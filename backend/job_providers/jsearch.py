@@ -1,0 +1,217 @@
+"""JSearch job provider integration."""
+
+import hashlib
+import os
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+
+import httpx
+
+from .base import JobSearchQuery, ProviderResult
+
+
+class JSearchProvider:
+    name = "jsearch"
+
+    def __init__(self, api_key: str, base_url: Optional[str] = None, timeout: float = 15.0):
+        self.api_key = api_key
+        self.base_url = (base_url or os.environ.get("JSEARCH_BASE_URL") or "https://api.openwebninja.com/jsearch").rstrip("/")
+        self.timeout = timeout
+
+    async def search(self, query: JobSearchQuery) -> ProviderResult:
+        params: Dict[str, Any] = {
+            "query": self._query_string(query),
+            "language": query.language,
+        }
+        if query.country:
+            params["country"] = query.country
+        if query.remote_preference == "remote":
+            params["work_from_home"] = "true"
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.get(
+                f"{self.base_url}/search-v2",
+                params=params,
+                headers={"x-api-key": self.api_key},
+            )
+            response.raise_for_status()
+            payload = response.json()
+
+        rows = self._extract_jobs(payload)
+        imported_at = datetime.now(timezone.utc).isoformat()
+        jobs = [self.normalize_job(row, query, imported_at) for row in rows[: query.limit]]
+        jobs = [job for job in jobs if job is not None]
+        return ProviderResult(jobs=jobs, raw_response=payload)
+
+    def _extract_jobs(self, payload: Any) -> List[Dict[str, Any]]:
+        if isinstance(payload, list):
+            return [row for row in payload if isinstance(row, dict)]
+
+        if not isinstance(payload, dict):
+            raise ValueError(f"Unexpected JSearch response shape: top-level type={type(payload).__name__}")
+
+        candidate_keys = ("jobs", "data", "results", "items")
+        for key in candidate_keys:
+            value = payload.get(key)
+            if isinstance(value, list):
+                return [row for row in value if isinstance(row, dict)]
+            if isinstance(value, dict):
+                for nested_key in candidate_keys:
+                    nested_value = value.get(nested_key)
+                    if isinstance(nested_value, list):
+                        return [row for row in nested_value if isinstance(row, dict)]
+
+        top_keys = sorted(payload.keys())
+        typed_keys = {key: type(payload.get(key)).__name__ for key in top_keys}
+        raise ValueError(f"Unexpected JSearch response shape: keys={top_keys}, types={typed_keys}")
+
+    def _query_string(self, query: JobSearchQuery) -> str:
+        if query.raw_query:
+            return " ".join((query.role or "").split()) or "software engineer"
+        parts = [query.role.strip() or "software engineer", "jobs"]
+        location = (query.location or "").strip()
+        if query.remote_preference == "remote":
+            parts.append("remote")
+            if location:
+                parts.extend(["in", location])
+        elif location:
+            parts.extend(["in", location])
+        return " ".join(parts)
+
+    def normalize_job(
+        self,
+        row: Dict[str, Any],
+        query: JobSearchQuery,
+        imported_at: str,
+    ) -> Optional[Dict[str, Any]]:
+        external_id = row.get("job_id")
+        title = row.get("job_title")
+        company = row.get("employer_name")
+        if not external_id or not title or not company:
+            return None
+
+        apply_options = row.get("apply_options") or []
+        first_apply = apply_options[0] if apply_options else {}
+        external_url = row.get("job_apply_link") or first_apply.get("apply_link") or row.get("job_google_link")
+        source = row.get("job_publisher") or first_apply.get("publisher") or "JSearch"
+        ats_provider = self._detect_ats(external_url, apply_options)
+        auto_apply_supported = ats_provider in ("greenhouse", "lever", "ashby")
+
+        return {
+            "job_id": self._internal_job_id(external_id),
+            "title": title,
+            "company": company,
+            "company_logo": row.get("employer_logo"),
+            "location": self._location(row),
+            "remote": self._remote(row, query),
+            "salary_min": self._salary(row.get("job_min_salary")),
+            "salary_max": self._salary(row.get("job_max_salary")),
+            "currency": row.get("job_salary_currency") or "USD",
+            "description": row.get("job_description") or "",
+            "requirements": self._requirements(row),
+            "tech_stack": [],
+            "seniority": self._seniority(title),
+            "posted_at": self._posted_at(row) or imported_at,
+            "provider": self.name,
+            "external_id": external_id,
+            "external_url": external_url,
+            "source": source,
+            "ats_provider": ats_provider,
+            "auto_apply_supported": auto_apply_supported,
+            "auto_apply_reason": (
+                f"{ats_provider} supported for V1 auto-apply"
+                if auto_apply_supported
+                else "Unsupported or unknown ATS provider for V1 auto-apply"
+            ),
+            "imported_at": imported_at,
+            "last_seen_at": imported_at,
+            "provider_query": self._query_string(query),
+            "provider_search_key": self.search_key(query),
+            "raw_provider_payload": row if os.environ.get("JOB_IMPORT_STORE_RAW", "false").lower() == "true" else None,
+        }
+
+    def search_key(self, query: JobSearchQuery) -> str:
+        bits = [
+            self.name,
+            (query.role or "").strip().lower(),
+            (query.location or "").strip().lower(),
+            (query.remote_preference or "any").strip().lower(),
+            (query.country or "").lower(),
+            query.language.lower(),
+        ]
+        return ":".join(bits)
+
+    def _internal_job_id(self, external_id: str) -> str:
+        digest = hashlib.sha1(f"{self.name}:{external_id}".encode("utf-8")).hexdigest()[:16]
+        return f"job_{digest}"
+
+    def _detect_ats(self, external_url: Optional[str], apply_options: List[Dict[str, Any]]) -> str:
+        urls = [external_url or ""]
+        for option in apply_options:
+            if isinstance(option, dict):
+                urls.append(option.get("apply_link") or "")
+
+        text = " ".join(urls).lower()
+        if "greenhouse.io" in text or "boards.greenhouse.io" in text or "job-boards.greenhouse.io" in text:
+            return "greenhouse"
+        if "jobs.lever.co" in text:
+            return "lever"
+        if "ashbyhq.com" in text or "jobs.ashbyhq.com" in text:
+            return "ashby"
+        return "unknown"
+
+    def _location(self, row: Dict[str, Any]) -> str:
+        if row.get("job_location"):
+            return row["job_location"]
+        parts = [row.get("job_city"), row.get("job_state"), row.get("job_country")]
+        return ", ".join([p for p in parts if p]) or "Unknown"
+
+    def _remote(self, row: Dict[str, Any], query: JobSearchQuery) -> str:
+        if row.get("job_is_remote") is True or row.get("job_work_from_home") is True:
+            return "remote"
+        if query.remote_preference == "remote":
+            return "remote"
+        text = " ".join([str(row.get("job_title") or ""), str(row.get("job_description") or ""), str(row.get("job_location") or "")]).lower()
+        if "hybrid" in text:
+            return "hybrid"
+        if "remote" in text or "work from home" in text:
+            return "remote"
+        return "onsite"
+
+    def _salary(self, value: Any) -> Optional[int]:
+        try:
+            if value is None:
+                return None
+            return int(float(value))
+        except (TypeError, ValueError):
+            return None
+
+    def _requirements(self, row: Dict[str, Any]) -> List[str]:
+        highlights = row.get("job_highlights") or {}
+        qualifications = highlights.get("Qualifications") or highlights.get("qualifications") or []
+        if isinstance(qualifications, list):
+            return [str(item) for item in qualifications[:8]]
+        return []
+
+    def _seniority(self, title: str) -> Optional[str]:
+        text = (title or "").lower()
+        if any(token in text for token in ("principal",)):
+            return "principal"
+        if any(token in text for token in ("staff", "lead", "head of")):
+            return "lead"
+        if any(token in text for token in ("senior", "sr.")):
+            return "senior"
+        if any(token in text for token in ("junior", "jr.", "entry", "graduate", "intern")):
+            return "junior"
+        return "mid"
+
+    def _posted_at(self, row: Dict[str, Any]) -> Optional[str]:
+        if row.get("job_posted_at_datetime_utc"):
+            return row["job_posted_at_datetime_utc"]
+        ts = row.get("job_posted_at_timestamp")
+        try:
+            if ts:
+                return datetime.fromtimestamp(int(ts), tz=timezone.utc).isoformat()
+        except (TypeError, ValueError, OSError):
+            return None
+        return None
