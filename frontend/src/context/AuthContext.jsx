@@ -25,7 +25,7 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     // CRITICAL: If returning from OAuth callback, skip the /me check.
     // AuthCallback will exchange the session_id and establish the session first.
-    if (window.location.hash?.includes("session_id=")) {
+    if (window.location.hash?.includes("session_id=") || window.location.hash?.includes("session_token=")) {
       setLoading(false);
       return;
     }

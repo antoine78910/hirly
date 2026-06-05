@@ -1,7 +1,7 @@
 """Job import/cache service.
 
-MongoDB remains the source of truth. External providers only import normalized
-jobs into the `jobs` collection.
+Supabase/PostgreSQL remains the source of truth. External providers only import
+normalized jobs into the `jobs` collection.
 """
 
 import logging

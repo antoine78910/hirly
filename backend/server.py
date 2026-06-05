@@ -9,10 +9,9 @@ Features:
 - Application tracker with status updates
 """
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, UploadFile, File, Depends, Cookie, Header, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import io
 import json
@@ -26,7 +25,6 @@ from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Dict, Any, Literal
 from datetime import datetime, timezone, timedelta
 import httpx
-import certifi
 
 # Optional file parsing libs
 from pypdf import PdfReader
@@ -36,13 +34,15 @@ from jobs_service import refresh_greenhouse_boards, refresh_jobs_for_profile_if_
 from job_providers import get_board_provider, get_job_provider
 from job_providers.base import JobSearchQuery
 from llm_client import LLMProviderNotConfigured, complete_json_text
+from onboarding_suggestions import suggest_categories, suggest_roles
+from location_search import search_locations
+from google_auth import build_google_login_url, decode_state, exchange_code_for_user
+from database import init_db, close_db
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url, tlsCAFile=certifi.where())
-db = client[os.environ['DB_NAME']]
+db = None
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -144,9 +144,11 @@ class StatusUpdate(BaseModel):
 
 class PreferencesUpdate(BaseModel):
     target_role: Optional[str] = None
+    target_roles: Optional[List[str]] = None
     target_location: Optional[str] = None
     target_location_data: Optional[Dict[str, Any]] = None
     remote_preference: Optional[str] = None
+    seniority: Optional[str] = None
 
 
 class ContactUpdate(BaseModel):
@@ -156,6 +158,24 @@ class ContactUpdate(BaseModel):
     location: Optional[str] = None
     linkedin: Optional[str] = None
     website: Optional[str] = None
+
+
+class OnboardingCategoryItem(BaseModel):
+    id: str
+    label: str
+
+
+class OnboardingSuggestCategoriesRequest(BaseModel):
+    location: str = ""
+    contract_type: str = ""
+    location_data: Optional[Dict[str, Any]] = None
+
+
+class OnboardingSuggestRolesRequest(BaseModel):
+    location: str = ""
+    contract_type: str = ""
+    categories: List[OnboardingCategoryItem] = Field(default_factory=list)
+    location_data: Optional[Dict[str, Any]] = None
 
 
 # ===================== Auth helpers =====================
@@ -191,28 +211,32 @@ async def get_current_user(
 
 # ===================== Auth routes =====================
 
-@api_router.post("/auth/session")
-async def auth_session(request: Request, response: Response):
-    """Exchange OAuth session_id for a session_token cookie."""
-    body = await request.json()
-    session_id = body.get("session_id")
-    if not session_id:
-        raise HTTPException(status_code=400, detail="session_id required")
+def _is_dev_environment() -> bool:
+    return os.environ.get("ENVIRONMENT", "development") == "development"
 
-    async with httpx.AsyncClient(timeout=15.0) as http:
-        r = await http.get(
-            "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
-            headers={"X-Session-ID": session_id},
-        )
-        if r.status_code != 200:
-            raise HTTPException(status_code=401, detail="Invalid session_id")
-        data = r.json()
 
-    email = data["email"]
-    name = data["name"]
-    picture = data.get("picture")
-    session_token = data["session_token"]
+def _frontend_origin() -> str:
+    return os.environ.get("FRONTEND_URL", "http://localhost:3000").rstrip("/")
 
+
+def _set_session_cookie(response: Response, session_token: str) -> None:
+    response.set_cookie(
+        key="session_token",
+        value=session_token,
+        max_age=7 * 24 * 60 * 60,
+        httponly=True,
+        secure=not _is_dev_environment(),
+        samesite="lax" if _is_dev_environment() else "none",
+        path="/",
+    )
+
+
+async def _upsert_user_and_create_session(
+    email: str,
+    name: str,
+    picture: Optional[str],
+    session_token: Optional[str] = None,
+) -> tuple[dict, bool, str]:
     existing = await db.users.find_one({"email": email}, {"_id": 0})
     if existing:
         user_id = existing["user_id"]
@@ -230,26 +254,99 @@ async def auth_session(request: Request, response: Response):
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
 
+    token = session_token or f"sess_{uuid.uuid4().hex}"
     expires_at = datetime.now(timezone.utc) + timedelta(days=7)
     await db.user_sessions.insert_one({
         "user_id": user_id,
-        "session_token": session_token,
+        "session_token": token,
         "expires_at": expires_at.isoformat(),
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
 
-    response.set_cookie(
-        key="session_token",
-        value=session_token,
-        max_age=7 * 24 * 60 * 60,
-        httponly=True,
-        secure=True,
-        samesite="none",
-        path="/",
-    )
-
     user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
     has_profile = await db.profiles.find_one({"user_id": user_id}, {"_id": 0, "cv_text": 1}) is not None
+    return user_doc, has_profile, token
+
+
+@api_router.get("/auth/google/login")
+async def auth_google_login(redirect: str = Query(default="/swipe")):
+    """Redirect the browser to Google OAuth."""
+    client_id = os.environ.get("GOOGLE_CLIENT_ID")
+    client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
+    redirect_uri = os.environ.get("GOOGLE_REDIRECT_URI")
+    if not client_id or not client_secret or not redirect_uri:
+        raise HTTPException(
+            status_code=503,
+            detail="Google OAuth is not configured. Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REDIRECT_URI in backend/.env",
+        )
+
+    safe_redirect = redirect if redirect.startswith("/") else "/swipe"
+    url = build_google_login_url(client_id, redirect_uri, safe_redirect)
+    return RedirectResponse(url)
+
+
+@api_router.get("/auth/google/callback")
+async def auth_google_callback(
+    code: Optional[str] = Query(default=None),
+    state: Optional[str] = Query(default=None),
+    error: Optional[str] = Query(default=None),
+):
+    """Google OAuth callback — creates user in Supabase and redirects back to the frontend."""
+    frontend = _frontend_origin()
+    fallback = f"{frontend}/"
+
+    if error or not code or not state:
+        return RedirectResponse(f"{fallback}?auth_error=google_cancelled")
+
+    client_id = os.environ.get("GOOGLE_CLIENT_ID")
+    client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
+    redirect_uri = os.environ.get("GOOGLE_REDIRECT_URI")
+    if not client_id or not client_secret or not redirect_uri:
+        return RedirectResponse(f"{fallback}?auth_error=google_not_configured")
+
+    try:
+        redirect_path = decode_state(state)
+        profile = await exchange_code_for_user(code, client_id, client_secret, redirect_uri)
+        email = profile.get("email")
+        if not email:
+            raise ValueError("Google profile missing email")
+
+        _, _, session_token = await _upsert_user_and_create_session(
+            email=email,
+            name=profile.get("name") or email.split("@")[0],
+            picture=profile.get("picture"),
+        )
+        target = f"{frontend}{redirect_path}"
+        return RedirectResponse(f"{target}#session_token={session_token}")
+    except Exception as exc:
+        logger.exception("Google OAuth callback failed: %s", exc)
+        return RedirectResponse(f"{fallback}?auth_error=google_failed")
+
+
+@api_router.post("/auth/session")
+async def auth_session(request: Request, response: Response):
+    """Exchange OAuth session_id for a session_token cookie."""
+    body = await request.json()
+    session_id = body.get("session_id")
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id required")
+
+    async with httpx.AsyncClient(timeout=15.0) as http:
+        r = await http.get(
+            "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
+            headers={"X-Session-ID": session_id},
+        )
+        if r.status_code != 200:
+            raise HTTPException(status_code=401, detail="Invalid session_id")
+        data = r.json()
+
+    user_doc, has_profile, session_token = await _upsert_user_and_create_session(
+        email=data["email"],
+        name=data["name"],
+        picture=data.get("picture"),
+        session_token=data["session_token"],
+    )
+    _set_session_cookie(response, session_token)
     return {"user": user_doc, "has_profile": has_profile, "session_token": session_token}
 
 
@@ -742,6 +839,45 @@ async def patch_profile_extras(payload: Dict[str, Any], user: User = Depends(get
     return {"ok": True, "extras": merged}
 
 
+@api_router.get("/locations/search")
+async def locations_search(q: str = Query("", min_length=0), limit: int = Query(10, ge=1, le=15)):
+    """Worldwide city/region search via OpenStreetMap + optional Google Places."""
+    query = (q or "").strip()
+    if len(query) < 1:
+        raise HTTPException(status_code=400, detail="Query parameter q is required")
+    return await search_locations(query, limit=limit)
+
+
+@api_router.post("/onboarding/suggest-categories")
+async def onboarding_suggest_categories(body: OnboardingSuggestCategoriesRequest):
+    """Region + contract-aware job categories for onboarding (no auth required)."""
+    if not body.location.strip():
+        raise HTTPException(status_code=400, detail="Location is required")
+    if not body.contract_type.strip():
+        raise HTTPException(status_code=400, detail="Contract type is required")
+    result = await suggest_categories(
+        body.location.strip(),
+        body.contract_type.strip(),
+        body.location_data,
+    )
+    return result
+
+
+@api_router.post("/onboarding/suggest-roles")
+async def onboarding_suggest_roles(body: OnboardingSuggestRolesRequest):
+    """Specific role titles for selected onboarding categories (no auth required)."""
+    if not body.categories:
+        raise HTTPException(status_code=400, detail="At least one category is required")
+    cats = [c.model_dump() for c in body.categories]
+    result = await suggest_roles(
+        body.location.strip(),
+        body.contract_type.strip(),
+        cats,
+        body.location_data,
+    )
+    return result
+
+
 @api_router.put("/profile/preferences")
 async def update_preferences(prefs: PreferencesUpdate, user: User = Depends(get_current_user)):
     payload = prefs.model_dump(exclude_unset=True)
@@ -751,7 +887,13 @@ async def update_preferences(prefs: PreferencesUpdate, user: User = Depends(get_
         if v is not None or k == "target_location_data"
     }
     target_role = update.get("target_role")
-    if isinstance(target_role, str) and target_role.strip():
+    target_roles = update.get("target_roles")
+    if isinstance(target_roles, list) and target_roles:
+        cleaned = [r.strip() for r in target_roles if isinstance(r, str) and r.strip()]
+        if cleaned:
+            update["target_roles"] = cleaned
+            update["target_role"] = cleaned[0]
+    elif isinstance(target_role, str) and target_role.strip():
         update["target_role"] = target_role.strip()
         update["target_roles"] = [target_role.strip()]
     update["updated_at"] = datetime.now(timezone.utc).isoformat()
@@ -3137,13 +3279,18 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_seed():
     """Auto-seed mock jobs only when development fallback is explicitly enabled."""
+    global db
     try:
+        db = await init_db()
         await db.jobs.create_index([("provider", 1), ("external_id", 1)], unique=True, sparse=True)
         await db.jobs.create_index([("provider", 1), ("provider_search_key", 1), ("imported_at", -1)])
         await db.jobs.create_index([("job_id", 1)], unique=True)
         await db.company_boards.create_index([("board_id", 1)], unique=True)
         await db.company_boards.create_index([("ats_provider", 1), ("enabled", 1), ("priority", -1)])
         await db.company_boards.create_index([("last_synced_at", 1)])
+        await db.users.create_index([("email", 1)], unique=True)
+        await db.user_sessions.create_index([("session_token", 1)], unique=True)
+        await db.user_sessions.create_index([("user_id", 1)])
         await seed_greenhouse_company_boards(db)
 
         fallback_mock = os.environ.get("JOB_PROVIDER_FALLBACK_MOCK", "false").lower() in ("1", "true", "yes", "on")
@@ -3167,4 +3314,4 @@ async def startup_seed():
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    client.close()
+    await close_db()

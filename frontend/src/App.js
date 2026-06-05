@@ -15,18 +15,16 @@ import Improve from "@/pages/Improve";
 import History from "@/pages/History";
 import AuthCallback from "@/pages/AuthCallback";
 import ProtectedRoute from "@/components/ProtectedRoute";
-import BottomNav from "@/components/BottomNav";
-
 function AppRouter() {
   const location = useLocation();
-  if (location.hash?.includes("session_id=")) {
+  if (location.hash?.includes("session_id=") || location.hash?.includes("session_token=")) {
     return <AuthCallback />;
   }
   return (
     <>
       <Routes>
         <Route path="/" element={<Landing />} />
-        <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
+        <Route path="/onboarding" element={<Onboarding />} />
         <Route path="/swipe" element={<ProtectedRoute requireProfile><Swipe /></ProtectedRoute>} />
         <Route path="/interviews" element={<ProtectedRoute requireProfile><Interviews /></ProtectedRoute>} />
         <Route path="/improve" element={<ProtectedRoute requireProfile><Improve /></ProtectedRoute>} />
@@ -37,7 +35,6 @@ function AppRouter() {
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="/history" element={<ProtectedRoute requireProfile><History /></ProtectedRoute>} />
       </Routes>
-      <BottomNav />
     </>
   );
 }

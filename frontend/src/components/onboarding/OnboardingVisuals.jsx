@@ -1,0 +1,415 @@
+import { motion } from "framer-motion";
+import { Gem } from "lucide-react";
+import { BRAND } from "../../lib/brand";
+import { ob } from "./onboardingTheme";
+
+const EASE_OUT = [0.4, 0, 0.2, 1];
+
+function ChartCard({ label, children, caption }) {
+  return (
+    <div className={`${ob.card} p-4 sm:p-6`}>
+      {label ? <p className={`text-xs sm:text-sm ${ob.muted} mb-3 font-medium`}>{label}</p> : null}
+      {children}
+      {caption ? (
+        <p className={`text-center text-xs sm:text-sm ${ob.muted} mt-4 leading-relaxed`}>{caption}</p>
+      ) : null}
+    </div>
+  );
+}
+
+const RATE_CURVE = "M 48 120 Q 120 108 168 72 T 264 32";
+const RATE_FILL = `${RATE_CURVE} L 264 136 L 48 136 Z`;
+const RATE_POINTS = [
+  { cx: 48, cy: 120, delay: 0.2 },
+  { cx: 120, cy: 100, delay: 0.55 },
+  { cx: 168, cy: 72, delay: 0.9 },
+];
+const DIAMOND_DELAY = 1.3;
+const RATE_END = { x: 264, y: 32 };
+
+export function InterviewRateChart() {
+  return (
+    <ChartCard label="Your interview rate">
+      <svg viewBox="0 0 320 160" className="w-full h-auto" aria-hidden>
+        <defs>
+          <linearGradient id="rateFillLight" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#7C3AED" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="#7C3AED" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+
+        {[40, 80, 120].map((y, i) => (
+          <motion.line
+            key={`h-${y}`}
+            x1="24"
+            y1={y}
+            x2="296"
+            y2={y}
+            stroke="#E4E4E7"
+            strokeDasharray="4 4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.35, delay: i * 0.04 }}
+          />
+        ))}
+        {[72, 136, 200, 264].map((x, i) => (
+          <motion.line
+            key={`v-${x}`}
+            x1={x}
+            y1="24"
+            x2={x}
+            y2="136"
+            stroke="#E4E4E7"
+            strokeDasharray="4 4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.35, delay: 0.1 + i * 0.04 }}
+          />
+        ))}
+
+        <motion.line
+          x1="24"
+          y1="136"
+          x2="296"
+          y2="136"
+          stroke="#A1A1AA"
+          strokeWidth="2"
+          initial={{ pathLength: 0 }}
+          animate={{ pathLength: 1 }}
+          transition={{ duration: 0.45 }}
+        />
+
+        <motion.path
+          d={RATE_CURVE}
+          fill="none"
+          stroke="#7C3AED"
+          strokeWidth="3"
+          strokeLinecap="round"
+          initial={{ pathLength: 0 }}
+          animate={{ pathLength: 1 }}
+          transition={{ duration: 1.25, ease: EASE_OUT, delay: 0.15 }}
+        />
+
+        <motion.path
+          d={RATE_FILL}
+          fill="url(#rateFillLight)"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.55, delay: 0.95, ease: EASE_OUT }}
+        />
+
+        {RATE_POINTS.map(({ cx, cy, delay }) => (
+          <motion.circle
+            key={`${cx}-${cy}`}
+            cx={cx}
+            cy={cy}
+            r="5"
+            fill="#7C3AED"
+            stroke="#fff"
+            strokeWidth="2"
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.3, delay, ease: EASE_OUT }}
+            style={{ transformOrigin: `${cx}px ${cy}px` }}
+          />
+        ))}
+
+        <g transform={`translate(${RATE_END.x}, ${RATE_END.y})`}>
+          <motion.g
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: [0, 1.18, 1], opacity: 1 }}
+            transition={{
+              scale: { duration: 0.45, delay: DIAMOND_DELAY, ease: EASE_OUT, times: [0, 0.65, 1] },
+              opacity: { duration: 0.15, delay: DIAMOND_DELAY },
+            }}
+          >
+            <circle cx="0" cy="0" r="14" fill="#7C3AED" />
+            <foreignObject x="-10" y="-10" width="20" height="20">
+              <div
+                xmlns="http://www.w3.org/1999/xhtml"
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Gem size={14} color="#fff" strokeWidth={2.5} />
+              </div>
+            </foreignObject>
+          </motion.g>
+        </g>
+      </svg>
+
+      <motion.p
+        className={`text-center text-xs sm:text-sm ${ob.muted} mt-4 leading-relaxed`}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.5, delay: 1.65 }}
+      >
+        {`${BRAND.NAME} makes it easy to apply to more of the right jobs, increasing interviews.`}
+      </motion.p>
+    </ChartCard>
+  );
+}
+
+export function Compare2xChart() {
+  return (
+    <ChartCard caption={`${BRAND.NAME} makes it easy to apply to more of the right jobs, increasing interviews.`}>
+      <div className="flex items-end justify-center gap-6 sm:gap-10 h-44 sm:h-52">
+        <div className="flex flex-col items-center flex-1 max-w-[120px]">
+          <p className="text-sm text-zinc-600 mb-3 text-center font-medium">On your own</p>
+          <div className="w-full h-36 sm:h-44 rounded-2xl bg-zinc-100 border border-zinc-200 flex flex-col justify-end overflow-hidden">
+            <div className="h-[18%] bg-zinc-300 rounded-b-xl flex items-center justify-center">
+              <span className="text-xs font-bold text-zinc-700">5%</span>
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-col items-center flex-1 max-w-[120px]">
+          <p className={`text-sm ${ob.accent} font-semibold mb-3 text-center`}>With {BRAND.NAME}</p>
+          <div className="w-full h-36 sm:h-44 rounded-2xl bg-zinc-50 border border-linkedin/30 flex flex-col justify-end overflow-hidden shadow-sm">
+            <div className="h-[55%] gradient-linkedin rounded-b-xl flex items-center justify-center">
+              <span className="text-lg font-black text-white">2x</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </ChartCard>
+  );
+}
+
+const LT_AXIS = { left: 40, right: 280, top: 36, bottom: 148 };
+const LT_START = { x: 56, y: 128 };
+const LT_SWIIPR_END = { x: 264, y: 48 };
+const LT_TRAD_END = { x: 264, y: 118 };
+const LT_SWIIPR_CURVE = `M ${LT_START.x} ${LT_START.y} Q 120 118 180 95 T ${LT_SWIIPR_END.x} ${LT_SWIIPR_END.y}`;
+const LT_TRAD_CURVE = `M ${LT_START.x} ${LT_START.y} Q 140 125 200 120 T ${LT_TRAD_END.x} ${LT_TRAD_END.y}`;
+const LT_SWIIPR_FILL = `${LT_SWIIPR_CURVE} L ${LT_SWIIPR_END.x} ${LT_AXIS.bottom} L ${LT_START.x} ${LT_AXIS.bottom} Z`;
+
+function LongTermBrandBadge({ x, y, delay }) {
+  return (
+    <g transform={`translate(${x}, ${y})`}>
+      <motion.g
+        initial={{ scale: 0, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ duration: 0.4, delay, ease: EASE_OUT }}
+      >
+        <foreignObject x="-42" y="-14" width="84" height="22">
+          <div
+            xmlns="http://www.w3.org/1999/xhtml"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "flex-end",
+              gap: "5px",
+              width: "100%",
+              height: "100%",
+            }}
+          >
+            <img
+              src={`${process.env.PUBLIC_URL || ""}/logo.png`}
+              alt=""
+              width="16"
+              height="16"
+              style={{ display: "block", objectFit: "contain" }}
+            />
+            <span style={{ fontSize: "11px", fontWeight: 700, color: "#7C3AED", lineHeight: 1 }}>
+              {BRAND.NAME}
+            </span>
+          </div>
+        </foreignObject>
+      </motion.g>
+    </g>
+  );
+}
+
+export function LongTermResultsChart() {
+  const gridY = [60, 92, 124];
+  const gridX = [56, 160, 264];
+
+  return (
+    <ChartCard>
+      <svg viewBox="0 0 320 196" className="w-full h-auto" aria-hidden>
+        <defs>
+          <linearGradient id="ltFillLight" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#7C3AED" stopOpacity="0.38" />
+            <stop offset="45%" stopColor="#7C3AED" stopOpacity="0.16" />
+            <stop offset="100%" stopColor="#7C3AED" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+
+        <text x={LT_AXIS.left} y={24} fill="#52525B" fontSize="11" fontWeight="600">
+          # of Job Offers
+        </text>
+
+        {gridY.map((y, i) => (
+          <motion.line
+            key={`gy-${y}`}
+            x1={LT_AXIS.left}
+            y1={y}
+            x2={LT_AXIS.right}
+            y2={y}
+            stroke="#E4E4E7"
+            strokeDasharray="4 4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.35, delay: i * 0.05 }}
+          />
+        ))}
+        {gridX.map((x, i) => (
+          <motion.line
+            key={`gx-${x}`}
+            x1={x}
+            y1={LT_AXIS.top}
+            x2={x}
+            y2={LT_AXIS.bottom}
+            stroke="#E4E4E7"
+            strokeDasharray="4 4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.35, delay: 0.1 + i * 0.05 }}
+          />
+        ))}
+
+        <motion.line
+          x1={LT_AXIS.left}
+          y1={LT_AXIS.top}
+          x2={LT_AXIS.left}
+          y2={LT_AXIS.bottom}
+          stroke="#A1A1AA"
+          strokeWidth="2"
+          strokeLinecap="round"
+          initial={{ pathLength: 0 }}
+          animate={{ pathLength: 1 }}
+          transition={{ duration: 0.45 }}
+        />
+        <motion.line
+          x1={LT_AXIS.left}
+          y1={LT_AXIS.bottom}
+          x2={LT_AXIS.right}
+          y2={LT_AXIS.bottom}
+          stroke="#A1A1AA"
+          strokeWidth="2"
+          strokeLinecap="round"
+          initial={{ pathLength: 0 }}
+          animate={{ pathLength: 1 }}
+          transition={{ duration: 0.45, delay: 0.08 }}
+        />
+
+        <text x={LT_START.x - 8} y={168} fill="#71717A" fontSize="11" textAnchor="middle">
+          Month 2
+        </text>
+        <text x={LT_SWIIPR_END.x} y={168} fill="#71717A" fontSize="11" textAnchor="middle">
+          Month 6
+        </text>
+
+        <motion.path
+          d={LT_SWIIPR_CURVE}
+          fill="none"
+          stroke="#7C3AED"
+          strokeWidth="3"
+          strokeLinecap="round"
+          initial={{ pathLength: 0 }}
+          animate={{ pathLength: 1 }}
+          transition={{ duration: 1.35, ease: EASE_OUT }}
+        />
+
+        <motion.path
+          d={LT_SWIIPR_FILL}
+          fill="url(#ltFillLight)"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.7, delay: 0.95, ease: EASE_OUT }}
+        />
+
+        <motion.path
+          d={LT_TRAD_CURVE}
+          fill="none"
+          stroke="#EF4444"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          initial={{ pathLength: 0, opacity: 0.5 }}
+          animate={{ pathLength: 1, opacity: 1 }}
+          transition={{ duration: 1.1, delay: 0.55, ease: EASE_OUT }}
+        />
+
+        <motion.circle
+          cx={LT_START.x}
+          cy={LT_START.y}
+          r="6"
+          fill="#7C3AED"
+          stroke="#fff"
+          strokeWidth="2"
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.3, delay: 0.15 }}
+          style={{ transformOrigin: `${LT_START.x}px ${LT_START.y}px` }}
+        />
+
+        <motion.circle
+          cx={LT_SWIIPR_END.x}
+          cy={LT_SWIIPR_END.y}
+          r="6"
+          fill="#7C3AED"
+          stroke="#fff"
+          strokeWidth="2"
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.35, delay: 1.2 }}
+          style={{ transformOrigin: `${LT_SWIIPR_END.x}px ${LT_SWIIPR_END.y}px` }}
+        />
+
+        <motion.circle
+          cx={LT_TRAD_END.x}
+          cy={LT_TRAD_END.y}
+          r="6"
+          fill="#EF4444"
+          stroke="#fff"
+          strokeWidth="2"
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.35, delay: 1.45 }}
+          style={{ transformOrigin: `${LT_TRAD_END.x}px ${LT_TRAD_END.y}px` }}
+        />
+
+        <motion.text
+          x={168}
+          y={132}
+          fill="#EF4444"
+          fontSize="10"
+          textAnchor="middle"
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 1.55 }}
+        >
+          Traditional Job Search
+        </motion.text>
+
+        <LongTermBrandBadge x={LT_SWIIPR_END.x} y={LT_SWIIPR_END.y - 18} delay={1.25} />
+      </svg>
+
+      <motion.p
+        className={`text-center text-xs sm:text-sm ${ob.muted} mt-4 leading-relaxed`}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.5, delay: 1.7 }}
+      >
+        {`80% of ${BRAND.NAME} users significantly increased job offers in 6 months.`}
+      </motion.p>
+    </ChartCard>
+  );
+}
+
+export function InterviewTargetDashes({ count, max = 8 }) {
+  return (
+    <div className="flex gap-2 sm:gap-2.5 mt-6">
+      {Array.from({ length: max }).map((_, i) => (
+        <div
+          key={i}
+          className={`h-1.5 sm:h-2 flex-1 rounded-full transition-colors ${i < count ? "gradient-linkedin" : "bg-zinc-200"}`}
+        />
+      ))}
+    </div>
+  );
+}

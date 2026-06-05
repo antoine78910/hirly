@@ -87,7 +87,29 @@ const ROLE_GROUPS = [
   },
 ];
 
-export default function RolePicker({ value, onChange, testId = "role-picker" }) {
+export default function RolePicker({ value, onChange, testId = "role-picker", variant = "dark" }) {
+  const light = variant === "light";
+  const labelClass = light ? "text-sm font-semibold text-zinc-700" : "text-sm font-semibold text-zinc-200";
+  const triggerClass = light
+    ? "w-full h-11 rounded-xl bg-white border border-zinc-200 text-zinc-900 px-4 flex items-center justify-between text-left"
+    : "w-full h-11 rounded-xl bg-sprout-surface-2 border border-sprout-border text-white px-4 flex items-center justify-between text-left";
+  const valueClass = light
+    ? `truncate text-sm ${value ? "text-zinc-900" : "text-zinc-400"}`
+    : `truncate text-sm ${value ? "text-white" : "text-sprout-dim"}`;
+  const chevronClass = light ? "w-4 h-4 text-zinc-400" : "w-4 h-4 text-sprout-muted";
+  const inputClass = light
+    ? "h-11 rounded-xl bg-white border-zinc-200 text-zinc-900 placeholder:text-zinc-400 pl-10"
+    : "h-11 rounded-xl bg-sprout-surface-2 border-sprout-border text-white placeholder:text-sprout-dim pl-10";
+  const listClass = light
+    ? "max-h-[42vh] overflow-y-auto rounded-2xl border border-zinc-200 bg-white divide-y divide-zinc-100"
+    : "max-h-[42vh] overflow-y-auto rounded-2xl border border-sprout-border bg-sprout-surface divide-y divide-sprout-border";
+  const emptyClass = light ? "px-4 py-5 text-sm text-zinc-500" : "px-4 py-5 text-sm text-sprout-muted";
+  const groupTitleClass = light
+    ? "px-4 pb-2 text-[11px] uppercase tracking-[0.16em] text-zinc-500"
+    : "px-4 pb-2 text-[11px] uppercase tracking-[0.16em] text-sprout-muted";
+  const roleOnClass = light ? "bg-linkedin-light text-linkedin" : "bg-sprout-mint-soft text-sprout-mint";
+  const roleOffClass = light ? "text-zinc-700 hover:bg-zinc-50" : "text-zinc-100 hover:bg-sprout-surface-2";
+  const searchIconClass = light ? "w-4 h-4 text-zinc-400 absolute left-3 top-3.5" : "w-4 h-4 text-sprout-muted absolute left-3 top-3.5";
   const [query, setQuery] = useState("");
   const [manual, setManual] = useState(false);
   const [open, setOpen] = useState(false);
@@ -112,43 +134,43 @@ export default function RolePicker({ value, onChange, testId = "role-picker" }) 
   return (
     <div className="space-y-3" data-testid={testId}>
       <div className="space-y-1.5">
-        <Label className="text-sm font-semibold text-zinc-200">Target role</Label>
+        <Label className={labelClass}>Target role</Label>
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="w-full h-11 rounded-xl bg-sprout-surface-2 border border-sprout-border text-white px-4 flex items-center justify-between text-left"
+          className={triggerClass}
           data-testid={`${testId}-toggle`}
         >
-          <span className={`truncate text-sm ${value ? "text-white" : "text-sprout-dim"}`}>
+          <span className={valueClass}>
             {value || "Choose a role"}
           </span>
-          <ChevronDown className={`w-4 h-4 text-sprout-muted transition-transform ${open ? "rotate-180" : ""}`} />
+          <ChevronDown className={`${chevronClass} transition-transform ${open ? "rotate-180" : ""}`} />
         </button>
       </div>
 
       {open && (
         <>
           <div className="space-y-1.5">
-            <Label className="text-sm font-semibold text-zinc-200">Search roles</Label>
+            <Label className={labelClass}>Search roles</Label>
         <div className="relative">
-          <Search className="w-4 h-4 text-sprout-muted absolute left-3 top-3.5" />
+          <Search className={searchIconClass} />
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search common roles"
-            className="h-11 rounded-xl bg-sprout-surface-2 border-sprout-border text-white placeholder:text-sprout-dim pl-10"
+            className={inputClass}
             data-testid={`${testId}-search`}
           />
         </div>
       </div>
 
-      <div className="max-h-[42vh] overflow-y-auto rounded-2xl border border-sprout-border bg-sprout-surface divide-y divide-sprout-border">
+      <div className={listClass}>
         {filteredGroups.length === 0 ? (
-          <div className="px-4 py-5 text-sm text-sprout-muted">No matching roles. Choose Other below.</div>
+          <div className={emptyClass}>No matching roles. Choose Other below.</div>
         ) : (
           filteredGroups.map((group) => (
             <section key={group.group} className="py-3">
-              <h3 className="px-4 pb-2 text-[11px] uppercase tracking-[0.16em] text-sprout-muted">{group.group}</h3>
+              <h3 className={groupTitleClass}>{group.group}</h3>
               <div className="space-y-1">
                 {group.roles.map((role) => (
                   <button
@@ -156,9 +178,7 @@ export default function RolePicker({ value, onChange, testId = "role-picker" }) 
                     type="button"
                     onClick={() => selectRole(role)}
                     className={`w-full px-4 py-2.5 text-left text-sm font-medium transition-colors ${
-                      !manual && value === role
-                        ? "bg-sprout-mint-soft text-sprout-mint"
-                        : "text-zinc-100 hover:bg-sprout-surface-2"
+                      !manual && value === role ? roleOnClass : roleOffClass
                     }`}
                     data-testid={`${testId}-role`}
                   >
@@ -176,7 +196,7 @@ export default function RolePicker({ value, onChange, testId = "role-picker" }) 
             onChange("");
           }}
           className={`w-full px-4 py-3 text-left text-sm font-semibold ${
-            manual ? "bg-sprout-mint-soft text-sprout-mint" : "text-zinc-100 hover:bg-sprout-surface-2"
+            manual ? roleOnClass : roleOffClass
           }`}
           data-testid={`${testId}-other`}
         >
@@ -186,12 +206,12 @@ export default function RolePicker({ value, onChange, testId = "role-picker" }) 
 
       {manual && (
         <div className="space-y-1.5">
-          <Label className="text-sm font-semibold text-zinc-200">Custom role</Label>
+          <Label className={labelClass}>Custom role</Label>
           <Input
             value={value || ""}
             onChange={(e) => onChange(e.target.value)}
             placeholder="Enter your target role"
-            className="h-11 rounded-xl bg-sprout-surface-2 border-sprout-border text-white placeholder:text-sprout-dim"
+            className={inputClass}
             data-testid={`${testId}-manual`}
           />
         </div>
