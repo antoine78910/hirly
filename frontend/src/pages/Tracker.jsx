@@ -1,9 +1,10 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import {
-  Loader2, Sparkles, MapPin, Building2, FileText, Mail, Download, MessageSquare, Star,
+  Loader2, MapPin, Building2, FileText, Mail, Download, MessageSquare, FileSearch,
 } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
+import { BrandHeader } from "../components/app/AppScreenHeader";
+import ResumeSheet from "../components/ResumeSheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Button } from "../components/ui/button";
@@ -73,6 +74,7 @@ export default function Tracker() {
   const [missingAnswers, setMissingAnswers] = useState({});
   const [savingMissing, setSavingMissing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [resumeOpen, setResumeOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -183,176 +185,87 @@ export default function Tracker() {
     }
   };
 
-  const positive = useMemo(() => apps.filter((a) => ["interview", "offer"].includes(a.status)).length, [apps]);
-  const reviews = useMemo(() =>
-    apps
-      .filter((a) => a.match_score && a.match_reasons?.length)
-      .slice(0, 8)
-      .map((a) => ({
-        application_id: a.application_id,
-        company: a.job?.company,
-        title: a.job?.title,
-        score: a.match_score,
-        reason: a.match_reasons[0],
-        status: a.status,
-      })),
-  [apps]);
+  const hasResume = Boolean(profile?.cv_text);
 
   return (
-    <div className="sprout min-h-dvh bg-sprout-bg text-white pb-28">
-      <header className="px-5 pt-6 max-w-md mx-auto">
-        <h1 className="font-display font-black text-3xl tracking-tighter text-white">Activity</h1>
-        <p className="text-sm text-sprout-muted mt-1">
-          {apps.length} package{apps.length === 1 ? "" : "s"} generated · {positive} in motion
-        </p>
-      </header>
+    <div className="min-h-dvh bg-white pb-28 text-zinc-900">
+      <BrandHeader />
 
-      {/* Stats bar */}
-      {!loading && apps.length > 0 && (
-        <div className="px-5 mt-4 max-w-md mx-auto grid grid-cols-3 gap-3">
-          {[
-            {
-              label: "Applied",
-              value: apps.length,
-              color: "text-sprout-mint",
-              bg: "bg-sprout-mint-soft",
-            },
-            {
-              label: "Interviews",
-              value: apps.filter((a) => a.status === "interview").length,
-              color: "text-emerald-300",
-              bg: "bg-emerald-500/10",
-            },
-            {
-              label: "Offers",
-              value: apps.filter((a) => a.status === "offer").length,
-              color: "text-fuchsia-300",
-              bg: "bg-fuchsia-500/10",
-            },
-          ].map((s) => (
-            <div
-              key={s.label}
-              className={`rounded-2xl border border-sprout-border bg-sprout-surface p-4 text-center`}
-            >
-              <p className={`font-display font-black text-3xl tracking-tighter ${s.color}`}>
-                {s.value}
-              </p>
-              <p className="text-[11px] text-sprout-muted mt-1 font-medium">{s.label}</p>
+      <div className="mx-auto max-w-md px-5">
+        {!hasResume ? (
+          <section className="py-8 text-center">
+            <div className="mx-auto grid h-20 w-20 place-items-center rounded-2xl border-2 border-linkedin/30 bg-violet-50">
+              <FileSearch className="h-10 w-10 text-linkedin" strokeWidth={1.5} />
             </div>
-          ))}
-        </div>
-      )}
-
-      <div className="px-5 mt-5 max-w-md mx-auto">
-        <Tabs defaultValue="applications">
-          <TabsList className="grid grid-cols-2 w-full bg-sprout-surface border border-sprout-border rounded-full h-10 p-1">
-            <TabsTrigger
-              value="applications"
-              className="rounded-full data-[state=active]:bg-sprout-mint data-[state=active]:text-black text-sprout-muted font-semibold"
-              data-testid="tab-applications"
+            <h2 className="mt-6 font-display text-2xl font-bold tracking-tight">Add Your Resume</h2>
+            <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-zinc-500">
+              Upload your main resume to activate job applications and track your progress.
+            </p>
+            <button
+              type="button"
+              onClick={() => setResumeOpen(true)}
+              className="mt-8 w-full rounded-full gradient-linkedin py-3.5 text-base font-semibold text-white hover:opacity-90"
+              data-testid="applications-upload-resume"
             >
-              Applications
-            </TabsTrigger>
-            <TabsTrigger
-              value="reviews"
-              className="rounded-full data-[state=active]:bg-sprout-mint data-[state=active]:text-black text-sprout-muted font-semibold"
-              data-testid="tab-reviews"
-            >
-              Reviews
-            </TabsTrigger>
-          </TabsList>
+              Upload Resume
+            </button>
+          </section>
+        ) : null}
 
-          <TabsContent value="applications" className="mt-5">
-            {loading ? (
-              <div className="flex justify-center mt-12"><Loader2 className="w-5 h-5 animate-spin text-sprout-muted" /></div>
-            ) : apps.length === 0 ? (
-              <div className="mt-16 text-center text-sprout-muted">
-                <Sparkles className="w-7 h-7 mx-auto mb-2 text-sprout-dim" />
-                <p>No generated application packages yet. Start swiping.</p>
-              </div>
-            ) : (
-              <ul className="space-y-2.5" data-testid="applications-list">
-                {apps.map((a, i) => (
-                  <motion.li
-                    key={a.application_id}
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.03 }}
-                    className="rounded-2xl border border-sprout-border bg-sprout-surface hover:border-sprout-border-2 transition-colors p-4 cursor-pointer"
-                    onClick={() => openApplication(a)}
-                    data-testid={`application-${a.application_id}`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 text-xs text-sprout-mint font-semibold">
-                          <Building2 className="w-3.5 h-3.5" /> {a.job?.company || "—"}
-                        </div>
-                        <p className="font-display font-bold text-[17px] leading-tight truncate text-white mt-0.5">{a.job?.title || "Untitled"}</p>
-                        <div className="flex items-center gap-2 mt-1.5 text-xs text-sprout-muted">
-                          <MapPin className="w-3 h-3" /> {a.job?.location || "—"}
-                          {a.match_score && <span className="text-sprout-mint font-semibold">· {a.match_score}%</span>}
-                          <span className="text-sprout-dim">· {fmtDate(a.created_at)}</span>
-                        </div>
-                      </div>
-                      <div onClick={(e) => e.stopPropagation()} className="shrink-0">
-                        <Select value={a.status} onValueChange={(v) => changeStatus(a.application_id, v)}>
-                          <SelectTrigger
-                            className="h-8 rounded-full text-[11px] bg-sprout-surface-2 border-sprout-border text-white px-3 w-[112px]"
-                            data-testid={`status-select-${a.application_id}`}
-                          >
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="bg-sprout-surface border-sprout-border text-white">
-                            {STATUSES.map((s) => (<SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+        <section className={hasResume ? "pt-4" : "mt-10 border-t border-zinc-100 pt-8"}>
+          <h3 className="font-display text-lg font-bold">Your recent applications</h3>
+          {loading ? (
+            <div className="mt-12 flex justify-center">
+              <Loader2 className="h-5 w-5 animate-spin text-zinc-400" />
+            </div>
+          ) : apps.length === 0 ? (
+            <p className="mt-4 text-sm text-zinc-600">No results found.</p>
+          ) : (
+            <ul className="mt-4 divide-y divide-zinc-100" data-testid="applications-list">
+              {apps.map((a) => (
+                <motion.li
+                  key={a.application_id}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="cursor-pointer py-4 first:pt-2"
+                  onClick={() => openApplication(a)}
+                  data-testid={`application-${a.application_id}`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-linkedin">{a.job?.company || "—"}</p>
+                      <p className="mt-0.5 truncate font-semibold text-zinc-900">{a.job?.title || "Untitled"}</p>
+                      <p className="mt-1 text-xs text-zinc-500">
+                        {a.job?.location || "—"} · {fmtDate(a.created_at)}
+                      </p>
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <StatusPill status={a.status} />
-                      <SubmissionPill status={a.submission_status} />
+                    <div onClick={(e) => e.stopPropagation()} className="shrink-0">
+                      <Select value={a.status} onValueChange={(v) => changeStatus(a.application_id, v)}>
+                        <SelectTrigger
+                          className="h-8 w-[108px] rounded-full border-zinc-200 bg-white px-3 text-[11px] text-zinc-700"
+                          data-testid={`status-select-${a.application_id}`}
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="border-zinc-200 bg-white text-zinc-900">
+                          {STATUSES.map((s) => (<SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>))}
+                        </SelectContent>
+                      </Select>
                     </div>
-                  </motion.li>
-                ))}
-              </ul>
-            )}
-          </TabsContent>
-
-          <TabsContent value="reviews" className="mt-5">
-            {loading ? (
-              <div className="flex justify-center mt-12"><Loader2 className="w-5 h-5 animate-spin text-sprout-muted" /></div>
-            ) : reviews.length === 0 ? (
-              <div className="mt-16 text-center text-sprout-muted">
-                <Star className="w-7 h-7 mx-auto mb-2 text-sprout-dim" />
-                <p>AI match reviews appear here after you swipe.</p>
-              </div>
-            ) : (
-              <ul className="space-y-2.5" data-testid="reviews-list">
-                {reviews.map((r, i) => (
-                  <motion.li
-                    key={r.application_id}
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.03 }}
-                    className="rounded-2xl border border-sprout-border bg-sprout-surface p-4"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="min-w-0">
-                        <p className="text-xs text-sprout-mint font-semibold">{r.company}</p>
-                        <p className="font-display font-bold text-white text-[15px] truncate">{r.title}</p>
-                      </div>
-                      <span className="inline-flex items-center gap-1 rounded-full bg-sprout-mint-soft text-sprout-mint text-xs font-bold px-2.5 py-1">
-                        <Sparkles className="w-3 h-3" /> {r.score}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-sm text-sprout-muted leading-relaxed">"{r.reason}"</p>
-                  </motion.li>
-                ))}
-              </ul>
-            )}
-          </TabsContent>
-        </Tabs>
+                  </div>
+                </motion.li>
+              ))}
+            </ul>
+          )}
+        </section>
       </div>
+
+      <ResumeSheet
+        open={resumeOpen}
+        profile={profile}
+        onClose={() => setResumeOpen(false)}
+        onUploaded={load}
+      />
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent

@@ -101,6 +101,7 @@ export default function Onboarding() {
   const [contractType, setContractType] = useState(null);
   const [triedOtherApps, setTriedOtherApps] = useState(null);
   const [attribution, setAttribution] = useState(null);
+  const [referralCode, setReferralCode] = useState("");
   const [suggestedCategories, setSuggestedCategories] = useState([]);
   const [suggestedRoles, setSuggestedRoles] = useState([]);
   const [loadingCategories, setLoadingCategories] = useState(false);
@@ -141,6 +142,11 @@ export default function Onboarding() {
     if (idx >= 0) setStepIndex(idx);
     if (stepParam !== "intro") setSearchParams({}, { replace: true });
   }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (!user || step !== "signup") return;
+    setStepIndex(STEP_ORDER.indexOf("jobSearch"));
+  }, [user, step]);
 
   useEffect(() => {
     if (step !== "categories" || !onboardingLocation.trim() || !contractType) return;
@@ -294,6 +300,7 @@ export default function Onboarding() {
           selected_roles: selectedRoles,
           interviews_per_week: interviewsPerWeek,
           acquisition_source: attribution,
+          referral_code: referralCode.trim().toUpperCase() || null,
           salary_min: salaryMin,
           salary_max: salaryMax,
         },
@@ -305,7 +312,7 @@ export default function Onboarding() {
 
   const finishOnboarding = async () => {
     if (!user) {
-      await startGoogleLogin("/onboarding");
+      await startGoogleLogin("/onboarding?step=showcasePricing");
       return;
     }
     setSaving(true);
@@ -363,6 +370,8 @@ export default function Onboarding() {
         return true;
       case "attribution":
         return !!attribution;
+      case "referralCode":
+        return true;
       case "upload":
         return !parsing;
       case "showcaseLanding":
@@ -372,6 +381,21 @@ export default function Onboarding() {
       default:
         return false;
     }
+  };
+
+  const submitReferralCode = () => {
+    const code = referralCode.trim().toUpperCase();
+    if (!code) {
+      toast.error("Enter a referral code or tap Skip");
+      return;
+    }
+    if (!/^[A-Z0-9]{4,8}$/.test(code)) {
+      toast.error("Enter a valid referral code (4–8 letters or numbers)");
+      return;
+    }
+    setReferralCode(code);
+    toast.success("Referral code applied");
+    goNext();
   };
 
   const onContinue = () => {
@@ -397,6 +421,20 @@ export default function Onboarding() {
   const footer = !hideFooter ? (
     step === "showcasePricing" ? (
       <FinishOnboardingButton saving={saving} onClick={finishOnboarding} />
+    ) : step === "referralCode" ? (
+      <div className="space-y-2.5">
+        <ContinueButton onClick={submitReferralCode} disabled={!referralCode.trim()} testId="referral-submit">
+          Submit
+        </ContinueButton>
+        <button
+          type="button"
+          onClick={goNext}
+          className="w-full h-11 sm:h-12 rounded-full border border-zinc-200 bg-white text-sm sm:text-base font-semibold text-linkedin hover:bg-violet-50 transition-colors"
+          data-testid="referral-skip"
+        >
+          Skip
+        </button>
+      </div>
     ) : (
       <ContinueButton onClick={onContinue} disabled={!canContinue() || parsing}>
         {isLastIntroSlide ? (
@@ -762,6 +800,35 @@ export default function Onboarding() {
                   testId={`attribution-${id}`}
                 />
               ))}
+            </div>
+          </motion.div>
+        )}
+
+        {step === "referralCode" && (
+          <motion.div key="referralCode" {...stepMotion}>
+            <h1 className={stepTitleClass}>Referral code</h1>
+            <p className={stepSubtitleClass}>Paste a referral code below if you have one.</p>
+
+            <div className={`${ob.stepBody} items-center`}>
+              <OnboardingIllustration src="/onboarding/referral-gift.png" alt="" />
+
+              <div className="w-full mt-2">
+                <label htmlFor="referral-code-input" className="mb-2 block text-sm font-semibold text-zinc-800">
+                  Referral Code
+                </label>
+                <input
+                  id="referral-code-input"
+                  data-testid="referral-code-input"
+                  type="text"
+                  value={referralCode}
+                  onChange={(e) => setReferralCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8))}
+                  placeholder="GR7E34"
+                  autoCapitalize="characters"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  className="w-full h-12 sm:h-14 rounded-2xl border border-zinc-200 bg-white px-4 text-center font-mono text-lg tracking-[0.2em] text-zinc-900 placeholder:text-zinc-300 focus:border-linkedin focus:outline-none focus:ring-2 focus:ring-linkedin/20"
+                />
+              </div>
             </div>
           </motion.div>
         )}

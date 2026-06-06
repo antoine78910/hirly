@@ -1,3 +1,5 @@
+import { sel } from "../../lib/selectionTheme";
+
 /** Light LP-aligned tokens for onboarding (white background). */
 export const ob = {
   step: "flex flex-1 flex-col min-h-0 overflow-hidden",
@@ -18,14 +20,10 @@ export const ob = {
     "flex w-full min-h-[2.75rem] items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-center text-[11px] font-medium leading-tight transition-all duration-200 ease-out active:scale-[0.98] sm:min-h-[3rem] sm:px-3 sm:py-2.5 sm:text-xs",
   card: "rounded-2xl border border-zinc-200 bg-white shadow-sm",
   cardInner: "rounded-2xl border border-zinc-200 bg-zinc-50/80",
-  chipOn:
-    "border-violet-400/70 bg-gradient-to-br from-violet-50 via-fuchsia-50/75 to-violet-50 text-violet-800 shadow-[0_1px_2px_rgba(124,58,237,0.08)] ring-1 ring-violet-300/50",
-  chipOff:
-    "bg-white text-zinc-600 border-zinc-200 hover:border-violet-300/55 hover:bg-violet-50/55 hover:text-violet-700",
-  optionOn:
-    "border-violet-400/65 bg-gradient-to-br from-violet-50 via-fuchsia-50/65 to-violet-50 shadow-[0_1px_3px_rgba(124,58,237,0.1)] ring-1 ring-violet-300/45",
-  optionOff:
-    "border-zinc-200 bg-white hover:border-violet-200 hover:bg-violet-50/45 hover:shadow-sm",
+  chipOn: sel.chipOn,
+  chipOff: sel.chipOff,
+  optionOn: sel.optionOn,
+  optionOff: sel.optionOff,
   accent: "text-linkedin",
   accentSoft: "bg-linkedin-light",
   muted: "text-zinc-600",

@@ -4,6 +4,7 @@ import { X, Plus, Info } from "lucide-react";
 import { toast } from "sonner";
 import { Switch } from "../components/ui/switch";
 import PlacesAutocomplete, { hasGooglePlacesKey } from "./PlacesAutocomplete";
+import { sel } from "../lib/selectionTheme";
 
 /**
  * Sprout-style Filters sheet — matches Swipper reference screenshots.
@@ -58,10 +59,8 @@ function Chip({ active, children, onClick, testId }) {
       type="button"
       onClick={onClick}
       data-testid={testId}
-      className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-        active
-          ? "bg-sprout-mint text-white"
-          : "bg-sprout-surface-2 text-zinc-200 border border-sprout-border hover:border-sprout-border-2"
+      className={`px-4 py-2 rounded-full text-sm font-medium ${
+        active ? sel.chipOn : sel.chipOff
       }`}
     >
       {children}
@@ -75,16 +74,14 @@ function RadioRow({ active, label, onClick, testId }) {
       type="button"
       onClick={onClick}
       data-testid={testId}
-      className={`w-full h-12 px-4 rounded-2xl flex items-center justify-between text-left transition-colors ${
-        active
-          ? "bg-sprout-mint-soft border border-sprout-mint/60 text-white"
-          : "bg-sprout-surface-2 border border-sprout-border text-zinc-300"
+      className={`w-full h-12 px-4 rounded-2xl flex items-center justify-between text-left ${
+        active ? sel.optionOn : sel.optionOff
       }`}
     >
       <span className="font-medium">{label}</span>
       {active && (
-        <span className="w-5 h-5 rounded-full bg-sprout-mint grid place-items-center">
-          <svg viewBox="0 0 20 20" className="w-3 h-3 text-black" fill="currentColor"><path d="M7.5 13l-3-3 1.4-1.4L7.5 10.2l6.6-6.6L15.5 5z" /></svg>
+        <span className={sel.checkDot}>
+          <svg viewBox="0 0 20 20" className="w-3 h-3" fill="currentColor"><path d="M7.5 13l-3-3 1.4-1.4L7.5 10.2l6.6-6.6L15.5 5z" /></svg>
         </span>
       )}
     </button>
@@ -116,7 +113,7 @@ function TagInput({ value, onAdd, onRemove, placeholder, testId }) {
       {value.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {value.map((v) => (
-            <span key={v} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-sprout-mint-soft text-sprout-mint text-xs font-semibold">
+            <span key={v} className={sel.tag}>
               {v}
               <button type="button" onClick={() => onRemove(v)} className="hover:text-white">
                 <X className="w-3 h-3" />

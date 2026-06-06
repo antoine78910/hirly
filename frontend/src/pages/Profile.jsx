@@ -1,10 +1,19 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
+import { demoMode } from "../lib/dev";
+import { DEMO_PROFILE } from "../lib/demoData";
 import {
-  Loader2, User as UserIcon, FileText, Briefcase, FileStack,
-  Bell, Settings as SettingsIcon, ChevronRight, SlidersHorizontal,
+  User as UserIcon,
+  FileText,
+  FolderOpen,
+  Settings as SettingsIcon,
+  ChevronRight,
+  Zap,
+  Pencil,
+  Plus,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import PersonalInfoSheet from "../components/PersonalInfoSheet";
@@ -16,25 +25,21 @@ import PlacesAutocomplete, { hasGooglePlacesKey } from "../components/PlacesAuto
 import { Label } from "../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import RolePicker from "../components/RolePicker";
+import { TitleHeader } from "../components/app/AppScreenHeader";
 
-function CategoryCard({ icon: Icon, title, body, onClick, testId }) {
-  return (
-    <button
-      onClick={onClick}
-      data-testid={testId}
-      className="w-full flex items-start gap-4 p-5 rounded-2xl border border-sprout-border bg-sprout-surface hover:bg-sprout-surface-2 transition-colors text-left"
-    >
-      <div className="w-14 h-14 rounded-full bg-sprout-mint-soft-2 grid place-items-center shrink-0">
-        <Icon className="w-6 h-6 text-sprout-mint" strokeWidth={1.9} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <h3 className="font-display font-bold text-white text-xl leading-tight">{title}</h3>
-        <p className="mt-2 text-[14px] leading-snug text-sprout-muted">{body}</p>
-      </div>
-      <ChevronRight className="w-5 h-5 text-sprout-muted mt-2 shrink-0" />
-    </button>
-  );
-}
+const PROFILE_TABS = [
+  { key: "resume", label: "Resume", icon: FileText },
+  { key: "personal", label: "Personal", icon: UserIcon },
+  { key: "files", label: "Files", icon: FolderOpen },
+];
+
+const RESUME_SECTIONS = [
+  { key: "certifications", title: "Certifications", countKey: null, add: "Add certifications" },
+  { key: "awards", title: "Awards", countKey: "awards", add: "Add awards" },
+  { key: "coursework", title: "Relevant Coursework", countKey: "coursework", add: "Add coursework" },
+  { key: "languages", title: "Languages", countKey: "languages", add: "Add languages" },
+  { key: "skills", title: "Skills", countKey: "skills", add: "Add skills" },
+];
 
 function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
   const [targetRole, setTargetRole] = useState("");
@@ -116,116 +121,247 @@ function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
   );
 }
 
+function profileCompletion(profile) {
+  if (!profile) return 0;
+  const checks = [
+    Boolean(profile.cv_text),
+    Boolean(profile.contact?.name),
+    Boolean(profile.contact?.email),
+    Boolean(profile.target_role),
+    (profile.skills || []).length > 0,
+    (profile.experience || []).length > 0,
+  ];
+  return Math.round((checks.filter(Boolean).length / checks.length) * 100);
+}
+
 export default function Profile() {
-  const { user, checkAuth } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
-  const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [openSheet, setOpenSheet] = useState(null); // "personal" | "resume" | "professional" | "documents"
+  const [profile, setProfile] = useState(() => (demoMode ? DEMO_PROFILE : null));
+  const [loading, setLoading] = useState(!demoMode);
+  const [tab, setTab] = useState("resume");
+  const [openSheet, setOpenSheet] = useState(null);
+  const [creditsDismissed, setCreditsDismissed] = useState(false);
 
   const reload = useCallback(async () => {
     try {
       const { data } = await api.get("/profile");
-      setProfile(data);
-      await checkAuth?.();
+      if (data) setProfile(data);
     } catch (_) {}
-  }, [checkAuth]);
+  }, []);
 
   useEffect(() => {
-    (async () => { try { await reload(); } finally { setLoading(false); } })();
+    let cancelled = false;
+    (async () => {
+      try {
+        await reload();
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
   }, [reload]);
 
-  if (loading) {
-    return (
-      <div className="sprout min-h-dvh bg-sprout-bg flex items-center justify-center">
-        <Loader2 className="w-5 h-5 animate-spin text-sprout-muted" />
-      </div>
-    );
-  }
+  const completion = useMemo(() => profileCompletion(profile), [profile]);
+  const swipeCredits = 40;
 
-  const firstName = (profile?.contact?.name || user?.name || "").split(" ")[0] || "You";
-  const email = profile?.contact?.email || user?.email;
+  const sectionCount = (key) => {
+    if (!key) return 0;
+    const val = profile?.[key];
+    return Array.isArray(val) ? val.length : 0;
+  };
+
+  const showSkeleton = loading && !profile;
 
   return (
-    <div className="sprout min-h-dvh bg-sprout-bg text-white pb-28 max-w-md mx-auto px-5">
-      <header className="pt-6 flex items-center justify-between" data-testid="profile-header">
-        <div className="flex items-center gap-2">
-          <UserIcon className="w-6 h-6 text-white" strokeWidth={2} />
-          <h1 className="font-display font-bold text-3xl tracking-tight">Profile</h1>
-        </div>
-        <div className="flex items-center gap-2">
+    <div className="min-h-dvh bg-white pb-28 text-zinc-900">
+      <TitleHeader
+        title="Profile"
+        rightAction={(
           <button
-            className="w-10 h-10 grid place-items-center rounded-full hover:bg-sprout-surface"
-            data-testid="profile-bell-btn"
-            aria-label="Notifications"
-          >
-            <Bell className="w-5 h-5 text-white" />
-          </button>
-          <button
+            type="button"
             onClick={() => navigate("/settings")}
-            className="w-10 h-10 grid place-items-center rounded-full hover:bg-sprout-surface"
-            data-testid="profile-settings-btn"
+            className="grid h-10 w-10 place-items-center rounded-full text-zinc-500 hover:bg-zinc-100"
             aria-label="Settings"
+            data-testid="profile-settings-btn"
           >
-            <SettingsIcon className="w-5 h-5 text-white" />
+            <SettingsIcon className="h-5 w-5" />
+          </button>
+        )}
+      />
+
+      <div className="mx-auto max-w-md space-y-4 px-4">
+        {!creditsDismissed ? (
+          <div className="flex items-center gap-3 rounded-2xl border border-zinc-200 bg-white px-3 py-3 shadow-sm">
+            <button
+              type="button"
+              onClick={() => setCreditsDismissed(true)}
+              className="text-zinc-300 hover:text-zinc-500"
+              aria-label="Dismiss"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/credits")}
+              className="flex min-w-0 flex-1 items-center gap-3 text-left"
+              data-testid="profile-credits-card"
+            >
+              <div className="grid h-10 w-10 place-items-center rounded-full bg-violet-100">
+                <Zap className="h-5 w-5 text-linkedin" fill="currentColor" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold">
+                  <span className="text-amber-500">{swipeCredits}</span> Swipes
+                </p>
+                <p className="text-xs text-zinc-500">Get More Credits</p>
+              </div>
+              <ChevronRight className="h-5 w-5 shrink-0 text-zinc-300" />
+            </button>
+          </div>
+        ) : null}
+
+        <div className={`rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm ${showSkeleton ? "animate-pulse" : ""}`}>
+          <div className="flex items-center gap-4">
+            <div
+              className="relative grid h-16 w-16 place-items-center rounded-full"
+              style={{
+                background: showSkeleton
+                  ? "#e4e4e7"
+                  : `conic-gradient(#7C3AED ${completion * 3.6}deg, #e4e4e7 0deg)`,
+              }}
+            >
+              <div className="grid h-12 w-12 place-items-center rounded-full bg-white text-sm font-bold text-zinc-900">
+                {showSkeleton ? "—" : `${completion}%`}
+              </div>
+            </div>
+            <div className="flex-1">
+              <p className="font-display text-lg font-bold">Complete your profile</p>
+              <p className="text-sm text-zinc-500">Auto-fill more job application fields.</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setOpenSheet("professional")}
+            className="mt-4 w-full rounded-full gradient-linkedin py-3 text-sm font-semibold text-white hover:opacity-90"
+            data-testid="profile-finish-btn"
+          >
+            Finish profile
           </button>
         </div>
-      </header>
 
-      <section className="mt-2 flex items-center gap-4">
-        {user?.picture ? (
-          <img
-            src={user.picture}
-            alt={firstName}
-            className="w-20 h-20 rounded-full border border-sprout-border object-cover"
-          />
-        ) : (
-          <div className="w-20 h-20 rounded-full bg-sprout-mint text-white grid place-items-center font-display font-black text-3xl">
-            {(firstName[0] || "U").toUpperCase()}
+        <div className="flex border-b border-zinc-200">
+          {PROFILE_TABS.map((t) => {
+            const Icon = t.icon;
+            const active = tab === t.key;
+            return (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setTab(t.key)}
+                className={`flex flex-1 flex-col items-center gap-1 py-3 text-xs font-semibold ${
+                  active ? "text-linkedin" : "text-zinc-400"
+                }`}
+                data-testid={`profile-tab-${t.key}`}
+              >
+                <Icon className="h-5 w-5" strokeWidth={active ? 2.4 : 1.8} />
+                {t.label}
+                {active ? <span className="h-0.5 w-8 rounded-full bg-linkedin" /> : <span className="h-0.5 w-8" />}
+              </button>
+            );
+          })}
+        </div>
+
+        {tab === "resume" && (
+          <div className="space-y-5 pb-4">
+            <button
+              type="button"
+              onClick={() => setOpenSheet("resume")}
+              className="flex w-full items-center justify-between rounded-xl border border-dashed border-zinc-300 px-4 py-3 text-left hover:bg-zinc-50"
+            >
+              <div>
+                <p className="font-semibold text-zinc-900">Your CV</p>
+                <p className="text-sm text-zinc-500">
+                  {profile?.cv_text ? "Resume uploaded — tap to update" : "Upload your resume"}
+                </p>
+              </div>
+              <Pencil className="h-4 w-4 text-zinc-400" />
+            </button>
+
+            {RESUME_SECTIONS.map((section) => {
+              const count = sectionCount(section.countKey);
+              return (
+                <div key={section.key}>
+                  <h3 className="mb-2 font-bold text-zinc-900">
+                    {section.title}
+                    {section.countKey ? ` (${count})` : ""}
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setOpenSheet("professional")}
+                    className="flex w-full items-center justify-between rounded-xl border border-dashed border-zinc-300 px-4 py-4 text-left hover:bg-zinc-50"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="grid h-10 w-10 place-items-center rounded-full bg-violet-50 text-linkedin">
+                        <Plus className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-zinc-900">{section.add}</p>
+                        {section.key === "languages" ? (
+                          <p className="text-sm text-zinc-500">Highlight the languages you speak and your proficiency.</p>
+                        ) : null}
+                      </div>
+                    </div>
+                    <Plus className="h-5 w-5 text-linkedin" />
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
-        <div className="min-w-0 flex-1">
-          <h2 className="font-display font-black text-3xl tracking-tight leading-tight truncate">{firstName}</h2>
-          <p className="text-sm text-sprout-muted truncate">{email}</p>
-        </div>
-      </section>
 
-      <div className="mt-6 space-y-4" data-testid="profile-categories">
-        <CategoryCard
-          icon={SlidersHorizontal}
-          title="Job preferences"
-          body="Set the role, location, and remote preference used for your job feed."
-          onClick={() => setOpenSheet("preferences")}
-          testId="profile-preferences-card"
-        />
-        <CategoryCard
-          icon={UserIcon}
-          title="Personal details"
-          body="Edit the personal info we use on every application you send."
-          onClick={() => setOpenSheet("personal")}
-          testId="profile-personal-card"
-        />
-        <CategoryCard
-          icon={FileText}
-          title="Your CV"
-          body="View, refresh, or replace the CV we tailor to every job."
-          onClick={() => setOpenSheet("resume")}
-          testId="profile-resume-card"
-        />
-        <CategoryCard
-          icon={Briefcase}
-          title="Professional profile"
-          body="Manage experience, education, skills, and everything else recruiters see."
-          onClick={() => setOpenSheet("professional")}
-          testId="profile-professional-card"
-        />
-        <CategoryCard
-          icon={FileStack}
-          title="Other files"
-          body="Add transcripts, portfolios, certificates and other supporting docs."
-          onClick={() => setOpenSheet("documents")}
-          testId="profile-documents-card"
-        />
+        {tab === "personal" && (
+          <div className="space-y-3 pb-4">
+            <button
+              type="button"
+              onClick={() => setOpenSheet("personal")}
+              className="flex w-full items-center justify-between border-b border-zinc-100 py-4 text-left"
+            >
+              <div>
+                <p className="font-semibold">Personal details</p>
+                <p className="text-sm text-zinc-500">{profile?.contact?.name || "Add your name"}</p>
+              </div>
+              <Pencil className="h-4 w-4 text-zinc-400" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setOpenSheet("preferences")}
+              className="flex w-full items-center justify-between border-b border-zinc-100 py-4 text-left"
+            >
+              <div>
+                <p className="font-semibold">Job preferences</p>
+                <p className="text-sm text-zinc-500">{profile?.target_role || "Set target role"}</p>
+              </div>
+              <Pencil className="h-4 w-4 text-zinc-400" />
+            </button>
+          </div>
+        )}
+
+        {tab === "files" && (
+          <div className="pb-4">
+            <button
+              type="button"
+              onClick={() => setOpenSheet("documents")}
+              className="flex w-full items-center justify-between rounded-xl border border-dashed border-zinc-300 px-4 py-4 text-left hover:bg-zinc-50"
+            >
+              <div>
+                <p className="font-semibold text-zinc-900">Other files</p>
+                <p className="text-sm text-zinc-500">Transcripts, portfolios, certificates…</p>
+              </div>
+              <Plus className="h-5 w-5 text-linkedin" />
+            </button>
+          </div>
+        )}
       </div>
 
       <PersonalInfoSheet

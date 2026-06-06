@@ -16,7 +16,8 @@ export default function AuthCallback() {
     hasProcessed.current = true;
 
     const params = new URLSearchParams(window.location.search);
-    const nextPath = params.get("next") || "/swipe";
+    const storedReturn = sessionStorage.getItem("swiipr_onboarding_return");
+    const nextPath = params.get("next") || storedReturn || "/swipe";
 
     (async () => {
       try {
@@ -35,11 +36,17 @@ export default function AuthCallback() {
         setUser(data.user);
         setHasProfile(Boolean(data.has_profile));
         setHasPreferences(Boolean(data.has_preferences));
+        sessionStorage.removeItem("swiipr_onboarding_return");
 
-        // Clear hash and route to next step
         window.history.replaceState({}, "", window.location.pathname);
-        if (!data.has_profile || !data.has_preferences) navigate("/onboarding", { replace: true });
-        else navigate(nextPath.startsWith("/") ? nextPath : "/swipe", { replace: true });
+        const onboardingIncomplete = !data.has_profile || !data.has_preferences;
+        let destination = nextPath.startsWith("/") ? nextPath : "/swipe";
+        if (onboardingIncomplete) {
+          destination = destination.startsWith("/onboarding")
+            ? destination
+            : "/onboarding?step=jobSearch";
+        }
+        navigate(destination, { replace: true });
       } catch (e) {
         console.error("Auth callback failed", e);
         navigate("/", { replace: true });

@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Mail, Sparkles, Copy, Check, ChevronRight, X } from "lucide-react";
+import { Mail, Sparkles, Copy, Check, ChevronRight, X, Menu, Settings, Star, Pencil } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { BRAND } from "../lib/brand";
 import { toast } from "sonner";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -8,10 +10,54 @@ import { Textarea } from "@/components/ui/textarea";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const TABS = [
-  { key: "sent", label: "Sent" },
-  { key: "drafts", label: "Drafts" },
-  { key: "replies", label: "Replies" },
+const INBOX_FILTERS = [
+  { key: "primary", label: "Primary", activeClass: "bg-zinc-800 text-white", idleClass: "bg-zinc-100 text-zinc-700" },
+  { key: "verification", label: "Verification", activeClass: "bg-orange-100 text-orange-700", idleClass: "bg-orange-50 text-orange-600" },
+  { key: "interview", label: "Interview", activeClass: "bg-violet-100 text-violet-700", idleClass: "bg-violet-50 text-violet-600" },
+  { key: "offer", label: "Offer", activeClass: "bg-teal-100 text-teal-700", idleClass: "bg-teal-50 text-teal-600" },
+];
+
+const INBOX_MESSAGES = [
+  {
+    id: 1,
+    filter: "primary",
+    from: `The ${BRAND.NAME} Team`,
+    subject: `Welcome to ${BRAND.NAME}!`,
+    preview: `Welcome to ${BRAND.NAME}! Hey there! We're excited to help you land your next role…`,
+    body: `Welcome to ${BRAND.NAME}!\n\nHey there! We're excited to help you land your next role. Swipe through curated jobs, apply in one tap, and track every application from your inbox.\n\nTip: complete your profile to auto-fill applications faster.\n\n— The ${BRAND.NAME} Team`,
+    date: "Jun 5",
+    starred: false,
+  },
+  {
+    id: 2,
+    filter: "interview",
+    from: "Linear Recruiting",
+    subject: "Interview invitation — Senior Frontend Engineer",
+    preview: "We'd love to schedule a 30-minute chat with our engineering team next week.",
+    body: `Hi Alex,\n\nThank you for applying to the Senior Frontend Engineer role at Linear. We'd love to schedule a 30-minute video chat with our engineering team next week.\n\nPlease reply with your availability (Mon–Thu, 10am–6pm CET) or use the scheduling link in your applicant portal.\n\nBest,\nSarah Chen\nLinear Recruiting`,
+    date: "Jun 4",
+    starred: true,
+  },
+  {
+    id: 3,
+    filter: "verification",
+    from: "Stripe Careers",
+    subject: "Please verify your email address",
+    preview: "Confirm your email to complete your application for Backend Engineer.",
+    body: `Hello,\n\nPlease verify your email address to complete your application for Backend Engineer at Stripe.\n\nThis link expires in 48 hours. If you did not apply, you can ignore this message.\n\nStripe Careers`,
+    date: "Jun 3",
+    starred: false,
+  },
+  {
+    id: 4,
+    filter: "offer",
+    from: "Raycast HR",
+    subject: "Offer letter — Product Designer",
+    preview: "Congratulations! We're thrilled to extend an offer to join the Raycast team.",
+    body: `Congratulations Alex!\n\nWe're thrilled to extend an offer for the Product Designer position at Raycast. Your portfolio and product sense really stood out throughout the process.\n\nYou'll find the offer letter and benefits summary attached. We'd love a response by Friday.\n\nWelcome to the team,\nRaycast HR`,
+    date: "Jun 1",
+    starred: true,
+  },
 ];
 
 const MOCK_JOBS = [
@@ -268,10 +314,8 @@ function GenerateSheet({ open, onClose, onSaveDraft }) {
                 <button
                   key={t.key}
                   onClick={() => { setEmailType(t.key); setGeneratedBody(""); }}
-                  className={`text-left p-3.5 rounded-2xl border transition-colors ${
-                    emailType === t.key
-                      ? "border-sprout-mint bg-sprout-mint-soft"
-                      : "border-sprout-border bg-sprout-surface-2 hover:border-sprout-border-2"
+                  className={`text-left p-3.5 rounded-2xl transition-all duration-200 ease-out ${
+                    emailType === t.key ? "selection-option-on" : "selection-option-off"
                   }`}
                 >
                   <span className="text-xl">{t.emoji}</span>
@@ -351,6 +395,65 @@ function GenerateSheet({ open, onClose, onSaveDraft }) {
           {/* Safe area bottom spacing */}
           <div className="h-4" />
         </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+// ─── Inbox message detail ─────────────────────────────────────────────────────
+
+function InboxMessageSheet({ message, onClose }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    if (!message) return;
+    navigator.clipboard.writeText(message.body || message.preview).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    toast.success("Message copied");
+  };
+
+  return (
+    <Sheet open={!!message} onOpenChange={(v) => !v && onClose()}>
+      <SheetContent
+        side="bottom"
+        className="max-h-[85dvh] overflow-y-auto rounded-t-3xl border-zinc-200 bg-white p-0"
+      >
+        {message ? (
+          <>
+            <SheetHeader className="border-b border-zinc-100 px-5 pb-4 pt-6 text-left">
+              <div className="flex items-start gap-3">
+                <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-violet-100 font-bold text-linkedin">
+                  {message.from.charAt(0)}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <SheetTitle className="font-display text-lg font-bold leading-tight text-zinc-900">
+                    {message.subject}
+                  </SheetTitle>
+                  <p className="mt-1 text-sm text-zinc-500">
+                    From <span className="font-semibold text-zinc-800">{message.from}</span>
+                    {" · "}
+                    {message.date}
+                  </p>
+                </div>
+              </div>
+            </SheetHeader>
+            <div className="space-y-4 px-5 py-5">
+              <p className="whitespace-pre-line text-sm leading-relaxed text-zinc-700">
+                {message.body || message.preview}
+              </p>
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-xs font-semibold text-linkedin hover:bg-violet-50"
+                data-testid="inbox-message-copy"
+              >
+                {copied ? <><Check className="h-3 w-3" /> Copied</> : <><Copy className="h-3 w-3" /> Copy</>}
+              </button>
+              <div className="h-4" />
+            </div>
+          </>
+        ) : null}
       </SheetContent>
     </Sheet>
   );
@@ -490,73 +593,144 @@ function RepliesTab() {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function Emails() {
-  const [activeTab, setActiveTab] = useState("sent");
+  const navigate = useNavigate();
+  const [filter, setFilter] = useState("primary");
+  const [query, setQuery] = useState("");
   const [generateOpen, setGenerateOpen] = useState(false);
   const [drafts, setDrafts] = useState(loadDrafts());
+  const [starred, setStarred] = useState(() =>
+    Object.fromEntries(INBOX_MESSAGES.map((m) => [m.id, m.starred])),
+  );
+  const [selectedMessage, setSelectedMessage] = useState(null);
 
   const handleSaveDraft = (draft) => {
     const updated = [draft, ...drafts];
     setDrafts(updated);
     saveDrafts(updated);
-    // If user is on the drafts tab, the child will re-read from localStorage on next mount,
-    // but we keep drafts in state here for the badge count.
   };
 
+  const messages = INBOX_MESSAGES.filter((m) => {
+    if (m.filter !== filter) return false;
+    if (!query.trim()) return true;
+    const q = query.toLowerCase();
+    return (
+      m.from.toLowerCase().includes(q)
+      || m.subject.toLowerCase().includes(q)
+      || m.preview.toLowerCase().includes(q)
+    );
+  });
+
   return (
-    <div className="sprout min-h-dvh bg-sprout-bg text-white pb-28">
-      {/* Header */}
-      <header className="px-5 pt-6 max-w-md mx-auto">
-        <h1 className="font-display font-black text-3xl tracking-tighter text-white">Emails</h1>
-        <p className="text-sm text-sprout-muted mt-1">
-          Tailored outreach + recruiter replies, in one inbox.
-        </p>
+    <div className="relative min-h-dvh bg-white pb-28 text-zinc-900">
+      <header className="mx-auto max-w-md px-4 pt-4">
+        <div className="flex items-center gap-2">
+          <button type="button" className="grid h-10 w-10 place-items-center text-zinc-500" aria-label="Menu">
+            <Menu className="h-5 w-5" />
+          </button>
+          <div className="flex h-11 flex-1 items-center rounded-full bg-zinc-100 px-4">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search in mail"
+              className="w-full bg-transparent text-sm text-zinc-900 placeholder:text-zinc-400 outline-none"
+              data-testid="inbox-search"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate("/settings")}
+            className="grid h-10 w-10 place-items-center text-zinc-500"
+            aria-label="Settings"
+          >
+            <Settings className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="mt-4 flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+          {INBOX_FILTERS.map((f) => {
+            const active = filter === f.key;
+            return (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => setFilter(f.key)}
+                className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
+                  active ? f.activeClass : f.idleClass
+                }`}
+                data-testid={`inbox-filter-${f.key}`}
+              >
+                {f.label}
+              </button>
+            );
+          })}
+        </div>
       </header>
 
-      <div className="px-5 mt-5 max-w-md mx-auto space-y-4">
-        {/* Generate outreach button */}
-        <button
-          onClick={() => setGenerateOpen(true)}
-          className="w-full flex items-center gap-3 p-4 rounded-2xl gradient-linkedin text-white font-semibold text-sm"
-        >
-          <Sparkles className="w-4 h-4" />
-          Generate outreach email
-        </button>
-
-        {/* Tabs */}
-        <div className="flex gap-2 p-1 rounded-full bg-sprout-surface border border-sprout-border">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setActiveTab(t.key)}
-              className={`relative flex-1 h-10 rounded-full text-sm font-semibold transition-colors ${
-                activeTab === t.key ? "text-white" : "text-sprout-muted"
-              }`}
-            >
-              {activeTab === t.key && (
-                <motion.span
-                  layoutId="email-tab-pill"
-                  className="absolute inset-0 rounded-full bg-sprout-mint"
-                  transition={{ type: "spring", stiffness: 300, damping: 28 }}
-                />
-              )}
-              <span className="relative">{t.label}</span>
-            </button>
-          ))}
-        </div>
-
-        {/* Tab content */}
-        <div className="mt-2">
-          {activeTab === "sent" && <SentTab />}
-          {activeTab === "drafts" && <DraftsTab key={drafts.length} />}
-          {activeTab === "replies" && <RepliesTab />}
-        </div>
+      <div className="mx-auto mt-2 max-w-md px-4">
+        <p className="mb-2 text-xs font-medium capitalize text-zinc-400">{filter}</p>
+        {messages.length === 0 ? (
+          <p className="py-12 text-center text-sm text-zinc-500">No messages in this folder.</p>
+        ) : (
+          <ul className="divide-y divide-zinc-100">
+            {messages.map((m) => (
+              <li key={m.id} data-testid={`inbox-row-${m.id}`}>
+                <div className="flex gap-3 py-4">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedMessage(m)}
+                    className="flex min-w-0 flex-1 gap-3 text-left transition-colors hover:opacity-90 active:bg-zinc-50 rounded-lg -mx-1 px-1"
+                    data-testid={`inbox-open-${m.id}`}
+                  >
+                    <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-violet-100 font-bold text-linkedin">
+                      {m.from.charAt(0)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="truncate text-sm font-bold text-zinc-900">{m.from}</p>
+                        <span className="shrink-0 text-xs text-zinc-400">{m.date}</span>
+                      </div>
+                      <p className="truncate text-sm font-semibold text-zinc-800">{m.subject}</p>
+                      <p className="mt-0.5 line-clamp-2 text-sm text-zinc-500">{m.preview}</p>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setStarred((s) => ({ ...s, [m.id]: !s[m.id] }));
+                    }}
+                    className="shrink-0 pt-1 text-zinc-300 hover:text-amber-400"
+                    aria-label={starred[m.id] ? "Unstar" : "Star"}
+                    data-testid={`inbox-star-${m.id}`}
+                  >
+                    <Star className={`h-4 w-4 ${starred[m.id] ? "fill-amber-400 text-amber-400" : ""}`} />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
-      {/* Generate sheet */}
+      <button
+        type="button"
+        onClick={() => setGenerateOpen(true)}
+        className="fixed bottom-24 right-5 z-40 grid h-14 w-14 place-items-center rounded-full gradient-linkedin text-white shadow-lg hover:opacity-90"
+        aria-label="Compose email"
+        data-testid="inbox-compose-fab"
+      >
+        <Pencil className="h-6 w-6" />
+      </button>
+
       <GenerateSheet
         open={generateOpen}
         onClose={() => setGenerateOpen(false)}
         onSaveDraft={handleSaveDraft}
+      />
+
+      <InboxMessageSheet
+        message={selectedMessage}
+        onClose={() => setSelectedMessage(null)}
       />
     </div>
   );

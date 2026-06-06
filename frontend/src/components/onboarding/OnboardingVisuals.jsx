@@ -1,10 +1,19 @@
-import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
+import {
+  motion,
+  animate,
+  useMotionValue,
+  useSpring,
+  useTransform,
+  useMotionValueEvent,
+} from "framer-motion";
 import { Gem } from "lucide-react";
 import Logo from "../Logo";
 import { BRAND } from "../../lib/brand";
 import { ob } from "./onboardingTheme";
 
 const EASE_OUT = [0.4, 0, 0.2, 1];
+const EASE_SMOOTH = [0.16, 1, 0.3, 1];
 
 function ChartCard({ label, children, caption }) {
   return (
@@ -155,40 +164,90 @@ export function InterviewRateChart() {
   );
 }
 
+const OWN_TARGET_PCT = 5;
+const SWIIPR_TARGET_X = 2;
+/** Max column height (px) inside the track — scales visually via transform */
+const OWN_BAR_PX = 44;
+const SWIIPR_BAR_PX = 104;
+const SWIIPR_SCALE_AT_1X = OWN_BAR_PX / SWIIPR_BAR_PX;
+
 export function Compare2xChart() {
+  const ownTarget = useMotionValue(0);
+  const swiiprTarget = useMotionValue(1);
+  const ownMotion = useSpring(ownTarget, { stiffness: 85, damping: 20, mass: 0.5 });
+  const swiiprMotion = useSpring(swiiprTarget, { stiffness: 70, damping: 22, mass: 0.6 });
+
+  const [ownLabel, setOwnLabel] = useState(0);
+  const [swiiprLabel, setSwiiprLabel] = useState("1.0x");
+  const [captionVisible, setCaptionVisible] = useState(false);
+
+  useEffect(() => {
+    ownTarget.set(0);
+    swiiprTarget.set(1);
+    const ownAnim = animate(ownTarget, OWN_TARGET_PCT, {
+      duration: 2,
+      delay: 0.2,
+      ease: EASE_SMOOTH,
+    });
+    const swiiprAnim = animate(swiiprTarget, SWIIPR_TARGET_X, {
+      duration: 2.4,
+      delay: 0.55,
+      ease: EASE_SMOOTH,
+    });
+    return () => {
+      ownAnim.stop();
+      swiiprAnim.stop();
+    };
+  }, [ownTarget, swiiprTarget]);
+
+  useMotionValueEvent(ownMotion, "change", (v) => {
+    setOwnLabel(Math.round(v));
+  });
+
+  useMotionValueEvent(swiiprMotion, "change", (v) => {
+    setSwiiprLabel(v >= 1.95 ? "2x" : `${v.toFixed(1)}x`);
+    setCaptionVisible(v >= 1.75);
+  });
+
+  const ownScale = useTransform(ownMotion, [0, OWN_TARGET_PCT], [0, 1]);
+  const swiiprScale = useTransform(
+    swiiprMotion,
+    [1, SWIIPR_TARGET_X],
+    [SWIIPR_SCALE_AT_1X, 1],
+  );
+  const logoScale = useTransform(swiiprMotion, [1, 1.35, 2], [0.7, 0.88, 1]);
+  const logoOpacity = useTransform(swiiprMotion, [1.05, 1.25], [0, 1]);
+
   return (
     <div className={`${ob.card} mx-auto w-full max-w-lg p-5 sm:p-6`}>
       <div className="flex items-end justify-center gap-6 sm:gap-12">
         <div className="flex flex-1 max-w-[9.5rem] flex-col items-center sm:max-w-[11rem]">
           <p className="mb-4 text-center text-sm font-medium text-zinc-600 sm:text-base">On your own</p>
-          <div className="flex h-48 w-full flex-col justify-end rounded-2xl border border-zinc-200 bg-zinc-100 p-2 sm:h-60 sm:p-2.5">
+          <div className="flex h-48 w-full flex-col justify-end overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 p-2 sm:h-60 sm:p-2.5">
             <motion.div
-              className="flex h-[22%] min-h-[2.75rem] items-center justify-center rounded-xl bg-zinc-300 sm:min-h-[3.25rem]"
-              initial={{ scaleY: 0, opacity: 0 }}
-              animate={{ scaleY: 1, opacity: 1 }}
-              transition={{ duration: 0.45, ease: EASE_OUT, delay: 0.15 }}
-              style={{ transformOrigin: "bottom" }}
+              className="flex w-full origin-bottom items-center justify-center rounded-xl bg-zinc-300 will-change-transform"
+              style={{ height: OWN_BAR_PX, scaleY: ownScale }}
             >
-              <span className="text-sm font-bold text-zinc-700 sm:text-base">5%</span>
+              <OwnBarLabel ownScale={ownScale} label={ownLabel} />
             </motion.div>
           </div>
         </div>
 
         <div className="flex flex-1 max-w-[9.5rem] flex-col items-center sm:max-w-[11rem]">
           <p className={`mb-4 text-center text-sm font-semibold sm:text-base ${ob.accent}`}>With {BRAND.NAME}</p>
-          <div className="flex h-48 w-full flex-col justify-end rounded-2xl border border-violet-200 bg-zinc-50 p-2 shadow-sm sm:h-60 sm:p-2.5">
+          <div className="flex h-48 w-full flex-col justify-end overflow-hidden rounded-2xl border border-violet-200 bg-zinc-50 p-2 shadow-sm sm:h-60 sm:p-2.5">
             <motion.div
-              className="gradient-linkedin flex h-[52%] min-h-[6.5rem] flex-col items-center justify-center gap-2 rounded-xl py-3 sm:min-h-[8rem] sm:gap-2.5 sm:py-4"
-              initial={{ scaleY: 0, opacity: 0 }}
-              animate={{ scaleY: 1, opacity: 1 }}
-              transition={{ duration: 0.55, ease: EASE_OUT, delay: 0.3 }}
-              style={{ transformOrigin: "bottom" }}
+              className="gradient-linkedin flex w-full origin-bottom flex-col items-center justify-end gap-1.5 overflow-hidden rounded-xl pb-2 pt-3 will-change-transform sm:gap-2 sm:pb-3 sm:pt-4"
+              style={{ height: SWIIPR_BAR_PX, scaleY: swiiprScale }}
             >
-              <span className="rounded-xl bg-white/95 p-2 shadow-sm sm:p-2.5">
+              <motion.span
+                className="rounded-xl bg-white/95 p-1.5 shadow-sm sm:p-2"
+                style={{ scale: logoScale, opacity: logoOpacity }}
+              >
                 <Logo size={28} className="sm:hidden" />
                 <Logo size={36} className="hidden sm:block" />
-              </span>
-              <span className="font-display text-2xl font-black leading-none text-white sm:text-3xl">2x</span>
+              </motion.span>
+              <SwiiprBarLabel swiiprScale={swiiprScale} label={swiiprLabel} />
             </motion.div>
           </div>
         </div>
@@ -196,13 +255,38 @@ export function Compare2xChart() {
 
       <motion.p
         className={`mt-5 text-center text-xs leading-snug sm:mt-6 sm:text-sm ${ob.muted}`}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.45, delay: 0.75 }}
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: captionVisible ? 1 : 0, y: captionVisible ? 0 : 6 }}
+        transition={{ duration: 0.55, ease: EASE_SMOOTH }}
       >
         {`${BRAND.NAME} makes it easy to apply to more of the right jobs, increasing interviews.`}
       </motion.p>
     </div>
+  );
+}
+
+/** Counter-scale label so text stays readable while the bar grows */
+function SwiiprBarLabel({ swiiprScale, label }) {
+  const textScaleY = useTransform(swiiprScale, (s) => (s > 0.15 ? 1 / s : 1));
+  return (
+    <motion.span
+      className="font-display text-xl font-black leading-none tabular-nums text-white sm:text-3xl"
+      style={{ scaleY: textScaleY }}
+    >
+      {label}
+    </motion.span>
+  );
+}
+
+function OwnBarLabel({ ownScale, label }) {
+  const textScaleY = useTransform(ownScale, (s) => (s > 0.12 ? 1 / s : 1));
+  return (
+    <motion.span
+      className="text-sm font-bold tabular-nums text-zinc-700 sm:text-base"
+      style={{ scaleY: textScaleY }}
+    >
+      {label}%
+    </motion.span>
   );
 }
 

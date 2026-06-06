@@ -231,7 +231,7 @@ function EntryEditor({ open, sectionKey, entry, onClose, onSave }) {
                 key={t}
                 onClick={() => setTab(t)}
                 className={`flex-1 h-10 rounded-full text-sm font-semibold capitalize transition-colors ${
-                  tab === t ? "bg-sprout-mint text-white" : "text-sprout-muted"
+                  tab === t ? "selection-tab-on text-violet-800" : "text-zinc-500"
                 }`}
                 data-testid={`entry-tab-${t}`}
               >

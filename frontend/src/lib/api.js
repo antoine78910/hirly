@@ -1,4 +1,6 @@
 import axios from "axios";
+import { demoMode } from "./dev";
+import { getDemoResponse } from "./demoApi";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API = `${BACKEND_URL}/api`;
@@ -20,5 +22,19 @@ export const getSessionToken = () => localStorage.getItem(TOKEN_KEY);
 api.interceptors.request.use((config) => {
   const t = getSessionToken();
   if (t) config.headers.Authorization = `Bearer ${t}`;
+
+  if (demoMode) {
+    const mock = getDemoResponse(config);
+    if (mock !== undefined) {
+      config.adapter = () => Promise.resolve({
+        data: mock,
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config,
+      });
+    }
+  }
+
   return config;
 });

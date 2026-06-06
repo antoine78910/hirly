@@ -96,12 +96,8 @@ export default function PlacesAutocomplete({
   const optionClass = light
     ? "w-full text-left px-4 py-3 text-sm text-zinc-700 hover:bg-zinc-50 flex items-start gap-2.5"
     : "w-full text-left px-4 py-3 text-sm text-zinc-100 hover:bg-sprout-surface-2 flex items-start gap-2.5";
-  const chipOnClass = light
-    ? "border-violet-400/70 bg-gradient-to-br from-violet-50 via-fuchsia-50/75 to-violet-50 text-violet-800 shadow-[0_1px_2px_rgba(124,58,237,0.08)] ring-1 ring-violet-300/50"
-    : "border-sprout-mint/70 bg-sprout-mint/15 text-sprout-mint ring-1 ring-sprout-mint/30";
-  const chipOffClass = light
-    ? "bg-white text-zinc-600 border-zinc-200 hover:border-violet-300/55 hover:bg-violet-50/55 hover:text-violet-700"
-    : "bg-sprout-surface-2 text-zinc-200 border-sprout-border hover:border-sprout-border-2";
+  const chipOnClass = "selection-chip-on";
+  const chipOffClass = light ? "selection-chip-off" : "selection-chip-off bg-zinc-50";
 
   const applyLocation = useCallback((location) => {
     setResults([]);

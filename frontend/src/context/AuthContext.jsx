@@ -1,7 +1,14 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { api, setSessionToken } from "../lib/api";
+import { devBypassAuth } from "../lib/dev";
 
 const AuthContext = createContext(null);
+
+const DEV_MOCK_USER = {
+  user_id: "dev-local",
+  email: "dev@localhost",
+  name: "Dev User",
+};
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -24,6 +31,13 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
+    if (devBypassAuth) {
+      setUser(DEV_MOCK_USER);
+      setHasProfile(true);
+      setHasPreferences(true);
+      setLoading(false);
+      return;
+    }
     // CRITICAL: If returning from OAuth callback, skip the /me check.
     // AuthCallback will exchange the OAuth session and establish the app session first.
     if (window.location.pathname === "/auth/callback") {

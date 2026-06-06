@@ -112,13 +112,13 @@ export default function History() {
             onClick={() => switchTab(t.key)}
             data-testid={t.testid}
             className={`relative flex-1 h-10 rounded-full text-sm font-semibold transition-colors ${
-              tab === t.key ? "text-white" : "text-sprout-muted"
+              tab === t.key ? "text-violet-800" : "text-zinc-500"
             }`}
           >
             {tab === t.key && (
               <motion.span
                 layoutId="history-tab-pill"
-                className="absolute inset-0 rounded-full bg-sprout-mint"
+                className="absolute inset-0 rounded-full selection-tab-on"
                 transition={{ type: "spring", stiffness: 300, damping: 28 }}
               />
             )}

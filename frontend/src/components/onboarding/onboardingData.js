@@ -61,19 +61,35 @@ export const ONBOARDING_STEP_ORDER = [
   "potentialChart",
   "compare2x",
   "attribution",
+  "referralCode",
   "upload",
   "showcaseLanding",
   "showcaseAllInOne",
   "showcasePricing",
 ];
 
+/** Showcase step screenshots — add PNGs under `public/onboarding/`. */
+export const ONBOARDING_SHOWCASE_SCREENS = {
+  landing: {
+    left: "/onboarding/showcase-screening.png",
+    center: "/onboarding/showcase-swipe.png",
+    right: "/onboarding/showcase-applications.png",
+  },
+  allInOne: "/onboarding/showcase-documents-phone.png",
+  pricing: "/onboarding/showcase-pricing-phone.png",
+};
+
 export const ONBOARDING_PAIN_TAGS = [
   "Hours applying, no replies?",
-  "Endless scrolling for jobs?",
   "Reapplying by accident?",
+  "Copy-pasting cover letters?",
+  "No idea if anyone saw it?",
+  "Rewriting the same answers?",
+  "Endless scrolling for jobs?",
   "Writing 'Dear Hiring Manager' again?",
   "Tracked in a messy spreadsheet?",
   "Forgot which version you sent?",
+  "Stuck using 10+ job sites?",
 ];
 
 export const ONBOARDING_PRICING_PLANS = [

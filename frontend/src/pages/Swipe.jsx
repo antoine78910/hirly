@@ -9,7 +9,10 @@ import {
 import { toast } from "sonner";
 import Logo from "../components/Logo";
 import FiltersModal from "../components/FiltersModal";
+import TargetSearchSheet from "../components/TargetSearchSheet";
+import ReportJobSheet from "../components/ReportJobSheet";
 import { BRAND } from "../lib/brand";
+import { shareJob } from "../lib/shareJob";
 
 const DEFAULT_SEARCH_RADIUS = "50km";
 
@@ -121,14 +124,43 @@ function Pill({ icon: Icon, children, mint }) {
   );
 }
 
-function CardFront({ job }) {
+function stopCardTap(e) {
+  e.stopPropagation();
+  e.preventDefault();
+}
+
+function CardFront({ job, onReport, onShare, actionsEnabled }) {
   return (
     <div className="absolute inset-0 backface-hidden bg-sprout-surface border border-sprout-border rounded-[28px] overflow-hidden flex flex-col">
       {/* top bar: flag, share | match badge */}
       <div className="flex items-start justify-between p-5">
-        <div className="flex items-center gap-3">
-          <Flag className="w-5 h-5 text-sprout-mint" strokeWidth={1.8} />
-          <Share2 className="w-5 h-5 text-sprout-mint" strokeWidth={1.8} />
+        <div className="pointer-events-auto flex items-center gap-3">
+          <button
+            type="button"
+            onPointerDown={stopCardTap}
+            onClick={(e) => {
+              stopCardTap(e);
+              if (actionsEnabled) onReport?.(job);
+            }}
+            className="grid h-9 w-9 place-items-center rounded-full text-sprout-mint hover:bg-sprout-mint-soft transition-colors"
+            aria-label="Report job"
+            data-testid="job-report-btn"
+          >
+            <Flag className="w-5 h-5" strokeWidth={1.8} />
+          </button>
+          <button
+            type="button"
+            onPointerDown={stopCardTap}
+            onClick={(e) => {
+              stopCardTap(e);
+              if (actionsEnabled) onShare?.(job);
+            }}
+            className="grid h-9 w-9 place-items-center rounded-full text-sprout-mint hover:bg-sprout-mint-soft transition-colors"
+            aria-label="Share job"
+            data-testid="job-share-btn"
+          >
+            <Share2 className="w-5 h-5" strokeWidth={1.8} />
+          </button>
         </div>
         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sprout-mint text-white text-xs font-bold">
           <Zap className="w-3.5 h-3.5" fill="white" />
@@ -273,7 +305,7 @@ function CardBack({ job }) {
   );
 }
 
-function Card({ job, onSwipe, isTop, index }) {
+function Card({ job, onSwipe, onReport, onShare, isTop, index }) {
   const x = useMotionValue(0);
   const y = useMotionValue(0);
   const rotate = useTransform(x, [-260, 0, 260], [-14, 0, 14]);
@@ -329,7 +361,12 @@ function Card({ job, onSwipe, isTop, index }) {
         transition={{ type: "spring", stiffness: 110, damping: 18 }}
         style={{ pointerEvents: flipped ? "auto" : "none" }}
       >
-        <CardFront job={job} />
+        <CardFront
+          job={job}
+          onReport={onReport}
+          onShare={onShare}
+          actionsEnabled={isTop}
+        />
         <CardBack job={job} />
 
         {/* Stamps — top corners, asymmetric rotation. */}
@@ -340,7 +377,7 @@ function Card({ job, onSwipe, isTop, index }) {
               className="pointer-events-none absolute top-20 left-6 px-4 py-1.5 rounded-xl border-[3px] border-sprout-mint text-sprout-mint font-display font-black text-3xl rotate-[-14deg] backdrop-blur-sm tracking-wider"
               data-testid="apply-stamp"
             >
-              SEND
+              APPLY
             </motion.div>
             <motion.div
               style={{ opacity: skipOpacity }}
@@ -360,19 +397,19 @@ function SkeletonCard() {
   return (
     <div className="absolute inset-0 bg-sprout-surface border border-sprout-border rounded-[28px] p-6 overflow-hidden" data-testid="skeleton-card">
       <div className="flex items-center justify-between">
-        <div className="h-5 w-16 shimmer-dark rounded-full" />
-        <div className="h-6 w-10 shimmer-dark rounded-full" />
+        <div className="h-5 w-16 shimmer-light rounded-full" />
+        <div className="h-6 w-10 shimmer-light rounded-full" />
       </div>
-      <div className="mt-6 flex justify-center"><div className="h-16 w-20 shimmer-dark rounded-2xl" /></div>
-      <div className="mt-5 mx-auto h-6 w-32 shimmer-dark rounded" />
-      <div className="mt-2 mx-auto h-4 w-3/4 shimmer-dark rounded" />
-      <div className="mt-1 mx-auto h-4 w-1/2 shimmer-dark rounded" />
-      <div className="mt-8 mx-auto h-10 w-2/3 shimmer-dark rounded" />
-      <div className="mt-2 mx-auto h-10 w-1/2 shimmer-dark rounded" />
+      <div className="mt-6 flex justify-center"><div className="h-16 w-20 shimmer-light rounded-2xl" /></div>
+      <div className="mt-5 mx-auto h-6 w-32 shimmer-light rounded" />
+      <div className="mt-2 mx-auto h-4 w-3/4 shimmer-light rounded" />
+      <div className="mt-1 mx-auto h-4 w-1/2 shimmer-light rounded" />
+      <div className="mt-8 mx-auto h-10 w-2/3 shimmer-light rounded" />
+      <div className="mt-2 mx-auto h-10 w-1/2 shimmer-light rounded" />
       <div className="mt-8 flex justify-center gap-2">
-        <div className="h-7 w-20 shimmer-dark rounded-full" />
-        <div className="h-7 w-20 shimmer-dark rounded-full" />
-        <div className="h-7 w-20 shimmer-dark rounded-full" />
+        <div className="h-7 w-20 shimmer-light rounded-full" />
+        <div className="h-7 w-20 shimmer-light rounded-full" />
+        <div className="h-7 w-20 shimmer-light rounded-full" />
       </div>
     </div>
   );
@@ -385,11 +422,14 @@ export default function Swipe() {
   const [appLoading, setAppLoading] = useState(false);
   const [appliedToday, setAppliedToday] = useState(0);
   const [target, setTarget] = useState({ role: "", location: "" });
+  const [targetLocationData, setTargetLocationData] = useState(null);
+  const [targetSheetOpen, setTargetSheetOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState(null);
   const [totalCount, setTotalCount] = useState(null);
   const [feedMeta, setFeedMeta] = useState(null);
   const [feedError, setFeedError] = useState("");
+  const [reportJob, setReportJob] = useState(null);
   const fetchingRef = useRef(false);
   const filtersRef = useRef(null);
   const pendingFiltersRef = useRef(undefined);
@@ -397,7 +437,13 @@ export default function Swipe() {
   const loadProfile = useCallback(async () => {
     try {
       const { data } = await api.get("/profile");
-      if (data) setTarget({ role: data.target_role || "", location: data.target_location || "" });
+      if (data) {
+        setTarget({
+          role: data.target_role || "",
+          location: data.target_location || "",
+        });
+        setTargetLocationData(data.target_location_data || null);
+      }
     } catch (_) {}
   }, []);
 
@@ -517,13 +563,38 @@ export default function Swipe() {
     } catch (e) { toast.error("Nothing to undo"); }
   };
 
-  const headerLabel = target.role
-    ? `${target.role}${target.location ? ` · ${target.location}` : ""}`
-    : "Browsing all roles";
+  const handleShareJob = async (job) => {
+    try {
+      const result = await shareJob(job);
+      if (result.cancelled) return;
+      if (result.method === "clipboard") toast.success("Link copied to clipboard");
+    } catch {
+      toast.error("Could not share this job");
+    }
+  };
+
+  const dismissJob = useCallback((jobId) => {
+    setJobs((prev) => prev.filter((j) => j.job_id !== jobId));
+    api.post("/swipe", { job_id: jobId, direction: "left" }).catch(() => {});
+    if (jobs.length <= 3) loadFeed();
+  }, [jobs.length, loadFeed]);
+
+  const handleReportSubmit = async (reason) => {
+    if (!reportJob) return;
+    try {
+      await api.post("/jobs/report", { job_id: reportJob.job_id, reason });
+    } catch (_) {
+      /* demo / offline — still acknowledge */
+    }
+    toast.success("Thanks — we'll review this listing");
+    const reportedId = reportJob.job_id;
+    setReportJob(null);
+    if (topJob?.job_id === reportedId) dismissJob(reportedId);
+  };
 
   return (
-    <div className="sprout h-dvh flex flex-col bg-sprout-bg text-white overflow-hidden">
-      <header className="px-4 pt-5 pb-3 flex items-center gap-3 max-w-md mx-auto w-full" data-testid="swipe-header">
+    <div className="sprout h-dvh flex flex-col bg-sprout-bg text-zinc-900 overflow-hidden">
+      <header className="flex shrink-0 items-center gap-3 px-4 pb-3 pt-5 max-w-md mx-auto w-full" data-testid="swipe-header">
         <div className="flex items-center gap-1.5">
           <Zap className="w-5 h-5 text-sprout-mint" strokeWidth={2} fill="rgb(167,139,250)" />
           <span className="text-sprout-mint font-semibold text-sm" data-testid="applied-today">{appliedToday}</span>
@@ -532,10 +603,20 @@ export default function Swipe() {
           <Undo2 className="w-5 h-5 text-sprout-mint" />
         </button>
         <div className="flex-1 flex justify-center">
-          <div className="px-4 py-1.5 rounded-full bg-sprout-surface text-center max-w-[220px] truncate" data-testid="target-pill">
-            <p className="font-semibold text-white text-sm leading-tight truncate">{target.role || "Set target role"}</p>
-            <p className="text-[11px] text-sprout-muted leading-tight truncate">{target.location || "Anywhere"} · auto-match</p>
-          </div>
+          <button
+            type="button"
+            onClick={() => setTargetSheetOpen(true)}
+            className="max-w-[220px] truncate rounded-full border border-transparent bg-white px-4 py-1.5 text-center shadow-sm ring-1 ring-zinc-200/80 transition-colors hover:border-violet-200 hover:bg-violet-50/50"
+            data-testid="target-pill"
+            aria-label="Edit target role and location"
+          >
+            <p className="truncate text-sm font-semibold leading-tight text-zinc-900">
+              {target.role || "Set target role"}
+            </p>
+            <p className="truncate text-[11px] leading-tight text-zinc-500">
+              {target.location || "Anywhere"} · tap to edit
+            </p>
+          </button>
         </div>
         <button
           onClick={() => navigate("/history")}
@@ -559,8 +640,8 @@ export default function Swipe() {
         </button>
       </header>
 
-      <div className="flex-1 relative px-4 pb-36">
-        <div className="relative w-full max-w-md mx-auto h-full">
+      <div className="relative min-h-0 flex-1 px-4 pb-2">
+        <div className="relative mx-auto h-full w-full max-w-md">
           {loading && jobs.length === 0 && <SkeletonCard />}
 
           {!loading && jobs.length === 0 && (
@@ -602,61 +683,66 @@ export default function Swipe() {
           <AnimatePresence>
             {jobs.slice(0, 3).reverse().map((j, i, arr) => {
               const idx = arr.length - 1 - i;
-              return <Card key={j.job_id} job={j} onSwipe={handleSwipe} isTop={idx === 0} index={idx} />;
+              return (
+                <Card
+                  key={j.job_id}
+                  job={j}
+                  onSwipe={handleSwipe}
+                  onReport={setReportJob}
+                  onShare={handleShareJob}
+                  isTop={idx === 0}
+                  index={idx}
+                />
+              );
             })}
           </AnimatePresence>
+
+          {topJob ? (
+            <div
+              className="pointer-events-none absolute inset-x-0 z-20 flex items-center justify-center gap-14"
+              style={{ bottom: "calc(4.5rem + env(safe-area-inset-bottom, 0px))" }}
+            >
+              <motion.button
+                whileTap={{ scale: 0.9 }}
+                onClick={() => handleSwipe("skip")}
+                disabled={!topJob || appLoading}
+                className="pointer-events-auto grid h-14 w-14 place-items-center rounded-full border-2 border-rose-500/70 bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)] transition-colors hover:border-rose-500"
+                aria-label="Pass"
+                data-testid="skip-btn"
+              >
+                <X className="h-6 w-6 text-rose-500" strokeWidth={2.5} />
+              </motion.button>
+
+              <motion.button
+                whileTap={{ scale: 0.9 }}
+                onClick={() => handleSwipe("apply")}
+                disabled={!topJob || appLoading}
+                className="pointer-events-auto grid h-16 w-16 place-items-center rounded-full gradient-linkedin shadow-[0_8px_28px_rgba(124,58,237,0.45)] transition-opacity hover:opacity-90"
+                aria-label="Apply"
+                data-testid="apply-btn"
+              >
+                {appLoading
+                  ? <Loader2 className="h-6 w-6 animate-spin text-white" />
+                  : <Heart className="h-6 w-6 fill-white text-white" />
+                }
+              </motion.button>
+            </div>
+          ) : null}
         </div>
       </div>
 
-      {topJob && (
-        <div className="absolute bottom-[88px] inset-x-0 flex flex-col items-center gap-3 pointer-events-none z-10">
-          {/* Action buttons */}
-          <div className="pointer-events-auto flex items-center gap-6">
-            {/* Skip button (✕) */}
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              onClick={() => handleSwipe("skip")}
-              disabled={!topJob || appLoading}
-              className="w-14 h-14 rounded-full bg-sprout-surface border-2 border-rose-500/60 grid place-items-center shadow-lg hover:border-rose-500 transition-colors"
-              aria-label="Pass"
-              data-testid="skip-btn"
-            >
-              <X className="w-6 h-6 text-rose-400" strokeWidth={2.5} />
-            </motion.button>
-
-            {/* Apply button (❤) */}
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              onClick={() => handleSwipe("apply")}
-              disabled={!topJob || appLoading}
-              className="w-16 h-16 rounded-full gradient-linkedin grid place-items-center shadow-[0_0_24px_rgba(124,58,237,0.4)] hover:opacity-90 transition-opacity"
-              aria-label="Apply"
-              data-testid="apply-btn"
-            >
-              {appLoading
-                ? <Loader2 className="w-6 h-6 text-white animate-spin" />
-                : <Heart className="w-6 h-6 text-white" fill="white" />
-              }
-            </motion.button>
-
-            {/* Undo button */}
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              onClick={handleUndo}
-              className="w-14 h-14 rounded-full bg-sprout-surface border border-sprout-border grid place-items-center shadow-lg hover:border-sprout-border-2 transition-colors"
-              aria-label="Undo"
-              data-testid="undo-action-btn"
-            >
-              <Undo2 className="w-5 h-5 text-sprout-muted" />
-            </motion.button>
-          </div>
-
-          {/* Hint text */}
-          <div className="pointer-events-auto px-4 py-1.5 rounded-full bg-sprout-surface/80 backdrop-blur-md border border-sprout-border text-[11px] text-sprout-muted font-medium tracking-wide" data-testid="swipe-hint">
-            Swipe or tap · Tap card for details
-          </div>
-        </div>
-      )}
+      <TargetSearchSheet
+        open={targetSheetOpen}
+        initialRole={target.role}
+        initialLocation={target.location}
+        initialLocationData={targetLocationData}
+        onClose={() => setTargetSheetOpen(false)}
+        onSaved={({ role, location, locationData }) => {
+          setTarget({ role, location });
+          setTargetLocationData(locationData);
+          loadFeed(true, filtersRef.current);
+        }}
+      />
 
       <FiltersModal
         open={filtersOpen}
@@ -664,6 +750,13 @@ export default function Swipe() {
         totalCount={totalCount}
         onApply={applyFilters}
         onClose={() => setFiltersOpen(false)}
+      />
+
+      <ReportJobSheet
+        open={Boolean(reportJob)}
+        job={reportJob}
+        onClose={() => setReportJob(null)}
+        onSubmit={handleReportSubmit}
       />
     </div>
   );

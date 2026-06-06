@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { ChevronDown, Search } from "lucide-react";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+import { sel } from "../lib/selectionTheme";
 
 const ROLE_GROUPS = [
   {
@@ -107,8 +108,8 @@ export default function RolePicker({ value, onChange, testId = "role-picker", va
   const groupTitleClass = light
     ? "px-4 pb-2 text-[11px] uppercase tracking-[0.16em] text-zinc-500"
     : "px-4 pb-2 text-[11px] uppercase tracking-[0.16em] text-sprout-muted";
-  const roleOnClass = light ? "bg-linkedin-light text-linkedin" : "bg-sprout-mint-soft text-sprout-mint";
-  const roleOffClass = light ? "text-zinc-700 hover:bg-zinc-50" : "text-zinc-100 hover:bg-sprout-surface-2";
+  const roleOnClass = sel.listOn;
+  const roleOffClass = light ? sel.listOff : `${sel.listOff} text-zinc-700`;
   const searchIconClass = light ? "w-4 h-4 text-zinc-400 absolute left-3 top-3.5" : "w-4 h-4 text-sprout-muted absolute left-3 top-3.5";
   const [query, setQuery] = useState("");
   const [manual, setManual] = useState(false);

@@ -1,9 +1,12 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { Loader2 } from "lucide-react";
+import { devBypassAuth } from "../lib/dev";
 
 export default function ProtectedRoute({ children, requireProfile = false }) {
   const { user, hasProfile, loading } = useAuth();
+
+  if (devBypassAuth) return children;
 
   if (loading) {
     return (

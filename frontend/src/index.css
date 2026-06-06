@@ -46,27 +46,28 @@ h1, h2, h3, h4, .font-display {
     --linkedin-dark: 211 100% 25%;
     --linkedin-light: 207 50% 95%;
   }
-  /* Dark theme tokens — used by all in-app surfaces (Swiipr violet→blue accent on black) */
+  /* In-app theme — light surfaces with violet→blue accent */
   .sprout {
-    --background: 0 0% 0%;
-    --foreground: 0 0% 98%;
-    --card: 240 4% 11%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 4% 11%;
-    --popover-foreground: 0 0% 98%;
+    --background: 0 0% 100%;
+    --foreground: 0 0% 9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 9%;
     --primary: 258 90% 66%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 240 4% 14%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 4% 14%;
-    --muted-foreground: 240 5% 65%;
-    --accent: 240 4% 14%;
-    --accent-foreground: 258 90% 76%;
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
+    --accent: 0 0% 96%;
+    --accent-foreground: 258 90% 50%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 4% 16%;
-    --input: 240 4% 16%;
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
     --ring: 258 90% 66%;
+    color: #18181b;
   }
 }
 
@@ -74,9 +75,7 @@ h1, h2, h3, h4, .font-display {
   * { @apply border-border; }
   body { @apply bg-background text-foreground; }
   html, body { overscroll-behavior-y: none; }
-  /* When the in-app .sprout shell is mounted anywhere, paint the html & body black
-     so desktop renders no white side-bars around the mobile-width content. */
-  html:has(.sprout), body:has(.sprout) { background-color: #000000; }
+  html:has(.sprout), body:has(.sprout) { background-color: #ffffff; }
 }
 
 @layer utilities {
@@ -96,23 +95,45 @@ h1, h2, h3, h4, .font-display {
     background: linear-gradient(180deg, #F5F3FF 0%, #EFF6FF 50%, #FFFFFF 100%);
   }
 
-  /* Swiipr in-app theme — keep utility names stable; values shifted to the brand violet→blue palette. */
-  .bg-sprout-bg { background-color: #000000; }
-  .bg-sprout-surface { background-color: #131318; }
-  .bg-sprout-surface-2 { background-color: #1B1B22; }
-  /* PRIMARY ACCENT (single colour) → violet */
+  /* Swiipr in-app theme — light surfaces, stable utility names */
+  .bg-sprout-bg { background-color: #ffffff; }
+  .bg-sprout-surface { background-color: #ffffff; }
+  .bg-sprout-surface-2 { background-color: #f4f4f5; }
   .bg-sprout-mint { background-color: #7C3AED; }
-  .bg-sprout-mint-soft   { background-color: rgba(124, 58, 237, 0.14); }
-  .bg-sprout-mint-soft-2 { background-color: rgba(124, 58, 237, 0.24); }
-  .text-sprout-mint { color: #A78BFA; }
-  .text-sprout-text { color: #FAFAFA; }
-  .text-sprout-muted { color: #A1A1AA; }
-  .text-sprout-dim   { color: #71717A; }
+  .bg-sprout-mint-soft   { background-color: rgba(124, 58, 237, 0.1); }
+  .bg-sprout-mint-soft-2 { background-color: rgba(124, 58, 237, 0.16); }
+  .text-sprout-mint { color: #7C3AED; }
+  .text-sprout-text { color: #18181b; }
+  .text-sprout-muted { color: #71717a; }
+  .text-sprout-dim   { color: #a1a1aa; }
   .border-sprout-mint    { border-color: #7C3AED; }
-  .border-sprout-border  { border-color: #27272A; }
-  .border-sprout-border-2{ border-color: #3F3F46; }
+  .border-sprout-border  { border-color: #e4e4e7; }
+  .border-sprout-border-2{ border-color: #d4d4d8; }
   .ring-sprout-mint  { --tw-ring-color: #7C3AED; }
-  .hover\:bg-sprout-mint-soft:hover { background-color: rgba(124, 58, 237, 0.14); }
+  .hover\:bg-sprout-mint-soft:hover { background-color: rgba(124, 58, 237, 0.1); }
+
+  .sprout .text-white { color: #18181b; }
+  .sprout .text-zinc-100 { color: #3f3f46; }
+  .sprout .bg-sprout-mint.text-white,
+  .sprout .bg-sprout-mint .text-white,
+  .sprout .gradient-linkedin,
+  .sprout .gradient-linkedin .text-white { color: #ffffff; }
+
+  .selection-chip-on {
+    @apply border border-violet-400/70 bg-gradient-to-br from-violet-50 via-fuchsia-50/75 to-violet-50 text-violet-800 shadow-[0_1px_2px_rgba(124,58,237,0.08)] ring-1 ring-violet-300/50 transition-all duration-200 ease-out;
+  }
+  .selection-chip-off {
+    @apply bg-white text-zinc-600 border border-zinc-200 hover:border-violet-300/55 hover:bg-violet-50/55 hover:text-violet-700 transition-all duration-200 ease-out;
+  }
+  .selection-option-on {
+    @apply border border-violet-400/65 bg-gradient-to-br from-violet-50 via-fuchsia-50/65 to-violet-50 text-violet-900 shadow-[0_1px_3px_rgba(124,58,237,0.1)] ring-1 ring-violet-300/45 transition-all duration-200 ease-out;
+  }
+  .selection-option-off {
+    @apply border border-zinc-200 bg-white text-zinc-700 hover:border-violet-200 hover:bg-violet-50/45 hover:shadow-sm transition-all duration-200 ease-out;
+  }
+  .selection-tab-on {
+    @apply bg-gradient-to-br from-violet-50 via-fuchsia-50/80 to-violet-50 ring-1 ring-violet-300/45 border border-violet-400/35 shadow-sm;
+  }
 
   /* Brand gradient (logo-aligned: violet → indigo → blue) — for hero CTAs, badges, logo strokes */
   .bg-swiipr-gradient   { background: linear-gradient(135deg, #A78BFA 0%, #7C3AED 30%, #6366F1 65%, #3B82F6 100%); }
