@@ -389,6 +389,7 @@ export default function Swipe() {
   const [filters, setFilters] = useState(null);
   const [totalCount, setTotalCount] = useState(null);
   const [feedMeta, setFeedMeta] = useState(null);
+  const [feedError, setFeedError] = useState("");
   const fetchingRef = useRef(false);
   const filtersRef = useRef(null);
   const pendingFiltersRef = useRef(undefined);
@@ -434,6 +435,7 @@ export default function Swipe() {
     }
     fetchingRef.current = true;
     setLoading(true);
+    setFeedError("");
     try {
       const params = buildFeedParams(f);
       console.log("JOB_FEED_PARAMS", {
@@ -442,7 +444,7 @@ export default function Swipe() {
         search_radius: f?.searchRadius || DEFAULT_SEARCH_RADIUS,
         only_my_country: Boolean(f?.onlyMyCountry),
       });
-      const { data } = await api.get(`/jobs/feed?${params.toString()}`);
+      const { data } = await api.get(`/jobs/feed?${params.toString()}`, { timeout: 15000 });
       setTotalCount(typeof data.total === "number" ? data.total : null);
       setFeedMeta(data || null);
       setJobs((prev) => {
@@ -453,7 +455,16 @@ export default function Swipe() {
         return merged;
       });
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Failed to load jobs");
+      const detail = e?.code === "ECONNABORTED"
+        ? "Jobs feed is taking too long. Try refreshing or widening your filters."
+        : e?.response?.data?.detail || "Failed to load jobs";
+      setFeedError(typeof detail === "string" ? detail : "Failed to load jobs");
+      setFeedMeta((prev) => ({
+        ...(prev || {}),
+        fallback_reason: typeof detail === "string" ? detail : "Failed to load jobs",
+      }));
+      if (replace) setJobs([]);
+      toast.error(typeof detail === "string" ? detail : "Failed to load jobs");
     } finally {
       setLoading(false);
       fetchingRef.current = false;
@@ -563,12 +574,16 @@ export default function Swipe() {
                 <Zap className="w-7 h-7 text-sprout-mint" />
               </div>
               <h3 className="font-display font-bold text-2xl text-white">
-                {feedMeta?.fallback_reason === "no_auto_apply_jobs_found"
+                {feedError
+                  ? "Could not load jobs."
+                  : feedMeta?.fallback_reason === "no_auto_apply_jobs_found"
                   ? "No one-swipe jobs found with these filters."
                   : "No jobs found with these filters."}
               </h3>
               <p className="mt-2 text-sprout-muted text-sm max-w-xs">
-                {feedMeta?.provider_rate_limited
+                {feedError
+                  ? feedError
+                  : feedMeta?.provider_rate_limited
                   ? "Job provider is temporarily rate-limited. Try again later or widen filters."
                   : feedMeta?.fallback_reason === "no_auto_apply_jobs_found"
                     ? "Try widening your distance, adding more locations, or choosing another role."

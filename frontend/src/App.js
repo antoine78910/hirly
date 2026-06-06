@@ -1,5 +1,5 @@
 import "@/App.css";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/context/AuthContext";
 import Landing from "@/pages/Landing";
@@ -15,15 +15,14 @@ import Improve from "@/pages/Improve";
 import History from "@/pages/History";
 import AuthCallback from "@/pages/AuthCallback";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import BottomNav from "@/components/BottomNav";
+
 function AppRouter() {
-  const location = useLocation();
-  if (location.hash?.includes("session_id=") || location.hash?.includes("session_token=")) {
-    return <AuthCallback />;
-  }
   return (
     <>
       <Routes>
         <Route path="/" element={<Landing />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/onboarding" element={<Onboarding />} />
         <Route path="/swipe" element={<ProtectedRoute requireProfile><Swipe /></ProtectedRoute>} />
         <Route path="/interviews" element={<ProtectedRoute requireProfile><Interviews /></ProtectedRoute>} />
@@ -31,10 +30,11 @@ function AppRouter() {
         <Route path="/people" element={<ProtectedRoute requireProfile><People /></ProtectedRoute>} />
         <Route path="/tracker" element={<ProtectedRoute requireProfile><Tracker /></ProtectedRoute>} />
         <Route path="/emails" element={<ProtectedRoute requireProfile><Emails /></ProtectedRoute>} />
-        <Route path="/profile" element={<ProtectedRoute requireProfile><Profile /></ProtectedRoute>} />
+        <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="/history" element={<ProtectedRoute requireProfile><History /></ProtectedRoute>} />
       </Routes>
+      <BottomNav />
     </>
   );
 }

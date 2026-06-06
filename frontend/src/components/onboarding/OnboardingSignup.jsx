@@ -39,11 +39,11 @@ export default function OnboardingSignup({ onClose }) {
     };
   }, []);
 
-  const handleGoogleSignup = () => {
-    const ok = startGoogleLogin("/onboarding?step=jobSearch");
+  const handleGoogleSignup = async () => {
+    const ok = await startGoogleLogin("/onboarding?step=jobSearch");
     if (!ok) {
       toast.error("Google sign-up is not configured", {
-        description: "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in backend/.env",
+        description: "Set REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY in frontend/.env",
       });
     }
   };

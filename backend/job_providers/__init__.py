@@ -2,6 +2,7 @@
 
 from .jsearch import JSearchProvider
 from .greenhouse import GreenhouseProvider
+from .lever import LeverProvider
 
 
 def get_job_provider(name: str, api_key: str):
@@ -15,4 +16,6 @@ def get_board_provider(name: str):
     provider = (name or "").lower()
     if provider == "greenhouse":
         return GreenhouseProvider()
+    if provider == "lever":
+        return LeverProvider()
     raise ValueError(f"Unsupported board provider: {name}")

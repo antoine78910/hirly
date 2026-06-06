@@ -78,7 +78,7 @@ const stepMotion = {
 export default function Onboarding() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { user, setHasProfile, setHasPreferences } = useAuth();
+  const { user, setHasProfile, setHasPreferences, checkAuth } = useAuth();
 
   const [stepIndex, setStepIndex] = useState(() => {
     const stepParam = new URLSearchParams(window.location.search).get("step");
@@ -266,7 +266,9 @@ export default function Onboarding() {
       form.append("file", f);
       const { data } = await api.post("/profile/cv", form, { headers: { "Content-Type": "multipart/form-data" } });
       setProfile(data);
-      setHasProfile(true);
+      const { data: authState } = await api.get("/auth/me");
+      setHasProfile(Boolean(authState?.has_profile));
+      if (checkAuth) await checkAuth();
       toast.success("Your profile is ready");
       setStepIndex(STEP_ORDER.indexOf("showcaseLanding"));
     } catch (e) {
@@ -303,7 +305,7 @@ export default function Onboarding() {
 
   const finishOnboarding = async () => {
     if (!user) {
-      startGoogleLogin("/onboarding");
+      await startGoogleLogin("/onboarding");
       return;
     }
     setSaving(true);
@@ -414,7 +416,7 @@ export default function Onboarding() {
 
   return (
     <>
-    {step === "signup" ? (
+    {step === "signup" && !user ? (
       <OnboardingSignup onClose={goBack} />
     ) : (
     <OnboardingShell

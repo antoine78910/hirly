@@ -1,11 +1,12 @@
 """Job import/cache service.
 
-Supabase/PostgreSQL remains the source of truth. External providers only import
-normalized jobs into the `jobs` collection.
+Supabase is the source of truth. External providers import normalized jobs into
+the active database adapter.
 """
 
 import logging
 import os
+import time
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -29,6 +30,32 @@ GREENHOUSE_SEED_BOARDS = [
     ("scaleai", "Scale AI"),
     ("chime", "Chime"),
     ("brex", "Brex"),
+]
+
+LEVER_SEED_BOARDS = [
+    ("tsmg", "TSMG"),
+    ("paytmpayments", "Paytm Payments Services"),
+    ("paytm", "Paytm"),
+    ("shieldai", "Shield AI"),
+    ("spotify", "Spotify"),
+    ("coupa", "Coupa"),
+    ("peerspace", "Peerspace"),
+    ("dnb", "Dun & Bradstreet"),
+    ("hcvt", "HCVT"),
+    ("bonedry", "Bone Dry Roofing"),
+]
+
+LEGACY_INVALID_LEVER_SEED_SITES = [
+    "asana",
+    "canonical",
+    "databricks",
+    "gusto",
+    "netlify",
+    "postman",
+    "retool",
+    "zapier",
+    "mercury",
+    "headway",
 ]
 
 
@@ -215,7 +242,7 @@ async def _import_provider_jobs(db, provider, query: JobSearchQuery) -> Dict[str
     return stats
 
 
-async def _upsert_job_batch(db, jobs: List[Dict[str, Any]]) -> Dict[str, int]:
+async def _upsert_job_batch(db, jobs: List[Dict[str, Any]], progress: Optional[Dict[str, Any]] = None, progress_base: int = 0) -> Dict[str, int]:
     stats = {
         "total_imported": 0,
         "auto_apply_supported_imported": 0,
@@ -228,6 +255,8 @@ async def _upsert_job_batch(db, jobs: List[Dict[str, Any]]) -> Dict[str, int]:
             upsert=True,
         )
         stats["total_imported"] += 1
+        if progress is not None:
+            progress["jobs_upserted_so_far"] = progress_base + stats["total_imported"]
         if job.get("auto_apply_supported") is True:
             stats["auto_apply_supported_imported"] += 1
         if job.get("ats_provider") == "unknown":
@@ -288,6 +317,63 @@ async def seed_greenhouse_company_boards(db) -> int:
     return seeded
 
 
+def _lever_board_doc(site: str, company: str) -> Dict[str, Any]:
+    now = datetime.now(timezone.utc).isoformat()
+    return {
+        "board_id": f"lever:{site}",
+        "company": company,
+        "ats_provider": "lever",
+        "board_token": site,
+        "board_url": f"https://jobs.lever.co/{site}",
+        "api_url": f"https://api.lever.co/v0/postings/{site}?mode=json",
+        "enabled": True,
+        "priority": 90,
+        "countries": ["us", "gb", "eu", "remote"],
+        "role_keywords": ["engineer", "analyst", "product", "marketing", "sales", "operations"],
+        "last_synced_at": None,
+        "last_success_at": None,
+        "last_error": None,
+        "failure_count": 0,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
+async def seed_lever_company_boards(db) -> int:
+    seeded = 0
+    await db.company_boards.update_many(
+        {"board_id": {"$in": [f"lever:{site}" for site in LEGACY_INVALID_LEVER_SEED_SITES]}},
+        {"$set": {"enabled": False, "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    for site, company in LEVER_SEED_BOARDS:
+        doc = _lever_board_doc(site, company)
+        result = await db.company_boards.update_one(
+            {"board_id": doc["board_id"]},
+            {
+                "$setOnInsert": {
+                    "board_id": doc["board_id"],
+                    "created_at": doc["created_at"],
+                },
+                "$set": {
+                    "company": doc["company"],
+                    "ats_provider": "lever",
+                    "board_token": doc["board_token"],
+                    "board_url": doc["board_url"],
+                    "api_url": doc["api_url"],
+                    "enabled": doc["enabled"],
+                    "priority": doc["priority"],
+                    "countries": doc["countries"],
+                    "role_keywords": doc["role_keywords"],
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                },
+            },
+            upsert=True,
+        )
+        if result.upserted_id is not None:
+            seeded += 1
+    return seeded
+
+
 def _parse_iso_datetime(value: Optional[str]) -> Optional[datetime]:
     if not value:
         return None
@@ -305,7 +391,13 @@ async def refresh_greenhouse_boards(
     profile: Optional[Dict[str, Any]] = None,
     limit_boards: int = 10,
     force: bool = False,
+    job_limit: Optional[int] = None,
+    progress: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
+    started_at = time.perf_counter()
+    limit_boards = max(1, min(int(limit_boards or 10), _env_int("MAX_PROVIDER_REFRESH_BOARDS", 25)))
+    job_limit = max(1, min(int(job_limit or _env_int("GREENHOUSE_BOARD_JOB_LIMIT", 100)), 500))
+    logger.info("refresh_start provider=greenhouse limit_boards=%s job_limit=%s force=%s", limit_boards, job_limit, force)
     await seed_greenhouse_company_boards(db)
     provider = get_board_provider("greenhouse")
     ttl_minutes = _env_int("GREENHOUSE_BOARD_IMPORT_TTL_MINUTES", 360)
@@ -338,6 +430,9 @@ async def refresh_greenhouse_boards(
             continue
 
         boards_checked += 1
+        if progress is not None:
+            progress["boards_checked"] = boards_checked
+            progress["last_board"] = board.get("board_token")
         now = datetime.now(timezone.utc).isoformat()
         board_query = BoardQuery(
             board_token=board["board_token"],
@@ -346,7 +441,7 @@ async def refresh_greenhouse_boards(
             location=location,
             remote_preference=remote_preference,
             country=country,
-            limit=_env_int("GREENHOUSE_BOARD_JOB_LIMIT", 100),
+            limit=job_limit,
         )
         try:
             inspection = await provider.inspect_board(board["board_token"])
@@ -369,8 +464,11 @@ async def refresh_greenhouse_boards(
                     ),
                 )
             result = await provider.search_board(board_query)
-            stats = await _upsert_job_batch(db, result.jobs)
+            stats = await _upsert_job_batch(db, result.jobs, progress=progress, progress_base=jobs_imported)
             jobs_imported += stats["total_imported"]
+            if progress is not None:
+                progress["jobs_upserted_so_far"] = jobs_imported
+                progress["sample_jobs"] = [*progress.get("sample_jobs", []), *result.jobs[:5]][:5]
             auto_apply_supported_imported += stats["auto_apply_supported_imported"]
             if result.jobs and len(sample_jobs) < 5:
                 sample_jobs.extend(result.jobs[: 5 - len(sample_jobs)])
@@ -407,12 +505,157 @@ async def refresh_greenhouse_boards(
             )
             logger.warning("Greenhouse board refresh failed: board=%s error=%s", board.get("board_token"), exc)
 
+    elapsed_ms = int((time.perf_counter() - started_at) * 1000)
+    logger.info(
+        "refresh_end provider=greenhouse boards_checked=%s jobs_upserted=%s elapsed_ms=%s",
+        boards_checked,
+        jobs_imported,
+        elapsed_ms,
+    )
     return {
         "boards_checked": boards_checked,
         "boards_successful": boards_successful,
         "jobs_imported": jobs_imported,
         "auto_apply_supported_imported": auto_apply_supported_imported,
         "sample_jobs": sample_jobs,
+        "elapsed_ms": elapsed_ms,
+    }
+
+
+async def refresh_lever_boards(
+    db,
+    profile: Optional[Dict[str, Any]] = None,
+    limit_boards: int = 10,
+    force: bool = False,
+    job_limit: Optional[int] = None,
+    progress: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    started_at = time.perf_counter()
+    limit_boards = max(1, min(int(limit_boards or 10), _env_int("MAX_PROVIDER_REFRESH_BOARDS", 25)))
+    job_limit = max(1, min(int(job_limit or _env_int("LEVER_BOARD_JOB_LIMIT", 100)), 500))
+    logger.info("refresh_start provider=lever limit_boards=%s job_limit=%s force=%s", limit_boards, job_limit, force)
+    await seed_lever_company_boards(db)
+    provider = get_board_provider("lever")
+    ttl_minutes = _env_int("LEVER_BOARD_IMPORT_TTL_MINUTES", 360)
+    stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=ttl_minutes)
+    boards = await db.company_boards.find(
+        {"ats_provider": "lever", "enabled": True},
+        {"_id": 0},
+    ).sort("priority", -1).limit(limit_boards).to_list(limit_boards)
+
+    role = None
+    location = None
+    remote_preference = "any"
+    country = None
+    if profile:
+        query = build_profile_job_query(profile)
+        role = query.role
+        location = query.location
+        remote_preference = query.remote_preference
+        country = query.country
+
+    boards_checked = 0
+    boards_successful = 0
+    jobs_imported = 0
+    auto_apply_supported_imported = 0
+    sample_jobs: List[Dict[str, Any]] = []
+
+    for board in boards:
+        last_synced = _parse_iso_datetime(board.get("last_synced_at"))
+        if not force and last_synced and last_synced >= stale_cutoff:
+            continue
+
+        boards_checked += 1
+        if progress is not None:
+            progress["boards_checked"] = boards_checked
+            progress["last_board"] = board.get("board_token")
+        now = datetime.now(timezone.utc).isoformat()
+        board_query = BoardQuery(
+            board_token=board["board_token"],
+            company=board["company"],
+            role=role,
+            location=location,
+            remote_preference=remote_preference,
+            country=country,
+            limit=job_limit,
+        )
+        try:
+            inspection = await provider.inspect_board(board["board_token"])
+            logger.info(
+                "Lever board check: site=%s primary_status=%s eu_status=%s jobs_count=%s primary_error_snippet=%s eu_error_snippet=%s",
+                board["board_token"],
+                inspection.get("primary_status"),
+                inspection.get("eu_status"),
+                inspection["jobs_count"],
+                inspection.get("primary_error_snippet"),
+                inspection.get("eu_error_snippet"),
+            )
+            if inspection["status_code"] != 200:
+                raise httpx.HTTPStatusError(
+                    f"Lever board returned {inspection['status_code']}",
+                    request=httpx.Request("GET", inspection["api_url"]),
+                    response=httpx.Response(
+                        inspection["status_code"] or 500,
+                        request=httpx.Request("GET", inspection["api_url"]),
+                        text=inspection["error_snippet"] or "",
+                    ),
+                )
+            result = await provider.search_board(board_query)
+            stats = await _upsert_job_batch(db, result.jobs, progress=progress, progress_base=jobs_imported)
+            jobs_imported += stats["total_imported"]
+            if progress is not None:
+                progress["jobs_upserted_so_far"] = jobs_imported
+                progress["sample_jobs"] = [*progress.get("sample_jobs", []), *result.jobs[:5]][:5]
+            auto_apply_supported_imported += stats["auto_apply_supported_imported"]
+            if result.jobs and len(sample_jobs) < 5:
+                sample_jobs.extend(result.jobs[: 5 - len(sample_jobs)])
+            boards_successful += 1
+            await db.company_boards.update_one(
+                {"board_id": board["board_id"]},
+                {
+                    "$set": {
+                        "last_synced_at": now,
+                        "last_success_at": now,
+                        "last_error": None,
+                        "updated_at": now,
+                    },
+                    "$setOnInsert": {"created_at": now},
+                },
+            )
+            logger.info(
+                "Lever board refreshed: site=%s total_imported=%s auto_apply_supported_imported=%s",
+                board["board_token"],
+                stats["total_imported"],
+                stats["auto_apply_supported_imported"],
+            )
+        except Exception as exc:
+            await db.company_boards.update_one(
+                {"board_id": board["board_id"]},
+                {
+                    "$set": {
+                        "last_synced_at": now,
+                        "last_error": str(exc)[:500],
+                        "updated_at": now,
+                    },
+                    "$inc": {"failure_count": 1},
+                },
+            )
+            logger.warning("Lever board refresh failed: site=%s error=%s", board.get("board_token"), exc)
+
+    elapsed_ms = int((time.perf_counter() - started_at) * 1000)
+    logger.info(
+        "refresh_end provider=lever boards_checked=%s jobs_upserted=%s elapsed_ms=%s",
+        boards_checked,
+        jobs_imported,
+        elapsed_ms,
+    )
+    return {
+        "boards_checked": boards_checked,
+        "boards_successful": boards_successful,
+        "jobs_imported": jobs_imported,
+        "auto_apply_supported_imported": auto_apply_supported_imported,
+        "sample_jobs": sample_jobs,
+        "elapsed_ms": elapsed_ms,
     }
 
 
@@ -559,6 +802,7 @@ async def refresh_jobs_for_profile_if_needed(
     }
 
     greenhouse_result = None
+    lever_result = None
     if require_auto_apply:
         existing_auto_count = await db.jobs.count_documents({
             "auto_apply_supported": True,
@@ -574,22 +818,33 @@ async def refresh_jobs_for_profile_if_needed(
                 "auto_apply_supported": True,
                 "ats_provider": {"$in": ["greenhouse", "lever", "ashby"]},
             })
+        if existing_auto_count < target_auto_apply_count:
+            lever_result = await refresh_lever_boards(
+                db,
+                profile=profile,
+                limit_boards=_env_int("LEVER_FEED_REFRESH_BOARD_LIMIT", 10),
+            )
+            existing_auto_count = await db.jobs.count_documents({
+                "auto_apply_supported": True,
+                "ats_provider": {"$in": ["greenhouse", "lever", "ashby"]},
+            })
         if existing_auto_count >= target_auto_apply_count:
             return {
-                "attempted": bool(greenhouse_result),
+                "attempted": bool(greenhouse_result or lever_result),
                 "ok": True,
-                "reason": "greenhouse_imported" if greenhouse_result else "cache_fresh_auto_apply",
+                "reason": "direct_ats_imported" if (greenhouse_result or lever_result) else "cache_fresh_auto_apply",
                 "count": existing_auto_count,
                 "greenhouse": greenhouse_result,
+                "lever": lever_result,
                 **base_metadata,
             }
 
     if not _env_bool("JSEARCH_ENABLED", True):
-        return {"attempted": bool(greenhouse_result), "reason": "disabled", "greenhouse": greenhouse_result, **base_metadata}
+        return {"attempted": bool(greenhouse_result or lever_result), "reason": "disabled", "greenhouse": greenhouse_result, "lever": lever_result, **base_metadata}
 
     api_key = os.environ.get("JSEARCH_API_KEY")
     if not api_key:
-        return {"attempted": bool(greenhouse_result), "reason": "missing_api_key", "greenhouse": greenhouse_result, **base_metadata}
+        return {"attempted": bool(greenhouse_result or lever_result), "reason": "missing_api_key", "greenhouse": greenhouse_result, "lever": lever_result, **base_metadata}
 
     provider_name = os.environ.get("JOB_PROVIDER_PRIMARY", "jsearch")
     provider = get_job_provider(provider_name, api_key)

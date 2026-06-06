@@ -6,6 +6,7 @@ export const API = `${BACKEND_URL}/api`;
 export const api = axios.create({
   baseURL: API,
   withCredentials: true,
+  timeout: 20000,
 });
 
 // Fallback: if cookies are not sent (third-party context), use bearer token

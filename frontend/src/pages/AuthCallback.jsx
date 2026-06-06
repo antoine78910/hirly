@@ -4,11 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { api, setSessionToken } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { Loader2 } from "lucide-react";
-
-function returnPathAfterAuth() {
-  const path = `${window.location.pathname}${window.location.search}`;
-  return path && path !== "/" ? path : "/swipe";
-}
+import { supabase, supabaseConfigured } from "../lib/supabase";
 
 export default function AuthCallback() {
   const navigate = useNavigate();
@@ -19,48 +15,31 @@ export default function AuthCallback() {
     if (hasProcessed.current) return;
     hasProcessed.current = true;
 
-    const hash = window.location.hash || "";
-    const sessionIdMatch = hash.match(/session_id=([^&]+)/);
-    const sessionTokenMatch = hash.match(/session_token=([^&]+)/);
-    const returnPath = returnPathAfterAuth();
-
-    if (!sessionIdMatch && !sessionTokenMatch) {
-      navigate("/", { replace: true });
-      return;
-    }
+    const params = new URLSearchParams(window.location.search);
+    const nextPath = params.get("next") || "/swipe";
 
     (async () => {
       try {
-        if (sessionTokenMatch) {
-          const session_token = decodeURIComponent(sessionTokenMatch[1]);
-          setSessionToken(session_token);
-          const { data } = await api.get("/auth/me");
-          setUser(data.user);
-          setHasProfile(data.has_profile);
-          setHasPreferences(data.has_preferences);
-          window.history.replaceState({}, "", returnPath);
-
-          if (!data.has_profile) {
-            const onboardingPath = returnPath.includes("onboarding")
-              ? returnPath
-              : "/onboarding?step=jobSearch";
-            navigate(onboardingPath, { replace: true });
-          } else {
-            navigate(returnPath, { replace: true });
-          }
-          return;
-        }
-
-        const session_id = decodeURIComponent(sessionIdMatch[1]);
-        const { data } = await api.post("/auth/session", { session_id });
+        if (!supabaseConfigured || !supabase) throw new Error("Supabase auth is not configured");
+        const code = params.get("code");
+        const { data: sessionData, error } = code
+          ? await supabase.auth.exchangeCodeForSession(code)
+          : await supabase.auth.getSession();
+        if (error) throw error;
+        const accessToken = sessionData?.session?.access_token;
+        if (!accessToken) throw new Error("Supabase session not found");
+        const response = await api.post("/auth/supabase-session", { access_token: accessToken });
+        const data = response.data;
+        console.log("AUTH_CALLBACK_RESPONSE", data);
         if (data?.session_token) setSessionToken(data.session_token);
         setUser(data.user);
-        setHasProfile(data.has_profile);
-        setHasPreferences(false);
+        setHasProfile(Boolean(data.has_profile));
+        setHasPreferences(Boolean(data.has_preferences));
 
+        // Clear hash and route to next step
         window.history.replaceState({}, "", window.location.pathname);
-        if (!data.has_profile) navigate("/onboarding?step=jobSearch", { replace: true });
-        else navigate("/swipe", { replace: true });
+        if (!data.has_profile || !data.has_preferences) navigate("/onboarding", { replace: true });
+        else navigate(nextPath.startsWith("/") ? nextPath : "/swipe", { replace: true });
       } catch (e) {
         console.error("Auth callback failed", e);
         navigate("/", { replace: true });
