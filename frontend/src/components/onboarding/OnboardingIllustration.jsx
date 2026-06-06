@@ -4,7 +4,7 @@ export default function OnboardingIllustration({ src, alt = "", large = false })
   if (large) {
     return (
       <div
-        className="w-[280px] h-[280px] sm:w-[320px] sm:h-[320px] lg:w-[340px] lg:h-[340px] flex items-center justify-center shrink-0"
+        className="w-[min(72vw,260px)] h-[min(72vw,260px)] sm:w-[300px] sm:h-[300px] lg:w-[320px] lg:h-[320px] flex items-center justify-center shrink-0"
         aria-hidden={!alt}
       >
         <img

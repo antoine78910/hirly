@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import {
   Zap, Undo2, History, SlidersHorizontal, Flag, Share2, MapPin, Calendar,
-  Briefcase, Building2, BarChart3, Laptop, Info,
+  Briefcase, Building2, BarChart3, Laptop, Info, Heart, X, Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import Logo from "../components/Logo";
@@ -548,7 +548,7 @@ export default function Swipe() {
         </button>
       </header>
 
-      <div className="flex-1 relative px-4 pb-24">
+      <div className="flex-1 relative px-4 pb-36">
         <div className="relative w-full max-w-md mx-auto h-full">
           {loading && jobs.length === 0 && <SkeletonCard />}
 
@@ -594,9 +594,51 @@ export default function Swipe() {
       </div>
 
       {topJob && (
-        <div className="absolute bottom-[100px] inset-x-0 flex items-center justify-center pointer-events-none z-10">
+        <div className="absolute bottom-[88px] inset-x-0 flex flex-col items-center gap-3 pointer-events-none z-10">
+          {/* Action buttons */}
+          <div className="pointer-events-auto flex items-center gap-6">
+            {/* Skip button (✕) */}
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={() => handleSwipe("skip")}
+              disabled={!topJob || appLoading}
+              className="w-14 h-14 rounded-full bg-sprout-surface border-2 border-rose-500/60 grid place-items-center shadow-lg hover:border-rose-500 transition-colors"
+              aria-label="Pass"
+              data-testid="skip-btn"
+            >
+              <X className="w-6 h-6 text-rose-400" strokeWidth={2.5} />
+            </motion.button>
+
+            {/* Apply button (❤) */}
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={() => handleSwipe("apply")}
+              disabled={!topJob || appLoading}
+              className="w-16 h-16 rounded-full gradient-linkedin grid place-items-center shadow-[0_0_24px_rgba(124,58,237,0.4)] hover:opacity-90 transition-opacity"
+              aria-label="Apply"
+              data-testid="apply-btn"
+            >
+              {appLoading
+                ? <Loader2 className="w-6 h-6 text-white animate-spin" />
+                : <Heart className="w-6 h-6 text-white" fill="white" />
+              }
+            </motion.button>
+
+            {/* Undo button */}
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={handleUndo}
+              className="w-14 h-14 rounded-full bg-sprout-surface border border-sprout-border grid place-items-center shadow-lg hover:border-sprout-border-2 transition-colors"
+              aria-label="Undo"
+              data-testid="undo-action-btn"
+            >
+              <Undo2 className="w-5 h-5 text-sprout-muted" />
+            </motion.button>
+          </div>
+
+          {/* Hint text */}
           <div className="pointer-events-auto px-4 py-1.5 rounded-full bg-sprout-surface/80 backdrop-blur-md border border-sprout-border text-[11px] text-sprout-muted font-medium tracking-wide" data-testid="swipe-hint">
-            ← Pass · Tap card for details · Send →
+            Swipe or tap · Tap card for details
           </div>
         </div>
       )}

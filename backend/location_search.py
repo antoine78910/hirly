@@ -23,6 +23,8 @@ RELEVANT_OSM_TYPES = {
     "borough",
     "suburb",
     "locality",
+    "isolated_dwelling",
+    "farm",
     "county",
     "state",
     "region",
@@ -34,6 +36,8 @@ RELEVANT_OSM_TYPES = {
     "province",
     "state_district",
 }
+
+BLOCKED_PLACE_TYPES = {"", "yes", "no"}
 
 # Common aliases → expanded search queries (regions, departments, states)
 SEARCH_ALIASES: dict[str, list[str]] = {
@@ -112,13 +116,11 @@ def _alias_queries(query: str) -> list[str]:
     for item in extra:
         if item not in out:
             out.append(item)
-    if len(key) >= 3 and "," not in query:
-        out.append(f"{query.strip()}, France")
     deduped: list[str] = []
     for q in out:
         if q and q not in deduped:
             deduped.append(q)
-    return deduped[:4]
+    return deduped[:3]
 
 
 def _is_duplicate(label: str, seen: set[str]) -> bool:
@@ -240,6 +242,8 @@ def _score_item(query: str, item: dict[str, Any], raw: dict[str, Any] | None = N
         score += 45
     elif kind in {"city", "town"}:
         score += 25
+    elif kind in {"village", "hamlet", "locality", "municipality"}:
+        score += 18
 
     addr = (raw or {}).get("address") or {}
     for field in ("state", "region", "county", "state_district", "city", "town"):
@@ -267,16 +271,13 @@ def _item_from_nominatim(item: dict[str, Any], query: str) -> dict[str, Any] | N
     osm_type = str(item.get("type") or "").lower()
     osm_class = str(item.get("class") or "").lower()
 
-    allowed = (
-        osm_class in {"boundary", "place", "landuse"}
-        or osm_type in RELEVANT_OSM_TYPES
-    )
-    if osm_class == "place" and osm_type not in RELEVANT_OSM_TYPES and osm_type != "administrative":
-        allowed = False
-    if osm_type in {"historic", "yes"} and osm_class == "boundary":
-        allowed = False
-
-    if not allowed:
+    if osm_class == "place":
+        if osm_type in BLOCKED_PLACE_TYPES:
+            return None
+    elif osm_class == "boundary":
+        if osm_type in {"historic", "yes"}:
+            return None
+    elif osm_class not in {"boundary", "place"}:
         return None
 
     label = _format_nominatim_label(item)
@@ -325,8 +326,9 @@ async def _nominatim_request(query: str, limit: int) -> list[dict[str, Any]]:
                 "addressdetails": 1,
                 "namedetails": 1,
                 "extratags": 1,
-                "limit": max(limit * 3, 15),
+                "limit": max(limit * 4, 20),
                 "dedupe": 1,
+                "accept-language": "en",
             },
             headers={"User-Agent": USER_AGENT},
         )
@@ -337,6 +339,22 @@ async def _nominatim_request(query: str, limit: int) -> list[dict[str, Any]]:
     return payload if isinstance(payload, list) else []
 
 
+def _collect_nominatim_rows(
+    payload: list[dict[str, Any]],
+    query: str,
+    seen_ids: set[str],
+    collected: list[dict[str, Any]],
+) -> None:
+    for raw in payload:
+        osm_id = f"{raw.get('osm_type')}:{raw.get('osm_id')}"
+        if osm_id in seen_ids:
+            continue
+        seen_ids.add(osm_id)
+        item = _item_from_nominatim(raw, query)
+        if item:
+            collected.append(item)
+
+
 async def _search_nominatim(query: str, limit: int = 10) -> list[dict[str, Any]]:
     cache_key = f"nominatim:{query.lower()}:{limit}"
     cached = _cache_get(cache_key)
@@ -345,20 +363,23 @@ async def _search_nominatim(query: str, limit: int = 10) -> list[dict[str, Any]]
 
     collected: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
+    queries = _alias_queries(query)
 
-    for q in _alias_queries(query):
-        try:
-            payload = await _nominatim_request(q, limit)
-        except Exception:
-            continue
-        for raw in payload:
-            osm_id = f"{raw.get('osm_type')}:{raw.get('osm_id')}"
-            if osm_id in seen_ids:
+    try:
+        payload = await _nominatim_request(queries[0], limit)
+        _collect_nominatim_rows(payload, query, seen_ids, collected)
+    except Exception:
+        pass
+
+    if len(collected) < max(2, limit // 2):
+        for q in queries[1:]:
+            try:
+                payload = await _nominatim_request(q, limit)
+            except Exception:
                 continue
-            seen_ids.add(osm_id)
-            item = _item_from_nominatim(raw, query)
-            if item:
-                collected.append(item)
+            _collect_nominatim_rows(payload, query, seen_ids, collected)
+            if len(collected) >= limit:
+                break
 
     collected.sort(key=lambda row: row.get("_score", 0), reverse=True)
     out = []

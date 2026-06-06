@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Loader2, MapPin } from "lucide-react";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
@@ -17,6 +18,30 @@ function resultToLocation(result) {
   };
 }
 
+function localSuggestionResults(query, suggestionLabels, limit = 10) {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+
+  return suggestionLabels
+    .filter((label) => {
+      const lower = label.toLowerCase();
+      const city = lower.split(",")[0].trim();
+      return lower.includes(q) || city.startsWith(q);
+    })
+    .slice(0, limit)
+    .map((label) => ({
+      id: `local:${label}`,
+      label,
+      source: "local",
+      place_id: "",
+      country: label.split(",").slice(-1)[0]?.trim() || "",
+      country_code: "",
+      lat: null,
+      lng: null,
+      kind: "city",
+    }));
+}
+
 export default function PlacesAutocomplete({
   label,
   value,
@@ -28,16 +53,23 @@ export default function PlacesAutocomplete({
   testId,
   variant = "dark",
   suggestions = [],
+  compactChips = false,
+  maxSuggestions,
 }) {
   const light = variant === "light";
   const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState(false);
   const [results, setResults] = useState([]);
   const [touched, setTouched] = useState(false);
   const [focused, setFocused] = useState(false);
   const blurTimerRef = useRef(null);
   const requestIdRef = useRef(0);
+  const abortRef = useRef(null);
+  const anchorRef = useRef(null);
+  const [dropdownRect, setDropdownRect] = useState(null);
 
+  const visibleSuggestions = maxSuggestions ? suggestions.slice(0, maxSuggestions) : suggestions;
   const trimmedValue = (value || "").trim();
   const hasSelection = Boolean(
     selectedLocation?.location_label
@@ -47,8 +79,7 @@ export default function PlacesAutocomplete({
 
   const showDropdown = focused
     && trimmedValue.length >= 1
-    && !hasSelection
-    && (searching || results.length > 0);
+    && !hasSelection;
 
   const labelClass = light ? "text-sm font-semibold text-zinc-700" : "text-sm font-semibold text-zinc-200";
   const optionalClass = light ? "text-zinc-400 font-normal" : "text-sprout-dim font-normal";
@@ -60,16 +91,16 @@ export default function PlacesAutocomplete({
     ? `text-xs ${isInvalid ? "text-rose-500" : "text-zinc-500"}`
     : `text-xs ${isInvalid ? "text-rose-300" : "text-sprout-muted"}`;
   const dropdownClass = light
-    ? "absolute z-[90] left-0 right-0 top-full mt-1 rounded-2xl border border-zinc-200 bg-white shadow-xl overflow-hidden max-h-60 overflow-y-auto"
-    : "absolute z-[90] left-0 right-0 top-full mt-1 rounded-2xl border border-sprout-border bg-sprout-surface shadow-xl overflow-hidden max-h-60 overflow-y-auto";
+    ? "rounded-2xl border border-zinc-200 bg-white shadow-xl overflow-hidden max-h-60 overflow-y-auto"
+    : "rounded-2xl border border-sprout-border bg-sprout-surface shadow-xl overflow-hidden max-h-60 overflow-y-auto";
   const optionClass = light
     ? "w-full text-left px-4 py-3 text-sm text-zinc-700 hover:bg-zinc-50 flex items-start gap-2.5"
     : "w-full text-left px-4 py-3 text-sm text-zinc-100 hover:bg-sprout-surface-2 flex items-start gap-2.5";
   const chipOnClass = light
-    ? "bg-linkedin text-white border-linkedin shadow-sm"
-    : "bg-sprout-mint text-white border-sprout-mint";
+    ? "border-violet-400/70 bg-gradient-to-br from-violet-50 via-fuchsia-50/75 to-violet-50 text-violet-800 shadow-[0_1px_2px_rgba(124,58,237,0.08)] ring-1 ring-violet-300/50"
+    : "border-sprout-mint/70 bg-sprout-mint/15 text-sprout-mint ring-1 ring-sprout-mint/30";
   const chipOffClass = light
-    ? "bg-white text-linkedin border-zinc-200 hover:border-linkedin/40 hover:bg-linkedin-light/50"
+    ? "bg-white text-zinc-600 border-zinc-200 hover:border-violet-300/55 hover:bg-violet-50/55 hover:text-violet-700"
     : "bg-sprout-surface-2 text-zinc-200 border-sprout-border hover:border-sprout-border-2";
 
   const applyLocation = useCallback((location) => {
@@ -80,38 +111,80 @@ export default function PlacesAutocomplete({
     onInputChange(location.location_label);
   }, [onInputChange, onSelect]);
 
+  const updateDropdownRect = useCallback(() => {
+    const node = anchorRef.current;
+    if (!node) return;
+    const rect = node.getBoundingClientRect();
+    setDropdownRect({
+      top: rect.bottom + 4,
+      left: rect.left,
+      width: rect.width,
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!showDropdown) {
+      setDropdownRect(null);
+      return undefined;
+    }
+    updateDropdownRect();
+    window.addEventListener("resize", updateDropdownRect);
+    window.addEventListener("scroll", updateDropdownRect, true);
+    return () => {
+      window.removeEventListener("resize", updateDropdownRect);
+      window.removeEventListener("scroll", updateDropdownRect, true);
+    };
+  }, [showDropdown, trimmedValue, updateDropdownRect]);
+
   useEffect(() => {
     if (!trimmedValue || hasSelection) {
+      abortRef.current?.abort();
       setResults([]);
       setSearching(false);
-      return;
+      setSearchError(false);
+      return undefined;
     }
 
     const requestId = ++requestIdRef.current;
+    const fallback = localSuggestionResults(trimmedValue, suggestions, 10);
     setSearching(true);
+    setSearchError(false);
+    setResults(fallback);
 
     const handle = setTimeout(async () => {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
       try {
         const { data } = await api.get("/locations/search", {
-          params: { q: trimmedValue, limit: 10 },
+          params: { q: trimmedValue, limit: 12 },
+          timeout: 20000,
+          signal: controller.signal,
         });
         if (requestId !== requestIdRef.current) return;
-        setResults(data?.results || []);
-      } catch {
-        if (requestId !== requestIdRef.current) return;
-        setResults([]);
+        const apiResults = data?.results || [];
+        setResults(apiResults.length > 0 ? apiResults : fallback);
+        setSearchError(apiResults.length === 0 && fallback.length === 0);
+      } catch (error) {
+        if (requestId !== requestIdRef.current || error?.code === "ERR_CANCELED") return;
+        setResults(fallback);
+        setSearchError(fallback.length === 0);
       } finally {
         if (requestId === requestIdRef.current) setSearching(false);
       }
-    }, 280);
+    }, 200);
 
-    return () => clearTimeout(handle);
-  }, [trimmedValue, hasSelection]);
+    return () => {
+      clearTimeout(handle);
+      abortRef.current?.abort();
+    };
+  }, [trimmedValue, hasSelection, suggestions]);
 
   const helperText = useMemo(() => {
     if (isInvalid) return "Select one of the suggested locations.";
-    if (trimmedValue) return "Pick a city, town, department, or region from the list.";
-    return optional ? "Optional" : "Start typing any city or region worldwide";
+    if (trimmedValue) return "Pick a city, town, village, or region from the list.";
+    return optional ? "Optional" : "Start typing any city, town, or village worldwide";
   }, [isInvalid, optional, trimmedValue]);
 
   const handleChange = (next) => {
@@ -195,7 +268,7 @@ export default function PlacesAutocomplete({
       <Label className={labelClass}>
         {label} {optional && <span className={optionalClass}>(optional)</span>}
       </Label>
-      <div className="relative">
+      <div className="relative" ref={anchorRef}>
         <Input
           value={value || ""}
           onChange={(e) => handleChange(e.target.value)}
@@ -212,62 +285,77 @@ export default function PlacesAutocomplete({
           <MapPin className={iconClass} />
         )}
 
-        {showDropdown && (
-          <div className={dropdownClass} role="listbox">
-            {searching && results.length === 0 && (
-              <div className={`px-4 py-3 text-sm ${light ? "text-zinc-500" : "text-sprout-muted"}`}>
-                Searching worldwide locations…
-              </div>
-            )}
-            {results.map((result) => {
-              const badge = kindLabel(result.kind);
-              return (
-                <button
-                  key={result.id}
-                  type="button"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => selectResult(result)}
-                  className={optionClass}
-                  data-testid={`${testId}-option`}
-                  role="option"
-                >
-                  <MapPin className={`w-4 h-4 shrink-0 mt-0.5 ${light ? "text-linkedin" : "text-sprout-mint"}`} />
-                  <span className="min-w-0">
-                    <span className="block">{result.label}</span>
-                    {badge ? (
-                      <span className={`block text-xs mt-0.5 ${light ? "text-zinc-400" : "text-sprout-muted"}`}>
-                        {badge}
+        {showDropdown && dropdownRect && typeof document !== "undefined"
+          ? createPortal(
+              <div
+                className={dropdownClass}
+                role="listbox"
+                style={{
+                  position: "fixed",
+                  top: dropdownRect.top,
+                  left: dropdownRect.left,
+                  width: dropdownRect.width,
+                  zIndex: 9999,
+                }}
+              >
+                {searching && results.length === 0 && (
+                  <div className={`px-4 py-3 text-sm ${light ? "text-zinc-500" : "text-sprout-muted"}`}>
+                    Searching cities, towns, and villages…
+                  </div>
+                )}
+                {results.map((result) => {
+                  const badge = kindLabel(result.kind);
+                  return (
+                    <button
+                      key={result.id}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => selectResult(result)}
+                      className={optionClass}
+                      data-testid={`${testId}-option`}
+                      role="option"
+                    >
+                      <MapPin className={`w-4 h-4 shrink-0 mt-0.5 ${light ? "text-linkedin" : "text-sprout-mint"}`} />
+                      <span className="min-w-0">
+                        <span className="block">{result.label}</span>
+                        {badge ? (
+                          <span className={`block text-xs mt-0.5 ${light ? "text-zinc-400" : "text-sprout-muted"}`}>
+                            {badge}
+                          </span>
+                        ) : null}
                       </span>
-                    ) : null}
-                  </span>
-                </button>
-              );
-            })}
-            {!searching && results.length === 0 && (
-              <div className={`px-4 py-3 text-sm ${light ? "text-zinc-500" : "text-sprout-muted"}`}>
-                No locations found. Try a nearby city or region name.
-              </div>
-            )}
-          </div>
-        )}
+                    </button>
+                  );
+                })}
+                {!searching && results.length === 0 && (
+                  <div className={`px-4 py-3 text-sm ${light ? "text-zinc-500" : "text-sprout-muted"}`}>
+                    {searchError
+                      ? "Location service unavailable. Start the backend server or pick a popular location below."
+                      : "No locations found. Try a nearby city or region name."}
+                  </div>
+                )}
+              </div>,
+              document.body,
+            )
+          : null}
       </div>
       <p className={helperClass}>{helperText}</p>
-      {suggestions.length > 0 && !trimmedValue && (
-        <div className="pt-1">
-          <p className={`text-xs font-medium mb-2 ${light ? "text-zinc-500" : "text-sprout-muted"}`}>
+      {visibleSuggestions.length > 0 && !trimmedValue && (
+        <div className="pt-0.5">
+          <p className={`text-[11px] font-medium mb-1.5 ${light ? "text-zinc-500" : "text-sprout-muted"}`}>
             Popular locations
           </p>
-          <div className="flex flex-wrap gap-2">
-            {suggestions.map((suggestion) => {
+          <div className={`flex flex-wrap ${compactChips ? "gap-1.5" : "gap-2"}`}>
+            {visibleSuggestions.map((suggestion) => {
               const on = isSuggestionSelected(suggestion);
               return (
                 <button
                   key={suggestion}
                   type="button"
                   onClick={() => selectSuggestion(suggestion)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium border transition-all ${
-                    on ? chipOnClass : chipOffClass
-                  }`}
+                  className={`inline-flex items-center gap-1 border font-medium transition-all duration-200 ease-out active:scale-[0.97] rounded-full ${
+                    compactChips ? "px-2 py-1 text-[11px] sm:text-xs" : "gap-1.5 px-3 py-2 text-sm"
+                  } ${on ? chipOnClass : chipOffClass}`}
                   data-testid={`${testId}-suggestion`}
                 >
                   <MapPin className="w-3.5 h-3.5 shrink-0" />

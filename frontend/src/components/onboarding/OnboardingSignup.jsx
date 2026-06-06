@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "../ui/input";
@@ -31,6 +31,14 @@ function GoogleIcon({ className = "w-5 h-5" }) {
 export default function OnboardingSignup({ onClose }) {
   const [email, setEmail] = useState("");
 
+  useEffect(() => {
+    const prev = document.documentElement.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    return () => {
+      document.documentElement.style.overflow = prev;
+    };
+  }, []);
+
   const handleGoogleSignup = () => {
     const ok = startGoogleLogin("/onboarding?step=jobSearch");
     if (!ok) {
@@ -56,8 +64,8 @@ export default function OnboardingSignup({ onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-white text-zinc-900 min-h-dvh">
-      <div className="flex items-center justify-center relative px-5 pt-5 pb-4 shrink-0 border-b border-zinc-100">
+    <div className="fixed inset-0 z-50 flex h-dvh max-h-dvh flex-col overflow-hidden bg-white text-zinc-900">
+      <div className="relative flex shrink-0 items-center justify-center border-b border-zinc-100 px-5 pb-3 pt-4">
         <button
           type="button"
           onClick={onClose}
@@ -70,8 +78,8 @@ export default function OnboardingSignup({ onClose }) {
         <h1 className="font-display font-semibold text-lg tracking-tight">Sign up</h1>
       </div>
 
-      <div className="flex-1 w-full max-w-md mx-auto px-5 pb-8 flex flex-col justify-center">
-        <form onSubmit={handleEmailSignup} className="space-y-5">
+      <div className="mx-auto flex w-full max-w-md flex-1 min-h-0 flex-col justify-center px-5 pb-6">
+        <form onSubmit={handleEmailSignup} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="signup-email" className="text-sm font-medium text-zinc-700">
               Email
@@ -97,7 +105,7 @@ export default function OnboardingSignup({ onClose }) {
           </button>
         </form>
 
-        <div className="flex items-center gap-4 my-8">
+        <div className="my-5 flex items-center gap-4">
           <div className="flex-1 h-px bg-zinc-200" />
           <span className="text-sm text-zinc-500 shrink-0">or</span>
           <div className="flex-1 h-px bg-zinc-200" />

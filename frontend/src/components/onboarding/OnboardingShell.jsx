@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { ChevronLeft } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -9,14 +10,22 @@ export default function OnboardingShell({
   children,
   footer,
 }) {
+  useEffect(() => {
+    const prev = document.documentElement.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    return () => {
+      document.documentElement.style.overflow = prev;
+    };
+  }, []);
+
   return (
-    <div className="min-h-dvh bg-white text-zinc-900 flex flex-col">
-      <div className="relative flex-1 flex flex-col items-center gradient-linkedin-soft overflow-hidden">
+    <div className="h-dvh max-h-dvh overflow-hidden bg-white text-zinc-900 flex flex-col">
+      <div className="relative flex-1 flex flex-col items-center gradient-linkedin-soft overflow-hidden min-h-0">
         <div className="absolute inset-0 bg-grid mask-radial pointer-events-none" />
 
-        <div className="relative w-full max-w-[430px] sm:max-w-lg lg:max-w-xl flex-1 flex flex-col px-5 sm:px-8 lg:px-10 pt-4 sm:pt-6 pb-4 sm:pb-6 min-h-0">
+        <div className="relative w-full max-w-[430px] sm:max-w-lg lg:max-w-xl flex-1 flex flex-col px-4 sm:px-8 lg:px-10 pt-2 sm:pt-4 pb-2 sm:pb-4 min-h-0">
           {showProgress ? (
-            <div className="flex items-center gap-3 mb-4 sm:mb-5 shrink-0">
+            <div className="flex items-center gap-2.5 mb-2 sm:mb-3 shrink-0">
               {showBack ? (
                 <button
                   type="button"
@@ -40,7 +49,7 @@ export default function OnboardingShell({
               </div>
             </div>
           ) : showBack ? (
-            <div className="mb-2 sm:mb-3 shrink-0">
+            <div className="mb-1.5 sm:mb-2 shrink-0">
               <button
                 type="button"
                 onClick={onBack}
@@ -53,9 +62,9 @@ export default function OnboardingShell({
             </div>
           ) : null}
 
-          <div className="flex-1 min-h-0 flex flex-col">{children}</div>
+          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">{children}</div>
 
-          {footer ? <div className="pt-4 sm:pt-5 shrink-0">{footer}</div> : null}
+          {footer ? <div className="pt-2 sm:pt-3 shrink-0">{footer}</div> : null}
         </div>
       </div>
     </div>
@@ -69,7 +78,7 @@ export function ContinueButton({ children, disabled, onClick, testId = "onboardi
       onClick={onClick}
       disabled={disabled}
       data-testid={testId}
-      className="w-full h-14 sm:h-[3.75rem] rounded-full gradient-linkedin text-white font-bold text-base sm:text-lg disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity shadow-[0_12px_40px_-12px_rgba(124,58,237,0.45)]"
+      className="w-full h-11 sm:h-12 rounded-full gradient-linkedin text-white font-bold text-sm sm:text-base disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity shadow-[0_12px_40px_-12px_rgba(124,58,237,0.45)]"
     >
       {children}
     </button>

@@ -207,6 +207,42 @@ export default function Tracker() {
         </p>
       </header>
 
+      {/* Stats bar */}
+      {!loading && apps.length > 0 && (
+        <div className="px-5 mt-4 max-w-md mx-auto grid grid-cols-3 gap-3">
+          {[
+            {
+              label: "Applied",
+              value: apps.length,
+              color: "text-sprout-mint",
+              bg: "bg-sprout-mint-soft",
+            },
+            {
+              label: "Interviews",
+              value: apps.filter((a) => a.status === "interview").length,
+              color: "text-emerald-300",
+              bg: "bg-emerald-500/10",
+            },
+            {
+              label: "Offers",
+              value: apps.filter((a) => a.status === "offer").length,
+              color: "text-fuchsia-300",
+              bg: "bg-fuchsia-500/10",
+            },
+          ].map((s) => (
+            <div
+              key={s.label}
+              className={`rounded-2xl border border-sprout-border bg-sprout-surface p-4 text-center`}
+            >
+              <p className={`font-display font-black text-3xl tracking-tighter ${s.color}`}>
+                {s.value}
+              </p>
+              <p className="text-[11px] text-sprout-muted mt-1 font-medium">{s.label}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="px-5 mt-5 max-w-md mx-auto">
         <Tabs defaultValue="applications">
           <TabsList className="grid grid-cols-2 w-full bg-sprout-surface border border-sprout-border rounded-full h-10 p-1">

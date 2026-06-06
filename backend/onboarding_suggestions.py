@@ -54,49 +54,49 @@ def _fallback_categories(location: str, contract_type: str) -> list[dict[str, st
     if contract == "summer_job":
         if any(k in loc for k in ("bordeaux", "bourgogne", "champagne", "languedoc", "provence", "alsace", "loire", "rhône", "rhone", "vineyard", "wine")):
             return [
-                {"id": "agriculture_harvest", "label": "Agriculture & harvest"},
-                {"id": "retail", "label": "Retail & sales"},
-                {"id": "hospitality", "label": "Hospitality & tourism"},
-                {"id": "food_service", "label": "Food service"},
+                {"id": "agriculture", "label": "Agriculture & Harvest"},
+                {"id": "retail", "label": "Retail & Sales Floor"},
+                {"id": "hospitality_food", "label": "Hospitality & Food"},
+                {"id": "transport", "label": "Transport & Delivery"},
             ]
         if any(k in loc for k in ("france", "paris", "lyon", "marseille", "toulouse", "nice")):
             return [
-                {"id": "retail", "label": "Retail & sales"},
-                {"id": "hospitality", "label": "Hospitality & tourism"},
-                {"id": "events", "label": "Events & promotions"},
-                {"id": "childcare", "label": "Childcare & camps"},
+                {"id": "retail", "label": "Retail & Sales Floor"},
+                {"id": "hospitality_food", "label": "Hospitality & Food"},
+                {"id": "education_childcare", "label": "Education & Childcare"},
+                {"id": "customer", "label": "Customer Success"},
             ]
         return [
-            {"id": "retail", "label": "Retail & sales"},
-            {"id": "hospitality", "label": "Hospitality & tourism"},
-            {"id": "outdoor", "label": "Outdoor & recreation"},
-            {"id": "customer_service", "label": "Customer service"},
+            {"id": "retail", "label": "Retail & Sales Floor"},
+            {"id": "hospitality_food", "label": "Hospitality & Food"},
+            {"id": "agriculture", "label": "Agriculture & Harvest"},
+            {"id": "customer", "label": "Customer Success"},
         ]
 
     if contract in ("internship", "apprenticeship"):
         return [
-            {"id": "technology", "label": "Technology & software"},
-            {"id": "marketing", "label": "Marketing & communications"},
-            {"id": "finance", "label": "Finance & business"},
-            {"id": "design", "label": "Design & creative"},
-            {"id": "operations", "label": "Operations & admin"},
+            {"id": "software", "label": "Software Engineering"},
+            {"id": "marketing", "label": "Marketing"},
+            {"id": "finance", "label": "Finance"},
+            {"id": "design", "label": "Design"},
+            {"id": "operations", "label": "Operations & Strategy"},
         ]
 
     if contract in ("seasonal", "part_time"):
         return [
-            {"id": "retail", "label": "Retail & sales"},
-            {"id": "logistics", "label": "Logistics & warehousing"},
-            {"id": "hospitality", "label": "Hospitality & tourism"},
-            {"id": "customer_service", "label": "Customer service"},
+            {"id": "retail", "label": "Retail & Sales Floor"},
+            {"id": "logistics", "label": "Logistics & Warehouse"},
+            {"id": "hospitality_food", "label": "Hospitality & Food"},
+            {"id": "agriculture", "label": "Agriculture & Harvest"},
         ]
 
     return [
-        {"id": "technology", "label": "Technology & software"},
-        {"id": "business", "label": "Business & operations"},
-        {"id": "sales", "label": "Sales & account management"},
-        {"id": "marketing", "label": "Marketing & growth"},
+        {"id": "software", "label": "Software Engineering"},
+        {"id": "operations", "label": "Operations & Strategy"},
+        {"id": "sales", "label": "Sales"},
+        {"id": "marketing", "label": "Marketing"},
         {"id": "healthcare", "label": "Healthcare"},
-        {"id": "finance", "label": "Finance & accounting"},
+        {"id": "finance", "label": "Finance"},
     ]
 
 
@@ -135,13 +135,15 @@ def _fallback_roles(
             "Customer advisor",
         ]
 
-    if "hospitality" in labels or "food" in labels:
+    if "hospitality" in labels or "food" in labels or "restaurant" in labels:
         return [
-            "Waiter / waitress",
-            "Kitchen assistant",
-            "Hotel front desk agent",
+            "Server",
+            "Waiter",
+            "Waitress",
+            "Bartender",
+            "Kitchen Porter",
             "Barista",
-            "Housekeeping staff",
+            "Hotel Front Desk",
         ]
 
     if "technology" in labels or "software" in labels:

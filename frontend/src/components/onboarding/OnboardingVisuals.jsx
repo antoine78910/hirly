@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { Gem } from "lucide-react";
+import Logo from "../Logo";
 import { BRAND } from "../../lib/brand";
 import { ob } from "./onboardingTheme";
 
@@ -7,11 +8,11 @@ const EASE_OUT = [0.4, 0, 0.2, 1];
 
 function ChartCard({ label, children, caption }) {
   return (
-    <div className={`${ob.card} p-4 sm:p-6`}>
-      {label ? <p className={`text-xs sm:text-sm ${ob.muted} mb-3 font-medium`}>{label}</p> : null}
+    <div className={`${ob.card} p-3 sm:p-4`}>
+      {label ? <p className={`text-xs ${ob.muted} mb-2 font-medium`}>{label}</p> : null}
       {children}
       {caption ? (
-        <p className={`text-center text-xs sm:text-sm ${ob.muted} mt-4 leading-relaxed`}>{caption}</p>
+        <p className={`text-center text-[11px] sm:text-xs ${ob.muted} mt-2 leading-snug`}>{caption}</p>
       ) : null}
     </div>
   );
@@ -30,7 +31,7 @@ const RATE_END = { x: 264, y: 32 };
 export function InterviewRateChart() {
   return (
     <ChartCard label="Your interview rate">
-      <svg viewBox="0 0 320 160" className="w-full h-auto" aria-hidden>
+      <svg viewBox="0 0 320 160" className="w-full max-h-[22dvh] sm:max-h-[26dvh] h-auto" aria-hidden>
         <defs>
           <linearGradient id="rateFillLight" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#7C3AED" stopOpacity="0.25" />
@@ -156,26 +157,52 @@ export function InterviewRateChart() {
 
 export function Compare2xChart() {
   return (
-    <ChartCard caption={`${BRAND.NAME} makes it easy to apply to more of the right jobs, increasing interviews.`}>
-      <div className="flex items-end justify-center gap-6 sm:gap-10 h-44 sm:h-52">
-        <div className="flex flex-col items-center flex-1 max-w-[120px]">
-          <p className="text-sm text-zinc-600 mb-3 text-center font-medium">On your own</p>
-          <div className="w-full h-36 sm:h-44 rounded-2xl bg-zinc-100 border border-zinc-200 flex flex-col justify-end overflow-hidden">
-            <div className="h-[18%] bg-zinc-300 rounded-b-xl flex items-center justify-center">
-              <span className="text-xs font-bold text-zinc-700">5%</span>
-            </div>
+    <div className={`${ob.card} mx-auto w-full max-w-lg p-5 sm:p-6`}>
+      <div className="flex items-end justify-center gap-6 sm:gap-12">
+        <div className="flex flex-1 max-w-[9.5rem] flex-col items-center sm:max-w-[11rem]">
+          <p className="mb-4 text-center text-sm font-medium text-zinc-600 sm:text-base">On your own</p>
+          <div className="flex h-48 w-full flex-col justify-end rounded-2xl border border-zinc-200 bg-zinc-100 p-2 sm:h-60 sm:p-2.5">
+            <motion.div
+              className="flex h-[22%] min-h-[2.75rem] items-center justify-center rounded-xl bg-zinc-300 sm:min-h-[3.25rem]"
+              initial={{ scaleY: 0, opacity: 0 }}
+              animate={{ scaleY: 1, opacity: 1 }}
+              transition={{ duration: 0.45, ease: EASE_OUT, delay: 0.15 }}
+              style={{ transformOrigin: "bottom" }}
+            >
+              <span className="text-sm font-bold text-zinc-700 sm:text-base">5%</span>
+            </motion.div>
           </div>
         </div>
-        <div className="flex flex-col items-center flex-1 max-w-[120px]">
-          <p className={`text-sm ${ob.accent} font-semibold mb-3 text-center`}>With {BRAND.NAME}</p>
-          <div className="w-full h-36 sm:h-44 rounded-2xl bg-zinc-50 border border-linkedin/30 flex flex-col justify-end overflow-hidden shadow-sm">
-            <div className="h-[55%] gradient-linkedin rounded-b-xl flex items-center justify-center">
-              <span className="text-lg font-black text-white">2x</span>
-            </div>
+
+        <div className="flex flex-1 max-w-[9.5rem] flex-col items-center sm:max-w-[11rem]">
+          <p className={`mb-4 text-center text-sm font-semibold sm:text-base ${ob.accent}`}>With {BRAND.NAME}</p>
+          <div className="flex h-48 w-full flex-col justify-end rounded-2xl border border-violet-200 bg-zinc-50 p-2 shadow-sm sm:h-60 sm:p-2.5">
+            <motion.div
+              className="gradient-linkedin flex h-[52%] min-h-[6.5rem] flex-col items-center justify-center gap-2 rounded-xl py-3 sm:min-h-[8rem] sm:gap-2.5 sm:py-4"
+              initial={{ scaleY: 0, opacity: 0 }}
+              animate={{ scaleY: 1, opacity: 1 }}
+              transition={{ duration: 0.55, ease: EASE_OUT, delay: 0.3 }}
+              style={{ transformOrigin: "bottom" }}
+            >
+              <span className="rounded-xl bg-white/95 p-2 shadow-sm sm:p-2.5">
+                <Logo size={28} className="sm:hidden" />
+                <Logo size={36} className="hidden sm:block" />
+              </span>
+              <span className="font-display text-2xl font-black leading-none text-white sm:text-3xl">2x</span>
+            </motion.div>
           </div>
         </div>
       </div>
-    </ChartCard>
+
+      <motion.p
+        className={`mt-5 text-center text-xs leading-snug sm:mt-6 sm:text-sm ${ob.muted}`}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.45, delay: 0.75 }}
+      >
+        {`${BRAND.NAME} makes it easy to apply to more of the right jobs, increasing interviews.`}
+      </motion.p>
+    </div>
   );
 }
 
@@ -230,7 +257,7 @@ export function LongTermResultsChart() {
 
   return (
     <ChartCard>
-      <svg viewBox="0 0 320 196" className="w-full h-auto" aria-hidden>
+      <svg viewBox="0 0 320 196" className="w-full max-h-[24dvh] sm:max-h-[28dvh] h-auto" aria-hidden>
         <defs>
           <linearGradient id="ltFillLight" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#7C3AED" stopOpacity="0.38" />
@@ -375,7 +402,7 @@ export function LongTermResultsChart() {
 
         <motion.text
           x={168}
-          y={132}
+          y={140}
           fill="#EF4444"
           fontSize="10"
           textAnchor="middle"
@@ -403,7 +430,7 @@ export function LongTermResultsChart() {
 
 export function InterviewTargetDashes({ count, max = 8 }) {
   return (
-    <div className="flex gap-2 sm:gap-2.5 mt-6">
+    <div className="flex gap-1.5 sm:gap-2 mt-3 sm:mt-4">
       {Array.from({ length: max }).map((_, i) => (
         <div
           key={i}
