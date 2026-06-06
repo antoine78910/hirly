@@ -12,6 +12,7 @@ export const AuthProvider = ({ children }) => {
   const checkAuth = useCallback(async () => {
     try {
       const { data } = await api.get("/auth/me");
+      console.log("AUTH_CONTEXT_ME", data);
       setUser(data.user);
       setHasProfile(data.has_profile);
       setHasPreferences(data.has_preferences);
@@ -24,8 +25,8 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     // CRITICAL: If returning from OAuth callback, skip the /me check.
-    // AuthCallback will exchange the session_id and establish the session first.
-    if (window.location.hash?.includes("session_id=")) {
+    // AuthCallback will exchange the OAuth session and establish the app session first.
+    if (window.location.pathname === "/auth/callback") {
       setLoading(false);
       return;
     }

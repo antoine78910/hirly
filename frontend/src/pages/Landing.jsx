@@ -4,16 +4,7 @@ import { ArrowRight, Sparkles, Zap, FileCheck2, Inbox, Heart, X, Star, ShieldChe
 import { motion } from "framer-motion";
 import Logo from "../components/Logo";
 import { BRAND } from "../lib/brand";
-
-const startGoogleLogin = () => {
-  const authUrl = process.env.REACT_APP_AUTH_URL;
-  if (!authUrl) {
-    console.error("REACT_APP_AUTH_URL is not configured.");
-    return;
-  }
-  const redirectUrl = window.location.origin + "/swipe";
-  window.location.href = `${authUrl}?redirect=${encodeURIComponent(redirectUrl)}`;
-};
+import { startGoogleLogin } from "../lib/auth";
 
 export default function Landing() {
   return (
@@ -27,7 +18,7 @@ export default function Landing() {
           </a>
           <Button
             data-testid="header-signin-btn"
-            onClick={startGoogleLogin}
+            onClick={() => startGoogleLogin("/swipe")}
             className="rounded-full bg-linkedin hover:bg-linkedin-dark text-white font-semibold px-5"
           >
             Sign in
@@ -77,7 +68,7 @@ export default function Landing() {
           >
             <Button
               data-testid="hero-cta-btn"
-              onClick={startGoogleLogin}
+              onClick={() => startGoogleLogin("/swipe")}
               size="lg"
               className="rounded-full gradient-linkedin hover:opacity-90 text-white font-semibold h-12 px-7 text-base pulse-ring"
             >
@@ -204,7 +195,7 @@ export default function Landing() {
           <p className="relative mt-3 text-white/80">Your next job is one swipe away.</p>
           <Button
             data-testid="footer-cta-btn"
-            onClick={startGoogleLogin}
+            onClick={() => startGoogleLogin("/swipe")}
             size="lg"
             className="relative mt-8 rounded-full bg-white text-linkedin hover:bg-zinc-100 font-semibold h-12 px-7 text-base"
           >

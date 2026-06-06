@@ -5,9 +5,9 @@ Swiipr is a job matching and application automation app. It combines a swipe-bas
 ## Stack
 
 - Frontend: React, CRACO, Tailwind, shadcn-style components
-- Backend: FastAPI, Motor, MongoDB
+- Backend: FastAPI, Supabase/Postgres
 - AI: OpenAI adapter via `OPENAI_API_KEY`
-- Jobs: MongoDB as source of truth, Greenhouse direct import, JSearch discovery/fallback
+- Jobs: Supabase as source of truth, Greenhouse/Lever direct import, JSearch discovery/fallback
 - ATS submission: Greenhouse V1
 
 ## Local Setup
@@ -15,8 +15,9 @@ Swiipr is a job matching and application automation app. It combines a swipe-bas
 Backend environment variables are read from `backend/.env`:
 
 ```env
-MONGO_URL=
-DB_NAME=
+SUPABASE_URL=
+SUPABASE_SECRET_KEY=
+SUPABASE_DB_URL=
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4.1-mini
 JSEARCH_API_KEY=

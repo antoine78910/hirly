@@ -2,47 +2,64 @@
 Tinder for Jobs - FastAPI backend.
 
 Features:
-- Google OAuth session exchange (session_id -> session_token cookie)
+- Supabase Google OAuth exchange (access_token -> session_token cookie)
 - CV upload (PDF/DOCX/TXT) -> Claude Sonnet 4.5 extracts profile JSON
 - Job feed with AI-computed match score & reasons (Claude)
 - Swipe right -> creates Application with tailored CV + cover letter (Claude)
 - Application tracker with status updates
 """
+import sys
+import asyncio
+
+if sys.platform.startswith("win"):
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, UploadFile, File, Depends, Cookie, Header, Query
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import io
 import json
 import logging
+import inspect
 import random
 import uuid
 import re
 import base64
+import time
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Dict, Any, Literal
 from datetime import datetime, timezone, timedelta
 import httpx
-import certifi
 
 # Optional file parsing libs
 from pypdf import PdfReader
 import docx as docx_lib
 from application_documents import build_application_package, cover_letter_to_text
-from jobs_service import refresh_greenhouse_boards, refresh_jobs_for_profile_if_needed, seed_greenhouse_company_boards
+from browser_submission.base import BrowserSubmissionError, browser_submit_dry_run_enabled
+from browser_submission.lever import LeverBrowserSubmissionEngine
+from db import create_database_adapter
+from db.supabase_adapter import count_supabase_table, test_supabase_connection
+from jobs_service import (
+    refresh_greenhouse_boards,
+    refresh_jobs_for_profile_if_needed,
+    refresh_lever_boards,
+    seed_greenhouse_company_boards,
+    seed_lever_company_boards,
+)
 from job_providers import get_board_provider, get_job_provider
 from job_providers.base import JobSearchQuery
+from location_search import search_locations
 from llm_client import LLMProviderNotConfigured, complete_json_text
+from onboarding_suggestions import suggest_categories, suggest_roles
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url, tlsCAFile=certifi.where())
-db = client[os.environ['DB_NAME']]
+DATABASE_PROVIDER = "supabase"
+db = create_database_adapter()
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -107,6 +124,20 @@ class GreenhousePrepareSubmitRequest(BaseModel):
     job_id: str
 
 
+class LeverBrowserFillRequest(BaseModel):
+    job_id: str
+
+
+class LeverSubmissionBenchmarkRequest(BaseModel):
+    job_ids: List[str]
+    run_browser_submit: bool = True
+    allow_real_submit: bool = False
+
+
+class SupabaseSessionRequest(BaseModel):
+    access_token: str
+
+
 class ResolveMissingInfoRequest(BaseModel):
     answers: Dict[str, Any] = Field(default_factory=dict)
     save_to_profile: bool = True
@@ -144,9 +175,11 @@ class StatusUpdate(BaseModel):
 
 class PreferencesUpdate(BaseModel):
     target_role: Optional[str] = None
+    target_roles: Optional[List[str]] = None
     target_location: Optional[str] = None
     target_location_data: Optional[Dict[str, Any]] = None
     remote_preference: Optional[str] = None
+    seniority: Optional[str] = None
 
 
 class ContactUpdate(BaseModel):
@@ -158,6 +191,24 @@ class ContactUpdate(BaseModel):
     website: Optional[str] = None
 
 
+class OnboardingCategoryItem(BaseModel):
+    id: str
+    label: str
+
+
+class OnboardingSuggestCategoriesRequest(BaseModel):
+    location: str = ""
+    contract_type: str = ""
+    location_data: Optional[Dict[str, Any]] = None
+
+
+class OnboardingSuggestRolesRequest(BaseModel):
+    location: str = ""
+    contract_type: str = ""
+    categories: List[OnboardingCategoryItem] = Field(default_factory=list)
+    location_data: Optional[Dict[str, Any]] = None
+
+
 # ===================== Auth helpers =====================
 
 async def get_current_user(
@@ -166,13 +217,18 @@ async def get_current_user(
     authorization: Optional[str] = Header(default=None),
 ) -> User:
     token = session_token
+    token_source = "cookie" if token else None
     if not token and authorization and authorization.lower().startswith("bearer "):
         token = authorization.split(" ", 1)[1].strip()
+        token_source = "authorization_header"
     if not token:
+        logger.info("auth_me token_missing path=%s", request.url.path)
         raise HTTPException(status_code=401, detail="Not authenticated")
 
+    logger.info("auth_me token_received source=%s path=%s", token_source, request.url.path)
     session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
     if not session:
+        logger.info("auth_me invalid_token reason=session_not_found source=%s", token_source)
         raise HTTPException(status_code=401, detail="Invalid session")
 
     expires_at = session.get("expires_at")
@@ -181,61 +237,161 @@ async def get_current_user(
     if expires_at and expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
     if expires_at and expires_at < datetime.now(timezone.utc):
+        logger.info("auth_me invalid_token reason=session_expired source=%s user_id=%s", token_source, session.get("user_id"))
         raise HTTPException(status_code=401, detail="Session expired")
 
     user_doc = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
     if not user_doc:
+        logger.info("auth_me invalid_token reason=user_not_found source=%s user_id=%s", token_source, session.get("user_id"))
         raise HTTPException(status_code=401, detail="User not found")
     return User(**user_doc)
 
 
 # ===================== Auth routes =====================
 
-@api_router.post("/auth/session")
-async def auth_session(request: Request, response: Response):
-    """Exchange OAuth session_id for a session_token cookie."""
-    body = await request.json()
-    session_id = body.get("session_id")
-    if not session_id:
-        raise HTTPException(status_code=400, detail="session_id required")
-
-    async with httpx.AsyncClient(timeout=15.0) as http:
-        r = await http.get(
-            "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
-            headers={"X-Session-ID": session_id},
-        )
-        if r.status_code != 200:
-            raise HTTPException(status_code=401, detail="Invalid session_id")
-        data = r.json()
-
-    email = data["email"]
-    name = data["name"]
-    picture = data.get("picture")
-    session_token = data["session_token"]
-
+async def _upsert_auth_user(email: str, name: str, picture: Optional[str], extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     existing = await db.users.find_one({"email": email}, {"_id": 0})
     if existing:
         user_id = existing["user_id"]
+        update = {"name": name, "picture": picture}
+        if extra:
+            update.update(extra)
         await db.users.update_one(
             {"user_id": user_id},
-            {"$set": {"name": name, "picture": picture}},
+            {"$set": update},
         )
     else:
         user_id = f"user_{uuid.uuid4().hex[:12]}"
-        await db.users.insert_one({
+        user_doc = {
             "user_id": user_id,
             "email": email,
             "name": name,
             "picture": picture,
             "created_at": datetime.now(timezone.utc).isoformat(),
-        })
+        }
+        if extra:
+            user_doc.update(extra)
+        await db.users.insert_one(user_doc)
+    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    return user_doc
 
+
+async def _create_app_session(user_id: str, source: str, session_token: Optional[str] = None) -> str:
+    token = session_token or f"sess_{uuid.uuid4().hex}"
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    await db.user_sessions.insert_one({
+        "user_id": user_id,
+        "session_token": token,
+        "expires_at": expires_at.isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "source": source,
+    })
+    return token
+
+
+def _set_app_session_cookie(response: Response, session_token: str) -> None:
+    is_dev = os.environ.get("ENVIRONMENT", "").strip().lower() == "development"
+    response.set_cookie(
+        key="session_token",
+        value=session_token,
+        max_age=7 * 24 * 60 * 60,
+        httponly=True,
+        secure=not is_dev,
+        samesite="lax" if is_dev else "none",
+        path="/",
+    )
+
+
+@api_router.post("/auth/supabase-session")
+async def auth_supabase_session(body: SupabaseSessionRequest, response: Response):
+    """Exchange a verified Supabase access token for the app's session_token."""
+    access_token = (body.access_token or "").strip()
+    if not access_token:
+        raise HTTPException(status_code=400, detail="access_token required")
+
+    supabase_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+    supabase_secret = os.environ.get("SUPABASE_SECRET_KEY", "")
+    if not supabase_url or not supabase_secret:
+        raise HTTPException(status_code=503, detail="Supabase auth is not configured")
+
+    async with httpx.AsyncClient(timeout=15.0) as http:
+        r = await http.get(
+            f"{supabase_url}/auth/v1/user",
+            headers={
+                "apikey": supabase_secret,
+                "Authorization": f"Bearer {access_token}",
+            },
+        )
+    if r.status_code != 200:
+        logger.info("supabase_session invalid_token status=%s body=%s", r.status_code, r.text[:200])
+        raise HTTPException(status_code=401, detail="Invalid Supabase access token")
+
+    data = r.json()
+    email = data.get("email")
+    if not email:
+        raise HTTPException(status_code=401, detail="Supabase user email is missing")
+    metadata = data.get("user_metadata") or {}
+    identities = data.get("identities") or []
+    identity_data = (identities[0].get("identity_data") if identities and isinstance(identities[0], dict) else {}) or {}
+    name = (
+        metadata.get("full_name")
+        or metadata.get("name")
+        or identity_data.get("full_name")
+        or identity_data.get("name")
+        or email.split("@")[0]
+    )
+    picture = metadata.get("avatar_url") or metadata.get("picture") or identity_data.get("avatar_url") or identity_data.get("picture")
+    user_doc = await _upsert_auth_user(
+        email=email,
+        name=name,
+        picture=picture,
+        extra={
+            "auth_provider": "supabase",
+            "supabase_user_id": data.get("id"),
+            "last_login_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+    session_token = await _create_app_session(user_doc["user_id"], "supabase_google")
+    _set_app_session_cookie(response, session_token)
+
+    profile = await db.profiles.find_one({"user_id": user_doc["user_id"]}, {"_id": 0, "cv_text": 1, "target_role": 1})
+    logger.info("supabase_session success user_id=%s email=%s", user_doc["user_id"], email)
+    return {
+        "user": user_doc,
+        "has_profile": profile is not None and bool(profile.get("cv_text")),
+        "has_preferences": profile is not None and bool(profile.get("target_role")),
+        "session_token": session_token,
+    }
+
+
+@api_router.post("/dev/login")
+async def dev_login(response: Response):
+    """Development-only local login that bypasses Emergent OAuth."""
+    if not _dev_tools_enabled():
+        raise HTTPException(status_code=404, detail="Not found")
+
+    user_doc = await db.users.find_one({}, {"_id": 0})
+    if not user_doc:
+        user_id = f"user_{uuid.uuid4().hex[:12]}"
+        user_doc = {
+            "user_id": user_id,
+            "email": "dev@swiipr.local",
+            "name": "Dev User",
+            "picture": None,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.users.insert_one(user_doc)
+    else:
+        user_id = user_doc["user_id"]
+
+    session_token = f"dev_session_{uuid.uuid4().hex}"
     expires_at = datetime.now(timezone.utc) + timedelta(days=7)
     await db.user_sessions.insert_one({
         "user_id": user_id,
         "session_token": session_token,
         "expires_at": expires_at.isoformat(),
         "created_at": datetime.now(timezone.utc).isoformat(),
+        "source": "dev_login",
     })
 
     response.set_cookie(
@@ -243,19 +399,39 @@ async def auth_session(request: Request, response: Response):
         value=session_token,
         max_age=7 * 24 * 60 * 60,
         httponly=True,
-        secure=True,
-        samesite="none",
+        secure=False,
+        samesite="lax",
         path="/",
     )
 
-    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
-    has_profile = await db.profiles.find_one({"user_id": user_id}, {"_id": 0, "cv_text": 1}) is not None
-    return {"user": user_doc, "has_profile": has_profile, "session_token": session_token}
+    profile = await db.profiles.find_one({"user_id": user_id}, {"_id": 0})
+    logger.info(
+        "dev_login success user_id=%s has_profile=%s token_prefix=%s",
+        user_id,
+        bool(profile),
+        session_token[:12],
+    )
+    return {
+        "session_token": session_token,
+        "token": session_token,
+        "user": user_doc,
+        "profile": profile,
+        "has_profile": profile is not None and bool(profile.get("cv_text")),
+        "has_preferences": profile is not None and bool(profile.get("target_role")),
+    }
 
 
 @api_router.get("/auth/me")
 async def auth_me(user: User = Depends(get_current_user)):
     profile = await db.profiles.find_one({"user_id": user.user_id}, {"_id": 0})
+    logger.info(
+        "auth_me cv_readiness user_id=%s profile_exists=%s has_cv_text=%s has_cv_filename=%s has_preferences=%s",
+        user.user_id,
+        profile is not None,
+        bool((profile or {}).get("cv_text")),
+        bool((profile or {}).get("cv_filename")),
+        bool((profile or {}).get("target_role")),
+    )
     return {
         "user": user.model_dump(),
         "has_profile": profile is not None and bool(profile.get("cv_text")),
@@ -742,6 +918,43 @@ async def patch_profile_extras(payload: Dict[str, Any], user: User = Depends(get
     return {"ok": True, "extras": merged}
 
 
+@api_router.get("/locations/search")
+async def locations_search(q: str = Query("", min_length=0), limit: int = Query(10, ge=1, le=15)):
+    """Worldwide city/region search via OpenStreetMap + optional Google Places."""
+    query = (q or "").strip()
+    if len(query) < 1:
+        raise HTTPException(status_code=400, detail="Query parameter q is required")
+    return await search_locations(query, limit=limit)
+
+
+@api_router.post("/onboarding/suggest-categories")
+async def onboarding_suggest_categories(body: OnboardingSuggestCategoriesRequest):
+    """Region + contract-aware job categories for onboarding."""
+    if not body.location.strip():
+        raise HTTPException(status_code=400, detail="Location is required")
+    if not body.contract_type.strip():
+        raise HTTPException(status_code=400, detail="Contract type is required")
+    return await suggest_categories(
+        body.location.strip(),
+        body.contract_type.strip(),
+        body.location_data,
+    )
+
+
+@api_router.post("/onboarding/suggest-roles")
+async def onboarding_suggest_roles(body: OnboardingSuggestRolesRequest):
+    """Specific role titles for selected onboarding categories."""
+    if not body.categories:
+        raise HTTPException(status_code=400, detail="At least one category is required")
+    categories = [category.model_dump() for category in body.categories]
+    return await suggest_roles(
+        body.location.strip(),
+        body.contract_type.strip(),
+        categories,
+        body.location_data,
+    )
+
+
 @api_router.put("/profile/preferences")
 async def update_preferences(prefs: PreferencesUpdate, user: User = Depends(get_current_user)):
     payload = prefs.model_dump(exclude_unset=True)
@@ -751,7 +964,13 @@ async def update_preferences(prefs: PreferencesUpdate, user: User = Depends(get_
         if v is not None or k == "target_location_data"
     }
     target_role = update.get("target_role")
-    if isinstance(target_role, str) and target_role.strip():
+    target_roles = update.get("target_roles")
+    if isinstance(target_roles, list) and target_roles:
+        cleaned = [role.strip() for role in target_roles if isinstance(role, str) and role.strip()]
+        if cleaned:
+            update["target_roles"] = cleaned
+            update["target_role"] = cleaned[0]
+    elif isinstance(target_role, str) and target_role.strip():
         update["target_role"] = target_role.strip()
         update["target_roles"] = [target_role.strip()]
     update["updated_at"] = datetime.now(timezone.utc).isoformat()
@@ -810,9 +1029,276 @@ async def get_feed(
     lng: Optional[float] = None,
     score: bool = False,                                  # opt-in AI scoring (slow); default off for snappy UX
 ):
+    started_at = time.perf_counter()
+    logger.info(
+        "jobs/feed start: user_id=%s limit=%s search_radius=%s include_non_auto_apply=%s locations_json=%s location=%s",
+        user.user_id,
+        limit,
+        search_radius,
+        include_non_auto_apply,
+        bool(locations_json),
+        location,
+    )
     profile = await db.profiles.find_one({"user_id": user.user_id}, {"_id": 0})
     if not profile or not profile.get("cv_text"):
+        logger.info(
+            "jobs/feed cv_readiness_failed user_id=%s profile_exists=%s has_cv_text=%s has_cv_filename=%s profile_keys=%s",
+            user.user_id,
+            profile is not None,
+            bool((profile or {}).get("cv_text")),
+            bool((profile or {}).get("cv_filename")),
+            sorted(list((profile or {}).keys()))[:30],
+        )
         raise HTTPException(status_code=400, detail="Upload CV first")
+
+    max_elapsed_seconds = 8.0
+    ats_supported = ["greenhouse", "lever", "ashby"]
+
+    def _elapsed_ms() -> int:
+        return int((time.perf_counter() - started_at) * 1000)
+
+    def _timed_out() -> bool:
+        return (time.perf_counter() - started_at) >= max_elapsed_seconds
+
+    def _tokens(value: str) -> List[str]:
+        stop = {
+            "and", "or", "the", "a", "an", "of", "for", "to", "in", "with",
+            "remote", "jobs", "job", "cdi", "cdd", "full", "time",
+        }
+        return [
+            token
+            for token in re.findall(r"[a-z0-9]+", (value or "").lower())
+            if len(token) > 2 and token not in stop
+        ]
+
+    def _role_family_tokens(role: str) -> List[str]:
+        tokens = _tokens(role)
+        role_lower = (role or "").lower()
+        family = list(tokens)
+        if any(token in tokens for token in ("developer", "engineer", "javascript", "node", "frontend", "backend")):
+            family.extend(["developer", "software", "engineer", "frontend", "backend", "fullstack", "full-stack", "javascript", "node"])
+        if "analyst" in tokens:
+            family.extend(["analyst", "analytics", "analysis", "insights", "business", "market"])
+        if "manager" in tokens:
+            family.extend(["manager", "management", "lead", "operations", "product"])
+        if "full-stack" in role_lower or "full stack" in role_lower:
+            family.extend(["fullstack", "full-stack", "frontend", "backend"])
+        return list(dict.fromkeys(token for token in family if token))
+
+    def _job_text(job: Dict[str, Any]) -> str:
+        return " ".join([
+            str(job.get("title") or ""),
+            str(job.get("company") or ""),
+            str(job.get("description") or ""),
+            str(job.get("clean_description") or ""),
+            " ".join(str(item) for item in (job.get("requirements") or [])),
+        ]).lower()
+
+    def _role_score(job: Dict[str, Any], strict_tokens: List[str], family_tokens: List[str]) -> int:
+        title = (job.get("title") or "").lower()
+        text = _job_text(job)
+        if not strict_tokens and not family_tokens:
+            return 10
+        strict_title_hits = sum(1 for token in strict_tokens if token in title)
+        strict_text_hits = sum(1 for token in strict_tokens if token in text)
+        family_title_hits = sum(1 for token in family_tokens if token in title)
+        family_text_hits = sum(1 for token in family_tokens if token in text)
+        return strict_title_hits * 30 + min(strict_text_hits, 4) * 8 + family_title_hits * 14 + min(family_text_hits, 6) * 3
+
+    def _location_terms() -> Dict[str, List[str]]:
+        raw_locations: List[str] = []
+        if locations_json:
+            try:
+                parsed = json.loads(locations_json)
+                if isinstance(parsed, list):
+                    raw_locations.extend(str(item.get("location_label") or "") for item in parsed if isinstance(item, dict))
+            except json.JSONDecodeError:
+                pass
+        if location_label:
+            raw_locations.append(location_label)
+        if location:
+            raw_locations.extend(location)
+        target_location_data = profile.get("target_location_data") or {}
+        if target_location_data.get("location_label"):
+            raw_locations.append(str(target_location_data.get("location_label")))
+        elif profile.get("target_location"):
+            raw_locations.append(str(profile.get("target_location")))
+        country_code_value = (
+            (country_code or "")
+            or str(target_location_data.get("country_code") or "")
+        ).lower().strip()
+        country_value = (
+            (country or "")
+            or str(target_location_data.get("country") or "")
+        ).lower().strip()
+        aliases = {
+            "fr": ["france", "paris", "ile de france", "ile-de-france", "île-de-france"],
+            "gb": ["united kingdom", "uk", "england", "london"],
+            "us": ["united states", "usa", "new york", "san francisco"],
+            "ma": ["morocco", "maroc", "casablanca"],
+        }
+        city_terms = list(dict.fromkeys(token for label in raw_locations for token in _tokens(label)))
+        country_terms = list(dict.fromkeys([country_value, *aliases.get(country_code_value, [])]))
+        return {"labels": [label for label in raw_locations if label], "city": city_terms, "country": [term for term in country_terms if term]}
+
+    def _location_score(job: Dict[str, Any], terms: Dict[str, List[str]], worldwide: bool = False) -> int:
+        if worldwide:
+            return 10
+        job_location = (job.get("location") or "").lower()
+        remote_value = str(job.get("remote") or "").lower()
+        score_value = 0
+        if any(term and term in job_location for term in terms["city"]):
+            score_value += 45
+        if any(term and term in job_location for term in terms["country"]):
+            score_value += 25
+        if remote_value == "remote":
+            score_value += 8
+        return score_value
+
+    def _recency_score(job: Dict[str, Any]) -> int:
+        raw = job.get("posted_at") or job.get("imported_at") or job.get("last_seen_at")
+        if not raw:
+            return 0
+        try:
+            parsed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+        except ValueError:
+            return 0
+        age_days = max(0, (datetime.now(timezone.utc) - parsed).days)
+        if age_days <= 7:
+            return 20
+        if age_days <= 30:
+            return 10
+        return 0
+
+    async def _fast_cached_feed() -> Dict[str, Any]:
+        requested_limit = max(1, min(int(limit or 5), 25))
+        target_role = (
+            profile.get("target_role")
+            or ((profile.get("target_roles") or [None])[0])
+            or ""
+        ).strip()
+        strict_tokens = _tokens(target_role)
+        family_tokens = _role_family_tokens(target_role)
+        terms = _location_terms()
+        swiped_rows = await db.swipes.find({"user_id": user.user_id}, {"_id": 0, "job_id": 1}).limit(1000).to_list(1000)
+        swiped_ids = {row.get("job_id") for row in swiped_rows if row.get("job_id")}
+        base_query: Dict[str, Any] = {}
+        if not include_non_auto_apply:
+            base_query = {
+                "auto_apply_supported": True,
+                "ats_provider": {"$in": ats_supported},
+            }
+        candidate_limit = max(300, requested_limit * 80)
+        candidates = await db.jobs.find(base_query, {"_id": 0}).limit(candidate_limit).to_list(candidate_limit)
+        candidates = [job for job in candidates if job.get("job_id") not in swiped_ids]
+        logger.info(
+            "feed_filter_stage user_id=%s stage=candidate_pool elapsed_ms=%s query=%s count=%s swiped_count=%s",
+            user.user_id,
+            _elapsed_ms(),
+            base_query,
+            len(candidates),
+            len(swiped_ids),
+        )
+
+        def rank(pool: List[Dict[str, Any]], *, worldwide: bool, broad: bool, any_role: bool = False) -> List[Dict[str, Any]]:
+            ranked = []
+            for job in pool:
+                role_score = 10 if any_role else _role_score(job, strict_tokens if not broad else [], family_tokens)
+                location_score = _location_score(job, terms, worldwide=worldwide)
+                if not worldwide and terms["labels"] and location_score <= 0:
+                    continue
+                if not any_role and role_score <= 0:
+                    continue
+                ranked.append({
+                    **job,
+                    "_feed_rank_score": role_score * 3 + location_score * 2 + _recency_score(job),
+                    "_role_match_score": role_score,
+                    "_location_match_score": location_score,
+                })
+            ranked.sort(key=lambda row: row.get("_feed_rank_score", 0), reverse=True)
+            diverse: List[Dict[str, Any]] = []
+            deferred: List[Dict[str, Any]] = []
+            seen_companies = set()
+            for job in ranked:
+                company_key = (job.get("company") or "").strip().lower()
+                if len(diverse) < min(5, requested_limit) and company_key in seen_companies:
+                    deferred.append(job)
+                    continue
+                diverse.append(job)
+                if company_key:
+                    seen_companies.add(company_key)
+                if len(diverse) >= requested_limit:
+                    break
+            for job in deferred:
+                if len(diverse) >= requested_limit:
+                    break
+                diverse.append(job)
+            return diverse[:requested_limit]
+
+        fallback_used = "none"
+        jobs = rank(candidates, worldwide=False, broad=False)
+        logger.info("feed_filter_stage user_id=%s stage=strict_role_location elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))
+        if len(jobs) < requested_limit and not _timed_out():
+            fallback_used = "worldwide_role_family"
+            jobs = rank(candidates, worldwide=True, broad=True)
+            logger.info("feed_filter_stage user_id=%s stage=worldwide_role_family elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))
+        if len(jobs) < requested_limit and not _timed_out():
+            fallback_used = "worldwide_auto_apply"
+            jobs = rank(candidates, worldwide=True, broad=True, any_role=True)
+            logger.info("feed_filter_stage user_id=%s stage=worldwide_auto_apply elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))
+
+        clean_jobs = []
+        for job in jobs[:requested_limit]:
+            clean = {key: value for key, value in job.items() if not key.startswith("_")}
+            clean_jobs.append({
+                **clean,
+                "match_score": clean.get("match_score") or random.randint(78, 96),
+                "match_reasons": clean.get("match_reasons") or ["Auto-apply compatible role from a supported ATS."],
+            })
+        elapsed = _elapsed_ms()
+        logger.info(
+            "jobs/feed fast complete: user_id=%s feed_elapsed_ms=%s returned=%s fallback_used=%s timed_out=%s",
+            user.user_id,
+            elapsed,
+            len(clean_jobs),
+            fallback_used,
+            _timed_out(),
+        )
+        return {
+            "jobs": clean_jobs,
+            "total": len(clean_jobs),
+            "feed_mode": "auto_apply_only" if not include_non_auto_apply else "mixed",
+            "auto_apply_count": sum(1 for job in clean_jobs if job.get("auto_apply_supported") is True),
+            "total_count": len(candidates),
+            "fallback_reason": None if fallback_used == "none" else fallback_used,
+            "searched_location": terms["labels"][0] if terms["labels"] else profile.get("target_location"),
+            "searched_locations": terms["labels"],
+            "search_radius": "worldwide" if fallback_used.startswith("worldwide") else search_radius,
+            "suggested_next_radius": None if clean_jobs else "worldwide",
+            "only_my_country": only_my_country,
+            "widened_search": fallback_used.startswith("worldwide"),
+            "original_location": terms["labels"][0] if terms["labels"] else profile.get("target_location"),
+            "final_location_used": "worldwide" if fallback_used.startswith("worldwide") else (terms["labels"][0] if terms["labels"] else profile.get("target_location")),
+            "provider_rate_limited": False,
+            "provider_cooldown_until": None,
+            "matched_role": target_role or None,
+            "matched_location": terms["labels"],
+            "companies_returned": sorted({job.get("company") for job in clean_jobs if job.get("company")}),
+            "filters_applied": {
+                "target_role": target_role or None,
+                "role_tokens": strict_tokens,
+                "broader_role_tokens": family_tokens,
+                "auto_apply_supported": not include_non_auto_apply,
+                "ats_provider": ats_supported if not include_non_auto_apply else None,
+                "search_radius": search_radius,
+            },
+            "feed_elapsed_ms": elapsed,
+            "fallback_used": fallback_used,
+        }
+
+    return await _fast_cached_feed()
 
     provider_enabled = os.environ.get("JSEARCH_ENABLED", "true").lower() in ("1", "true", "yes", "on")
     provider_configured = bool(os.environ.get("JSEARCH_API_KEY"))
@@ -869,7 +1355,8 @@ async def get_feed(
         return await db.jobs.count_documents(count_query)
 
     refresh_results = []
-    refresh_locations = selected_locations or [None]
+    max_feed_refresh_locations = max(1, min(int(os.environ.get("FEED_MAX_REFRESH_LOCATIONS", "3")), 10))
+    refresh_locations = (selected_locations or [None])[:max_feed_refresh_locations]
     for loc_data in refresh_locations:
         loc_label = loc_data.get("location_label") if loc_data else None
         refresh_result = await refresh_jobs_for_profile_if_needed(
@@ -892,6 +1379,12 @@ async def get_feed(
         if refreshed_labels and await _count_auto_for_labels(refreshed_labels) >= limit:
             break
     refresh_result = refresh_results[-1] if refresh_results else {"attempted": False, "reason": "no_refresh"}
+    logger.info(
+        "jobs/feed refresh complete: user_id=%s elapsed_ms=%s refresh_results=%s",
+        user.user_id,
+        int((time.perf_counter() - started_at) * 1000),
+        refresh_results,
+    )
 
     # exclude jobs already swiped
     swiped = await db.swipes.find({"user_id": user.user_id}, {"_id": 0, "job_id": 1}).to_list(2000)
@@ -996,6 +1489,8 @@ async def get_feed(
     broader_role_tokens = []
     if role_tokens:
         broader_role_tokens = role_tokens[-1:]
+        if "analyst" in role_tokens:
+            broader_role_tokens = list(dict.fromkeys([*role_tokens, "analytics", "analysis", "insights", "scientist"]))
         if "software" in role_tokens and "engineer" in role_tokens:
             broader_role_tokens = ["software", "engineer"]
 
@@ -1029,6 +1524,7 @@ async def get_feed(
         title = (job.get("title") or "").lower()
         body = " ".join([
             job.get("description") or "",
+            job.get("clean_description") or "",
             " ".join(job.get("requirements") or []),
         ]).lower()
         title_hits = sum(1 for token in tokens if token in title)
@@ -1088,7 +1584,7 @@ async def get_feed(
             }
             if not role_tokens or strict_role_score >= max(20, len(role_tokens) * 12):
                 strict_matches.append(ranked_job)
-            elif broad_role_score > 0:
+            elif broad_role_score >= 20:
                 ranked_job["_feed_rank_score"] = broad_role_score * 2 + location_match_score * 2 + recency
                 broader_matches.append(ranked_job)
 
@@ -1230,6 +1726,15 @@ async def get_feed(
         })
     if fallback_reason is None and feed_mode == "auto_apply_only":
         fallback_reason = None
+    logger.info(
+        "jobs/feed complete: user_id=%s elapsed_ms=%s returned=%s total=%s feed_mode=%s fallback_reason=%s",
+        user.user_id,
+        int((time.perf_counter() - started_at) * 1000),
+        len(enriched),
+        total,
+        feed_mode,
+        fallback_reason,
+    )
     return {
         "jobs": enriched,
         "total": total,
@@ -1256,41 +1761,169 @@ async def get_feed(
 
 @api_router.post("/swipe")
 async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
-    # record swipe
-    existing = await db.swipes.find_one({"user_id": user.user_id, "job_id": req.job_id}, {"_id": 0})
-    if existing:
-        return {"ok": True, "duplicate": True}
+    phase = "swipe_start"
 
-    await db.swipes.insert_one({
-        "user_id": user.user_id,
-        "job_id": req.job_id,
-        "direction": req.direction,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    })
+    def log_phase(name: str, **extra: Any) -> None:
+        safe_extra = {
+            key: value
+            for key, value in extra.items()
+            if key not in {"cv_text", "cover_letter", "tailored_cover_letter", "prompt", "tokens"}
+        }
+        logger.info(
+            "swipe_phase=%s user_id=%s job_id=%s direction=%s provider=%s extra=%s",
+            name,
+            user.user_id,
+            req.job_id,
+            req.direction,
+            DATABASE_PROVIDER,
+            safe_extra,
+        )
 
-    if req.direction != "right":
-        return {"ok": True, "applied": False}
-
-    job = await db.jobs.find_one({"job_id": req.job_id}, {"_id": 0})
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    profile = await db.profiles.find_one({"user_id": user.user_id}, {"_id": 0})
-    if not profile:
-        raise HTTPException(status_code=400, detail="Profile required")
+    def safe_error(exc: Exception) -> HTTPException:
+        message = str(exc).strip() or "Swipe failed"
+        if len(message) > 500:
+            message = message[:500]
+        logger.exception(
+            "swipe_failed phase=%s user_id=%s job_id=%s direction=%s exception=%s",
+            phase,
+            user.user_id,
+            req.job_id,
+            req.direction,
+            exc.__class__.__name__,
+        )
+        return HTTPException(
+            status_code=getattr(exc, "status_code", 500) if isinstance(exc, HTTPException) else 500,
+            detail={
+                "phase": phase,
+                "exception_class": exc.__class__.__name__,
+                "message": message,
+            },
+        )
 
     try:
+        log_phase("swipe_start")
+        phase = "auth_ok"
+        log_phase("auth_ok")
+
+        phase = "job_loaded"
+        job = await db.jobs.find_one({"job_id": req.job_id}, {"_id": 0})
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        log_phase(
+            "job_loaded",
+            job_provider=job.get("provider"),
+            ats_provider=job.get("ats_provider"),
+            has_description=bool(job.get("description") or job.get("clean_description")),
+            job_keys=sorted(list(job.keys()))[:60],
+        )
+
+        phase = "swipe_record_insert_start"
+        existing = await db.swipes.find_one({"user_id": user.user_id, "job_id": req.job_id}, {"_id": 0})
+        log_phase("swipe_record_insert_start", duplicate=bool(existing))
+        if not existing:
+            await db.swipes.insert_one({
+                "user_id": user.user_id,
+                "job_id": req.job_id,
+                "direction": req.direction,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+        phase = "swipe_record_insert_done"
+        log_phase("swipe_record_insert_done", duplicate=bool(existing))
+
+        if req.direction != "right":
+            phase = "response_build_start"
+            log_phase("response_build_start")
+            response = {"ok": True, "applied": False, "duplicate": bool(existing)}
+            phase = "response_build_done"
+            log_phase("response_build_done")
+            phase = "swipe_complete"
+            log_phase("swipe_complete")
+            return response
+
+        profile = await db.profiles.find_one({"user_id": user.user_id}, {"_id": 0})
+        if not profile:
+            raise HTTPException(status_code=400, detail="Profile required")
+
+        existing_app = await db.applications.find_one({"user_id": user.user_id, "job_id": req.job_id}, {"_id": 0})
+        if existing_app:
+            normalized = _normalize_application_status_fields(existing_app)
+            phase = "response_build_start"
+            log_phase("response_build_start", duplicate_application=True)
+            response = {
+                "ok": True,
+                "applied": True,
+                "submitted": normalized.get("submission_status") == "submitted",
+                "duplicate": bool(existing),
+                "application_id": normalized["application_id"],
+                "package_status": normalized["package_status"],
+                "submission_status": normalized["submission_status"],
+            }
+            phase = "response_build_done"
+            log_phase("response_build_done", duplicate_application=True)
+            phase = "swipe_complete"
+            log_phase("swipe_complete", duplicate_application=True)
+            return response
+
+        phase = "application_generation_start"
+        log_phase("application_generation_start")
         doc = await _generate_application_doc(user, profile, job)
-    except LLMProviderNotConfigured as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    await db.applications.insert_one(doc)
-    return {
-        "ok": True,
-        "applied": True,
-        "submitted": False,
-        "application_id": doc["application_id"],
-        "package_status": doc["package_status"],
-        "submission_status": doc["submission_status"],
-    }
+        phase = "application_generation_done"
+        log_phase(
+            "application_generation_done",
+            application_id=doc.get("application_id"),
+            package_status=doc.get("package_status"),
+            submission_status=doc.get("submission_status"),
+        )
+
+        phase = "application_upsert_start"
+        log_phase("application_upsert_start", application_id=doc.get("application_id"))
+        await db.applications.update_one(
+            {"user_id": user.user_id, "job_id": req.job_id},
+            {"$setOnInsert": doc},
+            upsert=True,
+        )
+        saved_doc = await db.applications.find_one({"user_id": user.user_id, "job_id": req.job_id}, {"_id": 0})
+        if not saved_doc:
+            raise RuntimeError("Application upsert did not produce a saved document")
+        saved_doc = _normalize_application_status_fields(saved_doc)
+        phase = "application_upsert_done"
+        log_phase(
+            "application_upsert_done",
+            application_id=saved_doc.get("application_id"),
+            package_status=saved_doc.get("package_status"),
+            submission_status=saved_doc.get("submission_status"),
+        )
+
+        phase = "response_build_start"
+        log_phase("response_build_start")
+        response = {
+            "ok": True,
+            "applied": True,
+            "submitted": False,
+            "duplicate": bool(existing),
+            "application_id": saved_doc["application_id"],
+            "package_status": saved_doc["package_status"],
+            "submission_status": saved_doc["submission_status"],
+        }
+        phase = "response_build_done"
+        log_phase("response_build_done")
+        phase = "swipe_complete"
+        log_phase("swipe_complete")
+        return response
+    except LLMProviderNotConfigured as exc:
+        phase = "application_generation_start"
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "phase": phase,
+                "exception_class": exc.__class__.__name__,
+                "message": str(exc),
+            },
+        ) from exc
+    except HTTPException as exc:
+        raise safe_error(exc) from exc
+    except Exception as exc:
+        raise safe_error(exc) from exc
 
 
 @api_router.get("/swipes/history")
@@ -1396,6 +2029,458 @@ async def greenhouse_form_preview(job_id: str, user: User = Depends(get_current_
         "fields": preview["fields"],
         "supports_auto_submit": preview["supports_auto_submit"],
         "blockers": preview["blockers"],
+    }
+
+
+async def _load_or_create_lever_browser_application(job_id: str, user: User) -> tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+    job = await db.jobs.find_one({"job_id": job_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.get("ats_provider") != "lever":
+        raise HTTPException(status_code=400, detail="Job is not a Lever job")
+
+    profile = await db.profiles.find_one({"user_id": user.user_id}, {"_id": 0})
+    if not profile or not profile.get("cv_text"):
+        raise HTTPException(status_code=400, detail="Upload your CV before preparing a browser submission.")
+
+    app_doc = await db.applications.find_one(
+        {"user_id": user.user_id, "job_id": job_id},
+        {"_id": 0},
+    )
+    package_missing = (
+        not app_doc
+        or not app_doc.get("tailored_resume_structured")
+        or not app_doc.get("tailored_cover_letter")
+        or not app_doc.get("tailored_cv_file_b64")
+    )
+    if package_missing:
+        generated_doc = await _generate_application_doc(user, profile, job)
+        if app_doc:
+            generated_doc["application_id"] = app_doc["application_id"]
+            generated_doc["created_at"] = app_doc.get("created_at") or generated_doc["created_at"]
+            await db.applications.update_one(
+                {"user_id": user.user_id, "job_id": job_id, "application_id": app_doc["application_id"]},
+                {"$set": generated_doc},
+            )
+        else:
+            await db.applications.insert_one(generated_doc)
+        app_doc = await db.applications.find_one(
+            {"user_id": user.user_id, "job_id": job_id},
+            {"_id": 0},
+        )
+
+    if not app_doc:
+        raise HTTPException(status_code=500, detail="Application package could not be created")
+    return job, profile, app_doc
+
+
+def _browser_engine_headless() -> bool:
+    return os.environ.get("BROWSER_HEADLESS", "true").lower() not in ("0", "false", "no", "off")
+
+
+def _dev_tools_enabled() -> bool:
+    return (
+        os.environ.get("ENVIRONMENT", "").strip().lower() == "development"
+        or os.environ.get("DEV_TOOLS_ENABLED", "false").strip().lower() in ("1", "true", "yes", "on")
+    )
+
+
+def _log_browser_exception(message: str, exc: Exception) -> None:
+    if _dev_tools_enabled():
+        logger.exception(message)
+    else:
+        logger.warning("%s: %s", message, exc.__class__.__name__)
+
+
+LEVER_BROWSER_ENDPOINT_VERSION = "lever_prepare_browser_fill_endpoint_v3_runtime_markers_2026_06_05"
+
+
+def _lever_module_file() -> str:
+    module = __import__(LeverBrowserSubmissionEngine.__module__, fromlist=["__file__"])
+    return str(getattr(module, "__file__", LeverBrowserSubmissionEngine.__module__))
+
+
+def _lever_runtime_markers(engine: Optional[LeverBrowserSubmissionEngine] = None) -> Dict[str, Any]:
+    engine_obj = engine or LeverBrowserSubmissionEngine(headless=_browser_engine_headless())
+    return {
+        "endpoint_version": LEVER_BROWSER_ENDPOINT_VERSION,
+        "engine_version": getattr(engine_obj, "engine_version", "unknown"),
+        "lever_module_file": _lever_module_file(),
+        "server_file": __file__,
+        "last_launch_marker": getattr(engine_obj, "last_launch_marker", None),
+    }
+
+
+def _lever_marked_detail(detail: Any, engine: Optional[LeverBrowserSubmissionEngine] = None) -> Dict[str, Any]:
+    if isinstance(detail, dict):
+        return {**_lever_runtime_markers(engine), **detail}
+    return {**_lever_runtime_markers(engine), "message": detail}
+
+
+async def _prepare_lever_browser_fill(job_id: str, user: User, click_submit: bool = False) -> Dict[str, Any]:
+    engine = LeverBrowserSubmissionEngine(headless=_browser_engine_headless())
+    try:
+        job, profile, app_doc = await _load_or_create_lever_browser_application(job_id, user)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _log_browser_exception("Lever browser load_application failed", exc)
+        raise HTTPException(
+            status_code=502,
+            detail=_lever_marked_detail({
+                "phase": "load_application",
+                "exception_class": exc.__class__.__name__,
+                "message": str(exc).strip() or "Failed to load Lever application context.",
+            }, engine),
+        ) from exc
+
+    logger.info(
+        "Lever browser provider class=%s file=%s endpoint_version=%s engine_version=%s",
+        engine.__class__.__name__,
+        getattr(__import__(engine.__class__.__module__, fromlist=["__file__"]), "__file__", engine.__class__.__module__),
+        LEVER_BROWSER_ENDPOINT_VERSION,
+        getattr(engine, "engine_version", "unknown"),
+    )
+    try:
+        result = await engine.prepare_fill(
+            job=job,
+            app_doc=app_doc,
+            profile=profile,
+            user=user.model_dump(mode="json"),
+            click_submit=click_submit,
+        )
+    except BrowserSubmissionError as exc:
+        _log_browser_exception(f"Lever browser failed during {exc.phase}", exc)
+        raise HTTPException(status_code=502, detail=_lever_marked_detail(exc.safe_detail(), engine)) from exc
+    except ValueError as exc:
+        _log_browser_exception("Lever browser validation failed", exc)
+        raise HTTPException(
+            status_code=400,
+            detail=_lever_marked_detail({
+                "phase": "load_application",
+                "exception_class": exc.__class__.__name__,
+                "message": str(exc).strip() or "Invalid Lever browser submission request.",
+            }, engine),
+        ) from exc
+    except RuntimeError as exc:
+        _log_browser_exception("Lever browser runtime failure", exc)
+        raise HTTPException(
+            status_code=502,
+            detail=_lever_marked_detail({
+                "phase": "open_browser",
+                "exception_class": exc.__class__.__name__,
+                "message": str(exc).strip() or "Lever browser runtime failure.",
+            }, engine),
+        ) from exc
+    except Exception as exc:
+        _log_browser_exception("Lever browser unexpected failure", exc)
+        raise HTTPException(
+            status_code=502,
+            detail=_lever_marked_detail({
+                "phase": "open_browser",
+                "exception_class": exc.__class__.__name__,
+                "message": str(exc).strip() or "Unexpected Lever browser failure.",
+            }, engine),
+        ) from exc
+
+    result_dict = result.to_dict()
+    result_for_storage = _sanitize_browser_result_for_application(result_dict)
+    now = datetime.now(timezone.utc).isoformat()
+    if not click_submit:
+        await db.applications.update_one(
+            {"application_id": app_doc["application_id"], "user_id": user.user_id},
+            {"$set": {
+                "lever_browser_fill_result": result_for_storage,
+                "lever_browser_prepared_at": now,
+                "updated_at": now,
+            }},
+        )
+
+    return {
+        **_lever_runtime_markers(engine),
+        "job_id": job["job_id"],
+        "application_id": app_doc["application_id"],
+        "company": job.get("company"),
+        "title": job.get("title"),
+        **result_dict,
+    }
+
+
+def _sanitize_browser_result_for_application(result_dict: Dict[str, Any]) -> Dict[str, Any]:
+    result_for_storage = dict(result_dict)
+    for key in ("screenshot_b64", "submit_screenshot_b64"):
+        if result_for_storage.get(key):
+            result_for_storage[key] = f"<omitted, {len(result_dict[key])} base64 chars>"
+    return result_for_storage
+
+
+async def _store_lever_browser_submission_run(
+    *,
+    user: User,
+    result: Dict[str, Any],
+    dry_run: bool,
+) -> str:
+    now = datetime.now(timezone.utc).isoformat()
+    run_id = f"browser_run_{uuid.uuid4().hex[:16]}"
+    success_detected = bool(result.get("success_detected"))
+    status = (
+        "dry_run"
+        if dry_run
+        else "submitted"
+        if success_detected
+        else "blocked_captcha"
+        if result.get("captcha_required")
+        else "unknown"
+        if result.get("submit_clicked") and result.get("failure_reason") == "submission_status_unknown"
+        else "failed"
+    )
+    run_doc = {
+        "run_id": run_id,
+        "application_id": result.get("application_id"),
+        "job_id": result.get("job_id"),
+        "user_id": user.user_id,
+        "provider": "lever_browser",
+        "status": status,
+        "dry_run": dry_run,
+        "screenshots": {
+            "prepared_b64": result.get("screenshot_b64"),
+            "submitted_b64": result.get("submit_screenshot_b64"),
+        },
+        "success_detected": success_detected,
+        "captcha_required": bool(result.get("captcha_required")),
+        "action_required": bool(result.get("action_required")),
+        "failure_reason": result.get("failure_reason"),
+        "post_submit_page_text_excerpt": result.get("post_submit_page_text_excerpt"),
+        "post_submit_errors": result.get("post_submit_errors"),
+        "submit_button_still_visible": result.get("submit_button_still_visible"),
+        "confirmation_text_found": result.get("confirmation_text_found"),
+        "lever_network_submit_statuses": result.get("lever_network_submit_statuses"),
+        "final_url": result.get("final_url") or result.get("application_url"),
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.browser_submission_runs.insert_one(run_doc)
+    return run_id
+
+
+@api_router.post("/applications/lever/prepare-browser-fill")
+async def lever_prepare_browser_fill(body: LeverBrowserFillRequest, user: User = Depends(get_current_user)):
+    """Fill a Lever hosted application page in Playwright and stop before submit."""
+    try:
+        return await _prepare_lever_browser_fill(body.job_id, user)
+    except HTTPException as exc:
+        exc.detail = _lever_marked_detail(exc.detail)
+        raise
+
+
+@api_router.post("/applications/lever/browser-submit")
+async def lever_browser_submit(body: LeverBrowserFillRequest, user: User = Depends(get_current_user)):
+    """Fill a Lever hosted application page and optionally click submit when dry-run is disabled."""
+    try:
+        if browser_submit_dry_run_enabled():
+            result = await _prepare_lever_browser_fill(body.job_id, user)
+            run_id = await _store_lever_browser_submission_run(user=user, result=result, dry_run=True)
+            return {
+                **result,
+                "dry_run": True,
+                "browser_submission_run_id": run_id,
+                "stopped_before_submit": True,
+                "message": "Dry run successful. Application was filled but submit was not clicked.",
+            }
+        result = await _prepare_lever_browser_fill(body.job_id, user, click_submit=True)
+        run_id = await _store_lever_browser_submission_run(user=user, result=result, dry_run=False)
+        now = datetime.now(timezone.utc).isoformat()
+        if result.get("success_detected"):
+            await db.applications.update_one(
+                {"application_id": result["application_id"], "user_id": user.user_id},
+                {"$set": {
+                    "submission_status": "submitted",
+                    "submitted_at": now,
+                    "submission_provider": "lever_browser",
+                    "submission_error": None,
+                    "browser_submission_run_id": run_id,
+                    "lever_browser_submission_result": _sanitize_browser_result_for_application(result),
+                    "updated_at": now,
+                }},
+            )
+            return {
+                **result,
+                "dry_run": False,
+                "browser_submission_run_id": run_id,
+                "submission_status": "submitted",
+                "message": "Application submitted.",
+            }
+
+        if result.get("captcha_required"):
+            await db.applications.update_one(
+                {"application_id": result["application_id"], "user_id": user.user_id},
+                {"$set": {
+                    "submission_status": "action_required",
+                    "submission_error": "captcha_required",
+                    "submission_provider": "lever_browser",
+                    "browser_submission_run_id": run_id,
+                    "lever_browser_submission_result": _sanitize_browser_result_for_application(result),
+                    "updated_at": now,
+                }},
+            )
+            return {
+                **result,
+                "dry_run": False,
+                "browser_submission_run_id": run_id,
+                "submission_status": "action_required",
+                "captcha_required": True,
+                "action_required": True,
+                "message": "Human verification required to complete submission.",
+            }
+
+        if result.get("submit_clicked") and result.get("failure_reason") == "submission_status_unknown":
+            await db.applications.update_one(
+                {"application_id": result["application_id"], "user_id": user.user_id},
+                {"$set": {
+                    "submission_status": "unknown",
+                    "submission_error": "submission_status_unknown",
+                    "submission_provider": "lever_browser",
+                    "browser_submission_run_id": run_id,
+                    "lever_browser_submission_result": _sanitize_browser_result_for_application(result),
+                    "updated_at": now,
+                }},
+            )
+            return {
+                **result,
+                "dry_run": False,
+                "browser_submission_run_id": run_id,
+                "submission_status": "unknown",
+                "message": "Submit was clicked, but success confirmation was not detected.",
+            }
+
+        await db.applications.update_one(
+            {"application_id": result["application_id"], "user_id": user.user_id},
+            {"$set": {
+                "submission_status": "failed",
+                "submission_error": result.get("failure_reason") or "Lever submission success was not detected.",
+                "submission_provider": "lever_browser",
+                "browser_submission_run_id": run_id,
+                "lever_browser_submission_result": _sanitize_browser_result_for_application(result),
+                "updated_at": now,
+            }},
+        )
+        return {
+            **result,
+            "dry_run": False,
+            "browser_submission_run_id": run_id,
+            "submission_status": "failed",
+            "message": "Submit was attempted, but success confirmation was not detected.",
+        }
+    except HTTPException as exc:
+        exc.detail = _lever_marked_detail(exc.detail)
+        raise
+
+
+def _lever_benchmark_summary(result: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "job_id": result.get("job_id"),
+        "application_id": result.get("application_id"),
+        "company": result.get("company"),
+        "title": result.get("title"),
+        "captcha_required": bool(result.get("captcha_required")),
+        "action_required": bool(result.get("action_required")),
+        "ready_for_final_click": bool(result.get("ready_for_final_click")),
+        "blockers": result.get("blockers") or [],
+        "unfilled_required_fields": result.get("unfilled_required_fields") or [],
+        "success_likelihood": result.get("success_likelihood"),
+        "final_click_candidate_selector": result.get("final_click_candidate_selector"),
+        "submit_clicked": bool(result.get("submit_clicked")),
+        "success_detected": bool(result.get("success_detected")),
+        "failure_reason": result.get("failure_reason"),
+        "final_url": result.get("final_url") or result.get("application_url"),
+        "submission_status": result.get("submission_status"),
+        "captcha_debug": result.get("captcha_debug") or {},
+        "post_submit_errors": result.get("post_submit_errors") or [],
+        "submit_button_still_visible": result.get("submit_button_still_visible"),
+        "confirmation_text_found": result.get("confirmation_text_found"),
+        "lever_network_submit_statuses": result.get("lever_network_submit_statuses") or [],
+    }
+
+
+@api_router.post("/applications/lever/submission-benchmark")
+async def lever_submission_benchmark(body: LeverSubmissionBenchmarkRequest, user: User = Depends(get_current_user)):
+    unique_job_ids = []
+    seen = set()
+    for job_id in body.job_ids:
+        if job_id and job_id not in seen:
+            unique_job_ids.append(job_id)
+            seen.add(job_id)
+
+    if not unique_job_ids:
+        raise HTTPException(status_code=400, detail="job_ids is required")
+
+    dry_run_enabled = browser_submit_dry_run_enabled()
+    real_submit_enabled = bool(body.allow_real_submit and not dry_run_enabled)
+    results = []
+    for job_id in unique_job_ids:
+        logger.info(
+            "Lever benchmark job start: user_id=%s job_id=%s run_browser_submit=%s real_submit_enabled=%s",
+            user.user_id,
+            job_id,
+            body.run_browser_submit,
+            real_submit_enabled,
+        )
+        try:
+            if body.run_browser_submit and real_submit_enabled:
+                result = await _prepare_lever_browser_fill(job_id, user, click_submit=True)
+                run_id = await _store_lever_browser_submission_run(user=user, result=result, dry_run=False)
+                result = {**result, "browser_submission_run_id": run_id}
+            else:
+                result = await _prepare_lever_browser_fill(job_id, user, click_submit=False)
+                if body.run_browser_submit:
+                    run_id = await _store_lever_browser_submission_run(user=user, result=result, dry_run=True)
+                    result = {
+                        **result,
+                        "dry_run": True,
+                        "browser_submission_run_id": run_id,
+                        "stopped_before_submit": True,
+                    }
+            results.append({"ok": True, **_lever_benchmark_summary(result)})
+        except HTTPException as exc:
+            detail = exc.detail if isinstance(exc.detail, dict) else {"message": exc.detail}
+            results.append({
+                "ok": False,
+                "job_id": job_id,
+                "error": detail,
+                "captcha_required": False,
+                "ready_for_final_click": False,
+                "blockers": [],
+                "success_likelihood": None,
+                "final_click_candidate_selector": None,
+            })
+        except Exception as exc:
+            logger.exception("Lever benchmark job failed: user_id=%s job_id=%s", user.user_id, job_id)
+            results.append({
+                "ok": False,
+                "job_id": job_id,
+                "error": {
+                    "exception_class": exc.__class__.__name__,
+                    "message": str(exc)[:500],
+                },
+                "captcha_required": False,
+                "ready_for_final_click": False,
+                "blockers": [],
+                "success_likelihood": None,
+                "final_click_candidate_selector": None,
+            })
+
+    clean_ready = [
+        item for item in results
+        if item.get("ok") and item.get("ready_for_final_click") and not item.get("captcha_required") and not item.get("blockers")
+    ]
+    return {
+        "dry_run": not real_submit_enabled,
+        "real_submit_enabled": real_submit_enabled,
+        "run_browser_submit": body.run_browser_submit,
+        "total": len(results),
+        "clean_ready_count": len(clean_ready),
+        "captcha_required_count": sum(1 for item in results if item.get("captcha_required")),
+        "results": results,
     }
 
 
@@ -2950,8 +4035,6 @@ async def dev_greenhouse_import_test():
     )
     if not dev_enabled:
         raise HTTPException(status_code=404, detail="Not found")
-
-    await seed_greenhouse_company_boards(db)
     result = await refresh_greenhouse_boards(db, limit_boards=10, force=True)
     sample_jobs = result.get("sample_jobs", [])
     return {
@@ -2988,6 +4071,591 @@ async def dev_greenhouse_board_test(board_token: str = "stripe"):
         "jobs_count": inspection["jobs_count"],
         "first_job_title": inspection["first_job_title"],
         "error_snippet": inspection["error_snippet"],
+    }
+
+
+@api_router.get("/dev/lever-import-test")
+async def dev_lever_import_test():
+    dev_enabled = (
+        os.environ.get("ENVIRONMENT", "").lower() == "development"
+        or os.environ.get("DEV_TOOLS_ENABLED", "false").lower() in ("1", "true", "yes", "on")
+    )
+    if not dev_enabled:
+        raise HTTPException(status_code=404, detail="Not found")
+    result = await refresh_lever_boards(db, limit_boards=10, force=True)
+    sample_jobs = result.get("sample_jobs", [])
+    return {
+        "boards_checked": result.get("boards_checked", 0),
+        "boards_successful": result.get("boards_successful", 0),
+        "jobs_imported": result.get("jobs_imported", 0),
+        "sample_jobs": sample_jobs[:5],
+    }
+
+
+@api_router.get("/dev/lever-board-test")
+async def dev_lever_board_test(site: str = "postman"):
+    dev_enabled = (
+        os.environ.get("ENVIRONMENT", "").lower() == "development"
+        or os.environ.get("DEV_TOOLS_ENABLED", "false").lower() in ("1", "true", "yes", "on")
+    )
+    if not dev_enabled:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    board_site = site.strip().lower()
+    if not board_site:
+        raise HTTPException(status_code=400, detail="site is required")
+
+    provider = get_board_provider("lever")
+    try:
+        inspection = await provider.inspect_board(board_site)
+    except Exception as exc:
+        logger.warning("Lever board test failed: site=%s error=%s", board_site, exc)
+        raise HTTPException(status_code=502, detail="Lever board test failed") from exc
+
+    return {
+        "site": inspection["site"],
+        "primary_url": inspection.get("primary_url"),
+        "primary_status": inspection.get("primary_status"),
+        "primary_error_snippet": inspection.get("primary_error_snippet"),
+        "eu_url": inspection.get("eu_url"),
+        "eu_status": inspection.get("eu_status"),
+        "eu_error_snippet": inspection.get("eu_error_snippet"),
+        "jobs_count": inspection["jobs_count"],
+        "first_job_title": inspection["first_job_title"],
+    }
+
+
+@api_router.get("/dev/provider-write-test")
+async def dev_provider_write_test(
+    provider: str = "lever",
+    max_boards: int = 1,
+    max_jobs_per_board: int = 25,
+    timeout_seconds: int = 120,
+):
+    dev_enabled = (
+        os.environ.get("ENVIRONMENT", "").lower() == "development"
+        or os.environ.get("DEV_TOOLS_ENABLED", "false").lower() in ("1", "true", "yes", "on")
+    )
+    if not dev_enabled:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    provider_name = (provider or "").strip().lower()
+    if provider_name not in ("greenhouse", "lever"):
+        raise HTTPException(status_code=400, detail="provider must be 'greenhouse' or 'lever'")
+
+    max_boards = max(1, min(int(max_boards or 1), 5))
+    max_jobs_per_board = max(1, min(int(max_jobs_per_board or 25), 100))
+    timeout_seconds = max(5, min(int(timeout_seconds or 120), 300))
+    started_at = time.perf_counter()
+    progress: Dict[str, Any] = {
+        "boards_checked": 0,
+        "jobs_upserted_so_far": 0,
+        "last_board": None,
+        "sample_jobs": [],
+    }
+
+    async def _run_bounded_write_test() -> Dict[str, Any]:
+        if provider_name == "greenhouse":
+            result = await refresh_greenhouse_boards(
+                db,
+                limit_boards=max_boards,
+                force=True,
+                job_limit=max_jobs_per_board,
+                progress=progress,
+            )
+        else:
+            result = await refresh_lever_boards(
+                db,
+                limit_boards=max_boards,
+                force=True,
+                job_limit=max_jobs_per_board,
+                progress=progress,
+            )
+        return result
+
+    try:
+        result = await asyncio.wait_for(_run_bounded_write_test(), timeout=timeout_seconds)
+    except asyncio.TimeoutError as exc:
+        elapsed_ms = int((time.perf_counter() - started_at) * 1000)
+        logger.warning("provider_write_test timeout provider=%s elapsed_ms=%s", provider_name, elapsed_ms)
+        return {
+            "active_provider": DATABASE_PROVIDER,
+            "jobs_collection_provider": _runtime_collection_provider("jobs"),
+            "company_boards_collection_provider": _runtime_collection_provider("company_boards"),
+            "provider": provider_name,
+            "timed_out": True,
+            "phase": "provider_write_test",
+            "message": f"Provider write test timed out after {timeout_seconds} seconds.",
+            "boards_checked": progress.get("boards_checked", 0),
+            "jobs_upserted_so_far": progress.get("jobs_upserted_so_far", 0),
+            "last_board": progress.get("last_board"),
+            "elapsed_ms": elapsed_ms,
+            "timeout_seconds": timeout_seconds,
+            "max_boards": max_boards,
+            "max_jobs_per_board": max_jobs_per_board,
+            "sample_job_id": (progress.get("sample_jobs") or [{}])[0].get("job_id") if progress.get("sample_jobs") else None,
+        }
+
+    sample_jobs = result.get("sample_jobs") or []
+    sample_job_id = sample_jobs[0].get("job_id") if sample_jobs else None
+    sample_db_job = None
+    if sample_job_id:
+        sample_db_job = await db.jobs.find_one(
+            {"job_id": sample_job_id},
+            {"_id": 0, "job_id": 1, "title": 1, "company": 1, "provider": 1, "ats_provider": 1},
+        )
+    return {
+        "active_provider": DATABASE_PROVIDER,
+        "jobs_collection_provider": _runtime_collection_provider("jobs"),
+        "company_boards_collection_provider": _runtime_collection_provider("company_boards"),
+        "provider": provider_name,
+        "timed_out": False,
+        "boards_checked": result.get("boards_checked", 0),
+        "boards_successful": result.get("boards_successful", 0),
+        "inserted_or_updated_count": result.get("jobs_imported", 0),
+        "jobs_upserted_so_far": result.get("jobs_imported", 0),
+        "auto_apply_supported_imported": result.get("auto_apply_supported_imported", 0),
+        "elapsed_ms": result.get("elapsed_ms"),
+        "timeout_seconds": timeout_seconds,
+        "max_boards": max_boards,
+        "max_jobs_per_board": max_jobs_per_board,
+        "last_board": progress.get("last_board"),
+        "sample_job_id": sample_job_id,
+        "sample_job_persisted": sample_db_job is not None,
+        "sample_job": sample_db_job,
+    }
+
+
+@api_router.get("/dev/playwright-launch-test")
+async def dev_playwright_launch_test():
+    dev_enabled = (
+        os.environ.get("ENVIRONMENT", "").lower() == "development"
+        or os.environ.get("DEV_TOOLS_ENABLED", "false").lower() in ("1", "true", "yes", "on")
+    )
+    if not dev_enabled:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    try:
+        from playwright.async_api import async_playwright
+    except ImportError as exc:
+        return {
+            "ok": False,
+            "phase": "import_playwright",
+            "exception_class": exc.__class__.__name__,
+            "message": str(exc).strip() or "Playwright is not installed.",
+        }
+
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            try:
+                page = await browser.new_page()
+                await page.goto("about:blank")
+                return {"ok": True}
+            finally:
+                await browser.close()
+    except Exception as exc:
+        if _dev_tools_enabled():
+            logger.exception("Dev Playwright launch test failed")
+        return {
+            "ok": False,
+            "phase": "open_browser",
+            "exception_class": exc.__class__.__name__,
+            "message": str(exc),
+        }
+
+
+@api_router.get("/dev/asyncio-loop-debug")
+async def dev_asyncio_loop_debug():
+    loop = asyncio.get_running_loop()
+    subprocess_supported = False
+    subprocess_error = None
+    try:
+        process = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "--version",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await process.communicate()
+        subprocess_supported = process.returncode == 0
+        if process.returncode != 0:
+            subprocess_error = f"python --version exited with {process.returncode}"
+    except Exception as exc:
+        subprocess_error = f"{exc.__class__.__name__}: {str(exc)[:500]}"
+
+    return {
+        "platform": sys.platform,
+        "event_loop_policy": asyncio.get_event_loop_policy().__class__.__name__,
+        "running_loop_class": loop.__class__.__name__,
+        "subprocess_supported_test": subprocess_supported,
+        "subprocess_error": subprocess_error,
+    }
+
+
+@api_router.get("/dev/lever-runtime-debug")
+async def dev_lever_runtime_debug():
+    old_error_string = "Playwright browser launch failed." + " Ensure Chromium is installed"
+    source = inspect.getsource(LeverBrowserSubmissionEngine.prepare_fill)
+    source_lines = source.splitlines()[:40]
+    engine = LeverBrowserSubmissionEngine(headless=_browser_engine_headless())
+    return {
+        "endpoint_version": LEVER_BROWSER_ENDPOINT_VERSION,
+        "engine_version": getattr(engine, "engine_version", "unknown"),
+        "lever_module_file": _lever_module_file(),
+        "lever_class_name": LeverBrowserSubmissionEngine.__name__,
+        "prepare_fill_source_first_40_lines": source_lines,
+        "contains_old_error_string": old_error_string in source,
+    }
+
+
+@api_router.get("/dev/db-health")
+async def dev_db_health():
+    dev_tools_enabled_raw = os.environ.get("DEV_TOOLS_ENABLED")
+    environment_raw = os.environ.get("ENVIRONMENT")
+    env_file_path = ROOT_DIR / ".env"
+
+    supabase_url = os.environ.get("SUPABASE_URL", "")
+    supabase_secret = os.environ.get("SUPABASE_SECRET_KEY", "")
+    supabase_config_present = bool(supabase_url and supabase_secret)
+    supabase_connection_ok = False
+    supabase_error = None
+
+    if supabase_config_present:
+        result = await test_supabase_connection(supabase_url, supabase_secret)
+        supabase_connection_ok = bool(result.get("ok"))
+        supabase_error = result.get("error")
+    else:
+        supabase_error = "SUPABASE_URL or SUPABASE_SECRET_KEY is missing."
+
+    return {
+        "active_provider": DATABASE_PROVIDER,
+        "dev_tools_enabled_raw": dev_tools_enabled_raw,
+        "environment_raw": environment_raw,
+        "env_file_loaded": env_file_path.exists(),
+        "current_working_directory": os.getcwd(),
+        "server_file": __file__,
+        "supabase_config_present": supabase_config_present,
+        "supabase_connection_ok": supabase_connection_ok,
+        "supabase_error": supabase_error,
+    }
+
+
+@api_router.get("/dev/db-counts")
+async def dev_db_counts():
+    tables = (
+        "users",
+        "user_sessions",
+        "jobs",
+        "company_boards",
+        "profiles",
+        "swipes",
+        "applications",
+        "browser_submission_runs",
+    )
+    counts: Dict[str, Any] = {}
+    for table in tables:
+        count = None
+        error = None
+        try:
+            count = await getattr(db, table).count_documents({})
+        except Exception as exc:
+            error = f"{exc.__class__.__name__}: {str(exc)[:300]}"
+        counts[table] = {
+            "supabase_count": count,
+            "supabase_error": error,
+        }
+
+    return {
+        "active_provider": DATABASE_PROVIDER,
+        "supabase_config_present": bool(os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_SECRET_KEY")),
+        "tables": counts,
+    }
+
+
+@api_router.get("/dev/db-provider-test")
+async def dev_db_provider_test():
+    jobs_count = await db.jobs.count_documents({})
+    company_boards_count = await db.company_boards.count_documents({})
+    sample_jobs = await db.jobs.find({}, {"_id": 0}).limit(1).to_list(1)
+    return {
+        "active_provider": DATABASE_PROVIDER,
+        "jobs_count": jobs_count,
+        "company_boards_count": company_boards_count,
+        "sample_job": sample_jobs[0] if sample_jobs else None,
+    }
+
+
+@api_router.get("/dev/jobs-query-debug")
+async def dev_jobs_query_debug(
+    user: User = Depends(get_current_user),
+    limit: int = 5,
+    search_radius: str = "50km",
+    locations_json: Optional[str] = None,
+    location: Optional[List[str]] = Query(None),
+    location_label: Optional[str] = None,
+    country: Optional[str] = None,
+    country_code: Optional[str] = None,
+    lat: Optional[float] = None,
+    lng: Optional[float] = None,
+    only_my_country: bool = False,
+):
+    profile = await db.profiles.find_one({"user_id": user.user_id}, {"_id": 0}) or {}
+    profile_location_data = profile.get("target_location_data") or {}
+    profile_country_code = (profile_location_data.get("country_code") or "").strip().lower()
+    profile_country = profile_location_data.get("country")
+
+    selected_locations: List[Dict[str, Any]] = []
+    if locations_json:
+        try:
+            parsed_locations = json.loads(locations_json)
+            if isinstance(parsed_locations, list):
+                selected_locations = [loc for loc in parsed_locations if isinstance(loc, dict) and loc.get("location_label")]
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="locations_json must be a JSON array")
+    if location_label:
+        selected_locations = [{
+            "location_label": location_label,
+            "country": country,
+            "country_code": country_code,
+            "lat": lat,
+            "lng": lng,
+        }]
+    if only_my_country:
+        if profile_country_code:
+            selected_locations = [
+                {**loc, "country_code": profile_country_code, "country": profile_country or loc.get("country")}
+                for loc in selected_locations
+            ]
+            if not selected_locations and profile_location_data:
+                selected_locations = [profile_location_data]
+        elif not selected_locations and profile_location_data:
+            selected_locations = [profile_location_data]
+    if not selected_locations and profile_location_data:
+        selected_locations = [profile_location_data]
+
+    selected_location_labels = [
+        loc.get("location_label")
+        for loc in selected_locations
+        if isinstance(loc, dict) and loc.get("location_label")
+    ]
+    radius_scope = (search_radius or "50km").lower().strip()
+    filter_locations = None
+    if radius_scope not in ("worldwide", "remote", "remote/worldwide"):
+        filter_locations = selected_location_labels or location
+        if not filter_locations and only_my_country and profile_country:
+            filter_locations = [profile_country]
+
+    location_filter_clause = None
+    if filter_locations:
+        expanded_filter_locations = set()
+        for loc in filter_locations:
+            expanded_filter_locations.add(loc)
+            for part in re.split(r"[,/|-]", loc):
+                part = part.strip()
+                if len(part) >= 3:
+                    expanded_filter_locations.add(part)
+        location_filter_clause = {
+            "$or": [
+                {"location": {"$regex": re.escape(loc), "$options": "i"}}
+                for loc in expanded_filter_locations
+            ]
+        }
+
+    swiped = await db.swipes.find({"user_id": user.user_id}, {"_id": 0, "job_id": 1}).to_list(2000)
+    swiped_ids = {item.get("job_id") for item in swiped if item.get("job_id")}
+
+    target_role = (
+        profile.get("target_role")
+        or ((profile.get("target_roles") or [None])[0])
+        or ""
+    ).strip()
+
+    def _tokens(value: str) -> List[str]:
+        stop = {"and", "or", "the", "a", "an", "of", "for", "to", "in", "with", "remote", "jobs", "job"}
+        return [token for token in re.findall(r"[a-z0-9]+", (value or "").lower()) if len(token) > 2 and token not in stop]
+
+    role_tokens = _tokens(target_role)
+    broader_role_tokens = role_tokens[-1:] if role_tokens else []
+    if "analyst" in role_tokens:
+        broader_role_tokens = list(dict.fromkeys([*role_tokens, "analytics", "analysis", "insights", "scientist"]))
+    if "software" in role_tokens and "engineer" in role_tokens:
+        broader_role_tokens = ["software", "engineer"]
+
+    def _role_score(job: Dict[str, Any], tokens: List[str]) -> int:
+        if not tokens:
+            return 0
+        title = (job.get("title") or "").lower()
+        body = " ".join([
+            job.get("description") or "",
+            job.get("clean_description") or "",
+            " ".join(job.get("requirements") or []),
+        ]).lower()
+        title_hits = sum(1 for token in tokens if token in title)
+        body_hits = sum(1 for token in tokens if token in body)
+        exact_bonus = 25 if target_role and target_role.lower() in title else 0
+        return exact_bonus + title_hits * 20 + min(body_hits, len(tokens)) * 5
+
+    def _role_matches(job: Dict[str, Any]) -> bool:
+        if not role_tokens:
+            return True
+        strict_score = _role_score(job, role_tokens)
+        broad_score = _role_score(job, broader_role_tokens)
+        return strict_score >= max(20, len(role_tokens) * 12) or broad_score >= 20
+
+    def _location_matches(job: Dict[str, Any]) -> bool:
+        if not location_filter_clause:
+            return True
+        job_location = (job.get("location") or "").lower()
+        for clause in location_filter_clause.get("$or", []):
+            regex = (clause.get("location") or {}).get("$regex")
+            if regex and re.search(regex, job_location, re.IGNORECASE):
+                return True
+        return False
+
+    def _sample_jobs(jobs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return [
+            {
+                "job_id": job.get("job_id"),
+                "title": job.get("title"),
+                "company": job.get("company"),
+                "provider": job.get("provider"),
+                "ats_provider": job.get("ats_provider"),
+                "auto_apply_supported": job.get("auto_apply_supported"),
+                "location": job.get("location"),
+            }
+            for job in jobs[:5]
+        ]
+
+    async def _compare_source(source_name: str, jobs_collection: Any) -> Dict[str, Any]:
+        auto_query = {"auto_apply_supported": True}
+        ats_query = {**auto_query, "ats_provider": {"$in": ["greenhouse", "lever", "ashby"]}}
+        swiped_query = dict(ats_query)
+        if swiped_ids:
+            swiped_query["job_id"] = {"$nin": list(swiped_ids)}
+        location_query = dict(swiped_query)
+        if location_filter_clause:
+            location_query.setdefault("$and", []).append(location_filter_clause)
+
+        total_jobs = await jobs_collection.count_documents({})
+        auto_apply_supported_count = await jobs_collection.count_documents(auto_query)
+        ats_provider_supported_count = await jobs_collection.count_documents(ats_query)
+        after_swipe_exclusion_count = await jobs_collection.count_documents(swiped_query)
+
+        stage_candidates = await jobs_collection.find(swiped_query, {"_id": 0}).limit(5000).to_list(5000)
+        after_role = [job for job in stage_candidates if _role_matches(job)]
+        after_location = [job for job in after_role if _location_matches(job)]
+        after_location.sort(
+            key=lambda job: (
+                _role_score(job, role_tokens),
+                str(job.get("imported_at") or job.get("posted_at") or ""),
+            ),
+            reverse=True,
+        )
+        final_jobs = after_location[:limit]
+
+        adapter_location_count = await jobs_collection.count_documents(location_query)
+        return {
+            "source": source_name,
+            "counts": {
+                "total_jobs": total_jobs,
+                "auto_apply_supported_count": auto_apply_supported_count,
+                "ats_provider_supported_count": ats_provider_supported_count,
+                "after_swipe_exclusion_count": after_swipe_exclusion_count,
+                "after_role_filter_count": len(after_role),
+                "after_location_filter_count": len(after_location),
+                "final_count": len(final_jobs),
+            },
+            "adapter_location_filter_count": adapter_location_count,
+            "sample_jobs": _sample_jobs(final_jobs),
+        }
+
+    active_result = await _compare_source(_runtime_collection_provider("jobs"), db.jobs)
+
+    return {
+        "active_provider": DATABASE_PROVIDER,
+        "user_id": user.user_id,
+        "target_role": target_role or None,
+        "role_tokens": role_tokens,
+        "broader_role_tokens": broader_role_tokens,
+        "swiped_job_ids_count": len(swiped_ids),
+        "filters": {
+            "auto_apply_supported": True,
+            "ats_provider": ["greenhouse", "lever", "ashby"],
+            "selected_locations": selected_location_labels,
+            "location_query": location,
+            "search_radius": search_radius,
+            "only_my_country": only_my_country,
+            "country_code": country_code or profile_country_code or None,
+            "location_filter_clause": location_filter_clause,
+        },
+        "supabase": active_result,
+        "supabase_sample_jobs": active_result.get("sample_jobs", []) if active_result.get("source") == "supabase" else [],
+    }
+
+
+def _runtime_collection_provider(collection_name: str) -> str:
+    collection = getattr(db, collection_name)
+    module_name = collection.__class__.__module__
+    if "supabase_adapter" in module_name:
+        return "supabase"
+    return "unknown"
+
+
+@api_router.get("/dev/database-usage-audit")
+async def dev_database_usage_audit():
+    audited_collections = [
+        "users",
+        "user_sessions",
+        "profiles",
+        "jobs",
+        "applications",
+        "swipes",
+        "company_boards",
+        "browser_submission_runs",
+    ]
+    collection_providers = {
+        collection_name: _runtime_collection_provider(collection_name)
+        for collection_name in audited_collections
+    }
+
+    route_collections = {
+        "login:/api/auth/supabase-session": ["users", "user_sessions", "profiles"],
+        "auth_me:/api/auth/me": ["user_sessions", "users", "profiles"],
+        "profile:/api/profile*": ["user_sessions", "users", "profiles", "swipes", "applications"],
+        "swipes:/api/swipe*": ["user_sessions", "users", "swipes", "jobs", "profiles", "applications"],
+        "applications:/api/applications*": ["user_sessions", "users", "applications", "jobs", "profiles", "browser_submission_runs"],
+        "jobs_feed:/api/jobs/feed": ["user_sessions", "users", "profiles", "swipes", "jobs"],
+        "company_boards:startup_and_import_dev_routes": ["company_boards", "jobs"],
+    }
+
+    route_details: Dict[str, Any] = {}
+    routes_using_supabase: List[str] = []
+    for route_name, collections in route_collections.items():
+        providers = sorted({collection_providers[collection] for collection in collections})
+        route_details[route_name] = {
+            "collections": collections,
+            "providers": providers,
+            "uses_supabase": "supabase" in providers,
+        }
+        if "supabase" in providers:
+            routes_using_supabase.append(route_name)
+
+    return {
+        "provider": DATABASE_PROVIDER,
+        "collections_using_supabase": [
+            name for name, provider in collection_providers.items() if provider == "supabase"
+        ],
+        "collections_using_mongo": [],
+        "routes_using_supabase": routes_using_supabase,
+        "routes_using_mongo": [],
+        "collection_providers": collection_providers,
+        "route_details": route_details,
+        "notes": [
+            "This endpoint inspects the live db object currently bound in server.py.",
+            "All runtime collections use Supabase.",
+            "Provider refresh/import writes use the active database adapter for jobs and company_boards.",
+        ],
     }
 
 
@@ -3032,6 +4700,74 @@ async def dev_greenhouse_jobs_sample():
         },
     ).limit(10).to_list(10)
     return {"jobs": jobs, "count": len(jobs)}
+
+
+@api_router.get("/dev/auto-apply-jobs-by-provider")
+async def dev_auto_apply_jobs_by_provider():
+    dev_enabled = (
+        os.environ.get("ENVIRONMENT", "").lower() == "development"
+        or os.environ.get("DEV_TOOLS_ENABLED", "false").lower() in ("1", "true", "yes", "on")
+    )
+    if not dev_enabled:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    providers = ["greenhouse", "lever", "ashby"]
+    response: Dict[str, Any] = {}
+    total_jobs = 0
+    total_auto_apply_jobs = 0
+    for provider in providers:
+        query = {"ats_provider": provider, "auto_apply_supported": True}
+        count = await db.jobs.count_documents(query)
+        total_auto_apply_jobs += count
+        candidates = await db.jobs.find(
+            query,
+            {
+                "_id": 0,
+                "job_id": 1,
+                "title": 1,
+                "company": 1,
+                "external_url": 1,
+                "ats_provider": 1,
+                "provider": 1,
+                "imported_at": 1,
+                "last_seen_at": 1,
+            },
+        ).sort([("company", 1), ("imported_at", -1)]).limit(500).to_list(500)
+
+        sample_jobs = []
+        overflow_jobs = []
+        seen_companies = set()
+        for job in candidates:
+            company_key = (job.get("company") or "").strip().lower()
+            sample = {
+                "job_id": job.get("job_id"),
+                "title": job.get("title"),
+                "company": job.get("company"),
+                "external_url": job.get("external_url"),
+                "ats_provider": job.get("ats_provider"),
+                "provider": job.get("provider"),
+            }
+            if company_key and company_key not in seen_companies:
+                sample_jobs.append(sample)
+                seen_companies.add(company_key)
+            else:
+                overflow_jobs.append(sample)
+            if len(sample_jobs) >= 20:
+                break
+        if len(sample_jobs) < 20:
+            sample_jobs.extend(overflow_jobs[: 20 - len(sample_jobs)])
+
+        response[provider] = {
+            "count": count,
+            "sample_jobs": sample_jobs[:20],
+        }
+
+    total_jobs = await db.jobs.count_documents({})
+    return {
+        "total_jobs": total_jobs,
+        "total_auto_apply_jobs": total_auto_apply_jobs,
+        "providers": response,
+    }
 
 
 @api_router.get("/dev/clean-job-descriptions")
@@ -3137,14 +4873,16 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_seed():
     """Auto-seed mock jobs only when development fallback is explicitly enabled."""
+    logger.info("DB health route registered at /api/dev/db-health")
+    logger.info("DB counts route registered at /api/dev/db-counts")
+    logger.info(
+        "Startup env debug: DEV_TOOLS_ENABLED=%r ENVIRONMENT=%r",
+        os.environ.get("DEV_TOOLS_ENABLED"),
+        os.environ.get("ENVIRONMENT"),
+    )
     try:
-        await db.jobs.create_index([("provider", 1), ("external_id", 1)], unique=True, sparse=True)
-        await db.jobs.create_index([("provider", 1), ("provider_search_key", 1), ("imported_at", -1)])
-        await db.jobs.create_index([("job_id", 1)], unique=True)
-        await db.company_boards.create_index([("board_id", 1)], unique=True)
-        await db.company_boards.create_index([("ats_provider", 1), ("enabled", 1), ("priority", -1)])
-        await db.company_boards.create_index([("last_synced_at", 1)])
         await seed_greenhouse_company_boards(db)
+        await seed_lever_company_boards(db)
 
         fallback_mock = os.environ.get("JOB_PROVIDER_FALLBACK_MOCK", "false").lower() in ("1", "true", "yes", "on")
         if not fallback_mock:
@@ -3167,4 +4905,4 @@ async def startup_seed():
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    client.close()
+    await db.close()
