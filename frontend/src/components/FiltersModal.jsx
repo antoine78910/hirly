@@ -173,8 +173,8 @@ export default function FiltersModal({ open, initialFilters, totalCount, onApply
         data-testid="filters-modal"
       >
         {/* Header */}
-        <div className="sticky top-0 z-10 bg-sprout-bg/95 backdrop-blur-xl border-b border-sprout-border">
-          <div className="max-w-md mx-auto px-5 py-4 flex items-center justify-between">
+        <div className="sticky top-0 z-10 border-b border-sprout-border bg-sprout-bg/95 pt-safe backdrop-blur-xl">
+          <div className="mx-auto flex max-w-md items-center justify-between px-safe py-3 sm:px-5 sm:py-4">
             <button onClick={onClose} className="w-10 h-10 grid place-items-center rounded-full hover:bg-sprout-surface" data-testid="filters-close">
               <X className="w-5 h-5 text-white" />
             </button>
@@ -183,7 +183,7 @@ export default function FiltersModal({ open, initialFilters, totalCount, onApply
           </div>
         </div>
 
-        <div className="max-w-md mx-auto px-5 pt-6 pb-56 space-y-8">
+        <div className="mx-auto max-w-md space-y-8 px-safe pb-56 pt-6 sm:px-5">
           {/* Salary */}
           <section>
             <div className="flex items-center gap-1.5">

@@ -1,9 +1,9 @@
 /** Soft rose/violet selection — shared by onboarding and in-app pickers. */
 export const sel = {
   chipOn:
-    "border border-violet-400/70 bg-gradient-to-br from-violet-50 via-fuchsia-50/75 to-violet-50 text-violet-800 shadow-[0_1px_2px_rgba(124,58,237,0.08)] ring-1 ring-violet-300/50 transition-all duration-200 ease-out",
+    "border border-violet-400/70 bg-gradient-to-br from-violet-50 via-fuchsia-50/75 to-violet-50 text-violet-800 shadow-[0_1px_2px_rgba(124,58,237,0.08)] ring-1 ring-violet-300/50 transition-colors duration-200 ease-out",
   chipOff:
-    "bg-white text-zinc-600 border border-zinc-200 hover:border-violet-300/55 hover:bg-violet-50/55 hover:text-violet-700 transition-all duration-200 ease-out",
+    "bg-white text-zinc-600 border border-zinc-200 ring-1 ring-transparent shadow-[0_1px_2px_rgba(0,0,0,0)] hover:border-violet-300/55 hover:bg-violet-50/55 hover:text-violet-700 transition-colors duration-200 ease-out",
   optionOn:
     "border border-violet-400/65 bg-gradient-to-br from-violet-50 via-fuchsia-50/65 to-violet-50 text-violet-900 shadow-[0_1px_3px_rgba(124,58,237,0.1)] ring-1 ring-violet-300/45 transition-all duration-200 ease-out",
   optionOff:

@@ -178,12 +178,13 @@ export function Compare2xChart() {
   const swiiprMotion = useSpring(swiiprTarget, { stiffness: 70, damping: 22, mass: 0.6 });
 
   const [ownLabel, setOwnLabel] = useState(0);
-  const [swiiprLabel, setSwiiprLabel] = useState("1.0x");
-  const [captionVisible, setCaptionVisible] = useState(false);
+  const [endReveal, setEndReveal] = useState(false);
 
   useEffect(() => {
     ownTarget.set(0);
     swiiprTarget.set(1);
+    setEndReveal(false);
+
     const ownAnim = animate(ownTarget, OWN_TARGET_PCT, {
       duration: 2,
       delay: 0.2,
@@ -193,7 +194,9 @@ export function Compare2xChart() {
       duration: 2.4,
       delay: 0.55,
       ease: EASE_SMOOTH,
+      onComplete: () => setEndReveal(true),
     });
+
     return () => {
       ownAnim.stop();
       swiiprAnim.stop();
@@ -204,50 +207,56 @@ export function Compare2xChart() {
     setOwnLabel(Math.round(v));
   });
 
-  useMotionValueEvent(swiiprMotion, "change", (v) => {
-    setSwiiprLabel(v >= 1.95 ? "2x" : `${v.toFixed(1)}x`);
-    setCaptionVisible(v >= 1.75);
-  });
-
   const ownScale = useTransform(ownMotion, [0, OWN_TARGET_PCT], [0, 1]);
   const swiiprScale = useTransform(
     swiiprMotion,
     [1, SWIIPR_TARGET_X],
     [SWIIPR_SCALE_AT_1X, 1],
   );
-  const logoScale = useTransform(swiiprMotion, [1, 1.35, 2], [0.7, 0.88, 1]);
-  const logoOpacity = useTransform(swiiprMotion, [1.05, 1.25], [0, 1]);
+  const ownLabelBottom = useTransform(ownScale, (s) => 8 + (OWN_BAR_PX * s) / 2);
 
   return (
     <div className={`${ob.card} mx-auto w-full max-w-lg p-5 sm:p-6`}>
       <div className="flex items-end justify-center gap-6 sm:gap-12">
         <div className="flex flex-1 max-w-[9.5rem] flex-col items-center sm:max-w-[11rem]">
           <p className="mb-4 text-center text-sm font-medium text-zinc-600 sm:text-base">On your own</p>
-          <div className="flex h-48 w-full flex-col justify-end overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 p-2 sm:h-60 sm:p-2.5">
+          <div className="relative flex h-48 w-full flex-col justify-end overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 p-2 sm:h-60 sm:p-2.5">
             <motion.div
-              className="flex w-full origin-bottom items-center justify-center rounded-xl bg-zinc-300 will-change-transform"
+              className="w-full origin-bottom rounded-xl bg-zinc-300 will-change-transform"
               style={{ height: OWN_BAR_PX, scaleY: ownScale }}
+            />
+            <motion.span
+              className="absolute left-1/2 -translate-x-1/2 translate-y-1/2 text-sm font-bold tabular-nums text-zinc-700 sm:text-base"
+              style={{ bottom: ownLabelBottom }}
             >
-              <OwnBarLabel ownScale={ownScale} label={ownLabel} />
-            </motion.div>
+              {ownLabel}%
+            </motion.span>
           </div>
         </div>
 
         <div className="flex flex-1 max-w-[9.5rem] flex-col items-center sm:max-w-[11rem]">
           <p className={`mb-4 text-center text-sm font-semibold sm:text-base ${ob.accent}`}>With {BRAND.NAME}</p>
-          <div className="flex h-48 w-full flex-col justify-end overflow-hidden rounded-2xl border border-violet-200 bg-zinc-50 p-2 shadow-sm sm:h-60 sm:p-2.5">
+          <div className="relative flex h-48 w-full flex-col justify-end overflow-hidden rounded-2xl border border-violet-200 bg-zinc-50 p-2 shadow-sm sm:h-60 sm:p-2.5">
             <motion.div
-              className="gradient-linkedin flex w-full origin-bottom flex-col items-center justify-end gap-1.5 overflow-hidden rounded-xl pb-2 pt-3 will-change-transform sm:gap-2 sm:pb-3 sm:pt-4"
+              className="gradient-linkedin w-full origin-bottom rounded-xl will-change-transform"
               style={{ height: SWIIPR_BAR_PX, scaleY: swiiprScale }}
+            />
+            <motion.div
+              className="pointer-events-none absolute inset-x-2 bottom-2 flex flex-col items-center gap-1.5 sm:inset-x-2.5 sm:bottom-2.5 sm:gap-2"
+              initial={false}
+              animate={{
+                opacity: endReveal ? 1 : 0,
+                scale: endReveal ? 1 : 0.94,
+              }}
+              transition={{ duration: 0.45, ease: EASE_SMOOTH }}
             >
-              <motion.span
-                className="rounded-xl bg-white/95 p-1.5 shadow-sm sm:p-2"
-                style={{ scale: logoScale, opacity: logoOpacity }}
-              >
+              <span className="rounded-xl bg-white/95 p-1.5 shadow-sm sm:p-2">
                 <Logo size={28} className="sm:hidden" />
                 <Logo size={36} className="hidden sm:block" />
-              </motion.span>
-              <SwiiprBarLabel swiiprScale={swiiprScale} label={swiiprLabel} />
+              </span>
+              <span className="font-display text-xl font-black leading-none tabular-nums text-white sm:text-3xl">
+                2x
+              </span>
             </motion.div>
           </div>
         </div>
@@ -256,37 +265,12 @@ export function Compare2xChart() {
       <motion.p
         className={`mt-5 text-center text-xs leading-snug sm:mt-6 sm:text-sm ${ob.muted}`}
         initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: captionVisible ? 1 : 0, y: captionVisible ? 0 : 6 }}
-        transition={{ duration: 0.55, ease: EASE_SMOOTH }}
+        animate={{ opacity: endReveal ? 1 : 0, y: endReveal ? 0 : 6 }}
+        transition={{ duration: 0.55, ease: EASE_SMOOTH, delay: endReveal ? 0.12 : 0 }}
       >
         {`${BRAND.NAME} makes it easy to apply to more of the right jobs, increasing interviews.`}
       </motion.p>
     </div>
-  );
-}
-
-/** Counter-scale label so text stays readable while the bar grows */
-function SwiiprBarLabel({ swiiprScale, label }) {
-  const textScaleY = useTransform(swiiprScale, (s) => (s > 0.15 ? 1 / s : 1));
-  return (
-    <motion.span
-      className="font-display text-xl font-black leading-none tabular-nums text-white sm:text-3xl"
-      style={{ scaleY: textScaleY }}
-    >
-      {label}
-    </motion.span>
-  );
-}
-
-function OwnBarLabel({ ownScale, label }) {
-  const textScaleY = useTransform(ownScale, (s) => (s > 0.12 ? 1 / s : 1));
-  return (
-    <motion.span
-      className="text-sm font-bold tabular-nums text-zinc-700 sm:text-base"
-      style={{ scaleY: textScaleY }}
-    >
-      {label}%
-    </motion.span>
   );
 }
 

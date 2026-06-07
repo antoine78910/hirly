@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import {
-  Loader2, MapPin, Building2, FileText, Mail, Download, MessageSquare, FileSearch,
+  Loader2, MapPin, FileText, Mail, Download, MessageSquare, FileSearch, Sparkles,
 } from "lucide-react";
 import { BrandHeader } from "../components/app/AppScreenHeader";
+import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
+import CompanyLogo from "../components/CompanyLogo";
 import ResumeSheet from "../components/ResumeSheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Button } from "../components/ui/button";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
@@ -14,37 +16,96 @@ import CVPreview from "../components/CVPreview";
 import CoverLetterPreview from "../components/CoverLetterPreview";
 import { downloadTailoredCV, downloadCoverLetter } from "../lib/pdf";
 
-const STATUSES = [
-  { value: "applied",   label: "Generated", tint: "bg-sprout-mint-soft text-sprout-mint",  dot: "bg-sprout-mint" },
-  { value: "viewed",    label: "Viewed",    tint: "bg-amber-500/15 text-amber-300",        dot: "bg-amber-400" },
-  { value: "interview", label: "Interview", tint: "bg-emerald-500/15 text-emerald-300",    dot: "bg-emerald-400" },
-  { value: "rejected",  label: "Rejected",  tint: "bg-rose-500/15 text-rose-300",          dot: "bg-rose-400" },
-  { value: "offer",     label: "Offer",     tint: "bg-fuchsia-500/15 text-fuchsia-300",    dot: "bg-fuchsia-400" },
-];
-
-const SUBMISSION_STATUSES = {
-  not_submitted: { label: "Not submitted yet", tint: "bg-zinc-500/15 text-zinc-300", dot: "bg-zinc-400" },
-  ready: { label: "Ready to submit", tint: "bg-amber-500/15 text-amber-300", dot: "bg-amber-400" },
-  submitted: { label: "Submitted", tint: "bg-emerald-500/15 text-emerald-300", dot: "bg-emerald-400" },
-  failed: { label: "Submission failed", tint: "bg-rose-500/15 text-rose-300", dot: "bg-rose-400" },
-  blocked: { label: "Action required", tint: "bg-orange-500/15 text-orange-300", dot: "bg-orange-400" },
+const DISPLAY_STATUSES = {
+  generated: {
+    label: "Generated",
+    tintLight: "bg-violet-50 text-violet-700 ring-1 ring-violet-200/80",
+    tintDark: "bg-sprout-mint-soft text-sprout-mint",
+    dotLight: "bg-violet-500",
+    dotDark: "bg-sprout-mint",
+  },
+  ready: {
+    label: "Ready to submit",
+    tintLight: "bg-amber-50 text-amber-700 ring-1 ring-amber-200/80",
+    tintDark: "bg-amber-500/15 text-amber-300",
+    dotLight: "bg-amber-500",
+    dotDark: "bg-amber-400",
+  },
+  submitted: {
+    label: "Submitted",
+    tintLight: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/80",
+    tintDark: "bg-emerald-500/15 text-emerald-300",
+    dotLight: "bg-emerald-500",
+    dotDark: "bg-emerald-400",
+  },
+  viewed: {
+    label: "Viewed",
+    tintLight: "bg-amber-50 text-amber-700 ring-1 ring-amber-200/80",
+    tintDark: "bg-amber-500/15 text-amber-300",
+    dotLight: "bg-amber-500",
+    dotDark: "bg-amber-400",
+  },
+  interview: {
+    label: "Interview",
+    tintLight: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/80",
+    tintDark: "bg-emerald-500/15 text-emerald-300",
+    dotLight: "bg-emerald-500",
+    dotDark: "bg-emerald-400",
+  },
+  offer: {
+    label: "Offer",
+    tintLight: "bg-fuchsia-50 text-fuchsia-700 ring-1 ring-fuchsia-200/80",
+    tintDark: "bg-fuchsia-500/15 text-fuchsia-300",
+    dotLight: "bg-fuchsia-500",
+    dotDark: "bg-fuchsia-400",
+  },
+  rejected: {
+    label: "Rejected",
+    tintLight: "bg-rose-50 text-rose-700 ring-1 ring-rose-200/80",
+    tintDark: "bg-rose-500/15 text-rose-300",
+    dotLight: "bg-rose-500",
+    dotDark: "bg-rose-400",
+  },
+  action_required: {
+    label: "Action required",
+    tintLight: "bg-orange-50 text-orange-700 ring-1 ring-orange-200/80",
+    tintDark: "bg-orange-500/15 text-orange-300",
+    dotLight: "bg-orange-500",
+    dotDark: "bg-orange-400",
+  },
+  failed: {
+    label: "Submission failed",
+    tintLight: "bg-rose-50 text-rose-700 ring-1 ring-rose-200/80",
+    tintDark: "bg-rose-500/15 text-rose-300",
+    dotLight: "bg-rose-500",
+    dotDark: "bg-rose-400",
+  },
 };
 
-const StatusPill = ({ status }) => {
-  const s = STATUSES.find((x) => x.value === status) || STATUSES[0];
-  return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${s.tint}`} data-testid={`status-pill-${status}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
-      {s.label}
-    </span>
-  );
+/** One user-facing status: pipeline updates win, then submission state. */
+const resolveDisplayStatus = ({ status, submission_status }) => {
+  if (status === "offer") return "offer";
+  if (status === "rejected") return "rejected";
+  if (status === "interview") return "interview";
+  if (status === "viewed") return "viewed";
+  if (submission_status === "blocked") return "action_required";
+  if (submission_status === "failed") return "failed";
+  if (submission_status === "ready") return "ready";
+  if (submission_status === "submitted") return "submitted";
+  return "generated";
 };
 
-const SubmissionPill = ({ status }) => {
-  const s = SUBMISSION_STATUSES[status || "not_submitted"] || SUBMISSION_STATUSES.not_submitted;
+const ApplicationStatusPill = ({ application, variant = "light" }) => {
+  const key = resolveDisplayStatus(application);
+  const s = DISPLAY_STATUSES[key] || DISPLAY_STATUSES.generated;
+  const tint = variant === "dark" ? s.tintDark : s.tintLight;
+  const dot = variant === "dark" ? s.dotDark : s.dotLight;
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${s.tint}`} data-testid={`submission-pill-${status || "not_submitted"}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${tint}`}
+      data-testid={`status-pill-${key}`}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
       {s.label}
     </span>
   );
@@ -94,14 +155,6 @@ export default function Tracker() {
     });
     setMissingAnswers(initial);
   }, [selected]);
-
-  const changeStatus = async (id, status) => {
-    try {
-      await api.patch(`/applications/${id}/status`, { status });
-      setApps((prev) => prev.map((a) => a.application_id === id ? { ...a, status } : a));
-      toast.success("Status updated");
-    } catch { toast.error("Failed to update"); }
-  };
 
   const handleDownloadCV = () => {
     if (!selected) return;
@@ -188,10 +241,11 @@ export default function Tracker() {
   const hasResume = Boolean(profile?.cv_text);
 
   return (
-    <div className="min-h-dvh bg-white pb-28 text-zinc-900">
+    <AppPage className="bg-white text-zinc-900">
       <BrandHeader />
 
-      <div className="mx-auto max-w-md px-5">
+      <AppPageScroll>
+        <div className="mx-auto max-w-md px-safe sm:px-5">
         {!hasResume ? (
           <section className="py-8 text-center">
             <div className="mx-auto grid h-20 w-20 place-items-center rounded-2xl border-2 border-linkedin/30 bg-violet-50">
@@ -231,26 +285,19 @@ export default function Tracker() {
                   onClick={() => openApplication(a)}
                   data-testid={`application-${a.application_id}`}
                 >
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-2.5 sm:gap-3">
+                    <CompanyLogo company={a.job?.company} size="sm" rounded="xl" />
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-semibold text-linkedin">{a.job?.company || "—"}</p>
-                      <p className="mt-0.5 truncate font-semibold text-zinc-900">{a.job?.title || "Untitled"}</p>
-                      <p className="mt-1 text-xs text-zinc-500">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="truncate text-xs font-semibold text-linkedin">{a.job?.company || "—"}</p>
+                        <ApplicationStatusPill application={a} />
+                      </div>
+                      <p className="mt-0.5 truncate text-sm font-semibold text-zinc-900 sm:text-base">
+                        {a.job?.title || "Untitled"}
+                      </p>
+                      <p className="mt-1 truncate text-xs text-zinc-500">
                         {a.job?.location || "—"} · {fmtDate(a.created_at)}
                       </p>
-                    </div>
-                    <div onClick={(e) => e.stopPropagation()} className="shrink-0">
-                      <Select value={a.status} onValueChange={(v) => changeStatus(a.application_id, v)}>
-                        <SelectTrigger
-                          className="h-8 w-[108px] rounded-full border-zinc-200 bg-white px-3 text-[11px] text-zinc-700"
-                          data-testid={`status-select-${a.application_id}`}
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="border-zinc-200 bg-white text-zinc-900">
-                          {STATUSES.map((s) => (<SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>))}
-                        </SelectContent>
-                      </Select>
                     </div>
                   </div>
                 </motion.li>
@@ -258,7 +305,8 @@ export default function Tracker() {
             </ul>
           )}
         </section>
-      </div>
+        </div>
+      </AppPageScroll>
 
       <ResumeSheet
         open={resumeOpen}
@@ -275,11 +323,15 @@ export default function Tracker() {
           {selected && (
             <>
               <DialogHeader className="px-6 pt-6 pb-3 border-b border-sprout-border sticky top-0 bg-sprout-surface z-10">
-                <p className="text-xs font-semibold text-sprout-mint">{selected.job?.company}</p>
-                <DialogTitle className="font-display text-2xl tracking-tight text-white">{selected.job?.title}</DialogTitle>
+                <div className="flex items-start gap-3">
+                  <CompanyLogo company={selected.job?.company} size="sm" rounded="xl" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-sprout-mint">{selected.job?.company}</p>
+                    <DialogTitle className="font-display text-2xl tracking-tight text-white">{selected.job?.title}</DialogTitle>
+                  </div>
+                </div>
                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                  <StatusPill status={selected.status} />
-                  <SubmissionPill status={selected.submission_status} />
+                  <ApplicationStatusPill application={selected} variant="dark" />
                   {selected.match_score && (<span className="text-xs font-semibold text-sprout-mint">{selected.match_score}% match</span>)}
                   {selected.job?.location && (
                     <span className="text-xs text-sprout-muted inline-flex items-center gap-1"><MapPin className="w-3 h-3" />{selected.job.location}</span>
@@ -438,6 +490,6 @@ export default function Tracker() {
         </DialogContent>
       </Dialog>
 
-    </div>
+    </AppPage>
   );
 }

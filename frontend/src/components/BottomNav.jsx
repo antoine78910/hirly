@@ -22,7 +22,7 @@ export default function BottomNav() {
       className="fixed inset-x-0 bottom-0 z-50 border-t border-zinc-200 bg-white/95 pb-safe pt-1.5 backdrop-blur-xl"
       data-testid="bottom-nav"
     >
-      <div className="mx-auto grid w-full max-w-md grid-cols-5 items-end">
+      <div className="mx-auto grid w-full max-w-md grid-cols-5 items-end px-safe">
         {tabs.map((t) => {
           const Icon = t.icon;
           const isActive = location.pathname === t.to;
@@ -31,17 +31,17 @@ export default function BottomNav() {
               key={t.to}
               to={t.to}
               data-testid={t.testid}
-              className={`flex min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 ${
+              className={`flex min-w-0 flex-col items-center justify-center gap-0.5 px-0 py-1.5 ${
                 isActive ? "text-zinc-900" : "text-zinc-400"
               }`}
             >
               <Icon
-                className="h-5 w-5 shrink-0"
+                className="h-[18px] w-[18px] shrink-0 sm:h-5 sm:w-5"
                 strokeWidth={isActive ? 2.4 : 1.8}
                 fill={isActive && t.to === "/feedback" ? "currentColor" : "none"}
               />
               <span
-                className={`w-full truncate text-center text-[10px] leading-tight ${
+                className={`w-full truncate text-center text-[9px] leading-tight sm:text-[10px] ${
                   isActive ? "font-semibold" : "font-medium"
                 }`}
               >

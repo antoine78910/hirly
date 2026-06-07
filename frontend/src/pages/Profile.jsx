@@ -26,6 +26,7 @@ import { Label } from "../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import RolePicker from "../components/RolePicker";
 import { TitleHeader } from "../components/app/AppScreenHeader";
+import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
 
 const PROFILE_TABS = [
   { key: "resume", label: "Resume", icon: FileText },
@@ -174,7 +175,7 @@ export default function Profile() {
   const showSkeleton = loading && !profile;
 
   return (
-    <div className="min-h-dvh bg-white pb-28 text-zinc-900">
+    <AppPage className="bg-white text-zinc-900">
       <TitleHeader
         title="Profile"
         rightAction={(
@@ -190,7 +191,8 @@ export default function Profile() {
         )}
       />
 
-      <div className="mx-auto max-w-md space-y-4 px-4">
+      <AppPageScroll>
+        <div className="mx-auto max-w-md space-y-4 px-4">
         {!creditsDismissed ? (
           <div className="flex items-center gap-3 rounded-2xl border border-zinc-200 bg-white px-3 py-3 shadow-sm">
             <button
@@ -362,7 +364,8 @@ export default function Profile() {
             </button>
           </div>
         )}
-      </div>
+        </div>
+      </AppPageScroll>
 
       <PersonalInfoSheet
         open={openSheet === "personal"}
@@ -394,6 +397,6 @@ export default function Profile() {
         profile={profile}
         onClose={() => setOpenSheet(null)}
       />
-    </div>
+    </AppPage>
   );
 }

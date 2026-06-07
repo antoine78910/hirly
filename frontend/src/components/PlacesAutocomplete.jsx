@@ -4,6 +4,7 @@ import { Loader2, MapPin } from "lucide-react";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { api } from "../lib/api";
+import { buildTypedLocationResult, searchLocationsClient } from "../lib/locationSearch";
 
 function resultToLocation(result) {
   return {
@@ -59,7 +60,6 @@ export default function PlacesAutocomplete({
   const light = variant === "light";
   const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
-  const [searchError, setSearchError] = useState(false);
   const [results, setResults] = useState([]);
   const [touched, setTouched] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -137,14 +137,12 @@ export default function PlacesAutocomplete({
       abortRef.current?.abort();
       setResults([]);
       setSearching(false);
-      setSearchError(false);
       return undefined;
     }
 
     const requestId = ++requestIdRef.current;
     const fallback = localSuggestionResults(trimmedValue, suggestions, 10);
     setSearching(true);
-    setSearchError(false);
     setResults(fallback);
 
     const handle = setTimeout(async () => {
@@ -152,20 +150,40 @@ export default function PlacesAutocomplete({
       const controller = new AbortController();
       abortRef.current = controller;
 
+      const resolveResults = async () => {
+        try {
+          const { data } = await api.get("/locations/search", {
+            params: { q: trimmedValue, limit: 12 },
+            timeout: 20000,
+            signal: controller.signal,
+          });
+          const apiResults = data?.results || [];
+          if (apiResults.length > 0) return apiResults;
+        } catch (error) {
+          if (error?.code === "ERR_CANCELED") throw error;
+        }
+
+        try {
+          const clientResults = await searchLocationsClient(trimmedValue, 12, controller.signal);
+          if (clientResults.length > 0) return clientResults;
+        } catch (error) {
+          if (error?.name === "AbortError" || error?.code === "ERR_CANCELED") throw error;
+        }
+
+        const typed = buildTypedLocationResult(trimmedValue);
+        if (typed.length > 0) return [...fallback, ...typed];
+        return fallback;
+      };
+
       try {
-        const { data } = await api.get("/locations/search", {
-          params: { q: trimmedValue, limit: 12 },
-          timeout: 20000,
-          signal: controller.signal,
-        });
+        const nextResults = await resolveResults();
         if (requestId !== requestIdRef.current) return;
-        const apiResults = data?.results || [];
-        setResults(apiResults.length > 0 ? apiResults : fallback);
-        setSearchError(apiResults.length === 0 && fallback.length === 0);
+        setResults(nextResults);
       } catch (error) {
         if (requestId !== requestIdRef.current || error?.code === "ERR_CANCELED") return;
-        setResults(fallback);
-        setSearchError(fallback.length === 0);
+        const typed = buildTypedLocationResult(trimmedValue);
+        const nextResults = typed.length > 0 ? [...fallback, ...typed] : fallback;
+        setResults(nextResults);
       } finally {
         if (requestId === requestIdRef.current) setSearching(false);
       }
@@ -196,23 +214,29 @@ export default function PlacesAutocomplete({
   const selectSuggestion = async (suggestionLabel) => {
     setLoading(true);
     try {
-      const { data } = await api.get("/locations/search", {
-        params: { q: suggestionLabel, limit: 3 },
-      });
-      const match = data?.results?.[0];
-      if (match) {
-        applyLocation(resultToLocation(match));
-        return;
+      try {
+        const { data } = await api.get("/locations/search", {
+          params: { q: suggestionLabel, limit: 3 },
+        });
+        const match = data?.results?.[0];
+        if (match) {
+          applyLocation(resultToLocation(match));
+          return;
+        }
+      } catch {
+        // fall through to client search
       }
-      applyLocation({
-        location_label: suggestionLabel,
-        place_id: "",
-        country: "",
-        country_code: "",
-        lat: null,
-        lng: null,
-      });
-    } catch {
+
+      try {
+        const clientResults = await searchLocationsClient(suggestionLabel, 3);
+        if (clientResults[0]) {
+          applyLocation(resultToLocation(clientResults[0]));
+          return;
+        }
+      } catch {
+        // fall through to label-only selection
+      }
+
       applyLocation({
         location_label: suggestionLabel,
         place_id: "",
@@ -325,9 +349,7 @@ export default function PlacesAutocomplete({
                 })}
                 {!searching && results.length === 0 && (
                   <div className={`px-4 py-3 text-sm ${light ? "text-zinc-500" : "text-sprout-muted"}`}>
-                    {searchError
-                      ? "Location service unavailable. Start the backend server or pick a popular location below."
-                      : "No locations found. Try a nearby city or region name."}
+                    No locations found. Try a nearby city or region name, or pick a popular location below.
                   </div>
                 )}
               </div>,

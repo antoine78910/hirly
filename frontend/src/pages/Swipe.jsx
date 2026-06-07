@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import Logo from "../components/Logo";
+import CompanyLogo from "../components/CompanyLogo";
 import FiltersModal from "../components/FiltersModal";
 import TargetSearchSheet from "../components/TargetSearchSheet";
 import ReportJobSheet from "../components/ReportJobSheet";
@@ -63,8 +64,6 @@ const workModelIcon = (v) => ({
 const workModelLabel = (v) => ({
   remote: "Remote", hybrid: "Hybrid", onsite: "In Person",
 }[v] || v || "Hybrid");
-
-const initial = (s) => (s || "?").trim().charAt(0).toUpperCase();
 
 const stripHtml = (value = "") => {
   const withBreaks = String(value)
@@ -133,7 +132,7 @@ function CardFront({ job, onReport, onShare, actionsEnabled }) {
   return (
     <div className="absolute inset-0 backface-hidden bg-sprout-surface border border-sprout-border rounded-[28px] overflow-hidden flex flex-col">
       {/* top bar: flag, share | match badge */}
-      <div className="flex items-start justify-between p-5">
+      <div className="flex items-start justify-between p-4 sm:p-5">
         <div className="pointer-events-auto flex items-center gap-3">
           <button
             type="button"
@@ -169,21 +168,19 @@ function CardFront({ job, onReport, onShare, actionsEnabled }) {
       </div>
 
       {/* logo */}
-      <div className="flex justify-center mt-1">
-        <div className="w-20 h-16 rounded-2xl bg-white grid place-items-center font-display font-black text-2xl text-zinc-900">
-          {initial(job.company)}
-        </div>
+      <div className="mt-1 flex justify-center">
+        <CompanyLogo company={job.company} size="lg" rounded="2xl" />
       </div>
 
       {/* company + blurb + title */}
-      <div className="px-7 mt-5 text-center">
+      <div className="mt-5 px-5 text-center sm:px-7">
         <p className="font-display font-semibold text-2xl text-white">{job.company}</p>
         <p className="mt-3 text-[15px] leading-snug text-sprout-muted line-clamp-3">
           {descriptionPreview(job)}
         </p>
       </div>
 
-      <div className="px-7 mt-7">
+      <div className="mt-7 px-5 sm:px-7">
         <h2
           className="font-display font-black text-white text-center leading-[1.05] tracking-tight"
           style={{ fontSize: "clamp(28px, 6vw, 40px)" }}
@@ -594,50 +591,66 @@ export default function Swipe() {
 
   return (
     <div className="sprout h-dvh flex flex-col bg-sprout-bg text-zinc-900 overflow-hidden">
-      <header className="flex shrink-0 items-center gap-3 px-4 pb-3 pt-5 max-w-md mx-auto w-full" data-testid="swipe-header">
-        <div className="flex items-center gap-1.5">
-          <Zap className="w-5 h-5 text-sprout-mint" strokeWidth={2} fill="rgb(167,139,250)" />
-          <span className="text-sprout-mint font-semibold text-sm" data-testid="applied-today">{appliedToday}</span>
-        </div>
-        <button onClick={handleUndo} className="w-9 h-9 grid place-items-center rounded-full hover:bg-sprout-surface" data-testid="undo-btn" aria-label="Undo last swipe">
-          <Undo2 className="w-5 h-5 text-sprout-mint" />
-        </button>
-        <div className="flex-1 flex justify-center">
+      <header
+        className="mx-auto flex w-full max-w-md shrink-0 items-center gap-1 px-safe pb-2 pt-safe sm:gap-2.5 sm:px-4"
+        data-testid="swipe-header"
+      >
+        <div className="flex shrink-0 items-center gap-0.5">
+          <div className="flex items-center gap-0.5 px-0.5">
+            <Zap className="h-4 w-4 text-sprout-mint sm:h-5 sm:w-5" strokeWidth={2} fill="rgb(167,139,250)" />
+            <span className="text-xs font-semibold text-sprout-mint sm:text-sm" data-testid="applied-today">
+              {appliedToday}
+            </span>
+          </div>
           <button
-            type="button"
-            onClick={() => setTargetSheetOpen(true)}
-            className="max-w-[220px] truncate rounded-full border border-transparent bg-white px-4 py-1.5 text-center shadow-sm ring-1 ring-zinc-200/80 transition-colors hover:border-violet-200 hover:bg-violet-50/50"
-            data-testid="target-pill"
-            aria-label="Edit target role and location"
+            onClick={handleUndo}
+            className="grid h-8 w-8 place-items-center rounded-full hover:bg-sprout-surface sm:h-9 sm:w-9"
+            data-testid="undo-btn"
+            aria-label="Undo last swipe"
           >
-            <p className="truncate text-sm font-semibold leading-tight text-zinc-900">
-              {target.role || "Set target role"}
-            </p>
-            <p className="truncate text-[11px] leading-tight text-zinc-500">
-              {target.location || "Anywhere"} · tap to edit
-            </p>
+            <Undo2 className="h-4 w-4 text-sprout-mint sm:h-5 sm:w-5" />
           </button>
         </div>
+
         <button
-          onClick={() => navigate("/history")}
-          className="w-9 h-9 grid place-items-center rounded-full hover:bg-sprout-surface"
-          data-testid="history-btn"
-          aria-label="History"
+          type="button"
+          onClick={() => setTargetSheetOpen(true)}
+          className="min-w-0 flex-1 rounded-full border border-transparent bg-white px-2 py-1 text-center shadow-sm ring-1 ring-zinc-200/80 transition-colors hover:border-violet-200 hover:bg-violet-50/50 sm:px-4 sm:py-1.5"
+          data-testid="target-pill"
+          aria-label="Edit target role and location"
         >
-          <History className="w-5 h-5 text-sprout-mint" />
+          <p className="truncate text-xs font-semibold leading-tight text-zinc-900 sm:text-sm">
+            {target.role || "Set target role"}
+          </p>
+          <p className="truncate text-[9px] leading-tight text-zinc-500 sm:text-[11px]">
+            <span className="sm:hidden">{target.location || "Anywhere"}</span>
+            <span className="hidden sm:inline">{target.location || "Anywhere"} · tap to edit</span>
+          </p>
         </button>
-        <button
-          onClick={() => setFiltersOpen(true)}
-          className="relative w-9 h-9 grid place-items-center rounded-full hover:bg-sprout-surface"
-          data-testid="filters-open-btn"
-        >
-          <SlidersHorizontal className="w-5 h-5 text-sprout-mint" />
-          {filters && Object.values(filters).some((v) =>
-            Array.isArray(v) ? v.length > 0 : (typeof v === "number" ? v > 0 : false)
-          ) && (
-            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-sprout-mint border-2 border-sprout-bg" />
-          )}
-        </button>
+
+        <div className="flex shrink-0 items-center gap-0.5">
+          <button
+            onClick={() => navigate("/history")}
+            className="grid h-8 w-8 place-items-center rounded-full hover:bg-sprout-surface sm:h-9 sm:w-9"
+            data-testid="history-btn"
+            aria-label="History"
+          >
+            <History className="h-4 w-4 text-sprout-mint sm:h-5 sm:w-5" />
+          </button>
+          <button
+            onClick={() => setFiltersOpen(true)}
+            className="relative grid h-8 w-8 place-items-center rounded-full hover:bg-sprout-surface sm:h-9 sm:w-9"
+            data-testid="filters-open-btn"
+            aria-label="Open filters"
+          >
+            <SlidersHorizontal className="h-4 w-4 text-sprout-mint sm:h-5 sm:w-5" />
+            {filters && Object.values(filters).some((v) =>
+              Array.isArray(v) ? v.length > 0 : (typeof v === "number" ? v > 0 : false)
+            ) && (
+              <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-sprout-bg bg-sprout-mint" />
+            )}
+          </button>
+        </div>
       </header>
 
       <div className="relative min-h-0 flex-1 px-4 pb-2">
@@ -699,7 +712,7 @@ export default function Swipe() {
 
           {topJob ? (
             <div
-              className="pointer-events-none absolute inset-x-0 z-20 flex items-center justify-center gap-14"
+              className="pointer-events-none absolute inset-x-0 z-20 flex items-center justify-center gap-8 sm:gap-14"
               style={{ bottom: "calc(4.5rem + env(safe-area-inset-bottom, 0px))" }}
             >
               <motion.button

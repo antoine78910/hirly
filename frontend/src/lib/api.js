@@ -2,7 +2,8 @@ import axios from "axios";
 import { demoMode } from "./dev";
 import { getDemoResponse } from "./demoApi";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL
+  || (process.env.NODE_ENV === "development" ? "http://localhost:8001" : "");
 export const API = `${BACKEND_URL}/api`;
 
 export const api = axios.create({

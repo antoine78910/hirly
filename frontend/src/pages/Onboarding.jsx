@@ -8,12 +8,15 @@ import {
   FileText,
   Loader2,
   CheckCircle2,
+  Plus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import PlacesAutocomplete from "../components/PlacesAutocomplete";
 import { BRAND } from "../lib/brand";
 import {
+  ProfileSetupStep,
+  ProfileWelcomeStep,
   ShowcaseLandingStep,
   ShowcaseAllInOneStep,
   ShowcasePricingStep,
@@ -44,26 +47,45 @@ import {
   rolesForCategories,
   iconForCategoryLabel,
   SUGGESTED_ONBOARDING_LOCATIONS,
+  readOnboardingPreviewBoot,
 } from "../components/onboarding/onboardingData";
+import { devBypassAuth } from "../lib/dev";
+import { preloadOnboardingShowcaseImages } from "../lib/onboardingImagePreload";
 import { ob } from "../components/onboarding/onboardingTheme";
 
-const PARSING_STEPS = [
-  "Reading your CV…",
-  "Extracting your skills…",
-  "Mapping your experience…",
-  "Finding the perfect roles for you…",
-  "Polishing your profile…",
-];
-
 const STEP_ORDER = ONBOARDING_STEP_ORDER;
+const INITIAL_ONBOARDING_BOOT = readOnboardingPreviewBoot(STEP_ORDER);
+const INITIAL_PREVIEW = INITIAL_ONBOARDING_BOOT?.state;
+
+const defaultCategoryOptions = () =>
+  JOB_CATEGORIES.map(({ id, label }) => ({ id, label }));
+
+const chipReveal = {
+  container: {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: { staggerChildren: 0.03, delayChildren: 0.04 },
+    },
+  },
+  item: {
+    hidden: { opacity: 0, y: 10, scale: 0.97 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      scale: 1,
+      transition: { duration: 0.32, ease: [0.22, 1, 0.36, 1] },
+    },
+  },
+};
 
 const stepTitleClass = ob.title;
 const stepSubtitleClass = ob.subtitle;
 
 const slideVariants = {
-  enter: { opacity: 0, x: 24 },
+  enter: { opacity: 0, x: 20 },
   center: { opacity: 1, x: 0 },
-  exit: { opacity: 0, x: -24 },
+  exit: { opacity: 0, x: -16 },
 };
 
 const stepMotion = {
@@ -71,7 +93,7 @@ const stepMotion = {
   initial: "enter",
   animate: "center",
   exit: "exit",
-  transition: { duration: 0.28 },
+  transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1] },
   className: ob.step,
 };
 
@@ -80,36 +102,35 @@ export default function Onboarding() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { user, setHasProfile, setHasPreferences, checkAuth } = useAuth();
 
-  const [stepIndex, setStepIndex] = useState(() => {
-    const stepParam = new URLSearchParams(window.location.search).get("step");
-    if (stepParam) {
-      const idx = STEP_ORDER.indexOf(stepParam);
-      if (idx >= 0) return idx;
-    }
-    return 0;
-  });
+  const [stepIndex, setStepIndex] = useState(INITIAL_ONBOARDING_BOOT?.stepIndex ?? 0);
   const [introIndex, setIntroIndex] = useState(0);
-  const [categories, setCategories] = useState([]);
-  const [selectedRoles, setSelectedRoles] = useState([]);
-  const [experience, setExperience] = useState(null);
-  const [salaryMin, setSalaryMin] = useState(50000);
-  const [salaryMax, setSalaryMax] = useState(100000);
-  const [interviewsPerWeek, setInterviewsPerWeek] = useState(4);
-  const [jobSearchStatus, setJobSearchStatus] = useState(null);
-  const [onboardingLocation, setOnboardingLocation] = useState("");
-  const [onboardingLocationData, setOnboardingLocationData] = useState(null);
-  const [contractType, setContractType] = useState(null);
-  const [triedOtherApps, setTriedOtherApps] = useState(null);
-  const [attribution, setAttribution] = useState(null);
+  const [categories, setCategories] = useState(INITIAL_PREVIEW?.categories ?? []);
+  const [selectedRoles, setSelectedRoles] = useState(INITIAL_PREVIEW?.selectedRoles ?? []);
+  const [experience, setExperience] = useState(INITIAL_PREVIEW?.experience ?? null);
+  const [salaryMin, setSalaryMin] = useState(INITIAL_PREVIEW?.salaryMin ?? 50000);
+  const [salaryMax, setSalaryMax] = useState(INITIAL_PREVIEW?.salaryMax ?? 100000);
+  const [interviewsPerWeek, setInterviewsPerWeek] = useState(INITIAL_PREVIEW?.interviewsPerWeek ?? 4);
+  const [jobSearchStatus, setJobSearchStatus] = useState(INITIAL_PREVIEW?.jobSearchStatus ?? null);
+  const [onboardingLocation, setOnboardingLocation] = useState(INITIAL_PREVIEW?.onboardingLocation ?? "");
+  const [onboardingLocationData, setOnboardingLocationData] = useState(
+    INITIAL_PREVIEW?.onboardingLocationData ?? null,
+  );
+  const [contractType, setContractType] = useState(INITIAL_PREVIEW?.contractType ?? null);
+  const [triedOtherApps, setTriedOtherApps] = useState(INITIAL_PREVIEW?.triedOtherApps ?? null);
+  const [attribution, setAttribution] = useState(INITIAL_PREVIEW?.attribution ?? null);
   const [referralCode, setReferralCode] = useState("");
-  const [suggestedCategories, setSuggestedCategories] = useState([]);
-  const [suggestedRoles, setSuggestedRoles] = useState([]);
-  const [loadingCategories, setLoadingCategories] = useState(false);
-  const [loadingRoles, setLoadingRoles] = useState(false);
 
+  useEffect(() => {
+    preloadOnboardingShowcaseImages();
+  }, []);
+  const [suggestedCategories, setSuggestedCategories] = useState(
+    INITIAL_PREVIEW?.suggestedCategories ?? [],
+  );
+  const [suggestedRoles, setSuggestedRoles] = useState([]);
+  const [customRoles, setCustomRoles] = useState([]);
+  const [customRoleDraft, setCustomRoleDraft] = useState("");
   const [file, setFile] = useState(null);
   const [parsing, setParsing] = useState(false);
-  const [parsePhase, setParsePhase] = useState(0);
   const [profile, setProfile] = useState(null);
   const [selectedPlan, setSelectedPlan] = useState("quarterly");
   const [saving, setSaving] = useState(false);
@@ -123,24 +144,47 @@ export default function Onboarding() {
     ? suggestedCategories
     : JOB_CATEGORIES.map(({ id, label }) => ({ id, label }));
   const roleSuggestions = useMemo(() => {
-    if (suggestedRoles.length) return suggestedRoles;
-    return rolesForCategories(categories, 24, categoryOptions);
-  }, [suggestedRoles, categories, categoryOptions]);
+    const fromCategories = rolesForCategories(categories, 200, categoryOptions);
+    const extras = customRoles.filter((role) => !fromCategories.includes(role));
+    if (suggestedRoles.length) {
+      const merged = [...suggestedRoles];
+      for (const role of extras) {
+        if (!merged.includes(role)) merged.push(role);
+      }
+      return merged;
+    }
+    return [...fromCategories, ...extras];
+  }, [suggestedRoles, categories, categoryOptions, customRoles]);
   const interviewHint = interviewFeedback(interviewsPerWeek);
 
   useEffect(() => {
-    if (!parsing) return;
-    setParsePhase(0);
-    const t = setInterval(() => setParsePhase((p) => Math.min(p + 1, PARSING_STEPS.length - 1)), 1200);
-    return () => clearInterval(t);
-  }, [parsing]);
-
-  useEffect(() => {
+    const preview = searchParams.get("preview");
     const stepParam = searchParams.get("step");
-    if (!stepParam) return;
-    const idx = STEP_ORDER.indexOf(stepParam);
-    if (idx >= 0) setStepIndex(idx);
-    if (stepParam !== "intro") setSearchParams({}, { replace: true });
+    if (!preview && !stepParam) return;
+
+    const boot = readOnboardingPreviewBoot(STEP_ORDER);
+    if (!boot) return;
+
+    setStepIndex(boot.stepIndex);
+    if (boot.state) {
+      setCategories(boot.state.categories);
+      setSelectedRoles(boot.state.selectedRoles);
+      setExperience(boot.state.experience);
+      setSalaryMin(boot.state.salaryMin);
+      setSalaryMax(boot.state.salaryMax);
+      setInterviewsPerWeek(boot.state.interviewsPerWeek);
+      setJobSearchStatus(boot.state.jobSearchStatus);
+      setOnboardingLocation(boot.state.onboardingLocation);
+      setOnboardingLocationData(boot.state.onboardingLocationData);
+      setContractType(boot.state.contractType);
+      setTriedOtherApps(boot.state.triedOtherApps);
+      setAttribution(boot.state.attribution);
+      setSuggestedCategories(boot.state.suggestedCategories);
+    }
+
+    if (!devBypassAuth && stepParam && stepParam !== "intro") {
+      setSearchParams({}, { replace: true });
+    }
   }, [searchParams, setSearchParams]);
 
   useEffect(() => {
@@ -150,67 +194,10 @@ export default function Onboarding() {
 
   useEffect(() => {
     if (step !== "categories" || !onboardingLocation.trim() || !contractType) return;
-    let cancelled = false;
-    setLoadingCategories(true);
-    api
-      .post("/onboarding/suggest-categories", {
-        location: onboardingLocation,
-        contract_type: contractType,
-        location_data: onboardingLocationData,
-      })
-      .then(({ data }) => {
-        if (cancelled) return;
-        const items = data?.categories?.length
-          ? data.categories
-          : JOB_CATEGORIES.map(({ id, label }) => ({ id, label }));
-        setSuggestedCategories(items);
-        setCategories((prev) => prev.filter((id) => items.some((c) => c.id === id)));
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setSuggestedCategories(JOB_CATEGORIES.map(({ id, label }) => ({ id, label })));
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingCategories(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [step, onboardingLocation, contractType, onboardingLocationData]);
-
-  useEffect(() => {
-    if (step !== "roles" || categories.length === 0) return;
-    const selectedCats = suggestedCategories.filter((c) => categories.includes(c.id));
-    const payloadCats = selectedCats.length
-      ? selectedCats
-      : JOB_CATEGORIES.filter((c) => categories.includes(c.id)).map(({ id, label }) => ({ id, label }));
-    if (!payloadCats.length) return;
-
-    let cancelled = false;
-    setLoadingRoles(true);
-    api
-      .post("/onboarding/suggest-roles", {
-        location: onboardingLocation,
-        contract_type: contractType,
-        location_data: onboardingLocationData,
-        categories: payloadCats,
-      })
-      .then(({ data }) => {
-        if (cancelled) return;
-        setSuggestedRoles(data?.roles || []);
-        setSelectedRoles((prev) => prev.filter((r) => (data?.roles || []).includes(r)));
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setSuggestedRoles(rolesForCategories(categories, 24, categoryOptions));
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingRoles(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [step, categories, suggestedCategories, onboardingLocation, contractType, onboardingLocationData]);
+    const items = defaultCategoryOptions();
+    setSuggestedCategories(items);
+    setCategories((prev) => prev.filter((id) => items.some((c) => c.id === id)));
+  }, [step, onboardingLocation, contractType]);
 
   const goNext = () => {
     if (step === "intro") {
@@ -242,10 +229,30 @@ export default function Onboarding() {
         toast.message("Pick up to 3 categories");
         return prev;
       } else next = [...prev, id];
-      setSelectedRoles([]);
+
+      const options = suggestedCategories.length ? suggestedCategories : defaultCategoryOptions();
+      const available = new Set([
+        ...rolesForCategories(next, 200, options),
+        ...customRoles,
+      ]);
+      setSelectedRoles((roles) => roles.filter((role) => available.has(role)));
       setSuggestedRoles([]);
       return next;
     });
+  };
+
+  const addCustomRole = () => {
+    const role = customRoleDraft.trim();
+    if (!role) return;
+    if (selectedRoles.length >= 3) {
+      toast.message("Pick up to 3 roles");
+      return;
+    }
+    if (!selectedRoles.includes(role)) {
+      setSelectedRoles((prev) => [...prev, role]);
+      setCustomRoles((prev) => (prev.includes(role) ? prev : [...prev, role]));
+    }
+    setCustomRoleDraft("");
   };
 
   const toggleRole = (role) => {
@@ -267,6 +274,7 @@ export default function Onboarding() {
     }
     setFile(f);
     setParsing(true);
+    preloadOnboardingShowcaseImages();
     try {
       const form = new FormData();
       form.append("file", f);
@@ -276,7 +284,8 @@ export default function Onboarding() {
       setHasProfile(Boolean(authState?.has_profile));
       if (checkAuth) await checkAuth();
       toast.success("Your profile is ready");
-      setStepIndex(STEP_ORDER.indexOf("showcaseLanding"));
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      setStepIndex(STEP_ORDER.indexOf("profileSetup"));
     } catch (e) {
       console.error(e);
       toast.error(e?.response?.data?.detail || "Failed to parse CV");
@@ -354,9 +363,7 @@ export default function Onboarding() {
       case "otherApps":
         return !!triedOtherApps;
       case "categories":
-        return categories.length > 0;
-      case "roles":
-        return selectedRoles.length > 0;
+        return categories.length > 0 && selectedRoles.length > 0;
       case "experience":
         return !!experience;
       case "salary":
@@ -374,6 +381,8 @@ export default function Onboarding() {
         return true;
       case "upload":
         return !parsing;
+      case "profileSetup":
+      case "profileWelcome":
       case "showcaseLanding":
       case "showcaseAllInOne":
       case "showcasePricing":
@@ -416,11 +425,18 @@ export default function Onboarding() {
 
   const introSlide = INTRO_SLIDES[introIndex];
   const isLastIntroSlide = step === "intro" && introIndex === INTRO_SLIDES.length - 1;
-  const hideFooter = parsing || (step === "signup" && !user);
+  const hideFooter = parsing || step === "profileSetup" || (step === "signup" && !user);
 
   const footer = !hideFooter ? (
     step === "showcasePricing" ? (
       <FinishOnboardingButton saving={saving} onClick={finishOnboarding} />
+    ) : step === "profileWelcome" ? (
+      <div className="space-y-2">
+        <ContinueButton onClick={onContinue} testId="profile-welcome-continue">
+          Continue
+        </ContinueButton>
+        <p className="text-center text-xs text-zinc-500">Let&apos;s make sure you&apos;re ready</p>
+      </div>
     ) : step === "referralCode" ? (
       <div className="space-y-2.5">
         <ContinueButton onClick={submitReferralCode} disabled={!referralCode.trim()} testId="referral-submit">
@@ -460,8 +476,16 @@ export default function Onboarding() {
     <OnboardingShell
       progress={progress}
       onBack={goBack}
-      showBack={stepIndex > 0 || introIndex > 0}
-      showProgress={step !== "intro"}
+      ambientClassName={step === "showcaseLanding" ? "showcase-landing-ambient" : undefined}
+      showBack={(stepIndex > 0 || introIndex > 0) && step !== "profileSetup"}
+      showProgress={
+        step !== "intro"
+        && step !== "profileSetup"
+        && step !== "profileWelcome"
+        && step !== "showcaseLanding"
+        && step !== "showcaseAllInOne"
+        && step !== "showcasePricing"
+      }
       footer={parsing ? null : footer}
     >
       <AnimatePresence mode="wait">
@@ -586,66 +610,102 @@ export default function Onboarding() {
         )}
 
         {step === "categories" && (
-          <motion.div key="categories" {...stepMotion}>
+          <motion.div
+            key="categories"
+            {...stepMotion}
+            className="flex flex-1 flex-col min-h-0 overflow-y-auto overflow-x-hidden"
+          >
             <h1 className={stepTitleClass}>What kind of job are you looking for?</h1>
             <p className={stepSubtitleClass}>
               {onboardingLocation
                 ? `Suggested for ${onboardingLocationData?.location_label || onboardingLocation}. Pick up to 3.`
                 : "Select up to 3 job categories that interest you most."}
             </p>
-            {loadingCategories ? (
-              <div className={`${ob.stepBody} flex items-center justify-center gap-2 ${ob.muted}`}>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span className="text-sm">Finding categories for your area…</span>
-              </div>
-            ) : (
-              <div className={`${ob.stepBody} ${ob.chipGrid}`} data-testid="job-categories">
+            <div className="mt-2 sm:mt-3 flex flex-col gap-4 pb-2">
+              <motion.div
+                key={`categories-${onboardingLocation}-${contractType}`}
+                className="flex flex-wrap gap-2 content-start"
+                data-testid="job-categories"
+                variants={chipReveal.container}
+                initial="hidden"
+                animate="visible"
+              >
                 {categoryOptions.map(({ id, label }) => {
                   const Icon = iconForCategoryLabel(label);
                   const on = categories.includes(id);
                   return (
-                    <button
+                    <motion.button
                       key={id}
                       type="button"
+                      layout={false}
+                      variants={chipReveal.item}
                       onClick={() => toggleCategory(id)}
-                      className={`${ob.chipGridItem} ${on ? ob.chipOn : ob.chipOff}`}
+                      className={`${ob.chip} ${on ? ob.chipOn : ob.chipOff}`}
                     >
-                      <Icon className="hidden h-3.5 w-3.5 shrink-0 sm:block" />
-                      <span className="line-clamp-2">{label}</span>
-                    </button>
+                      <Icon className="h-3.5 w-3.5 shrink-0" />
+                      <span>{label}</span>
+                    </motion.button>
                   );
                 })}
-              </div>
-            )}
-          </motion.div>
-        )}
+              </motion.div>
 
-        {step === "roles" && (
-          <motion.div key="roles" {...stepMotion}>
-            <h1 className={stepTitleClass}>Select relevant roles</h1>
-            <p className={stepSubtitleClass}>Pick up to 3 specific roles for your job search.</p>
-            {loadingRoles ? (
-              <div className={`${ob.stepBody} flex items-center justify-center gap-2 ${ob.muted}`}>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span className="text-sm">Loading role examples…</span>
-              </div>
-            ) : (
-            <div className={`${ob.stepBody} ${ob.chipGrid}`} data-testid="role-chips">
-              {roleSuggestions.map((role) => {
-                const on = selectedRoles.includes(role);
-                return (
-                  <button
-                    key={role}
-                    type="button"
-                    onClick={() => toggleRole(role)}
-                    className={`${ob.chipGridItem} ${on ? ob.chipOn : ob.chipOff}`}
+              {categories.length > 0 && (
+                <div className="space-y-3">
+                  <p className="text-sm sm:text-[15px] font-medium text-zinc-900 leading-snug">
+                    Select the most relevant roles for your job search
+                  </p>
+                  <motion.div
+                    key={`roles-${categories.join(",")}`}
+                    className="flex flex-wrap gap-2 content-start"
+                    data-testid="role-chips"
+                    variants={chipReveal.container}
+                    initial="hidden"
+                    animate="visible"
                   >
-                    <span className="line-clamp-2">{role}</span>
-                  </button>
-                );
-              })}
+                    {roleSuggestions.map((role) => {
+                      const on = selectedRoles.includes(role);
+                      return (
+                        <motion.button
+                          key={role}
+                          type="button"
+                          layout={false}
+                          variants={chipReveal.item}
+                          onClick={() => toggleRole(role)}
+                          className={`${ob.chip} ${on ? ob.chipOn : ob.chipOff}`}
+                        >
+                          <span>{role}</span>
+                        </motion.button>
+                      );
+                    })}
+                  </motion.div>
+                  <div className="flex gap-2 pt-1">
+                    <input
+                      type="text"
+                      value={customRoleDraft}
+                      onChange={(e) => setCustomRoleDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          addCustomRole();
+                        }
+                      }}
+                      placeholder="Can't find your role? Add it here"
+                      className="min-w-0 flex-1 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-linkedin/30"
+                      data-testid="custom-role-input"
+                    />
+                    <button
+                      type="button"
+                      onClick={addCustomRole}
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-linkedin text-white transition-colors duration-200 ease-out hover:bg-linkedin/90 active:scale-[0.97]"
+                      aria-label="Add role"
+                      data-testid="custom-role-add"
+                    >
+                      <Plus className="h-5 w-5" strokeWidth={2.5} />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-            )}
           </motion.div>
         )}
 
@@ -888,7 +948,7 @@ export default function Onboarding() {
             <button
               type="button"
               onClick={() => {
-                setStepIndex(STEP_ORDER.indexOf("showcaseLanding"));
+                setStepIndex(STEP_ORDER.indexOf("profileSetup"));
                 toast.message("You can upload your resume later from Profile");
               }}
               className={`mt-3 w-full text-center text-sm ${ob.muted} hover:text-zinc-900 underline-offset-2 hover:underline`}
@@ -900,25 +960,45 @@ export default function Onboarding() {
         )}
 
         {parsing && (
-          <motion.div key="parsing" className={ob.step} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <motion.div
+            key="parsing"
+            className={`${ob.step} items-center justify-center text-center`}
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+          >
             <h1 className={ob.title}>
               Reading your CV<span className="text-linkedin">…</span>
             </h1>
             <p className={ob.subtitle}>Building your profile.</p>
-            <div className={`${ob.stepBody} space-y-2`}>
-              {PARSING_STEPS.map((s, i) => (
-                <div key={i} className="flex items-center gap-3" data-testid={`parse-step-${i}`}>
-                  {i < parsePhase ? (
-                    <CheckCircle2 className={`w-5 h-5 ${ob.accent} shrink-0`} />
-                  ) : i === parsePhase ? (
-                    <Loader2 className={`w-5 h-5 ${ob.accent} animate-spin shrink-0`} />
-                  ) : (
-                    <div className="w-5 h-5 rounded-full border-2 border-zinc-200 shrink-0" />
-                  )}
-                  <span className={`text-[15px] ${i <= parsePhase ? "text-zinc-900 font-medium" : ob.dim}`}>{s}</span>
-                </div>
-              ))}
-            </div>
+            <motion.div
+              className={`${ob.stepBody} flex flex-col items-center justify-center gap-3`}
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.08, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <Loader2 className="h-9 w-9 animate-spin text-linkedin" data-testid="parse-loading" />
+              <p className={`text-sm ${ob.muted}`}>This only takes a moment.</p>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {step === "profileSetup" && !parsing && (
+          <ProfileSetupStep
+            onComplete={() => setStepIndex(STEP_ORDER.indexOf("profileWelcome"))}
+          />
+        )}
+
+        {step === "profileWelcome" && !parsing && (
+          <motion.div key="profileWelcome" {...stepMotion}>
+            <ProfileWelcomeStep
+              salaryMin={salaryMin}
+              selectedRoles={selectedRoles}
+              categories={categories}
+              categoryOptions={categoryOptions}
+              interviewsPerWeek={interviewsPerWeek}
+            />
           </motion.div>
         )}
 

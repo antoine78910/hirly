@@ -4,6 +4,11 @@
 @tailwind components;
 @tailwind utilities;
 
+html {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
 body {
   margin: 0;
   font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -12,6 +17,13 @@ body {
   background: #FFFFFF;
   color: #0A0A0A;
   min-height: 100dvh;
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+#root {
+  overflow-x: hidden;
+  max-width: 100vw;
 }
 
 h1, h2, h3, h4, .font-display {
@@ -93,6 +105,12 @@ h1, h2, h3, h4, .font-display {
   }
   .gradient-linkedin-soft {
     background: linear-gradient(180deg, #F5F3FF 0%, #EFF6FF 50%, #FFFFFF 100%);
+  }
+  .showcase-landing-ambient {
+    background:
+      radial-gradient(ellipse 140% 100% at 50% 100%, rgba(124, 58, 237, 0.09) 0%, transparent 62%),
+      radial-gradient(ellipse 110% 75% at 50% 45%, rgba(99, 102, 241, 0.06) 0%, transparent 58%),
+      radial-gradient(ellipse 120% 90% at 50% 0%, rgba(167, 139, 250, 0.05) 0%, transparent 55%);
   }
 
   /* Swiipr in-app theme — light surfaces, stable utility names */
@@ -177,11 +195,58 @@ h1, h2, h3, h4, .font-display {
 }
 .pulse-mint { animation: pulse-mint 1.8s infinite; }
 
+@keyframes pain-marquee-left {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-25%, 0, 0); }
+}
+@keyframes pain-marquee-right {
+  from { transform: translate3d(-25%, 0, 0); }
+  to { transform: translate3d(0, 0, 0); }
+}
+.pain-marquee-left {
+  animation: pain-marquee-left linear infinite;
+  animation-fill-mode: both;
+  will-change: transform;
+}
+.pain-marquee-right {
+  animation: pain-marquee-right linear infinite;
+  animation-fill-mode: both;
+  will-change: transform;
+}
+.pain-marquee-mask {
+  mask-image: linear-gradient(to right, transparent, #000 2%, #000 98%, transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 2%, #000 98%, transparent);
+}
+
+/* App-wide thin scrollbar (~4px). Use .no-scrollbar to hide on a specific container. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(113, 113, 122, 0.35) transparent;
+}
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(113, 113, 122, 0.28);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(113, 113, 122, 0.45);
+}
+
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
 .pb-safe { padding-bottom: max(env(safe-area-inset-bottom), 0.75rem); }
 .pt-safe { padding-top: max(env(safe-area-inset-top), 0.75rem); }
+.px-safe {
+  padding-left: max(env(safe-area-inset-left), 0.75rem);
+  padding-right: max(env(safe-area-inset-right), 0.75rem);
+}
 .h-dvh { height: 100dvh; }
 
 .bg-grid {
@@ -203,3 +268,14 @@ h1, h2, h3, h4, .font-display {
 
 button, [role="button"] { -webkit-tap-highlight-color: transparent; }
 .touch-pan-y { touch-action: pan-y; }
+
+/* Primary scroll region for in-app pages (wheel + touch, not only the scrollbar thumb). */
+.app-scroll {
+  flex: 1 1 0%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  touch-action: pan-y;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+}

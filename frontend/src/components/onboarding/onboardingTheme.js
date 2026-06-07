@@ -14,7 +14,7 @@ export const ob = {
   optionList: "space-y-1.5 sm:space-y-2",
   optionGrid: "grid grid-cols-2 gap-1.5 sm:gap-2",
   chip:
-    "inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-full text-xs sm:text-sm font-medium border transition-all duration-200 ease-out active:scale-[0.97]",
+    "inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-full text-xs sm:text-sm font-medium border transition-colors duration-200 ease-out active:scale-[0.97]",
   chipGrid: "grid grid-cols-2 gap-2 sm:gap-2.5 content-start overflow-y-auto pr-0.5",
   chipGridItem:
     "flex w-full min-h-[2.75rem] items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-center text-[11px] font-medium leading-tight transition-all duration-200 ease-out active:scale-[0.98] sm:min-h-[3rem] sm:px-3 sm:py-2.5 sm:text-xs",

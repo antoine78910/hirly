@@ -1,12 +1,18 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Mail, Sparkles, Copy, Check, ChevronRight, X, Menu, Settings, Star, Pencil } from "lucide-react";
+import {
+  Mail, Sparkles, Copy, Check, ChevronRight, ChevronLeft, ChevronDown, X, Menu, Settings, Star, Pencil,
+  CornerUpLeft, Archive, MoreHorizontal, AlertTriangle, Send,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { BRAND } from "../lib/brand";
 import { toast } from "sonner";
+import Logo from "../components/Logo";
+import CompanyLogo from "../components/CompanyLogo";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -18,16 +24,6 @@ const INBOX_FILTERS = [
 ];
 
 const INBOX_MESSAGES = [
-  {
-    id: 1,
-    filter: "primary",
-    from: `The ${BRAND.NAME} Team`,
-    subject: `Welcome to ${BRAND.NAME}!`,
-    preview: `Welcome to ${BRAND.NAME}! Hey there! We're excited to help you land your next role…`,
-    body: `Welcome to ${BRAND.NAME}!\n\nHey there! We're excited to help you land your next role. Swipe through curated jobs, apply in one tap, and track every application from your inbox.\n\nTip: complete your profile to auto-fill applications faster.\n\n— The ${BRAND.NAME} Team`,
-    date: "Jun 5",
-    starred: false,
-  },
   {
     id: 2,
     filter: "interview",
@@ -58,7 +54,107 @@ const INBOX_MESSAGES = [
     date: "Jun 1",
     starred: true,
   },
+  {
+    id: 5,
+    filter: "primary",
+    from: "Vercel Careers",
+    subject: "Application received — Full Stack Engineer",
+    preview: "Thanks for applying via Swiipr. We've received your application and our team is reviewing it.",
+    body: `Hi Alex,\n\nThanks for applying to the Full Stack Engineer role at Vercel through ${BRAND.NAME}. We've received your tailored application package and our recruiting team is reviewing it now.\n\nYou'll hear back within 5–7 business days. In the meantime, feel free to explore our engineering blog and open roles.\n\nBest,\nVercel Careers`,
+    date: "Jun 5",
+    starred: false,
+  },
+  {
+    id: 6,
+    filter: "primary",
+    company: "Linear",
+    from: "Sarah Chen",
+    subject: "Re: Senior Frontend Engineer role at Linear",
+    preview: "Thanks for reaching out! I'd be happy to chat — how does Thursday at 2pm CET work?",
+    body: `Hi Alex,\n\nThanks for your note about the Senior Frontend Engineer role at Linear. I reviewed your background and would love to set up a quick intro call.\n\nWould Thursday at 2:00pm CET work for a 20-minute chat? If not, send a few slots that work for you this week.\n\nLooking forward to it,\nSarah Chen\nLinear Recruiting`,
+    date: "Jun 4",
+    starred: true,
+  },
+  {
+    id: 7,
+    filter: "primary",
+    from: "Notion Recruiting",
+    subject: "Update on your iOS Engineer application",
+    preview: "Thank you for your interest in Notion. After careful review, we've decided not to move forward.",
+    body: `Hi Alex,\n\nThank you for taking the time to apply for the iOS Engineer position at Notion and for the thoughtful application you submitted via ${BRAND.NAME}.\n\nAfter reviewing your profile alongside other candidates, we've decided not to move forward at this time. We'd encourage you to apply again if a future role is a closer match.\n\nWe appreciate your interest in Notion and wish you the best in your search.\n\nKind regards,\nNotion Recruiting`,
+    date: "Jun 2",
+    starred: false,
+  },
+  {
+    id: 8,
+    filter: "interview",
+    from: "Anthropic Talent",
+    subject: "Technical interview — Product Engineer",
+    preview: "Your application stood out. We'd like to invite you to a 60-minute technical interview.",
+    body: `Hi Alex,\n\nThank you for applying to the Product Engineer role at Anthropic. Your experience shipping product surfaces resonated with our team.\n\nWe'd like to invite you to a 60-minute technical interview focused on frontend architecture and product thinking. You'll meet with two engineers from our product team.\n\nPlease reply with your availability next week (Mon–Fri, 9am–5pm PT) or use the scheduling link below.\n\nBest,\nMaya Patel\nAnthropic Talent`,
+    date: "Jun 3",
+    starred: false,
+  },
+  {
+    id: 9,
+    filter: "interview",
+    from: "Linear Recruiting",
+    subject: "Reminder: interview tomorrow at 2:00pm CET",
+    preview: "Quick reminder about your video interview for Senior Frontend Engineer tomorrow.",
+    body: `Hi Alex,\n\nJust a friendly reminder that your video interview for the Senior Frontend Engineer role is scheduled for tomorrow at 2:00pm CET.\n\nJoin link: https://meet.linear.app/interview\n\nPlease have a stable connection and be ready to walk through a recent project. The session will run about 45 minutes.\n\nSee you then,\nSarah Chen\nLinear Recruiting`,
+    date: "Jun 4",
+    starred: true,
+  },
+  {
+    id: 10,
+    filter: "primary",
+    from: "Supabase Hiring",
+    subject: "Re: Backend Engineer — we'd like to learn more",
+    preview: "Your Postgres + TypeScript background looks like a strong fit. Are you open to a short call?",
+    body: `Hey Alex,\n\nI came across your application for the Backend Engineer role at Supabase. Your open-source contributions and Postgres experience caught our attention.\n\nWould you be open to a 25-minute call next week to learn more about what you're looking for and walk through the team structure?\n\nReply with a few times that work for you — I'm flexible Tue–Thu.\n\nCheers,\nJames Okonkwo\nSupabase Hiring`,
+    date: "May 31",
+    starred: false,
+  },
+  {
+    id: 11,
+    filter: "verification",
+    from: "Greenhouse",
+    subject: "Complete your profile for Anthropic",
+    preview: "Anthropic uses Greenhouse for applications. Please confirm your work authorization details.",
+    body: `Hello Alex,\n\nAnthropic asked us to collect a few additional details to complete your application for Product Engineer.\n\nPlease confirm your work authorization status and expected start date using the secure link below. This takes about 2 minutes.\n\nIf you have questions, reply to this email and we'll help.\n\nGreenhouse Applicant Support`,
+    date: "Jun 2",
+    starred: false,
+  },
+  {
+    id: 12,
+    filter: "primary",
+    from: "Stripe Recruiting",
+    subject: "Re: DevRel Engineer — next steps",
+    preview: "Thanks for applying. We'd like you to complete a short writing exercise before the next round.",
+    body: `Hi Alex,\n\nThanks for applying to the DevRel Engineer role at Stripe via ${BRAND.NAME}. We enjoyed your application and would like to move you to the next step.\n\nPlease complete a short writing exercise (technical blog post outline + sample intro) within 5 business days. You'll find the brief in your applicant portal.\n\nLet us know if you need an extension.\n\nBest,\nMarc Dubois\nStripe Recruiting`,
+    date: "May 30",
+    starred: false,
+  },
+  {
+    id: 1,
+    filter: "primary",
+    variant: "welcome",
+    category: "system",
+    from: `The ${BRAND.NAME} Team`,
+    subject: `Welcome to ${BRAND.NAME}!`,
+    preview: `Welcome to ${BRAND.NAME}! Hey there! We're excited to have you on board…`,
+    date: "Jun 5",
+    starred: false,
+    replyDisabled: true,
+  },
 ];
+
+const sortInboxMessages = (items) =>
+  [...items].sort((a, b) => {
+    if (a.variant === "welcome") return 1;
+    if (b.variant === "welcome") return -1;
+    return b.id - a.id;
+  });
 
 const MOCK_JOBS = [
   { id: 1, company: "Linear", role: "Senior Frontend Engineer", contact: "Sarah Chen" },
@@ -402,60 +498,418 @@ function GenerateSheet({ open, onClose, onSaveDraft }) {
 
 // ─── Inbox message detail ─────────────────────────────────────────────────────
 
-function InboxMessageSheet({ message, onClose }) {
-  const [copied, setCopied] = useState(false);
+const CATEGORY_BADGES = {
+  system: "bg-sky-100 text-sky-900",
+  verification: "bg-orange-100 text-orange-800",
+  interview: "bg-violet-100 text-violet-800",
+  offer: "bg-teal-100 text-teal-800",
+};
 
-  const handleCopy = () => {
-    if (!message) return;
-    navigator.clipboard.writeText(message.body || message.preview).catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-    toast.success("Message copied");
+function canReplyToMessage(message) {
+  return !message?.replyDisabled && message?.variant !== "welcome";
+}
+
+function getCategoryBadge(message) {
+  if (message.category === "system" || message.variant === "welcome") {
+    return { key: "system", label: "System" };
+  }
+  const labels = { verification: "Verification", interview: "Interview", offer: "Offer" };
+  if (labels[message.filter]) return { key: message.filter, label: labels[message.filter] };
+  return null;
+}
+
+function SenderAvatar({ message, size = "md" }) {
+  const isSystem = message.variant === "welcome" || message.category === "system";
+  const logoSize = size === "lg" ? "md" : "sm";
+  const box = size === "lg" ? "h-11 w-11" : "h-10 w-10";
+
+  if (isSystem) {
+    return (
+      <div
+        className={`grid ${box} shrink-0 place-items-center rounded-full border border-zinc-200/90 bg-white p-1.5 shadow-sm`}
+      >
+        <Logo size={size === "lg" ? 28 : 22} />
+      </div>
+    );
+  }
+
+  return (
+    <CompanyLogo
+      company={message.company || message.from}
+      size={logoSize}
+      rounded="full"
+    />
+  );
+}
+
+function WelcomeMessageBody() {
+  return (
+    <article className="space-y-5 text-[15px] leading-[1.55] text-zinc-800">
+      <h1 className="font-display text-[26px] font-bold tracking-tight text-zinc-900">
+        Welcome to {BRAND.NAME}!
+      </h1>
+      <p>Hey there! We&apos;re excited to have you on board.</p>
+      <p>
+        This is your <strong className="font-semibold text-zinc-900">{BRAND.NAME} inbox</strong>
+        {" "}&mdash; a dedicated space for all your job search communication. Here&apos;s what you can expect to see here:
+      </p>
+      <ul className="list-disc space-y-2.5 pl-5 marker:text-zinc-400">
+        <li>
+          <strong className="font-semibold text-zinc-900">Application confirmations</strong>
+          {" "}when you swipe right on a job
+        </li>
+        <li>
+          <strong className="font-semibold text-zinc-900">Interview requests</strong>
+          {" "}from companies that want to meet you
+        </li>
+        <li>
+          <strong className="font-semibold text-zinc-900">Job offers</strong>
+          {" "}and next steps
+        </li>
+        <li>
+          <strong className="font-semibold text-zinc-900">Important updates</strong>
+          {" "}about your applications
+        </li>
+      </ul>
+      <p>Start swiping to apply to jobs, and you&apos;ll see updates appear right here.</p>
+      <p>
+        Happy Swiping,
+        <br />
+        <strong className="font-semibold text-zinc-900">The {BRAND.NAME} Team</strong>
+      </p>
+    </article>
+  );
+}
+
+function MessageMoreMenu({ open, message, starred, onClose, onToggleStar, onArchive, onMarkUnread, onReport }) {
+  if (!message) return null;
+
+  const items = [
+    {
+      key: "star",
+      icon: Star,
+      label: starred ? "Unstar" : "Star",
+      sub: starred ? "Remove from starred" : "Add to starred",
+      onClick: onToggleStar,
+      danger: false,
+    },
+    {
+      key: "archive",
+      icon: Archive,
+      label: "Archive",
+      sub: "Move to archive",
+      onClick: onArchive,
+      danger: false,
+    },
+    {
+      key: "unread",
+      icon: Mail,
+      label: "Mark as Unread",
+      sub: "Mark this thread as not read",
+      onClick: onMarkUnread,
+      danger: false,
+    },
+    {
+      key: "report",
+      icon: AlertTriangle,
+      label: "Report",
+      sub: "Report this email",
+      onClick: onReport,
+      danger: true,
+    },
+  ];
+
+  return (
+    <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
+      <SheetContent
+        side="bottom"
+        className="rounded-t-2xl border-zinc-200 bg-white p-0"
+        data-testid="inbox-more-menu"
+      >
+        <div className="flex justify-center pt-2">
+          <div className="h-1 w-10 rounded-full bg-zinc-200" />
+        </div>
+        <div className="flex justify-end px-5 pt-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-sm font-semibold text-zinc-900"
+            data-testid="inbox-more-done"
+          >
+            Done
+          </button>
+        </div>
+        <ul className="mt-1 divide-y divide-zinc-100 pb-6">
+          {items.map(({ key, icon: Icon, label, sub, onClick, danger }) => (
+            <li key={key}>
+              <button
+                type="button"
+                onClick={() => {
+                  onClick();
+                  onClose();
+                }}
+                className="flex w-full items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-zinc-50"
+                data-testid={`inbox-more-${key}`}
+              >
+                <Icon
+                  className={`h-6 w-6 shrink-0 ${danger ? "text-rose-500" : "text-zinc-800"}`}
+                  strokeWidth={danger ? 2 : 1.75}
+                  fill={key === "star" && starred ? "currentColor" : "none"}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className={`text-[15px] font-semibold ${danger ? "text-rose-500" : "text-zinc-900"}`}>
+                    {label}
+                  </p>
+                  <p className="text-sm text-zinc-500">{sub}</p>
+                </div>
+                <ChevronRight className="h-4 w-4 shrink-0 text-zinc-300" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function ReplySheet({ message, open, onClose, onSend }) {
+  const [body, setBody] = useState("");
+
+  useEffect(() => {
+    if (open) setBody("");
+  }, [open, message?.id]);
+
+  if (!message) return null;
+
+  const handleSend = () => {
+    const text = body.trim();
+    if (!text) {
+      toast.error("Write a reply first");
+      return;
+    }
+    onSend(text);
+    onClose();
   };
 
   return (
-    <Sheet open={!!message} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent
-        side="bottom"
-        className="max-h-[85dvh] overflow-y-auto rounded-t-3xl border-zinc-200 bg-white p-0"
-      >
-        {message ? (
-          <>
-            <SheetHeader className="border-b border-zinc-100 px-5 pb-4 pt-6 text-left">
-              <div className="flex items-start gap-3">
-                <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-violet-100 font-bold text-linkedin">
-                  {message.from.charAt(0)}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <SheetTitle className="font-display text-lg font-bold leading-tight text-zinc-900">
-                    {message.subject}
-                  </SheetTitle>
-                  <p className="mt-1 text-sm text-zinc-500">
-                    From <span className="font-semibold text-zinc-800">{message.from}</span>
-                    {" · "}
-                    {message.date}
-                  </p>
-                </div>
-              </div>
-            </SheetHeader>
-            <div className="space-y-4 px-5 py-5">
-              <p className="whitespace-pre-line text-sm leading-relaxed text-zinc-700">
-                {message.body || message.preview}
-              </p>
-              <button
-                type="button"
-                onClick={handleCopy}
-                className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-xs font-semibold text-linkedin hover:bg-violet-50"
-                data-testid="inbox-message-copy"
-              >
-                {copied ? <><Check className="h-3 w-3" /> Copied</> : <><Copy className="h-3 w-3" /> Copy</>}
-              </button>
-              <div className="h-4" />
-            </div>
-          </>
-        ) : null}
+    <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
+      <SheetContent side="bottom" className="rounded-t-2xl border-zinc-200 bg-white p-0">
+        <SheetHeader className="border-b border-zinc-100 px-5 pb-4 pt-6 text-left">
+          <SheetTitle className="font-display text-lg font-bold text-zinc-900">
+            Reply to {message.from}
+          </SheetTitle>
+          <p className="text-sm text-zinc-500">Re: {message.subject}</p>
+        </SheetHeader>
+        <div className="space-y-4 px-5 py-5">
+          <Textarea
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            placeholder="Write your reply…"
+            className="min-h-[140px] resize-none border-zinc-200 text-sm leading-relaxed"
+            data-testid="inbox-reply-input"
+          />
+          <div className="flex gap-2">
+            <Button
+              onClick={handleSend}
+              className="flex-1 rounded-full gradient-linkedin text-white"
+              data-testid="inbox-reply-send"
+            >
+              <Send className="mr-1.5 h-4 w-4" />
+              Send
+            </Button>
+            <Button variant="outline" onClick={onClose} className="rounded-full border-zinc-200">
+              Cancel
+            </Button>
+          </div>
+        </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function MessageActionBar({ onReply, onMarkUnread, onArchive, onMore }) {
+  const actions = [
+    { key: "reply", icon: CornerUpLeft, label: "Reply", onClick: onReply },
+    { key: "mail", icon: Mail, label: "Mark unread", onClick: onMarkUnread },
+    { key: "archive", icon: Archive, label: "Archive", onClick: onArchive },
+    { key: "more", icon: MoreHorizontal, label: "More", onClick: onMore },
+  ];
+
+  return (
+    <div
+      className="pointer-events-none fixed inset-x-0 bottom-[4.85rem] z-50 flex justify-center px-safe"
+      data-testid="inbox-message-actions"
+    >
+      <div className="pointer-events-auto flex w-full max-w-[280px] items-center justify-around rounded-full border border-zinc-200/80 bg-zinc-100/95 px-1.5 py-1 shadow-sm backdrop-blur-sm">
+        {actions.map(({ key, icon: Icon, label, onClick }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={onClick}
+            className="grid h-7 w-7 place-items-center rounded-full text-zinc-700 transition-colors hover:bg-white/90 active:scale-95"
+            aria-label={label}
+            data-testid={`inbox-action-${key}`}
+          >
+            <Icon className="h-3.5 w-3.5" strokeWidth={1.75} />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function InboxMessageDetail({
+  message,
+  starred,
+  onClose,
+  onToggleStar,
+  onMarkUnread,
+  onArchive,
+  onReport,
+  onReplySent,
+}) {
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [replyOpen, setReplyOpen] = useState(false);
+
+  if (!message) return null;
+
+  const category = getCategoryBadge(message);
+  const replyAllowed = canReplyToMessage(message);
+
+  const handleReply = () => {
+    if (!replyAllowed) {
+      toast.message("You can't reply to this message");
+      return;
+    }
+    setReplyOpen(true);
+  };
+
+  const handleMarkUnread = () => {
+    onMarkUnread();
+    toast.success("Marked as unread");
+  };
+
+  const handleArchive = () => {
+    onArchive();
+    toast.success("Message archived");
+  };
+
+  const handleReport = () => {
+    onReport();
+    toast.success("Report submitted — thanks for letting us know");
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex h-dvh max-h-dvh flex-col overflow-hidden bg-white text-zinc-900" data-testid="inbox-message-detail">
+      <header className="mx-auto w-full max-w-md shrink-0 border-b border-zinc-100 px-safe pb-3 pt-safe sm:px-4">
+        <button
+          type="button"
+          onClick={onClose}
+          className="inline-flex items-center gap-0.5 text-[15px] font-medium text-zinc-900"
+          data-testid="inbox-message-back"
+        >
+          <ChevronLeft className="h-5 w-5" strokeWidth={2} />
+          Back
+        </button>
+
+        <div className="mt-3 flex flex-wrap items-start gap-x-2 gap-y-1">
+          <h1 className="min-w-0 flex-1 basis-[calc(100%-4.5rem)] font-display text-base font-bold leading-snug text-zinc-900 sm:text-[17px]">
+            {message.subject}
+          </h1>
+          <div className="ml-auto flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={onToggleStar}
+              className="text-zinc-400 transition-colors hover:text-amber-400"
+              aria-label={starred ? "Unstar" : "Star"}
+              data-testid="inbox-detail-star"
+            >
+              <Star className={`h-4 w-4 ${starred ? "fill-amber-400 text-amber-400" : ""}`} />
+            </button>
+            {category ? (
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold sm:text-[11px] ${
+                  CATEGORY_BADGES[category.key] || CATEGORY_BADGES.system
+                }`}
+                data-testid="inbox-category-badge"
+              >
+                {category.label}
+              </span>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="mt-3 flex items-start gap-3">
+          <SenderAvatar message={message} />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline gap-2">
+              <p className="truncate text-sm font-bold text-zinc-900">{message.from}</p>
+              <span className="shrink-0 text-xs text-zinc-400">{message.date}</span>
+            </div>
+            <button
+              type="button"
+              className="mt-0.5 inline-flex items-center gap-0.5 text-xs text-zinc-500"
+              onClick={() => toast.message("Recipient details coming soon")}
+            >
+              to me
+              <ChevronDown className="h-3 w-3" />
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => setMoreOpen(true)}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-zinc-600 hover:bg-zinc-100"
+            aria-label="More options"
+            data-testid="inbox-header-more"
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </button>
+        </div>
+      </header>
+
+      <div className="app-scroll mx-auto w-full max-w-md px-5 pb-28 pt-5">
+        {message.variant === "welcome" ? (
+          <WelcomeMessageBody />
+        ) : (
+          <article className="space-y-4">
+            <p className="whitespace-pre-line text-[15px] leading-[1.55] text-zinc-800">
+              {message.body || message.preview}
+            </p>
+          </article>
+        )}
+      </div>
+
+      <MessageActionBar
+        onReply={handleReply}
+        onMarkUnread={handleMarkUnread}
+        onArchive={handleArchive}
+        onMore={() => setMoreOpen(true)}
+      />
+
+      <MessageMoreMenu
+        open={moreOpen}
+        message={message}
+        starred={starred}
+        onClose={() => setMoreOpen(false)}
+        onToggleStar={() => {
+          onToggleStar();
+          toast.success(starred ? "Removed from starred" : "Added to starred");
+        }}
+        onArchive={handleArchive}
+        onMarkUnread={handleMarkUnread}
+        onReport={handleReport}
+      />
+
+      <ReplySheet
+        message={message}
+        open={replyOpen}
+        onClose={() => setReplyOpen(false)}
+        onSend={(text) => {
+          onReplySent(text);
+          toast.success("Reply sent");
+        }}
+      />
+    </div>
   );
 }
 
@@ -601,6 +1055,12 @@ export default function Emails() {
   const [starred, setStarred] = useState(() =>
     Object.fromEntries(INBOX_MESSAGES.map((m) => [m.id, m.starred])),
   );
+  const [read, setRead] = useState(() =>
+    Object.fromEntries(INBOX_MESSAGES.map((m) => [m.id, false])),
+  );
+  const [archived, setArchived] = useState(() =>
+    Object.fromEntries(INBOX_MESSAGES.map((m) => [m.id, false])),
+  );
   const [selectedMessage, setSelectedMessage] = useState(null);
 
   const handleSaveDraft = (draft) => {
@@ -609,44 +1069,72 @@ export default function Emails() {
     saveDrafts(updated);
   };
 
-  const messages = INBOX_MESSAGES.filter((m) => {
-    if (m.filter !== filter) return false;
-    if (!query.trim()) return true;
-    const q = query.toLowerCase();
-    return (
-      m.from.toLowerCase().includes(q)
-      || m.subject.toLowerCase().includes(q)
-      || m.preview.toLowerCase().includes(q)
-    );
-  });
+  const openMessage = (m) => {
+    setRead((prev) => ({ ...prev, [m.id]: true }));
+    setSelectedMessage(m);
+  };
+
+  const closeMessage = () => setSelectedMessage(null);
+
+  const toggleStar = (id) => {
+    setStarred((s) => ({ ...s, [id]: !s[id] }));
+  };
+
+  const markUnread = (id) => {
+    setRead((r) => ({ ...r, [id]: false }));
+    closeMessage();
+  };
+
+  const archiveMessage = (id) => {
+    setArchived((a) => ({ ...a, [id]: true }));
+    closeMessage();
+  };
+
+  const messages = sortInboxMessages(
+    INBOX_MESSAGES.filter((m) => {
+      if (archived[m.id]) return false;
+      if (m.filter !== filter) return false;
+      if (!query.trim()) return true;
+      const q = query.toLowerCase();
+      return (
+        m.from.toLowerCase().includes(q)
+        || m.subject.toLowerCase().includes(q)
+        || m.preview.toLowerCase().includes(q)
+      );
+    }),
+  );
 
   return (
-    <div className="relative min-h-dvh bg-white pb-28 text-zinc-900">
-      <header className="mx-auto max-w-md px-4 pt-4">
-        <div className="flex items-center gap-2">
-          <button type="button" className="grid h-10 w-10 place-items-center text-zinc-500" aria-label="Menu">
+    <AppPage className="relative bg-white text-zinc-900">
+      <header className="mx-auto w-full max-w-md shrink-0 px-safe pt-safe sm:px-4">
+        <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
+          <button
+            type="button"
+            className="grid h-9 w-9 shrink-0 place-items-center text-zinc-500 sm:h-10 sm:w-10"
+            aria-label="Menu"
+          >
             <Menu className="h-5 w-5" />
           </button>
-          <div className="flex h-11 flex-1 items-center rounded-full bg-zinc-100 px-4">
+          <div className="flex h-10 min-w-0 flex-1 items-center rounded-full bg-zinc-100 px-3 sm:h-11 sm:px-4">
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search in mail"
-              className="w-full bg-transparent text-sm text-zinc-900 placeholder:text-zinc-400 outline-none"
+              className="w-full min-w-0 bg-transparent text-sm text-zinc-900 placeholder:text-zinc-400 outline-none"
               data-testid="inbox-search"
             />
           </div>
           <button
             type="button"
             onClick={() => navigate("/settings")}
-            className="grid h-10 w-10 place-items-center text-zinc-500"
+            className="grid h-9 w-9 shrink-0 place-items-center text-zinc-500 sm:h-10 sm:w-10"
             aria-label="Settings"
           >
             <Settings className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="mt-4 flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+        <div className="-mx-safe mt-3 flex gap-1.5 overflow-x-auto px-safe pb-1 no-scrollbar sm:mx-0 sm:mt-4 sm:gap-2 sm:px-0">
           {INBOX_FILTERS.map((f) => {
             const active = filter === f.key;
             return (
@@ -654,7 +1142,7 @@ export default function Emails() {
                 key={f.key}
                 type="button"
                 onClick={() => setFilter(f.key)}
-                className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
+                className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors sm:px-4 sm:py-2 sm:text-sm ${
                   active ? f.activeClass : f.idleClass
                 }`}
                 data-testid={`inbox-filter-${f.key}`}
@@ -666,56 +1154,62 @@ export default function Emails() {
         </div>
       </header>
 
-      <div className="mx-auto mt-2 max-w-md px-4">
-        <p className="mb-2 text-xs font-medium capitalize text-zinc-400">{filter}</p>
-        {messages.length === 0 ? (
-          <p className="py-12 text-center text-sm text-zinc-500">No messages in this folder.</p>
-        ) : (
-          <ul className="divide-y divide-zinc-100">
-            {messages.map((m) => (
-              <li key={m.id} data-testid={`inbox-row-${m.id}`}>
-                <div className="flex gap-3 py-4">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedMessage(m)}
-                    className="flex min-w-0 flex-1 gap-3 text-left transition-colors hover:opacity-90 active:bg-zinc-50 rounded-lg -mx-1 px-1"
-                    data-testid={`inbox-open-${m.id}`}
-                  >
-                    <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-violet-100 font-bold text-linkedin">
-                      {m.from.charAt(0)}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="truncate text-sm font-bold text-zinc-900">{m.from}</p>
-                        <span className="shrink-0 text-xs text-zinc-400">{m.date}</span>
+      <AppPageScroll>
+        <div className="mx-auto mt-2 max-w-md px-safe sm:px-4">
+          <p className="mb-2 text-xs font-medium capitalize text-zinc-400">{filter}</p>
+          {messages.length === 0 ? (
+            <p className="py-12 text-center text-sm text-zinc-500">No messages in this folder.</p>
+          ) : (
+            <ul className="divide-y divide-zinc-100">
+              {messages.map((m) => (
+                <li key={m.id} data-testid={`inbox-row-${m.id}`}>
+                  <div className="flex gap-3 py-4">
+                    <button
+                      type="button"
+                      onClick={() => openMessage(m)}
+                      className="flex min-w-0 flex-1 gap-3 text-left transition-colors hover:opacity-90 active:bg-zinc-50 rounded-lg -mx-1 px-1"
+                      data-testid={`inbox-open-${m.id}`}
+                    >
+                      <SenderAvatar message={m} size="lg" />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className={`truncate text-sm ${read[m.id] ? "font-semibold text-zinc-800" : "font-bold text-zinc-900"}`}>
+                            {m.from}
+                          </p>
+                          <span className="shrink-0 text-xs text-zinc-400">{m.date}</span>
+                        </div>
+                        <p className={`truncate text-sm ${read[m.id] ? "font-medium text-zinc-700" : "font-bold text-zinc-900"}`}>
+                          {m.subject}
+                        </p>
+                        <p className={`mt-0.5 line-clamp-2 text-sm ${read[m.id] ? "text-zinc-500" : "font-medium text-zinc-600"}`}>
+                          {m.preview}
+                        </p>
                       </div>
-                      <p className="truncate text-sm font-semibold text-zinc-800">{m.subject}</p>
-                      <p className="mt-0.5 line-clamp-2 text-sm text-zinc-500">{m.preview}</p>
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setStarred((s) => ({ ...s, [m.id]: !s[m.id] }));
-                    }}
-                    className="shrink-0 pt-1 text-zinc-300 hover:text-amber-400"
-                    aria-label={starred[m.id] ? "Unstar" : "Star"}
-                    data-testid={`inbox-star-${m.id}`}
-                  >
-                    <Star className={`h-4 w-4 ${starred[m.id] ? "fill-amber-400 text-amber-400" : ""}`} />
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleStar(m.id);
+                      }}
+                      className="shrink-0 pt-1 text-zinc-300 hover:text-amber-400"
+                      aria-label={starred[m.id] ? "Unstar" : "Star"}
+                      data-testid={`inbox-star-${m.id}`}
+                    >
+                      <Star className={`h-4 w-4 ${starred[m.id] ? "fill-amber-400 text-amber-400" : ""}`} />
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </AppPageScroll>
 
       <button
         type="button"
         onClick={() => setGenerateOpen(true)}
-        className="fixed bottom-24 right-5 z-40 grid h-14 w-14 place-items-center rounded-full gradient-linkedin text-white shadow-lg hover:opacity-90"
+        className="fixed bottom-24 right-4 z-40 grid h-12 w-12 place-items-center rounded-full gradient-linkedin text-white shadow-lg hover:opacity-90 sm:right-5 sm:h-14 sm:w-14"
         aria-label="Compose email"
         data-testid="inbox-compose-fab"
       >
@@ -728,10 +1222,16 @@ export default function Emails() {
         onSaveDraft={handleSaveDraft}
       />
 
-      <InboxMessageSheet
+      <InboxMessageDetail
         message={selectedMessage}
-        onClose={() => setSelectedMessage(null)}
+        starred={selectedMessage ? starred[selectedMessage.id] : false}
+        onClose={closeMessage}
+        onToggleStar={() => selectedMessage && toggleStar(selectedMessage.id)}
+        onMarkUnread={() => selectedMessage && markUnread(selectedMessage.id)}
+        onArchive={() => selectedMessage && archiveMessage(selectedMessage.id)}
+        onReport={() => {}}
+        onReplySent={() => {}}
       />
-    </div>
+    </AppPage>
   );
 }

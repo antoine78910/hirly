@@ -36,6 +36,23 @@ import {
   Zap,
   FileCheck2,
   MessageSquare,
+  MessageSquareX,
+  ClipboardCopy,
+  Hourglass,
+  Send,
+  Filter,
+  RefreshCw,
+  UserX,
+  Puzzle,
+  CircleDollarSign,
+  ListChecks,
+  FlaskConical,
+  Calendar,
+  TrendingDown,
+  Table2,
+  Repeat,
+  EyeOff,
+  Globe,
   UtensilsCrossed,
   ShoppingBag,
   Package,
@@ -53,7 +70,6 @@ export const ONBOARDING_STEP_ORDER = [
   "otherApps",
   "longTerm",
   "categories",
-  "roles",
   "experience",
   "salary",
   "interviews",
@@ -63,51 +79,194 @@ export const ONBOARDING_STEP_ORDER = [
   "attribution",
   "referralCode",
   "upload",
+  "profileSetup",
+  "profileWelcome",
   "showcaseLanding",
   "showcaseAllInOne",
   "showcasePricing",
 ];
 
-/** Showcase step screenshots — add PNGs under `public/onboarding/`. */
-export const ONBOARDING_SHOWCASE_SCREENS = {
-  landing: {
-    left: "/onboarding/showcase-screening.png",
-    center: "/onboarding/showcase-swipe.png",
-    right: "/onboarding/showcase-applications.png",
-  },
-  allInOne: "/onboarding/showcase-documents-phone.png",
-  pricing: "/onboarding/showcase-pricing-phone.png",
+/** Dark setup loader — order: image 3 → 4 → 2 → 1 (user reference). */
+export const PROFILE_SETUP_PHASES = [
+  { sub: "Setting up everything…" },
+  { sub: "Analyzing your profile…" },
+  { sub: "Calibrating recommendations…" },
+  { sub: "Finding the perfect opportunities for you…" },
+];
+
+/** Personalized “Welcome” cards shown after CV upload, before phone mockup steps. */
+export function buildProfileWelcomeItems({
+  salaryMin,
+  selectedRoles = [],
+  categories = [],
+  categoryOptions = [],
+  interviewsPerWeek = 4,
+}) {
+  const salaryLabel = formatSalary(salaryMin);
+  const primaryRole = selectedRoles[0] || "your target roles";
+  const categoryLabels = categories
+    .map((id) => categoryOptions.find((c) => c.id === id)?.label)
+    .filter(Boolean);
+  const industryHint = categoryLabels.length
+    ? categoryLabels.slice(0, 2).join(" & ")
+    : "top companies";
+
+  return [
+    {
+      title: "Scale Your Career Fast",
+      body: `We'll help you target high-growth teams and roles aligned with your ${salaryLabel}+ salary goal.`,
+    },
+    {
+      title: "Apply at Light Speed",
+      body: `Our AI agent automates tailored applications for ${primaryRole} — no more copy-pasting the same answers.`,
+    },
+    {
+      title: "Land Your Next Win",
+      body: `Swipe right on ${industryHint} matches. We handle the paperwork while you focus on landing ${interviewsPerWeek} interviews per week.`,
+    },
+  ];
+}
+
+/** Steps from profile welcome through pricing (preview / dev shortcuts). */
+export const ONBOARDING_LATE_STEP_IDS = [
+  "profileSetup",
+  "profileWelcome",
+  "showcaseLanding",
+  "showcaseAllInOne",
+  "showcasePricing",
+];
+
+const ONBOARDING_PREVIEW_STEP_ALIASES = {
+  final: "showcaseLanding",
+  welcome: "profileWelcome",
+  allinone: "showcaseAllInOne",
+  pricing: "showcasePricing",
+  setup: "profileSetup",
 };
 
-export const ONBOARDING_PAIN_TAGS = [
-  "Hours applying, no replies?",
-  "Reapplying by accident?",
-  "Copy-pasting cover letters?",
-  "No idea if anyone saw it?",
-  "Rewriting the same answers?",
-  "Endless scrolling for jobs?",
-  "Writing 'Dear Hiring Manager' again?",
-  "Tracked in a messy spreadsheet?",
-  "Forgot which version you sent?",
-  "Stuck using 10+ job sites?",
+/** Demo answers so late onboarding steps render without completing the full flow. */
+export function createOnboardingPreviewState() {
+  const categoryOptions = JOB_CATEGORIES.map(({ id, label }) => ({ id, label }));
+  return {
+    categories: ["software", "product", "design"],
+    selectedRoles: ["Software Engineer", "Product Manager", "UX Designer"],
+    experience: "mid",
+    salaryMin: 75000,
+    salaryMax: 120000,
+    interviewsPerWeek: 4,
+    jobSearchStatus: "yes",
+    onboardingLocation: "Paris, France",
+    onboardingLocationData: { location_label: "Paris, France" },
+    contractType: "permanent",
+    triedOtherApps: "no",
+    attribution: "search",
+    suggestedCategories: categoryOptions,
+  };
+}
+
+/**
+ * Read `?preview=` or `?step=` from the URL for dev previews.
+ * Example: /onboarding?preview=final  /onboarding?step=showcaseAllInOne
+ */
+export function readOnboardingPreviewBoot(stepOrder = ONBOARDING_STEP_ORDER) {
+  if (typeof window === "undefined") return null;
+
+  const params = new URLSearchParams(window.location.search);
+  const preview = params.get("preview");
+  const stepParam = params.get("step");
+
+  let targetStep = null;
+  if (preview && ONBOARDING_PREVIEW_STEP_ALIASES[preview]) {
+    targetStep = ONBOARDING_PREVIEW_STEP_ALIASES[preview];
+  } else if (stepParam && stepOrder.includes(stepParam)) {
+    targetStep = stepParam;
+  }
+
+  if (!targetStep) return null;
+
+  const stepIndex = stepOrder.indexOf(targetStep);
+  if (stepIndex < 0) return null;
+
+  const welcomeIndex = stepOrder.indexOf("profileWelcome");
+  const needsPreviewState = stepIndex >= welcomeIndex;
+
+  return {
+    stepIndex,
+    state: needsPreviewState ? createOnboardingPreviewState() : null,
+  };
+}
+
+/** Showcase step screenshots — PNGs under `public/onboarding/`. */
+export const ONBOARDING_SHOWCASE_SCREENS = {
+  /** Image 1 — swipe feed */
+  landing: "/onboarding/showcase-pricing.png",
+  /** Image 2 — resume & cover letter */
+  allInOne: "/onboarding/showcase-all-in-one.png",
+  /** Image 3 — three-phone collage */
+  pricing: "/onboarding/showcase-landing.png",
+};
+
+/** Job-search pain points — icon + short label for onboarding marquee. */
+export const ONBOARDING_PAIN_POINTS = [
+  { id: "no-replies", label: "Hours applying, no replies?", Icon: Hourglass },
+  { id: "void", label: "Applications into the void", Icon: Send },
+  { id: "copy-paste", label: "Copy-paste cover letters", Icon: ClipboardCopy },
+  { id: "ats", label: "ATS filters you out", Icon: Filter },
+  { id: "rewrite-cv", label: "Rewriting your CV every time", Icon: RefreshCw },
+  { id: "ghosted", label: "Ghosted after interviews", Icon: UserX },
+  { id: "no-feedback", label: "Rejections with no feedback", Icon: MessageSquareX },
+  { id: "vague-jobs", label: "Job unlike the posting", Icon: Puzzle },
+  { id: "hidden-salary", label: "Salary hidden until the end", Icon: CircleDollarSign },
+  { id: "long-forms", label: "Endless application forms", Icon: ListChecks },
+  { id: "tech-tests", label: "Surprise tech assessments", Icon: FlaskConical },
+  { id: "long-process", label: "Months of interview rounds", Icon: Calendar },
+  { id: "qual-mismatch", label: "Over- or under-qualified", Icon: TrendingDown },
+  { id: "spreadsheet", label: "Tracking apps in a spreadsheet", Icon: Table2 },
+  { id: "reapply", label: "Reapplying by accident", Icon: Repeat },
+  { id: "unseen", label: "No idea if anyone saw it", Icon: EyeOff },
+  { id: "many-sites", label: "Stuck on 10+ job sites", Icon: Globe },
 ];
+
+const PAIN_MARQUEE_ROW_CONFIG = [
+  { reverse: false, duration: 420, delayOffset: 0.22 },
+  { reverse: true, duration: 470, delayOffset: 0.47 },
+  { reverse: false, duration: 390, delayOffset: 0.71 },
+  { reverse: true, duration: 440, delayOffset: 0.35 },
+];
+
+/** Split pain points into dense marquee rows (staggered, no gaps on load). */
+export function buildPainMarqueeRows(points = ONBOARDING_PAIN_POINTS, rowCount = 4) {
+  if (!points.length) return [];
+
+  const loops = 2;
+
+  return PAIN_MARQUEE_ROW_CONFIG.slice(0, rowCount).map((cfg, rowIndex) => {
+    const tags = [];
+    for (let loop = 0; loop < loops; loop += 1) {
+      for (let i = 0; i < points.length; i += 1) {
+        tags.push(points[(rowIndex + i) % points.length]);
+      }
+    }
+    return { ...cfg, tags };
+  });
+}
 
 export const ONBOARDING_PRICING_PLANS = [
   {
     id: "quarterly",
     label: "Quarterly",
-    billed: "€89.99 paid quarterly",
-    weekly: "€7.50",
+    billed: "€59.99 paid quarterly",
+    weekly: "€5.00",
     badge: "33% OFF",
-    footnote: "Billed as €89.99/quarter",
+    footnote: "Billed as €59.99/quarter",
   },
   {
     id: "monthly",
     label: "Monthly",
-    billed: "€44.99 paid monthly",
-    weekly: "€11.25",
+    billed: "€29.99 paid monthly",
+    weekly: "€7.50",
     badge: null,
-    footnote: "Billed as €44.99/month",
+    footnote: "Billed as €29.99/month",
   },
 ];
 
@@ -196,28 +355,266 @@ export const INTRO_SLIDES = [
 ];
 
 export const JOB_CATEGORIES = [
-  { id: "software", label: "Software Engineering", Icon: Code2, roles: ["Software Engineer", "Frontend Developer", "Backend Developer", "Full Stack Developer", "DevOps Engineer", "QA Engineer"] },
-  { id: "data", label: "Data", Icon: Database, roles: ["Data Analyst", "Data Scientist", "Business Analyst"] },
-  { id: "product", label: "Product", Icon: Layers, roles: ["Product Manager", "Project Manager", "Product Designer"] },
-  { id: "design", label: "Design", Icon: Palette, roles: ["UX/UI Designer", "Graphic Designer", "Content Designer"] },
-  { id: "marketing", label: "Marketing", Icon: Megaphone, roles: ["Marketing Manager", "Market Analyst", "Content Designer"] },
-  { id: "sales", label: "Sales", Icon: BarChart3, roles: ["Sales Representative", "Account Executive", "Business Development Rep"] },
-  { id: "finance", label: "Finance", Icon: Briefcase, roles: ["Finance Analyst", "Accountant", "Financial Advisor"] },
-  { id: "healthcare", label: "Healthcare", Icon: HeartPulse, roles: ["Nurse", "Medical Receptionist", "Pharmacy Assistant", "Care Assistant"] },
-  { id: "hr", label: "Human Resources", Icon: Users, roles: ["HR Assistant", "Recruiter", "People Operations Coordinator"] },
-  { id: "operations", label: "Operations & Strategy", Icon: Briefcase, roles: ["Operations Manager", "Office Manager", "Executive Assistant"] },
-  { id: "customer", label: "Customer Success", Icon: Headphones, roles: ["Customer Support Specialist", "Client Success Manager", "Help Desk Agent"] },
-  { id: "hospitality_food", label: "Hospitality & Food", Icon: UtensilsCrossed, roles: ["Server", "Waiter", "Waitress", "Bartender", "Restaurant Host", "Kitchen Porter", "Barista", "Hotel Front Desk"] },
-  { id: "retail", label: "Retail & Sales Floor", Icon: ShoppingBag, roles: ["Retail Sales Associate", "Cashier", "Store Supervisor", "Visual Merchandiser"] },
-  { id: "logistics", label: "Logistics & Warehouse", Icon: Package, roles: ["Warehouse Worker", "Picker Packer", "Forklift Operator", "Inventory Clerk"] },
-  { id: "transport", label: "Transport & Delivery", Icon: Truck, roles: ["Delivery Driver", "Courier", "Truck Driver", "Ride-hail Driver"] },
-  { id: "agriculture", label: "Agriculture & Harvest", Icon: Leaf, roles: ["Farm Hand", "Fruit Picker", "Vineyard Worker", "Harvest Worker", "Greenhouse Worker"] },
-  { id: "education_childcare", label: "Education & Childcare", Icon: GraduationCap, roles: ["Teaching Assistant", "Childcare Worker", "Camp Counselor", "Tutor"] },
-  { id: "trades", label: "Trades & Construction", Icon: Hammer, roles: ["Electrician Apprentice", "Plumber Apprentice", "Construction Laborer", "Carpenter Helper"] },
-  { id: "security", label: "Security", Icon: Shield, roles: ["Security Guard", "Event Steward", "CCTV Operator"] },
-  { id: "engineering_other", label: "Engineering (other)", Icon: Wrench, roles: ["Mechanical Engineer", "Civil Engineer", "Industrial Engineer"] },
-  { id: "consulting", label: "Consulting", Icon: User, roles: ["Business Analyst", "Project Manager", "Management Consultant"] },
-  { id: "legal", label: "Legal", Icon: Scale, roles: ["Legal Assistant", "Paralegal", "Compliance Analyst"] },
+  {
+    id: "software",
+    label: "Software Engineering",
+    Icon: Code2,
+    roles: [
+      "Backend Engineer",
+      "Blockchain Engineer",
+      "Cloud Engineer",
+      "Data Engineer",
+      "Developer Relations",
+      "DevOps Engineer",
+      "Embedded Engineer",
+      "Engineering Manager",
+      "Frontend Engineer",
+      "Fullstack Engineer",
+      "Game Engineer",
+      "Machine Learning Engineer",
+      "Mobile Engineer",
+      "Network Engineer",
+      "QA Engineer",
+      "Sales Engineer",
+      "Software Engineer",
+      "Site Reliability Engineer",
+      "Software Architect",
+      "Support Engineer",
+    ],
+  },
+  {
+    id: "healthcare",
+    label: "Healthcare",
+    Icon: HeartPulse,
+    roles: [
+      "Clinical Research Associate",
+      "Clinical Research Coordinator",
+      "Epidemiologist",
+      "Healthcare Administrator",
+      "Healthcare Manager",
+      "Licensed Practical Nurse",
+      "Medical Biller",
+      "Medical Coder",
+      "Medical Director",
+      "Medical Science Liaison",
+      "Mental Health Counselor",
+      "Nurse Practitioner",
+      "Occupational Therapist",
+      "Pharmacist",
+      "Pharmacy Technician",
+      "Physical Therapist",
+      "Physician",
+      "Public Health Analyst",
+      "Radiologic Technologist",
+      "Radiologist",
+      "Registered Nurse",
+      "Speech-Language Pathologist",
+      "Surgeon",
+      "Surgical Technologist",
+    ],
+  },
+  {
+    id: "consulting",
+    label: "Consulting",
+    Icon: User,
+    roles: [
+      "Financial Consultant",
+      "IT Consultant",
+      "L&D Specialist",
+      "Management Consultant",
+      "Technology Consultant",
+      "Training Manager",
+    ],
+  },
+  {
+    id: "data",
+    label: "Data",
+    Icon: Database,
+    roles: ["Data Analyst", "Data Scientist", "Research Engineer", "Salesforce Analyst"],
+  },
+  {
+    id: "design",
+    label: "Design",
+    Icon: Palette,
+    roles: [
+      "Brand Designer",
+      "Graphic Designer",
+      "Industrial Designer",
+      "Motion Designer",
+      "Product Designer",
+      "UI Designer",
+      "UX Designer",
+    ],
+  },
+  {
+    id: "finance",
+    label: "Finance",
+    Icon: DollarSign,
+    roles: [
+      "Accountant",
+      "Accounts Payable Specialist",
+      "Accounts Receivable Specialist",
+      "Bookkeeper",
+      "Corporate Finance Manager",
+      "Finance Operations Analyst",
+      "Financial Analyst",
+      "Financial Auditor",
+      "Payroll Specialist",
+      "Risk Analyst",
+    ],
+  },
+  {
+    id: "legal",
+    label: "Legal",
+    Icon: Scale,
+    roles: ["Compliance Officer", "Legal Counsel", "Paralegal"],
+  },
+  {
+    id: "hr",
+    label: "Human Resources",
+    Icon: Users,
+    roles: [
+      "Executive Assistant",
+      "HR Business Partner",
+      "HR Generalist",
+      "HR Manager",
+      "People Operations Manager",
+      "Recruiter",
+      "Technical Recruiter",
+    ],
+  },
+  {
+    id: "marketing",
+    label: "Marketing",
+    Icon: Megaphone,
+    roles: [
+      "Brand Manager",
+      "Communications Specialist",
+      "Community Manager",
+      "Content Marketing Manager",
+      "Content Strategist",
+      "Copywriter",
+      "Creative Director",
+      "Digital Marketing Manager",
+      "Digital Marketing Specialist",
+      "Event Manager",
+      "Growth Hacker",
+      "Growth Marketing Manager",
+      "Marketing Analyst",
+      "Marketing Generalist",
+      "Marketing Operations Manager",
+      "Performance Marketing Manager",
+      "Product Marketing Manager",
+      "Public Relations Manager",
+      "SEO Manager",
+      "SEO Specialist",
+      "Social Media Manager",
+    ],
+  },
+  {
+    id: "operations",
+    label: "Operations & Strategy",
+    Icon: Briefcase,
+    roles: [
+      "Business Analyst",
+      "Business Operations Analyst",
+      "Business Operations Manager",
+      "Corporate Strategist",
+      "Operations Associate",
+      "Operations Coordinator",
+      "Program Manager",
+      "Project Manager",
+      "Strategy Manager",
+      "Supply Chain Analyst",
+      "Supply Chain Manager",
+    ],
+  },
+  {
+    id: "product",
+    label: "Product",
+    Icon: Layers,
+    roles: ["Product Analyst", "Product Manager", "Technical Product Manager", "User Researcher"],
+  },
+  {
+    id: "sales",
+    label: "Sales",
+    Icon: BarChart3,
+    roles: [
+      "Account Executive",
+      "Account Manager",
+      "Business Development Manager",
+      "Business Development Representative",
+      "Channel Sales Manager",
+      "Enterprise Account Executive",
+      "Partnership Manager",
+      "Sales Director",
+      "Sales Manager",
+      "Sales Operations Analyst",
+      "Sales Operations Manager",
+      "Technical Account Manager",
+      "VP of Sales",
+    ],
+  },
+  {
+    id: "customer",
+    label: "Customer Success",
+    Icon: Headphones,
+    roles: ["Customer Success Manager", "Customer Support Manager", "Customer Support Representative"],
+  },
+  {
+    id: "security",
+    label: "Security",
+    Icon: Shield,
+    roles: ["Cybersecurity Analyst", "Cybersecurity Engineer", "Security Engineer"],
+  },
+  {
+    id: "engineering_other",
+    label: "Misc. Engineering",
+    Icon: Wrench,
+    roles: ["Hardware Engineer", "IT Support Specialist", "Mechanical Engineer", "Technical Writer"],
+  },
+  {
+    id: "hospitality_food",
+    label: "Hospitality & Food",
+    Icon: UtensilsCrossed,
+    roles: ["Server", "Waiter", "Waitress", "Bartender", "Restaurant Host", "Kitchen Porter", "Barista", "Hotel Front Desk"],
+  },
+  {
+    id: "retail",
+    label: "Retail & Sales Floor",
+    Icon: ShoppingBag,
+    roles: ["Retail Sales Associate", "Cashier", "Store Supervisor", "Visual Merchandiser"],
+  },
+  {
+    id: "logistics",
+    label: "Logistics & Warehouse",
+    Icon: Package,
+    roles: ["Warehouse Worker", "Picker Packer", "Forklift Operator", "Inventory Clerk"],
+  },
+  {
+    id: "transport",
+    label: "Transport & Delivery",
+    Icon: Truck,
+    roles: ["Delivery Driver", "Courier", "Truck Driver", "Ride-hail Driver"],
+  },
+  {
+    id: "agriculture",
+    label: "Agriculture & Harvest",
+    Icon: Leaf,
+    roles: ["Farm Hand", "Fruit Picker", "Vineyard Worker", "Harvest Worker", "Greenhouse Worker"],
+  },
+  {
+    id: "education_childcare",
+    label: "Education & Childcare",
+    Icon: GraduationCap,
+    roles: ["Teaching Assistant", "Childcare Worker", "Camp Counselor", "Tutor"],
+  },
+  {
+    id: "trades",
+    label: "Trades & Construction",
+    Icon: Hammer,
+    roles: ["Electrician Apprentice", "Plumber Apprentice", "Construction Laborer", "Carpenter Helper"],
+  },
 ];
 
 export const EXPERIENCE_LEVELS = [
@@ -341,7 +738,7 @@ function resolveJobCategory(id, label) {
   return null;
 }
 
-export function rolesForCategories(categoryIds, max = 24, categoryOptions = []) {
+export function rolesForCategories(categoryIds, max = 200, categoryOptions = []) {
   const seen = new Set();
   const out = [];
   for (const selectedId of categoryIds) {

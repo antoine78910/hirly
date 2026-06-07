@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Phone, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { BrandHeader } from "../components/app/AppScreenHeader";
+import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
 import { BRAND } from "../lib/brand";
 
 const TABS = [
@@ -32,12 +33,12 @@ export default function Feedback() {
   };
 
   return (
-    <div className="flex min-h-dvh flex-col bg-white pb-28 text-zinc-900">
+    <AppPage className="bg-white text-zinc-900">
       <BrandHeader
         rightAction={
           <button
             type="button"
-            className="grid h-10 w-10 place-items-center rounded-full text-linkedin hover:bg-violet-50"
+            className="grid h-9 w-9 place-items-center rounded-full text-linkedin hover:bg-violet-50 sm:h-10 sm:w-10"
             aria-label="Call support"
             onClick={() => toast.message("Support line coming soon")}
           >
@@ -46,7 +47,7 @@ export default function Feedback() {
         }
       />
 
-      <div className="flex border-b border-zinc-200">
+      <div className="flex shrink-0 border-b border-zinc-200">
         {TABS.map((t) => {
           const active = tab === t.key;
           return (
@@ -68,7 +69,7 @@ export default function Feedback() {
         })}
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 pt-5">
+      <AppPageScroll className="px-5 pt-5">
         {tab === "feedback" ? (
           <div>
             <div className="max-w-[85%] rounded-2xl rounded-bl-md bg-zinc-100 px-4 py-3 text-[15px] leading-relaxed text-zinc-800">
@@ -89,10 +90,10 @@ export default function Feedback() {
             ))}
           </ul>
         )}
-      </div>
+      </AppPageScroll>
 
       {tab === "feedback" ? (
-        <div className="border-t border-zinc-100 px-4 py-3">
+        <div className="shrink-0 border-t border-zinc-100 px-4 py-3">
           <div className="mx-auto flex max-w-md items-center gap-2">
             <button
               type="button"
@@ -113,6 +114,6 @@ export default function Feedback() {
           </div>
         </div>
       ) : null}
-    </div>
+    </AppPage>
   );
 }

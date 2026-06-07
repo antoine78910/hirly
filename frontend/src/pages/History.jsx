@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowLeft, Zap, Loader2 } from "lucide-react";
 import { api } from "../lib/api";
+import CompanyLogo from "../components/CompanyLogo";
 import { toast } from "sonner";
 
 const TABS = [
@@ -24,9 +25,7 @@ function JobRow({ row, onApplyNow }) {
       className="rounded-2xl border border-sprout-border bg-sprout-surface p-4 flex items-start gap-4"
       data-testid={`history-row-${job.job_id}`}
     >
-      <div className="w-16 h-16 rounded-xl bg-white grid place-items-center font-display font-black text-2xl text-zinc-900 shrink-0">
-        {(job.company || "?").trim().charAt(0).toUpperCase()}
-      </div>
+      <CompanyLogo company={job.company} size="md" rounded="xl" />
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
           <p className="font-display font-bold text-white text-[17px] leading-tight line-clamp-2">{job.title}</p>
