@@ -13,6 +13,7 @@ import {
   Zap,
   Pencil,
   Plus,
+  ShieldCheck,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -20,10 +21,11 @@ import PersonalInfoSheet from "../components/PersonalInfoSheet";
 import ResumeSheet from "../components/ResumeSheet";
 import ProfessionalProfileSheet from "../components/ProfessionalProfileSheet";
 import DocumentsSheet from "../components/DocumentsSheet";
-import Sheet, { SaveButton } from "../components/Sheet";
+import Sheet, { Field, SaveButton } from "../components/Sheet";
 import PlacesAutocomplete, { hasGooglePlacesKey } from "../components/PlacesAutocomplete";
 import { Label } from "../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { Switch } from "../components/ui/switch";
 import RolePicker from "../components/RolePicker";
 import { TitleHeader } from "../components/app/AppScreenHeader";
 import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
@@ -47,6 +49,7 @@ function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
   const [targetLocation, setTargetLocation] = useState("");
   const [targetLocationData, setTargetLocationData] = useState(null);
   const [remote, setRemote] = useState("any");
+  const [seniority, setSeniority] = useState("any");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -55,6 +58,7 @@ function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
     setTargetLocation(profile?.target_location_data?.location_label || profile?.target_location || "");
     setTargetLocationData(profile?.target_location_data || null);
     setRemote(profile?.remote_preference || "any");
+    setSeniority(profile?.seniority || "any");
   }, [open, profile]);
 
   const save = async () => {
@@ -69,6 +73,7 @@ function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
         target_location: targetLocationData?.location_label || targetLocation,
         target_location_data: targetLocationData,
         remote_preference: remote,
+        seniority: seniority === "any" ? null : seniority,
       });
       toast.success("Preferences saved");
       await onSaved?.();
@@ -117,6 +122,174 @@ function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
             </SelectContent>
           </Select>
         </div>
+        <div className="space-y-1.5">
+          <Label className="text-sm font-semibold text-zinc-200">Seniority</Label>
+          <Select value={seniority} onValueChange={setSeniority}>
+            <SelectTrigger className="h-11 rounded-xl bg-sprout-surface-2 border-sprout-border text-white" data-testid="job-prefs-seniority">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-sprout-surface border-sprout-border text-white">
+              <SelectItem value="any">Any</SelectItem>
+              <SelectItem value="junior">Junior</SelectItem>
+              <SelectItem value="mid">Mid level</SelectItem>
+              <SelectItem value="senior">Senior</SelectItem>
+              <SelectItem value="lead">Lead</SelectItem>
+              <SelectItem value="principal">Principal</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+    </Sheet>
+  );
+}
+
+function boolSelectValue(value) {
+  if (value === true) return "yes";
+  if (value === false) return "no";
+  return "unset";
+}
+
+function boolSelectToValue(value) {
+  if (value === "yes") return true;
+  if (value === "no") return false;
+  return null;
+}
+
+function ApplicationDefaultsSheet({ open, profile, onClose, onSaved }) {
+  const [defaults, setDefaults] = useState({});
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setDefaults({ ...(profile?.application_defaults || {}) });
+  }, [open, profile]);
+
+  const update = (key, value) => setDefaults((prev) => ({ ...prev, [key]: value }));
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await api.put("/profile/application-defaults", { application_defaults: defaults });
+      toast.success("Application defaults saved");
+      await onSaved?.();
+      onClose();
+    } catch (_) {
+      toast.error("Could not save application defaults");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Sheet
+      open={open}
+      title="Application Defaults"
+      onClose={onClose}
+      testId="application-defaults-sheet"
+      footer={<SaveButton saving={saving} onClick={save} testId="application-defaults-save" />}
+    >
+      <div className="space-y-4">
+        <Field
+          label="Phone country code"
+          value={defaults.phone_country_code}
+          onChange={(v) => update("phone_country_code", v)}
+          placeholder="+44"
+          testId="app-defaults-phone-country-code"
+        />
+        <Field
+          label="Current country"
+          value={defaults.current_location_country}
+          onChange={(v) => update("current_location_country", v)}
+          placeholder="United Kingdom"
+          testId="app-defaults-current-country"
+        />
+        <Field
+          label="Current city"
+          value={defaults.current_location_city}
+          onChange={(v) => update("current_location_city", v)}
+          placeholder="London"
+          testId="app-defaults-current-city"
+        />
+        <Field
+          label="Work-authorized countries"
+          value={Array.isArray(defaults.work_authorized_countries) ? defaults.work_authorized_countries.join(", ") : defaults.work_authorized_countries}
+          onChange={(v) => update("work_authorized_countries", v.split(",").map((item) => item.trim()).filter(Boolean))}
+          placeholder="United Kingdom, United States"
+          testId="app-defaults-work-authorized-countries"
+        />
+        <div className="space-y-1.5">
+          <Label className="text-sm font-semibold text-zinc-200">Requires visa sponsorship</Label>
+          <Select value={boolSelectValue(defaults.requires_sponsorship)} onValueChange={(v) => update("requires_sponsorship", boolSelectToValue(v))}>
+            <SelectTrigger className="h-11 rounded-xl bg-sprout-surface-2 border-sprout-border text-white" data-testid="app-defaults-sponsorship">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-sprout-surface border-sprout-border text-white">
+              <SelectItem value="unset">Not set</SelectItem>
+              <SelectItem value="yes">Yes</SelectItem>
+              <SelectItem value="no">No</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-sm font-semibold text-zinc-200">Willing to relocate</Label>
+          <Select value={boolSelectValue(defaults.willing_to_relocate)} onValueChange={(v) => update("willing_to_relocate", boolSelectToValue(v))}>
+            <SelectTrigger className="h-11 rounded-xl bg-sprout-surface-2 border-sprout-border text-white" data-testid="app-defaults-relocate">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-sprout-surface border-sprout-border text-white">
+              <SelectItem value="unset">Not set</SelectItem>
+              <SelectItem value="yes">Yes</SelectItem>
+              <SelectItem value="no">No</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <Field
+          label="Default referral source"
+          value={defaults.referral_source}
+          onChange={(v) => update("referral_source", v)}
+          placeholder="Swiipr"
+          testId="app-defaults-referral-source"
+        />
+        <div className="space-y-1.5">
+          <Label className="text-sm font-semibold text-zinc-200">Privacy consent default</Label>
+          <Select value={boolSelectValue(defaults.privacy_consent)} onValueChange={(v) => update("privacy_consent", boolSelectToValue(v))}>
+            <SelectTrigger className="h-11 rounded-xl bg-sprout-surface-2 border-sprout-border text-white" data-testid="app-defaults-privacy-consent">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-sprout-surface border-sprout-border text-white">
+              <SelectItem value="unset">Not set</SelectItem>
+              <SelectItem value="yes">I agree</SelectItem>
+              <SelectItem value="no">I do not agree</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <label className="flex items-center justify-between gap-4 rounded-xl border border-sprout-border bg-sprout-surface-2 p-4">
+          <span>
+            <span className="block text-sm font-semibold text-zinc-200">Prefer not to say for demographics</span>
+            <span className="mt-1 block text-xs text-sprout-muted">Use decline/prefer-not-to-say options when forms provide them.</span>
+          </span>
+          <Switch
+            checked={Boolean(defaults.prefer_not_to_say_demographics)}
+            onCheckedChange={(checked) => update("prefer_not_to_say_demographics", checked)}
+            data-testid="app-defaults-prefer-not-demographics"
+          />
+        </label>
+        <div className="space-y-1.5">
+          <Label className="text-sm font-semibold text-zinc-200">Former employer or non-compete restriction</Label>
+          <Select
+            value={boolSelectValue(defaults.former_employer_restriction_or_noncompete)}
+            onValueChange={(v) => update("former_employer_restriction_or_noncompete", boolSelectToValue(v))}
+          >
+            <SelectTrigger className="h-11 rounded-xl bg-sprout-surface-2 border-sprout-border text-white" data-testid="app-defaults-noncompete">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-sprout-surface border-sprout-border text-white">
+              <SelectItem value="unset">Not set</SelectItem>
+              <SelectItem value="yes">Yes</SelectItem>
+              <SelectItem value="no">No</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
     </Sheet>
   );
@@ -124,6 +297,9 @@ function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
 
 function profileCompletion(profile) {
   if (!profile) return 0;
+  if (typeof profile.profile_completion?.percentage === "number") {
+    return profile.profile_completion.percentage;
+  }
   const checks = [
     Boolean(profile.cv_text),
     Boolean(profile.contact?.name),
@@ -346,6 +522,18 @@ export default function Profile() {
               </div>
               <Pencil className="h-4 w-4 text-zinc-400" />
             </button>
+            <button
+              type="button"
+              onClick={() => setOpenSheet("application-defaults")}
+              className="flex w-full items-center justify-between border-b border-zinc-100 py-4 text-left"
+              data-testid="profile-application-defaults-card"
+            >
+              <div>
+                <p className="font-semibold">Application defaults</p>
+                <p className="text-sm text-zinc-500">Reusable answers for one-swipe applications</p>
+              </div>
+              <ShieldCheck className="h-4 w-4 text-zinc-400" />
+            </button>
           </div>
         )}
 
@@ -376,6 +564,12 @@ export default function Profile() {
       />
       <JobPreferencesSheet
         open={openSheet === "preferences"}
+        profile={profile}
+        onClose={() => setOpenSheet(null)}
+        onSaved={reload}
+      />
+      <ApplicationDefaultsSheet
+        open={openSheet === "application-defaults"}
         profile={profile}
         onClose={() => setOpenSheet(null)}
         onSaved={reload}

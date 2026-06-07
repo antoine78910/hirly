@@ -170,11 +170,8 @@ def _supabase_row(table: str, document: Document) -> Dict[str, Any]:
     if table == "applications":
         return {
             "application_id": _document_key(table, doc),
-            # Preserve user_id/job_id inside data. Keep top-level columns null so
-            # legacy unique indexes on (user_id, job_id) cannot collapse multiple
-            # historical application attempts for the same job.
-            "user_id": None,
-            "job_id": None,
+            "user_id": doc.get("user_id"),
+            "job_id": doc.get("job_id"),
             "status": doc.get("status"),
             "package_status": doc.get("package_status"),
             "submission_status": doc.get("submission_status"),
@@ -463,8 +460,11 @@ class SupabaseCollectionAdapter(CollectionPort):
             return documents
         return [document for document in documents if _matches_filter(document, filter)]
 
-    async def find_one(self, filter: Filter, projection: Projection = None):
-        rows = await SupabaseCursorAdapter(self, filter, projection).limit(1).to_list(1)
+    async def find_one(self, filter: Filter, projection: Projection = None, sort: Optional[List[tuple[str, int]]] = None):
+        cursor = SupabaseCursorAdapter(self, filter, projection)
+        if sort:
+            cursor.sort(sort)
+        rows = await cursor.limit(1).to_list(1)
         return rows[0] if rows else None
 
     def find(self, filter: Optional[Filter] = None, projection: Projection = None):

@@ -84,6 +84,76 @@ const descriptionPreview = (job) => {
   return safeDescription(job);
 };
 
+const swipeSuccessCopy = (data, job) => {
+  const submission = data?.submission_status || "not_submitted";
+  const pkg = data?.package_status || data?.application_status;
+
+  if (submission === "prepared") {
+    return {
+      title: "Application prepared",
+      description: `${job.company} is ready in Tracker. Not submitted yet.`,
+    };
+  }
+  if (submission === "action_required" || submission === "blocked") {
+    return {
+      title: "Action required",
+      description: "Open Tracker to answer the remaining application questions.",
+    };
+  }
+  if (submission === "blocked_captcha") {
+    return {
+      title: "Human verification needed",
+      description: "Open Tracker to complete the manual verification step.",
+    };
+  }
+  if (submission === "prepare_failed") {
+    return {
+      title: "Application package generated",
+      description: "Browser preparation failed. You can retry from Tracker.",
+    };
+  }
+
+  if (pkg === "generated_text_only") {
+    return {
+      title: "Application text generated",
+      description: "CV and cover letter text are ready, but the file package needs review.",
+    };
+  }
+  if (pkg === "needs_profile_data") {
+    return {
+      title: "More profile data needed",
+      description: "Complete your CV/profile to generate a stronger application.",
+    };
+  }
+  if (pkg === "needs_job_data") {
+    return {
+      title: "More job data needed",
+      description: "This job post does not include enough detail for a strong tailored package.",
+    };
+  }
+  if (pkg === "failed") {
+    return {
+      title: "Application saved",
+      description: "Generation failed. Open Tracker to review or retry later.",
+    };
+  }
+
+  return {
+    title: `Application package generated for ${job.company}`,
+    description: "CV and cover letter are ready. Not submitted yet.",
+  };
+};
+
+const swipeErrorMessage = (e) => {
+  if (e?.code === "ECONNABORTED") {
+    return "Application generation is still taking longer than expected. Check Tracker in a moment.";
+  }
+  const detail = e?.response?.data?.detail;
+  if (typeof detail === "string") return detail;
+  if (detail?.message) return detail.message;
+  return "Swipe failed";
+};
+
 function DescriptionSections({ job }) {
   const sections = (job.job_description_sections || [])
     .filter((section) => section?.title && Array.isArray(section.bullets) && section.bullets.length)
@@ -540,15 +610,28 @@ export default function Swipe() {
       setAppLoading(true);
       setAppliedToday((n) => n + 1);
     }
+    const loadingToastId = intent === "apply"
+      ? toast.loading("Generating tailored application...", {
+          description: "This can take up to a minute for detailed job posts.",
+        })
+      : null;
     try {
-      const { data } = await api.post("/swipe", { job_id: job.job_id, direction });
+      const { data } = await api.post(
+        "/swipe",
+        { job_id: job.job_id, direction },
+        intent === "apply" ? { timeout: 180000 } : undefined,
+      );
       if (intent === "apply" && data.applied) {
-        toast.success(`Application package generated for ${job.company}`, {
-          description: "CV and cover letter are ready. Not submitted yet.",
+        const copy = swipeSuccessCopy(data, job);
+        toast.success(copy.title, {
+          id: loadingToastId,
+          description: copy.description,
           duration: 3500,
         });
       }
-    } catch (e) { toast.error("Swipe failed"); }
+    } catch (e) {
+      toast.error(swipeErrorMessage(e), loadingToastId ? { id: loadingToastId } : undefined);
+    }
     finally { if (intent === "apply") setAppLoading(false); }
     if (jobs.length <= 3) loadFeed();
   };

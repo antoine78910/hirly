@@ -169,26 +169,67 @@ class LeverBrowserSubmissionEngine:
 
                             phase = "extract_fields"
                             fields_detected = await extract_fields(page)
+                            self._after_fields_detected(url, fields_detected)
+                            await self._prepare_field_models(url, fields_detected, job, app_doc, profile, user)
+                            if self.provider == "greenhouse":
+                                logger.info(
+                                    "greenhouse_fields_detected url=%s fields=%s",
+                                    url,
+                                    self._safe_json([
+                                        {
+                                            "selector": field.get("selector"),
+                                            "tag": field.get("tag"),
+                                            "type": field.get("type"),
+                                            "label": field.get("label"),
+                                            "aria_label": field.get("aria_label"),
+                                            "placeholder": field.get("placeholder"),
+                                            "name": field.get("name"),
+                                            "id": field.get("id"),
+                                            "required": field.get("required"),
+                                            "options": field.get("options") or [],
+                                        }
+                                        for field in fields_detected
+                                        if field.get("visible")
+                                    ])[:12000],
+                                )
                             if not fields_detected:
                                 blockers.append(blocker("form_not_found", "No application form fields were detected."))
 
                             phase = "fill_fields"
                             for field in fields_detected:
-                                fill = match_field(field, profile, app_doc, user)
+                                fill = self._match_field(field, profile, app_doc, user)
+                                self._log_answer_resolution(field, fill)
                                 if not fill:
-                                    if self._is_tsmg_field(field):
+                                    if self._is_tsmg_field(field) or field.get("required"):
                                         field_fill_debug.append(self._fill_debug(field, None, False, False, ""))
                                     continue
                                 field_type = str(field.get("type") or "text").lower()
                                 selector = field.get("selector")
                                 if not selector and not self._is_tsmg_field(field):
                                     continue
+                                valid_before, reject_reason = self._validate_fill_before_attempt(field, fill)
+                                if not valid_before:
+                                    value_preview = self._safe_value_preview(fill.get("value") if fill else "")
+                                    debug_item = self._fill_debug(field, fill, False, False, "")
+                                    debug_item.update({
+                                        "fill_rejected": True,
+                                        "rejection_reason": reject_reason,
+                                        "attempted_value_preview": value_preview,
+                                    })
+                                    field_fill_debug.append(debug_item)
+                                    self._log_fill_rejected(field, fill, reject_reason)
+                                    if field.get("required"):
+                                        blockers.append(blocker(
+                                            "field_fill_rejected",
+                                            f"Field fill rejected by validation: {reject_reason}",
+                                            field,
+                                        ))
+                                    continue
                                 try:
+                                    success = False
+                                    value_after = ""
                                     if self._is_tsmg_field(field):
                                         success, value_after = await self._fill_exact_named_field(page, field, fill)
-                                        field_fill_debug.append(self._fill_debug(field, fill, True, success, value_after))
-                                        if success:
-                                            fields_filled.append(self._filled(field, fill))
                                     elif field_type == "file":
                                         phase = "upload_files"
                                         upload = await self._upload_file(
@@ -202,21 +243,49 @@ class LeverBrowserSubmissionEngine:
                                             file_uploads.append(upload)
                                             if upload.field_name == "resume":
                                                 resume_uploaded = True
-                                            fields_filled.append(self._filled(field, fill))
+                                            success = True
+                                            value_after = upload.filename
                                         phase = "fill_fields"
                                     elif field_type in ("text", "email", "tel", "url", "search", "textarea", "contenteditable"):
                                         await self._human_fill_text(page, selector, str(fill["value"]))
-                                        fields_filled.append(self._filled(field, fill))
+                                        success = True
+                                        value_after = await self._read_field_value_after_fill(page, field, str(fill["value"]))
                                     elif field_type == "select":
                                         if await self._select_option(page, selector, str(fill["value"])):
-                                            fields_filled.append(self._filled(field, fill))
+                                            success = True
+                                            value_after = await self._read_field_value_after_fill(page, field, str(fill["value"]))
+                                    elif field_type == "combobox":
+                                        if await self._select_combobox_option(page, field, str(fill["value"])):
+                                            success = True
+                                            value_after = await self._read_field_value_after_fill(page, field, str(fill["value"]))
                                     elif field_type in ("checkbox", "radio"):
                                         if self._should_check_option(field, fill):
                                             await self._human_check(page, selector)
+                                            success = True
+                                            value_after = "checked"
+                                    if success:
+                                        valid_after, invalid_reason = self._validate_fill_after_attempt(field, fill, value_after)
+                                        debug_item = self._fill_debug(field, fill, True, valid_after, value_after)
+                                        if not valid_after:
+                                            debug_item.update({
+                                                "invalid_after_fill": True,
+                                                "invalid_after_fill_reason": invalid_reason,
+                                            })
+                                            await self._clear_invalid_field_value(page, field)
+                                            blockers.append(blocker(
+                                                "invalid_field_value_after_fill",
+                                                f"Filled value failed validation: {invalid_reason}",
+                                                field,
+                                            ))
+                                        field_fill_debug.append(debug_item)
+                                        self._log_fill_attempt(field, fill, valid_after, value_after)
+                                        if valid_after:
                                             fields_filled.append(self._filled(field, fill))
+                                    elif fill:
+                                        field_fill_debug.append(self._fill_debug(field, fill, True, False, value_after))
                                 except Exception as exc:
-                                    if self._is_tsmg_field(field):
-                                        field_fill_debug.append(self._fill_debug(field, fill, True, False, "", exc))
+                                    field_fill_debug.append(self._fill_debug(field, fill, True, False, "", exc))
+                                    self._log_fill_attempt(field, fill, False, "", exc)
                                     blockers.append(blocker(
                                         "field_fill_failed",
                                         f"Could not fill field: {exc.__class__.__name__}",
@@ -234,7 +303,7 @@ class LeverBrowserSubmissionEngine:
                                 if field.get("name")
                             }
                             for field in fields_after:
-                                if not field.get("required") or field.get("disabled"):
+                                if not field.get("required") or field.get("disabled") or not field.get("visible"):
                                     continue
                                 if field.get("type") != "file" and not self._field_has_value(field):
                                     unfilled_required_fields.append(self._field_summary(field))
@@ -251,6 +320,7 @@ class LeverBrowserSubmissionEngine:
                                             field,
                                         ))
 
+                            self._after_required_verification(fields_after, unfilled_required_fields, blockers)
                             blocker_debug = self._cleanup_stale_field_fill_blockers(blockers, field_value_by_name)
                             blockers = blocker_debug["blockers_after_revalidation"]
                             final_click_candidate_selector = await self._final_click_candidate_selector(page)
@@ -284,6 +354,14 @@ class LeverBrowserSubmissionEngine:
                                     failure_reason = "not_ready_for_final_click"
                             phase = "screenshot"
                             screenshot_b64 = base64.b64encode(await page.screenshot(full_page=True)).decode("ascii")
+                            self._after_final_prepare_result(
+                                ready_for_final_click=ready_for_final_click,
+                                blockers=blockers,
+                                unfilled_required_fields=unfilled_required_fields,
+                                resume_uploaded=resume_uploaded,
+                                final_click_candidate_selector=final_click_candidate_selector,
+                                submit_disabled=submit_disabled,
+                            )
                         except BrowserSubmissionError:
                             raise
                         except Exception as exc:
@@ -428,6 +506,69 @@ class LeverBrowserSubmissionEngine:
         message = str(exc).strip()
         return message[:800] if message else fallback
 
+    def _safe_json(self, value: Any) -> str:
+        try:
+            import json
+            return json.dumps(value, default=str)
+        except Exception:
+            return str(value)
+
+    def _match_field(
+        self,
+        field: Dict[str, Any],
+        profile: Dict[str, Any],
+        app_doc: Dict[str, Any],
+        user: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        return match_field(field, profile, app_doc, user)
+
+    def _after_fields_detected(self, url: str, fields: List[Dict[str, Any]]) -> None:
+        return None
+
+    async def _prepare_field_models(
+        self,
+        url: str,
+        fields: List[Dict[str, Any]],
+        job: Dict[str, Any],
+        app_doc: Dict[str, Any],
+        profile: Dict[str, Any],
+        user: Dict[str, Any],
+    ) -> None:
+        return None
+
+    def _log_answer_resolution(self, field: Dict[str, Any], fill: Optional[Dict[str, Any]]) -> None:
+        return None
+
+    def _log_fill_attempt(
+        self,
+        field: Dict[str, Any],
+        fill: Optional[Dict[str, Any]],
+        success: bool,
+        value_after: str,
+        exc: Optional[Exception] = None,
+    ) -> None:
+        return None
+
+    def _after_required_verification(
+        self,
+        fields_after: List[Dict[str, Any]],
+        unfilled_required_fields: List[Dict[str, Any]],
+        blockers: List[Dict[str, Any]],
+    ) -> None:
+        return None
+
+    def _after_final_prepare_result(
+        self,
+        *,
+        ready_for_final_click: bool,
+        blockers: List[Dict[str, Any]],
+        unfilled_required_fields: List[Dict[str, Any]],
+        resume_uploaded: bool,
+        final_click_candidate_selector: Optional[str],
+        submit_disabled: bool,
+    ) -> None:
+        return None
+
     async def _human_delay(self, min_ms: Optional[int] = None, max_ms: Optional[int] = None) -> None:
         if not self.human_pace:
             return
@@ -553,8 +694,14 @@ class LeverBrowserSubmissionEngine:
     ) -> Dict[str, Any]:
         item = {
             "field_name": field.get("name"),
+            "id": field.get("id"),
             "field_type": field.get("type"),
             "label": field.get("label"),
+            "placeholder": field.get("placeholder"),
+            "options": field.get("options") or [],
+            "aria_label": field.get("aria_label"),
+            "nearby_text": field.get("nearby_text"),
+            "field_container_text": field.get("field_container_text"),
             "matched_value": fill.get("value") if fill else None,
             "match_source": fill.get("source") if fill else None,
             "attempted_fill": attempted,
@@ -564,6 +711,66 @@ class LeverBrowserSubmissionEngine:
         if exc:
             item["fill_error"] = f"{exc.__class__.__name__}: {self._safe_exception_message(exc, '')}"
         return item
+
+    def _validate_fill_before_attempt(self, field: Dict[str, Any], fill: Dict[str, Any]) -> tuple[bool, str]:
+        return True, ""
+
+    def _validate_fill_after_attempt(self, field: Dict[str, Any], fill: Dict[str, Any], value_after: str) -> tuple[bool, str]:
+        return True, ""
+
+    def _log_fill_rejected(self, field: Dict[str, Any], fill: Optional[Dict[str, Any]], reason: str) -> None:
+        logger.info(
+            "%s_fill_rejected field=%s reason=%s",
+            self.provider,
+            field.get("label") or field.get("name") or field.get("id"),
+            reason,
+        )
+
+    def _safe_value_preview(self, value: Any) -> str:
+        text = str(value or "").replace("\n", " ").replace("\r", " ").strip()
+        return text[:80]
+
+    async def _read_field_value_after_fill(self, page: Any, field: Dict[str, Any], fallback: str = "") -> str:
+        selector = field.get("selector")
+        field_name = str(field.get("name") or "")
+        try:
+            if field_name:
+                value = await self._field_value_by_name(page, field_name)
+                if str(value or "").strip():
+                    return str(value)
+            if selector:
+                return await page.locator(selector).first.evaluate(
+                    """(element) => {
+                        if (!element) return "";
+                        if (element.tagName && element.tagName.toLowerCase() === "select") {
+                            const option = element.options && element.selectedIndex >= 0 ? element.options[element.selectedIndex] : null;
+                            return String((option && (option.label || option.textContent || option.value)) || element.value || "");
+                        }
+                        return String(element.value || element.getAttribute("aria-label") || element.textContent || "");
+                    }"""
+                )
+        except Exception:
+            return fallback
+        return fallback
+
+    async def _clear_invalid_field_value(self, page: Any, field: Dict[str, Any]) -> None:
+        selector = field.get("selector")
+        field_name = str(field.get("name") or "")
+        try:
+            if field_name:
+                await self._set_field_value_with_js(page, field_name, "")
+                return
+            if selector:
+                await page.locator(selector).first.evaluate(
+                    """(element) => {
+                        if (!element) return;
+                        if ("value" in element) element.value = "";
+                        element.dispatchEvent(new Event("input", {bubbles: true}));
+                        element.dispatchEvent(new Event("change", {bubbles: true}));
+                    }"""
+                )
+        except Exception:
+            return
 
     async def _fill_exact_named_field(self, page: Any, field: Dict[str, Any], fill: Dict[str, Any]) -> tuple[bool, str]:
         field_name = str(field.get("name") or "")
@@ -636,10 +843,14 @@ class LeverBrowserSubmissionEngine:
 
     def _field_has_value(self, field: Dict[str, Any]) -> bool:
         value = str(field.get("value_before") or "").strip()
+        if str(field.get("type") or "").lower() == "combobox" and not value:
+            value = str(field.get("nearby_text") or field.get("field_container_text") or "").strip()
         if not value:
             return False
         normalized = canonical(value)
         if normalized in ("select", "select one", "select an option", "please select"):
+            return False
+        if normalized.startswith("select ") and len(normalized.split()) <= 3:
             return False
         return True
 
@@ -690,6 +901,49 @@ class LeverBrowserSubmissionEngine:
             return True
         except Exception:
             return False
+
+    async def _select_combobox_option(self, page: Any, field: Dict[str, Any], value: str) -> bool:
+        selector = field.get("selector")
+        if not selector or not value:
+            return False
+        locator = page.locator(selector).first
+        await self._human_scroll_to_locator(locator)
+        await self._human_move_to_locator(page, locator)
+        try:
+            await locator.click(timeout=5000)
+            await self._human_delay()
+        except Exception:
+            return False
+
+        candidates = [value]
+        normalized = canonical(value)
+        if normalized == "swiipr":
+            candidates.extend(["Other", "Other website", "Job board", "Online"])
+        elif normalized in ("i agree", "agree"):
+            candidates.extend(["I agree", "Agree", "Yes"])
+        elif normalized in ("no", "false"):
+            candidates.extend(["No"])
+
+        for candidate in candidates:
+            try:
+                option = page.get_by_role("option", name=candidate).first
+                if await option.count():
+                    await option.click(timeout=5000)
+                    await self._human_delay()
+                    return True
+            except Exception:
+                pass
+            try:
+                text_option = page.locator(
+                    "[role='option'], [id*='option'], .select__option, [class*='option']"
+                ).filter(has_text=candidate).first
+                if await text_option.count():
+                    await text_option.click(timeout=5000)
+                    await self._human_delay()
+                    return True
+            except Exception:
+                pass
+        return False
 
     def _should_check_option(self, field: Dict[str, Any], fill: Dict[str, Any]) -> bool:
         value = canonical(fill.get("value"))
@@ -1008,8 +1262,17 @@ class LeverBrowserSubmissionEngine:
             "id": field.get("id"),
             "label": field.get("label"),
             "type": field.get("type"),
-            "required": bool(field.get("required")),
+            "placeholder": field.get("placeholder"),
             "options": field.get("options") or [],
+            "aria_label": field.get("aria_label"),
+            "nearby_text": field.get("nearby_text"),
+            "field_container_text": field.get("field_container_text"),
+            "matched_value": None,
+            "match_source": None,
+            "attempted_fill": False,
+            "fill_success": False,
+            "value_after_fill": field.get("value_before") or field.get("nearby_text") or "",
+            "required": bool(field.get("required")),
             "visible": bool(field.get("visible")),
             "disabled": bool(field.get("disabled")),
         }

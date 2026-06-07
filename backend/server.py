@@ -29,6 +29,7 @@ import re
 import base64
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Dict, Any, Literal
 from datetime import datetime, timezone, timedelta
@@ -37,9 +38,11 @@ import httpx
 # Optional file parsing libs
 from pypdf import PdfReader
 import docx as docx_lib
-from application_documents import build_application_package, cover_letter_to_text
+from application_documents import DOCX_MIME, build_application_package, cover_letter_to_text, sanitize_docx_text
 from browser_submission.base import BrowserSubmissionError, browser_submit_dry_run_enabled
+from browser_submission.greenhouse import GreenhouseBrowserSubmissionEngine
 from browser_submission.lever import LeverBrowserSubmissionEngine
+from browser_submission.matching import suggested_profile_key as browser_suggested_profile_key
 from db import create_database_adapter
 from db.supabase_adapter import count_supabase_table, test_supabase_connection
 from jobs_service import (
@@ -94,6 +97,7 @@ class Profile(BaseModel):
     remote_preference: Optional[str] = "any"   # remote | onsite | hybrid | any
     seniority: Optional[str] = None
     application_answers_profile: Dict[str, Any] = Field(default_factory=dict)
+    application_defaults: Dict[str, Any] = Field(default_factory=dict)
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -140,7 +144,7 @@ class SupabaseSessionRequest(BaseModel):
 
 class ResolveMissingInfoRequest(BaseModel):
     answers: Dict[str, Any] = Field(default_factory=dict)
-    save_to_profile: bool = True
+    save_to_profile: bool = False
 
 
 class Application(BaseModel):
@@ -149,8 +153,8 @@ class Application(BaseModel):
     user_id: str
     job_id: str
     status: Literal["applied", "viewed", "interview", "rejected", "offer"] = "applied"
-    package_status: Literal["not_generated", "generated", "failed"] = "not_generated"
-    submission_status: Literal["not_submitted", "ready", "submitted", "failed", "blocked"] = "not_submitted"
+    package_status: Literal["not_generated", "generated", "generated_text_only", "failed", "pending_generation", "needs_profile_data", "needs_job_data"] = "not_generated"
+    submission_status: Literal["not_submitted", "ready", "prepared", "submitted", "failed", "blocked", "action_required", "blocked_captcha", "prepare_failed", "unknown"] = "not_submitted"
     submitted_at: Optional[str] = None
     submission_provider: Optional[str] = None
     submission_response_id: Optional[str] = None
@@ -189,6 +193,10 @@ class ContactUpdate(BaseModel):
     location: Optional[str] = None
     linkedin: Optional[str] = None
     website: Optional[str] = None
+
+
+class ApplicationDefaultsUpdate(BaseModel):
+    application_defaults: Dict[str, Any] = Field(default_factory=dict)
 
 
 class OnboardingCategoryItem(BaseModel):
@@ -574,6 +582,8 @@ async def claude_generate_application(profile: Dict[str, Any], job: Dict[str, An
         "certifications, metrics, work authorization, or tools not present in the candidate data."
     )
 
+    job_description = job.get("clean_description") or job.get("description") or ""
+    job_requirements = job.get("requirements") or []
     prompt = f"""Create a tailored application package for this job.
 
 Rules:
@@ -593,15 +603,19 @@ Candidate profile:
   "experience": profile.get("experience", []),
   "education": profile.get("education", []),
   "seniority": profile.get("seniority"),
+  "target_role": profile.get("target_role"),
+  "target_roles": profile.get("target_roles", []),
+  "target_location": profile.get("target_location"),
+  "remote_preference": profile.get("remote_preference"),
   "template_style": profile.get("template_style", "modern"),
 }, indent=2)}
 
 Job:
-- Title: {job['title']}
-- Company: {job['company']}
-- Location: {job['location']} ({job['remote']})
-- Description: {job['description']}
-- Requirements: {json.dumps(job.get('requirements', []))}
+- Title: {job.get('title')}
+- Company: {job.get('company')}
+- Location: {job.get('location')} ({job.get('remote')})
+- Description: {job_description}
+- Requirements: {json.dumps(job_requirements)}
 - Tech: {json.dumps(job.get('tech_stack', []))}
 
 Return JSON with this exact schema:
@@ -636,36 +650,139 @@ Return JSON with this exact schema:
 async def _generate_application_doc(user: User, profile: Dict[str, Any], job: Dict[str, Any]) -> Dict[str, Any]:
     try:
         gen = await claude_generate_application(profile, job)
-    except LLMProviderNotConfigured:
-        raise
     except Exception as exc:
         logger.exception("Application generation failed")
-        raise HTTPException(status_code=502, detail="AI application generation failed") from exc
+        return _pending_application_doc(user, job, exc)
+
+    return _build_generated_application_doc(user, profile, job, gen)
+
+
+def _build_generated_application_doc(
+    user: User,
+    profile: Dict[str, Any],
+    job: Dict[str, Any],
+    gen: Dict[str, Any],
+    package_builder: Any = build_application_package,
+) -> Dict[str, Any]:
+    gen = sanitize_docx_text(gen)
+    profile = sanitize_docx_text(profile)
+    cv_text = str(profile.get("cv_text") or "")
+    job_description = str(job.get("clean_description") or job.get("description") or "")
+    tailored_resume = gen.get("tailored_resume_structured") or gen.get("tailored_resume") or {}
+    cover_letter = gen.get("tailored_cover_letter") or gen.get("cover_letter") or {}
+    tailored_resume_length = len(json.dumps(tailored_resume, default=str))
+    cover_letter_length = len(cover_letter_to_text(cover_letter))
+    generation_mode = "ai" if gen else "fallback"
+    logger.info(
+        "application_generation_quality user_id=%s job_id=%s has_cv_text=%s cv_text_length=%s job_description_length=%s tailored_resume_length=%s cover_letter_length=%s match_score=%s generation_mode=%s",
+        user.user_id,
+        job.get("job_id"),
+        bool(cv_text),
+        len(cv_text),
+        len(job_description),
+        tailored_resume_length,
+        cover_letter_length,
+        gen.get("match_score"),
+        generation_mode,
+    )
+    package_status = "generated"
+    generation_status = "generated"
+    generation_error = None
+    application_package: Dict[str, Any]
+    data_quality_status = None
+    if len(cv_text) < 300:
+        data_quality_status = "needs_profile_data"
+    elif len(job_description) < 300:
+        data_quality_status = "needs_job_data"
 
     try:
-        application_package = build_application_package(profile, gen)
+        if data_quality_status:
+            application_package = {
+                "tailored_resume_structured": tailored_resume,
+                "tailored_cover_letter": cover_letter,
+                "application_answers": gen.get("application_answers") or [],
+                "tailored_cv_file_b64": None,
+                "tailored_cv_filename": None,
+                "tailored_cv_mime": None,
+                "template_preservation_status": "not_supported",
+                "template_preservation_notes": (
+                    "Application text was generated, but inputs were too thin to claim a tailored CV package."
+                ),
+            }
+            package_status = data_quality_status
+            generation_error = data_quality_status
+        else:
+            application_package = package_builder(profile, gen)
     except Exception as exc:
-        logger.exception("Tailored CV file generation failed")
-        raise HTTPException(status_code=502, detail="Tailored CV generation failed") from exc
+        logger.exception("DOCX_BUILD_FAILED")
+        generation_error = "docx_build_failed"
+        application_package = {
+            "tailored_resume_structured": tailored_resume,
+            "tailored_cover_letter": cover_letter,
+            "application_answers": gen.get("application_answers") or [],
+            "tailored_cv_file_b64": None,
+            "tailored_cv_filename": None,
+            "tailored_cv_mime": None,
+            "template_preservation_status": "not_supported",
+            "template_preservation_notes": (
+                "DOCX generation failed after sanitizing AI output. "
+                "Generated text content was saved without a tailored file."
+            ),
+        }
+        package_status = "generated_text_only"
 
     return {
         "application_id": f"app_{uuid.uuid4().hex[:12]}",
         "user_id": user.user_id,
         "job_id": job["job_id"],
         "status": "applied",
-        "package_status": "generated",
+        "package_status": package_status,
+        "generation_status": generation_status,
+        "generation_error": generation_error,
         "submission_status": "not_submitted",
         "submitted_at": None,
         "submission_provider": None,
         "submission_response_id": None,
         "submission_error": None,
-        "tailored_resume": gen.get("tailored_resume", {}),
-        "cover_letter": gen.get("cover_letter", {}),
+        "tailored_resume": tailored_resume,
+        "cover_letter": cover_letter,
         **application_package,
         "match_score": gen.get("match_score", 75),
         "match_reasons": gen.get("match_reasons", []),
         "interview_prep": gen.get("interview_prep", []),
         "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _pending_application_doc(user: User, job: Dict[str, Any], error: Optional[Exception] = None) -> Dict[str, Any]:
+    now = datetime.now(timezone.utc).isoformat()
+    error_message = None
+    if error is not None:
+        message = str(error).strip() or error.__class__.__name__
+        error_message = message[:500]
+    return {
+        "application_id": f"app_{uuid.uuid4().hex[:12]}",
+        "user_id": user.user_id,
+        "job_id": job["job_id"],
+        "status": "applied",
+        "package_status": "pending_generation",
+        "submission_status": "not_submitted",
+        "submitted_at": None,
+        "submission_provider": None,
+        "submission_response_id": None,
+        "submission_error": error_message,
+        "tailored_resume": {},
+        "cover_letter": {},
+        "tailored_resume_structured": {},
+        "tailored_cover_letter": {},
+        "application_answers": [],
+        "match_score": None,
+        "match_reasons": [],
+        "interview_prep": [],
+        "generation_status": "pending_generation",
+        "generation_error": error_message,
+        "created_at": now,
+        "updated_at": now,
     }
 
 
@@ -691,6 +808,15 @@ def _normalize_application_status_fields(app_doc: Dict[str, Any]) -> Dict[str, A
             _all_payload_fields(payload),
         )
     return app
+
+
+def _application_text_lengths(app_doc: Dict[str, Any]) -> Dict[str, int]:
+    tailored_resume = app_doc.get("tailored_resume_structured") or app_doc.get("tailored_resume") or {}
+    cover_letter = app_doc.get("tailored_cover_letter") or app_doc.get("cover_letter") or {}
+    return {
+        "tailored_resume_length": len(json.dumps(tailored_resume, default=str)) if tailored_resume else 0,
+        "cover_letter_length": len(cover_letter_to_text(cover_letter)) if cover_letter else 0,
+    }
 
 
 # ===================== Career Coach (Interviews + Improve) =====================
@@ -888,7 +1014,35 @@ async def get_profile(user: User = Depends(get_current_user)):
     )
     if not profile:
         return None
+    profile["profile_completion"] = _profile_completion(profile)
     return profile
+
+
+def _profile_completion(profile: Dict[str, Any]) -> Dict[str, Any]:
+    defaults = profile.get("application_defaults") or {}
+    contact = profile.get("contact") or {}
+    checks = [
+        ("cv_uploaded", bool(profile.get("cv_text") or profile.get("cv_filename"))),
+        ("target_roles", bool(profile.get("target_role") or profile.get("target_roles"))),
+        ("location", bool(profile.get("target_location") or profile.get("target_location_data"))),
+        ("linkedin_or_portfolio", bool(contact.get("linkedin") or contact.get("website") or contact.get("github"))),
+        ("application_defaults", all(
+            defaults.get(key) not in (None, "")
+            for key in (
+                "work_authorized_countries",
+                "requires_sponsorship",
+                "current_location_city",
+                "former_employer_restriction_or_noncompete",
+            )
+        ) or bool(defaults.get("prefer_not_to_say_demographics"))),
+    ]
+    completed = sum(1 for _, ok in checks if ok)
+    return {
+        "percentage": round((completed / len(checks)) * 100),
+        "completed": completed,
+        "total": len(checks),
+        "items": {key: ok for key, ok in checks},
+    }
 
 
 @api_router.delete("/profile")
@@ -900,6 +1054,46 @@ async def delete_account(user: User = Depends(get_current_user)):
     await db.user_sessions.delete_many({"user_id": user.user_id})
     await db.users.delete_one({"user_id": user.user_id})
     return {"ok": True}
+
+
+@api_router.put("/profile/application-defaults")
+async def update_application_defaults(body: ApplicationDefaultsUpdate, user: User = Depends(get_current_user)):
+    defaults = body.application_defaults or {}
+    if not isinstance(defaults, dict):
+        raise HTTPException(status_code=400, detail="application_defaults must be an object")
+    allowed_keys = {
+        "country",
+        "city",
+        "phone_country_code",
+        "work_authorized_countries",
+        "requires_sponsorship",
+        "willing_to_relocate",
+        "current_location_country",
+        "current_location_city",
+        "referral_source",
+        "privacy_consent",
+        "eeo_gender",
+        "eeo_race",
+        "eeo_veteran",
+        "eeo_disability",
+        "eeo_lgbtq",
+        "prefer_not_to_say_demographics",
+        "former_company_history",
+        "former_employer_restriction_or_noncompete",
+    }
+    clean = {key: value for key, value in defaults.items() if key in allowed_keys}
+    now = datetime.now(timezone.utc).isoformat()
+    update_fields = {f"application_defaults.{key}": value for key, value in clean.items()}
+    update_fields["updated_at"] = now
+    await db.profiles.update_one(
+        {"user_id": user.user_id},
+        {"$set": update_fields},
+        upsert=True,
+    )
+    profile = await db.profiles.find_one({"user_id": user.user_id}, {"_id": 0, "cv_original_b64": 0})
+    if profile:
+        profile["profile_completion"] = _profile_completion(profile)
+    return {"ok": True, "application_defaults": (profile or {}).get("application_defaults") or {}, "profile": profile}
 
 
 @api_router.patch("/profile/extras")
@@ -1847,8 +2041,17 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
         existing_app = await db.applications.find_one({"user_id": user.user_id, "job_id": req.job_id}, {"_id": 0})
         if existing_app:
             normalized = _normalize_application_status_fields(existing_app)
+            duplicate_lengths = _application_text_lengths(normalized)
             phase = "response_build_start"
-            log_phase("response_build_start", duplicate_application=True)
+            log_phase(
+                "response_build_start",
+                duplicate_application=True,
+                application_id=normalized.get("application_id"),
+                ats_provider=job.get("ats_provider"),
+                package_status=normalized.get("package_status"),
+                submission_status=normalized.get("submission_status"),
+                **duplicate_lengths,
+            )
             response = {
                 "ok": True,
                 "applied": True,
@@ -1856,24 +2059,57 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
                 "duplicate": bool(existing),
                 "application_id": normalized["application_id"],
                 "package_status": normalized["package_status"],
+                "application_status": normalized["package_status"],
                 "submission_status": normalized["submission_status"],
             }
             phase = "response_build_done"
-            log_phase("response_build_done", duplicate_application=True)
+            log_phase(
+                "response_build_done",
+                duplicate_application=True,
+                application_id=normalized.get("application_id"),
+                status_returned_to_frontend=normalized.get("submission_status"),
+            )
             phase = "swipe_complete"
-            log_phase("swipe_complete", duplicate_application=True)
+            log_phase(
+                "swipe_complete",
+                duplicate_application=True,
+                application_id=normalized.get("application_id"),
+                status_returned_to_frontend=normalized.get("submission_status"),
+            )
             return response
 
         phase = "application_generation_start"
+        generation_started_at = time.perf_counter()
         log_phase("application_generation_start")
-        doc = await _generate_application_doc(user, profile, job)
-        phase = "application_generation_done"
-        log_phase(
-            "application_generation_done",
-            application_id=doc.get("application_id"),
-            package_status=doc.get("package_status"),
-            submission_status=doc.get("submission_status"),
-        )
+        try:
+            doc = await _generate_application_doc(user, profile, job)
+            generation_elapsed_ms = int((time.perf_counter() - generation_started_at) * 1000)
+            phase = "application_generation_done"
+            log_phase(
+                "application_generation_done",
+                application_id=doc.get("application_id"),
+                package_status=doc.get("package_status"),
+                submission_status=doc.get("submission_status"),
+                **_application_text_lengths(doc),
+                elapsed_ms=generation_elapsed_ms,
+            )
+        except Exception as exc:
+            generation_elapsed_ms = int((time.perf_counter() - generation_started_at) * 1000)
+            phase = "application_generation_failed"
+            log_phase(
+                "application_generation_failed",
+                elapsed_ms=generation_elapsed_ms,
+                exception_class=exc.__class__.__name__,
+                message=(str(exc).strip() or exc.__class__.__name__)[:500],
+            )
+            logger.exception(
+                "application_generation_failed user_id=%s job_id=%s elapsed_ms=%s exception=%s",
+                user.user_id,
+                req.job_id,
+                generation_elapsed_ms,
+                exc.__class__.__name__,
+            )
+            doc = _pending_application_doc(user, job, exc)
 
         phase = "application_upsert_start"
         log_phase("application_upsert_start", application_id=doc.get("application_id"))
@@ -1882,20 +2118,139 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
             {"$setOnInsert": doc},
             upsert=True,
         )
-        saved_doc = await db.applications.find_one({"user_id": user.user_id, "job_id": req.job_id}, {"_id": 0})
+        saved_doc = None
+        application_id_doc = None
+        user_job_doc = None
+        if doc.get("application_id"):
+            application_id_doc = await db.applications.find_one({"application_id": doc["application_id"]}, {"_id": 0})
+        log_phase(
+            "application_verify_by_application_id_found",
+            application_id=doc.get("application_id"),
+            found=bool(application_id_doc),
+        )
+        user_job_doc = await db.applications.find_one({"user_id": user.user_id, "job_id": req.job_id}, {"_id": 0})
+        log_phase(
+            "application_verify_by_user_job_found",
+            application_id=(user_job_doc or {}).get("application_id"),
+            found=bool(user_job_doc),
+        )
+        if application_id_doc:
+            saved_doc = application_id_doc
+            log_phase("application_verify_fallback_used", fallback="application_id_primary")
+        elif user_job_doc:
+            saved_doc = user_job_doc
+            log_phase("application_verify_fallback_used", fallback="user_job_secondary")
         if not saved_doc:
-            raise RuntimeError("Application upsert did not produce a saved document")
+            logger.warning(
+                "application_verification_failed user_id=%s job_id=%s application_id=%s insert_returned_without_readback=true",
+                user.user_id,
+                req.job_id,
+                doc.get("application_id"),
+            )
+            log_phase("verification_failed", application_id=doc.get("application_id"))
+            saved_doc = doc
         saved_doc = _normalize_application_status_fields(saved_doc)
+        browser_prepare_started = False
+
+        if (
+            req.direction == "right"
+            and job.get("ats_provider") == "greenhouse"
+            and saved_doc.get("package_status") == "generated"
+        ):
+            browser_prepare_started = True
+            phase = "greenhouse_prepare_start"
+            log_phase(
+                "greenhouse_prepare_start",
+                application_id=saved_doc.get("application_id"),
+                browser_prepare_started=True,
+                package_status=saved_doc.get("package_status"),
+                **_application_text_lengths(saved_doc),
+            )
+            prepare_started_at = time.perf_counter()
+            try:
+                prepare_timeout = int(os.environ.get("GREENHOUSE_PREPARE_AFTER_SWIPE_TIMEOUT_SECONDS", "90"))
+                prepare_result = await asyncio.wait_for(
+                    _prepare_greenhouse_browser_fill(req.job_id, user, click_submit=False),
+                    timeout=prepare_timeout,
+                )
+                phase = "greenhouse_prepare_done"
+                log_phase(
+                    "greenhouse_prepare_done",
+                    elapsed_ms=int((time.perf_counter() - prepare_started_at) * 1000),
+                    application_id=saved_doc.get("application_id"),
+                    ready_for_final_click=prepare_result.get("ready_for_final_click"),
+                    action_required=prepare_result.get("action_required"),
+                    captcha_required=prepare_result.get("captcha_required"),
+                    blockers_count=len(prepare_result.get("blockers") or []),
+                    browser_prepare_result_status=prepare_result.get("submission_status"),
+                )
+                refreshed_doc = await db.applications.find_one(
+                    {"application_id": saved_doc["application_id"]},
+                    {"_id": 0},
+                )
+                if refreshed_doc:
+                    saved_doc = _normalize_application_status_fields(refreshed_doc)
+                log_phase(
+                    "greenhouse_prepare_status_refreshed",
+                    application_id=saved_doc.get("application_id"),
+                    final_submission_status_saved=saved_doc.get("submission_status"),
+                    browser_prepare_result_status=prepare_result.get("submission_status"),
+                )
+            except Exception as exc:
+                phase = "greenhouse_prepare_failed"
+                elapsed_ms = int((time.perf_counter() - prepare_started_at) * 1000)
+                log_phase(
+                    "greenhouse_prepare_failed",
+                    elapsed_ms=elapsed_ms,
+                    exception_class=exc.__class__.__name__,
+                    message=(str(exc).strip() or exc.__class__.__name__)[:500],
+                )
+                logger.exception(
+                    "greenhouse_prepare_after_swipe_failed user_id=%s job_id=%s application_id=%s elapsed_ms=%s",
+                    user.user_id,
+                    req.job_id,
+                    saved_doc.get("application_id"),
+                    elapsed_ms,
+                )
+                now = datetime.now(timezone.utc).isoformat()
+                await db.applications.update_one(
+                    {"application_id": saved_doc["application_id"], "user_id": user.user_id},
+                    {"$set": {
+                        "submission_status": "prepare_failed",
+                        "submission_error": "greenhouse_browser_prepare_failed",
+                        "greenhouse_browser_prepare_error": {
+                            "exception_class": exc.__class__.__name__,
+                            "message": (str(exc).strip() or exc.__class__.__name__)[:500],
+                            "elapsed_ms": elapsed_ms,
+                        },
+                        "updated_at": now,
+                    }},
+                )
+                saved_doc = {
+                    **saved_doc,
+                    "submission_status": "prepare_failed",
+                    "submission_error": "greenhouse_browser_prepare_failed",
+                }
+
         phase = "application_upsert_done"
         log_phase(
             "application_upsert_done",
             application_id=saved_doc.get("application_id"),
+            ats_provider=job.get("ats_provider"),
             package_status=saved_doc.get("package_status"),
+            **_application_text_lengths(saved_doc),
+            browser_prepare_started=browser_prepare_started,
+            final_submission_status_saved=saved_doc.get("submission_status"),
             submission_status=saved_doc.get("submission_status"),
         )
 
         phase = "response_build_start"
-        log_phase("response_build_start")
+        log_phase(
+            "response_build_start",
+            application_id=saved_doc.get("application_id"),
+            package_status=saved_doc.get("package_status"),
+            submission_status=saved_doc.get("submission_status"),
+        )
         response = {
             "ok": True,
             "applied": True,
@@ -1903,12 +2258,21 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
             "duplicate": bool(existing),
             "application_id": saved_doc["application_id"],
             "package_status": saved_doc["package_status"],
+            "application_status": saved_doc["package_status"],
             "submission_status": saved_doc["submission_status"],
         }
         phase = "response_build_done"
-        log_phase("response_build_done")
+        log_phase(
+            "response_build_done",
+            application_id=saved_doc.get("application_id"),
+            status_returned_to_frontend=response.get("submission_status"),
+        )
         phase = "swipe_complete"
-        log_phase("swipe_complete")
+        log_phase(
+            "swipe_complete",
+            application_id=saved_doc.get("application_id"),
+            status_returned_to_frontend=response.get("submission_status"),
+        )
         return response
     except LLMProviderNotConfigured as exc:
         phase = "application_generation_start"
@@ -2484,6 +2848,831 @@ async def lever_submission_benchmark(body: LeverSubmissionBenchmarkRequest, user
     }
 
 
+GREENHOUSE_BROWSER_ENDPOINT_VERSION = "greenhouse_prepare_browser_fill_endpoint_v1_experiment_2026_06_06"
+
+
+def _greenhouse_module_file() -> str:
+    module = __import__(GreenhouseBrowserSubmissionEngine.__module__, fromlist=["__file__"])
+    return str(getattr(module, "__file__", GreenhouseBrowserSubmissionEngine.__module__))
+
+
+def _greenhouse_runtime_markers(engine: Optional[GreenhouseBrowserSubmissionEngine] = None) -> Dict[str, Any]:
+    engine_obj = engine or GreenhouseBrowserSubmissionEngine(headless=_browser_engine_headless())
+    return {
+        "endpoint_version": GREENHOUSE_BROWSER_ENDPOINT_VERSION,
+        "engine_version": getattr(engine_obj, "engine_version", "unknown"),
+        "greenhouse_module_file": _greenhouse_module_file(),
+        "server_file": __file__,
+        "last_launch_marker": getattr(engine_obj, "last_launch_marker", None),
+    }
+
+
+def _greenhouse_marked_detail(detail: Any, engine: Optional[GreenhouseBrowserSubmissionEngine] = None) -> Dict[str, Any]:
+    if isinstance(detail, dict):
+        return {**_greenhouse_runtime_markers(engine), **detail}
+    return {**_greenhouse_runtime_markers(engine), "message": detail}
+
+
+def _browser_field_public_name(field: Dict[str, Any]) -> str:
+    return str(field.get("id") or field.get("name") or _canonical_field_name(field.get("label") or "field"))
+
+
+def _greenhouse_browser_required_question(field: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    suggested_key = browser_suggested_profile_key(field)
+    options = field.get("options") or []
+    if (
+        not options
+        and str(field.get("type") or "").lower() in ("select", "combobox", "radio")
+        and suggested_key
+        and suggested_key not in {"country", "city", "current_location_city", "current_location_country", "eeo_gender", "eeo_race", "eeo_veteran", "eeo_disability", "eeo_lgbtq"}
+    ):
+        options = [
+            {"value": "Yes", "label": "Yes"},
+            {"value": "No", "label": "No"},
+        ]
+    return {
+        "field_name": _browser_field_public_name(field),
+        "field_id": field.get("id"),
+        "name": field.get("name"),
+        "label": str(field.get("label") or field.get("nearby_text") or "Required question"),
+        "question": str(field.get("label") or field.get("nearby_text") or "Required question"),
+        "reason": "user_answer_required" if suggested_key else "required_answer_missing",
+        "field_type": field.get("type") or "input_text",
+        "type": field.get("type") or "input_text",
+        "options": options,
+        "suggested_profile_key": suggested_key,
+    }
+
+
+def _greenhouse_browser_required_questions(result: Dict[str, Any]) -> List[Dict[str, Any]]:
+    questions = []
+    for field in result.get("unfilled_required_fields") or []:
+        if not isinstance(field, dict):
+            continue
+        question = _greenhouse_browser_required_question(field)
+        if question:
+            questions.append(question)
+    return _dedupe_missing_information(questions)
+
+
+def _greenhouse_browser_payload_from_required_questions(questions: List[Dict[str, Any]]) -> Dict[str, Any]:
+    fields = {}
+    payload_questions = []
+    for item in questions:
+        field_name = item.get("field_name")
+        if not field_name:
+            continue
+        fields[field_name] = ""
+        payload_questions.append({
+            "name": field_name,
+            "label": item.get("label") or item.get("question") or field_name,
+            "type": item.get("field_type") or item.get("type") or "input_text",
+            "required": True,
+            "value": "",
+            "options": item.get("options") or [],
+            "suggested_profile_key": item.get("suggested_profile_key"),
+        })
+    return {
+        "method": "browser",
+        "provider": "greenhouse_browser",
+        "fields": fields,
+        "questions": payload_questions,
+    }
+
+
+def _greenhouse_hosted_url_validation(url: Any) -> Dict[str, Any]:
+    text = str(url or "").strip()
+    if not text:
+        return {"ok": False, "reason": "empty"}
+    try:
+        parsed = urlparse(text)
+    except Exception as exc:
+        return {"ok": False, "reason": f"parse_error:{exc.__class__.__name__}"}
+    host = parsed.netloc.lower()
+    if parsed.scheme not in ("http", "https") or not host:
+        return {"ok": False, "reason": "missing_http_host", "host": host}
+    allowed = (
+        "greenhouse.io",
+        "greenhouse.com",
+        "boards.greenhouse",
+        "job-boards.greenhouse",
+    )
+    ok = any(token in host for token in allowed)
+    return {
+        "ok": ok,
+        "reason": "greenhouse_hosted_url" if ok else "non_greenhouse_host",
+        "host": host,
+    }
+
+
+def _greenhouse_job_board_parts(job: Dict[str, Any]) -> tuple[Optional[str], Optional[str]]:
+    board_token = job.get("board_token")
+    greenhouse_job_id = job.get("provider_job_id")
+    external_id = str(job.get("external_id") or "")
+    if (not board_token or not greenhouse_job_id) and ":" in external_id:
+        left, right = external_id.split(":", 1)
+        board_token = board_token or left
+        greenhouse_job_id = greenhouse_job_id or right
+    return (str(board_token).strip() if board_token else None, str(greenhouse_job_id).strip() if greenhouse_job_id else None)
+
+
+def _append_greenhouse_url_candidate(candidates: List[Dict[str, Any]], source: str, url: Any) -> None:
+    text = str(url or "").strip()
+    if not text:
+        return
+    if any(item.get("url") == text for item in candidates):
+        return
+    candidates.append({
+        "source": source,
+        "url": text,
+        "validation": _greenhouse_hosted_url_validation(text),
+    })
+
+
+async def _resolve_greenhouse_browser_application_url(job: Dict[str, Any]) -> Dict[str, Any]:
+    candidates: List[Dict[str, Any]] = []
+    for key in ("apply_url", "hosted_url", "application_url", "external_url", "source"):
+        _append_greenhouse_url_candidate(candidates, f"job.{key}", job.get(key))
+
+    raw = job.get("raw_provider_payload") or {}
+    if isinstance(raw, dict):
+        for key in (
+            "absolute_url",
+            "external_url",
+            "application_url",
+            "apply_url",
+            "applyUrl",
+            "hosted_url",
+            "hostedUrl",
+            "url",
+        ):
+            _append_greenhouse_url_candidate(candidates, f"raw_provider_payload.{key}", raw.get(key))
+
+    board_token, greenhouse_job_id = _greenhouse_job_board_parts(job)
+    if board_token and greenhouse_job_id:
+        try:
+            provider = get_board_provider("greenhouse")
+            preview = await provider.inspect_application_form(board_token, greenhouse_job_id)
+            _append_greenhouse_url_candidate(candidates, "greenhouse.form_preview.application_url", preview.get("application_url"))
+        except Exception as exc:
+            logger.warning(
+                "greenhouse_url_form_preview_failed job_id=%s board_token=%s greenhouse_job_id=%s exception=%s message=%s",
+                job.get("job_id"),
+                board_token,
+                greenhouse_job_id,
+                exc.__class__.__name__,
+                str(exc)[:300],
+            )
+        _append_greenhouse_url_candidate(
+            candidates,
+            "derived.boards_greenhouse_url",
+            f"https://boards.greenhouse.io/{board_token}/jobs/{greenhouse_job_id}",
+        )
+
+    selected = next((item for item in candidates if item.get("validation", {}).get("ok")), None)
+    result = {
+        "selected_url": selected.get("url") if selected else None,
+        "selected_source": selected.get("source") if selected else None,
+        "candidates": candidates,
+        "validation_result": selected.get("validation") if selected else {"ok": False, "reason": "no_valid_greenhouse_url"},
+    }
+    logger.info(
+        "greenhouse_url_candidates job_id=%s candidates=%s",
+        job.get("job_id"),
+        json.dumps([
+            {
+                "source": item.get("source"),
+                "url": item.get("url"),
+                "validation": item.get("validation"),
+            }
+            for item in candidates
+        ], default=str)[:3000],
+    )
+    logger.info(
+        "greenhouse_url_selected job_id=%s selected=%s source=%s",
+        job.get("job_id"),
+        result["selected_url"],
+        result["selected_source"],
+    )
+    logger.info(
+        "greenhouse_url_validation_result job_id=%s result=%s",
+        job.get("job_id"),
+        result["validation_result"],
+    )
+    return result
+
+
+async def _load_or_create_greenhouse_browser_application(job_id: str, user: User) -> tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+    job = await db.jobs.find_one({"job_id": job_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.get("ats_provider") != "greenhouse":
+        raise HTTPException(status_code=400, detail="Job is not a Greenhouse job")
+
+    profile = await db.profiles.find_one({"user_id": user.user_id}, {"_id": 0})
+    if not profile or not profile.get("cv_text"):
+        raise HTTPException(status_code=400, detail="Upload your CV before preparing a browser submission.")
+
+    app_doc = await db.applications.find_one(
+        {"user_id": user.user_id, "job_id": job_id},
+        {"_id": 0},
+        sort=[("created_at", -1)],
+    )
+    package_missing = (
+        not app_doc
+        or not app_doc.get("tailored_resume_structured")
+        or not app_doc.get("tailored_cover_letter")
+        or not app_doc.get("tailored_cv_file_b64")
+    )
+    if package_missing:
+        generated_doc = await _generate_application_doc(user, profile, job)
+        if app_doc:
+            generated_doc["application_id"] = app_doc["application_id"]
+            generated_doc["created_at"] = app_doc.get("created_at") or generated_doc["created_at"]
+            await db.applications.update_one(
+                {"user_id": user.user_id, "job_id": job_id, "application_id": app_doc["application_id"]},
+                {"$set": generated_doc},
+                upsert=True,
+            )
+        else:
+            await db.applications.insert_one(generated_doc)
+        app_doc = await db.applications.find_one(
+            {"user_id": user.user_id, "job_id": job_id},
+            {"_id": 0},
+            sort=[("created_at", -1)],
+        )
+
+    if not app_doc:
+        raise HTTPException(status_code=500, detail="Application package could not be created")
+    return job, profile, app_doc
+
+
+async def _prepare_greenhouse_browser_fill(job_id: str, user: User, click_submit: bool = False) -> Dict[str, Any]:
+    engine = GreenhouseBrowserSubmissionEngine(headless=_browser_engine_headless())
+    try:
+        job, profile, app_doc = await _load_or_create_greenhouse_browser_application(job_id, user)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _log_browser_exception("Greenhouse browser load_application failed", exc)
+        raise HTTPException(
+            status_code=502,
+            detail=_greenhouse_marked_detail({
+                "phase": "load_application",
+                "exception_class": exc.__class__.__name__,
+                "message": str(exc).strip() or "Failed to load Greenhouse application context.",
+            }, engine),
+        ) from exc
+
+    logger.info(
+        "Greenhouse browser provider class=%s file=%s endpoint_version=%s engine_version=%s",
+        engine.__class__.__name__,
+        getattr(__import__(engine.__class__.__module__, fromlist=["__file__"]), "__file__", engine.__class__.__module__),
+        GREENHOUSE_BROWSER_ENDPOINT_VERSION,
+        getattr(engine, "engine_version", "unknown"),
+    )
+    url_resolution = await _resolve_greenhouse_browser_application_url(job)
+    selected_url = url_resolution.get("selected_url")
+    if not selected_url:
+        now = datetime.now(timezone.utc).isoformat()
+        blocker_item = {
+            "code": "missing_greenhouse_application_url",
+            "message": "A valid Greenhouse hosted application URL could not be found for this job.",
+            "field": None,
+        }
+        result_dict = {
+            **_greenhouse_runtime_markers(engine),
+            "job_id": job["job_id"],
+            "application_id": app_doc["application_id"],
+            "company": job.get("company"),
+            "title": job.get("title"),
+            "application_url": None,
+            "fields_detected": [],
+            "fields_filled": [],
+            "blockers": [blocker_item],
+            "unfilled_required_fields": [],
+            "file_uploads": [],
+            "ready_for_final_click": False,
+            "captcha_required": False,
+            "action_required": False,
+            "success_likelihood": 0.0,
+            "submission_status": "blocked",
+            "failure_reason": "missing_greenhouse_application_url",
+            "greenhouse_url_candidates": url_resolution.get("candidates") or [],
+            "greenhouse_url_validation_result": url_resolution.get("validation_result"),
+        }
+        await db.applications.update_one(
+            {"application_id": app_doc["application_id"]},
+            {"$set": {
+                "user_id": user.user_id,
+                "job_id": job_id,
+                "submission_status": "blocked",
+                "submission_error": "missing_greenhouse_application_url",
+                "prepared_missing_information": [],
+                "prepared_blockers": [blocker_item],
+                "greenhouse_browser_fill_result": _sanitize_browser_result_for_application(result_dict),
+                "greenhouse_browser_prepared_at": now,
+                "updated_at": now,
+            }},
+        )
+        logger.info(
+            "greenhouse_url_validation_result job_id=%s application_id=%s blocked_reason=missing_greenhouse_application_url",
+            job.get("job_id"),
+            app_doc.get("application_id"),
+        )
+        return result_dict
+
+    job_for_browser = {
+        **job,
+        "application_url": selected_url,
+        "external_url": selected_url,
+        "greenhouse_url_candidates": url_resolution.get("candidates") or [],
+        "greenhouse_url_selected": selected_url,
+        "greenhouse_url_validation_result": url_resolution.get("validation_result"),
+    }
+    try:
+        result = await engine.prepare_fill(
+            job=job_for_browser,
+            app_doc=app_doc,
+            profile=profile,
+            user=user.model_dump(mode="json"),
+            click_submit=click_submit,
+        )
+    except BrowserSubmissionError as exc:
+        _log_browser_exception(f"Greenhouse browser failed during {exc.phase}", exc)
+        raise HTTPException(status_code=502, detail=_greenhouse_marked_detail(exc.safe_detail(), engine)) from exc
+    except ValueError as exc:
+        _log_browser_exception("Greenhouse browser validation failed", exc)
+        raise HTTPException(
+            status_code=400,
+            detail=_greenhouse_marked_detail({
+                "phase": "load_application",
+                "exception_class": exc.__class__.__name__,
+                "message": str(exc).strip() or "Invalid Greenhouse browser submission request.",
+            }, engine),
+        ) from exc
+    except Exception as exc:
+        _log_browser_exception("Greenhouse browser unexpected failure", exc)
+        raise HTTPException(
+            status_code=502,
+            detail=_greenhouse_marked_detail({
+                "phase": "open_browser",
+                "exception_class": exc.__class__.__name__,
+                "message": str(exc).strip() or "Unexpected Greenhouse browser failure.",
+            }, engine),
+        ) from exc
+
+    result_dict = result.to_dict()
+    result_dict["greenhouse_url_candidates"] = url_resolution.get("candidates") or []
+    result_dict["greenhouse_url_selected"] = selected_url
+    result_dict["greenhouse_url_validation_result"] = url_resolution.get("validation_result")
+    result_for_storage = _sanitize_browser_result_for_application(result_dict)
+    now = datetime.now(timezone.utc).isoformat()
+    if not click_submit:
+        required_questions = _greenhouse_browser_required_questions(result_dict)
+        recognized_required_names = {item.get("field_name") for item in required_questions}
+        unfilled_required_names = {
+            _browser_field_public_name(field)
+            for field in result_dict.get("unfilled_required_fields") or []
+            if isinstance(field, dict)
+        }
+        action_required = bool(required_questions) and unfilled_required_names == recognized_required_names
+        status_updates: Dict[str, Any] = {}
+        if action_required:
+            payload = _greenhouse_browser_payload_from_required_questions(required_questions)
+            result_dict["action_required"] = True
+            result_dict["action_required_reason"] = "user_answers_required"
+            result_dict["required_questions"] = required_questions
+            result_dict["message"] = "A few answers are needed to complete this application."
+            status_updates = {
+                "submission_status": "action_required",
+                "submission_error": "user_answers_required",
+                "prepared_application_payload": payload,
+                "prepared_missing_information": required_questions,
+                "prepared_blockers": [],
+            }
+        elif result_dict.get("captcha_required"):
+            status_updates = {
+                "submission_status": "blocked_captcha",
+                "submission_error": "captcha_required",
+                "prepared_missing_information": [],
+                "prepared_blockers": result_dict.get("blockers") or [],
+            }
+        elif result_dict.get("ready_for_final_click"):
+            status_updates = {
+                "submission_status": "prepared",
+                "submission_error": None,
+                "prepared_missing_information": [],
+                "prepared_blockers": [],
+            }
+        elif result_dict.get("blockers"):
+            status_updates = {
+                "submission_status": "blocked",
+                "submission_error": "browser_prepare_blocked",
+                "prepared_missing_information": [],
+                "prepared_blockers": result_dict.get("blockers") or [],
+            }
+        prepare_status = status_updates.get("submission_status") or app_doc.get("submission_status") or "not_submitted"
+        result_dict["submission_status"] = prepare_status
+        logger.info(
+            "greenhouse_browser_prepare_status job_id=%s application_id=%s package_status=%s ready_for_final_click=%s action_required=%s captcha_required=%s blockers_count=%s result_status=%s",
+            job.get("job_id"),
+            app_doc.get("application_id"),
+            app_doc.get("package_status"),
+            result_dict.get("ready_for_final_click"),
+            result_dict.get("action_required"),
+            result_dict.get("captcha_required"),
+            len(result_dict.get("blockers") or []),
+            prepare_status,
+        )
+        result_for_storage = _sanitize_browser_result_for_application(result_dict)
+        await db.applications.update_one(
+            {"application_id": app_doc["application_id"]},
+            {"$set": {
+                "user_id": user.user_id,
+                "job_id": job_id,
+                "greenhouse_browser_fill_result": result_for_storage,
+                "greenhouse_browser_prepared_at": now,
+                "updated_at": now,
+                **status_updates,
+            }},
+        )
+        persisted = await db.applications.find_one({"application_id": app_doc["application_id"]}, {"_id": 0})
+        logger.info(
+            "greenhouse_browser_prepare_status_saved job_id=%s application_id=%s result_status=%s saved_status=%s update_filter=application_id",
+            job.get("job_id"),
+            app_doc.get("application_id"),
+            prepare_status,
+            (persisted or {}).get("submission_status"),
+        )
+
+    return {
+        **_greenhouse_runtime_markers(engine),
+        "job_id": job["job_id"],
+        "application_id": app_doc["application_id"],
+        "company": job.get("company"),
+        "title": job.get("title"),
+        **result_dict,
+    }
+
+
+async def _store_greenhouse_browser_submission_run(
+    *,
+    user: User,
+    result: Dict[str, Any],
+    dry_run: bool,
+) -> str:
+    now = datetime.now(timezone.utc).isoformat()
+    run_id = f"browser_run_{uuid.uuid4().hex[:16]}"
+    success_detected = bool(result.get("success_detected"))
+    status = (
+        "dry_run"
+        if dry_run
+        else "submitted"
+        if success_detected
+        else "blocked_captcha"
+        if result.get("captcha_required")
+        else "unknown"
+        if result.get("submit_clicked") and result.get("failure_reason") == "submission_status_unknown"
+        else "failed"
+    )
+    run_doc = {
+        "run_id": run_id,
+        "application_id": result.get("application_id"),
+        "job_id": result.get("job_id"),
+        "user_id": user.user_id,
+        "provider": "greenhouse_browser",
+        "status": status,
+        "dry_run": dry_run,
+        "screenshots": {
+            "prepared_b64": result.get("screenshot_b64"),
+            "submitted_b64": result.get("submit_screenshot_b64"),
+        },
+        "success_detected": success_detected,
+        "captcha_required": bool(result.get("captcha_required")),
+        "action_required": bool(result.get("action_required")),
+        "failure_reason": result.get("failure_reason"),
+        "post_submit_page_text_excerpt": result.get("post_submit_page_text_excerpt"),
+        "post_submit_errors": result.get("post_submit_errors"),
+        "submit_button_still_visible": result.get("submit_button_still_visible"),
+        "confirmation_text_found": result.get("confirmation_text_found"),
+        "final_url": result.get("final_url") or result.get("application_url"),
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.browser_submission_runs.insert_one(run_doc)
+    return run_id
+
+
+@api_router.post("/applications/greenhouse/prepare-browser-fill")
+async def greenhouse_prepare_browser_fill(body: GreenhousePrepareSubmitRequest, user: User = Depends(get_current_user)):
+    """Fill a Greenhouse hosted application page in Playwright and stop before submit."""
+    try:
+        return await _prepare_greenhouse_browser_fill(body.job_id, user)
+    except HTTPException as exc:
+        exc.detail = _greenhouse_marked_detail(exc.detail)
+        raise
+
+
+@api_router.post("/applications/greenhouse/browser-submit")
+async def greenhouse_browser_submit(body: GreenhousePrepareSubmitRequest, user: User = Depends(get_current_user)):
+    """Fill a Greenhouse hosted application page and optionally click submit when dry-run is disabled."""
+    try:
+        if browser_submit_dry_run_enabled():
+            result = await _prepare_greenhouse_browser_fill(body.job_id, user)
+            run_id = await _store_greenhouse_browser_submission_run(user=user, result=result, dry_run=True)
+            return {
+                **result,
+                "dry_run": True,
+                "browser_submission_run_id": run_id,
+                "stopped_before_submit": True,
+                "message": "Dry run successful. Application was filled but submit was not clicked.",
+            }
+        result = await _prepare_greenhouse_browser_fill(body.job_id, user, click_submit=True)
+        run_id = await _store_greenhouse_browser_submission_run(user=user, result=result, dry_run=False)
+        now = datetime.now(timezone.utc).isoformat()
+        if result.get("success_detected"):
+            await db.applications.update_one(
+                {"application_id": result["application_id"], "user_id": user.user_id},
+                {"$set": {
+                    "submission_status": "submitted",
+                    "submitted_at": now,
+                    "submission_provider": "greenhouse_browser",
+                    "submission_error": None,
+                    "browser_submission_run_id": run_id,
+                    "greenhouse_browser_submission_result": _sanitize_browser_result_for_application(result),
+                    "updated_at": now,
+                }},
+            )
+            return {
+                **result,
+                "dry_run": False,
+                "browser_submission_run_id": run_id,
+                "submission_status": "submitted",
+                "message": "Application submitted.",
+            }
+
+        if result.get("captcha_required"):
+            await db.applications.update_one(
+                {"application_id": result["application_id"], "user_id": user.user_id},
+                {"$set": {
+                    "submission_status": "action_required",
+                    "submission_error": "captcha_required",
+                    "submission_provider": "greenhouse_browser",
+                    "browser_submission_run_id": run_id,
+                    "greenhouse_browser_submission_result": _sanitize_browser_result_for_application(result),
+                    "updated_at": now,
+                }},
+            )
+            return {
+                **result,
+                "dry_run": False,
+                "browser_submission_run_id": run_id,
+                "submission_status": "action_required",
+                "captcha_required": True,
+                "action_required": True,
+                "message": "Human verification required to complete submission.",
+            }
+
+        if result.get("submit_clicked") and result.get("failure_reason") == "submission_status_unknown":
+            await db.applications.update_one(
+                {"application_id": result["application_id"], "user_id": user.user_id},
+                {"$set": {
+                    "submission_status": "unknown",
+                    "submission_error": "submission_status_unknown",
+                    "submission_provider": "greenhouse_browser",
+                    "browser_submission_run_id": run_id,
+                    "greenhouse_browser_submission_result": _sanitize_browser_result_for_application(result),
+                    "updated_at": now,
+                }},
+            )
+            return {
+                **result,
+                "dry_run": False,
+                "browser_submission_run_id": run_id,
+                "submission_status": "unknown",
+                "message": "Submit was clicked, but success confirmation was not detected.",
+            }
+
+        await db.applications.update_one(
+            {"application_id": result["application_id"], "user_id": user.user_id},
+            {"$set": {
+                "submission_status": "failed",
+                "submission_error": result.get("failure_reason") or "Greenhouse submission success was not detected.",
+                "submission_provider": "greenhouse_browser",
+                "browser_submission_run_id": run_id,
+                "greenhouse_browser_submission_result": _sanitize_browser_result_for_application(result),
+                "updated_at": now,
+            }},
+        )
+        return {
+            **result,
+            "dry_run": False,
+            "browser_submission_run_id": run_id,
+            "submission_status": "failed",
+            "message": "Submit was attempted, but success confirmation was not detected.",
+        }
+    except HTTPException as exc:
+        exc.detail = _greenhouse_marked_detail(exc.detail)
+        raise
+
+
+def _greenhouse_benchmark_summary(result: Dict[str, Any]) -> Dict[str, Any]:
+    fields_detected = result.get("fields_detected") or []
+    fields_filled = result.get("fields_filled") or []
+    blockers = result.get("blockers") or []
+    unfilled = result.get("unfilled_required_fields") or []
+    fill_debug = result.get("field_fill_debug") or []
+    action_required_fields = result.get("required_questions") or result.get("prepared_missing_information") or unfilled
+    failed_fields = [
+        item
+        for item in fill_debug
+        if item.get("attempted_fill") and not item.get("fill_success")
+    ]
+    rejected_fills = [item for item in fill_debug if item.get("fill_rejected")]
+    invalid_after_fills = [item for item in fill_debug if item.get("invalid_after_fill")]
+    suspicious_values = []
+    for item in fill_debug:
+        label = str(item.get("label") or item.get("field_name") or item.get("id") or "")
+        field_type = str(item.get("field_type") or "").lower()
+        value = str(item.get("value_after_fill") or item.get("matched_value") or "")
+        value_key = value.strip().lower()
+        if not value_key:
+            continue
+        label_key = label.strip().lower()
+        reason = item.get("rejection_reason") or item.get("invalid_after_fill_reason")
+        suspicious = None
+        if ("email" in label_key or field_type == "email") and ("@" not in value_key or "." not in value_key):
+            suspicious = "email_field_without_email_value"
+        elif ("linkedin" in label_key or field_type == "url") and (" " in value or (value and not value_key.startswith(("http://", "https://")))):
+            suspicious = "url_field_with_invalid_url_value"
+        elif ("phone" in label_key or field_type == "tel") and value and not any(ch.isdigit() for ch in value):
+            suspicious = "phone_field_without_digits"
+        elif ("first name" in label_key or "last name" in label_key) and "@" in value:
+            suspicious = "name_field_with_email_value"
+        elif reason:
+            suspicious = reason
+        if suspicious:
+            suspicious_values.append({
+                "field_name": item.get("field_name"),
+                "id": item.get("id"),
+                "label": item.get("label"),
+                "field_type": item.get("field_type"),
+                "value_preview": value[:80],
+                "reason": suspicious,
+                "attempted_fill": item.get("attempted_fill"),
+                "fill_success": item.get("fill_success"),
+            })
+    wrong_fill_count = len([
+        item for item in suspicious_values
+        if item.get("reason") in {
+            "email_field_without_email_value",
+            "url_field_with_invalid_url_value",
+            "phone_field_without_digits",
+            "name_field_with_email_value",
+        }
+    ])
+    return {
+        "job_id": result.get("job_id"),
+        "application_id": result.get("application_id"),
+        "company": result.get("company"),
+        "title": result.get("title"),
+        "url": result.get("greenhouse_url_selected") or result.get("application_url"),
+        "total_fields": len(fields_detected),
+        "required_fields": sum(1 for field in fields_detected if field.get("required")),
+        "autofilled_fields": len(fields_filled),
+        "action_required_fields": action_required_fields,
+        "action_required_count": len(action_required_fields),
+        "failed_fields": failed_fields,
+        "failed_fields_count": len(failed_fields),
+        "wrong_fill_count": wrong_fill_count,
+        "rejected_fill_count": len(rejected_fills),
+        "invalid_after_fill_count": len(invalid_after_fills),
+        "suspicious_values": suspicious_values,
+        "final_status": result.get("submission_status"),
+        "captcha_required": bool(result.get("captcha_required")),
+        "action_required": bool(result.get("action_required")),
+        "ready_for_final_click": bool(result.get("ready_for_final_click")),
+        "blockers": blockers,
+        "unfilled_required_fields": unfilled,
+        "success_likelihood": result.get("success_likelihood"),
+        "final_click_candidate_selector": result.get("final_click_candidate_selector"),
+        "submit_clicked": bool(result.get("submit_clicked")),
+        "success_detected": bool(result.get("success_detected")),
+        "failure_reason": result.get("failure_reason"),
+        "final_url": result.get("final_url") or result.get("application_url"),
+        "submission_status": result.get("submission_status"),
+        "captcha_debug": result.get("captcha_debug") or {},
+        "post_submit_errors": result.get("post_submit_errors") or [],
+        "submit_button_still_visible": result.get("submit_button_still_visible"),
+        "confirmation_text_found": result.get("confirmation_text_found"),
+    }
+
+
+@api_router.post("/applications/greenhouse/submission-benchmark")
+async def greenhouse_submission_benchmark(body: LeverSubmissionBenchmarkRequest, user: User = Depends(get_current_user)):
+    unique_job_ids = []
+    seen = set()
+    for job_id in body.job_ids[:10]:
+        if job_id and job_id not in seen:
+            unique_job_ids.append(job_id)
+            seen.add(job_id)
+
+    if not unique_job_ids:
+        raise HTTPException(status_code=400, detail="job_ids is required")
+
+    dry_run_enabled = browser_submit_dry_run_enabled()
+    real_submit_enabled = bool(body.allow_real_submit and not dry_run_enabled)
+    results = []
+    for job_id in unique_job_ids:
+        logger.info(
+            "Greenhouse benchmark job start: user_id=%s job_id=%s run_browser_submit=%s real_submit_enabled=%s",
+            user.user_id,
+            job_id,
+            body.run_browser_submit,
+            real_submit_enabled,
+        )
+        try:
+            if body.run_browser_submit and real_submit_enabled:
+                result = await _prepare_greenhouse_browser_fill(job_id, user, click_submit=True)
+                run_id = await _store_greenhouse_browser_submission_run(user=user, result=result, dry_run=False)
+                result = {**result, "browser_submission_run_id": run_id}
+            else:
+                result = await _prepare_greenhouse_browser_fill(job_id, user, click_submit=False)
+                run_id = await _store_greenhouse_browser_submission_run(user=user, result=result, dry_run=True)
+                result = {
+                    **result,
+                    "dry_run": True,
+                    "browser_submission_run_id": run_id,
+                    "stopped_before_submit": True,
+                }
+            results.append({"ok": True, **_greenhouse_benchmark_summary(result)})
+        except HTTPException as exc:
+            detail = exc.detail if isinstance(exc.detail, dict) else {"message": exc.detail}
+            results.append({
+                "ok": False,
+                "job_id": job_id,
+                "error": detail,
+                "captcha_required": False,
+                "ready_for_final_click": False,
+                "blockers": [],
+                "success_likelihood": None,
+                "final_click_candidate_selector": None,
+            })
+        except Exception as exc:
+            logger.exception("Greenhouse benchmark job failed: user_id=%s job_id=%s", user.user_id, job_id)
+            results.append({
+                "ok": False,
+                "job_id": job_id,
+                "error": {
+                    "exception_class": exc.__class__.__name__,
+                    "message": str(exc)[:500],
+                },
+                "captcha_required": False,
+                "ready_for_final_click": False,
+                "blockers": [],
+                "success_likelihood": None,
+                "final_click_candidate_selector": None,
+            })
+
+    clean_ready = [
+        item for item in results
+        if item.get("ok") and item.get("ready_for_final_click") and not item.get("captcha_required") and not item.get("blockers")
+    ]
+    total_jobs_tested = len(results)
+    ready_count = len(clean_ready)
+    captcha_count = sum(1 for item in results if item.get("captcha_required"))
+    blocker_count = sum(1 for item in results if item.get("blockers"))
+    unfilled_counts = [
+        len(item.get("unfilled_required_fields") or [])
+        for item in results
+        if item.get("ok")
+    ]
+    likelihoods = [
+        float(item.get("success_likelihood"))
+        for item in results
+        if item.get("success_likelihood") is not None
+    ]
+    denominator = total_jobs_tested or 1
+    return {
+        "dry_run": not real_submit_enabled,
+        "real_submit_enabled": real_submit_enabled,
+        "run_browser_submit": body.run_browser_submit,
+        "total": total_jobs_tested,
+        "total_jobs_tested": total_jobs_tested,
+        "ready_count": ready_count,
+        "ready_rate": round(ready_count / denominator, 4),
+        "captcha_count": captcha_count,
+        "captcha_rate": round(captcha_count / denominator, 4),
+        "blocker_count": blocker_count,
+        "blocker_rate": round(blocker_count / denominator, 4),
+        "average_unfilled_required_fields": round(sum(unfilled_counts) / len(unfilled_counts), 2) if unfilled_counts else 0,
+        "average_success_likelihood": round(sum(likelihoods) / len(likelihoods), 4) if likelihoods else 0,
+        "submit_selector_found_count": sum(1 for item in results if item.get("final_click_candidate_selector")),
+        "results": results,
+    }
+
+
 def _split_name(full_name: Optional[str]) -> Dict[str, str]:
     parts = (full_name or "").strip().split()
     if not parts:
@@ -2599,10 +3788,14 @@ def _profile_has_explicit_answer(profile: Dict[str, Any], field: Dict[str, Any])
 def _missing_info_item(field: Dict[str, Any], reason: str) -> Dict[str, Any]:
     return {
         "field_name": _public_missing_field_name(field),
+        "field_id": field.get("field_id") or field.get("id"),
         "label": str(field.get("label") or field.get("name") or "Unknown field"),
+        "question": str(field.get("question") or field.get("label") or field.get("name") or "Unknown field"),
         "reason": reason,
         "field_type": field.get("type") or "input_text",
+        "type": field.get("type") or "input_text",
         "options": field.get("options") or [],
+        "suggested_profile_key": field.get("suggested_profile_key"),
     }
 
 
@@ -2634,10 +3827,14 @@ def _normalize_missing_information(items: List[Any], known_fields: List[Dict[str
             )
             normalized.append({
                 "field_name": _public_missing_field_name(field or {"name": field_name, "label": label}),
+                "field_id": item.get("field_id") or item.get("id"),
                 "label": label or str(field.get("label") or "Unknown field"),
+                "question": item.get("question") or label or str(field.get("label") or "Unknown field"),
                 "reason": item.get("reason") or "missing_information",
                 "field_type": item.get("field_type") or field.get("type") or "input_text",
+                "type": item.get("type") or item.get("field_type") or field.get("type") or "input_text",
                 "options": item.get("options") or field.get("options") or [],
+                "suggested_profile_key": item.get("suggested_profile_key") or field.get("suggested_profile_key"),
             })
             continue
 
@@ -2787,7 +3984,15 @@ def _required_fields_count(payload: Dict[str, Any]) -> int:
 def _field_by_name_from_payload(payload: Dict[str, Any], field_name: str) -> Optional[Dict[str, Any]]:
     canonical = _canonical_field_name(field_name)
     for question in payload.get("questions") or []:
-        if isinstance(question, dict) and _canonical_field_key(question) == canonical:
+        if not isinstance(question, dict):
+            continue
+        question_names = {
+            _canonical_field_key(question),
+            _canonical_field_name(question.get("name")),
+            _canonical_field_name(question.get("field_name")),
+            _canonical_field_name(question.get("field_id")),
+        }
+        if canonical in question_names:
             return question
     for candidate_field in ("first_name", "last_name", "email", "phone"):
         if _canonical_field_name(candidate_field) == canonical:
@@ -2801,10 +4006,29 @@ def _profile_answer_updates_from_resolved_fields(payload: Dict[str, Any], answer
         field = _field_by_name_from_payload(payload, field_name)
         if not field or _is_empty_answer(value):
             continue
+        suggested_key = field.get("suggested_profile_key")
+        if suggested_key:
+            updates[f"application_defaults.{suggested_key}"] = value
+            if suggested_key.startswith("eeo_") and _is_demographic_decline_answer(value):
+                updates["application_defaults.prefer_not_to_say_demographics"] = True
+            continue
         key = _profile_answer_key(field)
         if key:
             updates[f"application_answers_profile.{key}"] = value
     return updates
+
+
+def _is_demographic_decline_answer(value: Any) -> bool:
+    text = str(value or "").strip().lower()
+    canonical = _canonical_field_name(value)
+    return any(token in text for token in (
+        "prefer not",
+        "decline",
+        "do not wish",
+        "don't wish",
+        "choose not to disclose",
+        "do not want to answer",
+    )) or any(token in canonical for token in ("prefer_not", "decline", "do_not_wish", "choose_not_to_disclose"))
 
 
 def _remove_resolved_missing_items(missing_items: List[Any], answers: Dict[str, Any]) -> List[Any]:
@@ -3661,7 +4885,13 @@ async def resolve_missing_info(
         for question in payload.get("questions") or []:
             if not isinstance(question, dict):
                 continue
-            if _canonical_field_key(question) == canonical:
+            question_names = {
+                _canonical_field_key(question),
+                _canonical_field_name(question.get("name")),
+                _canonical_field_name(question.get("field_name")),
+                _canonical_field_name(question.get("field_id")),
+            }
+            if canonical in question_names:
                 question["value"] = value
                 if question.get("name"):
                     fields[question["name"]] = value
@@ -4370,6 +5600,158 @@ async def dev_db_counts():
         "active_provider": DATABASE_PROVIDER,
         "supabase_config_present": bool(os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_SECRET_KEY")),
         "tables": counts,
+    }
+
+
+@api_router.get("/dev/applications-read-write-test")
+async def dev_applications_read_write_test(user: User = Depends(get_current_user)):
+    if not _dev_tools_enabled():
+        raise HTTPException(status_code=404, detail="Not found")
+    now = datetime.now(timezone.utc).isoformat()
+    test_doc = {
+        "application_id": f"app_rw_test_{uuid.uuid4().hex[:12]}",
+        "user_id": user.user_id,
+        "job_id": f"job_rw_test_{uuid.uuid4().hex[:12]}",
+        "status": "applied",
+        "package_status": "pending_generation",
+        "submission_status": "not_submitted",
+        "created_at": now,
+        "updated_at": now,
+        "dev_test": True,
+    }
+    await db.applications.update_one(
+        {"application_id": test_doc["application_id"]},
+        {"$set": test_doc},
+        upsert=True,
+    )
+    by_application_id = await db.applications.find_one(
+        {"application_id": test_doc["application_id"]},
+        {"_id": 0},
+    )
+    by_user_job = await db.applications.find_one(
+        {"user_id": test_doc["user_id"], "job_id": test_doc["job_id"]},
+        {"_id": 0},
+    )
+
+    backfill_limit = 500
+    rows = await db.applications.find({}, {"_id": 0}).limit(backfill_limit).to_list(backfill_limit)
+    backfilled = 0
+    backfill_errors = []
+    for row in rows:
+        if not row.get("application_id") or not row.get("user_id") or not row.get("job_id"):
+            continue
+        try:
+            await db.applications.update_one(
+                {"application_id": row["application_id"]},
+                {"$set": {
+                    "application_id": row["application_id"],
+                    "user_id": row["user_id"],
+                    "job_id": row["job_id"],
+                    "status": row.get("status"),
+                    "package_status": row.get("package_status"),
+                    "submission_status": row.get("submission_status"),
+                    "updated_at": row.get("updated_at") or now,
+                }},
+                upsert=True,
+            )
+            backfilled += 1
+        except Exception as exc:
+            if len(backfill_errors) < 5:
+                backfill_errors.append({
+                    "application_id": row.get("application_id"),
+                    "exception_class": exc.__class__.__name__,
+                    "message": str(exc)[:300],
+                })
+
+    return {
+        "active_provider": DATABASE_PROVIDER,
+        "created_application_id": test_doc["application_id"],
+        "created_job_id": test_doc["job_id"],
+        "read_by_application_id_found": by_application_id is not None,
+        "read_by_user_id_job_id_found": by_user_job is not None,
+        "read_by_application_id": {
+            "application_id": (by_application_id or {}).get("application_id"),
+            "user_id": (by_application_id or {}).get("user_id"),
+            "job_id": (by_application_id or {}).get("job_id"),
+        },
+        "read_by_user_id_job_id": {
+            "application_id": (by_user_job or {}).get("application_id"),
+            "user_id": (by_user_job or {}).get("user_id"),
+            "job_id": (by_user_job or {}).get("job_id"),
+        },
+        "backfill_scanned": len(rows),
+        "backfilled_top_level_user_job": backfilled,
+        "backfill_errors": backfill_errors,
+    }
+
+
+@api_router.get("/dev/docx-fallback-test")
+async def dev_docx_fallback_test(user: User = Depends(get_current_user)):
+    if not _dev_tools_enabled():
+        raise HTTPException(status_code=404, detail="Not found")
+
+    def failing_package_builder(profile: Dict[str, Any], generated: Dict[str, Any]) -> Dict[str, Any]:
+        raise ValueError("All strings must be XML compatible: Unicode or ASCII, no NULL bytes or control characters")
+
+    profile = {
+        "user_id": user.user_id,
+        "contact": {
+            "name": f"{user.name}\x00",
+            "email": user.email,
+        },
+        "cv_text": "Profile text\x00 with bad chars\x07",
+        "cv_filename": "cv.docx",
+        "cv_mime": DOCX_MIME,
+    }
+    job = {
+        "job_id": f"job_docx_fallback_test_{uuid.uuid4().hex[:8]}",
+        "title": "DOCX Fallback Test",
+        "company": "Swiipr",
+    }
+    generated = {
+        "tailored_resume": {
+            "summary": "Summary with null\x00 and bell\x07 chars",
+            "skills": ["Python\x01", "FastAPI"],
+            "experience": [
+                {
+                    "role": "Engineer\x02",
+                    "company": "Example",
+                    "duration": "2020\x03",
+                    "highlights": ["Built systems\x0B"],
+                }
+            ],
+        },
+        "tailored_cover_letter": {
+            "greeting": "Hello\x00",
+            "paragraphs": ["Cover letter paragraph\x07"],
+            "sign_off": "Regards",
+        },
+        "application_answers": [],
+        "match_score": 80,
+        "match_reasons": ["Test"],
+        "interview_prep": [],
+    }
+    try:
+        doc = _build_generated_application_doc(user, profile, job, generated, package_builder=failing_package_builder)
+    except Exception as exc:
+        logger.exception("DOCX fallback test unexpectedly raised")
+        return {
+            "ok": False,
+            "raised": True,
+            "exception_class": exc.__class__.__name__,
+            "message": str(exc)[:500],
+        }
+    return {
+        "ok": True,
+        "raised": False,
+        "application_id": doc.get("application_id"),
+        "package_status": doc.get("package_status"),
+        "generation_status": doc.get("generation_status"),
+        "generation_error": doc.get("generation_error"),
+        "submission_status": doc.get("submission_status"),
+        "tailored_cv_file_b64_is_none": doc.get("tailored_cv_file_b64") is None,
+        "has_tailored_resume_text": bool(doc.get("tailored_resume") or doc.get("tailored_resume_structured")),
+        "has_cover_letter_text": bool(doc.get("cover_letter") or doc.get("tailored_cover_letter")),
     }
 
 

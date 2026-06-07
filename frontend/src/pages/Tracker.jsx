@@ -31,6 +31,13 @@ const DISPLAY_STATUSES = {
     dotLight: "bg-amber-500",
     dotDark: "bg-amber-400",
   },
+  prepared: {
+    label: "Prepared",
+    tintLight: "bg-amber-50 text-amber-700 ring-1 ring-amber-200/80",
+    tintDark: "bg-amber-500/15 text-amber-300",
+    dotLight: "bg-amber-500",
+    dotDark: "bg-amber-400",
+  },
   submitted: {
     label: "Submitted",
     tintLight: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/80",
@@ -73,6 +80,27 @@ const DISPLAY_STATUSES = {
     dotLight: "bg-orange-500",
     dotDark: "bg-orange-400",
   },
+  blocked_captcha: {
+    label: "CAPTCHA required",
+    tintLight: "bg-orange-50 text-orange-700 ring-1 ring-orange-200/80",
+    tintDark: "bg-orange-500/15 text-orange-300",
+    dotLight: "bg-orange-500",
+    dotDark: "bg-orange-400",
+  },
+  prepare_failed: {
+    label: "Prepare failed",
+    tintLight: "bg-rose-50 text-rose-700 ring-1 ring-rose-200/80",
+    tintDark: "bg-rose-500/15 text-rose-300",
+    dotLight: "bg-rose-500",
+    dotDark: "bg-rose-400",
+  },
+  unknown: {
+    label: "Status unknown",
+    tintLight: "bg-zinc-50 text-zinc-700 ring-1 ring-zinc-200/80",
+    tintDark: "bg-zinc-500/15 text-zinc-300",
+    dotLight: "bg-zinc-500",
+    dotDark: "bg-zinc-400",
+  },
   failed: {
     label: "Submission failed",
     tintLight: "bg-rose-50 text-rose-700 ring-1 ring-rose-200/80",
@@ -88,10 +116,14 @@ const resolveDisplayStatus = ({ status, submission_status }) => {
   if (status === "rejected") return "rejected";
   if (status === "interview") return "interview";
   if (status === "viewed") return "viewed";
-  if (submission_status === "blocked") return "action_required";
+  if (submission_status === "blocked" || submission_status === "action_required") return "action_required";
+  if (submission_status === "blocked_captcha") return "blocked_captcha";
+  if (submission_status === "prepare_failed") return "prepare_failed";
   if (submission_status === "failed") return "failed";
   if (submission_status === "ready") return "ready";
+  if (submission_status === "prepared") return "prepared";
   if (submission_status === "submitted") return "submitted";
+  if (submission_status === "unknown") return "unknown";
   return "generated";
 };
 
@@ -126,6 +158,35 @@ const missingFieldsForForm = (items = []) => {
   });
 };
 
+const optionValue = (option) => {
+  if (typeof option === "string") return option;
+  return option?.value || option?.label || "";
+};
+
+const optionLabel = (option) => {
+  if (typeof option === "string") return option;
+  return option?.label || option?.value || "";
+};
+
+const applicationStatusMessage = (status) => {
+  if (status === "submitted") return "Submitted";
+  if (status === "ready" || status === "prepared") {
+    return "Application prepared. Final submission is not enabled yet.";
+  }
+  if (status === "blocked" || status === "action_required") {
+    return "A few answers are needed before this application can be prepared.";
+  }
+  if (status === "blocked_captcha") {
+    return "Human verification is required before this application can be completed.";
+  }
+  if (status === "prepare_failed") {
+    return "Application package generated, but browser preparation failed.";
+  }
+  if (status === "failed") return "Submission failed.";
+  if (status === "unknown") return "Submission status is unknown. Review before continuing.";
+  return "Not submitted yet";
+};
+
 export default function Tracker() {
   const [profile, setProfile] = useState(null);
   const [apps, setApps] = useState([]);
@@ -133,8 +194,9 @@ export default function Tracker() {
   const [selected, setSelected] = useState(null);
   const [open, setOpen] = useState(false);
   const [missingAnswers, setMissingAnswers] = useState({});
+  const [saveMissingToProfile, setSaveMissingToProfile] = useState(false);
   const [savingMissing, setSavingMissing] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [preparingAgain, setPreparingAgain] = useState(false);
   const [resumeOpen, setResumeOpen] = useState(false);
 
   const load = async () => {
@@ -154,6 +216,7 @@ export default function Tracker() {
       if (item?.field_name) initial[item.field_name] = "";
     });
     setMissingAnswers(initial);
+    setSaveMissingToProfile(false);
   }, [selected]);
 
   const handleDownloadCV = () => {
@@ -196,7 +259,7 @@ export default function Tracker() {
     try {
       await api.post(`/applications/${selected.application_id}/resolve-missing-info`, {
         answers: missingAnswers,
-        save_to_profile: true,
+        save_to_profile: saveMissingToProfile,
       });
       const { data } = await api.get(`/applications/${selected.application_id}`);
       const updated = data;
@@ -218,23 +281,21 @@ export default function Tracker() {
     return data;
   };
 
-  const submitGreenhouseApplication = async () => {
+  const prepareGreenhouseAgain = async () => {
     if (!selected?.job_id) return;
-    setSubmitting(true);
+    setPreparingAgain(true);
     try {
-      const { data } = await api.post("/applications/greenhouse/submit", { job_id: selected.job_id });
-      if (data.dry_run) {
-        toast.success("Dry run successful — application was not sent.");
-      } else {
-        toast.success("Application submitted");
-      }
+      const { data } = await api.post("/applications/greenhouse/prepare-browser-fill", { job_id: selected.job_id });
+      const status = data?.submission_status;
+      toast.success(status === "prepared" || status === "ready" ? "Application prepared" : "Prepare finished");
       await refreshApplication(selected.application_id);
+      await load();
     } catch (e) {
       const detail = e?.response?.data?.detail;
-      toast.error(detail?.message || (typeof detail === "string" ? detail : "Submission failed"));
+      toast.error(detail?.message || (typeof detail === "string" ? detail : "Prepare failed"));
       try { await refreshApplication(selected.application_id); } catch {}
     } finally {
-      setSubmitting(false);
+      setPreparingAgain(false);
     }
   };
 
@@ -343,34 +404,56 @@ export default function Tracker() {
                 <div className="p-4 rounded-2xl bg-sprout-surface-2 border border-sprout-border mb-5">
                   <p className="text-sm font-semibold text-white">Application package generated</p>
                   <p className="mt-1 text-sm text-sprout-muted">
-                    {selected.submission_status === "submitted"
-                      ? "Submitted"
-                      : selected.submission_status === "ready"
-                        ? "Ready to submit"
-                        : selected.submission_status === "blocked"
-                          ? "Not submitted yet. Submission is blocked until missing information is resolved."
-                          : "Not submitted yet"}
+                    {applicationStatusMessage(selected.submission_status)}
                   </p>
-                  {selected.submission_status === "ready" && (
+                  {(selected.submission_status === "ready" || selected.submission_status === "prepared") && (
                     <Button
-                      onClick={submitGreenhouseApplication}
-                      disabled={submitting}
+                      disabled
                       className="mt-3 w-full rounded-full bg-sprout-mint hover:opacity-90 text-black"
                       data-testid="submit-application-btn"
                     >
-                      {submitting ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : null}
-                      Submit application
+                      Ready to submit
+                    </Button>
+                  )}
+                  {selected.job?.ats_provider === "greenhouse" && ["ready", "prepared", "blocked", "action_required", "prepare_failed"].includes(selected.submission_status) && (
+                    <Button
+                      onClick={prepareGreenhouseAgain}
+                      disabled={preparingAgain}
+                      variant="outline"
+                      className="mt-3 w-full rounded-full border-sprout-border text-white hover:bg-sprout-surface-2"
+                      data-testid="prepare-greenhouse-again-top-btn"
+                    >
+                      {preparingAgain ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : null}
+                      Prepare again
                     </Button>
                   )}
                 </div>
 
-                {selected.submission_status === "blocked" && (selected.prepared_missing_information || []).length > 0 && (
+                {selected.submission_status === "blocked_captcha" && (
+                  <div className="p-4 rounded-2xl bg-orange-500/10 border border-orange-400/30 mb-5" data-testid="captcha-required-state">
+                    <p className="text-sm font-semibold text-orange-200">Human verification required</p>
+                    <p className="mt-1 text-sm text-sprout-muted">
+                      The application form needs a manual CAPTCHA or security check before it can be completed.
+                    </p>
+                  </div>
+                )}
+
+                {selected.submission_status === "prepare_failed" && (
+                  <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-400/30 mb-5" data-testid="prepare-failed-state">
+                    <p className="text-sm font-semibold text-rose-200">Preparation failed</p>
+                    <p className="mt-1 text-sm text-sprout-muted">
+                      The CV and cover letter were generated, but the browser preparation step needs to be retried.
+                    </p>
+                  </div>
+                )}
+
+                {(selected.submission_status === "blocked" || selected.submission_status === "action_required") && (selected.prepared_missing_information || []).length > 0 && (
                   <div className="p-4 rounded-2xl bg-orange-500/10 border border-orange-400/30 mb-5" data-testid="missing-info-form">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="text-sm font-semibold text-orange-200">Action required</p>
                         <p className="mt-1 text-sm text-sprout-muted">
-                          Answer these required fields to make this application ready. It will not be submitted automatically.
+                          A few answers are needed to complete this application. It will not be submitted automatically.
                         </p>
                       </div>
                     </div>
@@ -391,8 +474,8 @@ export default function Tracker() {
                                 >
                                   <option value="">Select an answer</option>
                                   {options.map((opt) => (
-                                    <option key={`${item.field_name}-${opt.value || opt.label}`} value={opt.value || opt.label}>
-                                      {opt.label || opt.value}
+                                    <option key={`${item.field_name}-${optionValue(opt)}`} value={optionValue(opt)}>
+                                      {optionLabel(opt)}
                                     </option>
                                   ))}
                                 </select>
@@ -405,11 +488,26 @@ export default function Tracker() {
                                   data-testid={`missing-field-${item.field_name}`}
                                 />
                               )}
-                              <span className="mt-1 block text-[11px] text-sprout-dim">{item.reason}</span>
+                              <span className="mt-1 block text-[11px] text-sprout-dim">
+                                {item.suggested_profile_key ? `Can be reused as ${item.suggested_profile_key.replaceAll("_", " ")}` : item.reason}
+                              </span>
                             </label>
                           );
                         })}
                     </div>
+                    <label className="mt-4 flex items-start gap-3 rounded-xl border border-sprout-border bg-sprout-surface/70 p-3 text-sm text-zinc-200">
+                      <input
+                        type="checkbox"
+                        checked={saveMissingToProfile}
+                        onChange={(e) => setSaveMissingToProfile(e.target.checked)}
+                        className="mt-1 h-4 w-4 accent-sprout-mint"
+                        data-testid="save-missing-to-profile-checkbox"
+                      />
+                      <span>
+                        <span className="block font-semibold text-white">Save these answers to my profile for future applications</span>
+                        <span className="mt-0.5 block text-xs text-sprout-muted">Use this for reusable legal or work-preference answers only.</span>
+                      </span>
+                    </label>
                     <Button
                       onClick={resolveMissingInfo}
                       disabled={savingMissing}
@@ -418,6 +516,16 @@ export default function Tracker() {
                     >
                       {savingMissing ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : null}
                       Save answers
+                    </Button>
+                    <Button
+                      onClick={prepareGreenhouseAgain}
+                      disabled={preparingAgain}
+                      variant="outline"
+                      className="mt-2 w-full rounded-full border-sprout-border text-white hover:bg-sprout-surface-2"
+                      data-testid="prepare-greenhouse-again-btn"
+                    >
+                      {preparingAgain ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : null}
+                      Prepare again
                     </Button>
                   </div>
                 )}

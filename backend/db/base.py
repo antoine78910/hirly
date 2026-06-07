@@ -36,7 +36,7 @@ class CursorPort(ABC):
 
 class CollectionPort(ABC):
     @abstractmethod
-    async def find_one(self, filter: Filter, projection: Projection = None) -> Optional[Document]:
+    async def find_one(self, filter: Filter, projection: Projection = None, sort: Optional[SortSpec] = None) -> Optional[Document]:
         raise NotImplementedError
 
     @abstractmethod

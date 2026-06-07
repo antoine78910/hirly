@@ -74,6 +74,22 @@ FIELD_EXTRACTOR_SCRIPT = r"""
     return element.getAttribute("placeholder") || element.name || element.id || "";
   }
 
+  function closestContainer(element) {
+    return element.closest(
+      ".application-question, .question, .field, .form-field, .input-wrapper, .select-wrapper, fieldset, li, div"
+    );
+  }
+
+  function nearbyTextFor(element) {
+    const chunks = [];
+    let node = element;
+    for (let depth = 0; node && depth < 4; depth += 1) {
+      if (node.previousElementSibling) chunks.push(textOf(node.previousElementSibling));
+      node = node.parentElement;
+    }
+    return chunks.filter(Boolean).join(" ").slice(0, 500);
+  }
+
   function optionsFor(element) {
     if (element.tagName.toLowerCase() === "select") {
       return Array.from(element.options || []).map((option) => ({
@@ -93,7 +109,7 @@ FIELD_EXTRACTOR_SCRIPT = r"""
   return nodes.map((element, index) => {
     const tag = element.tagName.toLowerCase();
     const role = element.getAttribute("role") || "";
-    const type = tag === "textarea"
+      const type = tag === "textarea"
       ? "textarea"
       : tag === "select"
         ? "select"
@@ -102,6 +118,14 @@ FIELD_EXTRACTOR_SCRIPT = r"""
           : element.getAttribute("contenteditable") === "true"
             ? "contenteditable"
             : (element.getAttribute("type") || "text").toLowerCase();
+    const ariaLabel = element.getAttribute("aria-label") || "";
+    const ariaLabelledBy = element.getAttribute("aria-labelledby") || "";
+    const container = closestContainer(element);
+    const containerText = container ? textOf(container).slice(0, 1000) : "";
+    const checked = Boolean(element.checked);
+    const value = type === "checkbox" || type === "radio"
+      ? (checked ? (element.value || "on") : "")
+      : (element.value || "");
     return {
       index,
       selector: selectorFor(element),
@@ -112,10 +136,15 @@ FIELD_EXTRACTOR_SCRIPT = r"""
       type,
       label: labelFor(element),
       placeholder: element.getAttribute("placeholder") || "",
+      aria_label: ariaLabel,
+      aria_labelledby: ariaLabelledBy,
+      nearby_text: nearbyTextFor(element),
+      field_container_text: containerText,
       required: Boolean(element.required || element.getAttribute("aria-required") === "true"),
-      visible: Boolean(element.offsetWidth || element.offsetHeight || element.getClientRects().length),
+      visible: Boolean(element.getAttribute("aria-hidden") !== "true" && (element.offsetWidth || element.offsetHeight || element.getClientRects().length)),
       disabled: Boolean(element.disabled || element.getAttribute("aria-disabled") === "true"),
-      value_before: element.value || "",
+      checked,
+      value_before: value,
       options: optionsFor(element),
     };
   });
