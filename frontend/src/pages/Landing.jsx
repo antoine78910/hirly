@@ -6,13 +6,22 @@ import Logo from "../components/Logo";
 import { BRAND } from "../lib/brand";
 import { startGoogleLogin } from "../lib/auth";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 export default function Landing() {
   const navigate = useNavigate();
+  const { user, hasProfile, hasPreferences, loading } = useAuth();
   const [searchParams] = useSearchParams();
   const postLoginPath = searchParams.get("redirect") || "/swipe";
   const onSignIn = () => startGoogleLogin(postLoginPath);
-  const onStartOnboarding = () => navigate("/onboarding");
+  const onStartSwiping = () => {
+    if (loading) return;
+    if (user) {
+      navigate(hasProfile && hasPreferences ? "/swipe" : "/onboarding");
+      return;
+    }
+    navigate("/signup");
+  };
 
   return (
     <div className="min-h-dvh bg-white text-zinc-900">
@@ -75,7 +84,8 @@ export default function Landing() {
           >
             <Button
               data-testid="hero-cta-btn"
-              onClick={onStartOnboarding}
+              onClick={onStartSwiping}
+              disabled={loading}
               size="lg"
               className="rounded-full gradient-linkedin hover:opacity-90 text-white font-semibold h-12 px-7 text-base pulse-ring"
             >
@@ -203,7 +213,8 @@ export default function Landing() {
             <p className="relative mt-3 text-white/80">Your next job is one swipe away.</p>
             <Button
               data-testid="footer-cta-btn"
-              onClick={onStartOnboarding}
+              onClick={onStartSwiping}
+              disabled={loading}
               size="lg"
               className="relative mt-8 h-12 rounded-full bg-white px-7 text-base font-semibold text-linkedin hover:bg-zinc-100"
             >

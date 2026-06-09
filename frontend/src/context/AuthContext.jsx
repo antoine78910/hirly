@@ -19,7 +19,6 @@ export const AuthProvider = ({ children }) => {
   const checkAuth = useCallback(async () => {
     try {
       const { data } = await api.get("/auth/me");
-      console.log("AUTH_CONTEXT_ME", data);
       setUser(data.user);
       setHasProfile(data.has_profile);
       setHasPreferences(data.has_preferences);

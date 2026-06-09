@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/context/AuthContext";
 import Landing from "@/pages/Landing";
+import Signup from "@/pages/Signup";
 import Onboarding from "@/pages/Onboarding";
 import Swipe from "@/pages/Swipe";
 import Tracker from "@/pages/Tracker";
@@ -28,6 +29,7 @@ function AppRoute({ children, requireProfile = false }) {
 
 function shouldShowBottomNav(pathname) {
   if (pathname === "/" || pathname === "/auth/callback") return false;
+  if (pathname === "/signup") return false;
   if (pathname === "/onboarding" || pathname.startsWith("/onboarding/")) return false;
   if (pathname === "/credits" || pathname === "/referral") return false;
   return true;
@@ -47,6 +49,7 @@ function AppRouter() {
       ) : null}
       <Routes>
         <Route path="/" element={<Landing />} />
+        <Route path="/signup" element={<Signup />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/onboarding" element={<Onboarding />} />
         <Route path="/swipe" element={<AppRoute requireProfile><Swipe /></AppRoute>} />

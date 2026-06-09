@@ -31,7 +31,6 @@ export default function AuthCallback() {
         if (!accessToken) throw new Error("Supabase session not found");
         const response = await api.post("/auth/supabase-session", { access_token: accessToken });
         const data = response.data;
-        console.log("AUTH_CALLBACK_RESPONSE", data);
         if (data?.session_token) setSessionToken(data.session_token);
         setUser(data.user);
         setHasProfile(Boolean(data.has_profile));
@@ -45,6 +44,8 @@ export default function AuthCallback() {
           destination = destination.startsWith("/onboarding")
             ? destination
             : "/onboarding?step=jobSearch";
+        } else if (destination.startsWith("/onboarding")) {
+          destination = "/swipe";
         }
         navigate(destination, { replace: true });
       } catch (e) {
