@@ -1376,6 +1376,262 @@ async def get_feed(
         strict_tokens = _tokens(target_role)
         family_tokens = _role_family_tokens(target_role)
         terms = _location_terms()
+        radius_scope = (search_radius or "50km").lower().strip()
+        radius_km_match = re.match(r"^(\d+)\s*km$", radius_scope)
+        radius_km = int(radius_km_match.group(1)) if radius_km_match else None
+
+        def _parse_selected_locations() -> List[Dict[str, Any]]:
+            selected: List[Dict[str, Any]] = []
+            if locations_json:
+                try:
+                    parsed = json.loads(locations_json)
+                    if isinstance(parsed, list):
+                        selected.extend(
+                            loc
+                            for loc in parsed
+                            if isinstance(loc, dict) and (loc.get("location_label") or loc.get("country") or loc.get("country_code"))
+                        )
+                except json.JSONDecodeError:
+                    pass
+            if location_label:
+                selected.append({
+                    "location_label": location_label,
+                    "place_id": place_id,
+                    "country": country,
+                    "country_code": country_code,
+                    "lat": lat,
+                    "lng": lng,
+                })
+            if location:
+                selected.extend({"location_label": item} for item in location if item)
+            return selected
+
+        selected_locations = _parse_selected_locations()
+        explicit_location_filter = bool(
+            selected_locations
+            or location
+            or location_label
+            or place_id
+            or country
+            or country_code
+            or lat is not None
+            or lng is not None
+        )
+        explicit_filters = bool(
+            min_salary > 0
+            or (posted_within and posted_within != "any")
+            or work_location
+            or job_type
+            or experience
+            or explicit_location_filter
+            or only_company
+            or hide_company
+            or only_industry
+            or hide_industry
+            or include_unknown_location is False
+            or include_unknown_salary is False
+            or only_my_country
+            or radius_scope not in ("50km", "50 km")
+        )
+
+        def _country_terms_from_locations() -> List[str]:
+            aliases = {
+                "fr": ["france"],
+                "gb": ["united kingdom", "uk", "england"],
+                "us": ["united states", "usa"],
+                "ma": ["morocco", "maroc"],
+            }
+            values: List[str] = []
+            for loc in selected_locations:
+                code = str(loc.get("country_code") or "").lower().strip()
+                country_name = str(loc.get("country") or "").lower().strip()
+                if country_name:
+                    values.append(country_name)
+                values.extend(aliases.get(code, []))
+            if only_my_country:
+                profile_location_data = profile.get("target_location_data") or {}
+                profile_code = str(profile_location_data.get("country_code") or "").lower().strip()
+                profile_country = str(profile_location_data.get("country") or "").lower().strip()
+                if profile_country:
+                    values.append(profile_country)
+                values.extend(aliases.get(profile_code, []))
+            return list(dict.fromkeys(value for value in values if value))
+
+        def _city_terms_from_locations() -> List[str]:
+            values: List[str] = []
+            for loc in selected_locations:
+                label = str(loc.get("location_label") or "").strip()
+                if not label:
+                    continue
+                city_part = re.split(r"[,/|-]", label, maxsplit=1)[0]
+                values.extend(_tokens(city_part))
+            if not selected_locations and location:
+                for label in location:
+                    city_part = re.split(r"[,/|-]", str(label), maxsplit=1)[0]
+                    values.extend(_tokens(city_part))
+            return list(dict.fromkeys(values))
+
+        selected_city_terms = _city_terms_from_locations()
+        selected_country_terms = _country_terms_from_locations()
+
+        def _job_work_location(job: Dict[str, Any]) -> str:
+            raw = job.get("remote")
+            if isinstance(raw, bool):
+                return "remote" if raw else "onsite"
+            text = " ".join([
+                str(raw or ""),
+                str(job.get("location") or ""),
+                str(job.get("workplace_type") or ""),
+                str(job.get("work_location") or ""),
+            ]).lower()
+            if "hybrid" in text:
+                return "hybrid"
+            if "remote" in text or "work from home" in text:
+                return "remote"
+            if "onsite" in text or "on-site" in text or "in person" in text or "office" in text:
+                return "onsite"
+            return "unknown"
+
+        def _matches_work_location(job: Dict[str, Any]) -> bool:
+            if not work_location:
+                return True
+            wanted = {
+                ("onsite" if str(item).lower() in ("in-person", "in_person", "on-site", "onsite") else str(item).lower())
+                for item in work_location
+            }
+            actual = _job_work_location(job)
+            if actual == "unknown":
+                return include_unknown_location
+            if "remote" in wanted and actual == "remote":
+                return True
+            if "hybrid" in wanted and actual == "hybrid":
+                return True
+            if "onsite" in wanted and actual == "onsite":
+                return True
+            return False
+
+        def _matches_location(job: Dict[str, Any]) -> bool:
+            if not explicit_location_filter and not only_my_country:
+                return True
+            job_location = str(job.get("location") or "").lower()
+            job_country_code = str(job.get("country_code") or "").lower().strip()
+            if not job_location and not job_country_code:
+                return include_unknown_location
+            city_match = bool(selected_city_terms and any(term in job_location for term in selected_city_terms))
+            country_match = bool(
+                (selected_country_terms and any(term in job_location for term in selected_country_terms))
+                or any(str(loc.get("country_code") or "").lower().strip() == job_country_code for loc in selected_locations if loc.get("country_code"))
+            )
+            if only_my_country:
+                profile_location_data = profile.get("target_location_data") or {}
+                profile_code = str(profile_location_data.get("country_code") or "").lower().strip()
+                if profile_code and job_country_code == profile_code:
+                    return True
+                return country_match
+            if radius_scope in ("worldwide", "remote", "remote/worldwide"):
+                return True
+            if radius_km is not None and radius_km <= 25:
+                return city_match
+            return city_match or country_match
+
+        def _matches_salary(job: Dict[str, Any]) -> bool:
+            if not min_salary or min_salary <= 0:
+                return True
+            salary_max = job.get("salary_max")
+            if salary_max in (None, ""):
+                return include_unknown_salary
+            try:
+                return int(salary_max) >= int(min_salary)
+            except (TypeError, ValueError):
+                return include_unknown_salary
+
+        def _matches_posted_date(job: Dict[str, Any]) -> bool:
+            if not posted_within or posted_within == "any":
+                return True
+            days_map = {"1d": 1, "7d": 7, "30d": 30}
+            days = days_map.get(posted_within)
+            if not days:
+                return True
+            raw = job.get("posted_at") or job.get("imported_at") or job.get("last_seen_at")
+            if not raw:
+                return False
+            try:
+                parsed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+            except ValueError:
+                return False
+            return parsed >= datetime.now(timezone.utc) - timedelta(days=days)
+
+        def _matches_job_type(job: Dict[str, Any]) -> bool:
+            if not job_type:
+                return True
+            text = " ".join([
+                str(job.get("job_type") or ""),
+                str(job.get("employment_type") or ""),
+                str(job.get("contract_type") or ""),
+                str(job.get("title") or ""),
+                str(job.get("description") or ""),
+            ]).lower()
+            aliases = {
+                "full_time": ["full time", "full-time", "permanent", "cdi"],
+                "part_time": ["part time", "part-time"],
+                "internship": ["intern", "internship", "stage"],
+            }
+            return any(any(alias in text for alias in aliases.get(kind, [kind])) for kind in job_type)
+
+        def _matches_experience(job: Dict[str, Any]) -> bool:
+            if not experience:
+                return True
+            exp_map = {
+                "entry": ["junior", "entry"],
+                "mid": ["mid", "intermediate"],
+                "senior": ["senior"],
+                "executive": ["lead", "principal", "executive", "director"],
+            }
+            wanted: List[str] = []
+            for item in experience:
+                wanted.extend(exp_map.get(item, [item]))
+            seniority = str(job.get("seniority") or "").lower()
+            title = str(job.get("title") or "").lower()
+            return any(item in seniority or item in title for item in wanted)
+
+        def _matches_company(job: Dict[str, Any]) -> bool:
+            company = str(job.get("company") or "").lower()
+            if only_company and not any(company == str(item).lower() for item in only_company):
+                return False
+            if hide_company and any(str(item).lower() in company for item in hide_company):
+                return False
+            return True
+
+        def _matches_industry(job: Dict[str, Any]) -> bool:
+            if not only_industry and not hide_industry:
+                return True
+            text = " ".join([
+                str(job.get("industry") or ""),
+                " ".join(str(item) for item in (job.get("industries") or [])),
+                str(job.get("company") or ""),
+                str(job.get("description") or ""),
+                str(job.get("clean_description") or ""),
+            ]).lower()
+            if only_industry and not any(str(item).lower() in text for item in only_industry):
+                return False
+            if hide_industry and any(str(item).lower() in text for item in hide_industry):
+                return False
+            return True
+
+        def _matches_explicit_filters(job: Dict[str, Any]) -> bool:
+            return (
+                _matches_work_location(job)
+                and _matches_location(job)
+                and _matches_salary(job)
+                and _matches_posted_date(job)
+                and _matches_job_type(job)
+                and _matches_experience(job)
+                and _matches_company(job)
+                and _matches_industry(job)
+            )
+
         swiped_rows = await db.swipes.find({"user_id": user.user_id}, {"_id": 0, "job_id": 1}).limit(1000).to_list(1000)
         swiped_ids = {row.get("job_id") for row in swiped_rows if row.get("job_id")}
         base_query: Dict[str, Any] = {}
@@ -1387,13 +1643,17 @@ async def get_feed(
         candidate_limit = max(300, requested_limit * 80)
         candidates = await db.jobs.find(base_query, {"_id": 0}).limit(candidate_limit).to_list(candidate_limit)
         candidates = [job for job in candidates if job.get("job_id") not in swiped_ids]
+        unfiltered_count = len(candidates)
+        candidates = [job for job in candidates if _matches_explicit_filters(job)]
         logger.info(
-            "feed_filter_stage user_id=%s stage=candidate_pool elapsed_ms=%s query=%s count=%s swiped_count=%s",
+            "feed_filter_stage user_id=%s stage=candidate_pool elapsed_ms=%s query=%s count=%s unfiltered_count=%s swiped_count=%s explicit_filters=%s",
             user.user_id,
             _elapsed_ms(),
             base_query,
             len(candidates),
+            unfiltered_count,
             len(swiped_ids),
+            explicit_filters,
         )
 
         def rank(pool: List[Dict[str, Any]], *, worldwide: bool, broad: bool, any_role: bool = False) -> List[Dict[str, Any]]:
@@ -1434,11 +1694,13 @@ async def get_feed(
         fallback_used = "none"
         jobs = rank(candidates, worldwide=False, broad=False)
         logger.info("feed_filter_stage user_id=%s stage=strict_role_location elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))
-        if len(jobs) < requested_limit and not _timed_out():
+        if explicit_filters and len(jobs) < requested_limit:
+            fallback_used = "none_due_to_explicit_filters"
+        if not explicit_filters and len(jobs) < requested_limit and not _timed_out():
             fallback_used = "worldwide_role_family"
             jobs = rank(candidates, worldwide=True, broad=True)
             logger.info("feed_filter_stage user_id=%s stage=worldwide_role_family elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))
-        if len(jobs) < requested_limit and not _timed_out():
+        if not explicit_filters and len(jobs) < requested_limit and not _timed_out():
             fallback_used = "worldwide_auto_apply"
             jobs = rank(candidates, worldwide=True, broad=True, any_role=True)
             logger.info("feed_filter_stage user_id=%s stage=worldwide_auto_apply elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))
@@ -1469,7 +1731,7 @@ async def get_feed(
             "fallback_reason": None if fallback_used == "none" else fallback_used,
             "searched_location": terms["labels"][0] if terms["labels"] else profile.get("target_location"),
             "searched_locations": terms["labels"],
-            "search_radius": "worldwide" if fallback_used.startswith("worldwide") else search_radius,
+            "search_radius": search_radius,
             "suggested_next_radius": None if clean_jobs else "worldwide",
             "only_my_country": only_my_country,
             "widened_search": fallback_used.startswith("worldwide"),
@@ -1487,9 +1749,26 @@ async def get_feed(
                 "auto_apply_supported": not include_non_auto_apply,
                 "ats_provider": ats_supported if not include_non_auto_apply else None,
                 "search_radius": search_radius,
+                "explicit_filters": explicit_filters,
+                "work_location": work_location,
+                "locations": [loc.get("location_label") for loc in selected_locations if loc.get("location_label")],
+                "selected_city_terms": selected_city_terms,
+                "selected_country_terms": selected_country_terms,
+                "only_my_country": only_my_country,
+                "min_salary": min_salary,
+                "posted_within": posted_within,
+                "job_type": job_type,
+                "experience": experience,
+                "only_company": only_company,
+                "hide_company": hide_company,
+                "only_industry": only_industry,
+                "hide_industry": hide_industry,
+                "include_unknown_location": include_unknown_location,
+                "include_unknown_salary": include_unknown_salary,
             },
             "feed_elapsed_ms": elapsed,
             "fallback_used": fallback_used,
+            "explicit_filters": explicit_filters,
         }
 
     return await _fast_cached_feed()

@@ -131,6 +131,10 @@ export function getDemoResponse(config) {
       jobs: clone(state.feedJobs.slice(0, limit)),
       total: state.feedJobs.length,
       fallback_reason: null,
+      demo_mode: true,
+      backend_api_mocked: true,
+      filters_backend_accurate: false,
+      warning: "Demo mode active: /jobs/feed is mocked and filters are not backend-accurate.",
     };
   }
 

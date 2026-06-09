@@ -6,6 +6,8 @@ import { Label } from "./ui/label";
 import { api } from "../lib/api";
 import { buildTypedLocationResult, searchLocationsClient } from "../lib/locationSearch";
 
+const EMPTY_SUGGESTIONS = [];
+
 function resultToLocation(result) {
   return {
     location_label: result.label || "",
@@ -53,7 +55,7 @@ export default function PlacesAutocomplete({
   optional = false,
   testId,
   variant = "dark",
-  suggestions = [],
+  suggestions = EMPTY_SUGGESTIONS,
   compactChips = false,
   maxSuggestions,
 }) {
@@ -92,10 +94,10 @@ export default function PlacesAutocomplete({
     : `text-xs ${isInvalid ? "text-rose-300" : "text-sprout-muted"}`;
   const dropdownClass = light
     ? "rounded-2xl border border-zinc-200 bg-white shadow-xl overflow-hidden max-h-60 overflow-y-auto"
-    : "rounded-2xl border border-sprout-border bg-sprout-surface shadow-xl overflow-hidden max-h-60 overflow-y-auto";
+    : "rounded-2xl border border-zinc-200 bg-white shadow-xl overflow-hidden max-h-60 overflow-y-auto";
   const optionClass = light
     ? "w-full text-left px-4 py-3 text-sm text-zinc-700 hover:bg-zinc-50 flex items-start gap-2.5"
-    : "w-full text-left px-4 py-3 text-sm text-zinc-100 hover:bg-sprout-surface-2 flex items-start gap-2.5";
+    : "w-full text-left px-4 py-3 text-sm text-zinc-800 hover:bg-sprout-mint-soft active:bg-sprout-mint-soft focus:bg-sprout-mint-soft focus:outline-none flex items-start gap-2.5";
   const chipOnClass = "selection-chip-on";
   const chipOffClass = light ? "selection-chip-off" : "selection-chip-off bg-zinc-50";
 
@@ -319,7 +321,7 @@ export default function PlacesAutocomplete({
                 }}
               >
                 {searching && results.length === 0 && (
-                  <div className={`px-4 py-3 text-sm ${light ? "text-zinc-500" : "text-sprout-muted"}`}>
+                  <div className={`px-4 py-3 text-sm ${light ? "text-zinc-500" : "text-zinc-500"}`}>
                     Searching cities, towns, and villages…
                   </div>
                 )}
@@ -339,7 +341,7 @@ export default function PlacesAutocomplete({
                       <span className="min-w-0">
                         <span className="block">{result.label}</span>
                         {badge ? (
-                          <span className={`block text-xs mt-0.5 ${light ? "text-zinc-400" : "text-sprout-muted"}`}>
+                          <span className={`block text-xs mt-0.5 ${light ? "text-zinc-400" : "text-zinc-500"}`}>
                             {badge}
                           </span>
                         ) : null}
@@ -348,7 +350,7 @@ export default function PlacesAutocomplete({
                   );
                 })}
                 {!searching && results.length === 0 && (
-                  <div className={`px-4 py-3 text-sm ${light ? "text-zinc-500" : "text-sprout-muted"}`}>
+                  <div className={`px-4 py-3 text-sm ${light ? "text-zinc-500" : "text-zinc-500"}`}>
                     No locations found. Try a nearby city or region name, or pick a popular location below.
                   </div>
                 )}

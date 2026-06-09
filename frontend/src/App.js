@@ -19,7 +19,7 @@ import Referral from "@/pages/Referral";
 import AuthCallback from "@/pages/AuthCallback";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import BottomNav from "@/components/BottomNav";
-import { devBypassAuth } from "@/lib/dev";
+import { demoMode, devBypassAuth } from "@/lib/dev";
 
 function AppRoute({ children, requireProfile = false }) {
   if (devBypassAuth) return children;
@@ -36,9 +36,15 @@ function shouldShowBottomNav(pathname) {
 function AppRouter() {
   const location = useLocation();
   const showBottomNav = shouldShowBottomNav(location.pathname);
+  const showDemoBanner = demoMode && location.pathname !== "/" && location.pathname !== "/auth/callback";
 
   return (
     <>
+      {showDemoBanner ? (
+        <div className="fixed inset-x-0 top-0 z-[100] bg-amber-400 px-4 py-2 text-center text-xs font-bold text-zinc-950 shadow-md">
+          Demo mode active — backend API calls are mocked
+        </div>
+      ) : null}
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/auth/callback" element={<AuthCallback />} />

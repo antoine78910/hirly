@@ -16,6 +16,55 @@ import { BRAND } from "../lib/brand";
 import { shareJob } from "../lib/shareJob";
 
 const DEFAULT_SEARCH_RADIUS = "50km";
+const FILTERS_STORAGE_KEY = "swiipr.jobs.filters.v1";
+
+const readPersistedFilters = () => {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(FILTERS_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch (_) {
+    return null;
+  }
+};
+
+const savePersistedFilters = (filters) => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(filters));
+  } catch (_) {}
+};
+
+const clearPersistedFilters = () => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(FILTERS_STORAGE_KEY);
+  } catch (_) {}
+};
+
+const hasActiveFilters = (value) => {
+  if (!value) return false;
+  return Boolean(
+    value.minSalary > 0
+    || (value.postedDate && value.postedDate !== "any")
+    || (value.workLocations || []).length
+    || (value.jobTypes || []).length
+    || (value.experience || []).length
+    || (value.locations || []).length
+    || (value.locationsData || []).length
+    || value.locationData
+    || (value.onlyCompanies || []).length
+    || (value.hideCompanies || []).length
+    || (value.onlyIndustries || []).length
+    || (value.hideIndustries || []).length
+    || value.includeUnknownLocation === false
+    || value.includeUnknownSalary === false
+    || (value.searchRadius && value.searchRadius !== DEFAULT_SEARCH_RADIUS)
+    || value.onlyMyCountry
+  );
+};
 
 /* ============================================================
    Swipper card — Tinder-style swipe physics.
@@ -492,13 +541,13 @@ export default function Swipe() {
   const [targetLocationData, setTargetLocationData] = useState(null);
   const [targetSheetOpen, setTargetSheetOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [filters, setFilters] = useState(null);
+  const [filters, setFilters] = useState(() => readPersistedFilters());
   const [totalCount, setTotalCount] = useState(null);
   const [feedMeta, setFeedMeta] = useState(null);
   const [feedError, setFeedError] = useState("");
   const [reportJob, setReportJob] = useState(null);
   const fetchingRef = useRef(false);
-  const filtersRef = useRef(null);
+  const filtersRef = useRef(filters);
   const pendingFiltersRef = useRef(undefined);
 
   const loadProfile = useCallback(async () => {
@@ -549,6 +598,7 @@ export default function Swipe() {
     fetchingRef.current = true;
     setLoading(true);
     setFeedError("");
+    if (replace) setJobs([]);
     try {
       const params = buildFeedParams(f);
       console.log("JOB_FEED_PARAMS", {
@@ -589,13 +639,42 @@ export default function Swipe() {
     }
   }, []);
 
-  useEffect(() => { loadProfile(); loadFeed(true, null); }, [loadProfile, loadFeed]);
+  useEffect(() => {
+    loadProfile();
+    const persistedFilters = readPersistedFilters();
+    if (persistedFilters) {
+      filtersRef.current = persistedFilters;
+      setFilters(persistedFilters);
+      loadFeed(true, persistedFilters);
+      return;
+    }
+    loadFeed(true, null);
+  }, [loadProfile, loadFeed]);
 
   const applyFilters = (f) => {
     filtersRef.current = f;
     setFilters(f);
+    savePersistedFilters(f);
     setFiltersOpen(false);
+    setJobs([]);
+    setLoading(true);
+    setTotalCount(null);
+    setFeedMeta(null);
+    setFeedError("");
     loadFeed(true, f);
+  };
+
+  const resetFilters = () => {
+    clearPersistedFilters();
+    filtersRef.current = null;
+    setFilters(null);
+    setFiltersOpen(false);
+    setJobs([]);
+    setLoading(true);
+    setTotalCount(null);
+    setFeedMeta(null);
+    setFeedError("");
+    loadFeed(true, null);
   };
 
   const topJob = jobs[0];
@@ -727,9 +806,7 @@ export default function Swipe() {
             aria-label="Open filters"
           >
             <SlidersHorizontal className="h-4 w-4 text-sprout-mint sm:h-5 sm:w-5" />
-            {filters && Object.values(filters).some((v) =>
-              Array.isArray(v) ? v.length > 0 : (typeof v === "number" ? v > 0 : false)
-            ) && (
+            {hasActiveFilters(filters) && (
               <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-sprout-bg bg-sprout-mint" />
             )}
           </button>
@@ -845,6 +922,7 @@ export default function Swipe() {
         initialFilters={filters}
         totalCount={totalCount}
         onApply={applyFilters}
+        onReset={resetFilters}
         onClose={() => setFiltersOpen(false)}
       />
 

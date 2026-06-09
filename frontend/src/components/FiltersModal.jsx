@@ -126,7 +126,7 @@ function TagInput({ value, onAdd, onRemove, placeholder, testId }) {
   );
 }
 
-export default function FiltersModal({ open, initialFilters, totalCount, onApply, onClose }) {
+export default function FiltersModal({ open, initialFilters, totalCount, onApply, onReset, onClose }) {
   const [f, setF] = useState({ ...DEFAULT, ...(initialFilters || {}) });
   const [locationDraft, setLocationDraft] = useState("");
 
@@ -434,7 +434,11 @@ export default function FiltersModal({ open, initialFilters, totalCount, onApply
             </div>
             <div className="flex gap-3">
               <button
-                onClick={() => { setF(DEFAULT); setLocationDraft(""); }}
+                onClick={() => {
+                  setF(DEFAULT);
+                  setLocationDraft("");
+                  if (onReset) onReset();
+                }}
                 className="flex-1 h-12 rounded-full bg-sprout-surface-2 border border-sprout-border text-sprout-mint font-semibold"
                 data-testid="filters-clear"
               >
