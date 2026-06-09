@@ -224,35 +224,48 @@ async def get_current_user(
     session_token: Optional[str] = Cookie(default=None),
     authorization: Optional[str] = Header(default=None),
 ) -> User:
-    token = session_token
-    token_source = "cookie" if token else None
-    if not token and authorization and authorization.lower().startswith("bearer "):
-        token = authorization.split(" ", 1)[1].strip()
-        token_source = "authorization_header"
-    if not token:
+    bearer_token = None
+    if authorization and authorization.lower().startswith("bearer "):
+        bearer_token = authorization.split(" ", 1)[1].strip()
+
+    candidates: List[tuple[str, str]] = []
+    if bearer_token:
+        candidates.append(("bearer", bearer_token))
+    if session_token:
+        source = "bearer_failed_cookie_fallback" if bearer_token else "cookie"
+        candidates.append((source, session_token))
+
+    if not candidates:
         logger.info("auth_me token_missing path=%s", request.url.path)
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    logger.info("auth_me token_received source=%s path=%s", token_source, request.url.path)
-    session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
-    if not session:
-        logger.info("auth_me invalid_token reason=session_not_found source=%s", token_source)
-        raise HTTPException(status_code=401, detail="Invalid session")
+    last_failure = "Invalid session"
+    for token_source, token in candidates:
+        logger.info("auth_me token_received source=%s path=%s", token_source, request.url.path)
+        session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
+        if not session:
+            logger.info("auth_me invalid_token reason=session_not_found source=%s", token_source)
+            last_failure = "Invalid session"
+            continue
 
-    expires_at = session.get("expires_at")
-    if isinstance(expires_at, str):
-        expires_at = datetime.fromisoformat(expires_at)
-    if expires_at and expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-    if expires_at and expires_at < datetime.now(timezone.utc):
-        logger.info("auth_me invalid_token reason=session_expired source=%s user_id=%s", token_source, session.get("user_id"))
-        raise HTTPException(status_code=401, detail="Session expired")
+        expires_at = session.get("expires_at")
+        if isinstance(expires_at, str):
+            expires_at = datetime.fromisoformat(expires_at)
+        if expires_at and expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at and expires_at < datetime.now(timezone.utc):
+            logger.info("auth_me invalid_token reason=session_expired source=%s user_id=%s", token_source, session.get("user_id"))
+            last_failure = "Session expired"
+            continue
 
-    user_doc = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
-    if not user_doc:
-        logger.info("auth_me invalid_token reason=user_not_found source=%s user_id=%s", token_source, session.get("user_id"))
-        raise HTTPException(status_code=401, detail="User not found")
-    return User(**user_doc)
+        user_doc = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
+        if not user_doc:
+            logger.info("auth_me invalid_token reason=user_not_found source=%s user_id=%s", token_source, session.get("user_id"))
+            last_failure = "User not found"
+            continue
+        return User(**user_doc)
+
+    raise HTTPException(status_code=401, detail=last_failure)
 
 
 # ===================== Auth routes =====================
@@ -1301,29 +1314,35 @@ async def get_feed(
 
     def _location_terms() -> Dict[str, List[str]]:
         raw_locations: List[str] = []
+        explicit_request_location = False
         if locations_json:
             try:
                 parsed = json.loads(locations_json)
                 if isinstance(parsed, list):
-                    raw_locations.extend(str(item.get("location_label") or "") for item in parsed if isinstance(item, dict))
+                    parsed_labels = [str(item.get("location_label") or "") for item in parsed if isinstance(item, dict)]
+                    raw_locations.extend(parsed_labels)
+                    explicit_request_location = any(label for label in parsed_labels)
             except json.JSONDecodeError:
                 pass
         if location_label:
             raw_locations.append(location_label)
+            explicit_request_location = True
         if location:
             raw_locations.extend(location)
+            explicit_request_location = True
         target_location_data = profile.get("target_location_data") or {}
-        if target_location_data.get("location_label"):
-            raw_locations.append(str(target_location_data.get("location_label")))
-        elif profile.get("target_location"):
-            raw_locations.append(str(profile.get("target_location")))
+        if not explicit_request_location:
+            if target_location_data.get("location_label"):
+                raw_locations.append(str(target_location_data.get("location_label")))
+            elif profile.get("target_location"):
+                raw_locations.append(str(profile.get("target_location")))
         country_code_value = (
             (country_code or "")
-            or str(target_location_data.get("country_code") or "")
+            or ("" if explicit_request_location else str(target_location_data.get("country_code") or ""))
         ).lower().strip()
         country_value = (
             (country or "")
-            or str(target_location_data.get("country") or "")
+            or ("" if explicit_request_location else str(target_location_data.get("country") or ""))
         ).lower().strip()
         aliases = {
             "fr": ["france", "paris", "ile de france", "ile-de-france", "île-de-france"],
@@ -1530,7 +1549,7 @@ async def get_feed(
                 return country_match
             if radius_scope in ("worldwide", "remote", "remote/worldwide"):
                 return True
-            if radius_km is not None and radius_km <= 25:
+            if radius_km is not None:
                 return city_match
             return city_match or country_match
 

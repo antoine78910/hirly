@@ -53,6 +53,12 @@ const DEFAULT = {
   onlyMyCountry: false,
 };
 
+const locationKey = (loc) => {
+  const placeId = String(loc?.place_id || "").trim();
+  if (placeId) return `place:${placeId}`;
+  return `label:${String(loc?.location_label || "").trim().toLowerCase()}`;
+};
+
 function Chip({ active, children, onClick, testId }) {
   return (
     <button
@@ -259,7 +265,7 @@ export default function FiltersModal({ open, initialFilters, totalCount, onApply
           {/* Locations — cities/countries the user wants to target */}
           <section>
             <h3 className="font-display font-bold text-2xl mb-3">Locations</h3>
-            <p className="text-sm text-sprout-muted -mt-2 mb-3">Add one or more cities, regions, or countries.</p>
+            <p className="text-sm text-sprout-muted -mt-2 mb-3">Choose a city, region, or country for this feed.</p>
             {hasGooglePlacesKey() ? (
               <div className="space-y-3">
                 <PlacesAutocomplete
@@ -272,12 +278,13 @@ export default function FiltersModal({ open, initialFilters, totalCount, onApply
                     if (!loc) return;
                     setF((s) => {
                       const existing = s.locationsData || [];
-                      if (existing.some((item) => item.place_id === loc.place_id)) return s;
+                      const key = locationKey(loc);
+                      if (existing.some((item) => locationKey(item) === key)) return s;
                       const nextLocations = [...existing, loc];
                       return {
                         ...s,
                         locationsData: nextLocations,
-                        locationData: nextLocations[0],
+                        locationData: nextLocations[0] || null,
                         locations: nextLocations.map((item) => item.location_label),
                       };
                     });
