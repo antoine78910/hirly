@@ -2664,13 +2664,16 @@ async def require_admin_user(user: User = Depends(get_current_user)) -> User:
         for item in os.environ.get("ADMIN_EMAILS", "").split(",")
         if item.strip()
     ]
-    if admin_emails:
-        if user.email.lower() not in admin_emails:
-            raise HTTPException(status_code=403, detail="Admin access required")
+    user_email = (user.email or "").strip().lower()
+    if user_email and user_email in admin_emails:
         return user
-    if _dev_tools_enabled():
+
+    allow_dev_fallback = os.environ.get("ADMIN_ALLOW_DEV_FALLBACK", "false").strip().lower() in ("1", "true", "yes", "on")
+    if allow_dev_fallback and _dev_tools_enabled():
+        logger.warning("admin_access dev_fallback user_id=%s email=%s", user.user_id, user.email)
         return user
-    raise HTTPException(status_code=403, detail="Admin access is not configured")
+
+    raise HTTPException(status_code=403, detail="Admin access denied")
 
 
 def _admin_status_filter(filter_value: Optional[str]) -> Optional[set[str]]:

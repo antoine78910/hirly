@@ -32,6 +32,7 @@ export default function AdminApplications() {
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [accessDenied, setAccessDenied] = useState(false);
 
   const queryFilter = useMemo(
     () => FILTERS.some((item) => item.key === activeFilter) ? activeFilter : "all",
@@ -41,12 +42,19 @@ export default function AdminApplications() {
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
+    setAccessDenied(false);
     try {
       const params = queryFilter === "all" ? "" : `?filter=${encodeURIComponent(queryFilter)}`;
       const { data } = await api.get(`/admin/applications${params}`);
       setApplications(data.applications || []);
     } catch (err) {
-      setError(err?.response?.data?.detail || "Could not load admin applications");
+      setApplications([]);
+      if (err?.response?.status === 403) {
+        setAccessDenied(true);
+        setError("Admin access denied");
+      } else {
+        setError(err?.response?.data?.detail || "Could not load admin applications");
+      }
     } finally {
       setLoading(false);
     }
@@ -97,11 +105,16 @@ export default function AdminApplications() {
           })}
         </div>
 
-        {error ? (
+        {accessDenied ? (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-8 text-center">
+            <h2 className="font-display text-xl font-bold text-red-700">Admin access denied</h2>
+            <p className="mt-2 text-sm text-red-600">Your account is not allowed to view admin operations data.</p>
+          </div>
+        ) : error ? (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</div>
         ) : null}
 
-        <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
+        {!accessDenied ? <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
           <table className="w-full min-w-[900px] text-left text-sm">
             <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
               <tr>
@@ -146,7 +159,7 @@ export default function AdminApplications() {
               )}
             </tbody>
           </table>
-        </div>
+        </div> : null}
       </main>
     </div>
   );

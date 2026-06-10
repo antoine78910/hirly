@@ -50,6 +50,7 @@ export default function AdminApplicationDetail() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [accessDenied, setAccessDenied] = useState(false);
   const [note, setNote] = useState("");
   const [savingNote, setSavingNote] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState("");
@@ -57,11 +58,18 @@ export default function AdminApplicationDetail() {
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
+    setAccessDenied(false);
     try {
       const response = await api.get(`/admin/applications/${id}`);
       setData(response.data);
     } catch (err) {
-      setError(err?.response?.data?.detail || "Could not load application");
+      setData(null);
+      if (err?.response?.status === 403) {
+        setAccessDenied(true);
+        setError("Admin access denied");
+      } else {
+        setError(err?.response?.data?.detail || "Could not load application");
+      }
     } finally {
       setLoading(false);
     }
@@ -131,7 +139,14 @@ export default function AdminApplicationDetail() {
         <Link className="inline-flex items-center gap-2 text-sm font-semibold text-linkedin" to="/admin/applications">
           <ArrowLeft className="h-4 w-4" /> Back to queue
         </Link>
-        <div className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</div>
+        {accessDenied ? (
+          <div className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-8 text-center">
+            <h1 className="font-display text-xl font-bold text-red-700">Admin access denied</h1>
+            <p className="mt-2 text-sm text-red-600">Your account is not allowed to view admin operations data.</p>
+          </div>
+        ) : (
+          <div className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</div>
+        )}
       </div>
     );
   }
