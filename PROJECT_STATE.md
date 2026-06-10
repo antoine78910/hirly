@@ -1,10 +1,10 @@
-# Swiipr Project State
+# Hirly Project State
 
 Last audited: 2026-06-07
 
 ## Product Overview
 
-Swiipr is a mobile-first job search and application automation app. Users sign in with Google, complete onboarding, upload a CV, set job preferences, swipe through compatible jobs, and generate tailored application packages. The current product direction prioritizes jobs that can eventually support one-swipe auto-apply through known ATS systems.
+Hirly is a mobile-first job search and application automation app. Users sign in with Google, complete onboarding, upload a CV, set job preferences, swipe through compatible jobs, and generate tailored application packages. The current product direction prioritizes jobs that can eventually support one-swipe auto-apply through known ATS systems.
 
 The core user loop is:
 

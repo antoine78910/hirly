@@ -1,5 +1,5 @@
 /**
- * Swiipr briefcase mark.
+ * Hirly briefcase mark.
  */
 export default function Logo({ size = 28, className = "" }) {
   const src = `${process.env.PUBLIC_URL || ""}/logo.png`;
@@ -9,7 +9,7 @@ export default function Logo({ size = 28, className = "" }) {
       src={src}
       width={size}
       height={size}
-      alt="Swiipr"
+      alt="Hirly"
       className={`inline-block object-contain shrink-0 ${className}`}
       draggable={false}
     />

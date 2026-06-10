@@ -60,7 +60,7 @@ import {
   Hammer,
 } from "lucide-react";
 
-/** Swiipr onboarding step order */
+/** Hirly onboarding step order */
 export const ONBOARDING_STEP_ORDER = [
   "intro",           // 5 illustrated intro slides
   "signup",
@@ -324,7 +324,7 @@ export const OTHER_APPS_OPTIONS = [
 export const INTRO_SLIDES = [
   {
     id: "welcome",
-    title: "Welcome to Swiipr!",
+    title: "Welcome to Hirly!",
     body: "Your job application agent—built to learn who you are and apply on your behalf.",
     image: "/onboarding/intro-1.png",
   },
@@ -337,13 +337,13 @@ export const INTRO_SLIDES = [
   {
     id: "questions",
     title: "Answer Smart Questions",
-    body: "Swiipr asks tailored, job-specific questions to capture details most resumes miss.",
+    body: "Hirly asks tailored, job-specific questions to capture details most resumes miss.",
     image: "/onboarding/intro-3.png",
   },
   {
     id: "apply",
     title: "One Tap. Fully Applied.",
-    body: "Review your resume and cover letter, then submit. Swiipr's AI agent applies directly on employer websites.",
+    body: "Review your resume and cover letter, then submit. Hirly's AI agent applies directly on employer websites.",
     image: "/onboarding/intro-4.png",
   },
   {

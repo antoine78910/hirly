@@ -63,7 +63,7 @@ export default function Settings() {
   const openExternal = (href) => window.open(href, "_blank", "noopener");
 
   const deleteAccount = () => {
-    if (!window.confirm("Delete your Swiipr account? This removes your profile, swipes, and applications. This cannot be undone.")) return;
+    if (!window.confirm("Delete your Hirly account? This removes your profile, swipes, and applications. This cannot be undone.")) return;
     api.delete("/profile").then(() => {
       toast.success("Account deleted");
       logout();
@@ -108,10 +108,10 @@ export default function Settings() {
       <Section label="Plan & help" testId="settings-support">
         <Row icon={CreditCard}    label="Upgrade your plan" onClick={() => todo("Subscription")}            testId="settings-subscribe" />
         <Row icon={RotateCw}      label="Restore purchase"  onClick={() => todo("Restore purchase")}       testId="settings-restore" />
-        <Row icon={MessageSquare} label="Talk to us"        onClick={() => openExternal("mailto:hi@swiipr.app")} testId="settings-chat" />
+        <Row icon={MessageSquare} label="Talk to us"        onClick={() => openExternal("mailto:hi@hirly.com")} testId="settings-chat" />
       </Section>
 
-      <Section label="Share Swiipr" testId="settings-social">
+      <Section label="Share Hirly" testId="settings-social">
         <Row icon={Users}     label="Invite a friend" onClick={inviteFriends}                                 testId="settings-invite" />
         <Row icon={Instagram} label="We're on Instagram" onClick={() => openExternal("https://instagram.com")} testId="settings-instagram" />
         <Row icon={TikTok}    label="We're on TikTok"    onClick={() => openExternal("https://tiktok.com")}    testId="settings-tiktok" />

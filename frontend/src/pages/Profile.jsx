@@ -247,7 +247,7 @@ function ApplicationDefaultsSheet({ open, profile, onClose, onSaved }) {
           label="Default referral source"
           value={defaults.referral_source}
           onChange={(v) => update("referral_source", v)}
-          placeholder="Swiipr"
+          placeholder="Hirly"
           testId="app-defaults-referral-source"
         />
         <div className="space-y-1.5">

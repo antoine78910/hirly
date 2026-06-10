@@ -335,7 +335,7 @@ export function ShowcasePricingStep({ selectedPlan, onSelectPlan }) {
         <div className="relative left-1/2 flex min-h-0 flex-1 -translate-x-1/2 w-screen max-w-none items-center justify-center">
           <ShowcaseImage
             src={ONBOARDING_SHOWCASE_SCREENS.pricing}
-            alt="Swiipr inbox, swipe feed, and applications"
+            alt="Hirly inbox, swipe feed, and applications"
             className="mx-0 h-full max-h-full w-full max-w-none"
           />
         </div>

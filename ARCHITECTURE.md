@@ -2,7 +2,7 @@
 
 ## High-Level System
 
-Swiipr is split into a React frontend and a FastAPI backend.
+Hirly is split into a React frontend and a FastAPI backend.
 
 ```
 React / CRACO / Tailwind

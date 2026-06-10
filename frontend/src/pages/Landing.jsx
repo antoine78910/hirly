@@ -244,7 +244,7 @@ export default function Landing() {
                   <img
                     decoding="async"
                     loading="lazy"
-                    src="https://api.qrserver.com/v1/create-qr-code/?size=1024x1024&margin=4&ecc=M&data=https://swiipr.app"
+                    src="https://api.qrserver.com/v1/create-qr-code/?size=1024x1024&margin=4&ecc=M&data=https://hirly.com"
                     alt=""
                     className="block h-full w-full object-contain object-center blur-[3px] select-none"
                     draggable={false}

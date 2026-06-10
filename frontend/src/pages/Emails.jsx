@@ -59,7 +59,7 @@ const INBOX_MESSAGES = [
     filter: "primary",
     from: "Vercel Careers",
     subject: "Application received — Full Stack Engineer",
-    preview: "Thanks for applying via Swiipr. We've received your application and our team is reviewing it.",
+    preview: "Thanks for applying via Hirly. We've received your application and our team is reviewing it.",
     body: `Hi Alex,\n\nThanks for applying to the Full Stack Engineer role at Vercel through ${BRAND.NAME}. We've received your tailored application package and our recruiting team is reviewing it now.\n\nYou'll hear back within 5–7 business days. In the meantime, feel free to explore our engineering blog and open roles.\n\nBest,\nVercel Careers`,
     date: "Jun 5",
     starred: false,

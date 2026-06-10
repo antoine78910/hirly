@@ -1,6 +1,6 @@
-# Swiipr
+# Hirly
 
-Swiipr is a job matching and application automation app. It combines a swipe-based job feed, CV/profile parsing, tailored application packages, and a Greenhouse-first submission pipeline.
+Hirly is a job matching and application automation app. It combines a swipe-based job feed, CV/profile parsing, tailored application packages, and a Greenhouse-first submission pipeline.
 
 ## Stack
 
