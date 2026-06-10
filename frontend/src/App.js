@@ -1,5 +1,5 @@
 import "@/App.css";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Routes, Route, useLocation } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/context/AuthContext";
 import Landing from "@/pages/Landing";
@@ -18,6 +18,8 @@ import Feedback from "@/pages/Feedback";
 import Credits from "@/pages/Credits";
 import Referral from "@/pages/Referral";
 import AuthCallback from "@/pages/AuthCallback";
+import AdminApplications from "@/pages/AdminApplications";
+import AdminApplicationDetail from "@/pages/AdminApplicationDetail";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import BottomNav from "@/components/BottomNav";
 import { demoMode, devBypassAuth } from "@/lib/dev";
@@ -30,6 +32,7 @@ function AppRoute({ children, requireProfile = false }) {
 function shouldShowBottomNav(pathname) {
   if (pathname === "/" || pathname === "/auth/callback") return false;
   if (pathname === "/signup") return false;
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) return false;
   if (pathname === "/onboarding" || pathname.startsWith("/onboarding/")) return false;
   if (pathname === "/credits" || pathname === "/referral") return false;
   return true;
@@ -51,6 +54,9 @@ function AppRouter() {
         <Route path="/" element={<Landing />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route path="/admin" element={<AppRoute><Navigate to="/admin/applications" replace /></AppRoute>} />
+        <Route path="/admin/applications" element={<AppRoute><AdminApplications /></AppRoute>} />
+        <Route path="/admin/applications/:id" element={<AppRoute><AdminApplicationDetail /></AppRoute>} />
         <Route path="/onboarding" element={<Onboarding />} />
         <Route path="/swipe" element={<AppRoute requireProfile><Swipe /></AppRoute>} />
         <Route path="/feedback" element={<AppRoute><Feedback /></AppRoute>} />

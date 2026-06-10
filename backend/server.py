@@ -177,6 +177,14 @@ class StatusUpdate(BaseModel):
     status: Literal["applied", "viewed", "interview", "rejected", "offer"]
 
 
+class AdminNoteCreate(BaseModel):
+    note: str
+
+
+class AdminStatusUpdate(BaseModel):
+    status: Literal["submitted", "needs_user_input", "blocked", "escalated"]
+
+
 class PreferencesUpdate(BaseModel):
     target_role: Optional[str] = None
     target_roles: Optional[List[str]] = None
@@ -2648,6 +2656,189 @@ async def list_applications(user: User = Depends(get_current_user)):
         a = _normalize_application_status_fields(a)
         result.append({**a, "job": job_map.get(a["job_id"])})
     return {"applications": result}
+
+
+async def require_admin_user(user: User = Depends(get_current_user)) -> User:
+    admin_emails = [
+        item.strip().lower()
+        for item in os.environ.get("ADMIN_EMAILS", "").split(",")
+        if item.strip()
+    ]
+    if admin_emails:
+        if user.email.lower() not in admin_emails:
+            raise HTTPException(status_code=403, detail="Admin access required")
+        return user
+    if _dev_tools_enabled():
+        return user
+    raise HTTPException(status_code=403, detail="Admin access is not configured")
+
+
+def _admin_status_filter(filter_value: Optional[str]) -> Optional[set[str]]:
+    if not filter_value or filter_value == "all":
+        return None
+    mapping = {
+        "action_required": {"action_required"},
+        "blocked": {"blocked"},
+        "blocked_captcha": {"blocked_captcha"},
+        "prepare_failed": {"prepare_failed"},
+        "prepared": {"prepared", "ready"},
+        "submitted": {"submitted"},
+    }
+    return mapping.get(filter_value)
+
+
+def _admin_doc_metadata(app_doc: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "tailored_cv_available": bool(app_doc.get("tailored_cv_file_b64") or app_doc.get("tailored_resume_structured") or app_doc.get("tailored_resume")),
+        "tailored_cv_filename": app_doc.get("tailored_cv_filename"),
+        "tailored_cv_mime": app_doc.get("tailored_cv_mime"),
+        "cover_letter_available": bool(app_doc.get("tailored_cover_letter") or app_doc.get("cover_letter")),
+        "cover_letter_format": "text" if (app_doc.get("tailored_cover_letter") or app_doc.get("cover_letter")) else None,
+        **_application_text_lengths(app_doc),
+    }
+
+
+def _admin_application_row(app_doc: Dict[str, Any], user_doc: Optional[Dict[str, Any]], job_doc: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    app_doc = _normalize_application_status_fields(app_doc)
+    return {
+        "application_id": app_doc.get("application_id"),
+        "user_id": app_doc.get("user_id"),
+        "user_email": (user_doc or {}).get("email"),
+        "company": (job_doc or {}).get("company") or app_doc.get("company"),
+        "title": (job_doc or {}).get("title") or app_doc.get("title"),
+        "ats_provider": (job_doc or {}).get("ats_provider") or app_doc.get("submission_provider"),
+        "submission_status": app_doc.get("submission_status"),
+        "package_status": app_doc.get("package_status"),
+        "admin_status": app_doc.get("admin_status"),
+        "created_at": app_doc.get("created_at"),
+        "updated_at": app_doc.get("updated_at") or app_doc.get("created_at"),
+    }
+
+
+@api_router.get("/admin/applications")
+async def admin_list_applications(
+    status_filter: Optional[str] = Query(default=None, alias="filter"),
+    status: Optional[str] = Query(default=None),
+    admin: User = Depends(require_admin_user),
+):
+    status_filter = status_filter or status
+    apps = await db.applications.find({}, {"_id": 0}).sort("updated_at", -1).to_list(1000)
+    allowed_statuses = _admin_status_filter(status_filter)
+    if allowed_statuses is not None:
+        apps = [
+            app_doc
+            for app_doc in apps
+            if _normalize_application_status_fields(app_doc).get("submission_status") in allowed_statuses
+        ]
+
+    user_ids = list({app.get("user_id") for app in apps if app.get("user_id")})
+    job_ids = list({app.get("job_id") for app in apps if app.get("job_id")})
+    users = await db.users.find({"user_id": {"$in": user_ids}}, {"_id": 0}).to_list(1000) if user_ids else []
+    jobs = await db.jobs.find({"job_id": {"$in": job_ids}}, {"_id": 0}).to_list(1000) if job_ids else []
+    user_map = {item.get("user_id"): item for item in users}
+    job_map = {item.get("job_id"): item for item in jobs}
+    return {
+        "applications": [
+            _admin_application_row(app_doc, user_map.get(app_doc.get("user_id")), job_map.get(app_doc.get("job_id")))
+            for app_doc in apps
+        ],
+        "filter": status_filter or "all",
+    }
+
+
+@api_router.get("/admin/applications/{application_id}")
+async def admin_get_application(application_id: str, admin: User = Depends(require_admin_user)):
+    app_doc = await db.applications.find_one({"application_id": application_id}, {"_id": 0})
+    if not app_doc:
+        raise HTTPException(status_code=404, detail="Application not found")
+    app_doc = _normalize_application_status_fields(app_doc)
+    profile = await db.profiles.find_one({"user_id": app_doc.get("user_id")}, {"_id": 0})
+    user_doc = await db.users.find_one({"user_id": app_doc.get("user_id")}, {"_id": 0})
+    job = await db.jobs.find_one({"job_id": app_doc.get("job_id")}, {"_id": 0})
+    runs = await db.browser_submission_runs.find(
+        {"application_id": application_id},
+        {
+            "_id": 0,
+            "screenshots": 0,
+        },
+    ).sort("created_at", -1).to_list(20)
+    required_questions = (
+        app_doc.get("required_questions")
+        or app_doc.get("prepared_missing_information")
+        or []
+    )
+    notes = app_doc.get("admin_notes") or []
+    return {
+        "application": {**app_doc, "user_email": (user_doc or {}).get("email")},
+        "profile": profile,
+        "job": job,
+        "prepared_missing_information": app_doc.get("prepared_missing_information") or [],
+        "required_questions": required_questions,
+        "browser_submission_runs": runs,
+        "generated_documents_metadata": _admin_doc_metadata(app_doc),
+        "latest_notes": notes[-20:],
+    }
+
+
+@api_router.post("/admin/applications/{application_id}/notes")
+async def admin_add_application_note(
+    application_id: str,
+    body: AdminNoteCreate,
+    admin: User = Depends(require_admin_user),
+):
+    note = body.note.strip()
+    if not note:
+        raise HTTPException(status_code=400, detail="note required")
+    app_doc = await db.applications.find_one({"application_id": application_id}, {"_id": 0})
+    if not app_doc:
+        raise HTTPException(status_code=404, detail="Application not found")
+    now = datetime.now(timezone.utc).isoformat()
+    notes = list(app_doc.get("admin_notes") or [])
+    notes.append({
+        "note_id": f"note_{uuid.uuid4().hex[:12]}",
+        "note": note,
+        "author_user_id": admin.user_id,
+        "author_email": admin.email,
+        "created_at": now,
+    })
+    await db.applications.update_one(
+        {"application_id": application_id},
+        {"$set": {"admin_notes": notes, "updated_at": now}},
+    )
+    return {"ok": True, "note": notes[-1], "latest_notes": notes[-20:]}
+
+
+@api_router.patch("/admin/applications/{application_id}/admin-status")
+async def admin_update_application_status(
+    application_id: str,
+    body: AdminStatusUpdate,
+    admin: User = Depends(require_admin_user),
+):
+    app_doc = await db.applications.find_one({"application_id": application_id}, {"_id": 0})
+    if not app_doc:
+        raise HTTPException(status_code=404, detail="Application not found")
+    submission_status = {
+        "submitted": "submitted",
+        "needs_user_input": "action_required",
+        "blocked": "blocked",
+        "escalated": "blocked",
+    }[body.status]
+    now = datetime.now(timezone.utc).isoformat()
+    update = {
+        "admin_status": body.status,
+        "submission_status": submission_status,
+        "updated_at": now,
+        "admin_status_updated_by": admin.email,
+        "admin_status_updated_at": now,
+    }
+    if body.status == "submitted":
+        update["submitted_at"] = now
+    await db.applications.update_one(
+        {"application_id": application_id},
+        {"$set": update},
+    )
+    updated = await db.applications.find_one({"application_id": application_id}, {"_id": 0})
+    return {"ok": True, "application": _normalize_application_status_fields(updated or {})}
 
 
 @api_router.get("/applications/greenhouse/form-preview")
