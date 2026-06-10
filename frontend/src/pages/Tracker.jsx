@@ -15,6 +15,7 @@ import { motion } from "framer-motion";
 import CVPreview from "../components/CVPreview";
 import CoverLetterPreview from "../components/CoverLetterPreview";
 import { downloadTailoredCV, downloadCoverLetter } from "../lib/pdf";
+import { trackEvent } from "../lib/analytics";
 
 const DISPLAY_STATUSES = {
   generated: {
@@ -94,6 +95,13 @@ const DISPLAY_STATUSES = {
     dotLight: "bg-rose-500",
     dotDark: "bg-rose-400",
   },
+  pending: {
+    label: "Application pending",
+    tintLight: "bg-amber-50 text-amber-700 ring-1 ring-amber-200/80",
+    tintDark: "bg-amber-500/15 text-amber-300",
+    dotLight: "bg-amber-500",
+    dotDark: "bg-amber-400",
+  },
   unknown: {
     label: "Status unknown",
     tintLight: "bg-zinc-50 text-zinc-700 ring-1 ring-zinc-200/80",
@@ -111,11 +119,13 @@ const DISPLAY_STATUSES = {
 };
 
 /** One user-facing status: pipeline updates win, then submission state. */
-const resolveDisplayStatus = ({ status, submission_status }) => {
+const resolveDisplayStatus = ({ status, submission_status, user_facing_submission_status }) => {
   if (status === "offer") return "offer";
   if (status === "rejected") return "rejected";
   if (status === "interview") return "interview";
   if (status === "viewed") return "viewed";
+  if (user_facing_submission_status === "pending") return "pending";
+  if (user_facing_submission_status === "submitted") return "submitted";
   if (submission_status === "blocked" || submission_status === "action_required") return "action_required";
   if (submission_status === "blocked_captcha") return "blocked_captcha";
   if (submission_status === "prepare_failed") return "prepare_failed";
@@ -170,6 +180,7 @@ const optionLabel = (option) => {
 
 const applicationStatusMessage = (status) => {
   if (status === "submitted") return "Submitted";
+  if (status === "pending") return "We're finalizing your application.";
   if (status === "ready" || status === "prepared") {
     return "Application prepared. Final submission is not enabled yet.";
   }
@@ -207,7 +218,10 @@ export default function Tracker() {
       setProfile(p.data || null);
     } finally { setLoading(false); }
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    trackEvent("tracker_view");
+    load();
+  }, []);
 
   useEffect(() => {
     if (!selected) return;
@@ -265,6 +279,10 @@ export default function Tracker() {
       const updated = data;
       setSelected(updated);
       setApps((prev) => prev.map((a) => a.application_id === updated.application_id ? updated : a));
+      trackEvent("action_required_answer_saved", {
+        application_id: selected.application_id,
+        save_to_profile: saveMissingToProfile,
+      });
       toast.success(updated.submission_status === "ready" ? "Ready to submit" : "Answers saved");
     } catch (e) {
       const detail = e?.response?.data?.detail;
@@ -284,6 +302,11 @@ export default function Tracker() {
   const prepareGreenhouseAgain = async () => {
     if (!selected?.job_id) return;
     setPreparingAgain(true);
+    trackEvent("prepare_again_clicked", {
+      application_id: selected.application_id,
+      job_id: selected.job_id,
+      ats_provider: selected.job?.ats_provider,
+    });
     try {
       const { data } = await api.post("/applications/greenhouse/prepare-browser-fill", { job_id: selected.job_id });
       const status = data?.submission_status;
@@ -404,7 +427,7 @@ export default function Tracker() {
                 <div className="p-4 rounded-2xl bg-sprout-surface-2 border border-sprout-border mb-5">
                   <p className="text-sm font-semibold text-white">Application package generated</p>
                   <p className="mt-1 text-sm text-sprout-muted">
-                    {applicationStatusMessage(selected.submission_status)}
+                    {applicationStatusMessage(selected.user_facing_submission_status || selected.submission_status)}
                   </p>
                   {(selected.submission_status === "ready" || selected.submission_status === "prepared") && (
                     <Button
@@ -433,7 +456,7 @@ export default function Tracker() {
                   <div className="p-4 rounded-2xl bg-orange-500/10 border border-orange-400/30 mb-5" data-testid="captcha-required-state">
                     <p className="text-sm font-semibold text-orange-200">Human verification required</p>
                     <p className="mt-1 text-sm text-sprout-muted">
-                      The application form needs a manual CAPTCHA or security check before it can be completed.
+                      The application form needs an additional security check before it can be completed.
                     </p>
                   </div>
                 )}

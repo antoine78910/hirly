@@ -28,6 +28,7 @@ import uuid
 import re
 import base64
 import time
+import hashlib
 from pathlib import Path
 from urllib.parse import urlparse
 from pydantic import BaseModel, Field, ConfigDict
@@ -142,6 +143,14 @@ class SupabaseSessionRequest(BaseModel):
     access_token: str
 
 
+class AnalyticsEventRequest(BaseModel):
+    event: str
+    properties: Dict[str, Any] = Field(default_factory=dict)
+    anonymous_id: Optional[str] = None
+    page: Optional[str] = None
+    source: Optional[str] = None
+
+
 class ResolveMissingInfoRequest(BaseModel):
     answers: Dict[str, Any] = Field(default_factory=dict)
     save_to_profile: bool = False
@@ -183,6 +192,11 @@ class AdminNoteCreate(BaseModel):
 
 class AdminStatusUpdate(BaseModel):
     status: Literal["submitted", "needs_user_input", "blocked", "escalated"]
+
+
+class AdminManualStatusUpdate(BaseModel):
+    manual_status: Literal["manual_review_needed", "manual_in_progress", "manually_submitted", "manual_blocked", "needs_user_input"]
+    note: Optional[str] = None
 
 
 class PreferencesUpdate(BaseModel):
@@ -466,6 +480,58 @@ async def auth_me(user: User = Depends(get_current_user)):
         "has_profile": profile is not None and bool(profile.get("cv_text")),
         "has_preferences": profile is not None and bool(profile.get("target_role")),
     }
+
+
+async def _optional_current_user(
+    request: Request,
+    session_token: Optional[str] = Cookie(default=None),
+    authorization: Optional[str] = Header(default=None),
+) -> Optional[User]:
+    try:
+        return await get_current_user(request, session_token=session_token, authorization=authorization)
+    except HTTPException:
+        return None
+
+
+def _hash_ip(request: Request) -> Optional[str]:
+    forwarded = request.headers.get("x-forwarded-for", "")
+    raw_ip = forwarded.split(",", 1)[0].strip() if forwarded else (request.client.host if request.client else "")
+    if not raw_ip:
+        return None
+    salt = os.environ.get("ANALYTICS_IP_HASH_SALT", "hirly-analytics")
+    return hashlib.sha256(f"{salt}:{raw_ip}".encode("utf-8")).hexdigest()[:24]
+
+
+@api_router.post("/analytics/event")
+async def track_analytics_event(
+    body: AnalyticsEventRequest,
+    request: Request,
+    user: Optional[User] = Depends(_optional_current_user),
+):
+    event_name = (body.event or "").strip()
+    if not event_name:
+        raise HTTPException(status_code=400, detail="event required")
+    if len(event_name) > 120:
+        raise HTTPException(status_code=400, detail="event too long")
+    now = datetime.now(timezone.utc).isoformat()
+    event_doc = {
+        "event_id": f"evt_{uuid.uuid4().hex}",
+        "user_id": user.user_id if user else None,
+        "anonymous_id": (body.anonymous_id or "").strip()[:160] or None,
+        "event": event_name,
+        "properties": body.properties or {},
+        "page": (body.page or "").strip()[:300] or None,
+        "source": (body.source or "").strip()[:120] or None,
+        "created_at": now,
+        "user_agent": request.headers.get("user-agent"),
+        "ip_hash": _hash_ip(request),
+    }
+    try:
+        await db.analytics_events.insert_one(event_doc)
+    except Exception as exc:
+        logger.warning("analytics_event_store_failed event=%s error=%s", event_name, str(exc)[:200])
+        return {"ok": False, "stored": False}
+    return {"ok": True, "stored": True, "event_id": event_doc["event_id"]}
 
 
 @api_router.post("/auth/logout")
@@ -2654,7 +2720,7 @@ async def list_applications(user: User = Depends(get_current_user)):
     result = []
     for a in apps:
         a = _normalize_application_status_fields(a)
-        result.append({**a, "job": job_map.get(a["job_id"])})
+        result.append(_public_application_doc(a, job_map.get(a["job_id"])))
     return {"applications": result}
 
 
@@ -2690,6 +2756,73 @@ def _admin_status_filter(filter_value: Optional[str]) -> Optional[set[str]]:
     return mapping.get(filter_value)
 
 
+MANUAL_STATUSES = {"manual_review_needed", "manual_in_progress", "manually_submitted", "manual_blocked", "needs_user_input"}
+
+
+def _has_remaining_user_questions(app_doc: Dict[str, Any]) -> bool:
+    return bool(app_doc.get("prepared_missing_information") or app_doc.get("required_questions"))
+
+
+def _effective_manual_status(app_doc: Dict[str, Any]) -> Optional[str]:
+    manual_status = app_doc.get("manual_status") or app_doc.get("admin_status")
+    if manual_status in MANUAL_STATUSES:
+        return manual_status
+    if app_doc.get("submission_status") in {"prepare_failed", "blocked", "blocked_captcha", "failed"} and not _has_remaining_user_questions(app_doc):
+        return "manual_review_needed"
+    return None
+
+
+def _user_facing_submission_status(app_doc: Dict[str, Any]) -> str:
+    if app_doc.get("submission_status") == "submitted" or _effective_manual_status(app_doc) == "manually_submitted":
+        return "submitted"
+    if _effective_manual_status(app_doc) in {"manual_review_needed", "manual_in_progress", "manual_blocked"}:
+        return "pending"
+    return app_doc.get("submission_status") or "not_submitted"
+
+
+def _public_application_doc(app_doc: Dict[str, Any], job_doc: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    public_doc = dict(_normalize_application_status_fields(app_doc))
+    public_doc["user_facing_submission_status"] = _user_facing_submission_status(public_doc)
+    for key in (
+        "admin_status",
+        "manual_status",
+        "assigned_to",
+        "assigned_to_user_id",
+        "assigned_at",
+        "admin_notes",
+        "admin_timeline",
+        "admin_status_updated_by",
+        "admin_status_updated_at",
+        "manual_status_updated_by",
+        "manual_status_updated_at",
+    ):
+        public_doc.pop(key, None)
+    if job_doc is not None:
+        public_doc["job"] = job_doc
+    return public_doc
+
+
+def _job_application_url(job_doc: Optional[Dict[str, Any]]) -> Optional[str]:
+    if not job_doc:
+        return None
+    for key in ("application_url", "external_url", "source_url", "url", "absolute_url", "job_url"):
+        value = job_doc.get(key)
+        if value:
+            return value
+    data = job_doc.get("data") if isinstance(job_doc.get("data"), dict) else {}
+    for key in ("application_url", "external_url", "source_url", "url", "absolute_url", "job_url"):
+        value = data.get(key)
+        if value:
+            return value
+    return None
+
+
+def _append_admin_timeline(app_doc: Dict[str, Any], event: Dict[str, Any]) -> List[Dict[str, Any]]:
+    timeline = list(app_doc.get("admin_timeline") or [])
+    timeline.append(event)
+    return timeline[-100:]
+
+
 def _admin_doc_metadata(app_doc: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "tailored_cv_available": bool(app_doc.get("tailored_cv_file_b64") or app_doc.get("tailored_resume_structured") or app_doc.get("tailored_resume")),
@@ -2711,10 +2844,384 @@ def _admin_application_row(app_doc: Dict[str, Any], user_doc: Optional[Dict[str,
         "title": (job_doc or {}).get("title") or app_doc.get("title"),
         "ats_provider": (job_doc or {}).get("ats_provider") or app_doc.get("submission_provider"),
         "submission_status": app_doc.get("submission_status"),
+        "user_facing_submission_status": _user_facing_submission_status(app_doc),
         "package_status": app_doc.get("package_status"),
         "admin_status": app_doc.get("admin_status"),
+        "manual_status": _effective_manual_status(app_doc),
+        "assigned_to": app_doc.get("assigned_to"),
+        "assigned_at": app_doc.get("assigned_at"),
         "created_at": app_doc.get("created_at"),
         "updated_at": app_doc.get("updated_at") or app_doc.get("created_at"),
+    }
+
+
+def _parse_dt(value: Any) -> Optional[datetime]:
+    if isinstance(value, datetime):
+        dt = value
+    elif isinstance(value, str) and value:
+        try:
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    else:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def _is_today(value: Any) -> bool:
+    dt = _parse_dt(value)
+    if not dt:
+        return False
+    return dt.astimezone(timezone.utc).date() == datetime.now(timezone.utc).date()
+
+
+def _profile_completion(profile: Optional[Dict[str, Any]]) -> int:
+    if not profile:
+        return 0
+    checks = [
+        bool(profile.get("cv_text")),
+        bool(profile.get("target_role") or profile.get("target_roles")),
+        bool(profile.get("target_location") or profile.get("target_location_data")),
+        bool((profile.get("application_answers_profile") or {}) or (profile.get("application_defaults") or {})),
+    ]
+    return int(round((sum(1 for item in checks if item) / len(checks)) * 100))
+
+
+def _attention_status(status: Optional[str]) -> bool:
+    return status in {"action_required", "blocked", "blocked_captcha", "prepare_failed", "failed"}
+
+
+def _ats_bucket(value: Optional[str]) -> str:
+    normalized = (value or "unknown").strip().lower()
+    if normalized in {"greenhouse", "lever", "ashby"}:
+        return normalized
+    return "unknown"
+
+
+async def _admin_base_data() -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
+    users = await db.users.find({}, {"_id": 0}).to_list(10000)
+    profiles = await db.profiles.find({}, {"_id": 0}).to_list(10000)
+    swipes = await db.swipes.find({}, {"_id": 0}).to_list(10000)
+    applications = await db.applications.find({}, {"_id": 0}).to_list(10000)
+    job_ids = list({app.get("job_id") for app in applications if app.get("job_id")})
+    jobs = await db.jobs.find({"job_id": {"$in": job_ids}}, {"_id": 0}).to_list(10000) if job_ids else []
+    return users, profiles, swipes, applications, jobs
+
+
+async def _analytics_events() -> List[Dict[str, Any]]:
+    try:
+        return await db.analytics_events.find({}, {"_id": 0}).sort("created_at", -1).to_list(10000)
+    except Exception as exc:
+        logger.warning("analytics_events_read_failed error=%s", str(exc)[:200])
+        return []
+
+
+def _event_actor(event_doc: Dict[str, Any]) -> str:
+    return str(event_doc.get("user_id") or event_doc.get("anonymous_id") or event_doc.get("event_id") or "")
+
+
+def _unique_event_actors(events: List[Dict[str, Any]], event_name: str) -> set[str]:
+    return {_event_actor(item) for item in events if item.get("event") == event_name and _event_actor(item)}
+
+
+def _event_count(events: List[Dict[str, Any]], event_name: str) -> int:
+    return sum(1 for item in events if item.get("event") == event_name)
+
+
+def _series_counts(items: List[Dict[str, Any]], days: int, date_getter, predicate=lambda item: True) -> List[Dict[str, Any]]:
+    today = datetime.now(timezone.utc).date()
+    buckets = {(today - timedelta(days=offset)).isoformat(): 0 for offset in range(days - 1, -1, -1)}
+    for item in items:
+        if not predicate(item):
+            continue
+        dt = _parse_dt(date_getter(item))
+        if not dt:
+            continue
+        key = dt.astimezone(timezone.utc).date().isoformat()
+        if key in buckets:
+            buckets[key] += 1
+    return [{"date": key, "count": value} for key, value in buckets.items()]
+
+
+def _rate(numerator: int, denominator: int) -> float:
+    if not denominator:
+        return 0.0
+    return round((numerator / denominator) * 100, 1)
+
+
+@api_router.get("/admin/overview")
+async def admin_overview(admin: User = Depends(require_admin_user)):
+    users, profiles, _swipes, applications, jobs = await _admin_base_data()
+    normalized_apps = [_normalize_application_status_fields(app_doc) for app_doc in applications]
+    user_map = {item.get("user_id"): item for item in users}
+    job_map = {item.get("job_id"): item for item in jobs}
+    prepared_statuses = {"ready", "prepared"}
+    failed_blocked_statuses = {"failed", "blocked", "blocked_captcha", "prepare_failed"}
+    generated_count = sum(1 for app_doc in normalized_apps if app_doc.get("package_status") in {"generated", "generated_text_only"})
+    prepared_count = sum(1 for app_doc in normalized_apps if app_doc.get("submission_status") in prepared_statuses)
+    submitted_count = sum(1 for app_doc in normalized_apps if app_doc.get("submission_status") == "submitted")
+
+    blocker_counts: Dict[str, int] = {}
+    for app_doc in normalized_apps:
+        if not _attention_status(app_doc.get("submission_status")):
+            continue
+        blockers = app_doc.get("prepared_missing_information") or app_doc.get("prepared_blockers") or [app_doc.get("submission_error") or app_doc.get("submission_status")]
+        for blocker in blockers:
+            if isinstance(blocker, dict):
+                label = blocker.get("label") or blocker.get("field_label") or blocker.get("field_name") or blocker.get("reason")
+            else:
+                label = str(blocker or "")
+            label = (label or "Unknown blocker").strip()
+            blocker_counts[label] = blocker_counts.get(label, 0) + 1
+
+    attention_apps = [
+        app_doc
+        for app_doc in normalized_apps
+        if _attention_status(app_doc.get("submission_status"))
+    ]
+    attention_apps.sort(key=lambda item: _parse_dt(item.get("updated_at") or item.get("created_at")) or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+
+    return {
+        "metrics": {
+            "total_users": len(users),
+            "new_users_today": sum(1 for user in users if _is_today(user.get("created_at"))),
+            "applications_today": sum(1 for app_doc in normalized_apps if _is_today(app_doc.get("created_at"))),
+            "prepared_applications": prepared_count,
+            "action_required": sum(1 for app_doc in normalized_apps if app_doc.get("submission_status") == "action_required"),
+            "failed_blocked": sum(1 for app_doc in normalized_apps if app_doc.get("submission_status") in failed_blocked_statuses),
+            "submitted": submitted_count,
+            "conversion": {
+                "generated": generated_count,
+                "prepared": prepared_count,
+                "submitted": submitted_count,
+            },
+        },
+        "top_blockers": [
+            {"label": label, "count": count}
+            for label, count in sorted(blocker_counts.items(), key=lambda item: item[1], reverse=True)[:8]
+        ],
+        "latest_attention": [
+            _admin_application_row(app_doc, user_map.get(app_doc.get("user_id")), job_map.get(app_doc.get("job_id")))
+            for app_doc in attention_apps[:10]
+        ],
+    }
+
+
+@api_router.get("/admin/users")
+async def admin_list_users(admin: User = Depends(require_admin_user)):
+    users, profiles, _swipes, applications, _jobs = await _admin_base_data()
+    profile_map = {item.get("user_id"): item for item in profiles}
+    app_counts: Dict[str, int] = {}
+    last_app_at: Dict[str, Any] = {}
+    for app_doc in applications:
+        uid = app_doc.get("user_id")
+        if not uid:
+            continue
+        app_counts[uid] = app_counts.get(uid, 0) + 1
+        candidate = app_doc.get("updated_at") or app_doc.get("created_at")
+        if not last_app_at.get(uid) or (_parse_dt(candidate) or datetime.min.replace(tzinfo=timezone.utc)) > (_parse_dt(last_app_at[uid]) or datetime.min.replace(tzinfo=timezone.utc)):
+            last_app_at[uid] = candidate
+
+    rows = []
+    for user_doc in users:
+        uid = user_doc.get("user_id")
+        profile = profile_map.get(uid)
+        rows.append({
+            "user_id": uid,
+            "email": user_doc.get("email"),
+            "name": user_doc.get("name"),
+            "profile_completion": _profile_completion(profile),
+            "cv_uploaded": bool((profile or {}).get("cv_text")),
+            "total_applications": app_counts.get(uid, 0),
+            "last_active_at": last_app_at.get(uid) or (profile or {}).get("updated_at") or user_doc.get("created_at"),
+            "created_at": user_doc.get("created_at"),
+            "plan": "Not connected",
+        })
+    rows.sort(key=lambda item: _parse_dt(item.get("last_active_at")) or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+    return {"users": rows}
+
+
+@api_router.get("/admin/users/{user_id}")
+async def admin_get_user(user_id: str, admin: User = Depends(require_admin_user)):
+    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
+    profile = await db.profiles.find_one({"user_id": user_id}, {"_id": 0})
+    apps = await db.applications.find({"user_id": user_id}, {"_id": 0}).sort("updated_at", -1).to_list(500)
+    job_ids = list({app.get("job_id") for app in apps if app.get("job_id")})
+    jobs = await db.jobs.find({"job_id": {"$in": job_ids}}, {"_id": 0}).to_list(500) if job_ids else []
+    job_map = {item.get("job_id"): item for item in jobs}
+    return {
+        "user": {
+            **user_doc,
+            "profile_completion": _profile_completion(profile),
+            "cv_uploaded": bool((profile or {}).get("cv_text")),
+            "plan": "Not connected",
+        },
+        "profile": profile,
+        "contact": (profile or {}).get("contact") or {},
+        "preferences": {
+            "target_role": (profile or {}).get("target_role"),
+            "target_roles": (profile or {}).get("target_roles") or [],
+            "target_location": (profile or {}).get("target_location"),
+            "remote_preference": (profile or {}).get("remote_preference"),
+            "seniority": (profile or {}).get("seniority"),
+        },
+        "application_defaults": (profile or {}).get("application_defaults") or {},
+        "applications": [
+            _admin_application_row(app_doc, user_doc, job_map.get(app_doc.get("job_id")))
+            for app_doc in apps
+        ],
+        "internal_notes": [],
+    }
+
+
+@api_router.get("/admin/analytics")
+async def admin_analytics(admin: User = Depends(require_admin_user)):
+    users, profiles, swipes, applications, jobs = await _admin_base_data()
+    events = await _analytics_events()
+    normalized_apps = [_normalize_application_status_fields(app_doc) for app_doc in applications]
+    job_map = {item.get("job_id"): item for item in jobs}
+    generated_count = sum(1 for app_doc in normalized_apps if app_doc.get("package_status") in {"generated", "generated_text_only"})
+    prepared_count = sum(1 for app_doc in normalized_apps if app_doc.get("submission_status") in {"ready", "prepared"})
+    action_required_count = sum(1 for app_doc in normalized_apps if app_doc.get("submission_status") == "action_required")
+    submitted_count = sum(1 for app_doc in normalized_apps if app_doc.get("submission_status") == "submitted")
+    blocked_failed_count = sum(1 for app_doc in normalized_apps if app_doc.get("submission_status") in {"failed", "blocked", "blocked_captcha", "prepare_failed"})
+
+    breakdown = {
+        "greenhouse": {"generated": 0, "prepared": 0, "action_required": 0, "submitted": 0, "failed_blocked": 0},
+        "lever": {"generated": 0, "prepared": 0, "action_required": 0, "submitted": 0, "failed_blocked": 0},
+        "ashby": {"generated": 0, "prepared": 0, "action_required": 0, "submitted": 0, "failed_blocked": 0},
+        "unknown": {"generated": 0, "prepared": 0, "action_required": 0, "submitted": 0, "failed_blocked": 0},
+    }
+    for app_doc in normalized_apps:
+        job = job_map.get(app_doc.get("job_id")) or {}
+        bucket = breakdown[_ats_bucket(job.get("ats_provider") or app_doc.get("submission_provider"))]
+        if app_doc.get("package_status") in {"generated", "generated_text_only"}:
+            bucket["generated"] += 1
+        if app_doc.get("submission_status") in {"ready", "prepared"}:
+            bucket["prepared"] += 1
+        if app_doc.get("submission_status") == "action_required":
+            bucket["action_required"] += 1
+        if app_doc.get("submission_status") == "submitted":
+            bucket["submitted"] += 1
+        if app_doc.get("submission_status") in {"failed", "blocked", "blocked_captcha", "prepare_failed"}:
+            bucket["failed_blocked"] += 1
+
+    ats_performance = {
+        key: {
+            **value,
+            "prepare_rate": _rate(value["prepared"], value["generated"]),
+            "failure_rate": _rate(value["failed_blocked"], value["generated"]),
+        }
+        for key, value in breakdown.items()
+    }
+
+    landing_actors = _unique_event_actors(events, "landing_view")
+    signup_actors = _unique_event_actors(events, "auth_success") or {user.get("user_id") for user in users if user.get("user_id")}
+    onboarding_started_actors = _unique_event_actors(events, "onboarding_started")
+    onboarding_completed_actors = _unique_event_actors(events, "onboarding_completed") or {profile.get("user_id") for profile in profiles if profile.get("target_role")}
+    cv_uploaded_actors = _unique_event_actors(events, "cv_upload_completed") or {profile.get("user_id") for profile in profiles if profile.get("cv_text")}
+    first_swipe_actors = {swipe.get("user_id") for swipe in swipes if swipe.get("user_id")}
+    right_swipe_count = sum(1 for swipe in swipes if swipe.get("direction") == "right")
+
+    cta_names = {
+        "cta_start_swiping_clicked": "Start swiping",
+        "cta_signup_clicked": "Signup",
+        "cta_login_clicked": "Login",
+    }
+    cta_analytics = []
+    for event_name, label in cta_names.items():
+        actors = _unique_event_actors(events, event_name)
+        cta_analytics.append({
+            "cta": label,
+            "event": event_name,
+            "clicks": _event_count(events, event_name),
+            "conversion_to_signup": _rate(len(actors & signup_actors), len(actors)),
+            "conversion_to_onboarding": _rate(len(actors & onboarding_started_actors), len(actors)),
+            "conversion_to_first_swipe": _rate(len(actors & first_swipe_actors), len(actors)),
+        })
+
+    admin_attention = [app_doc for app_doc in normalized_apps if _attention_status(app_doc.get("submission_status"))]
+    now = datetime.now(timezone.utc)
+    ages = []
+    for app_doc in admin_attention:
+        dt = _parse_dt(app_doc.get("updated_at") or app_doc.get("created_at"))
+        if dt:
+            ages.append(max(0, (now - dt).total_seconds() / 3600))
+
+    funnel_steps = [
+        {"step": "landing_view", "label": "Landing views", "count": len(landing_actors) or _event_count(events, "landing_view")},
+        {"step": "signup", "label": "Signup", "count": len(signup_actors)},
+        {"step": "onboarding_started", "label": "Onboarding started", "count": len(onboarding_started_actors)},
+        {"step": "onboarding_completed", "label": "Onboarding completed", "count": len(onboarding_completed_actors)},
+        {"step": "cv_uploaded", "label": "CV uploaded", "count": len(cv_uploaded_actors)},
+        {"step": "first_swipe", "label": "First swipe", "count": len(first_swipe_actors)},
+        {"step": "right_swipe", "label": "Right swipes", "count": right_swipe_count},
+        {"step": "application_generated", "label": "Applications generated", "count": generated_count},
+        {"step": "prepared", "label": "Prepared", "count": prepared_count},
+        {"step": "submitted", "label": "Submitted", "count": submitted_count},
+    ]
+    for index, row in enumerate(funnel_steps):
+        row["previous_rate"] = None if index == 0 else _rate(row["count"], funnel_steps[index - 1]["count"])
+
+    return {
+        "metrics": {
+            "visitors": len(landing_actors) or _event_count(events, "landing_view"),
+            "signups": len(users),
+            "onboarding_started": len(onboarding_started_actors),
+            "onboarding_complete": sum(1 for profile in profiles if profile.get("target_role")),
+            "onboarding_completed": len(onboarding_completed_actors),
+            "cv_uploaded": len(cv_uploaded_actors),
+            "swipe_users": len(first_swipe_actors),
+            "swipes": len(swipes),
+            "total_swipes": len(swipes),
+            "right_swipes": sum(1 for swipe in swipes if swipe.get("direction") == "right"),
+            "applications_generated": generated_count,
+            "prepared": prepared_count,
+            "action_required": action_required_count,
+            "submitted": submitted_count,
+            "failed_blocked": blocked_failed_count,
+            "blocked_or_failed": blocked_failed_count,
+        },
+        "conversion_funnel": funnel_steps,
+        "cta_analytics": cta_analytics,
+        "application_funnel": {
+            "generated": generated_count,
+            "prepared": prepared_count,
+            "action_required": action_required_count,
+            "blocked_captcha": sum(1 for app_doc in normalized_apps if app_doc.get("submission_status") == "blocked_captcha"),
+            "prepare_failed": sum(1 for app_doc in normalized_apps if app_doc.get("submission_status") == "prepare_failed"),
+            "submitted": submitted_count,
+        },
+        "by_ats": breakdown,
+        "ats_performance": ats_performance,
+        "time_series": {
+            "last_7_days": {
+                "signups": _series_counts(users, 7, lambda item: item.get("created_at")),
+                "swipes": _series_counts(swipes, 7, lambda item: item.get("created_at")),
+                "applications": _series_counts(normalized_apps, 7, lambda item: item.get("created_at")),
+                "prepared": _series_counts(normalized_apps, 7, lambda item: item.get("updated_at") or item.get("created_at"), lambda item: item.get("submission_status") in {"ready", "prepared"}),
+                "submitted": _series_counts(normalized_apps, 7, lambda item: item.get("submitted_at") or item.get("updated_at") or item.get("created_at"), lambda item: item.get("submission_status") == "submitted"),
+            },
+            "last_30_days": {
+                "signups": _series_counts(users, 30, lambda item: item.get("created_at")),
+                "swipes": _series_counts(swipes, 30, lambda item: item.get("created_at")),
+                "applications": _series_counts(normalized_apps, 30, lambda item: item.get("created_at")),
+                "prepared": _series_counts(normalized_apps, 30, lambda item: item.get("updated_at") or item.get("created_at"), lambda item: item.get("submission_status") in {"ready", "prepared"}),
+                "submitted": _series_counts(normalized_apps, 30, lambda item: item.get("submitted_at") or item.get("updated_at") or item.get("created_at"), lambda item: item.get("submission_status") == "submitted"),
+            },
+        },
+        "admin_ops": {
+            "open_action_required": sum(1 for app_doc in normalized_apps if app_doc.get("submission_status") == "action_required"),
+            "open_blocked": sum(1 for app_doc in normalized_apps if app_doc.get("submission_status") in {"blocked", "blocked_captcha", "prepare_failed"}),
+            "assigned_applications": sum(1 for app_doc in normalized_apps if app_doc.get("assigned_to")),
+            "unassigned_applications": sum(1 for app_doc in admin_attention if not app_doc.get("assigned_to")),
+            "average_unresolved_age_hours": round(sum(ages) / len(ages), 1) if ages else 0,
+        },
+        "events_available": bool(events),
     }
 
 
@@ -2732,6 +3239,12 @@ async def admin_list_applications(
             app_doc
             for app_doc in apps
             if _normalize_application_status_fields(app_doc).get("submission_status") in allowed_statuses
+        ]
+    elif status_filter in {"manual_review_needed", "manual_in_progress", "manually_submitted", "manual_blocked", "needs_user_input"}:
+        apps = [
+            app_doc
+            for app_doc in apps
+            if _effective_manual_status(_normalize_application_status_fields(app_doc)) == status_filter
         ]
 
     user_ids = list({app.get("user_id") for app in apps if app.get("user_id")})
@@ -2771,14 +3284,42 @@ async def admin_get_application(application_id: str, admin: User = Depends(requi
         or []
     )
     notes = app_doc.get("admin_notes") or []
+    cover_letter = app_doc.get("tailored_cover_letter") or app_doc.get("cover_letter") or {}
+    tailored_resume = app_doc.get("tailored_resume_structured") or app_doc.get("tailored_resume") or {}
+    app_with_admin = {
+        **app_doc,
+        "user_email": (user_doc or {}).get("email"),
+        "manual_status": _effective_manual_status(app_doc),
+        "user_facing_submission_status": _user_facing_submission_status(app_doc),
+    }
+    application_url = _job_application_url(job)
     return {
-        "application": {**app_doc, "user_email": (user_doc or {}).get("email")},
+        "application": app_with_admin,
         "profile": profile,
-        "job": job,
+        "job": {
+            **(job or {}),
+            "application_url": application_url,
+            "external_url": application_url or (job or {}).get("external_url"),
+        } if job else None,
+        "job_application_url": application_url,
+        "user_contact_info": (profile or {}).get("contact") or {"email": (user_doc or {}).get("email"), "name": (user_doc or {}).get("name")},
+        "profile_summary": (profile or {}).get("summary"),
+        "application_defaults": (profile or {}).get("application_defaults") or {},
         "prepared_missing_information": app_doc.get("prepared_missing_information") or [],
+        "resolved_answers": app_doc.get("resolved_answers") or app_doc.get("prepared_generated_answers") or [],
         "required_questions": required_questions,
         "browser_submission_runs": runs,
         "generated_documents_metadata": _admin_doc_metadata(app_doc),
+        "tailored_resume": tailored_resume,
+        "tailored_resume_text": json.dumps(tailored_resume, indent=2, default=str) if tailored_resume else "",
+        "cover_letter": cover_letter,
+        "cover_letter_text": cover_letter_to_text(cover_letter) if cover_letter else "",
+        "download_urls": {
+            "tailored_cv": f"/api/admin/applications/{application_id}/tailored-cv",
+            "cover_letter": f"/api/admin/applications/{application_id}/cover-letter",
+        },
+        "latest_browser_logs": runs[:5],
+        "admin_timeline": app_doc.get("admin_timeline") or [],
         "latest_notes": notes[-20:],
     }
 
@@ -2809,6 +3350,44 @@ async def admin_add_application_note(
         {"$set": {"admin_notes": notes, "updated_at": now}},
     )
     return {"ok": True, "note": notes[-1], "latest_notes": notes[-20:]}
+
+
+@api_router.post("/admin/applications/{application_id}/assign")
+async def admin_assign_application(application_id: str, admin: User = Depends(require_admin_user)):
+    app_doc = await db.applications.find_one({"application_id": application_id}, {"_id": 0})
+    if not app_doc:
+        raise HTTPException(status_code=404, detail="Application not found")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.applications.update_one(
+        {"application_id": application_id},
+        {"$set": {
+            "assigned_to": admin.email,
+            "assigned_to_user_id": admin.user_id,
+            "assigned_at": now,
+            "updated_at": now,
+        }},
+    )
+    updated = await db.applications.find_one({"application_id": application_id}, {"_id": 0})
+    return {"ok": True, "application": _normalize_application_status_fields(updated or {})}
+
+
+@api_router.post("/admin/applications/{application_id}/unassign")
+async def admin_unassign_application(application_id: str, admin: User = Depends(require_admin_user)):
+    app_doc = await db.applications.find_one({"application_id": application_id}, {"_id": 0})
+    if not app_doc:
+        raise HTTPException(status_code=404, detail="Application not found")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.applications.update_one(
+        {"application_id": application_id},
+        {"$set": {
+            "assigned_to": None,
+            "assigned_to_user_id": None,
+            "assigned_at": None,
+            "updated_at": now,
+        }},
+    )
+    updated = await db.applications.find_one({"application_id": application_id}, {"_id": 0})
+    return {"ok": True, "application": _normalize_application_status_fields(updated or {})}
 
 
 @api_router.patch("/admin/applications/{application_id}/admin-status")
@@ -2842,6 +3421,97 @@ async def admin_update_application_status(
     )
     updated = await db.applications.find_one({"application_id": application_id}, {"_id": 0})
     return {"ok": True, "application": _normalize_application_status_fields(updated or {})}
+
+
+@api_router.post("/admin/applications/{application_id}/manual-status")
+async def admin_update_application_manual_status(
+    application_id: str,
+    body: AdminManualStatusUpdate,
+    admin: User = Depends(require_admin_user),
+):
+    app_doc = await db.applications.find_one({"application_id": application_id}, {"_id": 0})
+    if not app_doc:
+        raise HTTPException(status_code=404, detail="Application not found")
+    now = datetime.now(timezone.utc).isoformat()
+    note_text = (body.note or "").strip()
+    notes = list(app_doc.get("admin_notes") or [])
+    if note_text:
+        notes.append({
+            "note_id": f"note_{uuid.uuid4().hex[:12]}",
+            "note": note_text,
+            "author_user_id": admin.user_id,
+            "author_email": admin.email,
+            "created_at": now,
+        })
+    timeline = _append_admin_timeline(app_doc, {
+        "event_id": f"timeline_{uuid.uuid4().hex[:12]}",
+        "type": "manual_status",
+        "manual_status": body.manual_status,
+        "author_user_id": admin.user_id,
+        "author_email": admin.email,
+        "note": note_text or None,
+        "created_at": now,
+    })
+    update = {
+        "admin_status": body.manual_status,
+        "manual_status": body.manual_status,
+        "admin_notes": notes,
+        "admin_timeline": timeline,
+        "manual_status_updated_by": admin.email,
+        "manual_status_updated_at": now,
+        "updated_at": now,
+    }
+    if body.manual_status == "manually_submitted":
+        update["submission_status"] = "submitted"
+        update["submitted_at"] = app_doc.get("submitted_at") or now
+    elif body.manual_status == "needs_user_input":
+        update["submission_status"] = "action_required"
+    await db.applications.update_one(
+        {"application_id": application_id},
+        {"$set": update},
+    )
+    updated = await db.applications.find_one({"application_id": application_id}, {"_id": 0})
+    return {"ok": True, "application": _normalize_application_status_fields(updated or {})}
+
+
+@api_router.get("/admin/applications/{application_id}/tailored-cv")
+async def admin_download_tailored_cv(application_id: str, admin: User = Depends(require_admin_user)):
+    from fastapi.responses import Response as FastAPIResponse
+
+    app_doc = await db.applications.find_one(
+        {"application_id": application_id},
+        {"_id": 0, "tailored_cv_file_b64": 1, "tailored_cv_filename": 1, "tailored_cv_mime": 1},
+    )
+    if not app_doc or not app_doc.get("tailored_cv_file_b64"):
+        raise HTTPException(status_code=404, detail="Tailored CV not found")
+    content = base64.b64decode(app_doc["tailored_cv_file_b64"])
+    filename = app_doc.get("tailored_cv_filename") or "tailored_cv.docx"
+    return FastAPIResponse(
+        content=content,
+        media_type=app_doc.get("tailored_cv_mime") or "application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@api_router.get("/admin/applications/{application_id}/cover-letter")
+async def admin_download_cover_letter(application_id: str, admin: User = Depends(require_admin_user)):
+    from fastapi.responses import Response as FastAPIResponse
+
+    app_doc = await db.applications.find_one(
+        {"application_id": application_id},
+        {"_id": 0, "tailored_cover_letter": 1, "cover_letter": 1},
+    )
+    if not app_doc:
+        raise HTTPException(status_code=404, detail="Application not found")
+    cover_letter = app_doc.get("tailored_cover_letter") or app_doc.get("cover_letter")
+    if not cover_letter:
+        raise HTTPException(status_code=404, detail="Cover letter not found")
+    content = cover_letter_to_text(cover_letter)
+    return FastAPIResponse(
+        content=content,
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{application_id}_cover_letter.txt"'},
+    )
 
 
 @api_router.get("/applications/greenhouse/form-preview")
@@ -5458,7 +6128,7 @@ async def get_application(application_id: str, user: User = Depends(get_current_
         raise HTTPException(status_code=404, detail="Not found")
     app_doc = _normalize_application_status_fields(app_doc)
     job = await db.jobs.find_one({"job_id": app_doc["job_id"]}, {"_id": 0})
-    return {**app_doc, "job": job}
+    return _public_application_doc(app_doc, job)
 
 
 @api_router.get("/applications/{application_id}/tailored-cv")

@@ -1,16 +1,26 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import { Button } from "../components/ui/button";
 import { Textarea } from "../components/ui/textarea";
+import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
+import { trackEvent } from "../lib/analytics";
 
 const ACTIONS = [
   { status: "submitted", label: "Mark Submitted" },
   { status: "needs_user_input", label: "Needs User Input" },
   { status: "blocked", label: "Blocked" },
   { status: "escalated", label: "Escalated" },
+];
+
+const MANUAL_ACTIONS = [
+  { status: "manual_review_needed", label: "Mark Needs Human Completion" },
+  { status: "manual_in_progress", label: "Start Manual Completion" },
+  { status: "manually_submitted", label: "Mark Manually Submitted" },
+  { status: "needs_user_input", label: "Mark Needs User Input" },
+  { status: "manual_blocked", label: "Mark Manual Blocked" },
 ];
 
 const fmtDate = (value) => {
@@ -25,6 +35,12 @@ const asList = (value) => Array.isArray(value) ? value : [];
 const summarizeQuestion = (item) => {
   if (typeof item === "string") return item;
   return item?.label || item?.field_label || item?.field_name || item?.name || JSON.stringify(item);
+};
+
+const stringifyForCopy = (value) => {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  return JSON.stringify(value, null, 2);
 };
 
 function Section({ title, children }) {
@@ -54,6 +70,9 @@ export default function AdminApplicationDetail() {
   const [note, setNote] = useState("");
   const [savingNote, setSavingNote] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState("");
+  const [updatingManualStatus, setUpdatingManualStatus] = useState("");
+  const [assigning, setAssigning] = useState("");
+  const openedTrackedRef = useRef(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -62,6 +81,14 @@ export default function AdminApplicationDetail() {
     try {
       const response = await api.get(`/admin/applications/${id}`);
       setData(response.data);
+      if (!openedTrackedRef.current) {
+        openedTrackedRef.current = true;
+        trackEvent("admin_application_opened", {
+          application_id: id,
+          status: response.data?.application?.submission_status,
+          ats_provider: response.data?.job?.ats_provider,
+        });
+      }
     } catch (err) {
       setData(null);
       if (err?.response?.status === 403) {
@@ -83,10 +110,15 @@ export default function AdminApplicationDetail() {
   const profile = useMemo(() => data?.profile || {}, [data]);
   const job = useMemo(() => data?.job || {}, [data]);
   const docs = useMemo(() => data?.generated_documents_metadata || {}, [data]);
+  const contact = useMemo(() => data?.user_contact_info || {}, [data]);
+  const defaults = useMemo(() => data?.application_defaults || {}, [data]);
+  const resolvedAnswers = useMemo(() => asList(data?.resolved_answers), [data]);
   const notes = useMemo(() => asList(data?.latest_notes), [data]);
   const questions = useMemo(() => asList(data?.required_questions), [data]);
   const missing = useMemo(() => asList(data?.prepared_missing_information), [data]);
   const runs = useMemo(() => asList(data?.browser_submission_runs), [data]);
+  const coverLetterText = data?.cover_letter_text || "";
+  const tailoredResumeText = data?.tailored_resume_text || "";
 
   const profileSummary = useMemo(() => {
     const parts = [
@@ -117,11 +149,70 @@ export default function AdminApplicationDetail() {
     try {
       await api.patch(`/admin/applications/${id}/admin-status`, { status });
       toast.success("Status updated");
+      trackEvent("admin_status_updated", { application_id: id, status });
       await load();
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Could not update status");
     } finally {
       setUpdatingStatus("");
+    }
+  };
+
+  const updateManualStatus = async (manualStatus) => {
+    setUpdatingManualStatus(manualStatus);
+    try {
+      await api.post(`/admin/applications/${id}/manual-status`, {
+        manual_status: manualStatus,
+        note: note.trim() || undefined,
+      });
+      if (note.trim()) setNote("");
+      toast.success("Manual status updated");
+      trackEvent("admin_status_updated", { application_id: id, manual_status: manualStatus });
+      await load();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Could not update manual status");
+    } finally {
+      setUpdatingManualStatus("");
+    }
+  };
+
+  const copyText = async (label, value) => {
+    const text = stringifyForCopy(value);
+    if (!text) {
+      toast.error(`No ${label} available`);
+      return;
+    }
+    await navigator.clipboard.writeText(text);
+    toast.success(`${label} copied`);
+  };
+
+  const downloadAdminFile = async (kind) => {
+    try {
+      const response = await api.get(`/admin/applications/${id}/${kind}`, { responseType: "blob" });
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = kind === "tailored-cv" ? "tailored_cv.docx" : "cover_letter.txt";
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Download failed");
+    }
+  };
+
+  const updateAssignment = async (action) => {
+    setAssigning(action);
+    try {
+      await api.post(`/admin/applications/${id}/${action}`);
+      toast.success(action === "assign" ? "Assigned to you" : "Unassigned");
+      if (action === "assign") {
+        trackEvent("admin_application_assigned", { application_id: id });
+      }
+      await load();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Could not update assignment");
+    } finally {
+      setAssigning("");
     }
   };
 
@@ -135,26 +226,24 @@ export default function AdminApplicationDetail() {
 
   if (error) {
     return (
-      <div className="min-h-dvh bg-zinc-50 px-6 py-8">
+      <AdminShell title="Application Detail">
         <Link className="inline-flex items-center gap-2 text-sm font-semibold text-linkedin" to="/admin/applications">
           <ArrowLeft className="h-4 w-4" /> Back to queue
         </Link>
         {accessDenied ? (
-          <div className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-8 text-center">
-            <h1 className="font-display text-xl font-bold text-red-700">Admin access denied</h1>
-            <p className="mt-2 text-sm text-red-600">Your account is not allowed to view admin operations data.</p>
-          </div>
+          <div className="mt-6"><AdminAccessDenied /></div>
         ) : (
           <div className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</div>
         )}
-      </div>
+      </AdminShell>
     );
   }
 
   return (
-    <div className="min-h-dvh bg-zinc-50 text-zinc-950">
-      <header className="border-b border-zinc-200 bg-white">
-        <div className="mx-auto max-w-7xl px-6 py-4">
+    <AdminShell
+      title={job.title || "Application"}
+      subtitle={job.company || "Unknown company"}
+    >
           <Link className="inline-flex items-center gap-2 text-sm font-semibold text-linkedin" to="/admin/applications">
             <ArrowLeft className="h-4 w-4" /> Back to queue
           </Link>
@@ -167,15 +256,70 @@ export default function AdminApplicationDetail() {
               {app.submission_status || "unknown"} / {app.package_status || "unknown"}
             </div>
           </div>
-        </div>
-      </header>
 
-      <main className="mx-auto grid max-w-7xl gap-5 px-6 py-6 lg:grid-cols-[1fr_360px]">
+      <div className="mt-6 grid gap-5 lg:grid-cols-[1fr_360px]">
         <div className="space-y-5">
+          <Section title="Manual completion panel">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <Button
+                variant="outline"
+                disabled={!data?.job_application_url}
+                onClick={() => window.open(data.job_application_url, "_blank", "noopener,noreferrer")}
+              >
+                Open job application URL
+              </Button>
+              <Button variant="outline" onClick={() => copyText("user info", contact)}>Copy user info</Button>
+              <Button variant="outline" onClick={() => downloadAdminFile("tailored-cv")} disabled={!docs.tailored_cv_available}>
+                Download tailored CV
+              </Button>
+              <Button variant="outline" onClick={() => downloadAdminFile("cover-letter")} disabled={!docs.cover_letter_available}>
+                Download cover letter
+              </Button>
+              <Button variant="outline" onClick={() => copyText("cover letter", coverLetterText)} disabled={!coverLetterText}>
+                Copy cover letter text
+              </Button>
+              <Button variant="outline" onClick={() => copyText("tailored resume", tailoredResumeText)} disabled={!tailoredResumeText}>
+                Copy tailored CV text
+              </Button>
+            </div>
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Job URL</p>
+                <p className="mt-1 break-all text-sm text-zinc-700">{data?.job_application_url || "Not available"}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Manual status</p>
+                <p className="mt-1 text-sm capitalize text-zinc-700">{app.manual_status || app.admin_status || "Not set"}</p>
+              </div>
+            </div>
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              <div>
+                <h3 className="text-sm font-bold">Resolved answers</h3>
+                <pre className="mt-2 max-h-44 overflow-auto whitespace-pre-wrap rounded-lg bg-zinc-50 p-3 text-xs text-zinc-700">
+                  {stringifyForCopy(resolvedAnswers) || "None recorded."}
+                </pre>
+              </div>
+              <div>
+                <h3 className="text-sm font-bold">Application defaults</h3>
+                <pre className="mt-2 max-h-44 overflow-auto whitespace-pre-wrap rounded-lg bg-zinc-50 p-3 text-xs text-zinc-700">
+                  {stringifyForCopy(defaults) || "None recorded."}
+                </pre>
+              </div>
+            </div>
+            <div className="mt-4">
+              <h3 className="text-sm font-bold">Automation failure/log summary</h3>
+              <pre className="mt-2 max-h-44 overflow-auto whitespace-pre-wrap rounded-lg bg-zinc-50 p-3 text-xs text-zinc-700">
+                {stringifyForCopy(data?.latest_browser_logs || runs.slice(0, 5)) || app.submission_error || "No automation failure recorded."}
+              </pre>
+            </div>
+          </Section>
+
           <Section title="A. User">
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="User" value={app.user_id} />
               <Field label="Email" value={app.user_email} />
+              <Field label="Contact name" value={contact.name} />
+              <Field label="Phone" value={contact.phone} />
             </div>
             <pre className="mt-4 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-zinc-50 p-3 text-sm text-zinc-700">
               {profileSummary || "No profile summary available."}
@@ -255,7 +399,37 @@ export default function AdminApplicationDetail() {
           </Section>
 
           <Section title="E. Admin Actions">
+            <div className="mb-4 rounded-md bg-zinc-50 p-3 text-sm text-zinc-700">
+              <p className="font-semibold">Assignment</p>
+              <p className="mt-1">{app.assigned_to ? `${app.assigned_to} at ${fmtDate(app.assigned_at)}` : "Unassigned"}</p>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <Button variant="outline" onClick={() => updateAssignment("assign")} disabled={Boolean(assigning)}>
+                  {assigning === "assign" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  Assign to me
+                </Button>
+                <Button variant="outline" onClick={() => updateAssignment("unassign")} disabled={Boolean(assigning)}>
+                  {assigning === "unassign" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  Unassign
+                </Button>
+              </div>
+            </div>
+            <div className="mb-4 space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Manual completion</p>
+              {MANUAL_ACTIONS.map((action) => (
+                <Button
+                  key={action.status}
+                  variant={action.status === "manually_submitted" ? "default" : "outline"}
+                  className="w-full justify-center"
+                  onClick={() => updateManualStatus(action.status)}
+                  disabled={Boolean(updatingManualStatus)}
+                >
+                  {updatingManualStatus === action.status ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  {action.label}
+                </Button>
+              ))}
+            </div>
             <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Legacy status</p>
               {ACTIONS.map((action) => (
                 <Button
                   key={action.status}
@@ -271,7 +445,7 @@ export default function AdminApplicationDetail() {
             </div>
           </Section>
         </aside>
-      </main>
-    </div>
+      </div>
+    </AdminShell>
   );
 }
