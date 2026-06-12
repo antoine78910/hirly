@@ -25,6 +25,8 @@ TABLE_META: Dict[str, Dict[str, Any]] = {
     "swipes": {"pk": None, "composite": ("user_id", "job_id")},
     "applications": {"pk": "application_id", "indexed": ["user_id"]},
     "company_boards": {"pk": "board_id"},
+    "analytics_events": {"pk": "event_id", "indexed": ["user_id", "anonymous_id", "event"]},
+    "stripe_events": {"pk": "event_id", "indexed": ["type"]},
 }
 
 
@@ -425,6 +427,29 @@ class Collection:
                     doc["board_id"],
                     payload,
                 )
+            elif self.name == "analytics_events":
+                await conn.execute(
+                    """
+                    INSERT INTO analytics_events (event_id, user_id, anonymous_id, event, page, source, created_at, data)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+                    ON CONFLICT (event_id) DO UPDATE
+                    SET user_id = EXCLUDED.user_id,
+                        anonymous_id = EXCLUDED.anonymous_id,
+                        event = EXCLUDED.event,
+                        page = EXCLUDED.page,
+                        source = EXCLUDED.source,
+                        created_at = EXCLUDED.created_at,
+                        data = EXCLUDED.data
+                    """,
+                    doc["event_id"],
+                    doc.get("user_id"),
+                    doc.get("anonymous_id"),
+                    doc.get("event"),
+                    doc.get("page"),
+                    doc.get("source"),
+                    doc.get("created_at"),
+                    payload,
+                )
 
     async def insert_one(self, doc: Dict[str, Any]) -> None:
         await self._save_doc(doc)
@@ -508,6 +533,8 @@ class Database:
         self.swipes = Collection("swipes", pool)
         self.applications = Collection("applications", pool)
         self.company_boards = Collection("company_boards", pool)
+        self.analytics_events = Collection("analytics_events", pool)
+        self.stripe_events = Collection("stripe_events", pool)
 
 
 db: Optional[Database] = None

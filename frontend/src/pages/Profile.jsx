@@ -29,6 +29,7 @@ import { Switch } from "../components/ui/switch";
 import RolePicker from "../components/RolePicker";
 import { TitleHeader } from "../components/app/AppScreenHeader";
 import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
+import { trackEvent } from "../lib/analytics";
 
 const PROFILE_TABS = [
   { key: "resume", label: "Resume", icon: FileText },
@@ -76,6 +77,7 @@ function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
         seniority: seniority === "any" ? null : seniority,
       });
       toast.success("Preferences saved");
+      trackEvent("profile_updated", { section: "job_preferences" });
       await onSaved?.();
       onClose();
     } catch (_) {
@@ -171,6 +173,7 @@ function ApplicationDefaultsSheet({ open, profile, onClose, onSaved }) {
     try {
       await api.put("/profile/application-defaults", { application_defaults: defaults });
       toast.success("Application defaults saved");
+      trackEvent("application_defaults_updated");
       await onSaved?.();
       onClose();
     } catch (_) {
@@ -195,6 +198,48 @@ function ApplicationDefaultsSheet({ open, profile, onClose, onSaved }) {
           onChange={(v) => update("phone_country_code", v)}
           placeholder="+44"
           testId="app-defaults-phone-country-code"
+        />
+        <Field
+          label="Education school"
+          value={defaults.education_school}
+          onChange={(v) => update("education_school", v)}
+          placeholder="University or school"
+          testId="app-defaults-education-school"
+        />
+        <Field
+          label="Degree"
+          value={defaults.education_degree}
+          onChange={(v) => update("education_degree", v)}
+          placeholder="Bachelor's Degree"
+          testId="app-defaults-education-degree"
+        />
+        <Field
+          label="Field of study"
+          value={defaults.education_discipline}
+          onChange={(v) => update("education_discipline", v)}
+          placeholder="Computer Science"
+          testId="app-defaults-education-discipline"
+        />
+        <Field
+          label="Graduation year"
+          value={defaults.education_graduation_year}
+          onChange={(v) => update("education_graduation_year", v)}
+          placeholder="2024"
+          testId="app-defaults-education-year"
+        />
+        <Field
+          label="LinkedIn URL"
+          value={defaults.linkedin_url}
+          onChange={(v) => update("linkedin_url", v)}
+          placeholder="https://linkedin.com/in/..."
+          testId="app-defaults-linkedin"
+        />
+        <Field
+          label="Website or portfolio"
+          value={defaults.website_url}
+          onChange={(v) => update("website_url", v)}
+          placeholder="https://..."
+          testId="app-defaults-website"
         />
         <Field
           label="Current country"
@@ -311,6 +356,10 @@ function profileCompletion(profile) {
   return Math.round((checks.filter(Boolean).length / checks.length) * 100);
 }
 
+function firstValue(...values) {
+  return values.find((value) => value !== undefined && value !== null && String(value).trim()) || "";
+}
+
 export default function Profile() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -328,6 +377,7 @@ export default function Profile() {
   }, []);
 
   useEffect(() => {
+    trackEvent("profile_view");
     let cancelled = false;
     (async () => {
       try {
@@ -340,6 +390,17 @@ export default function Profile() {
   }, [reload]);
 
   const completion = useMemo(() => profileCompletion(profile), [profile]);
+  const applicationDefaults = profile?.application_defaults || {};
+  const primaryEducation = Array.isArray(profile?.education) ? (profile.education[0] || {}) : {};
+  const extractedSummary = {
+    school: firstValue(primaryEducation.school, applicationDefaults.education_school),
+    degree: firstValue(primaryEducation.degree, applicationDefaults.education_degree),
+    discipline: firstValue(primaryEducation.discipline, primaryEducation.field_of_study, applicationDefaults.education_discipline),
+    graduationYear: firstValue(primaryEducation.graduation_year, primaryEducation.year, applicationDefaults.education_graduation_year),
+    linkedin: firstValue(profile?.contact?.linkedin, applicationDefaults.linkedin_url),
+    website: firstValue(profile?.contact?.website, applicationDefaults.website_url, applicationDefaults.portfolio_url),
+    phoneCountryCode: firstValue(applicationDefaults.phone_country_code),
+  };
   const swipeCredits = 40;
 
   const sectionCount = (key) => {
@@ -500,6 +561,39 @@ export default function Profile() {
 
         {tab === "personal" && (
           <div className="space-y-3 pb-4">
+            <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-zinc-900">Extracted application data</p>
+                  <p className="text-sm text-zinc-600">Reusable CV details used for job forms</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setOpenSheet("application-defaults")}
+                  className="text-sm font-semibold text-linkedin hover:opacity-80"
+                >
+                  Edit
+                </button>
+              </div>
+              <div className="mt-4 grid gap-3 text-sm">
+                {[
+                  ["School", extractedSummary.school],
+                  ["Degree", extractedSummary.degree],
+                  ["Field of study", extractedSummary.discipline],
+                  ["Graduation year", extractedSummary.graduationYear],
+                  ["LinkedIn", extractedSummary.linkedin],
+                  ["Website or portfolio", extractedSummary.website],
+                  ["Phone country code", extractedSummary.phoneCountryCode],
+                ].map(([label, value]) => (
+                  <div key={label} className="flex items-start justify-between gap-4 border-b border-zinc-100 pb-2 last:border-b-0 last:pb-0">
+                    <span className="text-zinc-600">{label}</span>
+                    <span className="max-w-[60%] break-words text-right font-medium text-zinc-900">
+                      {value || "Not set"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
             <button
               type="button"
               onClick={() => setOpenSheet("personal")}

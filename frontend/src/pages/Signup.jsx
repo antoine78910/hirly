@@ -9,6 +9,7 @@ import { startGoogleLogin } from "../lib/auth";
 import { api, setSessionToken } from "../lib/api";
 import { supabase, supabaseConfigured } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
+import { trackEvent } from "../lib/analytics";
 
 export default function Signup() {
   const navigate = useNavigate();
@@ -28,6 +29,10 @@ export default function Signup() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    trackEvent("signup_page_view", { mode });
+  }, [mode]);
 
   useEffect(() => {
     if (authLoading || !user) return;
@@ -53,6 +58,12 @@ export default function Signup() {
     setUser(data.user);
     setHasProfile(Boolean(data.has_profile));
     setHasPreferences(Boolean(data.has_preferences));
+    trackEvent("auth_success", {
+      method: "email",
+      mode,
+      has_profile: Boolean(data.has_profile),
+      has_preferences: Boolean(data.has_preferences),
+    });
     navigate(data.has_profile && data.has_preferences ? "/swipe" : "/onboarding?step=jobSearch", { replace: true });
   };
 
@@ -71,6 +82,7 @@ export default function Signup() {
     }
 
     setSubmitting(true);
+    trackEvent(mode === "login" ? "login_email_submitted" : "signup_email_submitted");
     try {
       const authCall = mode === "login"
         ? supabase.auth.signInWithPassword({ email: email.trim(), password })
@@ -86,6 +98,11 @@ export default function Signup() {
   };
 
   const ctaLabel = mode === "login" ? "Sign in" : "Sign up";
+
+  const onGoogleClick = () => {
+    trackEvent("signup_google_clicked", { mode });
+    startGoogleLogin("/swipe");
+  };
 
   return (
     <div className="min-h-dvh bg-white text-zinc-900">
@@ -122,7 +139,7 @@ export default function Signup() {
 
             <Button
               type="button"
-              onClick={() => startGoogleLogin("/swipe")}
+              onClick={onGoogleClick}
               className="h-12 w-full rounded-full border border-zinc-200 bg-white text-zinc-800 hover:bg-zinc-50"
               disabled={submitting}
               data-testid="signup-google-btn"

@@ -52,3 +52,25 @@ CREATE TABLE IF NOT EXISTS company_boards (
   board_id TEXT PRIMARY KEY,
   data JSONB NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS analytics_events (
+  event_id TEXT PRIMARY KEY,
+  user_id TEXT,
+  anonymous_id TEXT,
+  event TEXT,
+  page TEXT,
+  source TEXT,
+  created_at TIMESTAMPTZ,
+  data JSONB NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_event_created_at ON analytics_events (event, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_user_created_at ON analytics_events (user_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS stripe_events (
+  event_id TEXT PRIMARY KEY,
+  type TEXT,
+  created_at TIMESTAMPTZ,
+  processed_at TIMESTAMPTZ,
+  data JSONB NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_stripe_events_type_created_at ON stripe_events (type, created_at DESC);

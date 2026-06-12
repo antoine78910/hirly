@@ -128,6 +128,16 @@ def suggested_profile_key(field: Dict[str, Any]) -> Optional[str]:
         return "city"
     if "phone country code" in label or "country code" in label or "dial code" in label:
         return "phone_country_code"
+    if any(term in label for term in ("portfolio", "personal site", "personal website", "website", "github")):
+        return "website_url"
+    if "school" in label or "university" in label or "college" in label:
+        return "education_school"
+    if "degree" in label or "qualification" in label:
+        return "education_degree"
+    if any(term in label for term in ("discipline", "field of study", "major", "subject")):
+        return "education_discipline"
+    if any(term in label for term in ("graduation year", "grad year", "graduated", "year completed")):
+        return "education_graduation_year"
     if any(term in label for term in ("how did you hear", "referral source", "referred by", "candidate source")):
         return "referral_source"
     if any(term in label for term in ("privacy policy", "data processing", "data protection", "i agree", "consent")) and not is_sensitive_field({"label": label}):

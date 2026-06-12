@@ -43,6 +43,10 @@ class BrowserSubmissionResult:
     submit_button_still_visible: Optional[bool] = None
     confirmation_text_found: Optional[str] = None
     lever_network_submit_statuses: List[Dict[str, Any]] = field(default_factory=list)
+    form_scrape: List[Dict[str, Any]] = field(default_factory=list)
+    answer_plan: List[Dict[str, Any]] = field(default_factory=list)
+    verification_summary: Dict[str, Any] = field(default_factory=dict)
+    failed_fields: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -72,6 +76,10 @@ class BrowserSubmissionResult:
             "submit_button_still_visible": self.submit_button_still_visible,
             "confirmation_text_found": self.confirmation_text_found,
             "lever_network_submit_statuses": self.lever_network_submit_statuses,
+            "form_scrape": self.form_scrape,
+            "answer_plan": self.answer_plan,
+            "verification_summary": self.verification_summary,
+            "failed_fields": self.failed_fields,
         }
 
 

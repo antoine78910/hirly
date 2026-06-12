@@ -85,6 +85,8 @@ class DatabaseAdapter(ABC):
     swipes: CollectionPort
     company_boards: CollectionPort
     browser_submission_runs: CollectionPort
+    analytics_events: CollectionPort
+    stripe_events: CollectionPort
 
     @abstractmethod
     async def close(self) -> None:

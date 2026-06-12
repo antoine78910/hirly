@@ -35,6 +35,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Dict, Any, Literal
 from datetime import datetime, timezone, timedelta
 import httpx
+import stripe
 
 # Optional file parsing libs
 from pypdf import PdfReader
@@ -151,6 +152,10 @@ class AnalyticsEventRequest(BaseModel):
     source: Optional[str] = None
 
 
+class BillingCheckoutRequest(BaseModel):
+    plan: Literal["monthly", "quarterly"]
+
+
 class ResolveMissingInfoRequest(BaseModel):
     answers: Dict[str, Any] = Field(default_factory=dict)
     save_to_profile: bool = False
@@ -218,6 +223,14 @@ class ContactUpdate(BaseModel):
 
 
 class ApplicationDefaultsUpdate(BaseModel):
+    application_defaults: Dict[str, Any] = Field(default_factory=dict)
+
+
+class StructuredProfileDataUpdate(BaseModel):
+    contact: Dict[str, Any] = Field(default_factory=dict)
+    education: List[Dict[str, Any]] = Field(default_factory=list)
+    experience_summary: Dict[str, Any] = Field(default_factory=dict)
+    skills: List[str] = Field(default_factory=list)
     application_defaults: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -549,6 +562,298 @@ async def auth_logout(
     return {"ok": True}
 
 
+# ===================== Billing =====================
+
+def _stripe_secret_key() -> str:
+    key = os.environ.get("STRIPE_SECRET_KEY", "").strip()
+    if not key:
+        raise HTTPException(status_code=503, detail="Stripe is not configured")
+    stripe.api_key = key
+    return key
+
+
+def _frontend_url() -> str:
+    return os.environ.get("FRONTEND_URL", "http://localhost:3000").strip().rstrip("/")
+
+
+def _stripe_price_for_plan(plan: str) -> str:
+    env_name = "STRIPE_PRICE_MONTHLY" if plan == "monthly" else "STRIPE_PRICE_QUARTERLY"
+    price_id = os.environ.get(env_name, "").strip()
+    if not price_id:
+        raise HTTPException(status_code=503, detail=f"{env_name} is not configured")
+    return price_id
+
+
+def _plan_from_price(price_id: Optional[str]) -> Optional[str]:
+    if price_id and price_id == os.environ.get("STRIPE_PRICE_MONTHLY", "").strip():
+        return "monthly"
+    if price_id and price_id == os.environ.get("STRIPE_PRICE_QUARTERLY", "").strip():
+        return "quarterly"
+    return "unknown" if price_id else None
+
+
+def _billing_from_user(user_doc: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    return dict((user_doc or {}).get("billing") or {})
+
+
+def _billing_status_payload(user_doc: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    billing = _billing_from_user(user_doc)
+    status = billing.get("subscription_status") or "none"
+    return {
+        "subscription_status": status,
+        "plan": billing.get("plan"),
+        "current_period_end": billing.get("current_period_end"),
+        "stripe_customer_id_exists": bool(billing.get("stripe_customer_id")),
+        "is_premium": status in {"active", "trialing"},
+    }
+
+
+async def _get_user_doc(user: User) -> Dict[str, Any]:
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user_doc
+
+
+async def _update_user_billing_by_user_id(user_id: str, updates: Dict[str, Any]) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    update_fields = {f"billing.{key}": value for key, value in updates.items()}
+    update_fields["billing.updated_at"] = now
+    result = await db.users.update_one({"user_id": user_id}, {"$set": update_fields})
+    if getattr(result, "matched_count", 0) == 0:
+        logger.warning("stripe_billing_user_update_no_match user_id=%s keys=%s", user_id, sorted(updates.keys()))
+
+
+async def _update_user_billing_by_customer_id(customer_id: str, updates: Dict[str, Any]) -> None:
+    if not customer_id:
+        logger.warning("stripe_billing_customer_update_missing_customer keys=%s", sorted(updates.keys()))
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    update_fields = {f"billing.{key}": value for key, value in updates.items()}
+    update_fields["billing.updated_at"] = now
+    result = await db.users.update_one({"billing.stripe_customer_id": customer_id}, {"$set": update_fields})
+    if getattr(result, "matched_count", 0) == 0:
+        logger.warning("stripe_billing_customer_update_no_match customer_id=%s keys=%s", customer_id, sorted(updates.keys()))
+
+
+async def _stripe_customer_for_user(user_doc: Dict[str, Any]) -> str:
+    _stripe_secret_key()
+    billing = _billing_from_user(user_doc)
+    existing_customer_id = billing.get("stripe_customer_id")
+    if existing_customer_id:
+        return existing_customer_id
+    customer = stripe.Customer.create(
+        email=user_doc.get("email"),
+        name=user_doc.get("name") or user_doc.get("email"),
+        metadata={"user_id": user_doc.get("user_id", "")},
+    )
+    customer_id = customer["id"]
+    await _update_user_billing_by_user_id(user_doc["user_id"], {"stripe_customer_id": customer_id})
+    return customer_id
+
+
+def _period_end_iso(subscription: Any) -> Optional[str]:
+    value = subscription.get("current_period_end") if isinstance(subscription, dict) else getattr(subscription, "current_period_end", None)
+    if not value:
+        return None
+    try:
+        return datetime.fromtimestamp(int(value), tz=timezone.utc).isoformat()
+    except Exception:
+        return None
+
+
+def _subscription_plan(subscription: Any) -> Optional[str]:
+    try:
+        items = subscription["items"]["data"]
+        price_id = items[0]["price"]["id"] if items else None
+    except Exception:
+        price_id = None
+    return _plan_from_price(price_id)
+
+
+def _subscription_billing_updates(subscription: Any, *, last_payment_status: Optional[str] = None) -> Dict[str, Any]:
+    updates = {
+        "stripe_customer_id": subscription.get("customer"),
+        "stripe_subscription_id": subscription.get("id"),
+        "subscription_status": subscription.get("status"),
+        "plan": _subscription_plan(subscription) or subscription.get("metadata", {}).get("plan") or "unknown",
+        "current_period_end": _period_end_iso(subscription),
+    }
+    if last_payment_status:
+        updates["last_payment_status"] = last_payment_status
+    return {key: value for key, value in updates.items() if value is not None}
+
+
+def _stripe_configured() -> bool:
+    return bool(os.environ.get("STRIPE_SECRET_KEY", "").strip())
+
+
+async def _refresh_billing_from_stripe(user_doc: Dict[str, Any]) -> tuple[Dict[str, Any], Optional[str]]:
+    billing = _billing_from_user(user_doc)
+    subscription_id = billing.get("stripe_subscription_id")
+    if not subscription_id or not _stripe_configured():
+        return user_doc, None
+    try:
+        _stripe_secret_key()
+        subscription = stripe.Subscription.retrieve(subscription_id)
+        updates = _subscription_billing_updates(subscription)
+        await _update_user_billing_by_user_id(user_doc["user_id"], updates)
+        refreshed = await db.users.find_one({"user_id": user_doc["user_id"]}, {"_id": 0})
+        return refreshed or {**user_doc, "billing": {**billing, **updates}}, None
+    except Exception as exc:
+        logger.warning("stripe_billing_status_refresh_failed user_id=%s subscription_id=%s error=%s", user_doc.get("user_id"), subscription_id, str(exc)[:200])
+        return user_doc, "stripe_refresh_failed"
+
+
+@api_router.post("/billing/create-checkout-session")
+async def create_billing_checkout_session(body: BillingCheckoutRequest, user: User = Depends(get_current_user)):
+    _stripe_secret_key()
+    user_doc = await _get_user_doc(user)
+    customer_id = await _stripe_customer_for_user(user_doc)
+    frontend_url = _frontend_url()
+    session = stripe.checkout.Session.create(
+        mode="subscription",
+        customer=customer_id,
+        line_items=[{"price": _stripe_price_for_plan(body.plan), "quantity": 1}],
+        success_url=f"{frontend_url}/credits?checkout=success",
+        cancel_url=f"{frontend_url}/credits?checkout=cancelled",
+        client_reference_id=user.user_id,
+        metadata={"user_id": user.user_id, "plan": body.plan},
+        subscription_data={"metadata": {"user_id": user.user_id, "plan": body.plan}},
+    )
+    return {"url": session["url"]}
+
+
+@api_router.get("/billing/status")
+async def billing_status(user: User = Depends(get_current_user)):
+    user_doc = await _get_user_doc(user)
+    user_doc, warning = await _refresh_billing_from_stripe(user_doc)
+    payload = _billing_status_payload(user_doc)
+    if warning:
+        payload["warning"] = warning
+    return payload
+
+
+@api_router.post("/billing/create-portal-session")
+async def create_billing_portal_session(user: User = Depends(get_current_user)):
+    _stripe_secret_key()
+    user_doc = await _get_user_doc(user)
+    customer_id = _billing_from_user(user_doc).get("stripe_customer_id")
+    if not customer_id:
+        raise HTTPException(status_code=400, detail="No Stripe customer found")
+    session = stripe.billing_portal.Session.create(
+        customer=customer_id,
+        return_url=f"{_frontend_url()}/settings",
+    )
+    return {"url": session["url"]}
+
+
+async def _handle_subscription_event(subscription: Any, *, last_payment_status: Optional[str] = None) -> None:
+    customer_id = str(subscription.get("customer") or "")
+    if not customer_id:
+        logger.warning("stripe_subscription_event_missing_customer subscription_id=%s", subscription.get("id"))
+        return
+    await _update_user_billing_by_customer_id(customer_id, _subscription_billing_updates(subscription, last_payment_status=last_payment_status))
+
+
+async def _stripe_event_already_processed(event_id: str) -> bool:
+    if not event_id:
+        return False
+    existing = await db.stripe_events.find_one({"event_id": event_id}, {"_id": 0, "event_id": 1})
+    return bool(existing)
+
+
+async def _record_processed_stripe_event(event: Any) -> None:
+    event_id = event.get("id")
+    if not event_id:
+        return
+    created = event.get("created")
+    created_at = None
+    if created:
+        try:
+            created_at = datetime.fromtimestamp(int(created), tz=timezone.utc).isoformat()
+        except Exception:
+            created_at = None
+    try:
+        await db.stripe_events.insert_one({
+            "event_id": event_id,
+            "type": event.get("type"),
+            "created_at": created_at,
+            "processed_at": datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception as exc:
+        logger.info("stripe_event_record_duplicate_or_failed event_id=%s error=%s", event_id, str(exc)[:160])
+
+
+@api_router.post("/stripe/webhook")
+async def stripe_webhook(request: Request):
+    _stripe_secret_key()
+    webhook_secret = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
+    if not webhook_secret:
+        raise HTTPException(status_code=503, detail="Stripe webhook is not configured")
+    payload = await request.body()
+    signature = request.headers.get("Stripe-Signature", "")
+    try:
+        event = stripe.Webhook.construct_event(payload, signature, webhook_secret)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid payload")
+    except stripe.SignatureVerificationError:
+        raise HTTPException(status_code=400, detail="Invalid signature")
+
+    event_type = event["type"]
+    event_id = event.get("id")
+    if await _stripe_event_already_processed(event_id):
+        logger.info("stripe_webhook_duplicate_ignored event_id=%s type=%s", event_id, event_type)
+        return {"received": True, "duplicate": True}
+
+    obj = event["data"]["object"]
+    if event_type == "checkout.session.completed":
+        customer_id = obj.get("customer")
+        subscription_id = obj.get("subscription")
+        if not customer_id:
+            logger.warning("stripe_checkout_completed_missing_customer event_id=%s", event_id)
+        updates = {"stripe_customer_id": customer_id, "stripe_subscription_id": subscription_id, "last_payment_status": obj.get("payment_status")}
+        if subscription_id:
+            try:
+                subscription = stripe.Subscription.retrieve(subscription_id)
+                updates.update(_subscription_billing_updates(subscription, last_payment_status=obj.get("payment_status")))
+            except Exception as exc:
+                logger.warning("stripe_checkout_subscription_retrieve_failed event_id=%s subscription_id=%s error=%s", event_id, subscription_id, str(exc)[:200])
+        user_id = obj.get("client_reference_id") or obj.get("metadata", {}).get("user_id")
+        if user_id:
+            if not await db.users.find_one({"user_id": user_id}, {"_id": 0, "user_id": 1}):
+                logger.warning("stripe_checkout_client_reference_user_not_found event_id=%s user_id=%s", event_id, user_id)
+            await _update_user_billing_by_user_id(user_id, {key: value for key, value in updates.items() if value})
+        elif customer_id:
+            await _update_user_billing_by_customer_id(customer_id, {key: value for key, value in updates.items() if value})
+        else:
+            logger.warning("stripe_checkout_completed_no_user_or_customer event_id=%s", event_id)
+    elif event_type in {"customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted"}:
+        await _handle_subscription_event(obj)
+    elif event_type in {"invoice.payment_succeeded", "invoice.payment_failed"}:
+        subscription_id = obj.get("subscription")
+        customer_id = obj.get("customer")
+        payment_status = "failed" if event_type == "invoice.payment_failed" else "succeeded"
+        if subscription_id:
+            try:
+                subscription = stripe.Subscription.retrieve(subscription_id)
+                await _handle_subscription_event(subscription, last_payment_status=payment_status)
+            except Exception:
+                if customer_id:
+                    await _update_user_billing_by_customer_id(customer_id, {"last_payment_status": payment_status})
+                else:
+                    logger.warning("stripe_invoice_event_missing_customer event_id=%s type=%s", event_id, event_type)
+        elif customer_id:
+            await _update_user_billing_by_customer_id(customer_id, {"last_payment_status": payment_status})
+        else:
+            logger.warning("stripe_invoice_event_missing_subscription_customer event_id=%s type=%s", event_id, event_type)
+    else:
+        logger.info("stripe_webhook ignored event_type=%s", event_type)
+
+    await _record_processed_stripe_event(event)
+    return {"received": True}
+
+
 # ===================== CV parsing =====================
 
 def extract_text_from_upload(filename: str, content: bytes) -> str:
@@ -594,19 +899,23 @@ async def claude_extract_profile(cv_text: str) -> Dict[str, Any]:
     "email": "email or empty",
     "phone": "phone or empty",
     "location": "city, country or empty",
+    "city": "city explicitly listed or empty",
+    "country": "country explicitly listed or empty",
     "linkedin": "linkedin url or empty",
-    "website": "personal site url or empty"
+    "website": "personal site url or empty",
+    "portfolio": "portfolio url or empty"
   }},
   "summary": "1-2 sentence professional summary",
   "skills": ["skill1", "skill2", ...max 15],
   "experience": [{{"role": "...", "company": "...", "duration": "...", "location": "...", "highlights": ["...", "..."]}}],
-  "education": [{{"degree": "...", "school": "...", "year": "..."}}],
+  "education": [{{"degree": "...", "school": "...", "discipline": "field of study/major or empty", "field_of_study": "same if explicit or empty", "graduation_year": "YYYY or empty", "year": "YYYY or empty"}}],
   "target_roles": ["job title 1", "job title 2", "job title 3"],
   "seniority": "junior" | "mid" | "senior" | "lead" | "principal",
   "template_style": "modern" | "classic" | "minimal" | "two_column"
 }}
 
 For template_style, infer the layout aesthetic of the original CV: "two_column" if sidebar+main, "classic" if centered headers/serif feel, "minimal" if heavy whitespace and thin dividers, otherwise "modern".
+Extract only facts explicitly present in the CV. Do not infer work authorization, sponsorship, demographic data, pronouns, or legal eligibility.
 
 CV:
 ---
@@ -615,6 +924,329 @@ CV:
 Return ONLY the JSON object."""
     response = await complete_json_text(system_message, prompt)
     return _parse_json_from_llm(response)
+
+
+def _clean_string(value: Any, max_len: int = 300) -> str:
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    return text[:max_len]
+
+
+def _valid_email(value: Any) -> str:
+    text = _clean_string(value, 200)
+    return text if re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", text) else ""
+
+
+def _normalize_profile_url(value: Any, *, linkedin: bool = False) -> str:
+    text = _clean_string(value, 400)
+    if not text:
+        return ""
+    if re.search(r"\s", text):
+        return ""
+    if linkedin and "linkedin." not in text.lower():
+        return ""
+    if not re.match(r"^https?://", text, flags=re.I):
+        text = "https://" + text
+    parsed = urlparse(text)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc or "." not in parsed.netloc:
+        return ""
+    return text
+
+
+def _graduation_year(value: Any) -> str:
+    match = re.search(r"\b(19|20)\d{2}\b", str(value or ""))
+    return match.group(0) if match else ""
+
+
+def _split_location(value: Any) -> tuple[str, str]:
+    text = _clean_string(value, 160)
+    if not text:
+        return "", ""
+    parts = [part.strip() for part in text.split(",") if part.strip()]
+    if len(parts) >= 2:
+        return parts[0], parts[-1]
+    return text, ""
+
+
+def _phone_country_code_from_explicit(phone: str) -> str:
+    text = _clean_string(phone, 80)
+    match = re.match(r"^\s*(\+\d{1,4})\b", text)
+    return match.group(1) if match else ""
+
+
+def _first_education_item(education: Any) -> Dict[str, Any]:
+    items = education if isinstance(education, list) else []
+    for item in items:
+        if isinstance(item, dict):
+            return item
+    return {}
+
+
+def _cv_lines(cv_text: str) -> List[str]:
+    return [_clean_string(line, 500) for line in (cv_text or "").splitlines() if _clean_string(line, 500)]
+
+
+def _line_evidence(lines: List[str], value: Any, *, window: int = 1) -> str:
+    needle = _clean_string(value, 200).lower()
+    if not needle:
+        return ""
+    for idx, line in enumerate(lines):
+        if needle in line.lower():
+            start = max(0, idx - window)
+            end = min(len(lines), idx + window + 1)
+            return " | ".join(lines[start:end])
+    return ""
+
+
+def _normalize_country_name(value: Any) -> str:
+    text = _clean_string(value, 120)
+    key = text.lower()
+    aliases = {
+        "royaume-uni": "United Kingdom",
+        "royaume uni": "United Kingdom",
+        "uk": "United Kingdom",
+        "u.k.": "United Kingdom",
+        "united kingdom": "United Kingdom",
+        "usa": "United States",
+        "us": "United States",
+        "u.s.": "United States",
+        "united states": "United States",
+    }
+    return aliases.get(key, text)
+
+
+def _education_degree_parts(value: Any) -> tuple[str, str]:
+    text = _clean_string(value, 200)
+    if not text:
+        return "", ""
+    patterns = [
+        (r"\b(bsc|b\.sc\.?|bachelor(?:'s)?|ba|b\.a\.?)\b\s*(?:in|of)?\s*(.*)", "Bachelor"),
+        (r"\b(msc|m\.sc\.?|master(?:'s)?|ma|m\.a\.?)\b\s*(?:in|of)?\s*(.*)", "Master"),
+        (r"\b(phd|ph\.d\.?|doctorate)\b\s*(?:in|of)?\s*(.*)", "PhD"),
+    ]
+    for pattern, degree in patterns:
+        match = re.search(pattern, text, flags=re.I)
+        if match:
+            discipline = _clean_string(match.group(2), 160)
+            return degree, discipline
+    return text, ""
+
+
+def _education_candidate_from_cv(cv_text: str) -> Optional[Dict[str, Any]]:
+    lines = _cv_lines(cv_text)
+    lower_lines = [line.lower() for line in lines]
+    try:
+        start = lower_lines.index("education") + 1
+    except ValueError:
+        return None
+    end = len(lines)
+    for marker in ("work experience", "experience", "skills", "certificates"):
+        if marker in lower_lines[start:]:
+            end = min(end, start + lower_lines[start:].index(marker))
+    edu_lines = lines[start:end]
+    candidates: List[Dict[str, Any]] = []
+    school_terms = ("university", "college", "lycée", "lycee", "school", "institute", "academy")
+    degree_terms = ("bsc", "b.sc", "bachelor", "ba ", "msc", "m.sc", "master", "phd", "doctorate", "degree")
+    low_level_terms = ("primary school", "middle school", "high school", "hight school")
+    for idx, line in enumerate(edu_lines):
+        lower = line.lower()
+        if re.search(r"\d{2}/\d{4}|present|^\W*$", lower):
+            continue
+        next_line = edu_lines[idx + 1] if idx + 1 < len(edu_lines) else ""
+        following = " | ".join(edu_lines[idx:idx + 5])
+        has_degree = any(term in lower for term in degree_terms)
+        low_level = any(term in lower for term in low_level_terms)
+        next_is_institution = any(term in next_line.lower() for term in school_terms)
+        if not (has_degree or next_is_institution):
+            continue
+        score = 0.35
+        if has_degree:
+            score += 0.35
+        if "present" in following.lower():
+            score += 0.2
+        if low_level:
+            score -= 0.45
+        degree, discipline = _education_degree_parts(line)
+        if low_level and not has_degree:
+            degree = ""
+        candidates.append({
+            "school": next_line if next_is_institution else "",
+            "degree": degree,
+            "discipline": discipline,
+            "field_of_study": discipline,
+            "graduation_year": "" if "present" in following.lower() else _graduation_year(following),
+            "year": "" if "present" in following.lower() else _graduation_year(following),
+            "confidence": min(max(score, 0.0), 0.98),
+            "evidence": following,
+        })
+    if not candidates:
+        return None
+    return max(candidates, key=lambda item: item.get("confidence", 0.0))
+
+
+def _build_profile_intelligence(extracted: Dict[str, Any], cv_text: str) -> Dict[str, Any]:
+    contact_raw = extracted.get("contact") or {}
+    if not isinstance(contact_raw, dict):
+        contact_raw = {}
+    fields_extracted: List[str] = []
+    fields_skipped: List[str] = []
+    field_confidence: Dict[str, float] = {}
+    field_evidence: Dict[str, str] = {}
+    review_suggestions: Dict[str, Dict[str, Any]] = {}
+    auto_saved_fields: List[str] = []
+    lines = _cv_lines(cv_text)
+
+    def save_field(field: str, value: Any, confidence: float, evidence: str = "") -> bool:
+        if value in (None, ""):
+            return False
+        field_confidence[field] = round(float(confidence), 2)
+        field_evidence[field] = evidence or _line_evidence(lines, value)
+        if confidence >= 0.8:
+            fields_extracted.append(field)
+            auto_saved_fields.append(field)
+            return True
+        review_suggestions[field] = {
+            "value": value,
+            "confidence": round(float(confidence), 2),
+            "evidence": field_evidence[field],
+            "reason": "below_auto_save_threshold",
+        }
+        fields_skipped.append(f"{field}_low_confidence")
+        return False
+
+    contact: Dict[str, Any] = {}
+    for key in ("name", "phone", "location"):
+        value = _clean_string(contact_raw.get(key))
+        confidence = 0.9 if key in ("name", "phone") else 0.82
+        if save_field(f"contact.{key}", value, confidence):
+            contact[key] = value
+    email = _valid_email(contact_raw.get("email"))
+    if email and save_field("contact.email", email, 0.95):
+        contact["email"] = email
+    elif contact_raw.get("email"):
+        fields_skipped.append("contact.email_invalid")
+    linkedin = _normalize_profile_url(contact_raw.get("linkedin"), linkedin=True)
+    if linkedin and save_field("contact.linkedin", linkedin, 0.9):
+        contact["linkedin"] = linkedin
+    elif contact_raw.get("linkedin"):
+        review_suggestions["contact.linkedin"] = {
+            "value": _clean_string(contact_raw.get("linkedin")),
+            "confidence": 0.3,
+            "evidence": _line_evidence(lines, contact_raw.get("linkedin")),
+            "reason": "invalid_url_or_contains_whitespace",
+        }
+        fields_skipped.append("contact.linkedin_invalid")
+    website = _normalize_profile_url(contact_raw.get("website") or contact_raw.get("portfolio"))
+    if website and save_field("contact.website", website, 0.85):
+        contact["website"] = website
+    elif contact_raw.get("website") or contact_raw.get("portfolio"):
+        fields_skipped.append("contact.website_invalid")
+
+    city = _clean_string(contact_raw.get("city"))
+    country = _normalize_country_name(contact_raw.get("country"))
+    if not city or not country:
+        loc_city, loc_country = _split_location(contact.get("location"))
+        city = city or loc_city
+        country = country or _normalize_country_name(loc_country)
+    location_data = {}
+    if save_field("location.city", city, 0.82):
+        location_data["city"] = city
+    if save_field("location.country", country, 0.82):
+        location_data["country"] = country
+
+    education_item = _education_candidate_from_cv(cv_text) or _first_education_item(extracted.get("education"))
+    education_confidence = float(education_item.get("confidence") or 0.6) if education_item else 0.0
+    education: List[Dict[str, Any]] = []
+    if education_item:
+        degree, discipline_from_degree = _education_degree_parts(education_item.get("degree") or education_item.get("qualification"))
+        edu = {
+            "school": _clean_string(education_item.get("school") or education_item.get("institution") or education_item.get("university")),
+            "degree": _clean_string(degree),
+            "discipline": _clean_string(education_item.get("discipline") or education_item.get("field_of_study") or education_item.get("major") or discipline_from_degree),
+            "field_of_study": _clean_string(education_item.get("field_of_study") or education_item.get("discipline") or education_item.get("major") or discipline_from_degree),
+            "graduation_year": _graduation_year(education_item.get("graduation_year") or education_item.get("year") or education_item.get("end_date")),
+            "year": _graduation_year(education_item.get("year") or education_item.get("graduation_year") or education_item.get("end_date")),
+        }
+        evidence = education_item.get("evidence") or ""
+        clean_edu = {}
+        for key, value in edu.items():
+            confidence = education_confidence
+            if key in ("graduation_year", "year") and not value:
+                continue
+            if key in ("graduation_year", "year") and "present" in evidence.lower():
+                confidence = 0.2
+            if save_field(f"education.{key}", value, confidence, evidence):
+                clean_edu[key] = value
+        if clean_edu:
+            education.append(clean_edu)
+
+    experience_items = extracted.get("experience") if isinstance(extracted.get("experience"), list) else []
+    first_exp = next((item for item in experience_items if isinstance(item, dict)), {})
+    experience_summary = {
+        "current_title": _clean_string(first_exp.get("role") or first_exp.get("title")),
+        "current_company": _clean_string(first_exp.get("company")),
+    }
+    experience_summary = {key: value for key, value in experience_summary.items() if value}
+    if experience_summary:
+        fields_extracted.extend([f"experience_summary.{key}" for key in experience_summary])
+        auto_saved_fields.extend([f"experience_summary.{key}" for key in experience_summary])
+
+    skills = [
+        _clean_string(skill, 80)
+        for skill in (extracted.get("skills") or [])
+        if _clean_string(skill, 80)
+    ][:30]
+    if skills:
+        fields_extracted.append("skills")
+
+    defaults: Dict[str, Any] = {}
+    if education:
+        edu = education[0]
+        mapping = {
+            "education_school": edu.get("school"),
+            "education_degree": edu.get("degree"),
+            "education_discipline": edu.get("discipline") or edu.get("field_of_study"),
+            "education_graduation_year": edu.get("graduation_year") or edu.get("year"),
+        }
+        defaults.update({key: value for key, value in mapping.items() if value})
+    if website:
+        defaults["website_url"] = website
+    if linkedin:
+        defaults["linkedin_url"] = linkedin
+    if city:
+        defaults["city"] = city
+        defaults["current_location_city"] = city
+    if country:
+        defaults["country"] = country
+        defaults["current_location_country"] = country
+    phone_code = _phone_country_code_from_explicit(contact.get("phone", ""))
+    if phone_code:
+        defaults["phone_country_code"] = phone_code
+
+    cv_extraction = {
+        "extracted_at": datetime.now(timezone.utc).isoformat(),
+        "fields_extracted": sorted(set(fields_extracted)),
+        "fields_skipped": sorted(set(fields_skipped)),
+        "field_confidence": field_confidence,
+        "field_evidence": field_evidence,
+        "auto_saved_fields": sorted(set(auto_saved_fields)),
+        "review_suggestions": review_suggestions,
+        "confidence_summary": {
+            "mode": "explicit_cv_facts_with_confidence_thresholds",
+            "saved_defaults": sorted(defaults.keys()),
+            "suggested_defaults": sorted(review_suggestions.keys()),
+            "cv_text_length": len(cv_text or ""),
+        },
+    }
+    return {
+        "contact": contact,
+        "location_data": location_data,
+        "education": education,
+        "experience_summary": experience_summary,
+        "skills": skills,
+        "application_defaults": defaults,
+        "cv_extraction": cv_extraction,
+        "extraction_suggestions": review_suggestions,
+    }
 
 
 async def claude_score_jobs(profile: Dict[str, Any], jobs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -1046,17 +1678,48 @@ async def upload_cv(file: UploadFile = File(...), user: User = Depends(get_curre
     else:
         mime = "text/plain"
 
+    intelligence = _build_profile_intelligence(extracted, cv_text)
+    existing_profile = await db.profiles.find_one({"user_id": user.user_id}, {"_id": 0, "application_defaults": 1, "contact": 1}) or {}
+    existing_defaults = existing_profile.get("application_defaults") or {}
+    cv_managed_default_keys = {
+        "city",
+        "country",
+        "current_location_city",
+        "current_location_country",
+        "education_school",
+        "education_degree",
+        "education_discipline",
+        "education_graduation_year",
+        "linkedin_url",
+        "website_url",
+        "portfolio_url",
+    }
+    retained_defaults = {
+        key: value
+        for key, value in existing_defaults.items()
+        if key not in cv_managed_default_keys
+    }
+    merged_defaults = {**retained_defaults, **(intelligence.get("application_defaults") or {})}
+    contact = intelligence.get("contact") or {}
+    if user.email:
+        contact["email"] = user.email
+
     profile_doc = {
         "user_id": user.user_id,
         "cv_text": cv_text,
         "cv_filename": file.filename,
         "cv_original_b64": base64.b64encode(content).decode("ascii"),
         "cv_mime": mime,
-        "contact": extracted.get("contact", {}),
+        "contact": contact,
         "summary": extracted.get("summary", ""),
-        "skills": extracted.get("skills", []),
+        "skills": intelligence.get("skills") or extracted.get("skills", []),
         "experience": extracted.get("experience", []),
-        "education": extracted.get("education", []),
+        "education": intelligence.get("education") or extracted.get("education", []),
+        "experience_summary": intelligence.get("experience_summary") or {},
+        "location_data": intelligence.get("location_data") or {},
+        "application_defaults": merged_defaults,
+        "cv_extraction": intelligence.get("cv_extraction") or {},
+        "extraction_suggestions": intelligence.get("extraction_suggestions") or {},
         "target_roles": extracted.get("target_roles", []),
         "seniority": extracted.get("seniority"),
         "template_style": extracted.get("template_style", "modern"),
@@ -1152,6 +1815,13 @@ async def update_application_defaults(body: ApplicationDefaultsUpdate, user: Use
         "country",
         "city",
         "phone_country_code",
+        "linkedin_url",
+        "website_url",
+        "portfolio_url",
+        "education_school",
+        "education_degree",
+        "education_discipline",
+        "education_graduation_year",
         "work_authorized_countries",
         "requires_sponsorship",
         "willing_to_relocate",
@@ -1181,6 +1851,109 @@ async def update_application_defaults(body: ApplicationDefaultsUpdate, user: Use
     if profile:
         profile["profile_completion"] = _profile_completion(profile)
     return {"ok": True, "application_defaults": (profile or {}).get("application_defaults") or {}, "profile": profile}
+
+
+@api_router.put("/profile/structured-data")
+async def update_structured_profile_data(body: StructuredProfileDataUpdate, user: User = Depends(get_current_user)):
+    existing = await db.profiles.find_one({"user_id": user.user_id}, {"_id": 0}) or {}
+    contact_payload = body.contact or {}
+    contact = {**(existing.get("contact") or {})}
+    for key in ("name", "phone", "location", "linkedin", "website"):
+        value = contact_payload.get(key)
+        if value is not None:
+            contact[key] = _clean_string(value)
+    if contact.get("linkedin"):
+        normalized = _normalize_profile_url(contact.get("linkedin"), linkedin=True)
+        if normalized:
+            contact["linkedin"] = normalized
+    if contact.get("website"):
+        normalized = _normalize_profile_url(contact.get("website"))
+        if normalized:
+            contact["website"] = normalized
+    contact["email"] = user.email
+
+    education = []
+    for item in body.education or []:
+        if not isinstance(item, dict):
+            continue
+        clean_item = {
+            "school": _clean_string(item.get("school")),
+            "degree": _clean_string(item.get("degree")),
+            "discipline": _clean_string(item.get("discipline") or item.get("field_of_study")),
+            "field_of_study": _clean_string(item.get("field_of_study") or item.get("discipline")),
+            "graduation_year": _graduation_year(item.get("graduation_year") or item.get("year")),
+            "year": _graduation_year(item.get("year") or item.get("graduation_year")),
+        }
+        clean_item = {key: value for key, value in clean_item.items() if value}
+        if clean_item:
+            education.append(clean_item)
+    if not education:
+        education = existing.get("education") or []
+
+    defaults = {**(existing.get("application_defaults") or {})}
+    incoming_defaults = body.application_defaults or {}
+    allowed_default_keys = {
+        "linkedin_url",
+        "website_url",
+        "portfolio_url",
+        "education_school",
+        "education_degree",
+        "education_discipline",
+        "education_graduation_year",
+        "phone_country_code",
+        "city",
+        "country",
+        "current_location_city",
+        "current_location_country",
+    }
+    for key, value in incoming_defaults.items():
+        if key in allowed_default_keys:
+            defaults[key] = value
+    if education:
+        edu = education[0]
+        for key, value in {
+            "education_school": edu.get("school"),
+            "education_degree": edu.get("degree"),
+            "education_discipline": edu.get("discipline") or edu.get("field_of_study"),
+            "education_graduation_year": edu.get("graduation_year") or edu.get("year"),
+        }.items():
+            if value:
+                defaults[key] = value
+    if contact.get("linkedin"):
+        defaults["linkedin_url"] = contact["linkedin"]
+    if contact.get("website"):
+        defaults["website_url"] = contact["website"]
+    if contact.get("phone"):
+        code = _phone_country_code_from_explicit(contact["phone"])
+        if code:
+            defaults["phone_country_code"] = code
+    city, country = _split_location(contact.get("location"))
+    if city:
+        defaults["city"] = city
+        defaults["current_location_city"] = city
+    if country:
+        defaults["country"] = country
+        defaults["current_location_country"] = country
+
+    update = {
+        "contact": contact,
+        "education": education,
+        "application_defaults": defaults,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if body.skills:
+        update["skills"] = [_clean_string(skill, 80) for skill in body.skills if _clean_string(skill, 80)][:30]
+    if body.experience_summary:
+        update["experience_summary"] = {
+            key: _clean_string(value)
+            for key, value in body.experience_summary.items()
+            if key in {"current_title", "current_company", "years_experience"} and value not in (None, "")
+        }
+    await db.profiles.update_one({"user_id": user.user_id}, {"$set": update}, upsert=True)
+    profile = await db.profiles.find_one({"user_id": user.user_id}, {"_id": 0, "cv_original_b64": 0})
+    if profile:
+        profile["profile_completion"] = _profile_completion(profile)
+    return {"ok": True, "profile": profile}
 
 
 @api_router.patch("/profile/extras")
@@ -2710,9 +3483,32 @@ async def undo_swipe(user: User = Depends(get_current_user)):
 
 # ===================== Applications =====================
 
+def _application_effective_timestamp(app_doc: Dict[str, Any]) -> datetime:
+    for key in ("submitted_at", "manual_status_updated_at", "updated_at", "created_at"):
+        value = app_doc.get(key)
+        if not value:
+            continue
+        if isinstance(value, datetime):
+            parsed = value
+        else:
+            try:
+                parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            except ValueError:
+                continue
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed
+    return datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _sort_applications_newest_first(apps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return sorted(apps, key=_application_effective_timestamp, reverse=True)
+
+
 @api_router.get("/applications")
 async def list_applications(user: User = Depends(get_current_user)):
     apps = await db.applications.find({"user_id": user.user_id}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    apps = _sort_applications_newest_first(apps)
     # join job data
     job_ids = list({a["job_id"] for a in apps})
     jobs = await db.jobs.find({"job_id": {"$in": job_ids}}, {"_id": 0}).to_list(500)
@@ -2725,11 +3521,7 @@ async def list_applications(user: User = Depends(get_current_user)):
 
 
 async def require_admin_user(user: User = Depends(get_current_user)) -> User:
-    admin_emails = [
-        item.strip().lower()
-        for item in os.environ.get("ADMIN_EMAILS", "").split(",")
-        if item.strip()
-    ]
+    admin_emails = _env_email_set("ADMIN_EMAILS")
     user_email = (user.email or "").strip().lower()
     if user_email and user_email in admin_emails:
         return user
@@ -2740,6 +3532,33 @@ async def require_admin_user(user: User = Depends(get_current_user)) -> User:
         return user
 
     raise HTTPException(status_code=403, detail="Admin access denied")
+
+
+def _env_email_set(name: str) -> set[str]:
+    return {
+        item.strip().lower()
+        for item in os.environ.get(name, "").split(",")
+        if item.strip()
+    }
+
+
+def _env_enabled(name: str, default: str = "false") -> bool:
+    return os.environ.get(name, default).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _greenhouse_real_submit_allowed_emails() -> set[str]:
+    explicit = _env_email_set("REAL_SUBMIT_ALLOWED_EMAILS")
+    return explicit or _env_email_set("ADMIN_EMAILS")
+
+
+def _require_greenhouse_real_submit_allowed(user: User) -> None:
+    if not _env_enabled("GREENHOUSE_REAL_SUBMIT_ENABLED", "false"):
+        raise HTTPException(status_code=403, detail="Real Greenhouse submit is disabled.")
+    allowed_emails = _greenhouse_real_submit_allowed_emails()
+    user_email = (user.email or "").strip().lower()
+    if not user_email or user_email not in allowed_emails:
+        logger.warning("greenhouse_real_submit_denied user_id=%s email=%s", user.user_id, user.email)
+        raise HTTPException(status_code=403, detail="Real Greenhouse submit is not allowed for this account.")
 
 
 def _admin_status_filter(filter_value: Optional[str]) -> Optional[set[str]]:
@@ -3246,6 +4065,7 @@ async def admin_list_applications(
             for app_doc in apps
             if _effective_manual_status(_normalize_application_status_fields(app_doc)) == status_filter
         ]
+    apps = _sort_applications_newest_first(apps)
 
     user_ids = list({app.get("user_id") for app in apps if app.get("user_id")})
     job_ids = list({app.get("job_id") for app in apps if app.get("job_id")})
@@ -4040,6 +4860,11 @@ def _browser_field_public_name(field: Dict[str, Any]) -> str:
 
 
 def _greenhouse_browser_required_question(field: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    if field.get("safe_to_autofill") or field.get("answer_source"):
+        return None
+    reason_if_not_fillable = str(field.get("reason_if_not_fillable") or "")
+    if reason_if_not_fillable in {"unknown_optional_field", "not_fillable"}:
+        return None
     suggested_key = browser_suggested_profile_key(field)
     options = field.get("options") or []
     if (
@@ -4483,6 +5308,8 @@ async def _store_greenhouse_browser_submission_run(
     user: User,
     result: Dict[str, Any],
     dry_run: bool,
+    manual_fallback_triggered: bool = False,
+    result_status: Optional[str] = None,
 ) -> str:
     now = datetime.now(timezone.utc).isoformat()
     run_id = f"browser_run_{uuid.uuid4().hex[:16]}"
@@ -4506,6 +5333,11 @@ async def _store_greenhouse_browser_submission_run(
         "provider": "greenhouse_browser",
         "status": status,
         "dry_run": dry_run,
+        "clicked_submit": bool(result.get("submit_clicked")),
+        "result_status": result_status or status,
+        "manual_fallback_triggered": bool(manual_fallback_triggered),
+        "triggered_by_user_id": user.user_id,
+        "triggered_by_email": user.email,
         "screenshots": {
             "prepared_b64": result.get("screenshot_b64"),
             "submitted_b64": result.get("submit_screenshot_b64"),
@@ -4542,7 +5374,12 @@ async def greenhouse_browser_submit(body: GreenhousePrepareSubmitRequest, user: 
     try:
         if browser_submit_dry_run_enabled():
             result = await _prepare_greenhouse_browser_fill(body.job_id, user)
-            run_id = await _store_greenhouse_browser_submission_run(user=user, result=result, dry_run=True)
+            run_id = await _store_greenhouse_browser_submission_run(
+                user=user,
+                result=result,
+                dry_run=True,
+                result_status=result.get("submission_status") or "dry_run",
+            )
             return {
                 **result,
                 "dry_run": True,
@@ -4550,10 +5387,21 @@ async def greenhouse_browser_submit(body: GreenhousePrepareSubmitRequest, user: 
                 "stopped_before_submit": True,
                 "message": "Dry run successful. Application was filled but submit was not clicked.",
             }
+
+        _require_greenhouse_real_submit_allowed(user)
         result = await _prepare_greenhouse_browser_fill(body.job_id, user, click_submit=True)
-        run_id = await _store_greenhouse_browser_submission_run(user=user, result=result, dry_run=False)
         now = datetime.now(timezone.utc).isoformat()
+        manual_fallback_triggered = False
+        result_status = "submitted" if result.get("success_detected") else None
+
         if result.get("success_detected"):
+            run_id = await _store_greenhouse_browser_submission_run(
+                user=user,
+                result=result,
+                dry_run=False,
+                result_status="submitted",
+                manual_fallback_triggered=False,
+            )
             await db.applications.update_one(
                 {"application_id": result["application_id"], "user_id": user.user_id},
                 {"$set": {
@@ -4574,29 +5422,54 @@ async def greenhouse_browser_submit(body: GreenhousePrepareSubmitRequest, user: 
                 "message": "Application submitted.",
             }
 
+        manual_update = {
+            "manual_status": "manual_review_needed",
+            "admin_status": "manual_review_needed",
+            "manual_status_updated_by": user.email,
+            "manual_status_updated_at": now,
+        }
+
         if result.get("captcha_required"):
+            manual_fallback_triggered = True
+            run_id = await _store_greenhouse_browser_submission_run(
+                user=user,
+                result=result,
+                dry_run=False,
+                result_status="blocked_captcha",
+                manual_fallback_triggered=True,
+            )
             await db.applications.update_one(
                 {"application_id": result["application_id"], "user_id": user.user_id},
                 {"$set": {
-                    "submission_status": "action_required",
+                    "submission_status": "blocked_captcha",
                     "submission_error": "captcha_required",
                     "submission_provider": "greenhouse_browser",
                     "browser_submission_run_id": run_id,
                     "greenhouse_browser_submission_result": _sanitize_browser_result_for_application(result),
                     "updated_at": now,
+                    **manual_update,
                 }},
             )
             return {
                 **result,
                 "dry_run": False,
                 "browser_submission_run_id": run_id,
-                "submission_status": "action_required",
+                "submission_status": "blocked_captcha",
                 "captcha_required": True,
                 "action_required": True,
-                "message": "Human verification required to complete submission.",
+                "manual_fallback_triggered": manual_fallback_triggered,
+                "message": "An additional security check is required before this application can be completed.",
             }
 
         if result.get("submit_clicked") and result.get("failure_reason") == "submission_status_unknown":
+            manual_fallback_triggered = True
+            run_id = await _store_greenhouse_browser_submission_run(
+                user=user,
+                result=result,
+                dry_run=False,
+                result_status="unknown",
+                manual_fallback_triggered=True,
+            )
             await db.applications.update_one(
                 {"application_id": result["application_id"], "user_id": user.user_id},
                 {"$set": {
@@ -4606,6 +5479,7 @@ async def greenhouse_browser_submit(body: GreenhousePrepareSubmitRequest, user: 
                     "browser_submission_run_id": run_id,
                     "greenhouse_browser_submission_result": _sanitize_browser_result_for_application(result),
                     "updated_at": now,
+                    **manual_update,
                 }},
             )
             return {
@@ -4613,25 +5487,47 @@ async def greenhouse_browser_submit(body: GreenhousePrepareSubmitRequest, user: 
                 "dry_run": False,
                 "browser_submission_run_id": run_id,
                 "submission_status": "unknown",
+                "manual_fallback_triggered": manual_fallback_triggered,
                 "message": "Submit was clicked, but success confirmation was not detected.",
             }
 
+        required_questions = result.get("required_questions") or result.get("prepared_missing_information") or _greenhouse_browser_required_questions(result)
+        missing_user_answers = bool(result.get("action_required") or required_questions)
+        failed_status = "action_required" if missing_user_answers else "failed"
+        manual_fallback_triggered = not missing_user_answers
+        run_id = await _store_greenhouse_browser_submission_run(
+            user=user,
+            result=result,
+            dry_run=False,
+            result_status=failed_status,
+            manual_fallback_triggered=manual_fallback_triggered,
+        )
+        update_doc = {
+            "submission_status": failed_status,
+            "submission_error": result.get("failure_reason") or "Greenhouse submission success was not detected.",
+            "submission_provider": "greenhouse_browser",
+            "browser_submission_run_id": run_id,
+            "greenhouse_browser_submission_result": _sanitize_browser_result_for_application(result),
+            "updated_at": now,
+        }
+        if missing_user_answers:
+            update_doc.update({
+                "submission_error": "user_answers_required",
+                "prepared_missing_information": required_questions,
+                "prepared_blockers": [],
+            })
+        if manual_fallback_triggered:
+            update_doc.update(manual_update)
         await db.applications.update_one(
             {"application_id": result["application_id"], "user_id": user.user_id},
-            {"$set": {
-                "submission_status": "failed",
-                "submission_error": result.get("failure_reason") or "Greenhouse submission success was not detected.",
-                "submission_provider": "greenhouse_browser",
-                "browser_submission_run_id": run_id,
-                "greenhouse_browser_submission_result": _sanitize_browser_result_for_application(result),
-                "updated_at": now,
-            }},
+            {"$set": update_doc},
         )
         return {
             **result,
             "dry_run": False,
             "browser_submission_run_id": run_id,
-            "submission_status": "failed",
+            "submission_status": failed_status,
+            "manual_fallback_triggered": manual_fallback_triggered,
             "message": "Submit was attempted, but success confirmation was not detected.",
         }
     except HTTPException as exc:
@@ -4645,6 +5541,7 @@ def _greenhouse_benchmark_summary(result: Dict[str, Any]) -> Dict[str, Any]:
     blockers = result.get("blockers") or []
     unfilled = result.get("unfilled_required_fields") or []
     fill_debug = result.get("field_fill_debug") or []
+    verification = result.get("verification_summary") or {}
     action_required_fields = result.get("required_questions") or result.get("prepared_missing_information") or unfilled
     failed_fields = [
         item
@@ -4702,6 +5599,10 @@ def _greenhouse_benchmark_summary(result: Dict[str, Any]) -> Dict[str, Any]:
         "url": result.get("greenhouse_url_selected") or result.get("application_url"),
         "total_fields": len(fields_detected),
         "required_fields": sum(1 for field in fields_detected if field.get("required")),
+        "required_fields_detected": verification.get("required_fields_detected", sum(1 for field in fields_detected if field.get("required"))),
+        "required_fields_planned": verification.get("required_fields_planned"),
+        "required_fields_filled": verification.get("required_fields_filled"),
+        "required_fields_verified_complete": verification.get("required_fields_verified_complete"),
         "autofilled_fields": len(fields_filled),
         "action_required_fields": action_required_fields,
         "action_required_count": len(action_required_fields),

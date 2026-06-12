@@ -20,6 +20,10 @@ import Referral from "@/pages/Referral";
 import AuthCallback from "@/pages/AuthCallback";
 import AdminApplications from "@/pages/AdminApplications";
 import AdminApplicationDetail from "@/pages/AdminApplicationDetail";
+import AdminOverview from "@/pages/AdminOverview";
+import AdminUsers from "@/pages/AdminUsers";
+import AdminUserDetail from "@/pages/AdminUserDetail";
+import AdminAnalytics from "@/pages/AdminAnalytics";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import BottomNav from "@/components/BottomNav";
 import { demoMode, devBypassAuth } from "@/lib/dev";
@@ -54,9 +58,13 @@ function AppRouter() {
         <Route path="/" element={<Landing />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
-        <Route path="/admin" element={<AppRoute><Navigate to="/admin/applications" replace /></AppRoute>} />
+        <Route path="/admin" element={<AppRoute><Navigate to="/admin/overview" replace /></AppRoute>} />
+        <Route path="/admin/overview" element={<AppRoute><AdminOverview /></AppRoute>} />
         <Route path="/admin/applications" element={<AppRoute><AdminApplications /></AppRoute>} />
         <Route path="/admin/applications/:id" element={<AppRoute><AdminApplicationDetail /></AppRoute>} />
+        <Route path="/admin/users" element={<AppRoute><AdminUsers /></AppRoute>} />
+        <Route path="/admin/users/:userId" element={<AppRoute><AdminUserDetail /></AppRoute>} />
+        <Route path="/admin/analytics" element={<AppRoute><AdminAnalytics /></AppRoute>} />
         <Route path="/onboarding" element={<Onboarding />} />
         <Route path="/swipe" element={<AppRoute requireProfile><Swipe /></AppRoute>} />
         <Route path="/feedback" element={<AppRoute><Feedback /></AppRoute>} />

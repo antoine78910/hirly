@@ -43,10 +43,12 @@ export default function Settings() {
   const navigate = useNavigate();
   const { logout, user } = useAuth();
   const [theme, setTheme] = useState("System");
+  const [billing, setBilling] = useState(null);
 
   useEffect(() => {
     // Theme is informational for now; we keep the dark theme app-wide.
     setTheme(localStorage.getItem("swiipr_theme") || "System");
+    api.get("/billing/status").then(({ data }) => setBilling(data)).catch(() => setBilling(null));
   }, []);
 
   const todo = (what) => toast(`${what} — coming soon`);
@@ -61,6 +63,20 @@ export default function Settings() {
   };
 
   const openExternal = (href) => window.open(href, "_blank", "noopener");
+
+  const openPlan = async () => {
+    if (!billing?.is_premium) {
+      navigate("/credits");
+      return;
+    }
+    try {
+      const { data } = await api.post("/billing/create-portal-session");
+      if (data?.url) window.location.href = data.url;
+      else navigate("/credits");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Could not open billing portal");
+    }
+  };
 
   const deleteAccount = () => {
     if (!window.confirm("Delete your Hirly account? This removes your profile, swipes, and applications. This cannot be undone.")) return;
@@ -106,7 +122,7 @@ export default function Settings() {
       </Section>
 
       <Section label="Plan & help" testId="settings-support">
-        <Row icon={CreditCard}    label="Upgrade your plan" onClick={() => todo("Subscription")}            testId="settings-subscribe" />
+        <Row icon={CreditCard}    label={billing?.is_premium ? "Manage billing" : "Upgrade your plan"} onClick={openPlan} testId="settings-subscribe" />
         <Row icon={RotateCw}      label="Restore purchase"  onClick={() => todo("Restore purchase")}       testId="settings-restore" />
         <Row icon={MessageSquare} label="Talk to us"        onClick={() => openExternal("mailto:hi@hirly.com")} testId="settings-chat" />
       </Section>

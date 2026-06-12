@@ -1,12 +1,13 @@
-import { useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { X, Check, Gift } from "lucide-react";
 import { toast } from "sonner";
+import { api } from "../lib/api";
 
 const CREDIT_PACKS = [
-  { id: "pack-50", credits: 50, price: "5,99 €", save: "Save 16%" },
-  { id: "pack-100", credits: 100, price: "9,99 €", save: "Save 25%" },
-  { id: "pack-200", credits: 200, price: "17,99 €", save: "Save 30%" },
+  { id: "pack-50", credits: 50, price: "5,99 EUR", save: "Save 16%" },
+  { id: "pack-100", credits: 100, price: "9,99 EUR", save: "Save 25%" },
+  { id: "pack-200", credits: 200, price: "17,99 EUR", save: "Save 30%" },
 ];
 
 const PREMIUM_FEATURES = [
@@ -19,16 +20,59 @@ const PREMIUM_FEATURES = [
 
 export default function Credits() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const scrollRef = useRef(null);
   const [selectedPack, setSelectedPack] = useState("pack-50");
+  const [selectedPlan, setSelectedPlan] = useState("monthly");
+  const [billing, setBilling] = useState(null);
+  const [loadingPlan, setLoadingPlan] = useState(null);
+  const [portalLoading, setPortalLoading] = useState(false);
+  const checkoutStatus = searchParams.get("checkout");
+
+  const loadBilling = async () => {
+    try {
+      const { data } = await api.get("/billing/status");
+      setBilling(data);
+    } catch (_) {
+      setBilling(null);
+    }
+  };
+
+  useEffect(() => {
+    if (checkoutStatus === "success") toast.success("Payment received");
+    if (checkoutStatus === "cancelled") toast("Checkout cancelled");
+    loadBilling();
+  }, [checkoutStatus]);
 
   const buyPack = () => {
     const pack = CREDIT_PACKS.find((p) => p.id === selectedPack);
-    toast.success(`${pack.credits} application credits — checkout coming soon`);
+    toast.success(`${pack.credits} application credits - checkout coming soon`);
   };
 
-  const getPremium = () => {
-    toast.success("Premium subscription — checkout coming soon");
+  const getPremium = async () => {
+    setLoadingPlan(selectedPlan);
+    try {
+      const { data } = await api.post("/billing/create-checkout-session", { plan: selectedPlan });
+      if (!data?.url) throw new Error("Missing checkout URL");
+      window.location.href = data.url;
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Could not start checkout");
+    } finally {
+      setLoadingPlan(null);
+    }
+  };
+
+  const manageBilling = async () => {
+    setPortalLoading(true);
+    try {
+      const { data } = await api.post("/billing/create-portal-session");
+      if (!data?.url) throw new Error("Missing portal URL");
+      window.location.href = data.url;
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Could not open billing portal");
+    } finally {
+      setPortalLoading(false);
+    }
   };
 
   return (
@@ -47,6 +91,20 @@ export default function Credits() {
         <h1 className="font-display text-2xl font-bold leading-tight tracking-tight">
           Apply to as many jobs as you want
         </h1>
+
+        {billing?.is_premium ? (
+          <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">
+            Premium active{billing.plan ? ` - ${billing.plan}` : ""}
+          </div>
+        ) : checkoutStatus === "success" ? (
+          <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">
+            Payment received. Your subscription is being confirmed.
+          </div>
+        ) : checkoutStatus === "cancelled" ? (
+          <div className="mt-5 rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-semibold text-zinc-700">
+            Checkout cancelled. You can choose a plan when ready.
+          </div>
+        ) : null}
 
         <div
           ref={scrollRef}
@@ -107,14 +165,48 @@ export default function Credits() {
             ))}
           </ul>
 
-          <button
-            type="button"
-            onClick={getPremium}
-            className="mt-6 w-full rounded-full gradient-linkedin py-4 text-base font-bold text-white shadow-[0_8px_32px_-8px_rgba(124,58,237,0.45)] hover:opacity-90"
-            data-testid="credits-get-premium"
-          >
-            Get Premium
-          </button>
+          <div className="mt-6 grid grid-cols-2 gap-2 rounded-2xl bg-white/70 p-1">
+            {[
+              { id: "monthly", label: "Monthly" },
+              { id: "quarterly", label: "Quarterly" },
+            ].map((plan) => (
+              <button
+                key={plan.id}
+                type="button"
+                onClick={() => setSelectedPlan(plan.id)}
+                className={`rounded-full px-4 py-2 text-sm font-bold ${
+                  selectedPlan === plan.id
+                    ? "gradient-linkedin text-white"
+                    : "text-zinc-700 hover:bg-white"
+                }`}
+                data-testid={`credits-plan-${plan.id}`}
+              >
+                {plan.label}
+              </button>
+            ))}
+          </div>
+
+          {billing?.is_premium ? (
+            <button
+              type="button"
+              onClick={manageBilling}
+              disabled={portalLoading}
+              className="mt-6 w-full rounded-full gradient-linkedin py-4 text-base font-bold text-white shadow-[0_8px_32px_-8px_rgba(124,58,237,0.45)] hover:opacity-90 disabled:opacity-60"
+              data-testid="credits-manage-billing"
+            >
+              {portalLoading ? "Opening..." : "Manage billing"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={getPremium}
+              disabled={Boolean(loadingPlan)}
+              className="mt-6 w-full rounded-full gradient-linkedin py-4 text-base font-bold text-white shadow-[0_8px_32px_-8px_rgba(124,58,237,0.45)] hover:opacity-90 disabled:opacity-60"
+              data-testid="credits-get-premium"
+            >
+              {loadingPlan ? "Opening checkout..." : "Get Premium"}
+            </button>
+          )}
         </div>
 
         <button
@@ -124,7 +216,7 @@ export default function Credits() {
           data-testid="credits-referral-link"
         >
           <Gift className="h-4 w-4" />
-          Give Premium, Get Premium — earn free credits
+          Give Premium, Get Premium - earn free credits
         </button>
       </div>
     </div>

@@ -26,6 +26,8 @@ MIGRATED_TABLES = {
     "swipes",
     "applications",
     "browser_submission_runs",
+    "analytics_events",
+    "stripe_events",
 }
 TABLE_PRIMARY_KEYS = {
     "users": "user_id",
@@ -36,6 +38,8 @@ TABLE_PRIMARY_KEYS = {
     "swipes": "swipe_id",
     "applications": "application_id",
     "browser_submission_runs": "run_id",
+    "analytics_events": "event_id",
+    "stripe_events": "event_id",
 }
 TABLE_FILTER_COLUMNS = {
     "users": {"user_id", "email", "name", "created_at"},
@@ -60,6 +64,8 @@ TABLE_FILTER_COLUMNS = {
     "swipes": {"swipe_id", "user_id", "job_id", "direction", "created_at"},
     "applications": {"application_id", "user_id", "job_id", "status", "package_status", "submission_status", "created_at", "updated_at"},
     "browser_submission_runs": {"run_id", "application_id", "job_id", "user_id", "provider", "status", "dry_run", "created_at"},
+    "analytics_events": {"event_id", "user_id", "anonymous_id", "event", "page", "source", "created_at"},
+    "stripe_events": {"event_id", "type", "created_at", "processed_at"},
 }
 MAX_READ_ROWS = 10000
 READ_PAGE_SIZE = 1000
@@ -189,6 +195,25 @@ def _supabase_row(table: str, document: Document) -> Dict[str, Any]:
             "status": doc.get("status"),
             "dry_run": bool(doc.get("dry_run")),
             "created_at": doc.get("created_at"),
+            "data": doc,
+        }
+    if table == "analytics_events":
+        return {
+            "event_id": _document_key(table, doc),
+            "user_id": doc.get("user_id"),
+            "anonymous_id": doc.get("anonymous_id"),
+            "event": doc.get("event"),
+            "page": doc.get("page"),
+            "source": doc.get("source"),
+            "created_at": doc.get("created_at"),
+            "data": doc,
+        }
+    if table == "stripe_events":
+        return {
+            "event_id": _document_key(table, doc),
+            "type": doc.get("type"),
+            "created_at": doc.get("created_at"),
+            "processed_at": doc.get("processed_at"),
             "data": doc,
         }
     raise ValueError(f"Unsupported Supabase table: {table}")
@@ -608,6 +633,8 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
         self.swipes = SupabaseCollectionAdapter("swipes", supabase_url, secret_key)
         self.company_boards = SupabaseCollectionAdapter("company_boards", supabase_url, secret_key)
         self.browser_submission_runs = SupabaseCollectionAdapter("browser_submission_runs", supabase_url, secret_key)
+        self.analytics_events = SupabaseCollectionAdapter("analytics_events", supabase_url, secret_key)
+        self.stripe_events = SupabaseCollectionAdapter("stripe_events", supabase_url, secret_key)
 
     async def close(self) -> None:
         return None

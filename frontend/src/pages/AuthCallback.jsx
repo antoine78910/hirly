@@ -5,6 +5,7 @@ import { api, setSessionToken } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { Loader2 } from "lucide-react";
 import { supabase, supabaseConfigured } from "../lib/supabase";
+import { trackEvent } from "../lib/analytics";
 
 export default function AuthCallback() {
   const navigate = useNavigate();
@@ -35,6 +36,11 @@ export default function AuthCallback() {
         setUser(data.user);
         setHasProfile(Boolean(data.has_profile));
         setHasPreferences(Boolean(data.has_preferences));
+        trackEvent("auth_success", {
+          method: "google",
+          has_profile: Boolean(data.has_profile),
+          has_preferences: Boolean(data.has_preferences),
+        });
         sessionStorage.removeItem("swiipr_onboarding_return");
 
         window.history.replaceState({}, "", window.location.pathname);

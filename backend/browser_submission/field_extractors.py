@@ -76,8 +76,90 @@ FIELD_EXTRACTOR_SCRIPT = r"""
 
   function closestContainer(element) {
     return element.closest(
-      ".application-question, .question, .field, .form-field, .input-wrapper, .select-wrapper, fieldset, li, div"
+      ".application-question, .question, .field, .form-field, .input-wrapper, .select-wrapper, .select, .select__control, fieldset, li, div"
     );
+  }
+
+  function visibleElement(el) {
+    if (!el) return false;
+    if (el.hidden || el.getAttribute("aria-hidden") === "true") return false;
+    const style = window.getComputedStyle(el);
+    if (!style || style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0) return false;
+    const rect = el.getBoundingClientRect();
+    return Boolean(rect.width > 0 && rect.height > 0 && el.getClientRects().length);
+  }
+
+  function hiddenByContainer(element) {
+    let node = element;
+    while (node && node.nodeType === Node.ELEMENT_NODE && node !== document.body) {
+      if (!visibleElement(node)) return true;
+      const classText = String(node.className || "").toLowerCase();
+      if (node.hidden || node.getAttribute("aria-hidden") === "true" || /\\bhidden\\b|display-none|is-hidden/.test(classText)) return true;
+      node = node.parentElement;
+    }
+    return false;
+  }
+
+  function conditionalHintFor(element, container) {
+    const text = [
+      labelFor(element),
+      element.getAttribute("placeholder") || "",
+      element.getAttribute("aria-label") || "",
+      container ? textOf(container) : "",
+    ].join(" ").toLowerCase();
+    return /please specify|if yes|if other|self[- ]?describe|other/.test(text);
+  }
+
+  function requiredMarkerFor(element, container) {
+    const attrs = [
+      element.required,
+      element.getAttribute("aria-required") === "true",
+      element.getAttribute("required") !== null,
+    ];
+    if (attrs.some(Boolean)) return true;
+    const text = [
+      labelFor(element),
+      element.getAttribute("aria-label") || "",
+      element.getAttribute("placeholder") || "",
+      container ? textOf(container) : "",
+    ].join(" ").toLowerCase();
+    return /\\*|required|mandatory/.test(text) && !/optional/.test(text);
+  }
+
+  function stableIdFor(element, index) {
+    return [
+      element.getAttribute("name") || "",
+      element.id || "",
+      element.getAttribute("aria-label") || "",
+      element.getAttribute("placeholder") || "",
+      labelFor(element) || "",
+      String(index),
+    ].filter(Boolean).join("|").toLowerCase().replace(/[^a-z0-9|]+/g, "_").slice(0, 220);
+  }
+
+  function widgetTypeFor(element, type, role) {
+    const tag = element.tagName.toLowerCase();
+    const container = closestContainer(element);
+    const classText = [
+      element.className || "",
+      container ? container.className || "" : "",
+    ].join(" ").toLowerCase();
+    if (type === "file") return "file_upload";
+    if (tag === "textarea" || type === "textarea") return "textarea";
+    if (tag === "select" || type === "select") return "select";
+    if (
+      role === "combobox" ||
+      type === "combobox" ||
+      element.getAttribute("aria-haspopup") === "listbox" ||
+      element.getAttribute("aria-haspopup") === "menu" ||
+      /select__control|react-select|combobox|select-wrapper/.test(classText)
+    ) return "combobox";
+    if (type === "radio") return "radio";
+    if (type === "checkbox") return "checkbox";
+    if (type === "tel" && /country|prefix|dial/.test((labelFor(element) + " " + textOf(container || element)).toLowerCase())) return "phone_widget";
+    if (type === "tel") return "input";
+    if (type === "contenteditable") return "textarea";
+    return "input";
   }
 
   function nearbyTextFor(element) {
@@ -98,53 +180,80 @@ FIELD_EXTRACTOR_SCRIPT = r"""
       }));
     }
     if (element.type === "radio" || element.type === "checkbox") {
-      return [{value: element.value, label: labelFor(element)}];
+      const name = element.getAttribute("name") || "";
+      const group = name
+        ? Array.from(document.querySelectorAll("input[name=\"" + String(name).replace(/"/g, "\\\"") + "\"]"))
+        : [element];
+      return group.map((item) => ({value: item.value, label: labelFor(item)}));
+    }
+    const container = closestContainer(element);
+    if (container) {
+      const optionNodes = Array.from(container.querySelectorAll("[role='option'], option, li, button, [data-value]")).slice(0, 80);
+      const options = optionNodes.map((item) => ({
+        value: item.getAttribute("data-value") || item.getAttribute("value") || textOf(item),
+        label: textOf(item) || item.getAttribute("aria-label") || item.getAttribute("data-value") || "",
+      })).filter((item) => item.label || item.value);
+      if (options.length) return options;
     }
     return [];
   }
 
   const nodes = Array.from(document.querySelectorAll(
-    "input, textarea, select, [role='combobox'], [contenteditable='true']"
+    "input, textarea, select, [role='combobox'], [contenteditable='true'], button[aria-haspopup], [role='button'][aria-haspopup], [aria-haspopup='listbox'], [aria-haspopup='menu'], .select__control"
   ));
   return nodes.map((element, index) => {
     const tag = element.tagName.toLowerCase();
     const role = element.getAttribute("role") || "";
-      const type = tag === "textarea"
+    const classText = String(element.className || "").toLowerCase();
+    const type = tag === "textarea"
       ? "textarea"
       : tag === "select"
         ? "select"
         : role === "combobox"
           ? "combobox"
-          : element.getAttribute("contenteditable") === "true"
-            ? "contenteditable"
-            : (element.getAttribute("type") || "text").toLowerCase();
+          : element.getAttribute("aria-haspopup") || /select__control|react-select|combobox/.test(classText)
+            ? "combobox"
+            : element.getAttribute("contenteditable") === "true"
+              ? "contenteditable"
+              : (element.getAttribute("type") || "text").toLowerCase();
     const ariaLabel = element.getAttribute("aria-label") || "";
     const ariaLabelledBy = element.getAttribute("aria-labelledby") || "";
     const container = closestContainer(element);
     const containerText = container ? textOf(container).slice(0, 1000) : "";
     const checked = Boolean(element.checked);
+    const required = requiredMarkerFor(element, container);
+    const widgetType = widgetTypeFor(element, type, role);
+    const hiddenContainer = hiddenByContainer(element);
+    const visible = !hiddenContainer && visibleElement(element);
     const value = type === "checkbox" || type === "radio"
       ? (checked ? (element.value || "on") : "")
       : (element.value || "");
     return {
       index,
       selector: selectorFor(element),
+      stable_field_id: stableIdFor(element, index),
       tag,
       role,
       name: element.getAttribute("name") || "",
       id: element.id || "",
       type,
+      widget_type: widgetType,
       label: labelFor(element),
       placeholder: element.getAttribute("placeholder") || "",
       aria_label: ariaLabel,
       aria_labelledby: ariaLabelledBy,
       nearby_text: nearbyTextFor(element),
+      surrounding_question_text: containerText || nearbyTextFor(element),
       field_container_text: containerText,
-      required: Boolean(element.required || element.getAttribute("aria-required") === "true"),
-      visible: Boolean(element.getAttribute("aria-hidden") !== "true" && (element.offsetWidth || element.offsetHeight || element.getClientRects().length)),
+      required: visible ? required : false,
+      required_marker: required,
+      visible,
+      hidden_container: hiddenContainer,
+      conditional_hint: conditionalHintFor(element, container),
       disabled: Boolean(element.disabled || element.getAttribute("aria-disabled") === "true"),
       checked,
       value_before: value,
+      current_value: value,
       options: optionsFor(element),
     };
   });

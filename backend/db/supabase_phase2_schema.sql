@@ -94,3 +94,44 @@ create index if not exists browser_submission_runs_status_idx
 
 create index if not exists browser_submission_runs_data_gin_idx
     on public.browser_submission_runs using gin (data);
+
+
+create table if not exists public.analytics_events (
+    event_id text primary key,
+    user_id text,
+    anonymous_id text,
+    event text,
+    page text,
+    source text,
+    created_at timestamptz,
+    data jsonb not null default '{}'::jsonb,
+    migrated_at timestamptz not null default now()
+);
+
+create index if not exists analytics_events_event_created_at_idx
+    on public.analytics_events (event, created_at desc);
+
+create index if not exists analytics_events_user_created_at_idx
+    on public.analytics_events (user_id, created_at desc);
+
+create index if not exists analytics_events_anonymous_created_at_idx
+    on public.analytics_events (anonymous_id, created_at desc);
+
+create index if not exists analytics_events_data_gin_idx
+    on public.analytics_events using gin (data);
+
+
+create table if not exists public.stripe_events (
+    event_id text primary key,
+    type text,
+    created_at timestamptz,
+    processed_at timestamptz,
+    data jsonb not null default '{}'::jsonb,
+    migrated_at timestamptz not null default now()
+);
+
+create index if not exists stripe_events_type_created_at_idx
+    on public.stripe_events (type, created_at desc);
+
+create index if not exists stripe_events_data_gin_idx
+    on public.stripe_events using gin (data);

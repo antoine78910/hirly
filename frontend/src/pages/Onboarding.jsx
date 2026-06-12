@@ -52,6 +52,7 @@ import {
 import { devBypassAuth } from "../lib/dev";
 import { preloadOnboardingShowcaseImages } from "../lib/onboardingImagePreload";
 import { ob } from "../components/onboarding/onboardingTheme";
+import { trackEvent } from "../lib/analytics";
 
 const STEP_ORDER = ONBOARDING_STEP_ORDER;
 const INITIAL_ONBOARDING_BOOT = readOnboardingPreviewBoot(STEP_ORDER);
@@ -122,6 +123,10 @@ export default function Onboarding() {
 
   useEffect(() => {
     preloadOnboardingShowcaseImages();
+  }, []);
+
+  useEffect(() => {
+    trackEvent("onboarding_started");
   }, []);
   const [suggestedCategories, setSuggestedCategories] = useState(
     INITIAL_PREVIEW?.suggestedCategories ?? [],
@@ -274,12 +279,14 @@ export default function Onboarding() {
     }
     setFile(f);
     setParsing(true);
+    trackEvent("cv_upload_started", { source: "onboarding" });
     preloadOnboardingShowcaseImages();
     try {
       const form = new FormData();
       form.append("file", f);
       const { data } = await api.post("/profile/cv", form, { headers: { "Content-Type": "multipart/form-data" } });
       setProfile(data);
+      trackEvent("cv_upload_completed", { source: "onboarding" });
       const { data: authState } = await api.get("/auth/me");
       setHasProfile(Boolean(authState?.has_profile));
       if (checkAuth) await checkAuth();
@@ -288,6 +295,7 @@ export default function Onboarding() {
       setStepIndex(STEP_ORDER.indexOf("profileSetup"));
     } catch (e) {
       console.error(e);
+      trackEvent("cv_upload_failed", { source: "onboarding", message: e?.response?.data?.detail || e?.message });
       toast.error(e?.response?.data?.detail || "Failed to parse CV");
     } finally {
       setParsing(false);
@@ -338,6 +346,10 @@ export default function Onboarding() {
         seniority: exp?.backend,
       });
       setHasPreferences(true);
+      trackEvent("onboarding_completed", {
+        selected_roles: selectedRoles,
+        target_location: onboardingLocationData?.location_label || onboardingLocation || "",
+      });
       navigate("/swipe", { replace: true });
     } catch {
       toast.error("Failed to finish setup");
@@ -408,6 +420,7 @@ export default function Onboarding() {
   };
 
   const onContinue = () => {
+    trackEvent("onboarding_step_completed", { step, step_index: stepIndex });
     if (step === "intro" && introIndex === INTRO_SLIDES.length - 1) {
       setStepIndex(STEP_ORDER.indexOf("signup"));
       return;

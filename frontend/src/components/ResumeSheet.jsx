@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { api, API, getSessionToken } from "../lib/api";
 import { FileText, Upload, Download, Loader2 } from "lucide-react";
 import Sheet from "./Sheet";
+import { trackEvent } from "../lib/analytics";
 
 /** Resume slide-in. Shows current CV + lets user re-upload (uses same /profile/cv pipeline). */
 export default function ResumeSheet({ open, profile, onClose, onUploaded }) {
@@ -12,13 +13,16 @@ export default function ResumeSheet({ open, profile, onClose, onUploaded }) {
   const handleFile = async (file) => {
     if (!file) return;
     setUploading(true);
+    trackEvent("cv_upload_started", { source: "profile" });
     try {
       const form = new FormData();
       form.append("file", file);
       await api.post("/profile/cv", form, { headers: { "Content-Type": "multipart/form-data" } });
       toast.success("Resume updated. AI re-parsed your profile.");
+      trackEvent("cv_upload_completed", { source: "profile" });
       onUploaded?.();
     } catch (e) {
+      trackEvent("cv_upload_failed", { source: "profile", message: e?.response?.data?.detail || e?.message });
       toast.error(e?.response?.data?.detail || "Upload failed");
     } finally {
       setUploading(false);

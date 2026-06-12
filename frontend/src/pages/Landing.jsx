@@ -2,24 +2,37 @@
 import { Button } from "../components/ui/button";
 import { ArrowRight, Sparkles, Zap, FileCheck2, Inbox, Heart, X, Star, ShieldCheck } from "lucide-react";
 import { motion } from "framer-motion";
+import { useEffect } from "react";
 import Logo from "../components/Logo";
 import { BRAND } from "../lib/brand";
 import { startGoogleLogin } from "../lib/auth";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { trackEvent } from "../lib/analytics";
 
 export default function Landing() {
   const navigate = useNavigate();
   const { user, hasProfile, hasPreferences, loading } = useAuth();
   const [searchParams] = useSearchParams();
   const postLoginPath = searchParams.get("redirect") || "/swipe";
-  const onSignIn = () => startGoogleLogin(postLoginPath);
+
+  useEffect(() => {
+    trackEvent("landing_view");
+  }, []);
+
+  const onSignIn = () => {
+    trackEvent("cta_login_clicked", { location: "header" });
+    startGoogleLogin(postLoginPath);
+  };
+
   const onStartSwiping = () => {
     if (loading) return;
+    trackEvent("cta_start_swiping_clicked", { authenticated: Boolean(user) });
     if (user) {
       navigate(hasProfile && hasPreferences ? "/swipe" : "/onboarding");
       return;
     }
+    trackEvent("cta_signup_clicked", { location: "landing_start_swiping" });
     navigate("/signup");
   };
 

@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 import re
 import json
+import unicodedata
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urlparse
@@ -21,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 class GreenhouseBrowserSubmissionEngine(LeverBrowserSubmissionEngine):
     provider = "greenhouse"
-    engine_version = "greenhouse_browser_engine_v1_experiment_2026_06_06"
+    engine_version = "greenhouse_form_intelligence_pipeline_v1_2026_06_11"
 
     FIELD_CLASSIFICATIONS = {
         "first_name",
@@ -37,6 +39,10 @@ class GreenhouseBrowserSubmissionEngine(LeverBrowserSubmissionEngine):
         "linkedin_url",
         "website_url",
         "portfolio_url",
+        "education_school",
+        "education_degree",
+        "education_discipline",
+        "education_graduation_year",
         "referral_source",
         "privacy_consent",
         "work_authorization",
@@ -55,6 +61,37 @@ class GreenhouseBrowserSubmissionEngine(LeverBrowserSubmissionEngine):
         "unknown_required",
         "unknown_optional",
     }
+
+    async def prepare_fill(
+        self,
+        *,
+        job: dict[str, Any],
+        app_doc: dict[str, Any],
+        profile: dict[str, Any],
+        user: dict[str, Any],
+        click_submit: bool = False,
+    ):
+        self._greenhouse_form_scrape = []
+        self._greenhouse_answer_plan = []
+        self._greenhouse_plan_by_selector = {}
+        self._greenhouse_conditional_ignored = []
+        self._greenhouse_latest_field_fill_debug = []
+        result = await super().prepare_fill(
+            job=job,
+            app_doc=app_doc,
+            profile=profile,
+            user=user,
+            click_submit=click_submit,
+        )
+        result.form_scrape = list(getattr(self, "_greenhouse_form_scrape", []) or [])
+        result.answer_plan = list(getattr(self, "_greenhouse_answer_plan", []) or [])
+        result.failed_fields = self._pipeline_failed_fields(result)
+        result.verification_summary = self._pipeline_verification_summary(result)
+        logger.info(
+            "greenhouse_form_intelligence_summary result=%s",
+            self._safe_json(result.verification_summary)[:12000],
+        )
+        return result
 
     def _after_fields_detected(self, url: str, fields: list[dict[str, Any]]) -> None:
         models = [self._field_model(field) for field in fields if field.get("visible")]
@@ -90,6 +127,7 @@ class GreenhouseBrowserSubmissionEngine(LeverBrowserSubmissionEngine):
 
         model = self._field_model(field)
         resolution = self._resolve_field_answer(model, field, profile, app_doc, user)
+        self._record_answer_plan(field, model, resolution)
         if not resolution.get("safe_to_autofill"):
             return None
         value = resolution.get("value")
@@ -117,6 +155,45 @@ class GreenhouseBrowserSubmissionEngine(LeverBrowserSubmissionEngine):
             return None
         return fill
 
+    def _record_answer_plan(self, field: dict[str, Any], model: dict[str, Any], resolution: dict[str, Any]) -> None:
+        plan = {
+            "selector": field.get("selector"),
+            "stable_field_id": field.get("stable_field_id") or self._field_cache_key(field),
+            "field_id": field.get("id") or field.get("name"),
+            "label": field.get("label") or "",
+            "classification": model.get("field_group"),
+            "planned_answer": self._safe_planned_answer_preview(resolution.get("value")),
+            "source": resolution.get("answer_source") or (
+                "user_required" if field.get("required") else None
+            ),
+            "confidence": resolution.get("confidence") or 0.0,
+            "safe_to_autofill": bool(resolution.get("safe_to_autofill")),
+            "reason_if_not_fillable": resolution.get("reason_if_not_fillable"),
+            "suggested_profile_key": suggested_profile_key(field),
+            "widget_type": model.get("widget_type") or self._widget_type(field),
+            "required": bool(field.get("required")),
+            "options": field.get("options") or [],
+            "current_value": field.get("value_before") or field.get("current_value") or "",
+        }
+        key = self._field_cache_key(field)
+        plan_by_selector = getattr(self, "_greenhouse_plan_by_selector", {})
+        plan_by_selector[key] = plan
+        self._greenhouse_plan_by_selector = plan_by_selector
+        existing = [
+            item for item in getattr(self, "_greenhouse_answer_plan", [])
+            if item.get("stable_field_id") != plan["stable_field_id"]
+        ]
+        existing.append(plan)
+        self._greenhouse_answer_plan = existing
+
+    def _safe_planned_answer_preview(self, value: Any) -> Any:
+        if value in (None, ""):
+            return None
+        if value in ("__resume_file__", "__cover_letter_file__"):
+            return value
+        text = str(value)
+        return text if len(text) <= 160 else text[:157] + "..."
+
     def _field_model(self, field: dict[str, Any]) -> dict[str, Any]:
         cache_key = self._field_cache_key(field)
         cached = getattr(self, "_greenhouse_field_model_cache", {}).get(cache_key)
@@ -128,11 +205,13 @@ class GreenhouseBrowserSubmissionEngine(LeverBrowserSubmissionEngine):
         safe, reason = self._autofill_policy(field_group, field, normalized_label)
         return {
             "selector": field.get("selector"),
+            "stable_field_id": field.get("stable_field_id") or self._field_cache_key(field),
             "field_id": field.get("id") or field.get("name"),
             "label": field.get("label") or "",
             "normalized_label": normalized_label,
             "direct_identity": self._raw_field_key(field),
             "input_type": str(field.get("type") or "text").lower(),
+            "widget_type": self._widget_type(field),
             "field_group": field_group,
             "required": bool(field.get("required")),
             "options": field.get("options") or [],
@@ -209,6 +288,14 @@ class GreenhouseBrowserSubmissionEngine(LeverBrowserSubmissionEngine):
             return self._classification("portfolio_url", 0.9, "deterministic_direct", "portfolio identity")
         if self._label_has_any(label, ("website", "personal site", "github")):
             return self._classification("website_url", 0.88, "deterministic_direct", "website identity")
+        if self._is_education_school_field(label):
+            return self._classification("education_school", 0.9, "deterministic_direct", "education school identity", True)
+        if self._is_education_degree_field(label):
+            return self._classification("education_degree", 0.9, "deterministic_direct", "education degree identity", True)
+        if self._is_education_discipline_field(label):
+            return self._classification("education_discipline", 0.9, "deterministic_direct", "education discipline identity", True)
+        if self._is_education_graduation_year_field(label):
+            return self._classification("education_graduation_year", 0.9, "deterministic_direct", "education graduation year identity", True)
         if self._is_motivation_question(label):
             return self._classification("custom_motivation_question", 0.92, "deterministic_direct", "motivation question")
         if self._is_location_eligibility_question(label):
@@ -258,6 +345,8 @@ class GreenhouseBrowserSubmissionEngine(LeverBrowserSubmissionEngine):
             return self._classification("sponsorship", 0.75, "deterministic_context", "sponsorship context", True)
         if any(term in label for term in ("gender", "race", "ethnicity", "hispanic", "veteran", "disability", "sexual orientation")):
             return self._direct_identity_classification(field, label)
+        if any(term in label for term in ("school", "degree", "discipline", "field of study", "graduation year")):
+            return self._direct_identity_classification(field, label)
         return None
 
     def _classification(
@@ -286,6 +375,7 @@ class GreenhouseBrowserSubmissionEngine(LeverBrowserSubmissionEngine):
         user: dict[str, Any],
     ) -> None:
         cache: dict[str, dict[str, Any]] = {}
+        form_scrape: list[dict[str, Any]] = []
         llm_fallback_count = 0
         for field in fields:
             if not field.get("visible"):
@@ -296,14 +386,27 @@ class GreenhouseBrowserSubmissionEngine(LeverBrowserSubmissionEngine):
                 if llm_result:
                     model = self._model_with_llm_classification(model, field, llm_result)
                     llm_fallback_count += 1
+            label = model.get("normalized_label") or self._greenhouse_field_key(field)
+            if model.get("field_group") == "unknown_required":
+                if self._is_education_school_field(label):
+                    model = self._model_with_overrides(model, field, field_group="education_school", classification_reason="education school fallback")
+                elif self._is_education_degree_field(label):
+                    model = self._model_with_overrides(model, field, field_group="education_degree", classification_reason="education degree fallback")
+                elif self._is_education_discipline_field(label):
+                    model = self._model_with_overrides(model, field, field_group="education_discipline", classification_reason="education discipline fallback")
+                elif self._is_education_graduation_year_field(label):
+                    model = self._model_with_overrides(model, field, field_group="education_graduation_year", classification_reason="education graduation year fallback")
             cache[self._field_cache_key(field)] = model
+            form_scrape.append(self._form_scrape_item(field, model))
         self._greenhouse_field_model_cache = cache
+        self._greenhouse_form_scrape = form_scrape
         logger.info(
             "greenhouse_llm_classification_summary url=%s llm_fallback_count=%s total_visible_fields=%s",
             url,
             llm_fallback_count,
             len(cache),
         )
+        logger.info("greenhouse_form_scrape url=%s fields=%s", url, self._safe_json(form_scrape)[:24000])
 
     def _field_model_uncached(self, field: dict[str, Any]) -> dict[str, Any]:
         cache = getattr(self, "_greenhouse_field_model_cache", None)
@@ -315,6 +418,56 @@ class GreenhouseBrowserSubmissionEngine(LeverBrowserSubmissionEngine):
                 self._greenhouse_field_model_cache = cache
             elif hasattr(self, "_greenhouse_field_model_cache"):
                 delattr(self, "_greenhouse_field_model_cache")
+
+    def _model_with_overrides(self, model: dict[str, Any], field: dict[str, Any], **updates: Any) -> dict[str, Any]:
+        merged = {**model, **updates}
+        safe, reason = self._autofill_policy(str(merged.get("field_group") or ""), field, model.get("normalized_label") or "")
+        merged["safe_to_autofill"] = safe
+        merged["reason_if_not_fillable"] = reason
+        return merged
+
+    def _widget_type(self, field: dict[str, Any]) -> str:
+        widget = str(field.get("widget_type") or "").strip().lower()
+        if widget:
+            return widget
+        field_type = str(field.get("type") or "text").lower()
+        role = str(field.get("role") or "").lower()
+        label = self._greenhouse_field_key(field)
+        if field_type == "file":
+            return "file_upload"
+        if field_type in ("textarea", "contenteditable"):
+            return "textarea"
+        if field_type == "select":
+            return "select"
+        if field_type == "combobox" or role == "combobox":
+            return "combobox"
+        if field_type in ("radio", "checkbox"):
+            return field_type
+        if field_type == "tel" and any(term in label for term in ("country code", "phone code", "dial code", "prefix")):
+            return "phone_widget"
+        return "input"
+
+    def _form_scrape_item(self, field: dict[str, Any], model: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "selector": field.get("selector"),
+            "stable_field_id": field.get("stable_field_id") or self._field_cache_key(field),
+            "field_id": field.get("id") or field.get("name"),
+            "label": field.get("label") or "",
+            "aria_label": field.get("aria_label") or "",
+            "placeholder": field.get("placeholder") or "",
+            "name": field.get("name") or "",
+            "id": field.get("id") or "",
+            "input_type": str(field.get("type") or "text").lower(),
+            "required_marker": bool(field.get("required_marker") or field.get("required")),
+            "required": bool(field.get("required")),
+            "options": field.get("options") or [],
+            "current_value": field.get("value_before") or field.get("current_value") or "",
+            "surrounding_question_text": field.get("surrounding_question_text") or field.get("field_container_text") or field.get("nearby_text") or "",
+            "widget_type": model.get("widget_type") or self._widget_type(field),
+            "classification": model.get("field_group"),
+            "conditional_hint": bool(field.get("conditional_hint")),
+            "hidden_container": bool(field.get("hidden_container")),
+        }
 
     def _should_use_llm_classifier(self, model: dict[str, Any], field: dict[str, Any]) -> bool:
         if not field.get("required"):
@@ -420,6 +573,8 @@ class GreenhouseBrowserSubmissionEngine(LeverBrowserSubmissionEngine):
             return True, "requires_explicit_profile_default"
         if field_group.startswith("eeo_"):
             return True, "safe_only_if_decline_option_available"
+        if field_group in {"education_school", "education_degree", "education_discipline", "education_graduation_year"}:
+            return True, "requires_profile_education_default"
         if field_group == "unknown_required":
             return False, "unknown_required_field"
         if field_group == "unknown_optional":
@@ -480,10 +635,16 @@ class GreenhouseBrowserSubmissionEngine(LeverBrowserSubmissionEngine):
             return resolved("__cover_letter_file__", "application.cover_letter_file", 0.95)
 
         if group == "linkedin_url":
-            return resolved(canonical_applicant.get("linkedin_url"), "profile.contact.linkedin", 0.95)
+            value = defaults.get("linkedin_url") or canonical_applicant.get("linkedin_url")
+            source = "profile.application_defaults.linkedin_url" if defaults.get("linkedin_url") else "profile.contact.linkedin"
+            return resolved(value, source, 0.95)
         if group in ("website_url", "portfolio_url"):
-            value = canonical_applicant.get("website_url") or canonical_applicant.get("portfolio_url")
-            return resolved(value, "profile.contact.website", 0.9)
+            value, source = self._website_value_for_field(group, field, canonical_applicant, profile)
+            return resolved(value, source, 0.9) if value else self._not_fillable(model, "required_website_missing")
+
+        if group in {"education_school", "education_degree", "education_discipline", "education_graduation_year"}:
+            value, source = self._education_value_for_group(group, field, profile, answers_profile, prepared_answer)
+            return resolved(value, source, 0.92) if value not in (None, "") else self._not_fillable(model, f"{group}_missing")
 
         if group == "referral_source":
             if prepared_answer:
@@ -589,6 +750,82 @@ class GreenhouseBrowserSubmissionEngine(LeverBrowserSubmissionEngine):
             "application_answers_profile": profile.get("application_answers_profile") or {},
         }
 
+    def _website_value_for_field(
+        self,
+        group: str,
+        field: dict[str, Any],
+        canonical_applicant: dict[str, Any],
+        profile: dict[str, Any],
+    ) -> tuple[Optional[str], str]:
+        contact = profile.get("contact") or {}
+        defaults = profile.get("application_defaults") or {}
+        label = self._greenhouse_field_key(field)
+        website_candidates = [
+            defaults.get("website_url"),
+            defaults.get("portfolio_url") if group == "portfolio_url" else None,
+            contact.get("website"),
+            contact.get("personal_website"),
+            contact.get("portfolio"),
+            contact.get("portfolio_url"),
+            contact.get("github"),
+            contact.get("github_url"),
+            canonical_applicant.get("website_url"),
+            canonical_applicant.get("portfolio_url"),
+        ]
+        for candidate in website_candidates:
+            normalized = self._normalize_url(candidate)
+            if normalized:
+                source = "profile.application_defaults.website_url" if candidate in (defaults.get("website_url"), defaults.get("portfolio_url")) else "profile.contact.website"
+                return normalized, source
+        linkedin = canonical_applicant.get("linkedin_url")
+        if linkedin and ("linkedin" in label or "linked in" in label or "portfolio" in label):
+            return linkedin, "profile.contact.linkedin"
+        return None, "profile.contact.website"
+
+    def _education_value_for_group(
+        self,
+        group: str,
+        field: dict[str, Any],
+        profile: dict[str, Any],
+        answers_profile: dict[str, Any],
+        prepared_answer: Any,
+    ) -> tuple[Optional[str], str]:
+        if prepared_answer not in (None, ""):
+            return str(prepared_answer), "prepared_application_payload"
+        defaults = profile.get("application_defaults") or {}
+        key_map = {
+            "education_school": ("education_school", "school"),
+            "education_degree": ("education_degree", "degree"),
+            "education_discipline": ("education_discipline", "education_field_of_study", "field_of_study", "discipline"),
+            "education_graduation_year": ("education_graduation_year", "graduation_year", "grad_year", "year"),
+        }
+        for key in key_map.get(group, ()):
+            value = defaults.get(key)
+            if value not in (None, ""):
+                return str(value), f"profile.application_defaults.{key}"
+            value = answers_profile.get(key)
+            if value not in (None, ""):
+                return str(value), f"profile.application_answers_profile.{key}"
+
+        education_items = profile.get("education") or []
+        if isinstance(education_items, dict):
+            education_items = [education_items]
+        for item in education_items:
+            if not isinstance(item, dict):
+                continue
+            value = None
+            if group == "education_school":
+                value = item.get("school") or item.get("institution") or item.get("university") or item.get("college")
+            elif group == "education_degree":
+                value = item.get("degree") or item.get("qualification")
+            elif group == "education_discipline":
+                value = item.get("discipline") or item.get("field_of_study") or item.get("major") or item.get("subject")
+            elif group == "education_graduation_year":
+                value = item.get("graduation_year") or item.get("year") or item.get("end_year") or item.get("end_date")
+            if value not in (None, ""):
+                return str(value), "profile.education"
+        return None, f"profile.application_defaults.{key_map.get(group, (group,))[0]}"
+
     def validate_value_for_field(self, field: dict[str, Any], fill: Optional[dict[str, Any]], value: Any) -> tuple[bool, str]:
         model = self._field_model(field)
         group = str((fill or {}).get("field_group") or model.get("field_group") or "")
@@ -637,14 +874,32 @@ class GreenhouseBrowserSubmissionEngine(LeverBrowserSubmissionEngine):
             return self._value_matches_options_or_no_options(field, text)
 
         if group in ("linkedin_url", "website_url", "portfolio_url"):
-            if group == "linkedin_url" and source != "profile.contact.linkedin":
+            if group == "linkedin_url" and source not in ("profile.contact.linkedin", "profile.application_defaults.linkedin_url"):
                 return False, "linkedin_field_requires_linkedin_source"
-            if group in ("website_url", "portfolio_url") and not source.startswith("profile.contact."):
+            if group in ("website_url", "portfolio_url") and not (
+                source.startswith("profile.contact.")
+                or source.startswith("profile.application_defaults.")
+                or source == "prepared_application_payload"
+            ):
                 return False, "url_field_requires_profile_url_source"
             if not self._is_valid_url(text):
                 return False, "url_field_value_is_invalid"
             if group == "linkedin_url" and "linkedin.com" not in urlparse(text).netloc.lower():
                 return False, "linkedin_field_requires_linkedin_url"
+            return True, ""
+
+        if group in {"education_school", "education_degree", "education_discipline", "education_graduation_year"}:
+            if not (
+                source.startswith("profile.education")
+                or source.startswith("profile.application_defaults.")
+                or source.startswith("profile.application_answers_profile.")
+                or source == "prepared_application_payload"
+            ):
+                return False, "education_field_requires_profile_education_source"
+            if self._is_valid_email(text) or self._looks_like_phone(text) or self._looks_like_url(text):
+                return False, "education_field_value_has_wrong_shape"
+            if group == "education_graduation_year":
+                return bool(re.search(r"\b(19|20)\d{2}\b", text) or len(text) <= 30), "education_graduation_year_invalid"
             return True, ""
 
         if group == "country":
@@ -925,11 +1180,19 @@ class GreenhouseBrowserSubmissionEngine(LeverBrowserSubmissionEngine):
         unfilled_required_fields: list[dict[str, Any]],
         blockers: list[dict[str, Any]],
     ) -> None:
+        ignored = self._filter_inactive_required_fields(fields_after, unfilled_required_fields, blockers)
+        if ignored:
+            current = list(getattr(self, "_greenhouse_conditional_ignored", []) or [])
+            current.extend(ignored)
+            self._greenhouse_conditional_ignored = current
+            for item in ignored:
+                logger.info("conditional_required_ignored field=%s", self._safe_json(item)[:4000])
         logger.info(
             "greenhouse_required_verification result=%s",
             self._safe_json({
                 "required_count": sum(1 for field in fields_after if field.get("required") and field.get("visible") and not field.get("disabled")),
                 "unfilled_required_count": len(unfilled_required_fields),
+                "conditional_ignored_count": len(ignored),
                 "unfilled_required": [
                     {
                         "label": field.get("label"),
@@ -942,6 +1205,130 @@ class GreenhouseBrowserSubmissionEngine(LeverBrowserSubmissionEngine):
                 "blocker_count": len(blockers),
             })[:12000],
         )
+
+    def _filter_inactive_required_fields(
+        self,
+        fields_after: list[dict[str, Any]],
+        unfilled_required_fields: list[dict[str, Any]],
+        blockers: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        ignored: list[dict[str, Any]] = []
+        phone_verified = self._phone_tel_field_verified(fields_after)
+        successful_groups = self._successful_debug_groups()
+
+        def should_ignore(field: dict[str, Any]) -> tuple[bool, str, Optional[str]]:
+            if not field.get("visible") or field.get("disabled") or field.get("hidden_container"):
+                return True, "hidden_or_disabled", None
+            if phone_verified and self._is_duplicate_phone_widget(field):
+                return True, "duplicate_phone_country_artifact", "phone_tel_verified"
+            group = str(field.get("field_group") or field.get("classification") or "")
+            if field.get("safe_to_autofill") and group and group in successful_groups:
+                return True, "duplicate_verified_field_artifact", group
+            if self._is_conditionally_inactive_field(field, fields_after):
+                return True, "conditional_inactive", self._controlling_field_guess(field, fields_after)
+            return False, "", None
+
+        remove_keys: set[str] = set()
+        remove_labels: set[str] = set()
+        for field in list(unfilled_required_fields):
+            ignore, reason, controller = should_ignore(field)
+            if not ignore:
+                continue
+            key = self._field_match_key(field)
+            remove_keys.add(key)
+            if field.get("label"):
+                remove_labels.add(canonical(field.get("label")))
+            ignored.append({
+                "label": field.get("label"),
+                "selector": field.get("selector"),
+                "stable_field_id": field.get("stable_field_id"),
+                "reason": reason,
+                "controlling_field_guess": controller,
+            })
+
+        if remove_keys:
+            unfilled_required_fields[:] = [
+                field for field in unfilled_required_fields
+                if self._field_match_key(field) not in remove_keys
+            ]
+            blockers[:] = [
+                item for item in blockers
+                if (
+                    self._field_match_key(item.get("field") or {}) not in remove_keys
+                    and canonical((item.get("field") or {}).get("label")) not in remove_labels
+                )
+            ]
+        return ignored
+
+    def _successful_debug_groups(self) -> set[str]:
+        groups: set[str] = set()
+        for item in getattr(self, "_greenhouse_latest_field_fill_debug", []) or []:
+            if item.get("attempted_fill") and item.get("fill_success"):
+                group = str(item.get("classification") or "")
+                if group:
+                    groups.add(group)
+        return groups
+
+    def _field_match_key(self, field: dict[str, Any]) -> str:
+        return str(field.get("stable_field_id") or field.get("selector") or field.get("name") or field.get("id") or field.get("label") or "")
+
+    def _phone_tel_field_verified(self, fields_after: list[dict[str, Any]]) -> bool:
+        for field in fields_after:
+            if str(field.get("type") or "").lower() == "tel" and self._field_has_value(field):
+                return True
+        return False
+
+    def _is_duplicate_phone_widget(self, field: dict[str, Any]) -> bool:
+        label = self._greenhouse_field_key(field)
+        field_type = str(field.get("type") or field.get("field_type") or "").lower()
+        return (
+            field_type == "combobox"
+            and any(term in label for term in ("phone", "country code", "dial code", "select country"))
+        )
+
+    def _is_conditionally_inactive_field(self, field: dict[str, Any], fields_after: list[dict[str, Any]]) -> bool:
+        label = self._greenhouse_field_key(field)
+        if not (
+            field.get("conditional_hint")
+            or any(term in label for term in ("please specify", "if yes", "if other", "self describe", "self describe", "other"))
+        ):
+            return False
+        if self._field_has_value(field):
+            return False
+        container = canonical(field.get("field_container_text") or field.get("surrounding_question_text") or "")
+        if "please specify" in label and not self._nearby_self_describe_selected(field, fields_after):
+            return True
+        if any(term in label for term in ("if yes", "if other", "other", "self describe")) and not self._nearby_self_describe_selected(field, fields_after):
+            return True
+        if "please specify" in container and not self._nearby_self_describe_selected(field, fields_after):
+            return True
+        return False
+
+    def _nearby_self_describe_selected(self, field: dict[str, Any], fields_after: list[dict[str, Any]]) -> bool:
+        field_text = canonical(field.get("field_container_text") or field.get("surrounding_question_text") or field.get("nearby_text") or field.get("label") or "")
+        if not field_text:
+            return False
+        for candidate in fields_after:
+            if not candidate.get("visible") or candidate is field:
+                continue
+            value = canonical(candidate.get("value_before") or candidate.get("current_value") or "")
+            text = canonical(candidate.get("field_container_text") or candidate.get("label") or "")
+            if not value:
+                continue
+            if any(term in value for term in ("self describe", "self identify", "other", "not listed")):
+                if text and (text in field_text or field_text in text or any(word in field_text for word in text.split()[:4])):
+                    return True
+        return False
+
+    def _controlling_field_guess(self, field: dict[str, Any], fields_after: list[dict[str, Any]]) -> Optional[str]:
+        field_text = canonical(field.get("field_container_text") or field.get("surrounding_question_text") or field.get("label") or "")
+        for candidate in fields_after:
+            if candidate is field or not candidate.get("visible"):
+                continue
+            candidate_text = canonical(candidate.get("label") or candidate.get("field_container_text") or "")
+            if candidate_text and field_text and (candidate_text in field_text or field_text in candidate_text):
+                return candidate.get("label") or candidate.get("name") or candidate.get("id")
+        return None
 
     def _after_final_prepare_result(
         self,
@@ -985,38 +1372,57 @@ class GreenhouseBrowserSubmissionEngine(LeverBrowserSubmissionEngine):
             str(value),
         )
 
+    async def _read_field_value_after_fill(self, page: Any, field: dict[str, Any], fallback: str = "") -> str:
+        if self._widget_type(field) in ("combobox", "phone_widget") or str(field.get("type") or "").lower() == "combobox":
+            value = await self._combobox_value_snapshot(page, field)
+            return value or fallback
+        return await super()._read_field_value_after_fill(page, field, fallback)
+
     async def _select_option(self, page: Any, selector: str, value: str) -> bool:
         locator = page.locator(selector).first
         await self._human_scroll_to_locator(locator)
+        selected_option = None
         try:
             await locator.select_option(label=value, timeout=3000)
+            selected_option = value
             return await self._selected_value_matches(locator, value)
         except Exception:
             pass
         try:
             await locator.select_option(value=value, timeout=3000)
+            selected_option = value
             return await self._selected_value_matches(locator, value)
         except Exception:
             pass
         try:
-            await locator.evaluate(
+            selected_option = await locator.evaluate(
                 """(element, value) => {
+                    const canonical = (raw) => String(raw || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\\s+/g, ' ').trim();
+                    const wanted = canonical(value);
                     const option = Array.from(element.options || []).find((item) => {
-                        const label = String(item.label || item.textContent || '').trim().toLowerCase();
-                        const val = String(item.value || '').trim().toLowerCase();
-                        const wanted = String(value || '').trim().toLowerCase();
+                        const label = canonical(item.label || item.textContent || '');
+                        const val = canonical(item.value || '');
                         return label === wanted || val === wanted || label.includes(wanted) || wanted.includes(label);
                     });
-                    if (!option) return false;
+                    if (!option) return null;
                     element.value = option.value;
                     element.dispatchEvent(new Event('input', {bubbles: true}));
                     element.dispatchEvent(new Event('change', {bubbles: true}));
-                    return true;
+                    return String(option.label || option.textContent || option.value || '');
                 }""",
                 value,
             )
             return await self._selected_value_matches(locator, value)
         except Exception:
+            logger.info(
+                "greenhouse_native_select_result field=%s",
+                self._safe_json({
+                    "selector": selector,
+                    "planned_answer": self._safe_value_preview(value),
+                    "selected_option": selected_option,
+                    "success": False,
+                }),
+            )
             return False
 
     async def _selected_value_matches(self, locator: Any, value: str) -> bool:
@@ -1027,9 +1433,7 @@ class GreenhouseBrowserSubmissionEngine(LeverBrowserSubmissionEngine):
                     return String((option && (option.label || option.textContent || option.value)) || element.value || '');
                 }"""
             )
-            selected_key = canonical(selected)
-            value_key = canonical(value)
-            return bool(selected_key and (selected_key == value_key or value_key in selected_key or selected_key in value_key))
+            return self._canonical_values_match(selected, value)
         except Exception:
             return False
 
@@ -1037,17 +1441,102 @@ class GreenhouseBrowserSubmissionEngine(LeverBrowserSubmissionEngine):
         selector = field.get("selector")
         if not selector or not value:
             return False
+        result = await self._select_combobox_option_with_details(page, field, value)
+        details_by_key = getattr(self, "_greenhouse_combobox_debug_by_key", {})
+        details_by_key[self._field_cache_key(field)] = result
+        self._greenhouse_combobox_debug_by_key = details_by_key
+        logger.info(
+            "greenhouse_combobox_fill_result field=%s",
+            self._safe_json(result)[:12000],
+        )
+        return bool(result.get("verified"))
+
+    async def _select_combobox_option_with_details(self, page: Any, field: dict[str, Any], value: str) -> dict[str, Any]:
+        selector = field.get("selector")
         model = self._field_model(field)
-        if str(model.get("field_group") or "").startswith("eeo_"):
-            return await self._select_eeo_decline_combobox_option(page, field)
+        result: dict[str, Any] = {
+            **self._field_debug_identity(field),
+            "field_group": model.get("field_group"),
+            "planned_answer": self._safe_value_preview(value),
+            "options_discovered": [],
+            "best_match": None,
+            "match_score": 0.0,
+            "selected_option": None,
+            "selected_or_not": False,
+            "value_after_fill": "",
+            "verified": False,
+            "failure_reason": None,
+        }
+        if not selector or not value:
+            result["failure_reason"] = "missing_selector_or_value"
+            return result
         locator = page.locator(selector).first
         await self._human_scroll_to_locator(locator)
+        if str(model.get("field_group") or "").startswith("eeo_"):
+            preferred = None
+        else:
+            preferred = value
+
         try:
             await locator.click(timeout=5000)
-            await locator.fill(value, timeout=5000)
-            await page.wait_for_timeout(400)
-        except Exception:
-            return False
+            await page.wait_for_timeout(300)
+        except Exception as exc:
+            result["failure_reason"] = f"open_failed:{exc.__class__.__name__}"
+            return result
+
+        options = await self._extract_visible_combobox_options(page)
+        match = self._best_combobox_option_match(options, preferred or value, model, field)
+        selected = match.get("selected_option")
+        if not selected:
+            try:
+                await locator.fill(str(value), timeout=4000)
+            except Exception:
+                try:
+                    await locator.press_sequentially(str(value), timeout=5000)
+                except Exception:
+                    pass
+            await page.wait_for_timeout(500)
+            options = await self._extract_visible_combobox_options(page)
+            searched_match = self._best_combobox_option_match(options, preferred or value, model, field)
+            if float(searched_match.get("score") or 0) >= float(match.get("score") or 0):
+                match = searched_match
+                selected = match.get("selected_option")
+
+        result["options_discovered"] = options[:40]
+        result["best_match"] = match.get("best_match")
+        result["match_score"] = match.get("score")
+        result["selected_option"] = selected
+        result["selected_or_not"] = bool(selected)
+        if selected:
+            clicked = await self._click_combobox_option_text(page, selected)
+            if clicked:
+                await page.wait_for_timeout(450)
+            else:
+                result["failure_reason"] = "option_click_failed"
+        else:
+            result["failure_reason"] = match.get("reason") or "matching_option_not_found"
+
+        if not result["selected_option"]:
+            try:
+                await locator.press("Enter", timeout=2000)
+                await page.wait_for_timeout(350)
+            except Exception:
+                pass
+
+        value_after = await self._combobox_value_snapshot(page, field)
+        result["value_after_fill"] = value_after
+        expected = result["selected_option"] or value
+        result["verified"] = await self._combobox_value_matches(page, selector, expected, field=field)
+        if (
+            not result["verified"]
+            and result["selected_option"]
+            and self._canonical_values_match(result["selected_option"], value)
+            and not await self._combobox_required_error_visible(page, field)
+        ):
+            result["verified"] = True
+        if not result["verified"] and result["failure_reason"] is None:
+            result["failure_reason"] = "verification_failed"
+        return result
 
     async def _select_eeo_decline_combobox_option(self, page: Any, field: dict[str, Any]) -> bool:
         selector = field.get("selector")
@@ -1103,9 +1592,13 @@ class GreenhouseBrowserSubmissionEngine(LeverBrowserSubmissionEngine):
                     const selectors = [
                         '[role="option"]',
                         '[role="listbox"] [role="option"]',
+                        '[role="menu"] [role="menuitem"]',
+                        '[aria-selected]',
                         '[data-testid*="option"]',
                         '[id*="option"]',
                         '.select__option',
+                        '[class*="option"]',
+                        '[class*="menu"] [class*="item"]',
                         '.option',
                         'li'
                     ];
@@ -1129,22 +1622,239 @@ class GreenhouseBrowserSubmissionEngine(LeverBrowserSubmissionEngine):
         except Exception:
             return []
 
+    def _combobox_equivalence_keys(self, value: Any) -> set[str]:
+        raw = str(value or "")
+        key = canonical(value)
+        if not key:
+            return set()
+        groups = [
+            {"united kingdom", "uk", "gb", "great britain", "england", "britain"},
+            {"united states", "united states of america", "usa", "us", "america"},
+            {"yes", "y", "true", "i agree", "agree", "authorized", "authorised"},
+            {"no", "n", "false", "not authorized", "not authorised"},
+            {
+                "prefer not to say",
+                "decline to self identify",
+                "decline to self-identify",
+                "i do not wish to answer",
+                "i do not want to answer",
+                "i dont wish to answer",
+                "i don t wish to answer",
+                "choose not to disclose",
+                "i choose not to disclose",
+            },
+        ]
+        out = {key}
+        for group in groups:
+            canonical_group = {canonical(item) for item in group}
+            if key in canonical_group:
+                out.update(canonical_group)
+        if self._contains_dial_code(raw, "44"):
+            out.update({"44", "uk", "united kingdom", "gb", "great britain"})
+        if self._contains_dial_code(raw, "1"):
+            out.update({"1", "us", "usa", "united states", "united states of america"})
+        return {item for item in out if item}
+
+    def _contains_dial_code(self, value: Any, code: str) -> bool:
+        text = str(value or "")
+        return bool(re.search(rf"(?<!\d)\+?{re.escape(code)}(?!\d)", text))
+
+    def _safe_partial_option_match(self, option_key: str, wanted_key: str) -> bool:
+        if not option_key or not wanted_key:
+            return False
+        if wanted_key.isdigit() or option_key.isdigit():
+            return False
+        if len(wanted_key) < 3 or len(option_key) < 3:
+            return False
+        return wanted_key in option_key or option_key in wanted_key
+
+    def _canonical_values_match(self, actual: Any, expected: Any) -> bool:
+        actual_key = canonical(actual)
+        expected_key = canonical(expected)
+        if not actual_key or not expected_key:
+            return False
+        actual_keys = self._combobox_equivalence_keys(actual_key)
+        expected_keys = self._combobox_equivalence_keys(expected_key)
+        if actual_keys & expected_keys:
+            return True
+        return self._safe_partial_option_match(actual_key, expected_key)
+
+    def _best_combobox_option(self, options: list[str], value: str, model: dict[str, Any]) -> Optional[str]:
+        return self._best_combobox_option_match(options, value, model, {}).get("selected_option")
+
+    def _best_combobox_option_match(
+        self,
+        options: list[str],
+        value: str,
+        model: dict[str, Any],
+        field: dict[str, Any],
+    ) -> dict[str, Any]:
+        cleaned = [str(option).strip() for option in options if str(option or "").strip()]
+        if not cleaned:
+            return {
+                "selected_option": None,
+                "best_match": None,
+                "score": 0.0,
+                "reason": "no_options",
+            }
+        planned = str(value or "").strip()
+        if not planned:
+            return {
+                "selected_option": None,
+                "best_match": None,
+                "score": 0.0,
+                "reason": "missing_planned_answer",
+            }
+
+        best_option = None
+        best_score = 0.0
+        best_reason = "no_match"
+        for option in cleaned:
+            score, reason = self._score_option_match(planned, option)
+            if score > best_score:
+                best_option = option
+                best_score = score
+                best_reason = reason
+
+        threshold = 0.74
+        if best_score >= threshold:
+            return {
+                "selected_option": best_option,
+                "best_match": best_option,
+                "score": round(best_score, 3),
+                "reason": best_reason,
+            }
+
+        other = self._generic_other_option(cleaned)
+        if other and self._should_select_other_option(field, planned, cleaned):
+            return {
+                "selected_option": other,
+                "best_match": best_option,
+                "score": round(best_score, 3),
+                "reason": "selected_other_for_explicit_unmatched_answer",
+            }
+
+        return {
+            "selected_option": None,
+            "best_match": best_option,
+            "score": round(best_score, 3),
+            "reason": f"low_confidence_option_match:{best_reason}",
+        }
+
+    def _score_option_match(self, planned: str, option: str) -> tuple[float, str]:
+        if self._is_decline_intent(planned) and not self._is_decline_intent(option):
+            return 0.0, "decline_intent_option_not_decline"
+        if self._canonical_values_match(option, planned):
+            return 1.0, "universal_equivalence_or_exact"
+        planned_norm = self._normalize_option_text(planned)
+        option_norm = self._normalize_option_text(option)
+        if not planned_norm or not option_norm:
+            return 0.0, "empty_normalized_value"
+        if planned_norm == option_norm:
+            return 1.0, "exact_normalized"
+        if planned_norm in option_norm or option_norm in planned_norm:
+            shorter = min(len(planned_norm), len(option_norm))
+            longer = max(len(planned_norm), len(option_norm))
+            return max(0.82, shorter / max(longer, 1)), "substring_normalized"
+
+        planned_tokens = self._option_tokens(planned_norm)
+        option_tokens = self._option_tokens(option_norm)
+        token_score = self._token_overlap_score(planned_tokens, option_tokens)
+        acronym_score = 0.0
+        if self._acronym(option_tokens) == "".join(token[0] for token in planned_tokens if token):
+            acronym_score = 0.88
+        if self._acronym(planned_tokens) == "".join(token[0] for token in option_tokens if token):
+            acronym_score = max(acronym_score, 0.88)
+        fuzzy_score = SequenceMatcher(None, planned_norm, option_norm).ratio()
+        best = max(token_score, acronym_score, fuzzy_score)
+        if best == token_score:
+            return best, "token_overlap"
+        if best == acronym_score:
+            return best, "acronym"
+        return best, "fuzzy_similarity"
+
+    def _is_decline_intent(self, value: Any) -> bool:
+        key = canonical(value)
+        return any(pattern in key for pattern in {
+            "prefer not to say",
+            "decline to self identify",
+            "i do not wish to answer",
+            "i do not want to answer",
+            "i dont wish to answer",
+            "i don t wish to answer",
+            "choose not to disclose",
+            "i choose not to disclose",
+        })
+
+    def _normalize_option_text(self, value: Any) -> str:
+        text = unicodedata.normalize("NFKD", str(value or ""))
+        text = "".join(char for char in text if not unicodedata.combining(char))
+        text = text.lower()
+        text = re.sub(r"['’]", "", text)
+        text = re.sub(r"[^a-z0-9+]+", " ", text)
+        tokens = [
+            token
+            for token in re.sub(r"\s+", " ", text).strip().split()
+            if token not in {
+                "a",
+                "an",
+                "the",
+                "select",
+                "choose",
+                "please",
+                "option",
+                "field",
+                "program",
+                "degree",
+            }
+        ]
+        return " ".join(tokens)
+
+    def _option_tokens(self, normalized: str) -> set[str]:
+        return {token for token in str(normalized or "").split() if len(token) > 1}
+
+    def _token_overlap_score(self, planned_tokens: set[str], option_tokens: set[str]) -> float:
+        if not planned_tokens or not option_tokens:
+            return 0.0
+        overlap = planned_tokens & option_tokens
+        if not overlap:
+            return 0.0
+        precision = len(overlap) / len(option_tokens)
+        recall = len(overlap) / len(planned_tokens)
+        return (2 * precision * recall) / max(precision + recall, 0.0001)
+
+    def _acronym(self, tokens: set[str]) -> str:
+        ordered = sorted(tokens)
+        return "".join(token[0] for token in ordered if token)
+
+    def _generic_other_option(self, options: list[str]) -> Optional[str]:
+        for option in options:
+            key = self._normalize_option_text(option)
+            if key in {"other", "other website", "other option"}:
+                return option
+        return None
+
+    def _should_select_other_option(self, field: dict[str, Any], planned: str, options: list[str]) -> bool:
+        if not planned or len(str(planned).strip()) < 2:
+            return False
+        label = self._greenhouse_field_key(field)
+        container = canonical(field.get("field_container_text") or field.get("surrounding_question_text") or "")
+        if any(term in f"{label} {container}" for term in ("please specify", "if other", "other")):
+            return True
+        return len(options) <= 4 and any(self._normalize_option_text(option) == "other" for option in options)
+
     def _decline_option_from_options(self, options: list[str]) -> Optional[str]:
         decline_patterns = (
             "prefer not to say",
             "decline to self identify",
             "decline to self-identify",
             "i do not wish to answer",
+            "i do not want to answer",
             "i don't wish to answer",
             "i dont wish to answer",
+            "i don t wish to answer",
             "choose not to disclose",
             "i choose not to disclose",
-            "self describe later",
-            "self-describe later",
-            "prefer to self describe",
-            "prefer to self-describe",
-            "not listed",
-            "none of the above",
         )
         for option in options:
             key = canonical(option)
@@ -1155,8 +1865,9 @@ class GreenhouseBrowserSubmissionEngine(LeverBrowserSubmissionEngine):
     async def _click_combobox_option_text(self, page: Any, text: str) -> bool:
         locators = (
             page.get_by_role("option", name=text).first,
+            page.get_by_role("menuitem", name=text).first,
             page.locator("[role='option']").filter(has_text=text).first,
-            page.locator("li, [data-testid*='option'], [id*='option'], .select__option, .option").filter(has_text=text).first,
+            page.locator("[role='menuitem'], li, [data-testid*='option'], [id*='option'], .select__option, [class*='option'], .option").filter(has_text=text).first,
         )
         for option_locator in locators:
             try:
@@ -1167,75 +1878,251 @@ class GreenhouseBrowserSubmissionEngine(LeverBrowserSubmissionEngine):
                 continue
         return False
 
-        candidates = [value]
-        if canonical(value) == "swiipr":
-            candidates.extend(["Other", "Job board", "Online", "Other website"])
-        if canonical(value) in ("i agree", "agree"):
-            candidates.extend(["I agree", "Agree", "Yes"])
-        if canonical(value) in ("no", "false"):
-            candidates.extend(["No"])
-
-        for candidate in candidates:
-            for option_locator in (
-                page.get_by_role("option", name=candidate).first,
-                page.locator("[role='option'], [class*='option'], [id*='option'], li, div").filter(has_text=candidate).first,
-            ):
-                try:
-                    if await option_locator.count():
-                        await option_locator.click(timeout=4000)
-                        await page.wait_for_timeout(300)
-                        if await self._combobox_value_matches(page, selector, candidate):
-                            return True
-                except Exception:
-                    continue
+    async def _combobox_value_snapshot(self, page: Any, field: dict[str, Any]) -> str:
+        selector = field.get("selector")
+        if not selector:
+            return ""
         try:
-            await locator.press("Enter", timeout=2000)
-            await page.wait_for_timeout(300)
-            if await self._combobox_value_matches(page, selector, value):
-                return True
+            return await page.locator(selector).first.evaluate(
+                """(element) => {
+                    const textOf = (node) => node ? String(node.innerText || node.textContent || '').replace(/\\s+/g, ' ').trim() : '';
+                    const values = [];
+                    if (element.value) values.push(String(element.value));
+                    if (element.getAttribute('value')) values.push(element.getAttribute('value'));
+                    if (element.getAttribute('aria-valuetext')) values.push(element.getAttribute('aria-valuetext'));
+                    const text = textOf(element);
+                    if (text) values.push(text);
+                    const container = element.closest('.application-question, .question, .field, .form-field, .select-wrapper, .select, div');
+                    if (container) {
+                        for (const selected of container.querySelectorAll('[aria-selected="true"], [data-selected="true"], .select__single-value, [class*="singleValue"], [class*="selected"]')) {
+                            const selectedText = textOf(selected);
+                            if (selectedText) values.push(selectedText);
+                        }
+                        for (const input of container.querySelectorAll('input[type="hidden"], input:not([type]), input[type="text"], input[role="combobox"]')) {
+                            if (input.value) values.push(String(input.value));
+                        }
+                    }
+                    return values.filter(Boolean).join(' | ');
+                }"""
+            )
+        except Exception:
+            return ""
+
+    async def _combobox_required_error_visible(self, page: Any, field: dict[str, Any]) -> bool:
+        selector = field.get("selector")
+        if not selector:
+            return True
+        try:
+            return await page.locator(selector).first.evaluate(
+                """(element) => {
+                    const textOf = (node) => node ? String(node.innerText || node.textContent || '').replace(/\\s+/g, ' ').trim().toLowerCase() : '';
+                    const container = element.closest('.application-question, .question, .field, .form-field, .select-wrapper, .select, div');
+                    const text = textOf(container || element);
+                    return /required|can't be blank|must select|please select|is invalid/.test(text);
+                }"""
+            )
+        except Exception:
+            return True
+
+    async def _combobox_value_matches(self, page: Any, selector: str, value: str, field: Optional[dict[str, Any]] = None) -> bool:
+        field = field or {"selector": selector}
+        actual = await self._combobox_value_snapshot(page, field)
+        if self._canonical_values_match(actual, value):
+            return True
+        try:
+            await page.locator(selector).first.evaluate(
+                """(element) => {
+                    element.dispatchEvent(new Event('change', {bubbles: true}));
+                    element.dispatchEvent(new Event('blur', {bubbles: true}));
+                }"""
+            )
+            await page.wait_for_timeout(200)
         except Exception:
             pass
-        try:
-            await locator.evaluate(
-                """(element, value) => {
-                    if (!element) return false;
-                    element.value = value;
-                    element.setAttribute("value", value);
-                    element.dispatchEvent(new Event("input", {bubbles: true}));
-                    element.dispatchEvent(new Event("change", {bubbles: true}));
-                    element.dispatchEvent(new Event("blur", {bubbles: true}));
-                    return true;
-                }""",
-                value,
-            )
-            await page.wait_for_timeout(250)
-            return await self._combobox_value_matches(page, selector, value)
-        except Exception:
-            return False
-
-    async def _combobox_value_matches(self, page: Any, selector: str, value: str) -> bool:
-        try:
-            actual = await page.locator(selector).first.evaluate(
-                """(element) => String(element.value || element.getAttribute('aria-label') || element.textContent || '')"""
-            )
-            actual_key = canonical(actual)
-            value_key = canonical(value)
-            return bool(actual_key and (actual_key == value_key or value_key in actual_key or actual_key in value_key))
-        except Exception:
-            return False
+        if self._canonical_values_match(await self._combobox_value_snapshot(page, field), value):
+            return True
+        if self._field_model(field).get("field_group") in {"privacy_consent"}:
+            return not await self._combobox_required_error_visible(page, field)
+        return False
 
     def _field_summary(self, field: dict[str, Any]) -> dict[str, Any]:
         summary = super()._field_summary(field)
         model = self._field_model(field)
+        plan = getattr(self, "_greenhouse_plan_by_selector", {}).get(self._field_cache_key(field), {})
         summary.update({
+            "selector": field.get("selector"),
+            "stable_field_id": field.get("stable_field_id") or self._field_cache_key(field),
             "normalized_label": model.get("normalized_label"),
             "field_group": model.get("field_group"),
+            "widget_type": model.get("widget_type") or self._widget_type(field),
             "safe_to_autofill": model.get("safe_to_autofill"),
             "reason_if_not_fillable": model.get("reason_if_not_fillable"),
             "field_category": model.get("field_group"),
             "suggested_profile_key": suggested_profile_key(field),
+            "answer_source": plan.get("source"),
+            "planned_answer": plan.get("planned_answer"),
+            "surrounding_question_text": field.get("surrounding_question_text") or field.get("field_container_text") or field.get("nearby_text") or "",
+            "conditional_hint": bool(field.get("conditional_hint")),
+            "hidden_container": bool(field.get("hidden_container")),
         })
+        combobox_debug = getattr(self, "_greenhouse_combobox_debug_by_key", {}).get(self._field_cache_key(field))
+        if combobox_debug:
+            summary["option_match_debug"] = {
+                "planned_answer": combobox_debug.get("planned_answer"),
+                "available_options": combobox_debug.get("options_discovered") or [],
+                "best_match": combobox_debug.get("best_match"),
+                "match_score": combobox_debug.get("match_score"),
+                "selected_or_not": combobox_debug.get("selected_or_not"),
+                "reason": combobox_debug.get("failure_reason"),
+            }
         return summary
+
+    def _fill_debug(
+        self,
+        field: dict[str, Any],
+        fill: Optional[dict[str, Any]],
+        attempted: bool,
+        success: bool,
+        value_after: str,
+        exc: Optional[Exception] = None,
+    ) -> dict[str, Any]:
+        item = super()._fill_debug(field, fill, attempted, success, value_after, exc)
+        model = self._field_model(field)
+        plan = getattr(self, "_greenhouse_plan_by_selector", {}).get(self._field_cache_key(field), {})
+        item.update({
+            "selector": field.get("selector"),
+            "stable_field_id": field.get("stable_field_id") or self._field_cache_key(field),
+            "classification": model.get("field_group"),
+            "widget_type": model.get("widget_type") or self._widget_type(field),
+            "required": bool(field.get("required")),
+            "safe_to_autofill": plan.get("safe_to_autofill", model.get("safe_to_autofill")),
+            "reason_if_not_fillable": plan.get("reason_if_not_fillable") or model.get("reason_if_not_fillable"),
+            "suggested_profile_key": suggested_profile_key(field),
+        })
+        combobox_debug = getattr(self, "_greenhouse_combobox_debug_by_key", {}).get(self._field_cache_key(field))
+        if combobox_debug:
+            item["combobox_debug"] = {
+                "options_discovered": combobox_debug.get("options_discovered") or [],
+                "best_match": combobox_debug.get("best_match"),
+                "match_score": combobox_debug.get("match_score"),
+                "selected_option": combobox_debug.get("selected_option"),
+                "selected_or_not": combobox_debug.get("selected_or_not"),
+                "value_after_fill": combobox_debug.get("value_after_fill"),
+                "verification_result": combobox_debug.get("verified"),
+                "failure_reason": combobox_debug.get("failure_reason"),
+            }
+        latest = list(getattr(self, "_greenhouse_latest_field_fill_debug", []) or [])
+        latest.append(item)
+        self._greenhouse_latest_field_fill_debug = latest
+        return item
+
+    def _pipeline_failed_fields(self, result: Any) -> list[dict[str, Any]]:
+        failed: list[dict[str, Any]] = []
+        phone_filled = self._phone_debug_success(result)
+        for item in result.field_fill_debug or []:
+            if item.get("fill_rejected") or item.get("invalid_after_fill") or (item.get("attempted_fill") and not item.get("fill_success")):
+                if phone_filled and self._is_duplicate_phone_widget(item):
+                    continue
+                failed.append({
+                    "stable_field_id": item.get("stable_field_id"),
+                    "field_name": item.get("field_name"),
+                    "label": item.get("label"),
+                    "classification": item.get("classification") or item.get("field_group"),
+                    "widget_type": item.get("widget_type") or item.get("field_type"),
+                    "reason": item.get("rejection_reason") or item.get("invalid_after_fill_reason") or item.get("fill_error") or "fill_strategy_failed",
+                    "attempted_fill": item.get("attempted_fill"),
+                    "fill_success": item.get("fill_success"),
+                    "value_after_fill": item.get("value_after_fill"),
+                })
+        return failed
+
+    def _phone_debug_success(self, result: Any) -> bool:
+        for item in result.field_fill_debug or []:
+            if (
+                item.get("attempted_fill")
+                and item.get("fill_success")
+                and str(item.get("field_type") or "").lower() == "tel"
+                and str(item.get("matched_value") or item.get("value_after_fill") or "").strip()
+            ):
+                return True
+        return False
+
+    def _pipeline_verification_summary(self, result: Any) -> dict[str, Any]:
+        required_scrape = [
+            item for item in getattr(result, "form_scrape", []) or []
+            if item.get("required")
+        ]
+        required_plan = [
+            item for item in getattr(result, "answer_plan", []) or []
+            if item.get("required")
+        ]
+        planned_autofill = [item for item in required_plan if item.get("safe_to_autofill")]
+        user_required = [
+            item for item in required_plan
+            if not item.get("safe_to_autofill")
+        ]
+        attempted = [
+            item for item in result.field_fill_debug or []
+            if item.get("attempted_fill")
+        ]
+        successful = [
+            item for item in result.field_fill_debug or []
+            if item.get("attempted_fill") and item.get("fill_success") and not item.get("invalid_after_fill")
+        ]
+        successful_required = [
+            item for item in successful
+            if item.get("required")
+        ]
+        unfilled = result.unfilled_required_fields or []
+        verified_complete = max(0, len(required_scrape) - len(unfilled))
+        return {
+            "pipeline": "generic_form_intelligence",
+            "required_fields_detected": len(required_scrape),
+            "required_fields_planned": len(required_plan),
+            "required_fields_planned_autofill": len(planned_autofill),
+            "required_fields_user_required": len(user_required),
+            "fields_attempted": len(attempted),
+            "fields_filled": len(successful),
+            "required_fields_filled": len(successful_required),
+            "required_fields_verified_complete": verified_complete,
+            "remaining_action_required": len([
+                item for item in unfilled
+                if self._should_surface_action_required(item)
+            ]),
+            "failed_fields": len(self._pipeline_failed_fields(result)),
+            "invalid_after_fill": len([item for item in result.field_fill_debug or [] if item.get("invalid_after_fill")]),
+            "ready_for_final_click": bool(result.ready_for_final_click),
+            "conditional_ignored_count": len(getattr(self, "_greenhouse_conditional_ignored", []) or []),
+            "education_missing_count": len([
+                item for item in unfilled
+                if str(item.get("field_group") or item.get("classification") or "").startswith("education_")
+            ]),
+            "website_missing_count": len([
+                item for item in unfilled
+                if str(item.get("field_group") or item.get("classification") or "") in {"website_url", "portfolio_url"}
+            ]),
+        }
+
+    def _should_surface_action_required(self, field: dict[str, Any]) -> bool:
+        if not isinstance(field, dict):
+            return False
+        option_debug = field.get("option_match_debug") or {}
+        if (
+            field.get("required")
+            and option_debug
+            and field.get("answer_source")
+            and option_debug.get("selected_or_not") is False
+        ):
+            return True
+        if field.get("safe_to_autofill") or field.get("answer_source"):
+            return False
+        reason = str(field.get("reason_if_not_fillable") or "")
+        if reason in {
+            "unknown_optional_field",
+            "not_fillable",
+        }:
+            return False
+        return bool(field.get("required"))
 
     def _greenhouse_field_key(self, field: dict[str, Any]) -> str:
         return canonical(" ".join(str(field.get(key) or "") for key in (
@@ -1298,11 +2185,31 @@ class GreenhouseBrowserSubmissionEngine(LeverBrowserSubmissionEngine):
             return "country"
         if field_id in ("candidate_location", "candidate location", "candidate-location") or "location city" in raw or raw in ("location", "current location", "city"):
             return "city_location"
+        if self._is_education_school_field(raw):
+            return "education_school"
+        if self._is_education_degree_field(raw):
+            return "education_degree"
+        if self._is_education_discipline_field(raw):
+            return "education_discipline"
+        if self._is_education_graduation_year_field(raw):
+            return "education_graduation_year"
         if "linkedin" in raw or "linked in" in raw:
             return "linkedin_url"
         if "how did you hear" in raw or "referral source" in raw:
             return "referral_source"
         return None
+
+    def _is_education_school_field(self, label: str) -> bool:
+        return any(term in label for term in ("school", "university", "college", "institution")) and not any(term in label for term in ("high school diploma", "degree"))
+
+    def _is_education_degree_field(self, label: str) -> bool:
+        return any(term in label for term in ("degree", "qualification")) and "discipline" not in label
+
+    def _is_education_discipline_field(self, label: str) -> bool:
+        return any(term in label for term in ("discipline", "field of study", "major", "subject"))
+
+    def _is_education_graduation_year_field(self, label: str) -> bool:
+        return any(term in label for term in ("graduation year", "grad year", "graduated", "year completed", "completion year"))
 
     def _is_motivation_question(self, label: str) -> bool:
         return any(pattern in label for pattern in (

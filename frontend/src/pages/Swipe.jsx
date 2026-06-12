@@ -14,6 +14,7 @@ import TargetSearchSheet from "../components/TargetSearchSheet";
 import ReportJobSheet from "../components/ReportJobSheet";
 import { BRAND } from "../lib/brand";
 import { shareJob } from "../lib/shareJob";
+import { trackEvent } from "../lib/analytics";
 
 const DEFAULT_SEARCH_RADIUS = "50km";
 const FILTERS_STORAGE_KEY = "swiipr.jobs.filters.v1";
@@ -201,6 +202,24 @@ const swipeErrorMessage = (e) => {
   if (typeof detail === "string") return detail;
   if (detail?.message) return detail.message;
   return "Swipe failed";
+};
+
+const trackApplicationOutcome = (data, job) => {
+  if (!data?.applied) return;
+  const base = {
+    job_id: job?.job_id,
+    company: job?.company,
+    ats_provider: job?.ats_provider,
+    submission_status: data?.submission_status,
+    package_status: data?.package_status || data?.application_status,
+  };
+  trackEvent("application_generated", base);
+  const submission = data?.submission_status;
+  if (submission === "prepared" || submission === "ready") trackEvent("application_prepared", base);
+  if (submission === "action_required") trackEvent("application_action_required", base);
+  if (submission === "blocked" || submission === "blocked_captcha") trackEvent("application_blocked", base);
+  if (submission === "prepare_failed" || submission === "failed") trackEvent("application_prepare_failed", base);
+  if (submission === "submitted") trackEvent("application_submitted", base);
 };
 
 function DescriptionSections({ job }) {
@@ -549,6 +568,7 @@ export default function Swipe() {
   const fetchingRef = useRef(false);
   const filtersRef = useRef(filters);
   const pendingFiltersRef = useRef(undefined);
+  const viewedJobIdsRef = useRef(new Set());
 
   const loadProfile = useCallback(async () => {
     try {
@@ -652,6 +672,12 @@ export default function Swipe() {
   }, [loadProfile, loadFeed]);
 
   const applyFilters = (f) => {
+    trackEvent("filters_applied", {
+      locations: f?.locations,
+      locationsData: f?.locationsData,
+      workLocations: f?.workLocations,
+      searchRadius: f?.searchRadius,
+    });
     filtersRef.current = f;
     setFilters(f);
     savePersistedFilters(f);
@@ -679,6 +705,22 @@ export default function Swipe() {
 
   const topJob = jobs[0];
 
+  useEffect(() => {
+    trackEvent("swipe_page_view");
+  }, []);
+
+  useEffect(() => {
+    if (!topJob?.job_id) return;
+    if (viewedJobIdsRef.current.has(topJob.job_id)) return;
+    viewedJobIdsRef.current.add(topJob.job_id);
+    trackEvent("job_card_viewed", {
+      job_id: topJob.job_id,
+      company: topJob.company,
+      ats_provider: topJob.ats_provider,
+      location: topJob.location,
+    });
+  }, [topJob?.job_id, topJob?.company, topJob?.ats_provider, topJob?.location]);
+
   // intent: "apply" | "skip"
   const handleSwipe = async (intent) => {
     if (!topJob) return;
@@ -686,9 +728,20 @@ export default function Swipe() {
     setJobs((prev) => prev.slice(1));
     const direction = intent === "apply" ? "right" : "left";   // backend semantic
     if (intent === "apply") {
+      trackEvent("application_generation_started", {
+        job_id: job.job_id,
+        company: job.company,
+        ats_provider: job.ats_provider,
+      });
       setAppLoading(true);
       setAppliedToday((n) => n + 1);
     }
+    trackEvent(intent === "apply" ? "job_swiped_right" : "job_swiped_left", {
+      job_id: job.job_id,
+      company: job.company,
+      ats_provider: job.ats_provider,
+      location: job.location,
+    });
     const loadingToastId = intent === "apply"
       ? toast.loading("Generating tailored application...", {
           description: "This can take up to a minute for detailed job posts.",
@@ -701,6 +754,7 @@ export default function Swipe() {
         intent === "apply" ? { timeout: 180000 } : undefined,
       );
       if (intent === "apply" && data.applied) {
+        trackApplicationOutcome(data, job);
         const copy = swipeSuccessCopy(data, job);
         toast.success(copy.title, {
           id: loadingToastId,
