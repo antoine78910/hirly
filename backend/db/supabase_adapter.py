@@ -28,6 +28,11 @@ MIGRATED_TABLES = {
     "browser_submission_runs",
     "analytics_events",
     "stripe_events",
+    "training_creators",
+    "training_courses",
+    "training_modules",
+    "training_enrollments",
+    "training_crm_leads",
 }
 TABLE_PRIMARY_KEYS = {
     "users": "user_id",
@@ -40,6 +45,11 @@ TABLE_PRIMARY_KEYS = {
     "browser_submission_runs": "run_id",
     "analytics_events": "event_id",
     "stripe_events": "event_id",
+    "training_creators": "creator_id",
+    "training_courses": "course_id",
+    "training_modules": "module_id",
+    "training_enrollments": "enrollment_id",
+    "training_crm_leads": "lead_id",
 }
 TABLE_FILTER_COLUMNS = {
     "users": {"user_id", "email", "name", "created_at"},
@@ -66,6 +76,11 @@ TABLE_FILTER_COLUMNS = {
     "browser_submission_runs": {"run_id", "application_id", "job_id", "user_id", "provider", "status", "dry_run", "created_at"},
     "analytics_events": {"event_id", "user_id", "anonymous_id", "event", "page", "source", "created_at"},
     "stripe_events": {"event_id", "type", "created_at", "processed_at"},
+    "training_creators": {"creator_id", "user_id", "email", "display_name", "created_at"},
+    "training_courses": {"course_id", "creator_id", "title", "status", "published", "created_at", "updated_at"},
+    "training_modules": {"module_id", "course_id", "title", "sort_order", "duration_seconds", "created_at"},
+    "training_enrollments": {"enrollment_id", "user_id", "course_id", "progress_percent", "enrolled_at", "updated_at"},
+    "training_crm_leads": {"lead_id", "creator_id", "email", "name", "stage", "source", "created_at", "updated_at"},
 }
 MAX_READ_ROWS = 10000
 READ_PAGE_SIZE = 1000
@@ -214,6 +229,59 @@ def _supabase_row(table: str, document: Document) -> Dict[str, Any]:
             "type": doc.get("type"),
             "created_at": doc.get("created_at"),
             "processed_at": doc.get("processed_at"),
+            "data": doc,
+        }
+    if table == "training_creators":
+        return {
+            "creator_id": _document_key(table, doc),
+            "user_id": doc.get("user_id"),
+            "email": doc.get("email"),
+            "display_name": doc.get("display_name"),
+            "created_at": doc.get("created_at"),
+            "data": doc,
+        }
+    if table == "training_courses":
+        return {
+            "course_id": _document_key(table, doc),
+            "creator_id": doc.get("creator_id"),
+            "title": doc.get("title"),
+            "status": doc.get("status"),
+            "published": bool(doc.get("published")),
+            "created_at": doc.get("created_at"),
+            "updated_at": doc.get("updated_at"),
+            "data": doc,
+        }
+    if table == "training_modules":
+        return {
+            "module_id": _document_key(table, doc),
+            "course_id": doc.get("course_id"),
+            "title": doc.get("title"),
+            "sort_order": int(doc.get("sort_order") or 0),
+            "duration_seconds": doc.get("duration_seconds"),
+            "created_at": doc.get("created_at"),
+            "data": doc,
+        }
+    if table == "training_enrollments":
+        return {
+            "enrollment_id": _document_key(table, doc),
+            "user_id": doc.get("user_id"),
+            "course_id": doc.get("course_id"),
+            "progress_percent": int(doc.get("progress_percent") or 0),
+            "completed_module_ids": doc.get("completed_module_ids") or [],
+            "enrolled_at": doc.get("enrolled_at"),
+            "updated_at": doc.get("updated_at"),
+            "data": doc,
+        }
+    if table == "training_crm_leads":
+        return {
+            "lead_id": _document_key(table, doc),
+            "creator_id": doc.get("creator_id"),
+            "email": doc.get("email"),
+            "name": doc.get("name"),
+            "stage": doc.get("stage"),
+            "source": doc.get("source"),
+            "created_at": doc.get("created_at"),
+            "updated_at": doc.get("updated_at"),
             "data": doc,
         }
     raise ValueError(f"Unsupported Supabase table: {table}")
@@ -635,6 +703,11 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
         self.browser_submission_runs = SupabaseCollectionAdapter("browser_submission_runs", supabase_url, secret_key)
         self.analytics_events = SupabaseCollectionAdapter("analytics_events", supabase_url, secret_key)
         self.stripe_events = SupabaseCollectionAdapter("stripe_events", supabase_url, secret_key)
+        self.training_creators = SupabaseCollectionAdapter("training_creators", supabase_url, secret_key)
+        self.training_courses = SupabaseCollectionAdapter("training_courses", supabase_url, secret_key)
+        self.training_modules = SupabaseCollectionAdapter("training_modules", supabase_url, secret_key)
+        self.training_enrollments = SupabaseCollectionAdapter("training_enrollments", supabase_url, secret_key)
+        self.training_crm_leads = SupabaseCollectionAdapter("training_crm_leads", supabase_url, secret_key)
 
     async def close(self) -> None:
         return None

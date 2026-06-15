@@ -9,6 +9,7 @@ import {
 import { toast } from "sonner";
 import Logo from "../components/Logo";
 import { BRAND } from "../lib/brand";
+import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
 
 const Section = ({ label, children, testId }) => (
   <section className="mt-7" data-testid={testId}>
@@ -87,8 +88,8 @@ export default function Settings() {
   };
 
   return (
-    <div className="sprout min-h-dvh bg-sprout-bg text-white pb-32 max-w-md mx-auto px-5">
-      <header className="pt-6 flex items-center gap-3" data-testid="settings-header">
+    <AppPage className="sprout bg-sprout-bg text-white">
+      <header className="mx-auto w-full max-w-md shrink-0 px-5 pt-6 flex items-center gap-3" data-testid="settings-header">
         <button
           onClick={() => navigate(-1)}
           className="w-10 h-10 grid place-items-center rounded-full hover:bg-sprout-surface"
@@ -100,6 +101,7 @@ export default function Settings() {
         <h1 className="font-display font-bold text-2xl flex-1 text-center pr-10">Settings</h1>
       </header>
 
+      <AppPageScroll className="mx-auto max-w-md px-5 pb-32" withBottomNavPad={false}>
       <Section label="Look & feel" testId="settings-appearance">
         <Row icon={Palette} label="Theme" value={theme} onClick={() => todo("Theme picker")} testId="settings-theme" />
       </Section>
@@ -144,6 +146,7 @@ export default function Settings() {
         <p className="text-xs text-sprout-muted">User ID</p>
         <code className="text-[11px] text-sprout-dim break-all px-3" data-testid="settings-user-id">{user?.user_id || "—"}</code>
       </footer>
-    </div>
+      </AppPageScroll>
+    </AppPage>
   );
 }

@@ -24,8 +24,12 @@ import AdminOverview from "@/pages/AdminOverview";
 import AdminUsers from "@/pages/AdminUsers";
 import AdminUserDetail from "@/pages/AdminUserDetail";
 import AdminAnalytics from "@/pages/AdminAnalytics";
+import Training from "@/pages/Training";
+import TrainingCourse from "@/pages/TrainingCourse";
+import TrainingCreator from "@/pages/TrainingCreator";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import BottomNav from "@/components/BottomNav";
+import AppScrollLock from "@/components/app/AppScrollLock";
 import { demoMode, devBypassAuth } from "@/lib/dev";
 
 function AppRoute({ children, requireProfile = false }) {
@@ -39,6 +43,7 @@ function shouldShowBottomNav(pathname) {
   if (pathname === "/admin" || pathname.startsWith("/admin/")) return false;
   if (pathname === "/onboarding" || pathname.startsWith("/onboarding/")) return false;
   if (pathname === "/credits" || pathname === "/referral") return false;
+  if (pathname.startsWith("/training/creator")) return false;
   return true;
 }
 
@@ -54,6 +59,7 @@ function AppRouter() {
           Demo mode active — backend API calls are mocked
         </div>
       ) : null}
+      {showBottomNav ? <AppScrollLock /> : null}
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/signup" element={<Signup />} />
@@ -78,6 +84,9 @@ function AppRouter() {
         <Route path="/referral" element={<AppRoute><Referral /></AppRoute>} />
         <Route path="/settings" element={<AppRoute><Settings /></AppRoute>} />
         <Route path="/history" element={<AppRoute requireProfile><History /></AppRoute>} />
+        <Route path="/training" element={<AppRoute><Training /></AppRoute>} />
+        <Route path="/training/creator" element={<AppRoute><TrainingCreator /></AppRoute>} />
+        <Route path="/training/:courseId" element={<AppRoute><TrainingCourse /></AppRoute>} />
       </Routes>
       {showBottomNav ? <BottomNav /> : null}
     </>

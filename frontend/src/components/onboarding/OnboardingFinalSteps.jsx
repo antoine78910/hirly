@@ -332,15 +332,18 @@ export function ShowcasePricingStep({ selectedPlan, onSelectPlan }) {
       </div>
 
       <div className="mt-1 flex min-h-0 flex-1 flex-col gap-1.5 overflow-hidden sm:mt-1.5 sm:gap-2">
-        <div className="relative left-1/2 flex min-h-0 flex-1 -translate-x-1/2 w-screen max-w-none items-center justify-center">
-          <ShowcaseImage
-            src={ONBOARDING_SHOWCASE_SCREENS.pricing}
-            alt="Hirly inbox, swipe feed, and applications"
-            className="mx-0 h-full max-h-full w-full max-w-none"
-          />
+        <div className="relative left-1/2 flex min-h-0 flex-1 -translate-x-1/2 w-screen max-w-none items-end justify-center overflow-hidden">
+          <div className="showcase-pricing-glow pointer-events-none absolute inset-0" aria-hidden />
+          <div className="relative z-10 flex h-full w-full max-w-md items-end justify-center">
+            <ShowcaseImage
+              src={ONBOARDING_SHOWCASE_SCREENS.pricing}
+              alt="Hirly inbox, swipe feed, and applications"
+              className="mx-0 h-full max-h-full w-full max-w-none"
+            />
+          </div>
         </div>
 
-        <div className="shrink-0 space-y-1.5 pt-2">
+        <div className="shrink-0 space-y-1.5">
           {ONBOARDING_PRICING_PLANS.map((item) => {
             const on = selectedPlan === item.id;
             return (

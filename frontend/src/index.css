@@ -112,6 +112,37 @@ h1, h2, h3, h4, .font-display {
       radial-gradient(ellipse 110% 75% at 50% 45%, rgba(99, 102, 241, 0.06) 0%, transparent 58%),
       radial-gradient(ellipse 120% 90% at 50% 0%, rgba(167, 139, 250, 0.05) 0%, transparent 55%);
   }
+  .showcase-pricing-glow {
+    background:
+      radial-gradient(
+        ellipse 130% 58% at 50% 100%,
+        rgba(124, 58, 237, 0.26) 0%,
+        rgba(124, 58, 237, 0.14) 32%,
+        rgba(124, 58, 237, 0.05) 52%,
+        transparent 72%
+      ),
+      radial-gradient(
+        ellipse 160% 42% at 50% 100%,
+        rgba(167, 139, 250, 0.12) 0%,
+        transparent 62%
+      );
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0%,
+      #000 18%,
+      #000 48%,
+      rgba(0, 0, 0, 0.55) 72%,
+      transparent 88%
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0%,
+      #000 18%,
+      #000 48%,
+      rgba(0, 0, 0, 0.55) 72%,
+      transparent 88%
+    );
+  }
 
   /* Swiipr in-app theme — light surfaces, stable utility names */
   .bg-sprout-bg { background-color: #ffffff; }
@@ -218,28 +249,38 @@ h1, h2, h3, h4, .font-display {
   -webkit-mask-image: linear-gradient(to right, transparent, #000 2%, #000 98%, transparent);
 }
 
-/* App-wide thin scrollbar (~4px). Use .no-scrollbar to hide on a specific container. */
-* {
+/* Optional thin scrollbar for modals/dropdowns — not on main app pages. */
+.scrollbar-thin {
   scrollbar-width: thin;
   scrollbar-color: rgba(113, 113, 122, 0.35) transparent;
 }
-::-webkit-scrollbar {
+.scrollbar-thin::-webkit-scrollbar {
   width: 4px;
   height: 4px;
 }
-::-webkit-scrollbar-track {
+.scrollbar-thin::-webkit-scrollbar-track {
   background: transparent;
 }
-::-webkit-scrollbar-thumb {
+.scrollbar-thin::-webkit-scrollbar-thumb {
   background: rgba(113, 113, 122, 0.28);
   border-radius: 999px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(113, 113, 122, 0.45);
 }
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Bottom-nav app: scroll inside .app-scroll, not the document. */
+html.app-shell-locked,
+body.app-shell-locked {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+html.app-shell-locked #root,
+html.app-shell-locked .App {
+  height: 100%;
+  overflow: hidden;
+}
 
 .pb-safe { padding-bottom: max(env(safe-area-inset-bottom), 0.75rem); }
 .pt-safe { padding-top: max(env(safe-area-inset-top), 0.75rem); }
@@ -269,10 +310,11 @@ h1, h2, h3, h4, .font-display {
 button, [role="button"] { -webkit-tap-highlight-color: transparent; }
 .touch-pan-y { touch-action: pan-y; }
 
-/* Primary scroll region for in-app pages (wheel + touch, not only the scrollbar thumb). */
+/* Primary scroll region — wheel, trackpad, and touch (scrollbar hidden via .no-scrollbar). */
 .app-scroll {
   flex: 1 1 0%;
   min-height: 0;
+  height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   touch-action: pan-y;

@@ -867,7 +867,7 @@ function InboxMessageDetail({
         </div>
       </header>
 
-      <div className="app-scroll mx-auto w-full max-w-md px-5 pb-28 pt-5">
+      <div className="app-scroll no-scrollbar mx-auto min-h-0 w-full max-w-md flex-1 px-5 pb-28 pt-5">
         {message.variant === "welcome" ? (
           <WelcomeMessageBody />
         ) : (

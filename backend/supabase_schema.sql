@@ -74,3 +74,5 @@ CREATE TABLE IF NOT EXISTS stripe_events (
   data JSONB NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_stripe_events_type_created_at ON stripe_events (type, created_at DESC);
+
+-- Training platform (separate from core user data): see db/supabase_training_schema.sql

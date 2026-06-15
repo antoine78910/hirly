@@ -59,6 +59,8 @@ from job_providers.base import JobSearchQuery
 from location_search import search_locations
 from llm_client import LLMProviderNotConfigured, complete_json_text
 from onboarding_suggestions import suggest_categories, suggest_roles
+from training_routes import register_training_routes
+from training_service import is_training_creator, seed_training_content
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -412,10 +414,12 @@ async def auth_supabase_session(body: SupabaseSessionRequest, response: Response
 
     profile = await db.profiles.find_one({"user_id": user_doc["user_id"]}, {"_id": 0, "cv_text": 1, "target_role": 1})
     logger.info("supabase_session success user_id=%s email=%s", user_doc["user_id"], email)
+    creator_flag = await is_training_creator(db, user_doc["user_id"])
     return {
         "user": user_doc,
         "has_profile": profile is not None and bool(profile.get("cv_text")),
         "has_preferences": profile is not None and bool(profile.get("target_role")),
+        "is_training_creator": creator_flag,
         "session_token": session_token,
     }
 
@@ -488,10 +492,12 @@ async def auth_me(user: User = Depends(get_current_user)):
         bool((profile or {}).get("cv_filename")),
         bool((profile or {}).get("target_role")),
     )
+    creator = await is_training_creator(db, user.user_id)
     return {
         "user": user.model_dump(),
         "has_profile": profile is not None and bool(profile.get("cv_text")),
         "has_preferences": profile is not None and bool(profile.get("target_role")),
+        "is_training_creator": creator,
     }
 
 
@@ -8305,6 +8311,7 @@ async def dev_clean_job_descriptions():
 # ===================== Wire up =====================
 
 app.include_router(api_router)
+register_training_routes(api_router, get_current_user, db)
 
 app.add_middleware(
     CORSMiddleware,
@@ -8328,6 +8335,7 @@ async def startup_seed():
     try:
         await seed_greenhouse_company_boards(db)
         await seed_lever_company_boards(db)
+        await seed_training_content(db)
 
         fallback_mock = os.environ.get("JOB_PROVIDER_FALLBACK_MOCK", "false").lower() in ("1", "true", "yes", "on")
         if not fallback_mock:

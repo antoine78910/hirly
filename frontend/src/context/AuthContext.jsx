@@ -14,6 +14,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [hasProfile, setHasProfile] = useState(false);
   const [hasPreferences, setHasPreferences] = useState(false);
+  const [isTrainingCreator, setIsTrainingCreator] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const checkAuth = useCallback(async () => {
@@ -22,8 +23,10 @@ export const AuthProvider = ({ children }) => {
       setUser(data.user);
       setHasProfile(data.has_profile);
       setHasPreferences(data.has_preferences);
+      setIsTrainingCreator(Boolean(data.is_training_creator));
     } catch (e) {
       setUser(null);
+      setIsTrainingCreator(false);
     } finally {
       setLoading(false);
     }
@@ -34,6 +37,7 @@ export const AuthProvider = ({ children }) => {
       setUser(DEV_MOCK_USER);
       setHasProfile(true);
       setHasPreferences(true);
+      setIsTrainingCreator(false);
       setLoading(false);
       return;
     }
@@ -52,10 +56,23 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
     setHasProfile(false);
     setHasPreferences(false);
+    setIsTrainingCreator(false);
   };
 
   return (
-    <AuthContext.Provider value={{ user, hasProfile, hasPreferences, loading, checkAuth, setUser, setHasProfile, setHasPreferences, logout }}>
+    <AuthContext.Provider value={{
+      user,
+      hasProfile,
+      hasPreferences,
+      isTrainingCreator,
+      setIsTrainingCreator,
+      loading,
+      checkAuth,
+      setUser,
+      setHasProfile,
+      setHasPreferences,
+      logout,
+    }}>
       {children}
     </AuthContext.Provider>
   );

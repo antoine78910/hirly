@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { api } from "../lib/api";
 import { Textarea } from "../components/ui/textarea";
+import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
 
 const CAT_COLORS = {
   Behavioral: "bg-violet-500/15 text-violet-300",
@@ -231,15 +232,15 @@ export default function Interviews() {
 
   if (loading) {
     return (
-      <div className="sprout min-h-dvh bg-sprout-bg grid place-items-center">
+      <AppPage className="sprout grid place-items-center bg-sprout-bg">
         <Loader2 className="w-5 h-5 animate-spin text-sprout-muted" />
-      </div>
+      </AppPage>
     );
   }
 
   return (
-    <div className="sprout min-h-dvh bg-sprout-bg text-white pb-28 max-w-md mx-auto px-5">
-      <header className="pt-6 flex items-center justify-between" data-testid="interviews-header">
+    <AppPage className="sprout bg-sprout-bg text-white">
+      <header className="mx-auto w-full max-w-md shrink-0 px-5 pt-6 flex items-center justify-between" data-testid="interviews-header">
         <div className="flex items-center gap-2">
           <MessageSquare className="w-6 h-6 text-white" strokeWidth={2} />
           <h1 className="font-display font-bold text-3xl tracking-tight">Interviews</h1>
@@ -254,6 +255,7 @@ export default function Interviews() {
         </button>
       </header>
 
+      <AppPageScroll className="mx-auto max-w-md px-5">
       <p className="mt-1 text-sprout-muted text-sm">Practise role-specific questions and get instant AI feedback.</p>
 
       {/* Streak strip */}
@@ -306,12 +308,14 @@ export default function Interviews() {
         </section>
       )}
 
+      </AppPageScroll>
+
       <MockInterview
         open={open}
         questions={data?.mock_questions || []}
         onClose={() => setOpen(false)}
         onFinished={() => load(false)}
       />
-    </div>
+    </AppPage>
   );
 }

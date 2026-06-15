@@ -5,6 +5,7 @@ import {
   TrendingUp, Eye, FileText, Target, Award, Sparkles, Loader2, ExternalLink,
 } from "lucide-react";
 import { api } from "../lib/api";
+import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
 
 const IMPACT_COLORS = {
   high:   "bg-rose-500/15 text-rose-300 border-rose-500/30",
@@ -43,9 +44,9 @@ export default function Improve() {
 
   if (loading) {
     return (
-      <div className="sprout min-h-dvh bg-sprout-bg grid place-items-center">
+      <AppPage className="sprout grid place-items-center bg-sprout-bg">
         <Loader2 className="w-5 h-5 animate-spin text-sprout-muted" />
-      </div>
+      </AppPage>
     );
   }
 
@@ -53,8 +54,8 @@ export default function Improve() {
   const labelColor = LABEL_COLORS[r.label] || "text-white";
 
   return (
-    <div className="sprout min-h-dvh bg-sprout-bg text-white pb-28 max-w-md mx-auto px-5">
-      <header className="pt-6 flex items-center justify-between" data-testid="improve-header">
+    <AppPage className="sprout bg-sprout-bg text-white">
+      <header className="mx-auto w-full max-w-md shrink-0 px-5 pt-6 flex items-center justify-between" data-testid="improve-header">
         <div className="flex items-center gap-2">
           <TrendingUp className="w-6 h-6 text-white" strokeWidth={2} />
           <h1 className="font-display font-bold text-3xl tracking-tight">Improve</h1>
@@ -69,6 +70,7 @@ export default function Improve() {
         </button>
       </header>
 
+      <AppPageScroll className="mx-auto max-w-md px-5">
       <p className="mt-1 text-sprout-muted text-sm">Your AI career coach, updated daily. Tap Refresh to re-run.</p>
 
       {/* What recruiters see */}
@@ -175,6 +177,7 @@ export default function Improve() {
           </div>
         </section>
       )}
-    </div>
+      </AppPageScroll>
+    </AppPage>
   );
 }

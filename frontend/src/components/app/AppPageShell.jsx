@@ -10,7 +10,11 @@ export function AppPage({ children, className = "" }) {
 /** Wheel / trackpad / touch scroll area (use inside AppPage). */
 export function AppPageScroll({ children, className = "", withBottomNavPad = true }) {
   return (
-    <main className={`app-scroll ${withBottomNavPad ? "pb-28" : ""} ${className}`}>
+    <main
+      className={`app-scroll no-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden ${
+        withBottomNavPad ? "pb-28" : ""
+      } ${className}`}
+    >
       {children}
     </main>
   );

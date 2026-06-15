@@ -9,7 +9,7 @@ import { trackEvent } from "../lib/analytics";
 
 export default function AuthCallback() {
   const navigate = useNavigate();
-  const { setUser, setHasProfile, setHasPreferences } = useAuth();
+  const { setUser, setHasProfile, setHasPreferences, setIsTrainingCreator } = useAuth();
   const hasProcessed = useRef(false);
 
   useEffect(() => {
@@ -36,6 +36,7 @@ export default function AuthCallback() {
         setUser(data.user);
         setHasProfile(Boolean(data.has_profile));
         setHasPreferences(Boolean(data.has_preferences));
+        setIsTrainingCreator(Boolean(data.is_training_creator));
         trackEvent("auth_success", {
           method: "google",
           has_profile: Boolean(data.has_profile),
@@ -59,7 +60,7 @@ export default function AuthCallback() {
         navigate("/", { replace: true });
       }
     })();
-  }, [navigate, setUser, setHasProfile, setHasPreferences]);
+  }, [navigate, setUser, setHasProfile, setHasPreferences, setIsTrainingCreator]);
 
   return (
     <div className="min-h-dvh flex items-center justify-center bg-white" data-testid="auth-callback">

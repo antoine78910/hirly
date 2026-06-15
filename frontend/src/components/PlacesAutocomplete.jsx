@@ -93,8 +93,8 @@ export default function PlacesAutocomplete({
     ? `text-xs ${isInvalid ? "text-rose-500" : "text-zinc-500"}`
     : `text-xs ${isInvalid ? "text-rose-300" : "text-sprout-muted"}`;
   const dropdownClass = light
-    ? "rounded-2xl border border-zinc-200 bg-white shadow-xl overflow-hidden max-h-60 overflow-y-auto"
-    : "rounded-2xl border border-zinc-200 bg-white shadow-xl overflow-hidden max-h-60 overflow-y-auto";
+    ? "scrollbar-thin rounded-2xl border border-zinc-200 bg-white shadow-xl overflow-hidden max-h-60 overflow-y-auto"
+    : "scrollbar-thin rounded-2xl border border-sprout-border bg-sprout-surface shadow-xl overflow-hidden max-h-60 overflow-y-auto";
   const optionClass = light
     ? "w-full text-left px-4 py-3 text-sm text-zinc-700 hover:bg-zinc-50 flex items-start gap-2.5"
     : "w-full text-left px-4 py-3 text-sm text-zinc-800 hover:bg-sprout-mint-soft active:bg-sprout-mint-soft focus:bg-sprout-mint-soft focus:outline-none flex items-start gap-2.5";

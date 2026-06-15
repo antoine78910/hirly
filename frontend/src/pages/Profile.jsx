@@ -15,6 +15,7 @@ import {
   Plus,
   ShieldCheck,
   X,
+  GraduationCap,
 } from "lucide-react";
 import { toast } from "sonner";
 import PersonalInfoSheet from "../components/PersonalInfoSheet";
@@ -459,6 +460,22 @@ export default function Profile() {
             </button>
           </div>
         ) : null}
+
+        <button
+          type="button"
+          onClick={() => navigate("/training")}
+          className="flex w-full items-center gap-3 rounded-2xl border border-zinc-200 bg-white px-4 py-3.5 text-left shadow-sm transition-colors hover:border-violet-200 hover:bg-violet-50/40"
+          data-testid="profile-academy-card"
+        >
+          <div className="grid h-10 w-10 place-items-center rounded-full bg-violet-100">
+            <GraduationCap className="h-5 w-5 text-linkedin" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-zinc-900">Academy</p>
+            <p className="text-xs text-zinc-500">Video courses & job search training</p>
+          </div>
+          <ChevronRight className="h-5 w-5 shrink-0 text-zinc-300" />
+        </button>
 
         <div className={`rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm ${showSkeleton ? "animate-pulse" : ""}`}>
           <div className="flex items-center gap-4">

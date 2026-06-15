@@ -5,6 +5,7 @@ import { ArrowLeft, Zap, Loader2 } from "lucide-react";
 import { api } from "../lib/api";
 import CompanyLogo from "../components/CompanyLogo";
 import { toast } from "sonner";
+import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
 
 const TABS = [
   { key: "right", label: "Generated", testid: "history-tab-liked" },
@@ -91,8 +92,8 @@ export default function History() {
   const title = tab === "left" ? "Jobs you passed" : "Generated packages";
 
   return (
-    <div className="sprout min-h-dvh bg-sprout-bg text-white pb-28 max-w-md mx-auto px-5">
-      <header className="pt-6 flex items-center gap-3" data-testid="history-header">
+    <AppPage className="sprout bg-sprout-bg text-white">
+      <header className="mx-auto w-full max-w-md shrink-0 px-5 pt-6 flex items-center gap-3" data-testid="history-header">
         <button
           onClick={() => navigate(-1)}
           className="w-10 h-10 grid place-items-center rounded-full hover:bg-sprout-surface"
@@ -104,6 +105,7 @@ export default function History() {
         <h1 className="font-display font-bold text-xl flex-1 text-center pr-10">{title}</h1>
       </header>
 
+      <AppPageScroll className="mx-auto max-w-md px-5">
       <div className="mt-6 flex gap-2 p-1 rounded-full bg-sprout-surface border border-sprout-border" data-testid="history-tabs">
         {TABS.map((t) => (
           <button
@@ -139,6 +141,7 @@ export default function History() {
         )}
         {!loading && rows.map((r) => <JobRow key={r.job_id} row={r} onApplyNow={applyNow} />)}
       </div>
-    </div>
+      </AppPageScroll>
+    </AppPage>
   );
 }

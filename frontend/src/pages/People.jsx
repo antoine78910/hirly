@@ -4,6 +4,7 @@ import { Users, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
 
 const MOCK_PEOPLE = [
   { id: 1, name: "Sarah Chen", title: "Engineering Manager", company: "Linear", appliedRole: "Senior Frontend Engineer", connected: false, gradient: "from-violet-600 to-indigo-600" },
@@ -148,15 +149,15 @@ export default function People() {
   }
 
   return (
-    <div className="sprout min-h-dvh bg-sprout-bg text-white pb-28">
-      <header className="px-5 pt-6 max-w-md mx-auto">
+    <AppPage className="sprout bg-sprout-bg text-white">
+      <header className="mx-auto w-full max-w-md shrink-0 px-5 pt-6">
         <h1 className="font-display font-black text-3xl tracking-tighter text-white">People</h1>
         <p className="text-sm text-sprout-muted mt-1">
           {people.length} hiring contact{people.length !== 1 ? "s" : ""} matched to your applications
         </p>
       </header>
 
-      <div className="px-5 mt-5 max-w-md mx-auto">
+      <AppPageScroll className="mx-auto max-w-md px-5 pt-5">
         {people.length === 0 ? (
           <div className="mt-20 text-center">
             <div className="w-16 h-16 rounded-2xl bg-sprout-mint-soft grid place-items-center mx-auto">
@@ -179,7 +180,7 @@ export default function People() {
             ))}
           </ul>
         )}
-      </div>
+      </AppPageScroll>
 
       {selectedPerson && (
         <ConnectSheet
@@ -189,6 +190,6 @@ export default function People() {
           onConnected={handleConnected}
         />
       )}
-    </div>
+    </AppPage>
   );
 }
