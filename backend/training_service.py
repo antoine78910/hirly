@@ -7,12 +7,184 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from training_module_content import WARM_UP_PLAYBOOK_EN, WARM_UP_PLAYBOOK_FR
+
 logger = logging.getLogger(__name__)
 
 SEED_CREATOR_ID = "creator_swiipr_official"
 SEED_COURSE_ID = "course_job_search_mastery"
+SEED_MODULES_VERSION = 4
 
 CRM_STAGES = ["new", "contacted", "qualified", "enrolled", "won", "lost"]
+
+COURSE_I18N = {
+    "en": {
+        "title": "Talking Heads",
+        "subtitle": "Video scripts & lessons to level up your job search",
+        "description": "Go through each module, watch the videos, and complete the quizzes at the end of every chapter.",
+        "level": "Beginner",
+    },
+    "fr": {
+        "title": "Talking Heads",
+        "subtitle": "Scripts vidéo et leçons pour booster ta recherche d'emploi",
+        "description": "Parcours chaque module, regarde les vidéos et fais les quiz à la fin de chaque chapitre.",
+        "level": "Débutant",
+    },
+}
+
+CREATOR_I18N = {
+    "en": {
+        "display_name": "Hirly Academy",
+        "bio": "Official job search training from the Hirly team.",
+    },
+    "fr": {
+        "display_name": "Académie Hirly",
+        "bio": "Formation officielle à la recherche d'emploi par l'équipe Hirly.",
+    },
+}
+
+MODULE_I18N = {
+    "mod_getting_started": {
+        "en": {
+            "title": "Getting Started",
+            "description": "Set up your workspace and understand how the program works.",
+            "category": "fundamentals",
+        },
+        "fr": {
+            "title": "Pour bien commencer",
+            "description": "Configure ton espace et comprends comment fonctionne le programme.",
+            "category": "fundamentals",
+        },
+    },
+    "mod_warm_up": {
+        "en": {
+            "title": "Warm Up Playbook",
+            "description": "TikTok & IG warmup SOP before you post career content.",
+            "category": "fundamentals",
+            "content": WARM_UP_PLAYBOOK_EN,
+        },
+        "fr": {
+            "title": "Guide d'échauffement",
+            "description": "SOP warmup TikTok & IG avant de publier du contenu carrière.",
+            "category": "fundamentals",
+            "content": WARM_UP_PLAYBOOK_FR,
+        },
+    },
+    "mod_creating_content": {
+        "en": {
+            "title": "Creating Content",
+            "description": "How to plan, script, and record your talking-head videos.",
+            "category": "application",
+        },
+        "fr": {
+            "title": "Créer du contenu",
+            "description": "Comment planifier, scripter et enregistrer tes vidéos face caméra.",
+            "category": "application",
+        },
+    },
+    "mod_content_bank": {
+        "en": {
+            "title": "Content Bank Examples",
+            "description": "Reference scripts and formats you can reuse and adapt.",
+            "category": "application",
+        },
+        "fr": {
+            "title": "Exemples banque de contenu",
+            "description": "Scripts et formats de référence à réutiliser et adapter.",
+            "category": "application",
+        },
+    },
+    "mod_content_policy": {
+        "en": {
+            "title": "Content Policy & Payment",
+            "description": "Guidelines, compliance, and how payments work.",
+            "category": "application",
+        },
+        "fr": {
+            "title": "Politique de contenu & paiement",
+            "description": "Règles, conformité et fonctionnement des paiements.",
+            "category": "application",
+        },
+    },
+    "mod_account_management": {
+        "en": {
+            "title": "Account Management",
+            "description": "Manage your profile, settings, and creator account.",
+            "category": "interview",
+        },
+        "fr": {
+            "title": "Gestion du compte",
+            "description": "Gère ton profil, tes paramètres et ton compte créateur.",
+            "category": "interview",
+        },
+    },
+    "mod_submit_drafts": {
+        "en": {
+            "title": "Submit Drafts & Next Steps",
+            "description": "How to submit work, get feedback, and what happens next.",
+            "category": "interview",
+        },
+        "fr": {
+            "title": "Soumettre les brouillons & la suite",
+            "description": "Comment soumettre ton travail, obtenir des retours et la suite du parcours.",
+            "category": "interview",
+        },
+    },
+    "mod_resources": {
+        "en": {
+            "title": "Resources",
+            "description": "Templates, checklists, and links to keep handy.",
+            "category": "resources",
+        },
+        "fr": {
+            "title": "Ressources",
+            "description": "Modèles, checklists et liens utiles à garder sous la main.",
+            "category": "resources",
+        },
+    },
+    "mod_bonus": {
+        "en": {
+            "title": "Bonus: War is Over",
+            "description": "Extra tips and mindset for finishing strong.",
+            "category": "bonus",
+        },
+        "fr": {
+            "title": "Bonus : La guerre est finie",
+            "description": "Conseils bonus et état d'esprit pour finir en beauté.",
+            "category": "bonus",
+        },
+    },
+}
+
+for _module_id, _packs in MODULE_I18N.items():
+    for _lang in ("en", "fr"):
+        _packs[_lang].setdefault("video_url", "")
+
+
+MODULE_SEED = [
+    {"module_id": "mod_getting_started", "sort_order": 1, "duration_seconds": 480},
+    {"module_id": "mod_warm_up", "sort_order": 2, "duration_seconds": 420},
+    {"module_id": "mod_creating_content", "sort_order": 3, "duration_seconds": 600},
+    {"module_id": "mod_content_bank", "sort_order": 4, "duration_seconds": 540},
+    {"module_id": "mod_content_policy", "sort_order": 5, "duration_seconds": 480},
+    {"module_id": "mod_account_management", "sort_order": 6, "duration_seconds": 420},
+    {"module_id": "mod_submit_drafts", "sort_order": 7, "duration_seconds": 480},
+    {"module_id": "mod_resources", "sort_order": 8, "duration_seconds": 300},
+    {"module_id": "mod_bonus", "sort_order": 9, "duration_seconds": 360},
+]
+
+
+def _normalize_lang(lang: Optional[str]) -> str:
+    return "fr" if (lang or "").lower().startswith("fr") else "en"
+
+
+def _localize_fields(doc: Dict[str, Any], lang: str, fields: List[str]) -> Dict[str, Any]:
+    out = dict(doc)
+    pack = (doc.get("i18n") or {}).get(lang) or {}
+    for field in fields:
+        if field in pack:
+            out[field] = pack[field]
+    return out
 
 
 def _now() -> str:
@@ -52,30 +224,31 @@ async def register_creator(db, user: Dict[str, Any], display_name: Optional[str]
     return doc
 
 
-def _public_course(course: Dict[str, Any], module_count: int = 0) -> Dict[str, Any]:
+def _public_course(course: Dict[str, Any], module_count: int = 0, lang: str = "en") -> Dict[str, Any]:
+    localized = _localize_fields(course, lang, ["title", "subtitle", "description", "level"])
     return {
         "course_id": course["course_id"],
-        "title": course.get("title"),
-        "subtitle": course.get("subtitle"),
-        "description": course.get("description"),
+        "title": localized.get("title"),
+        "subtitle": localized.get("subtitle"),
+        "description": localized.get("description"),
         "thumbnail_url": course.get("thumbnail_url"),
-        "level": course.get("level", "Beginner"),
+        "level": localized.get("level", "Beginner"),
         "module_count": module_count,
         "duration_minutes": course.get("duration_minutes"),
         "creator_id": course.get("creator_id"),
     }
 
 
-async def list_published_courses(db) -> List[Dict[str, Any]]:
+async def list_published_courses(db, lang: str = "en") -> List[Dict[str, Any]]:
     courses = await db.training_courses.find({"published": True}).sort("created_at", -1).to_list(200)
     out = []
     for course in courses:
         modules = await db.training_modules.find({"course_id": course["course_id"]}).to_list(200)
-        out.append(_public_course(course, len(modules)))
+        out.append(_public_course(course, len(modules), lang))
     return out
 
 
-async def get_course_detail(db, course_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+async def get_course_detail(db, course_id: str, user_id: Optional[str] = None, lang: str = "en") -> Optional[Dict[str, Any]]:
     course = await db.training_courses.find_one({"course_id": course_id}, {"_id": 0})
     if not course or not course.get("published"):
         return None
@@ -91,11 +264,14 @@ async def get_course_detail(db, course_id: str, user_id: Optional[str] = None) -
     completed = set((enrollment or {}).get("completed_module_ids") or [])
     module_rows = []
     for mod in modules:
+        localized = _localize_fields(mod, lang, ["title", "description", "category", "content", "video_url"])
         module_rows.append({
             "module_id": mod["module_id"],
-            "title": mod.get("title"),
-            "description": mod.get("description"),
-            "video_url": mod.get("video_url"),
+            "title": localized.get("title"),
+            "description": localized.get("description"),
+            "category": localized.get("category") or mod.get("category"),
+            "content": localized.get("content") or [],
+            "video_url": localized.get("video_url", ""),
             "duration_seconds": mod.get("duration_seconds"),
             "sort_order": mod.get("sort_order", 0),
             "completed": mod["module_id"] in completed,
@@ -106,19 +282,21 @@ async def get_course_detail(db, course_id: str, user_id: Optional[str] = None) -
         progress = _pct(list(completed), len(module_rows))
 
     creator = await db.training_creators.find_one({"creator_id": course.get("creator_id")}, {"_id": 0})
+    creator_local = _localize_fields(creator or {}, lang, ["display_name", "bio"]) if creator else None
 
     return {
-        "course": _public_course(course, len(module_rows)),
+        "course": _public_course(course, len(module_rows), lang),
         "modules": module_rows,
+        "lang": lang,
         "enrollment": {
             "enrolled": enrollment is not None,
             "progress_percent": progress or 0,
             "completed_module_ids": list(completed),
         },
         "creator": {
-            "display_name": (creator or {}).get("display_name"),
-            "bio": (creator or {}).get("bio"),
-        } if creator else None,
+            "display_name": (creator_local or {}).get("display_name"),
+            "bio": (creator_local or {}).get("bio"),
+        } if creator_local else None,
     }
 
 
@@ -172,7 +350,7 @@ async def complete_module(db, user_id: str, course_id: str, module_id: str) -> D
     return {"progress_percent": progress, "completed_module_ids": completed}
 
 
-async def list_user_enrollments(db, user_id: str) -> List[Dict[str, Any]]:
+async def list_user_enrollments(db, user_id: str, lang: str = "en") -> List[Dict[str, Any]]:
     enrollments = await db.training_enrollments.find({"user_id": user_id}).sort("updated_at", -1).to_list(100)
     out = []
     for enr in enrollments:
@@ -181,7 +359,7 @@ async def list_user_enrollments(db, user_id: str) -> List[Dict[str, Any]]:
             continue
         modules = await db.training_modules.find({"course_id": enr["course_id"]}).to_list(200)
         out.append({
-            **_public_course(course, len(modules)),
+            **_public_course(course, len(modules), lang),
             "progress_percent": enr.get("progress_percent", 0),
             "enrolled_at": enr.get("enrolled_at"),
         })
@@ -275,11 +453,98 @@ async def update_lead(db, creator_id: str, lead_id: str, payload: Dict[str, Any]
     return {**lead, **updates}
 
 
+async def sync_training_locale_content(db) -> None:
+    """Patch i18n fields onto seed content when DB was created before translations."""
+    try:
+        course = await db.training_courses.find_one({"course_id": SEED_COURSE_ID}, {"_id": 0})
+        if course:
+            await db.training_courses.update_one(
+                {"course_id": SEED_COURSE_ID},
+                {"$set": {
+                    "i18n": COURSE_I18N,
+                    **COURSE_I18N["en"],
+                }},
+            )
+        creator = await db.training_creators.find_one({"creator_id": SEED_CREATOR_ID}, {"_id": 0})
+        if creator:
+            await db.training_creators.update_one(
+                {"creator_id": SEED_CREATOR_ID},
+                {"$set": {
+                    "i18n": CREATOR_I18N,
+                    **CREATOR_I18N["en"],
+                }},
+            )
+    except Exception as exc:
+        logger.warning("Training locale sync skipped: %s", exc)
+
+
+def _module_doc(mod_def: Dict[str, Any], now: str, existing: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    module_id = mod_def["module_id"]
+    i18n = MODULE_I18N[module_id]
+    return {
+        "module_id": module_id,
+        "course_id": SEED_COURSE_ID,
+        "i18n": i18n,
+        **i18n["en"],
+        "video_url": i18n["en"].get("video_url", ""),
+        "duration_seconds": mod_def.get("duration_seconds", 0),
+        "sort_order": mod_def["sort_order"],
+        "created_at": (existing or {}).get("created_at") or now,
+        "updated_at": now,
+    }
+
+
+async def sync_training_modules_catalog(db) -> None:
+    """Ensure seed course has the latest module catalog (Talking Heads chapters)."""
+    try:
+        course = await db.training_courses.find_one({"course_id": SEED_COURSE_ID}, {"_id": 0})
+        if not course:
+            return
+
+        if int(course.get("modules_seed_version") or 0) >= SEED_MODULES_VERSION:
+            return
+
+        now = _now()
+        expected_ids = {item["module_id"] for item in MODULE_SEED}
+
+        for mod_def in MODULE_SEED:
+            module_id = mod_def["module_id"]
+            existing = await db.training_modules.find_one({"module_id": module_id}, {"_id": 0})
+            doc = _module_doc(mod_def, now, existing)
+            await db.training_modules.update_one(
+                {"module_id": module_id},
+                {"$set": doc},
+                upsert=True,
+            )
+
+        obsolete = await db.training_modules.find({"course_id": SEED_COURSE_ID}).to_list(200)
+        for mod in obsolete:
+            if mod["module_id"] not in expected_ids:
+                await db.training_modules.delete_one({"module_id": mod["module_id"]})
+
+        total_seconds = sum(item.get("duration_seconds", 0) for item in MODULE_SEED)
+        await db.training_courses.update_one(
+            {"course_id": SEED_COURSE_ID},
+            {"$set": {
+                "i18n": COURSE_I18N,
+                **COURSE_I18N["en"],
+                "duration_minutes": max(1, round(total_seconds / 60)),
+                "modules_seed_version": SEED_MODULES_VERSION,
+                "updated_at": now,
+            }},
+        )
+        logger.info("Synced training modules catalog v%s (%s modules)", SEED_MODULES_VERSION, len(MODULE_SEED))
+    except Exception as exc:
+        logger.warning("Training modules sync skipped: %s", exc)
+
+
 async def seed_training_content(db) -> None:
     """Seed default Swiipr course + creator if missing."""
     try:
         existing = await db.training_courses.find_one({"course_id": SEED_COURSE_ID}, {"_id": 0})
         if existing:
+            await sync_training_locale_content(db)
+            await sync_training_modules_catalog(db)
             return
 
         now = _now()
@@ -287,8 +552,8 @@ async def seed_training_content(db) -> None:
             "creator_id": SEED_CREATOR_ID,
             "user_id": "system_creator",
             "email": "academy@hirly.app",
-            "display_name": "Hirly Academy",
-            "bio": "Official job search training from the Hirly team.",
+            "i18n": CREATOR_I18N,
+            **CREATOR_I18N["en"],
             "created_at": now,
         }
         await db.training_creators.update_one(
@@ -300,12 +565,11 @@ async def seed_training_content(db) -> None:
         course = {
             "course_id": SEED_COURSE_ID,
             "creator_id": SEED_CREATOR_ID,
-            "title": "Job Search Mastery",
-            "subtitle": "Land more interviews with a smarter workflow",
-            "description": "A step-by-step video course on targeting roles, tailoring applications, and staying consistent with Hirly.",
+            "i18n": COURSE_I18N,
+            **COURSE_I18N["en"],
             "thumbnail_url": "/onboarding/intro-3.png",
-            "level": "Beginner",
-            "duration_minutes": 42,
+            "duration_minutes": max(1, round(sum(m.get("duration_seconds", 0) for m in MODULE_SEED) / 60)),
+            "modules_seed_version": SEED_MODULES_VERSION,
             "status": "published",
             "published": True,
             "created_at": now,
@@ -313,58 +577,7 @@ async def seed_training_content(db) -> None:
         }
         await db.training_courses.insert_one(course)
 
-        modules = [
-            {
-                "module_id": "mod_welcome",
-                "course_id": SEED_COURSE_ID,
-                "title": "Welcome & mindset",
-                "description": "How top candidates structure their search.",
-                "video_url": "https://www.youtube.com/embed/ZXsQAXxvvxo",
-                "duration_seconds": 420,
-                "sort_order": 1,
-                "created_at": now,
-            },
-            {
-                "module_id": "mod_targeting",
-                "course_id": SEED_COURSE_ID,
-                "title": "Build your target list",
-                "description": "Pick roles, locations, and companies worth your time.",
-                "video_url": "https://www.youtube.com/embed/WEDIj9JBTC8",
-                "duration_seconds": 540,
-                "sort_order": 2,
-                "created_at": now,
-            },
-            {
-                "module_id": "mod_cv",
-                "course_id": SEED_COURSE_ID,
-                "title": "CV that gets replies",
-                "description": "Tailor your resume for each swipe in seconds.",
-                "video_url": "https://www.youtube.com/embed/Tt08Km5IYb0",
-                "duration_seconds": 600,
-                "sort_order": 3,
-                "created_at": now,
-            },
-            {
-                "module_id": "mod_swipe",
-                "course_id": SEED_COURSE_ID,
-                "title": "Swipe & apply smart",
-                "description": "Volume with quality — your daily Swiipr routine.",
-                "video_url": "https://www.youtube.com/embed/9No-FiEInLA",
-                "duration_seconds": 480,
-                "sort_order": 4,
-                "created_at": now,
-            },
-            {
-                "module_id": "mod_interview",
-                "course_id": SEED_COURSE_ID,
-                "title": "Interview prep",
-                "description": "Turn applications into conversations.",
-                "video_url": "https://www.youtube.com/embed/1qw5ITr3kho",
-                "duration_seconds": 540,
-                "sort_order": 5,
-                "created_at": now,
-            },
-        ]
+        modules = [_module_doc(mod_def, now) for mod_def in MODULE_SEED]
         await db.training_modules.insert_many(modules)
 
         demo_leads = [

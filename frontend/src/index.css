@@ -86,7 +86,7 @@ h1, h2, h3, h4, .font-display {
 @layer base {
   * { @apply border-border; }
   body { @apply bg-background text-foreground; }
-  html, body { overscroll-behavior-y: none; }
+  html, body { overscroll-behavior-y: auto; }
   html:has(.sprout), body:has(.sprout) { background-color: #ffffff; }
 }
 
@@ -280,6 +280,35 @@ html.app-shell-locked #root,
 html.app-shell-locked .App {
   height: 100%;
   overflow: hidden;
+}
+
+body.training-page [data-testid="bottom-nav"] {
+  display: none !important;
+}
+
+/* Marketing + training: native document scroll (mouse wheel / trackpad). */
+html.document-scroll,
+body.document-scroll {
+  height: auto;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+html.document-scroll #root,
+html.document-scroll .App {
+  height: auto;
+  min-height: 100dvh;
+  overflow: visible;
+}
+
+/* Safety: if both classes are present, keep scrolling enabled. */
+html.document-scroll.app-shell-locked,
+body.document-scroll.app-shell-locked,
+html.document-scroll.app-shell-locked #root,
+html.document-scroll.app-shell-locked .App {
+  overflow-y: auto !important;
+  height: auto !important;
 }
 
 .pb-safe { padding-bottom: max(env(safe-area-inset-bottom), 0.75rem); }

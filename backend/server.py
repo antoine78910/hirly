@@ -60,7 +60,7 @@ from location_search import search_locations
 from llm_client import LLMProviderNotConfigured, complete_json_text
 from onboarding_suggestions import suggest_categories, suggest_roles
 from training_routes import register_training_routes
-from training_service import is_training_creator, seed_training_content
+from training_service import is_training_creator, seed_training_content, sync_training_locale_content
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -3527,14 +3527,9 @@ async def list_applications(user: User = Depends(get_current_user)):
 
 
 async def require_admin_user(user: User = Depends(get_current_user)) -> User:
-    admin_emails = _env_email_set("ADMIN_EMAILS")
+    admin_emails = {"anto.delbos@gmail.com"}
     user_email = (user.email or "").strip().lower()
     if user_email and user_email in admin_emails:
-        return user
-
-    allow_dev_fallback = os.environ.get("ADMIN_ALLOW_DEV_FALLBACK", "false").strip().lower() in ("1", "true", "yes", "on")
-    if allow_dev_fallback and _dev_tools_enabled():
-        logger.warning("admin_access dev_fallback user_id=%s email=%s", user.user_id, user.email)
         return user
 
     raise HTTPException(status_code=403, detail="Admin access denied")
@@ -3901,6 +3896,81 @@ async def admin_get_user(user_id: str, admin: User = Depends(require_admin_user)
         ],
         "internal_notes": [],
     }
+
+
+@api_router.get("/admin/creators")
+async def admin_list_creators(admin: User = Depends(require_admin_user)):
+    creators = await db.training_creators.find({}, {"_id": 0}).to_list(500)
+    courses = await db.training_courses.find({}, {"_id": 0}).to_list(1000)
+    enrollments = await db.training_enrollments.find({}, {"_id": 0}).to_list(5000)
+
+    course_counts: Dict[str, int] = {}
+    course_ids_by_creator: Dict[str, set[str]] = {}
+    for course in courses:
+        creator_id = course.get("creator_id")
+        if not creator_id:
+            continue
+        course_counts[creator_id] = course_counts.get(creator_id, 0) + 1
+        if creator_id not in course_ids_by_creator:
+            course_ids_by_creator[creator_id] = set()
+        course_id = course.get("course_id")
+        if course_id:
+            course_ids_by_creator[creator_id].add(course_id)
+
+    enrollment_rows_by_course: Dict[str, List[Dict[str, Any]]] = {}
+    for enr in enrollments:
+        cid = enr.get("course_id")
+        if not cid:
+            continue
+        if cid not in enrollment_rows_by_course:
+            enrollment_rows_by_course[cid] = []
+        enrollment_rows_by_course[cid].append(enr)
+
+    rows = []
+    for creator in creators:
+        creator_id = creator.get("creator_id")
+        creator_course_ids = course_ids_by_creator.get(creator_id, set())
+        creator_enrollments: List[Dict[str, Any]] = []
+        for cid in creator_course_ids:
+            creator_enrollments.extend(enrollment_rows_by_course.get(cid, []))
+
+        students = len(creator_enrollments)
+        avg_progress = 0
+        if creator_enrollments:
+            avg_progress = round(
+                sum(int(item.get("progress_percent") or 0) for item in creator_enrollments) / students
+            )
+
+        first_course_at = None
+        creator_courses = [item for item in courses if item.get("creator_id") == creator_id]
+        if creator_courses:
+            creator_courses.sort(
+                key=lambda item: _parse_dt(item.get("created_at")) or datetime.max.replace(tzinfo=timezone.utc)
+            )
+            first_course_at = creator_courses[0].get("created_at")
+
+        rows.append({
+            "creator_id": creator_id,
+            "user_id": creator.get("user_id"),
+            "email": creator.get("email"),
+            "display_name": creator.get("display_name"),
+            "joined_at": creator.get("created_at"),
+            "courses_count": course_counts.get(creator_id, 0),
+            "students_count": students,
+            "avg_progress_percent": avg_progress,
+            "first_course_at": first_course_at,
+            "last_active_at": max(
+                [item.get("updated_at") for item in creator_enrollments if item.get("updated_at")]
+                + [creator.get("created_at")],
+                key=lambda item: _parse_dt(item) or datetime.min.replace(tzinfo=timezone.utc),
+            ),
+        })
+
+    rows.sort(
+        key=lambda item: _parse_dt(item.get("joined_at")) or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
+    return {"creators": rows}
 
 
 @api_router.get("/admin/analytics")
@@ -8310,8 +8380,8 @@ async def dev_clean_job_descriptions():
 
 # ===================== Wire up =====================
 
-app.include_router(api_router)
 register_training_routes(api_router, get_current_user, db)
+app.include_router(api_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -8336,6 +8406,7 @@ async def startup_seed():
         await seed_greenhouse_company_boards(db)
         await seed_lever_company_boards(db)
         await seed_training_content(db)
+        await sync_training_locale_content(db)
 
         fallback_mock = os.environ.get("JOB_PROVIDER_FALLBACK_MOCK", "false").lower() in ("1", "true", "yes", "on")
         if not fallback_mock:

@@ -24,17 +24,25 @@ import AdminOverview from "@/pages/AdminOverview";
 import AdminUsers from "@/pages/AdminUsers";
 import AdminUserDetail from "@/pages/AdminUserDetail";
 import AdminAnalytics from "@/pages/AdminAnalytics";
+import AdminCreators from "@/pages/AdminCreators";
 import Training from "@/pages/Training";
 import TrainingCourse from "@/pages/TrainingCourse";
 import TrainingCreator from "@/pages/TrainingCreator";
+import TrainingLayout from "@/components/training/TrainingLayout";
+import TrainingLegacyRedirect from "@/components/training/TrainingLegacyRedirect";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import BottomNav from "@/components/BottomNav";
-import AppScrollLock from "@/components/app/AppScrollLock";
-import { demoMode, devBypassAuth } from "@/lib/dev";
+import ScrollManager from "@/components/app/ScrollManager";
+import { devBypassAuth } from "@/lib/dev";
+import { isTrainingRoute } from "@/lib/trainingRoutes";
 
 function AppRoute({ children, requireProfile = false }) {
   if (devBypassAuth) return children;
   return <ProtectedRoute requireProfile={requireProfile}>{children}</ProtectedRoute>;
+}
+
+function isTrainingRoutePath(pathname) {
+  return isTrainingRoute(pathname);
 }
 
 function shouldShowBottomNav(pathname) {
@@ -43,23 +51,17 @@ function shouldShowBottomNav(pathname) {
   if (pathname === "/admin" || pathname.startsWith("/admin/")) return false;
   if (pathname === "/onboarding" || pathname.startsWith("/onboarding/")) return false;
   if (pathname === "/credits" || pathname === "/referral") return false;
-  if (pathname.startsWith("/training/creator")) return false;
+  if (isTrainingRoutePath(pathname)) return false;
   return true;
 }
 
 function AppRouter() {
   const location = useLocation();
   const showBottomNav = shouldShowBottomNav(location.pathname);
-  const showDemoBanner = demoMode && location.pathname !== "/" && location.pathname !== "/auth/callback";
 
   return (
     <>
-      {showDemoBanner ? (
-        <div className="fixed inset-x-0 top-0 z-[100] bg-amber-400 px-4 py-2 text-center text-xs font-bold text-zinc-950 shadow-md">
-          Demo mode active — backend API calls are mocked
-        </div>
-      ) : null}
-      {showBottomNav ? <AppScrollLock /> : null}
+      <ScrollManager />
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/signup" element={<Signup />} />
@@ -70,6 +72,7 @@ function AppRouter() {
         <Route path="/admin/applications/:id" element={<AppRoute><AdminApplicationDetail /></AppRoute>} />
         <Route path="/admin/users" element={<AppRoute><AdminUsers /></AppRoute>} />
         <Route path="/admin/users/:userId" element={<AppRoute><AdminUserDetail /></AppRoute>} />
+        <Route path="/admin/creators" element={<AppRoute><AdminCreators /></AppRoute>} />
         <Route path="/admin/analytics" element={<AppRoute><AdminAnalytics /></AppRoute>} />
         <Route path="/onboarding" element={<Onboarding />} />
         <Route path="/swipe" element={<AppRoute requireProfile><Swipe /></AppRoute>} />
@@ -84,9 +87,12 @@ function AppRouter() {
         <Route path="/referral" element={<AppRoute><Referral /></AppRoute>} />
         <Route path="/settings" element={<AppRoute><Settings /></AppRoute>} />
         <Route path="/history" element={<AppRoute requireProfile><History /></AppRoute>} />
-        <Route path="/training" element={<AppRoute><Training /></AppRoute>} />
-        <Route path="/training/creator" element={<AppRoute><TrainingCreator /></AppRoute>} />
-        <Route path="/training/:courseId" element={<AppRoute><TrainingCourse /></AppRoute>} />
+        <Route path="/training" element={<TrainingLegacyRedirect />} />
+        <Route path="/training/creator" element={<TrainingLegacyRedirect />} />
+        <Route path="/training/:courseId" element={<TrainingLegacyRedirect />} />
+        <Route path="/:locale/training" element={<AppRoute><TrainingLayout><Training /></TrainingLayout></AppRoute>} />
+        <Route path="/:locale/training/creator" element={<AppRoute><TrainingLayout><TrainingCreator /></TrainingLayout></AppRoute>} />
+        <Route path="/:locale/training/:courseId" element={<AppRoute><TrainingLayout><TrainingCourse /></TrainingLayout></AppRoute>} />
       </Routes>
       {showBottomNav ? <BottomNav /> : null}
     </>

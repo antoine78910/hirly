@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 import training_service as training
@@ -38,20 +38,30 @@ def register_training_routes(router: APIRouter, get_current_user, db) -> None:
         return creator
 
     @router.get("/training/catalog")
-    async def training_catalog(user=Depends(get_current_user)):
-        courses = await training.list_published_courses(db)
-        enrollments = await training.list_user_enrollments(db, user.user_id)
+    async def training_catalog(
+        user=Depends(get_current_user),
+        lang: str = Query("en"),
+    ):
+        locale = training._normalize_lang(lang)
+        courses = await training.list_published_courses(db, locale)
+        enrollments = await training.list_user_enrollments(db, user.user_id, locale)
         creator = await training.get_creator_by_user_id(db, user.user_id)
         return {
             "courses": courses,
             "my_courses": enrollments,
             "is_training_creator": creator is not None,
             "creator_id": (creator or {}).get("creator_id"),
+            "lang": locale,
         }
 
     @router.get("/training/courses/{course_id}")
-    async def training_course_detail(course_id: str, user=Depends(get_current_user)):
-        detail = await training.get_course_detail(db, course_id, user.user_id)
+    async def training_course_detail(
+        course_id: str,
+        user=Depends(get_current_user),
+        lang: str = Query("en"),
+    ):
+        locale = training._normalize_lang(lang)
+        detail = await training.get_course_detail(db, course_id, user.user_id, locale)
         if not detail:
             raise HTTPException(status_code=404, detail="Course not found")
         return detail

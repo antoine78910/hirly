@@ -10,6 +10,7 @@ import {
   DEMO_HISTORY_LEFT,
   demoSwipeRow,
 } from "./demoData";
+import { getDemoTrainingCatalog, getDemoTrainingCourseDetail } from "./demoTrainingData";
 
 const state = {
   feedJobs: DEMO_JOBS.map((j) => ({ ...j })),
@@ -204,6 +205,23 @@ export function getDemoResponse(config) {
       overall: Math.min(95, DEMO_INTERVIEW_SCORE.overall + bonus),
       technical: Math.min(95, DEMO_INTERVIEW_SCORE.technical + bonus),
     };
+  }
+
+  if (method === "get" && path === "/training/catalog") {
+    return getDemoTrainingCatalog(params.lang);
+  }
+
+  if (method === "get" && path.startsWith("/training/courses/")) {
+    const courseId = path.replace("/training/courses/", "");
+    return getDemoTrainingCourseDetail(courseId, params.lang);
+  }
+
+  if (method === "post" && /^\/training\/courses\/[^/]+\/enroll$/.test(path)) {
+    return { ok: true, enrollment: { enrolled: true, progress_percent: 0, completed_module_ids: [] } };
+  }
+
+  if (method === "post" && /^\/training\/courses\/[^/]+\/modules\/[^/]+\/complete$/.test(path)) {
+    return { ok: true, progress_percent: 10, completed_module_ids: [] };
   }
 
   return undefined;
