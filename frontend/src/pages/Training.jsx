@@ -116,7 +116,7 @@ export default function Training() {
               {t("modulesHint")}
             </p>
             <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-              <span className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-zinc-100 px-3 py-1.5 text-sm font-medium text-zinc-800">
+              <span className="inline-flex items-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 py-1.5 text-sm font-medium text-violet-700">
                 <PlayCircle className="h-4 w-4" />
                 {t("courseModules")}
               </span>

@@ -12,7 +12,7 @@ export default function ModuleSectionNav({ sections, activeSectionId, onSelect }
             onClick={() => onSelect(section.section_id)}
             className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
               active
-                ? "bg-zinc-900 text-white"
+                ? "bg-violet-600 text-white"
                 : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
             }`}
           >

@@ -7,13 +7,13 @@ function Callout({ variant, text }) {
       className={
         isWarning
           ? "flex gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
-          : "flex gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-900"
+          : "flex gap-3 rounded-lg border border-violet-200 bg-violet-50/60 px-4 py-3 text-sm text-violet-950"
       }
     >
       {isWarning ? (
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden />
       ) : (
-        <Info className="mt-0.5 h-4 w-4 shrink-0 text-zinc-500" aria-hidden />
+        <Info className="mt-0.5 h-4 w-4 shrink-0 text-violet-500" aria-hidden />
       )}
       <p className="leading-relaxed">{text}</p>
     </div>
