@@ -8,6 +8,7 @@ import { useTrainingLocale } from "../context/TrainingLocaleContext";
 import TrainingShell, { TrainingHero, useTrainingPageMode } from "../components/training/TrainingShell";
 import ModuleGalleryCard from "../components/training/ModuleGalleryCard";
 import { fetchTrainingCatalog, fetchTrainingCourseDetail } from "../lib/trainingData";
+import { TRAINING_COURSE_ID } from "../lib/demoTrainingData";
 import {
   parseTrainingLocale,
   trainingModulePath,
@@ -34,13 +35,9 @@ export default function Training() {
       setCatalog(courses);
       if (data.is_training_creator) setIsTrainingCreator(true);
 
-      const firstCourseId = courses[0]?.course_id;
-      if (!firstCourseId) {
-        setCatalogModules([]);
-        return;
-      }
+      const firstCourseId = courses[0]?.course_id || TRAINING_COURSE_ID;
       const detail = await fetchTrainingCourseDetail(firstCourseId, lang);
-      setCatalogModules(detail?.modules || []);
+      setCatalogModules(detail?.modules?.length ? detail.modules : []);
     } catch (e) {
       toast.error(e?.response?.data?.detail || t("loadError"));
     } finally {
@@ -107,7 +104,7 @@ export default function Training() {
         />
       )}
     >
-      {featured && catalogModules.length ? (
+      {featured && catalogModules.length > 0 ? (
         <section className="border-b border-zinc-200/80 bg-white px-4 py-8 sm:px-8 sm:py-10">
           <div className="mx-auto max-w-6xl">
             <p className="text-sm leading-relaxed text-zinc-500 sm:text-base">
@@ -131,7 +128,11 @@ export default function Training() {
                     index={index}
                     active={index === 0}
                     locked={false}
-                    onSelect={() => navigate(trainingModulePath(routeLocale, featured.course_id, mod.module_id))}
+                    onSelect={() => {
+                      const courseId = featured.course_id || TRAINING_COURSE_ID;
+                      const firstSection = mod.sections?.[0]?.section_id;
+                      navigate(trainingModulePath(routeLocale, courseId, mod.module_id, firstSection));
+                    }}
                     t={t}
                   />
                 ))}

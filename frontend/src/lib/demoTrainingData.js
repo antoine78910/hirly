@@ -1,11 +1,13 @@
-import { moduleContentFor } from "./trainingModuleContent";
+import { moduleExtrasFor } from "./trainingModuleContent";
 
 const COURSE_ID = "course_job_search_mastery";
+
+export const TRAINING_COURSE_ID = COURSE_ID;
 
 const MODULES_EN = [
   { module_id: "mod_getting_started", title: "Getting Started", description: "Set up your workspace and understand how the program works.", category: "fundamentals", sort_order: 1, duration_seconds: 480, video_url: "", completed: false },
   { module_id: "mod_warm_up", title: "Warm Up Playbook", description: "TikTok & IG warmup SOP before you post career content.", category: "fundamentals", sort_order: 2, duration_seconds: 420, video_url: "", completed: false },
-  { module_id: "mod_creating_content", title: "Creating Content", description: "How to plan, script, and record your talking-head videos.", category: "application", sort_order: 3, duration_seconds: 600, video_url: "", completed: false },
+  { module_id: "mod_creating_content", title: "Creating Content", description: "Filming, Hirly demos, and editing — three sub-chapters with video lessons.", category: "application", sort_order: 3, duration_seconds: 600, video_url: "", completed: false },
   { module_id: "mod_content_bank", title: "Content Bank Examples", description: "Reference scripts and formats you can reuse and adapt.", category: "application", sort_order: 4, duration_seconds: 540, video_url: "", completed: false },
   { module_id: "mod_content_policy", title: "Content Policy & Payment", description: "Guidelines, compliance, and how payments work.", category: "application", sort_order: 5, duration_seconds: 480, video_url: "", completed: false },
   { module_id: "mod_account_management", title: "Account Management", description: "Manage your profile, settings, and creator account.", category: "interview", sort_order: 6, duration_seconds: 420, video_url: "", completed: false },
@@ -17,7 +19,7 @@ const MODULES_EN = [
 const MODULES_FR = [
   { module_id: "mod_getting_started", title: "Pour bien commencer", description: "Configure ton espace et comprends comment fonctionne le programme.", category: "fundamentals", sort_order: 1, duration_seconds: 480, video_url: "", completed: false },
   { module_id: "mod_warm_up", title: "Guide d'échauffement", description: "SOP warmup TikTok & IG avant de publier du contenu carrière.", category: "fundamentals", sort_order: 2, duration_seconds: 420, video_url: "", completed: false },
-  { module_id: "mod_creating_content", title: "Créer du contenu", description: "Comment planifier, scripter et enregistrer tes vidéos face caméra.", category: "application", sort_order: 3, duration_seconds: 600, video_url: "", completed: false },
+  { module_id: "mod_creating_content", title: "Créer du contenu", description: "Tournage, démos Hirly et montage — trois sous-chapitres avec vidéos.", category: "application", sort_order: 3, duration_seconds: 600, video_url: "", completed: false },
   { module_id: "mod_content_bank", title: "Exemples banque de contenu", description: "Scripts et formats de référence à réutiliser et adapter.", category: "application", sort_order: 4, duration_seconds: 540, video_url: "", completed: false },
   { module_id: "mod_content_policy", title: "Politique de contenu & paiement", description: "Règles, conformité et fonctionnement des paiements.", category: "application", sort_order: 5, duration_seconds: 480, video_url: "", completed: false },
   { module_id: "mod_account_management", title: "Gestion du compte", description: "Gère ton profil, tes paramètres et ton compte créateur.", category: "interview", sort_order: 6, duration_seconds: 420, video_url: "", completed: false },
@@ -57,14 +59,18 @@ export function getDemoTrainingCatalog(lang = "en") {
 }
 
 export function getDemoTrainingCourseDetail(courseId, lang = "en") {
-  if (courseId !== COURSE_ID) return undefined;
+  if (courseId && courseId !== COURSE_ID) return undefined;
   const modules = lang === "fr" ? MODULES_FR : MODULES_EN;
   return {
     course: courseForLang(lang),
-    modules: modules.map((m) => ({
-      ...m,
-      content: moduleContentFor(m.module_id, lang) || [],
-    })),
+    modules: modules.map((m) => {
+      const extras = moduleExtrasFor(m.module_id, lang);
+      return {
+        ...m,
+        content: extras.content,
+        sections: extras.sections,
+      };
+    }),
     lang,
     enrollment: { enrolled: false, progress_percent: 0, completed_module_ids: [] },
     creator: {

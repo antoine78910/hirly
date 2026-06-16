@@ -1,43 +1,49 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { CheckCircle2, Loader2, Play } from "lucide-react";
-import { api } from "../lib/api";
+import { CheckCircle2, ChevronRight, Loader2, Play } from "lucide-react";
 import { useTrainingLocale } from "../context/TrainingLocaleContext";
 import { TrainingTopBar, useTrainingPageMode } from "../components/training/TrainingShell";
 import ModuleDocView from "../components/training/ModuleDocView";
-import { fetchTrainingCourseDetail } from "../lib/trainingData";
+import ModuleSectionNav from "../components/training/ModuleSectionNav";
+import { fetchTrainingCourseDetail, tryCompleteModule, tryEnrollCourse } from "../lib/trainingData";
 import {
   parseTrainingLocale,
   trainingHubPath,
   trainingModulePath,
 } from "../lib/trainingRoutes";
 
-function VideoPlayer({ url, t }) {
-  if (!url) return null;
+function VideoBlock({ url, t }) {
+  if (url) {
+    const embed = url.includes("youtube.com/embed") || url.includes("youtu.be")
+      ? url.replace("watch?v=", "embed/").replace("youtu.be/", "youtube.com/embed/")
+      : url;
 
-  const embed = url.includes("youtube.com/embed") || url.includes("youtu.be")
-    ? url.replace("watch?v=", "embed/").replace("youtu.be/", "youtube.com/embed/")
-    : url;
-
-  if (embed.includes("youtube.com/embed") || embed.includes("player.vimeo.com")) {
-    return (
-      <div className="overflow-hidden rounded-lg bg-zinc-900 shadow-lg ring-1 ring-zinc-700/50">
-        <div className="relative aspect-video">
-          <iframe
-            title={t("videoTitle")}
-            src={embed}
-            className="absolute inset-0 h-full w-full"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-          />
+    if (embed.includes("youtube.com/embed") || embed.includes("player.vimeo.com")) {
+      return (
+        <div className="overflow-hidden rounded-lg bg-zinc-900 shadow-lg ring-1 ring-zinc-700/50">
+          <div className="relative aspect-video">
+            <iframe
+              title={t("videoTitle")}
+              src={embed}
+              className="absolute inset-0 h-full w-full"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
         </div>
-      </div>
+      );
+    }
+
+    return (
+      <video src={url} controls className="aspect-video w-full rounded-lg bg-black ring-1 ring-zinc-700/50" />
     );
   }
 
   return (
-    <video src={url} controls className="aspect-video w-full rounded-lg bg-black ring-1 ring-zinc-700/50" />
+    <div className="flex aspect-video items-center justify-center rounded-lg bg-zinc-900 text-sm text-zinc-400">
+      {t("videoSoon")}
+    </div>
   );
 }
 
@@ -55,6 +61,8 @@ export default function TrainingCourse() {
   const [activeModuleId, setActiveModuleId] = useState(null);
 
   const hubPath = trainingHubPath(routeLocale);
+  const moduleParam = searchParams.get("module");
+  const sectionParam = searchParams.get("section");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -67,10 +75,9 @@ export default function TrainingCourse() {
       }
       setData(payload);
       const mods = payload.modules || [];
-      const fromUrl = searchParams.get("module");
       const firstIncomplete = mods.find((m) => !m.completed);
       setActiveModuleId((prev) => {
-        if (fromUrl && mods.some((m) => m.module_id === fromUrl)) return fromUrl;
+        if (moduleParam && mods.some((m) => m.module_id === moduleParam)) return moduleParam;
         if (prev && mods.some((m) => m.module_id === prev)) return prev;
         return (firstIncomplete || mods[0])?.module_id || null;
       });
@@ -80,21 +87,53 @@ export default function TrainingCourse() {
     } finally {
       setLoading(false);
     }
-  }, [courseId, hubPath, lang, navigate, searchParams, t]);
+  }, [courseId, hubPath, lang, moduleParam, navigate, t]);
 
   useEffect(() => { load(); }, [load]);
 
   const modules = data?.modules || [];
-  const enrollment = data?.enrollment || { enrolled: false };
   const activeModule = useMemo(
     () => modules.find((m) => m.module_id === activeModuleId) || modules[0],
     [modules, activeModuleId],
   );
 
+  const sections = activeModule?.sections || [];
+  const hasSections = sections.length > 0;
+
+  const activeSection = useMemo(() => {
+    if (!hasSections) return null;
+    if (sectionParam && sections.some((s) => s.section_id === sectionParam)) {
+      return sections.find((s) => s.section_id === sectionParam);
+    }
+    return sections[0];
+  }, [hasSections, sectionParam, sections]);
+
   useEffect(() => {
-    if (!activeModuleId || enrollment.enrolled || loading) return;
-    api.post(`/training/courses/${courseId}/enroll`).then(() => load()).catch(() => {});
-  }, [activeModuleId, courseId, enrollment.enrolled, load, loading]);
+    if (!hasSections || !activeModule || !activeSection) return;
+    if (sectionParam === activeSection.section_id) return;
+    navigate(
+      trainingModulePath(routeLocale, courseId, activeModule.module_id, activeSection.section_id),
+      { replace: true },
+    );
+  }, [
+    activeModule,
+    activeSection,
+    courseId,
+    hasSections,
+    navigate,
+    routeLocale,
+    sectionParam,
+  ]);
+
+  const activeSectionIndex = hasSections
+    ? sections.findIndex((s) => s.section_id === activeSection?.section_id)
+    : -1;
+  const hasNextSection = hasSections && activeSectionIndex >= 0 && activeSectionIndex < sections.length - 1;
+
+  useEffect(() => {
+    if (!activeModuleId || loading) return;
+    tryEnrollCourse(courseId);
+  }, [activeModuleId, courseId, loading]);
 
   useEffect(() => {
     if (!loading && data && !activeModule) {
@@ -102,17 +141,45 @@ export default function TrainingCourse() {
     }
   }, [loading, data, activeModule, hubPath, navigate]);
 
+  const displayVideoUrl = hasSections
+    ? activeSection?.video_url
+    : activeModule?.video_url;
+
+  const displayContent = hasSections
+    ? activeSection?.content
+    : activeModule?.content;
+
+  const selectSection = (sectionId) => {
+    navigate(trainingModulePath(routeLocale, courseId, activeModule.module_id, sectionId), { replace: true });
+  };
+
+  const goToNextSection = () => {
+    if (!hasNextSection) return;
+    const nextSection = sections[activeSectionIndex + 1];
+    navigate(
+      trainingModulePath(routeLocale, courseId, activeModule.module_id, nextSection.section_id),
+      { replace: true },
+    );
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const markComplete = async () => {
     if (!activeModule) return;
+    if (hasNextSection) {
+      goToNextSection();
+      return;
+    }
     setCompleting(true);
     try {
-      await api.post(`/training/courses/${courseId}/modules/${activeModule.module_id}/complete`);
+      await tryCompleteModule(courseId, activeModule.module_id);
       await load();
       const idx = modules.findIndex((m) => m.module_id === activeModule.module_id);
       const next = modules[idx + 1];
       if (next) {
         setActiveModuleId(next.module_id);
-        navigate(trainingModulePath(routeLocale, courseId, next.module_id), { replace: true });
+        const nextSections = next.sections || [];
+        const nextSection = nextSections[0]?.section_id;
+        navigate(trainingModulePath(routeLocale, courseId, next.module_id, nextSection), { replace: true });
       } else {
         toast.success(t("courseCompleted"));
         navigate(hubPath, { replace: true });
@@ -150,11 +217,23 @@ export default function TrainingCourse() {
             {activeModule.title}
           </h1>
 
-          <VideoPlayer url={activeModule.video_url} t={t} />
+          {hasSections ? (
+            <ModuleSectionNav
+              sections={sections}
+              activeSectionId={activeSection?.section_id}
+              onSelect={selectSection}
+            />
+          ) : null}
 
-          {activeModule.content?.length ? (
-            <ModuleDocView blocks={activeModule.content} />
-          ) : activeModule.description ? (
+          {hasSections && activeSection ? (
+            <h2 className="text-lg font-semibold text-zinc-800">{activeSection.title}</h2>
+          ) : null}
+
+          <VideoBlock url={displayVideoUrl} t={t} />
+
+          {displayContent?.length ? (
+            <ModuleDocView blocks={displayContent} />
+          ) : !hasSections && activeModule.description ? (
             <p className="leading-relaxed text-zinc-700">{activeModule.description}</p>
           ) : null}
 
@@ -162,11 +241,16 @@ export default function TrainingCourse() {
             <button
               type="button"
               onClick={markComplete}
-              disabled={completing || activeModule.completed}
+              disabled={completing || (!hasNextSection && activeModule.completed)}
               className="inline-flex items-center gap-2 rounded-md bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50"
             >
               {completing ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
+              ) : hasNextSection ? (
+                <>
+                  {t("next")}
+                  <ChevronRight className="h-4 w-4" />
+                </>
               ) : activeModule.completed ? (
                 <>
                   <CheckCircle2 className="h-4 w-4" />

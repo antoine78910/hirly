@@ -38,9 +38,13 @@ export function trainingHubPath(locale) {
   return isTrainingLocale(locale) ? trainingPath(locale) : "/training";
 }
 
-export function trainingModulePath(locale, courseId, moduleId) {
+export function trainingModulePath(locale, courseId, moduleId, sectionId) {
   const base = trainingCoursePath(locale, courseId);
-  return moduleId ? `${base}?module=${encodeURIComponent(moduleId)}` : base;
+  const params = new URLSearchParams();
+  if (moduleId) params.set("module", moduleId);
+  if (sectionId) params.set("section", sectionId);
+  const qs = params.toString();
+  return qs ? `${base}?${qs}` : base;
 }
 
 export function replaceTrainingLocale(pathname, search, nextLocale) {

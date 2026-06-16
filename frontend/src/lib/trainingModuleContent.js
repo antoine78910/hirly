@@ -1,5 +1,12 @@
 /** Demo / fallback structured doc blocks (mirrors backend training_module_content.py). */
 
+import {
+  CREATING_CONTENT_SECTIONS_EN,
+  CREATING_CONTENT_SECTIONS_FR,
+} from "./creatingContentSections";
+
+export { CREATING_CONTENT_SECTIONS_EN, CREATING_CONTENT_SECTIONS_FR };
+
 export const WARM_UP_PLAYBOOK_EN = [
   {
     type: "callout",
@@ -283,6 +290,20 @@ export const WARM_UP_PLAYBOOK_FR = [
 ];
 
 export function moduleContentFor(moduleId, lang = "en") {
-  if (moduleId !== "mod_warm_up") return null;
-  return lang === "fr" ? WARM_UP_PLAYBOOK_FR : WARM_UP_PLAYBOOK_EN;
+  if (moduleId === "mod_warm_up") {
+    return lang === "fr" ? WARM_UP_PLAYBOOK_FR : WARM_UP_PLAYBOOK_EN;
+  }
+  return null;
+}
+
+export function moduleSectionsFor(moduleId, lang = "en") {
+  if (moduleId !== "mod_creating_content") return [];
+  return lang === "fr" ? CREATING_CONTENT_SECTIONS_FR : CREATING_CONTENT_SECTIONS_EN;
+}
+
+export function moduleExtrasFor(moduleId, lang = "en") {
+  return {
+    content: moduleContentFor(moduleId, lang) || [],
+    sections: moduleSectionsFor(moduleId, lang),
+  };
 }
