@@ -10,6 +10,11 @@ import {
   WARM_UP_SECTIONS_FR,
 } from "./warmupSections";
 
+import {
+  CONTENT_BANK_SECTIONS_EN,
+  CONTENT_BANK_SECTIONS_FR,
+} from "./contentBankSections";
+
 export { CREATING_CONTENT_SECTIONS_EN, CREATING_CONTENT_SECTIONS_FR };
 
 export const WARM_UP_PLAYBOOK_EN = [
@@ -307,6 +312,9 @@ export function moduleSectionsFor(moduleId, lang = "en") {
   }
   if (moduleId === "mod_creating_content") {
     return lang === "fr" ? CREATING_CONTENT_SECTIONS_FR : CREATING_CONTENT_SECTIONS_EN;
+  }
+  if (moduleId === "mod_content_bank") {
+    return lang === "fr" ? CONTENT_BANK_SECTIONS_FR : CONTENT_BANK_SECTIONS_EN;
   }
   return [];
 }
