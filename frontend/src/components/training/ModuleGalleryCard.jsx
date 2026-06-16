@@ -6,6 +6,11 @@ function coverLabel(title) {
   return parts[0]?.trim() || title;
 }
 
+function cardGradient(category) {
+  if (category === "reference") return "from-teal-800 to-teal-700";
+  return "from-zinc-900 to-zinc-700";
+}
+
 export default function ModuleGalleryCard({
   module,
   index,
@@ -14,18 +19,27 @@ export default function ModuleGalleryCard({
   onSelect,
   t,
 }) {
+  const isReference = module.category === "reference";
+
   return (
     <button
       type="button"
       onClick={onSelect}
       disabled={locked}
       className={`group flex flex-col overflow-hidden rounded-md text-left shadow-md transition-all ${
-        active ? "ring-2 ring-violet-500 ring-offset-2 ring-offset-white" : "hover:ring-1 hover:ring-violet-300/40"
+        active
+          ? `ring-2 ring-offset-2 ring-offset-white ${isReference ? "ring-teal-500" : "ring-zinc-700"}`
+          : "hover:ring-1 hover:ring-zinc-400/40"
       } ${locked ? "cursor-not-allowed opacity-45" : ""}`}
     >
       <div
-        className="relative flex min-h-[120px] items-center justify-center bg-gradient-to-br from-violet-700 to-violet-600 px-4 py-5 sm:min-h-[132px]"
+        className={`relative flex min-h-[120px] items-center justify-center bg-gradient-to-br ${cardGradient(module.category)} px-4 py-5 sm:min-h-[132px]`}
       >
+        {isReference && (
+          <span className="absolute left-3 top-3 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/70">
+            Ref
+          </span>
+        )}
         <p className="text-center font-display text-xl font-bold leading-tight text-white sm:text-2xl">
           {coverLabel(module.title)}
         </p>
