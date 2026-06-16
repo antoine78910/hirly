@@ -31,6 +31,7 @@ import TrainingCreator from "@/pages/TrainingCreator";
 import TrainingLayout from "@/components/training/TrainingLayout";
 import TrainingLayoutDefault from "@/components/training/TrainingLayoutDefault";
 import TrainingLegacyRedirect from "@/components/training/TrainingLegacyRedirect";
+import TrainingErrorBoundary from "@/components/training/TrainingErrorBoundary";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import BottomNav from "@/components/BottomNav";
 import ScrollManager from "@/components/app/ScrollManager";
@@ -40,6 +41,16 @@ import { isTrainingRoute } from "@/lib/trainingRoutes";
 function AppRoute({ children, requireProfile = false }) {
   if (devBypassAuth) return children;
   return <ProtectedRoute requireProfile={requireProfile}>{children}</ProtectedRoute>;
+}
+
+function TrainingRoute({ children, localized = false }) {
+  const layout = localized ? TrainingLayout : TrainingLayoutDefault;
+  const Layout = layout;
+  return (
+    <TrainingErrorBoundary>
+      <Layout>{children}</Layout>
+    </TrainingErrorBoundary>
+  );
 }
 
 function isTrainingRoutePath(pathname) {
@@ -59,6 +70,15 @@ function shouldShowBottomNav(pathname) {
 function AppRouter() {
   const location = useLocation();
   const showBottomNav = shouldShowBottomNav(location.pathname);
+
+  if (location.pathname.length > 1 && location.pathname.endsWith("/")) {
+    return (
+      <Navigate
+        to={`${location.pathname.replace(/\/+$/, "")}${location.search}${location.hash}`}
+        replace
+      />
+    );
+  }
 
   return (
     <>
@@ -88,12 +108,12 @@ function AppRouter() {
         <Route path="/referral" element={<AppRoute><Referral /></AppRoute>} />
         <Route path="/settings" element={<AppRoute><Settings /></AppRoute>} />
         <Route path="/history" element={<AppRoute requireProfile><History /></AppRoute>} />
-        <Route path="/training" element={<AppRoute><TrainingLayoutDefault><Training /></TrainingLayoutDefault></AppRoute>} />
+        <Route path="/training" element={<TrainingRoute><Training /></TrainingRoute>} />
         <Route path="/training/creator" element={<TrainingLegacyRedirect />} />
-        <Route path="/training/:courseId" element={<AppRoute><TrainingLayoutDefault><TrainingCourse /></TrainingLayoutDefault></AppRoute>} />
-        <Route path="/:locale/training" element={<AppRoute><TrainingLayout><Training /></TrainingLayout></AppRoute>} />
+        <Route path="/training/:courseId" element={<TrainingRoute><TrainingCourse /></TrainingRoute>} />
+        <Route path="/:locale/training" element={<TrainingRoute localized><Training /></TrainingRoute>} />
         <Route path="/:locale/training/creator" element={<AppRoute><TrainingLayout><TrainingCreator /></TrainingLayout></AppRoute>} />
-        <Route path="/:locale/training/:courseId" element={<AppRoute><TrainingLayout><TrainingCourse /></TrainingLayout></AppRoute>} />
+        <Route path="/:locale/training/:courseId" element={<TrainingRoute localized><TrainingCourse /></TrainingRoute>} />
       </Routes>
       {showBottomNav ? <BottomNav /> : null}
     </>

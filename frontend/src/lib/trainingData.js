@@ -6,7 +6,7 @@ import {
 } from "./demoTrainingData";
 
 /** Set REACT_APP_TRAINING_API=true when the live training backend is ready. */
-function useLiveTrainingApi() {
+function isLiveTrainingApiEnabled() {
   return process.env.REACT_APP_TRAINING_API === "true";
 }
 
@@ -49,7 +49,7 @@ function mergeModules(apiModules, staticModules) {
 /** Load catalog — static bundled data by default (no backend required). */
 export async function fetchTrainingCatalog(lang) {
   const staticData = demoCatalog(lang);
-  if (!useLiveTrainingApi()) return staticData;
+  if (!isLiveTrainingApiEnabled()) return staticData;
 
   try {
     const { data } = await api.get("/training/catalog", { params: { lang } });
@@ -74,7 +74,7 @@ export async function fetchTrainingCatalog(lang) {
 export async function fetchTrainingCourseDetail(courseId, lang) {
   const staticData = staticCourseDetail(lang);
   if (!staticData) return undefined;
-  if (!useLiveTrainingApi()) return staticData;
+  if (!isLiveTrainingApiEnabled()) return staticData;
 
   const id = courseId || TRAINING_COURSE_ID;
   try {
@@ -96,7 +96,7 @@ export async function fetchTrainingCourseDetail(courseId, lang) {
 
 /** Best-effort API calls — never block UX when backend is unavailable. */
 export async function tryEnrollCourse(courseId) {
-  if (!useLiveTrainingApi()) return;
+  if (!isLiveTrainingApiEnabled()) return;
   try {
     await api.post(`/training/courses/${courseId}/enroll`);
   } catch {
@@ -105,7 +105,7 @@ export async function tryEnrollCourse(courseId) {
 }
 
 export async function tryCompleteModule(courseId, moduleId) {
-  if (!useLiveTrainingApi()) return;
+  if (!isLiveTrainingApiEnabled()) return;
   try {
     await api.post(`/training/courses/${courseId}/modules/${moduleId}/complete`);
   } catch {

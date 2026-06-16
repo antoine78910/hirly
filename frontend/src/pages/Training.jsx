@@ -39,7 +39,12 @@ export default function Training() {
       const detail = await fetchTrainingCourseDetail(firstCourseId, lang);
       setCatalogModules(detail?.modules?.length ? detail.modules : []);
     } catch (e) {
-      toast.error(e?.response?.data?.detail || t("loadError"));
+      const fallback = await fetchTrainingCourseDetail(TRAINING_COURSE_ID, lang);
+      setCatalog([{ course_id: TRAINING_COURSE_ID }]);
+      setCatalogModules(fallback?.modules || []);
+      if (!fallback?.modules?.length) {
+        toast.error(e?.response?.data?.detail || t("loadError"));
+      }
     } finally {
       setLoading(false);
     }

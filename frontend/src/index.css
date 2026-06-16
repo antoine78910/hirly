@@ -282,7 +282,8 @@ html.app-shell-locked .App {
   overflow: hidden;
 }
 
-body.training-page [data-testid="bottom-nav"] {
+body.training-page [data-testid="bottom-nav"],
+body[data-training-page="true"] [data-testid="bottom-nav"] {
   display: none !important;
 }
 

@@ -35,12 +35,14 @@ export default function ScrollManager() {
 
     html.classList.toggle("app-shell-locked", appShell);
     body.classList.toggle("app-shell-locked", appShell);
+    body.dataset.trainingPage = isTrainingRoute(pathname) ? "true" : "";
 
     return () => {
       html.classList.remove("document-scroll", "app-shell-locked");
       body.classList.remove("document-scroll", "app-shell-locked");
       root?.classList.remove("document-scroll");
       app?.classList.remove("document-scroll");
+      delete body.dataset.trainingPage;
     };
   }, [pathname]);
 
