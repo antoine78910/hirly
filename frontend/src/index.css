@@ -286,6 +286,26 @@ body.training-page [data-testid="bottom-nav"] {
   display: none !important;
 }
 
+/* Training: always allow native wheel / trackpad scroll on the document. */
+html.training-page-active,
+body.training-page {
+  height: auto !important;
+  min-height: 100dvh;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+html.training-page-active #root,
+html.training-page-active .App,
+body.training-page #root,
+body.training-page .App {
+  height: auto !important;
+  min-height: 100dvh;
+  overflow: visible !important;
+}
+
 /* Marketing + training: native document scroll (mouse wheel / trackpad). */
 html.document-scroll,
 body.document-scroll {

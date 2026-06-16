@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useLayoutEffect } from "react";
 import { useLocation } from "react-router-dom";
 
 import { isTrainingRoute } from "../../lib/trainingRoutes";
@@ -19,7 +19,7 @@ function usesAppShellScroll(pathname) {
 export default function ScrollManager() {
   const { pathname } = useLocation();
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const html = document.documentElement;
     const body = document.body;
     const root = document.getElementById("root");

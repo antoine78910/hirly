@@ -11,13 +11,23 @@ import { parseTrainingLocale, trainingHubPath, trainingPath } from "../../lib/tr
 
 export function useTrainingPageMode() {
   useEffect(() => {
-    document.body.classList.add("training-page");
-    document.documentElement.classList.remove("app-shell-locked");
-    document.body.classList.remove("app-shell-locked");
+    const html = document.documentElement;
+    const body = document.body;
+    const root = document.getElementById("root");
+    const app = document.querySelector(".App");
+
+    html.classList.add("training-page-active", "document-scroll");
+    body.classList.add("training-page", "document-scroll");
+    root?.classList.add("document-scroll");
+    app?.classList.add("document-scroll");
+    html.classList.remove("app-shell-locked");
+    body.classList.remove("app-shell-locked");
+
     return () => {
-      document.body.classList.remove("training-page");
-      document.documentElement.classList.remove("app-shell-locked");
-      document.body.classList.remove("app-shell-locked");
+      html.classList.remove("training-page-active", "document-scroll", "app-shell-locked");
+      body.classList.remove("training-page", "document-scroll", "app-shell-locked");
+      root?.classList.remove("document-scroll");
+      app?.classList.remove("document-scroll");
     };
   }, []);
 }
