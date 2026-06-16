@@ -1,6 +1,6 @@
 /** Warm Up module sub-chapters. */
 
-import { WARM_UP_PLAYBOOK_EN, WARM_UP_PLAYBOOK_FR } from "./trainingModuleContent";
+import { WARM_UP_PLAYBOOK_EN, WARM_UP_PLAYBOOK_FR } from "./warmUpPlaybook";
 
 function warmUpPostsEN() {
   return [
