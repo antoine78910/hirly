@@ -27,8 +27,19 @@ export function trainingPath(locale, ...segments) {
   return rest ? `/${loc}/training/${rest}` : `/${loc}/training`;
 }
 
+export function trainingCoursePath(locale, courseId) {
+  if (!isTrainingLocale(locale)) {
+    return courseId ? `/training/${courseId}` : "/training";
+  }
+  return trainingPath(locale, courseId);
+}
+
+export function trainingHubPath(locale) {
+  return isTrainingLocale(locale) ? trainingPath(locale) : "/training";
+}
+
 export function trainingModulePath(locale, courseId, moduleId) {
-  const base = trainingPath(locale, courseId);
+  const base = trainingCoursePath(locale, courseId);
   return moduleId ? `${base}?module=${encodeURIComponent(moduleId)}` : base;
 }
 
@@ -37,6 +48,9 @@ export function replaceTrainingLocale(pathname, search, nextLocale) {
   if (pathname.match(/^\/(en|fr)\/training/)) {
     return pathname.replace(/^\/(en|fr)/, `/${loc}`) + (search || "");
   }
+  if (pathname === "/training") return trainingPath(loc) + (search || "");
+  const courseMatch = pathname.match(/^\/training\/([^/]+)$/);
+  if (courseMatch) return trainingPath(loc, courseMatch[1]) + (search || "");
   return trainingPath(loc) + (search || "");
 }
 

@@ -31,7 +31,6 @@ import RolePicker from "../components/RolePicker";
 import { TitleHeader } from "../components/app/AppScreenHeader";
 import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
 import { trackEvent } from "../lib/analytics";
-import { trainingPath, storedTrainingLocale } from "../lib/trainingRoutes";
 
 const PROFILE_TABS = [
   { key: "resume", label: "Resume", icon: FileText },
@@ -464,7 +463,7 @@ export default function Profile() {
 
         <button
           type="button"
-          onClick={() => navigate(trainingPath(storedTrainingLocale()))}
+          onClick={() => navigate("/training")}
           className="flex w-full items-center gap-3 rounded-2xl border border-zinc-200 bg-white px-4 py-3.5 text-left shadow-sm transition-colors hover:border-violet-200 hover:bg-violet-50/40"
           data-testid="profile-academy-card"
         >

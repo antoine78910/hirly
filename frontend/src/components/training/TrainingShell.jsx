@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { NavLink, useNavigate, useSearchParams } from "react-router-dom";
+import { NavLink, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   GraduationCap, LayoutDashboard, BookOpen, Sparkles, ArrowLeft, ChevronDown,
 } from "lucide-react";
@@ -7,7 +7,7 @@ import Logo from "../Logo";
 import { BRAND } from "../../lib/brand";
 import { useTrainingLocale } from "../../context/TrainingLocaleContext";
 import TrainingLanguageToggle from "./TrainingLanguageToggle";
-import { trainingPath } from "../../lib/trainingRoutes";
+import { parseTrainingLocale, trainingHubPath, trainingPath } from "../../lib/trainingRoutes";
 
 export function useTrainingPageMode() {
   useEffect(() => {
@@ -24,7 +24,10 @@ export function useTrainingPageMode() {
 
 export function TrainingTopBar({ actions, backTo }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const routeLocale = parseTrainingLocale(location.pathname);
   const { lang, t } = useTrainingLocale();
+  const homePath = trainingHubPath(routeLocale);
 
   return (
     <header className="sticky top-0 z-40 border-b border-zinc-200/70 bg-white/95 backdrop-blur-md">
@@ -42,7 +45,7 @@ export function TrainingTopBar({ actions, backTo }) {
           ) : null}
           <button
             type="button"
-            onClick={() => navigate(trainingPath(lang))}
+            onClick={() => navigate(homePath)}
             className="flex min-w-0 items-center gap-2"
           >
             <Logo size={24} />
@@ -101,8 +104,11 @@ export default function TrainingShell({
   hero,
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
+  const routeLocale = parseTrainingLocale(location.pathname);
   const { lang, t } = useTrainingLocale();
+  const hubPath = trainingHubPath(routeLocale);
   const learningTab = searchParams.get("tab") === "learning";
 
   return (
@@ -110,65 +116,67 @@ export default function TrainingShell({
       <TrainingTopBar actions={actions} />
       {hero}
 
-      <div className="mx-auto flex max-w-6xl gap-10 px-4 py-8 sm:px-8">
         {showSidebar ? (
-          <aside className="hidden w-52 shrink-0 lg:block">
-            <nav className="sticky top-20 space-y-0.5">
-              <button
-                type="button"
-                onClick={() => navigate(trainingPath(lang))}
-                className={`flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm font-medium ${
-                  !learningTab ? "bg-zinc-200/70 text-zinc-900" : "text-zinc-600 hover:bg-zinc-100"
-                }`}
-              >
-                <BookOpen className="h-4 w-4 opacity-70" />
-                {t("catalog")}
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate(`${trainingPath(lang)}?tab=learning`)}
-                className={`flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm font-medium ${
-                  learningTab ? "bg-zinc-200/70 text-zinc-900" : "text-zinc-600 hover:bg-zinc-100"
-                }`}
-              >
-                <Sparkles className="h-4 w-4 opacity-70" />
-                {t("myLearning")}
-              </button>
-              {isCreator ? (
-                <NavLink
-                  to={trainingPath(lang, "creator")}
-                  className={({ isActive }) => `flex items-center gap-2 rounded-md px-2.5 py-2 text-sm font-medium ${
-                    isActive ? "bg-zinc-200/70 text-zinc-900" : "text-zinc-600 hover:bg-zinc-100"
+          <div className="mx-auto flex max-w-6xl gap-10 px-4 py-8 sm:px-8">
+            <aside className="hidden w-52 shrink-0 lg:block">
+              <nav className="sticky top-20 space-y-0.5">
+                <button
+                  type="button"
+                  onClick={() => navigate(hubPath)}
+                  className={`flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm font-medium ${
+                    !learningTab ? "bg-zinc-200/70 text-zinc-900" : "text-zinc-600 hover:bg-zinc-100"
                   }`}
                 >
-                  <LayoutDashboard className="h-4 w-4 opacity-70" />
-                  {t("creatorStudio")}
-                </NavLink>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => navigate("/swipe")}
-                className="mt-6 flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm text-zinc-500 hover:bg-zinc-100"
-              >
-                <GraduationCap className="h-4 w-4" />
-                {t("returnToBrand", { brand: BRAND.NAME })}
-              </button>
-            </nav>
-          </aside>
-        ) : null}
+                  <BookOpen className="h-4 w-4 opacity-70" />
+                  {t("catalog")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate(`${hubPath}?tab=learning`)}
+                  className={`flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm font-medium ${
+                    learningTab ? "bg-zinc-200/70 text-zinc-900" : "text-zinc-600 hover:bg-zinc-100"
+                  }`}
+                >
+                  <Sparkles className="h-4 w-4 opacity-70" />
+                  {t("myLearning")}
+                </button>
+                {isCreator ? (
+                  <NavLink
+                    to={trainingPath(routeLocale || lang, "creator")}
+                    className={({ isActive }) => `flex items-center gap-2 rounded-md px-2.5 py-2 text-sm font-medium ${
+                      isActive ? "bg-zinc-200/70 text-zinc-900" : "text-zinc-600 hover:bg-zinc-100"
+                    }`}
+                  >
+                    <LayoutDashboard className="h-4 w-4 opacity-70" />
+                    {t("creatorStudio")}
+                  </NavLink>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => navigate("/swipe")}
+                  className="mt-6 flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm text-zinc-500 hover:bg-zinc-100"
+                >
+                  <GraduationCap className="h-4 w-4" />
+                  {t("returnToBrand", { brand: BRAND.NAME })}
+                </button>
+              </nav>
+            </aside>
 
-        <main className="min-w-0 flex-1">
-          {title && !hero ? (
-            <div className="mb-8">
-              <h1 className="font-display text-3xl font-bold tracking-tight text-zinc-900">
-                {title}
-              </h1>
-              {subtitle ? <p className="mt-2 max-w-2xl text-zinc-500">{subtitle}</p> : null}
-            </div>
-          ) : null}
-          {children}
-        </main>
-      </div>
+            <main className="min-w-0 flex-1">
+              {title && !hero ? (
+                <div className="mb-8">
+                  <h1 className="font-display text-3xl font-bold tracking-tight text-zinc-900">
+                    {title}
+                  </h1>
+                  {subtitle ? <p className="mt-2 max-w-2xl text-zinc-500">{subtitle}</p> : null}
+                </div>
+              ) : null}
+              {children}
+            </main>
+          </div>
+        ) : (
+          children
+        )}
     </div>
   );
 }

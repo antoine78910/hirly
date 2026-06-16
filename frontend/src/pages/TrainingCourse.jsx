@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { CheckCircle2, Loader2, Play } from "lucide-react";
 import { api } from "../lib/api";
 import { useTrainingLocale } from "../context/TrainingLocaleContext";
 import { TrainingTopBar, useTrainingPageMode } from "../components/training/TrainingShell";
 import ModuleDocView from "../components/training/ModuleDocView";
-import { trainingModulePath, trainingPath } from "../lib/trainingRoutes";
+import { fetchTrainingCourseDetail } from "../lib/trainingData";
+import {
+  parseTrainingLocale,
+  trainingHubPath,
+  trainingModulePath,
+} from "../lib/trainingRoutes";
 
 function VideoPlayer({ url, t }) {
   if (!url) return null;
@@ -41,16 +46,25 @@ export default function TrainingCourse() {
   const { courseId } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const routeLocale = parseTrainingLocale(location.pathname);
   const { lang, t } = useTrainingLocale();
   const [loading, setLoading] = useState(true);
   const [completing, setCompleting] = useState(false);
   const [data, setData] = useState(null);
   const [activeModuleId, setActiveModuleId] = useState(null);
 
+  const hubPath = trainingHubPath(routeLocale);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: payload } = await api.get(`/training/courses/${courseId}`, { params: { lang } });
+      const payload = await fetchTrainingCourseDetail(courseId, lang);
+      if (!payload) {
+        toast.error(t("courseNotFound"));
+        navigate(hubPath, { replace: true });
+        return;
+      }
       setData(payload);
       const mods = payload.modules || [];
       const fromUrl = searchParams.get("module");
@@ -62,16 +76,16 @@ export default function TrainingCourse() {
       });
     } catch (e) {
       toast.error(e?.response?.data?.detail || t("courseNotFound"));
-      navigate(trainingPath(lang), { replace: true });
+      navigate(hubPath, { replace: true });
     } finally {
       setLoading(false);
     }
-  }, [courseId, lang, navigate, searchParams, t]);
+  }, [courseId, hubPath, lang, navigate, searchParams, t]);
 
   useEffect(() => { load(); }, [load]);
 
   const modules = data?.modules || [];
-  const enrollment = data?.enrollment || {};
+  const enrollment = data?.enrollment || { enrolled: false };
   const activeModule = useMemo(
     () => modules.find((m) => m.module_id === activeModuleId) || modules[0],
     [modules, activeModuleId],
@@ -84,9 +98,9 @@ export default function TrainingCourse() {
 
   useEffect(() => {
     if (!loading && data && !activeModule) {
-      navigate(trainingPath(lang), { replace: true });
+      navigate(hubPath, { replace: true });
     }
-  }, [loading, data, activeModule, navigate]);
+  }, [loading, data, activeModule, hubPath, navigate]);
 
   const markComplete = async () => {
     if (!activeModule) return;
@@ -98,10 +112,10 @@ export default function TrainingCourse() {
       const next = modules[idx + 1];
       if (next) {
         setActiveModuleId(next.module_id);
-        navigate(trainingModulePath(lang, courseId, next.module_id), { replace: true });
+        navigate(trainingModulePath(routeLocale, courseId, next.module_id), { replace: true });
       } else {
         toast.success(t("courseCompleted"));
-        navigate(trainingPath(lang), { replace: true });
+        navigate(hubPath, { replace: true });
       }
     } catch (e) {
       toast.error(e?.response?.data?.detail || t("saveError"));
@@ -128,7 +142,7 @@ export default function TrainingCourse() {
 
   return (
     <div className="min-h-dvh bg-white text-zinc-900">
-      <TrainingTopBar backTo={trainingPath(lang)} />
+      <TrainingTopBar backTo={hubPath} />
 
       <main className="mx-auto max-w-3xl px-4 py-8 sm:px-8 sm:py-10">
         <div className="space-y-6">

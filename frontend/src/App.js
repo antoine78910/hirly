@@ -29,6 +29,7 @@ import Training from "@/pages/Training";
 import TrainingCourse from "@/pages/TrainingCourse";
 import TrainingCreator from "@/pages/TrainingCreator";
 import TrainingLayout from "@/components/training/TrainingLayout";
+import TrainingLayoutDefault from "@/components/training/TrainingLayoutDefault";
 import TrainingLegacyRedirect from "@/components/training/TrainingLegacyRedirect";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import BottomNav from "@/components/BottomNav";
@@ -87,9 +88,9 @@ function AppRouter() {
         <Route path="/referral" element={<AppRoute><Referral /></AppRoute>} />
         <Route path="/settings" element={<AppRoute><Settings /></AppRoute>} />
         <Route path="/history" element={<AppRoute requireProfile><History /></AppRoute>} />
-        <Route path="/training" element={<TrainingLegacyRedirect />} />
+        <Route path="/training" element={<AppRoute><TrainingLayoutDefault><Training /></TrainingLayoutDefault></AppRoute>} />
         <Route path="/training/creator" element={<TrainingLegacyRedirect />} />
-        <Route path="/training/:courseId" element={<TrainingLegacyRedirect />} />
+        <Route path="/training/:courseId" element={<AppRoute><TrainingLayoutDefault><TrainingCourse /></TrainingLayoutDefault></AppRoute>} />
         <Route path="/:locale/training" element={<AppRoute><TrainingLayout><Training /></TrainingLayout></AppRoute>} />
         <Route path="/:locale/training/creator" element={<AppRoute><TrainingLayout><TrainingCreator /></TrainingLayout></AppRoute>} />
         <Route path="/:locale/training/:courseId" element={<AppRoute><TrainingLayout><TrainingCourse /></TrainingLayout></AppRoute>} />

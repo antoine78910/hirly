@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Loader2, LayoutDashboard, PlayCircle } from "lucide-react";
 import { api } from "../lib/api";
@@ -7,11 +7,18 @@ import { useAuth } from "../context/AuthContext";
 import { useTrainingLocale } from "../context/TrainingLocaleContext";
 import TrainingShell, { TrainingHero, useTrainingPageMode } from "../components/training/TrainingShell";
 import ModuleGalleryCard from "../components/training/ModuleGalleryCard";
-import { trainingModulePath, trainingPath } from "../lib/trainingRoutes";
+import { fetchTrainingCatalog, fetchTrainingCourseDetail } from "../lib/trainingData";
+import {
+  parseTrainingLocale,
+  trainingModulePath,
+  trainingPath,
+} from "../lib/trainingRoutes";
 
 export default function Training() {
   useTrainingPageMode();
   const navigate = useNavigate();
+  const location = useLocation();
+  const routeLocale = parseTrainingLocale(location.pathname);
   const { lang, t } = useTrainingLocale();
   const { isTrainingCreator, setIsTrainingCreator } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -22,7 +29,7 @@ export default function Training() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await api.get("/training/catalog", { params: { lang } });
+      const data = await fetchTrainingCatalog(lang);
       const courses = data.courses || [];
       setCatalog(courses);
       if (data.is_training_creator) setIsTrainingCreator(true);
@@ -32,8 +39,8 @@ export default function Training() {
         setCatalogModules([]);
         return;
       }
-      const { data: detail } = await api.get(`/training/courses/${firstCourseId}`, { params: { lang } });
-      setCatalogModules(detail.modules || []);
+      const detail = await fetchTrainingCourseDetail(firstCourseId, lang);
+      setCatalogModules(detail?.modules || []);
     } catch (e) {
       toast.error(e?.response?.data?.detail || t("loadError"));
     } finally {
@@ -49,7 +56,7 @@ export default function Training() {
       await api.post("/training/creator/register", {});
       setIsTrainingCreator(true);
       toast.success(t("creatorUnlocked"));
-      navigate(trainingPath(lang, "creator"));
+      navigate(trainingPath(routeLocale || lang, "creator"));
     } catch (e) {
       toast.error(e?.response?.data?.detail || t("creatorError"));
     } finally {
@@ -60,7 +67,7 @@ export default function Training() {
   const headerActions = isTrainingCreator ? (
     <button
       type="button"
-      onClick={() => navigate(trainingPath(lang, "creator"))}
+      onClick={() => navigate(trainingPath(routeLocale || lang, "creator"))}
       className="inline-flex items-center gap-1.5 rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-800"
     >
       <LayoutDashboard className="h-4 w-4" />
@@ -124,7 +131,7 @@ export default function Training() {
                     index={index}
                     active={index === 0}
                     locked={false}
-                    onSelect={() => navigate(trainingModulePath(lang, featured.course_id, mod.module_id))}
+                    onSelect={() => navigate(trainingModulePath(routeLocale, featured.course_id, mod.module_id))}
                     t={t}
                   />
                 ))}
@@ -132,7 +139,18 @@ export default function Training() {
             </div>
           </div>
         </section>
-      ) : null}
+      ) : (
+        <section className="px-4 py-12 text-center sm:px-8">
+          <p className="text-sm text-zinc-500">{t("noCourses")}</p>
+          <button
+            type="button"
+            onClick={load}
+            className="mt-4 rounded-md border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+          >
+            Retry
+          </button>
+        </section>
+      )}
     </TrainingShell>
   );
 }
