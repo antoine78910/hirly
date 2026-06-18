@@ -1,4 +1,117 @@
-import { AlertTriangle, Info } from "lucide-react";
+import { AlertTriangle, ExternalLink, Info } from "lucide-react";
+
+const URL_PATTERN = /(https?:\/\/[^\s<]+[^\s<.,;:!?])/g;
+const MARKDOWN_LINK_PATTERN = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g;
+
+function RichText({ text, className = "" }) {
+  if (!text) return null;
+
+  const parts = [];
+  let lastIndex = 0;
+  let match;
+
+  const combined = new RegExp(
+    `${MARKDOWN_LINK_PATTERN.source}|${URL_PATTERN.source}`,
+    "g",
+  );
+
+  while ((match = combined.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+
+    if (match[0].startsWith("[")) {
+      parts.push(
+        <a
+          key={`md-${match.index}`}
+          href={match[2]}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-medium text-violet-700 underline decoration-violet-300 underline-offset-2 hover:text-violet-900"
+        >
+          {match[1]}
+        </a>,
+      );
+    } else {
+      parts.push(
+        <a
+          key={`url-${match.index}`}
+          href={match[0]}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-medium text-violet-700 underline decoration-violet-300 underline-offset-2 hover:text-violet-900 break-all"
+        >
+          {match[0]}
+        </a>,
+      );
+    }
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  if (parts.length === 1 && typeof parts[0] === "string") {
+    return <span className={className}>{text.split("\n").map((line, i, arr) => (
+      <span key={i}>
+        {line}
+        {i < arr.length - 1 ? <br /> : null}
+      </span>
+    ))}</span>;
+  }
+
+  return (
+    <span className={className}>
+      {parts.map((part, i) => (
+        typeof part === "string"
+          ? part.split("\n").map((line, j, arr) => (
+              <span key={`${i}-${j}`}>
+                {line}
+                {j < arr.length - 1 ? <br /> : null}
+              </span>
+            ))
+          : part
+      ))}
+    </span>
+  );
+}
+
+function DocLink({ text, href }) {
+  return (
+    <p>
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-violet-700 underline decoration-violet-300 underline-offset-2 hover:text-violet-900"
+      >
+        {text}
+        <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
+      </a>
+    </p>
+  );
+}
+
+function ListItemContent({ item }) {
+  if (typeof item === "string") {
+    return <RichText text={item} />;
+  }
+  if (item?.href) {
+    return (
+      <a
+        href={item.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="font-medium text-violet-700 underline decoration-violet-300 underline-offset-2 hover:text-violet-900"
+      >
+        {item.text}
+      </a>
+    );
+  }
+  return <RichText text={item?.text || ""} />;
+}
 
 function Callout({ variant, text }) {
   const isWarning = variant === "warning";
@@ -15,7 +128,9 @@ function Callout({ variant, text }) {
       ) : (
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-violet-500" aria-hidden />
       )}
-      <p className="leading-relaxed">{text}</p>
+      <p className="leading-relaxed">
+        <RichText text={text} />
+      </p>
     </div>
   );
 }
@@ -26,6 +141,8 @@ function DocBlock({ block }) {
   switch (block.type) {
     case "callout":
       return <Callout variant={block.variant} text={block.text} />;
+    case "link":
+      return block.href ? <DocLink text={block.text} href={block.href} /> : null;
     case "heading": {
       const level = block.level || 2;
       if (level === 1) {
@@ -37,7 +154,11 @@ function DocBlock({ block }) {
       return <h3 className="text-lg font-semibold text-zinc-900">{block.text}</h3>;
     }
     case "paragraph":
-      return <p className="leading-relaxed text-zinc-700">{block.text}</p>;
+      return (
+        <p className="leading-relaxed text-zinc-700">
+          <RichText text={block.text} />
+        </p>
+      );
     case "list": {
       const Tag = block.style === "numbered" ? "ol" : "ul";
       const listClass = block.style === "numbered"
@@ -45,8 +166,10 @@ function DocBlock({ block }) {
         : "list-disc space-y-1.5 pl-5 text-zinc-700";
       return (
         <Tag className={listClass}>
-          {(block.items || []).map((item) => (
-            <li key={item} className="leading-relaxed">{item}</li>
+          {(block.items || []).map((item, index) => (
+            <li key={typeof item === "string" ? item : item.text || index} className="leading-relaxed">
+              <ListItemContent item={item} />
+            </li>
           ))}
         </Tag>
       );
