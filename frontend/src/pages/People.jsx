@@ -5,6 +5,8 @@ import { toast } from "sonner";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
+import DesktopPageHeader from "../components/desktop/DesktopPageHeader";
+import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
 
 const MOCK_PEOPLE = [
   { id: 1, name: "Sarah Chen", title: "Engineering Manager", company: "Linear", appliedRole: "Senior Frontend Engineer", connected: false, gradient: "from-violet-600 to-indigo-600" },
@@ -85,7 +87,7 @@ function PersonCard({ person, index, onConnect }) {
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.04 }}
-      className="flex items-center gap-4 bg-sprout-surface border border-sprout-border rounded-2xl px-4 py-4"
+      className="flex items-center gap-4 rounded-2xl border border-sprout-border bg-sprout-surface px-4 py-4 md:border-zinc-200 md:bg-white"
     >
       {/* Avatar */}
       <div
@@ -98,8 +100,8 @@ function PersonCard({ person, index, onConnect }) {
 
       {/* Info */}
       <div className="flex-1 min-w-0">
-        <p className="font-semibold text-white text-sm leading-tight truncate">{person.name}</p>
-        <p className="text-sprout-muted text-xs mt-0.5 truncate">
+        <p className="truncate text-sm font-semibold leading-tight text-white md:text-zinc-900">{person.name}</p>
+        <p className="mt-0.5 truncate text-xs text-sprout-muted md:text-zinc-500">
           {person.title} · {person.company}
         </p>
         <span className="mt-1.5 inline-block text-xs text-sprout-mint font-medium bg-sprout-mint-soft px-2 py-0.5 rounded-full truncate max-w-full">
@@ -149,15 +151,19 @@ export default function People() {
   }
 
   return (
-    <AppPage className="sprout bg-sprout-bg text-white">
-      <header className="mx-auto w-full max-w-md shrink-0 px-5 pt-6">
-        <h1 className="font-display font-black text-3xl tracking-tighter text-white">People</h1>
-        <p className="text-sm text-sprout-muted mt-1">
+    <AppPage className="sprout bg-sprout-bg text-white md:bg-transparent md:text-zinc-900 md:py-8">
+      <header className="mx-auto w-full max-w-md shrink-0 px-5 pt-6 md:hidden">
+        <h1 className="font-display text-3xl font-black tracking-tighter text-white">People</h1>
+        <p className="mt-1 text-sm text-sprout-muted">
           {people.length} hiring contact{people.length !== 1 ? "s" : ""} matched to your applications
         </p>
       </header>
 
-      <AppPageScroll className="mx-auto max-w-md px-5 pt-5">
+      <AppPageScroll className={`${APP_CONTENT_WIDTH} pt-5`}>
+        <DesktopPageHeader
+          title="Outreach"
+          subtitle={`${people.length} hiring contact${people.length !== 1 ? "s" : ""} matched to your applications`}
+        />
         {people.length === 0 ? (
           <div className="mt-20 text-center">
             <div className="w-16 h-16 rounded-2xl bg-sprout-mint-soft grid place-items-center mx-auto">
@@ -169,7 +175,7 @@ export default function People() {
             </p>
           </div>
         ) : (
-          <ul className="flex flex-col gap-3">
+          <ul className="flex flex-col gap-3 md:grid md:grid-cols-2 md:gap-4">
             {people.map((person, i) => (
               <PersonCard
                 key={person.id}

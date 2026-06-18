@@ -58,6 +58,10 @@ export default function PlacesAutocomplete({
   suggestions = EMPTY_SUGGESTIONS,
   compactChips = false,
   maxSuggestions,
+  inline = false,
+  hideLabel = false,
+  onFieldFocus,
+  onFieldBlur,
 }) {
   const light = variant === "light";
   const [loading, setLoading] = useState(false);
@@ -79,16 +83,27 @@ export default function PlacesAutocomplete({
   );
   const isInvalid = touched && trimmedValue && !hasSelection;
 
-  const showDropdown = focused
+  const showSearchDropdown = focused
     && trimmedValue.length >= 1
     && !hasSelection;
+  const showPopularDropdown = inline
+    && focused
+    && !trimmedValue
+    && visibleSuggestions.length > 0;
+  const showDropdown = showSearchDropdown || showPopularDropdown;
 
   const labelClass = light ? "text-sm font-semibold text-zinc-700" : "text-sm font-semibold text-zinc-200";
   const optionalClass = light ? "text-zinc-400 font-normal" : "text-sprout-dim font-normal";
-  const inputClass = light
+  const inputClass = inline
+    ? `h-auto min-h-0 border-0 bg-transparent p-0 pr-6 text-sm shadow-none focus-visible:ring-0 ${
+      light ? "text-zinc-900 placeholder:text-zinc-400" : "text-white placeholder:text-sprout-dim"
+    }`
+    : light
     ? `h-11 rounded-xl bg-white border-zinc-200 text-zinc-900 placeholder:text-zinc-400 pr-10 ${isInvalid ? "border-rose-500" : focused ? "border-linkedin ring-2 ring-linkedin/20" : ""}`
     : `h-11 rounded-xl bg-sprout-surface-2 border-sprout-border text-white placeholder:text-sprout-dim pr-10 ${isInvalid ? "border-rose-500" : ""}`;
-  const iconClass = light ? "w-4 h-4 text-zinc-400 absolute right-3 top-3.5" : "w-4 h-4 text-sprout-muted absolute right-3 top-3.5";
+  const iconClass = inline
+    ? "hidden"
+    : light ? "w-4 h-4 text-zinc-400 absolute right-3 top-3.5" : "w-4 h-4 text-sprout-muted absolute right-3 top-3.5";
   const helperClass = light
     ? `text-xs ${isInvalid ? "text-rose-500" : "text-zinc-500"}`
     : `text-xs ${isInvalid ? "text-rose-300" : "text-sprout-muted"}`;
@@ -255,10 +270,14 @@ export default function PlacesAutocomplete({
   const handleFocus = () => {
     if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
     setFocused(true);
+    onFieldFocus?.();
   };
 
   const handleBlur = () => {
-    blurTimerRef.current = setTimeout(() => setFocused(false), 150);
+    blurTimerRef.current = setTimeout(() => {
+      setFocused(false);
+      onFieldBlur?.();
+    }, 150);
   };
 
   const isSuggestionSelected = (suggestionLabel) => {
@@ -286,10 +305,12 @@ export default function PlacesAutocomplete({
   };
 
   return (
-    <div className="space-y-1.5" data-testid={testId}>
+    <div className={inline ? "min-w-0 flex-1" : "space-y-1.5"} data-testid={testId}>
+      {!hideLabel && !inline && label ? (
       <Label className={labelClass}>
         {label} {optional && <span className={optionalClass}>(optional)</span>}
       </Label>
+      ) : null}
       <div className="relative" ref={anchorRef}>
         <Input
           value={value || ""}
@@ -320,6 +341,28 @@ export default function PlacesAutocomplete({
                   zIndex: 9999,
                 }}
               >
+                {showPopularDropdown ? (
+                  <>
+                    <p className={`px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] ${light ? "text-zinc-400" : "text-sprout-muted"}`}>
+                      Popular locations
+                    </p>
+                    {visibleSuggestions.slice(0, maxSuggestions || 10).map((suggestion) => (
+                      <button
+                        key={suggestion}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => selectSuggestion(suggestion)}
+                        className={optionClass}
+                        data-testid={`${testId}-popular-option`}
+                        role="option"
+                      >
+                        <MapPin className={`w-4 h-4 shrink-0 mt-0.5 ${light ? "text-linkedin" : "text-sprout-mint"}`} />
+                        <span className="block">{suggestion}</span>
+                      </button>
+                    ))}
+                  </>
+                ) : (
+                  <>
                 {searching && results.length === 0 && (
                   <div className={`px-4 py-3 text-sm ${light ? "text-zinc-500" : "text-zinc-500"}`}>
                     Searching cities, towns, and villages…
@@ -354,13 +397,15 @@ export default function PlacesAutocomplete({
                     No locations found. Try a nearby city or region name, or pick a popular location below.
                   </div>
                 )}
+                  </>
+                )}
               </div>,
               document.body,
             )
           : null}
       </div>
-      <p className={helperClass}>{helperText}</p>
-      {visibleSuggestions.length > 0 && !trimmedValue && (
+      {!inline ? <p className={helperClass}>{helperText}</p> : null}
+      {!inline && visibleSuggestions.length > 0 && !trimmedValue && (
         <div className="pt-0.5">
           <p className={`text-[11px] font-medium mb-1.5 ${light ? "text-zinc-500" : "text-sprout-muted"}`}>
             Popular locations

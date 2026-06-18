@@ -3,13 +3,16 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import {
-  ArrowLeft, Palette, Bell, Sparkles, Compass, ShieldCheck, FileText,
+  ArrowLeft, Palette, Bell, Compass, ShieldCheck, FileText,
   CreditCard, RotateCw, MessageSquare, Users, Instagram, LogOut, Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import Logo from "../components/Logo";
 import { BRAND } from "../lib/brand";
 import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
+import DesktopAppShell from "../components/desktop/DesktopAppShell";
+import AISettingsPanel from "../components/desktop/AISettingsPanel";
+import MobileAISettings from "../components/settings/MobileAISettings";
 
 const Section = ({ label, children, testId }) => (
   <section className="mt-7" data-testid={testId}>
@@ -88,7 +91,14 @@ export default function Settings() {
   };
 
   return (
-    <AppPage className="sprout bg-sprout-bg text-white">
+    <>
+      <div className="hidden md:block">
+        <DesktopAppShell>
+          <AISettingsPanel />
+        </DesktopAppShell>
+      </div>
+
+      <AppPage className="sprout bg-sprout-bg text-white md:hidden">
       <header className="mx-auto w-full max-w-md shrink-0 px-5 pt-6 flex items-center gap-3" data-testid="settings-header">
         <button
           onClick={() => navigate(-1)}
@@ -110,9 +120,7 @@ export default function Settings() {
         <Row icon={Bell} label="Notification preferences" onClick={() => todo("Notification preferences")} testId="settings-notif-prefs" />
       </Section>
 
-      <Section label="AI preferences" testId="settings-ai">
-        <Row icon={Sparkles} label="Tune your AI" onClick={() => todo("AI settings")} testId="settings-ai-settings" />
-      </Section>
+      <MobileAISettings />
 
       <Section label="Walkthrough" testId="settings-tour">
         <Row icon={Compass} label="Replay walkthrough" onClick={() => todo("Product tour")} testId="settings-restart-tour" />
@@ -148,5 +156,6 @@ export default function Settings() {
       </footer>
       </AppPageScroll>
     </AppPage>
+    </>
   );
 }

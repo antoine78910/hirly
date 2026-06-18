@@ -4,7 +4,7 @@ import { BRAND } from "../../lib/brand";
 /** Centered Swiipr logo header (Sorce-style) — 3-column grid avoids overlap on narrow phones. */
 export function BrandHeader({ rightAction, leftAction, className = "" }) {
   return (
-    <header className={`px-safe pt-safe pb-2 sm:px-5 ${className}`}>
+    <header className={`px-safe pt-safe pb-2 sm:px-5 md:hidden ${className}`}>
       <div className="mx-auto grid w-full max-w-md grid-cols-[2.25rem_1fr_2.25rem] items-center gap-1 sm:grid-cols-[2.5rem_1fr_2.5rem]">
         <div className="flex justify-start">
           {leftAction || null}
@@ -26,7 +26,7 @@ export function BrandHeader({ rightAction, leftAction, className = "" }) {
 /** Simple centered title header — same 3-column layout for mobile safety. */
 export function TitleHeader({ title, rightAction, leftAction, className = "" }) {
   return (
-    <header className={`px-safe pt-safe pb-3 sm:px-5 ${className}`}>
+    <header className={`px-safe pt-safe pb-3 sm:px-5 md:hidden ${className}`}>
       <div className="mx-auto grid w-full max-w-md grid-cols-[2.25rem_1fr_2.25rem] items-center gap-1 sm:grid-cols-[2.5rem_1fr_2.5rem]">
         <div className="flex justify-start">
           {leftAction || null}

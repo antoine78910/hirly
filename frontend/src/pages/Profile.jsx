@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { demoMode } from "../lib/dev";
 import { DEMO_PROFILE } from "../lib/demoData";
+import { useSwipeCredits } from "../components/desktop/DesktopCreditsPill";
 import {
   User as UserIcon,
   FileText,
@@ -15,7 +16,6 @@ import {
   Plus,
   ShieldCheck,
   X,
-  GraduationCap,
 } from "lucide-react";
 import { toast } from "sonner";
 import PersonalInfoSheet from "../components/PersonalInfoSheet";
@@ -30,6 +30,8 @@ import { Switch } from "../components/ui/switch";
 import RolePicker from "../components/RolePicker";
 import { TitleHeader } from "../components/app/AppScreenHeader";
 import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
+import DesktopPageHeader from "../components/desktop/DesktopPageHeader";
+import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
 import { trackEvent } from "../lib/analytics";
 
 const PROFILE_TABS = [
@@ -364,6 +366,7 @@ function firstValue(...values) {
 export default function Profile() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { displayCredits, demoAccount } = useSwipeCredits();
   const [profile, setProfile] = useState(() => (demoMode ? DEMO_PROFILE : null));
   const [loading, setLoading] = useState(!demoMode);
   const [tab, setTab] = useState("resume");
@@ -402,7 +405,7 @@ export default function Profile() {
     website: firstValue(profile?.contact?.website, applicationDefaults.website_url, applicationDefaults.portfolio_url),
     phoneCountryCode: firstValue(applicationDefaults.phone_country_code),
   };
-  const swipeCredits = 40;
+  const swipeCredits = displayCredits;
 
   const sectionCount = (key) => {
     if (!key) return 0;
@@ -413,7 +416,7 @@ export default function Profile() {
   const showSkeleton = loading && !profile;
 
   return (
-    <AppPage className="bg-white text-zinc-900">
+    <AppPage className="bg-white text-zinc-900 md:py-8">
       <TitleHeader
         title="Profile"
         rightAction={(
@@ -430,7 +433,21 @@ export default function Profile() {
       />
 
       <AppPageScroll>
-        <div className="mx-auto max-w-md space-y-4 px-4">
+        <div className={`${APP_CONTENT_WIDTH} space-y-4 md:space-y-6`}>
+        <DesktopPageHeader
+          title="Profile"
+          subtitle="Resume, personal info, and application defaults."
+          actions={(
+            <button
+              type="button"
+              onClick={() => navigate("/settings")}
+              className="hidden rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 md:inline-flex md:items-center md:gap-2"
+            >
+              <SettingsIcon className="h-4 w-4" />
+              AI Settings
+            </button>
+          )}
+        />
         {!creditsDismissed ? (
           <div className="flex items-center gap-3 rounded-2xl border border-zinc-200 bg-white px-3 py-3 shadow-sm">
             <button
@@ -443,8 +460,8 @@ export default function Profile() {
             </button>
             <button
               type="button"
-              onClick={() => navigate("/credits")}
-              className="flex min-w-0 flex-1 items-center gap-3 text-left"
+              onClick={() => !demoAccount && navigate("/credits")}
+              className={`flex min-w-0 flex-1 items-center gap-3 text-left ${demoAccount ? "cursor-default" : ""}`}
               data-testid="profile-credits-card"
             >
               <div className="grid h-10 w-10 place-items-center rounded-full bg-violet-100">
@@ -452,30 +469,14 @@ export default function Profile() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-bold">
-                  <span className="text-amber-500">{swipeCredits}</span> Swipes
+                  <span className="text-amber-500">{swipeCredits}</span> {demoAccount ? "Demo credits" : "Swipes"}
                 </p>
-                <p className="text-xs text-zinc-500">Get More Credits</p>
+                <p className="text-xs text-zinc-500">{demoAccount ? "Local applies only" : "Get More Credits"}</p>
               </div>
               <ChevronRight className="h-5 w-5 shrink-0 text-zinc-300" />
             </button>
           </div>
         ) : null}
-
-        <button
-          type="button"
-          onClick={() => navigate("/training")}
-          className="flex w-full items-center gap-3 rounded-2xl border border-zinc-200 bg-white px-4 py-3.5 text-left shadow-sm transition-colors hover:border-violet-200 hover:bg-violet-50/40"
-          data-testid="profile-academy-card"
-        >
-          <div className="grid h-10 w-10 place-items-center rounded-full bg-violet-100">
-            <GraduationCap className="h-5 w-5 text-linkedin" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-bold text-zinc-900">Academy</p>
-            <p className="text-xs text-zinc-500">Video courses & job search training</p>
-          </div>
-          <ChevronRight className="h-5 w-5 shrink-0 text-zinc-300" />
-        </button>
 
         <div className={`rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm ${showSkeleton ? "animate-pulse" : ""}`}>
           <div className="flex items-center gap-4">

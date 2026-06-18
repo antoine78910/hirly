@@ -1,4 +1,5 @@
 import { AlertTriangle, ExternalLink, Info } from "lucide-react";
+import SocialExampleGrid from "./SocialExampleGrid";
 
 const URL_PATTERN = /(https?:\/\/[^\s<]+[^\s<.,;:!?])/g;
 const MARKDOWN_LINK_PATTERN = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g;
@@ -135,10 +136,12 @@ function Callout({ variant, text }) {
   );
 }
 
-function DocBlock({ block }) {
+function DocBlock({ block, lang }) {
   if (!block?.type) return null;
 
   switch (block.type) {
+    case "example_grid":
+      return <SocialExampleGrid items={block.items} lang={lang} />;
     case "callout":
       return <Callout variant={block.variant} text={block.text} />;
     case "link":
@@ -179,13 +182,13 @@ function DocBlock({ block }) {
   }
 }
 
-export default function ModuleDocView({ blocks }) {
+export default function ModuleDocView({ blocks, lang = "en" }) {
   if (!blocks?.length) return null;
 
   return (
     <article className="space-y-4">
       {blocks.map((block, index) => (
-        <DocBlock key={`${block.type}-${index}`} block={block} />
+        <DocBlock key={`${block.type}-${index}`} block={block} lang={lang} />
       ))}
     </article>
   );

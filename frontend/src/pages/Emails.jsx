@@ -13,6 +13,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
+import DesktopPageHeader from "../components/desktop/DesktopPageHeader";
+import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -1105,8 +1107,8 @@ export default function Emails() {
   );
 
   return (
-    <AppPage className="relative bg-white text-zinc-900">
-      <header className="mx-auto w-full max-w-md shrink-0 px-safe pt-safe sm:px-4">
+    <AppPage className="relative bg-white text-zinc-900 md:py-8">
+      <header className="mx-auto w-full max-w-md shrink-0 px-safe pt-safe sm:px-4 md:hidden">
         <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
           <button
             type="button"
@@ -1155,8 +1157,26 @@ export default function Emails() {
       </header>
 
       <AppPageScroll>
-        <div className="mx-auto mt-2 max-w-md px-safe sm:px-4">
-          <p className="mb-2 text-xs font-medium capitalize text-zinc-400">{filter}</p>
+        <div className={`${APP_CONTENT_WIDTH} mt-2`}>
+          <DesktopPageHeader title="Inbox" subtitle="Interview invites, offers, and application updates." />
+          <div className="mb-4 hidden flex-wrap gap-2 md:flex">
+            {INBOX_FILTERS.map((f) => {
+              const active = filter === f.key;
+              return (
+                <button
+                  key={f.key}
+                  type="button"
+                  onClick={() => setFilter(f.key)}
+                  className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
+                    active ? f.activeClass : f.idleClass
+                  }`}
+                >
+                  {f.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mb-2 text-xs font-medium capitalize text-zinc-400 md:mt-0">{filter}</p>
           {messages.length === 0 ? (
             <p className="py-12 text-center text-sm text-zinc-500">No messages in this folder.</p>
           ) : (

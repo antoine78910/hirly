@@ -1,6 +1,7 @@
 import axios from "axios";
 import { demoMode } from "./dev";
 import { getDemoResponse } from "./demoApi";
+import { getDemoAccountResponse, patchDemoAccountResponse } from "./demoAccount";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL
   || (process.env.NODE_ENV === "development" ? "http://localhost:8001" : "");
@@ -37,5 +38,23 @@ api.interceptors.request.use((config) => {
     }
   }
 
+  if (!config.adapter) {
+    const demoAccountMock = getDemoAccountResponse(config);
+    if (demoAccountMock !== undefined) {
+      config.adapter = () => Promise.resolve({
+        data: demoAccountMock,
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config,
+      });
+    }
+  }
+
   return config;
 });
+
+api.interceptors.response.use(
+  (response) => patchDemoAccountResponse(response),
+  (error) => Promise.reject(error),
+);

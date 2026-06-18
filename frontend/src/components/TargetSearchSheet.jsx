@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { api } from "../lib/api";
+import { saveTargetPreferences } from "../lib/targetPreferences";
 import RolePicker from "./RolePicker";
-import PlacesAutocomplete, { hasGooglePlacesKey } from "./PlacesAutocomplete";
+import PlacesAutocomplete from "./PlacesAutocomplete";
 
 export default function TargetSearchSheet({
   open,
@@ -27,30 +27,16 @@ export default function TargetSearchSheet({
   }, [open, initialRole, initialLocation, initialLocationData]);
 
   const save = async () => {
-    const role = targetRole.trim();
-    if (!role) {
-      toast.error("Please choose a target role");
-      return;
-    }
-    if (hasGooglePlacesKey() && targetLocation.trim() && !targetLocationData) {
-      toast.error("Select a location from the suggestions");
-      return;
-    }
-    const locationLabel = targetLocationData?.location_label || targetLocation.trim();
     setSaving(true);
     try {
-      await api.put("/profile/preferences", {
-        target_role: role,
-        target_roles: [role],
-        target_location: locationLabel,
-        target_location_data: targetLocationData,
-      });
-      toast.success("Search updated");
-      await onSaved?.({
-        role,
-        location: locationLabel || "Anywhere",
+      const saved = await saveTargetPreferences({
+        role: targetRole,
+        location: targetLocation,
         locationData: targetLocationData,
       });
+      if (!saved) return;
+      toast.success("Search updated");
+      await onSaved?.(saved);
       onClose();
     } catch (_) {
       toast.error("Could not save search preferences");

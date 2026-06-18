@@ -6,6 +6,8 @@ import { api } from "../lib/api";
 import CompanyLogo from "../components/CompanyLogo";
 import { toast } from "sonner";
 import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
+import DesktopPageHeader from "../components/desktop/DesktopPageHeader";
+import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
 
 const TABS = [
   { key: "right", label: "Generated", testid: "history-tab-liked" },
@@ -23,18 +25,18 @@ function JobRow({ row, onApplyNow }) {
   if (!job) return null;
   return (
     <div
-      className="rounded-2xl border border-sprout-border bg-sprout-surface p-4 flex items-start gap-4"
+      className="rounded-2xl border border-sprout-border bg-sprout-surface p-4 flex items-start gap-4 md:border-zinc-200 md:bg-white"
       data-testid={`history-row-${job.job_id}`}
     >
       <CompanyLogo company={job.company} size="md" rounded="xl" />
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
-          <p className="font-display font-bold text-white text-[17px] leading-tight line-clamp-2">{job.title}</p>
+          <p className="font-display text-[17px] font-bold leading-tight text-white line-clamp-2 md:text-zinc-900">{job.title}</p>
           <span className="inline-flex items-center gap-1 text-sprout-mint text-sm font-semibold shrink-0">
             <Zap className="w-4 h-4" />{row.match_score ?? 1}
           </span>
         </div>
-        <p className="text-sprout-muted text-sm mt-0.5">{job.company}</p>
+        <p className="mt-0.5 text-sm text-sprout-muted md:text-zinc-500">{job.company}</p>
         <div className="mt-3 flex items-center justify-between">
           <span className="text-xs text-sprout-dim">{formatDate(row.created_at)}</span>
           <button
@@ -92,8 +94,8 @@ export default function History() {
   const title = tab === "left" ? "Jobs you passed" : "Generated packages";
 
   return (
-    <AppPage className="sprout bg-sprout-bg text-white">
-      <header className="mx-auto w-full max-w-md shrink-0 px-5 pt-6 flex items-center gap-3" data-testid="history-header">
+    <AppPage className="sprout bg-sprout-bg text-white md:bg-transparent md:text-zinc-900 md:py-8">
+      <header className="mx-auto flex w-full max-w-md shrink-0 items-center gap-3 px-5 pt-6 md:hidden" data-testid="history-header">
         <button
           onClick={() => navigate(-1)}
           className="w-10 h-10 grid place-items-center rounded-full hover:bg-sprout-surface"
@@ -105,7 +107,8 @@ export default function History() {
         <h1 className="font-display font-bold text-xl flex-1 text-center pr-10">{title}</h1>
       </header>
 
-      <AppPageScroll className="mx-auto max-w-md px-5">
+      <AppPageScroll className={APP_CONTENT_WIDTH}>
+      <DesktopPageHeader title={title} subtitle="Review generated packages and jobs you passed." />
       <div className="mt-6 flex gap-2 p-1 rounded-full bg-sprout-surface border border-sprout-border" data-testid="history-tabs">
         {TABS.map((t) => (
           <button

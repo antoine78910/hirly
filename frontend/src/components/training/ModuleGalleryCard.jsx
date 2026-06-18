@@ -36,7 +36,7 @@ export default function ModuleGalleryCard({
       >
         {isReference && (
           <span className="absolute left-3 top-3 rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/80">
-            Ref
+            {t("refBadge")}
           </span>
         )}
         <p className="text-center font-display text-xl font-bold leading-tight text-white sm:text-2xl">

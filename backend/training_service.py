@@ -7,13 +7,18 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from training_module_content import WARM_UP_PLAYBOOK_EN, WARM_UP_PLAYBOOK_FR
+from training_module_content import (
+    CREATING_CONTENT_SECTIONS_EN,
+    CREATING_CONTENT_SECTIONS_FR,
+    WARM_UP_PLAYBOOK_EN,
+    WARM_UP_PLAYBOOK_FR,
+)
 
 logger = logging.getLogger(__name__)
 
 SEED_CREATOR_ID = "creator_swiipr_official"
 SEED_COURSE_ID = "course_job_search_mastery"
-SEED_MODULES_VERSION = 4
+SEED_MODULES_VERSION = 5
 
 CRM_STAGES = ["new", "contacted", "qualified", "enrolled", "won", "lost"]
 
@@ -73,13 +78,15 @@ MODULE_I18N = {
     "mod_creating_content": {
         "en": {
             "title": "Creating Content",
-            "description": "How to plan, script, and record your talking-head videos.",
+            "description": "Filming, Hirly demos, and editing — three sub-chapters with video lessons.",
             "category": "application",
+            "sections": CREATING_CONTENT_SECTIONS_EN,
         },
         "fr": {
             "title": "Créer du contenu",
-            "description": "Comment planifier, scripter et enregistrer tes vidéos face caméra.",
+            "description": "Tournage, démos Hirly et montage — trois sous-chapitres avec vidéos.",
             "category": "application",
+            "sections": CREATING_CONTENT_SECTIONS_FR,
         },
     },
     "mod_content_bank": {
@@ -159,6 +166,7 @@ MODULE_I18N = {
 for _module_id, _packs in MODULE_I18N.items():
     for _lang in ("en", "fr"):
         _packs[_lang].setdefault("video_url", "")
+        _packs[_lang].setdefault("sections", [])
 
 
 MODULE_SEED = [
@@ -264,13 +272,14 @@ async def get_course_detail(db, course_id: str, user_id: Optional[str] = None, l
     completed = set((enrollment or {}).get("completed_module_ids") or [])
     module_rows = []
     for mod in modules:
-        localized = _localize_fields(mod, lang, ["title", "description", "category", "content", "video_url"])
+        localized = _localize_fields(mod, lang, ["title", "description", "category", "content", "video_url", "sections"])
         module_rows.append({
             "module_id": mod["module_id"],
             "title": localized.get("title"),
             "description": localized.get("description"),
             "category": localized.get("category") or mod.get("category"),
             "content": localized.get("content") or [],
+            "sections": localized.get("sections") or [],
             "video_url": localized.get("video_url", ""),
             "duration_seconds": mod.get("duration_seconds"),
             "sort_order": mod.get("sort_order", 0),

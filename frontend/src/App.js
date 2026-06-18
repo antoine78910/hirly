@@ -14,6 +14,7 @@ import Emails from "@/pages/Emails";
 import Interviews from "@/pages/Interviews";
 import Improve from "@/pages/Improve";
 import History from "@/pages/History";
+import Review from "@/pages/Review";
 import Feedback from "@/pages/Feedback";
 import Credits from "@/pages/Credits";
 import Referral from "@/pages/Referral";
@@ -34,6 +35,7 @@ import TrainingLegacyRedirect from "@/components/training/TrainingLegacyRedirect
 import TrainingErrorBoundary from "@/components/training/TrainingErrorBoundary";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import BottomNav from "@/components/BottomNav";
+import AppLayout from "@/components/desktop/AppLayout";
 import ScrollManager from "@/components/app/ScrollManager";
 import { devBypassAuth } from "@/lib/dev";
 import { isTrainingRoute } from "@/lib/trainingRoutes";
@@ -96,7 +98,10 @@ function AppRouter() {
         <Route path="/admin/creators" element={<AppRoute><AdminCreators /></AppRoute>} />
         <Route path="/admin/analytics" element={<AppRoute><AdminAnalytics /></AppRoute>} />
         <Route path="/onboarding" element={<Onboarding />} />
+        <Route element={<AppLayout />}>
+        <Route path="/app" element={<AppRoute requireProfile><Swipe /></AppRoute>} />
         <Route path="/swipe" element={<AppRoute requireProfile><Swipe /></AppRoute>} />
+        <Route path="/review" element={<AppRoute requireProfile><Review /></AppRoute>} />
         <Route path="/feedback" element={<AppRoute><Feedback /></AppRoute>} />
         <Route path="/interviews" element={<AppRoute requireProfile><Interviews /></AppRoute>} />
         <Route path="/improve" element={<AppRoute requireProfile><Improve /></AppRoute>} />
@@ -108,6 +113,7 @@ function AppRouter() {
         <Route path="/referral" element={<AppRoute><Referral /></AppRoute>} />
         <Route path="/settings" element={<AppRoute><Settings /></AppRoute>} />
         <Route path="/history" element={<AppRoute requireProfile><History /></AppRoute>} />
+        </Route>
         <Route path="/training" element={<TrainingRoute><Training /></TrainingRoute>} />
         <Route path="/training/creator" element={<TrainingLegacyRedirect />} />
         <Route path="/training/:courseId" element={<TrainingRoute><TrainingCourse /></TrainingRoute>} />

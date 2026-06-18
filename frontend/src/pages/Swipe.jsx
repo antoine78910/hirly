@@ -15,6 +15,12 @@ import ReportJobSheet from "../components/ReportJobSheet";
 import { BRAND } from "../lib/brand";
 import { shareJob } from "../lib/shareJob";
 import { trackEvent } from "../lib/analytics";
+import { cacheJobForDemo, isDemoAccountEnabled } from "../lib/demoAccount";
+import DesktopUpgradeModal from "../components/upgrade/DesktopUpgradeModal";
+import DesktopSwipeFeed from "../components/swipe/DesktopSwipeFeed";
+import { saveTargetPreferences } from "../lib/targetPreferences";
+import { hasActiveFilters } from "../lib/jobFilters";
+import { readAiSettings } from "../lib/aiSettings";
 
 const DEFAULT_SEARCH_RADIUS = "50km";
 const FILTERS_STORAGE_KEY = "swiipr.jobs.filters.v1";
@@ -43,28 +49,6 @@ const clearPersistedFilters = () => {
   try {
     window.localStorage.removeItem(FILTERS_STORAGE_KEY);
   } catch (_) {}
-};
-
-const hasActiveFilters = (value) => {
-  if (!value) return false;
-  return Boolean(
-    value.minSalary > 0
-    || (value.postedDate && value.postedDate !== "any")
-    || (value.workLocations || []).length
-    || (value.jobTypes || []).length
-    || (value.experience || []).length
-    || (value.locations || []).length
-    || (value.locationsData || []).length
-    || value.locationData
-    || (value.onlyCompanies || []).length
-    || (value.hideCompanies || []).length
-    || (value.onlyIndustries || []).length
-    || (value.hideIndustries || []).length
-    || value.includeUnknownLocation === false
-    || value.includeUnknownSalary === false
-    || (value.searchRadius && value.searchRadius !== DEFAULT_SEARCH_RADIUS)
-    || value.onlyMyCountry
-  );
 };
 
 /* ============================================================
@@ -139,9 +123,12 @@ const swipeSuccessCopy = (data, job) => {
   const pkg = data?.package_status || data?.application_status;
 
   if (submission === "prepared") {
+    const reviewOn = readAiSettings().reviewDocuments;
     return {
-      title: "Application prepared",
-      description: `${job.company} is ready in Tracker. Not submitted yet.`,
+      title: reviewOn ? "Ready for your review" : "Application prepared",
+      description: reviewOn
+        ? `${job.company} is waiting in Review. Approve the documents to submit.`
+        : `${job.company} is ready in Applications. Not submitted yet.`,
     };
   }
   if (submission === "action_required" || submission === "blocked") {
@@ -558,17 +545,22 @@ export default function Swipe() {
   const [appliedToday, setAppliedToday] = useState(0);
   const [target, setTarget] = useState({ role: "", location: "" });
   const [targetLocationData, setTargetLocationData] = useState(null);
+  const [targetSaving, setTargetSaving] = useState(false);
   const [targetSheetOpen, setTargetSheetOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [desktopFiltersOpen, setDesktopFiltersOpen] = useState(false);
   const [filters, setFilters] = useState(() => readPersistedFilters());
   const [totalCount, setTotalCount] = useState(null);
   const [feedMeta, setFeedMeta] = useState(null);
   const [feedError, setFeedError] = useState("");
   const [reportJob, setReportJob] = useState(null);
+  const [billing, setBilling] = useState(null);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
   const fetchingRef = useRef(false);
   const filtersRef = useRef(filters);
   const pendingFiltersRef = useRef(undefined);
   const viewedJobIdsRef = useRef(new Set());
+  const handleSwipeRef = useRef(null);
 
   const loadProfile = useCallback(async () => {
     try {
@@ -659,8 +651,29 @@ export default function Swipe() {
     }
   }, []);
 
+  const saveTargetSearch = useCallback(async ({ role, location, locationData }) => {
+    setTargetSaving(true);
+    try {
+      const saved = await saveTargetPreferences({ role, location, locationData });
+      if (!saved) return false;
+      setTarget({ role: saved.role, location: saved.location });
+      setTargetLocationData(saved.locationData);
+      toast.success("Search updated");
+      loadFeed(true, filtersRef.current);
+      return true;
+    } catch (_) {
+      toast.error("Could not save search preferences");
+      return false;
+    } finally {
+      setTargetSaving(false);
+    }
+  }, [loadFeed]);
+
   useEffect(() => {
     loadProfile();
+    api.get("/billing/status")
+      .then(({ data }) => setBilling(data))
+      .catch(() => setBilling({ is_premium: false }));
     const persistedFilters = readPersistedFilters();
     if (persistedFilters) {
       filtersRef.current = persistedFilters;
@@ -703,7 +716,19 @@ export default function Swipe() {
     loadFeed(true, null);
   };
 
+  const handleRadiusChange = (searchRadius) => {
+    const next = { ...(filtersRef.current || {}), searchRadius };
+    applyFilters(next);
+  };
+
   const topJob = jobs[0];
+  const shouldGateApply = billing !== null && !billing.is_premium && !isDemoAccountEnabled();
+
+  const blockApplyForFreePlan = useCallback(() => {
+    if (!shouldGateApply) return false;
+    setUpgradeOpen(true);
+    return true;
+  }, [shouldGateApply]);
 
   useEffect(() => {
     trackEvent("swipe_page_view");
@@ -723,8 +748,10 @@ export default function Swipe() {
 
   // intent: "apply" | "skip"
   const handleSwipe = async (intent) => {
+    if (intent === "apply" && blockApplyForFreePlan()) return;
     if (!topJob) return;
     const job = topJob;
+    cacheJobForDemo(job);
     setJobs((prev) => prev.slice(1));
     const direction = intent === "apply" ? "right" : "left";   // backend semantic
     if (intent === "apply") {
@@ -805,8 +832,74 @@ export default function Swipe() {
     if (topJob?.job_id === reportedId) dismissJob(reportedId);
   };
 
+  handleSwipeRef.current = handleSwipe;
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (window.matchMedia("(min-width: 768px)").matches) return;
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+
+      const target = event.target;
+      const tag = target?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select") return;
+      if (target?.isContentEditable) return;
+      if (targetSheetOpen || filtersOpen || desktopFiltersOpen || reportJob || upgradeOpen) return;
+      if (appLoading || loading || !topJob) return;
+      if (event.key === "ArrowRight" && shouldGateApply) {
+        event.preventDefault();
+        setUpgradeOpen(true);
+        return;
+      }
+      event.preventDefault();
+      handleSwipeRef.current?.(event.key === "ArrowRight" ? "apply" : "skip");
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    appLoading,
+    filtersOpen,
+    desktopFiltersOpen,
+    loading,
+    reportJob,
+    targetSheetOpen,
+    topJob,
+    shouldGateApply,
+    navigate,
+    upgradeOpen,
+  ]);
+
   return (
-    <div className="sprout h-dvh flex flex-col bg-sprout-bg text-zinc-900 overflow-hidden">
+    <>
+      <div className="hidden md:block">
+        <DesktopSwipeFeed
+          job={topJob}
+          loading={loading}
+          feedError={feedError}
+          feedMeta={feedMeta}
+          target={target}
+          filters={filters}
+          appliedToday={appliedToday}
+          appLoading={appLoading}
+          onOpenTarget={() => setTargetSheetOpen(true)}
+          onFiltersChange={applyFilters}
+          onFiltersOpenChange={setDesktopFiltersOpen}
+          onTargetSave={saveTargetSearch}
+          targetLocationData={targetLocationData}
+          targetSaving={targetSaving}
+          onPass={() => handleSwipe("skip")}
+          onApply={() => handleSwipe("apply")}
+          onReport={setReportJob}
+          onShare={handleShareJob}
+          onRefresh={() => loadFeed(true)}
+          onRadiusChange={handleRadiusChange}
+          shouldGateApply={shouldGateApply}
+          onApplyBlocked={() => setUpgradeOpen(true)}
+          interactionBlocked={targetSheetOpen || filtersOpen || desktopFiltersOpen || Boolean(reportJob) || upgradeOpen}
+        />
+      </div>
+
+      <div className="sprout flex h-dvh flex-col overflow-hidden bg-sprout-bg text-zinc-900 md:hidden">
       <header
         className="mx-auto flex w-full max-w-md shrink-0 items-center gap-1 px-safe pb-2 pt-safe sm:gap-2.5 sm:px-4"
         data-testid="swipe-header"
@@ -957,6 +1050,7 @@ export default function Swipe() {
           ) : null}
         </div>
       </div>
+      </div>
 
       <TargetSearchSheet
         open={targetSheetOpen}
@@ -986,6 +1080,8 @@ export default function Swipe() {
         onClose={() => setReportJob(null)}
         onSubmit={handleReportSubmit}
       />
-    </div>
+
+      <DesktopUpgradeModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
+    </>
   );
 }

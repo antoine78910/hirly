@@ -6,6 +6,8 @@ import {
 } from "lucide-react";
 import { BrandHeader } from "../components/app/AppScreenHeader";
 import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
+import DesktopPageHeader from "../components/desktop/DesktopPageHeader";
+import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
 import CompanyLogo from "../components/CompanyLogo";
 import ResumeSheet from "../components/ResumeSheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
@@ -18,6 +20,7 @@ import CoverLetterPreview from "../components/CoverLetterPreview";
 import { downloadTailoredCV, downloadCoverLetter } from "../lib/pdf";
 import { trackEvent } from "../lib/analytics";
 import { useAuth } from "../context/AuthContext";
+import { resolveDisplayStatus } from "../lib/applicationReview";
 
 const DISPLAY_STATUSES = {
   prepared: {
@@ -102,25 +105,6 @@ const FILTERS = [
   { key: "expired", label: "Expired" },
 ];
 
-/** User-facing status only. Backend status persistence remains unchanged. */
-const resolveDisplayStatus = ({ status, submission_status, user_facing_submission_status, manual_status, admin_status }) => {
-  const values = [
-    user_facing_submission_status,
-    manual_status,
-    admin_status,
-    submission_status,
-    status,
-  ].filter(Boolean);
-  if (values.some((v) => ["submitted", "manually_submitted"].includes(v))) return "submitted";
-  if (values.some((v) => ["action_required", "needs_user_input"].includes(v))) return "action_required";
-  if (values.some((v) => ["pending", "manual_review_needed", "manual_in_progress"].includes(v))) return "pending";
-  if (values.some((v) => ["ready", "prepared"].includes(v))) return "prepared";
-  if (values.includes("blocked_captcha")) return "blocked_captcha";
-  if (values.some((v) => ["prepare_failed", "blocked", "failed"].includes(v))) return "failed";
-  if (values.includes("expired")) return "expired";
-  if (user_facing_submission_status === "pending") return "pending";
-  return "pending";
-};
 
 const ApplicationStatusPill = ({ application, variant = "light" }) => {
   const key = resolveDisplayStatus(application);
@@ -512,11 +496,15 @@ export default function Tracker() {
   const canShowInternalSubmitTest = internalSubmitTestEnabled && userEmail && internalSubmitEmails.has(userEmail);
 
   return (
-    <AppPage className="bg-white text-zinc-900">
+    <AppPage className="bg-white text-zinc-900 md:py-8">
       <BrandHeader />
 
       <AppPageScroll>
-        <div className="mx-auto max-w-md px-safe sm:px-5">
+        <div className={APP_CONTENT_WIDTH}>
+        <DesktopPageHeader
+          title="Applications"
+          subtitle="Track packages, submissions, and follow-ups in one place."
+        />
         {showResumeBanner ? (
           <section className="py-8 text-center">
             <div className="mx-auto grid h-20 w-20 place-items-center rounded-2xl border-2 border-linkedin/30 bg-violet-50">
@@ -559,7 +547,7 @@ export default function Tracker() {
             ) : null}
           </div>
 
-          <div className="mt-3 grid grid-cols-2 gap-2.5">
+          <div className="mt-3 grid grid-cols-2 gap-2.5 md:grid-cols-4">
             {[
               { label: "Total applications", value: summary.total, Icon: BriefcaseBusiness, tone: "border-zinc-200 bg-white text-zinc-900", sub: `${summary.submitted} submitted` },
               { label: "Success rate", value: `${summary.successRate}%`, Icon: CheckCircle2, tone: "border-emerald-100 bg-emerald-50 text-emerald-800", sub: "submitted / total" },

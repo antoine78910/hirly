@@ -16,6 +16,7 @@ export const TRAINING_UI = {
     inProgress: "In progress",
     allCourses: "All courses",
     chapters: "Chapters",
+    refBadge: "Ref",
     disclaimerTitle: "Important Notice: Confidentiality Agreement",
     disclaimerBody: "By accessing this document, you agree that it is strictly confidential. You are not authorized to share this document with anyone else, either through direct sharing, screenshots, or other means of distribution. Unauthorized sharing or distribution of this document will result in immediate revocation of access and may lead to further regulatory action.",
     disclaimerHelp: "If you have any questions about sharing this content, please contact the document owner for guidance.",
@@ -122,9 +123,12 @@ export const TRAINING_UI = {
     inProgress: "En cours",
     allCourses: "Tous les cours",
     chapters: "Chapitres",
-    disclaimerTitle: "Important Notice: Confidentiality Agreement",
-    disclaimerBody: "By accessing this document, you agree that it is strictly confidential. You are not authorized to share this document with anyone else, either through direct sharing, screenshots, or other means of distribution. Unauthorized sharing or distribution of this document will result in immediate revocation of access and may lead to further regulatory action.",
-    disclaimerHelp: "If you have any questions about sharing this content, please contact the document owner for guidance.",
+    disclaimerTitle: "Avis important : accord de confidentialité",
+    disclaimerBody:
+      "En accédant à ce document, tu acceptes qu'il est strictement confidentiel. Tu n'es pas autorisé(e) à le partager avec quiconque, que ce soit par partage direct, captures d'écran ou tout autre moyen de diffusion. Tout partage non autorisé entraînera la révocation immédiate de ton accès et pourra donner lieu à d'autres mesures.",
+    disclaimerHelp:
+      "Si tu as des questions sur le partage de ce contenu, contacte le propriétaire du document pour obtenir des conseils.",
+    refBadge: "Réf",
     titleColumn: "Titre",
     levelColumn: "Niveau",
     courseCatalog: "Catalogue des cours",

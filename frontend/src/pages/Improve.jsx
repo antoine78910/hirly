@@ -6,6 +6,8 @@ import {
 } from "lucide-react";
 import { api } from "../lib/api";
 import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
+import DesktopPageHeader from "../components/desktop/DesktopPageHeader";
+import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
 
 const IMPACT_COLORS = {
   high:   "bg-rose-500/15 text-rose-300 border-rose-500/30",
@@ -44,8 +46,8 @@ export default function Improve() {
 
   if (loading) {
     return (
-      <AppPage className="sprout grid place-items-center bg-sprout-bg">
-        <Loader2 className="w-5 h-5 animate-spin text-sprout-muted" />
+      <AppPage className="sprout grid place-items-center bg-sprout-bg md:bg-transparent">
+        <Loader2 className="w-5 h-5 animate-spin text-sprout-muted md:text-zinc-400" />
       </AppPage>
     );
   }
@@ -54,8 +56,8 @@ export default function Improve() {
   const labelColor = LABEL_COLORS[r.label] || "text-white";
 
   return (
-    <AppPage className="sprout bg-sprout-bg text-white">
-      <header className="mx-auto w-full max-w-md shrink-0 px-5 pt-6 flex items-center justify-between" data-testid="improve-header">
+    <AppPage className="sprout bg-sprout-bg text-white md:bg-transparent md:text-zinc-900 md:py-8">
+      <header className="mx-auto flex w-full max-w-md shrink-0 items-center justify-between px-5 pt-6 md:hidden" data-testid="improve-header">
         <div className="flex items-center gap-2">
           <TrendingUp className="w-6 h-6 text-white" strokeWidth={2} />
           <h1 className="font-display font-bold text-3xl tracking-tight">Improve</h1>
@@ -70,8 +72,23 @@ export default function Improve() {
         </button>
       </header>
 
-      <AppPageScroll className="mx-auto max-w-md px-5">
-      <p className="mt-1 text-sprout-muted text-sm">Your AI career coach, updated daily. Tap Refresh to re-run.</p>
+      <AppPageScroll className={APP_CONTENT_WIDTH}>
+      <DesktopPageHeader
+        title="Opportunities"
+        subtitle="Your AI career coach — profile analysis, gaps, and quick wins."
+        actions={(
+          <button
+            type="button"
+            onClick={() => load(true)}
+            disabled={refreshing}
+            className="rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-violet-600 hover:bg-violet-50 disabled:opacity-50"
+            data-testid="improve-refresh-desktop"
+          >
+            {refreshing ? "Refreshing…" : "Refresh"}
+          </button>
+        )}
+      />
+      <p className="mt-1 text-sm text-sprout-muted md:hidden">Your AI career coach, updated daily. Tap Refresh to re-run.</p>
 
       {/* What recruiters see */}
       <section

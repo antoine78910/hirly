@@ -3,6 +3,8 @@ import { Phone, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { BrandHeader } from "../components/app/AppScreenHeader";
 import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
+import DesktopPageHeader from "../components/desktop/DesktopPageHeader";
+import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
 import { BRAND } from "../lib/brand";
 
 const TABS = [
@@ -33,7 +35,7 @@ export default function Feedback() {
   };
 
   return (
-    <AppPage className="bg-white text-zinc-900">
+    <AppPage className="bg-white text-zinc-900 md:py-8">
       <BrandHeader
         rightAction={
           <button
@@ -47,7 +49,7 @@ export default function Feedback() {
         }
       />
 
-      <div className="flex shrink-0 border-b border-zinc-200">
+      <div className="flex shrink-0 border-b border-zinc-200 md:hidden">
         {TABS.map((t) => {
           const active = tab === t.key;
           return (
@@ -69,7 +71,8 @@ export default function Feedback() {
         })}
       </div>
 
-      <AppPageScroll className="px-5 pt-5">
+      <AppPageScroll className={`${APP_CONTENT_WIDTH} pt-5`}>
+        <DesktopPageHeader title="Feedback" subtitle="Share feedback with the founders or read release notes." />
         {tab === "feedback" ? (
           <div>
             <div className="max-w-[85%] rounded-2xl rounded-bl-md bg-zinc-100 px-4 py-3 text-[15px] leading-relaxed text-zinc-800">

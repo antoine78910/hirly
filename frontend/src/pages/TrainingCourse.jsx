@@ -229,10 +229,10 @@ export default function TrainingCourse() {
             <h2 className="text-lg font-semibold text-zinc-800">{activeSection.title}</h2>
           ) : null}
 
-          <VideoBlock url={displayVideoUrl} t={t} />
+          {displayVideoUrl ? <VideoBlock url={displayVideoUrl} t={t} /> : null}
 
           {displayContent?.length ? (
-            <ModuleDocView blocks={displayContent} />
+            <ModuleDocView blocks={displayContent} lang={lang} />
           ) : !hasSections && activeModule.description ? (
             <p className="leading-relaxed text-zinc-700">{activeModule.description}</p>
           ) : null}

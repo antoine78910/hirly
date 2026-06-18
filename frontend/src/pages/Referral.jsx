@@ -5,6 +5,8 @@ import { toast } from "sonner";
 import { useAuth } from "../context/AuthContext";
 import { referralCodeFromUserId, getFollowedSocials, markSocialFollowed } from "../lib/referral";
 import { BRAND } from "../lib/brand";
+import DesktopPageHeader from "../components/desktop/DesktopPageHeader";
+import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
 
 const SOCIAL_TASKS = [
   { id: "instagram", label: "Instagram", credits: 2, url: "https://instagram.com" },
@@ -79,19 +81,21 @@ export default function Referral() {
   };
 
   return (
-    <div className="min-h-dvh bg-white pb-10 text-zinc-900">
-      <div className="mx-auto max-w-md px-5 pt-5">
+    <div className="min-h-dvh bg-white pb-10 text-zinc-900 md:min-h-0">
+      <div className={`${APP_CONTENT_WIDTH} pt-5 md:py-8`}>
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="mb-4 grid h-10 w-10 place-items-center rounded-full text-zinc-500 hover:bg-zinc-100"
+          className="mb-4 grid h-10 w-10 place-items-center rounded-full text-zinc-500 hover:bg-zinc-100 md:hidden"
           aria-label="Close"
           data-testid="referral-close"
         >
           <X className="h-6 w-6" />
         </button>
 
-        <div className="flex flex-col items-center text-center">
+        <DesktopPageHeader title="Referral" subtitle="Give Premium, get Premium — earn free credits." />
+
+        <div className="flex flex-col items-center text-center md:items-start md:text-left">
           <div className="relative mb-4">
             <div className="flex -space-x-3">
               <div className="grid h-16 w-16 place-items-center rounded-full bg-gradient-to-br from-amber-300 to-amber-500 shadow-md">

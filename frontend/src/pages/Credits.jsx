@@ -3,6 +3,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { X, Check, Gift } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
+import DesktopPageHeader from "../components/desktop/DesktopPageHeader";
+import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
 
 const CREDIT_PACKS = [
   { id: "pack-50", credits: 50, price: "5,99 EUR", save: "Save 16%" },
@@ -76,19 +78,24 @@ export default function Credits() {
   };
 
   return (
-    <div className="min-h-dvh bg-white text-zinc-900">
-      <div className="mx-auto max-w-md px-5 pb-10 pt-5">
+    <div className="min-h-dvh bg-white text-zinc-900 md:min-h-0">
+      <div className={`${APP_CONTENT_WIDTH} pb-10 pt-5 md:py-8`}>
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="mb-6 grid h-10 w-10 place-items-center rounded-full text-zinc-500 hover:bg-zinc-100"
+          className="mb-6 grid h-10 w-10 place-items-center rounded-full text-zinc-500 hover:bg-zinc-100 md:hidden"
           aria-label="Close"
           data-testid="credits-close"
         >
           <X className="h-6 w-6" />
         </button>
 
-        <h1 className="font-display text-2xl font-bold leading-tight tracking-tight">
+        <DesktopPageHeader
+          title="Credits"
+          subtitle="Apply to as many jobs as you want with application credits or Premium."
+        />
+
+        <h1 className="font-display text-2xl font-bold leading-tight tracking-tight md:hidden">
           Apply to as many jobs as you want
         </h1>
 

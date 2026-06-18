@@ -135,3 +135,27 @@ export async function searchLocationsClient(query, limit = 12, signal) {
     .slice(0, limit)
     .map(({ _score, ...row }) => row);
 }
+
+/** Prioritize locations in the same country/region as the user's current target. */
+export function rankLocationSuggestions(labels, hint, limit = 12) {
+  const list = Array.isArray(labels) ? labels : [];
+  if (!list.length) return [];
+
+  const country = (hint || "")
+    .split(",")
+    .slice(-1)[0]
+    ?.trim()
+    .toLowerCase();
+
+  if (!country || country === "anywhere") {
+    return list.slice(0, limit);
+  }
+
+  return [...list]
+    .sort((a, b) => {
+      const aMatch = a.toLowerCase().includes(country);
+      const bMatch = b.toLowerCase().includes(country);
+      return Number(bMatch) - Number(aMatch);
+    })
+    .slice(0, limit);
+}

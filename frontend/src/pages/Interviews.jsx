@@ -9,6 +9,8 @@ import {
 import { api } from "../lib/api";
 import { Textarea } from "../components/ui/textarea";
 import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
+import DesktopPageHeader from "../components/desktop/DesktopPageHeader";
+import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
 
 const CAT_COLORS = {
   Behavioral: "bg-violet-500/15 text-violet-300",
@@ -239,8 +241,8 @@ export default function Interviews() {
   }
 
   return (
-    <AppPage className="sprout bg-sprout-bg text-white">
-      <header className="mx-auto w-full max-w-md shrink-0 px-5 pt-6 flex items-center justify-between" data-testid="interviews-header">
+    <AppPage className="sprout bg-sprout-bg text-white md:bg-transparent md:text-zinc-900 md:py-8">
+      <header className="mx-auto flex w-full max-w-md shrink-0 items-center justify-between px-5 pt-6 md:hidden" data-testid="interviews-header">
         <div className="flex items-center gap-2">
           <MessageSquare className="w-6 h-6 text-white" strokeWidth={2} />
           <h1 className="font-display font-bold text-3xl tracking-tight">Interviews</h1>
@@ -255,8 +257,22 @@ export default function Interviews() {
         </button>
       </header>
 
-      <AppPageScroll className="mx-auto max-w-md px-5">
-      <p className="mt-1 text-sprout-muted text-sm">Practise role-specific questions and get instant AI feedback.</p>
+      <AppPageScroll className={APP_CONTENT_WIDTH}>
+      <DesktopPageHeader
+        title="Interviews"
+        subtitle="Practise role-specific questions and get instant AI feedback."
+        actions={(
+          <button
+            type="button"
+            onClick={() => load(true)}
+            disabled={refreshing}
+            className="rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-violet-600 hover:bg-violet-50 disabled:opacity-50"
+          >
+            {refreshing ? "Refreshing…" : "Refresh"}
+          </button>
+        )}
+      />
+      <p className="mt-1 text-sm text-sprout-muted md:hidden">Practise role-specific questions and get instant AI feedback.</p>
 
       {/* Streak strip */}
       <div className="mt-5 flex gap-3" data-testid="interviews-streak">

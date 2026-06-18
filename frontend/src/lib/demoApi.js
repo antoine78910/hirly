@@ -11,6 +11,7 @@ import {
   demoSwipeRow,
 } from "./demoData";
 import { getDemoTrainingCatalog, getDemoTrainingCourseDetail } from "./demoTrainingData";
+import { isDemoAccountEnabled, consumeDemoCredit } from "./demoAccount";
 
 const state = {
   feedJobs: DEMO_JOBS.map((j) => ({ ...j })),
@@ -53,6 +54,7 @@ function handleSwipe(body = {}) {
   state.undoStack.push({ job: { ...job }, direction, row });
 
   if (direction === "right") {
+    if (isDemoAccountEnabled()) consumeDemoCredit();
     state.historyRight.unshift(row);
     const application = {
       application_id: `demo_app_${Date.now()}`,
