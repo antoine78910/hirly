@@ -14,17 +14,6 @@ pypdf==6.12.1
 python-docx==1.2.0
 beautifulsoup4==4.12.3
 
-# Job automation / browser flows
-playwright==1.56.0
-
-# Database adapters still present in source
-asyncpg==0.29.0
-
 # Test dependencies used by backend/tests
-pytest==9.0.3
 requests==2.34.2
-psycopg2-binary==2.9.10
 
-# Archived Mongo -> Supabase migration scripts
-certifi==2026.5.20
-motor==3.3.1
