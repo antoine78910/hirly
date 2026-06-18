@@ -10,7 +10,7 @@ def create_database_adapter() -> DatabaseAdapter:
     import os
 
     return SupabaseDatabaseAdapter(
-        supabase_url=os.environ["SUPABASE_URL"],
-        secret_key=os.environ["SUPABASE_SECRET_KEY"],
+        supabase_url=os.environ.get("SUPABASE_URL"),
+        secret_key=os.environ.get("SUPABASE_SECRET_KEY"),
         db_url=os.environ.get("SUPABASE_DB_URL"),
     )
