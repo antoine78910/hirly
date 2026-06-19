@@ -1,9 +1,11 @@
 import { FlaskConical } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { useAppLocale } from "../../context/AppLocaleContext";
 import { isDemoAccountEnabled } from "../../lib/demoAccount";
 
 export default function DemoAccountBadge({ className = "", compact = false, variant = "light" }) {
   const { user } = useAuth();
+  const { t } = useAppLocale();
   const isDemo = Boolean(user?.demo_account) || isDemoAccountEnabled();
 
   if (!isDemo) return null;
@@ -21,7 +23,7 @@ export default function DemoAccountBadge({ className = "", compact = false, vari
         data-testid="demo-account-badge"
       >
         <FlaskConical className="h-3 w-3" aria-hidden />
-        Demo account
+        {t("demo.badge")}
       </span>
     );
   }
@@ -39,9 +41,9 @@ export default function DemoAccountBadge({ className = "", compact = false, vari
         <FlaskConical className={`h-4 w-4 ${isDark ? "text-amber-300" : "text-amber-600"}`} aria-hidden />
       </div>
       <div className="min-w-0">
-        <p className={`text-sm font-semibold ${isDark ? "text-amber-200" : "text-amber-700"}`}>Demo account</p>
+        <p className={`text-sm font-semibold ${isDark ? "text-amber-200" : "text-amber-700"}`}>{t("demo.badge")}</p>
         <p className={`mt-0.5 text-xs leading-relaxed ${isDark ? "text-amber-200/75" : "text-amber-700/80"}`}>
-          Applications stay local for screen recordings. Nothing is submitted to employers.
+          {t("demo.banner")}
         </p>
       </div>
     </div>

@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Routes, Route, useLocation } from "react-route
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/context/AuthContext";
 import { UpgradeModalProvider } from "@/context/UpgradeModalContext";
+import { AppLocaleProvider } from "@/context/AppLocaleContext";
 import Landing from "@/pages/Landing";
 import Signup from "@/pages/Signup";
 import Onboarding from "@/pages/Onboarding";
@@ -134,9 +135,11 @@ function App() {
     <div className="App">
       <AuthProvider>
         <BrowserRouter>
-          <UpgradeModalProvider>
-            <AppRouter />
-          </UpgradeModalProvider>
+          <AppLocaleProvider>
+            <UpgradeModalProvider>
+              <AppRouter />
+            </UpgradeModalProvider>
+          </AppLocaleProvider>
           <Toaster position="top-center" richColors theme="dark" />
         </BrowserRouter>
       </AuthProvider>

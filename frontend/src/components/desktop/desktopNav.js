@@ -7,12 +7,13 @@ import {
   User,
 } from "lucide-react";
 
-export const DESKTOP_NAV_ITEMS = [
-  { to: "/swipe", label: "Jobs", icon: Briefcase, end: true },
-  { to: "/review", label: "Review", icon: FileText },
-  { to: "/tracker", label: "Applications", icon: Layers },
-  { to: "/improve", label: "Opportunities", icon: Sparkles },
-  { to: "/emails", label: "Inbox", icon: Mail },
-  { to: "/profile", label: "Profile", icon: User },
-  { to: "/settings", label: "AI Settings", icon: Sparkles },
-];
+export function getDesktopNavItems(t) {
+  return [
+    { to: "/swipe", label: t("nav.jobs"), icon: Briefcase, end: true },
+    { to: "/review", label: t("nav.review"), icon: FileText },
+    { to: "/tracker", label: t("nav.applications"), icon: Layers },
+    { to: "/emails", label: t("nav.inbox"), icon: Mail },
+    { to: "/profile", label: t("nav.profile"), icon: User },
+    { to: "/settings", label: t("nav.aiSettings"), icon: Sparkles },
+  ];
+}

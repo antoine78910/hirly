@@ -1,33 +1,15 @@
 import { motion } from "framer-motion";
 import { FileText, ScanSearch, ScrollText, ShieldCheck } from "lucide-react";
 import { useAiSettings } from "../../hooks/useAiSettings";
+import { useAppLocale } from "../../context/AppLocaleContext";
+import { getAiSettingRows } from "../../lib/appUi";
 
-const MOBILE_ROWS = [
-  {
-    id: "aiCoverLetter",
-    icon: FileText,
-    title: "AI Cover Letter",
-    description: "Generate a tailored cover letter for each job application",
-  },
-  {
-    id: "aiResume",
-    icon: ScrollText,
-    title: "AI Resume",
-    description: "Generate a tailored resume for each job application",
-  },
-  {
-    id: "reviewDocuments",
-    icon: ShieldCheck,
-    title: "Review Documents",
-    description: "Review and approve AI-generated documents before they are used in applications",
-  },
-  {
-    id: "findResumeGaps",
-    icon: ScanSearch,
-    title: "Find Gaps in Resume",
-    description: "Answer questions addressing job requirements to improve AI resume and cover letter generation",
-  },
-];
+const MOBILE_ICONS = {
+  aiCoverLetter: FileText,
+  aiResume: ScrollText,
+  reviewDocuments: ShieldCheck,
+  findResumeGaps: ScanSearch,
+};
 
 function MobileToggle({ checked, onChange, testId }) {
   return (
@@ -51,14 +33,16 @@ function MobileToggle({ checked, onChange, testId }) {
 
 export default function MobileAISettings() {
   const { settings, updateSetting } = useAiSettings();
+  const { t } = useAppLocale();
+  const rows = getAiSettingRows(t);
 
   return (
     <section className="mt-7" data-testid="settings-ai-mobile">
-      <h2 className="mb-2 px-1 text-xs uppercase tracking-[0.16em] text-sprout-muted">AI Application Settings</h2>
-      <p className="mb-3 px-1 text-sm text-sprout-muted">Choose how AI assists with your job applications.</p>
+      <h2 className="mb-2 px-1 text-xs uppercase tracking-[0.16em] text-sprout-muted">{t("aiSettings.subtitle")}</h2>
+      <p className="mb-3 px-1 text-sm text-sprout-muted">{t("aiSettings.mobileIntro")}</p>
       <div className="overflow-hidden rounded-2xl border border-sprout-border bg-sprout-surface divide-y divide-sprout-border">
-        {MOBILE_ROWS.map((row) => {
-          const Icon = row.icon;
+        {rows.map((row) => {
+          const Icon = MOBILE_ICONS[row.id];
           return (
             <div key={row.id} className="flex items-start gap-3 px-4 py-4" data-testid={`ai-setting-row-${row.id}`}>
               <div className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-sprout-mint-soft">

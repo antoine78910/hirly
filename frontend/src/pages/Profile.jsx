@@ -34,22 +34,17 @@ import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
 import DesktopPageHeader from "../components/desktop/DesktopPageHeader";
 import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
 import { trackEvent } from "../lib/analytics";
+import { useAppLocale } from "../context/AppLocaleContext";
+import { getResumeSections } from "../lib/appUi";
 
-const PROFILE_TABS = [
-  { key: "resume", label: "Resume", icon: FileText },
-  { key: "personal", label: "Personal", icon: UserIcon },
-  { key: "files", label: "Files", icon: FolderOpen },
-];
-
-const RESUME_SECTIONS = [
-  { key: "certifications", title: "Certifications", countKey: null, add: "Add certifications" },
-  { key: "awards", title: "Awards", countKey: "awards", add: "Add awards" },
-  { key: "coursework", title: "Relevant Coursework", countKey: "coursework", add: "Add coursework" },
-  { key: "languages", title: "Languages", countKey: "languages", add: "Add languages" },
-  { key: "skills", title: "Skills", countKey: "skills", add: "Add skills" },
-];
+const PROFILE_TAB_ICONS = {
+  resume: FileText,
+  personal: UserIcon,
+  files: FolderOpen,
+};
 
 function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
+  const { t } = useAppLocale();
   const [targetRole, setTargetRole] = useState("");
   const [targetLocation, setTargetLocation] = useState("");
   const [targetLocationData, setTargetLocationData] = useState(null);
@@ -68,7 +63,7 @@ function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
 
   const save = async () => {
     if (hasGooglePlacesKey() && targetLocation && !targetLocationData) {
-      toast.error("Select a location from the suggestions");
+      toast.error(t("profile.selectLocation"));
       return;
     }
     setSaving(true);
@@ -80,12 +75,12 @@ function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
         remote_preference: remote,
         seniority: seniority === "any" ? null : seniority,
       });
-      toast.success("Preferences saved");
+      toast.success(t("profile.preferencesSaved"));
       trackEvent("profile_updated", { section: "job_preferences" });
       await onSaved?.();
       onClose();
     } catch (_) {
-      toast.error("Could not save preferences");
+      toast.error(t("profile.preferencesError"));
     } finally {
       setSaving(false);
     }
@@ -94,7 +89,7 @@ function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
   return (
     <Sheet
       open={open}
-      title="Job Preferences"
+      title={t("profile.jobPreferences")}
       onClose={onClose}
       testId="job-preferences-sheet"
       footer={<SaveButton saving={saving} onClick={save} testId="job-preferences-save" />}
@@ -102,7 +97,7 @@ function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
       <div className="space-y-4">
         <RolePicker value={targetRole} onChange={setTargetRole} testId="job-prefs-role" />
         <PlacesAutocomplete
-          label="Target location"
+          label={t("profile.targetLocation")}
           optional
           value={targetLocation}
           selectedLocation={targetLocationData}
@@ -111,36 +106,36 @@ function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
             setTargetLocationData(loc);
             if (loc) setTargetLocation(loc.location_label);
           }}
-          placeholder="Search for a city or country"
+          placeholder={t("profileSections.locationPlaceholder")}
           testId="job-prefs-location"
         />
         <div className="space-y-1.5">
-          <Label className="text-sm font-semibold text-zinc-200">Remote preference</Label>
+          <Label className="text-sm font-semibold text-zinc-200">{t("profile.remotePreference")}</Label>
           <Select value={remote} onValueChange={setRemote}>
             <SelectTrigger className="h-11 rounded-xl bg-sprout-surface-2 border-sprout-border text-white" data-testid="job-prefs-remote">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-sprout-surface border-sprout-border text-white">
-              <SelectItem value="any">Any</SelectItem>
-              <SelectItem value="remote">Remote only</SelectItem>
-              <SelectItem value="hybrid">Hybrid</SelectItem>
-              <SelectItem value="onsite">On-site</SelectItem>
+              <SelectItem value="any">{t("profile.any")}</SelectItem>
+              <SelectItem value="remote">{t("profile.remoteOnly")}</SelectItem>
+              <SelectItem value="hybrid">{t("swipe.hybrid")}</SelectItem>
+              <SelectItem value="onsite">{t("profile.onsite")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-sm font-semibold text-zinc-200">Seniority</Label>
+          <Label className="text-sm font-semibold text-zinc-200">{t("profile.seniority")}</Label>
           <Select value={seniority} onValueChange={setSeniority}>
             <SelectTrigger className="h-11 rounded-xl bg-sprout-surface-2 border-sprout-border text-white" data-testid="job-prefs-seniority">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-sprout-surface border-sprout-border text-white">
-              <SelectItem value="any">Any</SelectItem>
-              <SelectItem value="junior">Junior</SelectItem>
-              <SelectItem value="mid">Mid level</SelectItem>
-              <SelectItem value="senior">Senior</SelectItem>
-              <SelectItem value="lead">Lead</SelectItem>
-              <SelectItem value="principal">Principal</SelectItem>
+              <SelectItem value="any">{t("profile.any")}</SelectItem>
+              <SelectItem value="junior">{t("swipe.entryLevel")}</SelectItem>
+              <SelectItem value="mid">{t("swipe.midLevel")}</SelectItem>
+              <SelectItem value="senior">{t("swipe.senior")}</SelectItem>
+              <SelectItem value="lead">{t("swipe.lead")}</SelectItem>
+              <SelectItem value="principal">{t("swipe.principal")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -162,6 +157,7 @@ function boolSelectToValue(value) {
 }
 
 function ApplicationDefaultsSheet({ open, profile, onClose, onSaved }) {
+  const { t } = useAppLocale();
   const [defaults, setDefaults] = useState({});
   const [saving, setSaving] = useState(false);
 
@@ -176,12 +172,12 @@ function ApplicationDefaultsSheet({ open, profile, onClose, onSaved }) {
     setSaving(true);
     try {
       await api.put("/profile/application-defaults", { application_defaults: defaults });
-      toast.success("Application defaults saved");
+      toast.success(t("profile.defaultsSaved"));
       trackEvent("application_defaults_updated");
       await onSaved?.();
       onClose();
     } catch (_) {
-      toast.error("Could not save application defaults");
+      toast.error(t("profile.defaultsError"));
     } finally {
       setSaving(false);
     }
@@ -190,80 +186,80 @@ function ApplicationDefaultsSheet({ open, profile, onClose, onSaved }) {
   return (
     <Sheet
       open={open}
-      title="Application Defaults"
+      title={t("profileSections.applicationDefaults")}
       onClose={onClose}
       testId="application-defaults-sheet"
       footer={<SaveButton saving={saving} onClick={save} testId="application-defaults-save" />}
     >
       <div className="space-y-4">
         <Field
-          label="Phone country code"
+          label={t("profileSections.phoneCountryCode")}
           value={defaults.phone_country_code}
           onChange={(v) => update("phone_country_code", v)}
           placeholder="+44"
           testId="app-defaults-phone-country-code"
         />
         <Field
-          label="Education school"
+          label={t("profileSections.educationSchool")}
           value={defaults.education_school}
           onChange={(v) => update("education_school", v)}
-          placeholder="University or school"
+          placeholder={t("profileSections.schoolPlaceholder")}
           testId="app-defaults-education-school"
         />
         <Field
-          label="Degree"
+          label={t("profileSections.degree")}
           value={defaults.education_degree}
           onChange={(v) => update("education_degree", v)}
-          placeholder="Bachelor's Degree"
+          placeholder={t("profileSections.degreePlaceholder")}
           testId="app-defaults-education-degree"
         />
         <Field
-          label="Field of study"
+          label={t("profileSections.fieldOfStudy")}
           value={defaults.education_discipline}
           onChange={(v) => update("education_discipline", v)}
-          placeholder="Computer Science"
+          placeholder={t("profileSections.fieldPlaceholder")}
           testId="app-defaults-education-discipline"
         />
         <Field
-          label="Graduation year"
+          label={t("profileSections.graduationYear")}
           value={defaults.education_graduation_year}
           onChange={(v) => update("education_graduation_year", v)}
           placeholder="2024"
           testId="app-defaults-education-year"
         />
         <Field
-          label="LinkedIn URL"
+          label={t("profileSections.linkedinUrl")}
           value={defaults.linkedin_url}
           onChange={(v) => update("linkedin_url", v)}
           placeholder="https://linkedin.com/in/..."
           testId="app-defaults-linkedin"
         />
         <Field
-          label="Website or portfolio"
+          label={t("profileSections.websitePortfolio")}
           value={defaults.website_url}
           onChange={(v) => update("website_url", v)}
           placeholder="https://..."
           testId="app-defaults-website"
         />
         <Field
-          label="Current country"
+          label={t("profileSections.currentCountry")}
           value={defaults.current_location_country}
           onChange={(v) => update("current_location_country", v)}
-          placeholder="United Kingdom"
+          placeholder={t("profileSections.countryPlaceholder")}
           testId="app-defaults-current-country"
         />
         <Field
-          label="Current city"
+          label={t("profileSections.currentCity")}
           value={defaults.current_location_city}
           onChange={(v) => update("current_location_city", v)}
-          placeholder="London"
+          placeholder={t("profileSections.cityPlaceholder")}
           testId="app-defaults-current-city"
         />
         <Field
-          label="Work-authorized countries"
+          label={t("profileSections.workAuthorized")}
           value={Array.isArray(defaults.work_authorized_countries) ? defaults.work_authorized_countries.join(", ") : defaults.work_authorized_countries}
           onChange={(v) => update("work_authorized_countries", v.split(",").map((item) => item.trim()).filter(Boolean))}
-          placeholder="United Kingdom, United States"
+          placeholder={t("profileSections.workAuthorizedPlaceholder")}
           testId="app-defaults-work-authorized-countries"
         />
         <div className="space-y-1.5">
@@ -293,10 +289,10 @@ function ApplicationDefaultsSheet({ open, profile, onClose, onSaved }) {
           </Select>
         </div>
         <Field
-          label="Default referral source"
+          label={t("profileSections.referralSource")}
           value={defaults.referral_source}
           onChange={(v) => update("referral_source", v)}
-          placeholder="Hirly"
+          placeholder={t("profileSections.referralPlaceholder")}
           testId="app-defaults-referral-source"
         />
         <div className="space-y-1.5">
@@ -365,6 +361,7 @@ function firstValue(...values) {
 }
 
 export default function Profile() {
+  const { t } = useAppLocale();
   const { user } = useAuth();
   const navigate = useNavigate();
   const { displayCredits, isPremium } = useSwipeCredits();
@@ -374,6 +371,14 @@ export default function Profile() {
   const [tab, setTab] = useState("resume");
   const [openSheet, setOpenSheet] = useState(null);
   const [creditsDismissed, setCreditsDismissed] = useState(false);
+
+  const profileTabs = useMemo(() => ([
+    { key: "resume", label: t("profile.resume"), icon: PROFILE_TAB_ICONS.resume },
+    { key: "personal", label: t("profile.personal"), icon: PROFILE_TAB_ICONS.personal },
+    { key: "files", label: t("profile.files"), icon: PROFILE_TAB_ICONS.files },
+  ]), [t]);
+
+  const resumeSections = useMemo(() => getResumeSections(t), [t]);
 
   const reload = useCallback(async () => {
     try {
@@ -420,13 +425,13 @@ export default function Profile() {
   return (
     <AppPage className="bg-white text-zinc-900 md:py-8">
       <TitleHeader
-        title="Profile"
+        title={t("profile.title")}
         rightAction={(
           <button
             type="button"
             onClick={() => navigate("/settings")}
             className="grid h-10 w-10 place-items-center rounded-full text-zinc-500 hover:bg-zinc-100"
-            aria-label="Settings"
+            aria-label={t("profileSections.settings")}
             data-testid="profile-settings-btn"
           >
             <SettingsIcon className="h-5 w-5" />
@@ -437,8 +442,8 @@ export default function Profile() {
       <AppPageScroll>
         <div className={`${APP_CONTENT_WIDTH} space-y-4 md:space-y-6`}>
         <DesktopPageHeader
-          title="Profile"
-          subtitle="Resume, personal info, and application defaults."
+          title={t("profile.title")}
+          subtitle={t("profile.subtitle")}
           actions={(
             <button
               type="button"
@@ -446,7 +451,7 @@ export default function Profile() {
               className="hidden rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 md:inline-flex md:items-center md:gap-2"
             >
               <SettingsIcon className="h-4 w-4" />
-              AI Settings
+              {t("nav.aiSettings")}
             </button>
           )}
         />
@@ -456,7 +461,7 @@ export default function Profile() {
               type="button"
               onClick={() => setCreditsDismissed(true)}
               className="text-zinc-300 hover:text-zinc-500"
-              aria-label="Dismiss"
+              aria-label={t("profileSections.dismiss")}
             >
               <X className="h-4 w-4" />
             </button>
@@ -473,9 +478,9 @@ export default function Profile() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-bold">
-                  <span className="text-amber-500">{swipeCredits}</span> {isPremium ? "Unlimited" : "Credits"}
+                  <span className="text-amber-500">{swipeCredits}</span> {isPremium ? t("common.unlimited") : t("common.credits")}
                 </p>
-                <p className="text-xs text-zinc-500">{isPremium ? "Unlimited swipes" : "Upgrade your plan"}</p>
+                <p className="text-xs text-zinc-500">{isPremium ? t("profile.unlimitedSwipes") : t("profile.upgradePlan")}</p>
               </div>
               <ChevronRight className="h-5 w-5 shrink-0 text-zinc-300" />
             </button>
@@ -497,8 +502,8 @@ export default function Profile() {
               </div>
             </div>
             <div className="flex-1">
-              <p className="font-display text-lg font-bold">Complete your profile</p>
-              <p className="text-sm text-zinc-500">Auto-fill more job application fields.</p>
+              <p className="font-display text-lg font-bold">{t("profile.completeProfile")}</p>
+              <p className="text-sm text-zinc-500">{t("profile.completeProfileBody")}</p>
             </div>
           </div>
           <button
@@ -507,26 +512,26 @@ export default function Profile() {
             className="mt-4 w-full rounded-full gradient-linkedin py-3 text-sm font-semibold text-white hover:opacity-90"
             data-testid="profile-finish-btn"
           >
-            Finish profile
+            {t("profile.finishProfile")}
           </button>
         </div>
 
         <div className="flex border-b border-zinc-200">
-          {PROFILE_TABS.map((t) => {
-            const Icon = t.icon;
-            const active = tab === t.key;
+          {profileTabs.map((tabItem) => {
+            const Icon = tabItem.icon;
+            const active = tab === tabItem.key;
             return (
               <button
-                key={t.key}
+                key={tabItem.key}
                 type="button"
-                onClick={() => setTab(t.key)}
+                onClick={() => setTab(tabItem.key)}
                 className={`flex flex-1 flex-col items-center gap-1 py-3 text-xs font-semibold ${
                   active ? "text-linkedin" : "text-zinc-400"
                 }`}
-                data-testid={`profile-tab-${t.key}`}
+                data-testid={`profile-tab-${tabItem.key}`}
               >
                 <Icon className="h-5 w-5" strokeWidth={active ? 2.4 : 1.8} />
-                {t.label}
+                {tabItem.label}
                 {active ? <span className="h-0.5 w-8 rounded-full bg-linkedin" /> : <span className="h-0.5 w-8" />}
               </button>
             );
@@ -541,15 +546,15 @@ export default function Profile() {
               className="flex w-full items-center justify-between rounded-xl border border-dashed border-zinc-300 px-4 py-3 text-left hover:bg-zinc-50"
             >
               <div>
-                <p className="font-semibold text-zinc-900">Your CV</p>
+                <p className="font-semibold text-zinc-900">{t("profile.yourCv")}</p>
                 <p className="text-sm text-zinc-500">
-                  {profile?.cv_text ? "Resume uploaded — tap to update" : "Upload your resume"}
+                  {profile?.cv_text ? t("profile.resumeUploaded") : t("profile.uploadResume")}
                 </p>
               </div>
               <Pencil className="h-4 w-4 text-zinc-400" />
             </button>
 
-            {RESUME_SECTIONS.map((section) => {
+            {resumeSections.map((section) => {
               const count = sectionCount(section.countKey);
               return (
                 <div key={section.key}>
@@ -569,7 +574,7 @@ export default function Profile() {
                       <div>
                         <p className="font-semibold text-zinc-900">{section.add}</p>
                         {section.key === "languages" ? (
-                          <p className="text-sm text-zinc-500">Highlight the languages you speak and your proficiency.</p>
+                          <p className="text-sm text-zinc-500">{t("profileSections.languagesHint")}</p>
                         ) : null}
                       </div>
                     </div>
@@ -586,31 +591,31 @@ export default function Profile() {
             <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="font-semibold text-zinc-900">Extracted application data</p>
-                  <p className="text-sm text-zinc-600">Reusable CV details used for job forms</p>
+                  <p className="font-semibold text-zinc-900">{t("profile.extractedData")}</p>
+                  <p className="text-sm text-zinc-600">{t("profile.extractedDataHint")}</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setOpenSheet("application-defaults")}
                   className="text-sm font-semibold text-linkedin hover:opacity-80"
                 >
-                  Edit
+                  {t("profileSections.edit")}
                 </button>
               </div>
               <div className="mt-4 grid gap-3 text-sm">
                 {[
-                  ["School", extractedSummary.school],
-                  ["Degree", extractedSummary.degree],
-                  ["Field of study", extractedSummary.discipline],
-                  ["Graduation year", extractedSummary.graduationYear],
-                  ["LinkedIn", extractedSummary.linkedin],
-                  ["Website or portfolio", extractedSummary.website],
-                  ["Phone country code", extractedSummary.phoneCountryCode],
+                  [t("profileSections.educationSchool"), extractedSummary.school],
+                  [t("profileSections.degree"), extractedSummary.degree],
+                  [t("profileSections.fieldOfStudy"), extractedSummary.discipline],
+                  [t("profileSections.graduationYear"), extractedSummary.graduationYear],
+                  [t("profileSections.linkedinUrl"), extractedSummary.linkedin],
+                  [t("profileSections.websitePortfolio"), extractedSummary.website],
+                  [t("profileSections.phoneCountryCode"), extractedSummary.phoneCountryCode],
                 ].map(([label, value]) => (
                   <div key={label} className="flex items-start justify-between gap-4 border-b border-zinc-100 pb-2 last:border-b-0 last:pb-0">
                     <span className="text-zinc-600">{label}</span>
                     <span className="max-w-[60%] break-words text-right font-medium text-zinc-900">
-                      {value || "Not set"}
+                      {value || t("common.notSet")}
                     </span>
                   </div>
                 ))}
@@ -622,8 +627,8 @@ export default function Profile() {
               className="flex w-full items-center justify-between border-b border-zinc-100 py-4 text-left"
             >
               <div>
-                <p className="font-semibold">Personal details</p>
-                <p className="text-sm text-zinc-500">{profile?.contact?.name || "Add your name"}</p>
+                <p className="font-semibold">{t("profile.personalDetails")}</p>
+                <p className="text-sm text-zinc-500">{profile?.contact?.name || t("profile.addYourName")}</p>
               </div>
               <Pencil className="h-4 w-4 text-zinc-400" />
             </button>
@@ -633,8 +638,8 @@ export default function Profile() {
               className="flex w-full items-center justify-between border-b border-zinc-100 py-4 text-left"
             >
               <div>
-                <p className="font-semibold">Job preferences</p>
-                <p className="text-sm text-zinc-500">{profile?.target_role || "Set target role"}</p>
+                <p className="font-semibold">{t("profile.jobPreferences")}</p>
+                <p className="text-sm text-zinc-500">{profile?.target_role || t("swipe.setTargetRole")}</p>
               </div>
               <Pencil className="h-4 w-4 text-zinc-400" />
             </button>
@@ -645,8 +650,8 @@ export default function Profile() {
               data-testid="profile-application-defaults-card"
             >
               <div>
-                <p className="font-semibold">Application defaults</p>
-                <p className="text-sm text-zinc-500">Reusable answers for one-swipe applications</p>
+                <p className="font-semibold">{t("profile.applicationDefaults")}</p>
+                <p className="text-sm text-zinc-500">{t("profile.applicationDefaultsHint")}</p>
               </div>
               <ShieldCheck className="h-4 w-4 text-zinc-400" />
             </button>
@@ -661,8 +666,8 @@ export default function Profile() {
               className="flex w-full items-center justify-between rounded-xl border border-dashed border-zinc-300 px-4 py-4 text-left hover:bg-zinc-50"
             >
               <div>
-                <p className="font-semibold text-zinc-900">Other files</p>
-                <p className="text-sm text-zinc-500">Transcripts, portfolios, certificates…</p>
+                <p className="font-semibold text-zinc-900">{t("profile.otherFiles")}</p>
+                <p className="text-sm text-zinc-500">{t("profile.otherFilesHint")}</p>
               </div>
               <Plus className="h-5 w-5 text-linkedin" />
             </button>

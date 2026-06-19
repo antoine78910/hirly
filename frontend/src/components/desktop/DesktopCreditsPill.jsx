@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Zap } from "lucide-react";
 import { api } from "../../lib/api";
 import { useUpgradeModal } from "../../context/UpgradeModalContext";
+import { useAppLocale } from "../../context/AppLocaleContext";
 import {
   DEMO_ACCOUNT_CHANGED,
   DEMO_CREDITS_CHANGED,
@@ -57,6 +58,7 @@ export function useSwipeCredits() {
 
 export default function DesktopCreditsPill({ isDark = false, className = "" }) {
   const { openUpgrade } = useUpgradeModal();
+  const { t } = useAppLocale();
   const { displayCredits, loading, isPremium } = useSwipeCredits();
 
   return (
@@ -72,7 +74,7 @@ export default function DesktopCreditsPill({ isDark = false, className = "" }) {
           ? "border-violet-500/30 bg-violet-500/10 text-violet-100 hover:bg-violet-500/20"
           : "border-violet-200 bg-gradient-to-r from-violet-50 to-blue-50 text-violet-700 shadow-sm hover:from-violet-100 hover:to-blue-100"
       } ${className}`}
-      aria-label={isPremium ? "Unlimited credits" : "View plans"}
+      aria-label={isPremium ? t("credits.unlimitedAria") : t("credits.viewPlans")}
       data-testid="desktop-credits-pill"
     >
       <span className="grid h-6 w-6 place-items-center rounded-full bg-gradient-to-br from-violet-500 to-blue-500 shadow-sm">
@@ -82,7 +84,7 @@ export default function DesktopCreditsPill({ isDark = false, className = "" }) {
         {loading ? "—" : displayCredits}
       </span>
       <span className={`text-xs font-medium ${isDark ? "text-violet-300/80" : "text-violet-500/80"}`}>
-        {isPremium ? "Unlimited" : "Credits"}
+        {isPremium ? t("common.unlimited") : t("common.credits")}
       </span>
     </button>
   );

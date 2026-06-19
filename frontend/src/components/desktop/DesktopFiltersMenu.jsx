@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Briefcase,
   Building2,
@@ -9,33 +9,41 @@ import {
   Factory,
   Home,
   SlidersHorizontal,
-  Sparkles,
   TrendingUp,
   X,
 } from "lucide-react";
 import {
-  DATE_OPTIONS,
-  EXPERIENCE_LEVELS,
-  EXPERIENCE_LABELS,
-  JOB_LABELS,
-  JOB_TYPES,
-  WORK_LABELS,
-  WORK_LOCATIONS,
   countActiveFilterGroups,
   formatMinSalary,
   mergeFilters,
   toggleFilterArray,
 } from "../../lib/jobFilters";
+import {
+  getDateOptions,
+  getExperienceOptions,
+  getFilterPanels,
+  getJobTypeOptions,
+  getWorkLocationOptions,
+} from "../../lib/appUi";
+import { useAppLocale } from "../../context/AppLocaleContext";
 
-const PANELS = [
-  { id: "postedDate", label: "Posted Date", icon: Calendar },
-  { id: "workLocation", label: "Work Location", icon: Home },
-  { id: "experience", label: "Experience", icon: TrendingUp },
-  { id: "jobType", label: "Job Type", icon: Briefcase },
-  { id: "salary", label: "Salary", icon: DollarSign },
-  { id: "company", label: "Company", icon: Building2 },
-  { id: "industry", label: "Industry", icon: Factory },
-];
+const PANEL_ICONS = {
+  postedDate: Calendar,
+  workLocation: Home,
+  experience: TrendingUp,
+  jobType: Briefcase,
+  salary: DollarSign,
+  company: Building2,
+  industry: Factory,
+};
+
+const SUBMENU_GAP = 6;
+const MAIN_MENU_WIDTH = 224;
+const VIEWPORT_PADDING = 12;
+
+function submenuWidthFor(panel) {
+  return panel === "company" || panel === "industry" ? 300 : 220;
+}
 
 function FlyoutRow({ active, children, onClick, onMouseEnter, testId, isDark }) {
   return (
@@ -74,7 +82,7 @@ function SubmenuOption({ active, label, onClick, testId, multi = false, isDark }
   );
 }
 
-function ListAddSection({ title, placeholder, values, onAdd, onRemove, testId, isDark }) {
+function ListAddSection({ title, placeholder, values, onAdd, onRemove, testId, isDark, addLabel, removeLabel }) {
   const [draft, setDraft] = useState("");
 
   const submit = () => {
@@ -108,7 +116,7 @@ function ListAddSection({ title, placeholder, values, onAdd, onRemove, testId, i
             isDark ? "bg-zinc-800 text-white hover:bg-zinc-700" : "bg-zinc-100 text-zinc-900 hover:bg-zinc-200"
           }`}
         >
-          Add
+          {addLabel}
         </button>
       </div>
       {values.length > 0 ? (
@@ -125,7 +133,7 @@ function ListAddSection({ title, placeholder, values, onAdd, onRemove, testId, i
                 type="button"
                 onClick={() => onRemove(value)}
                 className="text-zinc-400 hover:text-white"
-                aria-label={`Remove ${value}`}
+                aria-label={typeof removeLabel === "function" ? removeLabel(value) : removeLabel}
               >
                 <X className="h-3 w-3" />
               </button>
@@ -140,15 +148,21 @@ function ListAddSection({ title, placeholder, values, onAdd, onRemove, testId, i
 export default function DesktopFiltersMenu({
   filters,
   onFiltersChange,
-  onOpenTarget,
   themeMode = "light",
   onOpenChange,
 }) {
   const isDark = themeMode === "dark";
+  const { t } = useAppLocale();
+  const panels = getFilterPanels(t).map((panel) => ({
+    ...panel,
+    icon: PANEL_ICONS[panel.id],
+  }));
   const anchorRef = useRef(null);
+  const flyoutRef = useRef(null);
   const salaryTimerRef = useRef(null);
   const [open, setOpen] = useState(false);
-  const [activePanel, setActivePanel] = useState("postedDate");
+  const [activePanel, setActivePanel] = useState(null);
+  const [flyoutPos, setFlyoutPos] = useState(null);
   const f = mergeFilters(filters);
   const activeCount = countActiveFilterGroups(f);
   const [salaryDraft, setSalaryDraft] = useState(f.minSalary);
@@ -176,14 +190,56 @@ export default function DesktopFiltersMenu({
     if (salaryTimerRef.current) clearTimeout(salaryTimerRef.current);
   }, []);
 
+  const updateFlyoutPosition = useCallback(() => {
+    if (!open || !anchorRef.current) return;
+
+    const anchor = anchorRef.current.getBoundingClientRect();
+    const submenuWidth = activePanel ? submenuWidthFor(activePanel) + SUBMENU_GAP : 0;
+    const totalWidth = MAIN_MENU_WIDTH + submenuWidth;
+
+    let left = anchor.left;
+    if (left + totalWidth > window.innerWidth - VIEWPORT_PADDING) {
+      left = Math.max(VIEWPORT_PADDING, window.innerWidth - VIEWPORT_PADDING - totalWidth);
+    }
+
+    let top = anchor.bottom + 8;
+    const flyoutHeight = flyoutRef.current?.offsetHeight ?? 0;
+    if (flyoutHeight > 0 && top + flyoutHeight > window.innerHeight - VIEWPORT_PADDING) {
+      top = Math.max(VIEWPORT_PADDING, anchor.top - 8 - flyoutHeight);
+    }
+
+    setFlyoutPos({ left, top });
+  }, [activePanel, open]);
+
+  useLayoutEffect(() => {
+    updateFlyoutPosition();
+  }, [updateFlyoutPosition]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    window.addEventListener("resize", updateFlyoutPosition);
+    window.addEventListener("scroll", updateFlyoutPosition, true);
+    return () => {
+      window.removeEventListener("resize", updateFlyoutPosition);
+      window.removeEventListener("scroll", updateFlyoutPosition, true);
+    };
+  }, [open, updateFlyoutPosition]);
+
   useEffect(() => {
     if (!open) return undefined;
     const onPointerDown = (event) => {
       if (anchorRef.current?.contains(event.target)) return;
+      if (flyoutRef.current?.contains(event.target)) return;
+      setActivePanel(null);
+      setFlyoutPos(null);
       setOpen(false);
     };
     const onKeyDown = (event) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") {
+        setActivePanel(null);
+        setFlyoutPos(null);
+        setOpen(false);
+      }
     };
     document.addEventListener("mousedown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
@@ -206,7 +262,7 @@ export default function DesktopFiltersMenu({
       case "postedDate":
         return (
           <div className="space-y-0.5 p-1.5">
-            {DATE_OPTIONS.map((option) => (
+            {getDateOptions(t).map((option) => (
               <SubmenuOption
                 key={option.value}
                 isDark={isDark}
@@ -221,13 +277,13 @@ export default function DesktopFiltersMenu({
       case "workLocation":
         return (
           <div className="space-y-0.5 p-1.5">
-            {WORK_LOCATIONS.map((value) => (
+            {getWorkLocationOptions(t).map(({ value, label }) => (
               <SubmenuOption
                 key={value}
                 isDark={isDark}
                 multi
                 active={f.workLocations.includes(value)}
-                label={WORK_LABELS[value]}
+                label={label}
                 onClick={() => patch({
                   workLocations: toggleFilterArray(f.workLocations, value),
                 })}
@@ -239,13 +295,13 @@ export default function DesktopFiltersMenu({
       case "experience":
         return (
           <div className="space-y-0.5 p-1.5">
-            {EXPERIENCE_LEVELS.map((value) => (
+            {getExperienceOptions(t).map(({ value, label }) => (
               <SubmenuOption
                 key={value}
                 isDark={isDark}
                 multi
                 active={f.experience.includes(value)}
-                label={EXPERIENCE_LABELS[value]}
+                label={label}
                 onClick={() => patch({
                   experience: toggleFilterArray(f.experience, value),
                 })}
@@ -257,13 +313,13 @@ export default function DesktopFiltersMenu({
       case "jobType":
         return (
           <div className="space-y-0.5 p-1.5">
-            {JOB_TYPES.map((value) => (
+            {getJobTypeOptions(t).map(({ value, label }) => (
               <SubmenuOption
                 key={value}
                 isDark={isDark}
                 multi
                 active={f.jobTypes.includes(value)}
-                label={JOB_LABELS[value]}
+                label={label}
                 onClick={() => patch({
                   jobTypes: toggleFilterArray(f.jobTypes, value),
                 })}
@@ -276,7 +332,7 @@ export default function DesktopFiltersMenu({
         return (
           <div className="space-y-3 p-3">
             <p className={`text-sm ${isDark ? "text-zinc-300" : "text-zinc-600"}`}>
-              Minimum:
+              {t("filters.minimum")}
               {" "}
               <span className={`font-semibold ${isDark ? "text-white" : "text-zinc-900"}`}>
                 {formatMinSalary(salaryDraft)}
@@ -307,8 +363,10 @@ export default function DesktopFiltersMenu({
           <div className="space-y-4 p-3">
             <ListAddSection
               isDark={isDark}
-              title="Only show jobs from"
-              placeholder="Company name"
+              title={t("filters.onlyCompanies")}
+              placeholder={t("filters.companyPlaceholder")}
+              addLabel={t("common.add")}
+              removeLabel={(value) => t("filters.removeValue", { value })}
               values={f.onlyCompanies}
               onAdd={(value) => patch({
                 onlyCompanies: [...new Set([...f.onlyCompanies, value])],
@@ -322,8 +380,10 @@ export default function DesktopFiltersMenu({
             <div className={`h-px ${isDark ? "bg-zinc-800" : "bg-zinc-200"}`} />
             <ListAddSection
               isDark={isDark}
-              title="Hide jobs from"
-              placeholder="Company name"
+              title={t("filters.hideCompanies")}
+              placeholder={t("filters.companyPlaceholder")}
+              addLabel={t("common.add")}
+              removeLabel={(value) => t("filters.removeValue", { value })}
               values={f.hideCompanies}
               onAdd={(value) => patch({
                 hideCompanies: [...new Set([...f.hideCompanies, value])],
@@ -341,8 +401,10 @@ export default function DesktopFiltersMenu({
           <div className="space-y-4 p-3">
             <ListAddSection
               isDark={isDark}
-              title="Only show jobs in"
-              placeholder="Industry name"
+              title={t("filters.onlyIndustries")}
+              placeholder={t("filters.industryPlaceholder")}
+              addLabel={t("common.add")}
+              removeLabel={(value) => t("filters.removeValue", { value })}
               values={f.onlyIndustries}
               onAdd={(value) => patch({
                 onlyIndustries: [...new Set([...f.onlyIndustries, value])],
@@ -356,8 +418,10 @@ export default function DesktopFiltersMenu({
             <div className={`h-px ${isDark ? "bg-zinc-800" : "bg-zinc-200"}`} />
             <ListAddSection
               isDark={isDark}
-              title="Hide jobs in"
-              placeholder="Industry name"
+              title={t("filters.hideIndustries")}
+              placeholder={t("filters.industryPlaceholder")}
+              addLabel={t("common.add")}
+              removeLabel={(value) => t("filters.removeValue", { value })}
               values={f.hideIndustries}
               onAdd={(value) => patch({
                 hideIndustries: [...new Set([...f.hideIndustries, value])],
@@ -375,13 +439,25 @@ export default function DesktopFiltersMenu({
     }
   };
 
-  const submenuWidth = activePanel === "company" || activePanel === "industry" ? 300 : 220;
+  const submenuWidth = activePanel ? submenuWidthFor(activePanel) : 0;
+
+  const toggleOpen = () => {
+    setOpen((current) => {
+      if (current) {
+        setActivePanel(null);
+        setFlyoutPos(null);
+        return false;
+      }
+      setActivePanel(null);
+      return true;
+    });
+  };
 
   return (
     <div className="relative" ref={anchorRef} data-testid="desktop-filters-menu">
       <button
         type="button"
-        onClick={() => setOpen((current) => !current)}
+        onClick={toggleOpen}
         className={`relative inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium ${
           isDark
             ? "border-zinc-700 bg-zinc-900 text-zinc-100 hover:border-zinc-600"
@@ -391,7 +467,7 @@ export default function DesktopFiltersMenu({
         aria-expanded={open}
       >
         <SlidersHorizontal className="h-4 w-4" />
-        Filters
+        {t("filters.title")}
         {activeCount > 0 ? (
           <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-violet-500 px-1 text-[10px] font-bold text-white">
             {activeCount > 9 ? "9+" : activeCount}
@@ -400,15 +476,22 @@ export default function DesktopFiltersMenu({
       </button>
 
       {open ? (
-        <div className="absolute left-0 top-[calc(100%+8px)] z-50 flex items-start">
+        <div
+          ref={flyoutRef}
+          className="fixed z-50 flex items-start"
+          style={{
+            left: flyoutPos?.left ?? 0,
+            top: flyoutPos?.top ?? 0,
+            visibility: flyoutPos ? "visible" : "hidden",
+          }}
+        >
           <div className={`w-56 rounded-xl border p-1.5 ${menuShell}`}>
-            {PANELS.map(({ id, label, icon: Icon }) => (
+            {panels.map(({ id, label, icon: Icon }) => (
               <FlyoutRow
                 key={id}
                 isDark={isDark}
                 active={activePanel === id}
                 onMouseEnter={() => setActivePanel(id)}
-                onClick={() => setActivePanel(id)}
                 testId={`desktop-filters-panel-${id}`}
               >
                 <Icon className="h-4 w-4 shrink-0 text-zinc-400" />
@@ -426,7 +509,7 @@ export default function DesktopFiltersMenu({
               testId="desktop-filters-unknown-location"
             >
               <Check className={`h-4 w-4 shrink-0 ${f.includeUnknownLocation ? "text-violet-400" : "text-transparent"}`} />
-              <span className="min-w-0 flex-1 text-xs leading-snug">Include unknown work location</span>
+              <span className="min-w-0 flex-1 text-xs leading-snug">{t("filters.includeUnknownLocation")}</span>
             </FlyoutRow>
             <FlyoutRow
               isDark={isDark}
@@ -435,32 +518,20 @@ export default function DesktopFiltersMenu({
               testId="desktop-filters-unknown-salary"
             >
               <Check className={`h-4 w-4 shrink-0 ${f.includeUnknownSalary ? "text-violet-400" : "text-transparent"}`} />
-              <span className="min-w-0 flex-1 text-xs leading-snug">Include unknown salary</span>
+              <span className="min-w-0 flex-1 text-xs leading-snug">{t("filters.includeUnknownSalary")}</span>
             </FlyoutRow>
 
-            <div className={`my-1.5 h-px ${isDark ? "bg-zinc-800" : "bg-zinc-200"}`} />
+          </div>
 
-            <FlyoutRow
-              isDark={isDark}
-              active={false}
-              onClick={() => {
-                setOpen(false);
-                onOpenTarget?.();
-              }}
-              testId="desktop-filters-describe-search"
+          {activePanel ? (
+            <div
+              className={`ml-1.5 rounded-xl border ${submenuShell}`}
+              style={{ width: submenuWidth }}
+              data-testid="desktop-filters-submenu"
             >
-              <Sparkles className="h-4 w-4 shrink-0 text-violet-400" />
-              <span className="min-w-0 flex-1">Describe your search</span>
-            </FlyoutRow>
-          </div>
-
-          <div
-            className={`ml-1.5 rounded-xl border ${submenuShell}`}
-            style={{ width: submenuWidth }}
-            data-testid="desktop-filters-submenu"
-          >
-            {renderSubmenu()}
-          </div>
+              {renderSubmenu()}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { api } from "../lib/api";
 import { filterApplicationsForReview } from "../lib/applicationReview";
 import { useAiSettings } from "../hooks/useAiSettings";
+import { useAppLocale } from "../context/AppLocaleContext";
 import { BrandHeader } from "../components/app/AppScreenHeader";
 import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
 import DesktopPageHeader from "../components/desktop/DesktopPageHeader";
@@ -33,6 +34,7 @@ const fmtDate = (iso) => {
 };
 
 export default function Review() {
+  const { t } = useAppLocale();
   const { settings } = useAiSettings();
   const reviewEnabled = settings.reviewDocuments;
   const [apps, setApps] = useState([]);
@@ -52,7 +54,7 @@ export default function Review() {
       setApps(appsRes.data?.applications || []);
       setProfile(profileRes.data || null);
     } catch (_) {
-      toast.error("Could not load applications");
+      toast.error(t("review.loadError"));
     } finally {
       setLoading(false);
     }
@@ -73,7 +75,7 @@ export default function Review() {
       setSelected(data);
       setOpen(true);
     } catch (_) {
-      toast.error("Could not open application");
+      toast.error(t("review.openError"));
     }
   };
 
@@ -86,17 +88,17 @@ export default function Review() {
       });
       const status = data?.submission_status;
       if (status === "submitted") {
-        toast.success("Application submitted");
+        toast.success(t("review.submitted"));
       } else if (status === "action_required") {
-        toast("Action required", { description: "A few answers are needed before this can be completed." });
+        toast(t("review.actionRequired"), { description: t("review.actionRequiredDesc") });
       } else {
-        toast.success("Application approved", { description: "We are finalizing the submission." });
+        toast.success(t("review.approved"), { description: t("review.approvedDesc") });
       }
       setOpen(false);
       await load();
     } catch (e) {
       const detail = e?.response?.data?.detail;
-      toast.error(detail?.message || (typeof detail === "string" ? detail : "Could not submit application"));
+      toast.error(detail?.message || (typeof detail === "string" ? detail : t("review.submitError")));
     } finally {
       setSubmitting(false);
     }
@@ -109,12 +111,8 @@ export default function Review() {
       <AppPageScroll>
         <div className={APP_CONTENT_WIDTH}>
           <DesktopPageHeader
-            title="Review"
-            subtitle={
-              reviewEnabled
-                ? "Review and approve AI-generated documents before applications are submitted."
-                : "Enable Review Documents in AI Settings to approve applications before submit."
-            }
+            title={t("review.title")}
+            subtitle={reviewEnabled ? t("review.subtitleOn") : t("review.subtitleOff")}
           />
 
           {!reviewEnabled ? (
@@ -122,16 +120,16 @@ export default function Review() {
               <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-violet-50 text-violet-600">
                 <ShieldCheck className="h-7 w-7" />
               </div>
-              <h2 className="mt-5 font-display text-xl font-bold text-zinc-900">Document review is off</h2>
+              <h2 className="mt-5 font-display text-xl font-bold text-zinc-900">{t("review.disabledTitle")}</h2>
               <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-zinc-600">
-                Applications are prepared automatically when you swipe right. Turn on Review Documents to approve each package before it is submitted.
+                {t("review.disabledBody")}
               </p>
               <Link
                 to="/settings"
                 className="mt-6 inline-flex items-center gap-2 rounded-full gradient-linkedin px-5 py-2.5 text-sm font-semibold text-white"
               >
                 <Settings className="h-4 w-4" />
-                Open AI Settings
+                {t("review.openAiSettings")}
               </Link>
             </section>
           ) : loading ? (
@@ -143,15 +141,15 @@ export default function Review() {
               <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-white text-zinc-500 shadow-sm">
                 <CheckCircle2 className="h-7 w-7" />
               </div>
-              <h2 className="mt-5 font-display text-xl font-bold text-zinc-900">All caught up</h2>
+              <h2 className="mt-5 font-display text-xl font-bold text-zinc-900">{t("review.allCaughtUp")}</h2>
               <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-zinc-600">
-                No applications are waiting for your review. Swipe right on jobs to generate new packages.
+                {t("review.emptyBody")}
               </p>
               <Link
                 to="/swipe"
                 className="mt-6 inline-flex items-center gap-2 rounded-full bg-linkedin px-5 py-2.5 text-sm font-semibold text-white"
               >
-                Back to jobs
+                {t("review.backToJobs")}
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </section>
@@ -183,10 +181,12 @@ export default function Review() {
                       ) : null}
                       <div className="mt-3 flex flex-wrap gap-2">
                         <span className="rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-semibold text-violet-700">
-                          Ready to review
+                          {t("review.readyToReview")}
                         </span>
                         <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-[11px] font-semibold text-zinc-600">
-                          Generated {fmtDate(app.created_at) || "recently"}
+                          {fmtDate(app.created_at)
+                            ? t("review.generatedOn", { date: fmtDate(app.created_at) })
+                            : t("review.generatedRecently")}
                         </span>
                       </div>
                     </div>
@@ -217,18 +217,18 @@ export default function Review() {
 
               <div className="space-y-5 px-6 py-5">
                 <p className="text-sm text-zinc-600">
-                  Review the generated CV and cover letter below. When you approve, Hirly will submit this application.
+                  {t("review.dialogHint")}
                 </p>
 
                 <Tabs defaultValue="cv">
                   <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="cv">
                       <FileText className="mr-1.5 h-3.5 w-3.5" />
-                      CV
+                      {t("review.cv")}
                     </TabsTrigger>
                     <TabsTrigger value="cover">
                       <Mail className="mr-1.5 h-3.5 w-3.5" />
-                      Cover letter
+                      {t("review.coverLetter")}
                     </TabsTrigger>
                   </TabsList>
                   <TabsContent value="cv" className="mt-4">
@@ -255,7 +255,7 @@ export default function Review() {
                   data-testid="review-approve-submit-btn"
                 >
                   {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Approve & Submit
+                  {t("review.approveSubmit")}
                 </Button>
               </div>
             </>

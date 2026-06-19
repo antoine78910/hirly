@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import {
   Loader2, MapPin, FileText, Mail, Download, MessageSquare, FileSearch, Sparkles,
-  Search, CheckCircle2, Clock3, AlertCircle, ArrowRight, BriefcaseBusiness,
+  Search, CheckCircle2, Clock3, AlertCircle, ArrowRight, BriefcaseBusiness, Send, Zap,
 } from "lucide-react";
 import { BrandHeader } from "../components/app/AppScreenHeader";
 import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
@@ -20,95 +21,83 @@ import CoverLetterPreview from "../components/CoverLetterPreview";
 import { downloadTailoredCV, downloadCoverLetter } from "../lib/pdf";
 import { trackEvent } from "../lib/analytics";
 import { useAuth } from "../context/AuthContext";
+import { useAppLocale } from "../context/AppLocaleContext";
 import { resolveDisplayStatus } from "../lib/applicationReview";
+import {
+  getApplicationDisplayStatuses,
+  getTrackerEmptyCopy,
+  getTrackerFilterTabs,
+  getTrackerQuickFilters,
+} from "../lib/appUi";
 
-const DISPLAY_STATUSES = {
-  prepared: {
-    label: "Prepared",
-    stripLabel: "Ready",
-    cta: "Ready",
-    tintLight: "bg-blue-50 text-blue-900 ring-1 ring-blue-200/80",
-    tintDark: "bg-blue-100 text-blue-800 ring-1 ring-blue-200",
-    strip: "bg-blue-50 text-blue-900",
-    dotLight: "bg-blue-500",
-    dotDark: "bg-blue-300",
-  },
-  submitted: {
-    label: "Submitted",
-    stripLabel: "Submitted",
-    cta: "Applied",
-    tintLight: "bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200/80",
-    tintDark: "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200",
-    strip: "bg-emerald-50 text-emerald-900",
-    dotLight: "bg-emerald-500",
-    dotDark: "bg-emerald-400",
-  },
-  action_required: {
-    label: "Action required",
-    stripLabel: "Action required",
-    cta: "Answer questions",
-    tintLight: "bg-orange-50 text-orange-900 ring-1 ring-orange-200/80",
-    tintDark: "bg-orange-100 text-orange-800 ring-1 ring-orange-200",
-    strip: "bg-orange-50 text-orange-900",
-    dotLight: "bg-orange-500",
-    dotDark: "bg-orange-400",
-  },
-  blocked_captcha: {
-    label: "Security check needed",
-    stripLabel: "Security check needed",
-    cta: "View issue",
-    tintLight: "bg-orange-50 text-orange-900 ring-1 ring-orange-200/80",
-    tintDark: "bg-orange-100 text-orange-800 ring-1 ring-orange-200",
-    strip: "bg-orange-50 text-orange-900",
-    dotLight: "bg-orange-500",
-    dotDark: "bg-orange-400",
-  },
-  pending: {
-    label: "Application pending",
-    stripLabel: "Pending",
-    cta: "Finalizing",
-    tintLight: "bg-amber-50 text-amber-900 ring-1 ring-amber-200/80",
-    tintDark: "bg-amber-100 text-amber-800 ring-1 ring-amber-200",
-    strip: "bg-amber-50 text-amber-900",
-    dotLight: "bg-amber-500",
-    dotDark: "bg-amber-400",
-  },
-  failed: {
-    label: "Needs attention",
-    stripLabel: "Needs attention",
-    cta: "View issue",
-    tintLight: "bg-rose-50 text-rose-900 ring-1 ring-rose-200/80",
-    tintDark: "bg-rose-100 text-rose-800 ring-1 ring-rose-200",
-    strip: "bg-rose-50 text-rose-900",
-    dotLight: "bg-rose-500",
-    dotDark: "bg-rose-400",
-  },
-  expired: {
-    label: "Expired",
-    stripLabel: "Expired",
-    cta: "Expired",
-    tintLight: "bg-zinc-50 text-zinc-700 ring-1 ring-zinc-200/80",
-    tintDark: "bg-zinc-100 text-zinc-800 ring-1 ring-zinc-200",
-    strip: "bg-zinc-50 text-zinc-700",
-    dotLight: "bg-zinc-500",
-    dotDark: "bg-zinc-400",
-  },
+const QUICK_FILTER_ICONS = {
+  submitted: Send,
+  pending: Clock3,
+  prepared: Sparkles,
+  action_required: AlertCircle,
 };
 
-const FILTERS = [
-  { key: "all", label: "All" },
-  { key: "action_required", label: "Action required" },
-  { key: "pending", label: "Pending" },
-  { key: "submitted", label: "Submitted" },
-  { key: "prepared", label: "Prepared" },
-  { key: "failed", label: "Failed" },
-  { key: "expired", label: "Expired" },
-];
+const fmtListDate = (iso, lang) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(lang === "fr" ? "fr-FR" : "en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+};
 
-
-const ApplicationStatusPill = ({ application, variant = "light" }) => {
+const listStatusLabel = (application, t) => {
   const key = resolveDisplayStatus(application);
-  const s = DISPLAY_STATUSES[key] || DISPLAY_STATUSES.generated;
+  const labels = {
+    submitted: t("tracker.listViewApplication"),
+    pending: t("tracker.listApplying"),
+    prepared: t("tracker.listViewPackage"),
+    action_required: t("tracker.listAnswerQuestions"),
+    blocked_captcha: t("tracker.listSecurityCheck"),
+    failed: t("tracker.viewIssue"),
+    expired: t("tracker.expired"),
+  };
+  return labels[key] || t("tracker.listViewDetails");
+};
+
+function TrackerApplicationRow({ application, onOpen, t, lang }) {
+  const title = application.job?.title || t("tracker.untitledRole");
+  const company = application.job?.company || t("tracker.unknownCompany");
+  const date = fmtListDate(application.created_at, lang);
+  const statusLabel = listStatusLabel(application, t);
+  const score = application.job?.match_score ?? application.match_score ?? 1;
+
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(application)}
+      className="flex w-full items-center gap-3 rounded-2xl border border-zinc-200/90 bg-zinc-50/80 p-3 text-left transition-colors active:bg-zinc-100 md:rounded-xl md:p-3.5"
+      data-testid={`application-${application.application_id}`}
+    >
+      <CompanyLogo company={application.job?.company} size="sm" rounded="xl" className="shrink-0" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[15px] font-semibold leading-snug text-zinc-900">{title}</p>
+        <p className="truncate text-sm text-zinc-500">{company}</p>
+        <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[11px] text-zinc-500">
+          <span className="truncate">{date || t("tracker.recently")}</span>
+          <span aria-hidden="true">·</span>
+          <span className="inline-flex shrink-0 items-center gap-0.5 font-semibold text-linkedin">
+            <Zap className="h-3 w-3" fill="currentColor" />
+            {score}
+          </span>
+          <span aria-hidden="true">·</span>
+          <span className="truncate font-medium text-zinc-600">{statusLabel}</span>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+const ApplicationStatusPill = ({ application, variant = "light", displayStatuses }) => {
+  const key = resolveDisplayStatus(application);
+  const s = displayStatuses[key] || displayStatuses.pending;
   const tint = variant === "dark" ? s.tintDark : s.tintLight;
   const dot = variant === "dark" ? s.dotDark : s.dotLight;
   return (
@@ -122,7 +111,9 @@ const ApplicationStatusPill = ({ application, variant = "light" }) => {
   );
 };
 
-const statusMeta = (application) => DISPLAY_STATUSES[resolveDisplayStatus(application)] || DISPLAY_STATUSES.pending;
+const statusMeta = (application, displayStatuses) => (
+  displayStatuses[resolveDisplayStatus(application)] || displayStatuses.pending
+);
 
 const isApplicationPrepared = (application) => {
   const status = resolveDisplayStatus(application);
@@ -131,36 +122,36 @@ const isApplicationPrepared = (application) => {
     || (application.package_status && application.package_status !== "not_generated");
 };
 
-const applicationProgress = (application) => {
+const applicationProgress = (application, t) => {
   const status = resolveDisplayStatus(application);
   const prepared = isApplicationPrepared(application);
   return [
-    { key: "generated", label: "Generated", state: "done" },
-    { key: "prepared", label: "Prepared", state: prepared ? "done" : "todo" },
+    { key: "generated", label: t("tracker.generated"), state: "done" },
+    { key: "prepared", label: t("tracker.prepared"), state: prepared ? "done" : "todo" },
     {
       key: "pending",
-      label: "Pending",
+      label: t("tracker.pending"),
       state: status === "submitted" ? "done" : ["pending", "action_required", "blocked_captcha", "failed"].includes(status) ? "current" : "todo",
     },
     {
       key: "submitted",
-      label: "Submitted",
+      label: t("tracker.submitted"),
       state: status === "submitted" ? "done" : status === "failed" || status === "expired" ? "blocked" : "todo",
     },
   ];
 };
 
-const atsLabel = (application) => {
+const atsLabel = (application, t) => {
   const provider = application.job?.ats_provider || application.ats_provider || application.job?.source;
-  if (!provider) return "ATS unknown";
+  if (!provider) return t("tracker.atsUnknown");
   return String(provider).replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 };
 
-const workModeLabel = (application) => {
+const workModeLabel = (application, t) => {
   const job = application.job || {};
   const raw = job.work_location || job.work_mode || job.workplace_type || job.location_type;
   if (raw) return String(raw).replace(/[_-]/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
-  if (job.remote === true || String(job.remote || "").toLowerCase() === "true") return "Remote";
+  if (job.remote === true || String(job.remote || "").toLowerCase() === "true") return t("swipe.remote");
   return null;
 };
 
@@ -189,16 +180,16 @@ const fmtFullDate = (iso) => {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 };
 
-const relativeDate = (iso) => {
+const relativeDate = (iso, t) => {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   const days = Math.floor((Date.now() - d.getTime()) / 86400000);
-  if (days <= 0) return "Today";
-  if (days === 1) return "1 day ago";
-  if (days < 7) return `${days} days ago`;
-  if (days < 14) return "1 wk ago";
-  return `${Math.floor(days / 7)} wks ago`;
+  if (days <= 0) return t("tracker.today");
+  if (days === 1) return t("tracker.yesterday");
+  if (days < 7) return t("tracker.daysAgo", { n: days });
+  if (days < 14) return t("tracker.oneWeekAgo");
+  return t("tracker.weeksAgo", { n: Math.floor(days / 7) });
 };
 
 const matchesSearch = (application, query) => {
@@ -211,23 +202,13 @@ const matchesSearch = (application, query) => {
   ].some((value) => String(value || "").toLowerCase().includes(q));
 };
 
-const emptyCopy = (filter) => ({
-  all: "No applications yet. Swipe right on jobs to start tracking them here.",
-  action_required: "No applications need answers right now.",
-  pending: "No pending applications right now.",
-  submitted: "No submitted applications yet.",
-  prepared: "No prepared applications right now.",
-  failed: "No failed applications right now.",
-  expired: "No expired applications.",
-}[filter] || "No applications found.");
-
-const timelineFor = (application) => {
+const timelineFor = (application, t) => {
   const status = resolveDisplayStatus(application);
   const created = application.created_at;
   const items = [
     {
       key: "created",
-      label: "Application created",
+      label: t("tracker.timelineCreated"),
       detail: fmtFullDate(created),
       tone: "done",
     },
@@ -235,23 +216,23 @@ const timelineFor = (application) => {
   if (application.package_status && application.package_status !== "not_generated") {
     items.push({
       key: "package",
-      label: "Tailored package generated",
+      label: t("tracker.timelinePackage"),
       detail: fmtFullDate(application.updated_at || created),
       tone: "done",
     });
   }
   const statusLabels = {
-    submitted: "Application submitted",
-    action_required: "Answers needed",
-    pending: "Application pending",
-    prepared: "Application prepared",
-    blocked_captcha: "Security check needed",
-    failed: "Needs attention",
-    expired: "Application expired",
+    submitted: t("tracker.timelineSubmitted"),
+    action_required: t("tracker.timelineAnswersNeeded"),
+    pending: t("tracker.timelinePending"),
+    prepared: t("tracker.timelinePrepared"),
+    blocked_captcha: t("tracker.timelineSecurity"),
+    failed: t("tracker.timelineFailed"),
+    expired: t("tracker.timelineExpired"),
   };
   items.push({
     key: status,
-    label: statusLabels[status] || "Application pending",
+    label: statusLabels[status] || t("tracker.timelinePending"),
     detail: fmtFullDate(application.submitted_at || application.updated_at || created),
     tone: status === "submitted" || status === "prepared" ? "done" : status === "failed" || status === "expired" ? "error" : "current",
   });
@@ -277,28 +258,25 @@ const optionLabel = (option) => {
   return option?.label || option?.value || "";
 };
 
-const applicationStatusMessage = (status) => {
-  if (status === "submitted") return "Submitted";
-  if (status === "pending") return "We're finalizing your application.";
-  if (status === "ready" || status === "prepared") {
-    return "Application prepared. Final submission is not enabled yet.";
-  }
-  if (status === "blocked" || status === "action_required") {
-    return "A few answers are needed before this application can be prepared.";
-  }
-  if (status === "blocked_captcha") {
-    return "An additional security check is required before this application can be completed.";
-  }
-  if (status === "prepare_failed") {
-    return "Application package generated, but browser preparation failed.";
-  }
-  if (status === "failed") return "Submission failed.";
-  if (status === "unknown") return "Submission status is unknown. Review before continuing.";
-  return "Not submitted yet";
+const applicationStatusMessage = (status, t) => {
+  if (status === "submitted") return t("tracker.statusSubmitted");
+  if (status === "pending") return t("tracker.statusFinalizing");
+  if (status === "ready" || status === "prepared") return t("tracker.statusPrepared");
+  if (status === "blocked" || status === "action_required") return t("tracker.statusBlocked");
+  if (status === "blocked_captcha") return t("tracker.statusCaptcha");
+  if (status === "prepare_failed") return t("tracker.statusPrepareFailed");
+  if (status === "failed") return t("tracker.statusFailed");
+  if (status === "unknown") return t("tracker.statusUnknown");
+  return t("tracker.statusNotSubmitted");
 };
 
 export default function Tracker() {
+  const navigate = useNavigate();
+  const { t, lang } = useAppLocale();
   const { user } = useAuth();
+  const displayStatuses = useMemo(() => getApplicationDisplayStatuses(t), [t]);
+  const filters = useMemo(() => getTrackerFilterTabs(t), [t]);
+  const quickFilters = useMemo(() => getTrackerQuickFilters(t), [t]);
   const [profile, setProfile] = useState(null);
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -344,7 +322,7 @@ export default function Tracker() {
       job: selected.job,
       template: profile?.template_style || "modern",
     });
-    toast.success("CV downloaded");
+    toast.success(t("tracker.cvDownloaded"));
   };
 
   const handleDownloadCoverLetter = () => {
@@ -355,7 +333,7 @@ export default function Tracker() {
       job: selected.job,
       template: profile?.template_style || "modern",
     });
-    toast.success("Cover letter downloaded");
+    toast.success(t("tracker.coverDownloaded"));
   };
 
   const openApplication = async (app) => {
@@ -473,7 +451,7 @@ export default function Tracker() {
 
   const filterCounts = useMemo(() => {
     const counts = { all: apps.length };
-    FILTERS.forEach((filter) => {
+    filters.forEach((filter) => {
       if (filter.key !== "all") counts[filter.key] = 0;
     });
     apps.forEach((app) => {
@@ -481,7 +459,7 @@ export default function Tracker() {
       counts[status] = (counts[status] || 0) + 1;
     });
     return counts;
-  }, [apps]);
+  }, [apps, filters]);
 
   const filteredApps = useMemo(() => (
     apps.filter((app) => {
@@ -490,7 +468,10 @@ export default function Tracker() {
       return statusMatch && matchesSearch(app, searchQuery);
     })
   ), [apps, statusFilter, searchQuery]);
-  const selectedTimeline = useMemo(() => selected ? timelineFor(selected) : [], [selected]);
+  const selectedTimeline = useMemo(
+    () => (selected ? timelineFor(selected, t) : []),
+    [selected, t],
+  );
   const hasActiveListFilters = statusFilter !== "all" || searchQuery.trim();
   const userEmail = (user?.email || "").trim().toLowerCase();
   const canShowInternalSubmitTest = internalSubmitTestEnabled && userEmail && internalSubmitEmails.has(userEmail);
@@ -502,17 +483,38 @@ export default function Tracker() {
       <AppPageScroll>
         <div className={APP_CONTENT_WIDTH}>
         <DesktopPageHeader
-          title="Applications"
-          subtitle="Track packages, submissions, and follow-ups in one place."
+          title={t("tracker.title")}
+          subtitle={t("tracker.subtitle")}
         />
+
+        {/* Sprout-style primary tabs (mobile-first) */}
+        <div className="flex border-b border-zinc-200 md:mt-2">
+          <button
+            type="button"
+            className="relative flex-1 py-3 text-sm font-semibold text-linkedin"
+            data-testid="tracker-tab-applications"
+          >
+            {t("tracker.title")}
+            <span className="absolute inset-x-4 bottom-0 h-0.5 rounded-full bg-linkedin" />
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate("/history?tab=left")}
+            className="flex-1 py-3 text-sm font-semibold text-zinc-400 transition-colors hover:text-zinc-600"
+            data-testid="tracker-tab-skipped"
+          >
+            {t("tracker.skippedJobs")}
+          </button>
+        </div>
+
         {showResumeBanner ? (
           <section className="py-8 text-center">
             <div className="mx-auto grid h-20 w-20 place-items-center rounded-2xl border-2 border-linkedin/30 bg-violet-50">
               <FileSearch className="h-10 w-10 text-linkedin" strokeWidth={1.5} />
             </div>
-            <h2 className="mt-6 font-display text-2xl font-bold tracking-tight">Add Your Resume</h2>
+            <h2 className="mt-6 font-display text-2xl font-bold tracking-tight">{t("tracker.addResume")}</h2>
             <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-zinc-600">
-              Upload your main resume to activate job applications and track your progress.
+              {t("tracker.addResumeBody")}
             </p>
             <button
               type="button"
@@ -520,93 +522,134 @@ export default function Tracker() {
               className="mt-8 w-full rounded-full gradient-linkedin py-3.5 text-base font-semibold text-white hover:opacity-90"
               data-testid="applications-upload-resume"
             >
-              Upload Resume
+              {t("tracker.uploadResume")}
             </button>
           </section>
         ) : null}
 
-        <section className={showResumeBanner ? "mt-10 border-t border-zinc-100 pt-8 pb-8" : "pt-4 pb-8"}>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-700">Applications</p>
-            <h3 className="font-display text-2xl font-bold tracking-tight">Your applications</h3>
-          </div>
-
-          <div className="mt-5 flex items-center justify-between">
-            <h4 className="font-display text-lg font-bold tracking-tight">Summary</h4>
-            {hasActiveListFilters ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setStatusFilter("all");
-                  setSearchQuery("");
-                }}
-                className="text-sm font-semibold text-linkedin"
-              >
-                Clear
-              </button>
-            ) : null}
-          </div>
-
-          <div className="mt-3 grid grid-cols-2 gap-2.5 md:grid-cols-4">
-            {[
-              { label: "Total applications", value: summary.total, Icon: BriefcaseBusiness, tone: "border-zinc-200 bg-white text-zinc-900", sub: `${summary.submitted} submitted` },
-              { label: "Success rate", value: `${summary.successRate}%`, Icon: CheckCircle2, tone: "border-emerald-100 bg-emerald-50 text-emerald-800", sub: "submitted / total" },
-              { label: "Pending", value: summary.pending, Icon: Clock3, tone: "border-amber-100 bg-amber-50 text-amber-800", sub: "being finalized" },
-              { label: "Action required", value: summary.actionRequired, Icon: AlertCircle, tone: "border-orange-100 bg-orange-50 text-orange-800", sub: `${summary.attention} need attention` },
-            ].map(({ label, value, Icon, tone, sub }) => (
-              <div key={label} className={`rounded-2xl border p-3 ${tone}`}>
-                <div className="flex items-center gap-1.5">
-                  <Icon className="h-4 w-4 shrink-0" />
-                  <p className="truncate text-[11px] font-semibold">{label}</p>
-                </div>
-                <p className="mt-2 font-display text-3xl font-black leading-none">{value}</p>
-                <p className="mt-1 truncate text-[11px] font-medium">{sub}</p>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-4 flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-            {FILTERS.map((item) => {
+        <section className={showResumeBanner ? "mt-6 border-t border-zinc-100 pt-6 pb-8 md:mt-10 md:pt-8" : "pb-8 pt-3 md:pt-4"}>
+          {/* Status filter chips — horizontal scroll with counts */}
+          <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar" data-testid="tracker-status-filters">
+            <button
+              type="button"
+              onClick={() => setStatusFilter("all")}
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-sm font-semibold transition-colors ${
+                statusFilter === "all"
+                  ? "border-linkedin bg-linkedin text-white"
+                  : "border-zinc-200 bg-white text-zinc-700"
+              }`}
+            >
+              {t("tracker.all")}
+              <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${
+                statusFilter === "all" ? "bg-white/20" : "bg-zinc-100"
+              }`}>
+                {filterCounts.all || 0}
+              </span>
+            </button>
+            {quickFilters.map((item) => {
+              const Icon = QUICK_FILTER_ICONS[item.key] || Clock3;
               const active = statusFilter === item.key;
+              const count = filterCounts[item.key] || 0;
               return (
                 <button
                   key={item.key}
                   type="button"
                   onClick={() => setStatusFilter(item.key)}
-                  className={`shrink-0 rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors ${
-                    active ? "border-linkedin bg-linkedin text-white" : "border-zinc-200 bg-white text-zinc-600"
+                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-sm font-semibold transition-colors ${
+                    active ? "border-linkedin bg-linkedin text-white" : "border-zinc-200 bg-white text-zinc-700"
                   }`}
+                  data-testid={`tracker-filter-${item.key}`}
                 >
+                  <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
                   {item.label}
-                  <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] ${
-                    active ? "bg-white/20 text-white" : "bg-zinc-100 text-zinc-700"
+                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${
+                    active ? "bg-white/20" : "bg-zinc-100"
                   }`}>
-                    {filterCounts[item.key] || 0}
+                    {count}
                   </span>
                 </button>
               );
             })}
           </div>
 
-          <label className="mt-3 flex h-11 items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 shadow-sm">
-            <Search className="h-4 w-4 text-zinc-700" />
+          <label className="mt-2 flex h-10 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 md:h-11 md:rounded-2xl">
+            <Search className="h-4 w-4 shrink-0 text-zinc-500" />
             <input
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search company, job, or location"
-              className="min-w-0 flex-1 bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-600"
+              placeholder={t("tracker.searchPlaceholder")}
+              className="min-w-0 flex-1 bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-500"
               data-testid="applications-search"
             />
             {searchQuery ? (
               <button
                 type="button"
                 onClick={() => setSearchQuery("")}
-                className="text-xs font-semibold text-zinc-700"
+                className="text-xs font-semibold text-linkedin"
               >
-                Clear
+                {t("common.clear")}
               </button>
             ) : null}
           </label>
+
+          {/* Summary stats — desktop only */}
+          <div className="mt-6 hidden md:block">
+            <div className="flex items-center justify-between">
+              <h4 className="font-display text-lg font-bold tracking-tight">{t("tracker.summary")}</h4>
+              {hasActiveListFilters ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStatusFilter("all");
+                    setSearchQuery("");
+                  }}
+                  className="text-sm font-semibold text-linkedin"
+                >
+                  {t("common.clear")}
+                </button>
+              ) : null}
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2.5 md:grid-cols-4">
+              {[
+                { label: t("tracker.totalApplications"), value: summary.total, Icon: BriefcaseBusiness, tone: "border-zinc-200 bg-white text-zinc-900", sub: t("tracker.submittedCount", { n: summary.submitted }) },
+                { label: t("tracker.successRate"), value: `${summary.successRate}%`, Icon: CheckCircle2, tone: "border-emerald-100 bg-emerald-50 text-emerald-800", sub: t("tracker.submittedOverTotal") },
+                { label: t("tracker.pending"), value: summary.pending, Icon: Clock3, tone: "border-amber-100 bg-amber-50 text-amber-800", sub: t("tracker.beingFinalized") },
+                { label: t("tracker.actionRequired"), value: summary.actionRequired, Icon: AlertCircle, tone: "border-orange-100 bg-orange-50 text-orange-800", sub: t("tracker.needAttentionCount", { n: summary.attention }) },
+              ].map(({ label, value, Icon, tone, sub }) => (
+                <div key={label} className={`rounded-2xl border p-3 ${tone}`}>
+                  <div className="flex items-center gap-1.5">
+                    <Icon className="h-4 w-4 shrink-0" />
+                    <p className="truncate text-[11px] font-semibold">{label}</p>
+                  </div>
+                  <p className="mt-2 font-display text-3xl font-black leading-none">{value}</p>
+                  <p className="mt-1 truncate text-[11px] font-medium">{sub}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+              {filters.map((item) => {
+                const active = statusFilter === item.key;
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => setStatusFilter(item.key)}
+                    className={`shrink-0 rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors ${
+                      active ? "border-linkedin bg-linkedin text-white" : "border-zinc-200 bg-white text-zinc-600"
+                    }`}
+                  >
+                    {item.label}
+                    <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] ${
+                      active ? "bg-white/20 text-white" : "bg-zinc-100 text-zinc-700"
+                    }`}>
+                      {filterCounts[item.key] || 0}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           {loading ? (
             <div className="mt-12 flex justify-center">
@@ -617,99 +660,34 @@ export default function Tracker() {
               <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-white text-zinc-600 shadow-sm">
                 <BriefcaseBusiness className="h-5 w-5" />
               </div>
-              <p className="font-display text-lg font-bold text-zinc-900">Nothing here yet</p>
+              <p className="font-display text-lg font-bold text-zinc-900">{t("tracker.nothingYet")}</p>
               <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-zinc-600">
-                {searchQuery.trim() ? "No applications match your search." : emptyCopy(statusFilter)}
+                {searchQuery.trim() ? t("tracker.noSearchMatch") : getTrackerEmptyCopy(t, statusFilter)}
               </p>
               <button
                 type="button"
                 onClick={() => { window.location.href = "/swipe"; }}
                 className="mt-5 inline-flex items-center justify-center gap-1.5 rounded-full bg-linkedin px-4 py-2 text-sm font-semibold text-white"
               >
-                Back to swipe <ArrowRight className="h-4 w-4" />
+                {t("tracker.backToSwipe")} <ArrowRight className="h-4 w-4" />
               </button>
             </div>
           ) : (
-            <ul className="mt-4 space-y-3" data-testid="applications-list">
-              {filteredApps.map((a) => {
-                const meta = statusMeta(a);
-                const progress = applicationProgress(a);
-                const workMode = workModeLabel(a);
-                return (
-                  <motion.li
-                    key={a.application_id}
-                    initial={{ opacity: 0, y: 4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="cursor-pointer overflow-hidden rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm transition-transform active:scale-[0.99]"
-                    onClick={() => openApplication(a)}
-                    data-testid={`application-${a.application_id}`}
-                  >
-                    <div className={`flex items-center justify-between rounded-2xl px-3 py-2 text-xs font-bold ${meta.strip}`}>
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className={`h-2 w-2 rounded-full ${meta.dotLight}`} />
-                        {meta.stripLabel}
-                      </span>
-                      <span className="font-semibold">{relativeDate(a.submitted_at || a.updated_at || a.created_at)}</span>
-                    </div>
-
-                    <div className="mt-3 grid grid-cols-4 gap-1.5">
-                      {progress.map((step) => (
-                        <div key={step.key} className="min-w-0">
-                          <div className={`h-1.5 rounded-full ${
-                            step.state === "done" ? "bg-emerald-400" : step.state === "current" ? "bg-amber-400" : step.state === "blocked" ? "bg-rose-400" : "bg-zinc-200"
-                          }`} />
-                          <p className={`mt-1 truncate text-[10px] font-semibold ${
-                            step.state === "todo" ? "text-zinc-600" : "text-zinc-800"
-                          }`}>
-                            {step.label}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="mt-4 flex items-start gap-3">
-                      <CompanyLogo company={a.job?.company} size="md" rounded="xl" />
-                      <div className="min-w-0 flex-1">
-                        <p className="line-clamp-2 text-base font-bold leading-tight text-zinc-900">
-                          {a.job?.title || "Untitled role"}
-                        </p>
-                        <p className="mt-1 truncate text-sm text-zinc-600">{a.job?.company || "Unknown company"}</p>
-                        <p className="mt-2 flex items-center gap-1 truncate text-xs text-zinc-600">
-                          <MapPin className="h-3.5 w-3.5 shrink-0" />
-                          {a.job?.location || "Location not listed"}
-                        </p>
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          <span className="rounded-full bg-zinc-100 px-2 py-1 text-[11px] font-semibold text-zinc-700">
-                            {atsLabel(a)}
-                          </span>
-                          {workMode ? (
-                            <span className="rounded-full bg-zinc-100 px-2 py-1 text-[11px] font-semibold text-zinc-700">
-                              {workMode}
-                            </span>
-                          ) : null}
-                          <span className="rounded-full bg-zinc-100 px-2 py-1 text-[11px] font-semibold text-zinc-700">
-                            Updated {fmtDate(a.updated_at || a.created_at) || "recently"}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="mt-4 flex items-center justify-between border-t border-zinc-100 pt-3">
-                      <p className="text-xs text-zinc-600">Applied {fmtDate(a.created_at) || "recently"}</p>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          openApplication(a);
-                        }}
-                        className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold ${meta.tintLight}`}
-                      >
-                        {meta.cta}
-                        <ArrowRight className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </motion.li>
-                );
-              })}
+            <ul className="mt-3 space-y-2 md:mt-4 md:space-y-3" data-testid="applications-list">
+              {filteredApps.map((a) => (
+                <motion.li
+                  key={a.application_id}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                >
+                  <TrackerApplicationRow
+                    application={a}
+                    onOpen={openApplication}
+                    t={t}
+                    lang={lang}
+                  />
+                </motion.li>
+              ))}
             </ul>
           )}
         </section>
@@ -740,7 +718,7 @@ export default function Tracker() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                  <ApplicationStatusPill application={selected} variant="dark" />
+                  <ApplicationStatusPill application={selected} variant="dark" displayStatuses={displayStatuses} />
                   {selected.match_score && (<span className="text-xs font-semibold text-sprout-mint">{selected.match_score}% match</span>)}
                   {selected.job?.location && (
                     <span className="text-xs text-zinc-700 inline-flex items-center gap-1"><MapPin className="w-3 h-3" />{selected.job.location}</span>
@@ -752,13 +730,13 @@ export default function Tracker() {
                 <div className="p-4 rounded-2xl bg-sprout-surface-2 border border-sprout-border mb-5">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-xs font-bold uppercase tracking-wider text-zinc-700">Next action</p>
-                      <p className="mt-1 text-sm font-semibold text-zinc-900">{statusMeta(selected).cta}</p>
+                      <p className="text-xs font-bold uppercase tracking-wider text-zinc-700">{t("tracker.nextAction")}</p>
+                      <p className="mt-1 text-sm font-semibold text-zinc-900">{statusMeta(selected, displayStatuses).cta}</p>
                     </div>
-                    <ApplicationStatusPill application={selected} variant="dark" />
+                    <ApplicationStatusPill application={selected} variant="dark" displayStatuses={displayStatuses} />
                   </div>
                   <p className="mt-1 text-sm text-zinc-700">
-                    {applicationStatusMessage(selected.user_facing_submission_status || selected.submission_status)}
+                    {applicationStatusMessage(selected.user_facing_submission_status || selected.submission_status, t)}
                   </p>
                   {(selected.submission_status === "ready" || selected.submission_status === "prepared") && (
                     <Button
@@ -798,17 +776,17 @@ export default function Tracker() {
                 </div>
 
                 <div className="mb-5 rounded-2xl border border-sprout-border bg-sprout-surface-2 p-4">
-                  <p className="text-sm font-semibold text-zinc-900">Generated documents</p>
+                  <p className="text-sm font-semibold text-zinc-900">{t("tracker.generatedDocs")}</p>
                   <div className="mt-3 grid grid-cols-3 gap-2">
                     {[
-                      { label: "CV", ready: Boolean(selected.tailored_resume) },
-                      { label: "Cover", ready: Boolean(selected.cover_letter) },
-                      { label: "Prep", ready: Boolean(selected.interview_prep?.length) },
+                      { label: t("review.cv"), ready: Boolean(selected.tailored_resume) },
+                      { label: t("review.coverLetter"), ready: Boolean(selected.cover_letter) },
+                      { label: t("interviews.likelyQuestions"), ready: Boolean(selected.interview_prep?.length) },
                     ].map((doc) => (
                       <div key={doc.label} className="rounded-xl border border-sprout-border bg-sprout-surface px-3 py-2">
                         <p className="text-xs font-semibold text-zinc-900">{doc.label}</p>
                         <p className={`mt-1 text-[11px] font-semibold ${doc.ready ? "text-sprout-mint" : "text-zinc-700"}`}>
-                          {doc.ready ? "Available" : "Pending"}
+                          {doc.ready ? t("tracker.available") : t("tracker.pending")}
                         </p>
                       </div>
                     ))}
@@ -816,7 +794,7 @@ export default function Tracker() {
                 </div>
 
                 <div className="mb-5 rounded-2xl border border-sprout-border bg-sprout-surface-2 p-4">
-                  <p className="text-sm font-semibold text-zinc-900">Timeline</p>
+                  <p className="text-sm font-semibold text-zinc-900">{t("tracker.timeline")}</p>
                   <div className="mt-4 space-y-4">
                     {selectedTimeline.map((item, index) => {
                       const done = item.tone === "done";
@@ -843,7 +821,7 @@ export default function Tracker() {
 
                 {selected.submission_status === "blocked_captcha" && (
                   <div className="p-4 rounded-2xl bg-orange-500/10 border border-orange-400/30 mb-5" data-testid="captcha-required-state">
-                    <p className="text-sm font-semibold text-orange-800">Security check needed</p>
+                    <p className="text-sm font-semibold text-orange-800">{t("tracker.securityCheck")}</p>
                     <p className="mt-1 text-sm text-zinc-700">
                       The application form needs an additional security check before it can be completed.
                     </p>
@@ -863,7 +841,7 @@ export default function Tracker() {
                   <div className="p-4 rounded-2xl bg-orange-500/10 border border-orange-400/30 mb-5" data-testid="missing-info-form">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-sm font-semibold text-orange-800">Action required</p>
+                        <p className="text-sm font-semibold text-orange-800">{t("tracker.actionRequired")}</p>
                         <p className="mt-1 text-sm text-zinc-700">
                           A few answers are needed to complete this application. It will not be submitted automatically.
                         </p>
@@ -945,7 +923,7 @@ export default function Tracker() {
                 {selected.match_reasons?.length > 0 && (
                   <div className="p-4 rounded-2xl bg-sprout-mint-soft border border-sprout-mint/30 mb-5">
                     <p className="text-[11px] font-bold text-sprout-mint uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5" /> Why you fit
+                      <Sparkles className="w-3.5 h-3.5" /> {t("tracker.whyFit")}
                     </p>
                     <ul className="space-y-1.5">
                       {selected.match_reasons.map((r, i) => (

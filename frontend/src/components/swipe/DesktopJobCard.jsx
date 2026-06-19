@@ -11,18 +11,19 @@ import {
   Zap,
 } from "lucide-react";
 import Logo from "../Logo";
+import { BRAND } from "../../lib/brand";
 import {
   getJobBadgeItems,
   getJobDisplayContent,
 } from "../../lib/jobDisplayUtils";
 
-function formatPosted(iso) {
-  if (!iso) return "Posted recently";
+function formatPosted(iso, t) {
+  if (!iso) return t("swipe.postedRecently");
   const d = new Date(iso);
   const diff = Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
-  if (diff <= 0) return "Posted today";
-  if (diff === 1) return "Posted 1 day ago";
-  return `Posted ${diff} days ago`;
+  if (diff <= 0) return t("swipe.postedToday");
+  if (diff === 1) return t("swipe.postedOneDay");
+  return t("swipe.postedDays", { n: diff });
 }
 
 const BADGE_ICONS = {
@@ -59,7 +60,7 @@ function sectionMeta(title) {
   return { Icon: FileText, iconClass: "text-violet-600 dark:text-violet-400" };
 }
 
-function DetailSection({ title, bullets, body, theme, expanded }) {
+function DetailSection({ title, bullets, body, theme, expanded, t }) {
   const { Icon, iconClass } = sectionMeta(title);
   const isAbout = /about/i.test(title || "");
 
@@ -67,7 +68,7 @@ function DetailSection({ title, bullets, body, theme, expanded }) {
     <section className={`rounded-md border px-4 py-3 ${theme.cardSection}`}>
       <h3 className={`mb-2 flex items-center gap-2 text-sm font-medium ${theme.cardAboutTitle}`}>
         <Icon className={`size-4 shrink-0 ${iconClass}`} aria-hidden="true" />
-        {isAbout ? "About This Role" : title}
+        {isAbout ? t("swipe.aboutRole") : title}
         {!isAbout && bullets?.length ? (
           <span className={`font-normal ${theme.cardMeta}`}>({bullets.length})</span>
         ) : null}
@@ -91,13 +92,12 @@ function DetailSection({ title, bullets, body, theme, expanded }) {
   );
 }
 
-export default function DesktopJobCard({ job, collapsed, theme, isDark }) {
+export default function DesktopJobCard({ job, theme, t }) {
   const { snippet, about, detailSections } = getJobDisplayContent(job);
   const badges = getJobBadgeItems(job);
-  const expanded = !collapsed;
 
   return (
-    <div className={`flex min-h-0 flex-1 flex-col ${collapsed ? "max-h-52" : "h-full"}`}>
+    <div className="flex min-h-0 h-full flex-1 flex-col">
       <div className={`shrink-0 border-b p-5 pr-24 ${theme.cardHeader}`}>
         <div className="flex min-w-0 gap-4">
           <div className="min-w-0 flex-1">
@@ -116,18 +116,15 @@ export default function DesktopJobCard({ job, collapsed, theme, isDark }) {
         </div>
       </div>
 
-      <div
-        className={`min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-6 py-4 outline-none ${collapsed ? "overflow-hidden" : ""}`}
-        tabIndex={0}
-      >
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-6 py-4 outline-none">
         <div className={`flex flex-wrap items-center gap-x-4 gap-y-2 text-sm ${theme.cardMeta}`}>
           <span className="inline-flex min-w-0 items-center gap-1.5">
             <MapPin className="size-4 shrink-0" aria-hidden="true" />
-            <span className="truncate">{job.location || "Location not specified"}</span>
+            <span className="truncate">{job.location || t("swipe.locationNotSpecified")}</span>
           </span>
           <span className="inline-flex items-center gap-1.5">
             <Calendar className="size-4 shrink-0" aria-hidden="true" />
-            {formatPosted(job.posted_at)}
+            {formatPosted(job.posted_at, t)}
           </span>
         </div>
 
@@ -145,40 +142,42 @@ export default function DesktopJobCard({ job, collapsed, theme, isDark }) {
           </p>
         ) : null}
 
-        {expanded ? (
-          <div className="space-y-4">
-            {about ? (
-              <DetailSection
-                title="About This Role"
-                body={about}
-                theme={theme}
-                expanded={expanded}
-              />
-            ) : null}
+        <div className="space-y-4">
+          {about ? (
+            <DetailSection
+              title="About This Role"
+              body={about}
+              theme={theme}
+              expanded
+              t={t}
+            />
+          ) : null}
 
-            {detailSections.map((section) => (
-              <DetailSection
-                key={section.title}
-                title={section.title}
-                bullets={section.bullets}
-                theme={theme}
-                expanded={expanded}
-              />
-            ))}
+          {detailSections.map((section) => (
+            <DetailSection
+              key={section.title}
+              title={section.title}
+              bullets={section.bullets}
+              theme={theme}
+              expanded
+              t={t}
+            />
+          ))}
 
-            {job.match_reasons?.length > 0 ? (
-              <DetailSection
-                title="Why this fits you"
-                bullets={job.match_reasons}
-                theme={theme}
-                expanded={expanded}
-              />
-            ) : null}
-          </div>
-        ) : null}
+          {job.match_reasons?.length > 0 ? (
+            <DetailSection
+              title={t("swipe.whyFits")}
+              bullets={job.match_reasons}
+              theme={theme}
+              expanded
+              t={t}
+            />
+          ) : null}
+        </div>
 
-        <div className="flex items-center justify-center pt-2 pb-1">
-          <Logo size={isDark ? 28 : 32} />
+        <div className="flex flex-col items-center justify-center gap-2 pt-2 pb-1">
+          <Logo size={44} className="h-11 w-11" />
+          <p className={`text-center text-sm font-semibold font-display ${theme.cardCompany}`}>{BRAND.NAME}</p>
         </div>
       </div>
     </div>

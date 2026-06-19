@@ -18,11 +18,10 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
 import Logo from "@/components/Logo";
+import { useAppLocale } from "@/context/AppLocaleContext";
+import { getUpgradeContent } from "@/lib/appUi";
 import {
   SUBSCRIPTION_TIERS,
-  UPGRADE_BENEFITS,
-  UPGRADE_FEATURES,
-  UPGRADE_STATS,
 } from "@/lib/subscriptionTiers";
 
 const FEATURE_ICONS = { zap: Zap, sparkles: Sparkles, rocket: Rocket, check: Check, heart: HeartHandshake };
@@ -36,7 +35,7 @@ function FeatureItem({ title, description, icon, roundIcon = true }) {
           roundIcon ? "rounded-full" : "rounded-sm"
         }`}
       >
-        <Icon className="text-primary" aria-hidden />
+        <Icon className="text-linkedin" aria-hidden />
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="text-sm font-medium leading-snug">{title}</div>
@@ -46,9 +45,9 @@ function FeatureItem({ title, description, icon, roundIcon = true }) {
   );
 }
 
-function TierCard({ tier, selected, onSelect, isMonthly }) {
+function TierCard({ tier, selected, onSelect, isMonthly, t }) {
   const price = isMonthly ? tier.monthlyPrice : tier.weeklyPrice;
-  const period = isMonthly ? "per month" : "per week";
+  const period = isMonthly ? t("upgrade.perMonth") : t("upgrade.perWeek");
 
   return (
     <button
@@ -57,30 +56,30 @@ function TierCard({ tier, selected, onSelect, isMonthly }) {
       aria-checked={selected}
       data-state={selected ? "on" : "off"}
       onClick={onSelect}
-      className={`relative cursor-pointer rounded-xl border-2 p-4 text-center transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:p-6 ${
+      className={`relative cursor-pointer rounded-xl border-2 p-4 text-center transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/40 sm:p-6 ${
         selected
-          ? "border-primary bg-card text-card-foreground ring-2 ring-primary/20"
-          : "border-border bg-card text-card-foreground hover:border-primary/50"
+          ? "border-sprout-mint bg-card text-card-foreground ring-2 ring-violet-500/20"
+          : "border-border bg-card text-card-foreground hover:border-violet-300"
       }`}
     >
       {tier.popular ? (
         <div className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap">
-          <span className="inline-flex items-center rounded-full border border-transparent bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">
-            POPULAR
+          <span className="inline-flex items-center rounded-full border border-transparent bg-sprout-mint px-2 py-0.5 text-xs font-medium text-white">
+            {t("upgrade.popular")}
           </span>
         </div>
       ) : null}
       <div className="space-y-0.5 sm:space-y-1">
-        <div className="text-xs font-medium uppercase tracking-wide text-primary">{tier.name}</div>
+        <div className="text-xs font-medium uppercase tracking-wide text-linkedin">{tier.name}</div>
         <div className="text-xl font-bold sm:text-2xl">${price.toFixed(2)}</div>
         <div className="text-xs text-muted-foreground">{period}</div>
-        <div className="text-xs font-medium sm:text-sm">{tier.applications} Applications</div>
+        <div className="text-xs font-medium sm:text-sm">{t("upgrade.applications", { n: tier.applications })}</div>
       </div>
     </button>
   );
 }
 
-function PricingGrid({ isMonthly, selectedTier, onSelectTier }) {
+function PricingGrid({ isMonthly, selectedTier, onSelectTier, t }) {
   return (
     <div
       role="radiogroup"
@@ -93,6 +92,7 @@ function PricingGrid({ isMonthly, selectedTier, onSelectTier }) {
           selected={selectedTier === tier.id}
           onSelect={() => onSelectTier(tier.id)}
           isMonthly={isMonthly}
+          t={t}
         />
       ))}
     </div>
@@ -100,6 +100,8 @@ function PricingGrid({ isMonthly, selectedTier, onSelectTier }) {
 }
 
 export default function DesktopUpgradeModal({ open, onClose }) {
+  const { t } = useAppLocale();
+  const { features: UPGRADE_FEATURES, stats: UPGRADE_STATS, benefits: UPGRADE_BENEFITS } = getUpgradeContent(t);
   const [billingInterval, setBillingInterval] = useState("monthly");
   const [selectedTier, setSelectedTier] = useState("ultra");
   const [checkoutLoading, setCheckoutLoading] = useState(false);
@@ -117,9 +119,9 @@ export default function DesktopUpgradeModal({ open, onClose }) {
         window.location.href = data.url;
         return;
       }
-      toast.error("Could not start checkout. Please try again.");
+      toast.error(t("upgrade.checkoutError"));
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Checkout failed. Please try again.");
+      toast.error(e?.response?.data?.detail || t("upgrade.checkoutFailed"));
     } finally {
       setCheckoutLoading(false);
     }
@@ -128,12 +130,12 @@ export default function DesktopUpgradeModal({ open, onClose }) {
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose?.()}>
       <DialogContent
-        className="fixed top-[50%] left-[50%] z-50 grid h-dvh w-full max-w-full translate-x-[-50%] translate-y-[-50%] gap-0 overflow-hidden rounded-lg border bg-background p-0 shadow-lg sm:h-[95vh] sm:max-w-[95vw] lg:max-w-6xl"
+        className="sprout fixed top-[50%] left-[50%] z-50 grid h-dvh w-full max-w-full translate-x-[-50%] translate-y-[-50%] gap-0 overflow-hidden rounded-lg border bg-background p-0 shadow-lg sm:h-[95vh] sm:max-w-[95vw] lg:max-w-6xl"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
-        <DialogTitle className="sr-only">Unlock Your Dream Career</DialogTitle>
+        <DialogTitle className="sr-only">{t("upgrade.title")}</DialogTitle>
         <DialogDescription className="sr-only">
-          Join thousands who landed their dream jobs with Hirly
+          {t("upgrade.subtitle")}
         </DialogDescription>
 
         <div className="absolute top-6 left-6 z-20 hidden lg:block">
@@ -152,7 +154,7 @@ export default function DesktopUpgradeModal({ open, onClose }) {
             <div className="grid grid-cols-3 gap-3">
               {UPGRADE_STATS.map((stat) => (
                 <div key={stat.label} className="rounded-lg border bg-background/80 p-3 text-center">
-                  <div className="text-lg font-bold text-primary">{stat.value}</div>
+                  <div className="text-lg font-bold text-linkedin">{stat.value}</div>
                   <div className="text-xs text-muted-foreground">{stat.label}</div>
                 </div>
               ))}
@@ -166,28 +168,28 @@ export default function DesktopUpgradeModal({ open, onClose }) {
 
             <div className="mx-auto max-w-3xl space-y-4 sm:space-y-6">
               <div className="pt-4 text-center sm:pt-8">
-                <div className="mb-4 inline-flex items-center rounded-full bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary">
+                <div className="mb-4 inline-flex items-center rounded-full bg-sprout-mint-soft px-3 py-1.5 text-sm font-medium text-linkedin">
                   <Star className="mr-2 size-4" aria-hidden />
-                  Limited Time Offer
+                  {t("upgrade.limitedOffer")}
                 </div>
-                <h1 className="mb-2 text-2xl font-bold sm:text-3xl">Unlock Your Dream Career</h1>
+                <h1 className="mb-2 text-2xl font-bold sm:text-3xl">{t("upgrade.title")}</h1>
                 <p className="text-muted-foreground">
-                  Join thousands who landed their dream jobs with Hirly
+                  {t("upgrade.subtitle")}
                 </p>
               </div>
 
               <Tabs value={billingInterval} onValueChange={setBillingInterval}>
                 <div className="flex justify-center">
                   <div className="relative">
-                    <span className="absolute -top-3 left-1/4 z-10 -translate-x-1/2 whitespace-nowrap rounded-full border border-transparent bg-primary px-1.5 py-0.5 text-[10px] font-medium text-primary-foreground">
-                      Save 25%
+                    <span className="absolute -top-3 left-1/4 z-10 -translate-x-1/2 whitespace-nowrap rounded-full border border-transparent bg-sprout-mint px-1.5 py-0.5 text-[10px] font-medium text-white">
+                      {t("upgrade.save25")}
                     </span>
                     <TabsList className="grid h-9 w-full min-w-80 grid-cols-2 rounded-lg bg-muted p-[3px]">
                       <TabsTrigger value="monthly" className="h-[calc(100%-1px)] flex-1">
-                        Monthly
+                        {t("upgrade.monthly")}
                       </TabsTrigger>
                       <TabsTrigger value="weekly" className="h-[calc(100%-1px)] flex-1">
-                        Weekly
+                        {t("upgrade.weekly")}
                       </TabsTrigger>
                     </TabsList>
                   </div>
@@ -198,6 +200,7 @@ export default function DesktopUpgradeModal({ open, onClose }) {
                     isMonthly
                     selectedTier={selectedTier}
                     onSelectTier={setSelectedTier}
+                    t={t}
                   />
                 </TabsContent>
                 <TabsContent value="weekly" className="mt-4 outline-none sm:mt-6">
@@ -205,6 +208,7 @@ export default function DesktopUpgradeModal({ open, onClose }) {
                     isMonthly={false}
                     selectedTier={selectedTier}
                     onSelectTier={setSelectedTier}
+                    t={t}
                   />
                 </TabsContent>
               </Tabs>
@@ -212,7 +216,7 @@ export default function DesktopUpgradeModal({ open, onClose }) {
               <div className="hidden sm:block">
                 <div className="flex flex-col gap-6 rounded-xl border bg-muted py-6 text-card-foreground shadow-sm">
                   <div className="px-6">
-                    <h3 className="mb-4 text-center text-lg font-semibold">Unlock Your Dream Career</h3>
+                    <h3 className="mb-4 text-center text-lg font-semibold">{t("upgrade.title")}</h3>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       {UPGRADE_BENEFITS.map((benefit) => (
                         <FeatureItem key={benefit.title} {...benefit} roundIcon={false} />
@@ -227,20 +231,20 @@ export default function DesktopUpgradeModal({ open, onClose }) {
                   type="button"
                   onClick={handleCheckout}
                   disabled={checkoutLoading}
-                  className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-primary px-6 text-sm font-medium whitespace-nowrap text-primary-foreground transition-all hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
+                  className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md gradient-linkedin px-6 text-sm font-medium whitespace-nowrap text-white shadow-[0_8px_32px_-8px_rgba(124,58,237,0.35)] transition-all hover:opacity-90 disabled:pointer-events-none disabled:opacity-50"
                 >
                   {checkoutLoading ? (
                     <Loader2 className="size-4 animate-spin" aria-hidden />
                   ) : (
                     <Rocket className="size-4" aria-hidden />
                   )}
-                  Start Growing with Hirly
+                  {t("upgrade.cta")}
                 </button>
 
                 <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground sm:text-sm">
-                  {["Cancel anytime", "Secure payments", "Instant access"].map((label) => (
+                  {[t("upgrade.cancelAnytime"), t("upgrade.securePayments"), t("upgrade.instantAccess")].map((label) => (
                     <span key={label} className="flex items-center gap-1">
-                      <Check className="size-3 shrink-0 text-primary sm:size-4" aria-hidden />
+                      <Check className="size-3 shrink-0 text-linkedin sm:size-4" aria-hidden />
                       {label}
                     </span>
                   ))}
@@ -253,7 +257,7 @@ export default function DesktopUpgradeModal({ open, onClose }) {
                     rel="noopener noreferrer"
                     className="text-xs hover:text-foreground"
                   >
-                    Terms of Use
+                    {t("upgrade.terms")}
                   </a>
                   <a
                     href="https://www.hirly.ai/privacy"
@@ -261,13 +265,13 @@ export default function DesktopUpgradeModal({ open, onClose }) {
                     rel="noopener noreferrer"
                     className="text-xs hover:text-foreground"
                   >
-                    Privacy Policy
+                    {t("upgrade.privacy")}
                   </a>
                 </div>
               </div>
 
               <p className="text-center text-xs text-muted-foreground">
-                Secure checkout powered by Stripe
+                {t("upgrade.stripe")}
               </p>
             </div>
           </div>

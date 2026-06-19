@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Phone, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { BrandHeader } from "../components/app/AppScreenHeader";
@@ -6,16 +6,7 @@ import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
 import DesktopPageHeader from "../components/desktop/DesktopPageHeader";
 import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
 import { BRAND } from "../lib/brand";
-
-const TABS = [
-  { key: "feedback", label: "Feedback" },
-  { key: "release", label: "Release Notes" },
-];
-
-const WELCOME_MESSAGE = {
-  text: `What do you love/hate about ${BRAND.NAME}? This goes directly to the founders 💬`,
-  time: "5:52 PM",
-};
+import { useAppLocale } from "../context/AppLocaleContext";
 
 const RELEASE_NOTES = [
   { version: "v0.4", date: "Jun 2026", note: "New swipe feed filters and inbox categories." },
@@ -24,13 +15,24 @@ const RELEASE_NOTES = [
 ];
 
 export default function Feedback() {
+  const { t } = useAppLocale();
   const [tab, setTab] = useState("feedback");
   const [draft, setDraft] = useState("");
+
+  const tabs = useMemo(
+    () => [
+      { key: "feedback", label: t("feedback.title") },
+      { key: "release", label: t("feedback.releaseNotes") },
+    ],
+    [t],
+  );
+
+  const welcomeMessage = t("feedback.welcomeMessage", { brand: BRAND.NAME });
 
   const send = () => {
     const text = draft.trim();
     if (!text) return;
-    toast.success("Thanks! Your message was sent to the team.");
+    toast.success(t("feedback.thanks"));
     setDraft("");
   };
 
@@ -41,8 +43,8 @@ export default function Feedback() {
           <button
             type="button"
             className="grid h-9 w-9 place-items-center rounded-full text-linkedin hover:bg-violet-50 sm:h-10 sm:w-10"
-            aria-label="Call support"
-            onClick={() => toast.message("Support line coming soon")}
+            aria-label={t("feedback.callSupport")}
+            onClick={() => toast.message(t("feedback.supportSoon"))}
           >
             <Phone className="h-5 w-5" strokeWidth={2} />
           </button>
@@ -50,19 +52,19 @@ export default function Feedback() {
       />
 
       <div className="flex shrink-0 border-b border-zinc-200 md:hidden">
-        {TABS.map((t) => {
-          const active = tab === t.key;
+        {tabs.map((item) => {
+          const active = tab === item.key;
           return (
             <button
-              key={t.key}
+              key={item.key}
               type="button"
-              onClick={() => setTab(t.key)}
+              onClick={() => setTab(item.key)}
               className={`relative flex-1 py-3 text-sm font-semibold transition-colors ${
                 active ? "text-linkedin" : "text-zinc-400"
               }`}
-              data-testid={`feedback-tab-${t.key}`}
+              data-testid={`feedback-tab-${item.key}`}
             >
-              {t.label}
+              {item.label}
               {active ? (
                 <span className="absolute inset-x-0 bottom-0 h-0.5 bg-linkedin" />
               ) : null}
@@ -72,51 +74,46 @@ export default function Feedback() {
       </div>
 
       <AppPageScroll className={`${APP_CONTENT_WIDTH} pt-5`}>
-        <DesktopPageHeader title="Feedback" subtitle="Share feedback with the founders or read release notes." />
+        <DesktopPageHeader title={t("feedback.title")} subtitle={t("feedback.subtitle")} />
         {tab === "feedback" ? (
           <div>
             <div className="max-w-[85%] rounded-2xl rounded-bl-md bg-zinc-100 px-4 py-3 text-[15px] leading-relaxed text-zinc-800">
-              {WELCOME_MESSAGE.text}
+              {welcomeMessage}
             </div>
-            <p className="mt-1.5 text-xs text-zinc-400">{WELCOME_MESSAGE.time}</p>
+            <div className="mt-6 flex items-end gap-2">
+              <textarea
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder={t("feedback.messagePlaceholder")}
+                rows={3}
+                className="flex-1 resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-[15px] outline-none focus:border-violet-300"
+                data-testid="feedback-input"
+              />
+              <button
+                type="button"
+                onClick={send}
+                disabled={!draft.trim()}
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-full gradient-linkedin text-white disabled:opacity-40"
+                data-testid="feedback-send-btn"
+                aria-label={t("emails.send")}
+              >
+                <Plus className="h-5 w-5 rotate-45" />
+              </button>
+            </div>
           </div>
         ) : (
-          <ul className="space-y-4">
-            {RELEASE_NOTES.map((item) => (
-              <li key={item.version} className="border-b border-zinc-100 pb-4">
-                <p className="text-sm font-bold text-zinc-900">
-                  {item.version}
-                  <span className="ml-2 font-medium text-zinc-400">{item.date}</span>
+          <ul className="mt-4 space-y-4">
+            {RELEASE_NOTES.map((note) => (
+              <li key={note.version} className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3">
+                <p className="text-sm font-semibold text-zinc-900">
+                  {note.version} · {note.date}
                 </p>
-                <p className="mt-1 text-sm text-zinc-600">{item.note}</p>
+                <p className="mt-1 text-sm text-zinc-600">{note.note}</p>
               </li>
             ))}
           </ul>
         )}
       </AppPageScroll>
-
-      {tab === "feedback" ? (
-        <div className="shrink-0 border-t border-zinc-100 px-4 py-3">
-          <div className="mx-auto flex max-w-md items-center gap-2">
-            <button
-              type="button"
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-zinc-100 text-zinc-500"
-              aria-label="Attach file"
-              onClick={() => toast.message("Attachments coming soon")}
-            >
-              <Plus className="h-5 w-5" />
-            </button>
-            <input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && send()}
-              placeholder="Message"
-              className="h-11 flex-1 rounded-full border border-zinc-200 bg-zinc-50 px-4 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none focus:border-violet-300 focus:ring-2 focus:ring-violet-100"
-              data-testid="feedback-message-input"
-            />
-          </div>
-        </div>
-      ) : null}
     </AppPage>
   );
 }

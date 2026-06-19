@@ -13,43 +13,18 @@ import { BRAND } from "../../lib/brand";
 import { useAiSettings } from "../../hooks/useAiSettings";
 import { useDesktopTheme } from "./DesktopAppShell";
 import DemoAccountBadge from "../settings/DemoAccountBadge";
+import LanguageSwitcher from "../settings/LanguageSwitcher";
+import { useAppLocale } from "../../context/AppLocaleContext";
+import { getAiSettingRows } from "../../lib/appUi";
 
 const AI_FEATURE_IDS = ["aiCoverLetter", "aiResume", "reviewDocuments", "findResumeGaps"];
 
-const SETTING_ROWS = [
-  {
-    id: "aiCoverLetter",
-    icon: FileText,
-    accent: "from-violet-500 to-indigo-500",
-    title: "AI Cover Letter",
-    description: "Generate a tailored cover letter for each job application",
-    stat: "~90 sec saved",
-  },
-  {
-    id: "aiResume",
-    icon: ScrollText,
-    accent: "from-blue-500 to-violet-500",
-    title: "AI Resume",
-    description: "Generate a tailored resume for each job application",
-    stat: "ATS-optimized",
-  },
-  {
-    id: "reviewDocuments",
-    icon: ShieldCheck,
-    accent: "from-emerald-500 to-teal-500",
-    title: "Review Documents",
-    description: "Review and approve AI-generated documents before they are used in applications",
-    stat: "Full control",
-  },
-  {
-    id: "findResumeGaps",
-    icon: ScanSearch,
-    accent: "from-fuchsia-500 to-violet-500",
-    title: "Find Gaps in Resume",
-    description: "Answer questions addressing job requirements to improve AI resume and cover letter generation",
-    stat: "Smarter matches",
-  },
-];
+const AI_ROW_META = {
+  aiCoverLetter: { icon: FileText, accent: "from-violet-500 to-indigo-500" },
+  aiResume: { icon: ScrollText, accent: "from-blue-500 to-violet-500" },
+  reviewDocuments: { icon: ShieldCheck, accent: "from-emerald-500 to-teal-500" },
+  findResumeGaps: { icon: ScanSearch, accent: "from-fuchsia-500 to-violet-500" },
+};
 
 function ViralToggle({ checked, onChange, testId }) {
   return (
@@ -116,13 +91,19 @@ function SettingRow({ row, checked, onChange, index, isDark }) {
 export default function AISettingsPanel() {
   const { settings, updateSetting } = useAiSettings();
   const { isDark } = useDesktopTheme();
+  const { t } = useAppLocale();
+  const settingRows = getAiSettingRows(t).map((row) => ({
+    ...row,
+    ...AI_ROW_META[row.id],
+  }));
 
   const activeCount = AI_FEATURE_IDS.filter((id) => settings[id]).length;
 
   return (
     <div className="relative mx-auto max-w-5xl px-6 py-10 lg:px-10 lg:py-14">
-      <div className="relative mb-6 max-w-3xl">
+      <div className="relative mb-6 max-w-3xl space-y-4">
         <DemoAccountBadge />
+        <LanguageSwitcher variant={isDark ? "dark" : "light"} />
       </div>
       <div
         aria-hidden
@@ -141,26 +122,26 @@ export default function AISettingsPanel() {
         >
           <div className="inline-flex items-center gap-2 rounded-full border border-violet-500/20 bg-violet-500/10 px-3 py-1 text-xs font-semibold text-violet-600 dark:text-violet-300">
             <Sparkles className="h-3.5 w-3.5" />
-            Powered by {BRAND.NAME} AI
+            {t("aiSettings.poweredBy", { brand: BRAND.NAME })}
           </div>
 
           <h1 className="mt-5 font-display text-4xl font-black tracking-tight lg:text-5xl">
             <span className="bg-gradient-to-r from-violet-600 via-blue-600 to-violet-500 bg-clip-text text-transparent">
-              AI Settings
+              {t("aiSettings.title")}
             </span>
           </h1>
 
           <p className={`mt-3 text-lg font-semibold ${isDark ? "text-white" : "text-zinc-900"}`}>
-            AI Application Settings
+            {t("aiSettings.subtitle")}
           </p>
           <p className={`mt-2 max-w-md text-base leading-relaxed ${isDark ? "text-zinc-400" : "text-zinc-500"}`}>
-            Choose how AI assists with your job applications — tuned for speed, quality, and control.
+            {t("aiSettings.description")}
           </p>
 
           <div className="mt-8 flex flex-wrap gap-3">
             {[
-              { icon: Zap, label: `${activeCount}/4 features on` },
-              { icon: Wand2, label: "1-swipe apply ready" },
+              { icon: Zap, label: t("aiSettings.featuresOn", { n: activeCount }) },
+              { icon: Wand2, label: t("aiSettings.swipeReady") },
             ].map(({ icon: Icon, label }) => (
               <span
                 key={label}
@@ -185,10 +166,10 @@ export default function AISettingsPanel() {
               <Logo size={32} />
               <div>
                 <p className={`text-sm font-bold ${isDark ? "text-white" : "text-zinc-900"}`}>
-                  Built for screen recordings
+                  {t("aiSettings.promoTitle")}
                 </p>
                 <p className={`text-xs ${isDark ? "text-zinc-500" : "text-zinc-500"}`}>
-                  Clean layout · instant toggles · recruiter-grade output
+                  {t("aiSettings.promoBody")}
                 </p>
               </div>
             </div>
@@ -215,12 +196,12 @@ export default function AISettingsPanel() {
           >
             <div className="border-b border-zinc-200/80 px-5 py-4 dark:border-zinc-800 sm:px-6">
               <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${isDark ? "text-zinc-500" : "text-zinc-400"}`}>
-                Automation
+                {t("aiSettings.automation")}
               </p>
             </div>
 
             <div className={`divide-y ${isDark ? "divide-zinc-800" : "divide-zinc-100"}`}>
-              {SETTING_ROWS.map((row, index) => (
+              {settingRows.map((row, index) => (
                 <SettingRow
                   key={row.id}
                   row={row}

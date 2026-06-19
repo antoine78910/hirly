@@ -14,7 +14,9 @@ import DesktopAppShell from "../components/desktop/DesktopAppShell";
 import AISettingsPanel from "../components/desktop/AISettingsPanel";
 import MobileAISettings from "../components/settings/MobileAISettings";
 import DemoAccountBadge from "../components/settings/DemoAccountBadge";
+import LanguageSwitcher from "../components/settings/LanguageSwitcher";
 import { useUpgradeModal } from "../context/UpgradeModalContext";
+import { useAppLocale } from "../context/AppLocaleContext";
 
 const Section = ({ label, children, testId }) => (
   <section className="mt-7" data-testid={testId}>
@@ -49,6 +51,7 @@ export default function Settings() {
   const navigate = useNavigate();
   const { logout, user } = useAuth();
   const { openUpgrade } = useUpgradeModal();
+  const { t } = useAppLocale();
   const [theme, setTheme] = useState("System");
   const [billing, setBilling] = useState(null);
 
@@ -58,14 +61,14 @@ export default function Settings() {
     api.get("/billing/status").then(({ data }) => setBilling(data)).catch(() => setBilling(null));
   }, []);
 
-  const todo = (what) => toast(`${what} — coming soon`);
+  const todo = (what) => toast(t("settings.comingSoon", { feature: what }));
 
   const inviteFriends = async () => {
     const url = `${window.location.origin}/?ref=${encodeURIComponent(user?.email || "")}`;
     if (navigator.share) {
       try { await navigator.share({ title: BRAND.NAME, text: `Apply to jobs in 1 second with ${BRAND.NAME}.`, url }); return; } catch (_) {}
     }
-    try { await navigator.clipboard.writeText(url); toast.success("Invite link copied"); }
+    try { await navigator.clipboard.writeText(url); toast.success(t("settings.inviteCopied")); }
     catch (_) { toast("Share: " + url); }
   };
 
@@ -79,18 +82,18 @@ export default function Settings() {
     try {
       const { data } = await api.post("/billing/create-portal-session");
       if (data?.url) window.location.href = data.url;
-      else toast.error("Could not open billing portal");
+      else toast.error(t("settings.billingPortalError"));
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Could not open billing portal");
+      toast.error(error?.response?.data?.detail || t("settings.billingPortalError"));
     }
   };
 
   const deleteAccount = () => {
-    if (!window.confirm("Delete your Hirly account? This removes your profile, swipes, and applications. This cannot be undone.")) return;
+    if (!window.confirm(t("settings.deleteConfirm"))) return;
     api.delete("/profile").then(() => {
-      toast.success("Account deleted");
+      toast.success(t("settings.accountDeleted"));
       logout();
-    }).catch(() => toast.error("Could not delete account"));
+    }).catch(() => toast.error(t("settings.deleteError")));
   };
 
   return (
@@ -107,57 +110,63 @@ export default function Settings() {
           onClick={() => navigate(-1)}
           className="w-10 h-10 grid place-items-center rounded-full hover:bg-sprout-surface"
           data-testid="settings-back-btn"
-          aria-label="Back"
+          aria-label={t("common.back")}
         >
           <ArrowLeft className="w-5 h-5 text-white" />
         </button>
-        <h1 className="font-display font-bold text-2xl flex-1 text-center pr-10">Settings</h1>
+        <h1 className="font-display font-bold text-2xl flex-1 text-center pr-10">{t("settings.title")}</h1>
       </header>
 
       <AppPageScroll className="mx-auto max-w-md px-5 pb-32" withBottomNavPad={false}>
       <div className="mb-5">
         <DemoAccountBadge variant="dark" />
       </div>
-      <Section label="Look & feel" testId="settings-appearance">
-        <Row icon={Palette} label="Theme" value={theme} onClick={() => todo("Theme picker")} testId="settings-theme" />
+      <Section label={t("common.language")} testId="settings-language">
+        <div className="px-4 py-4">
+          <LanguageSwitcher variant="dark" className="w-full justify-center" />
+        </div>
       </Section>
 
-      <Section label="Alerts" testId="settings-notifications">
-        <Row icon={Bell} label="Notification preferences" onClick={() => todo("Notification preferences")} testId="settings-notif-prefs" />
+      <Section label={t("settings.lookAndFeel")} testId="settings-appearance">
+        <Row icon={Palette} label={t("settings.theme")} value={theme} onClick={() => todo(t("settings.theme"))} testId="settings-theme" />
+      </Section>
+
+      <Section label={t("settings.alerts")} testId="settings-notifications">
+        <Row icon={Bell} label={t("settings.notificationPrefs")} onClick={() => todo(t("settings.notificationPrefs"))} testId="settings-notif-prefs" />
       </Section>
 
       <MobileAISettings />
 
-      <Section label="Walkthrough" testId="settings-tour">
-        <Row icon={Compass} label="Replay walkthrough" onClick={() => todo("Product tour")} testId="settings-restart-tour" />
+      <Section label={t("settings.walkthrough")} testId="settings-tour">
+        <Row icon={Compass} label={t("settings.replayWalkthrough")} onClick={() => todo(t("settings.replayWalkthrough"))} testId="settings-restart-tour" />
       </Section>
 
-      <Section label="Privacy & data" testId="settings-security">
-        <Row icon={ShieldCheck} label="Privacy policy"  onClick={() => openExternal("/privacy")} testId="settings-privacy" />
-        <Row icon={FileText}    label="Terms of use"     onClick={() => openExternal("/terms")}   testId="settings-terms" />
+      <Section label={t("settings.privacyData")} testId="settings-security">
+        <Row icon={ShieldCheck} label={t("settings.privacyPolicy")}  onClick={() => openExternal("/privacy")} testId="settings-privacy" />
+        <Row icon={FileText}    label={t("settings.termsOfUse")}     onClick={() => openExternal("/terms")}   testId="settings-terms" />
       </Section>
 
-      <Section label="Plan & help" testId="settings-support">
-        <Row icon={CreditCard}    label={billing?.is_premium ? "Manage billing" : "Upgrade your plan"} onClick={openPlan} testId="settings-subscribe" />
-        <Row icon={RotateCw}      label="Restore purchase"  onClick={() => todo("Restore purchase")}       testId="settings-restore" />
-        <Row icon={MessageSquare} label="Talk to us"        onClick={() => openExternal("mailto:hi@hirly.com")} testId="settings-chat" />
+      <Section label={t("settings.planHelp")} testId="settings-support">
+        <Row icon={CreditCard}    label={billing?.is_premium ? t("settings.manageBilling") : t("settings.upgradePlan")} onClick={openPlan} testId="settings-subscribe" />
+        <Row icon={RotateCw}      label={t("settings.restorePurchase")}  onClick={() => todo(t("settings.restorePurchase"))}       testId="settings-restore" />
+        <Row icon={MessageSquare} label={t("settings.talkToUs")}        onClick={() => openExternal("mailto:hi@hirly.com")} testId="settings-chat" />
       </Section>
 
-      <Section label="Share Hirly" testId="settings-social">
-        <Row icon={Users}     label="Invite a friend" onClick={inviteFriends}                                 testId="settings-invite" />
-        <Row icon={Instagram} label="We're on Instagram" onClick={() => openExternal("https://instagram.com")} testId="settings-instagram" />
-        <Row icon={TikTok}    label="We're on TikTok"    onClick={() => openExternal("https://tiktok.com")}    testId="settings-tiktok" />
+      <Section label={t("settings.shareBrand", { brand: BRAND.NAME })} testId="settings-social">
+        <Row icon={Users}     label={t("settings.inviteFriend")} onClick={inviteFriends}                                 testId="settings-invite" />
+        <Row icon={Instagram} label={t("settings.onInstagram")} onClick={() => openExternal("https://instagram.com")} testId="settings-instagram" />
+        <Row icon={TikTok}    label={t("settings.onTikTok")}    onClick={() => openExternal("https://tiktok.com")}    testId="settings-tiktok" />
       </Section>
 
-      <Section label="Your account" testId="settings-account">
-        <Row icon={LogOut} label="Sign out"        onClick={logout}        testId="settings-logout" danger />
-        <Row icon={Trash2} label="Delete account"  onClick={deleteAccount} testId="settings-delete" danger />
+      <Section label={t("settings.yourAccount")} testId="settings-account">
+        <Row icon={LogOut} label={t("settings.signOut")}        onClick={logout}        testId="settings-logout" danger />
+        <Row icon={Trash2} label={t("settings.deleteAccount")}  onClick={deleteAccount} testId="settings-delete" danger />
       </Section>
 
       <footer className="mt-10 mb-4 flex flex-col items-center gap-2 text-center" data-testid="settings-footer">
         <Logo size={36} />
         <p className="font-display font-bold text-white">{BRAND.NAME}</p>
-        <p className="text-xs text-sprout-muted">User ID</p>
+        <p className="text-xs text-sprout-muted">{t("settings.userId")}</p>
         <code className="text-[11px] text-sprout-dim break-all px-3" data-testid="settings-user-id">{user?.user_id || "—"}</code>
       </footer>
       </AppPageScroll>

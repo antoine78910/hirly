@@ -9,17 +9,14 @@ import {
   FileText,
   Flag,
   Headphones,
-  Heart,
   Layers,
   Mail,
-  Minimize2,
   Share2,
   Sparkles,
   Sun,
   User,
   Loader2,
   MapPin,
-  X,
 } from "lucide-react";
 import DesktopCreditsPill from "../desktop/DesktopCreditsPill";
 import DesktopFiltersMenu from "../desktop/DesktopFiltersMenu";
@@ -30,21 +27,13 @@ import { SUGGESTED_ONBOARDING_LOCATIONS } from "../onboarding/onboardingData";
 import { rankLocationSuggestions } from "../../lib/locationSearch";
 import { jobExternalUrl } from "../../lib/jobDisplayUtils";
 import { useAuth } from "../../context/AuthContext";
+import { useAppLocale } from "../../context/AppLocaleContext";
+import { getDesktopNavItems } from "../desktop/desktopNav";
 import {
   DESKTOP_THEMES,
   readDesktopTheme,
   saveDesktopTheme,
 } from "./desktopFeedTheme";
-
-const NAV_ITEMS = [
-  { to: "/swipe", label: "Jobs", icon: Briefcase, end: true },
-  { to: "/review", label: "Review", icon: FileText },
-  { to: "/tracker", label: "Applications", icon: Layers },
-  { to: "/improve", label: "Opportunities", icon: Sparkles },
-  { to: "/emails", label: "Inbox", icon: Mail },
-  { to: "/profile", label: "Profile", icon: User },
-  { to: "/settings", label: "AI Settings", icon: Sparkles },
-];
 
 const RADIUS_OPTIONS = ["25km", "50km", "100km", "200km"];
 
@@ -62,7 +51,6 @@ export default function DesktopSwipeFeed({
   filters,
   appliedToday,
   appLoading,
-  onOpenTarget,
   onFiltersChange,
   onFiltersOpenChange,
   onTargetSave,
@@ -81,11 +69,14 @@ export default function DesktopSwipeFeed({
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { user } = useAuth();
+  const { t } = useAppLocale();
+  const navItems = getDesktopNavItems(t);
   const [themeMode, setThemeMode] = useState(readDesktopTheme);
-  const [collapsed, setCollapsed] = useState(false);
   const [exitIntent, setExitIntent] = useState(null);
   const [swipeAnimating, setSwipeAnimating] = useState(false);
-  const frozenJobRef = useRef(null);
+  const [renderJob, setRenderJob] = useState(job);
+  const exitHandledRef = useRef(false);
+  const swipedJobIdRef = useRef(null);
   const radius = filters?.searchRadius || "50km";
   const isDark = themeMode === "dark";
   const theme = DESKTOP_THEMES[themeMode];
@@ -170,6 +161,24 @@ export default function DesktopSwipeFeed({
     if (!ok) setRoleDraft(target.role || "");
   }, [displayLocation, onTargetSave, target.role, targetLocationData]);
 
+  useEffect(() => {
+    if (!job?.job_id) {
+      setRenderJob(null);
+      return;
+    }
+
+    if (swipedJobIdRef.current) {
+      if (job.job_id === swipedJobIdRef.current) return;
+      swipedJobIdRef.current = null;
+      setRenderJob(job);
+      return;
+    }
+
+    if (!swipeAnimating && !exitIntent && job.job_id !== renderJob?.job_id) {
+      setRenderJob(job);
+    }
+  }, [job, swipeAnimating, exitIntent, renderJob?.job_id]);
+
   const toggleTheme = () => {
     setThemeMode((current) => {
       const next = current === "dark" ? "light" : "dark";
@@ -178,42 +187,33 @@ export default function DesktopSwipeFeed({
     });
   };
 
-  const displayJob = swipeAnimating ? frozenJobRef.current : job;
+  const displayJob = renderJob;
   const swipeDisabled = !job || appLoading || swipeAnimating || interactionBlocked;
 
   const runSwipe = useCallback((intent) => {
-    if (!job || appLoading || swipeAnimating || interactionBlocked) return;
+    if (!renderJob || appLoading || swipeAnimating || interactionBlocked) return;
     if (intent === "apply" && shouldGateApply) {
       onApplyBlocked?.();
       return;
     }
-    frozenJobRef.current = job;
+    exitHandledRef.current = false;
     setSwipeAnimating(true);
     setExitIntent(intent);
-  }, [appLoading, interactionBlocked, job, onApplyBlocked, shouldGateApply, swipeAnimating]);
+  }, [appLoading, interactionBlocked, onApplyBlocked, renderJob, shouldGateApply, swipeAnimating]);
 
   const finishSwipe = useCallback(() => {
+    if (!exitIntent || exitHandledRef.current) return;
+    exitHandledRef.current = true;
+
     const intent = exitIntent;
+    swipedJobIdRef.current = renderJob?.job_id ?? null;
+    setRenderJob(null);
     setExitIntent(null);
     setSwipeAnimating(false);
-    frozenJobRef.current = null;
-    setCollapsed(false);
+
     if (intent === "apply") onApply?.();
     else if (intent === "skip") onPass?.();
   }, [exitIntent, onApply, onPass]);
-
-  useEffect(() => {
-    const onKeyDown = (event) => {
-      if (event.key !== " " && event.code !== "Space") return;
-      const tag = event.target?.tagName?.toLowerCase();
-      if (tag === "input" || tag === "textarea" || tag === "select") return;
-      if (event.target?.isContentEditable) return;
-      event.preventDefault();
-      setCollapsed((c) => !c);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -237,13 +237,13 @@ export default function DesktopSwipeFeed({
           onClick={() => navigate("/profile")}
           className={`flex items-center gap-2 rounded-lg px-2 py-2 text-left text-sm ${theme.accountBtn}`}
         >
-          <span className="truncate font-medium">{user?.email || "Account"}</span>
+          <span className="truncate font-medium">{user?.email || t("common.account")}</span>
           <ChevronDown className="ml-auto h-4 w-4 shrink-0 text-zinc-400" />
         </button>
 
-        <p className={`mt-6 px-2 text-[11px] font-semibold uppercase tracking-wider ${theme.sectionLabel}`}>Platform</p>
+        <p className={`mt-6 px-2 text-[11px] font-semibold uppercase tracking-wider ${theme.sectionLabel}`}>{t("common.platform")}</p>
         <nav className="mt-2 flex flex-col gap-0.5">
-          {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
+          {navItems.map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
               to={to}
@@ -262,18 +262,12 @@ export default function DesktopSwipeFeed({
         </nav>
 
         <div className="mt-auto space-y-3 px-1 pt-6">
-          <div className={`rounded-xl border p-3 ${theme.tourCard}`}>
-            <p className={`text-sm font-semibold ${theme.tourTitle}`}>Tour completed</p>
-            <button type="button" className="mt-1 text-xs font-medium text-violet-500 hover:text-violet-600">
-              Restart tour
-            </button>
-          </div>
           <button
             type="button"
             className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm ${theme.supportBtn}`}
           >
             <Headphones className="h-4 w-4" />
-            Support
+            {t("common.support")}
           </button>
         </div>
       </aside>
@@ -281,10 +275,10 @@ export default function DesktopSwipeFeed({
       <div className="flex min-w-0 flex-1 flex-col">
         <header className={`flex items-center justify-end gap-4 border-b px-6 py-3 ${theme.header}`}>
           {[
-            { label: "Import Job", action: () => {} },
-            { label: "Quick Apply", action: () => runSwipe("apply") },
-            { label: "Job Board", action: () => navigate("/tracker") },
-            { label: "Skipped", action: () => navigate("/history") },
+            { label: t("swipe.importJob"), action: () => {} },
+            { label: t("swipe.quickApply"), action: () => runSwipe("apply") },
+            { label: t("swipe.jobBoard"), action: () => navigate("/tracker") },
+            { label: t("swipe.skipped"), action: () => navigate("/history") },
           ].map((item) => (
             <button
               key={item.label}
@@ -302,8 +296,8 @@ export default function DesktopSwipeFeed({
             className={`grid h-9 w-9 place-items-center rounded-lg transition-colors ${
               isDark ? theme.iconBtn : `${theme.iconBtn} text-amber-500`
             }`}
-            aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-            title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+            aria-label={isDark ? t("swipe.switchLight") : t("swipe.switchDark")}
+            title={isDark ? t("swipe.switchLight") : t("swipe.switchDark")}
             data-testid="desktop-theme-toggle"
           >
             <Sun className="h-4 w-4" />
@@ -312,7 +306,7 @@ export default function DesktopSwipeFeed({
             type="button"
             onClick={() => navigate("/profile")}
             className={`relative grid h-9 w-9 place-items-center rounded-lg ${theme.iconBtn}`}
-            aria-label="Notifications"
+            aria-label={t("swipe.notifications")}
           >
             <Bell className="h-4 w-4" />
             {appliedToday > 0 ? (
@@ -340,7 +334,7 @@ export default function DesktopSwipeFeed({
                   roleFocusedRef.current = false;
                   commitRole();
                 }}
-                placeholder="Job title"
+                placeholder={t("swipe.jobTitle")}
                 disabled={targetSaving}
                 testId="desktop-target-role"
               />
@@ -372,7 +366,7 @@ export default function DesktopSwipeFeed({
                   locationFocusedRef.current = false;
                   commitLocation();
                 }}
-                placeholder="Location"
+                placeholder={t("swipe.location")}
                 testId="desktop-target-location"
               />
             </div>
@@ -390,18 +384,9 @@ export default function DesktopSwipeFeed({
             <DesktopFiltersMenu
               filters={filters}
               onFiltersChange={onFiltersChange}
-              onOpenTarget={onOpenTarget}
               themeMode={themeMode}
               onOpenChange={onFiltersOpenChange}
             />
-            <button
-              type="button"
-              onClick={onOpenTarget}
-              className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium ${theme.describeBtn}`}
-            >
-              <Sparkles className="h-4 w-4" />
-              Describe your search
-            </button>
           </div>
         </div>
 
@@ -412,29 +397,14 @@ export default function DesktopSwipeFeed({
             onClick={() => runSwipe("skip")}
             disabled={swipeDisabled}
             className={`inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-md border px-6 text-sm font-medium shadow-sm transition-all disabled:pointer-events-none disabled:opacity-50 ${theme.actionBtn}`}
-            aria-label="Pass"
+            aria-label={t("swipe.pass")}
             data-testid="desktop-pass-btn"
           >
-            <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 border-rose-500/70 bg-white">
-              <X className="h-3.5 w-3.5 text-rose-500" strokeWidth={2.5} />
-            </span>
-            Pass
+            {t("swipe.pass")}
             <kbd className={`pointer-events-none inline-flex h-5 min-w-5 items-center justify-center rounded-sm px-1 font-sans text-xs font-medium ${theme.actionKbd}`}>
               ←
             </kbd>
           </motion.button>
-
-          <button
-            type="button"
-            onClick={() => setCollapsed((c) => !c)}
-            className={`inline-flex h-10 w-[160px] shrink-0 items-center justify-center gap-2 rounded-md border px-6 text-sm font-medium shadow-sm transition-all ${theme.actionBtn}`}
-          >
-            <Minimize2 className="h-4 w-4 shrink-0" aria-hidden />
-            <span className="w-16 text-left">Collapse</span>
-            <kbd className={`pointer-events-none inline-flex h-5 min-w-5 items-center justify-center rounded-sm px-1 font-sans text-xs font-medium ${theme.actionKbd}`}>
-              Space
-            </kbd>
-          </button>
 
           <motion.button
             type="button"
@@ -442,17 +412,11 @@ export default function DesktopSwipeFeed({
             onClick={() => runSwipe("apply")}
             disabled={swipeDisabled}
             className={`inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-md border px-6 text-sm font-medium shadow-sm transition-all disabled:pointer-events-none disabled:opacity-50 ${theme.actionBtn}`}
-            aria-label="Apply"
+            aria-label={t("swipe.apply")}
             data-testid="desktop-apply-btn"
           >
-            <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full gradient-linkedin shadow-sm">
-              {appLoading ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-white" />
-              ) : (
-                <Heart className="h-3.5 w-3.5 fill-white text-white" />
-              )}
-            </span>
-            Apply
+            {appLoading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+            {t("swipe.apply")}
             <kbd className={`pointer-events-none inline-flex h-5 min-w-5 items-center justify-center rounded-sm px-1 font-sans text-xs font-medium ${theme.applyKbd}`}>
               →
             </kbd>
@@ -469,19 +433,20 @@ export default function DesktopSwipeFeed({
           ) : !displayJob ? (
             <div className="mx-auto max-w-lg py-20 text-center">
               <p className={`text-lg font-semibold ${theme.emptyTitle}`}>
-                {feedError || feedMeta?.fallback_reason || "No jobs found"}
+                {feedError || feedMeta?.fallback_reason || t("swipe.noJobs")}
               </p>
               <button
                 type="button"
                 onClick={onRefresh}
                 className="mt-4 rounded-full gradient-linkedin px-6 py-2.5 text-sm font-semibold text-white"
               >
-                Refresh feed
+                {t("common.refresh")}
               </button>
             </div>
           ) : (
             <div className="relative mx-auto flex h-full max-w-3xl flex-col">
-              <AnimatePresence mode="popLayout">
+              <AnimatePresence mode="wait" initial={false}>
+                {displayJob ? (
                 <motion.article
                   key={displayJob.job_id}
                   initial={{ opacity: 0, y: 28, scale: 0.96 }}
@@ -490,7 +455,7 @@ export default function DesktopSwipeFeed({
                       ? SWIPE_EXIT[exitIntent]
                       : { opacity: 1, x: 0, y: 0, rotate: 0, scale: 1 }
                   }
-                  exit={{ opacity: 0, y: -16, scale: 0.98 }}
+                  exit={{ opacity: 0, scale: 0.98 }}
                   transition={{ type: "spring", stiffness: 260, damping: 28 }}
                   onAnimationComplete={() => {
                     if (!exitIntent) return;
@@ -507,7 +472,7 @@ export default function DesktopSwipeFeed({
                       style={{ rotate: "-14deg" }}
                       data-testid="desktop-apply-stamp"
                     >
-                      APPLY
+                      {t("swipe.applyStamp")}
                     </motion.div>
                   ) : null}
                   {exitIntent === "skip" ? (
@@ -518,15 +483,15 @@ export default function DesktopSwipeFeed({
                       style={{ rotate: "14deg" }}
                       data-testid="desktop-pass-stamp"
                     >
-                      PASS
+                      {t("swipe.passStamp")}
                     </motion.div>
                   ) : null}
 
                   <div className="absolute right-5 top-5 z-20 flex items-center gap-1">
-                    <button type="button" onClick={() => onReport?.(displayJob)} className={`grid h-9 w-9 place-items-center rounded-lg ${theme.actionIcon}`} aria-label="Report">
+                    <button type="button" onClick={() => onReport?.(displayJob)} className={`grid h-9 w-9 place-items-center rounded-lg ${theme.actionIcon}`} aria-label={t("swipe.reportJob")}>
                       <Flag className="h-4 w-4" />
                     </button>
-                    <button type="button" onClick={() => onShare?.(displayJob)} className={`grid h-9 w-9 place-items-center rounded-lg ${theme.actionIcon}`} aria-label="Share">
+                    <button type="button" onClick={() => onShare?.(displayJob)} className={`grid h-9 w-9 place-items-center rounded-lg ${theme.actionIcon}`} aria-label={t("swipe.shareJob")}>
                       <Share2 className="h-4 w-4" />
                     </button>
                     {jobExternalUrl(displayJob) ? (
@@ -536,8 +501,9 @@ export default function DesktopSwipeFeed({
                     ) : null}
                   </div>
 
-                  <DesktopJobCard job={displayJob} collapsed={collapsed} theme={theme} isDark={isDark} />
+                  <DesktopJobCard job={displayJob} theme={theme} t={t} />
                 </motion.article>
+                ) : null}
               </AnimatePresence>
             </div>
           )}

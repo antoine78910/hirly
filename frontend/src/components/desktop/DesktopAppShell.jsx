@@ -2,13 +2,15 @@ import { createContext, useContext, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { ChevronDown, Headphones, Sun } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { useAppLocale } from "../../context/AppLocaleContext";
 import DesktopCreditsPill from "./DesktopCreditsPill";
 import {
   DESKTOP_THEMES,
   readDesktopTheme,
   saveDesktopTheme,
 } from "../swipe/desktopFeedTheme";
-import { DESKTOP_NAV_ITEMS } from "./desktopNav";
+import { getDesktopNavItems } from "./desktopNav";
+import LanguageSwitcher from "../settings/LanguageSwitcher";
 
 const DesktopThemeContext = createContext({ themeMode: "light", isDark: false, theme: DESKTOP_THEMES.light });
 
@@ -20,6 +22,8 @@ export default function DesktopAppShell({ children, headerRight = null }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { user } = useAuth();
+  const { t } = useAppLocale();
+  const navItems = getDesktopNavItems(t);
   const [themeMode, setThemeMode] = useState(readDesktopTheme);
   const isDark = themeMode === "dark";
   const theme = DESKTOP_THEMES[themeMode];
@@ -41,15 +45,15 @@ export default function DesktopAppShell({ children, headerRight = null }) {
           onClick={() => navigate("/profile")}
           className={`flex items-center gap-2 rounded-lg px-2 py-2 text-left text-sm ${theme.accountBtn}`}
         >
-          <span className="truncate font-medium">{user?.email || "Account"}</span>
+          <span className="truncate font-medium">{user?.email || t("common.account")}</span>
           <ChevronDown className="ml-auto h-4 w-4 shrink-0 text-zinc-400" />
         </button>
 
         <p className={`mt-6 px-2 text-[11px] font-semibold uppercase tracking-wider ${theme.sectionLabel}`}>
-          Platform
+          {t("common.platform")}
         </p>
         <nav className="mt-2 flex flex-col gap-0.5">
-          {DESKTOP_NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
+          {navItems.map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
               to={to}
@@ -68,18 +72,12 @@ export default function DesktopAppShell({ children, headerRight = null }) {
         </nav>
 
         <div className="mt-auto space-y-3 px-1 pt-6">
-          <div className={`rounded-xl border p-3 ${theme.tourCard}`}>
-            <p className={`text-sm font-semibold ${theme.tourTitle}`}>Tour completed</p>
-            <button type="button" className="mt-1 text-xs font-medium text-violet-500 hover:text-violet-600">
-              Restart tour
-            </button>
-          </div>
           <button
             type="button"
             className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm ${theme.supportBtn}`}
           >
             <Headphones className="h-4 w-4" />
-            Support
+            {t("common.support")}
           </button>
         </div>
       </aside>
@@ -87,6 +85,7 @@ export default function DesktopAppShell({ children, headerRight = null }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className={`flex items-center justify-end gap-3 border-b px-6 py-3 ${theme.header}`}>
           {headerRight}
+          <LanguageSwitcher variant={isDark ? "dark" : "light"} />
           <DesktopCreditsPill isDark={isDark} />
           <button
             type="button"
@@ -94,7 +93,7 @@ export default function DesktopAppShell({ children, headerRight = null }) {
             className={`grid h-9 w-9 place-items-center rounded-lg transition-colors ${
               isDark ? theme.iconBtn : `${theme.iconBtn} text-amber-500`
             }`}
-            aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+            aria-label={isDark ? t("swipe.switchLight") : t("swipe.switchDark")}
             data-testid="desktop-theme-toggle"
           >
             <Sun className="h-4 w-4" />

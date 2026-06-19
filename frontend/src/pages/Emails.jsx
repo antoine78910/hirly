@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   Mail, Sparkles, Copy, Check, ChevronRight, ChevronLeft, ChevronDown, X, Menu, Settings, Star, Pencil,
@@ -15,14 +15,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
 import DesktopPageHeader from "../components/desktop/DesktopPageHeader";
 import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
+import { useAppLocale } from "../context/AppLocaleContext";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const INBOX_FILTERS = [
-  { key: "primary", label: "Primary", activeClass: "bg-zinc-800 text-white", idleClass: "bg-zinc-100 text-zinc-700" },
-  { key: "verification", label: "Verification", activeClass: "bg-orange-100 text-orange-700", idleClass: "bg-orange-50 text-orange-600" },
-  { key: "interview", label: "Interview", activeClass: "bg-violet-100 text-violet-700", idleClass: "bg-violet-50 text-violet-600" },
-  { key: "offer", label: "Offer", activeClass: "bg-teal-100 text-teal-700", idleClass: "bg-teal-50 text-teal-600" },
+const getInboxFilters = (t) => [
+  { key: "primary", label: t("emails.primary"), activeClass: "bg-zinc-800 text-white", idleClass: "bg-zinc-100 text-zinc-700" },
+  { key: "verification", label: t("emails.verification"), activeClass: "bg-orange-100 text-orange-700", idleClass: "bg-orange-50 text-orange-600" },
+  { key: "interview", label: t("emails.interview"), activeClass: "bg-violet-100 text-violet-700", idleClass: "bg-violet-50 text-violet-600" },
+  { key: "offer", label: t("emails.offer"), activeClass: "bg-teal-100 text-teal-700", idleClass: "bg-teal-50 text-teal-600" },
 ];
 
 const INBOX_MESSAGES = [
@@ -255,16 +256,17 @@ function saveDrafts(drafts) {
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
 function StatusPill({ status }) {
+  const { t } = useAppLocale();
   if (status === "replied") {
     return (
       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300">
-        Replied
+        {t("emails.replied")}
       </span>
     );
   }
   return (
     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sprout-mint-soft text-sprout-mint">
-      Sent
+      {t("emails.sent")}
     </span>
   );
 }
@@ -301,6 +303,7 @@ function SentEmailRow({ email, onClick }) {
 }
 
 function DraftRow({ draft, onCopy, onDelete }) {
+  const { t } = useAppLocale();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -333,11 +336,11 @@ function DraftRow({ draft, onCopy, onDelete }) {
       >
         {copied ? (
           <>
-            <Check className="w-3 h-3" /> Copied
+            <Check className="w-3 h-3" /> {t("emails.saved")}
           </>
         ) : (
           <>
-            <Copy className="w-3 h-3" /> Copy
+            <Copy className="w-3 h-3" /> {t("emails.copy")}
           </>
         )}
       </button>
@@ -348,6 +351,7 @@ function DraftRow({ draft, onCopy, onDelete }) {
 // ─── Generate Sheet ───────────────────────────────────────────────────────────
 
 function GenerateSheet({ open, onClose, onSaveDraft }) {
+  const { t } = useAppLocale();
   const [emailType, setEmailType] = useState("cold");
   const [selectedJobId, setSelectedJobId] = useState(MOCK_JOBS[0].id);
   const [generatedBody, setGeneratedBody] = useState("");
@@ -375,7 +379,7 @@ function GenerateSheet({ open, onClose, onSaveDraft }) {
     };
     onSaveDraft(draft);
     setCopied(true);
-    toast.success("Copied and saved as draft");
+    toast.success(t("emails.copiedDraft"));
     setTimeout(() => {
       setCopied(false);
       onClose();
@@ -397,7 +401,7 @@ function GenerateSheet({ open, onClose, onSaveDraft }) {
       >
         <SheetHeader className="px-5 pt-6 pb-4 border-b border-sprout-border text-left">
           <SheetTitle className="font-display font-bold text-xl text-white">
-            New outreach email
+            {t("emails.newOutreach")}
           </SheetTitle>
         </SheetHeader>
 
@@ -405,7 +409,7 @@ function GenerateSheet({ open, onClose, onSaveDraft }) {
           {/* Email type picker */}
           <div>
             <p className="text-sprout-muted text-xs font-semibold uppercase tracking-wider mb-3">
-              Email type
+              {t("emails.emailType")}
             </p>
             <div className="grid grid-cols-2 gap-2.5">
               {EMAIL_TYPES.map((t) => (
@@ -427,7 +431,7 @@ function GenerateSheet({ open, onClose, onSaveDraft }) {
           {/* Job picker */}
           <div>
             <p className="text-sprout-muted text-xs font-semibold uppercase tracking-wider mb-3">
-              Application
+              {t("emails.application")}
             </p>
             <div className="relative">
               <select
@@ -451,14 +455,14 @@ function GenerateSheet({ open, onClose, onSaveDraft }) {
             className="w-full h-11 rounded-2xl gradient-linkedin text-white font-semibold text-sm flex items-center justify-center gap-2"
           >
             <Sparkles className="w-4 h-4" />
-            Generate
+            {t("emails.generate")}
           </button>
 
           {/* Generated output */}
           {generatedBody && (
             <div className="space-y-3">
               <p className="text-sprout-muted text-xs font-semibold uppercase tracking-wider">
-                Preview
+                {t("emails.preview")}
               </p>
               <Textarea
                 readOnly
@@ -472,11 +476,11 @@ function GenerateSheet({ open, onClose, onSaveDraft }) {
                 >
                   {copied ? (
                     <>
-                      <Check className="w-4 h-4" /> Saved
+                      <Check className="w-4 h-4" /> {t("emails.saved")}
                     </>
                   ) : (
                     <>
-                      <Copy className="w-4 h-4" /> Copy & Save as Draft
+                      <Copy className="w-4 h-4" /> {t("emails.copySaveDraft")}
                     </>
                   )}
                 </button>
@@ -484,7 +488,7 @@ function GenerateSheet({ open, onClose, onSaveDraft }) {
                   onClick={handleClose}
                   className="h-11 px-5 rounded-2xl bg-sprout-surface-2 text-sprout-muted font-semibold text-sm hover:text-white transition-colors border border-sprout-border"
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </button>
               </div>
             </div>
@@ -511,11 +515,15 @@ function canReplyToMessage(message) {
   return !message?.replyDisabled && message?.variant !== "welcome";
 }
 
-function getCategoryBadge(message) {
+function getCategoryBadge(message, t) {
   if (message.category === "system" || message.variant === "welcome") {
-    return { key: "system", label: "System" };
+    return { key: "system", label: t("emails.system") };
   }
-  const labels = { verification: "Verification", interview: "Interview", offer: "Offer" };
+  const labels = {
+    verification: t("emails.verification"),
+    interview: t("emails.interview"),
+    offer: t("emails.offer"),
+  };
   if (labels[message.filter]) return { key: message.filter, label: labels[message.filter] };
   return null;
 }
@@ -675,6 +683,7 @@ function MessageMoreMenu({ open, message, starred, onClose, onToggleStar, onArch
 }
 
 function ReplySheet({ message, open, onClose, onSend }) {
+  const { t } = useAppLocale();
   const [body, setBody] = useState("");
 
   useEffect(() => {
@@ -686,7 +695,7 @@ function ReplySheet({ message, open, onClose, onSend }) {
   const handleSend = () => {
     const text = body.trim();
     if (!text) {
-      toast.error("Write a reply first");
+      toast.error(t("emails.writeReplyFirst"));
       return;
     }
     onSend(text);
@@ -698,7 +707,7 @@ function ReplySheet({ message, open, onClose, onSend }) {
       <SheetContent side="bottom" className="rounded-t-2xl border-zinc-200 bg-white p-0">
         <SheetHeader className="border-b border-zinc-100 px-5 pb-4 pt-6 text-left">
           <SheetTitle className="font-display text-lg font-bold text-zinc-900">
-            Reply to {message.from}
+            {t("emails.reply")} {message.from}
           </SheetTitle>
           <p className="text-sm text-zinc-500">Re: {message.subject}</p>
         </SheetHeader>
@@ -706,7 +715,7 @@ function ReplySheet({ message, open, onClose, onSend }) {
           <Textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
-            placeholder="Write your reply…"
+            placeholder={t("emails.writeReply")}
             className="min-h-[140px] resize-none border-zinc-200 text-sm leading-relaxed"
             data-testid="inbox-reply-input"
           />
@@ -717,10 +726,10 @@ function ReplySheet({ message, open, onClose, onSend }) {
               data-testid="inbox-reply-send"
             >
               <Send className="mr-1.5 h-4 w-4" />
-              Send
+              {t("emails.send")}
             </Button>
             <Button variant="outline" onClick={onClose} className="rounded-full border-zinc-200">
-              Cancel
+              {t("common.cancel")}
             </Button>
           </div>
         </div>
@@ -770,17 +779,18 @@ function InboxMessageDetail({
   onReport,
   onReplySent,
 }) {
+  const { t } = useAppLocale();
   const [moreOpen, setMoreOpen] = useState(false);
   const [replyOpen, setReplyOpen] = useState(false);
 
   if (!message) return null;
 
-  const category = getCategoryBadge(message);
+  const category = getCategoryBadge(message, t);
   const replyAllowed = canReplyToMessage(message);
 
   const handleReply = () => {
     if (!replyAllowed) {
-      toast.message("You can't reply to this message");
+      toast.message(t("emails.cantReply"));
       return;
     }
     setReplyOpen(true);
@@ -788,17 +798,17 @@ function InboxMessageDetail({
 
   const handleMarkUnread = () => {
     onMarkUnread();
-    toast.success("Marked as unread");
+    toast.success(t("emails.markedUnread"));
   };
 
   const handleArchive = () => {
     onArchive();
-    toast.success("Message archived");
+    toast.success(t("emails.archived"));
   };
 
   const handleReport = () => {
     onReport();
-    toast.success("Report submitted — thanks for letting us know");
+    toast.success(t("emails.reportThanks"));
   };
 
   return (
@@ -811,7 +821,7 @@ function InboxMessageDetail({
           data-testid="inbox-message-back"
         >
           <ChevronLeft className="h-5 w-5" strokeWidth={2} />
-          Back
+          {t("emails.back")}
         </button>
 
         <div className="mt-3 flex flex-wrap items-start gap-x-2 gap-y-1">
@@ -853,7 +863,7 @@ function InboxMessageDetail({
               className="mt-0.5 inline-flex items-center gap-0.5 text-xs text-zinc-500"
               onClick={() => toast.message("Recipient details coming soon")}
             >
-              to me
+              {t("emails.toMe")}
               <ChevronDown className="h-3 w-3" />
             </button>
           </div>
@@ -895,7 +905,7 @@ function InboxMessageDetail({
         onClose={() => setMoreOpen(false)}
         onToggleStar={() => {
           onToggleStar();
-          toast.success(starred ? "Removed from starred" : "Added to starred");
+          toast.success(starred ? t("emails.removedStarred") : t("emails.addedStarred"));
         }}
         onArchive={handleArchive}
         onMarkUnread={handleMarkUnread}
@@ -908,7 +918,7 @@ function InboxMessageDetail({
         onClose={() => setReplyOpen(false)}
         onSend={(text) => {
           onReplySent(text);
-          toast.success("Reply sent");
+          toast.success(t("emails.replySent"));
         }}
       />
     </div>
@@ -918,6 +928,7 @@ function InboxMessageDetail({
 // ─── Sent Email Detail Sheet ──────────────────────────────────────────────────
 
 function EmailDetailSheet({ email, onClose }) {
+  const { t } = useAppLocale();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -957,7 +968,7 @@ function EmailDetailSheet({ email, onClose }) {
                 onClick={handleCopy}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-sprout-surface-2 text-sprout-mint text-xs font-semibold hover:bg-sprout-mint-soft transition-colors"
               >
-                {copied ? <><Check className="w-3 h-3" /> Copied</> : <><Copy className="w-3 h-3" /> Copy</>}
+                {copied ? <><Check className="w-3 h-3" /> {t("emails.saved")}</> : <><Copy className="w-3 h-3" /> {t("emails.copy")}</>}
               </button>
               <div className="h-4" />
             </div>
@@ -986,6 +997,7 @@ function SentTab() {
 }
 
 function DraftsTab() {
+  const { t } = useAppLocale();
   const [drafts, setDrafts] = useState([]);
 
   useEffect(() => {
@@ -994,14 +1006,14 @@ function DraftsTab() {
 
   const handleCopy = (draft) => {
     navigator.clipboard.writeText(draft.body).catch(() => {});
-    toast.success("Copied to clipboard");
+    toast.success(t("emails.copied"));
   };
 
   const handleDelete = (id) => {
     const updated = drafts.filter((d) => d.id !== id);
     setDrafts(updated);
     saveDrafts(updated);
-    toast.success("Draft deleted");
+    toast.success(t("emails.draftDeleted"));
   };
 
   if (drafts.length === 0) {
@@ -1009,7 +1021,7 @@ function DraftsTab() {
       <div className="mt-16 text-center">
         <Mail className="w-7 h-7 mx-auto mb-3 text-sprout-dim" />
         <p className="text-sprout-muted text-sm">
-          No drafts yet. Generate an outreach email to save a draft.
+          {t("emails.noDrafts")}
         </p>
       </div>
     );
@@ -1049,7 +1061,9 @@ function RepliesTab() {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function Emails() {
+  const { t } = useAppLocale();
   const navigate = useNavigate();
+  const inboxFilters = useMemo(() => getInboxFilters(t), [t]);
   const [filter, setFilter] = useState("primary");
   const [query, setQuery] = useState("");
   const [generateOpen, setGenerateOpen] = useState(false);
@@ -1121,7 +1135,7 @@ export default function Emails() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search in mail"
+              placeholder={t("emails.searchMail")}
               className="w-full min-w-0 bg-transparent text-sm text-zinc-900 placeholder:text-zinc-400 outline-none"
               data-testid="inbox-search"
             />
@@ -1137,7 +1151,7 @@ export default function Emails() {
         </div>
 
         <div className="-mx-safe mt-3 flex gap-1.5 overflow-x-auto px-safe pb-1 no-scrollbar sm:mx-0 sm:mt-4 sm:gap-2 sm:px-0">
-          {INBOX_FILTERS.map((f) => {
+          {inboxFilters.map((f) => {
             const active = filter === f.key;
             return (
               <button
@@ -1158,9 +1172,9 @@ export default function Emails() {
 
       <AppPageScroll>
         <div className={`${APP_CONTENT_WIDTH} mt-2`}>
-          <DesktopPageHeader title="Inbox" subtitle="Interview invites, offers, and application updates." />
+          <DesktopPageHeader title={t("emails.inboxTitle")} subtitle={t("emails.inboxSubtitle")} />
           <div className="mb-4 hidden flex-wrap gap-2 md:flex">
-            {INBOX_FILTERS.map((f) => {
+            {inboxFilters.map((f) => {
               const active = filter === f.key;
               return (
                 <button
@@ -1178,7 +1192,7 @@ export default function Emails() {
           </div>
           <p className="mb-2 text-xs font-medium capitalize text-zinc-400 md:mt-0">{filter}</p>
           {messages.length === 0 ? (
-            <p className="py-12 text-center text-sm text-zinc-500">No messages in this folder.</p>
+            <p className="py-12 text-center text-sm text-zinc-500">{t("emails.emptyFolder")}</p>
           ) : (
             <ul className="divide-y divide-zinc-100">
               {messages.map((m) => (
@@ -1230,7 +1244,7 @@ export default function Emails() {
         type="button"
         onClick={() => setGenerateOpen(true)}
         className="fixed bottom-24 right-4 z-40 grid h-12 w-12 place-items-center rounded-full gradient-linkedin text-white shadow-lg hover:opacity-90 sm:right-5 sm:h-14 sm:w-14"
-        aria-label="Compose email"
+        aria-label={t("emails.composeEmail")}
         data-testid="inbox-compose-fab"
       >
         <Pencil className="h-6 w-6" />
