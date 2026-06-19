@@ -108,6 +108,7 @@ export function getDemoResponse(config) {
         user_id: "dev-local",
         email: "dev@localhost",
         name: "Dev User",
+        demo_account: false,
       },
       has_profile: Boolean(DEMO_PROFILE.cv_text),
       has_preferences: Boolean(DEMO_PROFILE.target_role),
@@ -224,6 +225,38 @@ export function getDemoResponse(config) {
 
   if (method === "post" && /^\/training\/courses\/[^/]+\/modules\/[^/]+\/complete$/.test(path)) {
     return { ok: true, progress_percent: 10, completed_module_ids: [] };
+  }
+
+  if (method === "get" && path === "/admin/overview") {
+    return {
+      metrics: {
+        total_users: 24,
+        new_users_today: 2,
+        applications_today: 5,
+        prepared_applications: 8,
+        action_required: 1,
+        failed_blocked: 2,
+        submitted: 12,
+        conversion: { generated: 18, prepared: 8, submitted: 12 },
+      },
+      top_blockers: [
+        { label: "Missing phone number", count: 3 },
+        { label: "Security check needed", count: 1 },
+      ],
+      latest_attention: [],
+    };
+  }
+
+  if (method === "get" && path === "/admin/influencers") {
+    return { influencers: [] };
+  }
+
+  if (method === "post" && path === "/admin/influencers") {
+    return { ok: true, influencer: { influencer_id: `demo_inf_${Date.now()}`, ...(typeof body === "string" ? JSON.parse(body) : body) } };
+  }
+
+  if (method === "post" && /^\/admin\/influencers\/[^/]+\/grant-demo$/.test(path)) {
+    return { ok: true, email: "dev@localhost", demo_account: true, user_id: "dev-local" };
   }
 
   return undefined;

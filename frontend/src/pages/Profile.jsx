@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { demoMode } from "../lib/dev";
 import { DEMO_PROFILE } from "../lib/demoData";
 import { useSwipeCredits } from "../components/desktop/DesktopCreditsPill";
+import { useUpgradeModal } from "../context/UpgradeModalContext";
 import {
   User as UserIcon,
   FileText,
@@ -366,7 +367,8 @@ function firstValue(...values) {
 export default function Profile() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { displayCredits, demoAccount } = useSwipeCredits();
+  const { displayCredits, isPremium } = useSwipeCredits();
+  const { openUpgrade } = useUpgradeModal();
   const [profile, setProfile] = useState(() => (demoMode ? DEMO_PROFILE : null));
   const [loading, setLoading] = useState(!demoMode);
   const [tab, setTab] = useState("resume");
@@ -460,8 +462,10 @@ export default function Profile() {
             </button>
             <button
               type="button"
-              onClick={() => !demoAccount && navigate("/credits")}
-              className={`flex min-w-0 flex-1 items-center gap-3 text-left ${demoAccount ? "cursor-default" : ""}`}
+              onClick={() => {
+                if (!isPremium) openUpgrade();
+              }}
+              className={`flex min-w-0 flex-1 items-center gap-3 text-left ${isPremium ? "cursor-default" : ""}`}
               data-testid="profile-credits-card"
             >
               <div className="grid h-10 w-10 place-items-center rounded-full bg-violet-100">
@@ -469,9 +473,9 @@ export default function Profile() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-bold">
-                  <span className="text-amber-500">{swipeCredits}</span> {demoAccount ? "Demo credits" : "Swipes"}
+                  <span className="text-amber-500">{swipeCredits}</span> {isPremium ? "Unlimited" : "Credits"}
                 </p>
-                <p className="text-xs text-zinc-500">{demoAccount ? "Local applies only" : "Get More Credits"}</p>
+                <p className="text-xs text-zinc-500">{isPremium ? "Unlimited swipes" : "Upgrade your plan"}</p>
               </div>
               <ChevronRight className="h-5 w-5 shrink-0 text-zinc-300" />
             </button>

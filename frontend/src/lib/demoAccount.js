@@ -1,7 +1,19 @@
-import { readAiSettings } from "./aiSettings";
-
 export const DEMO_CREDITS_MAX = 600;
 export const DEMO_CREDITS_CHANGED = "hirly:demo-credits-changed";
+export const DEMO_ACCOUNT_CHANGED = "hirly:demo-account-changed";
+
+let cachedDemoAccount = false;
+
+export function setDemoAccountFromUser(user) {
+  cachedDemoAccount = Boolean(user?.demo_account);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(DEMO_ACCOUNT_CHANGED));
+  }
+}
+
+export function isDemoAccountEnabled() {
+  return cachedDemoAccount;
+}
 
 const CREDITS_KEY = "hirly.demo.credits.remaining";
 const APPS_KEY = "hirly.demo.applications";
@@ -28,10 +40,6 @@ function writeJson(key, value) {
   } catch {
     /* ignore quota errors */
   }
-}
-
-export function isDemoAccountEnabled() {
-  return Boolean(readAiSettings().demoAccount);
 }
 
 export function getDemoCreditsRemaining() {

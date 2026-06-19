@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { api } from "../lib/api";
 import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
 
@@ -30,6 +31,7 @@ export default function AdminUserDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [accessDenied, setAccessDenied] = useState(false);
+  const [demoSaving, setDemoSaving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -66,6 +68,21 @@ export default function AdminUserDetail() {
     ].filter(Boolean).join("\n");
   }, [profile, user.profile_completion]);
 
+  const demoAccount = Boolean(user.demo_account);
+
+  const toggleDemoAccount = async () => {
+    setDemoSaving(true);
+    try {
+      await api.patch(`/admin/users/${userId}/demo-account`, { demo_account: !demoAccount });
+      toast.success(demoAccount ? "Demo account disabled" : "Demo account enabled");
+      await load();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Could not update demo account");
+    } finally {
+      setDemoSaving(false);
+    }
+  };
+
   if (loading) {
     return <div className="grid min-h-dvh place-items-center bg-zinc-50"><Loader2 className="h-6 w-6 animate-spin text-zinc-500" /></div>;
   }
@@ -101,6 +118,33 @@ export default function AdminUserDetail() {
           </div>
 
           <aside className="space-y-5">
+            <Section title="Account flags">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold text-zinc-900">Demo account</p>
+                  <p className="mt-1 text-sm text-zinc-500">
+                    Local applies only — no submissions to employers. Unlimited swipes with a 600-credit display cycle.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={toggleDemoAccount}
+                  disabled={demoSaving}
+                  role="switch"
+                  aria-checked={demoAccount}
+                  data-testid="admin-demo-account-toggle"
+                  className={`relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
+                    demoAccount ? "bg-linkedin" : "bg-zinc-300"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${
+                      demoAccount ? "left-[22px]" : "left-0.5"
+                    }`}
+                  />
+                </button>
+              </div>
+            </Section>
             <Section title="Contact">
               <JsonBlock value={data.contact} />
             </Section>

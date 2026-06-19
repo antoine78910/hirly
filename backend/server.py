@@ -47,6 +47,7 @@ from browser_submission.lever import LeverBrowserSubmissionEngine
 from browser_submission.matching import suggested_profile_key as browser_suggested_profile_key
 from db import create_database_adapter
 from db.supabase_adapter import count_supabase_table, test_supabase_connection
+from influencer_store import create_influencer, get_influencer, list_influencers, update_influencer
 from jobs_service import (
     refresh_greenhouse_boards,
     refresh_jobs_for_profile_if_needed,
@@ -83,6 +84,7 @@ class User(BaseModel):
     email: str
     name: str
     picture: Optional[str] = None
+    demo_account: bool = False
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -3528,6 +3530,7 @@ async def list_applications(user: User = Depends(get_current_user)):
 
 async def require_admin_user(user: User = Depends(get_current_user)) -> User:
     admin_emails = {"anto.delbos@gmail.com"}
+    admin_emails |= _env_email_set("ADMIN_EMAILS")
     user_email = (user.email or "").strip().lower()
     if user_email and user_email in admin_emails:
         return user
@@ -3720,14 +3723,77 @@ def _ats_bucket(value: Optional[str]) -> str:
     return "unknown"
 
 
+def _admin_blocker_labels(app_doc: Dict[str, Any]) -> List[str]:
+    raw = app_doc.get("prepared_missing_information") or app_doc.get("prepared_blockers")
+    if raw is None:
+        fallback = app_doc.get("submission_error") or app_doc.get("submission_status") or "Unknown blocker"
+        return [str(fallback).strip() or "Unknown blocker"]
+    if isinstance(raw, str):
+        return [raw.strip() or "Unknown blocker"]
+    if isinstance(raw, dict):
+        label = raw.get("label") or raw.get("field_label") or raw.get("field_name") or raw.get("reason")
+        return [str(label or raw).strip() or "Unknown blocker"]
+    if not isinstance(raw, list):
+        return [str(raw).strip() or "Unknown blocker"]
+    labels: List[str] = []
+    for blocker in raw:
+        if isinstance(blocker, dict):
+            label = blocker.get("label") or blocker.get("field_label") or blocker.get("field_name") or blocker.get("reason")
+        else:
+            label = str(blocker or "")
+        label = (label or "Unknown blocker").strip()
+        labels.append(label)
+    return labels or ["Unknown blocker"]
+
+
+async def _admin_safe_find(collection, limit: int = 10000) -> List[Dict[str, Any]]:
+    name = getattr(collection, "name", None) or getattr(collection, "table_name", "unknown")
+    try:
+        cursor = collection.find({}, {"_id": 0})
+        if hasattr(cursor, "limit"):
+            cursor = cursor.limit(limit)
+        return await cursor.to_list(limit)
+    except Exception as exc:
+        logger.warning("admin_base_data_read_failed collection=%s error=%s", name, str(exc)[:200])
+        return []
+
+
 async def _admin_base_data() -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
-    users = await db.users.find({}, {"_id": 0}).to_list(10000)
-    profiles = await db.profiles.find({}, {"_id": 0}).to_list(10000)
-    swipes = await db.swipes.find({}, {"_id": 0}).to_list(10000)
-    applications = await db.applications.find({}, {"_id": 0}).to_list(10000)
+    users = await _admin_safe_find(db.users)
+    profiles = await _admin_safe_find(db.profiles)
+    swipes = await _admin_safe_find(db.swipes)
+    applications = await _admin_safe_find(db.applications)
     job_ids = list({app.get("job_id") for app in applications if app.get("job_id")})
-    jobs = await db.jobs.find({"job_id": {"$in": job_ids}}, {"_id": 0}).to_list(10000) if job_ids else []
+    if not job_ids:
+        jobs: List[Dict[str, Any]] = []
+    else:
+        job_id_set = set(job_ids)
+        jobs = [job for job in await _admin_safe_find(db.jobs) if job.get("job_id") in job_id_set]
     return users, profiles, swipes, applications, jobs
+
+
+async def _find_user_by_email(email: str) -> Optional[Dict[str, Any]]:
+    normalized = (email or "").strip().lower()
+    if not normalized:
+        return None
+    user_doc = await db.users.find_one({"email": normalized}, {"_id": 0})
+    if user_doc:
+        return user_doc
+    users = await _admin_safe_find(db.users)
+    for user_doc in users:
+        if (user_doc.get("email") or "").strip().lower() == normalized:
+            return user_doc
+    return None
+
+
+async def _set_user_demo_account(user_id: str, demo_account: bool) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    result = await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {"demo_account": demo_account, "updated_at": now}},
+    )
+    if getattr(result, "matched_count", 0) == 0:
+        raise HTTPException(status_code=404, detail="User not found")
 
 
 async def _analytics_events() -> List[Dict[str, Any]]:
@@ -3787,13 +3853,7 @@ async def admin_overview(admin: User = Depends(require_admin_user)):
     for app_doc in normalized_apps:
         if not _attention_status(app_doc.get("submission_status")):
             continue
-        blockers = app_doc.get("prepared_missing_information") or app_doc.get("prepared_blockers") or [app_doc.get("submission_error") or app_doc.get("submission_status")]
-        for blocker in blockers:
-            if isinstance(blocker, dict):
-                label = blocker.get("label") or blocker.get("field_label") or blocker.get("field_name") or blocker.get("reason")
-            else:
-                label = str(blocker or "")
-            label = (label or "Unknown blocker").strip()
+        for label in _admin_blocker_labels(app_doc):
             blocker_counts[label] = blocker_counts.get(label, 0) + 1
 
     attention_apps = [
@@ -3852,6 +3912,7 @@ async def admin_list_users(admin: User = Depends(require_admin_user)):
             "user_id": uid,
             "email": user_doc.get("email"),
             "name": user_doc.get("name"),
+            "demo_account": bool(user_doc.get("demo_account")),
             "profile_completion": _profile_completion(profile),
             "cv_uploaded": bool((profile or {}).get("cv_text")),
             "total_applications": app_counts.get(uid, 0),
@@ -3895,6 +3956,92 @@ async def admin_get_user(user_id: str, admin: User = Depends(require_admin_user)
             for app_doc in apps
         ],
         "internal_notes": [],
+    }
+
+
+@api_router.patch("/admin/users/{user_id}/demo-account")
+async def admin_set_demo_account(
+    user_id: str,
+    payload: Dict[str, Any],
+    admin: User = Depends(require_admin_user),
+):
+    if "demo_account" not in payload:
+        raise HTTPException(status_code=400, detail="demo_account is required")
+    await _set_user_demo_account(user_id, bool(payload.get("demo_account")))
+    return {"ok": True, "demo_account": bool(payload.get("demo_account"))}
+
+
+@api_router.get("/admin/influencers")
+async def admin_list_influencers(admin: User = Depends(require_admin_user)):
+    rows = list_influencers()
+    user_ids = [row.get("user_id") for row in rows if row.get("user_id")]
+    user_map: Dict[str, Dict[str, Any]] = {}
+    for uid in user_ids:
+        user_doc = await db.users.find_one({"user_id": uid}, {"_id": 0})
+        if user_doc:
+            user_map[uid] = user_doc
+    enriched = []
+    for row in rows:
+        linked = user_map.get(row.get("user_id") or "")
+        enriched.append({
+            **row,
+            "linked_email": (linked or {}).get("email"),
+            "linked_demo_account": bool((linked or {}).get("demo_account")),
+        })
+    return {"influencers": enriched}
+
+
+@api_router.post("/admin/influencers")
+async def admin_create_influencer(payload: Dict[str, Any], admin: User = Depends(require_admin_user)):
+    name = (payload.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+    row = create_influencer(payload)
+    return {"ok": True, "influencer": row}
+
+
+@api_router.patch("/admin/influencers/{influencer_id}")
+async def admin_update_influencer(
+    influencer_id: str,
+    payload: Dict[str, Any],
+    admin: User = Depends(require_admin_user),
+):
+    row = update_influencer(influencer_id, payload)
+    if not row:
+        raise HTTPException(status_code=404, detail="Influencer not found")
+    return {"ok": True, "influencer": row}
+
+
+@api_router.post("/admin/influencers/{influencer_id}/grant-demo")
+async def admin_grant_influencer_demo(
+    influencer_id: str,
+    admin: User = Depends(require_admin_user),
+):
+    row = get_influencer(influencer_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Influencer not found")
+
+    user_doc = None
+    if row.get("user_id"):
+        user_doc = await db.users.find_one({"user_id": row["user_id"]}, {"_id": 0})
+    if not user_doc and row.get("email"):
+        user_doc = await _find_user_by_email(row["email"])
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="No Hirly user found for this influencer. Ask them to sign up first.")
+
+    user_id = user_doc["user_id"]
+    await _set_user_demo_account(user_id, True)
+    updated = update_influencer(influencer_id, {
+        "user_id": user_id,
+        "demo_granted": True,
+        "status": "active",
+    })
+    return {
+        "ok": True,
+        "influencer": updated,
+        "user_id": user_id,
+        "email": user_doc.get("email"),
+        "demo_account": True,
     }
 
 

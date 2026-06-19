@@ -16,7 +16,7 @@ import { BRAND } from "../lib/brand";
 import { shareJob } from "../lib/shareJob";
 import { trackEvent } from "../lib/analytics";
 import { cacheJobForDemo, isDemoAccountEnabled } from "../lib/demoAccount";
-import DesktopUpgradeModal from "../components/upgrade/DesktopUpgradeModal";
+import { useUpgradeModal } from "../context/UpgradeModalContext";
 import DesktopSwipeFeed from "../components/swipe/DesktopSwipeFeed";
 import { saveTargetPreferences } from "../lib/targetPreferences";
 import { hasActiveFilters } from "../lib/jobFilters";
@@ -555,7 +555,7 @@ export default function Swipe() {
   const [feedError, setFeedError] = useState("");
   const [reportJob, setReportJob] = useState(null);
   const [billing, setBilling] = useState(null);
-  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const { upgradeOpen, openUpgrade } = useUpgradeModal();
   const fetchingRef = useRef(false);
   const filtersRef = useRef(filters);
   const pendingFiltersRef = useRef(undefined);
@@ -726,9 +726,9 @@ export default function Swipe() {
 
   const blockApplyForFreePlan = useCallback(() => {
     if (!shouldGateApply) return false;
-    setUpgradeOpen(true);
+    openUpgrade();
     return true;
-  }, [shouldGateApply]);
+  }, [shouldGateApply, openUpgrade]);
 
   useEffect(() => {
     trackEvent("swipe_page_view");
@@ -847,7 +847,7 @@ export default function Swipe() {
       if (appLoading || loading || !topJob) return;
       if (event.key === "ArrowRight" && shouldGateApply) {
         event.preventDefault();
-        setUpgradeOpen(true);
+        openUpgrade();
         return;
       }
       event.preventDefault();
@@ -894,7 +894,7 @@ export default function Swipe() {
           onRefresh={() => loadFeed(true)}
           onRadiusChange={handleRadiusChange}
           shouldGateApply={shouldGateApply}
-          onApplyBlocked={() => setUpgradeOpen(true)}
+          onApplyBlocked={openUpgrade}
           interactionBlocked={targetSheetOpen || filtersOpen || desktopFiltersOpen || Boolean(reportJob) || upgradeOpen}
         />
       </div>
@@ -1080,8 +1080,6 @@ export default function Swipe() {
         onClose={() => setReportJob(null)}
         onSubmit={handleReportSubmit}
       />
-
-      <DesktopUpgradeModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
     </>
   );
 }

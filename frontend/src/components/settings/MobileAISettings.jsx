@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { FileText, ScanSearch, ScrollText, ShieldCheck, FlaskConical } from "lucide-react";
+import { FileText, ScanSearch, ScrollText, ShieldCheck } from "lucide-react";
 import { useAiSettings } from "../../hooks/useAiSettings";
 
 const MOBILE_ROWS = [
@@ -28,13 +28,6 @@ const MOBILE_ROWS = [
     description: "Answer questions addressing job requirements to improve AI resume and cover letter generation",
   },
 ];
-
-const DEMO_ROW = {
-  id: "demoAccount",
-  icon: FlaskConical,
-  title: "Demo account",
-  description: "Apply locally without sending to employers. Unlimited swipes with a 600-credit display cycle.",
-};
 
 function MobileToggle({ checked, onChange, testId }) {
   return (
@@ -83,24 +76,6 @@ export default function MobileAISettings() {
             </div>
           );
         })}
-      </div>
-
-      <h2 className="mb-2 mt-7 px-1 text-xs uppercase tracking-[0.16em] text-sprout-muted">Demo</h2>
-      <div className="overflow-hidden rounded-2xl border border-sprout-border bg-sprout-surface">
-        <div className="flex items-start gap-3 px-4 py-4" data-testid="ai-setting-row-demoAccount">
-          <div className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-500/15">
-            <FlaskConical className="h-4 w-4 text-amber-400" />
-          </div>
-          <div className="min-w-0 flex-1 pr-2">
-            <p className="text-[15px] font-semibold text-white">{DEMO_ROW.title}</p>
-            <p className="mt-1 text-sm leading-snug text-sprout-muted">{DEMO_ROW.description}</p>
-          </div>
-          <MobileToggle
-            checked={settings.demoAccount}
-            onChange={(value) => updateSetting("demoAccount", value)}
-            testId="ai-setting-toggle-demoAccount"
-          />
-        </div>
       </div>
     </section>
   );

@@ -13,6 +13,8 @@ import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
 import DesktopAppShell from "../components/desktop/DesktopAppShell";
 import AISettingsPanel from "../components/desktop/AISettingsPanel";
 import MobileAISettings from "../components/settings/MobileAISettings";
+import DemoAccountBadge from "../components/settings/DemoAccountBadge";
+import { useUpgradeModal } from "../context/UpgradeModalContext";
 
 const Section = ({ label, children, testId }) => (
   <section className="mt-7" data-testid={testId}>
@@ -46,6 +48,7 @@ const TikTok = (props) => (
 export default function Settings() {
   const navigate = useNavigate();
   const { logout, user } = useAuth();
+  const { openUpgrade } = useUpgradeModal();
   const [theme, setTheme] = useState("System");
   const [billing, setBilling] = useState(null);
 
@@ -70,13 +73,13 @@ export default function Settings() {
 
   const openPlan = async () => {
     if (!billing?.is_premium) {
-      navigate("/credits");
+      openUpgrade();
       return;
     }
     try {
       const { data } = await api.post("/billing/create-portal-session");
       if (data?.url) window.location.href = data.url;
-      else navigate("/credits");
+      else toast.error("Could not open billing portal");
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Could not open billing portal");
     }
@@ -112,6 +115,9 @@ export default function Settings() {
       </header>
 
       <AppPageScroll className="mx-auto max-w-md px-5 pb-32" withBottomNavPad={false}>
+      <div className="mb-5">
+        <DemoAccountBadge variant="dark" />
+      </div>
       <Section label="Look & feel" testId="settings-appearance">
         <Row icon={Palette} label="Theme" value={theme} onClick={() => todo("Theme picker")} testId="settings-theme" />
       </Section>

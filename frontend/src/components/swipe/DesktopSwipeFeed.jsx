@@ -405,50 +405,58 @@ export default function DesktopSwipeFeed({
           </div>
         </div>
 
-        <div className="flex items-center justify-center gap-8 px-6 py-4 sm:gap-12">
-          <div className="flex flex-col items-center gap-1.5">
-            <motion.button
-              type="button"
-              whileTap={{ scale: 0.9 }}
-              onClick={() => runSwipe("skip")}
-              disabled={swipeDisabled}
-              className="grid h-14 w-14 place-items-center rounded-full border-2 border-rose-500/70 bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)] transition-colors hover:border-rose-500 disabled:opacity-40"
-              aria-label="Pass"
-              data-testid="desktop-pass-btn"
-            >
-              <X className="h-6 w-6 text-rose-500" strokeWidth={2.5} />
-            </motion.button>
-            <kbd className={`rounded border px-1.5 py-0.5 text-[10px] ${theme.actionKbd}`}>←</kbd>
-          </div>
+        <div className="flex items-center justify-center gap-2 px-6 py-4">
+          <motion.button
+            type="button"
+            whileTap={{ scale: 0.98 }}
+            onClick={() => runSwipe("skip")}
+            disabled={swipeDisabled}
+            className={`inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-md border px-6 text-sm font-medium shadow-sm transition-all disabled:pointer-events-none disabled:opacity-50 ${theme.actionBtn}`}
+            aria-label="Pass"
+            data-testid="desktop-pass-btn"
+          >
+            <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 border-rose-500/70 bg-white">
+              <X className="h-3.5 w-3.5 text-rose-500" strokeWidth={2.5} />
+            </span>
+            Pass
+            <kbd className={`pointer-events-none inline-flex h-5 min-w-5 items-center justify-center rounded-sm px-1 font-sans text-xs font-medium ${theme.actionKbd}`}>
+              ←
+            </kbd>
+          </motion.button>
 
           <button
             type="button"
             onClick={() => setCollapsed((c) => !c)}
-            className={`inline-flex items-center gap-2 rounded-xl border px-5 py-2.5 text-sm font-semibold ${theme.actionBtn}`}
+            className={`inline-flex h-10 w-[160px] shrink-0 items-center justify-center gap-2 rounded-md border px-6 text-sm font-medium shadow-sm transition-all ${theme.actionBtn}`}
           >
-            <Minimize2 className="h-4 w-4" />
-            Collapse
-            <kbd className={`rounded border px-1.5 py-0.5 text-[10px] ${theme.actionKbd}`}>Space</kbd>
+            <Minimize2 className="h-4 w-4 shrink-0" aria-hidden />
+            <span className="w-16 text-left">Collapse</span>
+            <kbd className={`pointer-events-none inline-flex h-5 min-w-5 items-center justify-center rounded-sm px-1 font-sans text-xs font-medium ${theme.actionKbd}`}>
+              Space
+            </kbd>
           </button>
 
-          <div className="flex flex-col items-center gap-1.5">
-            <motion.button
-              type="button"
-              whileTap={{ scale: 0.9 }}
-              onClick={() => runSwipe("apply")}
-              disabled={swipeDisabled}
-              className="grid h-16 w-16 place-items-center rounded-full gradient-linkedin shadow-[0_8px_28px_rgba(124,58,237,0.45)] transition-opacity hover:opacity-90 disabled:opacity-40"
-              aria-label="Apply"
-              data-testid="desktop-apply-btn"
-            >
+          <motion.button
+            type="button"
+            whileTap={{ scale: 0.98 }}
+            onClick={() => runSwipe("apply")}
+            disabled={swipeDisabled}
+            className={`inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-md border px-6 text-sm font-medium shadow-sm transition-all disabled:pointer-events-none disabled:opacity-50 ${theme.actionBtn}`}
+            aria-label="Apply"
+            data-testid="desktop-apply-btn"
+          >
+            <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full gradient-linkedin shadow-sm">
               {appLoading ? (
-                <Loader2 className="h-6 w-6 animate-spin text-white" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-white" />
               ) : (
-                <Heart className="h-6 w-6 fill-white text-white" />
+                <Heart className="h-3.5 w-3.5 fill-white text-white" />
               )}
-            </motion.button>
-            <kbd className={`rounded border px-1.5 py-0.5 text-[10px] ${theme.applyKbd}`}>→</kbd>
-          </div>
+            </span>
+            Apply
+            <kbd className={`pointer-events-none inline-flex h-5 min-w-5 items-center justify-center rounded-sm px-1 font-sans text-xs font-medium ${theme.applyKbd}`}>
+              →
+            </kbd>
+          </motion.button>
         </div>
 
         <div className="relative min-h-0 flex-1 px-6 pb-6">

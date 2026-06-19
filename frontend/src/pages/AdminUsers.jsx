@@ -62,13 +62,14 @@ export default function AdminUsers() {
                 <th className="px-4 py-3">Profile</th>
                 <th className="px-4 py-3">CV</th>
                 <th className="px-4 py-3">Applications</th>
+                <th className="px-4 py-3">Demo</th>
                 <th className="px-4 py-3">Last active</th>
                 <th className="px-4 py-3">Plan</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
               {loading ? (
-                <tr><td className="px-4 py-8 text-center text-zinc-500" colSpan={7}><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>
+                <tr><td className="px-4 py-8 text-center text-zinc-500" colSpan={8}><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>
               ) : users.length ? users.map((user) => (
                 <tr key={user.user_id} className="hover:bg-zinc-50">
                   <td className="px-4 py-3">
@@ -79,11 +80,12 @@ export default function AdminUsers() {
                   <td className="px-4 py-3">{user.profile_completion || 0}%</td>
                   <td className="px-4 py-3">{user.cv_uploaded ? "Yes" : "No"}</td>
                   <td className="px-4 py-3">{user.total_applications || 0}</td>
+                  <td className="px-4 py-3">{user.demo_account ? "Yes" : "—"}</td>
                   <td className="px-4 py-3">{fmtDate(user.last_active_at || user.created_at)}</td>
                   <td className="px-4 py-3 text-zinc-500">{user.plan || "Not connected"}</td>
                 </tr>
               )) : (
-                <tr><td className="px-4 py-8 text-center text-zinc-500" colSpan={7}>No users found.</td></tr>
+                <tr><td className="px-4 py-8 text-center text-zinc-500" colSpan={8}>No users found.</td></tr>
               )}
             </tbody>
           </table>

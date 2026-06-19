@@ -7,12 +7,12 @@ import {
   Sparkles,
   Wand2,
   Zap,
-  FlaskConical,
 } from "lucide-react";
 import Logo from "../Logo";
 import { BRAND } from "../../lib/brand";
 import { useAiSettings } from "../../hooks/useAiSettings";
 import { useDesktopTheme } from "./DesktopAppShell";
+import DemoAccountBadge from "../settings/DemoAccountBadge";
 
 const AI_FEATURE_IDS = ["aiCoverLetter", "aiResume", "reviewDocuments", "findResumeGaps"];
 
@@ -50,15 +50,6 @@ const SETTING_ROWS = [
     stat: "Smarter matches",
   },
 ];
-
-const DEMO_ACCOUNT_ROW = {
-  id: "demoAccount",
-  icon: FlaskConical,
-  accent: "from-amber-500 to-orange-500",
-  title: "Demo account",
-  description: "Apply locally without sending to employers. Unlimited swipes with a 600-credit display cycle.",
-  stat: "Screen recordings",
-};
 
 function ViralToggle({ checked, onChange, testId }) {
   return (
@@ -130,6 +121,9 @@ export default function AISettingsPanel() {
 
   return (
     <div className="relative mx-auto max-w-5xl px-6 py-10 lg:px-10 lg:py-14">
+      <div className="relative mb-6 max-w-3xl">
+        <DemoAccountBadge />
+      </div>
       <div
         aria-hidden
         className="pointer-events-none absolute -left-20 top-0 h-72 w-72 rounded-full bg-violet-500/20 blur-3xl"
@@ -236,21 +230,6 @@ export default function AISettingsPanel() {
                   onChange={(value) => updateSetting(row.id, value)}
                 />
               ))}
-            </div>
-
-            <div className={`border-t ${isDark ? "border-zinc-800" : "border-zinc-100"}`}>
-              <div className="border-b border-zinc-200/80 px-5 py-4 dark:border-zinc-800 sm:px-6">
-                <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${isDark ? "text-zinc-500" : "text-zinc-400"}`}>
-                  Demo
-                </p>
-              </div>
-              <SettingRow
-                row={DEMO_ACCOUNT_ROW}
-                index={SETTING_ROWS.length}
-                isDark={isDark}
-                checked={settings.demoAccount}
-                onChange={(value) => updateSetting("demoAccount", value)}
-              />
             </div>
           </div>
         </motion.div>

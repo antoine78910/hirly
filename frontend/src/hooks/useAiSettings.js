@@ -19,13 +19,6 @@ export function useAiSettings() {
       saveAiSettings(next);
       return next;
     });
-    if (key === "demoAccount") {
-      toast.success(
-        value ? "Demo account enabled — applies stay local" : "Demo account disabled",
-        { duration: 2200 },
-      );
-      return;
-    }
     toast.success(value ? "AI feature enabled" : "AI feature disabled", { duration: 1800 });
   };
 

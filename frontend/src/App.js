@@ -2,6 +2,7 @@ import "@/App.css";
 import { BrowserRouter, Navigate, Routes, Route, useLocation } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/context/AuthContext";
+import { UpgradeModalProvider } from "@/context/UpgradeModalContext";
 import Landing from "@/pages/Landing";
 import Signup from "@/pages/Signup";
 import Onboarding from "@/pages/Onboarding";
@@ -25,6 +26,7 @@ import AdminOverview from "@/pages/AdminOverview";
 import AdminUsers from "@/pages/AdminUsers";
 import AdminUserDetail from "@/pages/AdminUserDetail";
 import AdminAnalytics from "@/pages/AdminAnalytics";
+import AdminInfluencers from "@/pages/AdminInfluencers";
 import AdminCreators from "@/pages/AdminCreators";
 import Training from "@/pages/Training";
 import TrainingCourse from "@/pages/TrainingCourse";
@@ -95,6 +97,7 @@ function AppRouter() {
         <Route path="/admin/applications/:id" element={<AppRoute><AdminApplicationDetail /></AppRoute>} />
         <Route path="/admin/users" element={<AppRoute><AdminUsers /></AppRoute>} />
         <Route path="/admin/users/:userId" element={<AppRoute><AdminUserDetail /></AppRoute>} />
+        <Route path="/admin/influencers" element={<AppRoute><AdminInfluencers /></AppRoute>} />
         <Route path="/admin/creators" element={<AppRoute><AdminCreators /></AppRoute>} />
         <Route path="/admin/analytics" element={<AppRoute><AdminAnalytics /></AppRoute>} />
         <Route path="/onboarding" element={<Onboarding />} />
@@ -131,7 +134,9 @@ function App() {
     <div className="App">
       <AuthProvider>
         <BrowserRouter>
-          <AppRouter />
+          <UpgradeModalProvider>
+            <AppRouter />
+          </UpgradeModalProvider>
           <Toaster position="top-center" richColors theme="dark" />
         </BrowserRouter>
       </AuthProvider>

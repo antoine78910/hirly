@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { api, setSessionToken } from "../lib/api";
 import { devBypassAuth } from "../lib/dev";
+import { setDemoAccountFromUser } from "../lib/demoAccount";
 
 const AuthContext = createContext(null);
 
@@ -8,6 +9,7 @@ const DEV_MOCK_USER = {
   user_id: "dev-local",
   email: "dev@localhost",
   name: "Dev User",
+  demo_account: false,
 };
 
 export const AuthProvider = ({ children }) => {
@@ -21,6 +23,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const { data } = await api.get("/auth/me");
       setUser(data.user);
+      setDemoAccountFromUser(data.user);
       setHasProfile(data.has_profile);
       setHasPreferences(data.has_preferences);
       setIsTrainingCreator(Boolean(data.is_training_creator));
@@ -35,6 +38,7 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     if (devBypassAuth) {
       setUser(DEV_MOCK_USER);
+      setDemoAccountFromUser(DEV_MOCK_USER);
       setHasProfile(true);
       setHasPreferences(true);
       setIsTrainingCreator(false);
@@ -54,6 +58,7 @@ export const AuthProvider = ({ children }) => {
     try { await api.post("/auth/logout"); } catch (_) {}
     setSessionToken(null);
     setUser(null);
+    setDemoAccountFromUser(null);
     setHasProfile(false);
     setHasPreferences(false);
     setIsTrainingCreator(false);
