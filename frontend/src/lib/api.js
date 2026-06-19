@@ -3,9 +3,18 @@ import { demoMode } from "./dev";
 import { getDemoResponse } from "./demoApi";
 import { getDemoAccountResponse, patchDemoAccountResponse } from "./demoAccount";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL
-  || (process.env.NODE_ENV === "development" ? "http://localhost:8001" : "");
-export const API = `${BACKEND_URL}/api`;
+const normalizeBackendUrl = (value) => {
+  const raw = (value || "").trim();
+  if (!raw) return "";
+  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  return withProtocol.replace(/\/+$/, "").replace(/\/api$/i, "");
+};
+
+const BACKEND_URL = normalizeBackendUrl(
+  process.env.REACT_APP_BACKEND_URL
+    || (process.env.NODE_ENV === "development" ? "http://localhost:8001" : ""),
+);
+export const API = BACKEND_URL ? `${BACKEND_URL}/api` : "/api";
 
 export const api = axios.create({
   baseURL: API,
