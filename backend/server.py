@@ -75,6 +75,27 @@ def _normalize_supabase_url(value: str | None) -> str:
     return url
 
 
+def _cors_origins() -> List[str]:
+    configured = [
+        origin.strip().rstrip("/")
+        for origin in os.environ.get("CORS_ORIGINS", "").split(",")
+        if origin.strip()
+    ]
+    defaults = [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "https://www.tryhirly.com",
+        "https://tryhirly.com",
+    ]
+    for env_name in ("FRONTEND_URL", "REACT_APP_FRONTEND_URL", "VERCEL_PROJECT_PRODUCTION_URL", "VERCEL_URL"):
+        value = (os.environ.get(env_name) or "").strip().rstrip("/")
+        if not value:
+            continue
+        defaults.append(value if value.startswith(("http://", "https://")) else f"https://{value}")
+    origins = configured or defaults
+    return list(dict.fromkeys([origin for origin in [*origins, *defaults] if origin and origin != "*"]))
+
+
 DATABASE_PROVIDER = "supabase"
 db = create_database_adapter()
 
@@ -8542,7 +8563,7 @@ app.include_router(api_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=_cors_origins(),
     allow_methods=["*"],
     allow_headers=["*"],
 )
