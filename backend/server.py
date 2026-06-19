@@ -66,6 +66,15 @@ from training_service import is_training_creator, seed_training_content, sync_tr
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
+
+def _normalize_supabase_url(value: str | None) -> str:
+    url = (value or "").strip().rstrip("/")
+    for suffix in ("/rest/v1", "/auth/v1"):
+        if url.endswith(suffix):
+            return url[: -len(suffix)]
+    return url
+
+
 DATABASE_PROVIDER = "supabase"
 db = create_database_adapter()
 
@@ -369,7 +378,7 @@ async def auth_supabase_session(body: SupabaseSessionRequest, response: Response
     if not access_token:
         raise HTTPException(status_code=400, detail="access_token required")
 
-    supabase_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+    supabase_url = _normalize_supabase_url(os.environ.get("SUPABASE_URL"))
     supabase_secret = os.environ.get("SUPABASE_SECRET_KEY", "")
     if not supabase_url or not supabase_secret:
         raise HTTPException(status_code=503, detail="Supabase auth is not configured")
@@ -7831,7 +7840,7 @@ async def dev_db_health():
     environment_raw = os.environ.get("ENVIRONMENT")
     env_file_path = ROOT_DIR / ".env"
 
-    supabase_url = os.environ.get("SUPABASE_URL", "")
+    supabase_url = _normalize_supabase_url(os.environ.get("SUPABASE_URL"))
     supabase_secret = os.environ.get("SUPABASE_SECRET_KEY", "")
     supabase_config_present = bool(supabase_url and supabase_secret)
     supabase_connection_ok = False
