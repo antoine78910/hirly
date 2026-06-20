@@ -1,0 +1,13 @@
+{
+  "experimentalServices": {
+    "frontend": {
+      "root": "frontend",
+      "routePrefix": "/",
+      "framework": "create-react-app",
+      "installCommand": "npm install --legacy-peer-deps",
+      "buildCommand": "CI=false npm run build",
+      "outputDirectory": "build"
+    }
+  },
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
