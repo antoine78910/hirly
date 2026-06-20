@@ -23,9 +23,33 @@ import {
 export { CREATING_CONTENT_SECTIONS_EN, CREATING_CONTENT_SECTIONS_FR };
 export { WARM_UP_PLAYBOOK_EN, WARM_UP_PLAYBOOK_FR };
 
+import {
+  GETTING_STARTED_EN,
+  GETTING_STARTED_FR,
+} from "./gettingStartedContent";
+
+import {
+  ACCOUNT_MANAGEMENT_EN,
+  ACCOUNT_MANAGEMENT_FR,
+} from "./accountManagementContent";
+
+import {
+  SUBMIT_DRAFTS_EN,
+  SUBMIT_DRAFTS_FR,
+} from "./submitDraftsContent";
+
 export function moduleContentFor(moduleId, lang = "en") {
+  if (moduleId === "mod_getting_started") {
+    return lang === "fr" ? GETTING_STARTED_FR : GETTING_STARTED_EN;
+  }
   if (moduleId === "mod_warm_up") {
     return lang === "fr" ? WARM_UP_PLAYBOOK_FR : WARM_UP_PLAYBOOK_EN;
+  }
+  if (moduleId === "mod_account_management") {
+    return lang === "fr" ? ACCOUNT_MANAGEMENT_FR : ACCOUNT_MANAGEMENT_EN;
+  }
+  if (moduleId === "mod_submit_drafts") {
+    return lang === "fr" ? SUBMIT_DRAFTS_FR : SUBMIT_DRAFTS_EN;
   }
   return null;
 }

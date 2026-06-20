@@ -1,4 +1,4 @@
-/** Desktop upgrade modal — subscription tiers (Sprout-style layout). */
+/** Desktop upgrade modal — subscription tiers (amounts in EUR). */
 
 export const UPGRADE_FEATURES = [
   {

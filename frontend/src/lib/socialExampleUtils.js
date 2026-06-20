@@ -8,7 +8,7 @@ export function parseSocialUrl(url) {
     return {
       platform: "tiktok",
       id: match[1],
-      embedUrl: `https://www.tiktok.com/embed/v2/${match[1]}`,
+      embedUrl: `https://www.tiktok.com/player/v1/${match[1]}`,
       openUrl: url,
     };
   }
@@ -55,13 +55,40 @@ export function parseSocialUrl(url) {
 export function embedSrcFor(parsed, { muted = true, autoplay = false } = {}) {
   if (!parsed?.embedUrl) return null;
   if (parsed.platform === "tiktok") {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams({
+      controls: "0",
+      progress_bar: "0",
+      play_button: "0",
+      volume_control: "0",
+      fullscreen_button: "0",
+      timestamp: "0",
+      music_info: "0",
+      description: "0",
+      rel: "0",
+      native_context_menu: "0",
+      closed_caption: "0",
+      muted: muted ? "1" : "0",
+      loop: "1",
+    });
     if (autoplay) params.set("autoplay", "1");
-    if (muted) params.set("mute", "1");
-    const qs = params.toString();
-    return qs ? `${parsed.embedUrl}?${qs}` : parsed.embedUrl;
+    return `${parsed.embedUrl}?${params.toString()}`;
   }
   return parsed.embedUrl;
+}
+
+/** Crop official embed chrome so the preview focuses on the video area. */
+export function embedFrameClassName(platform) {
+  if (platform === "instagram") return "social-embed-frame social-embed-frame--instagram";
+  if (platform === "tiktok") return "social-embed-frame social-embed-frame--tiktok";
+  return "social-embed-frame";
+}
+
+/** TikTok player v1 — host → iframe commands (play, pause, mute, unMute). */
+export function postTikTokPlayerMessage(iframe, type, value) {
+  if (!iframe?.contentWindow) return;
+  const message = { type, "x-tiktok-player": true };
+  if (value !== undefined) message.value = value;
+  iframe.contentWindow.postMessage(message, "*");
 }
 
 export const PLATFORM_LABELS = {
@@ -73,6 +100,10 @@ export const PLATFORM_LABELS = {
     hoverPreview: "Hover to preview",
     tapPreview: "Tap to preview",
     clickSound: "Click for sound",
+    soundOn: "Sound on",
+    soundOff: "Sound off",
+    pause: "Pause",
+    play: "Play",
     openOn: "Open on",
     previewUnavailable: "Preview unavailable — open the link",
   },
@@ -84,6 +115,10 @@ export const PLATFORM_LABELS = {
     hoverPreview: "Survole pour prévisualiser",
     tapPreview: "Appuie pour prévisualiser",
     clickSound: "Clique pour le son",
+    soundOn: "Son activé",
+    soundOff: "Son coupé",
+    pause: "Pause",
+    play: "Lecture",
     openOn: "Ouvrir sur",
     previewUnavailable: "Aperçu indisponible — ouvre le lien",
   },

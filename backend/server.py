@@ -48,6 +48,13 @@ from browser_submission.matching import suggested_profile_key as browser_suggest
 from db import create_database_adapter
 from db.supabase_adapter import count_supabase_table, test_supabase_connection
 from influencer_store import create_influencer, get_influencer, list_influencers, update_influencer
+from creator_invite_store import (
+    create_invitation,
+    get_invite_by_code,
+    list_invites_for_influencer,
+    mark_invite_redeemed,
+    validate_invite,
+)
 from jobs_service import (
     refresh_greenhouse_boards,
     refresh_jobs_for_profile_if_needed,
@@ -61,7 +68,14 @@ from location_search import search_locations
 from llm_client import LLMProviderNotConfigured, complete_json_text
 from onboarding_suggestions import suggest_categories, suggest_roles
 from training_routes import register_training_routes
-from training_service import is_training_creator, seed_training_content, sync_training_locale_content
+from training_service import (
+    SEED_COURSE_ID,
+    admin_training_analytics,
+    enroll_user,
+    is_training_creator,
+    seed_training_content,
+    sync_training_locale_content,
+)
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -249,9 +263,12 @@ class PreferencesUpdate(BaseModel):
 
 class ContactUpdate(BaseModel):
     name: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     email: Optional[str] = None       # always overridden server-side with authenticated user's email
     phone: Optional[str] = None
     location: Optional[str] = None
+    location_data: Optional[Dict[str, Any]] = None
     linkedin: Optional[str] = None
     website: Optional[str] = None
 
@@ -646,6 +663,49 @@ def _billing_status_payload(user_doc: Optional[Dict[str, Any]]) -> Dict[str, Any
     }
 
 
+_PLAN_CREDIT_LIMITS = {
+    "monthly": 200,
+    "quarterly": 600,
+    "ultra": 600,
+    "pro": 200,
+    "basic": 80,
+}
+
+
+def _billing_credit_limit(plan: Optional[str], is_premium: bool) -> int:
+    if not is_premium:
+        return 0
+    return _PLAN_CREDIT_LIMITS.get((plan or "").strip().lower(), 200)
+
+
+def _billing_period_bounds(billing: Dict[str, Any]) -> tuple[datetime, datetime]:
+    now = datetime.now(timezone.utc)
+    period_end = _parse_dt(billing.get("current_period_end")) or now
+    if period_end.tzinfo is None:
+        period_end = period_end.replace(tzinfo=timezone.utc)
+    period_start = period_end - timedelta(days=7)
+    return period_start, period_end
+
+
+def _count_records_in_period(
+    records: List[Dict[str, Any]],
+    period_start: datetime,
+    period_end: datetime,
+    *,
+    date_field: str = "created_at",
+) -> int:
+    count = 0
+    for record in records:
+        created_at = _parse_dt(record.get(date_field))
+        if not created_at:
+            continue
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        if period_start <= created_at <= period_end:
+            count += 1
+    return count
+
+
 async def _get_user_doc(user: User) -> Dict[str, Any]:
     user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
     if not user_doc:
@@ -772,6 +832,42 @@ async def billing_status(user: User = Depends(get_current_user)):
     return payload
 
 
+@api_router.get("/billing/usage")
+async def billing_usage(user: User = Depends(get_current_user)):
+    user_doc = await _get_user_doc(user)
+    user_doc, _warning = await _refresh_billing_from_stripe(user_doc)
+    billing = _billing_from_user(user_doc)
+    status_payload = _billing_status_payload(user_doc)
+    is_premium = bool(status_payload.get("is_premium"))
+    plan = status_payload.get("plan")
+    credits_total = _billing_credit_limit(plan, is_premium)
+    period_start, period_end = _billing_period_bounds(billing)
+
+    usage_rows = await db.swipes.find(
+        {"user_id": user.user_id, "direction": "right"},
+        {"_id": 0, "created_at": 1},
+    ).to_list(5000)
+    credits_used = _count_records_in_period(usage_rows, period_start, period_end)
+    credits_remaining = max(0, credits_total - credits_used) if credits_total else 0
+    usage_pct = round((credits_used / credits_total) * 100) if credits_total else 0
+
+    return {
+        "period_start": period_start.isoformat(),
+        "period_end": period_end.isoformat(),
+        "credits_used": credits_used,
+        "credits_total": credits_total,
+        "credits_remaining": credits_remaining,
+        "usage_percent": usage_pct,
+        "is_premium": is_premium,
+        "plan": plan,
+        "daily_usage": {
+            "7d": _series_counts(usage_rows, 7, lambda item: item.get("created_at")),
+            "14d": _series_counts(usage_rows, 14, lambda item: item.get("created_at")),
+            "30d": _series_counts(usage_rows, 30, lambda item: item.get("created_at")),
+        },
+    }
+
+
 @api_router.post("/billing/create-portal-session")
 async def create_billing_portal_session(user: User = Depends(get_current_user)):
     _stripe_secret_key()
@@ -781,7 +877,7 @@ async def create_billing_portal_session(user: User = Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="No Stripe customer found")
     session = stripe.billing_portal.Session.create(
         customer=customer_id,
-        return_url=f"{_frontend_url()}/settings",
+        return_url=f"{_frontend_url()}/billing",
     )
     return {"url": session["url"]}
 
@@ -1794,6 +1890,121 @@ async def download_original_cv(user: User = Depends(get_current_user)):
     )
 
 
+MAX_PROFILE_DOCUMENT_BYTES = 10 * 1024 * 1024
+PROFILE_DOCUMENT_EXTENSIONS = {".pdf", ".docx", ".txt", ".png", ".jpg", ".jpeg", ".webp"}
+
+
+def _mime_from_profile_document_filename(filename: str) -> str:
+    name_lower = (filename or "").lower()
+    if name_lower.endswith(".pdf"):
+        return "application/pdf"
+    if name_lower.endswith(".docx"):
+        return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    if name_lower.endswith(".png"):
+        return "image/png"
+    if name_lower.endswith(".jpg") or name_lower.endswith(".jpeg"):
+        return "image/jpeg"
+    if name_lower.endswith(".webp"):
+        return "image/webp"
+    return "text/plain"
+
+
+def _public_profile_document(doc: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "id": doc.get("id"),
+        "name": doc.get("name"),
+        "mime": doc.get("mime"),
+        "uploaded_at": doc.get("uploaded_at"),
+        "size": doc.get("size"),
+    }
+
+
+def _sanitize_profile_for_client(profile: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not profile:
+        return profile
+    docs = profile.get("additional_documents") or []
+    if docs:
+        profile = {**profile, "additional_documents": [_public_profile_document(doc) for doc in docs if isinstance(doc, dict)]}
+    return profile
+
+
+@api_router.post("/profile/documents")
+async def upload_profile_document(file: UploadFile = File(...), user: User = Depends(get_current_user)):
+    import base64
+
+    content = await file.read()
+    if len(content) > MAX_PROFILE_DOCUMENT_BYTES:
+        raise HTTPException(status_code=400, detail="File must be 10MB or smaller")
+    filename = file.filename or "document"
+    ext = filename.lower()[filename.rfind("."):] if "." in filename else ""
+    if ext not in PROFILE_DOCUMENT_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
+
+    entry = {
+        "id": str(uuid.uuid4()),
+        "name": filename,
+        "mime": _mime_from_profile_document_filename(filename),
+        "uploaded_at": datetime.now(timezone.utc).isoformat(),
+        "size": len(content),
+        "file_b64": base64.b64encode(content).decode("ascii"),
+    }
+    await db.profiles.update_one(
+        {"user_id": user.user_id},
+        {
+            "$push": {"additional_documents": entry},
+            "$set": {"updated_at": datetime.now(timezone.utc).isoformat()},
+        },
+        upsert=True,
+    )
+    return {"ok": True, "document": _public_profile_document(entry)}
+
+
+@api_router.get("/profile/documents/{document_id}")
+async def download_profile_document(document_id: str, user: User = Depends(get_current_user)):
+    import base64
+    from fastapi.responses import Response as FastAPIResponse
+
+    profile = await db.profiles.find_one(
+        {"user_id": user.user_id},
+        {"_id": 0, "additional_documents": 1},
+    )
+    for doc in (profile or {}).get("additional_documents") or []:
+        if doc.get("id") != document_id:
+            continue
+        payload = doc.get("file_b64")
+        if not payload:
+            raise HTTPException(status_code=404, detail="Document not found")
+        content = base64.b64decode(payload)
+        filename = doc.get("name") or "document"
+        mime = doc.get("mime") or "application/octet-stream"
+        disposition = "inline" if mime.startswith("image/") or mime == "application/pdf" else "attachment"
+        return FastAPIResponse(
+            content=content,
+            media_type=mime,
+            headers={"Content-Disposition": f'{disposition}; filename="{filename}"'},
+        )
+    raise HTTPException(status_code=404, detail="Document not found")
+
+
+@api_router.delete("/profile/documents/{document_id}")
+async def delete_profile_document(document_id: str, user: User = Depends(get_current_user)):
+    profile = await db.profiles.find_one(
+        {"user_id": user.user_id},
+        {"_id": 0, "additional_documents.id": 1},
+    )
+    docs = (profile or {}).get("additional_documents") or []
+    if not any(doc.get("id") == document_id for doc in docs):
+        raise HTTPException(status_code=404, detail="Document not found")
+    await db.profiles.update_one(
+        {"user_id": user.user_id},
+        {
+            "$pull": {"additional_documents": {"id": document_id}},
+            "$set": {"updated_at": datetime.now(timezone.utc).isoformat()},
+        },
+    )
+    return {"ok": True}
+
+
 @api_router.get("/profile")
 async def get_profile(user: User = Depends(get_current_user)):
     profile = await db.profiles.find_one(
@@ -1802,6 +2013,7 @@ async def get_profile(user: User = Depends(get_current_user)):
     )
     if not profile:
         return None
+    profile = _sanitize_profile_for_client(profile)
     profile["profile_completion"] = _profile_completion(profile)
     return profile
 
@@ -2083,6 +2295,10 @@ async def update_contact(contact: ContactUpdate, user: User = Depends(get_curren
     data["email"] = user.email  # force-overwrite
     existing = await db.profiles.find_one({"user_id": user.user_id}, {"_id": 0, "contact": 1}) or {}
     merged = {**(existing.get("contact") or {}), **data}
+    first_name = _clean_string(merged.get("first_name"))
+    last_name = _clean_string(merged.get("last_name"))
+    if first_name or last_name:
+        merged["name"] = " ".join(part for part in (first_name, last_name) if part).strip()
     await db.profiles.update_one(
         {"user_id": user.user_id},
         {"$set": {"contact": merged, "updated_at": datetime.now(timezone.utc).isoformat()}},
@@ -3207,6 +3423,18 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
         phase = "swipe_record_insert_done"
         log_phase("swipe_record_insert_done", duplicate=bool(existing))
 
+        if req.direction == "right":
+            user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0, "demo_account": 1})
+            if user_doc and user_doc.get("demo_account"):
+                log_phase("demo_account_apply_blocked")
+                return {
+                    "ok": True,
+                    "applied": True,
+                    "submitted": False,
+                    "demo_account": True,
+                    "duplicate": bool(existing),
+                }
+
         if req.direction != "right":
             phase = "response_build_start"
             log_phase("response_build_start")
@@ -4042,6 +4270,110 @@ async def admin_update_influencer(
     return {"ok": True, "influencer": row}
 
 
+async def _redeem_creator_invite(code: str, user_id: str, user_email: Optional[str] = None) -> Dict[str, Any]:
+    normalized = (code or "").strip()
+    if not re.fullmatch(r"\d{6}", normalized):
+        raise HTTPException(status_code=400, detail="Enter a valid 6-digit invitation code")
+
+    check = validate_invite(normalized)
+    invitation = check.get("invitation") or get_invite_by_code(normalized)
+    if not invitation:
+        raise HTTPException(status_code=404, detail="Invitation not found")
+
+    if invitation.get("redeemed_by_user_id") and invitation.get("redeemed_by_user_id") != user_id:
+        raise HTTPException(status_code=409, detail="This invitation was already used by another account")
+
+    if not check.get("valid") and check.get("reason") not in {"already_redeemed"}:
+        reason = check.get("reason")
+        if reason == "expired":
+            raise HTTPException(status_code=410, detail="This invitation has expired")
+        if reason == "revoked":
+            raise HTTPException(status_code=410, detail="This invitation is no longer valid")
+        raise HTTPException(status_code=400, detail="Invalid invitation code")
+
+    influencer_id = invitation.get("influencer_id")
+    course_id = invitation.get("course_id") or SEED_COURSE_ID
+
+    await _set_user_demo_account(user_id, True)
+    try:
+        enrollment = await enroll_user(db, user_id, course_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    if influencer_id:
+        update_influencer(influencer_id, {
+            "user_id": user_id,
+            "demo_granted": True,
+            "status": "active",
+            **({"email": user_email.strip().lower()} if user_email else {}),
+        })
+
+    if not invitation.get("redeemed_at"):
+        mark_invite_redeemed(normalized, user_id)
+
+    return {
+        "ok": True,
+        "code": normalized,
+        "demo_account": True,
+        "course_id": course_id,
+        "enrollment_id": enrollment.get("enrollment_id"),
+        "influencer_id": influencer_id,
+    }
+
+
+@api_router.get("/invites/{code}/validate")
+async def validate_creator_invite(code: str):
+    check = validate_invite(code)
+    invitation = check.get("invitation") or {}
+    return {
+        "valid": bool(check.get("valid")),
+        "reason": check.get("reason"),
+        "influencer_name": check.get("influencer_name"),
+        "course_id": check.get("course_id") or invitation.get("course_id") or SEED_COURSE_ID,
+        "already_redeemed": check.get("reason") == "already_redeemed",
+    }
+
+
+@api_router.post("/invites/redeem")
+async def redeem_creator_invite(payload: Dict[str, Any], user: User = Depends(get_current_user)):
+    code = (payload.get("code") or "").strip()
+    return await _redeem_creator_invite(code, user.user_id, user.email)
+
+
+@api_router.post("/admin/influencers/{influencer_id}/invite")
+async def admin_create_influencer_invite(
+    influencer_id: str,
+    payload: Dict[str, Any] = None,
+    admin: User = Depends(require_admin_user),
+):
+    row = get_influencer(influencer_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Influencer not found")
+    payload = payload or {}
+    course_id = (payload.get("course_id") or SEED_COURSE_ID).strip()
+    try:
+        invitation = create_invitation(influencer_id, course_id=course_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {
+        "ok": True,
+        "invitation": invitation,
+        "code": invitation.get("code"),
+        "course_id": invitation.get("course_id"),
+        "influencer": get_influencer(influencer_id),
+    }
+
+
+@api_router.get("/admin/influencers/{influencer_id}/invites")
+async def admin_list_influencer_invites(
+    influencer_id: str,
+    admin: User = Depends(require_admin_user),
+):
+    if not get_influencer(influencer_id):
+        raise HTTPException(status_code=404, detail="Influencer not found")
+    return {"invites": list_invites_for_influencer(influencer_id)}
+
+
 @api_router.post("/admin/influencers/{influencer_id}/grant-demo")
 async def admin_grant_influencer_demo(
     influencer_id: str,
@@ -4148,6 +4480,14 @@ async def admin_list_creators(admin: User = Depends(require_admin_user)):
         reverse=True,
     )
     return {"creators": rows}
+
+
+@api_router.get("/admin/training/analytics")
+async def admin_training_analytics(
+    admin: User = Depends(require_admin_user),
+    course_id: str = Query("course_job_search_mastery"),
+):
+    return await admin_training_analytics(db, course_id)
 
 
 @api_router.get("/admin/analytics")

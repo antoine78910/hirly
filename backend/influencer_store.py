@@ -76,7 +76,7 @@ def update_influencer(influencer_id: str, payload: Dict[str, Any]) -> Optional[D
         if row.get("influencer_id") != influencer_id:
             continue
         next_row = {**row}
-        for key in ("name", "email", "platform", "handle", "notes", "status", "user_id", "demo_granted"):
+        for key in ("name", "email", "platform", "handle", "notes", "status", "user_id", "latest_invite_code", "demo_granted"):
             if key in payload and payload[key] is not None:
                 value = payload[key]
                 if key == "email" and isinstance(value, str):

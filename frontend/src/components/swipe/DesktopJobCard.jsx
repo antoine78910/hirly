@@ -11,6 +11,7 @@ import {
   Zap,
 } from "lucide-react";
 import Logo from "../Logo";
+import CompanyLogo from "../CompanyLogo";
 import { BRAND } from "../../lib/brand";
 import {
   getJobBadgeItems,
@@ -107,7 +108,10 @@ export default function DesktopJobCard({ job, theme, t }) {
             >
               {job.title}
             </h1>
-            <p className={`mt-1 text-base font-medium ${theme.cardCompany}`}>{job.company}</p>
+            <div className="mt-2 flex items-center gap-3">
+              <CompanyLogo company={job.company} size="lg" rounded="2xl" className="shrink-0" />
+              <p className={`min-w-0 text-base font-medium leading-snug ${theme.cardCompany}`}>{job.company}</p>
+            </div>
           </div>
           <span className={`inline-flex h-fit shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${theme.matchBadge}`}>
             <Zap className="h-3.5 w-3.5" fill="currentColor" />

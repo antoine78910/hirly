@@ -4,7 +4,8 @@ import { X, Plus, Info } from "lucide-react";
 import { toast } from "sonner";
 import { Switch } from "../components/ui/switch";
 import PlacesAutocomplete, { hasGooglePlacesKey } from "./PlacesAutocomplete";
-import { sel } from "../lib/selectionTheme";
+import { formatMinSalary } from "../lib/jobFilters";
+import { useAppLocale } from "../context/AppLocaleContext";
 
 /**
  * Sprout-style Filters sheet — matches Swipper reference screenshots.
@@ -133,6 +134,7 @@ function TagInput({ value, onAdd, onRemove, placeholder, testId }) {
 }
 
 export default function FiltersModal({ open, initialFilters, totalCount, onApply, onReset, onClose }) {
+  const { lang } = useAppLocale();
   const [f, setF] = useState({ ...DEFAULT, ...(initialFilters || {}) });
   const [locationDraft, setLocationDraft] = useState("");
 
@@ -155,8 +157,6 @@ export default function FiltersModal({ open, initialFilters, totalCount, onApply
 
   if (!open) return null;
 
-  const fmtSalary = (n) =>
-    n >= 250000 ? "$250,000+" : `$${n.toLocaleString()}`;
   const radiusKm = radiusToNumber(f.searchRadius);
   const selectedLocations = f.locationsData || [];
   const removeLocation = (placeId) => {
@@ -197,8 +197,8 @@ export default function FiltersModal({ open, initialFilters, totalCount, onApply
               <Info className="w-4 h-4 text-sprout-mint" />
             </div>
             <div className="mt-3 flex justify-between text-sm text-zinc-200">
-              <span>{fmtSalary(0)}</span>
-              <span>{fmtSalary(250000)}</span>
+              <span>{formatMinSalary(0, lang)}</span>
+              <span>{formatMinSalary(250_000, lang)}</span>
             </div>
             <input
               type="range" min="0" max="250000" step="5000"
@@ -207,7 +207,7 @@ export default function FiltersModal({ open, initialFilters, totalCount, onApply
               className="mt-2 w-full accent-[#5EE5B5]"
               data-testid="filters-salary-slider"
             />
-            <p className="mt-1 text-xs text-sprout-muted">Current: <span className="text-sprout-mint font-semibold">{fmtSalary(f.minSalary)}</span></p>
+            <p className="mt-1 text-xs text-sprout-muted">Current: <span className="text-sprout-mint font-semibold">{formatMinSalary(f.minSalary, lang)}</span></p>
           </section>
 
           {/* Date */}

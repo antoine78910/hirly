@@ -19,6 +19,7 @@ import History from "@/pages/History";
 import Review from "@/pages/Review";
 import Feedback from "@/pages/Feedback";
 import Credits from "@/pages/Credits";
+import Billing from "@/pages/Billing";
 import Referral from "@/pages/Referral";
 import AuthCallback from "@/pages/AuthCallback";
 import AdminApplications from "@/pages/AdminApplications";
@@ -29,6 +30,8 @@ import AdminUserDetail from "@/pages/AdminUserDetail";
 import AdminAnalytics from "@/pages/AdminAnalytics";
 import AdminInfluencers from "@/pages/AdminInfluencers";
 import AdminCreators from "@/pages/AdminCreators";
+import AdminTraining from "@/pages/AdminTraining";
+import InviteLanding from "@/pages/InviteLanding";
 import Training from "@/pages/Training";
 import TrainingCourse from "@/pages/TrainingCourse";
 import TrainingCreator from "@/pages/TrainingCreator";
@@ -65,9 +68,10 @@ function isTrainingRoutePath(pathname) {
 function shouldShowBottomNav(pathname) {
   if (pathname === "/" || pathname === "/auth/callback") return false;
   if (pathname === "/signup") return false;
+  if (pathname.startsWith("/invite/")) return false;
   if (pathname === "/admin" || pathname.startsWith("/admin/")) return false;
   if (pathname === "/onboarding" || pathname.startsWith("/onboarding/")) return false;
-  if (pathname === "/credits" || pathname === "/referral") return false;
+  if (pathname === "/credits" || pathname === "/billing" || pathname === "/referral") return false;
   if (isTrainingRoutePath(pathname)) return false;
   return true;
 }
@@ -92,6 +96,7 @@ function AppRouter() {
         <Route path="/" element={<Landing />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route path="/invite/:code" element={<InviteLanding />} />
         <Route path="/admin" element={<AppRoute><Navigate to="/admin/overview" replace /></AppRoute>} />
         <Route path="/admin/overview" element={<AppRoute><AdminOverview /></AppRoute>} />
         <Route path="/admin/applications" element={<AppRoute><AdminApplications /></AppRoute>} />
@@ -100,6 +105,7 @@ function AppRouter() {
         <Route path="/admin/users/:userId" element={<AppRoute><AdminUserDetail /></AppRoute>} />
         <Route path="/admin/influencers" element={<AppRoute><AdminInfluencers /></AppRoute>} />
         <Route path="/admin/creators" element={<AppRoute><AdminCreators /></AppRoute>} />
+        <Route path="/admin/training" element={<AppRoute><AdminTraining /></AppRoute>} />
         <Route path="/admin/analytics" element={<AppRoute><AdminAnalytics /></AppRoute>} />
         <Route path="/onboarding" element={<Onboarding />} />
         <Route element={<AppLayout />}>
@@ -114,6 +120,7 @@ function AppRouter() {
         <Route path="/emails" element={<AppRoute requireProfile><Emails /></AppRoute>} />
         <Route path="/profile" element={<AppRoute><Profile /></AppRoute>} />
         <Route path="/credits" element={<AppRoute><Credits /></AppRoute>} />
+        <Route path="/billing" element={<AppRoute><Billing /></AppRoute>} />
         <Route path="/referral" element={<AppRoute><Referral /></AppRoute>} />
         <Route path="/settings" element={<AppRoute><Settings /></AppRoute>} />
         <Route path="/history" element={<AppRoute requireProfile><History /></AppRoute>} />

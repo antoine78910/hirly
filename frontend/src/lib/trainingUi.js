@@ -59,6 +59,7 @@ export const TRAINING_UI = {
     creatorError: "Could not register as creator",
     enrollError: "Could not enroll",
     saveError: "Could not save progress",
+    quizRequired: "Pass the chapter quiz before marking this lesson complete.",
     levelBeginner: "Beginner",
     categories: {
       fundamentals: "Getting started",
@@ -168,6 +169,7 @@ export const TRAINING_UI = {
     creatorError: "Impossible de s'inscrire comme créateur",
     enrollError: "Impossible de s'inscrire",
     saveError: "Impossible d'enregistrer la progression",
+    quizRequired: "Réussis le quiz du chapitre avant de marquer cette leçon comme terminée.",
     levelBeginner: "Débutant",
     categories: {
       fundamentals: "Premiers pas",

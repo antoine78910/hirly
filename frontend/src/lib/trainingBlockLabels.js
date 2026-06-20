@@ -33,7 +33,7 @@ export const TRAINING_BLOCK_LABELS = {
     warmUpIntro:
       "Les Warm Up Posts sont des formats testés par d'autres créateurs Hirly pour booster l'engagement et l'activité sur ton compte. Ils sont surtout utiles si tu débutes dans le programme, ou si tes dernières vidéos ont moins de vues et que tu veux « réchauffer » ton compte.",
     warmUpPayoutNote:
-      "Note : les Warm Up Posts sont payés à 50 % du tarif contenu standard. Ajoute #aihirlyai à la légende pour le suivi.",
+      "Note : les Warm Up Posts sont payés à 50 % du tarif contenu standard. Ajoute #aihirlyai à la légende pour le suivi. Utilise des hashtags francophones (#emploi #rechercheemploi #tipsemploi #emploifrance…) — pas de hashtags US en mode FR.",
     captionExamples: "Exemples de légendes",
     videoTextHook: "Accroche texte dans la vidéo",
     outOfVideoCaption: "Légende hors vidéo",

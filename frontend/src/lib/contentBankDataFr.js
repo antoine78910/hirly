@@ -1,5 +1,6 @@
 /** Content Bank Examples — French translations. */
 
+import { frCaption, frHashtagLine } from "./trainingHashtags";
 import {
   bulletList,
   examplesGrid,
@@ -46,7 +47,7 @@ export const CONTENT_BANK_FR = [
       warningGuideline("Montre bien les vrais sites web dont tu parles dans la vidéo !"),
       heading(3, "Exemples de légendes"),
       paragraph(
-        "Fini les trajets McDo pour rien à cause des machines à McFlurry en panne. Utilise un VPN et un bloqueur de pub sur ces sites de streaming 😭🙏 #college #university #fypage #websites #mcdonalds\nBloqueur de pub pour le streaming !! Sites : vidbox.cc, Hirly, bored.com #websites #streaming #jobsearch\nDes apps qu'on dirait illégales à connaître #website #websites #apps #onlinetools",
+        `Fini les trajets McDo pour rien à cause des machines à McFlurry en panne. Utilise un VPN et un bloqueur de pub sur ces sites de streaming 😭🙏 ${frHashtagLine("etudiant", "alternance", "stage", "travail", "emploi")}\nBloqueur de pub pour le streaming !! Sites : vidbox.cc, Hirly, bored.com ${frHashtagLine("emploi", "rechercheemploi", "tipsemploi", "cv", "carriere")}\nDes apps qu'on dirait illégales à connaître ${frHashtagLine("emploi", "tipsemploi", "conseilscarriere", "cv", "rechercheemploi")}`,
       ),
       heading(2, "Script principal"),
       infoScript(
@@ -99,11 +100,18 @@ export const CONTENT_BANK_FR = [
       ),
       heading(3, "Légendes vidéo"),
       paragraph(
-        "Bien, mieux, le top : édition candidature ! #jobsearch #jobapplication #linkedin #indeed #careeradvice",
+        frCaption(
+          "Bien, mieux, le top : édition candidature !",
+          "emploi",
+          "rechercheemploi",
+          "linkedin",
+          "indeed",
+          "conseilscarriere",
+        ),
       ),
       heading(2, "Script principal"),
       infoScript(
-        "Bien. Mieux. Le top. Édition candidature.\n\nBien. LinkedIn et Indeed.\nTes plateformes classiques. Plein d'offres, mais tu es en concurrence avec des centaines de candidats — souvent c'est hit or miss.\n\nMieux. Handshake. Plus curated, surtout pour les étudiants. Stages et premiers jobs, mais tu dois tout postuler toi-même.\n\nLe top. Hirly. Tu swipes à droite sur les jobs que tu veux et ça postule en auto à des centaines d'offres sans que tu fasses quoi que ce soit. CV et lettre adaptés par offre, soumis directement sur le site de l'entreprise.",
+        "Bien. Mieux. Le top. Édition candidature.\n\nBien. LinkedIn et Indeed.\nTes plateformes classiques. Plein d'offres, mais tu es en concurrence avec des centaines de candidats — souvent c'est hit or miss.\n\nMieux. Welcome to the Jungle / France Travail.\nPlus ciblé pour le marché français. Stages, alternances et premiers jobs, mais tu dois tout postuler toi-même.\n\nLe top. Hirly. Tu swipes à droite sur les jobs que tu veux et ça postule en auto à des centaines d'offres sans que tu fasses quoi que ce soit. CV et lettre adaptés par offre, soumis directement sur le site de l'entreprise.",
       ),
     ],
   }),
@@ -140,7 +148,7 @@ export const CONTENT_BANK_FR = [
       ),
       heading(3, "Légendes"),
       paragraph(
-        "Accroche texte dans la vidéo :\n• Petit rappel pour ceux qui utilisent encore LinkedIn 🤨‼️\n• Chercher un job en 2026, c'est un rituel d'humiliation\n\nLégende hors vidéo :\nSi tu utilises seulement LinkedIn et Indeed, tu es en concurrence avec des centaines de candidats sur les mêmes offres.\n#jobsearch #jobsearchtips #remotejobs #jobapplication #careergrowth",
+        `Accroche texte dans la vidéo :\n• Petit rappel pour ceux qui utilisent encore LinkedIn 🤨‼️\n• Chercher un emploi en 2026, c'est un rituel d'humiliation\n\nLégende hors vidéo :\nSi tu utilises seulement LinkedIn et Indeed, tu es en concurrence avec des centaines de candidats sur les mêmes offres.\n${frHashtagLine("rechercheemploi", "tipsemploi", "emploi", "cv", "carriere", "emploifrance")}`,
       ),
       heading(2, "Script principal"),
       infoScript(
@@ -155,9 +163,9 @@ export const CONTENT_BANK_FR = [
 
   sectionBlock({
     section_id: "sec_cb_100k",
-    title: "Plateformes 100K$",
+    title: "Plateformes 50K€",
     content: [
-      heading(1, "Les plateformes qui m'ont valu un salaire à 100K"),
+      heading(1, "Les plateformes qui m'ont valu un salaire à 50K€"),
       heading(3, "Exemples"),
       examplesGrid([
         ex("Vidéo de Riyaj — 142K vues", "https://www.facebook.com/reel/2679321229131031"),
@@ -168,11 +176,11 @@ export const CONTENT_BANK_FR = [
       ),
       heading(3, "Légende"),
       paragraph(
-        "Accroche texte : Les plateformes qui m'ont valu un salaire à 100K\nLégende hors vidéo : Teste celles-ci #jobapplication #university #graduation #jobmarket",
+        `Accroche texte : Les plateformes qui m'ont valu un salaire à 50K€\nLégende hors vidéo : Teste celles-ci ${frHashtagLine("emploi", "rechercheemploi", "carriere", "tipsemploi", "emploifrance")}`,
       ),
       heading(2, "Script principal"),
       infoScript(
-        "Je vais te donner tous les sites que mes potes et moi avons utilisés pour décrocher un job à six chiffres — et non, t'as pas besoin de LinkedIn, t'as pas besoin d'Indeed.\n\nTu dois juste comprendre le concept de levier.\n\nVoici trois sites que tu peux utiliser.\n\nPerso j'adore le deuxième.\n\nLe premier, c'est Google Careers. Tu cherches un poste et Google sort toutes ces offres de partout sur internet. Filtre par lieu, salaire, et même remote.\n\nLe deuxième, c'est Hirly. Tu uploades ton CV, tu regardes les jobs, et à chaque clic sur postuler, l'IA postule pour toi sur le site de l'entreprise. C'est aussi simple que ça. Chaque candidature a une lettre et un CV personnalisés.\n\nLe troisième, c'est Handshake. Des milliers d'opportunités pour étudiants et jeunes diplômés que la plupart des gens ignorent.",
+        "Je vais te donner tous les sites que mes potes et moi avons utilisés pour décrocher un bon salaire en France — et non, t'as pas besoin de LinkedIn, t'as pas besoin d'Indeed.\n\nTu dois juste comprendre le concept de levier.\n\nVoici trois sites que tu peux utiliser.\n\nPerso j'adore le deuxième.\n\nLe premier, c'est Google Careers. Tu cherches un poste et Google sort toutes ces offres de partout sur internet. Filtre par lieu, salaire, et même télétravail.\n\nLe deuxième, c'est Hirly. Tu uploades ton CV, tu regardes les jobs, et à chaque clic sur postuler, l'IA postule pour toi sur le site de l'entreprise. C'est aussi simple que ça. Chaque candidature a une lettre et un CV personnalisés.\n\nLe troisième, c'est Welcome to the Jungle. Des milliers d'opportunités pour étudiants et jeunes diplômés que la plupart des gens ignorent en France.",
       ),
     ],
   }),
@@ -192,34 +200,35 @@ export const CONTENT_BANK_FR = [
       ]),
       heading(3, "Consignes"),
       warningGuideline(
-        'Fais une petite pause avant de dire « dot com » pour l\'emphase. Voix PLATE/MONOTONE en disant « dot com ».',
+        'Fais une petite pause avant de dire « point com » pour l\'emphase. Voix PLATE/MONOTONE en disant « point com ».',
       ),
       heading(3, "Légende"),
       paragraph(
-        "Accroche texte : J'ai créé un site appelé…\nLégende hors vidéo : regarde si t'as pas encore de job de prévu 😳 #recruitment #internship #jobsearch #jobtips #asian #jobapplication",
+        `Accroche texte : J'ai créé un site appelé…\nLégende hors vidéo : regarde si t'as pas encore d'emploi de prévu 😳 ${frHashtagLine("recrutement", "stage", "rechercheemploi", "tipsemploi", "emploi")}`,
       ),
       heading(2, "Script principal"),
       infoScript(
-        "J'ai créé un site appelé… [Nouvel angle caméra, plus proche, en contre-plongée]\nJe suis bientôt diplômé et je dois postuler à genre mille jobs mais j'ai même pas commencé dot com.\nC'est un site pour ceux qui veulent postuler à plein de jobs tout en économisant un max de temps.\n[Tuto Hirly]\nTu vas sur Hirly et tu uploades ton CV. Ensuite tu vas sur postuler et tu swipes à droite pour candidater. Si tu veux pas le job, swipe à gauche. L'IA postule automatiquement pour toi. Tu peux même suivre tes candidatures passées.\n[Retour face caméra]\nTu peux probablement envoyer genre 100 candidatures dans la prochaine demi-heure.",
+        "J'ai créé un site appelé… [Nouvel angle caméra, plus proche, en contre-plongée]\nJe suis bientôt diplômé et je dois postuler à genre mille jobs mais j'ai même pas commencé point com.\nC'est un site pour ceux qui veulent postuler à plein de jobs tout en économisant un max de temps.\n[Tuto Hirly]\nTu vas sur Hirly et tu uploades ton CV. Ensuite tu vas sur postuler et tu swipes à droite pour candidater. Si tu veux pas le job, swipe à gauche. L'IA postule automatiquement pour toi. Tu peux même suivre tes candidatures passées.\n[Retour face caméra]\nTu peux probablement envoyer genre 100 candidatures dans la prochaine demi-heure.",
       ),
     ],
   }),
 
   sectionBlock({
     section_id: "sec_cb_marry",
-    title: "Trend épouser/baiser",
+    title: "Trend épouser/embrasser",
     content: [
-      heading(1, "Vidéo trend : J'épouserais/baiserais la personne qui m'a montré ça"),
+      heading(1, "Vidéo trend : Je vais épouser/embrasser la personne qui m'a montré ça"),
       heading(3, "Accroche texte dans la vidéo"),
       bulletList([
-        "J'épouserais/baiserais la personne qui m'a montré ça",
-        "J'épouserais/baiserais l'employé Google qui m'a montré ça 🤯🤯",
+        "Je vais épouser la personne qui m'a montré ça",
+        "Je vais embrasser la personne qui m'a montré ça",
+        "Je vais épouser l'employé Google qui m'a montré ça 🤯🤯",
         "Celui/celle qui m'a montré ça va se faire sucer l'orteil 🤯🤯",
       ]),
       heading(3, "Légende hors vidéo"),
       bulletList([
-        "Je ne postulerai plus jamais manuellement #recruitment #college #jobhunt #internship",
-        "J'ai peur que ça ait changé ma vie 😭 #jobsearch #recruitment #college #jobhunt #internship",
+        `Je ne postulerai plus jamais manuellement ${frHashtagLine("recrutement", "alternance", "rechercheemploi", "stage", "emploi")}`,
+        `J'ai peur que ça ait changé ma vie 😭 ${frHashtagLine("rechercheemploi", "recrutement", "alternance", "stage", "carriere")}`,
       ]),
       heading(2, "Script principal"),
       infoScript(
@@ -230,9 +239,9 @@ export const CONTENT_BANK_FR = [
 
   sectionBlock({
     section_id: "sec_cb_ungatekeep",
-    title: "3 sites pour un job à 6 chiffres",
+    title: "3 sites pour un bon salaire",
     content: [
-      heading(1, "Je dévoile les 3 sites pour un job à 6 chiffres cet été"),
+      heading(1, "Je dévoile les 3 sites pour un bon salaire cet été"),
       heading(3, "Exemples"),
       examplesGrid([
         ex(
@@ -254,11 +263,11 @@ export const CONTENT_BANK_FR = [
       ]),
       heading(3, "Légendes"),
       paragraph(
-        "Accroche texte :\n• Je dévoile les 3 sites pour un job à 6 chiffres cet été\n• Je dévoile les 3 sites qui m'ont valu un stage été 2026 à 60$/h\n\nLégende hors vidéo :\nTop 3 sites pour un stage été 2026 #internships #jobboards #employment #fyp #jobsearch #recruitment #college #jobhunt #internship",
+        `Accroche texte :\n• Je dévoile les 3 sites pour un bon salaire cet été\n• Je dévoile les 3 sites qui m'ont valu un stage été 2026 à 25€/h\n\nLégende hors vidéo :\nTop 3 sites pour un stage été 2026 ${frHashtagLine("stage", "alternance", "emploi", "rechercheemploi", "tipsemploi", "carriere")}`,
       ),
       heading(2, "Script principal"),
       infoScript(
-        "Apparais devant une grande entreprise (sinon filme-toi en marchant/posant), avec l'accroche texte exactement comme dans la vidéo de référence.\n\nJe dévoile les 3 sites qui m'ont valu un stage été 2026 à 60$/h.\n\nMontre ton écran laptop, puis scroll dans les repos jobs GitHub.\n1. Hiring Cafe — Montre ton écran, puis scroll sur Hiring Cafe.\n2. Montre Hirly à l'écran, active ton CV généré par IA, et swipe à droite pour postuler en auto.\n3. Google Jobs — montre ton écran laptop, puis scroll.",
+        "Apparais devant une grande entreprise (sinon filme-toi en marchant/posant), avec l'accroche texte exactement comme dans la vidéo de référence.\n\nJe dévoile les 3 sites qui m'ont valu un stage été 2026 à 25€/h.\n\nMontre ton écran laptop, puis scroll dans les repos jobs GitHub.\n1. Hiring Cafe — Montre ton écran, puis scroll sur Hiring Cafe.\n2. Montre Hirly à l'écran, active ton CV généré par IA, et swipe à droite pour postuler en auto.\n3. Google Jobs — montre ton écran laptop, puis scroll.",
       ),
       heading(3, "Consignes"),
       warningGuideline(
@@ -289,7 +298,7 @@ export const CONTENT_BANK_FR = [
       ),
       heading(3, "Légende"),
       paragraph(
-        "Exemple légende hors vidéo : Surtout dans ce marché, postule plus malin, pas plus dur #jobsearch #jobapplication #unemployed #hired #jobmarket",
+        `Exemple légende hors vidéo : Surtout dans ce marché, postule plus malin, pas plus dur ${frHashtagLine("rechercheemploi", "emploi", "travail", "carriere", "emploifrance")}`,
       ),
       heading(2, "Script principal"),
       paragraph("C = Chômage  |  E = Embauché"),
@@ -299,6 +308,43 @@ export const CONTENT_BANK_FR = [
       heading(2, "Variation 1"),
       infoScript(
         "C : Je me fiche de l'interviewer.\nE : J'ai recherché les interviewers à l'avance pour comprendre le rôle dans l'entreprise.\n\nC : J'utilise le même CV et la même lettre partout.\nE : J'utilise Hirly pour générer des lettres et CV adaptés à chaque offre.\n\nC : Je passe trois heures par jour à postuler.\nE : J'utilise Hirly pour postuler en auto à des centaines d'offres en quelques minutes.",
+      ),
+    ],
+  }),
+
+  sectionBlock({
+    section_id: "sec_cb_secret_job_2026",
+    title: "Moyens secrets de trouver un job en 2026",
+    content: [
+      heading(1, "Moyens secrets de trouver un job en 2026"),
+      heading(3, "Exemples"),
+      examplesGrid([
+        ex(
+          "Vidéo de Maryam — 164K vues",
+          "https://www.tiktok.com/@that.corporate.blackgirl/video/7608782339253996820",
+        ),
+        ex("Vidéo de Nicole J — 45K vues", "https://www.instagram.com/reels/DVJpW3FiVFz/"),
+        ex("Vidéo originale", "https://www.instagram.com/reels/DU7KlUREViT/"),
+      ]),
+      heading(3, "Consignes"),
+      warningGuideline(
+        "Il faut un laptop ou un deuxième téléphone pour filmer les sites d'emploi.",
+      ),
+      heading(3, "Légende"),
+      paragraph(
+        `Accroche texte :\nMoyens secrets de trouver un job en 2026\n\nLégende hors vidéo :\n- Tu dois connaître ces deux sites si tu veux vraiment des entretiens.\n- Si tu postules uniquement sur LinkedIn et Indeed, tu es en concurrence avec des centaines de candidats sur les mêmes offres.\n${frHashtagLine("rechercheemploi", "tipsemploi", "teletravail", "candidature", "carriere")}`,
+      ),
+      heading(2, "Script principal"),
+      infoScript(
+        "Personne n'embauche en ce moment. Hmm. C'est peut-être juste toi.\nEt peut-être que tu cherches au mauvais endroit.\n\nSi tu ne connais pas ces deux sites, laisse-moi te mettre au courant.\nL'un s'appelle Welcome to the Jungle — des milliers d'offres en France que la plupart des gens ignorent.\n\nL'autre s'appelle Hirly.\nLui, il postule en auto sur le site de l'entreprise avec une lettre et un CV adaptés à chaque offre.\n\nDis-moi si quelqu'un finit par l'utiliser.",
+      ),
+      heading(2, "Variation 1"),
+      infoScript(
+        "Personne n'embauche en ce moment ? Hmm. C'est peut-être juste toi.\nEt peut-être que tu cherches au mauvais endroit.\n\nSi tu ne connais pas ces deux sites, laisse-moi te mettre au courant.\nL'un s'appelle Google Jobs — tu cherches un poste sur Google et ça sort les offres de partout sur internet. Tu peux filtrer par lieu, salaire, et même télétravail.\n\nL'autre s'appelle Hirly. Lui, il postule en auto sur le site de l'entreprise avec une lettre et un CV adaptés à chaque offre.\n\nDis-moi si quelqu'un finit par l'utiliser 👀",
+      ),
+      heading(2, "Variation 2"),
+      infoScript(
+        "Personne n'embauche ? C'est peut-être juste toi.\nPeut-être que tu cherches au mauvais endroit.\n\nSi tu ne connais pas ces deux sites, laisse-moi te mettre au courant.\nL'un s'appelle France Travail, avec des milliers d'opportunités que la plupart des gens passent à côté.\n\nEt l'autre ?\nC'est Hirly. Au lieu de passer des heures à postuler, il postule en auto sur le site de l'entreprise pour toi avec un CV et une lettre adaptés. Tu règles tes préférences, et il fait le gros du travail.\n\nSi tu en as marre de remplir la même candidature encore et encore, c'est peut-être la solution.\n\nDis-moi si l'un de vous finit par l'utiliser.",
       ),
     ],
   }),

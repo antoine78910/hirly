@@ -1,3 +1,4 @@
+import { formatSalary as formatSalaryEuro } from "../../lib/currency";
 import {
   Baby,
   BarChart3,
@@ -94,6 +95,7 @@ export const ONBOARDING_STEP_ORDER = [
   "showcaseLanding",
   "showcaseAllInOne",
   "showcasePricing",
+  "creatorAccessCode",
 ];
 
 /** Dark setup loader — order: image 3 → 4 → 2 → 1 (user reference). */
@@ -144,6 +146,7 @@ export const ONBOARDING_LATE_STEP_IDS = [
   "showcaseLanding",
   "showcaseAllInOne",
   "showcasePricing",
+  "creatorAccessCode",
 ];
 
 const ONBOARDING_PREVIEW_STEP_ALIASES = {
@@ -151,6 +154,7 @@ const ONBOARDING_PREVIEW_STEP_ALIASES = {
   welcome: "profileWelcome",
   allinone: "showcaseAllInOne",
   pricing: "showcasePricing",
+  creator: "creatorAccessCode",
   setup: "profileSetup",
 };
 
@@ -655,12 +659,8 @@ export const ATTRIBUTION_OPTIONS = [
   { id: "other", label: "Other", hint: "None of the above", Icon: MessageSquare },
 ];
 
-export function formatSalary(value) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(value);
+export function formatSalary(value, lang) {
+  return formatSalaryEuro(value, lang);
 }
 
 export function interviewFeedback(count) {

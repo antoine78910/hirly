@@ -6,6 +6,8 @@ import { useAuth } from "../context/AuthContext";
 import { Loader2 } from "lucide-react";
 import { supabase, supabaseConfigured } from "../lib/supabase";
 import { trackEvent } from "../lib/analytics";
+import { tryRedeemPendingInvite } from "../lib/creatorInvite";
+import { setDemoAccountFromUser } from "../lib/demoAccount";
 
 export default function AuthCallback() {
   const navigate = useNavigate();
@@ -37,6 +39,19 @@ export default function AuthCallback() {
         setHasProfile(Boolean(data.has_profile));
         setHasPreferences(Boolean(data.has_preferences));
         setIsTrainingCreator(Boolean(data.is_training_creator));
+        if (data?.user?.demo_account) {
+          setDemoAccountFromUser(data.user);
+        }
+        try {
+          const redeemed = await tryRedeemPendingInvite(api);
+          if (redeemed?.demo_account && data?.user) {
+            const nextUser = { ...data.user, demo_account: true };
+            setUser(nextUser);
+            setDemoAccountFromUser(nextUser);
+          }
+        } catch (inviteErr) {
+          console.warn("Invite redeem skipped", inviteErr?.response?.data?.detail || inviteErr?.message);
+        }
         trackEvent("auth_success", {
           method: "google",
           has_profile: Boolean(data.has_profile),

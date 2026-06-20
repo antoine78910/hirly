@@ -13,12 +13,13 @@ from training_module_content import (
     WARM_UP_PLAYBOOK_EN,
     WARM_UP_PLAYBOOK_FR,
 )
+from training_quizzes import get_quiz, quiz_id_for_module, score_quiz
 
 logger = logging.getLogger(__name__)
 
 SEED_CREATOR_ID = "creator_swiipr_official"
 SEED_COURSE_ID = "course_job_search_mastery"
-SEED_MODULES_VERSION = 5
+SEED_MODULES_VERSION = 8
 
 CRM_STAGES = ["new", "contacted", "qualified", "enrolled", "won", "lost"]
 
@@ -52,12 +53,12 @@ MODULE_I18N = {
     "mod_getting_started": {
         "en": {
             "title": "Getting Started",
-            "description": "Set up your workspace and understand how the program works.",
+            "description": "How the course works, why it matters, and what happens if you skip the rules.",
             "category": "fundamentals",
         },
         "fr": {
             "title": "Pour bien commencer",
-            "description": "Configure ton espace et comprends comment fonctionne le programme.",
+            "description": "Comment fonctionne le cours, pourquoi c'est important, et les risques si tu ignores les règles.",
             "category": "fundamentals",
         },
     },
@@ -69,7 +70,7 @@ MODULE_I18N = {
             "content": WARM_UP_PLAYBOOK_EN,
         },
         "fr": {
-            "title": "Guide d'échauffement",
+            "title": "Chauffer le compte",
             "description": "SOP warmup TikTok & IG avant de publier du contenu carrière.",
             "category": "fundamentals",
             "content": WARM_UP_PLAYBOOK_FR,
@@ -132,7 +133,7 @@ MODULE_I18N = {
             "category": "interview",
         },
         "fr": {
-            "title": "Soumettre les brouillons & la suite",
+            "title": "Soumettre le contenu",
             "description": "Comment soumettre ton travail, obtenir des retours et la suite du parcours.",
             "category": "interview",
         },
@@ -290,6 +291,14 @@ async def get_course_detail(db, course_id: str, user_id: Optional[str] = None, l
     if progress is None and module_rows:
         progress = _pct(list(completed), len(module_rows))
 
+    enrollment_data = (enrollment or {}).get("data") or {}
+    if isinstance(enrollment_data, dict):
+        quiz_results = enrollment_data.get("quiz_results") or (enrollment or {}).get("quiz_results") or {}
+        activity = enrollment_data.get("activity") or (enrollment or {}).get("activity") or {}
+    else:
+        quiz_results = (enrollment or {}).get("quiz_results") or {}
+        activity = (enrollment or {}).get("activity") or {}
+
     creator = await db.training_creators.find_one({"creator_id": course.get("creator_id")}, {"_id": 0})
     creator_local = _localize_fields(creator or {}, lang, ["display_name", "bio"]) if creator else None
 
@@ -301,6 +310,8 @@ async def get_course_detail(db, course_id: str, user_id: Optional[str] = None, l
             "enrolled": enrollment is not None,
             "progress_percent": progress or 0,
             "completed_module_ids": list(completed),
+            "quiz_results": quiz_results,
+            "activity": activity,
         },
         "creator": {
             "display_name": (creator_local or {}).get("display_name"),
@@ -325,6 +336,9 @@ async def enroll_user(db, user_id: str, course_id: str) -> Dict[str, Any]:
         "course_id": course_id,
         "progress_percent": 0,
         "completed_module_ids": [],
+        "quiz_results": {},
+        "activity": {},
+        "quiz_attempts_log": [],
         "enrolled_at": _now(),
         "updated_at": _now(),
     }
@@ -340,6 +354,11 @@ async def complete_module(db, user_id: str, course_id: str, module_id: str) -> D
     module = await db.training_modules.find_one({"module_id": module_id, "course_id": course_id}, {"_id": 0})
     if not module:
         raise ValueError("Module not found")
+
+    quiz_id = quiz_id_for_module(module_id)
+    quiz_results = enrollment.get("quiz_results") or {}
+    if not (quiz_results.get(quiz_id) or {}).get("passed"):
+        raise ValueError("Quiz not passed for this module")
 
     completed = list(enrollment.get("completed_module_ids") or [])
     if module_id not in completed:
@@ -357,6 +376,173 @@ async def complete_module(db, user_id: str, course_id: str, module_id: str) -> D
         }},
     )
     return {"progress_percent": progress, "completed_module_ids": completed}
+
+
+async def track_activity(
+    db,
+    user_id: str,
+    course_id: str,
+    module_id: str,
+    section_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    enrollment = await db.training_enrollments.find_one({"user_id": user_id, "course_id": course_id}, {"_id": 0})
+    if not enrollment:
+        enrollment = await enroll_user(db, user_id, course_id)
+
+    activity = dict(enrollment.get("activity") or {})
+    modules_viewed = list(activity.get("modules_viewed") or [])
+    if module_id and module_id not in modules_viewed:
+        modules_viewed.append(module_id)
+
+    activity.update({
+        "last_module_id": module_id,
+        "last_section_id": section_id,
+        "modules_viewed": modules_viewed,
+        "updated_at": _now(),
+    })
+
+    attempts_log = list(enrollment.get("quiz_attempts_log") or [])
+
+    await db.training_enrollments.update_one(
+        {"enrollment_id": enrollment["enrollment_id"]},
+        {"$set": {
+            "activity": activity,
+            "quiz_attempts_log": attempts_log,
+            "updated_at": _now(),
+        }},
+    )
+    return {"activity": activity}
+
+
+async def submit_quiz(
+    db,
+    user_id: str,
+    course_id: str,
+    quiz_id: str,
+    answers: Dict[str, str],
+) -> Dict[str, Any]:
+    quiz = get_quiz(quiz_id)
+    if not quiz:
+        raise ValueError("Quiz not found")
+
+    enrollment = await db.training_enrollments.find_one({"user_id": user_id, "course_id": course_id}, {"_id": 0})
+    if not enrollment:
+        enrollment = await enroll_user(db, user_id, course_id)
+
+    result = score_quiz(quiz, answers)
+    quiz_results = dict(enrollment.get("quiz_results") or {})
+    previous = quiz_results.get(quiz_id) or {}
+    attempts = int(previous.get("attempts") or 0) + 1
+    quiz_results[quiz_id] = {
+        **result,
+        "attempts": attempts,
+        "answers": answers,
+        "submitted_at": _now(),
+    }
+
+    attempts_log = list(enrollment.get("quiz_attempts_log") or [])
+    attempts_log.append({
+        "quiz_id": quiz_id,
+        "module_id": quiz.get("module_id"),
+        "score": result["score"],
+        "passed": result["passed"],
+        "answers": answers,
+        "submitted_at": _now(),
+    })
+    attempts_log = attempts_log[-200:]
+
+    await db.training_enrollments.update_one(
+        {"enrollment_id": enrollment["enrollment_id"]},
+        {"$set": {
+            "quiz_results": quiz_results,
+            "quiz_attempts_log": attempts_log,
+            "updated_at": _now(),
+        }},
+    )
+    return {"result": result, "quiz_results": quiz_results}
+
+
+async def admin_training_analytics(db, course_id: Optional[str] = None) -> Dict[str, Any]:
+    course_id = course_id or SEED_COURSE_ID
+    modules = await db.training_modules.find({"course_id": course_id}).sort("sort_order", 1).to_list(200)
+    enrollments = await db.training_enrollments.find({"course_id": course_id}).to_list(5000)
+    users = await db.users.find({}, {"_id": 0, "user_id": 1, "email": 1, "name": 1}).to_list(10000)
+    user_map = {u["user_id"]: u for u in users if u.get("user_id")}
+
+    module_ids = [m["module_id"] for m in modules]
+    module_titles = {m["module_id"]: m.get("title") or m["module_id"] for m in modules}
+
+    total_enrolled = len(enrollments)
+    completed_course = sum(1 for e in enrollments if int(e.get("progress_percent") or 0) >= 100)
+    avg_progress = 0
+    if enrollments:
+        avg_progress = round(sum(int(e.get("progress_percent") or 0) for e in enrollments) / total_enrolled)
+
+    module_completion: Dict[str, int] = {mid: 0 for mid in module_ids}
+    module_dropoff: Dict[str, int] = {mid: 0 for mid in module_ids}
+    quiz_pass_counts: Dict[str, int] = {}
+    quiz_attempt_counts: Dict[str, int] = {}
+
+    learner_rows = []
+    for enr in enrollments:
+        uid = enr.get("user_id")
+        user = user_map.get(uid) or {}
+        completed_ids = set(enr.get("completed_module_ids") or [])
+        for mid in completed_ids:
+            if mid in module_completion:
+                module_completion[mid] += 1
+
+        activity = enr.get("activity") or {}
+        last_module = activity.get("last_module_id")
+        if last_module and last_module in module_dropoff:
+            module_dropoff[last_module] += 1
+
+        quiz_results = enr.get("quiz_results") or {}
+        for qid, qres in quiz_results.items():
+            quiz_attempt_counts[qid] = quiz_attempt_counts.get(qid, 0) + int(qres.get("attempts") or 1)
+            if qres.get("passed"):
+                quiz_pass_counts[qid] = quiz_pass_counts.get(qid, 0) + 1
+
+        learner_rows.append({
+            "user_id": uid,
+            "email": user.get("email"),
+            "name": user.get("name"),
+            "progress_percent": enr.get("progress_percent", 0),
+            "completed_module_ids": list(completed_ids),
+            "last_module_id": last_module,
+            "last_section_id": activity.get("last_section_id"),
+            "quiz_results": quiz_results,
+            "updated_at": enr.get("updated_at"),
+        })
+
+    module_stats = []
+    for mod in modules:
+        mid = mod["module_id"]
+        qid = quiz_id_for_module(mid)
+        enrolled_base = total_enrolled or 1
+        module_stats.append({
+            "module_id": mid,
+            "title": module_titles.get(mid),
+            "sort_order": mod.get("sort_order", 0),
+            "completed_count": module_completion.get(mid, 0),
+            "completion_rate_percent": round((module_completion.get(mid, 0) / enrolled_base) * 100),
+            "stopped_here_count": module_dropoff.get(mid, 0),
+            "quiz_id": qid,
+            "quiz_pass_count": quiz_pass_counts.get(qid, 0),
+            "quiz_pass_rate_percent": round((quiz_pass_counts.get(qid, 0) / enrolled_base) * 100),
+        })
+
+    return {
+        "course_id": course_id,
+        "summary": {
+            "enrolled": total_enrolled,
+            "completed_course": completed_course,
+            "completion_rate_percent": round((completed_course / (total_enrolled or 1)) * 100),
+            "avg_progress_percent": avg_progress,
+        },
+        "module_stats": module_stats,
+        "learners": sorted(learner_rows, key=lambda r: r.get("updated_at") or "", reverse=True),
+    }
 
 
 async def list_user_enrollments(db, user_id: str, lang: str = "en") -> List[Dict[str, Any]]:

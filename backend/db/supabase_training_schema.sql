@@ -67,6 +67,7 @@ create table if not exists public.training_enrollments (
     course_id text not null,
     progress_percent integer not null default 0,
     completed_module_ids jsonb not null default '[]'::jsonb,
+    -- Also stores quiz_results, activity, quiz_attempts_log (see training_service.py)
     enrolled_at timestamptz,
     updated_at timestamptz,
     data jsonb not null default '{}'::jsonb,

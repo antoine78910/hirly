@@ -296,6 +296,41 @@ const CONTENT_BANK_EN = [
       ),
     ],
   }),
+
+  sectionBlock({
+    section_id: "sec_cb_secret_job_2026",
+    title: "Secret Ways To Find A Job In 2026",
+    content: [
+      heading(1, "Secret Ways To Find A Job In 2026"),
+      heading(3, "Examples"),
+      examplesGrid([
+        ex(
+          "Maryam's 164K Video",
+          "https://www.tiktok.com/@that.corporate.blackgirl/video/7608782339253996820",
+        ),
+        ex("Nicole J's 45K Video", "https://www.instagram.com/reels/DVJpW3FiVFz/"),
+        ex("Original Video", "https://www.instagram.com/reels/DU7KlUREViT/"),
+      ]),
+      heading(3, "Guidelines"),
+      warningGuideline("Requires laptop/second phone to record the job boards."),
+      heading(3, "Caption"),
+      paragraph(
+        "Video Text Hook:\nSecret Ways to Find a Job in 2026\n\nOut of Video Caption:\n- You need to know about these two job sites if you actually want interviews.\n- If you're only using LinkedIn and Indeed, you're competing with hundreds of applicants on the same listings.\n#jobsearch #jobsearchtips #remotejobs #jobapplication #careergrowth",
+      ),
+      heading(2, "Main Script"),
+      infoScript(
+        "Nobody is hiring right now. Hmm. Maybe it's just you.\nAnd maybe you're just looking in the wrong places.\n\nIf you don't know about these two websites, let me put you on.\nOne of them is called FlexJobs, and it has over 200,000 verified jobs that nobody knows about.\n\nThe next one is called Hirly.\nThis one actually auto-applies to the company's website directly with a tailored cover letter and resume for each listing.\n\nSo let me know if anyone ends up using this.",
+      ),
+      heading(2, "Variation 1"),
+      infoScript(
+        "Nobody is hiring right now? Hmm. Maybe it's just you.\nAnd maybe you're just looking in the wrong places.\n\nIf you don't know about these two websites, let me put you on.\nOne of them is called Google Jobs — literally just search for a role on Google and it pulls listings from all over the internet. You can filter by location, salary, and even remote ones.\n\nThe next one is called Hirly. This one actually auto-applies directly on the company's website with a tailored cover letter and resume for each listing.\n\nSo let me know if anyone ends up using this 👀",
+      ),
+      heading(2, "Variation 2"),
+      infoScript(
+        "Nobody's hiring right now? Maybe it's just you.\nMaybe you're just looking in the wrong places.\n\nIf you don't know about these two websites, let me put you on.\nOne of them is called Handshake, and it has thousands of opportunities for students and recent grads that most people completely overlook.\n\nBut the next one?\nIt's called Hirly. Instead of you spending hours applying, it actually auto-applies directly on the company's website for you with a tailored resume and cover letter. You literally set your preferences, and it does the heavy lifting.\n\nSo if you're tired of filling out the same application over and over again, this might be the move.\n\nLet me know if any of you end up using it.",
+      ),
+    ],
+  }),
 ];
 
 export const CONTENT_BANK_SECTIONS_EN = CONTENT_BANK_EN;

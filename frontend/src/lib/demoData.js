@@ -184,10 +184,20 @@ export const DEMO_PROFILE = {
   seniority: "senior",
   template_style: "modern",
   contact: {
+    first_name: "Alex",
+    last_name: "Martin",
     name: "Alex Martin",
     email: "alex.martin@demo.dev",
     phone: "+33 6 12 34 56 78",
+    location: "Paris, France",
     linkedin: "linkedin.com/in/alexmartin",
+  },
+  extras: {
+    onboarding: {
+      onboarding_location: "Paris, France",
+      salary_min: 75_000,
+      salary_max: 120_000,
+    },
   },
   skills: ["React", "TypeScript", "Next.js", "Node.js", "Figma", "Design systems"],
   experience: [
@@ -196,6 +206,15 @@ export const DEMO_PROFILE = {
     { role: "Frontend Developer", company: "Agency Co.", years: "2019 – 2021" },
   ],
   cv_text: "Alex Martin — Senior Frontend Engineer with 6+ years building polished web products.",
+  additional_documents: [
+    {
+      id: "demo-doc-1",
+      name: "Portfolio.pdf",
+      mime: "application/pdf",
+      uploaded_at: "2026-06-19T10:00:00.000Z",
+      size: 245_000,
+    },
+  ],
 };
 
 function application({

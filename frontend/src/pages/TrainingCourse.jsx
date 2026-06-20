@@ -6,7 +6,16 @@ import { useTrainingLocale } from "../context/TrainingLocaleContext";
 import { TrainingTopBar, useTrainingPageMode } from "../components/training/TrainingShell";
 import ModuleDocView from "../components/training/ModuleDocView";
 import ModuleSectionNav from "../components/training/ModuleSectionNav";
-import { fetchTrainingCourseDetail, tryCompleteModule, tryEnrollCourse } from "../lib/trainingData";
+import ModuleQuiz from "../components/training/ModuleQuiz";
+import {
+  fetchTrainingCourseDetail,
+  isQuizPassed,
+  tryCompleteModule,
+  tryEnrollCourse,
+  trySubmitQuiz,
+  tryTrackTrainingActivity,
+} from "../lib/trainingData";
+import { quizForModule } from "../lib/trainingQuizzes";
 import {
   parseTrainingLocale,
   trainingHubPath,
@@ -57,8 +66,10 @@ export default function TrainingCourse() {
   const { lang, t } = useTrainingLocale();
   const [loading, setLoading] = useState(true);
   const [completing, setCompleting] = useState(false);
+  const [quizSubmitting, setQuizSubmitting] = useState(false);
   const [data, setData] = useState(null);
   const [activeModuleId, setActiveModuleId] = useState(null);
+  const [quizPassed, setQuizPassed] = useState(false);
 
   const hubPath = trainingHubPath(routeLocale);
   const moduleParam = searchParams.get("module");
@@ -108,6 +119,19 @@ export default function TrainingCourse() {
     return sections[0];
   }, [hasSections, sectionParam, sections]);
 
+  const moduleQuiz = useMemo(
+    () => (activeModule ? quizForModule(activeModule.module_id, lang) : null),
+    [activeModule, lang],
+  );
+
+  useEffect(() => {
+    if (!activeModule?.module_id || !moduleQuiz) {
+      setQuizPassed(false);
+      return;
+    }
+    setQuizPassed(isQuizPassed(data?.enrollment, moduleQuiz.quiz_id, courseId));
+  }, [activeModule?.module_id, moduleQuiz, data?.enrollment, courseId]);
+
   useEffect(() => {
     if (!hasSections || !activeModule || !activeSection) return;
     if (sectionParam === activeSection.section_id) return;
@@ -129,11 +153,21 @@ export default function TrainingCourse() {
     ? sections.findIndex((s) => s.section_id === activeSection?.section_id)
     : -1;
   const hasNextSection = hasSections && activeSectionIndex >= 0 && activeSectionIndex < sections.length - 1;
+  const atChapterEnd = !hasNextSection;
 
   useEffect(() => {
     if (!activeModuleId || loading) return;
     tryEnrollCourse(courseId);
   }, [activeModuleId, courseId, loading]);
+
+  useEffect(() => {
+    if (!activeModuleId || loading) return;
+    tryTrackTrainingActivity(
+      courseId,
+      activeModuleId,
+      hasSections ? activeSection?.section_id : null,
+    );
+  }, [activeModuleId, activeSection?.section_id, courseId, hasSections, loading]);
 
   useEffect(() => {
     if (!loading && data && !activeModule) {
@@ -163,10 +197,28 @@ export default function TrainingCourse() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const handleQuizSubmit = async (quizId, answers, scored) => {
+    setQuizSubmitting(true);
+    try {
+      const result = await trySubmitQuiz(courseId, quizId, answers, scored);
+      if (result?.passed) {
+        setQuizPassed(true);
+        await load();
+      }
+      return result;
+    } finally {
+      setQuizSubmitting(false);
+    }
+  };
+
   const markComplete = async () => {
     if (!activeModule) return;
     if (hasNextSection) {
       goToNextSection();
+      return;
+    }
+    if (!quizPassed) {
+      toast.error(t("quizRequired"));
       return;
     }
     setCompleting(true);
@@ -185,7 +237,7 @@ export default function TrainingCourse() {
         navigate(hubPath, { replace: true });
       }
     } catch (e) {
-      toast.error(e?.response?.data?.detail || t("saveError"));
+      toast.error(e?.message || e?.response?.data?.detail || t("saveError"));
     } finally {
       setCompleting(false);
     }
@@ -206,6 +258,8 @@ export default function TrainingCourse() {
       </div>
     );
   }
+
+  const canComplete = atChapterEnd && (quizPassed || activeModule.completed);
 
   return (
     <div className="min-h-dvh bg-white text-zinc-900">
@@ -237,11 +291,21 @@ export default function TrainingCourse() {
             <p className="leading-relaxed text-zinc-700">{activeModule.description}</p>
           ) : null}
 
+          {atChapterEnd && moduleQuiz ? (
+            <ModuleQuiz
+              quiz={moduleQuiz}
+              lang={lang}
+              initialPassed={quizPassed}
+              submitting={quizSubmitting}
+              onSubmit={handleQuizSubmit}
+            />
+          ) : null}
+
           <div className="border-t border-zinc-100 pt-6">
             <button
               type="button"
               onClick={markComplete}
-              disabled={completing || (!hasNextSection && activeModule.completed)}
+              disabled={completing || (atChapterEnd && !canComplete && !hasNextSection)}
               className="inline-flex items-center gap-2 rounded-md bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50"
             >
               {completing ? (
@@ -263,6 +327,9 @@ export default function TrainingCourse() {
                 </>
               )}
             </button>
+            {atChapterEnd && !quizPassed && !activeModule.completed ? (
+              <p className="mt-2 text-sm text-amber-700">{t("quizRequired")}</p>
+            ) : null}
           </div>
         </div>
       </main>

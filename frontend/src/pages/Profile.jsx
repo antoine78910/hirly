@@ -15,14 +15,13 @@ import {
   Zap,
   Pencil,
   Plus,
-  ShieldCheck,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import PersonalInfoSheet from "../components/PersonalInfoSheet";
+import ProfilePersonalInfoTab from "../components/profile/ProfilePersonalInfoTab";
+import ProfileDocumentsTab from "../components/profile/ProfileDocumentsTab";
 import ResumeSheet from "../components/ResumeSheet";
 import ProfessionalProfileSheet from "../components/ProfessionalProfileSheet";
-import DocumentsSheet from "../components/DocumentsSheet";
 import Sheet, { Field, SaveButton } from "../components/Sheet";
 import PlacesAutocomplete, { hasGooglePlacesKey } from "../components/PlacesAutocomplete";
 import { Label } from "../components/ui/label";
@@ -40,7 +39,7 @@ import { getResumeSections } from "../lib/appUi";
 const PROFILE_TAB_ICONS = {
   resume: FileText,
   personal: UserIcon,
-  files: FolderOpen,
+  documents: FolderOpen,
 };
 
 function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
@@ -356,10 +355,6 @@ function profileCompletion(profile) {
   return Math.round((checks.filter(Boolean).length / checks.length) * 100);
 }
 
-function firstValue(...values) {
-  return values.find((value) => value !== undefined && value !== null && String(value).trim()) || "";
-}
-
 export default function Profile() {
   const { t } = useAppLocale();
   const { user } = useAuth();
@@ -375,7 +370,7 @@ export default function Profile() {
   const profileTabs = useMemo(() => ([
     { key: "resume", label: t("profile.resume"), icon: PROFILE_TAB_ICONS.resume },
     { key: "personal", label: t("profile.personal"), icon: PROFILE_TAB_ICONS.personal },
-    { key: "files", label: t("profile.files"), icon: PROFILE_TAB_ICONS.files },
+    { key: "documents", label: t("profile.documentsTab"), icon: PROFILE_TAB_ICONS.documents },
   ]), [t]);
 
   const resumeSections = useMemo(() => getResumeSections(t), [t]);
@@ -401,17 +396,6 @@ export default function Profile() {
   }, [reload]);
 
   const completion = useMemo(() => profileCompletion(profile), [profile]);
-  const applicationDefaults = profile?.application_defaults || {};
-  const primaryEducation = Array.isArray(profile?.education) ? (profile.education[0] || {}) : {};
-  const extractedSummary = {
-    school: firstValue(primaryEducation.school, applicationDefaults.education_school),
-    degree: firstValue(primaryEducation.degree, applicationDefaults.education_degree),
-    discipline: firstValue(primaryEducation.discipline, primaryEducation.field_of_study, applicationDefaults.education_discipline),
-    graduationYear: firstValue(primaryEducation.graduation_year, primaryEducation.year, applicationDefaults.education_graduation_year),
-    linkedin: firstValue(profile?.contact?.linkedin, applicationDefaults.linkedin_url),
-    website: firstValue(profile?.contact?.website, applicationDefaults.website_url, applicationDefaults.portfolio_url),
-    phoneCountryCode: firstValue(applicationDefaults.phone_country_code),
-  };
   const swipeCredits = displayCredits;
 
   const sectionCount = (key) => {
@@ -525,13 +509,15 @@ export default function Profile() {
                 key={tabItem.key}
                 type="button"
                 onClick={() => setTab(tabItem.key)}
-                className={`flex flex-1 flex-col items-center gap-1 py-3 text-xs font-semibold ${
+                className={`flex min-w-0 flex-1 flex-col items-center gap-1 px-0.5 py-3 text-center ${
                   active ? "text-linkedin" : "text-zinc-400"
                 }`}
                 data-testid={`profile-tab-${tabItem.key}`}
               >
-                <Icon className="h-5 w-5" strokeWidth={active ? 2.4 : 1.8} />
-                {tabItem.label}
+                <Icon className="h-5 w-5 shrink-0" strokeWidth={active ? 2.4 : 1.8} />
+                <span className="w-full min-w-0 text-[10px] font-semibold leading-tight [overflow-wrap:anywhere] sm:text-xs">
+                  {tabItem.label}
+                </span>
                 {active ? <span className="h-0.5 w-8 rounded-full bg-linkedin" /> : <span className="h-0.5 w-8" />}
               </button>
             );
@@ -540,20 +526,6 @@ export default function Profile() {
 
         {tab === "resume" && (
           <div className="space-y-5 pb-4">
-            <button
-              type="button"
-              onClick={() => setOpenSheet("resume")}
-              className="flex w-full items-center justify-between rounded-xl border border-dashed border-zinc-300 px-4 py-3 text-left hover:bg-zinc-50"
-            >
-              <div>
-                <p className="font-semibold text-zinc-900">{t("profile.yourCv")}</p>
-                <p className="text-sm text-zinc-500">
-                  {profile?.cv_text ? t("profile.resumeUploaded") : t("profile.uploadResume")}
-                </p>
-              </div>
-              <Pencil className="h-4 w-4 text-zinc-400" />
-            </button>
-
             {resumeSections.map((section) => {
               const count = sectionCount(section.countKey);
               return (
@@ -587,102 +559,23 @@ export default function Profile() {
         )}
 
         {tab === "personal" && (
-          <div className="space-y-3 pb-4">
-            <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-semibold text-zinc-900">{t("profile.extractedData")}</p>
-                  <p className="text-sm text-zinc-600">{t("profile.extractedDataHint")}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setOpenSheet("application-defaults")}
-                  className="text-sm font-semibold text-linkedin hover:opacity-80"
-                >
-                  {t("profileSections.edit")}
-                </button>
-              </div>
-              <div className="mt-4 grid gap-3 text-sm">
-                {[
-                  [t("profileSections.educationSchool"), extractedSummary.school],
-                  [t("profileSections.degree"), extractedSummary.degree],
-                  [t("profileSections.fieldOfStudy"), extractedSummary.discipline],
-                  [t("profileSections.graduationYear"), extractedSummary.graduationYear],
-                  [t("profileSections.linkedinUrl"), extractedSummary.linkedin],
-                  [t("profileSections.websitePortfolio"), extractedSummary.website],
-                  [t("profileSections.phoneCountryCode"), extractedSummary.phoneCountryCode],
-                ].map(([label, value]) => (
-                  <div key={label} className="flex items-start justify-between gap-4 border-b border-zinc-100 pb-2 last:border-b-0 last:pb-0">
-                    <span className="text-zinc-600">{label}</span>
-                    <span className="max-w-[60%] break-words text-right font-medium text-zinc-900">
-                      {value || t("common.notSet")}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setOpenSheet("personal")}
-              className="flex w-full items-center justify-between border-b border-zinc-100 py-4 text-left"
-            >
-              <div>
-                <p className="font-semibold">{t("profile.personalDetails")}</p>
-                <p className="text-sm text-zinc-500">{profile?.contact?.name || t("profile.addYourName")}</p>
-              </div>
-              <Pencil className="h-4 w-4 text-zinc-400" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setOpenSheet("preferences")}
-              className="flex w-full items-center justify-between border-b border-zinc-100 py-4 text-left"
-            >
-              <div>
-                <p className="font-semibold">{t("profile.jobPreferences")}</p>
-                <p className="text-sm text-zinc-500">{profile?.target_role || t("swipe.setTargetRole")}</p>
-              </div>
-              <Pencil className="h-4 w-4 text-zinc-400" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setOpenSheet("application-defaults")}
-              className="flex w-full items-center justify-between border-b border-zinc-100 py-4 text-left"
-              data-testid="profile-application-defaults-card"
-            >
-              <div>
-                <p className="font-semibold">{t("profile.applicationDefaults")}</p>
-                <p className="text-sm text-zinc-500">{t("profile.applicationDefaultsHint")}</p>
-              </div>
-              <ShieldCheck className="h-4 w-4 text-zinc-400" />
-            </button>
-          </div>
+          <ProfilePersonalInfoTab
+            profile={profile}
+            userEmail={user?.email}
+            onSaved={reload}
+          />
         )}
 
-        {tab === "files" && (
-          <div className="pb-4">
-            <button
-              type="button"
-              onClick={() => setOpenSheet("documents")}
-              className="flex w-full items-center justify-between rounded-xl border border-dashed border-zinc-300 px-4 py-4 text-left hover:bg-zinc-50"
-            >
-              <div>
-                <p className="font-semibold text-zinc-900">{t("profile.otherFiles")}</p>
-                <p className="text-sm text-zinc-500">{t("profile.otherFilesHint")}</p>
-              </div>
-              <Plus className="h-5 w-5 text-linkedin" />
-            </button>
-          </div>
+        {tab === "documents" && (
+          <ProfileDocumentsTab
+            profile={profile}
+            onUploadResume={() => setOpenSheet("resume")}
+            onDocumentsChange={reload}
+          />
         )}
         </div>
       </AppPageScroll>
 
-      <PersonalInfoSheet
-        open={openSheet === "personal"}
-        profile={profile}
-        userEmail={user?.email}
-        onClose={() => setOpenSheet(null)}
-        onSaved={reload}
-      />
       <JobPreferencesSheet
         open={openSheet === "preferences"}
         profile={profile}
@@ -706,11 +599,6 @@ export default function Profile() {
         profile={profile}
         onClose={() => setOpenSheet(null)}
         onChange={reload}
-      />
-      <DocumentsSheet
-        open={openSheet === "documents"}
-        profile={profile}
-        onClose={() => setOpenSheet(null)}
       />
     </AppPage>
   );

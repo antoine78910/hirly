@@ -5,7 +5,7 @@ const COURSE_ID = "course_job_search_mastery";
 export const TRAINING_COURSE_ID = COURSE_ID;
 
 const MODULES_EN = [
-  { module_id: "mod_getting_started", title: "Getting Started", description: "Set up your workspace and understand how the program works.", category: "fundamentals", sort_order: 1, duration_seconds: 480, video_url: "", completed: false },
+  { module_id: "mod_getting_started", title: "Getting Started", description: "How the course works, why it matters, and what happens if you skip the rules.", category: "fundamentals", sort_order: 1, duration_seconds: 480, video_url: "", completed: false },
   { module_id: "mod_warm_up", title: "Warm Up Playbook", description: "TikTok & IG warmup SOP before you post career content.", category: "fundamentals", sort_order: 2, duration_seconds: 420, video_url: "", completed: false },
   { module_id: "mod_creating_content", title: "Creating Content", description: "Filming, Hirly demos, and editing — three sub-chapters with video lessons.", category: "application", sort_order: 3, duration_seconds: 600, video_url: "", completed: false },
   { module_id: "mod_account_management", title: "Account Management", description: "Manage your profile, settings, and creator account.", category: "interview", sort_order: 4, duration_seconds: 420, video_url: "", completed: false },
@@ -14,11 +14,11 @@ const MODULES_EN = [
 ];
 
 const MODULES_FR = [
-  { module_id: "mod_getting_started", title: "Pour bien commencer", description: "Configure ton espace et comprends comment fonctionne le programme.", category: "fundamentals", sort_order: 1, duration_seconds: 480, video_url: "", completed: false },
-  { module_id: "mod_warm_up", title: "Guide d'échauffement", description: "SOP warmup TikTok & IG avant de publier du contenu carrière.", category: "fundamentals", sort_order: 2, duration_seconds: 420, video_url: "", completed: false },
+  { module_id: "mod_getting_started", title: "Pour bien commencer", description: "Comment fonctionne le cours, pourquoi c'est important, et les risques si tu ignores les règles.", category: "fundamentals", sort_order: 1, duration_seconds: 480, video_url: "", completed: false },
+  { module_id: "mod_warm_up", title: "Chauffer le compte", description: "SOP warmup TikTok & IG avant de publier du contenu carrière.", category: "fundamentals", sort_order: 2, duration_seconds: 420, video_url: "", completed: false },
   { module_id: "mod_creating_content", title: "Créer du contenu", description: "Tournage, démos Hirly et montage — trois sous-chapitres avec vidéos.", category: "application", sort_order: 3, duration_seconds: 600, video_url: "", completed: false },
   { module_id: "mod_account_management", title: "Gestion du compte", description: "Gère ton profil, tes paramètres et ton compte créateur.", category: "interview", sort_order: 4, duration_seconds: 420, video_url: "", completed: false },
-  { module_id: "mod_submit_drafts", title: "Soumettre & Paiement", description: "Comment soumettre ton travail, obtenir des retours et comment fonctionne le paiement.", category: "interview", sort_order: 5, duration_seconds: 480, video_url: "", completed: false },
+  { module_id: "mod_submit_drafts", title: "Soumettre le contenu", description: "Comment soumettre ton travail, obtenir des retours et comment fonctionne le paiement.", category: "interview", sort_order: 5, duration_seconds: 480, video_url: "", completed: false },
   { module_id: "mod_content_bank", title: "Exemples banque de contenu", description: "Scripts et formats de référence à réutiliser et adapter.", category: "reference", sort_order: 6, duration_seconds: 540, video_url: "", completed: false },
 ];
 

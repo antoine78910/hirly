@@ -50,9 +50,11 @@ import {
   readOnboardingPreviewBoot,
 } from "../components/onboarding/onboardingData";
 import { devBypassAuth } from "../lib/dev";
-import { preloadOnboardingShowcaseImages } from "../lib/onboardingImagePreload";
+import { splitFullName } from "../lib/personalInfoOptions";
 import { ob } from "../components/onboarding/onboardingTheme";
 import { trackEvent } from "../lib/analytics";
+import { getPendingInviteCode, redeemCreatorInvite } from "../lib/creatorInvite";
+import { setDemoAccountFromUser } from "../lib/demoAccount";
 
 const STEP_ORDER = ONBOARDING_STEP_ORDER;
 const INITIAL_ONBOARDING_BOOT = readOnboardingPreviewBoot(STEP_ORDER);
@@ -120,6 +122,8 @@ export default function Onboarding() {
   const [triedOtherApps, setTriedOtherApps] = useState(INITIAL_PREVIEW?.triedOtherApps ?? null);
   const [attribution, setAttribution] = useState(INITIAL_PREVIEW?.attribution ?? null);
   const [referralCode, setReferralCode] = useState("");
+  const [creatorAccessCode, setCreatorAccessCode] = useState(() => getPendingInviteCode());
+  const [redeemingCreatorCode, setRedeemingCreatorCode] = useState(false);
 
   useEffect(() => {
     preloadOnboardingShowcaseImages();
@@ -327,13 +331,32 @@ export default function Onboarding() {
     }
   };
 
-  const finishOnboarding = async () => {
+  const finishOnboarding = async ({ skipCreatorCode = false } = {}) => {
     if (!user) {
-      await startGoogleLogin("/onboarding?step=showcasePricing");
+      await startGoogleLogin("/onboarding?step=creatorAccessCode");
       return;
     }
     setSaving(true);
     try {
+      const code = skipCreatorCode ? "" : creatorAccessCode.trim();
+      if (/^\d{6}$/.test(code)) {
+        setRedeemingCreatorCode(true);
+        try {
+          const redeemed = await redeemCreatorInvite(api, code);
+          if (redeemed?.demo_account) {
+            setDemoAccountFromUser({ ...user, demo_account: true });
+          }
+          toast.success("Creator access activated");
+        } catch (inviteErr) {
+          toast.error(inviteErr?.response?.data?.detail || "Could not activate invitation code");
+          setSaving(false);
+          setRedeemingCreatorCode(false);
+          return;
+        } finally {
+          setRedeemingCreatorCode(false);
+        }
+      }
+
       await persistOnboardingMeta();
       const exp = EXPERIENCE_LEVELS.find((e) => e.id === experience);
       const primaryRole = selectedRoles[0] || profile?.target_roles?.[0] || "Software Engineer";
@@ -344,6 +367,13 @@ export default function Onboarding() {
         target_location_data: onboardingLocationData,
         remote_preference: "any",
         seniority: exp?.backend,
+      });
+      const nameParts = splitFullName(user?.name || profile?.contact?.name || "");
+      await api.put("/profile/contact", {
+        first_name: nameParts.first_name || undefined,
+        last_name: nameParts.last_name || undefined,
+        location: onboardingLocationData?.location_label || onboardingLocation || undefined,
+        location_data: onboardingLocationData || undefined,
       });
       setHasPreferences(true);
       trackEvent("onboarding_completed", {
@@ -399,6 +429,8 @@ export default function Onboarding() {
       case "showcaseAllInOne":
       case "showcasePricing":
         return true;
+      case "creatorAccessCode":
+        return true;
       default:
         return false;
     }
@@ -441,8 +473,23 @@ export default function Onboarding() {
   const hideFooter = parsing || step === "profileSetup" || (step === "signup" && !user);
 
   const footer = !hideFooter ? (
-    step === "showcasePricing" ? (
-      <FinishOnboardingButton saving={saving} onClick={finishOnboarding} />
+    step === "creatorAccessCode" ? (
+      <div className="space-y-2.5">
+        <FinishOnboardingButton saving={saving || redeemingCreatorCode} onClick={finishOnboarding} />
+        <button
+          type="button"
+          onClick={() => finishOnboarding({ skipCreatorCode: true })}
+          disabled={saving || redeemingCreatorCode}
+          className="w-full h-11 sm:h-12 rounded-full border border-zinc-200 bg-white text-sm sm:text-base font-semibold text-linkedin hover:bg-violet-50 transition-colors disabled:opacity-60"
+          data-testid="creator-access-skip"
+        >
+          Skip for now
+        </button>
+      </div>
+    ) : step === "showcasePricing" ? (
+      <ContinueButton onClick={onContinue} testId="showcase-pricing-continue">
+        Continue
+      </ContinueButton>
     ) : step === "profileWelcome" ? (
       <div className="space-y-2">
         <ContinueButton onClick={onContinue} testId="profile-welcome-continue">
@@ -498,6 +545,7 @@ export default function Onboarding() {
         && step !== "showcaseLanding"
         && step !== "showcaseAllInOne"
         && step !== "showcasePricing"
+        && step !== "creatorAccessCode"
       }
       footer={parsing ? null : footer}
     >
@@ -764,8 +812,8 @@ export default function Onboarding() {
                   className={ob.slider}
                 />
                 <div className={`flex justify-between text-xs ${ob.dim} mt-1`}>
-                  <span>$0</span>
-                  <span>$500,000</span>
+                  <span>{formatSalary(0)}</span>
+                  <span>{formatSalary(500_000)}</span>
                 </div>
               </div>
               <div>
@@ -1034,6 +1082,30 @@ export default function Onboarding() {
               onSelectPlan={setSelectedPlan}
               locationLabel={onboardingLocationData?.location_label || onboardingLocation || "Your city"}
             />
+          </motion.div>
+        )}
+
+        {step === "creatorAccessCode" && !parsing && (
+          <motion.div key="creatorAccessCode" {...stepMotion}>
+            <h1 className={stepTitleClass}>Creator access code</h1>
+            <p className={stepSubtitleClass}>
+              If you received a Hirly creator invitation, enter the 6-digit code here to unlock training and your demo account.
+            </p>
+            <div className="mt-6">
+              <input
+                className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-4 text-center font-mono text-2xl font-bold tracking-[0.25em] text-zinc-900 outline-none focus:border-violet-400"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                placeholder="000000"
+                value={creatorAccessCode}
+                onChange={(e) => setCreatorAccessCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                data-testid="creator-access-code-input"
+              />
+              <p className="mt-3 text-center text-xs leading-relaxed text-zinc-500">
+                You can also open the invitation link you received by email or DM. Skip this step if you already activated your access on web.
+              </p>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

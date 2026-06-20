@@ -129,6 +129,26 @@ export function getDemoResponse(config) {
     return { ok: true };
   }
 
+  if (method === "post" && path === "/profile/documents") {
+    const file = config.data instanceof FormData ? config.data.get("file") : null;
+    const name = file?.name || "document.pdf";
+    const doc = {
+      id: `demo-doc-${Date.now()}`,
+      name,
+      mime: "application/pdf",
+      uploaded_at: new Date().toISOString(),
+      size: file?.size || 0,
+    };
+    DEMO_PROFILE.additional_documents = [...(DEMO_PROFILE.additional_documents || []), doc];
+    return { ok: true, document: doc };
+  }
+
+  if (method === "delete" && path.startsWith("/profile/documents/")) {
+    const id = path.replace("/profile/documents/", "");
+    DEMO_PROFILE.additional_documents = (DEMO_PROFILE.additional_documents || []).filter((doc) => doc.id !== id);
+    return { ok: true };
+  }
+
   if (method === "get" && path === "/jobs/feed") {
     const limit = Number(params.limit || 5);
     return {

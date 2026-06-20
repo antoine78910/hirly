@@ -152,7 +152,7 @@ export default function DesktopFiltersMenu({
   onOpenChange,
 }) {
   const isDark = themeMode === "dark";
-  const { t } = useAppLocale();
+  const { t, lang } = useAppLocale();
   const panels = getFilterPanels(t).map((panel) => ({
     ...panel,
     icon: PANEL_ICONS[panel.id],
@@ -335,7 +335,7 @@ export default function DesktopFiltersMenu({
               {t("filters.minimum")}
               {" "}
               <span className={`font-semibold ${isDark ? "text-white" : "text-zinc-900"}`}>
-                {formatMinSalary(salaryDraft)}
+                {formatMinSalary(salaryDraft, lang)}
               </span>
             </p>
             <input
@@ -353,8 +353,8 @@ export default function DesktopFiltersMenu({
               data-testid="desktop-filters-salary-slider"
             />
             <div className={`flex justify-between text-xs ${isDark ? "text-zinc-500" : "text-zinc-400"}`}>
-              <span>$0</span>
-              <span>$250k</span>
+              <span>{formatMinSalary(0, lang)}</span>
+              <span>{formatMinSalary(250_000, lang)}</span>
             </div>
           </div>
         );

@@ -53,11 +53,10 @@ export function toggleFilterArray(values, value) {
   return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
 }
 
-export function formatMinSalary(value) {
-  const n = Number(value) || 0;
-  if (n >= 250000) return "$250k+";
-  if (n >= 1000) return `$${Math.round(n / 1000)}k`;
-  return `$${n.toLocaleString()}`;
+import { formatMinSalary as formatMinSalaryEuro } from "./currency";
+
+export function formatMinSalary(value, lang) {
+  return formatMinSalaryEuro(value, lang);
 }
 
 export function hasActiveFilters(value, defaultRadius = DEFAULT_SEARCH_RADIUS) {

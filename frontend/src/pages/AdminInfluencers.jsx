@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Plus, RefreshCw, Sparkles } from "lucide-react";
+import { Copy, Link2, Loader2, Plus, RefreshCw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
+import { buildInviteUrl } from "../lib/creatorInvite";
 import { Button } from "../components/ui/button";
 import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
 
@@ -22,6 +23,75 @@ const emptyForm = {
   notes: "",
 };
 
+async function copyText(label, value) {
+  try {
+    await navigator.clipboard.writeText(value);
+    toast.success(`${label} copied`);
+  } catch {
+    toast.error(`Could not copy ${label.toLowerCase()}`);
+  }
+}
+
+function InviteModal({ open, onClose, influencer, invite, creating, onCreate }) {
+  if (!open || !influencer) return null;
+
+  const code = invite?.code || "";
+  const inviteUrl = code ? buildInviteUrl(code) : "";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-lg rounded-xl border border-zinc-200 bg-white p-5 shadow-xl">
+        <h3 className="font-display text-lg font-bold">Creator invitation</h3>
+        <p className="mt-1 text-sm text-zinc-600">
+          Send this link to
+          {" "}
+          <span className="font-semibold text-zinc-900">{influencer.name}</span>
+          {" "}
+          so they can create an account, access training, and get a demo account automatically.
+        </p>
+
+        {invite ? (
+          <div className="mt-4 space-y-3 rounded-lg bg-zinc-50 p-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">6-digit code</p>
+              <div className="mt-1 flex items-center justify-between gap-2">
+                <span className="font-mono text-2xl font-bold tracking-[0.2em] text-zinc-900">{code}</span>
+                <Button size="sm" variant="outline" onClick={() => copyText("Code", code)}>
+                  <Copy className="h-4 w-4" />
+                  Copy
+                </Button>
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Invitation link</p>
+              <div className="mt-1 flex items-start gap-2">
+                <p className="flex-1 break-all text-sm text-zinc-700">{inviteUrl}</p>
+                <Button size="sm" variant="outline" onClick={() => copyText("Link", inviteUrl)}>
+                  <Link2 className="h-4 w-4" />
+                  Copy
+                </Button>
+              </div>
+            </div>
+            <p className="text-xs leading-relaxed text-zinc-500">
+              They can open the link on mobile or desktop. On mobile, they can also enter the 6-digit code at the end of onboarding.
+            </p>
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-zinc-600">Generate a fresh invitation for this creator.</p>
+        )}
+
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>Close</Button>
+          <Button disabled={creating} onClick={onCreate}>
+            {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {invite ? "Generate new link" : "Generate invitation"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminInfluencers() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -30,6 +100,9 @@ export default function AdminInfluencers() {
   const [form, setForm] = useState(emptyForm);
   const [creating, setCreating] = useState(false);
   const [grantingId, setGrantingId] = useState(null);
+  const [inviteTarget, setInviteTarget] = useState(null);
+  const [inviteData, setInviteData] = useState(null);
+  const [inviteCreating, setInviteCreating] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -87,10 +160,30 @@ export default function AdminInfluencers() {
     }
   };
 
+  const openInviteModal = (row) => {
+    setInviteTarget(row);
+    setInviteData(row.latest_invite_code ? { code: row.latest_invite_code } : null);
+  };
+
+  const createInvite = async () => {
+    if (!inviteTarget?.influencer_id) return;
+    setInviteCreating(true);
+    try {
+      const { data } = await api.post(`/admin/influencers/${inviteTarget.influencer_id}/invite`, {});
+      setInviteData(data.invitation || { code: data.code });
+      toast.success("Invitation link created");
+      await load();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Could not create invitation");
+    } finally {
+      setInviteCreating(false);
+    }
+  };
+
   return (
     <AdminShell
       title="Influencers"
-      subtitle="Track creators and grant demo accounts for screen recordings."
+      subtitle="Track creators, send training invitations, and grant demo accounts for screen recordings."
       actions={(
         <Button variant="outline" onClick={load} disabled={loading}>
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
@@ -149,7 +242,7 @@ export default function AdminInfluencers() {
           </section>
 
           <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
-            <table className="w-full min-w-[960px] text-left text-sm">
+            <table className="w-full min-w-[1080px] text-left text-sm">
               <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
                 <tr>
                   <th className="px-4 py-3">Creator</th>
@@ -157,7 +250,7 @@ export default function AdminInfluencers() {
                   <th className="px-4 py-3">Hirly account</th>
                   <th className="px-4 py-3">Demo</th>
                   <th className="px-4 py-3">Updated</th>
-                  <th className="px-4 py-3">Action</th>
+                  <th className="px-4 py-3">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
@@ -183,14 +276,20 @@ export default function AdminInfluencers() {
                     </td>
                     <td className="px-4 py-3 text-zinc-500">{fmtDate(row.updated_at)}</td>
                     <td className="px-4 py-3">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={grantingId === row.influencer_id || row.linked_demo_account}
-                        onClick={() => grantDemo(row.influencer_id)}
-                      >
-                        {grantingId === row.influencer_id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Grant demo"}
-                      </Button>
+                      <div className="flex flex-wrap gap-2">
+                        <Button size="sm" variant="default" onClick={() => openInviteModal(row)}>
+                          <Link2 className="h-4 w-4" />
+                          Invite
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={grantingId === row.influencer_id || row.linked_demo_account}
+                          onClick={() => grantDemo(row.influencer_id)}
+                        >
+                          {grantingId === row.influencer_id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Grant demo"}
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 )) : (
@@ -201,6 +300,18 @@ export default function AdminInfluencers() {
           </div>
         </div>
       )}
+
+      <InviteModal
+        open={Boolean(inviteTarget)}
+        onClose={() => {
+          setInviteTarget(null);
+          setInviteData(null);
+        }}
+        influencer={inviteTarget}
+        invite={inviteData}
+        creating={inviteCreating}
+        onCreate={createInvite}
+      />
     </AdminShell>
   );
 }

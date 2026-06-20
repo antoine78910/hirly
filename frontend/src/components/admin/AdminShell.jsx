@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { BarChart3, ClipboardList, LayoutDashboard, Megaphone, Users, GraduationCap } from "lucide-react";
+import { BarChart3, BookOpen, ClipboardList, LayoutDashboard, Megaphone, Users, GraduationCap } from "lucide-react";
 import { BRAND } from "../../lib/brand";
 import { trackEvent } from "../../lib/analytics";
 
@@ -10,6 +10,7 @@ const navItems = [
   { to: "/admin/users", label: "Users", icon: Users },
   { to: "/admin/influencers", label: "Influencers", icon: Megaphone },
   { to: "/admin/creators", label: "Creators", icon: GraduationCap },
+  { to: "/admin/training", label: "Training", icon: BookOpen },
   { to: "/admin/analytics", label: "Analytics", icon: BarChart3 },
 ];
 

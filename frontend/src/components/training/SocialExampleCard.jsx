@@ -1,9 +1,11 @@
-import { useCallback, useMemo, useState } from "react";
-import { ExternalLink, Instagram, Music2, Volume2 } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { ExternalLink, Instagram, Pause, Play, Volume2, VolumeX } from "lucide-react";
 import {
+  embedFrameClassName,
   embedSrcFor,
   parseSocialUrl,
   platformLabels,
+  postTikTokPlayerMessage,
 } from "../../lib/socialExampleUtils";
 
 function TikTokIcon({ className }) {
@@ -30,46 +32,100 @@ function platformAccent(platform) {
 export default function SocialExampleCard({ label, url, lang = "en" }) {
   const labels = platformLabels(lang);
   const parsed = useMemo(() => parseSocialUrl(url), [url]);
+  const iframeRef = useRef(null);
+  const instagramSrcRef = useRef(null);
+
   const [hovered, setHovered] = useState(false);
   const [withSound, setWithSound] = useState(false);
-  const [embedKey, setEmbedKey] = useState(0);
+  const [paused, setPaused] = useState(false);
 
-  const showEmbed = Boolean(parsed?.embedUrl && (hovered || withSound));
+  const showEmbed = Boolean(parsed?.embedUrl && (hovered || withSound || paused));
   const embedSrc = useMemo(
-    () => embedSrcFor(parsed, { muted: !withSound, autoplay: showEmbed }),
-    [parsed, withSound, showEmbed],
+    () => embedSrcFor(parsed, { muted: true, autoplay: true }),
+    [parsed],
   );
 
-  const enableSound = useCallback((event) => {
-    event.preventDefault();
-    event.stopPropagation();
+  const keepPreviewOpen = withSound || paused;
+
+  const togglePause = useCallback(
+    (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const iframe = iframeRef.current;
+      if (!iframe || !parsed?.embedUrl) return;
+
+      const nextPaused = !paused;
+      if (parsed.platform === "tiktok") {
+        postTikTokPlayerMessage(iframe, nextPaused ? "pause" : "play");
+      } else if (parsed.platform === "instagram") {
+        if (nextPaused) {
+          instagramSrcRef.current = iframe.src;
+          iframe.src = "about:blank";
+        } else {
+          iframe.src = instagramSrcRef.current || embedSrc;
+        }
+      }
+      setPaused(nextPaused);
+    },
+    [parsed, paused, embedSrc],
+  );
+
+  const toggleSound = useCallback(
+    (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const iframe = iframeRef.current;
+      if (!iframe || !parsed?.embedUrl) return;
+
+      const nextWithSound = !withSound;
+      if (parsed.platform === "tiktok") {
+        if (nextWithSound) {
+          iframe.src = embedSrcFor(parsed, { muted: false, autoplay: true });
+          setPaused(false);
+        } else {
+          postTikTokPlayerMessage(iframe, "mute");
+        }
+      } else if (parsed.platform === "instagram") {
+        const src = instagramSrcRef.current || embedSrc;
+        instagramSrcRef.current = src;
+        iframe.src = "about:blank";
+        iframe.src = src;
+        if (paused) setPaused(false);
+      }
+      setWithSound(nextWithSound);
+    },
+    [parsed, withSound, paused, embedSrc],
+  );
+
+  const activatePreview = useCallback(() => {
     if (!parsed?.embedUrl) return;
-    setWithSound(true);
-    setEmbedKey((k) => k + 1);
+    setHovered(true);
   }, [parsed?.embedUrl]);
 
-  const handlePreviewTap = useCallback(() => {
-    if (!parsed?.embedUrl) return;
-    if (!hovered) {
-      setHovered(true);
-      return;
-    }
-    if (!withSound) {
-      setWithSound(true);
-      setEmbedKey((k) => k + 1);
-    }
-  }, [parsed?.embedUrl, hovered, withSound]);
+  const handlePreviewTap = useCallback(
+    (event) => {
+      if (!parsed?.embedUrl) return;
+      if (!showEmbed) {
+        activatePreview();
+        return;
+      }
+      togglePause(event);
+    },
+    [parsed?.embedUrl, showEmbed, activatePreview, togglePause],
+  );
 
   const platformName = labels[parsed?.platform] || labels.link;
 
   return (
     <article
       className={`group flex flex-col overflow-hidden rounded-xl border bg-white shadow-sm transition-shadow ${
-        withSound ? "border-violet-400 ring-2 ring-violet-200" : "border-zinc-200 hover:border-violet-300 hover:shadow-md"
+        keepPreviewOpen
+          ? "border-violet-400 ring-2 ring-violet-200"
+          : "border-zinc-200 hover:border-violet-300 hover:shadow-md"
       }`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => {
-        if (!withSound) setHovered(false);
+        if (!keepPreviewOpen) setHovered(false);
       }}
     >
       <div
@@ -80,21 +136,53 @@ export default function SocialExampleCard({ label, url, lang = "en" }) {
         onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
-            handlePreviewTap();
+            handlePreviewTap(event);
           }
         }}
         aria-label={`${label} — ${parsed?.embedUrl ? labels.tapPreview : labels.previewUnavailable}`}
       >
         {showEmbed && embedSrc ? (
-          <iframe
-            key={embedKey}
-            title={label}
-            src={embedSrc}
-            className="absolute inset-0 h-full w-full border-0"
-            allow="autoplay; encrypted-media; picture-in-picture"
-            allowFullScreen
-            loading="lazy"
-          />
+          <div className="absolute inset-0 overflow-hidden bg-black">
+            <iframe
+              ref={iframeRef}
+              title={label}
+              src={embedSrc}
+              className={embedFrameClassName(parsed?.platform)}
+              allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+              allowFullScreen
+              loading="lazy"
+            />
+
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-3 pt-10">
+              <button
+                type="button"
+                onClick={togglePause}
+                className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm transition hover:bg-black/85"
+                aria-label={paused ? labels.play : labels.pause}
+              >
+                {paused ? (
+                  <Play className="h-3.5 w-3.5" aria-hidden />
+                ) : (
+                  <Pause className="h-3.5 w-3.5" aria-hidden />
+                )}
+                {paused ? labels.play : labels.pause}
+              </button>
+
+              <button
+                type="button"
+                onClick={toggleSound}
+                className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm transition hover:bg-black/85"
+                aria-label={withSound ? labels.soundOff : labels.soundOn}
+              >
+                {withSound ? (
+                  <Volume2 className="h-3.5 w-3.5" aria-hidden />
+                ) : (
+                  <VolumeX className="h-3.5 w-3.5" aria-hidden />
+                )}
+                {withSound ? labels.soundOn : labels.clickSound}
+              </button>
+            </div>
+          </div>
         ) : (
           <div
             className={`absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br ${platformAccent(parsed?.platform)} px-4 text-center text-white`}
@@ -110,22 +198,12 @@ export default function SocialExampleCard({ label, url, lang = "en" }) {
           </div>
         )}
 
-        {showEmbed && parsed?.embedUrl && !withSound ? (
-          <button
-            type="button"
-            onClick={enableSound}
-            className="absolute bottom-3 right-3 inline-flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm transition hover:bg-black/85"
-          >
-            <Volume2 className="h-3.5 w-3.5" aria-hidden />
-            {labels.clickSound}
-          </button>
-        ) : null}
-
-        {withSound ? (
-          <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-violet-600/90 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
-            <Music2 className="h-3 w-3" aria-hidden />
-            ON
-          </span>
+        {showEmbed && paused ? (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/35">
+            <span className="rounded-full bg-black/60 p-3 text-white">
+              <Play className="h-8 w-8" aria-hidden />
+            </span>
+          </div>
         ) : null}
       </div>
 

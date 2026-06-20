@@ -132,7 +132,7 @@ export default function Landing() {
               </div>
               <div className="flex flex-wrap gap-2 mb-4">
                 <span className="text-xs font-medium px-2 py-1 rounded-full bg-zinc-100 text-zinc-700">Remote</span>
-                <span className="text-xs font-medium px-2 py-1 rounded-full bg-zinc-100 text-zinc-700">$140k–$200k</span>
+                <span className="text-xs font-medium px-2 py-1 rounded-full bg-zinc-100 text-zinc-700">€140k–€200k</span>
                 <span className="text-xs font-medium px-2 py-1 rounded-full bg-zinc-100 text-zinc-700">TypeScript</span>
               </div>
               <ul className="text-sm text-zinc-600 space-y-1.5">

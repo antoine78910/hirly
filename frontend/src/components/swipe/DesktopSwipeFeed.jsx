@@ -4,7 +4,6 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   Bell,
   Briefcase,
-  ChevronDown,
   ExternalLink,
   FileText,
   Flag,
@@ -19,6 +18,7 @@ import {
   MapPin,
 } from "lucide-react";
 import DesktopCreditsPill from "../desktop/DesktopCreditsPill";
+import DesktopAccountMenu from "../desktop/DesktopAccountMenu";
 import DesktopFiltersMenu from "../desktop/DesktopFiltersMenu";
 import DesktopJobCard from "./DesktopJobCard";
 import PlacesAutocomplete from "../PlacesAutocomplete";
@@ -26,7 +26,6 @@ import RoleAutocomplete from "../RoleAutocomplete";
 import { SUGGESTED_ONBOARDING_LOCATIONS } from "../onboarding/onboardingData";
 import { rankLocationSuggestions } from "../../lib/locationSearch";
 import { jobExternalUrl } from "../../lib/jobDisplayUtils";
-import { useAuth } from "../../context/AuthContext";
 import { useAppLocale } from "../../context/AppLocaleContext";
 import { getDesktopNavItems } from "../desktop/desktopNav";
 import {
@@ -68,7 +67,6 @@ export default function DesktopSwipeFeed({
 }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { user } = useAuth();
   const { t } = useAppLocale();
   const navItems = getDesktopNavItems(t);
   const [themeMode, setThemeMode] = useState(readDesktopTheme);
@@ -232,14 +230,9 @@ export default function DesktopSwipeFeed({
   return (
     <div className={`flex h-dvh ${theme.root}`} data-testid="desktop-swipe-feed" data-theme={themeMode}>
       <aside className={`flex w-56 shrink-0 flex-col border-r px-3 py-4 lg:w-60 ${theme.sidebar}`}>
-        <button
-          type="button"
-          onClick={() => navigate("/profile")}
-          className={`flex items-center gap-2 rounded-lg px-2 py-2 text-left text-sm ${theme.accountBtn}`}
-        >
-          <span className="truncate font-medium">{user?.email || t("common.account")}</span>
-          <ChevronDown className="ml-auto h-4 w-4 shrink-0 text-zinc-400" />
-        </button>
+        <DesktopAccountMenu
+          triggerClassName={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm ${theme.accountBtn}`}
+        />
 
         <p className={`mt-6 px-2 text-[11px] font-semibold uppercase tracking-wider ${theme.sectionLabel}`}>{t("common.platform")}</p>
         <nav className="mt-2 flex flex-col gap-0.5">
@@ -250,13 +243,13 @@ export default function DesktopSwipeFeed({
               end={end}
               className={({ isActive }) => {
                 const active = isActive || (to === "/swipe" && pathname === "/app");
-                return `flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors ${
+                return `flex min-w-0 items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors ${
                   active ? theme.navActive : theme.navIdle
                 }`;
               }}
             >
               <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
-              {label}
+              <span className="min-w-0 truncate">{label}</span>
             </NavLink>
           ))}
         </nav>

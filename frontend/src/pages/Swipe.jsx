@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import Logo from "../components/Logo";
+import CompanyLogo from "../components/CompanyLogo";
 import FiltersModal from "../components/FiltersModal";
 import TargetSearchSheet from "../components/TargetSearchSheet";
 import ReportJobSheet from "../components/ReportJobSheet";
@@ -141,7 +142,10 @@ function MobileCardContent({ job, onReport, onShare, actionsEnabled, t }) {
           >
             {job.title}
           </h2>
-          <p className="mt-1 text-lg font-semibold text-white">{job.company}</p>
+          <div className="mt-3 flex items-center gap-3">
+            <CompanyLogo company={job.company} size="lg" rounded="2xl" className="shrink-0" />
+            <p className="min-w-0 text-lg font-semibold leading-snug text-white">{job.company}</p>
+          </div>
         </div>
 
         <div className="flex flex-col gap-1.5 text-[15px] text-sprout-muted">

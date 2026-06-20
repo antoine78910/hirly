@@ -1,5 +1,27 @@
 """Structured doc content for training modules (Notion-style blocks)."""
 
+POSTING_HOURS_EN = [
+    {"type": "heading", "level": 2, "text": "Best Posting (US)"},
+    {"type": "paragraph", "text": "Post only during:"},
+    {"type": "list", "style": "bullet", "items": [
+        "7–9 AM ET",
+        "11 AM–1 PM ET",
+        "6–9 PM ET",
+    ]},
+    {"type": "paragraph", "text": "Avoid posting during US sleeping hours or random timezone posting."},
+]
+
+POSTING_HOURS_FR = [
+    {"type": "heading", "level": 2, "text": "Meilleurs horaires de publication (France — CET/CEST)"},
+    {"type": "paragraph", "text": "Poste uniquement pendant :"},
+    {"type": "list", "style": "bullet", "items": [
+        "7h–9h (heure de Paris)",
+        "12h–14h",
+        "19h–22h",
+    ]},
+    {"type": "paragraph", "text": "Évite de poster la nuit ou en simulant le fuseau US (ET/PT). Cible ton audience en France et en francophonie — pas les États-Unis."},
+]
+
 WARM_UP_PLAYBOOK_EN = [
     {
         "type": "callout",
@@ -123,14 +145,7 @@ WARM_UP_PLAYBOOK_EN = [
     {"type": "paragraph", "text": "Do not judge from 1 video only."},
     {"type": "heading", "level": 2, "text": "Golden Rule"},
     {"type": "paragraph", "text": "Warmup is not about views. Warmup is about trust, audience alignment, stable reach, and long-term scaling. Rush the process = dead accounts."},
-    {"type": "heading", "level": 2, "text": "Best Posting (US)"},
-    {"type": "paragraph", "text": "Post only during:"},
-    {"type": "list", "style": "bullet", "items": [
-        "7–9 AM ET",
-        "11 AM–1 PM ET",
-        "6–9 PM ET",
-    ]},
-    {"type": "paragraph", "text": "Avoid posting during US sleeping hours or random timezone posting."},
+    *POSTING_HOURS_EN,
     {"type": "heading", "level": 2, "text": "Warmup Killers"},
     {"type": "list", "style": "bullet", "items": [
         "posting immediately",
@@ -151,7 +166,7 @@ WARM_UP_PLAYBOOK_FR = [
         "text": "Avant de publier — si tu viens de créer ton compte, suis ces règles attentivement.",
     },
     {"type": "heading", "level": 1, "text": "SOP Warmup TikTok / IG"},
-    {"type": "paragraph", "text": "Pour les comptes contenu recherche d'emploi, carrière & entretiens"},
+    {"type": "paragraph", "text": "Pour les comptes contenu emploi, carrière & entretiens (marché francophone — France)"},
     {"type": "heading", "level": 2, "text": "Pourquoi le warmup compte"},
     {"type": "paragraph", "text": "Les nouveaux comptes n'ont pas :"},
     {"type": "list", "style": "bullet", "items": [
@@ -169,7 +184,7 @@ WARM_UP_PLAYBOOK_FR = [
     {
         "type": "callout",
         "variant": "info",
-        "text": "Objectif = montrer à TikTok/IG un vrai compte US intéressé par : recherche d'emploi, carrière, entretiens, CV, LinkedIn, recrutement.",
+        "text": "Objectif = montrer à TikTok/IG un vrai compte basé en France intéressé par : emploi, carrière, entretiens, CV, alternance, stage, LinkedIn et recrutement — en français.",
     },
     {"type": "heading", "level": 2, "text": "Phase 0 — Mode lurker (Jours 1–2)"},
     {"type": "heading", "level": 3, "text": "Jour 1"},
@@ -179,11 +194,12 @@ WARM_UP_PLAYBOOK_FR = [
         "NE PAS follow en masse.",
         "NE PAS modifier le profil en boucle.",
     ]},
-    {"type": "paragraph", "text": "Recherche manuelle : job market, resume tips, interview tips, career advice, remote jobs, recruitment, etc."},
-    {"type": "paragraph", "text": "30–45 min au total, en plusieurs sessions. Interagis uniquement avec créateurs US et contenu carrière en anglais."},
+    {"type": "paragraph", "text": "Recherche manuelle (en français) : marché de l'emploi, conseils CV, entretien d'embauche, conseils carrière, alternance, stage, télétravail, recrutement, etc."},
+    {"type": "paragraph", "text": "30–45 min au total, en plusieurs sessions. Interagis uniquement avec créateurs francophones et contenu carrière en français (France, Belgique, Suisse, Canada FR)."},
     {"type": "heading", "level": 2, "text": "Phase 1 — Entraîner l'algorithme (Jours 3–5)"},
-    {"type": "paragraph", "text": "Toujours pas de publication. Cherche chaque jour : job search tips, resume advice, linkedin profile, interview prep, salary negotiation, ATS resume…"},
+    {"type": "paragraph", "text": "Toujours pas de publication. Cherche chaque jour (en français) : conseils recherche emploi, conseils CV, profil LinkedIn, préparation entretien, négociation salaire, CV ATS…"},
     {"type": "paragraph", "text": "30–60 min/jour. 1–3 commentaires max par session, naturels et pertinents."},
+    {"type": "paragraph", "text": "Hashtags recommandés : #emploi #job #entretien #alternance #stage #travail #carriere #cv #rechercheemploi #conseilscarriere #jobsearch #emploifrance #tipsemploi (+ #aihirlyai pour le suivi)."},
     {"type": "heading", "level": 2, "text": "Phase 2 — Publication contrôlée (Jour 5+)"},
     {"type": "list", "style": "bullet", "items": [
         "Jour 5 : 1 vidéo",
@@ -198,14 +214,13 @@ WARM_UP_PLAYBOOK_FR = [
     ]},
     {"type": "heading", "level": 2, "text": "Règle d'or"},
     {"type": "paragraph", "text": "Le warmup, ce n'est pas les vues. C'est la confiance, l'alignement audience et une portée stable. Brûler les étapes = comptes morts."},
-    {"type": "heading", "level": 2, "text": "Meilleurs horaires (US)"},
-    {"type": "list", "style": "bullet", "items": ["7–9h ET", "11h–13h ET", "18h–21h ET"]},
+    *POSTING_HOURS_FR,
     {"type": "heading", "level": 2, "text": "Ce qui tue le warmup"},
     {"type": "list", "style": "bullet", "items": [
         "publier immédiatement",
         "scroll multi-niches",
         "follow spam",
-        "changer GEO/IP",
+        "changer GEO/IP pour simuler les US",
         "modifier la bio en boucle",
         "10 vidéos/jour d'un coup",
         "contenu copié",
@@ -310,6 +325,7 @@ HIRLY_IN_VIDEOS_EN = [
 FILMING_PLAYBOOK_FR = [
     {"type": "heading", "level": 1, "text": "Bonnes pratiques face caméra"},
     {"type": "paragraph", "text": "Points essentiels : hook en 3 secondes, ton naturel, expressions exagérées, rythme rapide, vidéos courtes (7–60 s), cadrage varié, sous-titres courts centrés."},
+    *POSTING_HOURS_FR,
 ]
 
 HIRLY_IN_VIDEOS_FR = [

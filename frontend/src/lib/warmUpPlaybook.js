@@ -1,5 +1,7 @@
 /** Warm Up SOP doc blocks (EN + FR). */
 
+import { postingHoursBlocks } from "./trainingPostingHours";
+
 export const WARM_UP_PLAYBOOK_EN = [
   {
     type: "callout",
@@ -142,6 +144,25 @@ export const WARM_UP_PLAYBOOK_EN = [
     type: "paragraph",
     text: "Dead accounts usually only post, never browse, or spam upload.",
   },
+  { type: "heading", level: 2, text: "Ongoing Account Management (After Warmup)" },
+  {
+    type: "paragraph",
+    text: "Once warmup is done and you've posted your first videos, keep behaving like a normal user. Minimum daily activity is still required.",
+  },
+  {
+    type: "list",
+    style: "bullet",
+    items: [
+      "Posting: 1–2 posts/day per account (baseline).",
+      "Scrolling: 2–3 sessions/day, 10–15 min each.",
+      "A few likes, natural comments, very few follows.",
+    ],
+  },
+  {
+    type: "callout",
+    variant: "info",
+    text: "After warmup: post + human activity every day. Avoid opening the app only to publish, then closing it for weeks.",
+  },
   { type: "heading", level: 2, text: "Healthy Account Signals" },
   {
     type: "list",
@@ -158,17 +179,7 @@ export const WARM_UP_PLAYBOOK_EN = [
     type: "paragraph",
     text: "Warmup is not about views. Warmup is about trust, audience alignment, stable reach, and long-term scaling. Rush the process = dead accounts.",
   },
-  { type: "heading", level: 2, text: "Best Posting (US)" },
-  { type: "paragraph", text: "Post only during:" },
-  {
-    type: "list",
-    style: "bullet",
-    items: ["7–9 AM ET", "11 AM–1 PM ET", "6–9 PM ET"],
-  },
-  {
-    type: "paragraph",
-    text: "Avoid posting during US sleeping hours or random timezone posting.",
-  },
+  ...postingHoursBlocks("en"),
   { type: "heading", level: 2, text: "Warmup Killers" },
   {
     type: "list",
@@ -193,7 +204,7 @@ export const WARM_UP_PLAYBOOK_FR = [
     text: "Avant de publier — si tu viens de créer ton compte, suis ces règles attentivement.",
   },
   { type: "heading", level: 1, text: "SOP Warmup TikTok / IG" },
-  { type: "paragraph", text: "Pour les comptes contenu recherche d'emploi, carrière & entretiens" },
+  { type: "paragraph", text: "Pour les comptes contenu emploi, carrière & entretiens (marché francophone — France)" },
   { type: "heading", level: 2, text: "Pourquoi le warmup compte" },
   { type: "paragraph", text: "Les nouveaux comptes n'ont pas :" },
   {
@@ -210,7 +221,7 @@ export const WARM_UP_PLAYBOOK_FR = [
   {
     type: "callout",
     variant: "info",
-    text: "Objectif = montrer à TikTok/IG un vrai compte US intéressé par : recherche d'emploi, carrière, entretiens, CV, LinkedIn, recrutement.",
+    text: "Objectif = montrer à TikTok/IG un vrai compte basé en France intéressé par : emploi, carrière, entretiens, CV, alternance, stage, LinkedIn et recrutement — en français.",
   },
   { type: "heading", level: 2, text: "Phase 0 — Mode lurker (Jours 1–2)" },
   { type: "heading", level: 3, text: "Jour 1" },
@@ -226,23 +237,50 @@ export const WARM_UP_PLAYBOOK_FR = [
   },
   {
     type: "paragraph",
-    text: "Recherche manuelle : job market, resume tips, interview tips, career advice, remote jobs, recruitment, etc.",
+    text: "Recherche manuelle (en français) : marché de l'emploi, conseils CV, entretien d'embauche, conseils carrière, alternance, stage, télétravail, recrutement, etc.",
   },
   {
     type: "paragraph",
-    text: "30–45 min au total, en plusieurs sessions. Interagis uniquement avec créateurs US et contenu carrière en anglais.",
+    text: "30–45 min au total, en plusieurs sessions. Interagis uniquement avec créateurs francophones et contenu carrière en français (France, Belgique, Suisse, Canada FR).",
   },
   { type: "heading", level: 2, text: "Phase 1 — Entraîner l'algorithme (Jours 3–5)" },
   {
     type: "paragraph",
-    text: "Toujours pas de publication. Cherche chaque jour : job search tips, resume advice, linkedin profile, interview prep, salary negotiation, ATS resume…",
+    text: "Toujours pas de publication. Cherche chaque jour (en français) : conseils recherche emploi, conseils CV, profil LinkedIn, préparation entretien, négociation salaire, CV ATS…",
   },
   { type: "paragraph", text: "30–60 min/jour. 1–3 commentaires max par session, naturels et pertinents." },
+  {
+    type: "paragraph",
+    text: "Hashtags recommandés : #emploi #job #entretien #alternance #stage #travail #carriere #cv #rechercheemploi #conseilscarriere #jobsearch #emploifrance #tipsemploi (+ #aihirlyai pour le suivi).",
+  },
   { type: "heading", level: 2, text: "Phase 2 — Publication contrôlée (Jour 5+)" },
   {
     type: "list",
     style: "bullet",
     items: ["Jour 5 : 1 vidéo", "Jour 6 : 2 vidéos", "Jour 7+ : 2–4 posts/jour max"],
+  },
+  {
+    type: "paragraph",
+    text: "Les comptes morts ne font que publier sans jamais scroller, ou spamment les uploads.",
+  },
+  { type: "heading", level: 2, text: "Gestion du compte (après warmup)" },
+  {
+    type: "paragraph",
+    text: "Une fois le warmup terminé et les premières vidéos postées, continue à te comporter comme un utilisateur normal. Une activité quotidienne minimale reste nécessaire.",
+  },
+  {
+    type: "list",
+    style: "bullet",
+    items: [
+      "Publication : 1 à 2 posts/jour par compte (rythme de base).",
+      "Scroll : 2 à 3 sessions/jour, 10 à 15 min chacune.",
+      "Quelques likes, commentaires naturels, très peu de follows.",
+    ],
+  },
+  {
+    type: "callout",
+    variant: "info",
+    text: "Après warmup : poster + activité humaine chaque jour. À éviter : n'ouvrir l'app que pour publier puis la fermer pendant des semaines.",
   },
   { type: "heading", level: 2, text: "Signaux de compte sain" },
   {
@@ -259,12 +297,7 @@ export const WARM_UP_PLAYBOOK_FR = [
     type: "paragraph",
     text: "Le warmup, ce n'est pas les vues. C'est la confiance, l'alignement audience et une portée stable. Brûler les étapes = comptes morts.",
   },
-  { type: "heading", level: 2, text: "Meilleurs horaires (US)" },
-  {
-    type: "list",
-    style: "bullet",
-    items: ["7–9h ET", "11h–13h ET", "18h–21h ET"],
-  },
+  ...postingHoursBlocks("fr"),
   { type: "heading", level: 2, text: "Ce qui tue le warmup" },
   {
     type: "list",
@@ -273,7 +306,7 @@ export const WARM_UP_PLAYBOOK_FR = [
       "publier immédiatement",
       "scroll multi-niches",
       "follow spam",
-      "changer GEO/IP",
+      "changer GEO/IP pour simuler les US",
       "modifier la bio en boucle",
       "10 vidéos/jour d'un coup",
       "contenu copié",

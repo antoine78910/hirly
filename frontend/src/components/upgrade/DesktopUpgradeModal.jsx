@@ -20,6 +20,7 @@ import { api } from "@/lib/api";
 import Logo from "@/components/Logo";
 import { useAppLocale } from "@/context/AppLocaleContext";
 import { getUpgradeContent } from "@/lib/appUi";
+import { formatMoney } from "@/lib/currency";
 import {
   SUBSCRIPTION_TIERS,
 } from "@/lib/subscriptionTiers";
@@ -45,7 +46,7 @@ function FeatureItem({ title, description, icon, roundIcon = true }) {
   );
 }
 
-function TierCard({ tier, selected, onSelect, isMonthly, t }) {
+function TierCard({ tier, selected, onSelect, isMonthly, t, lang }) {
   const price = isMonthly ? tier.monthlyPrice : tier.weeklyPrice;
   const period = isMonthly ? t("upgrade.perMonth") : t("upgrade.perWeek");
 
@@ -71,15 +72,17 @@ function TierCard({ tier, selected, onSelect, isMonthly, t }) {
       ) : null}
       <div className="space-y-0.5 sm:space-y-1">
         <div className="text-xs font-medium uppercase tracking-wide text-linkedin">{tier.name}</div>
-        <div className="text-xl font-bold sm:text-2xl">${price.toFixed(2)}</div>
+        <div className="text-xl font-bold sm:text-2xl">{formatMoney(price, lang)}</div>
         <div className="text-xs text-muted-foreground">{period}</div>
-        <div className="text-xs font-medium sm:text-sm">{t("upgrade.applications", { n: tier.applications })}</div>
+        <div className="text-[11px] font-medium leading-tight [overflow-wrap:anywhere] sm:text-xs">
+          {t("upgrade.applications", { n: tier.applications })}
+        </div>
       </div>
     </button>
   );
 }
 
-function PricingGrid({ isMonthly, selectedTier, onSelectTier, t }) {
+function PricingGrid({ isMonthly, selectedTier, onSelectTier, t, lang }) {
   return (
     <div
       role="radiogroup"
@@ -93,6 +96,7 @@ function PricingGrid({ isMonthly, selectedTier, onSelectTier, t }) {
           onSelect={() => onSelectTier(tier.id)}
           isMonthly={isMonthly}
           t={t}
+          lang={lang}
         />
       ))}
     </div>
@@ -100,7 +104,7 @@ function PricingGrid({ isMonthly, selectedTier, onSelectTier, t }) {
 }
 
 export default function DesktopUpgradeModal({ open, onClose }) {
-  const { t } = useAppLocale();
+  const { t, lang } = useAppLocale();
   const { features: UPGRADE_FEATURES, stats: UPGRADE_STATS, benefits: UPGRADE_BENEFITS } = getUpgradeContent(t);
   const [billingInterval, setBillingInterval] = useState("monthly");
   const [selectedTier, setSelectedTier] = useState("ultra");
@@ -151,11 +155,13 @@ export default function DesktopUpgradeModal({ open, onClose }) {
                 ))}
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-2">
               {UPGRADE_STATS.map((stat) => (
-                <div key={stat.label} className="rounded-lg border bg-background/80 p-3 text-center">
-                  <div className="text-lg font-bold text-linkedin">{stat.value}</div>
-                  <div className="text-xs text-muted-foreground">{stat.label}</div>
+                <div key={stat.label} className="min-w-0 rounded-lg border bg-background/80 px-1 py-2.5 text-center sm:px-2 sm:py-3">
+                  <div className="text-base font-bold leading-none text-linkedin sm:text-lg">{stat.value}</div>
+                  <div className="mt-1 text-[10px] leading-tight text-muted-foreground [overflow-wrap:anywhere] sm:text-xs">
+                    {stat.label}
+                  </div>
                 </div>
               ))}
             </div>
@@ -184,11 +190,11 @@ export default function DesktopUpgradeModal({ open, onClose }) {
                     <span className="absolute -top-3 left-1/4 z-10 -translate-x-1/2 whitespace-nowrap rounded-full border border-transparent bg-sprout-mint px-1.5 py-0.5 text-[10px] font-medium text-white">
                       {t("upgrade.save25")}
                     </span>
-                    <TabsList className="grid h-9 w-full min-w-80 grid-cols-2 rounded-lg bg-muted p-[3px]">
-                      <TabsTrigger value="monthly" className="h-[calc(100%-1px)] flex-1">
+                    <TabsList className="grid h-9 w-full min-w-0 max-w-full grid-cols-2 rounded-lg bg-muted p-[3px] sm:min-w-80">
+                      <TabsTrigger value="monthly" className="h-[calc(100%-1px)] min-w-0 flex-1 px-2 text-xs sm:text-sm">
                         {t("upgrade.monthly")}
                       </TabsTrigger>
-                      <TabsTrigger value="weekly" className="h-[calc(100%-1px)] flex-1">
+                      <TabsTrigger value="weekly" className="h-[calc(100%-1px)] min-w-0 flex-1 px-2 text-xs sm:text-sm">
                         {t("upgrade.weekly")}
                       </TabsTrigger>
                     </TabsList>
@@ -201,6 +207,7 @@ export default function DesktopUpgradeModal({ open, onClose }) {
                     selectedTier={selectedTier}
                     onSelectTier={setSelectedTier}
                     t={t}
+                    lang={lang}
                   />
                 </TabsContent>
                 <TabsContent value="weekly" className="mt-4 outline-none sm:mt-6">
@@ -209,6 +216,7 @@ export default function DesktopUpgradeModal({ open, onClose }) {
                     selectedTier={selectedTier}
                     onSelectTier={setSelectedTier}
                     t={t}
+                    lang={lang}
                   />
                 </TabsContent>
               </Tabs>
@@ -241,11 +249,11 @@ export default function DesktopUpgradeModal({ open, onClose }) {
                   {t("upgrade.cta")}
                 </button>
 
-                <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground sm:text-sm">
+                <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground sm:gap-x-4 sm:text-xs">
                   {[t("upgrade.cancelAnytime"), t("upgrade.securePayments"), t("upgrade.instantAccess")].map((label) => (
-                    <span key={label} className="flex items-center gap-1">
+                    <span key={label} className="flex max-w-full min-w-0 items-center gap-1 text-center leading-tight">
                       <Check className="size-3 shrink-0 text-linkedin sm:size-4" aria-hidden />
-                      {label}
+                      <span className="[overflow-wrap:anywhere]">{label}</span>
                     </span>
                   ))}
                 </div>

@@ -1,5 +1,7 @@
 /** Creating Content sub-chapters (mirrors backend training_module_content.py). */
 
+import { postingHoursBlocks } from "./trainingPostingHours";
+
 export const CREATING_CONTENT_SECTIONS_EN = [
   {
     section_id: "sec_cc_filming",
@@ -254,6 +256,7 @@ export const CREATING_CONTENT_SECTIONS_FR = [
           "Place les sous-titres centrés, pas sur les bords",
         ],
       },
+      ...postingHoursBlocks("fr"),
     ],
   },
   {

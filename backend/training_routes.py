@@ -30,6 +30,15 @@ class LeadUpdateBody(BaseModel):
     notes: Optional[str] = None
 
 
+class TrainingActivityBody(BaseModel):
+    module_id: str
+    section_id: Optional[str] = None
+
+
+class QuizSubmitBody(BaseModel):
+    answers: Dict[str, str] = Field(default_factory=dict)
+
+
 def register_training_routes(router: APIRouter, get_current_user, db) -> None:
     async def _require_creator(user):
         creator = await training.get_creator_by_user_id(db, user.user_id)
@@ -78,6 +87,29 @@ def register_training_routes(router: APIRouter, get_current_user, db) -> None:
     async def training_complete_module(course_id: str, module_id: str, user=Depends(get_current_user)):
         try:
             result = await training.complete_module(db, user.user_id, course_id, module_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"ok": True, **result}
+
+    @router.post("/training/courses/{course_id}/activity")
+    async def training_track_activity(course_id: str, body: TrainingActivityBody, user=Depends(get_current_user)):
+        try:
+            result = await training.track_activity(
+                db, user.user_id, course_id, body.module_id, body.section_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return {"ok": True, **result}
+
+    @router.post("/training/courses/{course_id}/quizzes/{quiz_id}/submit")
+    async def training_submit_quiz(
+        course_id: str,
+        quiz_id: str,
+        body: QuizSubmitBody,
+        user=Depends(get_current_user),
+    ):
+        try:
+            result = await training.submit_quiz(db, user.user_id, course_id, quiz_id, body.answers)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return {"ok": True, **result}
