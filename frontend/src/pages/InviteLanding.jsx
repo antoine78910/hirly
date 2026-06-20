@@ -79,7 +79,7 @@ export default function InviteLanding() {
       navigate("/training", { replace: true });
       return;
     }
-    await startGoogleLogin("/training");
+    navigate("/onboarding");
   };
 
   if (checking || redeeming || (user && !invalid)) {

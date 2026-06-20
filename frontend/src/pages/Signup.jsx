@@ -35,15 +35,26 @@ export default function Signup() {
   }, [mode]);
 
   useEffect(() => {
+    if (authLoading || user) return;
+    if (mode === "signup") {
+      navigate("/onboarding", { replace: true });
+    }
+  }, [authLoading, user, mode, navigate]);
+
+  useEffect(() => {
     if (authLoading || !user) return;
     navigate(hasProfile && hasPreferences ? "/swipe" : "/onboarding", { replace: true });
   }, [authLoading, user, hasProfile, hasPreferences, navigate]);
 
   const updateMode = (nextMode) => {
+    if (nextMode === "signup") {
+      navigate("/onboarding");
+      return;
+    }
     setMode(nextMode);
     setError("");
     setNotice("");
-    setSearchParams(nextMode === "login" ? { mode: "login" } : {});
+    setSearchParams({ mode: "login" });
   };
 
   const finishWithSupabaseSession = async (session) => {

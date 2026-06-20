@@ -33,7 +33,7 @@ export default function Landing() {
       return;
     }
     trackEvent("cta_signup_clicked", { location: "landing_start_swiping" });
-    navigate("/signup");
+    navigate("/onboarding");
   };
 
   return (
