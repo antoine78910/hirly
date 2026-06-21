@@ -9,6 +9,7 @@ import { startGoogleLogin } from "../lib/auth";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { trackEvent } from "../lib/analytics";
+import { preloadOnboardingIntroImages } from "../lib/onboardingImagePreload";
 
 export default function Landing() {
   const navigate = useNavigate();
@@ -18,6 +19,7 @@ export default function Landing() {
 
   useEffect(() => {
     trackEvent("landing_view");
+    preloadOnboardingIntroImages();
   }, []);
 
   const onSignIn = () => {

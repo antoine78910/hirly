@@ -53,7 +53,7 @@ import { devBypassAuth } from "../lib/dev";
 import { splitFullName } from "../lib/personalInfoOptions";
 import { ob } from "../components/onboarding/onboardingTheme";
 import { trackEvent } from "../lib/analytics";
-import { preloadOnboardingShowcaseImages } from "../lib/onboardingImagePreload";
+import { preloadOnboardingIntroImages, preloadOnboardingShowcaseImages } from "../lib/onboardingImagePreload";
 import { getPendingInviteCode, redeemCreatorInvite } from "../lib/creatorInvite";
 import { setDemoAccountFromUser } from "../lib/demoAccount";
 
@@ -127,6 +127,7 @@ export default function Onboarding() {
   const [redeemingCreatorCode, setRedeemingCreatorCode] = useState(false);
 
   useEffect(() => {
+    preloadOnboardingIntroImages();
     preloadOnboardingShowcaseImages();
   }, []);
 
@@ -469,7 +470,6 @@ export default function Onboarding() {
     goNext();
   };
 
-  const introSlide = INTRO_SLIDES[introIndex];
   const isLastIntroSlide = step === "intro" && introIndex === INTRO_SLIDES.length - 1;
   const hideFooter = parsing || step === "profileSetup" || (step === "signup" && !user);
 
@@ -553,25 +553,30 @@ export default function Onboarding() {
       <AnimatePresence mode="wait">
         {step === "intro" && (
           <div className={`${ob.step} items-center justify-center text-center`}>
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={introIndex}
-                variants={slideVariants}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                transition={{ duration: 0.28 }}
-                className="flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-5 sm:gap-6"
-              >
-                <div className="flex w-full shrink-0 items-center justify-center">
-                  <OnboardingIllustration src={introSlide.image} alt="" large />
-                </div>
-                <div className="mx-auto flex w-full max-w-md flex-col items-center gap-3 sm:gap-4">
-                  <h1 className={ob.introTitle}>{introSlide.title}</h1>
-                  <p className={ob.introBody}>{introSlide.body}</p>
-                </div>
-              </motion.div>
-            </AnimatePresence>
+            <div className="relative flex min-h-0 w-full flex-1 flex-col items-center justify-center">
+              {INTRO_SLIDES.map((slide, i) => {
+                const active = i === introIndex;
+                return (
+                  <div
+                    key={slide.id}
+                    className={`flex w-full flex-col items-center justify-center gap-5 sm:gap-6 transition-opacity duration-150 ease-out ${
+                      active
+                        ? "relative opacity-100"
+                        : "pointer-events-none absolute inset-0 opacity-0"
+                    }`}
+                    aria-hidden={!active}
+                  >
+                    <div className="flex w-full shrink-0 items-center justify-center">
+                      <OnboardingIllustration src={slide.image} alt="" large priority />
+                    </div>
+                    <div className="mx-auto flex w-full max-w-md flex-col items-center gap-3 sm:gap-4">
+                      <h1 className={ob.introTitle}>{slide.title}</h1>
+                      <p className={ob.introBody}>{slide.body}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
             <div className={ob.introDots} aria-hidden>
               {INTRO_SLIDES.map((_, i) => (
                 <motion.div
