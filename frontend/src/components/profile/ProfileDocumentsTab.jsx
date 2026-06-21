@@ -1,11 +1,14 @@
 import { useCallback, useRef, useState } from "react";
-import { Download, Eye, File, FileStack, FileText, Trash2, Upload } from "lucide-react";
+import { Eye, File, FileStack, FileText, Trash2, Upload, Download } from "lucide-react";
 import { toast } from "sonner";
 import { api, API, getSessionToken } from "../../lib/api";
 import { demoMode } from "../../lib/dev";
 import { useAppLocale } from "../../context/AppLocaleContext";
 import { formatUploadedDate } from "../../lib/appUi";
 import { Button } from "../ui/button";
+import ConfigureAiSettingsButton from "../settings/ConfigureAiSettingsButton";
+import ResumeCurrentPreview from "./ResumeCurrentPreview";
+import ResumeExamplePreview from "./ResumeExamplePreview";
 import ProfileFormSection from "./ProfileFormSection";
 
 const ACCEPTED_DOCUMENTS = ".pdf,.docx,.txt,.png,.jpg,.jpeg,.webp";
@@ -25,33 +28,6 @@ function DocumentEmptyState({ icon: Icon, title, description, actionLabel, onAct
         <Upload className="h-4 w-4" />
         {actionLabel}
       </Button>
-    </div>
-  );
-}
-
-function ResumeFileCard({ filename, onReplace, onDownload, testId }) {
-  const { t } = useAppLocale();
-
-  return (
-    <div
-      className="flex flex-wrap items-center gap-3 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-4"
-      data-testid={testId}
-    >
-      <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-violet-100">
-        <FileText className="h-5 w-5 text-linkedin" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-zinc-900">{filename}</p>
-        <p className="text-xs text-zinc-500">{t("profile.documents.resumeOnFile")}</p>
-      </div>
-      <div className="flex items-center gap-2">
-        <Button type="button" variant="outline" size="icon" onClick={onDownload} aria-label={t("profile.documents.downloadResume")}>
-          <Download className="h-4 w-4" />
-        </Button>
-        <Button type="button" variant="outline" onClick={onReplace}>
-          {t("profile.documents.replaceResume")}
-        </Button>
-      </div>
     </div>
   );
 }
@@ -210,23 +186,41 @@ export default function ProfileDocumentsTab({ profile, onUploadResume, onDocumen
       <ProfileFormSection
         title={t("profile.documents.resumeTitle")}
         description={t("profile.documents.resumeSectionDesc")}
+        footer={(
+          <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs leading-relaxed text-zinc-500">
+              {t("profile.documents.configureAiSettingsHint")}
+            </p>
+            <ConfigureAiSettingsButton className="shrink-0 sm:w-auto" testId="profile-resume-ai-settings-footer" />
+          </div>
+        )}
       >
         {hasResume ? (
-          <ResumeFileCard
-            filename={profile?.cv_filename || t("profile.documents.resumeFallbackName")}
-            onReplace={onUploadResume}
-            onDownload={downloadResume}
-            testId="profile-resume-card"
-          />
+          <div className="space-y-4">
+            <ResumeCurrentPreview profile={profile} active compact />
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" onClick={onUploadResume} data-testid="profile-resume-replace-btn">
+                <Upload className="h-4 w-4" />
+                {t("profile.documents.replaceResume")}
+              </Button>
+              <Button type="button" variant="outline" onClick={downloadResume} data-testid="profile-resume-download-btn">
+                <Download className="h-4 w-4" />
+                {t("profile.documents.downloadResume")}
+              </Button>
+            </div>
+          </div>
         ) : (
-          <DocumentEmptyState
-            icon={FileText}
-            title={t("profile.documents.noResume")}
-            description={t("profile.documents.noResumeDesc")}
-            actionLabel={t("profile.documents.uploadResume")}
-            onAction={onUploadResume}
-            testId="profile-upload-resume"
-          />
+          <div className="space-y-6">
+            <DocumentEmptyState
+              icon={FileText}
+              title={t("profile.documents.noResume")}
+              description={t("profile.documents.noResumeDesc")}
+              actionLabel={t("profile.documents.uploadResume")}
+              onAction={onUploadResume}
+              testId="profile-upload-resume"
+            />
+            <ResumeExamplePreview compact />
+          </div>
         )}
       </ProfileFormSection>
 

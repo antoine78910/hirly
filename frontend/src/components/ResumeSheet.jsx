@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
-import { api, API, getSessionToken } from "../lib/api";
-import { Download, FileText, Loader2, Upload } from "lucide-react";
+import { api } from "../lib/api";
+import { FileText, Loader2, Upload } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -9,6 +9,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
+import ConfigureAiSettingsButton from "./settings/ConfigureAiSettingsButton";
+import ResumeCurrentPreview from "./profile/ResumeCurrentPreview";
+import { useAppLocale } from "../context/AppLocaleContext";
 import { trackEvent } from "../lib/analytics";
 
 const MAX_CV_BYTES = 10 * 1024 * 1024;
@@ -27,10 +30,13 @@ function isAcceptedFile(file) {
 
 /** Centered resume upload modal — drag & drop + file picker. */
 export default function ResumeSheet({ open, profile, onClose, onUploaded }) {
+  const { t } = useAppLocale();
   const inputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [selectedName, setSelectedName] = useState("");
+
+  const hasResume = Boolean(profile?.cv_filename || profile?.cv_text);
 
   const handleFile = useCallback(async (file) => {
     if (!file) return;
@@ -76,22 +82,6 @@ export default function ResumeSheet({ open, profile, onClose, onUploaded }) {
     if (file) handleFile(file);
   };
 
-  const download = async () => {
-    const token = getSessionToken();
-    const res = await fetch(`${API}/profile/cv/original`, {
-      credentials: "include",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!res.ok) return toast.error("No original CV to download.");
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = profile?.cv_filename || "cv";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   const displayName = selectedName || profile?.cv_filename;
 
   return (
@@ -102,40 +92,29 @@ export default function ResumeSheet({ open, profile, onClose, onUploaded }) {
       }}
     >
       <DialogContent
-        className="max-w-md gap-0 rounded-2xl border-zinc-200 p-0 sm:max-w-md"
+        className="max-h-[90vh] max-w-lg gap-0 overflow-y-auto rounded-2xl border-zinc-200 p-0 sm:max-w-lg"
         data-testid="resume-sheet"
       >
         <div className="px-6 pb-6 pt-6">
           <DialogHeader className="space-y-2 text-left">
             <DialogTitle className="font-display text-xl font-bold text-zinc-900">
-              Upload Resume
+              {hasResume ? t("resumeSheet.updateTitle") : t("resumeSheet.uploadTitle")}
             </DialogTitle>
             <DialogDescription className="text-sm leading-relaxed text-zinc-500">
-              Upload your PDF resume to get started with personalized job applications.
+              {hasResume ? t("resumeSheet.updateDesc") : t("resumeSheet.uploadDesc")}
             </DialogDescription>
           </DialogHeader>
 
-          {profile?.cv_filename ? (
-            <div className="mt-5 flex items-center gap-3 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3">
-              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-violet-100">
-                <FileText className="h-5 w-5 text-violet-600" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-zinc-900" data-testid="resume-filename">
-                  {profile.cv_filename}
-                </p>
-                <p className="text-xs text-zinc-500">Current resume on file</p>
-              </div>
-              <button
-                type="button"
-                onClick={download}
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-zinc-200 bg-white text-violet-600 transition-colors hover:border-violet-300 hover:bg-violet-50"
-                data-testid="resume-download-btn"
-                aria-label="Download resume"
-              >
-                <Download className="h-4 w-4" />
-              </button>
+          {hasResume ? (
+            <div className="mt-5">
+              <ResumeCurrentPreview profile={profile} active={open} />
             </div>
+          ) : null}
+
+          {hasResume ? (
+            <p className="mt-5 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+              {t("resumeSheet.replaceZoneTitle")}
+            </p>
           ) : null}
 
           <div
@@ -155,7 +134,7 @@ export default function ResumeSheet({ open, profile, onClose, onUploaded }) {
             onDragLeave={() => setDragOver(false)}
             onDrop={onDrop}
             data-testid="resume-dropzone"
-            className={`mt-5 cursor-pointer rounded-2xl border-2 border-dashed px-6 py-10 text-center transition-all ${
+            className={`${hasResume ? "mt-2" : "mt-5"} cursor-pointer rounded-2xl border-2 border-dashed px-6 py-10 text-center transition-all ${
               dragOver
                 ? "scale-[1.01] border-violet-500 bg-violet-50"
                 : "border-zinc-200 bg-white hover:border-violet-300 hover:bg-violet-50/40"
@@ -166,18 +145,20 @@ export default function ResumeSheet({ open, profile, onClose, onUploaded }) {
             </div>
             {displayName && uploading ? (
               <>
-                <p className="font-semibold text-zinc-900">Uploading…</p>
+                <p className="font-semibold text-zinc-900">{t("resumeSheet.uploading")}</p>
                 <p className="mt-1 truncate text-sm text-zinc-500">{displayName}</p>
               </>
-            ) : displayName ? (
+            ) : displayName && selectedName ? (
               <>
-                <p className="font-semibold text-zinc-900">Ready to upload</p>
+                <p className="font-semibold text-zinc-900">{t("resumeSheet.readyToUpload")}</p>
                 <p className="mt-1 truncate text-sm text-zinc-500">{displayName}</p>
               </>
             ) : (
               <>
-                <p className="font-semibold text-zinc-900">Upload Document</p>
-                <p className="mt-1 text-sm text-zinc-500">Drag and drop or click to browse</p>
+                <p className="font-semibold text-zinc-900">
+                  {hasResume ? t("resumeSheet.replaceZoneTitle") : t("resumeSheet.uploadDocument")}
+                </p>
+                <p className="mt-1 text-sm text-zinc-500">{t("resumeSheet.dropHint")}</p>
               </>
             )}
           </div>
@@ -207,10 +188,16 @@ export default function ResumeSheet({ open, profile, onClose, onUploaded }) {
             ) : (
               <FileText className="h-4 w-4" />
             )}
-            {uploading ? "Uploading…" : "Select File"}
+            {uploading ? t("resumeSheet.uploading") : t("resumeSheet.selectFile")}
           </button>
 
-          <p className="mt-4 text-center text-xs text-zinc-400">PDF • Max. 10MB</p>
+          <ConfigureAiSettingsButton
+            className="mt-3 w-full"
+            onBeforeNavigate={onClose}
+            testId="resume-sheet-ai-settings-btn"
+          />
+
+          <p className="mt-4 text-center text-xs text-zinc-400">{t("resumeSheet.fileFormats")}</p>
         </div>
       </DialogContent>
     </Dialog>

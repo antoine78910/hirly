@@ -84,6 +84,20 @@ TABLE_FILTER_COLUMNS = {
 }
 MAX_READ_ROWS = 10000
 READ_PAGE_SIZE = 1000
+JOB_FEED_LEAN_SELECT = (
+    "job_id,title,company,location,country_code,remote,posted_at,imported_at,last_seen_at,"
+    "ats_provider,auto_apply_supported,seniority,salary_max,salary_min,workplace_type,"
+    "work_location,job_type,employment_type,contract_type,industry,provider,match_score,match_reasons"
+)
+
+_shared_http_client: Optional[httpx.AsyncClient] = None
+
+
+def _get_shared_http_client(timeout: float = 30.0) -> httpx.AsyncClient:
+    global _shared_http_client
+    if _shared_http_client is None or _shared_http_client.is_closed:
+        _shared_http_client = httpx.AsyncClient(timeout=timeout)
+    return _shared_http_client
 
 
 class SupabaseWriteResult(dict):
@@ -508,7 +522,13 @@ class SupabaseCollectionAdapter(CollectionPort):
         if not self.supabase_url or not self.secret_key:
             raise RuntimeError("Supabase URL or secret key is missing.")
 
-    async def _read_documents(self, filter: Optional[Filter] = None, read_limit: Optional[int] = None) -> List[Document]:
+    async def _read_documents(
+        self,
+        filter: Optional[Filter] = None,
+        read_limit: Optional[int] = None,
+        *,
+        select: str = "data",
+    ) -> List[Document]:
         self._require_read_supported()
         assert self.supabase_url is not None
         assert self.secret_key is not None
@@ -518,37 +538,37 @@ class SupabaseCollectionAdapter(CollectionPort):
         documents: List[Document] = []
         offset = 0
         remote_filter_params = _postgrest_filter_params(self.table_name, filter)
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            while offset < MAX_READ_ROWS:
-                page_limit = READ_PAGE_SIZE
-                if read_limit is not None:
-                    remaining = max(0, read_limit - len(documents))
-                    if remaining <= 0:
-                        break
-                    page_limit = min(page_limit, remaining)
+        client = _get_shared_http_client()
+        while offset < MAX_READ_ROWS:
+            page_limit = READ_PAGE_SIZE
+            if read_limit is not None:
+                remaining = max(0, read_limit - len(documents))
+                if remaining <= 0:
+                    break
+                page_limit = min(page_limit, remaining)
                 params = {
-                    "select": "data",
+                    "select": select,
                     "limit": str(page_limit),
                     "offset": str(offset),
                 }
-                if remote_filter_params is not None:
-                    params.update(remote_filter_params)
-                response = await client.get(
-                    url,
-                    params=params,
-                    headers=headers,
+            if remote_filter_params is not None:
+                params.update(remote_filter_params)
+            response = await client.get(
+                url,
+                params=params,
+                headers=headers,
+            )
+            if response.status_code not in (200, 206):
+                raise RuntimeError(
+                    f"Supabase {self.table_name} read returned HTTP {response.status_code}: {response.text[:300]}"
                 )
-                if response.status_code not in (200, 206):
-                    raise RuntimeError(
-                        f"Supabase {self.table_name} read returned HTTP {response.status_code}: {response.text[:300]}"
-                    )
-                rows = response.json()
-                if not isinstance(rows, list) or not rows:
-                    break
-                documents.extend(_restore_document(row) for row in rows)
-                if len(rows) < page_limit:
-                    break
-                offset += page_limit
+            rows = response.json()
+            if not isinstance(rows, list) or not rows:
+                break
+            documents.extend(_restore_document(row) for row in rows)
+            if len(rows) < page_limit:
+                break
+            offset += page_limit
         if remote_filter_params is not None:
             return documents
         return [document for document in documents if _matches_filter(document, filter)]
@@ -563,6 +583,16 @@ class SupabaseCollectionAdapter(CollectionPort):
     def find(self, filter: Optional[Filter] = None, projection: Projection = None):
         self._require_read_supported()
         return SupabaseCursorAdapter(self, filter, projection)
+
+    async def read_with_select(
+        self,
+        filter: Optional[Filter],
+        limit: int,
+        *,
+        select: str = JOB_FEED_LEAN_SELECT,
+    ) -> List[Document]:
+        """Read rows without the heavy JSON `data` blob (used for feed ranking)."""
+        return await self._read_documents(filter, read_limit=limit, select=select)
 
     async def insert_one(self, document: Document):
         result = await upsert_supabase_documents(self.supabase_url or "", self.secret_key or "", self.table_name, [document])

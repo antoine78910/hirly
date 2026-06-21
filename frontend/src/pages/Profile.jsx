@@ -35,6 +35,7 @@ import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
 import { trackEvent } from "../lib/analytics";
 import { useAppLocale } from "../context/AppLocaleContext";
 import { getResumeSections } from "../lib/appUi";
+import LanguageSettingSection from "../components/settings/LanguageSettingSection";
 
 const PROFILE_TAB_ICONS = {
   resume: FileText,
@@ -499,6 +500,8 @@ export default function Profile() {
             {t("profile.finishProfile")}
           </button>
         </div>
+
+        <LanguageSettingSection variant="profile" />
 
         <div className="flex border-b border-zinc-200">
           {profileTabs.map((tabItem) => {

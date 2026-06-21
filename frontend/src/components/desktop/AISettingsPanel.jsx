@@ -13,7 +13,8 @@ import { BRAND } from "../../lib/brand";
 import { useAiSettings } from "../../hooks/useAiSettings";
 import { useDesktopTheme } from "./DesktopAppShell";
 import DemoAccountBadge from "../settings/DemoAccountBadge";
-import LanguageSwitcher from "../settings/LanguageSwitcher";
+import FinanceDemoSection from "../settings/FinanceDemoSection";
+import LanguageSettingSection from "../settings/LanguageSettingSection";
 import { useAppLocale } from "../../context/AppLocaleContext";
 import { getAiSettingRows } from "../../lib/appUi";
 
@@ -103,7 +104,6 @@ export default function AISettingsPanel() {
     <div className="relative mx-auto max-w-5xl px-6 py-10 lg:px-10 lg:py-14">
       <div className="relative mb-6 max-w-3xl space-y-4">
         <DemoAccountBadge />
-        <LanguageSwitcher variant={isDark ? "dark" : "light"} />
       </div>
       <div
         aria-hidden
@@ -215,6 +215,9 @@ export default function AISettingsPanel() {
           </div>
         </motion.div>
       </div>
+
+      <FinanceDemoSection variant="desktop" />
+      <LanguageSettingSection variant="desktop" />
     </div>
   );
 }

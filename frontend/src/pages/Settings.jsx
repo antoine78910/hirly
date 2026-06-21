@@ -14,7 +14,7 @@ import DesktopAppShell from "../components/desktop/DesktopAppShell";
 import AISettingsPanel from "../components/desktop/AISettingsPanel";
 import MobileAISettings from "../components/settings/MobileAISettings";
 import DemoAccountBadge from "../components/settings/DemoAccountBadge";
-import LanguageSwitcher from "../components/settings/LanguageSwitcher";
+import LanguageSettingSection from "../components/settings/LanguageSettingSection";
 import { useUpgradeModal } from "../context/UpgradeModalContext";
 import { useAppLocale } from "../context/AppLocaleContext";
 
@@ -121,11 +121,7 @@ export default function Settings() {
       <div className="mb-5">
         <DemoAccountBadge variant="dark" />
       </div>
-      <Section label={t("common.language")} testId="settings-language">
-        <div className="px-4 py-4">
-          <LanguageSwitcher variant="dark" className="w-full justify-center" />
-        </div>
-      </Section>
+      <LanguageSettingSection variant="mobile" />
 
       <Section label={t("settings.lookAndFeel")} testId="settings-appearance">
         <Row icon={Palette} label={t("settings.theme")} value={theme} onClick={() => todo(t("settings.theme"))} testId="settings-theme" />

@@ -1,8 +1,16 @@
 import { useAppLocale } from "../../context/AppLocaleContext";
 
-export default function LanguageSwitcher({ className = "", variant = "light" }) {
+export default function LanguageSwitcher({ className = "", variant = "light", onLangChange }) {
   const { lang, setLang, t } = useAppLocale();
   const isDark = variant === "dark";
+
+  const pick = (id) => {
+    if (onLangChange) {
+      onLangChange(id);
+      return;
+    }
+    setLang(id);
+  };
 
   return (
     <div
@@ -20,7 +28,7 @@ export default function LanguageSwitcher({ className = "", variant = "light" }) 
           <button
             key={id}
             type="button"
-            onClick={() => setLang(id)}
+            onClick={() => pick(id)}
             aria-pressed={active}
             data-testid={`language-${id}`}
             className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${

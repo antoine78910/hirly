@@ -175,37 +175,34 @@ export const DEMO_JOBS = [
   }),
 ];
 
+import { EXAMPLE_RESUME } from "./exampleResume";
+
 export const DEMO_PROFILE = {
-  target_role: "Senior Frontend Engineer",
-  target_roles: ["Senior Frontend Engineer"],
-  target_location: "Paris, France",
-  target_location_data: { location_label: "Paris, France", country_code: "FR" },
-  remote_preference: "hybrid",
-  seniority: "senior",
-  template_style: "modern",
-  contact: {
-    first_name: "Alex",
-    last_name: "Martin",
-    name: "Alex Martin",
-    email: "alex.martin@demo.dev",
-    phone: "+33 6 12 34 56 78",
-    location: "Paris, France",
-    linkedin: "linkedin.com/in/alexmartin",
-  },
+  target_role: EXAMPLE_RESUME.target_role,
+  target_roles: EXAMPLE_RESUME.target_roles,
+  target_location: EXAMPLE_RESUME.target_location,
+  target_location_data: EXAMPLE_RESUME.target_location_data,
+  remote_preference: EXAMPLE_RESUME.remote_preference,
+  seniority: EXAMPLE_RESUME.seniority,
+  template_style: EXAMPLE_RESUME.template_style,
+  contact: { ...EXAMPLE_RESUME.contact },
   extras: {
     onboarding: {
-      onboarding_location: "Paris, France",
-      salary_min: 75_000,
-      salary_max: 120_000,
+      onboarding_location: EXAMPLE_RESUME.target_location,
+      salary_min: 32_000,
+      salary_max: 45_000,
     },
   },
-  skills: ["React", "TypeScript", "Next.js", "Node.js", "Figma", "Design systems"],
-  experience: [
-    { role: "Senior Frontend Engineer", company: "Swiipr", years: "2024 – Present" },
-    { role: "Product Engineer", company: "Nova Labs", years: "2021 – 2024" },
-    { role: "Frontend Developer", company: "Agency Co.", years: "2019 – 2021" },
-  ],
-  cv_text: "Alex Martin — Senior Frontend Engineer with 6+ years building polished web products.",
+  skills: [...EXAMPLE_RESUME.skills],
+  experience: EXAMPLE_RESUME.experience.map(({ role, company, duration }) => ({
+    role,
+    company,
+    years: duration,
+  })),
+  cv_text: EXAMPLE_RESUME.cv_text,
+  cv_filename: EXAMPLE_RESUME.cv_filename,
+  cv_mime: EXAMPLE_RESUME.cv_mime,
+  cv_preview_url: EXAMPLE_RESUME.previewUrl,
   additional_documents: [
     {
       id: "demo-doc-1",

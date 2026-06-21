@@ -267,21 +267,6 @@ export default function DesktopSwipeFeed({
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className={`flex items-center justify-end gap-4 border-b px-6 py-3 ${theme.header}`}>
-          {[
-            { label: t("swipe.importJob"), action: () => {} },
-            { label: t("swipe.quickApply"), action: () => runSwipe("apply") },
-            { label: t("swipe.jobBoard"), action: () => navigate("/tracker") },
-            { label: t("swipe.skipped"), action: () => navigate("/history") },
-          ].map((item) => (
-            <button
-              key={item.label}
-              type="button"
-              onClick={item.action}
-              className={`text-sm font-medium transition-colors ${theme.headerLink}`}
-            >
-              {item.label}
-            </button>
-          ))}
           <DesktopCreditsPill isDark={isDark} />
           <button
             type="button"

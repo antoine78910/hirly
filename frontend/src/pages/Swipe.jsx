@@ -18,10 +18,11 @@ import { trackEvent } from "../lib/analytics";
 import { useAuth } from "../context/AuthContext";
 import { cacheJobForDemo, isDemoAccountEnabled, seedTutorialShowcaseIfEmpty } from "../lib/demoAccount";
 import { TUTORIAL_BYPASS_AUTH } from "../lib/dev";
+import { DEMO_SETTINGS_CHANGED } from "../lib/demoSettings";
 import { ensureTutorialSession } from "../lib/tutorialSession";
 import { useUpgradeModal } from "../context/UpgradeModalContext";
 import DesktopSwipeFeed from "../components/swipe/DesktopSwipeFeed";
-import { saveTargetPreferences } from "../lib/targetPreferences";
+import { saveTargetPreferences, normalizeLocationData } from "../lib/targetPreferences";
 import { hasActiveFilters } from "../lib/jobFilters";
 import { useAppLocale } from "../context/AppLocaleContext";
 import {
@@ -347,6 +348,8 @@ export default function Swipe() {
   const filtersRef = useRef(filters);
   const targetRef = useRef(target);
   const pendingFiltersRef = useRef(undefined);
+  const feedAbortRef = useRef(null);
+  const feedRequestIdRef = useRef(0);
   const viewedJobIdsRef = useRef(new Set());
   const handleSwipeRef = useRef(null);
 
@@ -398,24 +401,28 @@ export default function Swipe() {
   };
 
   const loadFeed = useCallback(async (replace = false, f = filtersRef.current) => {
-    if (fetchingRef.current) {
-      // queue the most recent filter change so it's not silently dropped
-      pendingFiltersRef.current = { replace, f };
-      return;
+    if (feedAbortRef.current) {
+      feedAbortRef.current.abort();
+      feedAbortRef.current = null;
     }
+    const requestId = feedRequestIdRef.current + 1;
+    feedRequestIdRef.current = requestId;
+    const controller = new AbortController();
+    feedAbortRef.current = controller;
+    pendingFiltersRef.current = undefined;
     fetchingRef.current = true;
     setLoading(true);
     setFeedError("");
     if (replace) setJobs([]);
     const requestFeed = async () => {
       const params = buildFeedParams(f);
-      const { data } = await api.get(`/jobs/feed?${params.toString()}`, { timeout: 20000 });
+      const { data } = await api.get(`/jobs/feed?${params.toString()}`, {
+        timeout: 45000,
+        signal: controller.signal,
+      });
       return data;
     };
     try {
-      if (TUTORIAL_BYPASS_AUTH) {
-        await ensureTutorialSession();
-      }
       console.log("JOB_FEED_PARAMS", {
         params: buildFeedParams(f).toString(),
         locations: f?.locationsData || (f?.locationData ? [f.locationData] : []),
@@ -427,6 +434,7 @@ export default function Swipe() {
       try {
         data = await requestFeed();
       } catch (firstError) {
+        if (controller.signal.aborted || firstError?.code === "ERR_CANCELED") throw firstError;
         if (TUTORIAL_BYPASS_AUTH && firstError?.response?.status === 401) {
           await ensureTutorialSession();
           data = await requestFeed();
@@ -434,6 +442,7 @@ export default function Swipe() {
           throw firstError;
         }
       }
+      if (requestId !== feedRequestIdRef.current) return;
       setTotalCount(typeof data.total === "number" ? data.total : null);
       setFeedMeta(data || null);
       if (TUTORIAL_BYPASS_AUTH) {
@@ -448,6 +457,8 @@ export default function Swipe() {
         return merged;
       });
     } catch (e) {
+      if (controller.signal.aborted || e?.code === "ERR_CANCELED") return;
+      if (requestId !== feedRequestIdRef.current) return;
       const rawDetail = e?.response?.data?.detail;
       const detail = e?.code === "ECONNABORTED"
         ? t("swipe.feedTimeout")
@@ -462,34 +473,44 @@ export default function Swipe() {
       if (replace) setJobs([]);
       toast.error(typeof detail === "string" ? detail : t("toasts.loadJobsError"));
     } finally {
-      setLoading(false);
-      fetchingRef.current = false;
-      const pending = pendingFiltersRef.current;
-      if (pending) {
-        pendingFiltersRef.current = undefined;
-        loadFeed(pending.replace, pending.f);
+      if (requestId === feedRequestIdRef.current) {
+        setLoading(false);
+        fetchingRef.current = false;
+        if (feedAbortRef.current === controller) feedAbortRef.current = null;
       }
     }
   }, [t]);
 
+  useEffect(() => {
+    const onDemoSettings = () => loadFeed(true, filtersRef.current);
+    window.addEventListener(DEMO_SETTINGS_CHANGED, onDemoSettings);
+    return () => window.removeEventListener(DEMO_SETTINGS_CHANGED, onDemoSettings);
+  }, [loadFeed]);
+
   const saveTargetSearch = useCallback(async ({ role, location, locationData }) => {
+    const trimmedRole = (role || "").trim();
+    if (!trimmedRole) {
+      toast.error(t("toasts.searchSaveError"));
+      return false;
+    }
     setTargetSaving(true);
     try {
-      const saved = await saveTargetPreferences({ role, location, locationData });
-      if (!saved) return false;
-      setTarget({ role: saved.role, location: saved.location });
-      setTargetLocationData(saved.locationData);
-      toast.success(t("toasts.searchUpdated"));
+      const trimmedLocation = (location || "").trim();
+      const normalizedLocationData = normalizeLocationData(trimmedLocation, locationData);
+      const locationLabel = normalizedLocationData?.location_label || trimmedLocation || "Anywhere";
+
+      setTarget({ role: trimmedRole, location: locationLabel });
+      setTargetLocationData(normalizedLocationData);
       const nextFilters = {
         ...(filtersRef.current || {}),
         searchRadius: filtersRef.current?.searchRadius || DEFAULT_SEARCH_RADIUS,
       };
-      if (saved.locationData) {
-        nextFilters.locationsData = [saved.locationData];
+      if (normalizedLocationData) {
+        nextFilters.locationsData = [normalizedLocationData];
         delete nextFilters.locations;
         delete nextFilters.locationData;
-      } else if (saved.location && saved.location !== "Anywhere") {
-        nextFilters.locations = [saved.location];
+      } else if (locationLabel && locationLabel !== "Anywhere") {
+        nextFilters.locations = [locationLabel];
         delete nextFilters.locationsData;
         delete nextFilters.locationData;
       }
@@ -497,6 +518,10 @@ export default function Swipe() {
       setFilters(nextFilters);
       savePersistedFilters(nextFilters);
       loadFeed(true, nextFilters);
+      toast.success(t("toasts.searchUpdated"));
+
+      saveTargetPreferences({ role: trimmedRole, location: locationLabel, locationData: normalizedLocationData })
+        .catch((error) => console.warn("Preferences save failed (feed already refreshed).", error));
       return true;
     } catch (_) {
       toast.error(t("toasts.searchSaveError"));

@@ -14,14 +14,7 @@ export async function ensureTutorialSession() {
   if (!TUTORIAL_BYPASS_AUTH) return null;
 
   const existing = getSessionToken();
-  if (existing) {
-    try {
-      await api.get("/auth/me");
-      return existing;
-    } catch {
-      setSessionToken(null);
-    }
-  }
+  if (existing) return existing;
 
   const data = await bootstrapTutorialSession();
   return data?.session_token || data?.token || null;

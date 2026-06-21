@@ -120,6 +120,47 @@ api_router = APIRouter(prefix="/api")
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+_feed_job_pool_cache: Dict[str, Any] = {"query_key": "", "rows": [], "fetched_at": 0.0}
+_FEED_JOB_POOL_TTL_SECONDS = 90.0
+
+
+async def _get_feed_job_candidates(base_query: Dict[str, Any], limit: int) -> List[Dict[str, Any]]:
+    cache_key = json.dumps(base_query, sort_keys=True, default=str)
+    now = time.monotonic()
+    if (
+        _feed_job_pool_cache["query_key"] == cache_key
+        and _feed_job_pool_cache["rows"]
+        and (now - float(_feed_job_pool_cache["fetched_at"])) < _FEED_JOB_POOL_TTL_SECONDS
+    ):
+        return list(_feed_job_pool_cache["rows"][:limit])
+    jobs_col = db.jobs
+    if hasattr(jobs_col, "read_with_select"):
+        rows = await jobs_col.read_with_select(base_query, limit)
+    else:
+        rows = await jobs_col.find(base_query, {"_id": 0}).limit(limit).to_list(limit)
+    _feed_job_pool_cache["query_key"] = cache_key
+    _feed_job_pool_cache["rows"] = rows
+    _feed_job_pool_cache["fetched_at"] = now
+    return rows
+
+
+async def _hydrate_feed_jobs(jobs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Load full job payloads (descriptions) only for jobs shown in the feed."""
+    job_ids = [job.get("job_id") for job in jobs if job.get("job_id")]
+    if not job_ids:
+        return jobs
+    full_rows = await db.jobs.find({"job_id": {"$in": job_ids}}, {"_id": 0}).to_list(len(job_ids))
+    by_id = {row.get("job_id"): row for row in full_rows if row.get("job_id")}
+    hydrated: List[Dict[str, Any]] = []
+    for job in jobs:
+        full = by_id.get(job.get("job_id"))
+        merged = {**job, **(full or {})}
+        for key, value in job.items():
+            if key.startswith("_"):
+                merged[key] = value
+        hydrated.append(merged)
+    return hydrated
+
 
 # ===================== Models =====================
 
@@ -631,7 +672,10 @@ async def tutorial_session(response: Response):
 
 @api_router.get("/auth/me")
 async def auth_me(user: User = Depends(get_current_user)):
-    profile = await db.profiles.find_one({"user_id": user.user_id}, {"_id": 0})
+    profile, creator = await asyncio.gather(
+        db.profiles.find_one({"user_id": user.user_id}, {"_id": 0}),
+        is_training_creator(db, user.user_id),
+    )
     logger.info(
         "auth_me cv_readiness user_id=%s profile_exists=%s has_cv_text=%s has_cv_filename=%s has_preferences=%s",
         user.user_id,
@@ -640,7 +684,6 @@ async def auth_me(user: User = Depends(get_current_user)):
         bool((profile or {}).get("cv_filename")),
         bool((profile or {}).get("target_role")),
     )
-    creator = await is_training_creator(db, user.user_id)
     return {
         "user": user.model_dump(),
         "has_profile": profile is not None and bool(profile.get("cv_text")),
@@ -2657,6 +2700,14 @@ async def get_feed(
             or radius_scope not in ("50km", "50 km")
         )
 
+        base_query: Dict[str, Any] = {}
+        if not include_non_auto_apply:
+            base_query = {
+                "auto_apply_supported": True,
+                "ats_provider": {"$in": ats_supported},
+            }
+        candidate_limit = max(80, requested_limit * 16) if explicit_filters else max(120, requested_limit * 24)
+
         def _country_terms_from_locations() -> List[str]:
             aliases = {
                 "fr": ["france"],
@@ -2754,7 +2805,7 @@ async def get_feed(
             if radius_scope in ("worldwide", "remote", "remote/worldwide"):
                 return True
             if radius_km is not None:
-                return city_match
+                return city_match or country_match
             return city_match or country_match
 
         def _matches_salary(job: Dict[str, Any]) -> bool:
@@ -2855,16 +2906,11 @@ async def get_feed(
                 and _matches_industry(job)
             )
 
-        swiped_rows = await db.swipes.find({"user_id": user.user_id}, {"_id": 0, "job_id": 1}).limit(1000).to_list(1000)
+        swiped_rows, candidates = await asyncio.gather(
+            db.swipes.find({"user_id": user.user_id}, {"_id": 0, "job_id": 1}).limit(500).to_list(500),
+            _get_feed_job_candidates(base_query, candidate_limit),
+        )
         swiped_ids = {row.get("job_id") for row in swiped_rows if row.get("job_id")}
-        base_query: Dict[str, Any] = {}
-        if not include_non_auto_apply:
-            base_query = {
-                "auto_apply_supported": True,
-                "ats_provider": {"$in": ats_supported},
-            }
-        candidate_limit = max(300, requested_limit * 80)
-        candidates = await db.jobs.find(base_query, {"_id": 0}).limit(candidate_limit).to_list(candidate_limit)
         candidates = [job for job in candidates if job.get("job_id") not in swiped_ids]
         unfiltered_count = len(candidates)
         candidates = [job for job in candidates if _matches_explicit_filters(job)]
@@ -2917,8 +2963,28 @@ async def get_feed(
         fallback_used = "none"
         jobs = rank(candidates, worldwide=False, broad=False)
         logger.info("feed_filter_stage user_id=%s stage=strict_role_location elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))
+        if explicit_filters and len(jobs) < requested_limit and explicit_location_filter and selected_country_terms:
+            relaxed = [
+                job for job in candidates
+                if _matches_explicit_filters(job) or (
+                    _role_score(job, strict_tokens, family_tokens) > 0
+                    and (
+                        bool(selected_country_terms and any(term in str(job.get("location") or "").lower() for term in selected_country_terms))
+                        or str(job.get("remote") or "").lower() == "remote"
+                    )
+                )
+            ]
+            if relaxed:
+                fallback_used = "relaxed_country"
+                jobs = rank(relaxed, worldwide=False, broad=False)
+                logger.info(
+                    "feed_filter_stage user_id=%s stage=relaxed_country elapsed_ms=%s count=%s",
+                    user.user_id,
+                    _elapsed_ms(),
+                    len(jobs),
+                )
         if explicit_filters and len(jobs) < requested_limit:
-            fallback_used = "none_due_to_explicit_filters"
+            fallback_used = "none_due_to_explicit_filters" if fallback_used == "none" else fallback_used
         if not explicit_filters and len(jobs) < requested_limit and not _timed_out():
             fallback_used = "worldwide_role_family"
             jobs = rank(candidates, worldwide=True, broad=True)
@@ -2927,6 +2993,8 @@ async def get_feed(
             fallback_used = "worldwide_auto_apply"
             jobs = rank(candidates, worldwide=True, broad=True, any_role=True)
             logger.info("feed_filter_stage user_id=%s stage=worldwide_auto_apply elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))
+
+        jobs = await _hydrate_feed_jobs(jobs)
 
         clean_jobs = []
         for job in jobs[:requested_limit]:
@@ -3497,6 +3565,27 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
         phase = "auth_ok"
         log_phase("auth_ok")
 
+        if req.direction == "right" and user.demo_account:
+            existing = await db.swipes.find_one(
+                {"user_id": user.user_id, "job_id": req.job_id},
+                {"_id": 0, "swipe_id": 1},
+            )
+            if not existing:
+                await db.swipes.insert_one({
+                    "user_id": user.user_id,
+                    "job_id": req.job_id,
+                    "direction": req.direction,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                })
+            log_phase("demo_account_apply_blocked")
+            return {
+                "ok": True,
+                "applied": True,
+                "submitted": False,
+                "demo_account": True,
+                "duplicate": bool(existing),
+            }
+
         phase = "job_loaded"
         job = await db.jobs.find_one({"job_id": req.job_id}, {"_id": 0})
         if not job:
@@ -3521,18 +3610,6 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
             })
         phase = "swipe_record_insert_done"
         log_phase("swipe_record_insert_done", duplicate=bool(existing))
-
-        if req.direction == "right":
-            user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0, "demo_account": 1})
-            if user_doc and user_doc.get("demo_account"):
-                log_phase("demo_account_apply_blocked")
-                return {
-                    "ok": True,
-                    "applied": True,
-                    "submitted": False,
-                    "demo_account": True,
-                    "duplicate": bool(existing),
-                }
 
         if req.direction != "right":
             phase = "response_build_start"
@@ -3875,8 +3952,8 @@ async def list_applications(user: User = Depends(get_current_user)):
     apps = await db.applications.find({"user_id": user.user_id}, {"_id": 0}).sort("created_at", -1).to_list(500)
     apps = _sort_applications_newest_first(apps)
     # join job data
-    job_ids = list({a["job_id"] for a in apps})
-    jobs = await db.jobs.find({"job_id": {"$in": job_ids}}, {"_id": 0}).to_list(500)
+    job_ids = list({a["job_id"] for a in apps if a.get("job_id")})
+    jobs = await db.jobs.find({"job_id": {"$in": job_ids}}, {"_id": 0}).to_list(500) if job_ids else []
     job_map = {j["job_id"]: j for j in jobs}
     result = []
     for a in apps:

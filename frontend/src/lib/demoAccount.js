@@ -2,6 +2,8 @@ export const DEMO_CREDITS_MAX = 600;
 export const DEMO_CREDITS_CHANGED = "hirly:demo-credits-changed";
 export const DEMO_ACCOUNT_CHANGED = "hirly:demo-account-changed";
 
+import { isFinanceDemoEnabled } from "./demoSettings";
+
 let cachedDemoAccount = false;
 
 export function setDemoAccountFromUser(user) {
@@ -12,7 +14,7 @@ export function setDemoAccountFromUser(user) {
 }
 
 export function isDemoAccountEnabled() {
-  return cachedDemoAccount;
+  return cachedDemoAccount || isFinanceDemoEnabled();
 }
 
 const CREDITS_KEY = "hirly.demo.credits.remaining";
@@ -349,8 +351,11 @@ export function getDemoAccountResponse(config) {
   }
 
   if (method === "post" && path === "/swipe") {
-    const parsed = typeof body === "string" ? JSON.parse(body) : body;
-    return handleDemoAccountSwipe(parsed);
+    if (isDemoAccountEnabled()) {
+      const parsed = typeof body === "string" ? JSON.parse(body) : body;
+      return handleDemoAccountSwipe(parsed);
+    }
+    return undefined;
   }
 
   if (method === "post" && path === "/swipe/undo") {

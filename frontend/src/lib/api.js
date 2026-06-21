@@ -1,6 +1,7 @@
 import axios from "axios";
 import { demoMode } from "./dev";
 import { getDemoResponse } from "./demoApi";
+import { getFinanceDemoResponse } from "./financeDemoApi";
 import { getDemoAccountResponse, patchDemoAccountResponse } from "./demoAccount";
 
 const normalizeBackendUrl = (value) => {
@@ -39,6 +40,19 @@ api.interceptors.request.use((config) => {
     if (mock !== undefined) {
       config.adapter = () => Promise.resolve({
         data: mock,
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config,
+      });
+    }
+  }
+
+  if (!config.adapter) {
+    const financeDemoMock = getFinanceDemoResponse(config);
+    if (financeDemoMock !== undefined) {
+      config.adapter = () => Promise.resolve({
+        data: financeDemoMock,
         status: 200,
         statusText: "OK",
         headers: {},

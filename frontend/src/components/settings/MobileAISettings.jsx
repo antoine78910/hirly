@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { FileText, ScanSearch, ScrollText, ShieldCheck } from "lucide-react";
 import { useAiSettings } from "../../hooks/useAiSettings";
+import FinanceDemoSection from "./FinanceDemoSection";
 import { useAppLocale } from "../../context/AppLocaleContext";
 import { getAiSettingRows } from "../../lib/appUi";
 
@@ -61,6 +62,7 @@ export default function MobileAISettings() {
           );
         })}
       </div>
+      <FinanceDemoSection variant="mobile" />
     </section>
   );
 }
