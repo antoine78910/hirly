@@ -53,6 +53,7 @@ import { devBypassAuth } from "../lib/dev";
 import { splitFullName } from "../lib/personalInfoOptions";
 import { ob } from "../components/onboarding/onboardingTheme";
 import { trackEvent } from "../lib/analytics";
+import { preloadOnboardingShowcaseImages } from "../lib/onboardingImagePreload";
 import { getPendingInviteCode, redeemCreatorInvite } from "../lib/creatorInvite";
 import { setDemoAccountFromUser } from "../lib/demoAccount";
 
