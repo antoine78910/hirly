@@ -18,6 +18,7 @@ import { trackEvent } from "../lib/analytics";
 import { useAuth } from "../context/AuthContext";
 import { cacheJobForDemo, isDemoAccountEnabled, seedTutorialShowcaseIfEmpty } from "../lib/demoAccount";
 import { TUTORIAL_BYPASS_AUTH } from "../lib/dev";
+import { ensureTutorialSession } from "../lib/tutorialSession";
 import { useUpgradeModal } from "../context/UpgradeModalContext";
 import DesktopSwipeFeed from "../components/swipe/DesktopSwipeFeed";
 import { saveTargetPreferences } from "../lib/targetPreferences";
@@ -344,9 +345,14 @@ export default function Swipe() {
   const { upgradeOpen, openUpgrade } = useUpgradeModal();
   const fetchingRef = useRef(false);
   const filtersRef = useRef(filters);
+  const targetRef = useRef(target);
   const pendingFiltersRef = useRef(undefined);
   const viewedJobIdsRef = useRef(new Set());
   const handleSwipeRef = useRef(null);
+
+  useEffect(() => {
+    targetRef.current = target;
+  }, [target]);
 
   const loadProfile = useCallback(async () => {
     try {
@@ -363,6 +369,10 @@ export default function Swipe() {
 
   const buildFeedParams = (f) => {
     const params = new URLSearchParams({ limit: "5", search_radius: DEFAULT_SEARCH_RADIUS });
+    const activeTarget = targetRef.current;
+    if (activeTarget?.role?.trim()) {
+      params.set("search_role", activeTarget.role.trim());
+    }
     if (!f) return params;
     if (f.minSalary)            params.set("min_salary", String(f.minSalary));
     if (f.postedDate && f.postedDate !== "any") params.set("posted_within", f.postedDate);
@@ -397,15 +407,33 @@ export default function Swipe() {
     setLoading(true);
     setFeedError("");
     if (replace) setJobs([]);
-    try {
+    const requestFeed = async () => {
       const params = buildFeedParams(f);
+      const { data } = await api.get(`/jobs/feed?${params.toString()}`, { timeout: 20000 });
+      return data;
+    };
+    try {
+      if (TUTORIAL_BYPASS_AUTH) {
+        await ensureTutorialSession();
+      }
       console.log("JOB_FEED_PARAMS", {
-        params: params.toString(),
+        params: buildFeedParams(f).toString(),
         locations: f?.locationsData || (f?.locationData ? [f.locationData] : []),
         search_radius: f?.searchRadius || DEFAULT_SEARCH_RADIUS,
         only_my_country: Boolean(f?.onlyMyCountry),
+        role: targetRef.current?.role || "",
       });
-      const { data } = await api.get(`/jobs/feed?${params.toString()}`, { timeout: 15000 });
+      let data;
+      try {
+        data = await requestFeed();
+      } catch (firstError) {
+        if (TUTORIAL_BYPASS_AUTH && firstError?.response?.status === 401) {
+          await ensureTutorialSession();
+          data = await requestFeed();
+        } else {
+          throw firstError;
+        }
+      }
       setTotalCount(typeof data.total === "number" ? data.total : null);
       setFeedMeta(data || null);
       if (TUTORIAL_BYPASS_AUTH) {
@@ -420,9 +448,12 @@ export default function Swipe() {
         return merged;
       });
     } catch (e) {
+      const rawDetail = e?.response?.data?.detail;
       const detail = e?.code === "ECONNABORTED"
         ? t("swipe.feedTimeout")
-        : e?.response?.data?.detail || t("toasts.loadJobsError");
+        : (typeof rawDetail === "string"
+          ? rawDetail
+          : rawDetail?.message || rawDetail?.detail || t("toasts.loadJobsError"));
       setFeedError(typeof detail === "string" ? detail : t("toasts.loadJobsError"));
       setFeedMeta((prev) => ({
         ...(prev || {}),

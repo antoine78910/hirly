@@ -2435,6 +2435,7 @@ async def get_feed(
     lat: Optional[float] = None,
     lng: Optional[float] = None,
     score: bool = False,                                  # opt-in AI scoring (slow); default off for snappy UX
+    search_role: Optional[str] = None,                    # override profile target_role for this feed request
 ):
     started_at = time.perf_counter()
     logger.info(
@@ -2457,6 +2458,13 @@ async def get_feed(
             sorted(list((profile or {}).keys()))[:30],
         )
         raise HTTPException(status_code=400, detail="Upload CV first")
+
+    feed_target_role = (
+        (search_role or "").strip()
+        or profile.get("target_role")
+        or ((profile.get("target_roles") or [None])[0])
+        or ""
+    ).strip()
 
     max_elapsed_seconds = 8.0
     ats_supported = ["greenhouse", "lever", "ashby"]
@@ -2587,11 +2595,7 @@ async def get_feed(
 
     async def _fast_cached_feed() -> Dict[str, Any]:
         requested_limit = max(1, min(int(limit or 5), 25))
-        target_role = (
-            profile.get("target_role")
-            or ((profile.get("target_roles") or [None])[0])
-            or ""
-        ).strip()
+        target_role = feed_target_role
         strict_tokens = _tokens(target_role)
         family_tokens = _role_family_tokens(target_role)
         terms = _location_terms()
@@ -3166,11 +3170,7 @@ async def get_feed(
         query["company"] = {"$not": {"$regex": "|".join(re.escape(c) for c in hide_company), "$options": "i"}}
 
     remote_pref = profile.get("remote_preference") or "any"
-    target_role = (
-        profile.get("target_role")
-        or ((profile.get("target_roles") or [None])[0])
-        or ""
-    ).strip()
+    target_role = feed_target_role
     radius_scope = (search_radius or "50km").lower().strip()
 
     def _tokens(value: str) -> List[str]:

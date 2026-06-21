@@ -21,6 +21,7 @@ const HISTORY_RIGHT_KEY = "hirly.demo.history.right";
 const HISTORY_LEFT_KEY = "hirly.demo.history.left";
 const UNDO_KEY = "hirly.demo.undo";
 const TUTORIAL_PREFS_KEY = "hirly.tutorial.preferences";
+const SESSION_TOKEN_KEY = "session_token";
 
 const TUTORIAL_PROFILE_DEFAULT = {
   target_role: "Software Engineer",
@@ -36,6 +37,19 @@ const TUTORIAL_PROFILE_DEFAULT = {
   summary: "Senior software engineer focused on React, TypeScript, and product delivery.",
   skills: ["React", "TypeScript", "Node.js", "Python"],
 };
+
+function hasSessionToken() {
+  if (typeof window === "undefined") return false;
+  try {
+    return Boolean(window.localStorage.getItem(SESSION_TOKEN_KEY));
+  } catch {
+    return false;
+  }
+}
+
+function shouldMockTutorialProfileRoutes() {
+  return isDemoAccountEnabled() && !hasSessionToken();
+}
 
 function getTutorialPreferences() {
   return readJson(TUTORIAL_PREFS_KEY, null);
@@ -321,14 +335,14 @@ export function getDemoAccountResponse(config) {
       target_location_data: parsed?.target_location_data,
       remote_preference: parsed?.remote_preference,
     });
-    if (isDemoAccountEnabled()) {
+    if (shouldMockTutorialProfileRoutes()) {
       return buildTutorialProfileResponse();
     }
     return undefined;
   }
 
   if (method === "get" && path === "/profile") {
-    if (isDemoAccountEnabled()) {
+    if (shouldMockTutorialProfileRoutes()) {
       return buildTutorialProfileResponse();
     }
     return undefined;
@@ -389,8 +403,10 @@ export function patchDemoAccountResponse(response) {
   }
 
   if (method === "get" && path === "/profile") {
-    const local = buildTutorialProfileResponse();
-    response.data = { ...(response.data || {}), ...local };
+    if (shouldMockTutorialProfileRoutes()) {
+      const local = buildTutorialProfileResponse();
+      response.data = { ...(response.data || {}), ...local };
+    }
   }
 
   return response;
