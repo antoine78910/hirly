@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
-import { api, setSessionToken } from "../lib/api";
+import { api, setSessionToken, getSessionToken } from "../lib/api";
 import { devBypassAuth, TUTORIAL_BYPASS_AUTH } from "../lib/dev";
 import { setDemoAccountFromUser } from "../lib/demoAccount";
 import { isOAuthCallbackInProgress } from "../lib/oauthCallback";
@@ -55,7 +55,22 @@ export const AuthProvider = ({ children }) => {
           setHasProfile(Boolean(data?.has_profile));
           setHasPreferences(Boolean(data?.has_preferences));
         } catch (error) {
-          console.warn("Tutorial session bootstrap failed; using local demo fallback.", error);
+          console.warn("Tutorial session bootstrap failed; trying stored session.", error);
+          const existingToken = getSessionToken();
+          if (existingToken) {
+            try {
+              const { data } = await api.get("/auth/me");
+              const user = { ...(data?.user || TUTORIAL_FALLBACK_USER), demo_account: true };
+              setUser(user);
+              setDemoAccountFromUser(user);
+              setHasProfile(Boolean(data?.has_profile));
+              setHasPreferences(Boolean(data?.has_preferences));
+              setLoading(false);
+              return;
+            } catch (storedError) {
+              console.warn("Stored tutorial session invalid.", storedError);
+            }
+          }
           setUser(TUTORIAL_FALLBACK_USER);
           setDemoAccountFromUser(TUTORIAL_FALLBACK_USER);
           setHasProfile(true);

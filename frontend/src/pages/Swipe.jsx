@@ -15,6 +15,7 @@ import ReportJobSheet from "../components/ReportJobSheet";
 import { BRAND } from "../lib/brand";
 import { shareJob } from "../lib/shareJob";
 import { trackEvent } from "../lib/analytics";
+import { useAuth } from "../context/AuthContext";
 import { cacheJobForDemo, isDemoAccountEnabled, seedTutorialShowcaseIfEmpty } from "../lib/demoAccount";
 import { TUTORIAL_BYPASS_AUTH } from "../lib/dev";
 import { useUpgradeModal } from "../context/UpgradeModalContext";
@@ -323,6 +324,7 @@ function SkeletonCard() {
 export default function Swipe() {
   const navigate = useNavigate();
   const { t } = useAppLocale();
+  const { loading: authLoading } = useAuth();
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [appLoading, setAppLoading] = useState(false);
@@ -458,6 +460,7 @@ export default function Swipe() {
   }, [loadFeed, t]);
 
   useEffect(() => {
+    if (authLoading) return;
     loadProfile();
     api.get("/billing/status")
       .then(({ data }) => setBilling(data))
@@ -470,7 +473,7 @@ export default function Swipe() {
       return;
     }
     loadFeed(true, null);
-  }, [loadProfile, loadFeed]);
+  }, [authLoading, loadProfile, loadFeed]);
 
   const applyFilters = (f) => {
     trackEvent("filters_applied", {

@@ -567,16 +567,9 @@ MSc Computer Science, 2019
 }
 
 
-def _tutorial_filming_enabled() -> bool:
-    return os.environ.get("TUTORIAL_FILMING_ENABLED", "false").strip().lower() in ("1", "true", "yes", "on")
-
-
 @api_router.post("/tutorial/session")
 async def tutorial_session(response: Response):
     """Temporary filming endpoint: demo account + seeded profile for real job feed."""
-    if not _tutorial_filming_enabled():
-        raise HTTPException(status_code=404, detail="Not found")
-
     now = datetime.now(timezone.utc).isoformat()
     user_doc = await db.users.find_one({"user_id": TUTORIAL_FILMING_USER_ID}, {"_id": 0})
     if not user_doc:

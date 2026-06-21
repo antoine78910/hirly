@@ -20,6 +20,53 @@ const APPS_KEY = "hirly.demo.applications";
 const HISTORY_RIGHT_KEY = "hirly.demo.history.right";
 const HISTORY_LEFT_KEY = "hirly.demo.history.left";
 const UNDO_KEY = "hirly.demo.undo";
+const TUTORIAL_PREFS_KEY = "hirly.tutorial.preferences";
+const SESSION_TOKEN_KEY = "session_token";
+
+const TUTORIAL_PROFILE_DEFAULT = {
+  target_role: "Software Engineer",
+  target_roles: ["Software Engineer", "Frontend Engineer"],
+  target_location: "Paris, France",
+  target_location_data: {
+    location_label: "Paris, France",
+    country: "France",
+    country_code: "FR",
+  },
+  remote_preference: "hybrid",
+  seniority: "mid",
+  summary: "Senior software engineer focused on React, TypeScript, and product delivery.",
+  skills: ["React", "TypeScript", "Node.js", "Python"],
+};
+
+function hasSessionToken() {
+  if (typeof window === "undefined") return false;
+  try {
+    return Boolean(window.localStorage.getItem(SESSION_TOKEN_KEY));
+  } catch {
+    return false;
+  }
+}
+
+function getTutorialPreferences() {
+  return readJson(TUTORIAL_PREFS_KEY, null);
+}
+
+function saveTutorialPreferences(payload) {
+  writeJson(TUTORIAL_PREFS_KEY, payload);
+}
+
+function buildTutorialProfileResponse() {
+  const saved = getTutorialPreferences();
+  return {
+    user_id: "tutorial_filming",
+    ...TUTORIAL_PROFILE_DEFAULT,
+    ...(saved || {}),
+  };
+}
+
+function shouldMockTutorialProfileRoutes() {
+  return isDemoAccountEnabled() && !hasSessionToken();
+}
 
 const jobCache = new Map();
 
@@ -278,6 +325,28 @@ export function getDemoAccountResponse(config) {
   const method = (config.method || "get").toLowerCase();
   const path = (config.url || "").split("?")[0];
   const body = config.data;
+
+  if (method === "put" && path === "/profile/preferences") {
+    const parsed = typeof body === "string" ? JSON.parse(body) : body;
+    saveTutorialPreferences({
+      target_role: parsed?.target_role,
+      target_roles: parsed?.target_roles,
+      target_location: parsed?.target_location,
+      target_location_data: parsed?.target_location_data,
+      remote_preference: parsed?.remote_preference,
+    });
+    if (shouldMockTutorialProfileRoutes()) {
+      return { ok: true };
+    }
+    return undefined;
+  }
+
+  if (method === "get" && path === "/profile") {
+    if (shouldMockTutorialProfileRoutes()) {
+      return buildTutorialProfileResponse();
+    }
+    return undefined;
+  }
 
   if (method === "post" && path === "/swipe") {
     const parsed = typeof body === "string" ? JSON.parse(body) : body;
