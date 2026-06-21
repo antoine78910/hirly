@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, useCallback } from "rea
 import { api, setSessionToken } from "../lib/api";
 import { devBypassAuth } from "../lib/dev";
 import { setDemoAccountFromUser } from "../lib/demoAccount";
+import { isOAuthCallbackInProgress } from "../lib/oauthCallback";
 
 const AuthContext = createContext(null);
 
@@ -47,7 +48,7 @@ export const AuthProvider = ({ children }) => {
     }
     // CRITICAL: If returning from OAuth callback, skip the /me check.
     // AuthCallback will exchange the OAuth session and establish the app session first.
-    if (window.location.pathname === "/auth/callback") {
+    if (isOAuthCallbackInProgress()) {
       setLoading(false);
       return;
     }

@@ -45,6 +45,7 @@ import AppLayout from "@/components/desktop/AppLayout";
 import ScrollManager from "@/components/app/ScrollManager";
 import { devBypassAuth } from "@/lib/dev";
 import { isTrainingRoute } from "@/lib/trainingRoutes";
+import { needsOAuthCallbackRedirect } from "@/lib/oauthCallback";
 
 function AppRoute({ children, requireProfile = false }) {
   if (devBypassAuth) return children;
@@ -79,6 +80,15 @@ function shouldShowBottomNav(pathname) {
 function AppRouter() {
   const location = useLocation();
   const showBottomNav = shouldShowBottomNav(location.pathname);
+
+  if (needsOAuthCallbackRedirect(location)) {
+    return (
+      <Navigate
+        to={`/auth/callback${location.search}${location.hash}`}
+        replace
+      />
+    );
+  }
 
   if (location.pathname.length > 1 && location.pathname.endsWith("/")) {
     return (

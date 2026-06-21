@@ -58,8 +58,6 @@ import { getPendingInviteCode, redeemCreatorInvite } from "../lib/creatorInvite"
 import { setDemoAccountFromUser } from "../lib/demoAccount";
 
 const STEP_ORDER = ONBOARDING_STEP_ORDER;
-const INITIAL_ONBOARDING_BOOT = readOnboardingPreviewBoot(STEP_ORDER);
-const INITIAL_PREVIEW = INITIAL_ONBOARDING_BOOT?.state;
 
 const defaultCategoryOptions = () =>
   JOB_CATEGORIES.map(({ id, label }) => ({ id, label }));
@@ -101,27 +99,57 @@ const stepMotion = {
   className: ob.step,
 };
 
+const introSlideMotion = {
+  duration: 0.28,
+  ease: [0.22, 1, 0.36, 1],
+};
+
 export default function Onboarding() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user, setHasProfile, setHasPreferences, checkAuth } = useAuth();
+  const introNavDirection = useRef(1);
 
-  const [stepIndex, setStepIndex] = useState(INITIAL_ONBOARDING_BOOT?.stepIndex ?? 0);
-  const [introIndex, setIntroIndex] = useState(0);
-  const [categories, setCategories] = useState(INITIAL_PREVIEW?.categories ?? []);
-  const [selectedRoles, setSelectedRoles] = useState(INITIAL_PREVIEW?.selectedRoles ?? []);
-  const [experience, setExperience] = useState(INITIAL_PREVIEW?.experience ?? null);
-  const [salaryMin, setSalaryMin] = useState(INITIAL_PREVIEW?.salaryMin ?? 50000);
-  const [salaryMax, setSalaryMax] = useState(INITIAL_PREVIEW?.salaryMax ?? 100000);
-  const [interviewsPerWeek, setInterviewsPerWeek] = useState(INITIAL_PREVIEW?.interviewsPerWeek ?? 4);
-  const [jobSearchStatus, setJobSearchStatus] = useState(INITIAL_PREVIEW?.jobSearchStatus ?? null);
-  const [onboardingLocation, setOnboardingLocation] = useState(INITIAL_PREVIEW?.onboardingLocation ?? "");
-  const [onboardingLocationData, setOnboardingLocationData] = useState(
-    INITIAL_PREVIEW?.onboardingLocationData ?? null,
+  const [stepIndex, setStepIndex] = useState(
+    () => readOnboardingPreviewBoot(STEP_ORDER)?.stepIndex ?? 0,
   );
-  const [contractType, setContractType] = useState(INITIAL_PREVIEW?.contractType ?? null);
-  const [triedOtherApps, setTriedOtherApps] = useState(INITIAL_PREVIEW?.triedOtherApps ?? null);
-  const [attribution, setAttribution] = useState(INITIAL_PREVIEW?.attribution ?? null);
+  const [introIndex, setIntroIndex] = useState(0);
+  const [categories, setCategories] = useState(
+    () => readOnboardingPreviewBoot(STEP_ORDER)?.state?.categories ?? [],
+  );
+  const [selectedRoles, setSelectedRoles] = useState(
+    () => readOnboardingPreviewBoot(STEP_ORDER)?.state?.selectedRoles ?? [],
+  );
+  const [experience, setExperience] = useState(
+    () => readOnboardingPreviewBoot(STEP_ORDER)?.state?.experience ?? null,
+  );
+  const [salaryMin, setSalaryMin] = useState(
+    () => readOnboardingPreviewBoot(STEP_ORDER)?.state?.salaryMin ?? 50000,
+  );
+  const [salaryMax, setSalaryMax] = useState(
+    () => readOnboardingPreviewBoot(STEP_ORDER)?.state?.salaryMax ?? 100000,
+  );
+  const [interviewsPerWeek, setInterviewsPerWeek] = useState(
+    () => readOnboardingPreviewBoot(STEP_ORDER)?.state?.interviewsPerWeek ?? 4,
+  );
+  const [jobSearchStatus, setJobSearchStatus] = useState(
+    () => readOnboardingPreviewBoot(STEP_ORDER)?.state?.jobSearchStatus ?? null,
+  );
+  const [onboardingLocation, setOnboardingLocation] = useState(
+    () => readOnboardingPreviewBoot(STEP_ORDER)?.state?.onboardingLocation ?? "",
+  );
+  const [onboardingLocationData, setOnboardingLocationData] = useState(
+    () => readOnboardingPreviewBoot(STEP_ORDER)?.state?.onboardingLocationData ?? null,
+  );
+  const [contractType, setContractType] = useState(
+    () => readOnboardingPreviewBoot(STEP_ORDER)?.state?.contractType ?? null,
+  );
+  const [triedOtherApps, setTriedOtherApps] = useState(
+    () => readOnboardingPreviewBoot(STEP_ORDER)?.state?.triedOtherApps ?? null,
+  );
+  const [attribution, setAttribution] = useState(
+    () => readOnboardingPreviewBoot(STEP_ORDER)?.state?.attribution ?? null,
+  );
   const [referralCode, setReferralCode] = useState("");
   const [creatorAccessCode, setCreatorAccessCode] = useState(() => getPendingInviteCode());
   const [redeemingCreatorCode, setRedeemingCreatorCode] = useState(false);
@@ -135,7 +163,7 @@ export default function Onboarding() {
     trackEvent("onboarding_started");
   }, []);
   const [suggestedCategories, setSuggestedCategories] = useState(
-    INITIAL_PREVIEW?.suggestedCategories ?? [],
+    () => readOnboardingPreviewBoot(STEP_ORDER)?.state?.suggestedCategories ?? [],
   );
   const [suggestedRoles, setSuggestedRoles] = useState([]);
   const [customRoles, setCustomRoles] = useState([]);
@@ -213,6 +241,7 @@ export default function Onboarding() {
   const goNext = () => {
     if (step === "intro") {
       if (introIndex < INTRO_SLIDES.length - 1) {
+        introNavDirection.current = 1;
         setIntroIndex((i) => i + 1);
         return;
       }
@@ -222,6 +251,7 @@ export default function Onboarding() {
 
   const goBack = () => {
     if (step === "intro" && introIndex > 0) {
+      introNavDirection.current = -1;
       setIntroIndex((i) => i - 1);
       return;
     }
@@ -553,27 +583,32 @@ export default function Onboarding() {
       <AnimatePresence mode="wait">
         {step === "intro" && (
           <div className={`${ob.step} items-center justify-center text-center`}>
-            <div className="relative flex min-h-0 w-full flex-1 flex-col items-center justify-center">
+            <div className={ob.introStage}>
               {INTRO_SLIDES.map((slide, i) => {
                 const active = i === introIndex;
+                const exitX = introNavDirection.current > 0 ? -20 : 20;
                 return (
-                  <div
+                  <motion.div
                     key={slide.id}
-                    className={`flex w-full flex-col items-center justify-center gap-5 sm:gap-6 transition-opacity duration-150 ease-out ${
-                      active
-                        ? "relative opacity-100"
-                        : "pointer-events-none absolute inset-0 opacity-0"
-                    }`}
+                    className={ob.introSlide}
+                    initial={false}
+                    animate={{
+                      opacity: active ? 1 : 0,
+                      x: active ? 0 : exitX,
+                      scale: active ? 1 : 0.98,
+                    }}
+                    transition={introSlideMotion}
+                    style={{ pointerEvents: active ? "auto" : "none" }}
                     aria-hidden={!active}
                   >
-                    <div className="flex w-full shrink-0 items-center justify-center">
+                    <div className={ob.introImageSlot}>
                       <OnboardingIllustration src={slide.image} alt="" large priority />
                     </div>
-                    <div className="mx-auto flex w-full max-w-md flex-col items-center gap-3 sm:gap-4">
+                    <div className={ob.introTextSlot}>
                       <h1 className={ob.introTitle}>{slide.title}</h1>
                       <p className={ob.introBody}>{slide.body}</p>
                     </div>
-                  </div>
+                  </motion.div>
                 );
               })}
             </div>

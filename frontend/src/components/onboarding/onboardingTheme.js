@@ -9,6 +9,14 @@ export const ob = {
     "font-display font-black text-[1.65rem] sm:text-3xl lg:text-[2.25rem] tracking-tight leading-[1.12] text-zinc-900 text-center max-w-md",
   introBody:
     "text-zinc-600 text-base sm:text-lg leading-relaxed text-center max-w-md px-1",
+  introStage:
+    "grid w-full shrink-0 overflow-hidden [grid-template-areas:'stack'] place-items-center",
+  introSlide:
+    "flex w-full max-w-md flex-col items-center gap-5 sm:gap-6 [grid-area:stack] px-1",
+  introImageSlot:
+    "flex h-[min(72vw,260px)] w-full max-w-[320px] shrink-0 items-center justify-center sm:h-[300px] lg:h-[320px]",
+  introTextSlot:
+    "flex h-[9.25rem] w-full max-w-md flex-col items-center justify-start gap-3 sm:h-[10.25rem] sm:gap-4",
   introDots: "flex shrink-0 items-center justify-center gap-2 pt-3 sm:pt-4",
   subtitle: "mt-1 sm:mt-1.5 text-zinc-600 text-sm sm:text-[15px] leading-snug",
   optionList: "space-y-1.5 sm:space-y-2",
