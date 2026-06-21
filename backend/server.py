@@ -7974,6 +7974,11 @@ async def seed_jobs():
     return {"ok": True, "count": len(docs)}
 
 
+@api_router.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
 @api_router.get("/")
 async def root():
     return {"message": "Tinder for Jobs API", "ok": True}
@@ -9008,16 +9013,8 @@ app.add_middleware(
 )
 
 
-@app.on_event("startup")
-async def startup_seed():
-    """Auto-seed mock jobs only when development fallback is explicitly enabled."""
-    logger.info("DB health route registered at /api/dev/db-health")
-    logger.info("DB counts route registered at /api/dev/db-counts")
-    logger.info(
-        "Startup env debug: DEV_TOOLS_ENABLED=%r ENVIRONMENT=%r",
-        os.environ.get("DEV_TOOLS_ENABLED"),
-        os.environ.get("ENVIRONMENT"),
-    )
+async def _startup_seed_impl():
+    """Seed boards and training content without blocking HTTP readiness."""
     try:
         await seed_greenhouse_company_boards(db)
         await seed_lever_company_boards(db)
@@ -9041,6 +9038,20 @@ async def startup_seed():
             logger.info(f"Seeded {len(docs)} jobs")
     except Exception as e:
         logger.warning(f"Seed failed: {e}")
+
+
+@app.on_event("startup")
+async def startup_seed():
+    """Register routes immediately; run seeding in the background."""
+    logger.info("DB health route registered at /api/dev/db-health")
+    logger.info("DB counts route registered at /api/dev/db-counts")
+    logger.info(
+        "Startup env debug: DEV_TOOLS_ENABLED=%r ENVIRONMENT=%r PORT=%r",
+        os.environ.get("DEV_TOOLS_ENABLED"),
+        os.environ.get("ENVIRONMENT"),
+        os.environ.get("PORT"),
+    )
+    asyncio.create_task(_startup_seed_impl())
 
 
 @app.on_event("shutdown")

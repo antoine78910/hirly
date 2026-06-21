@@ -13,13 +13,6 @@ export async function bootstrapTutorialSession() {
 export async function ensureTutorialSession() {
   if (!TUTORIAL_BYPASS_AUTH) return null;
 
-  if (
-    process.env.NODE_ENV === "production"
-    && !(process.env.REACT_APP_BACKEND_URL || "").trim()
-  ) {
-    throw new Error("REACT_APP_BACKEND_URL is not configured for this deployment");
-  }
-
   const existing = getSessionToken();
   if (existing) {
     try {
