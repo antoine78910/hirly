@@ -449,7 +449,23 @@ export default function Swipe() {
       setTarget({ role: saved.role, location: saved.location });
       setTargetLocationData(saved.locationData);
       toast.success(t("toasts.searchUpdated"));
-      loadFeed(true, filtersRef.current);
+      const nextFilters = {
+        ...(filtersRef.current || {}),
+        searchRadius: filtersRef.current?.searchRadius || DEFAULT_SEARCH_RADIUS,
+      };
+      if (saved.locationData) {
+        nextFilters.locationsData = [saved.locationData];
+        delete nextFilters.locations;
+        delete nextFilters.locationData;
+      } else if (saved.location && saved.location !== "Anywhere") {
+        nextFilters.locations = [saved.location];
+        delete nextFilters.locationsData;
+        delete nextFilters.locationData;
+      }
+      filtersRef.current = nextFilters;
+      setFilters(nextFilters);
+      savePersistedFilters(nextFilters);
+      loadFeed(true, nextFilters);
       return true;
     } catch (_) {
       toast.error(t("toasts.searchSaveError"));
