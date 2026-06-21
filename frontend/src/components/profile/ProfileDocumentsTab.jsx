@@ -16,15 +16,21 @@ const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
 
 function DocumentEmptyState({ icon: Icon, title, description, actionLabel, onAction, testId, disabled }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-zinc-200 px-6 py-10 text-center">
-      <div className="grid h-12 w-12 place-items-center rounded-xl bg-zinc-100 text-zinc-700">
+    <div className="shell-dashed flex flex-col items-center justify-center gap-4 rounded-lg border px-6 py-10 text-center">
+      <div className="grid h-12 w-12 place-items-center rounded-xl shell-icon-box">
         <Icon className="h-6 w-6" aria-hidden />
       </div>
       <div className="max-w-sm space-y-1">
-        <p className="text-base font-semibold text-zinc-900">{title}</p>
-        <p className="text-sm leading-relaxed text-zinc-500">{description}</p>
+        <p className="shell-title text-base font-semibold">{title}</p>
+        <p className="text-sm leading-relaxed shell-body">{description}</p>
       </div>
-      <Button type="button" onClick={onAction} disabled={disabled} data-testid={testId}>
+      <Button
+        type="button"
+        variant="brand"
+        onClick={onAction}
+        disabled={disabled}
+        data-testid={testId}
+      >
         <Upload className="h-4 w-4" />
         {actionLabel}
       </Button>
@@ -36,15 +42,15 @@ function AdditionalDocumentRow({ doc, onView, onDelete, deleting, lang, t }) {
   return (
     <div
       role="listitem"
-      className="flex flex-wrap items-center gap-4 rounded-md border border-zinc-200 p-4"
+      className="shell-surface-sm flex flex-wrap items-center gap-4 rounded-md p-4"
       data-testid={`profile-document-${doc.id}`}
     >
-      <div className="grid size-8 shrink-0 place-items-center rounded-sm border border-zinc-200 bg-zinc-100">
-        <File className="h-4 w-4 text-zinc-700" aria-hidden />
+      <div className="grid size-8 shrink-0 place-items-center rounded-sm shell-border shell-icon-box">
+        <File className="h-4 w-4" aria-hidden />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-zinc-900">{doc.name}</p>
-        <p className="text-sm text-zinc-500">
+        <p className="shell-title truncate text-sm font-medium">{doc.name}</p>
+        <p className="text-sm shell-body">
           {t("profile.documents.uploadedOn", { date: formatUploadedDate(lang, doc.uploaded_at) })}
         </p>
       </div>
@@ -188,7 +194,7 @@ export default function ProfileDocumentsTab({ profile, onUploadResume, onDocumen
         description={t("profile.documents.resumeSectionDesc")}
         footer={(
           <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs leading-relaxed text-zinc-500">
+            <p className="text-xs leading-relaxed shell-body">
               {t("profile.documents.configureAiSettingsHint")}
             </p>
             <ConfigureAiSettingsButton className="shrink-0 sm:w-auto" testId="profile-resume-ai-settings-footer" />
@@ -199,11 +205,22 @@ export default function ProfileDocumentsTab({ profile, onUploadResume, onDocumen
           <div className="space-y-4">
             <ResumeCurrentPreview profile={profile} active compact />
             <div className="flex flex-wrap gap-2">
-              <Button type="button" onClick={onUploadResume} data-testid="profile-resume-replace-btn">
+              <Button
+                type="button"
+                variant="brand"
+                onClick={onUploadResume}
+                data-testid="profile-resume-replace-btn"
+              >
                 <Upload className="h-4 w-4" />
                 {t("profile.documents.replaceResume")}
               </Button>
-              <Button type="button" variant="outline" onClick={downloadResume} data-testid="profile-resume-download-btn">
+              <Button
+                type="button"
+                variant="outline"
+                className="shell-border rounded-full"
+                onClick={downloadResume}
+                data-testid="profile-resume-download-btn"
+              >
                 <Download className="h-4 w-4" />
                 {t("profile.documents.downloadResume")}
               </Button>
@@ -231,9 +248,10 @@ export default function ProfileDocumentsTab({ profile, onUploadResume, onDocumen
         {additionalDocuments.length > 0 ? (
           <div>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <p className="min-w-0 text-sm text-zinc-900">{uploadedCountLabel}</p>
+              <p className="shell-title min-w-0 text-sm">{uploadedCountLabel}</p>
               <Button
                 type="button"
+                variant="brand"
                 size="sm"
                 className="shrink-0"
                 onClick={openDocumentPicker}

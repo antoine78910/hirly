@@ -1,5 +1,6 @@
 import { AlertTriangle, ExternalLink, Info } from "lucide-react";
 import SocialExampleGrid from "./SocialExampleGrid";
+import TrainingDocTable from "./TrainingDocTable";
 
 const URL_PATTERN = /(https?:\/\/[^\s<]+[^\s<.,;:!?])/g;
 const MARKDOWN_LINK_PATTERN = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g;
@@ -142,6 +143,8 @@ function DocBlock({ block, lang }) {
   switch (block.type) {
     case "example_grid":
       return <SocialExampleGrid items={block.items} lang={lang} />;
+    case "table":
+      return <TrainingDocTable block={block} />;
     case "callout":
       return <Callout variant={block.variant} text={block.text} />;
     case "link":

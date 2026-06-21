@@ -249,7 +249,7 @@ export default function Interviews() {
   }
 
   return (
-    <AppPage className="sprout bg-sprout-bg text-white md:bg-transparent md:text-zinc-900 md:py-8">
+    <AppPage className="sprout bg-sprout-bg text-white md:bg-transparent md:py-8 dark:md:text-zinc-100">
       <header className="mx-auto flex w-full max-w-md shrink-0 items-center justify-between px-5 pt-6 md:hidden" data-testid="interviews-header">
         <div className="flex items-center gap-2">
           <MessageSquare className="w-6 h-6 text-white" strokeWidth={2} />

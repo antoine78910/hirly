@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Switch } from "../components/ui/switch";
 import PlacesAutocomplete, { hasGooglePlacesKey } from "./PlacesAutocomplete";
 import { formatMinSalary } from "../lib/jobFilters";
+import SearchRadiusSlider from "./swipe/SearchRadiusSlider";
 import { useAppLocale } from "../context/AppLocaleContext";
 
 /**
@@ -28,12 +29,6 @@ const JOB_LABELS  = { full_time: "Full Time", part_time: "Part Time", internship
 
 const EXPERIENCE  = ["entry", "mid", "senior", "executive"];
 const EXP_LABELS  = { entry: "Entry Level", mid: "Mid Level", senior: "Senior Level", executive: "Executive Level" };
-const radiusToNumber = (value) => {
-  if (String(value || "").toLowerCase() === "worldwide") return 500;
-  const parsed = parseInt(String(value || "").replace("km", ""), 10);
-  if (Number.isNaN(parsed)) return 50;
-  return Math.min(500, Math.max(10, parsed));
-};
 
 const DEFAULT = {
   minSalary: 0,
@@ -157,7 +152,6 @@ export default function FiltersModal({ open, initialFilters, totalCount, onApply
 
   if (!open) return null;
 
-  const radiusKm = radiusToNumber(f.searchRadius);
   const selectedLocations = f.locationsData || [];
   const removeLocation = (placeId) => {
     setF((s) => {
@@ -328,29 +322,13 @@ export default function FiltersModal({ open, initialFilters, totalCount, onApply
             )}
           </section>
 
-          <section>
-            <div className="flex items-center justify-between gap-3 mb-3">
-              <h3 className="font-display font-bold text-2xl">Search Distance</h3>
-              <span className="text-sm font-semibold text-sprout-mint">{radiusKm >= 500 ? "Worldwide" : `${radiusKm} km`}</span>
-            </div>
-            <input
-              type="range"
-              min="10"
-              max="500"
-              step="1"
-              value={radiusKm}
-              onChange={(e) => {
-                const next = Number(e.target.value);
-                setF((s) => ({ ...s, searchRadius: next >= 500 ? "worldwide" : `${next}km` }));
-              }}
-              className="w-full accent-[#5EE5B5]"
-              data-testid="filters-radius-slider"
-            />
-            <div className="mt-2 flex justify-between text-[11px] text-sprout-muted">
-              <span>10 km</span>
-              <span>500 km</span>
-            </div>
-          </section>
+          <SearchRadiusSlider
+            variant="full"
+            label="Search Distance"
+            value={f.searchRadius}
+            onChange={(searchRadius) => setF((s) => ({ ...s, searchRadius }))}
+            testId="filters-radius-slider"
+          />
 
           <section>
             <label className="flex items-center justify-between text-white">

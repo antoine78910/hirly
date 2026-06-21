@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { Headphones, Sun } from "lucide-react";
 import { useAppLocale } from "../../context/AppLocaleContext";
@@ -34,9 +34,18 @@ export default function DesktopAppShell({ children, headerRight = null }) {
     });
   };
 
+  useEffect(() => {
+    const onThemeChange = (event) => {
+      const next = event.detail === "dark" ? "dark" : "light";
+      setThemeMode(next);
+    };
+    window.addEventListener("desktop-theme-change", onThemeChange);
+    return () => window.removeEventListener("desktop-theme-change", onThemeChange);
+  }, []);
+
   return (
     <DesktopThemeContext.Provider value={{ themeMode, isDark, theme }}>
-    <div className={`flex h-dvh ${theme.root}`} data-theme={themeMode}>
+    <div className={`flex h-dvh ${theme.root} ${isDark ? "dark" : ""}`} data-theme={themeMode}>
       <aside className={`flex w-56 shrink-0 flex-col border-r px-3 py-4 lg:w-60 ${theme.sidebar}`}>
         <DesktopAccountMenu
           triggerClassName={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm ${theme.accountBtn}`}

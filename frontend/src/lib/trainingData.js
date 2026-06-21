@@ -86,16 +86,25 @@ function mergeModules(apiModules, staticModules) {
   if (!apiModules?.length) return staticModules;
 
   const apiById = Object.fromEntries(apiModules.map((m) => [m.module_id, m]));
-  return staticModules.map((base) => {
+    return staticModules.map((base) => {
     const fromApi = apiById[base.module_id];
     if (!fromApi) return base;
+    const mergedSections = (fromApi.sections?.length ? fromApi.sections : base.sections)?.map((sec) => {
+      const baseSec = base.sections?.find((s) => s.section_id === sec.section_id);
+      return {
+        ...baseSec,
+        ...sec,
+        content: sec.content?.length ? sec.content : baseSec?.content,
+        resources: sec.resources?.length ? sec.resources : baseSec?.resources,
+      };
+    });
     return {
       ...base,
       ...fromApi,
       title: fromApi.title || base.title,
       description: fromApi.description || base.description,
       content: fromApi.content?.length ? fromApi.content : base.content,
-      sections: fromApi.sections?.length ? fromApi.sections : base.sections,
+      sections: mergedSections?.length ? mergedSections : base.sections,
       video_url: fromApi.video_url || base.video_url,
     };
   });

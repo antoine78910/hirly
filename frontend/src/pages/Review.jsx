@@ -17,7 +17,7 @@ import { filterApplicationsForReview } from "../lib/applicationReview";
 import { useAiSettings } from "../hooks/useAiSettings";
 import { useAppLocale } from "../context/AppLocaleContext";
 import { BrandHeader } from "../components/app/AppScreenHeader";
-import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
+import { AppPage, AppPageScroll, SHELL_PAGE_CLASS } from "../components/app/AppPageShell";
 import DesktopPageHeader from "../components/desktop/DesktopPageHeader";
 import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
 import CompanyLogo from "../components/CompanyLogo";
@@ -105,7 +105,7 @@ export default function Review() {
   };
 
   return (
-    <AppPage className="bg-white text-zinc-900 md:py-8">
+    <AppPage className={SHELL_PAGE_CLASS}>
       <BrandHeader />
 
       <AppPageScroll>
@@ -164,7 +164,7 @@ export default function Review() {
                   <button
                     type="button"
                     onClick={() => openApplication(app)}
-                    className="flex w-full items-start gap-4 rounded-3xl border border-zinc-200 bg-white p-4 text-left shadow-sm transition-transform hover:border-violet-200 hover:shadow-md active:scale-[0.99]"
+                    className="shell-surface flex w-full items-start gap-4 rounded-3xl p-4 text-left transition-transform hover:border-violet-200 hover:shadow-md active:scale-[0.99] dark:hover:border-violet-500/40"
                     data-testid={`review-item-${app.application_id}`}
                   >
                     <CompanyLogo company={app.job?.company} size="md" rounded="xl" />

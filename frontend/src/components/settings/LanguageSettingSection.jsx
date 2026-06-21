@@ -17,14 +17,14 @@ export default function LanguageSettingSection({ variant = "profile" }) {
   if (variant === "mobile") {
     return (
       <section className="mt-7" data-testid="settings-language-section">
-        <h2 className="mb-2 px-1 text-xs uppercase tracking-[0.16em] text-sprout-muted">
+        <h2 className="mb-1 px-1 text-xs uppercase tracking-[0.16em] text-sprout-muted">
           {t("settings.languageTitle")}
         </h2>
         <p className="mb-3 px-1 text-sm text-sprout-muted">{t("settings.languageDesc")}</p>
         <div className="overflow-hidden rounded-2xl border border-sprout-border bg-sprout-surface px-4 py-4">
           <div className="flex items-start gap-3">
-            <div className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-sprout-mint-soft">
-              <Globe className="h-4 w-4 text-sprout-mint" />
+            <div className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-sprout-border bg-sprout-surface-2 text-zinc-300">
+              <Globe className="h-4 w-4" strokeWidth={1.9} />
             </div>
             <div className="min-w-0 flex-1">
               <LanguageSwitcher variant="dark" className="w-full justify-start" onLangChange={handleLang} />
@@ -38,17 +38,16 @@ export default function LanguageSettingSection({ variant = "profile" }) {
   if (variant === "desktop") {
     const isDark = true;
     return (
-      <section className="relative mt-10" data-testid="settings-language-section">
-        <div className="mb-4 max-w-2xl">
-          <div className="inline-flex items-center gap-2 rounded-full border border-blue-500/25 bg-blue-500/10 px-3 py-1 text-xs font-semibold text-blue-300">
-            <Globe className="h-3.5 w-3.5" />
+      <section className="mt-10" data-testid="settings-language-section">
+        <div className="mb-4">
+          <h2 className={`text-[11px] font-semibold uppercase tracking-[0.16em] ${isDark ? "text-zinc-500" : "text-zinc-400"}`}>
             {t("settings.languageTitle")}
-          </div>
-          <p className={`mt-3 text-base leading-relaxed ${isDark ? "text-zinc-400" : "text-zinc-500"}`}>
+          </h2>
+          <p className={`mt-2 text-sm leading-relaxed ${isDark ? "text-zinc-500" : "text-zinc-500"}`}>
             {t("settings.languageDesc")}
           </p>
         </div>
-        <div className="overflow-hidden rounded-[27px] border border-zinc-800 bg-zinc-900/95 px-5 py-5 sm:px-6">
+        <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 px-5 py-5 sm:px-6">
           <LanguageSwitcher variant="dark" onLangChange={handleLang} />
         </div>
       </section>
@@ -57,18 +56,19 @@ export default function LanguageSettingSection({ variant = "profile" }) {
 
   return (
     <section
-      className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm"
+      className="shell-surface p-4"
       data-testid="profile-language-section"
     >
       <div className="flex items-start gap-3">
-        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-violet-50">
-          <Globe className="h-5 w-5 text-linkedin" />
+        <div className="shell-icon-box grid h-10 w-10 shrink-0 place-items-center rounded-xl shell-border">
+          <Globe className="h-4 w-4" strokeWidth={1.9} />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="font-semibold text-zinc-900">{t("settings.languageTitle")}</p>
-          <p className="mt-1 text-sm text-zinc-500">{t("settings.languageDesc")}</p>
+          <p className="shell-title font-semibold">{t("settings.languageTitle")}</p>
+          <p className="mt-1 text-sm shell-body">{t("settings.languageDesc")}</p>
           <div className="mt-3">
-            <LanguageSwitcher variant="light" onLangChange={handleLang} />
+            <LanguageSwitcher variant="light" className="dark:hidden" onLangChange={handleLang} />
+            <LanguageSwitcher variant="dark" className="hidden dark:inline-flex" onLangChange={handleLang} />
           </div>
         </div>
       </div>

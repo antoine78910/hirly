@@ -77,7 +77,7 @@ export function SaveButton({ saving, onClick, label = "Save", testId = "sheet-sa
     <Button
       onClick={onClick}
       disabled={saving}
-      className="w-full h-12 rounded-full bg-sprout-mint text-white font-semibold hover:opacity-90"
+      className="h-12 w-full rounded-full gradient-linkedin font-semibold text-white shadow-[0_8px_24px_rgba(124,58,237,0.28)] hover:opacity-90"
       data-testid={testId}
     >
       {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : label}

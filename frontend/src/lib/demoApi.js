@@ -12,6 +12,9 @@ import {
 } from "./demoData";
 import { getDemoTrainingCatalog, getDemoTrainingCourseDetail } from "./demoTrainingData";
 import { isDemoAccountEnabled, consumeDemoCredit } from "./demoAccount";
+import axios from "axios";
+import { parseApiPath } from "./apiPath";
+import { applyJobFilters, feedQueryToFilters } from "./applyJobFilters";
 
 const state = {
   feedJobs: DEMO_JOBS.map((j) => ({ ...j })),
@@ -23,12 +26,6 @@ const state = {
 
 function clone(data) {
   return JSON.parse(JSON.stringify(data));
-}
-
-function parsePath(url = "") {
-  const [path, query = ""] = url.split("?");
-  const params = Object.fromEntries(new URLSearchParams(query));
-  return { path, params };
 }
 
 function findJob(jobId) {
@@ -99,7 +96,7 @@ function handleUndo() {
 /** Return mock payload for a dev demo request, or undefined to hit the real API. */
 export function getDemoResponse(config) {
   const method = (config.method || "get").toLowerCase();
-  const { path, params } = parsePath(config.url || "");
+  const { path, params } = parseApiPath(axios.getUri(config));
   const body = config.data;
 
   if (method === "get" && path === "/auth/me") {
@@ -150,15 +147,23 @@ export function getDemoResponse(config) {
   }
 
   if (method === "get" && path === "/jobs/feed") {
-    const limit = Number(params.limit || 5);
+    const requestUrl = axios.getUri(config);
+    const query = requestUrl.includes("?") ? requestUrl.slice(requestUrl.indexOf("?") + 1) : "";
+    const params = new URLSearchParams(query);
+    const filters = feedQueryToFilters(params);
+    const searchRole = params.get("search_role") || "";
+    const limit = Number(params.get("limit") || 5);
+    const filtered = applyJobFilters(state.feedJobs, filters, {
+      searchRole,
+      profileLocationData: DEMO_PROFILE.target_location_data,
+    });
     return {
-      jobs: clone(state.feedJobs.slice(0, limit)),
-      total: state.feedJobs.length,
-      fallback_reason: null,
+      jobs: clone(filtered.slice(0, limit)),
+      total: filtered.length,
+      fallback_reason: filtered.length ? null : "no_jobs_for_filters",
       demo_mode: true,
       backend_api_mocked: true,
-      filters_backend_accurate: false,
-      warning: "Demo mode active: /jobs/feed is mocked and filters are not backend-accurate.",
+      filters_applied: filters,
     };
   }
 

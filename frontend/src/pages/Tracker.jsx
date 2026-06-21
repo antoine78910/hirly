@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import {
   Loader2, MapPin, FileText, Mail, Download, MessageSquare, FileSearch, Sparkles,
   Search, CheckCircle2, Clock3, AlertCircle, ArrowRight, BriefcaseBusiness, Send, Zap,
 } from "lucide-react";
 import { BrandHeader } from "../components/app/AppScreenHeader";
-import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
+import { AppPage, AppPageScroll, SHELL_PAGE_CLASS } from "../components/app/AppPageShell";
 import DesktopPageHeader from "../components/desktop/DesktopPageHeader";
 import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
 import CompanyLogo from "../components/CompanyLogo";
@@ -67,31 +67,71 @@ function TrackerApplicationRow({ application, onOpen, t, lang }) {
   const company = application.job?.company || t("tracker.unknownCompany");
   const date = fmtListDate(application.created_at, lang);
   const statusLabel = listStatusLabel(application, t);
-  const score = application.job?.match_score ?? application.match_score ?? 1;
 
   return (
     <button
       type="button"
       onClick={() => onOpen(application)}
-      className="flex w-full items-center gap-3 rounded-2xl border border-zinc-200/90 bg-zinc-50/80 p-3 text-left transition-colors active:bg-zinc-100 md:rounded-xl md:p-3.5"
+      className="shell-border shell-inset flex w-full items-center gap-3 rounded-2xl p-3 text-left transition-colors active:bg-zinc-100 dark:active:bg-zinc-800 md:rounded-xl md:p-3.5"
       data-testid={`application-${application.application_id}`}
     >
       <CompanyLogo company={application.job?.company} size="sm" rounded="xl" className="shrink-0" />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[15px] font-semibold leading-snug text-zinc-900">{title}</p>
+        <p className="shell-title truncate text-[15px] font-semibold leading-snug">{title}</p>
         <p className="truncate text-sm text-zinc-500">{company}</p>
         <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[11px] text-zinc-500">
           <span className="truncate">{date || t("tracker.recently")}</span>
           <span aria-hidden="true">·</span>
           <span className="inline-flex shrink-0 items-center gap-0.5 font-semibold text-linkedin">
             <Zap className="h-3 w-3" fill="currentColor" />
-            {score}
+            1
           </span>
           <span aria-hidden="true">·</span>
           <span className="truncate font-medium text-zinc-600">{statusLabel}</span>
         </div>
       </div>
     </button>
+  );
+}
+
+function TrackerPassedRow({ row, onApplyNow, applyingId, t, lang }) {
+  const job = row.job;
+  if (!job) return null;
+  const title = job.title || t("tracker.untitledRole");
+  const company = job.company || t("tracker.unknownCompany");
+  const date = fmtListDate(row.created_at, lang);
+  const applying = applyingId === job.job_id;
+
+  return (
+    <div
+      className="shell-border shell-inset flex w-full items-center gap-3 rounded-2xl p-3 md:rounded-xl md:p-3.5"
+      data-testid={`passed-job-${job.job_id}`}
+    >
+      <CompanyLogo company={job.company} size="sm" rounded="xl" className="shrink-0" />
+      <div className="min-w-0 flex-1">
+        <p className="shell-title truncate text-[15px] font-semibold leading-snug">{title}</p>
+        <p className="truncate text-sm text-zinc-500">{company}</p>
+        <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[11px] text-zinc-500">
+          <span className="truncate">{date || t("tracker.recently")}</span>
+          <span aria-hidden="true">·</span>
+          <span className="inline-flex shrink-0 items-center gap-0.5 font-semibold text-linkedin">
+            <Zap className="h-3 w-3" fill="currentColor" />
+            1
+          </span>
+          <span aria-hidden="true">·</span>
+          <span className="truncate font-medium text-zinc-600">{t("history.passed")}</span>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={() => onApplyNow(job.job_id)}
+        disabled={applying}
+        className="shrink-0 rounded-full bg-linkedin px-3 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-60"
+        data-testid={`passed-apply-${job.job_id}`}
+      >
+        {applying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t("history.generatePackage")}
+      </button>
+    </div>
   );
 }
 
@@ -272,7 +312,9 @@ const applicationStatusMessage = (status, t) => {
 
 export default function Tracker() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { t, lang } = useAppLocale();
+  const activeTab = searchParams.get("tab") === "passed" ? "passed" : "applications";
   const { user } = useAuth();
   const displayStatuses = useMemo(() => getApplicationDisplayStatuses(t), [t]);
   const filters = useMemo(() => getTrackerFilterTabs(t), [t]);
@@ -290,6 +332,44 @@ export default function Tracker() {
   const [resumeOpen, setResumeOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [passedRows, setPassedRows] = useState([]);
+  const [passedLoading, setPassedLoading] = useState(false);
+  const [applyingPassedId, setApplyingPassedId] = useState(null);
+
+  const setActiveTab = (tab) => {
+    if (tab === "passed") {
+      setSearchParams({ tab: "passed" }, { replace: true });
+      return;
+    }
+    setSearchParams({}, { replace: true });
+  };
+
+  const loadPassed = async () => {
+    setPassedLoading(true);
+    try {
+      const { data } = await api.get("/swipes/history?direction=left&limit=100");
+      setPassedRows(data.swipes || []);
+    } catch {
+      toast.error(t("history.loadError"));
+    } finally {
+      setPassedLoading(false);
+    }
+  };
+
+  const applyPassedJob = async (jobId) => {
+    setApplyingPassedId(jobId);
+    try {
+      await api.delete(`/swipes/${jobId}`);
+      await api.post("/swipe", { job_id: jobId, direction: "right" });
+      toast.success(t("history.packageGenerated"));
+      await Promise.all([loadPassed(), load()]);
+      setActiveTab("applications");
+    } catch {
+      toast.error(t("history.packageError"));
+    } finally {
+      setApplyingPassedId(null);
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -303,6 +383,10 @@ export default function Tracker() {
     trackEvent("tracker_view");
     load();
   }, []);
+
+  useEffect(() => {
+    if (activeTab === "passed") loadPassed();
+  }, [activeTab]);
 
   useEffect(() => {
     if (!selected) return;
@@ -468,6 +552,19 @@ export default function Tracker() {
       return statusMatch && matchesSearch(app, searchQuery);
     })
   ), [apps, statusFilter, searchQuery]);
+
+  const filteredPassed = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return passedRows;
+    return passedRows.filter((row) => {
+      const job = row.job || {};
+      return [job.company, job.title, job.location].some(
+        (value) => String(value || "").toLowerCase().includes(q),
+      );
+    });
+  }, [passedRows, searchQuery]);
+
+  const pageLoading = activeTab === "passed" ? passedLoading : loading;
   const selectedTimeline = useMemo(
     () => (selected ? timelineFor(selected, t) : []),
     [selected, t],
@@ -477,7 +574,7 @@ export default function Tracker() {
   const canShowInternalSubmitTest = internalSubmitTestEnabled && userEmail && internalSubmitEmails.has(userEmail);
 
   return (
-    <AppPage className="bg-white text-zinc-900 md:py-8">
+    <AppPage className={SHELL_PAGE_CLASS}>
       <BrandHeader />
 
       <AppPageScroll>
@@ -488,26 +585,36 @@ export default function Tracker() {
         />
 
         {/* Sprout-style primary tabs (mobile-first) */}
-        <div className="flex border-b border-zinc-200 md:mt-2">
+        <div className="shell-border-b flex md:mt-2">
           <button
             type="button"
-            className="relative flex-1 py-3 text-sm font-semibold text-linkedin"
+            onClick={() => setActiveTab("applications")}
+            className={`relative flex-1 py-3 text-sm font-semibold transition-colors ${
+              activeTab === "applications" ? "text-linkedin" : "shell-tab-inactive hover:text-zinc-600 dark:hover:text-zinc-300"
+            }`}
             data-testid="tracker-tab-applications"
           >
             {t("tracker.title")}
-            <span className="absolute inset-x-4 bottom-0 h-0.5 rounded-full bg-linkedin" />
+            {activeTab === "applications" ? (
+              <span className="absolute inset-x-4 bottom-0 h-0.5 rounded-full bg-linkedin" />
+            ) : null}
           </button>
           <button
             type="button"
-            onClick={() => navigate("/history?tab=left")}
-            className="flex-1 py-3 text-sm font-semibold text-zinc-400 transition-colors hover:text-zinc-600"
+            onClick={() => setActiveTab("passed")}
+            className={`relative flex-1 py-3 text-sm font-semibold transition-colors ${
+              activeTab === "passed" ? "text-linkedin" : "shell-tab-inactive hover:text-zinc-600 dark:hover:text-zinc-300"
+            }`}
             data-testid="tracker-tab-skipped"
           >
             {t("tracker.skippedJobs")}
+            {activeTab === "passed" ? (
+              <span className="absolute inset-x-4 bottom-0 h-0.5 rounded-full bg-linkedin" />
+            ) : null}
           </button>
         </div>
 
-        {showResumeBanner ? (
+        {activeTab === "applications" && showResumeBanner ? (
           <section className="py-8 text-center">
             <div className="mx-auto grid h-20 w-20 place-items-center rounded-2xl border-2 border-linkedin/30 bg-violet-50">
               <FileSearch className="h-10 w-10 text-linkedin" strokeWidth={1.5} />
@@ -527,7 +634,9 @@ export default function Tracker() {
           </section>
         ) : null}
 
-        <section className={showResumeBanner ? "mt-6 border-t border-zinc-100 pt-6 pb-8 md:mt-10 md:pt-8" : "pb-8 pt-3 md:pt-4"}>
+        <section className={activeTab === "applications" && showResumeBanner ? "mt-6 border-t border-zinc-100 pt-6 pb-8 md:mt-10 md:pt-8" : "pb-8 pt-3 md:pt-4"}>
+          {activeTab === "applications" ? (
+          <>
           {/* Status filter chips — horizontal scroll with counts */}
           <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar" data-testid="tracker-status-filters">
             <button
@@ -536,12 +645,12 @@ export default function Tracker() {
               className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-sm font-semibold transition-colors ${
                 statusFilter === "all"
                   ? "border-linkedin bg-linkedin text-white"
-                  : "border-zinc-200 bg-white text-zinc-700"
+                  : "shell-chip-idle"
               }`}
             >
               {t("tracker.all")}
               <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${
-                statusFilter === "all" ? "bg-white/20" : "bg-zinc-100"
+                statusFilter === "all" ? "bg-white/20" : "shell-chip-count"
               }`}>
                 {filterCounts.all || 0}
               </span>
@@ -556,14 +665,14 @@ export default function Tracker() {
                   type="button"
                   onClick={() => setStatusFilter(item.key)}
                   className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-sm font-semibold transition-colors ${
-                    active ? "border-linkedin bg-linkedin text-white" : "border-zinc-200 bg-white text-zinc-700"
+                    active ? "border-linkedin bg-linkedin text-white" : "shell-chip-idle"
                   }`}
                   data-testid={`tracker-filter-${item.key}`}
                 >
                   <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
                   {item.label}
                   <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${
-                    active ? "bg-white/20" : "bg-zinc-100"
+                    active ? "bg-white/20" : "shell-chip-count"
                   }`}>
                     {count}
                   </span>
@@ -572,13 +681,13 @@ export default function Tracker() {
             })}
           </div>
 
-          <label className="mt-2 flex h-10 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 md:h-11 md:rounded-2xl">
+          <label className="shell-search mt-2 flex h-10 items-center gap-2 rounded-xl px-3 md:h-11 md:rounded-2xl">
             <Search className="h-4 w-4 shrink-0 text-zinc-500" />
             <input
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder={t("tracker.searchPlaceholder")}
-              className="min-w-0 flex-1 bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-500"
+              className="min-w-0 flex-1 bg-transparent text-sm shell-title outline-none placeholder:shell-body"
               data-testid="applications-search"
             />
             {searchQuery ? (
@@ -611,7 +720,7 @@ export default function Tracker() {
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2.5 md:grid-cols-4">
               {[
-                { label: t("tracker.totalApplications"), value: summary.total, Icon: BriefcaseBusiness, tone: "border-zinc-200 bg-white text-zinc-900", sub: t("tracker.submittedCount", { n: summary.submitted }) },
+                { label: t("tracker.totalApplications"), value: summary.total, Icon: BriefcaseBusiness, tone: "shell-surface-sm text-zinc-900 dark:text-zinc-100", sub: t("tracker.submittedCount", { n: summary.submitted }) },
                 { label: t("tracker.successRate"), value: `${summary.successRate}%`, Icon: CheckCircle2, tone: "border-emerald-100 bg-emerald-50 text-emerald-800", sub: t("tracker.submittedOverTotal") },
                 { label: t("tracker.pending"), value: summary.pending, Icon: Clock3, tone: "border-amber-100 bg-amber-50 text-amber-800", sub: t("tracker.beingFinalized") },
                 { label: t("tracker.actionRequired"), value: summary.actionRequired, Icon: AlertCircle, tone: "border-orange-100 bg-orange-50 text-orange-800", sub: t("tracker.needAttentionCount", { n: summary.attention }) },
@@ -636,12 +745,12 @@ export default function Tracker() {
                     type="button"
                     onClick={() => setStatusFilter(item.key)}
                     className={`shrink-0 rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors ${
-                      active ? "border-linkedin bg-linkedin text-white" : "border-zinc-200 bg-white text-zinc-600"
+                      active ? "border-linkedin bg-linkedin text-white" : "shell-chip-idle"
                     }`}
                   >
                     {item.label}
                     <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] ${
-                      active ? "bg-white/20 text-white" : "bg-zinc-100 text-zinc-700"
+                      active ? "bg-white/20 text-white" : "shell-chip-count text-zinc-700 dark:text-zinc-300"
                     }`}>
                       {filterCounts[item.key] || 0}
                     </span>
@@ -651,16 +760,16 @@ export default function Tracker() {
             </div>
           </div>
 
-          {loading ? (
+          {pageLoading ? (
             <div className="mt-12 flex justify-center">
               <Loader2 className="h-5 w-5 animate-spin text-zinc-600" />
             </div>
           ) : filteredApps.length === 0 ? (
             <div className="mt-6 rounded-3xl border border-dashed border-zinc-200 bg-zinc-50 px-5 py-8 text-center">
-              <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-white text-zinc-600 shadow-sm">
+              <div className="shell-surface mx-auto grid h-12 w-12 place-items-center rounded-2xl text-zinc-600 dark:text-zinc-400">
                 <BriefcaseBusiness className="h-5 w-5" />
               </div>
-              <p className="font-display text-lg font-bold text-zinc-900">{t("tracker.nothingYet")}</p>
+              <p className="shell-title font-display text-lg font-bold">{t("tracker.nothingYet")}</p>
               <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-zinc-600">
                 {searchQuery.trim() ? t("tracker.noSearchMatch") : getTrackerEmptyCopy(t, statusFilter)}
               </p>
@@ -689,6 +798,71 @@ export default function Tracker() {
                 </motion.li>
               ))}
             </ul>
+          )}
+          </>
+          ) : (
+          <>
+          <label className="shell-search mt-2 flex h-10 items-center gap-2 rounded-xl px-3 md:h-11 md:rounded-2xl">
+            <Search className="h-4 w-4 shrink-0 text-zinc-500" />
+            <input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder={t("tracker.searchPlaceholder")}
+              className="min-w-0 flex-1 bg-transparent text-sm shell-title outline-none placeholder:shell-body"
+              data-testid="passed-search"
+            />
+            {searchQuery ? (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="text-xs font-semibold text-linkedin"
+              >
+                {t("common.clear")}
+              </button>
+            ) : null}
+          </label>
+
+          {pageLoading ? (
+            <div className="mt-12 flex justify-center" data-testid="passed-loading">
+              <Loader2 className="h-5 w-5 animate-spin text-zinc-600" />
+            </div>
+          ) : filteredPassed.length === 0 ? (
+            <div className="mt-6 rounded-3xl border border-dashed border-zinc-200 bg-zinc-50 px-5 py-8 text-center" data-testid="passed-empty">
+              <div className="shell-surface mx-auto grid h-12 w-12 place-items-center rounded-2xl text-zinc-600 dark:text-zinc-400">
+                <BriefcaseBusiness className="h-5 w-5" />
+              </div>
+              <p className="shell-title font-display text-lg font-bold">{t("tracker.nothingYet")}</p>
+              <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-zinc-600">
+                {searchQuery.trim() ? t("tracker.noSearchMatch") : t("history.noPassed")}
+              </p>
+              <button
+                type="button"
+                onClick={() => navigate("/swipe")}
+                className="mt-5 inline-flex items-center justify-center gap-1.5 rounded-full bg-linkedin px-4 py-2 text-sm font-semibold text-white"
+              >
+                {t("tracker.backToSwipe")} <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          ) : (
+            <ul className="mt-3 space-y-2 md:mt-4 md:space-y-3" data-testid="passed-list">
+              {filteredPassed.map((row) => (
+                <motion.li
+                  key={row.swipe_id || row.job_id}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                >
+                  <TrackerPassedRow
+                    row={row}
+                    onApplyNow={applyPassedJob}
+                    applyingId={applyingPassedId}
+                    t={t}
+                    lang={lang}
+                  />
+                </motion.li>
+              ))}
+            </ul>
+          )}
+          </>
           )}
         </section>
 

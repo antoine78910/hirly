@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import ConfigureAiSettingsButton from "./settings/ConfigureAiSettingsButton";
+import { Button } from "./ui/button";
 import ResumeCurrentPreview from "./profile/ResumeCurrentPreview";
 import { useAppLocale } from "../context/AppLocaleContext";
 import { trackEvent } from "../lib/analytics";
@@ -176,11 +177,12 @@ export default function ResumeSheet({ open, profile, onClose, onUploaded }) {
             data-testid="resume-file-input"
           />
 
-          <button
+          <Button
             type="button"
+            variant="brand"
+            className="mt-5 h-12 w-full"
             onClick={openPicker}
             disabled={uploading}
-            className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-full gradient-linkedin text-sm font-semibold text-white shadow-md transition-opacity hover:opacity-90 disabled:opacity-60"
             data-testid="resume-upload-btn"
           >
             {uploading ? (
@@ -189,7 +191,7 @@ export default function ResumeSheet({ open, profile, onClose, onUploaded }) {
               <FileText className="h-4 w-4" />
             )}
             {uploading ? t("resumeSheet.uploading") : t("resumeSheet.selectFile")}
-          </button>
+          </Button>
 
           <ConfigureAiSettingsButton
             className="mt-3 w-full"

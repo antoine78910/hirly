@@ -3,6 +3,7 @@ import { demoMode } from "./dev";
 import { getDemoResponse } from "./demoApi";
 import { getFinanceDemoResponse } from "./financeDemoApi";
 import { getDemoAccountResponse, patchDemoAccountResponse } from "./demoAccount";
+import { isFinanceDemoEnabled } from "./demoSettings";
 
 const normalizeBackendUrl = (value) => {
   const raw = (value || "").trim();
@@ -35,24 +36,26 @@ api.interceptors.request.use((config) => {
   const t = getSessionToken();
   if (t) config.headers.Authorization = `Bearer ${t}`;
 
-  if (demoMode) {
-    const mock = getDemoResponse(config);
-    if (mock !== undefined) {
+  // Finance demo must win over the real API (and over generic demoMode jobs).
+  if (!config.adapter && isFinanceDemoEnabled()) {
+    const financeDemoMock = getFinanceDemoResponse(config);
+    if (financeDemoMock !== undefined) {
       config.adapter = () => Promise.resolve({
-        data: mock,
+        data: financeDemoMock,
         status: 200,
         statusText: "OK",
         headers: {},
         config,
       });
+      return config;
     }
   }
 
-  if (!config.adapter) {
-    const financeDemoMock = getFinanceDemoResponse(config);
-    if (financeDemoMock !== undefined) {
+  if (demoMode && !config.adapter) {
+    const mock = getDemoResponse(config);
+    if (mock !== undefined) {
       config.adapter = () => Promise.resolve({
-        data: financeDemoMock,
+        data: mock,
         status: 200,
         statusText: "OK",
         headers: {},

@@ -1,11 +1,11 @@
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { useEffect, useState, useCallback } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowLeft, Zap, Loader2 } from "lucide-react";
+import { Zap, Loader2 } from "lucide-react";
 import { api } from "../lib/api";
 import CompanyLogo from "../components/CompanyLogo";
 import { toast } from "sonner";
-import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
+import { AppPage, AppPageScroll, SHELL_PAGE_CLASS } from "../components/app/AppPageShell";
 import DesktopPageHeader from "../components/desktop/DesktopPageHeader";
 import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
 import { useAppLocale } from "../context/AppLocaleContext";
@@ -22,23 +22,24 @@ function JobRow({ row, onApplyNow, t }) {
   if (!job) return null;
   return (
     <div
-      className="rounded-2xl border border-sprout-border bg-sprout-surface p-4 flex items-start gap-4 md:border-zinc-200 md:bg-white"
+      className="shell-surface-sm flex items-start gap-4 rounded-2xl p-4"
       data-testid={`history-row-${job.job_id}`}
     >
       <CompanyLogo company={job.company} size="md" rounded="xl" />
-      <div className="flex-1 min-w-0">
+      <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
-          <p className="font-display text-[17px] font-bold leading-tight text-white line-clamp-2 md:text-zinc-900">{job.title}</p>
-          <span className="inline-flex items-center gap-1 text-sprout-mint text-sm font-semibold shrink-0">
-            <Zap className="w-4 h-4" />{row.match_score ?? 1}
+          <p className="shell-title line-clamp-2 font-display text-[17px] font-bold leading-tight">{job.title}</p>
+          <span className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-linkedin">
+            <Zap className="h-4 w-4" />1
           </span>
         </div>
-        <p className="mt-0.5 text-sm text-sprout-muted md:text-zinc-500">{job.company}</p>
+        <p className="mt-0.5 text-sm text-zinc-500">{job.company}</p>
         <div className="mt-3 flex items-center justify-between">
-          <span className="text-xs text-sprout-dim">{formatDate(row.created_at)}</span>
+          <span className="text-xs text-zinc-400">{formatDate(row.created_at)}</span>
           <button
+            type="button"
             onClick={() => onApplyNow(job.job_id)}
-            className="px-4 h-9 rounded-full bg-sprout-mint text-white text-sm font-semibold hover:opacity-90 transition-opacity"
+            className="h-9 rounded-full bg-linkedin px-4 text-sm font-semibold text-white transition-opacity hover:opacity-90"
             data-testid={`history-apply-${job.job_id}`}
           >
             {t("history.generatePackage")}
@@ -50,12 +51,11 @@ function JobRow({ row, onApplyNow, t }) {
 }
 
 export default function History() {
+  const navigate = useNavigate();
   const { t } = useAppLocale();
   const tabs = getHistoryTabs(t);
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const initial = searchParams.get("tab") === "left" ? "left" : "right";
-  const [tab, setTab] = useState(initial);
+  const [tab, setTab] = useState("right");
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -64,85 +64,84 @@ export default function History() {
     try {
       const { data } = await api.get(`/swipes/history?direction=${direction}&limit=100`);
       setRows(data.swipes || []);
-    } catch (e) {
+    } catch {
       toast.error(t("history.loadError"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
-  useEffect(() => { load(tab); }, [tab, load]);
+  useEffect(() => {
+    if (searchParams.get("tab") === "left") return;
+    load(tab);
+  }, [tab, load, searchParams]);
 
-  const switchTab = (k) => {
-    setTab(k);
-    setSearchParams({ tab: k });
+  if (searchParams.get("tab") === "left") {
+    return <Navigate to="/tracker?tab=passed" replace />;
+  }
+
+  const switchTab = (key) => {
+    if (key === "left") {
+      navigate("/tracker?tab=passed");
+      return;
+    }
+    setTab(key);
+    setSearchParams({ tab: key });
   };
 
   const applyNow = async (jobId) => {
     try {
-      // remove the prior swipe so the job is eligible, then post a right-swipe
       await api.delete(`/swipes/${jobId}`);
       await api.post("/swipe", { job_id: jobId, direction: "right" });
       toast.success(t("history.packageGenerated"));
       load(tab);
-    } catch (e) {
+    } catch {
       toast.error(t("history.packageError"));
     }
   };
 
-  const title = tab === "left" ? t("history.passedTitle") : t("history.generatedTitle");
+  const title = t("history.generatedTitle");
 
   return (
-    <AppPage className="sprout bg-sprout-bg text-white md:bg-transparent md:text-zinc-900 md:py-8">
-      <header className="mx-auto flex w-full max-w-md shrink-0 items-center gap-3 px-5 pt-6 md:hidden" data-testid="history-header">
-        <button
-          onClick={() => navigate(-1)}
-          className="w-10 h-10 grid place-items-center rounded-full hover:bg-sprout-surface"
-          data-testid="history-back-btn"
-          aria-label={t("common.back")}
-        >
-          <ArrowLeft className="w-5 h-5 text-white" />
-        </button>
-        <h1 className="font-display font-bold text-xl flex-1 text-center pr-10">{title}</h1>
-      </header>
-
+    <AppPage className={SHELL_PAGE_CLASS}>
       <AppPageScroll className={APP_CONTENT_WIDTH}>
-      <DesktopPageHeader title={title} subtitle={t("history.subtitle")} />
-      <div className="mt-6 flex gap-2 p-1 rounded-full bg-sprout-surface border border-sprout-border" data-testid="history-tabs">
-        {tabs.map((tabItem) => (
-          <button
-            key={tabItem.key}
-            onClick={() => switchTab(tabItem.key)}
-            data-testid={tabItem.testid}
-            className={`relative flex-1 h-10 rounded-full text-sm font-semibold transition-colors ${
-              tab === tabItem.key ? "text-violet-800" : "text-zinc-500"
-            }`}
-          >
-            {tab === tabItem.key && (
-              <motion.span
-                layoutId="history-tab-pill"
-                className="absolute inset-0 rounded-full selection-tab-on"
-                transition={{ type: "spring", stiffness: 300, damping: 28 }}
-              />
-            )}
-            <span className="relative">{tabItem.label}</span>
-          </button>
-        ))}
-      </div>
+        <DesktopPageHeader title={title} subtitle={t("history.subtitle")} />
+        <div className="mt-6 flex gap-2 rounded-full border border-zinc-200 bg-zinc-100 p-1" data-testid="history-tabs">
+          {tabs.map((tabItem) => (
+            <button
+              key={tabItem.key}
+              type="button"
+              onClick={() => switchTab(tabItem.key)}
+              data-testid={tabItem.testid}
+              className={`relative h-10 flex-1 rounded-full text-sm font-semibold transition-colors ${
+                tab === tabItem.key ? "text-violet-800" : "text-zinc-500"
+              }`}
+            >
+              {tab === tabItem.key ? (
+                <motion.span
+                  layoutId="history-tab-pill"
+                  className="absolute inset-0 rounded-full bg-white shadow-sm"
+                  transition={{ type: "spring", stiffness: 300, damping: 28 }}
+                />
+              ) : null}
+              <span className="relative">{tabItem.label}</span>
+            </button>
+          ))}
+        </div>
 
-      <div className="mt-6 space-y-3" data-testid="history-list">
-        {loading && (
-          <div className="py-16 grid place-items-center" data-testid="history-loading">
-            <Loader2 className="w-5 h-5 animate-spin text-sprout-muted" />
-          </div>
-        )}
-        {!loading && rows.length === 0 && (
-          <div className="py-20 text-center" data-testid="history-empty">
-            <p className="text-sprout-muted">{tab === "left" ? t("history.noPassed") : t("history.noGenerated")}</p>
-          </div>
-        )}
-        {!loading && rows.map((r) => <JobRow key={r.job_id} row={r} onApplyNow={applyNow} t={t} />)}
-      </div>
+        <div className="mt-6 space-y-3" data-testid="history-list">
+          {loading ? (
+            <div className="grid place-items-center py-16" data-testid="history-loading">
+              <Loader2 className="h-5 w-5 animate-spin text-zinc-500" />
+            </div>
+          ) : null}
+          {!loading && rows.length === 0 ? (
+            <div className="py-20 text-center" data-testid="history-empty">
+              <p className="text-zinc-500">{t("history.noGenerated")}</p>
+            </div>
+          ) : null}
+          {!loading && rows.map((r) => <JobRow key={r.job_id} row={r} onApplyNow={applyNow} t={t} />)}
+        </div>
       </AppPageScroll>
     </AppPage>
   );

@@ -18,12 +18,13 @@ import { trackEvent } from "../lib/analytics";
 import { useAuth } from "../context/AuthContext";
 import { cacheJobForDemo, isDemoAccountEnabled, seedTutorialShowcaseIfEmpty } from "../lib/demoAccount";
 import { TUTORIAL_BYPASS_AUTH } from "../lib/dev";
-import { DEMO_SETTINGS_CHANGED } from "../lib/demoSettings";
+import { DEMO_SETTINGS_CHANGED, isFinanceDemoEnabled } from "../lib/demoSettings";
+import { getFinanceDemoFeedData } from "../lib/financeDemoApi";
 import { ensureTutorialSession } from "../lib/tutorialSession";
 import { useUpgradeModal } from "../context/UpgradeModalContext";
 import DesktopSwipeFeed from "../components/swipe/DesktopSwipeFeed";
 import { saveTargetPreferences, normalizeLocationData } from "../lib/targetPreferences";
-import { hasActiveFilters } from "../lib/jobFilters";
+import { hasActiveFilters, mergeFilters } from "../lib/jobFilters";
 import { useAppLocale } from "../context/AppLocaleContext";
 import {
   formatPostedDate,
@@ -131,7 +132,7 @@ function MobileCardContent({ job, onReport, onShare, actionsEnabled, t }) {
         </div>
         <span className="inline-flex items-center gap-1.5 rounded-full bg-sprout-mint px-3 py-1 text-xs font-bold text-white">
           <Zap className="h-3.5 w-3.5" fill="white" />
-          {job.match_score ?? 1}
+          1
         </span>
       </div>
 
@@ -376,27 +377,28 @@ export default function Swipe() {
     if (activeTarget?.role?.trim()) {
       params.set("search_role", activeTarget.role.trim());
     }
-    if (!f) return params;
-    if (f.minSalary)            params.set("min_salary", String(f.minSalary));
-    if (f.postedDate && f.postedDate !== "any") params.set("posted_within", f.postedDate);
-    f.workLocations?.forEach((v) => params.append("work_location", v));
-    f.jobTypes?.forEach((v)      => params.append("job_type", v));
-    f.experience?.forEach((v)    => params.append("experience", v));
-    if (f.locationsData?.length) {
-      params.set("locations_json", JSON.stringify(f.locationsData));
-    } else if (f.locationData) {
-      params.set("locations_json", JSON.stringify([f.locationData]));
+    if (f == null) return params;
+    const merged = mergeFilters(f);
+    if (merged.minSalary) params.set("min_salary", String(merged.minSalary));
+    if (merged.postedDate && merged.postedDate !== "any") params.set("posted_within", merged.postedDate);
+    merged.workLocations?.forEach((v) => params.append("work_location", v));
+    merged.jobTypes?.forEach((v) => params.append("job_type", v));
+    merged.experience?.forEach((v) => params.append("experience", v));
+    if (merged.locationsData?.length) {
+      params.set("locations_json", JSON.stringify(merged.locationsData));
+    } else if (merged.locationData) {
+      params.set("locations_json", JSON.stringify([merged.locationData]));
     } else {
-      f.locations?.forEach((v) => params.append("location", v));
+      merged.locations?.forEach((v) => params.append("location", v));
     }
-    f.onlyCompanies?.forEach((v) => params.append("only_company", v));
-    f.hideCompanies?.forEach((v) => params.append("hide_company", v));
-    f.onlyIndustries?.forEach((v) => params.append("only_industry", v));
-    f.hideIndustries?.forEach((v) => params.append("hide_industry", v));
-    if (f.includeUnknownLocation === false) params.set("include_unknown_location", "false");
-    if (f.includeUnknownSalary === false)   params.set("include_unknown_salary", "false");
-    if (f.searchRadius) params.set("search_radius", f.searchRadius);
-    if (f.onlyMyCountry) params.set("only_my_country", "true");
+    merged.onlyCompanies?.forEach((v) => params.append("only_company", v));
+    merged.hideCompanies?.forEach((v) => params.append("hide_company", v));
+    merged.onlyIndustries?.forEach((v) => params.append("only_industry", v));
+    merged.hideIndustries?.forEach((v) => params.append("hide_industry", v));
+    if (merged.includeUnknownLocation === false) params.set("include_unknown_location", "false");
+    if (merged.includeUnknownSalary === false) params.set("include_unknown_salary", "false");
+    if (merged.searchRadius) params.set("search_radius", merged.searchRadius);
+    if (merged.onlyMyCountry) params.set("only_my_country", "true");
     return params;
   };
 
@@ -416,6 +418,14 @@ export default function Swipe() {
     if (replace) setJobs([]);
     const requestFeed = async () => {
       const params = buildFeedParams(f);
+      if (isFinanceDemoEnabled()) {
+        const demoData = getFinanceDemoFeedData({
+          filters: f == null ? null : mergeFilters(f),
+          searchRole: targetRef.current?.role?.trim() || "",
+          limit: Number(params.get("limit") || 5),
+        });
+        if (demoData) return demoData;
+      }
       const { data } = await api.get(`/jobs/feed?${params.toString()}`, {
         timeout: 45000,
         signal: controller.signal,
@@ -435,7 +445,7 @@ export default function Swipe() {
         data = await requestFeed();
       } catch (firstError) {
         if (controller.signal.aborted || firstError?.code === "ERR_CANCELED") throw firstError;
-        if (TUTORIAL_BYPASS_AUTH && firstError?.response?.status === 401) {
+        if (!isFinanceDemoEnabled() && TUTORIAL_BYPASS_AUTH && firstError?.response?.status === 401) {
           await ensureTutorialSession();
           data = await requestFeed();
         } else {

@@ -87,7 +87,7 @@ function PersonCard({ person, index, onConnect }) {
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.04 }}
-      className="flex items-center gap-4 rounded-2xl border border-sprout-border bg-sprout-surface px-4 py-4 md:border-zinc-200 md:bg-white"
+      className="flex items-center gap-4 rounded-2xl border border-sprout-border bg-sprout-surface px-4 py-4 md:shell-surface-sm"
     >
       {/* Avatar */}
       <div
@@ -100,7 +100,7 @@ function PersonCard({ person, index, onConnect }) {
 
       {/* Info */}
       <div className="flex-1 min-w-0">
-        <p className="truncate text-sm font-semibold leading-tight text-white md:text-zinc-900">{person.name}</p>
+        <p className="truncate text-sm font-semibold leading-tight text-white md:shell-title">{person.name}</p>
         <p className="mt-0.5 truncate text-xs text-sprout-muted md:text-zinc-500">
           {person.title} · {person.company}
         </p>
@@ -151,7 +151,7 @@ export default function People() {
   }
 
   return (
-    <AppPage className="sprout bg-sprout-bg text-white md:bg-transparent md:text-zinc-900 md:py-8">
+    <AppPage className="sprout bg-sprout-bg text-white md:bg-transparent md:py-8 dark:md:text-zinc-100">
       <header className="mx-auto w-full max-w-md shrink-0 px-5 pt-6 md:hidden">
         <h1 className="font-display text-3xl font-black tracking-tighter text-white">People</h1>
         <p className="mt-1 text-sm text-sprout-muted">

@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 SEED_CREATOR_ID = "creator_swiipr_official"
 SEED_COURSE_ID = "course_job_search_mastery"
-SEED_MODULES_VERSION = 8
+SEED_MODULES_VERSION = 9
 
 CRM_STAGES = ["new", "contacted", "qualified", "enrolled", "won", "lost"]
 

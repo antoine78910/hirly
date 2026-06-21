@@ -117,12 +117,12 @@ export default function ResumeCurrentPreview({
 
   return (
     <section className="space-y-2" data-testid="resume-current-preview">
-      <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+      <p className="text-xs font-semibold uppercase tracking-wide shell-body">
         {sectionLabel}
       </p>
 
-      <div className="overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100 shadow-sm">
-        <div className={`relative ${previewHeight} overflow-hidden bg-zinc-200`}>
+      <div className="shell-surface-sm overflow-hidden shadow-sm">
+        <div className={`relative ${previewHeight} overflow-hidden bg-zinc-200 dark:bg-zinc-800`}>
           {loading ? (
             <div className="flex h-full flex-col items-center justify-center gap-2 text-zinc-500">
               <Loader2 className="h-6 w-6 animate-spin" />
@@ -146,21 +146,21 @@ export default function ResumeCurrentPreview({
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center text-zinc-500">
               <FileText className="h-8 w-8 text-violet-400" />
-              <p className="text-sm font-medium text-zinc-700">{filename}</p>
+              <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{filename}</p>
               <p className="max-w-xs text-xs leading-relaxed">{t("resumeSheet.pdfPreviewOnly")}</p>
             </div>
           )}
         </div>
 
-        <div className="flex items-center gap-2 border-t border-zinc-200 bg-white px-3 py-2.5 sm:px-4">
-          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-violet-100">
+        <div className="shell-border-b flex items-center gap-2 bg-white px-3 py-2.5 dark:bg-zinc-900 sm:px-4">
+          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-violet-100 dark:bg-violet-500/20">
             <FileText className="h-4 w-4 text-linkedin" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-zinc-900" data-testid="resume-filename">
+            <p className="shell-title truncate text-sm font-medium" data-testid="resume-filename">
               {filename}
             </p>
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs shell-body">
               {isExample ? t("resumeSheet.exampleOnFile") : t("resumeSheet.previewReadOnly")}
             </p>
           </div>

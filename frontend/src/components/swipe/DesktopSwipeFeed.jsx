@@ -28,13 +28,12 @@ import { rankLocationSuggestions } from "../../lib/locationSearch";
 import { jobExternalUrl } from "../../lib/jobDisplayUtils";
 import { useAppLocale } from "../../context/AppLocaleContext";
 import { getDesktopNavItems } from "../desktop/desktopNav";
+import SearchRadiusSlider from "./SearchRadiusSlider";
 import {
   DESKTOP_THEMES,
   readDesktopTheme,
   saveDesktopTheme,
 } from "./desktopFeedTheme";
-
-const RADIUS_OPTIONS = ["25km", "50km", "100km", "200km"];
 
 const SWIPE_EXIT = {
   skip: { x: -720, rotate: -10, opacity: 0, scale: 0.92 },
@@ -228,7 +227,7 @@ export default function DesktopSwipeFeed({
   }, [appLoading, interactionBlocked, job, runSwipe, swipeAnimating]);
 
   return (
-    <div className={`flex h-dvh ${theme.root}`} data-testid="desktop-swipe-feed" data-theme={themeMode}>
+    <div className={`flex h-dvh ${theme.root} ${isDark ? "dark" : ""}`} data-testid="desktop-swipe-feed" data-theme={themeMode}>
       <aside className={`flex w-56 shrink-0 flex-col border-r px-3 py-4 lg:w-60 ${theme.sidebar}`}>
         <DesktopAccountMenu
           triggerClassName={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm ${theme.accountBtn}`}
@@ -348,17 +347,13 @@ export default function DesktopSwipeFeed({
                 testId="desktop-target-location"
               />
             </div>
-            <select
+            <SearchRadiusSlider
               value={radius}
-              onChange={(e) => onRadiusChange?.(e.target.value)}
-              className={`rounded-xl border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/40 ${theme.select}`}
-            >
-              {RADIUS_OPTIONS.map((opt) => (
-                <option key={opt} value={opt}>
-                  {opt.replace("km", " km")}
-                </option>
-              ))}
-            </select>
+              onChange={onRadiusChange}
+              variant="compact"
+              className={theme.select}
+              testId="desktop-radius-slider"
+            />
             <DesktopFiltersMenu
               filters={filters}
               onFiltersChange={onFiltersChange}

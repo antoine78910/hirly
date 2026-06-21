@@ -3,6 +3,8 @@ export const DEMO_CREDITS_CHANGED = "hirly:demo-credits-changed";
 export const DEMO_ACCOUNT_CHANGED = "hirly:demo-account-changed";
 
 import { isFinanceDemoEnabled } from "./demoSettings";
+import axios from "axios";
+import { normalizeApiPath } from "./apiPath";
 
 let cachedDemoAccount = false;
 
@@ -325,7 +327,7 @@ export function getDemoAccountResponse(config) {
   if (!isDemoAccountEnabled()) return undefined;
 
   const method = (config.method || "get").toLowerCase();
-  const path = (config.url || "").split("?")[0];
+  const path = normalizeApiPath(axios.getUri(config));
   const body = config.data;
 
   if (method === "put" && path === "/profile/preferences") {
@@ -382,7 +384,8 @@ export function patchDemoAccountResponse(response) {
   if (!isDemoAccountEnabled()) return response;
 
   const method = (response.config?.method || "get").toLowerCase();
-  const path = (response.config?.url || "").split("?")[0];
+  const requestUrl = axios.getUri(response.config || {});
+  const path = normalizeApiPath(requestUrl);
 
   if (method === "get" && path === "/applications") {
     response.data = {
@@ -392,7 +395,7 @@ export function patchDemoAccountResponse(response) {
   }
 
   if (method === "get" && path === "/swipes/history") {
-    const direction = new URLSearchParams((response.config?.url || "").split("?")[1] || "").get("direction") === "left"
+    const direction = new URLSearchParams(requestUrl.split("?")[1] || "").get("direction") === "left"
       ? "left"
       : "right";
     response.data = {

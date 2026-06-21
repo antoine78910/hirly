@@ -99,5 +99,6 @@ export function saveDesktopTheme(theme) {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(DESKTOP_THEME_STORAGE_KEY, theme);
+    window.dispatchEvent(new CustomEvent("desktop-theme-change", { detail: theme }));
   } catch (_) {}
 }

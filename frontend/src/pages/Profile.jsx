@@ -29,7 +29,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Switch } from "../components/ui/switch";
 import RolePicker from "../components/RolePicker";
 import { TitleHeader } from "../components/app/AppScreenHeader";
-import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
+import { AppPage, AppPageScroll, SHELL_PAGE_CLASS } from "../components/app/AppPageShell";
 import DesktopPageHeader from "../components/desktop/DesktopPageHeader";
 import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
 import { trackEvent } from "../lib/analytics";
@@ -408,14 +408,14 @@ export default function Profile() {
   const showSkeleton = loading && !profile;
 
   return (
-    <AppPage className="bg-white text-zinc-900 md:py-8">
+    <AppPage className={SHELL_PAGE_CLASS}>
       <TitleHeader
         title={t("profile.title")}
         rightAction={(
           <button
             type="button"
             onClick={() => navigate("/settings")}
-            className="grid h-10 w-10 place-items-center rounded-full text-zinc-500 hover:bg-zinc-100"
+            className="grid h-10 w-10 place-items-center rounded-full text-zinc-500 shell-hover dark:text-zinc-400"
             aria-label={t("profileSections.settings")}
             data-testid="profile-settings-btn"
           >
@@ -433,7 +433,7 @@ export default function Profile() {
             <button
               type="button"
               onClick={() => navigate("/settings")}
-              className="hidden rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 md:inline-flex md:items-center md:gap-2"
+              className="shell-btn-outline hidden px-4 py-2 text-sm font-semibold md:inline-flex md:items-center md:gap-2"
             >
               <SettingsIcon className="h-4 w-4" />
               {t("nav.aiSettings")}
@@ -441,7 +441,7 @@ export default function Profile() {
           )}
         />
         {!creditsDismissed ? (
-          <div className="flex items-center gap-3 rounded-2xl border border-zinc-200 bg-white px-3 py-3 shadow-sm">
+          <div className="shell-surface flex items-center gap-3 px-3 py-3">
             <button
               type="button"
               onClick={() => setCreditsDismissed(true)}
@@ -465,14 +465,14 @@ export default function Profile() {
                 <p className="text-sm font-bold">
                   <span className="text-amber-500">{swipeCredits}</span> {isPremium ? t("common.unlimited") : t("common.credits")}
                 </p>
-                <p className="text-xs text-zinc-500">{isPremium ? t("profile.unlimitedSwipes") : t("profile.upgradePlan")}</p>
+                <p className="text-xs shell-body">{isPremium ? t("profile.unlimitedSwipes") : t("profile.upgradePlan")}</p>
               </div>
               <ChevronRight className="h-5 w-5 shrink-0 text-zinc-300" />
             </button>
           </div>
         ) : null}
 
-        <div className={`rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm ${showSkeleton ? "animate-pulse" : ""}`}>
+        <div className={`shell-surface p-4 ${showSkeleton ? "animate-pulse" : ""}`}>
           <div className="flex items-center gap-4">
             <div
               className="relative grid h-16 w-16 place-items-center rounded-full"
@@ -482,13 +482,13 @@ export default function Profile() {
                   : `conic-gradient(#7C3AED ${completion * 3.6}deg, #e4e4e7 0deg)`,
               }}
             >
-              <div className="grid h-12 w-12 place-items-center rounded-full bg-white text-sm font-bold text-zinc-900">
+              <div className="grid h-12 w-12 place-items-center rounded-full bg-white text-sm font-bold shell-title dark:bg-zinc-800">
                 {showSkeleton ? "—" : `${completion}%`}
               </div>
             </div>
             <div className="flex-1">
               <p className="font-display text-lg font-bold">{t("profile.completeProfile")}</p>
-              <p className="text-sm text-zinc-500">{t("profile.completeProfileBody")}</p>
+              <p className="text-sm shell-body">{t("profile.completeProfileBody")}</p>
             </div>
           </div>
           <button
@@ -503,7 +503,7 @@ export default function Profile() {
 
         <LanguageSettingSection variant="profile" />
 
-        <div className="flex border-b border-zinc-200">
+        <div className="shell-border-b flex">
           {profileTabs.map((tabItem) => {
             const Icon = tabItem.icon;
             const active = tab === tabItem.key;
@@ -513,7 +513,7 @@ export default function Profile() {
                 type="button"
                 onClick={() => setTab(tabItem.key)}
                 className={`flex min-w-0 flex-1 flex-col items-center gap-1 px-0.5 py-3 text-center ${
-                  active ? "text-linkedin" : "text-zinc-400"
+                  active ? "text-linkedin" : "shell-tab-inactive"
                 }`}
                 data-testid={`profile-tab-${tabItem.key}`}
               >
@@ -521,7 +521,7 @@ export default function Profile() {
                 <span className="w-full min-w-0 text-[10px] font-semibold leading-tight [overflow-wrap:anywhere] sm:text-xs">
                   {tabItem.label}
                 </span>
-                {active ? <span className="h-0.5 w-8 rounded-full bg-linkedin" /> : <span className="h-0.5 w-8" />}
+                {active ? <span className="h-0.5 w-8 rounded-full gradient-linkedin" /> : <span className="h-0.5 w-8" />}
               </button>
             );
           })}
@@ -533,23 +533,23 @@ export default function Profile() {
               const count = sectionCount(section.countKey);
               return (
                 <div key={section.key}>
-                  <h3 className="mb-2 font-bold text-zinc-900">
+                  <h3 className="shell-title mb-2 font-bold">
                     {section.title}
                     {section.countKey ? ` (${count})` : ""}
                   </h3>
                   <button
                     type="button"
                     onClick={() => setOpenSheet("professional")}
-                    className="flex w-full items-center justify-between rounded-xl border border-dashed border-zinc-300 px-4 py-4 text-left hover:bg-zinc-50"
+                    className="shell-dashed shell-hover flex w-full items-center justify-between rounded-xl border px-4 py-4 text-left"
                   >
                     <div className="flex items-center gap-3">
                       <div className="grid h-10 w-10 place-items-center rounded-full bg-violet-50 text-linkedin">
                         <Plus className="h-5 w-5" />
                       </div>
                       <div>
-                        <p className="font-semibold text-zinc-900">{section.add}</p>
+                        <p className="shell-title font-semibold">{section.add}</p>
                         {section.key === "languages" ? (
-                          <p className="text-sm text-zinc-500">{t("profileSections.languagesHint")}</p>
+                          <p className="text-sm shell-body">{t("profileSections.languagesHint")}</p>
                         ) : null}
                       </div>
                     </div>

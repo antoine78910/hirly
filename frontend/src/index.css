@@ -39,7 +39,7 @@ h1, h2, h3, h4, .font-display {
     --card-foreground: 0 0% 4%;
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 4%;
-    --primary: 211 100% 34%;
+    --primary: 258 90% 66%;
     --primary-foreground: 0 0% 100%;
     --secondary: 0 0% 96%;
     --secondary-foreground: 0 0% 4%;
@@ -51,12 +51,12 @@ h1, h2, h3, h4, .font-display {
     --destructive-foreground: 0 0% 98%;
     --border: 0 0% 90%;
     --input: 0 0% 90%;
-    --ring: 211 100% 34%;
+    --ring: 258 90% 66%;
     --radius: 0.75rem;
 
-    --linkedin: 211 100% 34%;
-    --linkedin-dark: 211 100% 25%;
-    --linkedin-light: 207 50% 95%;
+    --linkedin: 258 90% 66%;
+    --linkedin-dark: 271 81% 56%;
+    --linkedin-light: 250 100% 97%;
   }
   /* In-app theme — light surfaces with violet→blue accent */
   .sprout {
@@ -81,6 +81,27 @@ h1, h2, h3, h4, .font-display {
     --ring: 258 90% 66%;
     color: #18181b;
   }
+  .dark {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 6% 10%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 6% 10%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 258 90% 66%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 4% 16%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 4% 16%;
+    --muted-foreground: 240 5% 64%;
+    --accent: 240 4% 16%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 4% 16%;
+    --input: 240 4% 16%;
+    --ring: 258 90% 66%;
+  }
 }
 
 @layer base {
@@ -88,6 +109,58 @@ h1, h2, h3, h4, .font-display {
   body { @apply bg-background text-foreground; }
   html, body { overscroll-behavior-y: auto; }
   html:has(.sprout), body:has(.sprout) { background-color: #ffffff; }
+}
+
+@layer components {
+  /* Desktop shell pages — mobile stays light; dark follows shell .dark ancestor */
+  .shell-page {
+    @apply bg-white text-zinc-900 md:py-8 dark:text-zinc-100 dark:md:bg-transparent;
+  }
+  .shell-surface {
+    @apply rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-none;
+  }
+  .shell-surface-sm {
+    @apply rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900;
+  }
+  .shell-title {
+    @apply text-zinc-900 dark:text-zinc-100;
+  }
+  .shell-body {
+    @apply text-zinc-500 dark:text-zinc-400;
+  }
+  .shell-border {
+    @apply border-zinc-200 dark:border-zinc-800;
+  }
+  .shell-border-b {
+    @apply border-b border-zinc-200 dark:border-zinc-800;
+  }
+  .shell-inset {
+    @apply border border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800/40;
+  }
+  .shell-dashed {
+    @apply border-dashed border-zinc-300 dark:border-zinc-600;
+  }
+  .shell-icon-box {
+    @apply bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300;
+  }
+  .shell-hover {
+    @apply hover:bg-zinc-50 dark:hover:bg-zinc-800/50;
+  }
+  .shell-chip-idle {
+    @apply border-zinc-200 bg-white text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200;
+  }
+  .shell-chip-count {
+    @apply bg-zinc-100 dark:bg-zinc-800;
+  }
+  .shell-search {
+    @apply border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900;
+  }
+  .shell-btn-outline {
+    @apply rounded-xl border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800;
+  }
+  .shell-tab-inactive {
+    @apply text-zinc-400 dark:text-zinc-500;
+  }
 }
 
 @layer utilities {

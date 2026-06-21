@@ -1,4 +1,6 @@
 /** Full-height shell for bottom-nav pages — scroll lives in AppPageScroll, not the document. */
+export const SHELL_PAGE_CLASS = "shell-page";
+
 export function AppPage({ children, className = "" }) {
   return (
     <div

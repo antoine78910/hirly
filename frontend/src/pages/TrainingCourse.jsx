@@ -291,6 +291,15 @@ export default function TrainingCourse() {
             <p className="leading-relaxed text-zinc-700">{activeModule.description}</p>
           ) : null}
 
+          {activeSection?.resources?.length ? (
+            <section className="space-y-4 border-t border-zinc-100 pt-8">
+              <h3 className="text-lg font-semibold text-zinc-900">
+                {lang === "fr" ? "Ressources" : "Resources"}
+              </h3>
+              <ModuleDocView blocks={activeSection.resources} lang={lang} />
+            </section>
+          ) : null}
+
           {atChapterEnd && moduleQuiz ? (
             <ModuleQuiz
               quiz={moduleQuiz}

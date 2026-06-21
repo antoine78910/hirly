@@ -11,26 +11,56 @@ const COMPANIES = {
   shopify: { domain: "shopify.com", slug: "shopify" },
   framer: { domain: "framer.com", slug: "framer" },
   greenhouse: { domain: "greenhouse.io", slug: "greenhouse" },
+
+  // Finance demo — Paris banking & asset management
+  "credit agricole": { domain: "ca-cib.com", display: "Crédit Agricole CIB" },
+  bnp: { domain: "group.bnpparibas.com", display: "BNP Paribas" },
+  generale: { domain: "societegenerale.com", display: "Société Générale" },
+  natixis: { domain: "www.natixis.com", display: "Natixis" },
+  hsbc: { domain: "hsbc.fr", slug: "hsbc", display: "HSBC France" },
+  boursorama: { domain: "boursorama.com", display: "Boursorama" },
+  lazard: { domain: "lazard.com", display: "Lazard" },
+  amundi: { domain: "amundi.com", display: "Amundi" },
+  rothschild: { domain: "rothschildandco.com", display: "Rothschild & Co" },
+  deutsche: { domain: "db.com", slug: "deutschebank", display: "Deutsche Bank" },
+  axa: { domain: "axa-im.com", display: "AXA Investment Managers" },
+  bpce: { domain: "bpce.fr", display: "BPCE" },
 };
 
-const DISPLAY_NAMES = Object.fromEntries(
-  Object.keys(COMPANIES).map((k) => [k, k.charAt(0).toUpperCase() + k.slice(1)]),
-);
+const COMPANY_KEYS = Object.keys(COMPANIES).sort((a, b) => b.length - a.length);
+
+function normalizeCompanyLabel(label) {
+  return String(label)
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "");
+}
+
+function getDisplayName(key) {
+  const entry = COMPANIES[key];
+  if (!entry) return null;
+  return entry.display || key.charAt(0).toUpperCase() + key.slice(1);
+}
+
+function findCompanyKey(label) {
+  if (!label) return null;
+  const normalized = normalizeCompanyLabel(label);
+  for (const key of COMPANY_KEYS) {
+    const needle = normalizeCompanyLabel(key);
+    if (normalized === needle || normalized.includes(needle)) return key;
+  }
+  return null;
+}
 
 function companyKey(company) {
-  const resolved = resolveCompanyName(company) || company;
-  if (!resolved) return null;
-  return String(resolved).trim().toLowerCase();
+  return findCompanyKey(company) || (company ? String(company).trim().toLowerCase() : null);
 }
 
 /** Resolve a free-form label ("Linear Recruiting") to a canonical company name. */
 export function resolveCompanyName(label) {
-  if (!label) return null;
-  const lower = String(label).trim().toLowerCase();
-  for (const key of Object.keys(COMPANIES)) {
-    if (lower === key || lower.includes(key)) return DISPLAY_NAMES[key];
-  }
-  return null;
+  const key = findCompanyKey(label);
+  return key ? getDisplayName(key) : null;
 }
 
 export function getCompanyDomain(company) {
@@ -44,7 +74,8 @@ export function getCompanyLogoUrls(company) {
   if (!key || !COMPANIES[key]) return [];
 
   const { slug, domain } = COMPANIES[key];
-  const urls = [`https://cdn.simpleicons.org/${slug}`];
+  const urls = [];
+  if (slug) urls.push(`https://cdn.simpleicons.org/${slug}`);
   if (domain) {
     urls.push(`https://www.google.com/s2/favicons?domain=${domain}&sz=128`);
   }

@@ -3,8 +3,12 @@ import {
   FINANCE_DEMO_PROFILE,
   demoFinanceSwipeRow,
 } from "./financeDemoJobs";
+import axios from "axios";
 import { isFinanceDemoEnabled } from "./demoSettings";
 import { consumeDemoCredit } from "./demoAccount";
+import { parseApiPath } from "./apiPath";
+import { applyJobFilters, feedQueryToFilters } from "./applyJobFilters";
+import { mergeFilters } from "./jobFilters";
 
 const state = {
   feedJobs: FINANCE_DEMO_JOBS.map((j) => ({ ...j })),
@@ -18,10 +22,26 @@ function clone(data) {
   return JSON.parse(JSON.stringify(data));
 }
 
-function parsePath(url = "") {
-  const [path, query = ""] = url.split("?");
-  const params = Object.fromEntries(new URLSearchParams(query));
-  return { path, params };
+/** Build /jobs/feed payload for the finance Paris demo (local, no backend). */
+export function getFinanceDemoFeedData({ filters = null, searchRole = "", limit = 5 } = {}) {
+  if (!isFinanceDemoEnabled()) return null;
+  const mergedFilters = mergeFilters(filters);
+  const filtered = applyJobFilters(state.feedJobs, mergedFilters, {
+    searchRole,
+    profileLocationData: FINANCE_DEMO_PROFILE.target_location_data,
+  });
+  const safeLimit = Math.max(1, Number(limit) || 5);
+  return {
+    jobs: clone(filtered.slice(0, safeLimit)),
+    total: filtered.length,
+    total_count: filtered.length,
+    feed_mode: "finance_demo",
+    fallback_reason: filtered.length ? null : "no_jobs_for_filters",
+    demo_mode: true,
+    finance_demo: true,
+    matched_location: ["Paris, France"],
+    filters_applied: mergedFilters,
+  };
 }
 
 export function resetFinanceDemoFeed() {
@@ -99,22 +119,23 @@ export function getFinanceDemoResponse(config) {
   if (!isFinanceDemoEnabled()) return undefined;
 
   const method = (config.method || "get").toLowerCase();
-  const { path, params } = parsePath(config.url || "");
+  let requestUrl = config.url || "";
+  try {
+    requestUrl = axios.getUri(config);
+  } catch {
+    /* use config.url */
+  }
+  const { path, params } = parseApiPath(requestUrl);
   const body = config.data;
 
-  if (method === "get" && path === "/jobs/feed") {
-    const limit = Number(params.limit || 5);
-    return {
-      jobs: clone(state.feedJobs.slice(0, limit)),
-      total: state.feedJobs.length,
-      total_count: state.feedJobs.length,
-      feed_mode: "finance_demo",
-      fallback_reason: null,
-      demo_mode: true,
-      finance_demo: true,
-      matched_location: ["Paris, France"],
-      filters_applied: { target_role: FINANCE_DEMO_PROFILE.target_role },
-    };
+  if (method === "get" && path.includes("/jobs/feed")) {
+    const query = requestUrl.includes("?") ? requestUrl.slice(requestUrl.indexOf("?") + 1) : "";
+    const params = new URLSearchParams(query);
+    return getFinanceDemoFeedData({
+      filters: feedQueryToFilters(params),
+      searchRole: params.get("search_role") || "",
+      limit: params.get("limit") || 5,
+    });
   }
 
   if (method === "get" && path === "/profile") {

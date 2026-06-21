@@ -1,7 +1,10 @@
 /** Creating Content sub-chapters (mirrors backend training_module_content.py). */
 
 import { postingHoursBlocks } from "./trainingPostingHours";
-
+import {
+  INTRODUCE_HIRLY_RESOURCES_EN,
+  INTRODUCE_HIRLY_RESOURCES_FR,
+} from "./introIntroResources";
 export const CREATING_CONTENT_SECTIONS_EN = [
   {
     section_id: "sec_cc_filming",
@@ -148,6 +151,7 @@ export const CREATING_CONTENT_SECTIONS_EN = [
         ],
       },
     ],
+    resources: INTRODUCE_HIRLY_RESOURCES_EN,
   },
   {
     section_id: "sec_cc_editing",
@@ -313,6 +317,7 @@ export const CREATING_CONTENT_SECTIONS_FR = [
         ],
       },
     ],
+    resources: INTRODUCE_HIRLY_RESOURCES_FR,
   },
   {
     section_id: "sec_cc_editing",

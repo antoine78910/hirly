@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Phone, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { BrandHeader } from "../components/app/AppScreenHeader";
-import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
+import { AppPage, AppPageScroll, SHELL_PAGE_CLASS } from "../components/app/AppPageShell";
 import DesktopPageHeader from "../components/desktop/DesktopPageHeader";
 import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
 import { BRAND } from "../lib/brand";
@@ -37,7 +37,7 @@ export default function Feedback() {
   };
 
   return (
-    <AppPage className="bg-white text-zinc-900 md:py-8">
+    <AppPage className={SHELL_PAGE_CLASS}>
       <BrandHeader
         rightAction={
           <button

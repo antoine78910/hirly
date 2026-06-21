@@ -4,7 +4,7 @@ import {
   Building2,
   Calendar,
   Check,
-  ChevronRight,
+  ChevronLeft,
   DollarSign,
   Factory,
   Home,
@@ -197,15 +197,16 @@ export default function DesktopFiltersMenu({
     const submenuWidth = activePanel ? submenuWidthFor(activePanel) + SUBMENU_GAP : 0;
     const totalWidth = MAIN_MENU_WIDTH + submenuWidth;
 
-    let left = anchor.left;
-    if (left + totalWidth > window.innerWidth - VIEWPORT_PADDING) {
-      left = Math.max(VIEWPORT_PADDING, window.innerWidth - VIEWPORT_PADDING - totalWidth);
+    // Open to the left of the trigger, top-aligned with the button.
+    let left = anchor.left - totalWidth - 8;
+    if (left < VIEWPORT_PADDING) {
+      left = VIEWPORT_PADDING;
     }
 
-    let top = anchor.bottom + 8;
+    let top = anchor.top;
     const flyoutHeight = flyoutRef.current?.offsetHeight ?? 0;
     if (flyoutHeight > 0 && top + flyoutHeight > window.innerHeight - VIEWPORT_PADDING) {
-      top = Math.max(VIEWPORT_PADDING, anchor.top - 8 - flyoutHeight);
+      top = Math.max(VIEWPORT_PADDING, window.innerHeight - VIEWPORT_PADDING - flyoutHeight);
     }
 
     setFlyoutPos({ left, top });
@@ -476,63 +477,63 @@ export default function DesktopFiltersMenu({
       </button>
 
       {open ? (
-        <div
-          ref={flyoutRef}
-          className="fixed z-50 flex items-start"
-          style={{
-            left: flyoutPos?.left ?? 0,
-            top: flyoutPos?.top ?? 0,
-            visibility: flyoutPos ? "visible" : "hidden",
-          }}
-        >
-          <div className={`w-56 rounded-xl border p-1.5 ${menuShell}`}>
-            {panels.map(({ id, label, icon: Icon }) => (
-              <FlyoutRow
-                key={id}
-                isDark={isDark}
-                active={activePanel === id}
-                onMouseEnter={() => setActivePanel(id)}
-                testId={`desktop-filters-panel-${id}`}
+          <div
+            ref={flyoutRef}
+            className="fixed z-50 flex items-start"
+            style={{
+              left: flyoutPos?.left ?? 0,
+              top: flyoutPos?.top ?? 0,
+              visibility: flyoutPos ? "visible" : "hidden",
+            }}
+          >
+            {activePanel ? (
+              <div
+                className={`mr-1.5 rounded-xl border ${submenuShell}`}
+                style={{ width: submenuWidth }}
+                data-testid="desktop-filters-submenu"
               >
-                <Icon className="h-4 w-4 shrink-0 text-zinc-400" />
-                <span className="min-w-0 flex-1">{label}</span>
-                <ChevronRight className="h-4 w-4 shrink-0 text-zinc-500" />
+                {renderSubmenu()}
+              </div>
+            ) : null}
+
+            <div className={`w-56 rounded-xl border p-1.5 ${menuShell}`}>
+              {panels.map(({ id, label, icon: Icon }) => (
+                <FlyoutRow
+                  key={id}
+                  isDark={isDark}
+                  active={activePanel === id}
+                  onMouseEnter={() => setActivePanel(id)}
+                  testId={`desktop-filters-panel-${id}`}
+                >
+                  <Icon className="h-4 w-4 shrink-0 text-zinc-400" />
+                  <span className="min-w-0 flex-1">{label}</span>
+                  <ChevronLeft className="h-4 w-4 shrink-0 text-zinc-500" />
+                </FlyoutRow>
+              ))}
+
+              <div className={`my-1.5 h-px ${isDark ? "bg-zinc-800" : "bg-zinc-200"}`} />
+
+              <FlyoutRow
+                isDark={isDark}
+                active={false}
+                onClick={() => patch({ includeUnknownLocation: !f.includeUnknownLocation })}
+                testId="desktop-filters-unknown-location"
+              >
+                <Check className={`h-4 w-4 shrink-0 ${f.includeUnknownLocation ? "text-violet-400" : "text-transparent"}`} />
+                <span className="min-w-0 flex-1 text-xs leading-snug">{t("filters.includeUnknownLocation")}</span>
               </FlyoutRow>
-            ))}
+              <FlyoutRow
+                isDark={isDark}
+                active={false}
+                onClick={() => patch({ includeUnknownSalary: !f.includeUnknownSalary })}
+                testId="desktop-filters-unknown-salary"
+              >
+                <Check className={`h-4 w-4 shrink-0 ${f.includeUnknownSalary ? "text-violet-400" : "text-transparent"}`} />
+                <span className="min-w-0 flex-1 text-xs leading-snug">{t("filters.includeUnknownSalary")}</span>
+              </FlyoutRow>
 
-            <div className={`my-1.5 h-px ${isDark ? "bg-zinc-800" : "bg-zinc-200"}`} />
-
-            <FlyoutRow
-              isDark={isDark}
-              active={false}
-              onClick={() => patch({ includeUnknownLocation: !f.includeUnknownLocation })}
-              testId="desktop-filters-unknown-location"
-            >
-              <Check className={`h-4 w-4 shrink-0 ${f.includeUnknownLocation ? "text-violet-400" : "text-transparent"}`} />
-              <span className="min-w-0 flex-1 text-xs leading-snug">{t("filters.includeUnknownLocation")}</span>
-            </FlyoutRow>
-            <FlyoutRow
-              isDark={isDark}
-              active={false}
-              onClick={() => patch({ includeUnknownSalary: !f.includeUnknownSalary })}
-              testId="desktop-filters-unknown-salary"
-            >
-              <Check className={`h-4 w-4 shrink-0 ${f.includeUnknownSalary ? "text-violet-400" : "text-transparent"}`} />
-              <span className="min-w-0 flex-1 text-xs leading-snug">{t("filters.includeUnknownSalary")}</span>
-            </FlyoutRow>
-
-          </div>
-
-          {activePanel ? (
-            <div
-              className={`ml-1.5 rounded-xl border ${submenuShell}`}
-              style={{ width: submenuWidth }}
-              data-testid="desktop-filters-submenu"
-            >
-              {renderSubmenu()}
             </div>
-          ) : null}
-        </div>
+          </div>
       ) : null}
     </div>
   );

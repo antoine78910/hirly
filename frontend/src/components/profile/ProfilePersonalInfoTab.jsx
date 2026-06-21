@@ -28,7 +28,7 @@ const SALARY_STEP = 5_000;
 function SaveButton({ disabled, saving, onClick, testId }) {
   const { t } = useAppLocale();
   return (
-    <Button type="button" disabled={disabled || saving} onClick={onClick} data-testid={testId}>
+    <Button type="button" variant="brand" disabled={disabled || saving} onClick={onClick} data-testid={testId}>
       {saving ? t("common.loading") : t("common.save")}
     </Button>
   );
@@ -37,7 +37,7 @@ function SaveButton({ disabled, saving, onClick, testId }) {
 function FieldBlock({ label, htmlFor, children }) {
   return (
     <div className="space-y-2">
-      <Label htmlFor={htmlFor} className="text-sm font-medium text-zinc-900">{label}</Label>
+      <Label htmlFor={htmlFor} className="shell-title text-sm font-medium">{label}</Label>
       {children}
     </div>
   );
@@ -275,7 +275,7 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
               type="email"
               value={baseline.email}
               readOnly
-              className="bg-zinc-50 text-zinc-600"
+              className="shell-inset bg-zinc-50 text-zinc-600 dark:text-zinc-400"
               data-testid="personal-info-email"
             />
           </FieldBlock>
@@ -312,8 +312,8 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
                 testId="personal-info-address"
               />
             ) : (
-              <div className="flex flex-wrap items-center gap-2.5 rounded-md border border-zinc-200 bg-zinc-50 px-4 py-3">
-                <div className="min-w-0 flex-1 text-sm font-medium text-zinc-900">{contact.address}</div>
+              <div className="shell-inset flex flex-wrap items-center gap-2.5 rounded-md px-4 py-3">
+                <div className="shell-title min-w-0 flex-1 text-sm font-medium">{contact.address}</div>
                 <div className="flex items-center gap-2">
                   <Button
                     type="button"
@@ -357,12 +357,12 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
         <form id="salary-expectations-form" className="space-y-5" onSubmit={(e) => e.preventDefault()}>
           <div className="flex items-center justify-center gap-6 sm:gap-8">
             <div className="min-w-[120px] text-center sm:min-w-[140px]">
-              <span className="text-sm text-zinc-500">{t("profile.personalInfo.minimum")}</span>
+              <span className="text-sm shell-body">{t("profile.personalInfo.minimum")}</span>
               <p className="text-2xl font-bold text-linkedin">{formatSalary(salary.salaryMin, lang)}</p>
             </div>
             <span className="text-zinc-400">—</span>
             <div className="min-w-[120px] text-center sm:min-w-[140px]">
-              <span className="text-sm text-zinc-500">{t("profile.personalInfo.maximum")}</span>
+              <span className="text-sm shell-body">{t("profile.personalInfo.maximum")}</span>
               <p className="text-2xl font-bold text-linkedin">{formatSalary(salary.salaryMax, lang)}</p>
             </div>
           </div>
@@ -381,12 +381,12 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
             data-testid="personal-info-salary-slider"
           />
 
-          <div className="flex justify-between text-sm text-zinc-500">
+          <div className="flex justify-between text-sm shell-body">
             <span>{formatMoney(0, lang)}</span>
             <span>{formatMoney(SALARY_MAX, lang)}</span>
           </div>
 
-          <p className="rounded-lg bg-zinc-50 p-4 text-center text-sm text-zinc-600">{salarySummary}</p>
+          <p className="shell-inset rounded-lg p-4 text-center text-sm text-zinc-600 dark:text-zinc-400">{salarySummary}</p>
         </form>
       </ProfileFormSection>
 
@@ -441,8 +441,8 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
                     onClick={() => toggleEthnicity(option)}
                     className={`rounded-md border px-3 py-2 text-left text-sm transition-colors ${
                       active
-                        ? "border-linkedin bg-linkedin text-white"
-                        : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+                        ? "border-transparent gradient-linkedin text-white shadow-sm"
+                        : "shell-chip-idle"
                     }`}
                     data-testid={`personal-info-ethnicity-${option.slice(0, 12)}`}
                   >
@@ -503,7 +503,7 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
 
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-3">
-              <Label className="text-sm font-medium text-zinc-900">{t("profile.personalInfo.citizenshipStatus")}</Label>
+              <Label className="shell-title text-sm font-medium">{t("profile.personalInfo.citizenshipStatus")}</Label>
               <Button
                 type="button"
                 variant="outline"
@@ -544,11 +544,11 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
                 {demographics.citizenship.map((entry, index) => (
                   <li
                     key={`${entry.country}-${entry.status}-${index}`}
-                    className="flex items-center justify-between gap-3 rounded-md border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm"
+                    className="shell-inset flex items-center justify-between gap-3 rounded-md px-4 py-3 text-sm"
                   >
-                    <span className="font-medium text-zinc-900">{entry.country}</span>
+                    <span className="shell-title font-medium">{entry.country}</span>
                     <div className="flex items-center gap-2">
-                      <span className="text-zinc-600">{entry.status}</span>
+                      <span className="text-zinc-600 dark:text-zinc-400">{entry.status}</span>
                       <Button
                         type="button"
                         variant="outline"
@@ -563,13 +563,13 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
                 ))}
               </ul>
             ) : (
-              <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-zinc-200 px-6 py-8 text-center">
-                <div className="grid h-10 w-10 place-items-center rounded-lg bg-zinc-100 text-zinc-700">
+              <div className="shell-dashed flex flex-col items-center justify-center gap-3 rounded-lg border px-6 py-8 text-center">
+                <div className="grid h-10 w-10 place-items-center rounded-lg shell-icon-box">
                   <Globe className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-base font-medium text-zinc-900">{t("profile.personalInfo.noCitizenship")}</p>
-                  <p className="mt-1 text-sm text-zinc-500">{t("profile.personalInfo.noCitizenshipDesc")}</p>
+                  <p className="shell-title text-base font-medium">{t("profile.personalInfo.noCitizenship")}</p>
+                  <p className="mt-1 text-sm shell-body">{t("profile.personalInfo.noCitizenshipDesc")}</p>
                 </div>
               </div>
             )}

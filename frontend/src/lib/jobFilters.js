@@ -1,4 +1,23 @@
 export const DEFAULT_SEARCH_RADIUS = "50km";
+export const MIN_SEARCH_RADIUS_KM = 10;
+export const MAX_SEARCH_RADIUS_KM = 500;
+
+export function radiusToKm(value) {
+  if (String(value || "").toLowerCase() === "worldwide") return MAX_SEARCH_RADIUS_KM;
+  const parsed = parseInt(String(value || "").replace(/\D/g, ""), 10);
+  if (Number.isNaN(parsed)) return radiusToKm(DEFAULT_SEARCH_RADIUS);
+  return Math.min(MAX_SEARCH_RADIUS_KM, Math.max(MIN_SEARCH_RADIUS_KM, parsed));
+}
+
+export function radiusFromKm(km) {
+  const next = Math.min(MAX_SEARCH_RADIUS_KM, Math.max(MIN_SEARCH_RADIUS_KM, Math.round(km)));
+  return next >= MAX_SEARCH_RADIUS_KM ? "worldwide" : `${next}km`;
+}
+
+export function formatSearchRadius(value) {
+  const km = radiusToKm(value);
+  return km >= MAX_SEARCH_RADIUS_KM ? "Worldwide" : `${km} km`;
+}
 
 export const DATE_OPTIONS = [
   { value: "any", label: "Any time" },

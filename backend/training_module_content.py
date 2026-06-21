@@ -333,6 +333,133 @@ HIRLY_IN_VIDEOS_FR = [
     {"type": "paragraph", "text": "Commence par le swipe pour postuler, puis CV, lettre IA et historique des candidatures. Montre de grandes entreprises (Meta, Google) pour la crédibilité."},
 ]
 
+
+def _tag(text: str, color: str):
+    return {"type": "tag", "text": text, "color": color}
+
+
+_FR_TAGS = {
+    "upload": _tag("Importer ton CV", "yellow"),
+    "ai": _tag("Lettre + CV IA", "blue"),
+    "swipe": _tag("Fonction swipe", "pink"),
+    "history": _tag("Onglet Historique", "purple"),
+}
+
+_EN_TAGS = {
+    "upload": _tag("Upload your resume", "yellow"),
+    "ai": _tag("AI cover letter/resume", "blue"),
+    "swipe": _tag("Swiping feature", "pink"),
+    "history": _tag("History tab", "purple"),
+}
+
+INTRODUCE_HIRLY_RESOURCES_FR = [
+    {"type": "heading", "level": 4, "text": "Fonctionnalités principales + script"},
+    {
+        "type": "table",
+        "columns": ["Tags", "Script"],
+        "rows": [
+            [_FR_TAGS["upload"], ["Il suffit d'uploader ton CV", "Upload ton CV"]],
+            [
+                _FR_TAGS["ai"],
+                [
+                    "Active la lettre et le CV IA",
+                    "Ils ont même une lettre et un CV IA pour chaque swipe",
+                    "Ils ADAPTENT ton CV et ta lettre de motivation",
+                ],
+            ],
+            [
+                _FR_TAGS["swipe"],
+                [
+                    "Dès que tu swipes à droite, l'IA postule pour toi sur le site de l'entreprise",
+                    "Quand tu swipes à droite, ça postule sur le site pour toi",
+                ],
+            ],
+            [
+                _FR_TAGS["history"],
+                [
+                    "Regarde, j'ai postulé à tout ça en 10 minutes",
+                    "Regarde, voici TOUTES mes candidatures passées",
+                    "Tu peux aussi suivre tes candidatures passées et leurs statuts",
+                ],
+            ],
+        ],
+    },
+    {"type": "heading", "level": 4, "text": "Façons de présenter Hirly"},
+    {
+        "type": "table",
+        "columns": ["", "Variation 1", "Variation 2", "Variation 3"],
+        "rows": [
+            [{"type": "label", "text": "Court"}, [_FR_TAGS["upload"], _FR_TAGS["swipe"]], [], []],
+            [
+                {"type": "label", "text": "Moyen"},
+                [_FR_TAGS["upload"], _FR_TAGS["ai"], _FR_TAGS["swipe"]],
+                [_FR_TAGS["upload"], _FR_TAGS["swipe"], _FR_TAGS["history"]],
+                [_FR_TAGS["upload"], _FR_TAGS["swipe"], _FR_TAGS["ai"]],
+            ],
+            [
+                {"type": "label", "text": "Long"},
+                [_FR_TAGS["upload"], _FR_TAGS["ai"], _FR_TAGS["swipe"], _FR_TAGS["history"]],
+                [_FR_TAGS["upload"], _FR_TAGS["swipe"], _FR_TAGS["ai"], _FR_TAGS["history"]],
+                [],
+            ],
+        ],
+    },
+]
+
+INTRODUCE_HIRLY_RESOURCES_EN = [
+    {"type": "heading", "level": 4, "text": "Main features + script"},
+    {
+        "type": "table",
+        "columns": ["Tags", "Script"],
+        "rows": [
+            [_EN_TAGS["upload"], ["All you gotta do is upload your resume", "Just upload your resume"]],
+            [
+                _EN_TAGS["ai"],
+                [
+                    "Turn on the AI cover letter and resume",
+                    "They even have AI cover letter and resume for EACH swipe",
+                    "They TAILOR your resume and cover letter",
+                ],
+            ],
+            [
+                _EN_TAGS["swipe"],
+                [
+                    "Whenever you swipe right, the AI just automatically applies for you on the company website",
+                    "When you swipe right it just applies on the website for you",
+                ],
+            ],
+            [
+                _EN_TAGS["history"],
+                [
+                    "Look I applied to all of these in 10 minutes",
+                    "Look these are ALL my past applications",
+                    "You can also track all your past applications and statuses",
+                ],
+            ],
+        ],
+    },
+    {"type": "heading", "level": 4, "text": "Ways to introduce Hirly"},
+    {
+        "type": "table",
+        "columns": ["", "Variation 1", "Variation 2", "Variation 3"],
+        "rows": [
+            [{"type": "label", "text": "Short"}, [_EN_TAGS["upload"], _EN_TAGS["swipe"]], [], []],
+            [
+                {"type": "label", "text": "Medium"},
+                [_EN_TAGS["upload"], _EN_TAGS["ai"], _EN_TAGS["swipe"]],
+                [_EN_TAGS["upload"], _EN_TAGS["swipe"], _EN_TAGS["history"]],
+                [_EN_TAGS["upload"], _EN_TAGS["swipe"], _EN_TAGS["ai"]],
+            ],
+            [
+                {"type": "label", "text": "Long"},
+                [_EN_TAGS["upload"], _EN_TAGS["ai"], _EN_TAGS["swipe"], _EN_TAGS["history"]],
+                [_EN_TAGS["upload"], _EN_TAGS["swipe"], _EN_TAGS["ai"], _EN_TAGS["history"]],
+                [],
+            ],
+        ],
+    },
+]
+
 CREATING_CONTENT_SECTIONS_EN = [
     {
         "section_id": "sec_cc_filming",
@@ -345,6 +472,7 @@ CREATING_CONTENT_SECTIONS_EN = [
         "title": "Introducing Hirly in Videos",
         "video_url": "",
         "content": HIRLY_IN_VIDEOS_EN,
+        "resources": INTRODUCE_HIRLY_RESOURCES_EN,
     },
     {
         "section_id": "sec_cc_editing",
@@ -366,6 +494,7 @@ CREATING_CONTENT_SECTIONS_FR = [
         "title": "Présenter Hirly en vidéo",
         "video_url": "",
         "content": HIRLY_IN_VIDEOS_FR,
+        "resources": INTRODUCE_HIRLY_RESOURCES_FR,
     },
     {
         "section_id": "sec_cc_editing",

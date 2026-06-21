@@ -115,7 +115,7 @@ export default function DesktopJobCard({ job, theme, t }) {
           </div>
           <span className={`inline-flex h-fit shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${theme.matchBadge}`}>
             <Zap className="h-3.5 w-3.5" fill="currentColor" />
-            {job.match_score ?? 1}
+            1
           </span>
         </div>
       </div>

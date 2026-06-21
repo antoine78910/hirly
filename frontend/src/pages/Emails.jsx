@@ -12,7 +12,7 @@ import CompanyLogo from "../components/CompanyLogo";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
+import { AppPage, AppPageScroll, SHELL_PAGE_CLASS } from "../components/app/AppPageShell";
 import DesktopPageHeader from "../components/desktop/DesktopPageHeader";
 import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
 import { useAppLocale } from "../context/AppLocaleContext";
@@ -26,131 +26,7 @@ const getInboxFilters = (t) => [
   { key: "offer", label: t("emails.offer"), activeClass: "bg-teal-100 text-teal-700", idleClass: "bg-teal-50 text-teal-600" },
 ];
 
-const INBOX_MESSAGES = [
-  {
-    id: 2,
-    filter: "interview",
-    from: "Linear Recruiting",
-    subject: "Interview invitation — Senior Frontend Engineer",
-    preview: "We'd love to schedule a 30-minute chat with our engineering team next week.",
-    body: `Hi Alex,\n\nThank you for applying to the Senior Frontend Engineer role at Linear. We'd love to schedule a 30-minute video chat with our engineering team next week.\n\nPlease reply with your availability (Mon–Thu, 10am–6pm CET) or use the scheduling link in your applicant portal.\n\nBest,\nSarah Chen\nLinear Recruiting`,
-    date: "Jun 4",
-    starred: true,
-  },
-  {
-    id: 3,
-    filter: "verification",
-    from: "Stripe Careers",
-    subject: "Please verify your email address",
-    preview: "Confirm your email to complete your application for Backend Engineer.",
-    body: `Hello,\n\nPlease verify your email address to complete your application for Backend Engineer at Stripe.\n\nThis link expires in 48 hours. If you did not apply, you can ignore this message.\n\nStripe Careers`,
-    date: "Jun 3",
-    starred: false,
-  },
-  {
-    id: 4,
-    filter: "offer",
-    from: "Raycast HR",
-    subject: "Offer letter — Product Designer",
-    preview: "Congratulations! We're thrilled to extend an offer to join the Raycast team.",
-    body: `Congratulations Alex!\n\nWe're thrilled to extend an offer for the Product Designer position at Raycast. Your portfolio and product sense really stood out throughout the process.\n\nYou'll find the offer letter and benefits summary attached. We'd love a response by Friday.\n\nWelcome to the team,\nRaycast HR`,
-    date: "Jun 1",
-    starred: true,
-  },
-  {
-    id: 5,
-    filter: "primary",
-    from: "Vercel Careers",
-    subject: "Application received — Full Stack Engineer",
-    preview: "Thanks for applying via Hirly. We've received your application and our team is reviewing it.",
-    body: `Hi Alex,\n\nThanks for applying to the Full Stack Engineer role at Vercel through ${BRAND.NAME}. We've received your tailored application package and our recruiting team is reviewing it now.\n\nYou'll hear back within 5–7 business days. In the meantime, feel free to explore our engineering blog and open roles.\n\nBest,\nVercel Careers`,
-    date: "Jun 5",
-    starred: false,
-  },
-  {
-    id: 6,
-    filter: "primary",
-    company: "Linear",
-    from: "Sarah Chen",
-    subject: "Re: Senior Frontend Engineer role at Linear",
-    preview: "Thanks for reaching out! I'd be happy to chat — how does Thursday at 2pm CET work?",
-    body: `Hi Alex,\n\nThanks for your note about the Senior Frontend Engineer role at Linear. I reviewed your background and would love to set up a quick intro call.\n\nWould Thursday at 2:00pm CET work for a 20-minute chat? If not, send a few slots that work for you this week.\n\nLooking forward to it,\nSarah Chen\nLinear Recruiting`,
-    date: "Jun 4",
-    starred: true,
-  },
-  {
-    id: 7,
-    filter: "primary",
-    from: "Notion Recruiting",
-    subject: "Update on your iOS Engineer application",
-    preview: "Thank you for your interest in Notion. After careful review, we've decided not to move forward.",
-    body: `Hi Alex,\n\nThank you for taking the time to apply for the iOS Engineer position at Notion and for the thoughtful application you submitted via ${BRAND.NAME}.\n\nAfter reviewing your profile alongside other candidates, we've decided not to move forward at this time. We'd encourage you to apply again if a future role is a closer match.\n\nWe appreciate your interest in Notion and wish you the best in your search.\n\nKind regards,\nNotion Recruiting`,
-    date: "Jun 2",
-    starred: false,
-  },
-  {
-    id: 8,
-    filter: "interview",
-    from: "Anthropic Talent",
-    subject: "Technical interview — Product Engineer",
-    preview: "Your application stood out. We'd like to invite you to a 60-minute technical interview.",
-    body: `Hi Alex,\n\nThank you for applying to the Product Engineer role at Anthropic. Your experience shipping product surfaces resonated with our team.\n\nWe'd like to invite you to a 60-minute technical interview focused on frontend architecture and product thinking. You'll meet with two engineers from our product team.\n\nPlease reply with your availability next week (Mon–Fri, 9am–5pm PT) or use the scheduling link below.\n\nBest,\nMaya Patel\nAnthropic Talent`,
-    date: "Jun 3",
-    starred: false,
-  },
-  {
-    id: 9,
-    filter: "interview",
-    from: "Linear Recruiting",
-    subject: "Reminder: interview tomorrow at 2:00pm CET",
-    preview: "Quick reminder about your video interview for Senior Frontend Engineer tomorrow.",
-    body: `Hi Alex,\n\nJust a friendly reminder that your video interview for the Senior Frontend Engineer role is scheduled for tomorrow at 2:00pm CET.\n\nJoin link: https://meet.linear.app/interview\n\nPlease have a stable connection and be ready to walk through a recent project. The session will run about 45 minutes.\n\nSee you then,\nSarah Chen\nLinear Recruiting`,
-    date: "Jun 4",
-    starred: true,
-  },
-  {
-    id: 10,
-    filter: "primary",
-    from: "Supabase Hiring",
-    subject: "Re: Backend Engineer — we'd like to learn more",
-    preview: "Your Postgres + TypeScript background looks like a strong fit. Are you open to a short call?",
-    body: `Hey Alex,\n\nI came across your application for the Backend Engineer role at Supabase. Your open-source contributions and Postgres experience caught our attention.\n\nWould you be open to a 25-minute call next week to learn more about what you're looking for and walk through the team structure?\n\nReply with a few times that work for you — I'm flexible Tue–Thu.\n\nCheers,\nJames Okonkwo\nSupabase Hiring`,
-    date: "May 31",
-    starred: false,
-  },
-  {
-    id: 11,
-    filter: "verification",
-    from: "Greenhouse",
-    subject: "Complete your profile for Anthropic",
-    preview: "Anthropic uses Greenhouse for applications. Please confirm your work authorization details.",
-    body: `Hello Alex,\n\nAnthropic asked us to collect a few additional details to complete your application for Product Engineer.\n\nPlease confirm your work authorization status and expected start date using the secure link below. This takes about 2 minutes.\n\nIf you have questions, reply to this email and we'll help.\n\nGreenhouse Applicant Support`,
-    date: "Jun 2",
-    starred: false,
-  },
-  {
-    id: 12,
-    filter: "primary",
-    from: "Stripe Recruiting",
-    subject: "Re: DevRel Engineer — next steps",
-    preview: "Thanks for applying. We'd like you to complete a short writing exercise before the next round.",
-    body: `Hi Alex,\n\nThanks for applying to the DevRel Engineer role at Stripe via ${BRAND.NAME}. We enjoyed your application and would like to move you to the next step.\n\nPlease complete a short writing exercise (technical blog post outline + sample intro) within 5 business days. You'll find the brief in your applicant portal.\n\nLet us know if you need an extension.\n\nBest,\nMarc Dubois\nStripe Recruiting`,
-    date: "May 30",
-    starred: false,
-  },
-  {
-    id: 1,
-    filter: "primary",
-    variant: "welcome",
-    category: "system",
-    from: `The ${BRAND.NAME} Team`,
-    subject: `Welcome to ${BRAND.NAME}!`,
-    preview: `Welcome to ${BRAND.NAME}! Hey there! We're excited to have you on board…`,
-    date: "Jun 5",
-    starred: false,
-    replyDisabled: true,
-  },
-];
+const INBOX_MESSAGES = [];
 
 const sortInboxMessages = (items) =>
   [...items].sort((a, b) => {
@@ -166,38 +42,7 @@ const MOCK_JOBS = [
   { id: 4, company: "Notion", role: "Staff Engineer", contact: "Tom Richards" },
 ];
 
-const MOCK_SENT = [
-  {
-    id: 1,
-    to: "Sarah Chen",
-    company: "Linear",
-    subject: "Re: Senior Frontend Engineer role",
-    preview:
-      "Hi Sarah, I came across your opening at Linear and wanted to reach out directly. I'm very excited about what Linear is building and believe my background aligns strongly with what you're looking for.",
-    date: "2h ago",
-    status: "replied",
-  },
-  {
-    id: 2,
-    to: "Marc Dubois",
-    company: "Stripe",
-    subject: "Backend Engineer — cold reach",
-    preview:
-      "Hey Marc, I noticed Stripe is scaling its payments infrastructure team. I'd love to chat about how my experience in distributed systems could add value to what you're building.",
-    date: "Yesterday",
-    status: "sent",
-  },
-  {
-    id: 3,
-    to: "Tom Richards",
-    company: "Notion",
-    subject: "Staff Engineer opportunity",
-    preview:
-      "Hi Tom, I've been following Notion's product evolution closely and I'm very passionate about the direction the team is taking. I'd love to discuss the Staff Engineer role in more detail.",
-    date: "3 days ago",
-    status: "sent",
-  },
-];
+const MOCK_SENT = [];
 
 const EMAIL_TYPES = [
   {
@@ -982,7 +827,17 @@ function EmailDetailSheet({ email, onClose }) {
 // ─── Tab content ──────────────────────────────────────────────────────────────
 
 function SentTab() {
+  const { t } = useAppLocale();
   const [selectedEmail, setSelectedEmail] = useState(null);
+
+  if (MOCK_SENT.length === 0) {
+    return (
+      <div className="mt-16 text-center">
+        <Mail className="mx-auto mb-3 h-7 w-7 text-sprout-dim" />
+        <p className="text-sm text-sprout-muted">{t("emails.emptyFolder")}</p>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -1068,15 +923,9 @@ export default function Emails() {
   const [query, setQuery] = useState("");
   const [generateOpen, setGenerateOpen] = useState(false);
   const [drafts, setDrafts] = useState(loadDrafts());
-  const [starred, setStarred] = useState(() =>
-    Object.fromEntries(INBOX_MESSAGES.map((m) => [m.id, m.starred])),
-  );
-  const [read, setRead] = useState(() =>
-    Object.fromEntries(INBOX_MESSAGES.map((m) => [m.id, false])),
-  );
-  const [archived, setArchived] = useState(() =>
-    Object.fromEntries(INBOX_MESSAGES.map((m) => [m.id, false])),
-  );
+  const [starred, setStarred] = useState({});
+  const [read, setRead] = useState({});
+  const [archived, setArchived] = useState({});
   const [selectedMessage, setSelectedMessage] = useState(null);
 
   const handleSaveDraft = (draft) => {
@@ -1121,7 +970,7 @@ export default function Emails() {
   );
 
   return (
-    <AppPage className="relative bg-white text-zinc-900 md:py-8">
+    <AppPage className={`relative ${SHELL_PAGE_CLASS}`}>
       <header className="mx-auto w-full max-w-md shrink-0 px-safe pt-safe sm:px-4 md:hidden">
         <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
           <button
@@ -1192,7 +1041,11 @@ export default function Emails() {
           </div>
           <p className="mb-2 text-xs font-medium capitalize text-zinc-400 md:mt-0">{filter}</p>
           {messages.length === 0 ? (
-            <p className="py-12 text-center text-sm text-zinc-500">{t("emails.emptyFolder")}</p>
+            <div className="py-16 text-center">
+              <Mail className="mx-auto mb-3 h-8 w-8 text-zinc-300" />
+              <p className="text-sm font-medium text-zinc-700">{t("emails.emptyFolder")}</p>
+              <p className="mx-auto mt-2 max-w-sm text-sm text-zinc-500">{t("emails.syncInbox")}</p>
+            </div>
           ) : (
             <ul className="divide-y divide-zinc-100">
               {messages.map((m) => (

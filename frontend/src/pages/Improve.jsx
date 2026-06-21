@@ -56,7 +56,7 @@ export default function Improve() {
   const labelColor = LABEL_COLORS[r.label] || "text-white";
 
   return (
-    <AppPage className="sprout bg-sprout-bg text-white md:bg-transparent md:text-zinc-900 md:py-8">
+    <AppPage className="sprout bg-sprout-bg text-white md:bg-transparent md:py-8 dark:md:text-zinc-100">
       <header className="mx-auto flex w-full max-w-md shrink-0 items-center justify-between px-5 pt-6 md:hidden" data-testid="improve-header">
         <div className="flex items-center gap-2">
           <TrendingUp className="w-6 h-6 text-white" strokeWidth={2} />
