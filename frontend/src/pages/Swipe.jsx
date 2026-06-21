@@ -15,7 +15,8 @@ import ReportJobSheet from "../components/ReportJobSheet";
 import { BRAND } from "../lib/brand";
 import { shareJob } from "../lib/shareJob";
 import { trackEvent } from "../lib/analytics";
-import { cacheJobForDemo, isDemoAccountEnabled } from "../lib/demoAccount";
+import { cacheJobForDemo, isDemoAccountEnabled, seedTutorialShowcaseIfEmpty } from "../lib/demoAccount";
+import { TUTORIAL_BYPASS_AUTH } from "../lib/dev";
 import { useUpgradeModal } from "../context/UpgradeModalContext";
 import DesktopSwipeFeed from "../components/swipe/DesktopSwipeFeed";
 import { saveTargetPreferences } from "../lib/targetPreferences";
@@ -405,6 +406,10 @@ export default function Swipe() {
       const { data } = await api.get(`/jobs/feed?${params.toString()}`, { timeout: 15000 });
       setTotalCount(typeof data.total === "number" ? data.total : null);
       setFeedMeta(data || null);
+      if (TUTORIAL_BYPASS_AUTH) {
+        (data.jobs || []).forEach((job) => cacheJobForDemo(job));
+        seedTutorialShowcaseIfEmpty(data.jobs || []);
+      }
       setJobs((prev) => {
         const base = replace ? [] : prev;
         const seen = new Set(base.map((j) => j.job_id));

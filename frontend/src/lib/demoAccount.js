@@ -75,27 +75,85 @@ function resolveJob(jobId) {
   };
 }
 
-export function buildDemoApplication(job) {
+export function buildDemoApplication(job, variantIndex = 0) {
+  const variants = [
+    {
+      status: "interview",
+      submission_status: "submitted",
+      user_facing_submission_status: "submitted",
+      interview_prep: [
+        "Walk me through a recent product feature you shipped end-to-end.",
+        "How do you balance speed and code quality on a small team?",
+        "Tell me about a time you improved application performance.",
+      ],
+    },
+    {
+      status: "viewed",
+      submission_status: "submitted",
+      user_facing_submission_status: "submitted",
+    },
+    {
+      status: "applied",
+      submission_status: "ready",
+      user_facing_submission_status: "ready",
+    },
+    {
+      status: "applied",
+      submission_status: "not_submitted",
+      user_facing_submission_status: "pending",
+    },
+  ];
+  const variant = variants[variantIndex % variants.length];
+
   return {
     application_id: `demo_local_${Date.now()}_${job.job_id}`,
     job_id: job.job_id,
     job: { ...job },
-    status: "applied",
-    submission_status: "not_submitted",
+    status: variant.status,
+    submission_status: variant.submission_status,
+    user_facing_submission_status: variant.user_facing_submission_status,
     demo_local: true,
     match_score: job.match_score,
     match_reasons: job.match_reasons || [],
     created_at: new Date().toISOString(),
+    interview_prep: variant.interview_prep || [],
     tailored_resume: {
       summary: "Tailored CV generated in demo mode (not submitted to employers).",
       highlights: ["Relevant experience highlighted", "Keywords matched to the job description"],
     },
     cover_letter: {
       greeting: `Hi ${job.company} team,`,
-      body: `I'm excited about the ${job.title} role at ${job.company}.`,
-      closing: "Best regards",
+      body: `I'm excited about the ${job.title} role at ${job.company}. My background in ${(job.tech_stack || ["React", "TypeScript"]).slice(0, 2).join(" and ")} aligns well with what you're building.`,
+      closing: "Best regards,\nAlex Martin",
     },
   };
+}
+
+function daysAgoIso(days) {
+  return new Date(Date.now() - days * 86_400_000).toISOString();
+}
+
+export function seedTutorialShowcaseIfEmpty(jobs = []) {
+  if (!isDemoAccountEnabled()) return;
+  if (getDemoApplications().length > 0) return;
+
+  const picks = (jobs || []).filter((job) => job?.job_id).slice(0, 3);
+  if (!picks.length) return;
+
+  picks.forEach((job) => cacheJobForDemo(job));
+
+  const applications = picks.map((job, index) => ({
+    ...buildDemoApplication(job, index),
+    created_at: daysAgoIso(index + 1),
+  }));
+
+  writeJson(APPS_KEY, applications);
+
+  const rightSwipes = picks.map((job, index) => ({
+    ...buildSwipeRow(job, "right"),
+    created_at: daysAgoIso(index + 1),
+  }));
+  writeJson(HISTORY_RIGHT_KEY, rightSwipes);
 }
 
 function buildSwipeRow(job, direction) {
@@ -146,7 +204,7 @@ export function handleDemoAccountSwipe(body = {}) {
 
   if (direction === "right") {
     consumeDemoCredit();
-    const application = buildDemoApplication(job);
+    const application = buildDemoApplication(job, getDemoApplications().length);
     writeJson(APPS_KEY, [application, ...getDemoApplications()]);
 
     const row = buildSwipeRow(job, "right");

@@ -1,8 +1,9 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { api, setSessionToken } from "../lib/api";
-import { devBypassAuth } from "../lib/dev";
+import { devBypassAuth, TUTORIAL_BYPASS_AUTH } from "../lib/dev";
 import { setDemoAccountFromUser } from "../lib/demoAccount";
 import { isOAuthCallbackInProgress } from "../lib/oauthCallback";
+import { bootstrapTutorialSession } from "../lib/tutorialSession";
 
 const AuthContext = createContext(null);
 
@@ -11,6 +12,13 @@ const DEV_MOCK_USER = {
   email: "dev@localhost",
   name: "Dev User",
   demo_account: false,
+};
+
+const TUTORIAL_FALLBACK_USER = {
+  user_id: "tutorial_filming",
+  email: "tutorial@hirly.app",
+  name: "Alex Martin",
+  demo_account: true,
 };
 
 export const AuthProvider = ({ children }) => {
@@ -37,6 +45,27 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
+    if (TUTORIAL_BYPASS_AUTH) {
+      (async () => {
+        try {
+          const data = await bootstrapTutorialSession();
+          const user = { ...(data?.user || TUTORIAL_FALLBACK_USER), demo_account: true };
+          setUser(user);
+          setDemoAccountFromUser(user);
+          setHasProfile(Boolean(data?.has_profile));
+          setHasPreferences(Boolean(data?.has_preferences));
+        } catch (error) {
+          console.warn("Tutorial session bootstrap failed; using local demo fallback.", error);
+          setUser(TUTORIAL_FALLBACK_USER);
+          setDemoAccountFromUser(TUTORIAL_FALLBACK_USER);
+          setHasProfile(true);
+          setHasPreferences(true);
+        } finally {
+          setLoading(false);
+        }
+      })();
+      return;
+    }
     if (devBypassAuth) {
       setUser(DEV_MOCK_USER);
       setDemoAccountFromUser(DEV_MOCK_USER);

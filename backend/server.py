@@ -100,6 +100,7 @@ def _cors_origins() -> List[str]:
         "http://localhost:3001",
         "https://www.tryhirly.com",
         "https://tryhirly.com",
+        "https://hirly-two.vercel.app",
     ]
     for env_name in ("FRONTEND_URL", "REACT_APP_FRONTEND_URL", "VERCEL_PROJECT_PRODUCTION_URL", "VERCEL_URL"):
         value = (os.environ.get(env_name) or "").strip().rstrip("/")
@@ -527,6 +528,111 @@ async def dev_login(response: Response):
         "profile": profile,
         "has_profile": profile is not None and bool(profile.get("cv_text")),
         "has_preferences": profile is not None and bool(profile.get("target_role")),
+    }
+
+
+TUTORIAL_FILMING_USER_ID = "tutorial_filming"
+
+TUTORIAL_FILMING_PROFILE = {
+    "cv_text": """Alex Martin
+Senior Software Engineer — Paris, France
+
+EXPERIENCE
+Senior Software Engineer, ProductCo (2022–Present)
+- React/TypeScript product used by 200k+ users
+- Shipped hiring workflows and candidate tooling
+
+Software Engineer, StartupXYZ (2019–2022)
+- Node.js APIs, PostgreSQL, CI/CD
+
+SKILLS
+React, TypeScript, Node.js, Python, system design
+
+EDUCATION
+MSc Computer Science, 2019
+""",
+    "cv_filename": "alex-martin-cv.pdf",
+    "summary": "Senior software engineer focused on React, TypeScript, and product delivery.",
+    "target_role": "Software Engineer",
+    "target_roles": ["Software Engineer", "Frontend Engineer", "Full Stack Engineer"],
+    "target_location": "Paris, France",
+    "target_location_data": {
+        "location_label": "Paris, France",
+        "country": "France",
+        "country_code": "FR",
+    },
+    "remote_preference": "hybrid",
+    "seniority": "mid",
+    "skills": ["React", "TypeScript", "Node.js", "Python", "PostgreSQL"],
+}
+
+
+def _tutorial_filming_enabled() -> bool:
+    return os.environ.get("TUTORIAL_FILMING_ENABLED", "false").strip().lower() in ("1", "true", "yes", "on")
+
+
+@api_router.post("/tutorial/session")
+async def tutorial_session(response: Response):
+    """Temporary filming endpoint: demo account + seeded profile for real job feed."""
+    if not _tutorial_filming_enabled():
+        raise HTTPException(status_code=404, detail="Not found")
+
+    now = datetime.now(timezone.utc).isoformat()
+    user_doc = await db.users.find_one({"user_id": TUTORIAL_FILMING_USER_ID}, {"_id": 0})
+    if not user_doc:
+        user_doc = {
+            "user_id": TUTORIAL_FILMING_USER_ID,
+            "email": "tutorial@hirly.app",
+            "name": "Alex Martin",
+            "picture": None,
+            "demo_account": True,
+            "created_at": now,
+        }
+        await db.users.insert_one(user_doc)
+    else:
+        await db.users.update_one(
+            {"user_id": TUTORIAL_FILMING_USER_ID},
+            {"$set": {"demo_account": True, "name": user_doc.get("name") or "Alex Martin"}},
+        )
+        user_doc["demo_account"] = True
+
+    profile_payload = {
+        **TUTORIAL_FILMING_PROFILE,
+        "user_id": TUTORIAL_FILMING_USER_ID,
+        "updated_at": now,
+    }
+    await db.profiles.update_one(
+        {"user_id": TUTORIAL_FILMING_USER_ID},
+        {"$set": profile_payload},
+        upsert=True,
+    )
+
+    session_token = f"tutorial_session_{uuid.uuid4().hex}"
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    await db.user_sessions.insert_one({
+        "user_id": TUTORIAL_FILMING_USER_ID,
+        "session_token": session_token,
+        "expires_at": expires_at.isoformat(),
+        "created_at": now,
+        "source": "tutorial_filming",
+    })
+
+    response.set_cookie(
+        key="session_token",
+        value=session_token,
+        max_age=7 * 24 * 60 * 60,
+        httponly=True,
+        secure=os.environ.get("ENVIRONMENT", "").strip().lower() != "development",
+        samesite="lax",
+        path="/",
+    )
+
+    return {
+        "session_token": session_token,
+        "token": session_token,
+        "user": user_doc,
+        "has_profile": True,
+        "has_preferences": True,
     }
 
 
