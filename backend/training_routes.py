@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import mimetypes
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 import training_service as training
+from training_media import resolve_media_file
 
 
 class CreatorRegisterBody(BaseModel):
@@ -150,3 +153,51 @@ def register_training_routes(router: APIRouter, get_current_user, db) -> None:
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return {"ok": True, "lead": lead}
+
+    @router.get("/training/media/{course_id}/{module_id}/{section_part}/{lang}")
+    async def training_media_stream(
+        course_id: str,
+        module_id: str,
+        section_part: str,
+        lang: str,
+    ):
+        media_path = resolve_media_file(course_id, module_id, section_part, lang)
+        if not media_path:
+            raise HTTPException(status_code=404, detail="Video not found")
+        mime, _ = mimetypes.guess_type(str(media_path))
+        return FileResponse(
+            media_path,
+            media_type=mime or "video/mp4",
+            filename=media_path.name,
+        )
+
+
+def register_training_admin_routes(router: APIRouter, require_admin_user, db) -> None:
+    @router.get("/admin/training/videos")
+    async def admin_training_videos_list(
+        admin=Depends(require_admin_user),
+        course_id: str = Query("course_job_search_mastery"),
+    ):
+        return await training.admin_training_videos(db, course_id)
+
+    @router.post("/admin/training/videos")
+    async def admin_training_video_upload(
+        course_id: str = Form(...),
+        module_id: str = Form(...),
+        lang: str = Form("en"),
+        section_id: Optional[str] = Form(None),
+        file: UploadFile = File(...),
+        admin=Depends(require_admin_user),
+    ):
+        try:
+            result = await training.upload_training_video(
+                db,
+                course_id,
+                module_id,
+                section_id or None,
+                lang,
+                file,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return result

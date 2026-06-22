@@ -67,7 +67,7 @@ from job_providers.base import JobSearchQuery
 from location_search import search_locations
 from llm_client import LLMProviderNotConfigured, complete_json_text
 from onboarding_suggestions import suggest_categories, suggest_roles
-from training_routes import register_training_routes
+from training_routes import register_training_routes, register_training_admin_routes
 from training_service import (
     SEED_COURSE_ID,
     admin_training_analytics,
@@ -9079,6 +9079,7 @@ async def dev_clean_job_descriptions():
 # ===================== Wire up =====================
 
 register_training_routes(api_router, get_current_user, db)
+register_training_admin_routes(api_router, require_admin_user, db)
 app.include_router(api_router)
 
 app.add_middleware(

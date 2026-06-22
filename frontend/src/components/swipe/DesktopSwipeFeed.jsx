@@ -296,70 +296,74 @@ export default function DesktopSwipeFeed({
 
         <div className={`border-b px-6 py-4 ${theme.searchBar}`}>
           <div className="flex flex-wrap items-center gap-3">
-            <div
-              className={`flex min-w-[200px] flex-1 items-center rounded-xl border px-3 py-2.5 ${theme.field}`}
-            >
-              <Briefcase className="mr-2 h-4 w-4 shrink-0 text-zinc-400" />
-              <RoleAutocomplete
-                value={roleDraft}
-                onInputChange={setRoleDraft}
-                onPick={pickRole}
-                relatedRole={target.role || ""}
-                variant={isDark ? "dark" : "light"}
-                onFieldFocus={() => { roleFocusedRef.current = true; }}
-                onFieldBlur={() => {
-                  roleFocusedRef.current = false;
-                  commitRole();
-                }}
-                placeholder={t("swipe.jobTitle")}
-                disabled={targetSaving}
-                testId="desktop-target-role"
+            <div className="flex shrink-0 items-center gap-3">
+              <SearchRadiusSlider
+                value={radius}
+                onChange={onRadiusChange}
+                variant="compact"
+                className={theme.select}
+                testId="desktop-radius-slider"
+              />
+              <DesktopFiltersMenu
+                filters={filters}
+                onFiltersChange={onFiltersChange}
+                themeMode={themeMode}
+                onOpenChange={onFiltersOpenChange}
               />
             </div>
-            <div
-              className={`flex min-w-[180px] flex-1 items-center rounded-xl border px-3 py-2.5 ${theme.field}`}
-            >
-              <MapPin className="mr-2 h-4 w-4 shrink-0 text-zinc-400" />
-              <PlacesAutocomplete
-                inline
-                hideLabel
-                variant={isDark ? "dark" : "light"}
-                value={locationDraft}
-                selectedLocation={locationDataDraft}
-                suggestions={locationSuggestions}
-                maxSuggestions={12}
-                onInputChange={(next) => {
-                  setLocationDraft(next);
-                  if (next.trim() !== (locationDataDraft?.location_label || "")) {
-                    setLocationDataDraft(null);
-                  }
-                }}
-                onSelect={(loc) => {
-                  if (loc) pickLocation(loc);
-                  else setLocationDataDraft(null);
-                }}
-                onFieldFocus={() => { locationFocusedRef.current = true; }}
-                onFieldBlur={() => {
-                  locationFocusedRef.current = false;
-                  commitLocation();
-                }}
-                placeholder={t("swipe.location")}
-                testId="desktop-target-location"
-              />
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+              <div
+                className={`flex min-w-[200px] flex-1 items-center rounded-xl border px-3 py-2.5 ${theme.field}`}
+              >
+                <Briefcase className="mr-2 h-4 w-4 shrink-0 text-zinc-400" />
+                <RoleAutocomplete
+                  value={roleDraft}
+                  onInputChange={setRoleDraft}
+                  onPick={pickRole}
+                  relatedRole={target.role || ""}
+                  variant={isDark ? "dark" : "light"}
+                  onFieldFocus={() => { roleFocusedRef.current = true; }}
+                  onFieldBlur={() => {
+                    roleFocusedRef.current = false;
+                    commitRole();
+                  }}
+                  placeholder={t("swipe.jobTitle")}
+                  disabled={targetSaving}
+                  testId="desktop-target-role"
+                />
+              </div>
+              <div
+                className={`flex min-w-[180px] flex-1 items-center rounded-xl border px-3 py-2.5 ${theme.field}`}
+              >
+                <MapPin className="mr-2 h-4 w-4 shrink-0 text-zinc-400" />
+                <PlacesAutocomplete
+                  inline
+                  hideLabel
+                  variant={isDark ? "dark" : "light"}
+                  value={locationDraft}
+                  selectedLocation={locationDataDraft}
+                  suggestions={locationSuggestions}
+                  maxSuggestions={12}
+                  onInputChange={(next) => {
+                    setLocationDraft(next);
+                    if (next.trim() !== (locationDataDraft?.location_label || "")) {
+                      setLocationDataDraft(null);
+                    }
+                  }}
+                  onSelect={(loc) => {
+                    if (loc) pickLocation(loc);
+                    else setLocationDataDraft(null);
+                  }}
+                  onFieldFocus={() => { locationFocusedRef.current = true; }}
+                  onFieldBlur={() => {
+                    locationFocusedRef.current = false;
+                    commitLocation();
+                  }}
+                  placeholder={t("swipe.location")}
+                  testId="desktop-target-location"
+                />
+              </div>
             </div>
-            <SearchRadiusSlider
-              value={radius}
-              onChange={onRadiusChange}
-              variant="compact"
-              className={theme.select}
-              testId="desktop-radius-slider"
-            />
-            <DesktopFiltersMenu
-              filters={filters}
-              onFiltersChange={onFiltersChange}
-              themeMode={themeMode}
-              onOpenChange={onFiltersOpenChange}
-            />
           </div>
         </div>
 

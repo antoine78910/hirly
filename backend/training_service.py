@@ -14,6 +14,13 @@ from training_module_content import (
     WARM_UP_PLAYBOOK_FR,
 )
 from training_quizzes import get_quiz, quiz_id_for_module, score_quiz
+from training_media import (
+    VIDEO_SLOTS,
+    apply_upload_metadata,
+    merge_preserved_videos,
+    save_training_video,
+    slot_video_meta,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -545,6 +552,63 @@ async def admin_training_analytics(db, course_id: Optional[str] = None) -> Dict[
     }
 
 
+async def admin_training_videos(db, course_id: Optional[str] = None) -> Dict[str, Any]:
+    course_id = course_id or SEED_COURSE_ID
+    modules = await db.training_modules.find({"course_id": course_id}).to_list(200)
+    mod_map = {m["module_id"]: m for m in modules}
+    slots = []
+    for slot in VIDEO_SLOTS:
+        mod = mod_map.get(slot["module_id"]) or {}
+        slots.append({
+            "module_id": slot["module_id"],
+            "section_id": slot.get("section_id"),
+            "label": slot.get("label") or slot["module_id"],
+            "en": slot_video_meta(mod, slot, "en"),
+            "fr": slot_video_meta(mod, slot, "fr"),
+        })
+    return {"course_id": course_id, "slots": slots}
+
+
+async def upload_training_video(
+    db,
+    course_id: str,
+    module_id: str,
+    section_id: Optional[str],
+    lang: str,
+    file,
+) -> Dict[str, Any]:
+    module = await db.training_modules.find_one({"module_id": module_id, "course_id": course_id}, {"_id": 0})
+    if not module:
+        raise ValueError("Module not found")
+
+    _, video_url = await save_training_video(file, course_id, module_id, section_id, lang)
+    i18n = apply_upload_metadata(
+        module.get("i18n") or {},
+        section_id,
+        lang,
+        video_url,
+        file.filename or "video",
+    )
+    locale = _normalize_lang(lang)
+    pack = i18n[locale]
+    updates: Dict[str, Any] = {
+        "i18n": i18n,
+        "updated_at": _now(),
+    }
+    if locale == "en":
+        updates["video_url"] = pack.get("video_url", "")
+        updates["sections"] = pack.get("sections") or []
+
+    await db.training_modules.update_one({"module_id": module_id}, {"$set": updates})
+    return {
+        "ok": True,
+        "video_url": video_url,
+        "module_id": module_id,
+        "section_id": section_id,
+        "lang": locale,
+    }
+
+
 async def list_user_enrollments(db, user_id: str, lang: str = "en") -> List[Dict[str, Any]]:
     enrollments = await db.training_enrollments.find({"user_id": user_id}).sort("updated_at", -1).to_list(100)
     out = []
@@ -675,7 +739,7 @@ async def sync_training_locale_content(db) -> None:
 
 def _module_doc(mod_def: Dict[str, Any], now: str, existing: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     module_id = mod_def["module_id"]
-    i18n = MODULE_I18N[module_id]
+    i18n = merge_preserved_videos(MODULE_I18N[module_id], existing)
     return {
         "module_id": module_id,
         "course_id": SEED_COURSE_ID,

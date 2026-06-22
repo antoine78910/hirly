@@ -18,6 +18,15 @@ const BACKEND_URL = normalizeBackendUrl(
 );
 export const API = BACKEND_URL ? `${BACKEND_URL}/api` : "/api";
 
+/** Resolve API-relative media paths (e.g. uploaded training videos). */
+export function resolveApiAssetUrl(path) {
+  if (!path) return "";
+  if (/^https?:\/\//i.test(path)) return path;
+  const base = (BACKEND_URL || (typeof window !== "undefined" ? window.location.origin : "")).replace(/\/+$/, "");
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  return `${base}${normalized}`;
+}
+
 export const api = axios.create({
   baseURL: API,
   withCredentials: true,

@@ -4,7 +4,7 @@ import {
   Building2,
   Calendar,
   Check,
-  ChevronLeft,
+  ChevronRight,
   DollarSign,
   Factory,
   Home,
@@ -13,8 +13,10 @@ import {
   X,
 } from "lucide-react";
 import {
+  clearMenuFilters,
   countActiveFilterGroups,
   formatMinSalary,
+  hasActiveMenuFilters,
   mergeFilters,
   toggleFilterArray,
 } from "../../lib/jobFilters";
@@ -164,7 +166,8 @@ export default function DesktopFiltersMenu({
   const [activePanel, setActivePanel] = useState(null);
   const [flyoutPos, setFlyoutPos] = useState(null);
   const f = mergeFilters(filters);
-  const activeCount = countActiveFilterGroups(f);
+  const activeCount = countActiveFilterGroups(f, undefined, { excludeRadius: true });
+  const showClear = hasActiveMenuFilters(f);
   const [salaryDraft, setSalaryDraft] = useState(f.minSalary);
 
   useEffect(() => {
@@ -197,10 +200,10 @@ export default function DesktopFiltersMenu({
     const submenuWidth = activePanel ? submenuWidthFor(activePanel) + SUBMENU_GAP : 0;
     const totalWidth = MAIN_MENU_WIDTH + submenuWidth;
 
-    // Open to the left of the trigger, top-aligned with the button.
-    let left = anchor.left - totalWidth - 8;
-    if (left < VIEWPORT_PADDING) {
-      left = VIEWPORT_PADDING;
+    // Open to the right of the trigger, top-aligned with the button.
+    let left = anchor.left;
+    if (left + totalWidth > window.innerWidth - VIEWPORT_PADDING) {
+      left = Math.max(VIEWPORT_PADDING, window.innerWidth - VIEWPORT_PADDING - totalWidth);
     }
 
     let top = anchor.top;
@@ -454,8 +457,16 @@ export default function DesktopFiltersMenu({
     });
   };
 
+  const handleClear = () => {
+    onFiltersChange?.(clearMenuFilters(f));
+    setActivePanel(null);
+    setFlyoutPos(null);
+    setOpen(false);
+  };
+
   return (
-    <div className="relative" ref={anchorRef} data-testid="desktop-filters-menu">
+    <div className="flex items-center gap-2">
+      <div className="relative" ref={anchorRef} data-testid="desktop-filters-menu">
       <button
         type="button"
         onClick={toggleOpen}
@@ -486,16 +497,6 @@ export default function DesktopFiltersMenu({
               visibility: flyoutPos ? "visible" : "hidden",
             }}
           >
-            {activePanel ? (
-              <div
-                className={`mr-1.5 rounded-xl border ${submenuShell}`}
-                style={{ width: submenuWidth }}
-                data-testid="desktop-filters-submenu"
-              >
-                {renderSubmenu()}
-              </div>
-            ) : null}
-
             <div className={`w-56 rounded-xl border p-1.5 ${menuShell}`}>
               {panels.map(({ id, label, icon: Icon }) => (
                 <FlyoutRow
@@ -507,7 +508,7 @@ export default function DesktopFiltersMenu({
                 >
                   <Icon className="h-4 w-4 shrink-0 text-zinc-400" />
                   <span className="min-w-0 flex-1">{label}</span>
-                  <ChevronLeft className="h-4 w-4 shrink-0 text-zinc-500" />
+                  <ChevronRight className="h-4 w-4 shrink-0 text-zinc-500" />
                 </FlyoutRow>
               ))}
 
@@ -533,7 +534,32 @@ export default function DesktopFiltersMenu({
               </FlyoutRow>
 
             </div>
+
+            {activePanel ? (
+              <div
+                className={`ml-1.5 rounded-xl border ${submenuShell}`}
+                style={{ width: submenuWidth }}
+                data-testid="desktop-filters-submenu"
+              >
+                {renderSubmenu()}
+              </div>
+            ) : null}
           </div>
+      ) : null}
+      </div>
+      {showClear ? (
+        <button
+          type="button"
+          onClick={handleClear}
+          className={`inline-flex items-center rounded-xl border px-3 py-2.5 text-sm font-medium ${
+            isDark
+              ? "border-zinc-700 bg-zinc-900 text-zinc-300 hover:border-zinc-600 hover:text-white"
+              : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:text-zinc-900"
+          }`}
+          data-testid="desktop-filters-clear"
+        >
+          {t("filters.clear")}
+        </button>
       ) : null}
     </div>
   );

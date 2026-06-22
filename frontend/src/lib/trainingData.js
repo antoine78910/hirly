@@ -96,6 +96,7 @@ function mergeModules(apiModules, staticModules) {
         ...sec,
         content: sec.content?.length ? sec.content : baseSec?.content,
         resources: sec.resources?.length ? sec.resources : baseSec?.resources,
+        video_url: sec.video_url || baseSec?.video_url || "",
       };
     });
     return {
@@ -105,7 +106,7 @@ function mergeModules(apiModules, staticModules) {
       description: fromApi.description || base.description,
       content: fromApi.content?.length ? fromApi.content : base.content,
       sections: mergedSections?.length ? mergedSections : base.sections,
-      video_url: fromApi.video_url || base.video_url,
+      video_url: fromApi.video_url || base.video_url || "",
     };
   });
 }
@@ -152,6 +153,20 @@ export async function fetchTrainingCourseDetail(courseId, lang) {
   };
 
   if (!isLiveTrainingApiEnabled()) {
+    try {
+      const { data } = await api.get(`/training/courses/${id}`, { params: { lang } });
+      if (data?.modules?.length) {
+        return applyCompletion({
+          ...staticData,
+          ...data,
+          course: { ...staticData.course, ...data.course },
+          modules: mergeModules(data.modules, staticData.modules),
+          enrollment: mergeEnrollment(staticData.enrollment, data.enrollment, id),
+        });
+      }
+    } catch {
+      /* static fallback */
+    }
     return applyCompletion({
       ...staticData,
       enrollment: mergeEnrollment(staticData.enrollment, {}, id),

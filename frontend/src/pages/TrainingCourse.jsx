@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { CheckCircle2, ChevronRight, Loader2, Play } from "lucide-react";
+import { resolveApiAssetUrl } from "../lib/api";
 import { useTrainingLocale } from "../context/TrainingLocaleContext";
 import { TrainingTopBar, useTrainingPageMode } from "../components/training/TrainingShell";
 import ModuleDocView from "../components/training/ModuleDocView";
@@ -23,10 +24,11 @@ import {
 } from "../lib/trainingRoutes";
 
 function VideoBlock({ url, t }) {
-  if (url) {
-    const embed = url.includes("youtube.com/embed") || url.includes("youtu.be")
-      ? url.replace("watch?v=", "embed/").replace("youtu.be/", "youtube.com/embed/")
-      : url;
+  const resolvedUrl = resolveApiAssetUrl(url);
+  if (resolvedUrl) {
+    const embed = resolvedUrl.includes("youtube.com/embed") || resolvedUrl.includes("youtu.be")
+      ? resolvedUrl.replace("watch?v=", "embed/").replace("youtu.be/", "youtube.com/embed/")
+      : resolvedUrl;
 
     if (embed.includes("youtube.com/embed") || embed.includes("player.vimeo.com")) {
       return (
@@ -45,7 +47,7 @@ function VideoBlock({ url, t }) {
     }
 
     return (
-      <video src={url} controls className="aspect-video w-full rounded-lg bg-black ring-1 ring-zinc-700/50" />
+      <video src={embed} controls className="aspect-video w-full rounded-lg bg-black ring-1 ring-zinc-700/50" />
     );
   }
 

@@ -40,6 +40,7 @@ export default function SearchRadiusSlider({
           step={1}
           value={[radiusKm]}
           onValueChange={handleChange}
+          revealThumbOnInteraction
           className="py-0.5"
           aria-label={label}
         />
@@ -59,6 +60,7 @@ export default function SearchRadiusSlider({
         step={1}
         value={[radiusKm]}
         onValueChange={handleChange}
+        revealThumbOnInteraction
         aria-label={label}
       />
       <div className="mt-2 flex justify-between text-[11px] text-sprout-muted">
