@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import {
   Zap, Undo2, History, SlidersHorizontal, Flag, Share2, MapPin, Calendar,
-  Heart, X, Loader2,
+  Heart, X, Loader2, Info,
 } from "lucide-react";
 import { toast } from "sonner";
 import Logo from "../components/Logo";
@@ -64,7 +64,7 @@ const clearPersistedFilters = () => {
 };
 
 /* ============================================================
-   Swipe card — horizontal swipe + scrollable details (like desktop).
+   Swipe card — tap to flip for full job details (mobile).
 ============================================================ */
 
 function stopCardTap(e) {
@@ -96,14 +96,14 @@ function MobileDetailSection({ title, bullets, body, t }) {
   );
 }
 
-function MobileCardContent({ job, onReport, onShare, actionsEnabled, t }) {
-  const { snippet, about, detailSections } = getJobDisplayContent(job);
+function CardFront({ job, onReport, onShare, actionsEnabled, t }) {
+  const { snippet } = getJobDisplayContent(job);
   const badges = getJobBadgeItems(job);
 
   return (
-    <div className="absolute inset-0 flex flex-col overflow-hidden rounded-[28px] border border-sprout-border bg-sprout-surface">
-      <div className="relative shrink-0 border-b border-sprout-border px-4 pb-4 pt-4 sm:px-5 sm:pt-5">
-        <div className="absolute right-3 top-3 flex items-center gap-0.5 sm:right-4 sm:top-4">
+    <div className="backface-hidden absolute inset-0 flex flex-col overflow-hidden rounded-[28px] border border-sprout-border bg-sprout-surface">
+      <div className="flex shrink-0 items-start justify-between p-4 sm:p-5">
+        <div className="pointer-events-auto flex items-center gap-2">
           <button
             type="button"
             onPointerDown={stopCardTap}
@@ -131,61 +131,103 @@ function MobileCardContent({ job, onReport, onShare, actionsEnabled, t }) {
             <Share2 className="h-5 w-5" strokeWidth={1.8} />
           </button>
         </div>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-sprout-mint px-3 py-1 text-xs font-bold text-white">
+          <Zap className="h-3.5 w-3.5" fill="white" />
+          1
+        </span>
+      </div>
 
-        <div className="pr-20">
-          <div className="flex items-start gap-3">
-            <div className="min-w-0 flex-1">
-              <h2
-                className="font-display text-2xl font-black leading-tight tracking-tight text-white sm:text-3xl"
-                data-testid="job-title"
-              >
-                {job.title}
-              </h2>
-              <div className="mt-3 flex items-center gap-3">
-                <CompanyLogo company={job.company} size="lg" rounded="2xl" className="shrink-0" />
-                <p className="min-w-0 text-lg font-semibold leading-snug text-white">{job.company}</p>
-              </div>
-            </div>
-            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-sprout-mint px-3 py-1 text-xs font-bold text-white">
-              <Zap className="h-3.5 w-3.5" fill="white" />
-              1
+      <div className="mt-1 flex justify-center">
+        <CompanyLogo company={job.company} size="lg" rounded="2xl" />
+      </div>
+
+      <div className="mt-4 px-5 text-center sm:px-7">
+        <p className="font-display text-2xl font-semibold text-white">{job.company}</p>
+        {snippet ? (
+          <p className="mt-3 line-clamp-3 text-[15px] leading-snug text-sprout-muted">{snippet}</p>
+        ) : null}
+      </div>
+
+      <div className="mt-6 px-5 sm:px-7">
+        <h2
+          className="text-center font-display text-[clamp(1.65rem,6vw,2.35rem)] font-black leading-[1.05] tracking-tight text-white"
+          data-testid="job-title"
+        >
+          {job.title}
+        </h2>
+      </div>
+
+      <div className="mt-5 flex flex-col items-center gap-1.5 text-[15px] text-sprout-muted">
+        <div className="flex items-center gap-2">
+          <MapPin className="h-4 w-4 text-sprout-mint" strokeWidth={1.9} />
+          <span>{job.location || t("swipe.locationNotSpecified")}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Calendar className="h-4 w-4 text-sprout-mint" strokeWidth={1.9} />
+          <span>{formatPostedDate(t, job.posted_at) || t("swipe.postedRecently")}</span>
+        </div>
+      </div>
+
+      {badges.length > 0 ? (
+        <div className="mt-5 flex flex-wrap justify-center gap-2 px-5">
+          {badges.map((badge) => (
+            <span
+              key={badge.label}
+              className="inline-flex items-center rounded-full bg-sprout-surface-2 px-3 py-1.5 text-[13px] font-medium text-zinc-100"
+            >
+              {badge.label}
             </span>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="flex-1" />
+
+      <div className="flex items-center justify-between px-6 py-5">
+        <div className="flex items-center gap-2 font-display text-lg font-bold text-white">
+          <Logo size={22} />
+          {BRAND.NAME}
+        </div>
+        <div className="flex items-center gap-1.5 text-[13px] text-sprout-muted">
+          {t("swipe.tapForDetails")}
+          <Info className="h-4 w-4" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CardBack({ job, t }) {
+  const { about, detailSections } = getJobDisplayContent(job);
+
+  return (
+    <div className="backface-hidden rotate-y-180 absolute inset-0 flex flex-col overflow-hidden rounded-[28px] border border-sprout-border bg-sprout-surface">
+      <div
+        className="app-scroll no-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-6 pb-4 touch-pan-y sm:px-6"
+        data-testid="swipe-card-scroll"
+      >
+        <div>
+          <h2 className="font-display text-[clamp(1.5rem,5.5vw,2rem)] font-black leading-tight tracking-tight text-white">
+            {job.title}
+          </h2>
+          <div className="mt-3 flex items-center gap-3">
+            <CompanyLogo company={job.company} size="md" rounded="xl" className="shrink-0" />
+            <p className="text-lg font-semibold text-white">{job.company}</p>
           </div>
         </div>
 
-        <div className="mt-3 flex flex-col gap-1.5 text-[15px] text-sprout-muted">
+        <div className="space-y-1.5 text-[15px] text-sprout-muted">
           <div className="flex items-center gap-2">
-            <MapPin className="h-4 w-4 shrink-0 text-sprout-mint" strokeWidth={1.9} />
+            <MapPin className="h-4 w-4 text-sprout-mint" />
             <span>{job.location || t("swipe.locationNotSpecified")}</span>
           </div>
           <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4 shrink-0 text-sprout-mint" strokeWidth={1.9} />
+            <Calendar className="h-4 w-4 text-sprout-mint" />
             <span>{formatPostedDate(t, job.posted_at) || t("swipe.postedRecently")}</span>
           </div>
         </div>
 
-        {badges.length > 0 ? (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {badges.map((badge) => (
-              <span
-                key={badge.label}
-                className="inline-flex items-center rounded-full bg-sprout-surface-2 px-3 py-1.5 text-[13px] font-medium text-zinc-100"
-              >
-                {badge.label}
-              </span>
-            ))}
-          </div>
-        ) : null}
-
-      </div>
-
-      <div
-        className="app-scroll no-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-4 pb-32 touch-pan-y sm:px-6"
-        data-testid="swipe-card-scroll"
-      >
-        {snippet ? (
-          <p className="text-sm leading-relaxed text-sprout-muted">{snippet}</p>
-        ) : null}
+        <div className="border-t border-sprout-border" />
 
         <div className="space-y-3">
           {about ? (
@@ -218,11 +260,17 @@ function MobileCardContent({ job, onReport, onShare, actionsEnabled, t }) {
             </section>
           ) : null}
         </div>
+      </div>
 
-        <div className="flex flex-col items-center gap-2 pt-2 pb-1">
-          <Logo size={36} />
-          <p className="font-display text-sm font-bold text-white">{BRAND.NAME}</p>
-        </div>
+      <div className="flex shrink-0 items-center justify-between border-t border-sprout-border px-6 py-4 text-[13px] text-sprout-muted">
+        <span className="flex items-center gap-1.5 font-display font-bold text-white">
+          <Logo size={18} />
+          {BRAND.NAME}
+        </span>
+        <span className="flex items-center gap-1.5">
+          {t("swipe.tapToFlipBack")}
+          <Info className="h-4 w-4" />
+        </span>
       </div>
     </div>
   );
@@ -234,6 +282,12 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t }) {
   const opacity = useTransform(x, [-360, -260, 0, 260, 360], [0, 1, 1, 1, 0]);
   const applyOpacity = useTransform(x, [0, 80, 160], [0, 0.5, 1]);
   const skipOpacity = useTransform(x, [-160, -80, 0], [1, 0.5, 0]);
+  const [flipped, setFlipped] = useState(false);
+  const dragRef = useRef({ distance: 0 });
+
+  useEffect(() => {
+    setFlipped(false);
+  }, [job.job_id, isTop]);
 
   return (
     <motion.div
@@ -245,30 +299,46 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t }) {
         scale: 1 - index * 0.03,
         translateY: index * 10,
         zIndex: 10 - index,
+        touchAction: flipped ? "pan-y" : "none",
         pointerEvents: isTop ? "auto" : "none",
       }}
-      drag={isTop ? "x" : false}
+      drag={isTop && !flipped ? "x" : false}
       dragDirectionLock
       dragMomentum={false}
       dragElastic={0.6}
       dragSnapToOrigin
       whileDrag={{ cursor: "grabbing" }}
+      onDrag={(_, info) => {
+        dragRef.current.distance = Math.abs(info.offset.x);
+      }}
       onDragEnd={(_, info) => {
+        dragRef.current.distance = 0;
         if (info.offset.x > 140 || info.velocity.x > 700) onSwipe("apply");
         else if (info.offset.x < -140 || info.velocity.x < -700) onSwipe("skip");
+      }}
+      onTap={() => {
+        if (!isTop || dragRef.current.distance > 8) return;
+        setFlipped((current) => !current);
       }}
       transition={{ type: "spring", stiffness: 280, damping: 28 }}
       data-testid={isTop ? "swipe-card-top" : `swipe-card-${index}`}
     >
-      <MobileCardContent
-        job={job}
-        onReport={onReport}
-        onShare={onShare}
-        actionsEnabled={isTop}
-        t={t}
-      />
+      <motion.div
+        className="relative h-full w-full preserve-3d"
+        animate={{ rotateY: flipped ? 180 : 0 }}
+        transition={{ type: "spring", stiffness: 110, damping: 18 }}
+      >
+        <CardFront
+          job={job}
+          onReport={onReport}
+          onShare={onShare}
+          actionsEnabled={isTop}
+          t={t}
+        />
+        <CardBack job={job} t={t} />
+      </motion.div>
 
-      {isTop ? (
+      {isTop && !flipped ? (
         <>
           <motion.div
             style={{ opacity: applyOpacity }}
