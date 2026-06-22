@@ -109,6 +109,14 @@ export const FINANCE_DEMO_PROFILE = {
   cv_filename: "cv_demo.pdf",
 };
 
+export function getFinanceDemoSearchTarget() {
+  return {
+    role: FINANCE_DEMO_PROFILE.target_role || "Analyste M&A",
+    location: FINANCE_DEMO_PROFILE.target_location || "Paris, France",
+    locationData: FINANCE_DEMO_PROFILE.target_location_data || null,
+  };
+}
+
 export function demoFinanceSwipeRow(job, direction, days = 1) {
   return {
     swipe_id: `finance_demo_swipe_${job.job_id}_${direction}`,

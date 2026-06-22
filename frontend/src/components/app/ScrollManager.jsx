@@ -12,7 +12,7 @@ function usesDocumentScroll(pathname) {
 }
 
 function usesAppShellScroll(pathname) {
-  return false;
+  return pathname === "/swipe" || pathname === "/app";
 }
 
 /** Route-aware scroll: force native document scroll on long pages. */

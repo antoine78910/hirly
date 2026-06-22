@@ -20,6 +20,7 @@ import { cacheJobForDemo, isDemoAccountEnabled, seedTutorialShowcaseIfEmpty } fr
 import { TUTORIAL_BYPASS_AUTH } from "../lib/dev";
 import { DEMO_SETTINGS_CHANGED, isFinanceDemoEnabled } from "../lib/demoSettings";
 import { getFinanceDemoFeedData } from "../lib/financeDemoApi";
+import { getFinanceDemoSearchTarget } from "../lib/financeDemoJobs";
 import { ensureTutorialSession } from "../lib/tutorialSession";
 import { useUpgradeModal } from "../context/UpgradeModalContext";
 import DesktopSwipeFeed from "../components/swipe/DesktopSwipeFeed";
@@ -101,8 +102,8 @@ function MobileCardContent({ job, onReport, onShare, actionsEnabled, t }) {
 
   return (
     <div className="absolute inset-0 flex flex-col overflow-hidden rounded-[28px] border border-sprout-border bg-sprout-surface">
-      <div className="flex shrink-0 items-start justify-between p-4 sm:p-5">
-        <div className="flex items-center gap-3">
+      <div className="relative shrink-0 border-b border-sprout-border px-4 pb-4 pt-4 sm:px-5 sm:pt-5">
+        <div className="absolute right-3 top-3 flex items-center gap-0.5 sm:right-4 sm:top-4">
           <button
             type="button"
             onPointerDown={stopCardTap}
@@ -130,30 +131,29 @@ function MobileCardContent({ job, onReport, onShare, actionsEnabled, t }) {
             <Share2 className="h-5 w-5" strokeWidth={1.8} />
           </button>
         </div>
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-sprout-mint px-3 py-1 text-xs font-bold text-white">
-          <Zap className="h-3.5 w-3.5" fill="white" />
-          1
-        </span>
-      </div>
 
-      <div
-        className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 pb-6 touch-pan-y sm:px-6"
-        data-testid="swipe-card-scroll"
-      >
-        <div>
-          <h2
-            className="font-display text-2xl font-black leading-tight tracking-tight text-white sm:text-3xl"
-            data-testid="job-title"
-          >
-            {job.title}
-          </h2>
-          <div className="mt-3 flex items-center gap-3">
-            <CompanyLogo company={job.company} size="lg" rounded="2xl" className="shrink-0" />
-            <p className="min-w-0 text-lg font-semibold leading-snug text-white">{job.company}</p>
+        <div className="pr-20">
+          <div className="flex items-start gap-3">
+            <div className="min-w-0 flex-1">
+              <h2
+                className="font-display text-2xl font-black leading-tight tracking-tight text-white sm:text-3xl"
+                data-testid="job-title"
+              >
+                {job.title}
+              </h2>
+              <div className="mt-3 flex items-center gap-3">
+                <CompanyLogo company={job.company} size="lg" rounded="2xl" className="shrink-0" />
+                <p className="min-w-0 text-lg font-semibold leading-snug text-white">{job.company}</p>
+              </div>
+            </div>
+            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-sprout-mint px-3 py-1 text-xs font-bold text-white">
+              <Zap className="h-3.5 w-3.5" fill="white" />
+              1
+            </span>
           </div>
         </div>
 
-        <div className="flex flex-col gap-1.5 text-[15px] text-sprout-muted">
+        <div className="mt-3 flex flex-col gap-1.5 text-[15px] text-sprout-muted">
           <div className="flex items-center gap-2">
             <MapPin className="h-4 w-4 shrink-0 text-sprout-mint" strokeWidth={1.9} />
             <span>{job.location || t("swipe.locationNotSpecified")}</span>
@@ -165,7 +165,7 @@ function MobileCardContent({ job, onReport, onShare, actionsEnabled, t }) {
         </div>
 
         {badges.length > 0 ? (
-          <div className="flex flex-wrap gap-2">
+          <div className="mt-3 flex flex-wrap gap-2">
             {badges.map((badge) => (
               <span
                 key={badge.label}
@@ -177,8 +177,14 @@ function MobileCardContent({ job, onReport, onShare, actionsEnabled, t }) {
           </div>
         ) : null}
 
+      </div>
+
+      <div
+        className="app-scroll no-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-4 pb-32 touch-pan-y sm:px-6"
+        data-testid="swipe-card-scroll"
+      >
         {snippet ? (
-          <p className="line-clamp-3 text-sm leading-relaxed text-sprout-muted">{snippet}</p>
+          <p className="text-sm leading-relaxed text-sprout-muted">{snippet}</p>
         ) : null}
 
         <div className="space-y-3">
@@ -231,7 +237,7 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t }) {
 
   return (
     <motion.div
-      className="absolute inset-0 select-none"
+      className="absolute inset-0 h-full select-none"
       style={{
         x: isTop ? x : 0,
         rotate: isTop ? rotate : 0,
@@ -358,18 +364,45 @@ export default function Swipe() {
     targetRef.current = target;
   }, [target]);
 
+  const applyFinanceDemoTarget = useCallback(() => {
+    const demo = getFinanceDemoSearchTarget();
+    const nextTarget = { role: demo.role, location: demo.location };
+    setTarget(nextTarget);
+    targetRef.current = nextTarget;
+    setTargetLocationData(demo.locationData);
+    const nextFilters = {
+      ...(filtersRef.current || {}),
+      searchRadius: filtersRef.current?.searchRadius || DEFAULT_SEARCH_RADIUS,
+    };
+    if (demo.locationData) {
+      nextFilters.locationsData = [demo.locationData];
+      delete nextFilters.locations;
+      delete nextFilters.locationData;
+    }
+    filtersRef.current = nextFilters;
+    setFilters(nextFilters);
+    savePersistedFilters(nextFilters);
+    return nextFilters;
+  }, []);
+
   const loadProfile = useCallback(async () => {
+    if (isFinanceDemoEnabled()) {
+      applyFinanceDemoTarget();
+      return;
+    }
     try {
       const { data } = await api.get("/profile");
       if (data) {
-        setTarget({
+        const nextTarget = {
           role: data.target_role || "",
           location: data.target_location || "",
-        });
+        };
+        setTarget(nextTarget);
+        targetRef.current = nextTarget;
         setTargetLocationData(data.target_location_data || null);
       }
     } catch (_) {}
-  }, []);
+  }, [applyFinanceDemoTarget]);
 
   const buildFeedParams = (f) => {
     const params = new URLSearchParams({ limit: "5", search_radius: DEFAULT_SEARCH_RADIUS });
@@ -492,10 +525,19 @@ export default function Swipe() {
   }, [t]);
 
   useEffect(() => {
-    const onDemoSettings = () => loadFeed(true, filtersRef.current);
+    const onDemoSettings = (event) => {
+      const financeOn = Boolean(event?.detail?.financeJobFeed ?? isFinanceDemoEnabled());
+      const nextFilters = financeOn
+        ? applyFinanceDemoTarget()
+        : filtersRef.current;
+      if (!financeOn) {
+        loadProfile();
+      }
+      loadFeed(true, nextFilters);
+    };
     window.addEventListener(DEMO_SETTINGS_CHANGED, onDemoSettings);
     return () => window.removeEventListener(DEMO_SETTINGS_CHANGED, onDemoSettings);
-  }, [loadFeed]);
+  }, [loadFeed, loadProfile, applyFinanceDemoTarget]);
 
   const saveTargetSearch = useCallback(async ({ role, location, locationData }) => {
     const trimmedRole = (role || "").trim();
@@ -771,7 +813,7 @@ export default function Swipe() {
         />
       </div>
 
-      <div className="sprout flex h-dvh flex-col overflow-hidden bg-sprout-bg text-zinc-900 md:hidden">
+      <div className="sprout flex h-dvh max-h-dvh flex-col overflow-hidden bg-sprout-bg text-zinc-900 md:hidden">
       <header
         className="mx-auto flex w-full max-w-md shrink-0 items-center gap-1 px-safe pb-2 pt-safe sm:gap-2.5 sm:px-4"
         data-testid="swipe-header"
@@ -832,8 +874,8 @@ export default function Swipe() {
         </div>
       </header>
 
-      <div className="relative min-h-0 flex-1 px-4 pb-2">
-        <div className="relative mx-auto h-full w-full max-w-md">
+      <div className="relative min-h-0 flex-1 overflow-hidden px-4 pb-[calc(3.75rem+env(safe-area-inset-bottom,0px))]">
+        <div className="relative mx-auto h-full w-full max-w-md overflow-hidden">
           {loading && jobs.length === 0 && <SkeletonCard />}
 
           {!loading && jobs.length === 0 && (
