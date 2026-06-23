@@ -87,7 +87,7 @@ export function mergeDemoCvIntoProfile(profile) {
 
 /** Demo / tutorial — skip backend CV parsing (no AI key required). */
 export function shouldMockCvUpload() {
-  return isDemoAccountEnabled() || TUTORIAL_BYPASS_AUTH || demoMode;
+  return isDemoAccountEnabled() || isFinanceDemoEnabled() || TUTORIAL_BYPASS_AUTH || demoMode;
 }
 
 export function hasDemoCvStored() {
@@ -139,3 +139,27 @@ export async function handleDemoCvUpload(file) {
   delete response.cv_text;
   return response;
 }
+
+function extractUploadFile(data) {
+  if (!data) return null;
+  if (typeof FormData !== "undefined" && data instanceof FormData) {
+    return data.get("file");
+  }
+  return null;
+}
+
+/** Upload CV — local mock in demo/tutorial, real API otherwise. */
+export async function uploadProfileCv(file, apiClient) {
+  if (!file) {
+    throw new Error("No file provided");
+  }
+  if (shouldMockCvUpload()) {
+    const data = await handleDemoCvUpload(file);
+    return { data };
+  }
+  const form = new FormData();
+  form.append("file", file);
+  return apiClient.post("/profile/cv", form, { timeout: 120000 });
+}
+
+export { extractUploadFile };

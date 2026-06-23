@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
+import { shouldMockCvUpload, uploadProfileCv } from "../lib/demoCvUpload";
 import { useAuth } from "../context/AuthContext";
 import { Slider } from "../components/ui/slider";
 import {
@@ -309,7 +310,7 @@ export default function Onboarding() {
 
   const handleUpload = async (f) => {
     if (!f) return;
-    if (!user) {
+    if (!user && !shouldMockCvUpload()) {
       toast.error("Sign in with Google to upload your resume");
       return;
     }
@@ -318,21 +319,25 @@ export default function Onboarding() {
     trackEvent("cv_upload_started", { source: "onboarding" });
     preloadOnboardingShowcaseImages();
     try {
-      const form = new FormData();
-      form.append("file", f);
-      const { data } = await api.post("/profile/cv", form, { headers: { "Content-Type": "multipart/form-data" } });
+      const { data } = await uploadProfileCv(f, api);
       setProfile(data);
       trackEvent("cv_upload_completed", { source: "onboarding" });
-      const { data: authState } = await api.get("/auth/me");
-      setHasProfile(Boolean(authState?.has_profile));
-      if (checkAuth) await checkAuth();
-      toast.success("Your profile is ready");
+      if (!shouldMockCvUpload()) {
+        const { data: authState } = await api.get("/auth/me");
+        setHasProfile(Boolean(authState?.has_profile));
+        if (checkAuth) await checkAuth();
+        toast.success("Your profile is ready");
+      } else {
+        setHasProfile(true);
+      }
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
       setStepIndex(STEP_ORDER.indexOf("profileSetup"));
     } catch (e) {
       console.error(e);
       trackEvent("cv_upload_failed", { source: "onboarding", message: e?.response?.data?.detail || e?.message });
-      toast.error(e?.response?.data?.detail || "Failed to parse CV");
+      if (!shouldMockCvUpload()) {
+        toast.error(e?.response?.data?.detail || "Failed to parse CV");
+      }
     } finally {
       setParsing(false);
     }

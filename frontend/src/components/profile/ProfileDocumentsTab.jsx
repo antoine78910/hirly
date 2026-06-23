@@ -3,7 +3,6 @@ import { Eye, File, FileStack, FileText, Trash2, Upload, Download } from "lucide
 import { toast } from "sonner";
 import { api, API, getSessionToken } from "../../lib/api";
 import { fetchDemoCvOriginal, shouldMockCvUpload } from "../../lib/demoCvUpload";
-import { demoMode } from "../../lib/dev";
 import { useAppLocale } from "../../context/AppLocaleContext";
 import { formatUploadedDate } from "../../lib/appUi";
 import { Button } from "../ui/button";
@@ -130,13 +129,19 @@ export default function ProfileDocumentsTab({ profile, onUploadResume, onDocumen
     }
     setUploading(true);
     try {
+      if (shouldMockCvUpload()) {
+        await onDocumentsChange?.();
+        return;
+      }
       const form = new FormData();
       form.append("file", file);
       await api.post("/profile/documents", form, { headers: { "Content-Type": "multipart/form-data" } });
       toast.success(t("profile.documents.uploadSuccess"));
       await onDocumentsChange?.();
     } catch (error) {
-      toast.error(error?.response?.data?.detail || t("profile.documents.uploadError"));
+      if (!shouldMockCvUpload()) {
+        toast.error(error?.response?.data?.detail || t("profile.documents.uploadError"));
+      }
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -145,12 +150,9 @@ export default function ProfileDocumentsTab({ profile, onUploadResume, onDocumen
 
   const viewDocument = async (doc) => {
     try {
+      if (shouldMockCvUpload()) return;
       const token = getSessionToken();
       const url = `${API}/profile/documents/${doc.id}`;
-      if (demoMode) {
-        toast.message(t("profile.documents.viewUnavailableDemo"));
-        return;
-      }
       const res = await fetch(url, {
         credentials: "include",
         headers: token ? { Authorization: `Bearer ${token}` } : {},

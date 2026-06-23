@@ -3,7 +3,7 @@ export const DEMO_CREDITS_CHANGED = "hirly:demo-credits-changed";
 export const DEMO_ACCOUNT_CHANGED = "hirly:demo-account-changed";
 
 import { isFinanceDemoEnabled } from "./demoSettings";
-import { mergeDemoCvIntoProfile } from "./demoCvUpload";
+import { mergeDemoCvIntoProfile, hasDemoCvStored, shouldMockCvUpload } from "./demoCvUpload";
 import axios from "axios";
 import { normalizeApiPath } from "./apiPath";
 
@@ -416,7 +416,9 @@ export function patchDemoAccountResponse(response) {
   }
 
   if (method === "get" && path === "/profile") {
-    if (shouldMockTutorialProfileRoutes()) {
+    if (shouldMockCvUpload() && hasDemoCvStored()) {
+      response.data = mergeDemoCvIntoProfile(response.data || {});
+    } else if (shouldMockTutorialProfileRoutes()) {
       const local = buildTutorialProfileResponse();
       response.data = { ...(response.data || {}), ...local };
     }

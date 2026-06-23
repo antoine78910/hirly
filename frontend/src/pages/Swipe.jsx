@@ -31,7 +31,6 @@ import {
   formatPostedDate,
   getSwipeSuccessCopy,
   getSwipeErrorMessage,
-  getDemoSwipeSuccessCopy,
 } from "../lib/appUi";
 import { getJobBadgeItems, getJobDisplayContent } from "../lib/jobDisplayUtils";
 
@@ -757,11 +756,8 @@ export default function Swipe() {
       ats_provider: job.ats_provider,
       location: job.location,
     });
-    const loadingToastId = intent === "apply"
-      ? toast.loading(
-        demoApply ? t("toasts.demoApplying") : t("toasts.generatingApp"),
-        demoApply ? undefined : { description: t("toasts.generatingAppDesc") },
-      )
+    const loadingToastId = intent === "apply" && !demoApply
+      ? toast.loading(t("toasts.generatingApp"), { description: t("toasts.generatingAppDesc") })
       : null;
     try {
       const { data } = await api.post(
@@ -769,25 +765,11 @@ export default function Swipe() {
         { job_id: job.job_id, direction },
         intent === "apply" ? { timeout: demoApply ? 15000 : 180000 } : undefined,
       );
-      if (intent === "apply") {
-        const applied = Boolean(
-          data?.applied
-          || data?.demo_local
-          || data?.demo_account
-          || (demoApply && data?.ok !== false),
-        );
+      if (intent === "apply" && !demoApply) {
+        const applied = Boolean(data?.applied || data?.demo_local || data?.demo_account);
         if (applied) {
-          if (!demoApply) trackApplicationOutcome(data, job);
-          const copy = demoApply
-            ? getDemoSwipeSuccessCopy(t, job)
-            : getSwipeSuccessCopy(t, data, job);
-          toast.success(copy.title, {
-            id: loadingToastId,
-            description: copy.description,
-            duration: 3500,
-          });
-        } else if (demoApply) {
-          const copy = getDemoSwipeSuccessCopy(t, job);
+          trackApplicationOutcome(data, job);
+          const copy = getSwipeSuccessCopy(t, data, job);
           toast.success(copy.title, {
             id: loadingToastId,
             description: copy.description,
@@ -796,14 +778,7 @@ export default function Swipe() {
         }
       }
     } catch (e) {
-      if (demoApply) {
-        const copy = getDemoSwipeSuccessCopy(t, job);
-        toast.success(copy.title, {
-          id: loadingToastId,
-          description: copy.description,
-          duration: 3500,
-        });
-      } else {
+      if (!demoApply) {
         toast.error(getSwipeErrorMessage(t, e), loadingToastId ? { id: loadingToastId } : undefined);
       }
     }

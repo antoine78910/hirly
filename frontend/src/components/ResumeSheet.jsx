@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
+import { shouldMockCvUpload, uploadProfileCv } from "../lib/demoCvUpload";
 import { FileText, Loader2, Upload } from "lucide-react";
 import {
   Dialog,
@@ -54,13 +55,10 @@ export default function ResumeSheet({ open, profile, onClose, onUploaded }) {
     setUploading(true);
     trackEvent("cv_upload_started", { source: "profile" });
     try {
-      const form = new FormData();
-      form.append("file", file);
-      await api.post("/profile/cv", form, {
-        headers: { "Content-Type": "multipart/form-data" },
-        timeout: 120000,
-      });
-      toast.success("Resume updated. AI re-parsed your profile.");
+      await uploadProfileCv(file, api);
+      if (!shouldMockCvUpload()) {
+        toast.success("Resume updated. AI re-parsed your profile.");
+      }
       trackEvent("cv_upload_completed", { source: "profile" });
       onUploaded?.();
       onClose?.();
@@ -69,7 +67,9 @@ export default function ResumeSheet({ open, profile, onClose, onUploaded }) {
         source: "profile",
         message: e?.response?.data?.detail || e?.message,
       });
-      toast.error(e?.response?.data?.detail || "Upload failed");
+      if (!shouldMockCvUpload()) {
+        toast.error(e?.response?.data?.detail || "Upload failed");
+      }
     } finally {
       setUploading(false);
     }

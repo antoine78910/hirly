@@ -4,7 +4,7 @@ import { getDemoResponse } from "./demoApi";
 import { getFinanceDemoResponse } from "./financeDemoApi";
 import { getDemoAccountResponse, patchDemoAccountResponse } from "./demoAccount";
 import { isFinanceDemoEnabled } from "./demoSettings";
-import { handleDemoCvUpload, shouldMockCvUpload } from "./demoCvUpload";
+import { handleDemoCvUpload, shouldMockCvUpload, extractUploadFile } from "./demoCvUpload";
 import { normalizeApiPath } from "./apiPath";
 
 const normalizeBackendUrl = (value) => {
@@ -57,9 +57,9 @@ api.interceptors.request.use((config) => {
     }
     const path = normalizeApiPath(requestUrl);
     if (method === "post" && path === "/profile/cv") {
+      const uploadFile = extractUploadFile(config.data);
       config.adapter = async () => {
-        const file = config.data instanceof FormData ? config.data.get("file") : null;
-        const data = await handleDemoCvUpload(file);
+        const data = await handleDemoCvUpload(uploadFile);
         return {
           data,
           status: 200,
