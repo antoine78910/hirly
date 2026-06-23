@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { FileText, Loader2 } from "lucide-react";
 import { API, getSessionToken } from "../../lib/api";
+import { fetchDemoCvOriginal, shouldMockCvUpload } from "../../lib/demoCvUpload";
 import { useAppLocale } from "../../context/AppLocaleContext";
 
 function isStaticPreviewUrl(url) {
@@ -68,13 +69,19 @@ export default function ResumeCurrentPreview({
       setBlobUrl(null);
       setMode(null);
       try {
-        const token = getSessionToken();
-        const res = await fetch(`${API}/profile/cv/original`, {
-          credentials: "include",
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        if (!res.ok) throw new Error("missing original");
-        const blob = await res.blob();
+        let blob = null;
+        if (shouldMockCvUpload()) {
+          blob = await fetchDemoCvOriginal();
+        }
+        if (!blob) {
+          const token = getSessionToken();
+          const res = await fetch(`${API}/profile/cv/original`, {
+            credentials: "include",
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+          if (!res.ok) throw new Error("missing original");
+          blob = await res.blob();
+        }
         const resolvedMime = blob.type || mime;
         const resolvedMode = inlinePreviewMode(resolvedMime);
         if (!resolvedMode) {

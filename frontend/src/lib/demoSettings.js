@@ -36,3 +36,8 @@ export function saveDemoSettings(settings) {
 export function isFinanceDemoEnabled() {
   return Boolean(readDemoSettings().financeJobFeed);
 }
+
+/** Local/demo feeds — swipes should simulate apply, never hit real generation. */
+export function isDemoSwipeMode() {
+  return isFinanceDemoEnabled();
+}

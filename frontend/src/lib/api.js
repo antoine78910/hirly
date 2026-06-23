@@ -4,6 +4,8 @@ import { getDemoResponse } from "./demoApi";
 import { getFinanceDemoResponse } from "./financeDemoApi";
 import { getDemoAccountResponse, patchDemoAccountResponse } from "./demoAccount";
 import { isFinanceDemoEnabled } from "./demoSettings";
+import { handleDemoCvUpload, shouldMockCvUpload } from "./demoCvUpload";
+import { normalizeApiPath } from "./apiPath";
 
 const normalizeBackendUrl = (value) => {
   const raw = (value || "").trim();
@@ -45,12 +47,52 @@ api.interceptors.request.use((config) => {
   const t = getSessionToken();
   if (t) config.headers.Authorization = `Bearer ${t}`;
 
+  if (!config.adapter && shouldMockCvUpload()) {
+    const method = (config.method || "get").toLowerCase();
+    let requestUrl = config.url || "";
+    try {
+      requestUrl = axios.getUri(config);
+    } catch {
+      /* use config.url */
+    }
+    const path = normalizeApiPath(requestUrl);
+    if (method === "post" && path === "/profile/cv") {
+      config.adapter = async () => {
+        const file = config.data instanceof FormData ? config.data.get("file") : null;
+        const data = await handleDemoCvUpload(file);
+        return {
+          data,
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config,
+        };
+      };
+      return config;
+    }
+  }
+
   // Finance demo must win over the real API (and over generic demoMode jobs).
   if (!config.adapter && isFinanceDemoEnabled()) {
     const financeDemoMock = getFinanceDemoResponse(config);
     if (financeDemoMock !== undefined) {
       config.adapter = () => Promise.resolve({
         data: financeDemoMock,
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config,
+      });
+      return config;
+    }
+  }
+
+  // Demo-account swipes (tutorial / creator demo) — never call real apply generation.
+  if (!config.adapter && isDemoAccountEnabled()) {
+    const demoSwipeMock = getDemoAccountResponse(config);
+    if (demoSwipeMock !== undefined) {
+      config.adapter = () => Promise.resolve({
+        data: demoSwipeMock,
         status: 200,
         statusText: "OK",
         headers: {},
@@ -86,6 +128,22 @@ api.interceptors.request.use((config) => {
     }
   }
 
+  return config;
+});
+
+api.interceptors.request.use((config) => {
+  const method = (config.method || "get").toLowerCase();
+  if (method === "post") {
+    let path = "";
+    try {
+      path = normalizeApiPath(axios.getUri(config));
+    } catch {
+      path = normalizeApiPath(config.url || "");
+    }
+    if (path === "/profile/cv" && !config.adapter) {
+      config.timeout = Math.max(config.timeout || 0, 120000);
+    }
+  }
   return config;
 });
 

@@ -3,6 +3,7 @@ export const DEMO_CREDITS_CHANGED = "hirly:demo-credits-changed";
 export const DEMO_ACCOUNT_CHANGED = "hirly:demo-account-changed";
 
 import { isFinanceDemoEnabled } from "./demoSettings";
+import { mergeDemoCvIntoProfile } from "./demoCvUpload";
 import axios from "axios";
 import { normalizeApiPath } from "./apiPath";
 
@@ -65,11 +66,11 @@ function saveTutorialPreferences(payload) {
 
 function buildTutorialProfileResponse() {
   const saved = getTutorialPreferences();
-  return {
+  return mergeDemoCvIntoProfile({
     user_id: "tutorial_filming",
     ...TUTORIAL_PROFILE_DEFAULT,
     ...(saved || {}),
-  };
+  });
 }
 
 const jobCache = new Map();
@@ -115,6 +116,10 @@ export function consumeDemoCredit() {
 
 export function cacheJobForDemo(job) {
   if (job?.job_id) jobCache.set(job.job_id, job);
+}
+
+export function getCachedDemoJob(jobId) {
+  return jobCache.get(jobId);
 }
 
 function resolveJob(jobId) {

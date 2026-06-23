@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { Eye, File, FileStack, FileText, Trash2, Upload, Download } from "lucide-react";
 import { toast } from "sonner";
 import { api, API, getSessionToken } from "../../lib/api";
+import { fetchDemoCvOriginal, shouldMockCvUpload } from "../../lib/demoCvUpload";
 import { demoMode } from "../../lib/dev";
 import { useAppLocale } from "../../context/AppLocaleContext";
 import { formatUploadedDate } from "../../lib/appUi";
@@ -94,16 +95,22 @@ export default function ProfileDocumentsTab({ profile, onUploadResume, onDocumen
 
   const downloadResume = async () => {
     try {
-      const token = getSessionToken();
-      const res = await fetch(`${API}/profile/cv/original`, {
-        credentials: "include",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) {
-        toast.error(t("profile.documents.downloadError"));
-        return;
+      let blob = null;
+      if (shouldMockCvUpload()) {
+        blob = await fetchDemoCvOriginal();
       }
-      const blob = await res.blob();
+      if (!blob) {
+        const token = getSessionToken();
+        const res = await fetch(`${API}/profile/cv/original`, {
+          credentials: "include",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!res.ok) {
+          toast.error(t("profile.documents.downloadError"));
+          return;
+        }
+        blob = await res.blob();
+      }
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;

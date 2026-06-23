@@ -5,7 +5,8 @@ import {
 } from "./financeDemoJobs";
 import axios from "axios";
 import { isFinanceDemoEnabled } from "./demoSettings";
-import { consumeDemoCredit } from "./demoAccount";
+import { mergeDemoCvIntoProfile } from "./demoCvUpload";
+import { consumeDemoCredit, getCachedDemoJob } from "./demoAccount";
 import { parseApiPath } from "./apiPath";
 import { applyJobFilters, feedQueryToFilters } from "./applyJobFilters";
 import { mergeFilters } from "./jobFilters";
@@ -54,7 +55,8 @@ export function resetFinanceDemoFeed() {
 
 function findJob(jobId) {
   return (
-    state.feedJobs.find((j) => j.job_id === jobId)
+    getCachedDemoJob(jobId)
+    || state.feedJobs.find((j) => j.job_id === jobId)
     || state.applications.find((a) => a.job_id === jobId)?.job
     || [...state.historyRight, ...state.historyLeft].find((r) => r.job_id === jobId)?.job
     || FINANCE_DEMO_JOBS.find((j) => j.job_id === jobId)
@@ -63,8 +65,18 @@ function findJob(jobId) {
 
 function handleSwipe(body = {}) {
   const { job_id: jobId, direction } = body;
-  const job = findJob(jobId);
-  if (!job) return { ok: false };
+  let job = findJob(jobId);
+  if (!job && jobId) {
+    job = {
+      job_id: jobId,
+      title: "Role",
+      company: "Company",
+      location: "Paris, France",
+      match_score: 88,
+      provider: "demo",
+    };
+  }
+  if (!job) return { ok: false, applied: false };
 
   state.feedJobs = state.feedJobs.filter((j) => j.job_id !== jobId);
   const row = demoFinanceSwipeRow(job, direction);
@@ -139,7 +151,7 @@ export function getFinanceDemoResponse(config) {
   }
 
   if (method === "get" && path === "/profile") {
-    return clone(FINANCE_DEMO_PROFILE);
+    return mergeDemoCvIntoProfile(clone(FINANCE_DEMO_PROFILE));
   }
 
   if (method === "put" && path === "/profile/preferences") {

@@ -30,6 +30,10 @@ import { useAppLocale } from "../../context/AppLocaleContext";
 import { getDesktopNavItems } from "../desktop/desktopNav";
 import SearchRadiusSlider from "./SearchRadiusSlider";
 import {
+  clearMenuFilters,
+  countMenuFilterGroups,
+} from "../../lib/jobFilters";
+import {
   DESKTOP_THEMES,
   readDesktopTheme,
   saveDesktopTheme,
@@ -77,6 +81,11 @@ export default function DesktopSwipeFeed({
   const radius = filters?.searchRadius || "50km";
   const isDark = themeMode === "dark";
   const theme = DESKTOP_THEMES[themeMode];
+  const showClearFilters = countMenuFilterGroups(filters) > 0;
+
+  const handleClearFilters = useCallback(() => {
+    onFiltersChange?.(clearMenuFilters(filters));
+  }, [filters, onFiltersChange]);
 
   const displayLocation = target.location === "Anywhere" ? "" : (target.location || "");
   const [roleDraft, setRoleDraft] = useState(target.role || "");
@@ -310,6 +319,20 @@ export default function DesktopSwipeFeed({
                 themeMode={themeMode}
                 onOpenChange={onFiltersOpenChange}
               />
+              {showClearFilters ? (
+                <button
+                  type="button"
+                  onClick={handleClearFilters}
+                  className={`shrink-0 rounded-xl border px-3 py-2.5 text-sm font-semibold ${
+                    isDark
+                      ? "border-violet-500/40 bg-violet-500/10 text-violet-200 hover:border-violet-400 hover:bg-violet-500/20"
+                      : "border-violet-200 bg-violet-50 text-violet-700 hover:border-violet-300 hover:bg-violet-100"
+                  }`}
+                  data-testid="desktop-filters-clear"
+                >
+                  {t("filters.clear")}
+                </button>
+              ) : null}
             </div>
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
               <div

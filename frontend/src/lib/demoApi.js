@@ -12,6 +12,7 @@ import {
 } from "./demoData";
 import { getDemoTrainingCatalog, getDemoTrainingCourseDetail } from "./demoTrainingData";
 import { isDemoAccountEnabled, consumeDemoCredit } from "./demoAccount";
+import { mergeDemoCvIntoProfile } from "./demoCvUpload";
 import axios from "axios";
 import { parseApiPath } from "./apiPath";
 import { applyJobFilters, feedQueryToFilters } from "./applyJobFilters";
@@ -113,7 +114,7 @@ export function getDemoResponse(config) {
   }
 
   if (method === "get" && path === "/profile") {
-    return clone(DEMO_PROFILE);
+    return mergeDemoCvIntoProfile(clone(DEMO_PROFILE));
   }
 
   if (method === "put" && path === "/profile/preferences") {

@@ -136,6 +136,8 @@ export const APP_UI = {
       swipeAppSavedDesc: "Generation failed. Open Tracker to review or retry later.",
       swipePackageFor: "Application package generated for {company}",
       swipePackageReady: "CV and cover letter are ready. Not submitted yet.",
+      demoApplied: "Applied (demo)",
+      demoAppliedDesc: "Demo mode — your application was saved locally. Nothing was sent to the company.",
       generationTimeout: "Application generation is still taking longer than expected. Check Tracker in a moment.",
       noJobsFiltered: "No jobs found with these filters.",
       industryProductDesign: "Product Design",
@@ -684,6 +686,7 @@ export const APP_UI = {
     toasts: {
       generatingApp: "Generating tailored application…",
       generatingAppDesc: "This can take up to a minute for detailed job posts.",
+      demoApplying: "Saving application…",
       searchUpdated: "Search updated",
       searchSaveError: "Could not save search preferences",
       undone: "Undone",
@@ -828,6 +831,8 @@ export const APP_UI = {
       swipeAppSavedDesc: "La génération a échoué. Consultez Candidatures pour relire ou réessayer.",
       swipePackageFor: "Dossier généré pour {company}",
       swipePackageReady: "CV et lettre prêts. Pas encore envoyés.",
+      demoApplied: "Candidature enregistrée (démo)",
+      demoAppliedDesc: "Mode démo — candidature sauvegardée en local. Rien n'a été envoyé à l'entreprise.",
       generationTimeout: "La génération prend plus de temps que prévu. Consultez Candidatures dans un instant.",
       noJobsFiltered: "Aucune offre avec ces filtres.",
       industryProductDesign: "Design produit",
@@ -1376,6 +1381,7 @@ export const APP_UI = {
     toasts: {
       generatingApp: "Génération de la candidature…",
       generatingAppDesc: "Cela peut prendre jusqu'à une minute pour les offres détaillées.",
+      demoApplying: "Enregistrement de la candidature…",
       searchUpdated: "Recherche mise à jour",
       searchSaveError: "Impossible d'enregistrer la recherche",
       undone: "Annulé",
@@ -1568,6 +1574,16 @@ export function getCompanySize(t, job) {
   let h = 0;
   for (const c of job?.company || "") h = (h * 31 + c.charCodeAt(0)) >>> 0;
   return buckets[h % buckets.length];
+}
+
+export function getDemoSwipeSuccessCopy(t, job) {
+  const company = job?.company || "";
+  return {
+    title: t("swipe.demoApplied"),
+    description: company
+      ? t("swipe.demoAppliedDesc")
+      : t("swipe.demoAppliedDesc"),
+  };
 }
 
 export function getSwipeSuccessCopy(t, data, job) {

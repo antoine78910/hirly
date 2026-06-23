@@ -56,7 +56,10 @@ export default function ResumeSheet({ open, profile, onClose, onUploaded }) {
     try {
       const form = new FormData();
       form.append("file", file);
-      await api.post("/profile/cv", form, { headers: { "Content-Type": "multipart/form-data" } });
+      await api.post("/profile/cv", form, {
+        headers: { "Content-Type": "multipart/form-data" },
+        timeout: 120000,
+      });
       toast.success("Resume updated. AI re-parsed your profile.");
       trackEvent("cv_upload_completed", { source: "profile" });
       onUploaded?.();

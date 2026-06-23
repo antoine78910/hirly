@@ -13,10 +13,8 @@ import {
   X,
 } from "lucide-react";
 import {
-  clearMenuFilters,
-  countActiveFilterGroups,
+  countMenuFilterGroups,
   formatMinSalary,
-  hasActiveMenuFilters,
   mergeFilters,
   toggleFilterArray,
 } from "../../lib/jobFilters";
@@ -166,8 +164,7 @@ export default function DesktopFiltersMenu({
   const [activePanel, setActivePanel] = useState(null);
   const [flyoutPos, setFlyoutPos] = useState(null);
   const f = mergeFilters(filters);
-  const activeCount = countActiveFilterGroups(f, undefined, { excludeRadius: true });
-  const showClear = hasActiveMenuFilters(f);
+  const activeCount = countMenuFilterGroups(f);
   const [salaryDraft, setSalaryDraft] = useState(f.minSalary);
 
   useEffect(() => {
@@ -457,16 +454,8 @@ export default function DesktopFiltersMenu({
     });
   };
 
-  const handleClear = () => {
-    onFiltersChange?.(clearMenuFilters(f));
-    setActivePanel(null);
-    setFlyoutPos(null);
-    setOpen(false);
-  };
-
   return (
-    <div className="flex items-center gap-2">
-      <div className="relative" ref={anchorRef} data-testid="desktop-filters-menu">
+    <div className="relative" ref={anchorRef} data-testid="desktop-filters-menu">
       <button
         type="button"
         onClick={toggleOpen}
@@ -545,21 +534,6 @@ export default function DesktopFiltersMenu({
               </div>
             ) : null}
           </div>
-      ) : null}
-      </div>
-      {showClear ? (
-        <button
-          type="button"
-          onClick={handleClear}
-          className={`inline-flex items-center rounded-xl border px-3 py-2.5 text-sm font-medium ${
-            isDark
-              ? "border-zinc-700 bg-zinc-900 text-zinc-300 hover:border-zinc-600 hover:text-white"
-              : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:text-zinc-900"
-          }`}
-          data-testid="desktop-filters-clear"
-        >
-          {t("filters.clear")}
-        </button>
       ) : null}
     </div>
   );

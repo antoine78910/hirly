@@ -18,7 +18,7 @@ import { trackEvent } from "../lib/analytics";
 import { useAuth } from "../context/AuthContext";
 import { cacheJobForDemo, isDemoAccountEnabled, seedTutorialShowcaseIfEmpty } from "../lib/demoAccount";
 import { TUTORIAL_BYPASS_AUTH } from "../lib/dev";
-import { DEMO_SETTINGS_CHANGED, isFinanceDemoEnabled } from "../lib/demoSettings";
+import { DEMO_SETTINGS_CHANGED, isFinanceDemoEnabled, isDemoSwipeMode } from "../lib/demoSettings";
 import { getFinanceDemoFeedData } from "../lib/financeDemoApi";
 import { getFinanceDemoSearchTarget } from "../lib/financeDemoJobs";
 import { ensureTutorialSession } from "../lib/tutorialSession";
@@ -31,6 +31,7 @@ import {
   formatPostedDate,
   getSwipeSuccessCopy,
   getSwipeErrorMessage,
+  getDemoSwipeSuccessCopy,
 } from "../lib/appUi";
 import { getJobBadgeItems, getJobDisplayContent } from "../lib/jobDisplayUtils";
 
@@ -736,6 +737,7 @@ export default function Swipe() {
     if (intent === "apply" && blockApplyForFreePlan()) return;
     if (!topJob) return;
     const job = topJob;
+    const demoApply = intent === "apply" && (isDemoSwipeMode() || isDemoAccountEnabled());
     cacheJobForDemo(job);
     setJobs((prev) => prev.slice(1));
     const direction = intent === "apply" ? "right" : "left";   // backend semantic
@@ -744,6 +746,7 @@ export default function Swipe() {
         job_id: job.job_id,
         company: job.company,
         ats_provider: job.ats_provider,
+        demo: demoApply,
       });
       setAppLoading(true);
       setAppliedToday((n) => n + 1);
@@ -755,27 +758,54 @@ export default function Swipe() {
       location: job.location,
     });
     const loadingToastId = intent === "apply"
-      ? toast.loading(t("toasts.generatingApp"), {
-          description: t("toasts.generatingAppDesc"),
-        })
+      ? toast.loading(
+        demoApply ? t("toasts.demoApplying") : t("toasts.generatingApp"),
+        demoApply ? undefined : { description: t("toasts.generatingAppDesc") },
+      )
       : null;
     try {
       const { data } = await api.post(
         "/swipe",
         { job_id: job.job_id, direction },
-        intent === "apply" ? { timeout: 180000 } : undefined,
+        intent === "apply" ? { timeout: demoApply ? 15000 : 180000 } : undefined,
       );
-      if (intent === "apply" && data.applied) {
-        trackApplicationOutcome(data, job);
-        const copy = getSwipeSuccessCopy(t, data, job);
+      if (intent === "apply") {
+        const applied = Boolean(
+          data?.applied
+          || data?.demo_local
+          || data?.demo_account
+          || (demoApply && data?.ok !== false),
+        );
+        if (applied) {
+          if (!demoApply) trackApplicationOutcome(data, job);
+          const copy = demoApply
+            ? getDemoSwipeSuccessCopy(t, job)
+            : getSwipeSuccessCopy(t, data, job);
+          toast.success(copy.title, {
+            id: loadingToastId,
+            description: copy.description,
+            duration: 3500,
+          });
+        } else if (demoApply) {
+          const copy = getDemoSwipeSuccessCopy(t, job);
+          toast.success(copy.title, {
+            id: loadingToastId,
+            description: copy.description,
+            duration: 3500,
+          });
+        }
+      }
+    } catch (e) {
+      if (demoApply) {
+        const copy = getDemoSwipeSuccessCopy(t, job);
         toast.success(copy.title, {
           id: loadingToastId,
           description: copy.description,
           duration: 3500,
         });
+      } else {
+        toast.error(getSwipeErrorMessage(t, e), loadingToastId ? { id: loadingToastId } : undefined);
       }
-    } catch (e) {
-      toast.error(getSwipeErrorMessage(t, e), loadingToastId ? { id: loadingToastId } : undefined);
     }
     finally { if (intent === "apply") setAppLoading(false); }
     if (jobs.length <= 3) loadFeed();
