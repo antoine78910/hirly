@@ -14,6 +14,7 @@ import {
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import { filterApplicationsForReview } from "../lib/applicationReview";
+import { fetchTrackerPageData } from "../lib/demoApplications";
 import { useAiSettings } from "../hooks/useAiSettings";
 import { useAppLocale } from "../context/AppLocaleContext";
 import { BrandHeader } from "../components/app/AppScreenHeader";
@@ -47,18 +48,15 @@ export default function Review() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [appsRes, profileRes] = await Promise.all([
-        api.get("/applications"),
-        api.get("/profile"),
-      ]);
-      setApps(appsRes.data?.applications || []);
-      setProfile(profileRes.data || null);
+      const { applications, profile } = await fetchTrackerPageData(api);
+      setApps(applications);
+      setProfile(profile);
     } catch (_) {
       toast.error(t("review.loadError"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     load();

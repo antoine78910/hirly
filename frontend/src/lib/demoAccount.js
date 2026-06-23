@@ -269,6 +269,10 @@ export function handleDemoAccountSwipe(body = {}) {
     undoStack.push({ job: { ...job }, direction, application_id: application.application_id });
     writeJson(UNDO_KEY, undoStack);
 
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(DEMO_ACCOUNT_CHANGED));
+    }
+
     return { ok: true, applied: true, application_id: application.application_id, demo_local: true };
   }
 

@@ -1,7 +1,7 @@
 import axios from "axios";
 import { demoMode } from "./dev";
 import { getDemoResponse } from "./demoApi";
-import { getFinanceDemoResponse } from "./financeDemoApi";
+import { getFinanceDemoResponse, patchFinanceDemoResponse } from "./financeDemoApi";
 import { getDemoAccountResponse, patchDemoAccountResponse } from "./demoAccount";
 import { isFinanceDemoEnabled } from "./demoSettings";
 import { handleDemoCvUpload, shouldMockCvUpload, extractUploadFile } from "./demoCvUpload";
@@ -148,6 +148,6 @@ api.interceptors.request.use((config) => {
 });
 
 api.interceptors.response.use(
-  (response) => patchDemoAccountResponse(response),
+  (response) => patchFinanceDemoResponse(patchDemoAccountResponse(response)),
   (error) => Promise.reject(error),
 );

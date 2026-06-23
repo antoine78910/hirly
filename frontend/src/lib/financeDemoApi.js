@@ -11,11 +11,58 @@ import { parseApiPath } from "./apiPath";
 import { applyJobFilters, feedQueryToFilters } from "./applyJobFilters";
 import { mergeFilters } from "./jobFilters";
 
+export const FINANCE_DEMO_CHANGED = "hirly:finance-demo-changed";
+
+const FINANCE_APPS_KEY = "hirly.finance.demo.applications.v1";
+const FINANCE_HISTORY_RIGHT_KEY = "hirly.finance.demo.history.right.v1";
+const FINANCE_HISTORY_LEFT_KEY = "hirly.finance.demo.history.left.v1";
+
+function readJson(key, fallback) {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJson(key, value) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* ignore quota */
+  }
+}
+
+function clearFinancePersistence() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(FINANCE_APPS_KEY);
+    window.localStorage.removeItem(FINANCE_HISTORY_RIGHT_KEY);
+    window.localStorage.removeItem(FINANCE_HISTORY_LEFT_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+function persistFinanceDemoState() {
+  writeJson(FINANCE_APPS_KEY, state.applications);
+  writeJson(FINANCE_HISTORY_RIGHT_KEY, state.historyRight);
+  writeJson(FINANCE_HISTORY_LEFT_KEY, state.historyLeft);
+}
+
+function notifyFinanceDemoChanged() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(FINANCE_DEMO_CHANGED));
+}
+
 const state = {
   feedJobs: FINANCE_DEMO_JOBS.map((j) => ({ ...j })),
-  applications: [],
-  historyRight: [],
-  historyLeft: [],
+  applications: readJson(FINANCE_APPS_KEY, []),
+  historyRight: readJson(FINANCE_HISTORY_RIGHT_KEY, []),
+  historyLeft: readJson(FINANCE_HISTORY_LEFT_KEY, []),
   undoStack: [],
 };
 
@@ -58,7 +105,7 @@ function replenishFeedJobs() {
   const swiped = getSwipedJobIds();
   const pool = FINANCE_DEMO_JOBS.filter((j) => !swiped.has(j.job_id));
   if (!pool.length) {
-    resetFinanceDemoFeed();
+    state.feedJobs = FINANCE_DEMO_JOBS.map((j) => ({ ...j }));
     return;
   }
   state.feedJobs = pool.map((j) => ({ ...j }));
@@ -95,6 +142,20 @@ export function resetFinanceDemoFeed() {
   state.historyRight = [];
   state.historyLeft = [];
   state.undoStack = [];
+  clearFinancePersistence();
+}
+
+export function getFinanceDemoApplications() {
+  return clone(state.applications);
+}
+
+export function findFinanceDemoApplication(applicationId) {
+  return state.applications.find((a) => a.application_id === applicationId);
+}
+
+export function getFinanceDemoSwipeHistory(direction) {
+  const rows = direction === "left" ? state.historyLeft : state.historyRight;
+  return clone(rows);
 }
 
 function findJob(jobId) {
@@ -130,12 +191,15 @@ function handleSwipe(body = {}) {
     consumeDemoCredit();
     state.historyRight.unshift(row);
     const application = {
-      application_id: `finance_demo_app_${Date.now()}`,
+      application_id: `finance_demo_app_${Date.now()}_${jobId}`,
       job_id: jobId,
       job: { ...job },
       status: "applied",
-      submission_status: "not_submitted",
+      submission_status: "ready",
+      user_facing_submission_status: "prepared",
       package_status: "ready",
+      demo_local: true,
+      finance_demo: true,
       match_score: job.match_score,
       match_reasons: job.match_reasons,
       created_at: new Date().toISOString(),
@@ -150,10 +214,14 @@ function handleSwipe(body = {}) {
       },
     };
     state.applications.unshift(application);
+    persistFinanceDemoState();
+    notifyFinanceDemoChanged();
     return { ok: true, applied: true, application_id: application.application_id, demo_local: true };
   }
 
   state.historyLeft.unshift(row);
+  persistFinanceDemoState();
+  notifyFinanceDemoChanged();
   return { ok: true, applied: false, demo_local: true };
 }
 
@@ -167,6 +235,8 @@ function handleUndo() {
   } else {
     state.historyLeft = state.historyLeft.filter((r) => r.job_id !== last.job.job_id);
   }
+  persistFinanceDemoState();
+  notifyFinanceDemoChanged();
   return { ok: true };
 }
 
@@ -250,4 +320,71 @@ export function getFinanceDemoResponse(config) {
   }
 
   return undefined;
+}
+
+function mergeSwipeRows(primary, secondary) {
+  const seen = new Set();
+  const merged = [];
+  for (const row of [...primary, ...secondary]) {
+    const id = row?.swipe_id || row?.job_id;
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    merged.push(row);
+  }
+  return merged.sort(
+    (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime(),
+  );
+}
+
+/** Merge finance demo rows into API responses (when mock is skipped). */
+export function patchFinanceDemoResponse(response) {
+  if (!isFinanceDemoEnabled()) return response;
+
+  const method = (response.config?.method || "get").toLowerCase();
+  let requestUrl = "";
+  try {
+    requestUrl = axios.getUri(response.config || {});
+  } catch {
+    requestUrl = response.config?.url || "";
+  }
+  const { path, params } = parseApiPath(requestUrl);
+
+  if (method === "get" && path === "/applications") {
+    const apiApps = response.data?.applications || [];
+    response.data = {
+      ...response.data,
+      applications: mergeApplicationRows(getFinanceDemoApplications(), apiApps),
+    };
+  }
+
+  if (method === "get" && path.startsWith("/applications/")) {
+    const id = path.replace("/applications/", "");
+    const local = findFinanceDemoApplication(id);
+    if (local) response.data = clone(local);
+  }
+
+  if (method === "get" && path.includes("/swipes/history")) {
+    const direction = params.direction === "left" ? "left" : "right";
+    const local = getFinanceDemoSwipeHistory(direction);
+    response.data = {
+      ...response.data,
+      swipes: mergeSwipeRows(local, response.data?.swipes || []),
+    };
+  }
+
+  return response;
+}
+
+function mergeApplicationRows(primary, secondary) {
+  const seen = new Set();
+  const merged = [];
+  for (const row of [...primary, ...secondary]) {
+    const id = row?.application_id || row?.job_id;
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    merged.push(row);
+  }
+  return merged.sort(
+    (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime(),
+  );
 }

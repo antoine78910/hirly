@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { api } from "../lib/api";
+import { fetchTrackerPageData, fetchDemoSwipeHistory } from "../lib/demoApplications";
+import { FINANCE_DEMO_CHANGED } from "../lib/financeDemoApi";
+import { DEMO_ACCOUNT_CHANGED } from "../lib/demoAccount";
 import {
   Loader2, MapPin, FileText, Mail, Download, MessageSquare, FileSearch, Sparkles,
   Search, CheckCircle2, Clock3, AlertCircle, ArrowRight, BriefcaseBusiness, Send, Zap,
@@ -312,6 +315,7 @@ const applicationStatusMessage = (status, t) => {
 
 export default function Tracker() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { t, lang } = useAppLocale();
   const activeTab = searchParams.get("tab") === "passed" ? "passed" : "applications";
@@ -347,8 +351,8 @@ export default function Tracker() {
   const loadPassed = async () => {
     setPassedLoading(true);
     try {
-      const { data } = await api.get("/swipes/history?direction=left&limit=100");
-      setPassedRows(data.swipes || []);
+      const rows = await fetchDemoSwipeHistory(api, "left", { limit: 100 });
+      setPassedRows(rows);
     } catch {
       toast.error(t("history.loadError"));
     } finally {
@@ -374,14 +378,29 @@ export default function Tracker() {
   const load = async () => {
     setLoading(true);
     try {
-      const [a, p] = await Promise.all([api.get("/applications"), api.get("/profile")]);
-      setApps(a.data.applications || []);
-      setProfile(p.data || null);
-    } finally { setLoading(false); }
+      const { applications, profile } = await fetchTrackerPageData(api);
+      setApps(applications);
+      setProfile(profile);
+    } catch {
+      setApps([]);
+      setProfile(null);
+    } finally {
+      setLoading(false);
+    }
   };
   useEffect(() => {
     trackEvent("tracker_view");
     load();
+  }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    const refresh = () => load();
+    window.addEventListener(FINANCE_DEMO_CHANGED, refresh);
+    window.addEventListener(DEMO_ACCOUNT_CHANGED, refresh);
+    return () => {
+      window.removeEventListener(FINANCE_DEMO_CHANGED, refresh);
+      window.removeEventListener(DEMO_ACCOUNT_CHANGED, refresh);
+    };
   }, []);
 
   useEffect(() => {
