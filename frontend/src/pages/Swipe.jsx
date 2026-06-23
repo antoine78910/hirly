@@ -19,13 +19,13 @@ import { useAuth } from "../context/AuthContext";
 import { cacheJobForDemo, isDemoAccountEnabled, seedTutorialShowcaseIfEmpty } from "../lib/demoAccount";
 import { TUTORIAL_BYPASS_AUTH } from "../lib/dev";
 import { DEMO_SETTINGS_CHANGED, isFinanceDemoEnabled, isDemoSwipeMode } from "../lib/demoSettings";
-import { getFinanceDemoFeedData } from "../lib/financeDemoApi";
+import { getFinanceDemoFeedData, performFinanceDemoSwipe, performFinanceDemoUndo } from "../lib/financeDemoApi";
 import { getFinanceDemoSearchTarget } from "../lib/financeDemoJobs";
 import { ensureTutorialSession } from "../lib/tutorialSession";
 import { useUpgradeModal } from "../context/UpgradeModalContext";
 import DesktopSwipeFeed from "../components/swipe/DesktopSwipeFeed";
 import { saveTargetPreferences, normalizeLocationData } from "../lib/targetPreferences";
-import { hasActiveFilters, mergeFilters } from "../lib/jobFilters";
+import { hasActiveFilters, mergeFilters, clearMenuFilters } from "../lib/jobFilters";
 import { useAppLocale } from "../context/AppLocaleContext";
 import {
   formatPostedDate,
@@ -440,14 +440,11 @@ export default function Swipe() {
     setTarget(nextTarget);
     targetRef.current = nextTarget;
     setTargetLocationData(demo.locationData);
-    const nextFilters = {
-      ...(filtersRef.current || {}),
+    const nextFilters = clearMenuFilters({
       searchRadius: filtersRef.current?.searchRadius || DEFAULT_SEARCH_RADIUS,
-    };
+    });
     if (demo.locationData) {
       nextFilters.locationsData = [demo.locationData];
-      delete nextFilters.locations;
-      delete nextFilters.locationData;
     }
     filtersRef.current = nextFilters;
     setFilters(nextFilters);
@@ -659,6 +656,11 @@ export default function Swipe() {
     api.get("/billing/status")
       .then(({ data }) => setBilling(data))
       .catch(() => setBilling({ is_premium: false }));
+    if (isFinanceDemoEnabled()) {
+      const financeFilters = applyFinanceDemoTarget();
+      loadFeed(true, financeFilters);
+      return;
+    }
     const persistedFilters = readPersistedFilters();
     if (persistedFilters) {
       filtersRef.current = persistedFilters;
@@ -667,7 +669,7 @@ export default function Swipe() {
       return;
     }
     loadFeed(true, null);
-  }, [authLoading, loadProfile, loadFeed]);
+  }, [authLoading, loadProfile, loadFeed, applyFinanceDemoTarget]);
 
   const applyFilters = (f) => {
     trackEvent("filters_applied", {
@@ -736,7 +738,8 @@ export default function Swipe() {
     if (intent === "apply" && blockApplyForFreePlan()) return;
     if (!topJob) return;
     const job = topJob;
-    const demoApply = intent === "apply" && (isDemoSwipeMode() || isDemoAccountEnabled());
+    const demoSwipe = isDemoSwipeMode() || isDemoAccountEnabled();
+    const demoApply = intent === "apply" && demoSwipe;
     cacheJobForDemo(job);
     setJobs((prev) => prev.slice(1));
     const direction = intent === "apply" ? "right" : "left";   // backend semantic
@@ -760,11 +763,17 @@ export default function Swipe() {
       ? toast.loading(t("toasts.generatingApp"), { description: t("toasts.generatingAppDesc") })
       : null;
     try {
-      const { data } = await api.post(
-        "/swipe",
-        { job_id: job.job_id, direction },
-        intent === "apply" ? { timeout: demoApply ? 15000 : 180000 } : undefined,
-      );
+      let data;
+      if (isFinanceDemoEnabled()) {
+        data = performFinanceDemoSwipe({ job_id: job.job_id, direction });
+        if (!data?.ok) throw new Error("Finance demo swipe failed");
+      } else {
+        ({ data } = await api.post(
+          "/swipe",
+          { job_id: job.job_id, direction },
+          intent === "apply" ? { timeout: demoApply ? 15000 : 180000 } : undefined,
+        ));
+      }
       if (intent === "apply" && !demoApply) {
         const applied = Boolean(data?.applied || data?.demo_local || data?.demo_account);
         if (applied) {
@@ -778,7 +787,7 @@ export default function Swipe() {
         }
       }
     } catch (e) {
-      if (!demoApply) {
+      if (!demoSwipe) {
         toast.error(getSwipeErrorMessage(t, e), loadingToastId ? { id: loadingToastId } : undefined);
       }
     }
@@ -788,7 +797,9 @@ export default function Swipe() {
 
   const handleUndo = async () => {
     try {
-      const { data } = await api.post("/swipe/undo");
+      const data = isFinanceDemoEnabled()
+        ? performFinanceDemoUndo()
+        : (await api.post("/swipe/undo")).data;
       if (data.ok) { toast(t("toasts.undone")); loadFeed(true); }
     } catch (e) { toast.error(t("toasts.nothingToUndo")); }
   };
@@ -805,7 +816,11 @@ export default function Swipe() {
 
   const dismissJob = useCallback((jobId) => {
     setJobs((prev) => prev.filter((j) => j.job_id !== jobId));
-    api.post("/swipe", { job_id: jobId, direction: "left" }).catch(() => {});
+    if (isFinanceDemoEnabled()) {
+      performFinanceDemoSwipe({ job_id: jobId, direction: "left" });
+    } else {
+      api.post("/swipe", { job_id: jobId, direction: "left" }).catch(() => {});
+    }
     if (jobs.length <= 3) loadFeed();
   }, [jobs.length, loadFeed]);
 

@@ -23,21 +23,65 @@ function clone(data) {
   return JSON.parse(JSON.stringify(data));
 }
 
+function getSwipedJobIds() {
+  return new Set([
+    ...state.historyRight.map((r) => r.job_id),
+    ...state.historyLeft.map((r) => r.job_id),
+  ]);
+}
+
+/** Spread jobs so consecutive cards prefer different companies. */
+function interleaveByCompany(jobs) {
+  const buckets = new Map();
+  for (const job of jobs) {
+    const key = job.company || "unknown";
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(job);
+  }
+  const lists = [...buckets.values()];
+  const out = [];
+  let added = true;
+  while (added) {
+    added = false;
+    for (const list of lists) {
+      if (list.length) {
+        out.push(list.shift());
+        added = true;
+      }
+    }
+  }
+  return out;
+}
+
+function replenishFeedJobs() {
+  if (state.feedJobs.length > 0) return;
+  const swiped = getSwipedJobIds();
+  const pool = FINANCE_DEMO_JOBS.filter((j) => !swiped.has(j.job_id));
+  if (!pool.length) {
+    resetFinanceDemoFeed();
+    return;
+  }
+  state.feedJobs = pool.map((j) => ({ ...j }));
+}
+
 /** Build /jobs/feed payload for the finance Paris demo (local, no backend). */
 export function getFinanceDemoFeedData({ filters = null, searchRole = "", limit = 5 } = {}) {
   if (!isFinanceDemoEnabled()) return null;
+  replenishFeedJobs();
   const mergedFilters = mergeFilters(filters);
   const filtered = applyJobFilters(state.feedJobs, mergedFilters, {
-    searchRole,
+    // Full finance catalog — target role is display-only so filming gets company diversity.
+    searchRole: "",
     profileLocationData: FINANCE_DEMO_PROFILE.target_location_data,
   });
+  const diversified = interleaveByCompany(filtered);
   const safeLimit = Math.max(1, Number(limit) || 5);
   return {
-    jobs: clone(filtered.slice(0, safeLimit)),
-    total: filtered.length,
-    total_count: filtered.length,
+    jobs: clone(diversified.slice(0, safeLimit)),
+    total: diversified.length,
+    total_count: diversified.length,
     feed_mode: "finance_demo",
-    fallback_reason: filtered.length ? null : "no_jobs_for_filters",
+    fallback_reason: diversified.length ? null : "no_jobs_for_filters",
     demo_mode: true,
     finance_demo: true,
     matched_location: ["Paris, France"],
@@ -124,6 +168,17 @@ function handleUndo() {
     state.historyLeft = state.historyLeft.filter((r) => r.job_id !== last.job.job_id);
   }
   return { ok: true };
+}
+
+/** Local finance demo swipe — bypasses network. */
+export function performFinanceDemoSwipe(body = {}) {
+  if (!isFinanceDemoEnabled()) return undefined;
+  return handleSwipe(body);
+}
+
+export function performFinanceDemoUndo() {
+  if (!isFinanceDemoEnabled()) return undefined;
+  return handleUndo();
 }
 
 /** Mock finance demo routes when settings toggle is on. */
