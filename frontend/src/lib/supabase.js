@@ -13,9 +13,12 @@ function normalizeSupabaseAnonKey(key) {
   return key.trim();
 }
 
-const rawSupabaseUrl = process.env.REACT_APP_SUPABASE_URL;
+const DEFAULT_SUPABASE_URL = "https://vjsejwilyhzaxvjnvzcu.supabase.co";
+const DEFAULT_SUPABASE_ANON_KEY = "sb_publishable_Wm5f8zeSZs0h7RQ0udaYKg_PZvNfXvx";
+
+const rawSupabaseUrl = process.env.REACT_APP_SUPABASE_URL || DEFAULT_SUPABASE_URL;
 const supabaseUrl = normalizeSupabaseProjectUrl(rawSupabaseUrl);
-const supabaseAnonKey = normalizeSupabaseAnonKey(process.env.REACT_APP_SUPABASE_ANON_KEY);
+const supabaseAnonKey = normalizeSupabaseAnonKey(process.env.REACT_APP_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY);
 
 if (
   typeof process !== "undefined"
@@ -33,7 +36,7 @@ export const supabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 export const supabase = supabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
-        detectSessionInUrl: true,
+        detectSessionInUrl: false,
         persistSession: true,
         autoRefreshToken: true,
         flowType: "pkce",

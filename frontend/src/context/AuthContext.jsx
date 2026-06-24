@@ -90,6 +90,10 @@ export const AuthProvider = ({ children }) => {
       setLoading(false);
       return;
     }
+    const existingToken = getSessionToken();
+    if (existingToken?.startsWith("tutorial_session_")) {
+      setSessionToken(null);
+    }
     // CRITICAL: If returning from OAuth callback, skip the /me check.
     // AuthCallback will exchange the OAuth session and establish the app session first.
     if (isOAuthCallbackInProgress()) {

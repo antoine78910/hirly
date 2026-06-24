@@ -84,11 +84,9 @@ TABLE_FILTER_COLUMNS = {
 }
 MAX_READ_ROWS = 10000
 READ_PAGE_SIZE = 1000
-JOB_FEED_LEAN_SELECT = (
-    "job_id,title,company,location,country_code,remote,posted_at,imported_at,last_seen_at,"
-    "ats_provider,auto_apply_supported,seniority,salary_max,salary_min,workplace_type,"
-    "work_location,job_type,employment_type,contract_type,industry,provider,match_score,match_reasons"
-)
+# Jobs keep most feed fields in the JSONB document. Selecting non-column fields
+# through PostgREST raises a 400 and makes /jobs/feed fail, so read the document.
+JOB_FEED_SELECT = "data"
 
 _shared_http_client: Optional[httpx.AsyncClient] = None
 
@@ -546,16 +544,16 @@ class SupabaseCollectionAdapter(CollectionPort):
                 if remaining <= 0:
                     break
                 page_limit = min(page_limit, remaining)
-                params = {
-                    "select": select,
-                    "limit": str(page_limit),
-                    "offset": str(offset),
-                }
+            request_params: Dict[str, str] = {
+                "select": select,
+                "limit": str(page_limit),
+                "offset": str(offset),
+            }
             if remote_filter_params is not None:
-                params.update(remote_filter_params)
+                request_params.update(remote_filter_params)
             response = await client.get(
                 url,
-                params=params,
+                params=request_params,
                 headers=headers,
             )
             if response.status_code not in (200, 206):
@@ -589,9 +587,9 @@ class SupabaseCollectionAdapter(CollectionPort):
         filter: Optional[Filter],
         limit: int,
         *,
-        select: str = JOB_FEED_LEAN_SELECT,
+        select: str = JOB_FEED_SELECT,
     ) -> List[Document]:
-        """Read rows without the heavy JSON `data` blob (used for feed ranking)."""
+        """Read rows with an explicit PostgREST select list."""
         return await self._read_documents(filter, read_limit=limit, select=select)
 
     async def insert_one(self, document: Document):
@@ -790,10 +788,10 @@ async def count_supabase_table(
     }
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
-            params = {"select": "*", "limit": "0"}
+            request_params = {"select": "*", "limit": "0"}
             if filter_params:
-                params.update(filter_params)
-            response = await client.get(url, params=params, headers=headers)
+                request_params.update(filter_params)
+            response = await client.get(url, params=request_params, headers=headers)
         if response.status_code not in (200, 206):
             return {
                 "ok": False,

@@ -64,6 +64,7 @@ import { trackEvent } from "../lib/analytics";
 import { preloadOnboardingIntroImages, preloadOnboardingShowcaseImages } from "../lib/onboardingImagePreload";
 
 const STEP_ORDER = ONBOARDING_STEP_ORDER;
+const ONBOARDING_CHECKOUT_STATE_KEY = "hirly.onboarding.checkoutState";
 
 const defaultCategoryOptions = () =>
   JOB_CATEGORIES.map(({ id, label }) => ({ id, label }));
@@ -178,6 +179,7 @@ export default function Onboarding() {
   const [profile, setProfile] = useState(null);
   const [selectedPlan, setSelectedPlan] = useState("quarterly");
   const [saving, setSaving] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef();
 
@@ -202,9 +204,41 @@ export default function Onboarding() {
   }, [suggestedRoles, categories, categoryOptions, customRoles]);
   const interviewHint = interviewFeedback(interviewsPerWeek, lang);
 
+  const restoreCheckoutState = (payload) => {
+    if (!payload || typeof payload !== "object") return;
+    if (Array.isArray(payload.categories)) setCategories(payload.categories);
+    if (Array.isArray(payload.selectedRoles)) setSelectedRoles(payload.selectedRoles);
+    if (payload.experience) setExperience(payload.experience);
+    if (typeof payload.salaryMin === "number") setSalaryMin(payload.salaryMin);
+    if (typeof payload.salaryMax === "number") setSalaryMax(payload.salaryMax);
+    if (typeof payload.interviewsPerWeek === "number") setInterviewsPerWeek(payload.interviewsPerWeek);
+    if (payload.jobSearchStatus) setJobSearchStatus(payload.jobSearchStatus);
+    if (typeof payload.onboardingLocation === "string") setOnboardingLocation(payload.onboardingLocation);
+    if (payload.onboardingLocationData) setOnboardingLocationData(payload.onboardingLocationData);
+    if (payload.contractType) setContractType(payload.contractType);
+    if (payload.triedOtherApps) setTriedOtherApps(payload.triedOtherApps);
+    if (payload.attribution) setAttribution(payload.attribution);
+    if (Array.isArray(payload.suggestedCategories)) setSuggestedCategories(payload.suggestedCategories);
+    if (payload.selectedPlan) setSelectedPlan(payload.selectedPlan);
+  };
+
   useEffect(() => {
     const preview = searchParams.get("preview");
     const stepParam = searchParams.get("step");
+    const checkoutStatus = searchParams.get("checkout");
+
+    if (checkoutStatus) {
+      try {
+        restoreCheckoutState(JSON.parse(sessionStorage.getItem(ONBOARDING_CHECKOUT_STATE_KEY) || "null"));
+      } catch (_) {
+        /* ignore corrupt checkout state */
+      }
+      setStepIndex(STEP_ORDER.indexOf("showcasePricing"));
+      if (checkoutStatus === "success") toast.success("Payment received");
+      if (checkoutStatus === "cancelled") toast("Checkout cancelled");
+      return;
+    }
+
     if (!preview && !stepParam) return;
 
     const boot = readOnboardingPreviewBoot(STEP_ORDER);
@@ -225,6 +259,7 @@ export default function Onboarding() {
       setTriedOtherApps(boot.state.triedOtherApps);
       setAttribution(boot.state.attribution);
       setSuggestedCategories(boot.state.suggestedCategories);
+      if (boot.state.selectedPlan) setSelectedPlan(boot.state.selectedPlan);
     }
 
     if (!devBypassAuth && stepParam && stepParam !== "intro") {
@@ -394,6 +429,9 @@ export default function Onboarding() {
         location: onboardingLocationData?.location_label || onboardingLocation || undefined,
         location_data: onboardingLocationData || undefined,
       });
+      if (checkAuth) await checkAuth();
+      sessionStorage.removeItem(ONBOARDING_CHECKOUT_STATE_KEY);
+      setHasProfile(true);
       setHasPreferences(true);
       trackEvent("onboarding_completed", {
         selected_roles: selectedRoles,
@@ -404,6 +442,44 @@ export default function Onboarding() {
       toast.error(lang === "fr" ? "Échec de la configuration" : "Failed to finish setup");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const startOnboardingCheckout = async () => {
+    if (!user) {
+      await startGoogleLogin("/onboarding?step=showcasePricing");
+      return;
+    }
+    setCheckoutLoading(true);
+    try {
+      sessionStorage.setItem(ONBOARDING_CHECKOUT_STATE_KEY, JSON.stringify({
+        categories,
+        selectedRoles,
+        experience,
+        salaryMin,
+        salaryMax,
+        interviewsPerWeek,
+        jobSearchStatus,
+        onboardingLocation,
+        onboardingLocationData,
+        contractType,
+        triedOtherApps,
+        attribution,
+        suggestedCategories,
+        selectedPlan,
+      }));
+      const { data } = await api.post("/billing/create-checkout-session", {
+        plan: selectedPlan,
+        interval: selectedPlan,
+        source: "onboarding",
+      });
+      if (!data?.url) throw new Error("Missing checkout URL");
+      trackEvent("checkout_started", { source: "onboarding", plan: selectedPlan });
+      window.location.href = data.url;
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Could not start checkout");
+    } finally {
+      setCheckoutLoading(false);
     }
   };
 
@@ -490,7 +566,11 @@ export default function Onboarding() {
 
   const footer = !hideFooter ? (
     step === "showcasePricing" ? (
-      <FinishOnboardingButton saving={saving} onClick={finishOnboarding} />
+      <ContinueButton onClick={startOnboardingCheckout} disabled={checkoutLoading} testId="showcase-pricing-continue">
+        {checkoutLoading
+          ? (lang === "fr" ? "Ouverture du paiement..." : "Opening checkout...")
+          : (lang === "fr" ? "Continuer" : "Continue")}
+      </ContinueButton>
     ) : step === "profileWelcome" ? (
       <div className="space-y-2">
         <ContinueButton onClick={onContinue} testId="profile-welcome-continue">
@@ -1113,6 +1193,7 @@ export default function Onboarding() {
             />
           </motion.div>
         )}
+
 
       </AnimatePresence>
     </OnboardingShell>

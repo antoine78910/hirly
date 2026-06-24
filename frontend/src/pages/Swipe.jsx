@@ -709,7 +709,8 @@ export default function Swipe() {
   };
 
   const topJob = jobs[0];
-  const shouldGateApply = billing !== null && !billing.is_premium && !isDemoAccountEnabled();
+  const creditsRemaining = Number(billing?.credits_remaining ?? 0);
+  const shouldGateApply = billing !== null && (!billing.is_premium || creditsRemaining <= 0) && !isDemoAccountEnabled();
 
   const blockApplyForFreePlan = useCallback(() => {
     if (!shouldGateApply) return false;
@@ -777,6 +778,14 @@ export default function Swipe() {
       if (intent === "apply" && !demoApply) {
         const applied = Boolean(data?.applied || data?.demo_local || data?.demo_account);
         if (applied) {
+          if (data?.billing) {
+            setBilling((prev) => ({
+              ...(prev || {}),
+              is_premium: true,
+              credits_total: data.billing.credits_total ?? prev?.credits_total,
+              credits_remaining: data.billing.credits_remaining ?? prev?.credits_remaining,
+            }));
+          }
           trackApplicationOutcome(data, job);
           const copy = getSwipeSuccessCopy(t, data, job);
           toast.success(copy.title, {
@@ -787,6 +796,11 @@ export default function Swipe() {
         }
       }
     } catch (e) {
+      if (e?.response?.status === 402) {
+        const nextBilling = e?.response?.data?.detail?.billing;
+        if (nextBilling) setBilling(nextBilling);
+        openUpgrade();
+      }
       if (!demoSwipe) {
         toast.error(getSwipeErrorMessage(t, e), loadingToastId ? { id: loadingToastId } : undefined);
       }

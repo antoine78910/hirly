@@ -7,9 +7,8 @@ import { supabase, supabaseConfigured } from "./supabase";
  */
 export async function startGoogleLogin(returnPath = "/swipe", opts = {}) {
   const path = returnPath && returnPath.startsWith("/") ? returnPath : "/swipe";
-  if (path.startsWith("/onboarding")) {
-    sessionStorage.setItem("swiipr_onboarding_return", path);
-  }
+  sessionStorage.setItem("swiipr_onboarding_return", path);
+  setSessionToken(null);
 
   const devLoginEnabled = process.env.REACT_APP_DEV_LOGIN_ENABLED === "true";
   if (devLoginEnabled) {
