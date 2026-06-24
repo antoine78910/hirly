@@ -243,7 +243,8 @@ class AnalyticsEventRequest(BaseModel):
 
 
 class BillingCheckoutRequest(BaseModel):
-    plan: Literal["monthly", "quarterly"]
+    plan: Literal["basic", "pro", "ultra", "monthly", "quarterly"]
+    interval: Optional[Literal["weekly", "monthly", "quarterly"]] = None
 
 
 class ResolveMissingInfoRequest(BaseModel):
@@ -773,8 +774,23 @@ def _frontend_url() -> str:
     return os.environ.get("FRONTEND_URL", "http://localhost:3000").strip().rstrip("/")
 
 
+def _canonical_billing_plan(plan: str) -> str:
+    aliases = {
+        "monthly": "pro",
+        "quarterly": "ultra",
+    }
+    return aliases.get((plan or "").strip().lower(), (plan or "").strip().lower())
+
+
+def _stripe_price_env_for_plan(plan: str) -> str:
+    canonical_plan = _canonical_billing_plan(plan)
+    if canonical_plan not in {"basic", "pro", "ultra"}:
+        raise HTTPException(status_code=400, detail="Unsupported billing plan")
+    return f"STRIPE_PRICE_{canonical_plan.upper()}"
+
+
 def _stripe_price_for_plan(plan: str) -> str:
-    env_name = "STRIPE_PRICE_MONTHLY" if plan == "monthly" else "STRIPE_PRICE_QUARTERLY"
+    env_name = _stripe_price_env_for_plan(plan)
     price_id = os.environ.get(env_name, "").strip()
     if not price_id:
         raise HTTPException(status_code=503, detail=f"{env_name} is not configured")
@@ -782,10 +798,9 @@ def _stripe_price_for_plan(plan: str) -> str:
 
 
 def _plan_from_price(price_id: Optional[str]) -> Optional[str]:
-    if price_id and price_id == os.environ.get("STRIPE_PRICE_MONTHLY", "").strip():
-        return "monthly"
-    if price_id and price_id == os.environ.get("STRIPE_PRICE_QUARTERLY", "").strip():
-        return "quarterly"
+    for plan in ("basic", "pro", "ultra"):
+        if price_id and price_id == os.environ.get(f"STRIPE_PRICE_{plan.upper()}", "").strip():
+            return plan
     return "unknown" if price_id else None
 
 
@@ -948,18 +963,19 @@ async def _refresh_billing_from_stripe(user_doc: Dict[str, Any]) -> tuple[Dict[s
 @api_router.post("/billing/create-checkout-session")
 async def create_billing_checkout_session(body: BillingCheckoutRequest, user: User = Depends(get_current_user)):
     _stripe_secret_key()
+    billing_plan = _canonical_billing_plan(body.plan)
     user_doc = await _get_user_doc(user)
     customer_id = await _stripe_customer_for_user(user_doc)
     frontend_url = _frontend_url()
     session = stripe.checkout.Session.create(
         mode="subscription",
         customer=customer_id,
-        line_items=[{"price": _stripe_price_for_plan(body.plan), "quantity": 1}],
+        line_items=[{"price": _stripe_price_for_plan(billing_plan), "quantity": 1}],
         success_url=f"{frontend_url}/credits?checkout=success",
         cancel_url=f"{frontend_url}/credits?checkout=cancelled",
         client_reference_id=user.user_id,
-        metadata={"user_id": user.user_id, "plan": body.plan},
-        subscription_data={"metadata": {"user_id": user.user_id, "plan": body.plan}},
+        metadata={"user_id": user.user_id, "plan": billing_plan, "interval": body.interval or ""},
+        subscription_data={"metadata": {"user_id": user.user_id, "plan": billing_plan, "interval": body.interval or ""}},
     )
     return {"url": session["url"]}
 
