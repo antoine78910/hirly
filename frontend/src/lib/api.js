@@ -2,7 +2,7 @@ import axios from "axios";
 import { demoMode } from "./dev";
 import { getDemoResponse } from "./demoApi";
 import { getFinanceDemoResponse, patchFinanceDemoResponse } from "./financeDemoApi";
-import { getDemoAccountResponse, patchDemoAccountResponse } from "./demoAccount";
+import { getDemoAccountResponse, isDemoAccountEnabled, patchDemoAccountResponse } from "./demoAccount";
 import { isFinanceDemoEnabled } from "./demoSettings";
 import { handleDemoCvUpload, shouldMockCvUpload, extractUploadFile } from "./demoCvUpload";
 import { normalizeApiPath } from "./apiPath";
