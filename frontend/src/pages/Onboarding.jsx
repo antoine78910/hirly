@@ -55,11 +55,12 @@ import { splitFullName } from "../lib/personalInfoOptions";
 import { ob } from "../components/onboarding/onboardingTheme";
 import { trackEvent } from "../lib/analytics";
 import { preloadOnboardingIntroImages, preloadOnboardingShowcaseImages } from "../lib/onboardingImagePreload";
-import { getPendingInviteCode, redeemCreatorInvite } from "../lib/creatorInvite";
+import { getPendingInviteCode, redeemCreatorInvite, storePendingInviteCode } from "../lib/creatorInvite";
 import { setDemoAccountFromUser } from "../lib/demoAccount";
 
 const STEP_ORDER = ONBOARDING_STEP_ORDER;
 const ONBOARDING_CHECKOUT_STATE_KEY = "hirly.onboarding.checkoutState";
+const isSixDigitAccessCode = (value) => /^\d{6}$/.test(String(value || "").trim());
 
 const defaultCategoryOptions = () =>
   JOB_CATEGORIES.map(({ id, label }) => ({ id, label }));
@@ -215,6 +216,7 @@ export default function Onboarding() {
     if (payload.attribution) setAttribution(payload.attribution);
     if (Array.isArray(payload.suggestedCategories)) setSuggestedCategories(payload.suggestedCategories);
     if (payload.selectedPlan) setSelectedPlan(payload.selectedPlan);
+    if (isSixDigitAccessCode(payload.creatorAccessCode)) setCreatorAccessCode(payload.creatorAccessCode);
   };
 
   useEffect(() => {
@@ -472,6 +474,11 @@ export default function Onboarding() {
       await startGoogleLogin("/onboarding?step=showcasePricing");
       return;
     }
+    if (isSixDigitAccessCode(creatorAccessCode)) {
+      setStepIndex(STEP_ORDER.indexOf("creatorAccessCode"));
+      toast.success("Access code ready");
+      return;
+    }
     setCheckoutLoading(true);
     try {
       sessionStorage.setItem(ONBOARDING_CHECKOUT_STATE_KEY, JSON.stringify({
@@ -489,6 +496,7 @@ export default function Onboarding() {
         attribution,
         suggestedCategories,
         selectedPlan,
+        creatorAccessCode,
       }));
       const { data } = await api.post("/billing/create-checkout-session", {
         plan: selectedPlan,
@@ -557,6 +565,14 @@ export default function Onboarding() {
     const code = referralCode.trim().toUpperCase();
     if (!code) {
       toast.error("Enter a referral code or tap Skip");
+      return;
+    }
+    if (isSixDigitAccessCode(code)) {
+      setReferralCode(code);
+      setCreatorAccessCode(code);
+      storePendingInviteCode(code);
+      toast.success("Access code applied");
+      goNext();
       return;
     }
     if (!/^[A-Z0-9]{4,8}$/.test(code)) {
