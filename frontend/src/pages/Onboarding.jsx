@@ -174,6 +174,7 @@ export default function Onboarding() {
   const [profile, setProfile] = useState(null);
   const [selectedPlan, setSelectedPlan] = useState("quarterly");
   const [saving, setSaving] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef();
 
@@ -425,6 +426,28 @@ export default function Onboarding() {
     }
   };
 
+  const startOnboardingCheckout = async () => {
+    if (!user) {
+      await startGoogleLogin("/onboarding?step=showcasePricing");
+      return;
+    }
+    setCheckoutLoading(true);
+    try {
+      const { data } = await api.post("/billing/create-checkout-session", {
+        plan: selectedPlan,
+        interval: selectedPlan,
+        source: "onboarding",
+      });
+      if (!data?.url) throw new Error("Missing checkout URL");
+      trackEvent("checkout_started", { source: "onboarding", plan: selectedPlan });
+      window.location.href = data.url;
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Could not start checkout");
+    } finally {
+      setCheckoutLoading(false);
+    }
+  };
+
   const canContinue = () => {
     switch (step) {
       case "intro":
@@ -523,8 +546,8 @@ export default function Onboarding() {
         </button>
       </div>
     ) : step === "showcasePricing" ? (
-      <ContinueButton onClick={onContinue} testId="showcase-pricing-continue">
-        Continue
+      <ContinueButton onClick={startOnboardingCheckout} disabled={checkoutLoading} testId="showcase-pricing-continue">
+        {checkoutLoading ? "Opening checkout..." : "Continue"}
       </ContinueButton>
     ) : step === "profileWelcome" ? (
       <div className="space-y-2">

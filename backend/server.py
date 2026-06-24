@@ -245,6 +245,7 @@ class AnalyticsEventRequest(BaseModel):
 class BillingCheckoutRequest(BaseModel):
     plan: Literal["basic", "pro", "ultra", "monthly", "quarterly"]
     interval: Optional[Literal["weekly", "monthly", "quarterly"]] = None
+    source: Optional[Literal["app", "credits", "onboarding"]] = None
 
 
 class ResolveMissingInfoRequest(BaseModel):
@@ -782,15 +783,23 @@ def _canonical_billing_plan(plan: str) -> str:
     return aliases.get((plan or "").strip().lower(), (plan or "").strip().lower())
 
 
-def _stripe_price_env_for_plan(plan: str) -> str:
+def _stripe_price_env_for_plan(plan: str, *, interval: Optional[str] = None, source: Optional[str] = None) -> str:
+    raw_plan = (plan or "").strip().lower()
+    if source == "onboarding":
+        if raw_plan not in {"monthly", "quarterly"}:
+            raise HTTPException(status_code=400, detail="Unsupported onboarding billing plan")
+        return f"STRIPE_PRICE_ONBOARDING_{raw_plan.upper()}"
+
     canonical_plan = _canonical_billing_plan(plan)
     if canonical_plan not in {"basic", "pro", "ultra"}:
         raise HTTPException(status_code=400, detail="Unsupported billing plan")
+    if interval == "weekly":
+        return f"STRIPE_PRICE_{canonical_plan.upper()}_WEEKLY"
     return f"STRIPE_PRICE_{canonical_plan.upper()}"
 
 
-def _stripe_price_for_plan(plan: str) -> str:
-    env_name = _stripe_price_env_for_plan(plan)
+def _stripe_price_for_plan(plan: str, *, interval: Optional[str] = None, source: Optional[str] = None) -> str:
+    env_name = _stripe_price_env_for_plan(plan, interval=interval, source=source)
     price_id = os.environ.get(env_name, "").strip()
     if not price_id:
         raise HTTPException(status_code=503, detail=f"{env_name} is not configured")
@@ -799,7 +808,11 @@ def _stripe_price_for_plan(plan: str) -> str:
 
 def _plan_from_price(price_id: Optional[str]) -> Optional[str]:
     for plan in ("basic", "pro", "ultra"):
-        if price_id and price_id == os.environ.get(f"STRIPE_PRICE_{plan.upper()}", "").strip():
+        for env_name in (f"STRIPE_PRICE_{plan.upper()}", f"STRIPE_PRICE_{plan.upper()}_WEEKLY"):
+            if price_id and price_id == os.environ.get(env_name, "").strip():
+                return plan
+    for plan in ("monthly", "quarterly"):
+        if price_id and price_id == os.environ.get(f"STRIPE_PRICE_ONBOARDING_{plan.upper()}", "").strip():
             return plan
     return "unknown" if price_id else None
 
@@ -963,19 +976,27 @@ async def _refresh_billing_from_stripe(user_doc: Dict[str, Any]) -> tuple[Dict[s
 @api_router.post("/billing/create-checkout-session")
 async def create_billing_checkout_session(body: BillingCheckoutRequest, user: User = Depends(get_current_user)):
     _stripe_secret_key()
-    billing_plan = _canonical_billing_plan(body.plan)
+    checkout_source = body.source or "app"
+    billing_plan = body.plan if checkout_source == "onboarding" else _canonical_billing_plan(body.plan)
+    billing_interval = body.interval or ("quarterly" if checkout_source == "onboarding" and billing_plan == "quarterly" else "monthly")
     user_doc = await _get_user_doc(user)
     customer_id = await _stripe_customer_for_user(user_doc)
     frontend_url = _frontend_url()
+    if checkout_source == "onboarding":
+        success_url = f"{frontend_url}/onboarding?step=creatorAccessCode&checkout=success"
+        cancel_url = f"{frontend_url}/onboarding?step=showcasePricing&checkout=cancelled"
+    else:
+        success_url = f"{frontend_url}/credits?checkout=success"
+        cancel_url = f"{frontend_url}/credits?checkout=cancelled"
     session = stripe.checkout.Session.create(
         mode="subscription",
         customer=customer_id,
-        line_items=[{"price": _stripe_price_for_plan(billing_plan), "quantity": 1}],
-        success_url=f"{frontend_url}/credits?checkout=success",
-        cancel_url=f"{frontend_url}/credits?checkout=cancelled",
+        line_items=[{"price": _stripe_price_for_plan(billing_plan, interval=billing_interval, source=checkout_source), "quantity": 1}],
+        success_url=success_url,
+        cancel_url=cancel_url,
         client_reference_id=user.user_id,
-        metadata={"user_id": user.user_id, "plan": billing_plan, "interval": body.interval or ""},
-        subscription_data={"metadata": {"user_id": user.user_id, "plan": billing_plan, "interval": body.interval or ""}},
+        metadata={"user_id": user.user_id, "plan": billing_plan, "interval": billing_interval, "source": checkout_source},
+        subscription_data={"metadata": {"user_id": user.user_id, "plan": billing_plan, "interval": billing_interval, "source": checkout_source}},
     )
     return {"url": session["url"]}
 
