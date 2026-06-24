@@ -49,6 +49,7 @@ VIDEO_SLOTS: List[Dict[str, Any]] = [
     {"module_id": "mod_content_bank", "section_id": "sec_cb_green_screen", "label": "Content Bank — Green screen example"},
     {"module_id": "mod_content_bank", "section_id": "sec_cb_tablet_example", "label": "Content Bank — Tablet example"},
     {"module_id": "mod_content_bank", "section_id": "sec_cb_laptop_example", "label": "Content Bank — Laptop example"},
+    {"module_id": "mod_content_bank", "section_id": "sec_cb_laptop_without_talking", "label": "Content Bank — Laptop without talking"},
 ]
 
 

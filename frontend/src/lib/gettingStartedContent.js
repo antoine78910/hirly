@@ -1,5 +1,8 @@
 /** Getting Started module — course introduction (EN + FR). */
 
+export const GETTING_STARTED_VIDEO_URL =
+  "https://player.mediadelivery.net/play/689678/00095b90-e8c2-4d11-b9c1-9a3a499c58dd";
+
 export const GETTING_STARTED_EN = [
   {
     type: "callout",

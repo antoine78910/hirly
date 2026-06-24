@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { CheckCircle2, ChevronRight, Loader2, Play } from "lucide-react";
@@ -217,8 +217,14 @@ export default function TrainingCourse() {
       trainingModulePath(routeLocale, courseId, activeModule.module_id, nextSection.section_id),
       { replace: true },
     );
-    window.scrollTo({ top: 0, behavior: "smooth" });
   };
+
+  useLayoutEffect(() => {
+    if (loading) return;
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, [loading, activeModuleId, sectionParam]);
 
   const handleQuizSubmit = async (quizId, answers, scored) => {
     setQuizSubmitting(true);
@@ -312,7 +318,14 @@ export default function TrainingCourse() {
           ) : null}
 
           {hasSections && activeSection ? (
-            <h2 className="text-lg font-semibold text-zinc-800">{activeSection.title}</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-lg font-semibold text-zinc-800">{activeSection.title}</h2>
+              {activeSection.badge ? (
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-amber-900">
+                  {activeSection.badge}
+                </span>
+              ) : null}
+            </div>
           ) : null}
 
           {!showPresentationVideoAtTop && displayVideoUrl ? (

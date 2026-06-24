@@ -75,6 +75,7 @@ const CONTENT_BANK_EN = [
   sectionBlock({
     section_id: "sec_cb_gbb",
     title: "Good. Better. Best.",
+    badge: "Top format",
     content: [
       heading(1, "Good. Better. Best."),
       heading(3, "Examples"),
@@ -110,6 +111,7 @@ const CONTENT_BANK_EN = [
   sectionBlock({
     section_id: "sec_cb_linkedin",
     title: "LinkedIn Reminder",
+    badge: "Top format",
     content: [
       heading(1, "Friendly Reminder to Those Still Using LinkedIn"),
       heading(3, "Examples"),

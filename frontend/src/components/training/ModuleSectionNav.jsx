@@ -10,13 +10,24 @@ export default function ModuleSectionNav({ sections, activeSectionId, onSelect }
             key={section.section_id}
             type="button"
             onClick={() => onSelect(section.section_id)}
-            className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
               active
                 ? "bg-violet-600 text-white"
                 : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
             }`}
           >
-            {index + 1}. {section.title}
+            <span>
+              {index + 1}. {section.title}
+            </span>
+            {section.badge ? (
+              <span
+                className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                  active ? "bg-white/20 text-white" : "bg-amber-100 text-amber-900"
+                }`}
+              >
+                {section.badge}
+              </span>
+            ) : null}
           </button>
         );
       })}

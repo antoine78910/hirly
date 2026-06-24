@@ -75,6 +75,7 @@ export const CONTENT_BANK_FR = [
   sectionBlock({
     section_id: "sec_cb_gbb",
     title: "Bien. Mieux. Le top.",
+    badge: "Top format",
     content: [
       heading(1, "Bien. Mieux. Le top."),
       heading(3, "Exemples"),
@@ -119,6 +120,7 @@ export const CONTENT_BANK_FR = [
   sectionBlock({
     section_id: "sec_cb_linkedin",
     title: "Rappel LinkedIn",
+    badge: "Top format",
     content: [
       heading(1, "Petit rappel pour ceux qui utilisent encore LinkedIn"),
       heading(3, "Exemples"),

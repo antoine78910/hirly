@@ -49,5 +49,6 @@ python -m training_media
 | Green screen example | `sec_cb_green_screen` | … |
 | Tablet example | `sec_cb_tablet_example` | … |
 | Laptop example | `sec_cb_laptop_example` | … |
+| Laptop without talking | `sec_cb_laptop_without_talking` | … |
 
 Slots are defined in `training_media.py` → `VIDEO_SLOTS`.

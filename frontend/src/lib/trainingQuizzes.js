@@ -28,53 +28,53 @@ const QUIZZES_EN = {
 
     questions: [
 
-      q("gs1", "If you skip Warm Up and post too early, which outcome matches the course?", [
+      q("gs1", "The course is divided into how many main parts?", [
 
-        { id: "a", label: "Hashtag volume fixes reach within 24 hours" },
+        { id: "a", label: "3 parts — warm-up, content, and payment only" },
 
-        { id: "b", label: "Low reach, shadowban risk, or an account that stops scaling" },
+        { id: "b", label: "5 parts — warm-up, content creation, account management, submission & payment, resources" },
 
-        { id: "c", label: "FYP resets after exactly 3 posts regardless of behavior" },
-
-      ], "b"),
-
-      q("gs2", "When can you mark a chapter complete?", [
-
-        { id: "a", label: "After skimming the text — quizzes are optional" },
-
-        { id: "b", label: "Only after passing that chapter's end quiz" },
-
-        { id: "c", label: "After finishing the entire course, not per chapter" },
+        { id: "c", label: "7 parts — one per day of the week" },
 
       ], "b"),
 
-      q("gs3", "Your creator invitation uses a code of how many digits at mobile onboarding?", [
+      q("gs2", "If you skip or mishandle the warm-up strategy, you risk:", [
 
-        { id: "a", label: "4 digits" },
+        { id: "a", label: "Hashtags fixing reach within 24 hours" },
 
-        { id: "b", label: "6 digits" },
+        { id: "b", label: "Limited reach or algorithm penalties on your account" },
 
-        { id: "c", label: "8 alphanumeric characters" },
-
-      ], "b"),
-
-      q("gs4", "In demo mode, what happens when you swipe right to apply?", [
-
-        { id: "a", label: "Real applications are sent but marked as drafts" },
-
-        { id: "b", label: "Apply is disabled — no real submissions go to employers" },
-
-        { id: "c", label: "Only 3 demo swipes are allowed per day" },
+        { id: "c", label: "Automatic payment after your third post" },
 
       ], "b"),
 
-      q("gs5", "Unauthorized sharing of course scripts or screenshots can lead to:", [
+      q("gs3", "The English example videos from the US competitor are there to:", [
 
-        { id: "a", label: "A written warning only — no program consequences" },
+        { id: "a", label: "Repost as-is to publish faster" },
 
-        { id: "b", label: "Immediate removal from the creator program" },
+        { id: "b", label: "Inspire you and provide templates — not to copy in English" },
 
-        { id: "c", label: "Reduced payment after 30 days" },
+        { id: "c", label: "Replace the Content Bank scripts entirely" },
+
+      ], "b"),
+
+      q("gs4", "What language must the content you publish be in?", [
+
+        { id: "a", label: "English, to match the reference videos" },
+
+        { id: "b", label: "French, to target France and Francophone countries" },
+
+        { id: "c", label: "Any language as long as Hirly appears on screen" },
+
+      ], "b"),
+
+      q("gs5", "If you have a problem or question during the course, you should:", [
+
+        { id: "a", label: "Wait until you finish every module" },
+
+        { id: "b", label: "Contact the team directly via WhatsApp" },
+
+        { id: "c", label: "Ask publicly in TikTok comments for faster help" },
 
       ], "b"),
 
@@ -292,53 +292,53 @@ const QUIZZES_EN = {
 
     questions: [
 
-      q("sd1", "Required elements before submitting a draft:", [
+      q("sd1", "Where do you submit your finished video?", [
 
-        { id: "a", label: "Hook, Hirly demo when required, caption matching script guidelines" },
+        { id: "a", label: "In Instagram DMs to the Hirly team" },
 
-        { id: "b", label: "Logo animation, competitor mention, no Hirly on screen" },
+        { id: "b", label: "Via the Topr link below the module video" },
 
-        { id: "c", label: "Hashtags only — script and demo are optional" },
+        { id: "c", label: "By emailing an MP4 to support" },
 
-      ], "a"),
+      ], "b"),
 
-      q("sd2", "Why does the program require draft review?", [
+      q("sd2", "Before submitting on Topr, you must:", [
 
-        { id: "a", label: "To protect account health and payment eligibility — not to delay you" },
+        { id: "a", label: "Post the video on your account first, then paste the post URL" },
 
-        { id: "b", label: "To batch payments once per quarter" },
+        { id: "b", label: "Submit a script PDF only — posting comes later" },
 
-        { id: "c", label: "Only for creators under 10k followers" },
-
-      ], "a"),
-
-      q("sd3", "Your account repeatedly posts under 300 views. First response per SOP:", [
-
-        { id: "a", label: "Review Warm Up and Account Management compliance — likely compromised behavior" },
-
-        { id: "b", label: "Post 10 videos the same day to force distribution" },
-
-        { id: "c", label: "Switch niches to meme content for reach" },
+        { id: "c", label: "Receive payment before publishing" },
 
       ], "a"),
 
-      q("sd4", "Content must match which source of truth?", [
+      q("sd3", "Right after you submit on Topr, your video status is:", [
 
-        { id: "a", label: "The Content Bank script and approved format you selected" },
+        { id: "a", label: "Live with payment sent immediately" },
 
-        { id: "b", label: "Any trending format — scripts are inspiration only" },
+        { id: "b", label: "Under review — you get an answer within a few hours" },
 
-        { id: "c", label: "A competitor app's demo flow" },
+        { id: "c", label: "Auto-rejected if the caption is not in English" },
+
+      ], "b"),
+
+      q("sd4", "To receive payment, you need to:", [
+
+        { id: "a", label: "Connect your PayPal email on your Topr profile / balance" },
+
+        { id: "b", label: "Send bank wire details only via WhatsApp" },
+
+        { id: "c", label: "Invoice Hirly manually every month" },
 
       ], "a"),
 
-      q("sd5", "If Hirly must appear on screen for a script, you should:", [
+      q("sd5", "First time on Topr — the correct flow includes:", [
 
-        { id: "a", label: "Show Hirly correctly — skipping the demo invalidates the draft" },
+        { id: "a", label: "Sign up → Creator → join campaign → Create content for this campaign → submit post URL" },
 
-        { id: "b", label: "Describe Hirly verbally only — screen not required" },
+        { id: "b", label: "Skip sign-up and submit without an account" },
 
-        { id: "c", label: "Blur the app name to stay subtle" },
+        { id: "c", label: "Creator → delete account → resubmit every week" },
 
       ], "a"),
 
@@ -426,53 +426,53 @@ const QUIZZES_FR = {
 
     questions: [
 
-      q("gs1", "Si tu sautes le warmup et postes trop tôt, quelle issue correspond au cours ?", [
+      q("gs1", "La formation est divisée en combien de parties principales ?", [
 
-        { id: "a", label: "Les hashtags corrigent la portée en 24 h" },
+        { id: "a", label: "3 parties — warmup, contenu et paiement seulement" },
 
-        { id: "b", label: "Faible portée, risque de shadowban ou compte qui ne scale plus" },
+        { id: "b", label: "5 parties — warmup, création de contenu, gestion du compte, soumission & paiement, ressources" },
 
-        { id: "c", label: "Le FYP se reset après exactement 3 posts" },
-
-      ], "b"),
-
-      q("gs2", "Quand peux-tu marquer un chapitre comme terminé ?", [
-
-        { id: "a", label: "Après avoir survolé le texte — les quiz sont optionnels" },
-
-        { id: "b", label: "Seulement après avoir réussi le quiz de fin de chapitre" },
-
-        { id: "c", label: "Uniquement à la fin du cours entier" },
+        { id: "c", label: "7 parties — une par jour de la semaine" },
 
       ], "b"),
 
-      q("gs3", "Le code d'invitation créateur en fin d'onboarding mobile compte combien de chiffres ?", [
+      q("gs2", "Si tu ignores ou rates la stratégie de warmup, tu risques :", [
 
-        { id: "a", label: "4 chiffres" },
+        { id: "a", label: "Que les hashtags corrigent la portée en 24 h" },
 
-        { id: "b", label: "6 chiffres" },
+        { id: "b", label: "Une portée limitée ou des pénalités de l'algorithme sur ton compte" },
 
-        { id: "c", label: "8 caractères alphanumériques" },
-
-      ], "b"),
-
-      q("gs4", "En mode démo, que se passe-t-il quand tu swipes à droite pour postuler ?", [
-
-        { id: "a", label: "De vraies candidatures partent mais restent en brouillon" },
-
-        { id: "b", label: "Postuler est désactivé — aucune candidature réelle aux entreprises" },
-
-        { id: "c", label: "Seulement 3 swipes démo autorisés par jour" },
+        { id: "c", label: "Un paiement automatique après ton troisième post" },
 
       ], "b"),
 
-      q("gs5", "Partager sans autorisation scripts ou captures du cours peut entraîner :", [
+      q("gs3", "Les vidéos d'exemple en anglais du concurrent américain servent à :", [
 
-        { id: "a", label: "Un simple avertissement écrit" },
+        { id: "a", label: "Les republier telles quelles pour aller plus vite" },
 
-        { id: "b", label: "Une exclusion immédiate du programme créateur" },
+        { id: "b", label: "T'inspirer et te donner des modèles — pas à copier en anglais" },
 
-        { id: "c", label: "Une baisse de paiement après 30 jours" },
+        { id: "c", label: "Remplacer entièrement les scripts de la banque de contenu" },
+
+      ], "b"),
+
+      q("gs4", "Dans quelle langue dois-tu créer le contenu que tu publies ?", [
+
+        { id: "a", label: "En anglais, pour coller aux vidéos de référence" },
+
+        { id: "b", label: "En français, pour cibler la France et les pays francophones" },
+
+        { id: "c", label: "Dans n'importe quelle langue tant que Hirly est à l'écran" },
+
+      ], "b"),
+
+      q("gs5", "Si tu as un problème ou une question pendant la formation, tu dois :", [
+
+        { id: "a", label: "Attendre d'avoir fini tous les modules" },
+
+        { id: "b", label: "Nous contacter directement via WhatsApp" },
+
+        { id: "c", label: "Demander de l'aide publiquement en commentaire TikTok" },
 
       ], "b"),
 
@@ -670,53 +670,53 @@ const QUIZZES_FR = {
 
     questions: [
 
-      q("sd1", "Éléments requis avant de soumettre un brouillon :", [
+      q("sd1", "Où soumets-tu ta vidéo terminée ?", [
 
-        { id: "a", label: "Accroche, démo Hirly si requise, légende conforme au script" },
+        { id: "a", label: "En DM Instagram à l'équipe Hirly" },
 
-        { id: "b", label: "Animation logo, mention concurrent, pas de Hirly à l'écran" },
+        { id: "b", label: "Via le lien Topr sous la vidéo du module" },
 
-        { id: "c", label: "Hashtags seulement — script et démo optionnels" },
+        { id: "c", label: "Par e-mail en pièce jointe MP4 au support" },
 
-      ], "a"),
+      ], "b"),
 
-      q("sd2", "Pourquoi la relecture des brouillons est obligatoire ?", [
+      q("sd2", "Avant de soumettre sur Topr, tu dois :", [
 
-        { id: "a", label: "Protéger la santé du compte et l'éligibilité au paiement — pas te ralentir" },
+        { id: "a", label: "Publier la vidéo sur ton compte, puis coller l'URL du post" },
 
-        { id: "b", label: "Regrouper les paiements une fois par trimestre" },
+        { id: "b", label: "Envoyer seulement un PDF du script — la publication vient après" },
 
-        { id: "c", label: "Uniquement pour les créateurs sous 10k abonnés" },
-
-      ], "a"),
-
-      q("sd3", "Posts répétés sous 300 vues — première réaction selon la SOP :", [
-
-        { id: "a", label: "Revoir warmup et gestion du compte — comportement probablement compromis" },
-
-        { id: "b", label: "Poster 10 vidéos le même jour pour forcer la distribution" },
-
-        { id: "c", label: "Passer au contenu meme pour la portée" },
+        { id: "c", label: "Recevoir le paiement avant de publier" },
 
       ], "a"),
 
-      q("sd4", "Le contenu doit correspondre à quelle source de vérité ?", [
+      q("sd3", "Juste après la soumission sur Topr, le statut de ta vidéo est :", [
 
-        { id: "a", label: "Le script et format approuvé de la banque de contenu choisi" },
+        { id: "a", label: "En ligne avec paiement envoyé immédiatement" },
 
-        { id: "b", label: "N'importe quel format trending — scripts = inspiration" },
+        { id: "b", label: "Under review — tu as une réponse sous quelques heures" },
 
-        { id: "c", label: "Le flow démo d'une app concurrente" },
+        { id: "c", label: "Refusée automatiquement si la légende n'est pas en anglais" },
+
+      ], "b"),
+
+      q("sd4", "Pour recevoir ton paiement, tu dois :", [
+
+        { id: "a", label: "Connecter ton e-mail PayPal sur ton profil / balance Topr" },
+
+        { id: "b", label: "Envoyer tes coordonnées bancaires uniquement par WhatsApp" },
+
+        { id: "c", label: "Facturer Hirly manuellement chaque mois" },
 
       ], "a"),
 
-      q("sd5", "Si Hirly doit apparaître à l'écran pour un script :", [
+      q("sd5", "Première fois sur Topr — le bon parcours inclut :", [
 
-        { id: "a", label: "Montrer Hirly correctement — sauter la démo invalide le brouillon" },
+        { id: "a", label: "Sign up → Creator → rejoindre la campagne → Create content for this campaign → soumettre l'URL du post" },
 
-        { id: "b", label: "Décrire Hirly à l'oral seulement — écran non requis" },
+        { id: "b", label: "Passer l'inscription et soumettre sans compte" },
 
-        { id: "c", label: "Flouter le nom de l'app pour rester discret" },
+        { id: "c", label: "Creator → supprimer le compte → resoumettre chaque semaine" },
 
       ], "a"),
 

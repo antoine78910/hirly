@@ -28,6 +28,14 @@ SEED_CREATOR_ID = "creator_swiipr_official"
 SEED_COURSE_ID = "course_job_search_mastery"
 SEED_MODULES_VERSION = 9
 
+SUBMIT_DRAFTS_VIDEO_URL = (
+    "https://player.mediadelivery.net/play/689678/9cdda64d-b68e-4e87-b5c9-d076bb620aec"
+)
+
+GETTING_STARTED_VIDEO_URL = (
+    "https://player.mediadelivery.net/play/689678/00095b90-e8c2-4d11-b9c1-9a3a499c58dd"
+)
+
 CRM_STAGES = ["new", "contacted", "qualified", "enrolled", "won", "lost"]
 
 COURSE_I18N = {
@@ -62,11 +70,13 @@ MODULE_I18N = {
             "title": "Getting Started",
             "description": "How the course works, why it matters, and what happens if you skip the rules.",
             "category": "fundamentals",
+            "video_url": GETTING_STARTED_VIDEO_URL,
         },
         "fr": {
             "title": "Pour bien commencer",
             "description": "Comment fonctionne le cours, pourquoi c'est important, et les risques si tu ignores les règles.",
             "category": "fundamentals",
+            "video_url": GETTING_STARTED_VIDEO_URL,
         },
     },
     "mod_warm_up": {
@@ -138,11 +148,13 @@ MODULE_I18N = {
             "title": "Submit Drafts & Next Steps",
             "description": "How to submit work, get feedback, and what happens next.",
             "category": "interview",
+            "video_url": SUBMIT_DRAFTS_VIDEO_URL,
         },
         "fr": {
             "title": "Soumettre le contenu",
             "description": "Comment soumettre ton travail, obtenir des retours et la suite du parcours.",
             "category": "interview",
+            "video_url": SUBMIT_DRAFTS_VIDEO_URL,
         },
     },
     "mod_resources": {

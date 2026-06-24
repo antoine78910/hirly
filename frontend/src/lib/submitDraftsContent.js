@@ -3,6 +3,9 @@
 export const TOPR_SUBMIT_URL =
   "https://topr.io/protected/campaign/27d12ae2-5f2b-45d7-9ec9-0a7451bcd570";
 
+export const SUBMIT_DRAFTS_VIDEO_URL =
+  "https://player.mediadelivery.net/play/689678/9cdda64d-b68e-4e87-b5c9-d076bb620aec";
+
 export const SUBMIT_DRAFTS_EN = [
   { type: "heading", level: 1, text: "Submit Drafts & Next Steps" },
   { type: "heading", level: 2, text: "Submission link" },

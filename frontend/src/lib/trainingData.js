@@ -97,6 +97,7 @@ function mergeModules(apiModules, staticModules) {
         content: sec.content?.length ? sec.content : baseSec?.content,
         resources: sec.resources?.length ? sec.resources : baseSec?.resources,
         video_url: sec.video_url || baseSec?.video_url || "",
+        badge: sec.badge || baseSec?.badge || "",
       };
     });
     return {

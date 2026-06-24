@@ -56,6 +56,6 @@ export function bulletList(items) {
   };
 }
 
-export function sectionBlock({ section_id, title, video_url = "", content }) {
-  return { section_id, title, video_url, content };
+export function sectionBlock({ section_id, title, video_url = "", badge = "", content }) {
+  return { section_id, title, video_url, badge, content };
 }
