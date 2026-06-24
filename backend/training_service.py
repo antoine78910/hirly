@@ -46,7 +46,7 @@ COURSE_I18N = {
         "level": "Beginner",
     },
     "fr": {
-        "title": "Talking Heads",
+        "title": "Bienvenue dans ce cours",
         "subtitle": "Scripts vidéo et leçons pour booster ta recherche d'emploi",
         "description": "Parcours chaque module, regarde les vidéos et fais les quiz à la fin de chaque chapitre.",
         "level": "Débutant",
