@@ -55,6 +55,15 @@ const locationKey = (loc) => {
   return `label:${String(loc?.location_label || "").trim().toLowerCase()}`;
 };
 
+const sel = {
+  chipOn: "bg-sprout-mint text-white shadow-sm",
+  chipOff: "border border-sprout-border bg-sprout-surface-2 text-sprout-muted hover:border-sprout-mint/60 hover:text-white",
+  optionOn: "bg-sprout-mint text-white",
+  optionOff: "border border-sprout-border bg-sprout-surface-2 text-sprout-muted hover:border-sprout-mint/60 hover:text-white",
+  checkDot: "grid h-5 w-5 place-items-center rounded-full bg-white text-sprout-mint",
+  tag: "inline-flex items-center gap-1 rounded-full border border-sprout-border bg-sprout-surface-2 px-2.5 py-1 text-xs text-sprout-muted",
+};
+
 function Chip({ active, children, onClick, testId }) {
   return (
     <button
@@ -153,9 +162,9 @@ export default function FiltersModal({ open, initialFilters, totalCount, onApply
   if (!open) return null;
 
   const selectedLocations = f.locationsData || [];
-  const removeLocation = (placeId) => {
+  const removeLocation = (keyToRemove) => {
     setF((s) => {
-      const nextLocations = (s.locationsData || []).filter((loc) => loc.place_id !== placeId);
+      const nextLocations = (s.locationsData || []).filter((loc) => locationKey(loc) !== keyToRemove);
       return {
         ...s,
         locationsData: nextLocations,
@@ -300,7 +309,7 @@ export default function FiltersModal({ open, initialFilters, totalCount, onApply
                         </div>
                         <button
                           type="button"
-                          onClick={() => removeLocation(loc.place_id)}
+                          onClick={() => removeLocation(locationKey(loc))}
                           className="w-8 h-8 rounded-full grid place-items-center text-sprout-muted hover:text-white hover:bg-sprout-surface"
                           aria-label={`Remove ${loc.location_label}`}
                         >
