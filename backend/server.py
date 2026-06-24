@@ -1499,6 +1499,66 @@ def _cv_lines(cv_text: str) -> List[str]:
     return [_clean_string(line, 500) for line in (cv_text or "").splitlines() if _clean_string(line, 500)]
 
 
+def _fallback_extract_profile_from_cv(cv_text: str) -> Dict[str, Any]:
+    lines = _cv_lines(cv_text)
+    first_lines = lines[:12]
+    text = cv_text or ""
+    email_match = re.search(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", text, flags=re.I)
+    phone_match = re.search(r"(?:\+\d{1,4}[\s.-]?)?(?:\(?\d{2,4}\)?[\s.-]?){2,5}\d{2,4}", text)
+    linkedin_match = re.search(r"(?:https?://)?(?:www\.)?linkedin\.com/[^\s,;]+", text, flags=re.I)
+    website_match = re.search(r"https?://(?![^/\s]*linkedin\.com)[^\s,;]+", text, flags=re.I)
+
+    name = ""
+    for line in first_lines:
+        lower = line.lower()
+        if "@" in line or "linkedin" in lower or re.search(r"\d{3,}", line):
+            continue
+        words = [part for part in re.split(r"\s+", line) if part]
+        if 2 <= len(words) <= 5:
+            name = line
+            break
+
+    location = ""
+    for line in first_lines:
+        if any(marker in line.lower() for marker in ("remote", "linkedin", "@")):
+            continue
+        if "," in line and not re.search(r"\d{3,}", line):
+            location = line
+            break
+
+    known_skills = [
+        "Python", "JavaScript", "TypeScript", "React", "Node.js", "FastAPI", "Django",
+        "SQL", "PostgreSQL", "MongoDB", "Supabase", "AWS", "GCP", "Azure", "Docker",
+        "Kubernetes", "Excel", "Power BI", "Tableau", "Salesforce", "Figma",
+        "Marketing", "Sales", "Finance", "Accounting", "Operations", "Project Management",
+        "Product Management", "Customer Success", "Data Analysis", "Machine Learning",
+    ]
+    lower_text = text.lower()
+    skills = [skill for skill in known_skills if skill.lower() in lower_text][:15]
+    contact = {
+        "name": name,
+        "email": email_match.group(0) if email_match else "",
+        "phone": phone_match.group(0).strip() if phone_match else "",
+        "location": location,
+        "linkedin": linkedin_match.group(0) if linkedin_match else "",
+        "website": website_match.group(0) if website_match else "",
+        "portfolio": "",
+        "city": "",
+        "country": "",
+    }
+    return {
+        "contact": contact,
+        "summary": "",
+        "skills": skills,
+        "experience": [],
+        "education": [],
+        "target_roles": [],
+        "seniority": None,
+        "template_style": "modern",
+        "extraction_fallback_reason": "no_ai_provider",
+    }
+
+
 def _line_evidence(lines: List[str], value: Any, *, window: int = 1) -> str:
     needle = _clean_string(value, 200).lower()
     if not needle:
@@ -2178,7 +2238,8 @@ async def upload_cv(file: UploadFile = File(...), user: User = Depends(get_curre
     try:
         extracted = await claude_extract_profile(cv_text)
     except LLMProviderNotConfigured as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        logger.warning("cv_upload_ai_provider_not_configured user_id=%s error=%s", user.user_id, str(e))
+        extracted = _fallback_extract_profile_from_cv(cv_text)
     except Exception as e:
         logger.exception("CV extraction failed")
         raise HTTPException(status_code=500, detail=f"AI extraction failed: {e}")
@@ -2193,6 +2254,9 @@ async def upload_cv(file: UploadFile = File(...), user: User = Depends(get_curre
         mime = "text/plain"
 
     intelligence = _build_profile_intelligence(extracted, cv_text)
+    if extracted.get("extraction_fallback_reason"):
+        intelligence.setdefault("cv_extraction", {}).setdefault("confidence_summary", {})["mode"] = "fallback_no_ai_provider"
+        intelligence.setdefault("cv_extraction", {}).setdefault("fields_skipped", []).append("ai_provider_not_configured")
     existing_profile = await db.profiles.find_one({"user_id": user.user_id}, {"_id": 0, "application_defaults": 1, "contact": 1}) or {}
     existing_defaults = existing_profile.get("application_defaults") or {}
     cv_managed_default_keys = {
