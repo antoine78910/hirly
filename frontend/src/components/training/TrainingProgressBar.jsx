@@ -19,15 +19,16 @@ export default function TrainingProgressBar({
   courseId,
   enrollment,
   lang,
-  progressTick = 0, // eslint-disable-line no-unused-vars — only used as a render trigger
+  progressTick = 0,
 }) {
   const scored = modules.filter((m) => SCORED_MODULE_IDS.includes(m.module_id));
   if (!scored.length) return null;
 
   const quizResults = enrollment?.quiz_results || {};
-  const fractions = scored.map((m) =>
-    moduleProgressFraction(courseId, m, quizResults),
-  );
+  const fractions = scored.map((m) => {
+    void progressTick;
+    return moduleProgressFraction(courseId, m, quizResults);
+  });
   const overallPct = Math.round(
     (fractions.reduce((a, b) => a + b, 0) / scored.length) * 100,
   );

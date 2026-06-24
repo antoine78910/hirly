@@ -87,14 +87,6 @@ export default function Training() {
     </button>
   );
 
-  if (loading) {
-    return (
-      <div className="grid min-h-dvh place-items-center bg-white">
-        <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
-      </div>
-    );
-  }
-
   const featured = catalog[0];
   const courseId = featured?.course_id || TRAINING_COURSE_ID;
 
@@ -103,6 +95,14 @@ export default function Training() {
     [courseId, catalogModules],
   );
   const completedCount = catalogModules.filter((m) => m.completed).length;
+
+  if (loading) {
+    return (
+      <div className="grid min-h-dvh place-items-center bg-white">
+        <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
+      </div>
+    );
+  }
 
   return (
     <TrainingShell
