@@ -3,6 +3,7 @@ import { Zap } from "lucide-react";
 import { api } from "../../lib/api";
 import { useUpgradeModal } from "../../context/UpgradeModalContext";
 import { useAppLocale } from "../../context/AppLocaleContext";
+import { BILLING_UPDATED } from "../../lib/billingEvents";
 import {
   DEMO_ACCOUNT_CHANGED,
   DEMO_CREDITS_CHANGED,
@@ -23,12 +24,20 @@ export function useSwipeCredits() {
     const onCreditsChange = () => {
       if (isDemoAccountEnabled()) setCredits(getDemoCreditsRemaining());
     };
+    const onBillingUpdated = (event) => {
+      if (isDemoAccountEnabled()) return;
+      setIsPremium(Boolean(event?.detail?.is_premium));
+      setCredits(Number(event?.detail?.credits_remaining ?? 0));
+      setLoading(false);
+    };
 
     window.addEventListener(DEMO_CREDITS_CHANGED, onCreditsChange);
     window.addEventListener(DEMO_ACCOUNT_CHANGED, syncDemo);
+    window.addEventListener(BILLING_UPDATED, onBillingUpdated);
     return () => {
       window.removeEventListener(DEMO_CREDITS_CHANGED, onCreditsChange);
       window.removeEventListener(DEMO_ACCOUNT_CHANGED, syncDemo);
+      window.removeEventListener(BILLING_UPDATED, onBillingUpdated);
     };
   }, []);
 

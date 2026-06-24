@@ -27,6 +27,7 @@ import DesktopSwipeFeed from "../components/swipe/DesktopSwipeFeed";
 import { saveTargetPreferences, normalizeLocationData } from "../lib/targetPreferences";
 import { hasActiveFilters, mergeFilters, clearMenuFilters } from "../lib/jobFilters";
 import { useAppLocale } from "../context/AppLocaleContext";
+import { BILLING_UPDATED } from "../lib/billingEvents";
 import {
   formatPostedDate,
   getSwipeSuccessCopy,
@@ -670,6 +671,14 @@ export default function Swipe() {
     }
     loadFeed(true, null);
   }, [authLoading, loadProfile, loadFeed, applyFinanceDemoTarget]);
+
+  useEffect(() => {
+    const onBillingUpdated = (event) => {
+      if (event?.detail) setBilling(event.detail);
+    };
+    window.addEventListener(BILLING_UPDATED, onBillingUpdated);
+    return () => window.removeEventListener(BILLING_UPDATED, onBillingUpdated);
+  }, []);
 
   const applyFilters = (f) => {
     trackEvent("filters_applied", {

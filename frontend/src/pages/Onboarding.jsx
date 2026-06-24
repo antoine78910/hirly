@@ -414,11 +414,15 @@ export default function Onboarding() {
       if (/^\d{6}$/.test(code)) {
         setRedeemingCreatorCode(true);
         try {
-          const redeemed = await redeemCreatorInvite(api, code);
+          const redeemed = await redeemCreatorInvite(api, code, {
+            plan: selectedPlan,
+            interval: selectedPlan,
+            source: "onboarding",
+          });
           if (redeemed?.demo_account) {
             setDemoAccountFromUser({ ...user, demo_account: true });
           }
-          toast.success("Creator access activated");
+          toast.success(redeemed?.master_code ? "Test plan activated" : "Creator access activated");
         } catch (inviteErr) {
           toast.error(inviteErr?.response?.data?.detail || "Could not activate invitation code");
           setSaving(false);
