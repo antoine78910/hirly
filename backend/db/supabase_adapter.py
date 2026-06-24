@@ -546,16 +546,16 @@ class SupabaseCollectionAdapter(CollectionPort):
                 if remaining <= 0:
                     break
                 page_limit = min(page_limit, remaining)
-                params = {
-                    "select": select,
-                    "limit": str(page_limit),
-                    "offset": str(offset),
-                }
+            request_params: Dict[str, str] = {
+                "select": select,
+                "limit": str(page_limit),
+                "offset": str(offset),
+            }
             if remote_filter_params is not None:
-                params.update(remote_filter_params)
+                request_params.update(remote_filter_params)
             response = await client.get(
                 url,
-                params=params,
+                params=request_params,
                 headers=headers,
             )
             if response.status_code not in (200, 206):
@@ -790,10 +790,10 @@ async def count_supabase_table(
     }
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
-            params = {"select": "*", "limit": "0"}
+            request_params = {"select": "*", "limit": "0"}
             if filter_params:
-                params.update(filter_params)
-            response = await client.get(url, params=params, headers=headers)
+                request_params.update(filter_params)
+            response = await client.get(url, params=request_params, headers=headers)
         if response.status_code not in (200, 206):
             return {
                 "ok": False,
