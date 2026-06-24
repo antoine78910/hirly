@@ -21,6 +21,7 @@ import Logo from "@/components/Logo";
 import { useAppLocale } from "@/context/AppLocaleContext";
 import { getUpgradeContent } from "@/lib/appUi";
 import { formatMoney } from "@/lib/currency";
+import { notifyBillingUpdated } from "@/lib/billingEvents";
 import {
   SUBSCRIPTION_TIERS,
 } from "@/lib/subscriptionTiers";
@@ -109,12 +110,29 @@ export default function DesktopUpgradeModal({ open, onClose }) {
   const [billingInterval, setBillingInterval] = useState("monthly");
   const [selectedTier, setSelectedTier] = useState("ultra");
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [accessCode, setAccessCode] = useState("");
 
   const isMonthly = billingInterval === "monthly";
 
   const handleCheckout = async () => {
     setCheckoutLoading(true);
     try {
+      const normalizedCode = accessCode.trim();
+      if (normalizedCode) {
+        const { data } = await api.post("/billing/redeem-master-code", {
+          code: normalizedCode,
+          plan: selectedTier,
+          interval: billingInterval,
+          source: "app",
+        });
+        if (data?.billing) {
+          notifyBillingUpdated(data.billing);
+        }
+        toast.success("Test plan activated");
+        setAccessCode("");
+        onClose?.();
+        return;
+      }
       const { data } = await api.post("/billing/create-checkout-session", {
         plan: selectedTier,
         interval: billingInterval,
@@ -235,6 +253,16 @@ export default function DesktopUpgradeModal({ open, onClose }) {
               </div>
 
               <div className="space-y-4">
+                <input
+                  className="h-10 w-full rounded-md border border-border bg-background px-3 text-center font-mono text-sm font-semibold tracking-[0.2em] text-foreground outline-none transition-colors placeholder:tracking-normal placeholder:text-muted-foreground focus:border-violet-400"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  placeholder="Access code"
+                  value={accessCode}
+                  onChange={(e) => setAccessCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  data-testid="upgrade-access-code-input"
+                />
                 <button
                   type="button"
                   onClick={handleCheckout}

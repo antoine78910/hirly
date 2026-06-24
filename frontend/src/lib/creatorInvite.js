@@ -24,12 +24,12 @@ export function buildInviteUrl(code) {
   return `${window.location.origin}/invite/${normalized}`;
 }
 
-export async function redeemCreatorInvite(api, code) {
+export async function redeemCreatorInvite(api, code, options = {}) {
   const normalized = String(code || "").trim();
   if (!/^\d{6}$/.test(normalized)) {
     throw new Error("Enter a valid 6-digit invitation code");
   }
-  const { data } = await api.post("/invites/redeem", { code: normalized });
+  const { data } = await api.post("/invites/redeem", { code: normalized, ...options });
   clearPendingInviteCode();
   return data;
 }

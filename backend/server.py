@@ -248,6 +248,13 @@ class BillingCheckoutRequest(BaseModel):
     source: Optional[Literal["app", "credits", "onboarding"]] = None
 
 
+class BillingMasterCodeRequest(BaseModel):
+    code: str
+    plan: Literal["basic", "pro", "ultra", "monthly", "quarterly"] = "ultra"
+    interval: Optional[Literal["weekly", "monthly", "quarterly"]] = None
+    source: Optional[Literal["app", "credits", "onboarding"]] = None
+
+
 class ResolveMissingInfoRequest(BaseModel):
     answers: Dict[str, Any] = Field(default_factory=dict)
     save_to_profile: bool = False
@@ -806,6 +813,15 @@ def _stripe_price_for_plan(plan: str, *, interval: Optional[str] = None, source:
     return price_id
 
 
+def _master_billing_code() -> str:
+    return os.environ.get("MASTER_BILLING_CODE", "424242").strip()
+
+
+def _is_master_billing_code(code: str) -> bool:
+    expected = _master_billing_code()
+    return bool(expected) and (code or "").strip().casefold() == expected.casefold()
+
+
 def _plan_from_price(price_id: Optional[str]) -> Optional[str]:
     for plan in ("basic", "pro", "ultra"):
         for env_name in (f"STRIPE_PRICE_{plan.upper()}", f"STRIPE_PRICE_{plan.upper()}_WEEKLY"):
@@ -942,6 +958,41 @@ async def _get_user_doc(user: User) -> Dict[str, Any]:
     return user_doc
 
 
+async def _grant_master_billing_access(
+    user_id: str,
+    plan: str,
+    *,
+    interval: Optional[str] = None,
+    source: Optional[str] = None,
+) -> Dict[str, Any]:
+    checkout_source = source or "app"
+    billing_plan = plan if checkout_source == "onboarding" else _canonical_billing_plan(plan)
+    if checkout_source == "onboarding":
+        if billing_plan not in {"monthly", "quarterly"}:
+            raise HTTPException(status_code=400, detail="Unsupported onboarding billing plan")
+        billing_interval = interval or billing_plan
+    else:
+        if billing_plan not in {"basic", "pro", "ultra"}:
+            raise HTTPException(status_code=400, detail="Unsupported billing plan")
+        billing_interval = interval or "monthly"
+
+    now = datetime.now(timezone.utc)
+    period_days = 7 if billing_interval == "weekly" else 90 if billing_interval == "quarterly" else 30
+    updates = {
+        "subscription_status": "active",
+        "plan": billing_plan,
+        "interval": billing_interval,
+        "source": checkout_source,
+        "stripe_subscription_id": f"master_code_{user_id}_{uuid.uuid4().hex[:12]}",
+        "last_payment_status": "master_code",
+        "current_period_start": now.isoformat(),
+        "current_period_end": (now + timedelta(days=period_days)).isoformat(),
+    }
+    await _update_user_billing_by_user_id(user_id, updates)
+    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    return _billing_status_payload(user_doc)
+
+
 async def _update_user_billing_by_user_id(user_id: str, updates: Dict[str, Any]) -> None:
     now = datetime.now(timezone.utc).isoformat()
     existing_user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "billing": 1}) or {}
@@ -1057,6 +1108,8 @@ def _stripe_configured() -> bool:
 async def _refresh_billing_from_stripe(user_doc: Dict[str, Any]) -> tuple[Dict[str, Any], Optional[str]]:
     billing = _billing_from_user(user_doc)
     subscription_id = billing.get("stripe_subscription_id")
+    if str(subscription_id or "").startswith("master_code_"):
+        return user_doc, None
     if not subscription_id or not _stripe_configured():
         return user_doc, None
     try:
@@ -1119,6 +1172,27 @@ async def create_billing_checkout_session(body: BillingCheckoutRequest, user: Us
         subscription_data={"metadata": {"user_id": user.user_id, "plan": billing_plan, "interval": billing_interval, "source": checkout_source}},
     )
     return {"url": session["url"]}
+
+
+@api_router.post("/billing/redeem-master-code")
+async def redeem_billing_master_code(body: BillingMasterCodeRequest, user: User = Depends(get_current_user)):
+    code = (body.code or "").strip()
+    if not re.fullmatch(r"\d{6}", code):
+        raise HTTPException(status_code=400, detail="Enter a valid 6-digit access code")
+    if not _is_master_billing_code(code):
+        raise HTTPException(status_code=404, detail="Access code not found")
+
+    billing = await _grant_master_billing_access(
+        user.user_id,
+        body.plan,
+        interval=body.interval,
+        source=body.source,
+    )
+    return {
+        "ok": True,
+        "master_code": True,
+        "billing": billing,
+    }
 
 
 @api_router.get("/billing/status")
@@ -4684,6 +4758,16 @@ async def _redeem_creator_invite(code: str, user_id: str, user_email: Optional[s
 
 @api_router.get("/invites/{code}/validate")
 async def validate_creator_invite(code: str):
+    normalized = (code or "").strip()
+    if re.fullmatch(r"\d{6}", normalized) and _is_master_billing_code(normalized):
+        return {
+            "valid": True,
+            "reason": None,
+            "influencer_name": "Hirly test access",
+            "course_id": SEED_COURSE_ID,
+            "already_redeemed": False,
+            "master_code": True,
+        }
     check = validate_invite(code)
     invitation = check.get("invitation") or {}
     return {
@@ -4698,6 +4782,22 @@ async def validate_creator_invite(code: str):
 @api_router.post("/invites/redeem")
 async def redeem_creator_invite(payload: Dict[str, Any], user: User = Depends(get_current_user)):
     code = (payload.get("code") or "").strip()
+    if re.fullmatch(r"\d{6}", code) and _is_master_billing_code(code):
+        plan = (payload.get("plan") or "monthly").strip().lower()
+        source = (payload.get("source") or "onboarding").strip().lower()
+        interval = (payload.get("interval") or plan).strip().lower()
+        billing = await _grant_master_billing_access(
+            user.user_id,
+            plan,
+            interval=interval,
+            source=source,
+        )
+        return {
+            "ok": True,
+            "code": code,
+            "master_code": True,
+            "billing": billing,
+        }
     return await _redeem_creator_invite(code, user.user_id, user.email)
 
 
