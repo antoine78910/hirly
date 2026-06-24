@@ -84,11 +84,9 @@ TABLE_FILTER_COLUMNS = {
 }
 MAX_READ_ROWS = 10000
 READ_PAGE_SIZE = 1000
-JOB_FEED_LEAN_SELECT = (
-    "job_id,title,company,location,country_code,remote,posted_at,imported_at,last_seen_at,"
-    "ats_provider,auto_apply_supported,seniority,salary_max,salary_min,workplace_type,"
-    "work_location,job_type,employment_type,contract_type,industry,provider,match_score,match_reasons"
-)
+# Jobs keep most feed fields in the JSONB document. Selecting non-column fields
+# through PostgREST raises a 400 and makes /jobs/feed fail, so read the document.
+JOB_FEED_SELECT = "data"
 
 _shared_http_client: Optional[httpx.AsyncClient] = None
 
@@ -589,9 +587,9 @@ class SupabaseCollectionAdapter(CollectionPort):
         filter: Optional[Filter],
         limit: int,
         *,
-        select: str = JOB_FEED_LEAN_SELECT,
+        select: str = JOB_FEED_SELECT,
     ) -> List[Document]:
-        """Read rows without the heavy JSON `data` blob (used for feed ranking)."""
+        """Read rows with an explicit PostgREST select list."""
         return await self._read_documents(filter, read_limit=limit, select=select)
 
     async def insert_one(self, document: Document):
