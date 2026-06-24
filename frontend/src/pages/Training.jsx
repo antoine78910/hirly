@@ -89,7 +89,6 @@ export default function Training() {
 
   const featured = catalog[0];
   const courseId = featured?.course_id || TRAINING_COURSE_ID;
-
   const progressPct = useMemo(
     () => Math.round(courseProgressFraction(courseId, catalogModules, null) * 100),
     [courseId, catalogModules],

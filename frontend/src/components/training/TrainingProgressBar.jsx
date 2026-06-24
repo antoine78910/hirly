@@ -21,6 +21,7 @@ export default function TrainingProgressBar({
   lang,
   progressTick = 0,
 }) {
+  void progressTick;
   const scored = modules.filter((m) => SCORED_MODULE_IDS.includes(m.module_id));
   if (!scored.length) return null;
 

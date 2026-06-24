@@ -463,9 +463,9 @@ export default function Profile() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-bold">
-                  <span className="text-amber-500">{swipeCredits}</span> {isPremium ? t("common.unlimited") : t("common.credits")}
+                  <span className="text-amber-500">{swipeCredits}</span> {t("common.credits")}
                 </p>
-                <p className="text-xs shell-body">{isPremium ? t("profile.unlimitedSwipes") : t("profile.upgradePlan")}</p>
+                <p className="text-xs shell-body">{isPremium ? t("profile.creditsRemaining") : t("profile.upgradePlan")}</p>
               </div>
               <ChevronRight className="h-5 w-5 shrink-0 text-zinc-300" />
             </button>
