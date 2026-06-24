@@ -22,7 +22,6 @@ import {
   ShowcaseLandingStep,
   ShowcaseAllInOneStep,
   ShowcasePricingStep,
-  FinishOnboardingButton,
 } from "../components/onboarding/OnboardingFinalSteps";
 import { startGoogleLogin } from "../lib/auth";
 import OnboardingShell, { ContinueButton } from "../components/onboarding/OnboardingShell";
@@ -62,6 +61,8 @@ import { splitFullName } from "../lib/personalInfoOptions";
 import { ob } from "../components/onboarding/onboardingTheme";
 import { trackEvent } from "../lib/analytics";
 import { preloadOnboardingIntroImages, preloadOnboardingShowcaseImages } from "../lib/onboardingImagePreload";
+import { getPendingInviteCode, redeemCreatorInvite, storePendingInviteCode } from "../lib/creatorInvite";
+import { setDemoAccountFromUser } from "../lib/demoAccount";
 
 const STEP_ORDER = ONBOARDING_STEP_ORDER;
 const ONBOARDING_CHECKOUT_STATE_KEY = "hirly.onboarding.checkoutState";
@@ -181,6 +182,8 @@ export default function Onboarding() {
   const [selectedPlan, setSelectedPlan] = useState("quarterly");
   const [saving, setSaving] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [creatorAccessCode, setCreatorAccessCode] = useState(() => getPendingInviteCode());
+  const [redeemingAccessCode, setRedeemingAccessCode] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef();
 
@@ -410,9 +413,48 @@ export default function Onboarding() {
     }
   };
 
+  const redeemAccessCodeIfPresent = async () => {
+    const code = creatorAccessCode.trim();
+    if (!isSixDigitAccessCode(code)) return true;
+
+    setRedeemingAccessCode(true);
+    try {
+      const redeemed = await redeemCreatorInvite(api, code, {
+        plan: selectedPlan,
+        interval: selectedPlan,
+        source: "onboarding",
+      });
+      if (redeemed?.demo_account) {
+        setDemoAccountFromUser({ ...user, demo_account: true });
+      }
+      toast.success(
+        redeemed?.master_code
+          ? (lang === "fr" ? "Plan test activé" : "Test plan activated")
+          : (lang === "fr" ? "Accès créateur activé" : "Creator access activated"),
+      );
+      return true;
+    } catch (inviteErr) {
+      toast.error(
+        inviteErr?.response?.data?.detail
+          || (lang === "fr" ? "Impossible d'activer le code d'accès" : "Could not activate access code"),
+      );
+      return false;
+    } finally {
+      setRedeemingAccessCode(false);
+    }
+  };
+
   const finishOnboarding = async () => {
+    if (!user) {
+      await startGoogleLogin("/onboarding?step=showcasePricing");
+      return;
+    }
     setSaving(true);
     try {
+      if (!(await redeemAccessCodeIfPresent())) {
+        setSaving(false);
+        return;
+      }
       await persistOnboardingMeta();
       const exp = EXPERIENCE_LEVELS.find((e) => e.id === experience);
       const primaryRole = selectedRoles[0] || profile?.target_roles?.[0] || "Software Engineer";
@@ -453,8 +495,12 @@ export default function Onboarding() {
       return;
     }
     if (isSixDigitAccessCode(creatorAccessCode)) {
-      setStepIndex(STEP_ORDER.indexOf("creatorAccessCode"));
-      toast.success("Access code ready");
+      setCheckoutLoading(true);
+      try {
+        await finishOnboarding();
+      } finally {
+        setCheckoutLoading(false);
+      }
       return;
     }
     setCheckoutLoading(true);
@@ -547,7 +593,7 @@ export default function Onboarding() {
       setReferralCode(code);
       setCreatorAccessCode(code);
       storePendingInviteCode(code);
-      toast.success("Access code applied");
+      toast.success(lang === "fr" ? "Code d'accès appliqué" : "Access code applied");
       goNext();
       return;
     }
@@ -582,10 +628,16 @@ export default function Onboarding() {
 
   const footer = !hideFooter ? (
     step === "showcasePricing" ? (
-      <ContinueButton onClick={startOnboardingCheckout} disabled={checkoutLoading} testId="showcase-pricing-continue">
+      <ContinueButton
+        onClick={startOnboardingCheckout}
+        disabled={checkoutLoading || redeemingAccessCode || saving}
+        testId="showcase-pricing-continue"
+      >
         {checkoutLoading
           ? (lang === "fr" ? "Ouverture du paiement..." : "Opening checkout...")
-          : (lang === "fr" ? "Continuer" : "Continue")}
+          : redeemingAccessCode || saving
+            ? (lang === "fr" ? "Activation..." : "Activating...")
+            : (lang === "fr" ? "Continuer" : "Continue")}
       </ContinueButton>
     ) : step === "profileWelcome" ? (
       <div className="space-y-2">
