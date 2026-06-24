@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>People page — layout options</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #09090b; color: #fafafa; font-family: 'Inter', system-ui, sans-serif; padding: 24px 16px 48px; }
+  h1 { font-size: 20px; font-weight: 800; margin-bottom: 6px; letter-spacing: -0.03em; }
+  .subtitle { color: #71717a; font-size: 14px; margin-bottom: 28px; }
+
+  .options { display: flex; flex-direction: column; gap: 20px; }
+
+  .option {
+    border: 2px solid #27272a;
+    border-radius: 20px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: border-color 0.2s, transform 0.15s;
+  }
+  .option:hover { border-color: #7c3aed; transform: translateY(-2px); }
+  .option.selected { border-color: #7c3aed; box-shadow: 0 0 0 3px rgba(124,58,237,0.2); }
+
+  .option-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 16px 20px;
+    background: #131318;
+    border-bottom: 1px solid #27272a;
+  }
+  .letter {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: linear-gradient(135deg, #a78bfa, #7c3aed);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 900; font-size: 14px; color: white; flex-shrink: 0;
+  }
+  .option-header h3 { font-size: 16px; font-weight: 700; letter-spacing: -0.02em; }
+  .option-header p { font-size: 12px; color: #71717a; margin-top: 2px; }
+
+  /* Mockup area */
+  .phone-mock {
+    background: #000;
+    margin: 0;
+    padding: 16px 12px 20px;
+    min-height: 280px;
+    position: relative;
+  }
+
+  /* Option A — Feed-style (matched to your applications) */
+  .feed-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .feed-title { font-size: 17px; font-weight: 800; letter-spacing: -0.02em; }
+  .feed-badge { background: rgba(124,58,237,0.2); color: #a78bfa; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 99px; }
+
+  .person-card {
+    background: #131318;
+    border: 1px solid #27272a;
+    border-radius: 14px;
+    padding: 12px;
+    margin-bottom: 8px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .avatar { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #6366f1, #3b82f6); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex-shrink: 0; }
+  .person-info { flex: 1; min-width: 0; }
+  .person-name { font-size: 13px; font-weight: 700; }
+  .person-role { font-size: 11px; color: #71717a; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .person-company { font-size: 11px; color: #a78bfa; margin-top: 2px; }
+  .connect-btn { background: rgba(124,58,237,0.15); border: 1px solid rgba(124,58,237,0.3); color: #a78bfa; font-size: 11px; font-weight: 700; padding: 6px 10px; border-radius: 99px; white-space: nowrap; flex-shrink: 0; }
+
+  .match-tag { display: inline-flex; align-items: center; gap: 4px; background: rgba(124,58,237,0.1); color: #a78bfa; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 99px; margin-top: 4px; }
+
+  /* Option B — Company-centric accordion */
+  .company-row {
+    background: #131318;
+    border: 1px solid #27272a;
+    border-radius: 14px;
+    margin-bottom: 8px;
+    overflow: hidden;
+  }
+  .company-header-row { display: flex; align-items: center; gap: 10px; padding: 12px; }
+  .company-logo { width: 36px; height: 36px; border-radius: 8px; background: white; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 13px; color: #000; flex-shrink: 0; }
+  .company-name { font-size: 13px; font-weight: 700; flex: 1; }
+  .company-count { font-size: 11px; color: #71717a; }
+  .chevron { color: #52525b; font-size: 12px; }
+  .team-list { padding: 0 12px 12px; border-top: 1px solid #27272a; }
+  .team-member { display: flex; align-items: center; gap: 8px; padding: 8px 0; }
+  .mini-avatar { width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg, #f59e0b, #ef4444); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 11px; flex-shrink: 0; }
+  .mini-info { flex: 1; }
+  .mini-name { font-size: 12px; font-weight: 600; }
+  .mini-role { font-size: 10px; color: #71717a; }
+  .mini-btn { background: #7c3aed; color: white; font-size: 10px; font-weight: 700; padding: 4px 8px; border-radius: 99px; }
+
+  /* Option C — Kanban-style "People in your pipeline" */
+  .pipeline-tabs { display: flex; gap: 6px; margin-bottom: 14px; overflow-x: auto; padding-bottom: 4px; }
+  .p-tab { padding: 6px 12px; border-radius: 99px; font-size: 11px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+  .p-tab.active { background: #7c3aed; color: white; }
+  .p-tab:not(.active) { background: #131318; color: #71717a; border: 1px solid #27272a; }
+  .p-section-label { font-size: 10px; font-weight: 700; color: #52525b; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+  .p-card { background: #131318; border: 1px solid #27272a; border-radius: 12px; padding: 10px; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+  .p-avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12px; flex-shrink: 0; }
+  .p-info { flex: 1; min-width: 0; }
+  .p-name { font-size: 12px; font-weight: 700; }
+  .p-title { font-size: 10px; color: #71717a; margin-top: 1px; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<h1>Page People — 3 approches de layout</h1>
+<p class="subtitle">Quelle structure pour afficher les hiring managers liés à tes candidatures ?</p>
+
+<div class="options">
+
+  <!-- Option A -->
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="option-header">
+      <div class="letter">A</div>
+      <div>
+        <h3>Feed "matched to you"</h3>
+        <p>Personnes triées par pertinence par rapport à tes candidatures</p>
+      </div>
+    </div>
+    <div class="phone-mock">
+      <div class="feed-header">
+        <span class="feed-title">People</span>
+        <span class="feed-badge">⚡ Matched</span>
+      </div>
+
+      <div class="person-card">
+        <div class="avatar" style="background: linear-gradient(135deg,#7c3aed,#6366f1);">S</div>
+        <div class="person-info">
+          <div class="person-name">Sarah Chen</div>
+          <div class="person-role">Engineering Manager · Linear</div>
+          <div class="match-tag">✦ Applied to Linear</div>
+        </div>
+        <div class="connect-btn">Connect</div>
+      </div>
+
+      <div class="person-card">
+        <div class="avatar" style="background: linear-gradient(135deg,#059669,#0891b2);">M</div>
+        <div class="person-info">
+          <div class="person-name">Marc Dubois</div>
+          <div class="person-role">Tech Lead · Stripe</div>
+          <div class="match-tag">✦ Applied to Stripe</div>
+        </div>
+        <div class="connect-btn">Connect</div>
+      </div>
+
+      <div class="person-card">
+        <div class="avatar" style="background: linear-gradient(135deg,#d97706,#ef4444);">J</div>
+        <div class="person-info">
+          <div class="person-name">Julia Meyer</div>
+          <div class="person-role">Senior Recruiter · Vercel</div>
+          <div class="match-tag">✦ Applied to Vercel</div>
+        </div>
+        <div class="connect-btn">Connect</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Option B -->
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="option-header">
+      <div class="letter">B</div>
+      <div>
+        <h3>Par entreprise (accordion)</h3>
+        <p>Groupé par boîte, expand pour voir l'équipe hiring</p>
+      </div>
+    </div>
+    <div class="phone-mock">
+      <div class="feed-header">
+        <span class="feed-title">People</span>
+        <span style="font-size:11px;color:#52525b;">3 entreprises</span>
+      </div>
+
+      <div class="company-row">
+        <div class="company-header-row">
+          <div class="company-logo">L</div>
+          <div class="company-name">Linear</div>
+          <div class="company-count">4 contacts</div>
+          <div class="chevron">▼</div>
+        </div>
+        <div class="team-list">
+          <div class="team-member">
+            <div class="mini-avatar" style="background: linear-gradient(135deg,#7c3aed,#6366f1);">S</div>
+            <div class="mini-info">
+              <div class="mini-name">Sarah Chen</div>
+              <div class="mini-role">Engineering Manager</div>
+            </div>
+            <div class="mini-btn">Message</div>
+          </div>
+          <div class="team-member">
+            <div class="mini-avatar" style="background: linear-gradient(135deg,#059669,#10b981);">R</div>
+            <div class="mini-info">
+              <div class="mini-name">Ryan Park</div>
+              <div class="mini-role">Tech Recruiter</div>
+            </div>
+            <div class="mini-btn">Message</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="company-row">
+        <div class="company-header-row">
+          <div class="company-logo">S</div>
+          <div class="company-name">Stripe</div>
+          <div class="company-count">2 contacts</div>
+          <div class="chevron">▶</div>
+        </div>
+      </div>
+
+      <div class="company-row">
+        <div class="company-header-row">
+          <div class="company-logo">V</div>
+          <div class="company-name">Vercel</div>
+          <div class="company-count">3 contacts</div>
+          <div class="chevron">▶</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Option C -->
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="option-header">
+      <div class="letter">C</div>
+      <div>
+        <h3>Par étape du pipeline</h3>
+        <p>Hiring managers triés par ton statut de candidature (Applied, Interview, Offer)</p>
+      </div>
+    </div>
+    <div class="phone-mock">
+      <div class="pipeline-tabs">
+        <div class="p-tab active">All</div>
+        <div class="p-tab">Applied</div>
+        <div class="p-tab">Interview</div>
+        <div class="p-tab">Offer</div>
+      </div>
+
+      <div class="p-section-label">Interview stage · 2</div>
+      <div class="p-card">
+        <div class="p-avatar" style="background:linear-gradient(135deg,#059669,#10b981)">S</div>
+        <div class="p-info">
+          <div class="p-name">Sarah Chen · Linear</div>
+          <div class="p-title">Engineering Manager</div>
+        </div>
+        <div class="status-dot" style="background:#10b981"></div>
+      </div>
+
+      <div class="p-section-label" style="margin-top:10px">Applied stage · 3</div>
+      <div class="p-card">
+        <div class="p-avatar" style="background:linear-gradient(135deg,#7c3aed,#6366f1)">M</div>
+        <div class="p-info">
+          <div class="p-name">Marc Dubois · Stripe</div>
+          <div class="p-title">Tech Lead</div>
+        </div>
+        <div class="status-dot" style="background:#a78bfa"></div>
+      </div>
+      <div class="p-card">
+        <div class="p-avatar" style="background:linear-gradient(135deg,#d97706,#f59e0b)">J</div>
+        <div class="p-info">
+          <div class="p-name">Julia Meyer · Vercel</div>
+          <div class="p-title">Senior Recruiter</div>
+        </div>
+        <div class="status-dot" style="background:#a78bfa"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function toggleSelect(el) {
+  document.querySelectorAll('.option').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+  const choice = el.dataset.choice;
+  const text = el.querySelector('h3').textContent;
+  if (window.recordEvent) window.recordEvent('click', choice, text);
+}
+</script>
+</body>
+</html>

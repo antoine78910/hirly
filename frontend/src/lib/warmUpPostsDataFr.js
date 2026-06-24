@@ -11,7 +11,7 @@ export const WARM_UP_POSTS_FR = [
     audioUrl: "https://www.instagram.com/reels/audio/27387820134155033/",
     guidelines: ["Souris et ralentis la vidéo à 0,5–1×"],
     script:
-      "Plus jamais stressé avant un entretien — c'est comme une session gratuite où je parle de à quel point je suis génial et spectaculaire",
+      "Plus jamais stressé avant un entretien — c'est comme une séance gratuite où j'explique à quel point je suis génial et exceptionnel",
     caption: frCaption(
       "Quelqu'un peut m'embaucher svp ? J'ai cherché partout sur LinkedIn, Indeed, Hirly, Glassdoor…",
       ...["emploi", "rechercheemploi", "tipsemploi", "entretien", "emploifrance"],

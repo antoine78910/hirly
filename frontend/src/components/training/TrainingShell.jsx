@@ -32,7 +32,7 @@ export function useTrainingPageMode() {
   }, []);
 }
 
-export function TrainingTopBar({ actions, backTo }) {
+export function TrainingTopBar({ actions, backTo, progressPct = null }) {
   const navigate = useNavigate();
   const location = useLocation();
   const routeLocale = parseTrainingLocale(location.pathname);
@@ -77,6 +77,17 @@ export function TrainingTopBar({ actions, backTo }) {
           </button>
         </div>
       </div>
+
+      {/* Thin progress bar at the bottom edge of the header */}
+      {progressPct != null && (
+        <div className="absolute inset-x-0 bottom-0 h-[3px] overflow-hidden bg-zinc-100">
+          <div
+            className="h-full bg-gradient-to-r from-violet-500 via-violet-400 to-indigo-400 transition-[width] duration-700 ease-out"
+            style={{ width: `${progressPct}%` }}
+            aria-hidden
+          />
+        </div>
+      )}
     </header>
   );
 }
@@ -112,6 +123,7 @@ export default function TrainingShell({
   showSidebar = true,
   isCreator = false,
   hero,
+  progressPct = null,
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -123,7 +135,7 @@ export default function TrainingShell({
 
   return (
     <div className="min-h-dvh bg-white text-zinc-900">
-      <TrainingTopBar actions={actions} />
+      <TrainingTopBar actions={actions} progressPct={progressPct} />
       {hero}
 
         {showSidebar ? (

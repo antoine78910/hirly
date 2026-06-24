@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { CheckCircle2, ChevronRight, Loader2, Play } from "lucide-react";
@@ -8,6 +8,12 @@ import { TrainingTopBar, useTrainingPageMode } from "../components/training/Trai
 import ModuleDocView from "../components/training/ModuleDocView";
 import ModuleSectionNav from "../components/training/ModuleSectionNav";
 import ModuleQuiz from "../components/training/ModuleQuiz";
+import TrainingProgressBar from "../components/training/TrainingProgressBar";
+import {
+  SCORED_MODULE_IDS,
+  courseProgressFraction,
+  saveProgressEvent,
+} from "../lib/trainingProgress";
 import {
   fetchTrainingCourseDetail,
   isQuizPassed,
@@ -90,10 +96,24 @@ export default function TrainingCourse() {
   const [data, setData] = useState(null);
   const [activeModuleId, setActiveModuleId] = useState(null);
   const [quizPassed, setQuizPassed] = useState(false);
+  const [progressTick, setProgressTick] = useState(0);
+
+  // Refs for progress observation
+  const videoContainerRef = useRef(null);
+  const scrollSentinelRef = useRef(null);
+  const videoTimerRef = useRef(null);
 
   const hubPath = trainingHubPath(routeLocale);
   const moduleParam = searchParams.get("module");
   const sectionParam = searchParams.get("section");
+
+  const recordEvent = useCallback(
+    (moduleId, eventKey) => {
+      const isNew = saveProgressEvent(courseId, moduleId, eventKey);
+      if (isNew) setProgressTick((n) => n + 1);
+    },
+    [courseId],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -219,6 +239,70 @@ export default function TrainingCourse() {
     );
   };
 
+  // Record "visited" when a module is opened
+  useEffect(() => {
+    if (!activeModuleId || loading) return;
+    recordEvent(activeModuleId, "visited");
+  }, [activeModuleId, loading, recordEvent]);
+
+  // Record "section_X" when a section tab is opened
+  useEffect(() => {
+    if (!activeModuleId || !sectionParam || loading) return;
+    recordEvent(activeModuleId, `section_${sectionParam}`);
+  }, [activeModuleId, sectionParam, loading, recordEvent]);
+
+  // Reset video timer on section/module change
+  useEffect(() => {
+    return () => clearTimeout(videoTimerRef.current);
+  }, [activeModuleId, sectionParam]);
+
+  // Video watcher: if the video container is visible for 4 s → record "video"
+  useEffect(() => {
+    const el = videoContainerRef.current;
+    if (!el || !activeModuleId || loading) return;
+
+    let timer = null;
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          timer = setTimeout(() => recordEvent(activeModuleId, "video"), 4000);
+          videoTimerRef.current = timer;
+        } else {
+          clearTimeout(timer);
+        }
+      },
+      { threshold: 0.4 },
+    );
+    obs.observe(el);
+    return () => {
+      obs.disconnect();
+      clearTimeout(timer);
+    };
+  }, [activeModuleId, sectionParam, loading, recordEvent]);
+
+  // Scroll sentinel: record "scrolled" when user reaches the bottom of the content
+  useEffect(() => {
+    const el = scrollSentinelRef.current;
+    if (!el || !activeModuleId || loading) return;
+
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          recordEvent(activeModuleId, "scrolled");
+          obs.disconnect();
+        }
+      },
+      { threshold: 0.1 },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [activeModuleId, sectionParam, loading, recordEvent]);
+
+  // Re-tick when quiz passes so the progress bar reflects it immediately
+  useEffect(() => {
+    if (quizPassed) setProgressTick((n) => n + 1);
+  }, [quizPassed]);
+
   useLayoutEffect(() => {
     if (loading) return;
     window.scrollTo(0, 0);
@@ -290,9 +374,17 @@ export default function TrainingCourse() {
 
   const canComplete = atChapterEnd && (quizPassed || activeModule.completed);
 
+  const overallProgressPct = Math.round(
+    courseProgressFraction(courseId, modules, data?.enrollment) * 100,
+  );
+
+  const scoredModules = modules.filter((m) =>
+    SCORED_MODULE_IDS.includes(m.module_id),
+  );
+
   return (
     <div className="min-h-dvh bg-white text-zinc-900">
-      <TrainingTopBar backTo={hubPath} />
+      <TrainingTopBar backTo={hubPath} progressPct={overallProgressPct} />
 
       <main className="mx-auto max-w-3xl px-4 py-8 sm:px-8 sm:py-10">
         <div className="space-y-6">
@@ -300,12 +392,25 @@ export default function TrainingCourse() {
             {activeModule.title}
           </h1>
 
+          {scoredModules.length > 0 && (
+            <TrainingProgressBar
+              modules={scoredModules}
+              activeModuleId={activeModuleId}
+              courseId={courseId}
+              enrollment={data?.enrollment}
+              lang={lang}
+              progressTick={progressTick}
+            />
+          )}
+
           {showPresentationVideoAtTop ? (
             <section className="space-y-2" data-testid="training-presentation-video">
               <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
                 {lang === "fr" ? "Vidéo de présentation" : "Presentation video"}
               </p>
-              <VideoBlock url={activeSection?.video_url || ""} t={t} />
+              <div ref={videoContainerRef}>
+                <VideoBlock url={activeSection?.video_url || ""} t={t} />
+              </div>
             </section>
           ) : null}
 
@@ -329,7 +434,9 @@ export default function TrainingCourse() {
           ) : null}
 
           {!showPresentationVideoAtTop && displayVideoUrl ? (
-            <VideoBlock url={displayVideoUrl} t={t} />
+            <div ref={videoContainerRef}>
+              <VideoBlock url={displayVideoUrl} t={t} />
+            </div>
           ) : null}
 
           {displayContent?.length ? (
@@ -346,6 +453,9 @@ export default function TrainingCourse() {
               <ModuleDocView blocks={activeSection.resources} lang={lang} />
             </section>
           ) : null}
+
+          {/* Scroll sentinel — fires "scrolled" event when user reaches this point */}
+          <div ref={scrollSentinelRef} aria-hidden className="h-px" />
 
           {atChapterEnd && moduleQuiz ? (
             <ModuleQuiz

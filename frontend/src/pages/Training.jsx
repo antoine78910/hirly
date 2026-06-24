@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Loader2, LayoutDashboard, PlayCircle } from "lucide-react";
@@ -9,6 +9,7 @@ import TrainingShell, { TrainingHero, useTrainingPageMode } from "../components/
 import ModuleGalleryCard from "../components/training/ModuleGalleryCard";
 import { fetchTrainingCatalog, fetchTrainingCourseDetail } from "../lib/trainingData";
 import { TRAINING_COURSE_ID } from "../lib/demoTrainingData";
+import { courseProgressFraction } from "../lib/trainingProgress";
 import {
   parseTrainingLocale,
   trainingModulePath,
@@ -95,12 +96,20 @@ export default function Training() {
   }
 
   const featured = catalog[0];
+  const courseId = featured?.course_id || TRAINING_COURSE_ID;
+
+  const progressPct = useMemo(
+    () => Math.round(courseProgressFraction(courseId, catalogModules, null) * 100),
+    [courseId, catalogModules],
+  );
+  const completedCount = catalogModules.filter((m) => m.completed).length;
 
   return (
     <TrainingShell
       isCreator={isTrainingCreator}
       showSidebar={false}
       actions={headerActions}
+      progressPct={progressPct > 0 ? progressPct : null}
       hero={(
         <TrainingHero
           title={t("hubTitle")}
@@ -112,6 +121,25 @@ export default function Training() {
       {featured && catalogModules.length > 0 ? (
         <section className="border-b border-zinc-200/80 bg-white px-4 py-8 sm:px-8 sm:py-10">
           <div className="mx-auto max-w-6xl">
+            {/* Progress card */}
+            <div className="mb-6 rounded-2xl border border-zinc-200 bg-white p-4 sm:p-5 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-semibold text-zinc-800">
+                  {lang === "fr" ? "Progression globale" : "Overall progress"}
+                </span>
+                <span className="text-sm font-bold text-violet-600">{progressPct}%</span>
+              </div>
+              <div className="h-2.5 w-full overflow-hidden rounded-full bg-zinc-100">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-violet-500 via-violet-400 to-indigo-400 transition-[width] duration-700 ease-out"
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
+              <p className="mt-2 text-xs text-zinc-400">
+                {completedCount}/{catalogModules.length} {t("lessons")}
+              </p>
+            </div>
+
             <p className="text-sm leading-relaxed text-zinc-500 sm:text-base">
               {t("modulesHint")}
             </p>
@@ -119,9 +147,6 @@ export default function Training() {
               <span className="inline-flex items-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 py-1.5 text-sm font-medium text-violet-700">
                 <PlayCircle className="h-4 w-4" />
                 {t("courseModules")}
-              </span>
-              <span className="text-xs text-zinc-500">
-                {catalogModules.filter((m) => m.completed).length}/{catalogModules.length} {t("lessons")}
               </span>
             </div>
             <div className="mt-6 rounded-xl border border-zinc-200 bg-white p-4 sm:p-5">
@@ -134,7 +159,6 @@ export default function Training() {
                     active={index === 0}
                     locked={false}
                     onSelect={() => {
-                      const courseId = featured.course_id || TRAINING_COURSE_ID;
                       const firstSection = mod.sections?.[0]?.section_id;
                       navigate(trainingModulePath(routeLocale, courseId, mod.module_id, firstSection));
                     }}

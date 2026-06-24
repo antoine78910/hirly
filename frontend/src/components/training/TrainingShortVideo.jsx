@@ -2,24 +2,43 @@ import { useState } from "react";
 import { Video } from "lucide-react";
 import { resolveApiAssetUrl } from "../../lib/api";
 
+const CONTENT_BANK_MEDIA_PREFIX =
+  "/api/training/media/course_job_search_mastery/mod_content_bank";
+
+function contentBankApiVideoUrl(uploadSlot, lang = "fr") {
+  if (!uploadSlot) return "";
+  return `${CONTENT_BANK_MEDIA_PREFIX}/${uploadSlot}/${lang}`;
+}
+
 export default function TrainingShortVideo({ block, lang = "fr" }) {
+  const staticUrl = resolveApiAssetUrl(block.video_url || "");
+  const apiUrl = resolveApiAssetUrl(contentBankApiVideoUrl(block.upload_slot, lang));
+  const [playbackUrl, setPlaybackUrl] = useState(staticUrl);
   const [failed, setFailed] = useState(false);
-  const resolvedUrl = resolveApiAssetUrl(block.video_url || "");
   const aspect = block.aspect === "9:16" ? "aspect-[9/16]" : "aspect-video";
   const slotLabel = block.upload_label || block.upload_slot || "";
 
-  if (resolvedUrl && !failed) {
+  const handleVideoError = () => {
+    if (apiUrl && playbackUrl !== apiUrl) {
+      setPlaybackUrl(apiUrl);
+      return;
+    }
+    setFailed(true);
+  };
+
+  if (playbackUrl && !failed) {
     return (
       <div
         className="mx-auto w-full max-w-[280px] overflow-hidden rounded-2xl bg-zinc-900 shadow-lg ring-1 ring-zinc-200"
         data-testid={`short-video-${block.upload_slot || "inline"}`}
       >
         <video
-          src={resolvedUrl}
+          key={playbackUrl}
+          src={playbackUrl}
           controls
           playsInline
           className={`${aspect} w-full bg-black object-cover`}
-          onError={() => setFailed(true)}
+          onError={handleVideoError}
         />
       </div>
     );

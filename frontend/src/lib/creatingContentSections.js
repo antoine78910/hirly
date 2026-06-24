@@ -20,7 +20,6 @@ export const CREATING_CONTENT_SECTIONS_EN = [
     title: "Filming Playbook",
     video_url: CREATING_CONTENT_FILMING_VIDEO_URL,
     content: [
-      { type: "heading", level: 1, text: "Talking Head Best Practices" },
       { type: "paragraph", text: "Make sure:" },
       { type: "heading", level: 3, text: "1. Hook (First 3 Seconds Matter Most)" },
       {
@@ -176,7 +175,6 @@ export const CREATING_CONTENT_SECTIONS_FR = [
     title: "Guide de tournage",
     video_url: CREATING_CONTENT_FILMING_VIDEO_URL,
     content: [
-      { type: "heading", level: 1, text: "Bonnes pratiques face caméra" },
       { type: "paragraph", text: "Assure-toi de :" },
       { type: "heading", level: 3, text: "1. Hook (les 3 premières secondes comptent le plus)" },
       {
@@ -197,13 +195,13 @@ export const CREATING_CONTENT_SECTIONS_FR = [
         ],
       },
       { type: "paragraph", text: "L'objectif : stopper le scroll instantanément." },
-      { type: "heading", level: 3, text: "2. Ton & delivery" },
+      { type: "heading", level: 3, text: "2. Ton & diction" },
       {
         type: "list",
         style: "bullet",
         items: [
-          "Son naturel, casual, un peu plus drôle et expressif que d'habitude.",
-          "Parle comme en FaceTime avec un pote, en partageant du gossip.",
+          "Sois naturel, décontracté, un peu plus drôle et expressif qu'à l'habitude.",
+          "Parle comme si tu discutais avec un ami en lui partageant un secret.",
           "Si ça sonne récité ou comme si tu lisais un script, refais la prise.",
         ],
       },
@@ -211,7 +209,7 @@ export const CREATING_CONTENT_SECTIONS_FR = [
       { type: "paragraph", text: "Ton visage vend la vidéo — l'exagération aide." },
       {
         type: "paragraph",
-        text: "Utilise : sourcils levés, smirks, rolls des yeux, réactions awkward, expressions dramatiques.",
+        text: "Utilise : sourcils levés, sourires en coin, roulements des yeux, réactions décalées, expressions dramatiques.",
       },
       { type: "paragraph", text: "Ça crée de l'engagement visuel même sans le son." },
       { type: "heading", level: 3, text: "4. Rythme" },
@@ -222,7 +220,7 @@ export const CREATING_CONTENT_SECTIONS_FR = [
           "Parle un peu plus vite que dans une conversation normale.",
           "Évite les longues pauses.",
           "Pause seulement pour les punchlines ou le timing comique.",
-          "Si le rythme est lent, les viewers scrollent vite.",
+          "Si le rythme est lent, les gens décrochent rapidement.",
         ],
       },
       { type: "heading", level: 3, text: "5. Durée de la vidéo" },
@@ -258,7 +256,7 @@ export const CREATING_CONTENT_SECTIONS_FR = [
         text: "Change de plan toutes les quelques secondes pour que la vidéo paraisse plus rapide.",
       },
       { type: "heading", level: 3, text: "7. Sous-titres dans la vidéo" },
-      { type: "paragraph", text: "Important : ~50 % des viewers regardent sans le son." },
+      { type: "paragraph", text: "Important : ~50 % des spectateurs regardent sans le son." },
       { type: "paragraph", text: "Bonnes pratiques :" },
       {
         type: "list",
@@ -293,7 +291,7 @@ export const CREATING_CONTENT_SECTIONS_FR = [
           "Onglet historique des candidatures",
         ],
       },
-      { type: "paragraph", text: "Meilleur flow :" },
+      { type: "paragraph", text: "Meilleur enchaînement :" },
       {
         type: "list",
         style: "numbered",
@@ -316,13 +314,13 @@ export const CREATING_CONTENT_SECTIONS_FR = [
           "Tuto texte — audio trending + texte expliquant les étapes à l'écran",
         ],
       },
-      { type: "paragraph", text: "Tips :" },
+      { type: "paragraph", text: "Conseils :" },
       {
         type: "list",
         style: "bullet",
         items: [
           "Montre de grandes entreprises reconnues en swipant (Meta, Google, etc.)",
-          "Ça augmente la crédibilité et la relatability",
+          "Ça renforce la crédibilité et le sentiment d'identification",
         ],
       },
     ],

@@ -7,7 +7,6 @@ export const SUBMIT_DRAFTS_VIDEO_URL =
   "https://player.mediadelivery.net/play/689678/9cdda64d-b68e-4e87-b5c9-d076bb620aec";
 
 export const SUBMIT_DRAFTS_EN = [
-  { type: "heading", level: 1, text: "Submit Drafts & Next Steps" },
   { type: "heading", level: 2, text: "Submission link" },
   {
     type: "callout",
@@ -38,7 +37,6 @@ export const SUBMIT_DRAFTS_EN = [
 ];
 
 export const SUBMIT_DRAFTS_FR = [
-  { type: "heading", level: 1, text: "Soumettre le contenu" },
   { type: "heading", level: 2, text: "Lien de soumission" },
   {
     type: "callout",
@@ -48,7 +46,7 @@ export const SUBMIT_DRAFTS_FR = [
   { type: "link", text: "Soumettre ma vidéo sur Topr", href: TOPR_SUBMIT_URL },
   {
     type: "paragraph",
-    text: "Suis le script de la banque de contenu utilisé et inclus tous les éléments requis (accroche, démo Hirly, légende).",
+    text: "Suis le script de la banque de contenu que tu as utilisé et inclus tous les éléments requis (accroche, démo Hirly, légende).",
   },
   { type: "heading", level: 2, text: "Avant de soumettre" },
   {

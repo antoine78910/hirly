@@ -95,7 +95,6 @@ export const ONBOARDING_STEP_ORDER = [
   "showcaseLanding",
   "showcaseAllInOne",
   "showcasePricing",
-  "creatorAccessCode",
 ];
 
 /** Dark setup loader — order: image 3 → 4 → 2 → 1 (user reference). */
@@ -106,6 +105,13 @@ export const PROFILE_SETUP_PHASES = [
   { sub: "Finding the perfect opportunities for you…" },
 ];
 
+export const PROFILE_SETUP_PHASES_FR = [
+  { sub: "Tout préparer…" },
+  { sub: "Analyse de votre profil…" },
+  { sub: "Calibrage des recommandations…" },
+  { sub: "Recherche des meilleures opportunités pour vous…" },
+];
+
 /** Personalized “Welcome” cards shown after CV upload, before phone mockup steps. */
 export function buildProfileWelcomeItems({
   salaryMin,
@@ -113,15 +119,33 @@ export function buildProfileWelcomeItems({
   categories = [],
   categoryOptions = [],
   interviewsPerWeek = 4,
+  lang = "en",
 }) {
-  const salaryLabel = formatSalary(salaryMin);
-  const primaryRole = selectedRoles[0] || "your target roles";
+  const salaryLabel = formatSalary(salaryMin, lang);
+  const primaryRole = selectedRoles[0] || (lang === "fr" ? "vos postes cibles" : "your target roles");
   const categoryLabels = categories
     .map((id) => categoryOptions.find((c) => c.id === id)?.label)
     .filter(Boolean);
   const industryHint = categoryLabels.length
     ? categoryLabels.slice(0, 2).join(" & ")
-    : "top companies";
+    : (lang === "fr" ? "les meilleures entreprises" : "top companies");
+
+  if (lang === "fr") {
+    return [
+      {
+        title: "Boostez votre carrière",
+        body: `Nous vous aiderons à cibler des équipes en pleine croissance et des postes alignés avec votre objectif de ${salaryLabel}+.`,
+      },
+      {
+        title: "Candidatez à la vitesse de la lumière",
+        body: `Notre agent IA automatise les candidatures pour ${primaryRole} — fini le copier-coller.`,
+      },
+      {
+        title: "Décrochez votre prochaine victoire",
+        body: `Swipez sur les offres ${industryHint}. Nous gérons la paperasse pendant que vous visez ${interviewsPerWeek} entretiens par semaine.`,
+      },
+    ];
+  }
 
   return [
     {
@@ -146,7 +170,6 @@ export const ONBOARDING_LATE_STEP_IDS = [
   "showcaseLanding",
   "showcaseAllInOne",
   "showcasePricing",
-  "creatorAccessCode",
 ];
 
 const ONBOARDING_PREVIEW_STEP_ALIASES = {
@@ -154,7 +177,6 @@ const ONBOARDING_PREVIEW_STEP_ALIASES = {
   welcome: "profileWelcome",
   allinone: "showcaseAllInOne",
   pricing: "showcasePricing",
-  creator: "creatorAccessCode",
   setup: "profileSetup",
 };
 
@@ -221,6 +243,29 @@ export const ONBOARDING_SHOWCASE_SCREENS = {
 };
 
 /** Job-search pain points — icon + short label for onboarding marquee (Sprout/Framer set). */
+export const ONBOARDING_PAIN_POINTS_FR = [
+  { id: "follow-up", label: "Oublié de relancer ?", Icon: Bell },
+  { id: "no-replies", label: "Des heures à postuler, zéro réponse ?", Icon: Hourglass },
+  { id: "reapply", label: "Repostuler par erreur ?", Icon: Repeat },
+  { id: "re-enter-info", label: "Re-saisir les mêmes infos ?", Icon: Keyboard },
+  { id: "lost-track", label: "Perdu le fil de vos candidatures ?", Icon: FolderOpen },
+  { id: "copy-paste", label: "Copier-coller les lettres de motiv ?", Icon: ClipboardCopy },
+  { id: "unseen", label: "Personne ne l'a vu ?", Icon: EyeOff },
+  { id: "rewrite-cv", label: "Réécrire son CV encore et encore ?", Icon: RefreshCw },
+  { id: "duplicate-apps", label: "Doublons sur chaque site ?", Icon: Copy },
+  { id: "endless-scroll", label: "Scroller sans fin pour des offres ?", Icon: ScrollText },
+  { id: "dear-hiring", label: "Écrire « Madame, Monsieur » encore ?", Icon: PenLine },
+  { id: "job-is-job", label: "La recherche d'emploi, c'est un boulot ?", Icon: Briefcase },
+  { id: "manual-sheet", label: "Suivi sur tableur Excel ?", Icon: Table2 },
+  { id: "others-faster", label: "Les autres avancent plus vite ?", Icon: TrendingUp },
+  { id: "burnt-out", label: "À bout de forces ?", Icon: BatteryLow },
+  { id: "endless-search", label: "Ça n'en finit plus ?", Icon: Infinity },
+  { id: "many-sites", label: "Trop de sites d'emploi ?", Icon: Globe },
+  { id: "last-app", label: "Impossible de retrouver sa dernière cand. ?", Icon: Brain },
+  { id: "board-spam", label: "Marre du spam des job boards ?", Icon: MailWarning },
+  { id: "stuck-sheet", label: "Bloqué sur les tableurs ?", Icon: Sheet },
+];
+
 export const ONBOARDING_PAIN_POINTS = [
   { id: "follow-up", label: "Forgot to follow up?", Icon: Bell },
   { id: "no-replies", label: "Hours applying, no replies?", Icon: Hourglass },
@@ -268,24 +313,28 @@ export function buildPainMarqueeRows(points = ONBOARDING_PAIN_POINTS, rowCount =
   });
 }
 
-export const ONBOARDING_PRICING_PLANS = [
-  {
-    id: "quarterly",
-    label: "Quarterly",
-    billed: "€59.99 paid quarterly",
-    weekly: "€5.00",
-    badge: "33% OFF",
-    footnote: "Billed as €59.99/quarter",
-  },
-  {
-    id: "monthly",
-    label: "Monthly",
-    billed: "€29.99 paid monthly",
-    weekly: "€7.50",
-    badge: null,
-    footnote: "Billed as €29.99/month",
-  },
-];
+export function getOnboardingPricingPlans(lang = "en") {
+  const isFr = lang === "fr";
+  return [
+    {
+      id: "quarterly",
+      label: isFr ? "Trimestriel" : "Quarterly",
+      billed: isFr ? "59,99 € / trimestre" : "€59.99 paid quarterly",
+      weekly: isFr ? "5,00 €" : "€5.00",
+      badge: "33% OFF",
+      footnote: isFr ? "Facturé 59,99 € / trimestre" : "Billed as €59.99/quarter",
+    },
+    {
+      id: "monthly",
+      label: isFr ? "Mensuel" : "Monthly",
+      billed: isFr ? "29,99 € / mois" : "€29.99 paid monthly",
+      weekly: isFr ? "7,50 €" : "€7.50",
+      badge: null,
+      footnote: isFr ? "Facturé 29,99 € / mois" : "Billed as €29.99/month",
+    },
+  ];
+}
+export const ONBOARDING_PRICING_PLANS = getOnboardingPricingPlans("en");
 
 export const SUGGESTED_ONBOARDING_LOCATIONS = [
   "Paris, France",
@@ -327,15 +376,37 @@ export const EMPLOYMENT_TYPE_OPTIONS = [
   { id: "freelance", label: "Freelance / contract", hint: "Independent or project-based work.", Icon: User },
 ];
 
+export const EMPLOYMENT_TYPE_OPTIONS_FR = [
+  { id: "permanent", label: "CDI", hint: "Poste ouvert, à temps plein.", Icon: Briefcase },
+  { id: "fixed_term", label: "CDD", hint: "Contrat temporaire avec date de fin.", Icon: Clock },
+  { id: "internship", label: "Stage", hint: "Stage étudiant ou diplômé.", Icon: GraduationCap },
+  { id: "apprenticeship", label: "Alternance / apprentissage", hint: "Formation en alternance.", Icon: Wrench },
+  { id: "summer_job", label: "Job d'été", hint: "Poste saisonnier court pendant l'été.", Icon: Sun },
+  { id: "part_time", label: "Temps partiel", hint: "Heures réduites sur la durée.", Icon: Clock },
+  { id: "seasonal", label: "Emploi saisonnier", hint: "Postes de saison (vendanges, tourisme…).", Icon: Leaf },
+  { id: "freelance", label: "Freelance / mission", hint: "Travail indépendant ou à la mission.", Icon: User },
+];
+
 export const JOB_SEARCH_OPTIONS = [
   { id: "yes", label: "Yes", hint: "I'm actively applying to jobs right now.", Icon: Check },
   { id: "kindof", label: "Kind of", hint: "Just seeing what's out there.", Icon: HelpCircle },
   { id: "no", label: "No", hint: "I'm not actively looking for a new job.", Icon: X },
 ];
 
+export const JOB_SEARCH_OPTIONS_FR = [
+  { id: "yes", label: "Oui", hint: "Je postule activement en ce moment.", Icon: Check },
+  { id: "kindof", label: "Un peu", hint: "Je regarde juste ce qui existe.", Icon: HelpCircle },
+  { id: "no", label: "Non", hint: "Je ne cherche pas activement.", Icon: X },
+];
+
 export const OTHER_APPS_OPTIONS = [
   { id: "yes", label: "Yes", Icon: Check },
   { id: "no", label: "No", Icon: X },
+];
+
+export const OTHER_APPS_OPTIONS_FR = [
+  { id: "yes", label: "Oui", Icon: Check },
+  { id: "no", label: "Non", Icon: X },
 ];
 
 export const INTRO_SLIDES = [
@@ -367,6 +438,39 @@ export const INTRO_SLIDES = [
     id: "improve",
     title: "It Gets Better Every Time",
     body: "Track applications, interviews, and outcomes. Each application improves the next one automatically.",
+    image: "/onboarding/intro-5.png",
+  },
+];
+
+export const INTRO_SLIDES_FR = [
+  {
+    id: "welcome",
+    title: "Bienvenue sur Hirly !",
+    body: "Votre agent de candidature — conçu pour apprendre qui vous êtes et postuler à votre place.",
+    image: "/onboarding/intro-1.png",
+  },
+  {
+    id: "experts",
+    title: "Créé par des experts RH",
+    body: "Conçu avec des coaches carrière, recruteurs et professionnels qui savent ce qui fait décrocher un poste.",
+    image: "/onboarding/intro-2.png",
+  },
+  {
+    id: "questions",
+    title: "Répondez à des questions ciblées",
+    body: "Hirly pose des questions précises pour capturer les détails que la plupart des CV ratent.",
+    image: "/onboarding/intro-3.png",
+  },
+  {
+    id: "apply",
+    title: "Un tap. Candidature complète.",
+    body: "Relisez votre CV et lettre de motivation, puis envoyez. L'agent IA de Hirly postule directement sur les sites employeurs.",
+    image: "/onboarding/intro-4.png",
+  },
+  {
+    id: "improve",
+    title: "Il s'améliore à chaque fois",
+    body: "Suivez candidatures, entretiens et résultats. Chaque candidature améliore automatiquement la suivante.",
     image: "/onboarding/intro-5.png",
   },
 ];
@@ -643,11 +747,27 @@ export const EXPERIENCE_LEVELS = [
   { id: "lead", label: "Expert & leadership (10+ years)", backend: "lead", Icon: Crown },
 ];
 
+export const EXPERIENCE_LEVELS_FR = [
+  { id: "intern", label: "Stage", backend: "entry", Icon: Baby },
+  { id: "entry", label: "Débutant & diplômé", backend: "entry", Icon: GraduationCap },
+  { id: "junior", label: "Junior (1–2 ans)", backend: "junior", Icon: User },
+  { id: "mid", label: "Intermédiaire (3–5 ans)", backend: "mid", Icon: Users },
+  { id: "senior", label: "Senior (6–9 ans)", backend: "senior", Icon: Star },
+  { id: "lead", label: "Expert & leadership (10+ ans)", backend: "lead", Icon: Crown },
+];
+
 export const INTERVIEW_FEEDBACK = [
   { max: 2, label: "Light pace", tone: "muted" },
   { max: 4, label: "Realistic", tone: "good" },
   { max: 6, label: "Ambitious", tone: "good" },
   { max: 10, label: "High volume", tone: "warn" },
+];
+
+export const INTERVIEW_FEEDBACK_FR = [
+  { max: 2, label: "Rythme léger", tone: "muted" },
+  { max: 4, label: "Réaliste", tone: "good" },
+  { max: 6, label: "Ambitieux", tone: "good" },
+  { max: 10, label: "Volume élevé", tone: "warn" },
 ];
 
 export const ATTRIBUTION_OPTIONS = [
@@ -659,12 +779,22 @@ export const ATTRIBUTION_OPTIONS = [
   { id: "other", label: "Other", hint: "None of the above", Icon: MessageSquare },
 ];
 
+export const ATTRIBUTION_OPTIONS_FR = [
+  { id: "social", label: "Réseaux sociaux", hint: "TikTok, Instagram, LinkedIn, etc.", Icon: Video },
+  { id: "influencer", label: "Influenceur", hint: "Créateur ou communauté que vous suivez", Icon: Sparkles },
+  { id: "friend", label: "Ami / collègue", hint: "Bouche à oreille", Icon: Users },
+  { id: "search", label: "Recherche", hint: "Google ou store d'apps", Icon: Search },
+  { id: "ads", label: "Publicité", hint: "Pub en ligne ou hors ligne", Icon: Megaphone },
+  { id: "other", label: "Autre", hint: "Aucune de ces options", Icon: MessageSquare },
+];
+
 export function formatSalary(value, lang) {
   return formatSalaryEuro(value, lang);
 }
 
-export function interviewFeedback(count) {
-  const row = INTERVIEW_FEEDBACK.find((f) => count <= f.max) || INTERVIEW_FEEDBACK[INTERVIEW_FEEDBACK.length - 1];
+export function interviewFeedback(count, lang = "en") {
+  const list = lang === "fr" ? INTERVIEW_FEEDBACK_FR : INTERVIEW_FEEDBACK;
+  const row = list.find((f) => count <= f.max) || list[list.length - 1];
   return row;
 }
 

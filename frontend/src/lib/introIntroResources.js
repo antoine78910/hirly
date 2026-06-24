@@ -27,31 +27,31 @@ export const INTRODUCE_HIRLY_RESOURCES_FR = [
       [
         FR_TAGS.upload,
         [
-          "Il suffit d'uploader ton CV",
-          "Upload ton CV",
+          "Tout ce que t'as à faire, c'est importer ton CV.",
+          "Importe simplement ton CV.",
         ],
       ],
       [
         FR_TAGS.ai,
         [
-          "Active la lettre et le CV IA",
-          "Ils ont même une lettre et un CV IA pour chaque swipe",
-          "Ils ADAPTENT ton CV et ta lettre de motivation",
+          "Active la lettre de motivation et le CV générés par l'IA.",
+          "L'IA génère même une lettre de motivation et un CV personnalisés pour chaque candidature.",
+          "Elle adapte automatiquement ton CV et ta lettre de motivation à chaque offre.",
         ],
       ],
       [
         FR_TAGS.swipe,
         [
-          "Dès que tu swipes à droite, l'IA postule pour toi sur le site de l'entreprise",
-          "Quand tu swipes à droite, ça postule sur le site pour toi",
+          "À chaque fois que tu swipes à droite, l'IA postule automatiquement pour toi sur le site de l'entreprise.",
+          "Tu swipes à droite, et la candidature est envoyée automatiquement.",
         ],
       ],
       [
         FR_TAGS.history,
         [
-          "Regarde, j'ai postulé à tout ça en 10 minutes",
-          "Regarde, voici TOUTES mes candidatures passées",
-          "Tu peux aussi suivre tes candidatures passées et leurs statuts",
+          "Regarde, j'ai postulé à toutes ces offres en seulement 10 minutes.",
+          "Là, tu peux voir toutes mes candidatures précédentes.",
+          "Tu peux aussi suivre l'avancement et le statut de chacune de tes candidatures.",
         ],
       ],
     ],

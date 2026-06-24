@@ -10,12 +10,14 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { trackEvent } from "../lib/analytics";
 import { preloadOnboardingIntroImages } from "../lib/onboardingImagePreload";
+import { useAppLocale } from "../context/AppLocaleContext";
 
 export default function Landing() {
   const navigate = useNavigate();
   const { user, hasProfile, hasPreferences, loading } = useAuth();
   const [searchParams] = useSearchParams();
   const postLoginPath = searchParams.get("redirect") || "/swipe";
+  const { lang, setLang } = useAppLocale();
 
   useEffect(() => {
     trackEvent("landing_view");
@@ -47,13 +49,21 @@ export default function Landing() {
             <Logo size={28} />
             <span>{BRAND.NAME}</span>
           </a>
-          <Button
-            data-testid="header-signin-btn"
-            onClick={onSignIn}
-            className="rounded-full bg-linkedin hover:bg-linkedin-dark text-white font-semibold px-5"
-          >
-            Sign in
-          </Button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setLang(lang === "fr" ? "en" : "fr")}
+              className="text-xs font-semibold px-3 py-1 rounded-full border border-zinc-200 text-zinc-600 hover:border-linkedin hover:text-linkedin transition-colors"
+            >
+              {lang === "fr" ? "EN" : "FR"}
+            </button>
+            <Button
+              data-testid="header-signin-btn"
+              onClick={onSignIn}
+              className="rounded-full bg-linkedin hover:bg-linkedin-dark text-white font-semibold px-5"
+            >
+              {lang === "fr" ? "Se connecter" : "Sign in"}
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -68,7 +78,7 @@ export default function Landing() {
             className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-linkedin/20 bg-white shadow-sm text-xs font-semibold text-linkedin mb-7"
           >
             <Sparkles className="w-3.5 h-3.5" />
-            AI-tailored applications. 1 second each.
+            {lang === "fr" ? "Candidatures personnalisées par IA. En 1 seconde." : "AI-tailored applications. 1 second each."}
           </motion.div>
 
           <motion.h1
@@ -77,8 +87,8 @@ export default function Landing() {
             transition={{ duration: 0.6, delay: 0.05 }}
             className="font-display font-black text-5xl sm:text-6xl lg:text-7xl tracking-tighter leading-[0.95]"
           >
-            Swipe jobs.<br />
-            <span className="italic text-swiipr-gradient">Get hired.</span>
+            {lang === "fr" ? "Swipez les offres." : "Swipe jobs."}<br />
+            <span className="italic text-swiipr-gradient">{lang === "fr" ? "Décrochez un emploi." : "Get hired."}</span>
           </motion.h1>
 
           <motion.p
@@ -87,8 +97,11 @@ export default function Landing() {
             transition={{ duration: 0.6, delay: 0.15 }}
             className="mt-6 text-lg sm:text-xl text-zinc-600 max-w-2xl mx-auto leading-relaxed"
           >
-            Swipe right. Our AI tailors your CV and cover letter for every role.
-            Apply in <span className="text-linkedin font-semibold">1 second</span> instead of 20 minutes.
+            {lang === "fr" ? (
+              <>Swipez à droite. Notre IA adapte votre CV et lettre de motivation à chaque offre. Candidatez en <span className="text-linkedin font-semibold">1 seconde</span> au lieu de 20 minutes.</>
+            ) : (
+              <>Swipe right. Our AI tailors your CV and cover letter for every role. Apply in <span className="text-linkedin font-semibold">1 second</span> instead of 20 minutes.</>
+            )}
           </motion.p>
 
           <motion.div
@@ -104,11 +117,11 @@ export default function Landing() {
               size="lg"
               className="rounded-full gradient-linkedin hover:opacity-90 text-white font-semibold h-12 px-7 text-base pulse-ring"
             >
-              {BRAND.CTA_PRIMARY}
+              {lang === "fr" ? "Commencer à Swiper" : BRAND.CTA_PRIMARY}
               <ArrowRight className="ml-1.5 w-4 h-4" />
             </Button>
             <p className="flex items-center gap-1 text-xs text-zinc-500">
-              <ShieldCheck className="w-3.5 h-3.5" /> Free · No credit card
+              <ShieldCheck className="w-3.5 h-3.5" /> {lang === "fr" ? "Gratuit · Sans carte bancaire" : "Free · No credit card"}
             </p>
           </motion.div>
 
@@ -129,18 +142,18 @@ export default function Landing() {
                   <h3 className="font-display font-bold text-xl">Senior Frontend Engineer</h3>
                 </div>
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-linkedin-light text-linkedin text-xs font-semibold">
-                  <Sparkles className="w-3 h-3" /> 94% match
+                  <Sparkles className="w-3 h-3" /> {lang === "fr" ? "94% compatibilité" : "94% match"}
                 </span>
               </div>
               <div className="flex flex-wrap gap-2 mb-4">
-                <span className="text-xs font-medium px-2 py-1 rounded-full bg-zinc-100 text-zinc-700">Remote</span>
-                <span className="text-xs font-medium px-2 py-1 rounded-full bg-zinc-100 text-zinc-700">€140k–€200k</span>
+                <span className="text-xs font-medium px-2 py-1 rounded-full bg-zinc-100 text-zinc-700">{lang === "fr" ? "Télétravail" : "Remote"}</span>
+                <span className="text-xs font-medium px-2 py-1 rounded-full bg-zinc-100 text-zinc-700">{lang === "fr" ? "140k–200k €" : "€140k–€200k"}</span>
                 <span className="text-xs font-medium px-2 py-1 rounded-full bg-zinc-100 text-zinc-700">TypeScript</span>
               </div>
               <ul className="text-sm text-zinc-600 space-y-1.5">
-                <li>• 5 years TypeScript experience — perfect overlap</li>
-                <li>• You shipped perf wins on a complex SaaS dashboard</li>
-                <li>• Remote-first matches your preference</li>
+                <li>• {lang === "fr" ? "5 ans d'expérience TypeScript — correspondance parfaite" : "5 years TypeScript experience — perfect overlap"}</li>
+                <li>• {lang === "fr" ? "Vous avez livré des optimisations sur un dashboard SaaS complexe" : "You shipped perf wins on a complex SaaS dashboard"}</li>
+                <li>• {lang === "fr" ? "Télétravail correspond à votre préférence" : "Remote-first matches your preference"}</li>
               </ul>
               <div className="mt-6 flex items-center justify-between">
                 <div className="w-12 h-12 rounded-full grid place-items-center border border-zinc-200">
@@ -162,9 +175,9 @@ export default function Landing() {
           >
             <div className="flex items-center gap-1.5 text-amber-400">
               {[...Array(5)].map((_, i) => <Star key={i} className="w-4 h-4 fill-amber-400" />)}
-              <span className="ml-2 text-sm font-semibold text-zinc-700">4.9 · early access</span>
+              <span className="ml-2 text-sm font-semibold text-zinc-700">{lang === "fr" ? "4.9 · accès anticipé" : "4.9 · early access"}</span>
             </div>
-            <p className="text-xs text-zinc-500">Trusted by job seekers from Google, Stripe, Vercel and more</p>
+            <p className="text-xs text-zinc-500">{lang === "fr" ? "Utilisé par des candidats de Google, Stripe, Vercel et plus encore" : "Trusted by job seekers from Google, Stripe, Vercel and more"}</p>
           </motion.div>
         </div>
       </section>
@@ -173,23 +186,23 @@ export default function Landing() {
       <section className="border-y border-zinc-100">
         <div className="max-w-5xl mx-auto px-6 py-20 grid md:grid-cols-2 gap-6">
           <div className="bg-white border border-zinc-200 rounded-2xl p-8">
-            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-3">The old way</p>
-            <h3 className="font-display font-bold text-3xl mb-4">20 min / application</h3>
+            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-3">{lang === "fr" ? "L'ancienne façon" : "The old way"}</p>
+            <h3 className="font-display font-bold text-3xl mb-4">{lang === "fr" ? "20 min / candidature" : "20 min / application"}</h3>
             <ul className="text-zinc-600 space-y-2 text-sm">
-              <li>— Copy-paste the same CV everywhere</li>
-              <li>— Write a generic cover letter</li>
-              <li>— Fill out endless form fields</li>
-              <li>— Lose track of who you applied to</li>
+              <li>— {lang === "fr" ? "Copier-coller le même CV partout" : "Copy-paste the same CV everywhere"}</li>
+              <li>— {lang === "fr" ? "Rédiger une lettre de motivation générique" : "Write a generic cover letter"}</li>
+              <li>— {lang === "fr" ? "Remplir des formulaires sans fin" : "Fill out endless form fields"}</li>
+              <li>— {lang === "fr" ? "Perdre le fil de ses candidatures" : "Lose track of who you applied to"}</li>
             </ul>
           </div>
           <div className="gradient-linkedin text-white rounded-2xl p-8">
             <p className="text-xs font-semibold text-white/70 uppercase tracking-widest mb-3">{BRAND.NAME}</p>
-            <h3 className="font-display font-bold text-3xl mb-4">1 sec / application</h3>
+            <h3 className="font-display font-bold text-3xl mb-4">{lang === "fr" ? "1 sec / candidature" : "1 sec / application"}</h3>
             <ul className="text-white/90 space-y-2 text-sm">
-              <li>— Upload CV once</li>
-              <li>— Swipe right on jobs you like</li>
-              <li>— AI tailors CV + cover letter for each</li>
-              <li>— Track every application in one place</li>
+              <li>— {lang === "fr" ? "Importer le CV une seule fois" : "Upload CV once"}</li>
+              <li>— {lang === "fr" ? "Swiper à droite sur les offres qui vous intéressent" : "Swipe right on jobs you like"}</li>
+              <li>— {lang === "fr" ? "L'IA adapte le CV + la lettre pour chaque offre" : "AI tailors CV + cover letter for each"}</li>
+              <li>— {lang === "fr" ? "Suivre toutes les candidatures au même endroit" : "Track every application in one place"}</li>
             </ul>
           </div>
         </div>
@@ -198,14 +211,18 @@ export default function Landing() {
       {/* How it works */}
       <section className="max-w-6xl mx-auto px-6 py-24">
         <h2 className="font-display font-bold text-4xl sm:text-5xl tracking-tight text-center mb-16">
-          Three taps to your next job.
+          {lang === "fr" ? "Trois actions pour votre prochain emploi." : "Three taps to your next job."}
         </h2>
         <div className="grid md:grid-cols-3 gap-8">
-          {[
+          {(lang === "fr" ? [
+            { icon: FileCheck2, title: "Importez votre CV", body: "Nous extrayons vos compétences, expérience et postes cibles en quelques secondes." },
+            { icon: Zap, title: "Swipez les offres", body: "Chaque carte affiche un score de correspondance et explique pourquoi ce poste vous convient." },
+            { icon: Inbox, title: "Suivez tout", body: "De la candidature → à l'entretien → à l'offre. Tout au même endroit." },
+          ] : [
             { icon: FileCheck2, title: "Upload your CV", body: "We extract your skills, experience, and target roles in seconds." },
             { icon: Zap, title: "Swipe through jobs", body: "Every card shows a match score and why this job fits you." },
             { icon: Inbox, title: "Track everything", body: "From applied → interview → offer. Your applications, one place." },
-          ].map((s, i) => (
+          ]).map((s, i) => (
             <div key={i} className="border-t border-zinc-200 pt-6">
               <div className="w-10 h-10 rounded-xl gradient-linkedin text-white grid place-items-center mb-4">
                 <s.icon className="w-5 h-5" />
@@ -223,9 +240,9 @@ export default function Landing() {
           <div className="gradient-linkedin relative px-8 py-12 text-center text-white sm:px-16 sm:py-16">
             <div className="pointer-events-none absolute inset-0 opacity-10 bg-grid" aria-hidden />
             <h2 className="relative font-display text-4xl font-black tracking-tighter sm:text-5xl">
-              Start swiping.
+              {lang === "fr" ? "Commencez à swiper." : "Start swiping."}
             </h2>
-            <p className="relative mt-3 text-white/80">Your next job is one swipe away.</p>
+            <p className="relative mt-3 text-white/80">{lang === "fr" ? "Votre prochain emploi est à un swipe." : "Your next job is one swipe away."}</p>
             <Button
               data-testid="footer-cta-btn"
               onClick={onStartSwiping}
@@ -233,7 +250,7 @@ export default function Landing() {
               size="lg"
               className="relative mt-8 h-12 rounded-full bg-white px-7 text-base font-semibold text-linkedin hover:bg-zinc-100"
             >
-              {BRAND.CTA_SECONDARY} <ArrowRight className="ml-1.5 w-4 h-4" />
+              {lang === "fr" ? "Trouver un emploi aujourd'hui" : BRAND.CTA_SECONDARY} <ArrowRight className="ml-1.5 w-4 h-4" />
             </Button>
           </div>
         </div>
@@ -278,16 +295,18 @@ export default function Landing() {
 
               <div className="flex max-w-xl flex-col items-center text-center md:items-start md:text-left">
                 <h2 className="font-display text-2xl font-black uppercase tracking-tight text-zinc-900 sm:text-3xl lg:text-[2.5rem] lg:leading-tight">
-                  The application is coming soon
+                  {lang === "fr" ? "L'application arrive bientôt" : "The application is coming soon"}
                 </h2>
                 <p className="mt-4 text-base leading-relaxed text-zinc-500 sm:text-lg">
-                  {BRAND.NAME} will soon be available on mobile. Stay informed to be among the first to access it.
+                  {lang === "fr"
+                    ? `${BRAND.NAME} sera bientôt disponible sur mobile. Restez informé pour être parmi les premiers à y accéder.`
+                    : `${BRAND.NAME} will soon be available on mobile. Stay informed to be among the first to access it.`}
                 </p>
                 <div className="mt-8 flex flex-wrap items-center justify-center gap-3 md:justify-start">
                   <button
                     type="button"
                     className="group inline-flex items-center gap-2.5 rounded-lg border border-zinc-300 bg-white px-5 py-2.5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-linkedin/35 hover:shadow-md"
-                    aria-label="Google Play — available soon"
+                    aria-label={lang === "fr" ? "Google Play — bientôt disponible" : "Google Play — available soon"}
                   >
                     <svg className="h-5 w-5 shrink-0 transition-transform duration-200 group-hover:scale-110" viewBox="0 0 21 24" aria-hidden>
                       <path fill="#4285F4" d="M3 20.5V3.5C3 2.91 3.34 2.39 3.84 2.15L13.69 12 3.84 21.85c-.5-.24-.84-.76-.84-1.35z" />
@@ -300,14 +319,14 @@ export default function Landing() {
                         Google Play
                       </p>
                       <p className="text-[10px] font-medium text-zinc-400 transition-colors group-hover:text-linkedin/70">
-                        Available soon
+                        {lang === "fr" ? "Bientôt disponible" : "Available soon"}
                       </p>
                     </div>
                   </button>
                   <button
                     type="button"
                     className="group inline-flex items-center gap-2.5 rounded-lg bg-black px-5 py-2.5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-zinc-900 hover:shadow-md"
-                    aria-label="App Store — available soon"
+                    aria-label={lang === "fr" ? "App Store — bientôt disponible" : "App Store — available soon"}
                   >
                     <svg className="h-5 w-5 shrink-0 text-white transition-transform duration-200 group-hover:scale-110" viewBox="0 0 20 22" fill="currentColor" aria-hidden>
                       <path d="M15.71 19.17c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C1.25 16.67-.06 12.12 1.7 9.06c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M10 3c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" />
@@ -315,7 +334,7 @@ export default function Landing() {
                     <div className="text-left leading-tight">
                       <p className="text-sm font-semibold tracking-tight text-white">App Store</p>
                       <p className="text-[10px] font-medium text-white/55 transition-colors group-hover:text-white/80">
-                        Available soon
+                        {lang === "fr" ? "Bientôt disponible" : "Available soon"}
                       </p>
                     </div>
                   </button>

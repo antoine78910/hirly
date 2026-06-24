@@ -8,7 +8,6 @@ export const WARM_UP_PLAYBOOK_EN = [
     variant: "warning",
     text: "Before posting — if you just created your account, please follow these rules carefully.",
   },
-  { type: "heading", level: 1, text: "TikTok / IG Warmup SOP" },
   { type: "paragraph", text: "For job search, career advice & interview content accounts" },
   { type: "heading", level: 2, text: "Why Warmup Matters" },
   { type: "paragraph", text: "Fresh accounts have:" },
@@ -203,14 +202,13 @@ export const WARM_UP_PLAYBOOK_FR = [
     variant: "warning",
     text: "Avant de publier — si tu viens de créer ton compte, suis ces règles attentivement.",
   },
-  { type: "heading", level: 1, text: "SOP Warmup TikTok / IG" },
-  { type: "paragraph", text: "Pour les comptes contenu emploi, carrière & entretiens (marché francophone — France)" },
+  { type: "paragraph", text: "Pour les comptes de contenu emploi, carrière et entretiens (marché francophone — France)" },
   { type: "heading", level: 2, text: "Pourquoi le warmup compte" },
   { type: "paragraph", text: "Les nouveaux comptes n'ont pas :" },
   {
     type: "list",
     style: "bullet",
-    items: ["de confiance", "de profil audience", "d'historique comportemental"],
+    items: ["de crédibilité", "de profil d'audience", "d'historique comportemental"],
   },
   { type: "paragraph", text: "Si tu postes trop tôt :" },
   {
@@ -241,7 +239,7 @@ export const WARM_UP_PLAYBOOK_FR = [
   },
   {
     type: "paragraph",
-    text: "30–45 min au total, en plusieurs sessions. Interagis uniquement avec créateurs francophones et contenu carrière en français (France, Belgique, Suisse, Canada FR).",
+    text: "30–45 min au total, en plusieurs sessions. Interagis uniquement avec des créateurs francophones et du contenu carrière en français (France, Belgique, Suisse, Canada FR).",
   },
   { type: "heading", level: 2, text: "Phase 1 — Entraîner l'algorithme (Jours 3–5)" },
   {
@@ -261,7 +259,7 @@ export const WARM_UP_PLAYBOOK_FR = [
   },
   {
     type: "paragraph",
-    text: "Les comptes morts ne font que publier sans jamais scroller, ou spamment les uploads.",
+    text: "Les comptes morts ne font que publier sans jamais scroller, ou inondent la plateforme de vidéos d'un coup.",
   },
   { type: "heading", level: 2, text: "Gestion du compte (après warmup)" },
   {
@@ -295,7 +293,7 @@ export const WARM_UP_PLAYBOOK_FR = [
   { type: "heading", level: 2, text: "Règle d'or" },
   {
     type: "paragraph",
-    text: "Le warmup, ce n'est pas les vues. C'est la confiance, l'alignement audience et une portée stable. Brûler les étapes = comptes morts.",
+    text: "Le warmup, ce n'est pas les vues. C'est la crédibilité, l'alignement de l'audience et une portée stable. Brûler les étapes = comptes morts.",
   },
   ...postingHoursBlocks("fr"),
   { type: "heading", level: 2, text: "Ce qui tue le warmup" },
@@ -304,13 +302,13 @@ export const WARM_UP_PLAYBOOK_FR = [
     style: "bullet",
     items: [
       "publier immédiatement",
-      "scroll multi-niches",
-      "follow spam",
-      "changer GEO/IP pour simuler les US",
+      "scroller dans des niches variées",
+      "spam de follows",
+      "changer de GEO/IP",
       "modifier la bio en boucle",
       "10 vidéos/jour d'un coup",
-      "contenu copié",
-      "comportement bot",
+      "contenu copié ou réutilisé",
+      "comportement de bot",
     ],
   },
 ];

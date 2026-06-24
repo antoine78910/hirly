@@ -28,7 +28,6 @@ WARM_UP_PLAYBOOK_EN = [
         "variant": "warning",
         "text": "Before posting — if you just created your account, please follow these rules carefully.",
     },
-    {"type": "heading", "level": 1, "text": "TikTok / IG Warmup SOP"},
     {"type": "paragraph", "text": "For job search, career advice & interview content accounts"},
     {"type": "heading", "level": 2, "text": "Why Warmup Matters"},
     {"type": "paragraph", "text": "Fresh accounts have:"},
@@ -165,13 +164,12 @@ WARM_UP_PLAYBOOK_FR = [
         "variant": "warning",
         "text": "Avant de publier — si tu viens de créer ton compte, suis ces règles attentivement.",
     },
-    {"type": "heading", "level": 1, "text": "SOP Warmup TikTok / IG"},
-    {"type": "paragraph", "text": "Pour les comptes contenu emploi, carrière & entretiens (marché francophone — France)"},
+    {"type": "paragraph", "text": "Pour les comptes de contenu emploi, carrière et entretiens (marché francophone — France)"},
     {"type": "heading", "level": 2, "text": "Pourquoi le warmup compte"},
     {"type": "paragraph", "text": "Les nouveaux comptes n'ont pas :"},
     {"type": "list", "style": "bullet", "items": [
-        "de confiance",
-        "de profil audience",
+        "de crédibilité",
+        "de profil d'audience",
         "d'historique comportemental",
     ]},
     {"type": "paragraph", "text": "Si tu postes trop tôt :"},
@@ -195,7 +193,7 @@ WARM_UP_PLAYBOOK_FR = [
         "NE PAS modifier le profil en boucle.",
     ]},
     {"type": "paragraph", "text": "Recherche manuelle (en français) : marché de l'emploi, conseils CV, entretien d'embauche, conseils carrière, alternance, stage, télétravail, recrutement, etc."},
-    {"type": "paragraph", "text": "30–45 min au total, en plusieurs sessions. Interagis uniquement avec créateurs francophones et contenu carrière en français (France, Belgique, Suisse, Canada FR)."},
+    {"type": "paragraph", "text": "30–45 min au total, en plusieurs sessions. Interagis uniquement avec des créateurs francophones et du contenu carrière en français (France, Belgique, Suisse, Canada FR)."},
     {"type": "heading", "level": 2, "text": "Phase 1 — Entraîner l'algorithme (Jours 3–5)"},
     {"type": "paragraph", "text": "Toujours pas de publication. Cherche chaque jour (en français) : conseils recherche emploi, conseils CV, profil LinkedIn, préparation entretien, négociation salaire, CV ATS…"},
     {"type": "paragraph", "text": "30–60 min/jour. 1–3 commentaires max par session, naturels et pertinents."},
@@ -213,23 +211,22 @@ WARM_UP_PLAYBOOK_FR = [
         "moins de 300 répété = compte probablement compromis",
     ]},
     {"type": "heading", "level": 2, "text": "Règle d'or"},
-    {"type": "paragraph", "text": "Le warmup, ce n'est pas les vues. C'est la confiance, l'alignement audience et une portée stable. Brûler les étapes = comptes morts."},
+    {"type": "paragraph", "text": "Le warmup, ce n'est pas les vues. C'est la crédibilité, l'alignement de l'audience et une portée stable. Brûler les étapes = comptes morts."},
     *POSTING_HOURS_FR,
     {"type": "heading", "level": 2, "text": "Ce qui tue le warmup"},
     {"type": "list", "style": "bullet", "items": [
         "publier immédiatement",
-        "scroll multi-niches",
-        "follow spam",
-        "changer GEO/IP pour simuler les US",
+        "scroller dans des niches variées",
+        "spam de follows",
+        "changer de GEO/IP",
         "modifier la bio en boucle",
         "10 vidéos/jour d'un coup",
-        "contenu copié",
-        "comportement bot",
+        "contenu copié ou réutilisé",
+        "comportement de bot",
     ]},
 ]
 
 FILMING_PLAYBOOK_EN = [
-    {"type": "heading", "level": 1, "text": "Talking Head Best Practices"},
     {"type": "paragraph", "text": "Make sure:"},
     {"type": "heading", "level": 3, "text": "1. Hook (First 3 Seconds Matter Most)"},
     {"type": "list", "style": "bullet", "items": [
@@ -323,7 +320,6 @@ HIRLY_IN_VIDEOS_EN = [
 ]
 
 FILMING_PLAYBOOK_FR = [
-    {"type": "heading", "level": 1, "text": "Bonnes pratiques face caméra"},
     {"type": "paragraph", "text": "Points essentiels : hook en 3 secondes, ton naturel, expressions exagérées, rythme rapide, vidéos courtes (7–60 s), cadrage varié, sous-titres courts centrés."},
     *POSTING_HOURS_FR,
 ]
@@ -358,28 +354,28 @@ INTRODUCE_HIRLY_RESOURCES_FR = [
         "type": "table",
         "columns": ["Tags", "Script"],
         "rows": [
-            [_FR_TAGS["upload"], ["Il suffit d'uploader ton CV", "Upload ton CV"]],
+            [_FR_TAGS["upload"], ["Tout ce que t'as à faire, c'est importer ton CV.", "Importe simplement ton CV."]],
             [
                 _FR_TAGS["ai"],
                 [
-                    "Active la lettre et le CV IA",
-                    "Ils ont même une lettre et un CV IA pour chaque swipe",
-                    "Ils ADAPTENT ton CV et ta lettre de motivation",
+                    "Active la lettre de motivation et le CV générés par l'IA.",
+                    "L'IA génère même une lettre de motivation et un CV personnalisés pour chaque candidature.",
+                    "Elle adapte automatiquement ton CV et ta lettre de motivation à chaque offre.",
                 ],
             ],
             [
                 _FR_TAGS["swipe"],
                 [
-                    "Dès que tu swipes à droite, l'IA postule pour toi sur le site de l'entreprise",
-                    "Quand tu swipes à droite, ça postule sur le site pour toi",
+                    "À chaque fois que tu swipes à droite, l'IA postule automatiquement pour toi sur le site de l'entreprise.",
+                    "Tu swipes à droite, et la candidature est envoyée automatiquement.",
                 ],
             ],
             [
                 _FR_TAGS["history"],
                 [
-                    "Regarde, j'ai postulé à tout ça en 10 minutes",
-                    "Regarde, voici TOUTES mes candidatures passées",
-                    "Tu peux aussi suivre tes candidatures passées et leurs statuts",
+                    "Regarde, j'ai postulé à toutes ces offres en seulement 10 minutes.",
+                    "Là, tu peux voir toutes mes candidatures précédentes.",
+                    "Tu peux aussi suivre l'avancement et le statut de chacune de tes candidatures.",
                 ],
             ],
         ],

@@ -1,7 +1,6 @@
 /** Account Management module — post-warmup daily habits (EN + FR). */
 
 export const ACCOUNT_MANAGEMENT_EN = [
-  { type: "heading", level: 1, text: "Account Management After Warmup" },
   {
     type: "paragraph",
     text: "Once warmup is done and you've posted your first videos, don't stop behaving like a normal user. The playbook recommends keeping a minimum level of daily activity.",
@@ -44,10 +43,9 @@ export const ACCOUNT_MANAGEMENT_EN = [
 ];
 
 export const ACCOUNT_MANAGEMENT_FR = [
-  { type: "heading", level: 1, text: "Gestion du compte après warmup" },
   {
     type: "paragraph",
-    text: "Une fois le warmup terminé et les premières vidéos postées, ne t'arrête pas de te comporter comme un utilisateur normal. Le playbook recommande une activité quotidienne minimale.",
+    text: "Une fois le warmup terminé et les premières vidéos postées, continue à te comporter comme un utilisateur normal. Une activité quotidienne minimale reste nécessaire.",
   },
   { type: "heading", level: 2, text: "Rythme quotidien" },
   {
@@ -62,7 +60,7 @@ export const ACCOUNT_MANAGEMENT_FR = [
   { type: "heading", level: 2, text: "Pourquoi c'est important" },
   {
     type: "paragraph",
-    text: "TikTok et Instagram continuent d'observer ce que tu regardes, ce que tu recherches, ce que tu commentes, et combien de temps tu restes dans ta niche. Les comptes qui ne publient que pour poster sans jamais scroller paraissent automatisés et perdent en portée.",
+    text: "TikTok et Instagram continuent d'observer ce que tu regardes, ce que tu recherches, ce que tu commentes et combien de temps tu restes dans ta niche. Les comptes qui ne font que publier sans jamais scroller semblent automatisés et perdent en portée.",
   },
   {
     type: "callout",

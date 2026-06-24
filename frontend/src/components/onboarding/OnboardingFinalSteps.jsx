@@ -6,10 +6,15 @@ import { Check, Loader2 } from "lucide-react";
 import Logo from "../Logo";
 import { BRAND } from "../../lib/brand";
 import { ob } from "./onboardingTheme";
+import { useAppLocale } from "../../context/AppLocaleContext";
 import {
+  getOnboardingPricingPlans,
   ONBOARDING_PRICING_PLANS,
   ONBOARDING_SHOWCASE_SCREENS,
   PROFILE_SETUP_PHASES,
+  PROFILE_SETUP_PHASES_FR,
+  ONBOARDING_PAIN_POINTS,
+  ONBOARDING_PAIN_POINTS_FR,
   buildPainMarqueeRows,
   buildProfileWelcomeItems,
 } from "./onboardingData";
@@ -77,21 +82,23 @@ function SetupSpinner() {
 }
 
 export function ProfileSetupStep({ onComplete }) {
+  const { lang } = useAppLocale();
+  const phases = lang === "fr" ? PROFILE_SETUP_PHASES_FR : PROFILE_SETUP_PHASES;
   const [phaseIndex, setPhaseIndex] = useState(0);
-  const phase = PROFILE_SETUP_PHASES[phaseIndex];
+  const phase = phases[phaseIndex];
 
   useEffect(() => {
     preloadOnboardingShowcaseImages();
   }, []);
 
   useEffect(() => {
-    if (phaseIndex >= PROFILE_SETUP_PHASES.length - 1) {
+    if (phaseIndex >= phases.length - 1) {
       const done = setTimeout(onComplete, SETUP_PHASE_MS);
       return () => clearTimeout(done);
     }
     const next = setTimeout(() => setPhaseIndex((i) => i + 1), SETUP_PHASE_MS);
     return () => clearTimeout(next);
-  }, [phaseIndex, onComplete]);
+  }, [phaseIndex, phases.length, onComplete]);
 
   return (
     <motion.div
@@ -113,7 +120,7 @@ export function ProfileSetupStep({ onComplete }) {
         <SetupSpinner />
 
         <h1 className="mt-8 font-display text-xl font-bold tracking-tight text-zinc-900 sm:text-2xl">
-          Setting up everything
+          {lang === "fr" ? "Tout est en cours de préparation" : "Setting up everything"}
         </h1>
 
         <div className="relative mt-2 h-6 w-full max-w-xs">
@@ -195,12 +202,14 @@ export function ProfileWelcomeStep({
   categoryOptions,
   interviewsPerWeek,
 }) {
+  const { lang } = useAppLocale();
   const items = buildProfileWelcomeItems({
     salaryMin,
     selectedRoles,
     categories,
     categoryOptions,
     interviewsPerWeek,
+    lang,
   });
 
   return (
@@ -210,9 +219,9 @@ export function ProfileWelcomeStep({
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
       >
-        <h1 className={ob.title}>Welcome to {BRAND.NAME}!</h1>
+        <h1 className={ob.title}>{lang === "fr" ? `Bienvenue sur ${BRAND.NAME} !` : `Welcome to ${BRAND.NAME}!`}</h1>
         <p className={ob.subtitle}>
-          Based on your profile, here&apos;s how we&apos;ll help you succeed:
+          {lang === "fr" ? "Voici comment nous allons vous aider à réussir :" : "Based on your profile, here\u2019s how we\u2019ll help you succeed:"}
         </p>
       </motion.div>
 
@@ -243,6 +252,7 @@ export function ProfileWelcomeStep({
 }
 
 export function ShowcaseLandingStep() {
+  const { lang } = useAppLocale();
   return (
     <div className={`${ob.step} min-h-0 items-center overflow-hidden text-center`}>
       <div className="mb-1.5 shrink-0 sm:mb-2">
@@ -251,9 +261,9 @@ export function ShowcaseLandingStep() {
           <span className="font-display text-base font-bold text-swiipr-gradient">{BRAND.NAME}</span>
         </div>
 
-        <p className={`text-base sm:text-lg ${ob.muted}`}>Stop applying.</p>
+        <p className={`text-base sm:text-lg ${ob.muted}`}>{lang === "fr" ? "Arrêtez de postuler." : "Stop applying."}</p>
         <h1 className="mt-0.5 font-display text-[1.55rem] font-black leading-[1.1] tracking-tight text-zinc-900 sm:text-[2rem]">
-          Start landing interviews.
+          {lang === "fr" ? "Commencez à décrocher des entretiens." : "Start landing interviews."}
         </h1>
       </div>
 
@@ -271,7 +281,9 @@ export function ShowcaseLandingStep() {
 }
 
 export function ShowcaseAllInOneStep() {
-  const painRows = buildPainMarqueeRows();
+  const { lang } = useAppLocale();
+  const painPoints = lang === "fr" ? ONBOARDING_PAIN_POINTS_FR : ONBOARDING_PAIN_POINTS;
+  const painRows = buildPainMarqueeRows(painPoints);
 
   return (
     <div className={`${ob.step} items-center text-center`}>
@@ -281,10 +293,10 @@ export function ShowcaseAllInOneStep() {
       </div>
 
       <h1 className="font-display text-[1.4rem] font-black leading-tight tracking-tight text-zinc-900 sm:text-2xl">
-        All in one place
+        {lang === "fr" ? "Tout au même endroit" : "All in one place"}
       </h1>
       <p className={`mt-1.5 max-w-sm px-2 text-sm leading-snug sm:text-base ${ob.muted}`}>
-        Built for real results: everything your job search should&apos;ve been.
+        {lang === "fr" ? "Conçu pour de vrais résultats : tout ce que votre recherche d\u2019emploi aurait dû être." : "Built for real results: everything your job search should\u2019ve been."}
       </p>
 
       <div className={`${ob.stepBody} flex min-h-0 flex-col items-center justify-center gap-2 overflow-hidden sm:gap-3`}>
@@ -316,7 +328,9 @@ export function ShowcaseAllInOneStep() {
 }
 
 export function ShowcasePricingStep({ selectedPlan, onSelectPlan }) {
-  const plan = ONBOARDING_PRICING_PLANS.find((p) => p.id === selectedPlan) || ONBOARDING_PRICING_PLANS[0];
+  const { lang } = useAppLocale();
+  const plans = getOnboardingPricingPlans(lang);
+  const plan = plans.find((p) => p.id === selectedPlan) || plans[0];
 
   return (
     <div className={`${ob.step} min-h-0 overflow-hidden`}>
@@ -326,9 +340,9 @@ export function ShowcasePricingStep({ selectedPlan, onSelectPlan }) {
           <span className="font-display text-sm font-bold text-swiipr-gradient sm:text-base">{BRAND.NAME}</span>
         </div>
         <h1 className="font-display text-[1.2rem] font-black leading-tight tracking-tight text-zinc-900 sm:text-[1.45rem]">
-          All-in-one job search.
+          {lang === "fr" ? "Recherche d\u2019emploi tout-en-un." : "All-in-one job search."}
         </h1>
-        <p className={`mt-0.5 text-xs font-medium ${ob.muted}`}>Anywhere, anytime.</p>
+        <p className={`mt-0.5 text-xs font-medium ${ob.muted}`}>{lang === "fr" ? "Partout, tout le temps." : "Anywhere, anytime."}</p>
       </div>
 
       <div className="mt-1 flex min-h-0 flex-1 flex-col gap-1.5 overflow-hidden sm:mt-1.5 sm:gap-2">
@@ -344,7 +358,7 @@ export function ShowcasePricingStep({ selectedPlan, onSelectPlan }) {
         </div>
 
         <div className="shrink-0 space-y-1.5">
-          {ONBOARDING_PRICING_PLANS.map((item) => {
+          {plans.map((item) => {
             const on = selectedPlan === item.id;
             return (
               <button
@@ -377,7 +391,7 @@ export function ShowcasePricingStep({ selectedPlan, onSelectPlan }) {
                   </div>
                   <p className="shrink-0 text-xs font-bold text-zinc-900 sm:text-sm">
                     {item.weekly}
-                    <span className={`block text-right text-[9px] font-medium ${ob.dim}`}>/ week</span>
+                    <span className={`block text-right text-[9px] font-medium ${ob.dim}`}>{lang === "fr" ? "/ semaine" : "/ week"}</span>
                   </p>
                 </div>
               </button>
@@ -392,6 +406,7 @@ export function ShowcasePricingStep({ selectedPlan, onSelectPlan }) {
 }
 
 export function FinishOnboardingButton({ saving, onClick }) {
+  const { lang } = useAppLocale();
   return (
     <button
       type="button"
@@ -403,10 +418,10 @@ export function FinishOnboardingButton({ saving, onClick }) {
       {saving ? (
         <span className="inline-flex items-center justify-center gap-2">
           <Loader2 className="h-4 w-4 animate-spin" />
-          Starting…
+          {lang === "fr" ? "Démarrage…" : "Starting…"}
         </span>
       ) : (
-        "Start landing interviews"
+        lang === "fr" ? "Commencer" : "Start landing interviews"
       )}
     </button>
   );

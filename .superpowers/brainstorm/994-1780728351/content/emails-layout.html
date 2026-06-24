@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Emails page — layout options</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #09090b; color: #fafafa; font-family: 'Inter', system-ui, sans-serif; padding: 24px 16px 48px; }
+  h1 { font-size: 20px; font-weight: 800; margin-bottom: 6px; letter-spacing: -0.03em; }
+  .subtitle { color: #71717a; font-size: 14px; margin-bottom: 28px; }
+  .options { display: flex; flex-direction: column; gap: 20px; }
+  .option { border: 2px solid #27272a; border-radius: 20px; overflow: hidden; cursor: pointer; transition: border-color 0.2s, transform 0.15s; }
+  .option:hover { border-color: #7c3aed; transform: translateY(-2px); }
+  .option.selected { border-color: #7c3aed; box-shadow: 0 0 0 3px rgba(124,58,237,0.2); }
+  .option-header { display: flex; align-items: center; gap: 12px; padding: 16px 20px; background: #131318; border-bottom: 1px solid #27272a; }
+  .letter { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #a78bfa, #7c3aed); display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 14px; color: white; flex-shrink: 0; }
+  .option-header h3 { font-size: 16px; font-weight: 700; letter-spacing: -0.02em; }
+  .option-header p { font-size: 12px; color: #71717a; margin-top: 2px; }
+  .phone-mock { background: #000; padding: 16px 12px 20px; min-height: 300px; }
+
+  /* shared */
+  .mock-title { font-size: 17px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 4px; }
+  .mock-sub { font-size: 11px; color: #52525b; margin-bottom: 14px; }
+
+  /* Option A — Inbox style */
+  .inbox-compose { width: 100%; background: linear-gradient(135deg, #a78bfa, #7c3aed, #6366f1); color: white; border: none; border-radius: 14px; padding: 13px 16px; font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 8px; margin-bottom: 16px; cursor: pointer; }
+  .inbox-tabs { display: flex; gap: 0; background: #131318; border: 1px solid #27272a; border-radius: 99px; padding: 3px; margin-bottom: 12px; }
+  .i-tab { flex: 1; text-align: center; padding: 6px; border-radius: 99px; font-size: 11px; font-weight: 700; color: #52525b; }
+  .i-tab.active { background: #7c3aed; color: white; }
+  .email-row { background: #131318; border: 1px solid #27272a; border-radius: 12px; padding: 11px 12px; margin-bottom: 6px; }
+  .email-row-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
+  .email-to { font-size: 12px; font-weight: 700; }
+  .email-date { font-size: 10px; color: #52525b; }
+  .email-subject { font-size: 12px; font-weight: 600; margin-bottom: 3px; }
+  .email-preview { font-size: 11px; color: #71717a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .status-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 99px; font-size: 10px; font-weight: 700; margin-top: 5px; }
+  .sent { background: rgba(124,58,237,0.15); color: #a78bfa; }
+  .replied { background: rgba(16,185,129,0.15); color: #34d399; }
+  .draft { background: rgba(245,158,11,0.15); color: #fbbf24; }
+
+  /* Option B — Templates gallery */
+  .template-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .tpl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+  .tpl-card { background: #131318; border: 1px solid #27272a; border-radius: 12px; padding: 12px; }
+  .tpl-icon { width: 32px; height: 32px; border-radius: 8px; margin-bottom: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .tpl-name { font-size: 12px; font-weight: 700; margin-bottom: 3px; }
+  .tpl-desc { font-size: 10px; color: #71717a; line-height: 1.4; }
+  .tpl-use-btn { margin-top: 8px; background: rgba(124,58,237,0.15); color: #a78bfa; border: 1px solid rgba(124,58,237,0.3); border-radius: 99px; font-size: 10px; font-weight: 700; padding: 4px 8px; display: inline-block; }
+  .recent-label { font-size: 10px; font-weight: 700; color: #52525b; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+  .recent-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid #18181b; }
+  .r-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .r-text { flex: 1; font-size: 11px; color: #a1a1aa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .r-date { font-size: 10px; color: #52525b; }
+
+  /* Option C — Outreach per application */
+  .app-email-card { background: #131318; border: 1px solid #27272a; border-radius: 14px; padding: 12px; margin-bottom: 10px; }
+  .aec-top { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .company-badge { width: 32px; height: 32px; border-radius: 8px; background: white; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 13px; color: #000; }
+  .aec-info { flex: 1; }
+  .aec-company { font-size: 13px; font-weight: 700; }
+  .aec-role { font-size: 11px; color: #71717a; }
+  .no-email-badge { font-size: 10px; color: #52525b; border: 1px solid #27272a; border-radius: 99px; padding: 3px 7px; }
+  .has-email-badge { font-size: 10px; color: #34d399; background: rgba(16,185,129,0.1); border-radius: 99px; padding: 3px 7px; }
+  .generate-btn { width: 100%; background: rgba(124,58,237,0.12); border: 1px solid rgba(124,58,237,0.25); color: #a78bfa; border-radius: 10px; padding: 9px; font-size: 12px; font-weight: 700; text-align: center; cursor: pointer; }
+  .preview-snippet { background: #0d0d12; border: 1px solid #27272a; border-radius: 10px; padding: 10px; margin-top: 8px; }
+  .preview-snippet p { font-size: 11px; color: #71717a; line-height: 1.6; }
+  .copy-btn { margin-top: 7px; background: #7c3aed; color: white; border-radius: 99px; font-size: 10px; font-weight: 700; padding: 4px 10px; display: inline-block; }
+</style>
+</head>
+<body>
+
+<h1>Page Emails — 3 approches</h1>
+<p class="subtitle">Comment présenter les emails d'outreach générés par l'IA ?</p>
+
+<div class="options">
+
+  <!-- Option A: Inbox style -->
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="option-header">
+      <div class="letter">A</div>
+      <div>
+        <h3>Inbox style</h3>
+        <p>Sent / Drafts / Replies — comme une vraie boîte mail in-app</p>
+      </div>
+    </div>
+    <div class="phone-mock">
+      <div class="mock-title">Emails</div>
+      <div class="mock-sub">Outreach · recruiter replies · follow-ups</div>
+
+      <button class="inbox-compose">✦ &nbsp; Generate outreach email</button>
+
+      <div class="inbox-tabs">
+        <div class="i-tab active">Sent</div>
+        <div class="i-tab">Drafts</div>
+        <div class="i-tab">Replies</div>
+      </div>
+
+      <div class="email-row">
+        <div class="email-row-top">
+          <div class="email-to">Sarah Chen · Linear</div>
+          <div class="email-date">2h ago</div>
+        </div>
+        <div class="email-subject">Re: Senior Frontend Engineer role</div>
+        <div class="email-preview">Hi Sarah, I came across your opening at Linear and...</div>
+        <div><span class="status-pill replied">↩ Replied</span></div>
+      </div>
+
+      <div class="email-row">
+        <div class="email-row-top">
+          <div class="email-to">Marc Dubois · Stripe</div>
+          <div class="email-date">Yesterday</div>
+        </div>
+        <div class="email-subject">Your Backend Engineer opening</div>
+        <div class="email-preview">Hey Marc, I noticed Stripe is scaling its payments...</div>
+        <div><span class="status-pill sent">✓ Sent</span></div>
+      </div>
+
+      <div class="email-row">
+        <div class="email-row-top">
+          <div class="email-to">Vercel · Recruiter</div>
+          <div class="email-date">Draft</div>
+        </div>
+        <div class="email-subject">DevRel Engineer — cold reach</div>
+        <div class="email-preview">Hi there, I've been following Vercel's work on...</div>
+        <div><span class="status-pill draft">✎ Draft</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Option B: Templates gallery -->
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="option-header">
+      <div class="letter">B</div>
+      <div>
+        <h3>Galerie de templates</h3>
+        <p>Choisis un type d'email, l'IA génère + tu copies</p>
+      </div>
+    </div>
+    <div class="phone-mock">
+      <div class="template-header">
+        <div>
+          <div class="mock-title">Emails</div>
+          <div class="mock-sub">Génère en 1 tap</div>
+        </div>
+      </div>
+
+      <div class="tpl-grid">
+        <div class="tpl-card">
+          <div class="tpl-icon" style="background:rgba(124,58,237,0.15)">📩</div>
+          <div class="tpl-name">Cold outreach</div>
+          <div class="tpl-desc">Intro direct au hiring manager</div>
+          <div class="tpl-use-btn">Generate →</div>
+        </div>
+        <div class="tpl-card">
+          <div class="tpl-icon" style="background:rgba(16,185,129,0.15)">🔄</div>
+          <div class="tpl-name">Follow-up</div>
+          <div class="tpl-desc">Relance 1 semaine après apply</div>
+          <div class="tpl-use-btn">Generate →</div>
+        </div>
+        <div class="tpl-card">
+          <div class="tpl-icon" style="background:rgba(245,158,11,0.15)">🤝</div>
+          <div class="tpl-name">Referral ask</div>
+          <div class="tpl-desc">Demander une intro via ton réseau</div>
+          <div class="tpl-use-btn">Generate →</div>
+        </div>
+        <div class="tpl-card">
+          <div class="tpl-icon" style="background:rgba(99,102,241,0.15)">💬</div>
+          <div class="tpl-name">Thank you</div>
+          <div class="tpl-desc">Après un entretien</div>
+          <div class="tpl-use-btn">Generate →</div>
+        </div>
+      </div>
+
+      <div class="recent-label">Récents</div>
+      <div class="recent-row">
+        <div class="r-dot" style="background:#a78bfa"></div>
+        <div class="r-text">Cold outreach → Sarah Chen (Linear)</div>
+        <div class="r-date">2h</div>
+      </div>
+      <div class="recent-row">
+        <div class="r-dot" style="background:#34d399"></div>
+        <div class="r-text">Follow-up → Marc Dubois (Stripe)</div>
+        <div class="r-date">1j</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Option C: Per-application outreach -->
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="option-header">
+      <div class="letter">C</div>
+      <div>
+        <h3>Par candidature</h3>
+        <p>Chaque job a son email d'outreach généré, copier-coller direct</p>
+      </div>
+    </div>
+    <div class="phone-mock">
+      <div class="mock-title">Emails</div>
+      <div class="mock-sub">Un email par candidature, prêt à envoyer</div>
+
+      <div class="app-email-card">
+        <div class="aec-top">
+          <div class="company-badge">L</div>
+          <div class="aec-info">
+            <div class="aec-company">Linear</div>
+            <div class="aec-role">Senior Frontend Engineer</div>
+          </div>
+          <div class="has-email-badge">✓ Ready</div>
+        </div>
+        <div class="preview-snippet">
+          <p>Hi Sarah, I came across your Frontend Engineer role at Linear — the intersection of design and performance engineering is exactly where I thrive…</p>
+        </div>
+        <div style="margin-top:8px;display:flex;gap:6px">
+          <div class="copy-btn">Copy email</div>
+          <div style="background:#131318;border:1px solid #27272a;border-radius:99px;font-size:10px;font-weight:700;padding:4px 10px;color:#71717a;">Regenerate</div>
+        </div>
+      </div>
+
+      <div class="app-email-card">
+        <div class="aec-top">
+          <div class="company-badge">S</div>
+          <div class="aec-info">
+            <div class="aec-company">Stripe</div>
+            <div class="aec-role">Backend Engineer</div>
+          </div>
+          <div class="no-email-badge">Not generated</div>
+        </div>
+        <div class="generate-btn">✦ Generate outreach email</div>
+      </div>
+
+      <div class="app-email-card">
+        <div class="aec-top">
+          <div class="company-badge">V</div>
+          <div class="aec-info">
+            <div class="aec-company">Vercel</div>
+            <div class="aec-role">DevRel Engineer</div>
+          </div>
+          <div class="no-email-badge">Not generated</div>
+        </div>
+        <div class="generate-btn">✦ Generate outreach email</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function toggleSelect(el) {
+  document.querySelectorAll('.option').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+  const choice = el.dataset.choice;
+  const text = el.querySelector('h3').textContent;
+  if (window.recordEvent) window.recordEvent('click', choice, text);
+}
+</script>
+</body>
+</html>

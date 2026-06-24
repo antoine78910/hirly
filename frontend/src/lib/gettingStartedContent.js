@@ -9,7 +9,6 @@ export const GETTING_STARTED_EN = [
     variant: "warning",
     text: "Read this chapter carefully before you post anything. Many steps in this course are not optional — skipping them can cost you days of work or get your account restricted.",
   },
-  { type: "heading", level: 1, text: "Welcome to Talking Heads" },
   {
     type: "paragraph",
     text: "This is a fast, practical course built for creators promoting Hirly on TikTok and Instagram. Each chapter ends with a short quiz so you can check what you learned before moving on.",
@@ -70,9 +69,8 @@ export const GETTING_STARTED_FR = [
   {
     type: "callout",
     variant: "warning",
-    text: "Lis ce chapitre attentivement avant de publier quoi que ce soit. Beaucoup d'étapes ne sont pas optionnelles — les ignorer peut te coûter des jours de travail ou faire restreindre ton compte.",
+    text: "Lis ce chapitre attentivement avant de publier quoi que ce soit. Beaucoup d'étapes ne sont pas optionnelles — les ignorer peut te coûter des jours de travail ou entraîner des restrictions sur ton compte.",
   },
-  { type: "heading", level: 1, text: "Bienvenue dans Talking Heads" },
   {
     type: "paragraph",
     text: "C'est un cours rapide et pratique pour les créateurs qui promeuvent Hirly sur TikTok et Instagram. Chaque chapitre se termine par un petit questionnaire pour vérifier que tu as bien compris avant de continuer.",
@@ -91,12 +89,12 @@ export const GETTING_STARTED_FR = [
   { type: "heading", level: 2, text: "Prends ce cours au sérieux" },
   {
     type: "paragraph",
-    text: "Beaucoup d'informations ici sont cruciales. Si tu ignores les règles de warmup, postes trop tôt, ou n'ouvres l'app que pour publier puis disparais pendant des semaines, ton compte peut rester bloqué avec peu de portée, être shadowban, ou devenir inutilisable.",
+    text: "Beaucoup d'informations dans ce cours sont cruciales. Si tu ignores les règles de warmup, postes trop tôt, ou n'ouvres l'app que pour publier puis disparais pendant des semaines, ton compte peut rester bloqué avec peu de portée, être shadowbanné, ou devenir inutilisable.",
   },
   {
     type: "callout",
     variant: "info",
-    text: "Perdre un compte chauffé, c'est repartir de zéro — souvent plusieurs jours de scroll, d'engagement et de publication prudents perdus.",
+    text: "Perdre un compte chauffé, c'est repartir de zéro — souvent plusieurs jours de scroll, d'engagement et de publications soigneuses réduits à néant.",
   },
   { type: "heading", level: 2, text: "Confidentialité" },
   {
@@ -114,13 +112,13 @@ export const GETTING_STARTED_FR = [
     items: [
       "Sur l'app mobile, entre le code à 6 chiffres à la fin de l'onboarding si tu n'as pas encore ouvert le lien d'invitation.",
       "Ton compte est automatiquement mis en mode démo pour faire des swipes illimités pendant tes enregistrements d'écran.",
-      "La fonction postuler est désactivée en mode démo pour éviter d'envoyer de vraies candidatures aux entreprises.",
+      "La fonction de candidature est désactivée en mode démo pour éviter d'envoyer de vraies candidatures aux entreprises.",
     ],
   },
   {
     type: "callout",
     variant: "info",
-    text: "Utilise le mode démo pour montrer Hirly sereinement — les swipes sont réalistes, mais rien n'est envoyé aux recruteurs.",
+    text: "Utilise le mode démo pour montrer Hirly sereinement — les swipes sont réels, mais aucune candidature n'est envoyée aux recruteurs.",
   },
   {
     type: "callout",

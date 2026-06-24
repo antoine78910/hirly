@@ -1,8 +1,11 @@
 import { api, setSessionToken } from "./api";
 import { supabase, supabaseConfigured } from "./supabase";
 
-/** Start auth and return to the requested app path after login. */
-export async function startGoogleLogin(returnPath = "/swipe") {
+/** Start auth and return to the requested app path after login.
+ * @param {string} returnPath - App path to redirect to after successful login.
+ * @param {{ login_hint?: string }} [opts] - Optional OAuth hints (e.g. email pre-fill).
+ */
+export async function startGoogleLogin(returnPath = "/swipe", opts = {}) {
   const path = returnPath && returnPath.startsWith("/") ? returnPath : "/swipe";
   if (path.startsWith("/onboarding")) {
     sessionStorage.setItem("swiipr_onboarding_return", path);
@@ -29,9 +32,10 @@ export async function startGoogleLogin(returnPath = "/swipe") {
   }
 
   const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(path)}`;
+  const queryParams = opts.login_hint ? { login_hint: opts.login_hint } : undefined;
   const { error } = await supabase.auth.signInWithOAuth({
     provider: "google",
-    options: { redirectTo },
+    options: { redirectTo, ...(queryParams ? { queryParams } : {}) },
   });
   if (error) {
     console.error("Supabase Google login failed.", error);

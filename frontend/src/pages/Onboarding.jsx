@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { shouldMockCvUpload, uploadProfileCv } from "../lib/demoCvUpload";
 import { useAuth } from "../context/AuthContext";
+import { useAppLocale } from "../context/AppLocaleContext";
 import { Slider } from "../components/ui/slider";
 import {
   Upload,
@@ -36,13 +37,19 @@ import {
 } from "../components/onboarding/OnboardingVisuals";
 import {
   INTRO_SLIDES,
+  INTRO_SLIDES_FR,
   ONBOARDING_STEP_ORDER,
   JOB_SEARCH_OPTIONS,
+  JOB_SEARCH_OPTIONS_FR,
   EMPLOYMENT_TYPE_OPTIONS,
+  EMPLOYMENT_TYPE_OPTIONS_FR,
   OTHER_APPS_OPTIONS,
+  OTHER_APPS_OPTIONS_FR,
   JOB_CATEGORIES,
   EXPERIENCE_LEVELS,
+  EXPERIENCE_LEVELS_FR,
   ATTRIBUTION_OPTIONS,
+  ATTRIBUTION_OPTIONS_FR,
   formatSalary,
   interviewFeedback,
   rolesForCategories,
@@ -55,8 +62,6 @@ import { splitFullName } from "../lib/personalInfoOptions";
 import { ob } from "../components/onboarding/onboardingTheme";
 import { trackEvent } from "../lib/analytics";
 import { preloadOnboardingIntroImages, preloadOnboardingShowcaseImages } from "../lib/onboardingImagePreload";
-import { getPendingInviteCode, redeemCreatorInvite } from "../lib/creatorInvite";
-import { setDemoAccountFromUser } from "../lib/demoAccount";
 
 const STEP_ORDER = ONBOARDING_STEP_ORDER;
 
@@ -109,6 +114,7 @@ export default function Onboarding() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user, setHasProfile, setHasPreferences, checkAuth } = useAuth();
+  const { lang, setLang } = useAppLocale();
   const introNavDirection = useRef(1);
 
   const [stepIndex, setStepIndex] = useState(
@@ -152,8 +158,6 @@ export default function Onboarding() {
     () => readOnboardingPreviewBoot(STEP_ORDER)?.state?.attribution ?? null,
   );
   const [referralCode, setReferralCode] = useState("");
-  const [creatorAccessCode, setCreatorAccessCode] = useState(() => getPendingInviteCode());
-  const [redeemingCreatorCode, setRedeemingCreatorCode] = useState(false);
 
   useEffect(() => {
     preloadOnboardingIntroImages();
@@ -178,7 +182,8 @@ export default function Onboarding() {
   const inputRef = useRef();
 
   const step = STEP_ORDER[stepIndex];
-  const progress = ((stepIndex + (step === "intro" ? (introIndex + 1) / INTRO_SLIDES.length : 1)) / STEP_ORDER.length) * 100;
+  const slides = lang === "fr" ? INTRO_SLIDES_FR : INTRO_SLIDES;
+  const progress = ((stepIndex + (step === "intro" ? (introIndex + 1) / slides.length : 1)) / STEP_ORDER.length) * 100;
 
   const categoryOptions = suggestedCategories.length
     ? suggestedCategories
@@ -195,7 +200,7 @@ export default function Onboarding() {
     }
     return [...fromCategories, ...extras];
   }, [suggestedRoles, categories, categoryOptions, customRoles]);
-  const interviewHint = interviewFeedback(interviewsPerWeek);
+  const interviewHint = interviewFeedback(interviewsPerWeek, lang);
 
   useEffect(() => {
     const preview = searchParams.get("preview");
@@ -241,7 +246,7 @@ export default function Onboarding() {
 
   const goNext = () => {
     if (step === "intro") {
-      if (introIndex < INTRO_SLIDES.length - 1) {
+      if (introIndex < slides.length - 1) {
         introNavDirection.current = 1;
         setIntroIndex((i) => i + 1);
         return;
@@ -259,7 +264,7 @@ export default function Onboarding() {
     if (stepIndex > 0) {
       const prev = stepIndex - 1;
       setStepIndex(prev);
-      if (STEP_ORDER[prev] === "intro") setIntroIndex(INTRO_SLIDES.length - 1);
+      if (STEP_ORDER[prev] === "intro") setIntroIndex(slides.length - 1);
     }
   };
 
@@ -268,7 +273,7 @@ export default function Onboarding() {
       let next;
       if (prev.includes(id)) next = prev.filter((c) => c !== id);
       else if (prev.length >= 3) {
-        toast.message("Pick up to 3 categories");
+        toast.message(lang === "fr" ? "Choisissez jusqu'à 3 catégories" : "Pick up to 3 categories");
         return prev;
       } else next = [...prev, id];
 
@@ -287,7 +292,7 @@ export default function Onboarding() {
     const role = customRoleDraft.trim();
     if (!role) return;
     if (selectedRoles.length >= 3) {
-      toast.message("Pick up to 3 roles");
+      toast.message(lang === "fr" ? "Choisissez jusqu'à 3 postes" : "Pick up to 3 roles");
       return;
     }
     if (!selectedRoles.includes(role)) {
@@ -301,7 +306,7 @@ export default function Onboarding() {
     setSelectedRoles((prev) => {
       if (prev.includes(role)) return prev.filter((r) => r !== role);
       if (prev.length >= 3) {
-        toast.message("Pick up to 3 roles");
+        toast.message(lang === "fr" ? "Choisissez jusqu'à 3 postes" : "Pick up to 3 roles");
         return prev;
       }
       return [...prev, role];
@@ -311,7 +316,7 @@ export default function Onboarding() {
   const handleUpload = async (f) => {
     if (!f) return;
     if (!user && !shouldMockCvUpload()) {
-      toast.error("Sign in with Google to upload your resume");
+      toast.error(lang === "fr" ? "Connectez-vous avec Google pour importer votre CV" : "Sign in with Google to upload your resume");
       return;
     }
     setFile(f);
@@ -326,7 +331,7 @@ export default function Onboarding() {
         const { data: authState } = await api.get("/auth/me");
         setHasProfile(Boolean(authState?.has_profile));
         if (checkAuth) await checkAuth();
-        toast.success("Your profile is ready");
+        toast.success(lang === "fr" ? "Votre profil est prêt" : "Your profile is ready");
       } else {
         setHasProfile(true);
       }
@@ -336,7 +341,7 @@ export default function Onboarding() {
       console.error(e);
       trackEvent("cv_upload_failed", { source: "onboarding", message: e?.response?.data?.detail || e?.message });
       if (!shouldMockCvUpload()) {
-        toast.error(e?.response?.data?.detail || "Failed to parse CV");
+        toast.error(e?.response?.data?.detail || (lang === "fr" ? "Échec de l'analyse du CV" : "Failed to parse CV"));
       }
     } finally {
       setParsing(false);
@@ -368,32 +373,9 @@ export default function Onboarding() {
     }
   };
 
-  const finishOnboarding = async ({ skipCreatorCode = false } = {}) => {
-    if (!user) {
-      await startGoogleLogin("/onboarding?step=creatorAccessCode");
-      return;
-    }
+  const finishOnboarding = async () => {
     setSaving(true);
     try {
-      const code = skipCreatorCode ? "" : creatorAccessCode.trim();
-      if (/^\d{6}$/.test(code)) {
-        setRedeemingCreatorCode(true);
-        try {
-          const redeemed = await redeemCreatorInvite(api, code);
-          if (redeemed?.demo_account) {
-            setDemoAccountFromUser({ ...user, demo_account: true });
-          }
-          toast.success("Creator access activated");
-        } catch (inviteErr) {
-          toast.error(inviteErr?.response?.data?.detail || "Could not activate invitation code");
-          setSaving(false);
-          setRedeemingCreatorCode(false);
-          return;
-        } finally {
-          setRedeemingCreatorCode(false);
-        }
-      }
-
       await persistOnboardingMeta();
       const exp = EXPERIENCE_LEVELS.find((e) => e.id === experience);
       const primaryRole = selectedRoles[0] || profile?.target_roles?.[0] || "Software Engineer";
@@ -419,7 +401,7 @@ export default function Onboarding() {
       });
       navigate("/swipe", { replace: true });
     } catch {
-      toast.error("Failed to finish setup");
+      toast.error(lang === "fr" ? "Échec de la configuration" : "Failed to finish setup");
     } finally {
       setSaving(false);
     }
@@ -466,8 +448,6 @@ export default function Onboarding() {
       case "showcaseAllInOne":
       case "showcasePricing":
         return true;
-      case "creatorAccessCode":
-        return true;
       default:
         return false;
     }
@@ -476,21 +456,21 @@ export default function Onboarding() {
   const submitReferralCode = () => {
     const code = referralCode.trim().toUpperCase();
     if (!code) {
-      toast.error("Enter a referral code or tap Skip");
+      toast.error(lang === "fr" ? "Entrez un code de parrainage ou appuyez sur Passer" : "Enter a referral code or tap Skip");
       return;
     }
     if (!/^[A-Z0-9]{4,8}$/.test(code)) {
-      toast.error("Enter a valid referral code (4–8 letters or numbers)");
+      toast.error(lang === "fr" ? "Entrez un code valide (4–8 lettres ou chiffres)" : "Enter a valid referral code (4–8 letters or numbers)");
       return;
     }
     setReferralCode(code);
-    toast.success("Referral code applied");
+    toast.success(lang === "fr" ? "Code de parrainage appliqué" : "Referral code applied");
     goNext();
   };
 
   const onContinue = () => {
     trackEvent("onboarding_step_completed", { step, step_index: stepIndex });
-    if (step === "intro" && introIndex === INTRO_SLIDES.length - 1) {
+    if (step === "intro" && introIndex === slides.length - 1) {
       setStepIndex(STEP_ORDER.indexOf("signup"));
       return;
     }
@@ -505,38 +485,23 @@ export default function Onboarding() {
     goNext();
   };
 
-  const isLastIntroSlide = step === "intro" && introIndex === INTRO_SLIDES.length - 1;
+  const isLastIntroSlide = step === "intro" && introIndex === slides.length - 1;
   const hideFooter = parsing || step === "profileSetup" || (step === "signup" && !user);
 
   const footer = !hideFooter ? (
-    step === "creatorAccessCode" ? (
-      <div className="space-y-2.5">
-        <FinishOnboardingButton saving={saving || redeemingCreatorCode} onClick={finishOnboarding} />
-        <button
-          type="button"
-          onClick={() => finishOnboarding({ skipCreatorCode: true })}
-          disabled={saving || redeemingCreatorCode}
-          className="w-full h-11 sm:h-12 rounded-full border border-zinc-200 bg-white text-sm sm:text-base font-semibold text-linkedin hover:bg-violet-50 transition-colors disabled:opacity-60"
-          data-testid="creator-access-skip"
-        >
-          Skip for now
-        </button>
-      </div>
-    ) : step === "showcasePricing" ? (
-      <ContinueButton onClick={onContinue} testId="showcase-pricing-continue">
-        Continue
-      </ContinueButton>
+    step === "showcasePricing" ? (
+      <FinishOnboardingButton saving={saving} onClick={finishOnboarding} />
     ) : step === "profileWelcome" ? (
       <div className="space-y-2">
         <ContinueButton onClick={onContinue} testId="profile-welcome-continue">
-          Continue
+          {lang === "fr" ? "Continuer" : "Continue"}
         </ContinueButton>
-        <p className="text-center text-xs text-zinc-500">Let&apos;s make sure you&apos;re ready</p>
+        <p className="text-center text-xs text-zinc-500">{lang === "fr" ? "Assurons-nous que vous êtes prêt" : "Let\u2019s make sure you\u2019re ready"}</p>
       </div>
     ) : step === "referralCode" ? (
       <div className="space-y-2.5">
         <ContinueButton onClick={submitReferralCode} disabled={!referralCode.trim()} testId="referral-submit">
-          Submit
+          {lang === "fr" ? "Valider" : "Submit"}
         </ContinueButton>
         <button
           type="button"
@@ -544,21 +509,21 @@ export default function Onboarding() {
           className="w-full h-11 sm:h-12 rounded-full border border-zinc-200 bg-white text-sm sm:text-base font-semibold text-linkedin hover:bg-violet-50 transition-colors"
           data-testid="referral-skip"
         >
-          Skip
+          {lang === "fr" ? "Passer" : "Skip"}
         </button>
       </div>
     ) : (
       <ContinueButton onClick={onContinue} disabled={!canContinue() || parsing}>
         {isLastIntroSlide ? (
-          "Get Started"
+          lang === "fr" ? "Commencer" : "Get Started"
         ) : step === "intro" ? (
-          "Continue"
+          lang === "fr" ? "Continuer" : "Continue"
         ) : step === "signup" ? (
-          "Continue"
+          lang === "fr" ? "Continuer" : "Continue"
         ) : step === "upload" && !file ? (
-          "Upload resume"
+          lang === "fr" ? "Importer le CV" : "Upload resume"
         ) : (
-          "Continue"
+          lang === "fr" ? "Continuer" : "Continue"
         )}
       </ContinueButton>
     )
@@ -581,15 +546,23 @@ export default function Onboarding() {
         && step !== "showcaseLanding"
         && step !== "showcaseAllInOne"
         && step !== "showcasePricing"
-        && step !== "creatorAccessCode"
       }
       footer={parsing ? null : footer}
     >
+      {step !== "signup" && (
+        <button
+          onClick={() => setLang(lang === "fr" ? "en" : "fr")}
+          className="fixed top-3 right-3 z-50 text-xs font-semibold px-3 py-1.5 rounded-full border border-zinc-200 bg-white/90 text-zinc-600 hover:border-linkedin hover:text-linkedin transition-colors shadow-sm backdrop-blur-sm"
+          aria-label="Switch language"
+        >
+          {lang === "fr" ? "EN" : "FR"}
+        </button>
+      )}
       <AnimatePresence mode="wait">
         {step === "intro" && (
           <div className={`${ob.step} items-center justify-center text-center`}>
             <div className={ob.introStage}>
-              {INTRO_SLIDES.map((slide, i) => {
+              {slides.map((slide, i) => {
                 const active = i === introIndex;
                 const exitX = introNavDirection.current > 0 ? -20 : 20;
                 return (
@@ -618,7 +591,7 @@ export default function Onboarding() {
               })}
             </div>
             <div className={ob.introDots} aria-hidden>
-              {INTRO_SLIDES.map((_, i) => (
+              {slides.map((_, i) => (
                 <motion.div
                   key={i}
                   layout
@@ -633,9 +606,9 @@ export default function Onboarding() {
 
         {step === "jobSearch" && (
           <motion.div key="jobSearch" {...stepMotion}>
-            <h1 className={stepTitleClass}>Are you looking for a new job?</h1>
+            <h1 className={stepTitleClass}>{lang === "fr" ? "Êtes-vous à la recherche d'un emploi ?" : "Are you looking for a new job?"}</h1>
             <div className={`${ob.stepBody} ${ob.optionList}`} data-testid="job-search-options">
-              {JOB_SEARCH_OPTIONS.map(({ id, label, hint, Icon }) => (
+              {(lang === "fr" ? JOB_SEARCH_OPTIONS_FR : JOB_SEARCH_OPTIONS).map(({ id, label, hint, Icon }) => (
                 <SelectionCard
                   key={id}
                   selected={jobSearchStatus === id}
@@ -652,13 +625,13 @@ export default function Onboarding() {
 
         {step === "location" && (
           <motion.div key="location" {...stepMotion}>
-            <h1 className={stepTitleClass}>Where are you looking for work?</h1>
+            <h1 className={stepTitleClass}>{lang === "fr" ? "Où cherchez-vous du travail ?" : "Where are you looking for work?"}</h1>
             <p className={stepSubtitleClass}>
-              We&apos;ll suggest job types that are popular in your area.
+              {lang === "fr" ? "Nous suggérerons des types de postes populaires dans votre région." : "We\u2019ll suggest job types that are popular in your area."}
             </p>
             <div className={`${ob.stepBody} overflow-visible`}>
               <PlacesAutocomplete
-                label="Your location"
+                label={lang === "fr" ? "Votre localisation" : "Your location"}
                 variant="light"
                 value={onboardingLocation}
                 selectedLocation={onboardingLocationData}
@@ -667,7 +640,7 @@ export default function Onboarding() {
                   setOnboardingLocationData(loc);
                   if (loc) setOnboardingLocation(loc.location_label);
                 }}
-                placeholder="e.g. Bordeaux, France or New York, NY"
+                placeholder={lang === "fr" ? "ex. Bordeaux, France ou Paris, France" : "e.g. Bordeaux, France or New York, NY"}
                 suggestions={SUGGESTED_ONBOARDING_LOCATIONS}
                 compactChips
                 maxSuggestions={8}
@@ -679,10 +652,10 @@ export default function Onboarding() {
 
         {step === "contractType" && (
           <motion.div key="contractType" {...stepMotion}>
-            <h1 className={stepTitleClass}>What type of job are you looking for?</h1>
-            <p className={stepSubtitleClass}>Select the contract or duration that fits you best.</p>
+            <h1 className={stepTitleClass}>{lang === "fr" ? "Quel type de poste recherchez-vous ?" : "What type of job are you looking for?"}</h1>
+            <p className={stepSubtitleClass}>{lang === "fr" ? "Sélectionnez le contrat ou la durée qui vous convient le mieux." : "Select the contract or duration that fits you best."}</p>
             <div className={`${ob.stepBody} ${ob.optionGrid}`} data-testid="contract-type-options">
-              {EMPLOYMENT_TYPE_OPTIONS.map(({ id, label, hint, Icon }) => (
+              {(lang === "fr" ? EMPLOYMENT_TYPE_OPTIONS_FR : EMPLOYMENT_TYPE_OPTIONS).map(({ id, label, hint, Icon }) => (
                 <SelectionCard
                   key={id}
                   selected={contractType === id}
@@ -699,10 +672,10 @@ export default function Onboarding() {
 
         {step === "otherApps" && (
           <motion.div key="otherApps" {...stepMotion}>
-            <h1 className={stepTitleClass}>Have you tried other job search apps?</h1>
-            <p className={stepSubtitleClass}>Please select one of the options below.</p>
+            <h1 className={stepTitleClass}>{lang === "fr" ? "Avez-vous déjà essayé d'autres apps de recherche d'emploi ?" : "Have you tried other job search apps?"}</h1>
+            <p className={stepSubtitleClass}>{lang === "fr" ? "Sélectionnez une option ci-dessous." : "Please select one of the options below."}</p>
             <div className={`${ob.stepBody} ${ob.optionList}`} data-testid="other-apps-options">
-              {OTHER_APPS_OPTIONS.map(({ id, label, Icon }) => (
+              {(lang === "fr" ? OTHER_APPS_OPTIONS_FR : OTHER_APPS_OPTIONS).map(({ id, label, Icon }) => (
                 <SelectionCard
                   key={id}
                   selected={triedOtherApps === id}
@@ -722,11 +695,15 @@ export default function Onboarding() {
             {...stepMotion}
             className="flex flex-1 flex-col min-h-0 overflow-y-auto overflow-x-hidden"
           >
-            <h1 className={stepTitleClass}>What kind of job are you looking for?</h1>
+            <h1 className={stepTitleClass}>{lang === "fr" ? "Quel type de poste recherchez-vous ?" : "What kind of job are you looking for?"}</h1>
             <p className={stepSubtitleClass}>
               {onboardingLocation
-                ? `Suggested for ${onboardingLocationData?.location_label || onboardingLocation}. Pick up to 3.`
-                : "Select up to 3 job categories that interest you most."}
+                ? lang === "fr"
+                  ? `Suggéré pour ${onboardingLocationData?.location_label || onboardingLocation}. Choisissez jusqu'à 3.`
+                  : `Suggested for ${onboardingLocationData?.location_label || onboardingLocation}. Pick up to 3.`
+                : lang === "fr"
+                  ? "Sélectionnez jusqu'à 3 catégories de postes."
+                  : "Select up to 3 job categories that interest you most."}
             </p>
             <div className="mt-2 sm:mt-3 flex flex-col gap-4 pb-2">
               <motion.div
@@ -759,7 +736,7 @@ export default function Onboarding() {
               {categories.length > 0 && (
                 <div className="space-y-3">
                   <p className="text-sm sm:text-[15px] font-medium text-zinc-900 leading-snug">
-                    Select the most relevant roles for your job search
+                    {lang === "fr" ? "Sélectionnez les postes les plus pertinents" : "Select the most relevant roles for your job search"}
                   </p>
                   <motion.div
                     key={`roles-${categories.join(",")}`}
@@ -796,7 +773,7 @@ export default function Onboarding() {
                           addCustomRole();
                         }
                       }}
-                      placeholder="Can't find your role? Add it here"
+                      placeholder={lang === "fr" ? "Votre poste n'est pas listé ? Ajoutez-le" : "Can't find your role? Add it here"}
                       className="min-w-0 flex-1 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-linkedin/30"
                       data-testid="custom-role-input"
                     />
@@ -818,10 +795,10 @@ export default function Onboarding() {
 
         {step === "experience" && (
           <motion.div key="experience" {...stepMotion}>
-            <h1 className={stepTitleClass}>How much experience do you have?</h1>
-            <p className={stepSubtitleClass}>Select your experience level below.</p>
+            <h1 className={stepTitleClass}>{lang === "fr" ? "Quelle est votre expérience ?" : "How much experience do you have?"}</h1>
+            <p className={stepSubtitleClass}>{lang === "fr" ? "Sélectionnez votre niveau ci-dessous." : "Select your experience level below."}</p>
             <div className={`${ob.stepBody} ${ob.optionGrid}`}>
-              {EXPERIENCE_LEVELS.map(({ id, label, Icon }) => (
+              {(lang === "fr" ? EXPERIENCE_LEVELS_FR : EXPERIENCE_LEVELS).map(({ id, label, Icon }) => (
                 <button
                   key={id}
                   type="button"
@@ -841,13 +818,13 @@ export default function Onboarding() {
 
         {step === "salary" && (
           <motion.div key="salary" {...stepMotion}>
-            <h1 className={stepTitleClass}>Expected salary range?</h1>
-            <p className={stepSubtitleClass}>Set your range to help match you with the right jobs.</p>
+            <h1 className={stepTitleClass}>{lang === "fr" ? "Fourchette salariale souhaitée ?" : "Expected salary range?"}</h1>
+            <p className={stepSubtitleClass}>{lang === "fr" ? "Indiquez votre fourchette pour cibler les offres adaptées." : "Set your range to help match you with the right jobs."}</p>
             <div className={`${ob.stepBody} space-y-5 sm:space-y-6`}>
               <div>
                 <div className={`flex justify-between text-sm ${ob.muted} mb-2`}>
-                  <span>Minimum salary</span>
-                  <span className={`${ob.accent} font-bold text-lg`}>{formatSalary(salaryMin)}</span>
+                  <span>{lang === "fr" ? "Salaire minimum" : "Minimum salary"}</span>
+                  <span className={`${ob.accent} font-bold text-lg`}>{formatSalary(salaryMin, lang)}</span>
                 </div>
                 <Slider
                   value={[salaryMin]}
@@ -858,14 +835,14 @@ export default function Onboarding() {
                   className={ob.slider}
                 />
                 <div className={`flex justify-between text-xs ${ob.dim} mt-1`}>
-                  <span>{formatSalary(0)}</span>
-                  <span>{formatSalary(500_000)}</span>
+                  <span>{formatSalary(0, lang)}</span>
+                  <span>{formatSalary(500_000, lang)}</span>
                 </div>
               </div>
               <div>
                 <div className={`flex justify-between text-sm ${ob.muted} mb-2`}>
-                  <span>Maximum salary</span>
-                  <span className={`${ob.accent} font-bold text-lg`}>{formatSalary(salaryMax)}</span>
+                  <span>{lang === "fr" ? "Salaire maximum" : "Maximum salary"}</span>
+                  <span className={`${ob.accent} font-bold text-lg`}>{formatSalary(salaryMax, lang)}</span>
                 </div>
                 <Slider
                   value={[salaryMax]}
@@ -882,11 +859,11 @@ export default function Onboarding() {
 
         {step === "interviews" && (
           <motion.div key="interviews" {...stepMotion} className={`${ob.step} text-center justify-center`}>
-            <h1 className={stepTitleClass}>Interviews per week</h1>
-            <p className={stepSubtitleClass}>This will be used to calibrate your custom plan.</p>
+            <h1 className={stepTitleClass}>{lang === "fr" ? "Entretiens par semaine" : "Interviews per week"}</h1>
+            <p className={stepSubtitleClass}>{lang === "fr" ? "Ceci calibrera votre plan personnalisé." : "This will be used to calibrate your custom plan."}</p>
             <div className={`${ob.stepBody} items-center text-center`}>
             <p className="font-display text-3xl sm:text-4xl font-black text-zinc-900">
-              {interviewsPerWeek} <span className={`text-xl font-semibold ${ob.dim}`}>interviews</span>
+              {interviewsPerWeek} <span className={`text-xl font-semibold ${ob.dim}`}>{lang === "fr" ? "entretiens" : "interviews"}</span>
             </p>
             <div className="mt-4 w-full px-2 sm:mt-6">
               <Slider
@@ -909,14 +886,18 @@ export default function Onboarding() {
         {step === "interviewsConfirm" && (
           <motion.div key="interviewsConfirm" {...stepMotion}>
             <h1 className={stepTitleClass}>
-              Getting {interviewsPerWeek} interviews/week is totally achievable!
+              {lang === "fr"
+                ? `Obtenir ${interviewsPerWeek} entretiens/semaine est totalement réalisable !`
+                : `Getting ${interviewsPerWeek} interviews/week is totally achievable!`}
             </h1>
             <div className={ob.stepBody}>
             <InterviewTargetDashes count={Math.min(interviewsPerWeek, 8)} />
             <div className={`mt-3 sm:mt-4 ${ob.cardInner} p-4 sm:p-5 text-center`}>
-              <p className="font-bold text-base sm:text-lg text-zinc-900">You&apos;re right on track!</p>
+              <p className="font-bold text-base sm:text-lg text-zinc-900">{lang === "fr" ? "Vous êtes sur la bonne voie !" : "You\u2019re right on track!"}</p>
               <p className={`text-xs sm:text-sm ${ob.muted} mt-2 leading-snug`}>
-                {interviewsPerWeek} interviews per week is what 75% of our successful users aim for.
+                {lang === "fr"
+                  ? `${interviewsPerWeek} entretiens par semaine, c'est l'objectif de 75 % de nos utilisateurs qui réussissent.`
+                  : `${interviewsPerWeek} interviews per week is what 75% of our successful users aim for.`}
               </p>
             </div>
             </div>
@@ -925,7 +906,7 @@ export default function Onboarding() {
 
         {step === "potentialChart" && (
           <motion.div key="potentialChart" {...stepMotion}>
-            <h1 className={stepTitleClass}>You have great potential to crush your goal</h1>
+            <h1 className={stepTitleClass}>{lang === "fr" ? "Vous avez le potentiel pour dépasser votre objectif" : "You have great potential to crush your goal"}</h1>
             <div className={ob.stepBody}>
               <InterviewRateChart />
             </div>
@@ -935,7 +916,9 @@ export default function Onboarding() {
         {step === "compare2x" && (
           <motion.div key="compare2x" {...stepMotion}>
             <h1 className={stepTitleClass}>
-              Land twice as many interviews with {BRAND.NAME} vs on your own.
+              {lang === "fr"
+                ? `Décrochez deux fois plus d'entretiens avec ${BRAND.NAME} qu'en solo.`
+                : `Land twice as many interviews with ${BRAND.NAME} vs on your own.`}
             </h1>
             <div className={`${ob.stepBody} items-center justify-center`}>
               <Compare2xChart />
@@ -945,7 +928,7 @@ export default function Onboarding() {
 
         {step === "longTerm" && (
           <motion.div key="longTerm" {...stepMotion}>
-            <h1 className={stepTitleClass}>{BRAND.NAME} creates long-term results</h1>
+            <h1 className={stepTitleClass}>{lang === "fr" ? `${BRAND.NAME} crée des résultats durables` : `${BRAND.NAME} creates long-term results`}</h1>
             <div className={ob.stepBody}>
               <LongTermResultsChart />
             </div>
@@ -954,9 +937,9 @@ export default function Onboarding() {
 
         {step === "attribution" && (
           <motion.div key="attribution" {...stepMotion}>
-            <h1 className={`${stepTitleClass} text-center sm:text-left`}>How did you hear about us?</h1>
+            <h1 className={`${stepTitleClass} text-center sm:text-left`}>{lang === "fr" ? "Comment avez-vous entendu parler de nous ?" : "How did you hear about us?"}</h1>
             <div className={`${ob.stepBody} ${ob.optionGrid}`}>
-              {ATTRIBUTION_OPTIONS.map(({ id, label, hint, Icon }) => (
+              {(lang === "fr" ? ATTRIBUTION_OPTIONS_FR : ATTRIBUTION_OPTIONS).map(({ id, label, hint, Icon }) => (
                 <SelectionCard
                   key={id}
                   selected={attribution === id}
@@ -973,15 +956,15 @@ export default function Onboarding() {
 
         {step === "referralCode" && (
           <motion.div key="referralCode" {...stepMotion}>
-            <h1 className={stepTitleClass}>Referral code</h1>
-            <p className={stepSubtitleClass}>Paste a referral code below if you have one.</p>
+            <h1 className={stepTitleClass}>{lang === "fr" ? "Code de parrainage" : "Referral code"}</h1>
+            <p className={stepSubtitleClass}>{lang === "fr" ? "Collez un code de parrainage si vous en avez un." : "Paste a referral code below if you have one."}</p>
 
             <div className={`${ob.stepBody} items-center`}>
               <OnboardingIllustration src="/onboarding/referral-gift.png" alt="" />
 
               <div className="w-full mt-2">
                 <label htmlFor="referral-code-input" className="mb-2 block text-sm font-semibold text-zinc-800">
-                  Referral Code
+                  {lang === "fr" ? "Code de parrainage" : "Referral Code"}
                 </label>
                 <input
                   id="referral-code-input"
@@ -1002,8 +985,8 @@ export default function Onboarding() {
 
         {step === "upload" && !parsing && (
           <motion.div key="upload" {...stepMotion}>
-            <h1 className={stepTitleClass}>Upload your resume</h1>
-            <p className={stepSubtitleClass}>Upload your resume so we can build your profile and start applying to jobs right away.</p>
+            <h1 className={stepTitleClass}>{lang === "fr" ? "Importez votre CV" : "Upload your resume"}</h1>
+            <p className={stepSubtitleClass}>{lang === "fr" ? "Importez votre CV pour que nous construisions votre profil et commencions à postuler immédiatement." : "Upload your resume so we can build your profile and start applying to jobs right away."}</p>
 
             <div className={ob.stepBody}>
             <label
@@ -1026,8 +1009,8 @@ export default function Onboarding() {
                   <div className={`w-12 h-12 mx-auto rounded-xl ${ob.accentSoft} flex items-center justify-center mb-3`}>
                     <FileText className={`w-6 h-6 ${ob.accent}`} />
                   </div>
-                  <p className="font-semibold text-sm sm:text-base text-zinc-900">No resume selected</p>
-                  <p className={`text-xs sm:text-sm ${ob.muted} mt-1`}>PDF or DOCX supported</p>
+                  <p className="font-semibold text-sm sm:text-base text-zinc-900">{lang === "fr" ? "Aucun CV sélectionné" : "No resume selected"}</p>
+                  <p className={`text-xs sm:text-sm ${ob.muted} mt-1`}>{lang === "fr" ? "PDF ou DOCX acceptés" : "PDF or DOCX supported"}</p>
                 </>
               ) : (
                 <div className="flex items-center justify-center gap-2 text-zinc-700">
@@ -1056,11 +1039,11 @@ export default function Onboarding() {
               type="button"
               onClick={() => {
                 setStepIndex(STEP_ORDER.indexOf("profileSetup"));
-                toast.message("You can upload your resume later from Profile");
+                toast.message(lang === "fr" ? "Vous pouvez importer votre CV plus tard depuis le Profil" : "You can upload your resume later from Profile");
               }}
               className={`mt-3 w-full text-center text-sm ${ob.muted} hover:text-zinc-900 underline-offset-2 hover:underline`}
             >
-              Skip for now
+              {lang === "fr" ? "Passer pour l'instant" : "Skip for now"}
             </button>
             </div>
           </motion.div>
@@ -1076,9 +1059,9 @@ export default function Onboarding() {
             transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
           >
             <h1 className={ob.title}>
-              Reading your CV<span className="text-linkedin">…</span>
+              {lang === "fr" ? "Lecture de votre CV" : "Reading your CV"}<span className="text-linkedin">…</span>
             </h1>
-            <p className={ob.subtitle}>Building your profile.</p>
+            <p className={ob.subtitle}>{lang === "fr" ? "Construction de votre profil." : "Building your profile."}</p>
             <motion.div
               className={`${ob.stepBody} flex flex-col items-center justify-center gap-3`}
               initial={{ opacity: 0, scale: 0.96 }}
@@ -1086,7 +1069,7 @@ export default function Onboarding() {
               transition={{ delay: 0.08, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
             >
               <Loader2 className="h-9 w-9 animate-spin text-linkedin" data-testid="parse-loading" />
-              <p className={`text-sm ${ob.muted}`}>This only takes a moment.</p>
+              <p className={`text-sm ${ob.muted}`}>{lang === "fr" ? "Cela ne prend qu'un moment." : "This only takes a moment."}</p>
             </motion.div>
           </motion.div>
         )}
@@ -1131,29 +1114,6 @@ export default function Onboarding() {
           </motion.div>
         )}
 
-        {step === "creatorAccessCode" && !parsing && (
-          <motion.div key="creatorAccessCode" {...stepMotion}>
-            <h1 className={stepTitleClass}>Creator access code</h1>
-            <p className={stepSubtitleClass}>
-              If you received a Hirly creator invitation, enter the 6-digit code here to unlock training and your demo account.
-            </p>
-            <div className="mt-6">
-              <input
-                className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-4 text-center font-mono text-2xl font-bold tracking-[0.25em] text-zinc-900 outline-none focus:border-violet-400"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
-                placeholder="000000"
-                value={creatorAccessCode}
-                onChange={(e) => setCreatorAccessCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                data-testid="creator-access-code-input"
-              />
-              <p className="mt-3 text-center text-xs leading-relaxed text-zinc-500">
-                You can also open the invitation link you received by email or DM. Skip this step if you already activated your access on web.
-              </p>
-            </div>
-          </motion.div>
-        )}
       </AnimatePresence>
     </OnboardingShell>
     )}
