@@ -5,11 +5,20 @@ import {
   INTRODUCE_HIRLY_RESOURCES_EN,
   INTRODUCE_HIRLY_RESOURCES_FR,
 } from "./introIntroResources";
+
+/** Presentation video — Creating Content §1 (Filming / Guide de tournage). */
+export const CREATING_CONTENT_FILMING_VIDEO_URL =
+  "https://player.mediadelivery.net/play/689678/4f0053f4-a610-4fd4-80d0-53ac9f320dfe";
+
+/** Presentation video — Creating Content §3 (Editing / Guide de montage). */
+export const CREATING_CONTENT_EDITING_VIDEO_URL =
+  "https://player.mediadelivery.net/play/689678/f53914da-75ae-470e-83c2-fee9896774b0";
+
 export const CREATING_CONTENT_SECTIONS_EN = [
   {
     section_id: "sec_cc_filming",
     title: "Filming Playbook",
-    video_url: "",
+    video_url: CREATING_CONTENT_FILMING_VIDEO_URL,
     content: [
       { type: "heading", level: 1, text: "Talking Head Best Practices" },
       { type: "paragraph", text: "Make sure:" },
@@ -156,7 +165,7 @@ export const CREATING_CONTENT_SECTIONS_EN = [
   {
     section_id: "sec_cc_editing",
     title: "Editing Playbook",
-    video_url: "",
+    video_url: CREATING_CONTENT_EDITING_VIDEO_URL,
     content: [],
   },
 ];
@@ -165,7 +174,7 @@ export const CREATING_CONTENT_SECTIONS_FR = [
   {
     section_id: "sec_cc_filming",
     title: "Guide de tournage",
-    video_url: "",
+    video_url: CREATING_CONTENT_FILMING_VIDEO_URL,
     content: [
       { type: "heading", level: 1, text: "Bonnes pratiques face caméra" },
       { type: "paragraph", text: "Assure-toi de :" },
@@ -322,7 +331,7 @@ export const CREATING_CONTENT_SECTIONS_FR = [
   {
     section_id: "sec_cc_editing",
     title: "Guide de montage",
-    video_url: "",
+    video_url: CREATING_CONTENT_EDITING_VIDEO_URL,
     content: [],
   },
 ];

@@ -35,6 +35,19 @@ def test_validate_video_upload_rejects_empty():
     assert exc.value.status_code == 400
 
 
+def test_resolve_media_file_falls_back_to_any_video_in_slot(tmp_path, monkeypatch):
+    import training_media as media
+
+    slot_dir = tmp_path / "course" / "mod" / "sec_a"
+    slot_dir.mkdir(parents=True)
+    video = slot_dir / "swiping features.mp4"
+    video.write_bytes(b"fake")
+
+    monkeypatch.setattr(media, "MEDIA_ROOT", tmp_path)
+    resolved = media.resolve_media_file("course", "mod", "sec_a", "fr")
+    assert resolved == video
+
+
 def test_merge_preserved_videos_keeps_uploaded_urls():
     seed = {
         "en": {"title": "Warm Up", "video_url": "", "sections": [{"section_id": "sec_a", "video_url": ""}]},

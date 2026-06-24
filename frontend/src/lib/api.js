@@ -24,8 +24,12 @@ export const API = BACKEND_URL ? `${BACKEND_URL}/api` : "/api";
 export function resolveApiAssetUrl(path) {
   if (!path) return "";
   if (/^https?:\/\//i.test(path)) return path;
-  const base = (BACKEND_URL || (typeof window !== "undefined" ? window.location.origin : "")).replace(/\/+$/, "");
   const normalized = path.startsWith("/") ? path : `/${path}`;
+  // Same-origin static or proxied API paths in the browser.
+  if (typeof window !== "undefined" && (normalized.startsWith("/api/") || normalized.startsWith("/training-videos/"))) {
+    return normalized;
+  }
+  const base = (BACKEND_URL || (typeof window !== "undefined" ? window.location.origin : "")).replace(/\/+$/, "");
   return `${base}${normalized}`;
 }
 

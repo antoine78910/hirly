@@ -20,6 +20,7 @@ ALLOWED_VIDEO_MIMES = {
 }
 
 MEDIA_ROOT = Path(__file__).resolve().parent / "data" / "training_videos"
+DEFAULT_COURSE_ID = "course_job_search_mastery"
 
 # Canonical upload targets (module + optional section).
 VIDEO_SLOTS: List[Dict[str, Any]] = [
@@ -28,18 +29,26 @@ VIDEO_SLOTS: List[Dict[str, Any]] = [
     {"module_id": "mod_warm_up", "section_id": "sec_wu_posts", "label": "Warm Up — Posts"},
     {"module_id": "mod_creating_content", "section_id": "sec_cc_filming", "label": "Creating Content — Filming"},
     {"module_id": "mod_creating_content", "section_id": "sec_cc_hirly", "label": "Creating Content — Hirly"},
+    {"module_id": "mod_creating_content", "section_id": "sec_cc_hirly_var_resume_zoom", "label": "Hirly Variation FR — CV zoom"},
+    {"module_id": "mod_creating_content", "section_id": "sec_cc_hirly_var_resume_upload", "label": "Hirly Variation FR — CV upload POV"},
+    {"module_id": "mod_creating_content", "section_id": "sec_cc_hirly_var_swipe_pov", "label": "Hirly Variation FR — Swipe POV"},
+    {"module_id": "mod_creating_content", "section_id": "sec_cc_hirly_var_swipe_brand", "label": "Hirly Variation FR — Swipe grande entreprise"},
+    {"module_id": "mod_creating_content", "section_id": "sec_cc_hirly_var_ai_resume", "label": "Hirly Variation FR — CV IA adapté"},
+    {"module_id": "mod_creating_content", "section_id": "sec_cc_hirly_var_ai_letter", "label": "Hirly Variation FR — Lettre IA"},
+    {"module_id": "mod_creating_content", "section_id": "sec_cc_hirly_var_history_scroll", "label": "Hirly Variation FR — Historique scroll"},
+    {"module_id": "mod_creating_content", "section_id": "sec_cc_hirly_var_history_count", "label": "Hirly Variation FR — Historique volume"},
     {"module_id": "mod_creating_content", "section_id": "sec_cc_editing", "label": "Creating Content — Editing"},
     {"module_id": "mod_account_management", "section_id": None, "label": "Account Management"},
     {"module_id": "mod_submit_drafts", "section_id": None, "label": "Submit Drafts"},
-    {"module_id": "mod_content_bank", "section_id": "sec_cb_websites", "label": "Content Bank — 3 Websites"},
-    {"module_id": "mod_content_bank", "section_id": "sec_cb_gbb", "label": "Content Bank — GBB"},
-    {"module_id": "mod_content_bank", "section_id": "sec_cb_linkedin", "label": "Content Bank — LinkedIn"},
-    {"module_id": "mod_content_bank", "section_id": "sec_cb_100k", "label": "Content Bank — 100k"},
-    {"module_id": "mod_content_bank", "section_id": "sec_cb_website_made", "label": "Content Bank — Website Made"},
-    {"module_id": "mod_content_bank", "section_id": "sec_cb_marry", "label": "Content Bank — Marry"},
-    {"module_id": "mod_content_bank", "section_id": "sec_cb_ungatekeep", "label": "Content Bank — Ungatekeep"},
-    {"module_id": "mod_content_bank", "section_id": "sec_cb_hired", "label": "Content Bank — Hired"},
-    {"module_id": "mod_content_bank", "section_id": "sec_cb_secret_job_2026", "label": "Content Bank — Secret Job 2026"},
+    {"module_id": "mod_content_bank", "section_id": "sec_cb_swiping", "label": "Content Bank — Swiping"},
+    {"module_id": "mod_content_bank", "section_id": "sec_cb_history_short", "label": "Content Bank — History (short)"},
+    {"module_id": "mod_content_bank", "section_id": "sec_cb_history_long", "label": "Content Bank — History (long)"},
+    {"module_id": "mod_content_bank", "section_id": "sec_cb_cv_short", "label": "Content Bank — CV (short)"},
+    {"module_id": "mod_content_bank", "section_id": "sec_cb_cv_long", "label": "Content Bank — CV (long)"},
+    {"module_id": "mod_content_bank", "section_id": "sec_cb_cover_letter_ai", "label": "Content Bank — Cover letter AI"},
+    {"module_id": "mod_content_bank", "section_id": "sec_cb_green_screen", "label": "Content Bank — Green screen example"},
+    {"module_id": "mod_content_bank", "section_id": "sec_cb_tablet_example", "label": "Content Bank — Tablet example"},
+    {"module_id": "mod_content_bank", "section_id": "sec_cb_laptop_example", "label": "Content Bank — Laptop example"},
 ]
 
 
@@ -58,19 +67,39 @@ def _normalize_lang(lang: Optional[str]) -> str:
     return "fr" if (lang or "").lower().startswith("fr") else "en"
 
 
-def media_storage_path(course_id: str, module_id: str, section_id: Optional[str], lang: str, ext: str) -> Path:
-    section_part = _safe_segment(section_id) if section_id else "_module"
+def slot_section_part(section_id: Optional[str]) -> str:
+    return _safe_segment(section_id) if section_id else "_module"
+
+
+def slot_storage_dir(course_id: str, module_id: str, section_id: Optional[str]) -> Path:
     return (
         MEDIA_ROOT
         / _safe_segment(course_id)
         / _safe_segment(module_id)
-        / section_part
-        / f"{_normalize_lang(lang)}{ext.lower()}"
+        / slot_section_part(section_id)
     )
 
 
+def ensure_training_video_dirs(course_id: str = DEFAULT_COURSE_ID) -> List[Path]:
+    """Create on-disk folders for every canonical upload slot (plus .gitkeep)."""
+    created: List[Path] = []
+    MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
+    for slot in VIDEO_SLOTS:
+        dest_dir = slot_storage_dir(course_id, slot["module_id"], slot.get("section_id"))
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        gitkeep = dest_dir / ".gitkeep"
+        if not gitkeep.is_file():
+            gitkeep.write_text("", encoding="utf-8")
+        created.append(dest_dir)
+    return created
+
+
+def media_storage_path(course_id: str, module_id: str, section_id: Optional[str], lang: str, ext: str) -> Path:
+    return slot_storage_dir(course_id, module_id, section_id) / f"{_normalize_lang(lang)}{ext.lower()}"
+
+
 def media_public_path(course_id: str, module_id: str, section_id: Optional[str], lang: str) -> str:
-    section_part = _safe_segment(section_id) if section_id else "_module"
+    section_part = slot_section_part(section_id)
     return f"/api/training/media/{_safe_segment(course_id)}/{_safe_segment(module_id)}/{section_part}/{_normalize_lang(lang)}"
 
 
@@ -83,7 +112,24 @@ def resolve_media_file(course_id: str, module_id: str, section_part: str, lang: 
         candidate = base / f"{normalized_lang}{ext}"
         if candidate.is_file():
             return candidate
-    return None
+
+    # Manual drop-ins (e.g. "swiping features.mp4") when fr.mp4 / en.mp4 is absent.
+    candidates = [
+        path
+        for ext in ALLOWED_VIDEO_EXTENSIONS
+        for path in base.glob(f"*{ext}")
+        if path.is_file() and path.name != ".gitkeep"
+    ]
+    if not candidates:
+        return None
+    if len(candidates) == 1:
+        return candidates[0]
+
+    lang_hint = normalized_lang.lower()
+    for path in sorted(candidates, key=lambda item: item.name.lower()):
+        if lang_hint in path.stem.lower():
+            return path
+    return sorted(candidates, key=lambda item: item.stat().st_mtime, reverse=True)[0]
 
 
 def _guess_ext(filename: str, content_type: Optional[str]) -> str:
@@ -257,3 +303,10 @@ def merge_preserved_videos(seed_i18n: Dict[str, Any], existing: Optional[Dict[st
         merged[lang] = pack
 
     return merged
+
+
+if __name__ == "__main__":
+    dirs = ensure_training_video_dirs()
+    print(f"Ensured {len(dirs)} training video slot folder(s) under {MEDIA_ROOT}")
+    for path in dirs:
+        print(f"  {path.relative_to(MEDIA_ROOT)}")

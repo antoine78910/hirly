@@ -16,6 +16,8 @@ const EN_TAGS = {
   history: tag("History tab", "purple"),
 };
 
+import { HIRLY_EXAMPLE_VIDEOS_FR } from "./hirlyExampleVideosFr";
+
 export const INTRODUCE_HIRLY_RESOURCES_FR = [
   { type: "heading", level: 4, text: "Fonctionnalités principales + script" },
   {
@@ -54,31 +56,7 @@ export const INTRODUCE_HIRLY_RESOURCES_FR = [
       ],
     ],
   },
-  { type: "heading", level: 4, text: "Façons de présenter Hirly" },
-  {
-    type: "table",
-    columns: ["", "Variation 1", "Variation 2", "Variation 3"],
-    rows: [
-      [
-        { type: "label", text: "Court" },
-        [FR_TAGS.upload, FR_TAGS.swipe],
-        [],
-        [],
-      ],
-      [
-        { type: "label", text: "Moyen" },
-        [FR_TAGS.upload, FR_TAGS.ai, FR_TAGS.swipe],
-        [FR_TAGS.upload, FR_TAGS.swipe, FR_TAGS.history],
-        [FR_TAGS.upload, FR_TAGS.swipe, FR_TAGS.ai],
-      ],
-      [
-        { type: "label", text: "Long" },
-        [FR_TAGS.upload, FR_TAGS.ai, FR_TAGS.swipe, FR_TAGS.history],
-        [FR_TAGS.upload, FR_TAGS.swipe, FR_TAGS.ai, FR_TAGS.history],
-        [],
-      ],
-    ],
-  },
+  ...HIRLY_EXAMPLE_VIDEOS_FR,
 ];
 
 export const INTRODUCE_HIRLY_RESOURCES_EN = [
@@ -116,31 +94,6 @@ export const INTRODUCE_HIRLY_RESOURCES_EN = [
           "Look these are ALL my past applications",
           "You can also track all your past applications and statuses",
         ],
-      ],
-    ],
-  },
-  { type: "heading", level: 4, text: "Ways to introduce Hirly" },
-  {
-    type: "table",
-    columns: ["", "Variation 1", "Variation 2", "Variation 3"],
-    rows: [
-      [
-        { type: "label", text: "Short" },
-        [EN_TAGS.upload, EN_TAGS.swipe],
-        [],
-        [],
-      ],
-      [
-        { type: "label", text: "Medium" },
-        [EN_TAGS.upload, EN_TAGS.ai, EN_TAGS.swipe],
-        [EN_TAGS.upload, EN_TAGS.swipe, EN_TAGS.history],
-        [EN_TAGS.upload, EN_TAGS.swipe, EN_TAGS.ai],
-      ],
-      [
-        { type: "label", text: "Long" },
-        [EN_TAGS.upload, EN_TAGS.ai, EN_TAGS.swipe, EN_TAGS.history],
-        [EN_TAGS.upload, EN_TAGS.swipe, EN_TAGS.ai, EN_TAGS.history],
-        [],
       ],
     ],
   },

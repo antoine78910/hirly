@@ -384,24 +384,68 @@ INTRODUCE_HIRLY_RESOURCES_FR = [
             ],
         ],
     },
-    {"type": "heading", "level": 4, "text": "Façons de présenter Hirly"},
+    {"type": "heading", "level": 4, "text": "Exemples vidéo"},
     {
-        "type": "table",
-        "columns": ["", "Variation 1", "Variation 2", "Variation 3"],
-        "rows": [
-            [{"type": "label", "text": "Court"}, [_FR_TAGS["upload"], _FR_TAGS["swipe"]], [], []],
-            [
-                {"type": "label", "text": "Moyen"},
-                [_FR_TAGS["upload"], _FR_TAGS["ai"], _FR_TAGS["swipe"]],
-                [_FR_TAGS["upload"], _FR_TAGS["swipe"], _FR_TAGS["history"]],
-                [_FR_TAGS["upload"], _FR_TAGS["swipe"], _FR_TAGS["ai"]],
-            ],
-            [
-                {"type": "label", "text": "Long"},
-                [_FR_TAGS["upload"], _FR_TAGS["ai"], _FR_TAGS["swipe"], _FR_TAGS["history"]],
-                [_FR_TAGS["upload"], _FR_TAGS["swipe"], _FR_TAGS["ai"], _FR_TAGS["history"]],
-                [],
-            ],
+        "type": "callout",
+        "variant": "info",
+        "text": "Ouvre chaque thème pour voir les exemples. Quand il existe une version courte et une version longue, les deux sont listées.",
+    },
+    {
+        "type": "accordion",
+        "items": [
+            {
+                "title": "Swipe",
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "text": "Montre le swipe à droite — c'est la fonctionnalité centrale à mettre en avant tôt dans la vidéo.",
+                    },
+                    {"type": "short_video", "video_url": "/training-videos/course_job_search_mastery/mod_content_bank/sec_cb_swiping/fr.mp4", "upload_label": "Swipe", "aspect": "9:16", "upload_slot": "sec_cb_swiping"},
+                ],
+            },
+            {
+                "title": "Historique",
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "text": "Prouve le volume et le suivi des candidatures — idéal en hook ou en fin de vidéo.",
+                    },
+                    {"type": "heading", "level": 4, "text": "Version courte"},
+                    {"type": "short_video", "video_url": "/training-videos/course_job_search_mastery/mod_content_bank/sec_cb_history_short/fr.mp4", "upload_label": "Historique — court", "aspect": "9:16", "upload_slot": "sec_cb_history_short"},
+                    {"type": "heading", "level": 4, "text": "Version longue"},
+                    {"type": "short_video", "video_url": "/training-videos/course_job_search_mastery/mod_content_bank/sec_cb_history_long/fr.mp4", "upload_label": "Historique — long", "aspect": "9:16", "upload_slot": "sec_cb_history_long"},
+                ],
+            },
+            {
+                "title": "CV & lettre IA",
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "text": "Montre que Hirly adapte le CV et génère la lettre pour chaque offre.",
+                    },
+                    {"type": "heading", "level": 4, "text": "CV — version courte"},
+                    {"type": "short_video", "video_url": "/training-videos/course_job_search_mastery/mod_content_bank/sec_cb_cv_short/fr.mp4", "upload_label": "CV — court", "aspect": "9:16", "upload_slot": "sec_cb_cv_short"},
+                    {"type": "heading", "level": 4, "text": "CV — version longue"},
+                    {"type": "short_video", "video_url": "/training-videos/course_job_search_mastery/mod_content_bank/sec_cb_cv_long/fr.mp4", "upload_label": "CV — long", "aspect": "9:16", "upload_slot": "sec_cb_cv_long"},
+                    {"type": "heading", "level": 4, "text": "Lettre de motivation IA"},
+                    {"type": "short_video", "video_url": "/training-videos/course_job_search_mastery/mod_content_bank/sec_cb_cover_letter_ai/fr.mp4", "upload_label": "Lettre IA", "aspect": "9:16", "upload_slot": "sec_cb_cover_letter_ai"},
+                ],
+            },
+            {
+                "title": "Formats de tournage",
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "text": "Exemples selon comment tu filmes la démo à l'écran.",
+                    },
+                    {"type": "heading", "level": 4, "text": "Green screen — without phone or laptop"},
+                    {"type": "short_video", "video_url": "/training-videos/course_job_search_mastery/mod_content_bank/sec_cb_green_screen/fr.mp4", "upload_label": "Green screen", "aspect": "9:16", "upload_slot": "sec_cb_green_screen"},
+                    {"type": "heading", "level": 4, "text": "With laptop"},
+                    {"type": "short_video", "video_url": "/training-videos/course_job_search_mastery/mod_content_bank/sec_cb_laptop_example/fr.mp4", "upload_label": "Laptop", "aspect": "9:16", "upload_slot": "sec_cb_laptop_example"},
+                    {"type": "heading", "level": 4, "text": "With phone or tablet"},
+                    {"type": "short_video", "video_url": "/training-videos/course_job_search_mastery/mod_content_bank/sec_cb_tablet_example/fr.mp4", "upload_label": "Phone or tablet", "aspect": "9:16", "upload_slot": "sec_cb_tablet_example"},
+                ],
+            },
         ],
     },
 ]
@@ -438,33 +482,21 @@ INTRODUCE_HIRLY_RESOURCES_EN = [
             ],
         ],
     },
-    {"type": "heading", "level": 4, "text": "Ways to introduce Hirly"},
-    {
-        "type": "table",
-        "columns": ["", "Variation 1", "Variation 2", "Variation 3"],
-        "rows": [
-            [{"type": "label", "text": "Short"}, [_EN_TAGS["upload"], _EN_TAGS["swipe"]], [], []],
-            [
-                {"type": "label", "text": "Medium"},
-                [_EN_TAGS["upload"], _EN_TAGS["ai"], _EN_TAGS["swipe"]],
-                [_EN_TAGS["upload"], _EN_TAGS["swipe"], _EN_TAGS["history"]],
-                [_EN_TAGS["upload"], _EN_TAGS["swipe"], _EN_TAGS["ai"]],
-            ],
-            [
-                {"type": "label", "text": "Long"},
-                [_EN_TAGS["upload"], _EN_TAGS["ai"], _EN_TAGS["swipe"], _EN_TAGS["history"]],
-                [_EN_TAGS["upload"], _EN_TAGS["swipe"], _EN_TAGS["ai"], _EN_TAGS["history"]],
-                [],
-            ],
-        ],
-    },
 ]
+
+CREATING_CONTENT_FILMING_VIDEO_URL = (
+    "https://player.mediadelivery.net/play/689678/4f0053f4-a610-4fd4-80d0-53ac9f320dfe"
+)
+
+CREATING_CONTENT_EDITING_VIDEO_URL = (
+    "https://player.mediadelivery.net/play/689678/f53914da-75ae-470e-83c2-fee9896774b0"
+)
 
 CREATING_CONTENT_SECTIONS_EN = [
     {
         "section_id": "sec_cc_filming",
         "title": "Filming Playbook",
-        "video_url": "",
+        "video_url": CREATING_CONTENT_FILMING_VIDEO_URL,
         "content": FILMING_PLAYBOOK_EN,
     },
     {
@@ -477,7 +509,7 @@ CREATING_CONTENT_SECTIONS_EN = [
     {
         "section_id": "sec_cc_editing",
         "title": "Editing Playbook",
-        "video_url": "",
+        "video_url": CREATING_CONTENT_EDITING_VIDEO_URL,
         "content": [],
     },
 ]
@@ -486,7 +518,7 @@ CREATING_CONTENT_SECTIONS_FR = [
     {
         "section_id": "sec_cc_filming",
         "title": "Guide de tournage",
-        "video_url": "",
+        "video_url": CREATING_CONTENT_FILMING_VIDEO_URL,
         "content": FILMING_PLAYBOOK_FR,
     },
     {
@@ -499,7 +531,7 @@ CREATING_CONTENT_SECTIONS_FR = [
     {
         "section_id": "sec_cc_editing",
         "title": "Guide de montage",
-        "video_url": "",
+        "video_url": CREATING_CONTENT_EDITING_VIDEO_URL,
         "content": [],
     },
 ]

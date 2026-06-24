@@ -1,10 +1,20 @@
-/** Submit drafts module — brief SOP (EN + FR). */
+/** Submit drafts module — brief SOP (FR focus; EN kept minimal). */
+
+export const TOPR_SUBMIT_URL =
+  "https://topr.io/protected/campaign/27d12ae2-5f2b-45d7-9ec9-0a7451bcd570";
 
 export const SUBMIT_DRAFTS_EN = [
   { type: "heading", level: 1, text: "Submit Drafts & Next Steps" },
+  { type: "heading", level: 2, text: "Submission link" },
+  {
+    type: "callout",
+    variant: "info",
+    text: "When your video is ready, submit it on Topr using the link below.",
+  },
+  { type: "link", text: "Submit my video on Topr", href: TOPR_SUBMIT_URL },
   {
     type: "paragraph",
-    text: "When your video is ready, submit it through the creator workflow for review. Follow the Content Bank script you used and include all required elements (hook, Hirly demo, caption).",
+    text: "Follow the Content Bank script you used and include all required elements (hook, Hirly demo, caption).",
   },
   { type: "heading", level: 2, text: "Before you submit" },
   {
@@ -26,9 +36,16 @@ export const SUBMIT_DRAFTS_EN = [
 
 export const SUBMIT_DRAFTS_FR = [
   { type: "heading", level: 1, text: "Soumettre le contenu" },
+  { type: "heading", level: 2, text: "Lien de soumission" },
+  {
+    type: "callout",
+    variant: "info",
+    text: "Quand ta vidéo est prête, soumets-la sur Topr via le lien ci-dessous.",
+  },
+  { type: "link", text: "Soumettre ma vidéo sur Topr", href: TOPR_SUBMIT_URL },
   {
     type: "paragraph",
-    text: "Quand ta vidéo est prête, soumets-la via le workflow créateur pour relecture. Suis le script de la banque de contenu utilisé et inclus tous les éléments requis (accroche, démo Hirly, légende).",
+    text: "Suis le script de la banque de contenu utilisé et inclus tous les éléments requis (accroche, démo Hirly, légende).",
   },
   { type: "heading", level: 2, text: "Avant de soumettre" },
   {

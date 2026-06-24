@@ -26,6 +26,24 @@ import {
 function VideoBlock({ url, t }) {
   const resolvedUrl = resolveApiAssetUrl(url);
   if (resolvedUrl) {
+    const bunnyMatch = resolvedUrl.match(/mediadelivery\.net\/play\/(\d+)\/([a-f0-9-]+)/i);
+    if (bunnyMatch) {
+      const embed = `https://iframe.mediadelivery.net/embed/${bunnyMatch[1]}/${bunnyMatch[2]}`;
+      return (
+        <div className="overflow-hidden rounded-lg bg-zinc-900 shadow-lg ring-1 ring-zinc-700/50">
+          <div className="relative aspect-video">
+            <iframe
+              title={t("videoTitle")}
+              src={embed}
+              className="absolute inset-0 h-full w-full"
+              allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+        </div>
+      );
+    }
+
     const embed = resolvedUrl.includes("youtube.com/embed") || resolvedUrl.includes("youtu.be")
       ? resolvedUrl.replace("watch?v=", "embed/").replace("youtu.be/", "youtube.com/embed/")
       : resolvedUrl;
@@ -181,6 +199,9 @@ export default function TrainingCourse() {
     ? activeSection?.video_url
     : activeModule?.video_url;
 
+  const isCreatingContentModule = activeModule?.module_id === "mod_creating_content";
+  const showPresentationVideoAtTop = hasSections && isCreatingContentModule;
+
   const displayContent = hasSections
     ? activeSection?.content
     : activeModule?.content;
@@ -273,6 +294,15 @@ export default function TrainingCourse() {
             {activeModule.title}
           </h1>
 
+          {showPresentationVideoAtTop ? (
+            <section className="space-y-2" data-testid="training-presentation-video">
+              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                {lang === "fr" ? "Vidéo de présentation" : "Presentation video"}
+              </p>
+              <VideoBlock url={activeSection?.video_url || ""} t={t} />
+            </section>
+          ) : null}
+
           {hasSections ? (
             <ModuleSectionNav
               sections={sections}
@@ -285,7 +315,9 @@ export default function TrainingCourse() {
             <h2 className="text-lg font-semibold text-zinc-800">{activeSection.title}</h2>
           ) : null}
 
-          {displayVideoUrl ? <VideoBlock url={displayVideoUrl} t={t} /> : null}
+          {!showPresentationVideoAtTop && displayVideoUrl ? (
+            <VideoBlock url={displayVideoUrl} t={t} />
+          ) : null}
 
           {displayContent?.length ? (
             <ModuleDocView blocks={displayContent} lang={lang} />
