@@ -116,7 +116,7 @@ export const TRAINING_UI = {
     myLearning: "Ma progression",
     creatorStudio: "Studio créateur",
     becomeCreator: "Devenir créateur",
-    hubTitle: "Talking Heads",
+    hubTitle: "Bienvenue dans ce cours",
     hubSubtitle: "Scripts vidéo et leçons pour booster ta recherche d'emploi.",
     scrollHint: "Fais défiler pour voir les leçons",
     viewDetails: "Voir le cours",

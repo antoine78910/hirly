@@ -7,11 +7,11 @@ const STORAGE_KEY = "hirly_training_lang";
 const TrainingLocaleContext = createContext(null);
 
 export function TrainingLocaleProvider({ initialLang, children }) {
-  const resolved = isTrainingLocale(initialLang) ? initialLang : "en";
+  const resolved = isTrainingLocale(initialLang) ? initialLang : "fr";
   const [lang, setLangState] = useState(resolved);
 
   useEffect(() => {
-    const next = isTrainingLocale(initialLang) ? initialLang : "en";
+    const next = isTrainingLocale(initialLang) ? initialLang : "fr";
     setLangState(next);
     localStorage.setItem(STORAGE_KEY, next);
   }, [initialLang]);

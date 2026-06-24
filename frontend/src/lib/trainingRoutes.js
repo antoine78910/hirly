@@ -17,12 +17,14 @@ export function parseTrainingLocale(pathname) {
 }
 
 export function storedTrainingLocale() {
-  if (typeof window === "undefined") return "en";
-  return localStorage.getItem("hirly_training_lang") === "fr" ? "fr" : "en";
+  if (typeof window === "undefined") return "fr";
+  const stored = localStorage.getItem("hirly_training_lang");
+  if (stored === "en" || stored === "fr") return stored;
+  return "fr";
 }
 
 export function trainingPath(locale, ...segments) {
-  const loc = isTrainingLocale(locale) ? locale : "en";
+  const loc = isTrainingLocale(locale) ? locale : "fr";
   const rest = segments.filter(Boolean).join("/");
   return rest ? `/${loc}/training/${rest}` : `/${loc}/training`;
 }
@@ -48,7 +50,7 @@ export function trainingModulePath(locale, courseId, moduleId, sectionId) {
 }
 
 export function replaceTrainingLocale(pathname, search, nextLocale) {
-  const loc = isTrainingLocale(nextLocale) ? nextLocale : "en";
+  const loc = isTrainingLocale(nextLocale) ? nextLocale : "fr";
   if (pathname.match(/^\/(en|fr)\/training/)) {
     return pathname.replace(/^\/(en|fr)/, `/${loc}`) + (search || "");
   }

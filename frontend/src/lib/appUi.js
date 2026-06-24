@@ -1409,12 +1409,13 @@ export function appT(lang, key, vars = {}) {
 }
 
 export function readStoredAppLang() {
-  if (typeof window === "undefined") return "en";
+  if (typeof window === "undefined") return "fr";
   try {
     const stored = localStorage.getItem("hirly_app_lang");
-    return stored === "fr" ? "fr" : "en";
+    if (stored === "en" || stored === "fr") return stored;
+    return "fr";
   } catch (_) {
-    return "en";
+    return "fr";
   }
 }
 

@@ -28,7 +28,7 @@ function courseForLang(lang) {
   const fr = lang === "fr";
   return {
     course_id: COURSE_ID,
-    title: "Talking Heads",
+    title: fr ? "Bienvenue dans ce cours" : "Talking Heads",
     subtitle: fr
       ? "Scripts vidéo et leçons pour booster ta recherche d'emploi"
       : "Video scripts & lessons to level up your job search",

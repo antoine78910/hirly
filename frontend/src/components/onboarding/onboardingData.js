@@ -119,7 +119,7 @@ export function buildProfileWelcomeItems({
   categories = [],
   categoryOptions = [],
   interviewsPerWeek = 4,
-  lang = "en",
+  lang = "fr",
 }) {
   const salaryLabel = formatSalary(salaryMin, lang);
   const primaryRole = selectedRoles[0] || (lang === "fr" ? "vos postes cibles" : "your target roles");
@@ -313,7 +313,7 @@ export function buildPainMarqueeRows(points = ONBOARDING_PAIN_POINTS, rowCount =
   });
 }
 
-export function getOnboardingPricingPlans(lang = "en") {
+export function getOnboardingPricingPlans(lang = "fr") {
   const isFr = lang === "fr";
   return [
     {
@@ -334,7 +334,7 @@ export function getOnboardingPricingPlans(lang = "en") {
     },
   ];
 }
-export const ONBOARDING_PRICING_PLANS = getOnboardingPricingPlans("en");
+export const ONBOARDING_PRICING_PLANS = getOnboardingPricingPlans("fr");
 
 export const SUGGESTED_ONBOARDING_LOCATIONS = [
   "Paris, France",
@@ -792,7 +792,7 @@ export function formatSalary(value, lang) {
   return formatSalaryEuro(value, lang);
 }
 
-export function interviewFeedback(count, lang = "en") {
+export function interviewFeedback(count, lang = "fr") {
   const list = lang === "fr" ? INTERVIEW_FEEDBACK_FR : INTERVIEW_FEEDBACK;
   const row = list.find((f) => count <= f.max) || list[list.length - 1];
   return row;
