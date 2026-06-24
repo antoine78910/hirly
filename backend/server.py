@@ -827,9 +827,13 @@ def _billing_status_payload(user_doc: Optional[Dict[str, Any]]) -> Dict[str, Any
     return {
         "subscription_status": status,
         "plan": billing.get("plan"),
+        "interval": billing.get("interval"),
+        "source": billing.get("source"),
         "current_period_end": billing.get("current_period_end"),
         "stripe_customer_id_exists": bool(billing.get("stripe_customer_id")),
         "is_premium": status in {"active", "trialing"},
+        "credits_total": int(billing.get("credits_total") or 0),
+        "credits_remaining": int(billing.get("credits_remaining") or 0),
     }
 
 
@@ -842,10 +846,23 @@ _PLAN_CREDIT_LIMITS = {
 }
 
 
-def _billing_credit_limit(plan: Optional[str], is_premium: bool) -> int:
+def _billing_credit_limit(
+    plan: Optional[str],
+    is_premium: bool,
+    *,
+    interval: Optional[str] = None,
+    source: Optional[str] = None,
+) -> int:
     if not is_premium:
         return 0
-    return _PLAN_CREDIT_LIMITS.get((plan or "").strip().lower(), 200)
+    normalized_plan = (plan or "").strip().lower()
+    normalized_interval = (interval or "").strip().lower()
+    normalized_source = (source or "").strip().lower()
+    if normalized_source == "onboarding":
+        return {"monthly": 80, "quarterly": 200}.get(normalized_plan, 80)
+    if normalized_interval == "weekly":
+        return {"basic": 15, "pro": 35, "ultra": 100}.get(normalized_plan, 35)
+    return _PLAN_CREDIT_LIMITS.get(normalized_plan, 200)
 
 
 def _billing_period_bounds(billing: Dict[str, Any]) -> tuple[datetime, datetime]:
@@ -855,6 +872,48 @@ def _billing_period_bounds(billing: Dict[str, Any]) -> tuple[datetime, datetime]
         period_end = period_end.replace(tzinfo=timezone.utc)
     period_start = period_end - timedelta(days=7)
     return period_start, period_end
+
+
+def _billing_credit_period_key(billing: Dict[str, Any]) -> str:
+    return "|".join(str(billing.get(key) or "") for key in (
+        "stripe_subscription_id",
+        "current_period_start",
+        "current_period_end",
+        "plan",
+        "interval",
+        "source",
+    ))
+
+
+def _merge_billing_credit_state(existing_billing: Dict[str, Any], updates: Dict[str, Any]) -> Dict[str, Any]:
+    merged = {**existing_billing, **updates}
+    is_premium = (merged.get("subscription_status") or "none") in {"active", "trialing"}
+    if not is_premium:
+        merged["credits_total"] = 0
+        merged["credits_remaining"] = 0
+        merged["credits_period_key"] = _billing_credit_period_key(merged)
+        return merged
+
+    allowance = _billing_credit_limit(
+        merged.get("plan"),
+        True,
+        interval=merged.get("interval"),
+        source=merged.get("source"),
+    )
+    period_key = _billing_credit_period_key(merged)
+    if (
+        existing_billing.get("credits_period_key") != period_key
+        or not isinstance(existing_billing.get("credits_remaining"), int)
+        or int(existing_billing.get("credits_total") or 0) != allowance
+    ):
+        merged["credits_total"] = allowance
+        merged["credits_remaining"] = allowance
+        merged["credits_period_key"] = period_key
+    else:
+        merged["credits_total"] = allowance
+        merged["credits_remaining"] = max(0, min(int(existing_billing.get("credits_remaining") or 0), allowance))
+        merged["credits_period_key"] = period_key
+    return merged
 
 
 def _count_records_in_period(
@@ -885,7 +944,9 @@ async def _get_user_doc(user: User) -> Dict[str, Any]:
 
 async def _update_user_billing_by_user_id(user_id: str, updates: Dict[str, Any]) -> None:
     now = datetime.now(timezone.utc).isoformat()
-    update_fields = {f"billing.{key}": value for key, value in updates.items()}
+    existing_user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "billing": 1}) or {}
+    merged_billing = _merge_billing_credit_state(_billing_from_user(existing_user), updates)
+    update_fields = {f"billing.{key}": value for key, value in merged_billing.items()}
     update_fields["billing.updated_at"] = now
     result = await db.users.update_one({"user_id": user_id}, {"$set": update_fields})
     if getattr(result, "matched_count", 0) == 0:
@@ -897,7 +958,9 @@ async def _update_user_billing_by_customer_id(customer_id: str, updates: Dict[st
         logger.warning("stripe_billing_customer_update_missing_customer keys=%s", sorted(updates.keys()))
         return
     now = datetime.now(timezone.utc).isoformat()
-    update_fields = {f"billing.{key}": value for key, value in updates.items()}
+    existing_user = await db.users.find_one({"billing.stripe_customer_id": customer_id}, {"_id": 0, "billing": 1}) or {}
+    merged_billing = _merge_billing_credit_state(_billing_from_user(existing_user), updates)
+    update_fields = {f"billing.{key}": value for key, value in merged_billing.items()}
     update_fields["billing.updated_at"] = now
     result = await db.users.update_one({"billing.stripe_customer_id": customer_id}, {"$set": update_fields})
     if getattr(result, "matched_count", 0) == 0:
@@ -930,6 +993,16 @@ def _period_end_iso(subscription: Any) -> Optional[str]:
         return None
 
 
+def _period_start_iso(subscription: Any) -> Optional[str]:
+    value = subscription.get("current_period_start") if isinstance(subscription, dict) else getattr(subscription, "current_period_start", None)
+    if not value:
+        return None
+    try:
+        return datetime.fromtimestamp(int(value), tz=timezone.utc).isoformat()
+    except Exception:
+        return None
+
+
 def _subscription_plan(subscription: Any) -> Optional[str]:
     try:
         items = subscription["items"]["data"]
@@ -939,12 +1012,37 @@ def _subscription_plan(subscription: Any) -> Optional[str]:
     return _plan_from_price(price_id)
 
 
+def _subscription_metadata(subscription: Any) -> Dict[str, Any]:
+    metadata = subscription.get("metadata", {}) if isinstance(subscription, dict) else getattr(subscription, "metadata", {}) or {}
+    return dict(metadata or {})
+
+
+def _subscription_interval(subscription: Any) -> Optional[str]:
+    metadata = _subscription_metadata(subscription)
+    if metadata.get("interval"):
+        return str(metadata.get("interval"))
+    try:
+        recurring = subscription["items"]["data"][0]["price"].get("recurring") or {}
+        return recurring.get("interval")
+    except Exception:
+        return None
+
+
+def _subscription_source(subscription: Any) -> Optional[str]:
+    metadata = _subscription_metadata(subscription)
+    return str(metadata.get("source") or "") or None
+
+
 def _subscription_billing_updates(subscription: Any, *, last_payment_status: Optional[str] = None) -> Dict[str, Any]:
+    metadata = _subscription_metadata(subscription)
     updates = {
         "stripe_customer_id": subscription.get("customer"),
         "stripe_subscription_id": subscription.get("id"),
         "subscription_status": subscription.get("status"),
-        "plan": _subscription_plan(subscription) or subscription.get("metadata", {}).get("plan") or "unknown",
+        "plan": _subscription_plan(subscription) or metadata.get("plan") or "unknown",
+        "interval": _subscription_interval(subscription),
+        "source": _subscription_source(subscription),
+        "current_period_start": _period_start_iso(subscription),
         "current_period_end": _period_end_iso(subscription),
     }
     if last_payment_status:
@@ -971,6 +1069,28 @@ async def _refresh_billing_from_stripe(user_doc: Dict[str, Any]) -> tuple[Dict[s
     except Exception as exc:
         logger.warning("stripe_billing_status_refresh_failed user_id=%s subscription_id=%s error=%s", user_doc.get("user_id"), subscription_id, str(exc)[:200])
         return user_doc, "stripe_refresh_failed"
+
+
+async def _billing_apply_credit_status(user: User) -> Dict[str, Any]:
+    user_doc = await _get_user_doc(user)
+    user_doc, _warning = await _refresh_billing_from_stripe(user_doc)
+    payload = _billing_status_payload(user_doc)
+    return payload
+
+
+async def _consume_application_credit(user_id: str) -> Dict[str, int]:
+    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0, "billing": 1})
+    billing = _billing_from_user(user_doc)
+    remaining = max(0, int(billing.get("credits_remaining") or 0) - 1)
+    total = int(billing.get("credits_total") or 0)
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "billing.credits_remaining": remaining,
+            "billing.updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+    return {"credits_remaining": remaining, "credits_total": total}
 
 
 @api_router.post("/billing/create-checkout-session")
@@ -1019,15 +1139,20 @@ async def billing_usage(user: User = Depends(get_current_user)):
     status_payload = _billing_status_payload(user_doc)
     is_premium = bool(status_payload.get("is_premium"))
     plan = status_payload.get("plan")
-    credits_total = _billing_credit_limit(plan, is_premium)
+    credits_total = int(status_payload.get("credits_total") or _billing_credit_limit(
+        plan,
+        is_premium,
+        interval=status_payload.get("interval"),
+        source=status_payload.get("source"),
+    ))
+    credits_remaining = int(status_payload.get("credits_remaining") or 0)
     period_start, period_end = _billing_period_bounds(billing)
 
     usage_rows = await db.swipes.find(
         {"user_id": user.user_id, "direction": "right"},
         {"_id": 0, "created_at": 1},
     ).to_list(5000)
-    credits_used = _count_records_in_period(usage_rows, period_start, period_end)
-    credits_remaining = max(0, credits_total - credits_used) if credits_total else 0
+    credits_used = max(0, credits_total - credits_remaining) if credits_total else 0
     usage_pct = round((credits_used / credits_total) * 100) if credits_total else 0
 
     return {
@@ -1039,6 +1164,8 @@ async def billing_usage(user: User = Depends(get_current_user)):
         "usage_percent": usage_pct,
         "is_premium": is_premium,
         "plan": plan,
+        "interval": status_payload.get("interval"),
+        "source": status_payload.get("source"),
         "daily_usage": {
             "7d": _series_counts(usage_rows, 7, lambda item: item.get("created_at")),
             "14d": _series_counts(usage_rows, 14, lambda item: item.get("created_at")),
@@ -3635,6 +3762,21 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
             job_keys=sorted(list(job.keys()))[:60],
         )
 
+        billing_credit_status = None
+        if req.direction == "right":
+            phase = "billing_credit_check"
+            billing_credit_status = await _billing_apply_credit_status(user)
+            if not billing_credit_status.get("is_premium") or int(billing_credit_status.get("credits_remaining") or 0) <= 0:
+                log_phase("billing_credit_blocked", billing=billing_credit_status)
+                raise HTTPException(
+                    status_code=402,
+                    detail={
+                        "message": "No application credits remaining",
+                        "billing": billing_credit_status,
+                    },
+                )
+            log_phase("billing_credit_ok", billing=billing_credit_status)
+
         phase = "swipe_record_insert_start"
         existing = await db.swipes.find_one({"user_id": user.user_id, "job_id": req.job_id}, {"_id": 0})
         log_phase("swipe_record_insert_start", duplicate=bool(existing))
@@ -3685,6 +3827,7 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
                 "package_status": normalized["package_status"],
                 "application_status": normalized["package_status"],
                 "submission_status": normalized["submission_status"],
+                "billing": billing_credit_status,
             }
             phase = "response_build_done"
             log_phase(
@@ -3857,6 +4000,7 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
                 }
 
         phase = "application_upsert_done"
+        credit_result = await _consume_application_credit(user.user_id)
         log_phase(
             "application_upsert_done",
             application_id=saved_doc.get("application_id"),
@@ -3866,6 +4010,7 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
             browser_prepare_started=browser_prepare_started,
             final_submission_status_saved=saved_doc.get("submission_status"),
             submission_status=saved_doc.get("submission_status"),
+            credits_remaining=credit_result.get("credits_remaining"),
         )
 
         phase = "response_build_start"
@@ -3884,6 +4029,7 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
             "package_status": saved_doc["package_status"],
             "application_status": saved_doc["package_status"],
             "submission_status": saved_doc["submission_status"],
+            "billing": credit_result,
         }
         phase = "response_build_done"
         log_phase(
@@ -3909,6 +4055,8 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
             },
         ) from exc
     except HTTPException as exc:
+        if exc.status_code == 402:
+            raise exc
         raise safe_error(exc) from exc
     except Exception as exc:
         raise safe_error(exc) from exc
