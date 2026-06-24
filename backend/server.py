@@ -2865,6 +2865,14 @@ async def get_feed(
         family_text_hits = sum(1 for token in family_tokens if token in text)
         return strict_title_hits * 30 + min(strict_text_hits, 4) * 8 + family_title_hits * 14 + min(family_text_hits, 6) * 3
 
+    def _profile_feed_location_data() -> Dict[str, Any]:
+        contact = profile.get("contact") or {}
+        return profile.get("target_location_data") or contact.get("location_data") or {}
+
+    def _profile_feed_location_label() -> str:
+        contact = profile.get("contact") or {}
+        return str(profile.get("target_location") or contact.get("location") or "")
+
     def _location_terms() -> Dict[str, List[str]]:
         raw_locations: List[str] = []
         explicit_request_location = False
@@ -2883,12 +2891,12 @@ async def get_feed(
         if location:
             raw_locations.extend(location)
             explicit_request_location = True
-        target_location_data = profile.get("target_location_data") or {}
+        target_location_data = _profile_feed_location_data()
         if not explicit_request_location:
             if target_location_data.get("location_label"):
                 raw_locations.append(str(target_location_data.get("location_label")))
-            elif profile.get("target_location"):
-                raw_locations.append(str(profile.get("target_location")))
+            elif _profile_feed_location_label():
+                raw_locations.append(_profile_feed_location_label())
         country_code_value = (
             (country_code or "")
             or ("" if explicit_request_location else str(target_location_data.get("country_code") or ""))
@@ -2975,6 +2983,10 @@ async def get_feed(
             return selected
 
         selected_locations = _parse_selected_locations()
+        if not selected_locations and _profile_feed_location_data():
+            selected_locations = [_profile_feed_location_data()]
+        elif not selected_locations and _profile_feed_location_label():
+            selected_locations = [{"location_label": _profile_feed_location_label()}]
         explicit_location_filter = bool(
             selected_locations
             or location
@@ -3025,7 +3037,7 @@ async def get_feed(
                     values.append(country_name)
                 values.extend(aliases.get(code, []))
             if only_my_country:
-                profile_location_data = profile.get("target_location_data") or {}
+                profile_location_data = _profile_feed_location_data()
                 profile_code = str(profile_location_data.get("country_code") or "").lower().strip()
                 profile_country = str(profile_location_data.get("country") or "").lower().strip()
                 if profile_country:
