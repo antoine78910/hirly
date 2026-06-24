@@ -1,5 +1,5 @@
 // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, setSessionToken } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
@@ -13,6 +13,7 @@ export default function AuthCallback() {
   const navigate = useNavigate();
   const { setUser, setHasProfile, setHasPreferences, setIsTrainingCreator } = useAuth();
   const hasProcessed = useRef(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
     if (hasProcessed.current) return;
@@ -23,8 +24,11 @@ export default function AuthCallback() {
     const nextPath = params.get("next") || storedReturn || "/swipe";
 
     (async () => {
+      let step = "init";
       try {
+        step = "supabase_config";
         if (!supabaseConfigured || !supabase) throw new Error("Supabase auth is not configured");
+        step = "supabase_exchange";
         const code = params.get("code");
         const { data: sessionData, error } = code
           ? await supabase.auth.exchangeCodeForSession(code)
@@ -32,6 +36,7 @@ export default function AuthCallback() {
         if (error) throw error;
         const accessToken = sessionData?.session?.access_token;
         if (!accessToken) throw new Error("Supabase session not found");
+        step = "backend_session";
         const response = await api.post("/auth/supabase-session", { access_token: accessToken });
         const data = response.data;
         if (data?.session_token) setSessionToken(data.session_token);
@@ -72,7 +77,9 @@ export default function AuthCallback() {
         navigate(destination, { replace: true });
       } catch (e) {
         console.error("Auth callback failed", e);
-        navigate("/", { replace: true });
+        const detail = e?.response?.data?.detail || e?.message || "Unknown auth callback error";
+        const message = typeof detail === "string" ? detail : JSON.stringify(detail);
+        setErrorMessage(`${step}: ${message}`);
       }
     })();
   }, [navigate, setUser, setHasProfile, setHasPreferences, setIsTrainingCreator]);
@@ -81,6 +88,19 @@ export default function AuthCallback() {
     <div className="min-h-dvh flex items-center justify-center bg-white" data-testid="auth-callback">
       <div className="flex flex-col items-center gap-3 text-zinc-600">
         <Loader2 className="w-6 h-6 animate-spin" />
+        {errorMessage ? (
+          <div className="max-w-md px-6 text-center">
+            <p className="text-sm font-semibold text-red-600">Sign-in failed</p>
+            <p className="mt-2 break-words text-xs text-zinc-500">{errorMessage}</p>
+            <button
+              type="button"
+              onClick={() => navigate("/", { replace: true })}
+              className="mt-4 rounded-full bg-zinc-900 px-4 py-2 text-sm font-semibold text-white"
+            >
+              Back to sign in
+            </button>
+          </div>
+        ) : null}
         <p className="text-sm">Signing you in…</p>
       </div>
     </div>
