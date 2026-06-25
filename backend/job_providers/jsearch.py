@@ -132,11 +132,12 @@ class JSearchProvider:
         }
 
     def search_key(self, query: JobSearchQuery) -> str:
+        remote_preference = "remote" if (query.remote_preference or "").strip().lower() == "remote" else "any"
         bits = [
             self.name,
             (query.role or "").strip().lower(),
             (query.location or "").strip().lower(),
-            (query.remote_preference or "any").strip().lower(),
+            remote_preference,
             (query.country or "").lower(),
             query.language.lower(),
         ]

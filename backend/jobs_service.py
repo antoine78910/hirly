@@ -145,7 +145,7 @@ def build_profile_job_query(
         location = None
     if radius_scope in ("worldwide", "remote/worldwide"):
         country = None
-    remote_preference = profile.get("remote_preference") or "any"
+    remote_preference = "remote" if str(profile.get("remote_preference") or "").lower().strip() == "remote" else "any"
     if radius_scope in ("remote", "remote/worldwide"):
         remote_preference = "remote"
     logger.info("JSearch query location normalized: country=%s location=%s radius=%s role=%s", country, location, search_radius, role)
@@ -925,7 +925,7 @@ async def refresh_jobs_for_profile_if_needed(
             "provider_search_key": key,
             "imported_at": {"$gte": stale_cutoff},
         })
-    min_fresh_count = max(target_auto_apply_count, _env_int("JOB_IMPORT_MIN_FRESH_COUNT", 60))
+    min_fresh_count = max(target_auto_apply_count, _env_int("JOB_IMPORT_MIN_FRESH_COUNT", 10))
     if fresh_count >= min_fresh_count and not require_auto_apply:
         return {"attempted": False, "reason": "cache_fresh", "search_key": search_key, "search_keys": search_keys, "count": fresh_count, **base_metadata}
     any_cached = 0
@@ -1027,6 +1027,7 @@ async def refresh_jobs_for_profile_if_needed(
                 "ok": False,
                 "reason": "provider_rate_limited",
                 "search_key": search_key,
+                "search_keys": search_keys,
                 "cached_count": any_cached,
                 **base_metadata,
                 "provider_rate_limited": True,
@@ -1038,6 +1039,7 @@ async def refresh_jobs_for_profile_if_needed(
             "ok": False,
             "reason": "provider_error",
             "search_key": search_key,
+            "search_keys": search_keys,
             "cached_count": any_cached,
             **base_metadata,
         }
