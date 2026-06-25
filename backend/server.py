@@ -3075,6 +3075,19 @@ async def get_feed(
                 "provider_search_key": {"$in": provider_search_keys},
             }
 
+        def _compact_refresh_result(item: Dict[str, Any]) -> Dict[str, Any]:
+            compact: Dict[str, Any] = {}
+            for key, value in (item or {}).items():
+                if key == "jobs" and isinstance(value, list):
+                    compact["jobs_count"] = len(value)
+                elif key == "sample_jobs" and isinstance(value, list):
+                    compact["sample_jobs_count"] = len(value)
+                elif key in ("greenhouse", "lever") and isinstance(value, dict):
+                    compact[key] = _compact_refresh_result(value)
+                else:
+                    compact[key] = value
+            return compact
+
         def _country_terms_from_locations() -> List[str]:
             aliases = {
                 "fr": ["france"],
@@ -3173,6 +3186,12 @@ async def get_feed(
             job_country_code = str(job.get("country_code") or "").lower().strip()
             if not job_location and not job_country_code:
                 return include_unknown_location
+            if (
+                provider_search_keys
+                and job.get("provider") == "jsearch"
+                and str(job.get("provider_search_key") or "") in provider_search_keys
+            ):
+                return True
             city_match = bool(selected_city_terms and any(term in job_location for term in selected_city_terms))
             country_match = bool(
                 (selected_country_terms and any(term in job_location for term in selected_country_terms))
@@ -3366,6 +3385,16 @@ async def get_feed(
         else:
             jobs = rank(candidates, worldwide=False, broad=False)
             logger.info("feed_filter_stage user_id=%s stage=strict_role_location elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))
+            if len(jobs) < requested_limit and direct_refresh_jobs and not _timed_out():
+                fallback_used = "direct_provider_relaxed_role"
+                jobs = rank(candidates, worldwide=False, broad=True, any_role=True)
+                logger.info(
+                    "feed_filter_stage user_id=%s stage=direct_provider_relaxed_role elapsed_ms=%s count=%s direct_refresh_jobs=%s",
+                    user.user_id,
+                    _elapsed_ms(),
+                    len(jobs),
+                    len(direct_refresh_jobs),
+                )
         if not is_worldwide_radius and explicit_filters and len(jobs) < requested_limit and explicit_location_filter and selected_country_terms:
             relaxed = [
                 job for job in candidates
@@ -3409,13 +3438,18 @@ async def get_feed(
             })
         elapsed = _elapsed_ms()
         logger.info(
-            "jobs/feed fast complete: user_id=%s feed_elapsed_ms=%s returned=%s fallback_used=%s timed_out=%s",
+            "jobs/feed fast complete: user_id=%s feed_elapsed_ms=%s returned=%s fallback_used=%s timed_out=%s direct_refresh_jobs=%s provider_search_keys=%s unfiltered_count=%s candidates=%s",
             user.user_id,
             elapsed,
             len(clean_jobs),
             fallback_used,
             _timed_out(),
+            len(direct_refresh_jobs),
+            len(provider_search_keys),
+            unfiltered_count,
+            len(candidates),
         )
+        safe_refresh_results = [_compact_refresh_result(item) for item in refresh_results if isinstance(item, dict)]
         return {
             "jobs": clean_jobs,
             "total": len(clean_jobs),
@@ -3433,7 +3467,7 @@ async def get_feed(
             "final_location_used": "worldwide" if fallback_used.startswith("worldwide") else (terms["labels"][0] if terms["labels"] else profile.get("target_location")),
             "provider_rate_limited": any(item.get("provider_rate_limited") for item in refresh_results),
             "provider_cooldown_until": next((item.get("provider_cooldown_until") for item in refresh_results if item.get("provider_cooldown_until")), None),
-            "refresh_results": refresh_results,
+            "refresh_results": safe_refresh_results,
             "matched_role": target_role or None,
             "matched_location": terms["labels"],
             "companies_returned": sorted({job.get("company") for job in clean_jobs if job.get("company")}),
