@@ -57,11 +57,11 @@ const locationKey = (loc) => {
 
 const sel = {
   chipOn: "bg-sprout-mint text-white shadow-sm",
-  chipOff: "border border-sprout-border bg-sprout-surface-2 text-sprout-muted hover:border-sprout-mint/60 hover:text-white",
+  chipOff: "border border-sprout-border bg-sprout-surface-2 text-zinc-700 hover:border-sprout-mint/60 hover:text-zinc-950",
   optionOn: "bg-sprout-mint text-white",
-  optionOff: "border border-sprout-border bg-sprout-surface-2 text-sprout-muted hover:border-sprout-mint/60 hover:text-white",
+  optionOff: "border border-sprout-border bg-sprout-surface-2 text-zinc-700 hover:border-sprout-mint/60 hover:text-zinc-950",
   checkDot: "grid h-5 w-5 place-items-center rounded-full bg-white text-sprout-mint",
-  tag: "inline-flex items-center gap-1 rounded-full border border-sprout-border bg-sprout-surface-2 px-2.5 py-1 text-xs text-sprout-muted",
+  tag: "inline-flex items-center gap-1 rounded-full border border-sprout-border bg-sprout-surface-2 px-2.5 py-1 text-xs text-zinc-700",
 };
 
 function Chip({ active, children, onClick, testId }) {
@@ -108,7 +108,7 @@ function TagInput({ value, onAdd, onRemove, placeholder, testId }) {
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder={placeholder}
-          className="flex-1 h-11 rounded-full bg-sprout-surface-2 border border-sprout-border text-white placeholder:text-sprout-dim px-4 text-sm outline-none focus:border-sprout-mint"
+          className="flex-1 h-11 rounded-full bg-sprout-surface-2 border border-sprout-border text-zinc-900 placeholder:text-zinc-400 px-4 text-sm outline-none focus:border-sprout-mint"
           onKeyDown={(e) => {
             if (e.key === "Enter" && draft.trim()) { onAdd(draft.trim()); setDraft(""); }
           }}
@@ -126,7 +126,7 @@ function TagInput({ value, onAdd, onRemove, placeholder, testId }) {
           {value.map((v) => (
             <span key={v} className={sel.tag}>
               {v}
-              <button type="button" onClick={() => onRemove(v)} className="hover:text-white">
+              <button type="button" onClick={() => onRemove(v)} className="hover:text-zinc-950">
                 <X className="w-3 h-3" />
               </button>
             </span>
@@ -178,14 +178,14 @@ export default function FiltersModal({ open, initialFilters, totalCount, onApply
     <AnimatePresence>
       <motion.div
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        className="sprout fixed inset-0 z-[60] bg-sprout-bg text-white overflow-y-auto"
+        className="sprout fixed inset-0 z-[60] bg-sprout-bg text-zinc-900 overflow-y-auto"
         data-testid="filters-modal"
       >
         {/* Header */}
         <div className="sticky top-0 z-10 border-b border-sprout-border bg-sprout-bg/95 pt-safe backdrop-blur-xl">
           <div className="mx-auto flex max-w-md items-center justify-between px-safe py-3 sm:px-5 sm:py-4">
             <button onClick={onClose} className="w-10 h-10 grid place-items-center rounded-full hover:bg-sprout-surface" data-testid="filters-close">
-              <X className="w-5 h-5 text-white" />
+              <X className="w-5 h-5 text-zinc-900" />
             </button>
             <h2 className="font-display font-bold text-xl">Filters</h2>
             <span className="w-10" />
@@ -199,7 +199,7 @@ export default function FiltersModal({ open, initialFilters, totalCount, onApply
               <h3 className="font-display font-bold text-2xl">Minimum Salary</h3>
               <Info className="w-4 h-4 text-sprout-mint" />
             </div>
-            <div className="mt-3 flex justify-between text-sm text-zinc-200">
+            <div className="mt-3 flex justify-between text-sm text-zinc-500">
               <span>{formatMinSalary(0, lang)}</span>
               <span>{formatMinSalary(250_000, lang)}</span>
             </div>
@@ -304,13 +304,13 @@ export default function FiltersModal({ open, initialFilters, totalCount, onApply
                         className="flex items-center justify-between gap-3 rounded-2xl border border-sprout-border bg-sprout-surface-2 px-4 py-3"
                       >
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold text-white truncate">{loc.location_label}</p>
+                          <p className="text-sm font-semibold text-zinc-900 truncate">{loc.location_label}</p>
                           <p className="text-xs text-sprout-muted truncate">{loc.country || loc.country_code || "Selected location"}</p>
                         </div>
                         <button
                           type="button"
                           onClick={() => removeLocation(locationKey(loc))}
-                          className="w-8 h-8 rounded-full grid place-items-center text-sprout-muted hover:text-white hover:bg-sprout-surface"
+                          className="w-8 h-8 rounded-full grid place-items-center text-zinc-500 hover:text-zinc-900 hover:bg-sprout-surface"
                           aria-label={`Remove ${loc.location_label}`}
                         >
                           <X className="w-4 h-4" />
@@ -340,7 +340,7 @@ export default function FiltersModal({ open, initialFilters, totalCount, onApply
           />
 
           <section>
-            <label className="flex items-center justify-between text-white">
+            <label className="flex items-center justify-between text-zinc-900">
               <span className="font-semibold">Only search in my country</span>
               <Switch
                 checked={f.onlyMyCountry}
@@ -398,7 +398,7 @@ export default function FiltersModal({ open, initialFilters, totalCount, onApply
           <section>
             <h3 className="font-display font-bold text-2xl mb-3">Additional Filters</h3>
             <div className="space-y-3">
-              <label className="flex items-center justify-between text-white">
+              <label className="flex items-center justify-between text-zinc-900">
                 <span>Include unknown location type</span>
                 <Switch
                   checked={f.includeUnknownLocation}
@@ -406,7 +406,7 @@ export default function FiltersModal({ open, initialFilters, totalCount, onApply
                   data-testid="filters-unknown-location"
                 />
               </label>
-              <label className="flex items-center justify-between text-white">
+              <label className="flex items-center justify-between text-zinc-900">
                 <span>Include unknown salary range</span>
                 <Switch
                   checked={f.includeUnknownSalary}
