@@ -71,17 +71,12 @@ export default function AuthCallback() {
 
         window.history.replaceState({}, "", window.location.pathname);
         const onboardingIncomplete = !data.has_profile || !data.has_preferences;
-        const isTrainingDestination = (path) =>
-          typeof path === "string" && (path === "/training" || path.startsWith("/training/") || path.includes("/training"));
         let destination = inviteRedirect || (nextPath.startsWith("/") ? nextPath : "/swipe");
-        if (isTrainingDestination(destination)) {
-          // Training destinations skip onboarding — profile not required for creators
-        } else if (onboardingIncomplete && !inviteRedirect) {
+        // Creators who redeemed an invite go directly to their destination — no onboarding.
+        if (!inviteRedirect && onboardingIncomplete) {
           destination = destination.startsWith("/onboarding")
             ? destination
             : "/onboarding?step=jobSearch";
-        } else if (onboardingIncomplete && inviteRedirect === "/swipe") {
-          destination = "/onboarding?step=jobSearch";
         } else if (!inviteRedirect && destination.startsWith("/onboarding")) {
           destination = "/swipe";
         }

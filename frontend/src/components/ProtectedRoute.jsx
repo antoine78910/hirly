@@ -4,7 +4,7 @@ import { Loader2 } from "lucide-react";
 import { devBypassAuth } from "../lib/dev";
 
 export default function ProtectedRoute({ children, requireProfile = false }) {
-  const { user, hasProfile, hasPreferences, loading } = useAuth();
+  const { user, hasProfile, hasPreferences, hasTrainingAccess, loading } = useAuth();
 
   if (devBypassAuth) return children;
 
@@ -16,6 +16,10 @@ export default function ProtectedRoute({ children, requireProfile = false }) {
     );
   }
   if (!user) return <Navigate to="/" replace />;
-  if (requireProfile && (!hasProfile || !hasPreferences)) return <Navigate to="/onboarding" replace />;
+  // Demo and training creators bypass the job-seeker profile requirement.
+  const isCreator = Boolean(user?.demo_account) || Boolean(hasTrainingAccess);
+  if (requireProfile && !isCreator && (!hasProfile || !hasPreferences)) {
+    return <Navigate to="/onboarding" replace />;
+  }
   return children;
 }
