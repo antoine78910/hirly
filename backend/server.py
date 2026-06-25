@@ -29,6 +29,7 @@ import re
 import base64
 import time
 import hashlib
+import unicodedata
 from pathlib import Path
 from urllib.parse import urlparse
 from pydantic import BaseModel, Field, ConfigDict
@@ -2835,6 +2836,7 @@ async def get_feed(
         return (time.perf_counter() - started_at) >= max_elapsed_seconds
 
     def _tokens(value: str) -> List[str]:
+        value = unicodedata.normalize("NFKD", value or "").encode("ascii", "ignore").decode("ascii")
         stop = {
             "and", "or", "the", "a", "an", "of", "for", "to", "in", "with",
             "remote", "jobs", "job", "cdi", "cdd", "full", "time",
@@ -2850,7 +2852,7 @@ async def get_feed(
         role_lower = (role or "").lower()
         family = list(tokens)
         if any(token in tokens for token in ("developer", "engineer", "javascript", "node", "frontend", "backend")):
-            family.extend(["developer", "software", "engineer", "frontend", "backend", "fullstack", "full-stack", "javascript", "node"])
+            family.extend(["developer", "developpeur", "software", "engineer", "frontend", "backend", "fullstack", "full-stack", "javascript", "node"])
         if "analyst" in tokens:
             family.extend(["analyst", "analytics", "analysis", "insights", "business", "market"])
         if "manager" in tokens:
@@ -2860,16 +2862,17 @@ async def get_feed(
         return list(dict.fromkeys(token for token in family if token))
 
     def _job_text(job: Dict[str, Any]) -> str:
-        return " ".join([
+        text = " ".join([
             str(job.get("title") or ""),
             str(job.get("company") or ""),
             str(job.get("description") or ""),
             str(job.get("clean_description") or ""),
             " ".join(str(item) for item in (job.get("requirements") or [])),
         ]).lower()
+        return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
 
     def _role_score(job: Dict[str, Any], strict_tokens: List[str], family_tokens: List[str]) -> int:
-        title = (job.get("title") or "").lower()
+        title = unicodedata.normalize("NFKD", (job.get("title") or "").lower()).encode("ascii", "ignore").decode("ascii")
         text = _job_text(job)
         if not strict_tokens and not family_tokens:
             return 10
@@ -3030,11 +3033,6 @@ async def get_feed(
         )
 
         base_query: Dict[str, Any] = {}
-        if not include_non_auto_apply:
-            base_query = {
-                "auto_apply_supported": True,
-                "ats_provider": {"$in": ats_supported},
-            }
         candidate_limit = max(80, requested_limit * 16) if explicit_filters else max(120, requested_limit * 24)
         if explicit_location_filter:
             candidate_limit = max(candidate_limit, 1000)
@@ -3055,10 +3053,27 @@ async def get_feed(
                     location_override=loc_label,
                     location_data_override=loc_data if isinstance(loc_data, dict) else None,
                     search_radius=search_radius,
+                    role_override=target_role,
                 )
                 refresh_results.append(refresh_result)
                 if refresh_result.get("provider_rate_limited"):
                     break
+
+        provider_search_keys: List[str] = []
+        direct_refresh_jobs: List[Dict[str, Any]] = []
+        for refresh_result in refresh_results:
+            direct_refresh_jobs.extend(job for job in (refresh_result.get("jobs") or []) if isinstance(job, dict))
+            for key in refresh_result.get("search_keys") or []:
+                if key:
+                    provider_search_keys.append(str(key))
+            if refresh_result.get("search_key"):
+                provider_search_keys.append(str(refresh_result.get("search_key")))
+        provider_search_keys = list(dict.fromkeys(provider_search_keys))
+        if provider_search_keys:
+            base_query = {
+                "provider": "jsearch",
+                "provider_search_key": {"$in": provider_search_keys},
+            }
 
         def _country_terms_from_locations() -> List[str]:
             aliases = {
@@ -3273,14 +3288,22 @@ async def get_feed(
                 and _matches_industry(job)
             )
 
-        swiped_rows, candidates = await asyncio.gather(
-            db.swipes.find({"user_id": user.user_id}, {"_id": 0, "job_id": 1}).limit(500).to_list(500),
-            _get_feed_job_candidates(base_query, candidate_limit),
-        )
+        swiped_rows = await db.swipes.find({"user_id": user.user_id}, {"_id": 0, "job_id": 1}).limit(500).to_list(500)
         swiped_ids = {row.get("job_id") for row in swiped_rows if row.get("job_id")}
+        if direct_refresh_jobs:
+            candidates = direct_refresh_jobs
+        else:
+            candidates = await _get_feed_job_candidates(base_query, candidate_limit)
         candidates = [job for job in candidates if job.get("job_id") not in swiped_ids]
         unfiltered_count = len(candidates)
         candidates = [job for job in candidates if _matches_explicit_filters(job)]
+        if provider_search_keys and not candidates and not _timed_out():
+            fallback_query: Dict[str, Any] = {}
+            fallback_candidates = await _get_feed_job_candidates(fallback_query, candidate_limit)
+            fallback_candidates = [job for job in fallback_candidates if job.get("job_id") not in swiped_ids]
+            unfiltered_count = len(fallback_candidates)
+            candidates = [job for job in fallback_candidates if _matches_explicit_filters(job)]
+            base_query = fallback_query
         logger.info(
             "feed_filter_stage user_id=%s stage=candidate_pool elapsed_ms=%s query=%s count=%s unfiltered_count=%s swiped_count=%s explicit_filters=%s",
             user.user_id,
@@ -3291,31 +3314,6 @@ async def get_feed(
             len(swiped_ids),
             explicit_filters,
         )
-
-        async def _load_mixed_candidates() -> List[Dict[str, Any]]:
-            queries: List[Dict[str, Any]] = []
-            if selected_country_codes:
-                queries.append({"country_code": {"$in": selected_country_codes}})
-            queries.append({})
-
-            mixed_by_id: Dict[str, Dict[str, Any]] = {}
-            for query in queries:
-                for job in await _get_feed_job_candidates(query, candidate_limit):
-                    job_id = job.get("job_id")
-                    if not job_id or job_id in swiped_ids or job_id in mixed_by_id:
-                        continue
-                    mixed_by_id[job_id] = job
-
-            mixed = [job for job in mixed_by_id.values() if _matches_explicit_filters(job)]
-            logger.info(
-                "feed_filter_stage user_id=%s stage=mixed_candidate_pool elapsed_ms=%s queries=%s count=%s unfiltered_count=%s",
-                user.user_id,
-                _elapsed_ms(),
-                queries,
-                len(mixed),
-                len(mixed_by_id),
-            )
-            return mixed
 
         def rank(pool: List[Dict[str, Any]], *, worldwide: bool, broad: bool, any_role: bool = False) -> List[Dict[str, Any]]:
             ranked = []
@@ -3399,36 +3397,6 @@ async def get_feed(
             jobs = rank(candidates, worldwide=True, broad=True, any_role=True)
             logger.info("feed_filter_stage user_id=%s stage=worldwide_auto_apply elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))
 
-        mixed_fallback_used = False
-        if not include_non_auto_apply and len(jobs) < requested_limit and not _timed_out():
-            mixed_candidates = await _load_mixed_candidates()
-            if mixed_candidates:
-                mixed_fallback_used = True
-                candidates = mixed_candidates
-                fallback_used = "mixed_non_auto_apply_location_fallback"
-                mixed_jobs = rank(
-                    mixed_candidates,
-                    worldwide=is_worldwide_radius,
-                    broad=True,
-                    any_role=is_worldwide_radius,
-                )
-                if len(mixed_jobs) < requested_limit and explicit_filters:
-                    mixed_jobs = rank(mixed_candidates, worldwide=True, broad=True)
-                if len(mixed_jobs) < requested_limit:
-                    mixed_jobs = rank(mixed_candidates, worldwide=True, broad=True, any_role=True)
-                combined_by_id: Dict[str, Dict[str, Any]] = {}
-                for job in [*jobs, *mixed_jobs]:
-                    job_id = job.get("job_id")
-                    if job_id and job_id not in combined_by_id:
-                        combined_by_id[job_id] = job
-                jobs = list(combined_by_id.values())[:requested_limit]
-                logger.info(
-                    "feed_filter_stage user_id=%s stage=mixed_non_auto_apply_fallback elapsed_ms=%s count=%s",
-                    user.user_id,
-                    _elapsed_ms(),
-                    len(jobs),
-                )
-
         jobs = await _hydrate_feed_jobs(jobs)
 
         clean_jobs = []
@@ -3451,7 +3419,7 @@ async def get_feed(
         return {
             "jobs": clean_jobs,
             "total": len(clean_jobs),
-            "feed_mode": "mixed_fallback" if mixed_fallback_used else ("auto_apply_only" if not include_non_auto_apply else "mixed"),
+            "feed_mode": "mixed",
             "auto_apply_count": sum(1 for job in clean_jobs if job.get("auto_apply_supported") is True),
             "total_count": len(candidates),
             "fallback_reason": None if fallback_used == "none" else fallback_used,
@@ -3473,9 +3441,10 @@ async def get_feed(
                 "target_role": target_role or None,
                 "role_tokens": strict_tokens,
                 "broader_role_tokens": family_tokens,
-                "auto_apply_supported": False if mixed_fallback_used else not include_non_auto_apply,
-                "ats_provider": None if mixed_fallback_used or include_non_auto_apply else ats_supported,
-                "auto_apply_fallback": mixed_fallback_used,
+                "auto_apply_supported": None,
+                "ats_provider": None,
+                "auto_apply_fallback": False,
+                "provider_search_keys": provider_search_keys,
                 "search_radius": search_radius,
                 "explicit_filters": explicit_filters,
                 "work_location": work_location,

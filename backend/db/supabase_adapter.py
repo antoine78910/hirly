@@ -536,10 +536,11 @@ class SupabaseCollectionAdapter(CollectionPort):
         documents: List[Document] = []
         offset = 0
         remote_filter_params = _postgrest_filter_params(self.table_name, filter)
+        can_push_filter = remote_filter_params is not None
         client = _get_shared_http_client()
         while offset < MAX_READ_ROWS:
             page_limit = READ_PAGE_SIZE
-            if read_limit is not None:
+            if read_limit is not None and can_push_filter:
                 remaining = max(0, read_limit - len(documents))
                 if remaining <= 0:
                     break
@@ -549,6 +550,8 @@ class SupabaseCollectionAdapter(CollectionPort):
                 "limit": str(page_limit),
                 "offset": str(offset),
             }
+            if self.table_name == "jobs":
+                request_params["order"] = "imported_at.desc.nullslast"
             if remote_filter_params is not None:
                 request_params.update(remote_filter_params)
             response = await client.get(
@@ -567,9 +570,10 @@ class SupabaseCollectionAdapter(CollectionPort):
             if len(rows) < page_limit:
                 break
             offset += page_limit
-        if remote_filter_params is not None:
+        if can_push_filter:
             return documents
-        return [document for document in documents if _matches_filter(document, filter)]
+        filtered = [document for document in documents if _matches_filter(document, filter)]
+        return filtered[:read_limit] if read_limit is not None else filtered
 
     async def find_one(self, filter: Filter, projection: Projection = None, sort: Optional[List[tuple[str, int]]] = None):
         cursor = SupabaseCursorAdapter(self, filter, projection)

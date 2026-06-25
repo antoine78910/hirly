@@ -127,10 +127,12 @@ def build_profile_job_query(
     location_override: Optional[str] = None,
     location_data_override: Optional[Dict[str, Any]] = None,
     search_radius: str = "50km",
+    role_override: Optional[str] = None,
 ) -> JobSearchQuery:
     radius_scope = (search_radius or "").lower().strip()
     role = (
-        profile.get("target_role")
+        (role_override or "").strip()
+        or profile.get("target_role")
         or ((profile.get("target_roles") or [None])[0])
         or "software engineer"
     )
@@ -234,6 +236,7 @@ async def _import_provider_jobs(db, provider, query: JobSearchQuery) -> Dict[str
         "total_imported": 0,
         "auto_apply_supported_imported": 0,
         "unknown_ats_imported": 0,
+        "jobs": [],
     }
     for job in result.jobs:
         await db.jobs.update_one(
@@ -242,6 +245,7 @@ async def _import_provider_jobs(db, provider, query: JobSearchQuery) -> Dict[str
             upsert=True,
         )
         stats["total_imported"] += 1
+        stats["jobs"].append(job)
         if job.get("auto_apply_supported") is True:
             stats["auto_apply_supported_imported"] += 1
         if job.get("ats_provider") == "unknown":
@@ -691,6 +695,43 @@ def _role_variants(role: str) -> List[str]:
     return [value for value in _dedupe(variants) if value]
 
 
+def _localized_role_variants(role: str, country: Optional[str]) -> List[str]:
+    normalized = " ".join((role or "").split()) or "software engineer"
+    lower = normalized.lower()
+    country_code = (country or "").lower()
+    variants = [normalized]
+
+    if country_code in ("fr", "ma", "be", "ch"):
+        if any(term in lower for term in ("software", "engineer", "developer", "full stack", "full-stack", "frontend", "backend")):
+            variants = ["developpeur", "ingenieur logiciel", normalized]
+        elif "data" in lower and "analyst" in lower:
+            variants = ["analyste data", "analyste donnees", normalized]
+        elif "analyst" in lower:
+            variants = ["analyste", normalized]
+        elif "product" in lower and "manager" in lower:
+            variants = ["chef de produit", "product manager", normalized]
+        elif "project" in lower and "manager" in lower:
+            variants = ["chef de projet", normalized]
+        elif "sales" in lower:
+            variants = ["commercial", normalized]
+        elif "customer" in lower and "success" in lower:
+            variants = ["customer success", "charge de clientele", normalized]
+
+    return [value for value in _dedupe(variants) if value]
+
+
+def _copy_query_with_role(query: JobSearchQuery, role: str, *, raw_query: bool = False) -> JobSearchQuery:
+    return JobSearchQuery(
+        role=role,
+        location=query.location,
+        remote_preference=query.remote_preference,
+        country=query.country,
+        language=query.language,
+        limit=query.limit,
+        raw_query=raw_query,
+    )
+
+
 def _ats_attempt_countries(query: JobSearchQuery, search_radius: str) -> List[Optional[str]]:
     country = (query.country or "").lower() or None
     if (search_radius or "").lower() == "worldwide":
@@ -790,12 +831,14 @@ async def refresh_jobs_for_profile_if_needed(
     location_override: Optional[str] = None,
     location_data_override: Optional[Dict[str, Any]] = None,
     search_radius: str = "50km",
+    role_override: Optional[str] = None,
 ) -> Dict[str, Any]:
     query = build_profile_job_query(
         profile,
         location_override=location_override,
         location_data_override=location_data_override,
         search_radius=search_radius,
+        role_override=role_override,
     )
     base_metadata = {
         "searched_location": query.location,
@@ -866,38 +909,56 @@ async def refresh_jobs_for_profile_if_needed(
             "provider_cooldown_until": cooldown_until.isoformat(),
         }
 
-    search_key = provider.search_key(query)
+    query_variants = [
+        _copy_query_with_role(query, role)
+        for role in _localized_role_variants(query.role, query.country)
+    ]
+    search_keys = [provider.search_key(item) for item in query_variants]
+    search_key = search_keys[0] if search_keys else provider.search_key(query)
     ttl_minutes = _env_int("JOB_IMPORT_TTL_MINUTES", 360)
     stale_cutoff = (datetime.now(timezone.utc) - timedelta(minutes=ttl_minutes)).isoformat()
 
-    fresh_count = await db.jobs.count_documents({
-        "provider": provider.name,
-        "provider_search_key": search_key,
-        "imported_at": {"$gte": stale_cutoff},
-    })
+    fresh_count = 0
+    for key in search_keys:
+        fresh_count += await db.jobs.count_documents({
+            "provider": provider.name,
+            "provider_search_key": key,
+            "imported_at": {"$gte": stale_cutoff},
+        })
     min_fresh_count = max(target_auto_apply_count, _env_int("JOB_IMPORT_MIN_FRESH_COUNT", 60))
     if fresh_count >= min_fresh_count and not require_auto_apply:
-        return {"attempted": False, "reason": "cache_fresh", "search_key": search_key, "count": fresh_count, **base_metadata}
-    any_cached = await db.jobs.count_documents({
-        "provider": provider.name,
-        "provider_search_key": search_key,
-    })
+        return {"attempted": False, "reason": "cache_fresh", "search_key": search_key, "search_keys": search_keys, "count": fresh_count, **base_metadata}
+    any_cached = 0
+    for key in search_keys:
+        any_cached += await db.jobs.count_documents({
+            "provider": provider.name,
+            "provider_search_key": key,
+        })
 
     try:
         max_provider_requests = max(1, min(_env_int("JOB_IMPORT_MAX_PROVIDER_REQUESTS", 5), 10))
-        provider_requests = 1
-        import_stats = await _import_provider_jobs(db, provider, query)
-        imported = import_stats["total_imported"]
-        total_imported = imported
-        logger.info(
-            "JSearch refresh attempt: role=%s location=%s country=%s total_imported=%s auto_apply_supported_imported=%s unknown_ats_imported=%s",
-            query.role,
-            query.location,
-            query.country,
-            import_stats["total_imported"],
-            import_stats["auto_apply_supported_imported"],
-            import_stats["unknown_ats_imported"],
-        )
+        provider_requests = 0
+        total_imported = 0
+        imported_jobs: List[Dict[str, Any]] = []
+        imported = 0
+        for attempt_query in query_variants:
+            if provider_requests >= max_provider_requests or total_imported >= min_fresh_count:
+                break
+            provider_requests += 1
+            import_stats = await _import_provider_jobs(db, provider, attempt_query)
+            imported = import_stats["total_imported"]
+            total_imported += imported
+            imported_jobs.extend(import_stats.get("jobs") or [])
+            logger.info(
+                "JSearch refresh attempt: role=%s location=%s country=%s query=%s total_imported=%s auto_apply_supported_imported=%s unknown_ats_imported=%s",
+                attempt_query.role,
+                attempt_query.location,
+                attempt_query.country,
+                provider._query_string(attempt_query),
+                import_stats["total_imported"],
+                import_stats["auto_apply_supported_imported"],
+                import_stats["unknown_ats_imported"],
+            )
         fallback_used = None
         if total_imported < min_fresh_count and provider_requests < max_provider_requests:
             for fallback_location in _nearby_locations(query, search_radius):
@@ -906,7 +967,7 @@ async def refresh_jobs_for_profile_if_needed(
                 if provider_requests >= max_provider_requests:
                     break
                 fallback_query = JobSearchQuery(
-                    role=query.role,
+                    role=query_variants[0].role if query_variants else query.role,
                     location=fallback_location,
                     remote_preference=query.remote_preference,
                     country=query.country,
@@ -917,6 +978,7 @@ async def refresh_jobs_for_profile_if_needed(
                 fallback_stats = await _import_provider_jobs(db, provider, fallback_query)
                 imported = fallback_stats["total_imported"]
                 total_imported += imported
+                imported_jobs.extend(fallback_stats.get("jobs") or [])
                 logger.info(
                     "JSearch fallback attempt: role=%s location=%s country=%s total_imported=%s auto_apply_supported_imported=%s unknown_ats_imported=%s",
                     fallback_query.role,
@@ -933,7 +995,7 @@ async def refresh_jobs_for_profile_if_needed(
         if total_imported < min_fresh_count and provider_requests < max_provider_requests:
             broad_location = query.location or _country_name(query.country) or "remote"
             broad_query = JobSearchQuery(
-                role=f"jobs in {broad_location}",
+                role=f"{query_variants[0].role if query_variants else query.role} jobs in {broad_location}",
                 location=query.location,
                 remote_preference=query.remote_preference,
                 country=query.country,
@@ -944,6 +1006,7 @@ async def refresh_jobs_for_profile_if_needed(
             provider_requests += 1
             broad_stats = await _import_provider_jobs(db, provider, broad_query)
             total_imported += broad_stats["total_imported"]
+            imported_jobs.extend(broad_stats.get("jobs") or [])
             logger.info(
                 "JSearch broad local attempt: query=%s country=%s total_imported=%s auto_apply_supported_imported=%s unknown_ats_imported=%s",
                 provider._query_string(broad_query),
@@ -984,7 +1047,9 @@ async def refresh_jobs_for_profile_if_needed(
         "ok": True,
         "reason": "imported",
         "search_key": search_key,
+        "search_keys": search_keys,
         "imported": total_imported,
+        "jobs": imported_jobs[:200],
         "fallback_used": fallback_used,
         "ats_targeted_imported": ats_targeted_imported,
         **base_metadata,
