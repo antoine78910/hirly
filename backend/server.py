@@ -2871,7 +2871,11 @@ async def get_feed(
         if any(token in tokens for token in ("sales", "commercial")):
             family.extend(["sales", "commercial", "vente", "vendeur", "conseiller"])
         if "marketing" in tokens:
-            family.extend(["marketing", "charge", "responsable"])
+            family.extend(["marketing", "communication", "community", "seo", "contenu", "content", "digital", "charge", "assistant", "responsable"])
+        if any(token in tokens for token in ("hr", "human", "resources", "recruiter", "talent")):
+            family.extend(["hr", "rh", "ressources", "humaines", "recrutement", "recruteur", "talent", "paie", "formation", "assistant", "charge"])
+        if any(token in tokens for token in ("administrative", "receptionist", "office", "executive")):
+            family.extend(["administrative", "administratif", "assistant", "direction", "reception", "receptionniste", "office"])
         if any(token in tokens for token in ("finance", "accountant", "bookkeeper", "payroll")):
             family.extend(["finance", "comptable", "paie", "assistant"])
         if any(token in tokens for token in ("customer", "support", "success")):

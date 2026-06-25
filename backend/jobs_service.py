@@ -738,14 +738,20 @@ def _localized_role_variants(role: str, country: Optional[str]) -> List[str]:
             variants = ["chef de produit", "product manager", normalized]
         elif "project" in lower and "manager" in lower:
             variants = ["chef de projet", normalized]
+        elif any(term in lower for term in ("hr", "human resources", "resources humaines", "ressources humaines")):
+            variants = ["assistant rh", "ressources humaines", "charge rh", "recrutement", normalized]
+        elif any(term in lower for term in ("recruiter", "talent acquisition")):
+            variants = ["recruteur", "charge de recrutement", "talent acquisition", normalized]
         elif any(term in lower for term in ("research", "researcher")):
             variants = ["charge de recherche", "charge d'etudes", "recherche", "r&d", normalized]
         elif any(term in lower for term in ("sales", "business development", "commercial")):
             variants = ["commercial", "vendeur", "conseiller commercial", normalized]
         elif "marketing" in lower:
-            variants = ["marketing", "charge marketing", "responsable marketing", normalized]
+            variants = ["marketing", "assistant marketing", "charge marketing", "responsable marketing", "communication", "community manager", normalized]
         elif "operations" in lower:
             variants = ["operations", "responsable operations", "assistant operations", normalized]
+        elif any(term in lower for term in ("administrative", "receptionist", "office manager", "executive assistant")):
+            variants = ["assistant administratif", "assistant de direction", "receptionniste", "office manager", normalized]
         elif any(term in lower for term in ("finance", "accountant", "bookkeeper", "payroll")):
             variants = ["comptable", "finance", "gestionnaire paie", "assistant comptable", normalized]
         elif any(term in lower for term in ("teacher", "teaching")):

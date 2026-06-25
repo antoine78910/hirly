@@ -30,10 +30,8 @@ export default function RoleAutocomplete({
     [lang, relatedRole, trimmedValue],
   );
   const visibleSuggestions = useMemo(() => {
-    const exact = trimmedValue.toLowerCase();
-    if (!exact) return suggestions;
-    return suggestions.filter((entry) => entry.role.toLowerCase() !== exact);
-  }, [suggestions, trimmedValue]);
+    return suggestions;
+  }, [suggestions]);
 
   const showDropdown = focused && visibleSuggestions.length > 0;
 

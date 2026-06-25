@@ -10,7 +10,16 @@ const FRENCH_ROLE_LABELS = {
   "QA Engineer": "Ingénieur QA",
   "DevOps Engineer": "Ingénieur DevOps",
   "IT Support Specialist": "Technicien support IT",
+  "Cloud Engineer": "Ingenieur cloud",
+  "Cybersecurity Analyst": "Analyste cybersecurite",
+  "Systems Administrator": "Administrateur systemes",
+  "BI Analyst": "Analyste BI",
+  "Data Engineer": "Data engineer",
+  "Research Analyst": "Charge d'etudes",
+  "Marketing Assistant": "Assistant marketing",
+  "Marketing Coordinator": "Charge de marketing",
   "Product Manager": "Chef de produit",
+  "Product Owner": "Product owner",
   "Project Manager": "Chef de projet",
   "Graphic Designer": "Graphiste",
   "UX/UI Designer": "Designer UX/UI",
@@ -19,10 +28,28 @@ const FRENCH_ROLE_LABELS = {
   Researcher: "Chargé de recherche",
   "Market Analyst": "Analyste marché",
   "Marketing Manager": "Responsable marketing",
+  "Digital Marketing Specialist": "Specialiste marketing digital",
+  "Growth Marketing Manager": "Growth marketing manager",
+  "Content Marketing Manager": "Responsable content marketing",
+  "Social Media Manager": "Social media manager",
+  "SEO Specialist": "Specialiste SEO",
+  "Communications Officer": "Charge de communication",
+  "Community Manager": "Community manager",
+  "Brand Manager": "Chef de marque",
   "Sales Representative": "Commercial",
+  "Business Developer": "Business developer",
+  "Account Executive": "Account executive",
+  "Account Manager": "Account manager",
   "Customer Support": "Support client",
+  "Customer Success Manager": "Customer success manager",
+  "Call Center Agent": "Conseiller telephonique",
   "Operations Manager": "Responsable des opérations",
   "HR Assistant": "Assistant RH",
+  "HR Coordinator": "Charge RH",
+  "HR Manager": "Responsable RH",
+  Recruiter: "Recruteur",
+  "Talent Acquisition Specialist": "Charge de recrutement",
+  "Training Coordinator": "Coordinateur formation",
   "Administrative Assistant": "Assistant administratif",
   Receptionist: "Réceptionniste",
   "Office Manager": "Office manager",
@@ -33,6 +60,8 @@ const FRENCH_ROLE_LABELS = {
   "Financial Advisor": "Conseiller financier",
   "Payroll Specialist": "Gestionnaire paie",
   "Accounts Assistant": "Assistant comptable",
+  Controller: "Controleur financier",
+  Auditor: "Auditeur",
   Nurse: "Infirmier",
   Teacher: "Enseignant",
   "Teaching Assistant": "Assistant pédagogique",
@@ -50,6 +79,11 @@ const FRENCH_ROLE_LABELS = {
   "Security Guard": "Agent de sécurité",
   Chef: "Cuisinier",
   "Kitchen Assistant": "Commis de cuisine",
+  "Order Picker": "Preparateur de commandes",
+  "Forklift Operator": "Cariste",
+  "Logistics Assistant": "Assistant logistique",
+  "Logistics Coordinator": "Coordinateur logistique",
+  "Supply Chain Assistant": "Assistant supply chain",
 };
 
 const FRENCH_GROUP_LABELS = {
@@ -60,6 +94,15 @@ const FRENCH_GROUP_LABELS = {
   "Healthcare & Education": "Santé et éducation",
   "Service & Operations": "Service et opérations",
 };
+
+FRENCH_GROUP_LABELS["Data & Analytics"] = "Data et analyse";
+FRENCH_GROUP_LABELS["Marketing & Communications"] = "Marketing et communication";
+FRENCH_GROUP_LABELS["Sales & Customer"] = "Vente et relation client";
+FRENCH_GROUP_LABELS["Human Resources"] = "Ressources humaines";
+FRENCH_GROUP_LABELS["Administration & Operations"] = "Administration et operations";
+FRENCH_GROUP_LABELS["Finance & Accounting"] = "Finance et comptabilite";
+FRENCH_GROUP_LABELS["Service & Hospitality"] = "Service et hotellerie";
+FRENCH_GROUP_LABELS["Transport & Warehouse"] = "Transport et logistique";
 
 const FRENCH_LOCATION_REPLACEMENTS = [
   [/\bUnited States of America\b/gi, "États-Unis"],
