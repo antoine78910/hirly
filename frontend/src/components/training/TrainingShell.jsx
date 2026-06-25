@@ -6,13 +6,14 @@ import { NavLink, useLocation, useNavigate, useSearchParams } from "react-router
 
 import {
 
-  GraduationCap, LayoutDashboard, BookOpen, Sparkles, ArrowLeft, ChevronDown,
+  GraduationCap, LayoutDashboard, BookOpen, Sparkles, ArrowLeft, ChevronDown, User,
 
 } from "lucide-react";
 
 import Logo from "../Logo";
 
 import { BRAND } from "../../lib/brand";
+import { useAuth } from "../../context/AuthContext";
 
 import { useTrainingLocale } from "../../context/TrainingLocaleContext";
 
@@ -77,8 +78,10 @@ export function TrainingTopBar({ actions, backTo, progressPct = null, moduleStep
   const routeLocale = parseTrainingLocale(location.pathname);
 
   const { lang, t } = useTrainingLocale();
+  const { user } = useAuth();
 
   const homePath = trainingHubPath(routeLocale);
+  const accountEmail = user?.email?.trim() || "";
 
 
 
@@ -137,6 +140,17 @@ export function TrainingTopBar({ actions, backTo, progressPct = null, moduleStep
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
 
           {moduleStepper}
+
+          {accountEmail ? (
+            <span
+              className="flex max-w-[140px] items-center gap-1.5 truncate text-xs font-medium text-zinc-500 sm:max-w-[200px]"
+              title={accountEmail}
+              data-testid="training-account-email"
+            >
+              <User className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              <span className="truncate">{accountEmail}</span>
+            </span>
+          ) : null}
 
           {actions}
 

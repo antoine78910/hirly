@@ -87,6 +87,11 @@ export const AuthProvider = ({ children }) => {
       return;
     }
     if (devBypassAuth) {
+      const existingToken = getSessionToken();
+      if (existingToken) {
+        checkAuth();
+        return;
+      }
       setUser(DEV_MOCK_USER);
       setDemoAccountFromUser(DEV_MOCK_USER);
       setHasProfile(true);

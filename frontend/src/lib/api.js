@@ -120,15 +120,28 @@ api.interceptors.request.use((config) => {
   }
 
   if (demoMode && !config.adapter) {
-    const mock = getDemoResponse(config);
-    if (mock !== undefined) {
-      config.adapter = () => Promise.resolve({
-        data: mock,
-        status: 200,
-        statusText: "OK",
-        headers: {},
-        config,
-      });
+    const method = (config.method || "get").toLowerCase();
+    let requestUrl = config.url || "";
+    try {
+      requestUrl = axios.getUri(config);
+    } catch {
+      /* use config.url */
+    }
+    const path = normalizeApiPath(requestUrl);
+    const hasSession = Boolean(getSessionToken());
+    // Keep real account identity when logged in — only mock data routes without a session.
+    const skipAuthMeMock = hasSession && method === "get" && path === "/auth/me";
+    if (!skipAuthMeMock) {
+      const mock = getDemoResponse(config);
+      if (mock !== undefined) {
+        config.adapter = () => Promise.resolve({
+          data: mock,
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config,
+        });
+      }
     }
   }
 
