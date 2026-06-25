@@ -56,6 +56,7 @@ from creator_invite_store import (
     create_demo_invitation,
     create_invitation,
     create_standalone_invitation,
+    ensure_dev_test_invites,
     get_invite_by_code,
     list_demo_invites,
     list_invites_for_influencer,
@@ -9728,6 +9729,7 @@ app.add_middleware(
 async def _startup_seed_impl():
     """Seed boards and training content without blocking HTTP readiness."""
     try:
+        ensure_dev_test_invites()
         await seed_greenhouse_company_boards(db)
         await seed_lever_company_boards(db)
         await seed_training_content(db)

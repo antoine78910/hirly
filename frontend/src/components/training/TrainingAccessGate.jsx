@@ -1,17 +1,16 @@
 import { useEffect, useState } from "react";
-import { Navigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { devBypassAuth } from "../../lib/dev";
 import { api } from "../../lib/api";
-import ProtectedRoute from "../ProtectedRoute";
+import TrainingLoginPage from "./TrainingLoginPage";
 
 /** Set to false when training is invite-only again (must match backend TRAINING_OPEN_ACCESS). */
 const TRAINING_OPEN_ACCESS = (process.env.REACT_APP_TRAINING_OPEN_ACCESS ?? "true").toLowerCase() !== "false";
 
 export default function TrainingAccessGate({ children }) {
   const { user, loading: authLoading, hasTrainingAccess, setHasTrainingAccess } = useAuth();
-  const [checking, setChecking] = useState(!TRAINING_OPEN_ACCESS);
+  const [checking, setChecking] = useState(!TRAINING_OPEN_ACCESS && !devBypassAuth);
   const [allowed, setAllowed] = useState(devBypassAuth || TRAINING_OPEN_ACCESS);
 
   useEffect(() => {
@@ -59,21 +58,19 @@ export default function TrainingAccessGate({ children }) {
 
   if (devBypassAuth) return children;
 
-  if (TRAINING_OPEN_ACCESS) {
-    return <ProtectedRoute>{children}</ProtectedRoute>;
+  if (authLoading || checking) {
+    return (
+      <div className="grid min-h-dvh place-items-center bg-white">
+        <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
+      </div>
+    );
   }
 
-  return (
-    <ProtectedRoute>
-      {authLoading || checking ? (
-        <div className="grid min-h-dvh place-items-center bg-white">
-          <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
-        </div>
-      ) : allowed ? (
-        children
-      ) : (
-        <Navigate to="/" replace />
-      )}
-    </ProtectedRoute>
-  );
+  if (TRAINING_OPEN_ACCESS) {
+    if (!user) return <TrainingLoginPage />;
+    return children;
+  }
+
+  if (!user || !allowed) return <TrainingLoginPage />;
+  return children;
 }

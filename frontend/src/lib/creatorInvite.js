@@ -1,6 +1,27 @@
 import { queueDemoWelcome } from "./demoWelcome";
+import { queueTrainingWelcome } from "./trainingWelcome";
 
 const PENDING_INVITE_KEY = "hirly.creator_invite.pending";
+
+const normalizeInviteBaseUrl = (value) => {
+  const raw = (value || "").trim();
+  if (!raw) return "";
+  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  return withProtocol.replace(/\/+$/, "");
+};
+
+/** Public site used in creator invite links (production: tryhirly.com). */
+export const INVITE_BASE_URL = normalizeInviteBaseUrl(
+  process.env.REACT_APP_INVITE_BASE_URL || "https://tryhirly.com",
+);
+
+export function buildInviteUrl(code) {
+  const normalized = String(code || "").trim();
+  const base = INVITE_BASE_URL
+    || (typeof window !== "undefined" ? window.location.origin : "https://tryhirly.com");
+  return `${base}/invite/${normalized}`;
+}
+
 export function storePendingInviteCode(code) {
   const normalized = String(code || "").trim();
   if (!/^\d{6}$/.test(normalized)) return false;
@@ -17,12 +38,6 @@ export function getPendingInviteCode() {
 export function clearPendingInviteCode() {
   if (typeof window === "undefined") return;
   sessionStorage.removeItem(PENDING_INVITE_KEY);
-}
-
-export function buildInviteUrl(code) {
-  const normalized = String(code || "").trim();
-  if (typeof window === "undefined") return `/invite/${normalized}`;
-  return `${window.location.origin}/invite/${normalized}`;
 }
 
 export function inviteDestination(redeemData, inviteMeta) {
@@ -43,6 +58,7 @@ export function applyRedeemToAuth(redeemData, user, handlers) {
   if (redeemData.training_access) {
     next.training_access = true;
     handlers.setHasTrainingAccess?.(true);
+    queueTrainingWelcome();
   }
   handlers.setUser?.(next);
   return next;

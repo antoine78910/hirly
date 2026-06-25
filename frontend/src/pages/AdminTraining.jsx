@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, Copy, Link2, Loader2, RefreshCw, Sparkles, Upload, Video } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Copy, Link2, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import { adminApiErrorMessage } from "../lib/adminApi";
@@ -8,7 +8,6 @@ import { Button } from "../components/ui/button";
 import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
 
 const COURSE_ID = "course_job_search_mastery";
-const ACCEPTED_VIDEO = "video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov";
 
 const fmtDate = (value) => {
   if (!value) return "—";
@@ -195,126 +194,34 @@ function TrainingInvitesPanel() {
   );
 }
 
-function VideoUploadCell({ slot, lang, onUploaded }) {
-  const inputRef = useRef(null);
-  const [uploading, setUploading] = useState(false);
-  const meta = slot[lang] || {};
-
-  const handleFile = async (file) => {
-    if (!file) return;
-    setUploading(true);
-    try {
-      const form = new FormData();
-      form.append("course_id", COURSE_ID);
-      form.append("module_id", slot.module_id);
-      form.append("lang", lang);
-      if (slot.section_id) form.append("section_id", slot.section_id);
-      form.append("file", file);
-
-      await api.post("/admin/training/videos", form, {
-        headers: { "Content-Type": "multipart/form-data" },
-        timeout: 600000,
-      });
-      toast.success(`Video uploaded (${lang.toUpperCase()})`);
-      onUploaded?.();
-    } catch (err) {
-      toast.error(err?.response?.data?.detail || "Upload failed");
-    } finally {
-      setUploading(false);
-      if (inputRef.current) inputRef.current.value = "";
-    }
-  };
-
-  return (
-    <div className="space-y-2">
-      <input
-        ref={inputRef}
-        type="file"
-        accept={ACCEPTED_VIDEO}
-        className="hidden"
-        onChange={(e) => handleFile(e.target.files?.[0])}
-      />
-      {meta.has_video ? (
-        <div className="flex items-center gap-1.5 text-xs text-emerald-700">
-          <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-          <span className="truncate" title={meta.video_filename || "Uploaded"}>
-            {meta.video_filename || "Uploaded"}
-          </span>
-        </div>
-      ) : (
-        <p className="text-xs text-zinc-400">No video</p>
-      )}
-      {meta.video_uploaded_at ? (
-        <p className="text-[11px] text-zinc-400">{fmtDate(meta.video_uploaded_at)}</p>
-      ) : null}
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="h-8 w-full text-xs"
-        disabled={uploading}
-        onClick={() => inputRef.current?.click()}
-      >
-        {uploading ? (
-          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-        ) : (
-          <Upload className="mr-1.5 h-3.5 w-3.5" />
-        )}
-        {meta.has_video ? "Replace" : "Upload"}
-        {" "}
-        {lang.toUpperCase()}
-      </Button>
-    </div>
-  );
-}
-
 export default function AdminTraining() {
   const [data, setData] = useState(null);
-  const [videoSlots, setVideoSlots] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [videosLoading, setVideosLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [analyticsError, setAnalyticsError] = useState("");
   const [accessDenied, setAccessDenied] = useState(false);
 
   const loadAnalytics = useCallback(async () => {
-    const { data: payload } = await api.get("/admin/training/analytics");
-    setData(payload);
-  }, []);
-
-  const loadVideos = useCallback(async () => {
-    setVideosLoading(true);
+    setAnalyticsError("");
     try {
-      const { data: payload } = await api.get("/admin/training/videos", {
-        params: { course_id: COURSE_ID },
-      });
-      setVideoSlots(payload?.slots || []);
+      const { data: payload } = await api.get("/admin/training/analytics");
+      setData(payload);
     } catch (err) {
-      if (err?.response?.status !== 403) {
-        toast.error(adminApiErrorMessage(err, "Could not load training videos"));
+      setData(null);
+      if (err?.response?.status === 403) {
+        setAccessDenied(true);
+        setAnalyticsError("Admin access denied");
+      } else {
+        setAnalyticsError(adminApiErrorMessage(err, "Could not load training analytics"));
       }
-    } finally {
-      setVideosLoading(false);
     }
   }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
-    setError("");
     setAccessDenied(false);
-    try {
-      await Promise.all([loadAnalytics(), loadVideos()]);
-    } catch (err) {
-      setData(null);
-      if (err?.response?.status === 403) {
-        setAccessDenied(true);
-        setError("Admin access denied");
-      } else {
-        setError(adminApiErrorMessage(err, "Could not load training analytics"));
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [loadAnalytics, loadVideos]);
+    await loadAnalytics();
+    setLoading(false);
+  }, [loadAnalytics]);
 
   useEffect(() => {
     load();
@@ -329,19 +236,10 @@ export default function AdminTraining() {
     [moduleStats],
   );
 
-  const uploadedCount = useMemo(
-    () => videoSlots.reduce((acc, slot) => {
-      const en = slot.en?.has_video ? 1 : 0;
-      const fr = slot.fr?.has_video ? 1 : 0;
-      return acc + en + fr;
-    }, 0),
-    [videoSlots],
-  );
-
   return (
     <AdminShell
       title="Training"
-      subtitle="Upload lesson videos, track enrollment, and module completion"
+      subtitle="Training invitations, enrollment, and module completion"
       actions={(
         <Button variant="outline" size="sm" onClick={load} disabled={loading}>
           <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
@@ -349,7 +247,7 @@ export default function AdminTraining() {
         </Button>
       )}
     >
-      {accessDenied ? <AdminAccessDenied message={error} /> : null}
+      {accessDenied ? <AdminAccessDenied message={analyticsError} /> : null}
 
       {!accessDenied && loading ? (
         <div className="flex items-center gap-2 text-sm text-zinc-500">
@@ -358,71 +256,15 @@ export default function AdminTraining() {
         </div>
       ) : null}
 
-      {!accessDenied && !loading && error ? (
-        <p className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{error}</p>
-      ) : null}
-
       {!accessDenied && !loading ? (
         <div className="space-y-8">
           <TrainingInvitesPanel />
 
-          <section className="rounded-xl border border-zinc-200 bg-white shadow-sm">
-            <div className="border-b border-zinc-100 px-5 py-4">
-              <div className="flex items-center gap-2">
-                <Video className="h-5 w-5 text-violet-600" />
-                <div>
-                  <h2 className="font-display text-lg font-bold">Lesson videos</h2>
-                  <p className="text-sm text-zinc-500">
-                    Upload MP4, WebM, or MOV files (max 500 MB). EN and FR can differ per lesson.
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              {videosLoading ? (
-                <div className="flex items-center gap-2 px-5 py-8 text-sm text-zinc-500">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading video slots…
-                </div>
-              ) : (
-                <table className="min-w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-zinc-100 bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
-                      <th className="px-5 py-3">Lesson</th>
-                      <th className="px-5 py-3 w-40">English</th>
-                      <th className="px-5 py-3 w-40">French</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {videoSlots.map((slot) => (
-                      <tr key={`${slot.module_id}-${slot.section_id || "module"}`} className="border-b border-zinc-50 align-top">
-                        <td className="px-5 py-4">
-                          <p className="font-medium text-zinc-800">{slot.label}</p>
-                          <p className="mt-0.5 font-mono text-[11px] text-zinc-400">
-                            {slot.module_id}
-                            {slot.section_id ? ` · ${slot.section_id}` : ""}
-                          </p>
-                        </td>
-                        <td className="px-5 py-4">
-                          <VideoUploadCell slot={slot} lang="en" onUploaded={loadVideos} />
-                        </td>
-                        <td className="px-5 py-4">
-                          <VideoUploadCell slot={slot} lang="fr" onUploaded={loadVideos} />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-            {!videosLoading ? (
-              <p className="border-t border-zinc-100 px-5 py-3 text-xs text-zinc-500">
-                {uploadedCount}
-                {" "}
-                video(s) uploaded. Learners see them automatically in the training course.
-              </p>
-            ) : null}
-          </section>
+          {analyticsError ? (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              {analyticsError}
+            </p>
+          ) : null}
 
           {data ? (
             <>

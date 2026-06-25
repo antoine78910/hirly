@@ -11,6 +11,7 @@ import {
   demoSwipeRow,
 } from "./demoData";
 import { getDemoTrainingCatalog, getDemoTrainingCourseDetail } from "./demoTrainingData";
+import { getInviteDevResponse } from "./inviteDevMocks";
 import { isDemoAccountEnabled, consumeDemoCredit } from "./demoAccount";
 import { mergeDemoCvIntoProfile } from "./demoCvUpload";
 import axios from "axios";
@@ -355,7 +356,7 @@ export function getDemoResponse(config) {
       ok: true,
       invitation: {
         code: "123456",
-        invite_url: "http://localhost:3000/invite/123456",
+        invite_url: "https://tryhirly.com/invite/123456",
         email_hint: payload?.email_hint || "",
         invite_type: "training",
       },
@@ -400,6 +401,9 @@ export function getDemoResponse(config) {
   if (method === "post" && /^\/admin\/influencers\/[^/]+\/grant-demo$/.test(path)) {
     return { ok: true, email: "dev@localhost", demo_account: true, user_id: "dev-local" };
   }
+
+  const inviteMock = getInviteDevResponse(config);
+  if (inviteMock !== undefined) return inviteMock;
 
   return undefined;
 }

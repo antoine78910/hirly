@@ -132,6 +132,7 @@ export async function fetchTrainingCatalog(lang) {
     }
   } catch (err) {
     if (err?.response?.status === 403) throw err;
+    /* offline / backend down — keep bundled curriculum */
   }
   return staticData;
 }
@@ -167,6 +168,7 @@ export async function fetchTrainingCourseDetail(courseId, lang) {
       }
     } catch (err) {
       if (err?.response?.status === 403) throw err;
+      /* offline — local progress only */
     }
     return applyCompletion({
       ...staticData,
@@ -187,6 +189,7 @@ export async function fetchTrainingCourseDetail(courseId, lang) {
     }
   } catch (err) {
     if (err?.response?.status === 403) throw err;
+    /* offline — bundled curriculum */
   }
   return applyCompletion({
     ...staticData,

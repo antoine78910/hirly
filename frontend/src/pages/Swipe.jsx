@@ -440,7 +440,8 @@ export default function Swipe() {
 
   useEffect(() => {
     if (authLoading || !user?.user_id) return;
-    if (!isDemoAccountEnabled()) return;
+    const forcePreview = new URLSearchParams(window.location.search).get("demoWelcome") === "1";
+    if (!forcePreview && !isDemoAccountEnabled()) return;
     if (shouldOpenDemoWelcome(user.user_id)) {
       setDemoWelcomeOpen(true);
     }

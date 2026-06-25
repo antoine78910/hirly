@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { CheckCircle2, ChevronRight, Loader2, Play } from "lucide-react";
 import { resolveApiAssetUrl } from "../lib/api";
 import { useTrainingLocale } from "../context/TrainingLocaleContext";
+import { useAuth } from "../context/AuthContext";
 import { TrainingTopBar, useTrainingPageMode } from "../components/training/TrainingShell";
 import ModuleDocView from "../components/training/ModuleDocView";
 import ModuleSectionNav from "../components/training/ModuleSectionNav";
@@ -14,10 +15,12 @@ import {
   SCORED_MODULE_IDS,
   courseProgressFraction,
   saveProgressEvent,
+  willAllScoredModulesBeComplete,
 } from "../lib/trainingProgress";
 import {
   fetchTrainingCourseDetail,
   isQuizPassed,
+  loadLocalTrainingProgress,
   tryCompleteModule,
   tryEnrollCourse,
   trySubmitQuiz,
@@ -29,7 +32,12 @@ import {
   trainingHubPath,
   trainingModulePath,
 } from "../lib/trainingRoutes";
-import { queueTrainingCompletionFeedback } from "../lib/trainingCompletionFeedback";
+import {
+  dismissTrainingCompletionFeedback,
+  queueTrainingCompletionFeedback,
+  shouldShowTrainingCompletionFeedback,
+} from "../lib/trainingCompletionFeedback";
+import TrainingCompletionFeedbackModal from "../components/training/TrainingCompletionFeedbackModal";
 import { structureContentBankBlocks } from "../lib/contentBankDocStructure";
 import BunnyVideoIframe from "../components/training/BunnyVideoIframe";
 import {
@@ -110,6 +118,7 @@ export default function TrainingCourse() {
   const location = useLocation();
   const routeLocale = parseTrainingLocale(location.pathname);
   const { lang, t } = useTrainingLocale();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [completing, setCompleting] = useState(false);
   const [quizSubmitting, setQuizSubmitting] = useState(false);
@@ -119,6 +128,7 @@ export default function TrainingCourse() {
   const [progressTick, setProgressTick] = useState(0);
   const [showScrollHint, setShowScrollHint] = useState(false);
   const [celebrateModuleId, setCelebrateModuleId] = useState(null);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   // Refs for progress observation
   const videoContainerRef = useRef(null);
@@ -418,9 +428,27 @@ export default function TrainingCourse() {
       await tryCompleteModule(courseId, completedId);
       setCelebrateModuleId(completedId);
       await load();
+      const localProgress = loadLocalTrainingProgress(courseId);
+      const courseFinished = willAllScoredModulesBeComplete(
+        modules,
+        localProgress.completed_module_ids,
+        completedId,
+      );
       const idx = modules.findIndex((m) => m.module_id === completedId);
       const next = modules[idx + 1];
-      if (next) {
+      if (courseFinished) {
+        queueTrainingCompletionFeedback(courseId);
+        toast.success(t("courseCompleted"));
+        setTimeout(() => {
+          setCelebrateModuleId(null);
+          if (shouldShowTrainingCompletionFeedback(courseId, user?.user_id, { atFullProgress: true })) {
+            setFeedbackOpen(true);
+          } else {
+            navigate(hubPath, { replace: true });
+          }
+          setCompleting(false);
+        }, 900);
+      } else if (next) {
         setTimeout(() => {
           setCelebrateModuleId(null);
           setActiveModuleId(next.module_id);
@@ -464,6 +492,12 @@ export default function TrainingCourse() {
   const overallProgressPct = Math.round(
     courseProgressFraction(courseId, modules, data?.enrollment) * 100,
   );
+
+  const handleFeedbackDismiss = ({ submitted = false } = {}) => {
+    dismissTrainingCompletionFeedback(courseId, user?.user_id, { submitted });
+    setFeedbackOpen(false);
+    navigate(hubPath, { replace: true });
+  };
 
   const scoredModules = modules.filter((m) =>
     SCORED_MODULE_IDS.includes(m.module_id),
@@ -560,7 +594,14 @@ export default function TrainingCourse() {
   );
 
   return (
-    <div className="min-h-dvh bg-white text-zinc-900">
+    <>
+      <TrainingCompletionFeedbackModal
+        open={feedbackOpen}
+        courseId={courseId}
+        onDismiss={handleFeedbackDismiss}
+        onSubmitted={() => handleFeedbackDismiss({ submitted: true })}
+      />
+      <div className="min-h-dvh bg-white text-zinc-900">
       <TrainingTopBar
         backTo={hubPath}
         progressPct={overallProgressPct}
@@ -605,5 +646,6 @@ export default function TrainingCourse() {
         </div>
       </main>
     </div>
+    </>
   );
 }

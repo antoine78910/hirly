@@ -1,0 +1,30 @@
+[
+  {
+    "invite_id": "dev-training-invite",
+    "code": "123456",
+    "influencer_id": null,
+    "invite_type": "training",
+    "course_id": "course_job_search_mastery",
+    "email_hint": "",
+    "label": "Dev training invite",
+    "created_at": "2026-06-04T00:00:00+00:00",
+    "expires_at": "2026-09-02T00:00:00+00:00",
+    "redeemed_at": "2026-06-25T16:06:41.929391+00:00",
+    "redeemed_by_user_id": "tutorial_filming",
+    "revoked": false
+  },
+  {
+    "invite_id": "dev-demo-invite",
+    "code": "654321",
+    "influencer_id": null,
+    "invite_type": "demo",
+    "course_id": "course_job_search_mastery",
+    "email_hint": "",
+    "label": "Dev demo invite",
+    "created_at": "2026-06-04T00:00:00+00:00",
+    "expires_at": "2026-09-02T00:00:00+00:00",
+    "redeemed_at": "2026-06-25T16:06:58.012634+00:00",
+    "redeemed_by_user_id": "tutorial_filming",
+    "revoked": false
+  }
+]

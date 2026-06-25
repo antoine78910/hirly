@@ -16,6 +16,12 @@ INVITE_TYPE_TRAINING = "training"
 INVITE_TYPE_DEMO = "demo"
 INVITE_TYPE_CREATOR = "creator"  # legacy: grants both training + demo
 
+# Fixed local test codes (see frontend inviteDevMocks.js)
+DEV_TEST_INVITE_SPECS = (
+    {"code": "123456", "invite_type": INVITE_TYPE_TRAINING, "label": "Dev training invite"},
+    {"code": "654321", "invite_type": INVITE_TYPE_DEMO, "label": "Dev demo invite"},
+)
+
 
 def resolve_invite_type(row: Optional[Dict[str, Any]]) -> str:
     if not row:
@@ -36,6 +42,66 @@ def _ensure_store() -> None:
     STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
     if not STORE_PATH.exists():
         STORE_PATH.write_text("[]", encoding="utf-8")
+
+
+def _should_seed_dev_test_invites() -> bool:
+    import os
+
+    flag = (os.environ.get("SEED_DEV_INVITES") or "true").strip().lower()
+    return flag not in ("0", "false", "no", "off")
+
+
+def ensure_dev_test_invites() -> None:
+    """Ensure fixed dev invite codes exist (123456 training, 654321 demo)."""
+    if not _should_seed_dev_test_invites():
+        return
+
+    rows = load_invites()
+    by_code = {str(row.get("code")): index for index, row in enumerate(rows) if row.get("code")}
+    changed = False
+    now = _now_iso()
+    expires = (datetime.now(timezone.utc) + timedelta(days=INVITE_TTL_DAYS)).isoformat()
+
+    for spec in DEV_TEST_INVITE_SPECS:
+        code = spec["code"]
+        index = by_code.get(code)
+        if index is not None:
+            row = rows[index]
+            needs_reset = bool(row.get("redeemed_at") or row.get("revoked") or _is_expired(row))
+            if needs_reset:
+                rows[index] = {
+                    **row,
+                    "invite_type": spec["invite_type"],
+                    "label": spec.get("label") or row.get("label") or "",
+                    "expires_at": expires,
+                    "redeemed_at": None,
+                    "redeemed_by_user_id": None,
+                    "revoked": False,
+                    "updated_at": now,
+                }
+                changed = True
+            continue
+
+        rows.append(
+            {
+                "invite_id": str(uuid.uuid4()),
+                "code": code,
+                "influencer_id": None,
+                "invite_type": spec["invite_type"],
+                "course_id": DEFAULT_COURSE_ID,
+                "email_hint": "",
+                "label": spec.get("label") or "",
+                "created_at": now,
+                "expires_at": expires,
+                "redeemed_at": None,
+                "redeemed_by_user_id": None,
+                "revoked": False,
+            }
+        )
+        changed = True
+
+    if changed:
+        save_invites(rows)
 
 
 def load_invites() -> List[Dict[str, Any]]:

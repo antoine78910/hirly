@@ -1,4 +1,5 @@
 import { CheckCircle2, Lock, Play } from "lucide-react";
+import { isContentBankModule } from "../../lib/trainingProgress";
 
 function coverLabel(title) {
   if (!title) return "";
@@ -58,7 +59,7 @@ export default function ModuleGalleryCard({
   compact = false,
   size,
 }) {
-  const isReference = module.category === "reference";
+  const isReference = isContentBankModule(module);
   const variant = size || (compact ? "compact" : "default");
   const s = SIZE_STYLES[variant] || SIZE_STYLES.default;
 
@@ -76,7 +77,7 @@ export default function ModuleGalleryCard({
       <div
         className={`relative flex flex-1 items-center justify-center ${s.cover} ${
           isReference
-            ? "bg-gradient-to-br from-indigo-600 via-violet-700 to-purple-800"
+            ? "bg-gradient-to-br from-violet-950 via-purple-950 to-indigo-950"
             : "gradient-linkedin"
         }`}
       >

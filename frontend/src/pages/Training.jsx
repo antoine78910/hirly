@@ -7,13 +7,16 @@ import { useTrainingLocale } from "../context/TrainingLocaleContext";
 import TrainingShell, { useTrainingPageMode } from "../components/training/TrainingShell";
 import ModuleGalleryCard from "../components/training/ModuleGalleryCard";
 import TrainingCompletionFeedbackModal from "../components/training/TrainingCompletionFeedbackModal";
+import TrainingWelcomeModal from "../components/training/TrainingWelcomeModal";
 import { fetchTrainingCatalog, fetchTrainingCourseDetail } from "../lib/trainingData";
 import { TRAINING_COURSE_ID } from "../lib/demoTrainingData";
-import { SCORED_MODULE_IDS, courseProgressFraction } from "../lib/trainingProgress";
+import { areAllScoredModulesComplete, courseProgressFraction } from "../lib/trainingProgress";
 import {
   dismissTrainingCompletionFeedback,
+  queueTrainingCompletionFeedback,
   shouldShowTrainingCompletionFeedback,
 } from "../lib/trainingCompletionFeedback";
+import { dismissTrainingWelcome, shouldOpenTrainingWelcome } from "../lib/trainingWelcome";
 import {
   parseTrainingLocale,
   trainingModulePath,
@@ -31,6 +34,7 @@ export default function Training() {
   const [catalogModules, setCatalogModules] = useState([]);
   const [enrollment, setEnrollment] = useState(null);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -59,22 +63,44 @@ export default function Training() {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    if (!user?.user_id || loading) return;
+    if (shouldOpenTrainingWelcome(user.user_id)) {
+      setWelcomeOpen(true);
+    }
+  }, [user?.user_id, loading]);
+
+  const handleDismissWelcome = () => {
+    dismissTrainingWelcome(user?.user_id);
+    setWelcomeOpen(false);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("trainingWelcome")) {
+        url.searchParams.delete("trainingWelcome");
+        window.history.replaceState({}, "", `${url.pathname}${url.search}`);
+      }
+    }
+  };
+
   const featured = catalog[0];
   const courseId = featured?.course_id || TRAINING_COURSE_ID;
   const progressPct = useMemo(
     () => Math.round(courseProgressFraction(courseId, catalogModules, enrollment) * 100),
     [courseId, catalogModules, enrollment],
   );
-  const scoredComplete = useMemo(() => {
-    const scored = catalogModules.filter((m) => SCORED_MODULE_IDS.includes(m.module_id));
-    if (!scored.length) return false;
-    return scored.every((m) => m.completed);
-  }, [catalogModules]);
+  const scoredComplete = useMemo(
+    () => areAllScoredModulesComplete(catalogModules),
+    [catalogModules],
+  );
 
   useEffect(() => {
     if (!user?.user_id || loading) return;
-    if (progressPct < 100 && !scoredComplete) return;
-    if (shouldShowTrainingCompletionFeedback(courseId, user.user_id)) {
+    const forcePreview = new URLSearchParams(window.location.search).get("trainingFeedback") === "1"
+      || new URLSearchParams(window.location.search).get("trainingComplete") === "1";
+    const atFullProgress = progressPct >= 100 || scoredComplete;
+    if (!forcePreview && !atFullProgress) return;
+    if (atFullProgress) queueTrainingCompletionFeedback(courseId);
+    if (shouldShowTrainingCompletionFeedback(courseId, user.user_id, { atFullProgress: forcePreview || atFullProgress })) {
       setFeedbackOpen(true);
     }
   }, [user?.user_id, loading, progressPct, scoredComplete, courseId]);
@@ -95,6 +121,13 @@ export default function Training() {
 
   return (
     <TrainingShell showSidebar={false}>
+      <TrainingWelcomeModal
+        open={welcomeOpen}
+        onOpenChange={(next) => {
+          if (next) setWelcomeOpen(true);
+        }}
+        onDismiss={handleDismissWelcome}
+      />
       <TrainingCompletionFeedbackModal
         open={feedbackOpen}
         courseId={courseId}

@@ -1,18 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import {
-  AlertTriangle,
-  ArrowRight,
-  GraduationCap,
-  Loader2,
-  Lock,
-  Mail,
-  MonitorPlay,
-  Sparkles,
-} from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import Logo from "../components/Logo";
-import { Button } from "../components/ui/button";
+import GoogleSignInButton from "../components/auth/GoogleSignInButton";
 import { Input } from "../components/ui/input";
 import { BRAND } from "../lib/brand";
 import { api, setSessionToken } from "../lib/api";
@@ -25,7 +16,7 @@ import {
   redeemCreatorInvite,
   storePendingInviteCode,
 } from "../lib/creatorInvite";
-import { startGoogleLogin } from "../lib/auth";
+import { getLocalDevInviteMeta } from "../lib/inviteDevMocks";
 import { supabase, supabaseConfigured } from "../lib/supabase";
 
 function isTrainingInvite(meta) {
@@ -69,7 +60,8 @@ export default function InviteLanding() {
         const { data } = await api.get(`/invites/${normalized}/validate`);
         setInviteMeta(data);
       } catch {
-        setInviteMeta({ valid: false, reason: "not_found" });
+        const local = getLocalDevInviteMeta(normalized);
+        setInviteMeta(local || { valid: false, reason: "not_found" });
       } finally {
         setChecking(false);
       }
@@ -163,10 +155,10 @@ export default function InviteLanding() {
 
   if (checking || redeeming || (user && !invalid)) {
     return (
-      <div className="min-h-dvh flex items-center justify-center bg-zinc-950/40">
-        <div className="flex flex-col items-center gap-3 rounded-2xl bg-white px-8 py-6 shadow-xl">
-          <Loader2 className="h-6 w-6 animate-spin text-violet-600" />
-          <p className="text-sm text-zinc-600">Activation de votre accès créateur…</p>
+      <div className="min-h-dvh flex items-center justify-center bg-white">
+        <div className="flex flex-col items-center gap-3 text-zinc-500">
+          <Loader2 className="h-6 w-6 animate-spin" />
+          <p className="text-sm">Activation de votre accès…</p>
         </div>
       </div>
     );
@@ -176,188 +168,179 @@ export default function InviteLanding() {
   const influencerName = inviteMeta?.influencer_name;
 
   return (
-    <div className="min-h-dvh bg-zinc-950/50 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="mb-4 flex justify-center">
-          <Link to="/" className="flex items-center gap-2 font-display font-black tracking-tight text-lg text-white">
-            <Logo size={26} />
+    <div className="min-h-dvh bg-white text-zinc-900" data-testid="welcome-creator-page">
+      <header className="border-b border-zinc-100">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+          <Link to="/" className="flex items-center gap-2 font-display text-lg font-semibold tracking-tight">
+            <Logo size={28} />
             <span>{BRAND.NAME}</span>
           </Link>
         </div>
+      </header>
 
-        {isValid ? (
-          <div
-            className="rounded-3xl border border-zinc-200 bg-white shadow-2xl overflow-hidden"
-            data-testid="welcome-creator-modal"
-          >
-            <div className="bg-gradient-to-br from-violet-600 to-indigo-600 px-6 py-8 text-center text-white">
-              <div className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold mb-4">
-                <Sparkles className="h-3.5 w-3.5" />
-                Bienvenue, Créateur
-              </div>
-              <h1 className="font-display text-2xl sm:text-3xl font-black tracking-tight">
-                {influencerName ? `Bonjour ${influencerName} !` : "Vous êtes invité(e)"}
+      <main className="mx-auto max-w-5xl px-6 py-10 sm:py-14">
+        {!isValid ? (
+          <div className="mx-auto max-w-md text-center">
+            <h1 className="font-display text-2xl font-bold tracking-tight">Lien d&apos;invitation invalide</h1>
+            <p className="mt-3 text-sm leading-relaxed text-zinc-500">
+              Ce lien est manquant ou expiré. Contactez l&apos;équipe Hirly pour obtenir une nouvelle invitation.
+            </p>
+            <Link to="/" className="mt-6 inline-block text-sm font-medium text-zinc-900 underline-offset-4 hover:underline">
+              Retour à Hirly
+            </Link>
+          </div>
+        ) : (
+          <div className="grid items-start gap-10 lg:grid-cols-[1fr_400px] lg:gap-16">
+            <section className="max-w-lg">
+              <p className="text-sm font-medium text-zinc-500">Invitation créateur</p>
+              <h1 className="mt-2 font-display text-3xl font-bold tracking-tight sm:text-4xl">
+                {influencerName ? `Bonjour ${influencerName}` : "Bienvenue"}
               </h1>
-              <p className="mt-2 text-sm text-violet-100 leading-relaxed">
+              <p className="mt-4 text-base leading-relaxed text-zinc-600">
                 {demoInvite
-                  ? `Créez votre compte ${BRAND.NAME} pour accéder à l'environnement démo et enregistrer vos vidéos.`
-                  : `Créez votre compte ${BRAND.NAME} pour accéder au programme de formation créateur.`}
+                  ? `Créez votre compte pour accéder à l'environnement démo ${BRAND.NAME} et enregistrer vos vidéos.`
+                  : `Créez votre compte pour rejoindre le programme de formation créateur ${BRAND.NAME}.`}
               </p>
-            </div>
 
-            <div className="px-6 py-5 space-y-4">
-              {inviteMeta?.invite_type !== "demo" ? (
-                <div className="flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-left">
-                  <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 mt-0.5" />
-                  <p className="text-xs leading-relaxed text-amber-900">
-                    <span className="font-semibold">Accès confidentiel.</span>
-                    {" "}
-                    Il est strictement interdit de partager votre accès ou le contenu de la formation. Nous détectons
-                    les partages — en cas d&apos;abus, vous serez immédiatement exclu(e) du programme.
-                  </p>
-                </div>
-              ) : null}
-
-              <div className="grid gap-3">
+              <ul className="mt-8 space-y-3 text-sm text-zinc-600">
                 {trainingInvite ? (
-                  <div className="flex items-start gap-3 rounded-2xl border border-violet-100 bg-violet-50/50 px-4 py-3">
-                    <GraduationCap className="h-5 w-5 text-violet-600 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-bold text-zinc-900">Formation créateur</p>
-                      <p className="text-xs text-zinc-500 mt-0.5">Accès complet au cours Job Search Mastery</p>
-                    </div>
-                  </div>
+                  <li className="flex gap-2">
+                    <span className="text-zinc-400">—</span>
+                    <span>Accès complet au cours Job Search Mastery</span>
+                  </li>
                 ) : null}
                 {demoInvite ? (
-                  <div className="flex items-start gap-3 rounded-2xl border border-violet-100 bg-violet-50/50 px-4 py-3">
-                    <MonitorPlay className="h-5 w-5 text-violet-600 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-bold text-zinc-900">Compte démo</p>
-                      <p className="text-xs text-zinc-500 mt-0.5">Environnement sandbox pour vos enregistrements d&apos;écran</p>
-                    </div>
-                  </div>
+                  <li className="flex gap-2">
+                    <span className="text-zinc-400">—</span>
+                    <span>Compte démo pour vos enregistrements d&apos;écran</span>
+                  </li>
                 ) : null}
-              </div>
+              </ul>
 
-              <Button
-                type="button"
-                onClick={onGoogleClick}
-                className="h-12 w-full rounded-full border border-zinc-200 bg-white text-zinc-800 hover:bg-zinc-50"
-                disabled={submitting}
-                data-testid="invite-google-btn"
-              >
-                <span className="mr-2 grid h-5 w-5 place-items-center rounded-full border border-zinc-200 text-xs font-black text-linkedin">G</span>
-                Continuer avec Google
-              </Button>
+              {inviteMeta?.invite_type !== "demo" ? (
+                <p className="mt-8 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-xs leading-relaxed text-zinc-600">
+                  <span className="font-medium text-zinc-800">Accès confidentiel.</span>
+                  {" "}
+                  Ne partagez pas votre accès ni le contenu de la formation. Tout partage détecté entraîne une exclusion immédiate du programme.
+                </p>
+              ) : null}
+            </section>
 
-              <div className="flex items-center gap-3">
-                <div className="h-px flex-1 bg-zinc-200" />
-                <span className="text-xs font-medium text-zinc-400">ou</span>
-                <div className="h-px flex-1 bg-zinc-200" />
-              </div>
+            <section className="w-full max-w-md justify-self-center lg:justify-self-end">
+              <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
+                <h2 className="font-display text-lg font-semibold">
+                  {authMode === "login" ? "Connexion" : "Créer un compte"}
+                </h2>
+                <p className="mt-1 text-sm text-zinc-500">
+                  {authMode === "login"
+                    ? "Connectez-vous pour activer votre invitation."
+                    : "Inscrivez-vous pour activer votre invitation."}
+                </p>
 
-              <form className="space-y-3" onSubmit={onEmailSubmit}>
-                <label className="block">
-                  <span className="mb-1.5 block text-sm font-semibold text-zinc-700">E-mail</span>
-                  <div className="relative">
-                    <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+                <div className="mt-6">
+                  <GoogleSignInButton
+                    onClick={onGoogleClick}
+                    disabled={submitting}
+                    label="Continuer avec Google"
+                    testId="invite-google-btn"
+                  />
+                </div>
+
+                <div className="my-6 flex items-center gap-3">
+                  <div className="h-px flex-1 bg-zinc-200" />
+                  <span className="text-xs text-zinc-400">ou</span>
+                  <div className="h-px flex-1 bg-zinc-200" />
+                </div>
+
+                <form className="space-y-4" onSubmit={onEmailSubmit}>
+                  <label className="block">
+                    <span className="mb-1.5 block text-sm font-medium text-zinc-700">E-mail</span>
                     <Input
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="vous@email.com"
-                      className="h-12 rounded-2xl pl-10"
+                      className="h-11"
                       autoComplete="email"
                       required
                       data-testid="invite-email-input"
                     />
-                  </div>
-                </label>
+                  </label>
 
-                <label className="block">
-                  <span className="mb-1.5 block text-sm font-semibold text-zinc-700">Mot de passe</span>
-                  <div className="relative">
-                    <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+                  <label className="block">
+                    <span className="mb-1.5 block text-sm font-medium text-zinc-700">Mot de passe</span>
                     <Input
                       type="password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="h-12 rounded-2xl pl-10"
+                      className="h-11"
                       autoComplete={authMode === "login" ? "current-password" : "new-password"}
                       required
                       minLength={6}
                       data-testid="invite-password-input"
                     />
-                  </div>
-                </label>
+                  </label>
 
-                {authError ? <p className="text-sm text-red-600">{authError}</p> : null}
-                {authNotice ? <p className="text-sm text-amber-700">{authNotice}</p> : null}
+                  {authError ? <p className="text-sm text-red-600">{authError}</p> : null}
+                  {authNotice ? <p className="text-sm text-amber-700">{authNotice}</p> : null}
 
-                <button
-                  type="submit"
-                  disabled={submitting || !email.trim()}
-                  data-testid="invite-submit-btn"
-                  className="w-full h-12 rounded-full gradient-linkedin text-white font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
-                >
-                  {submitting ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                  <button
+                    type="submit"
+                    disabled={submitting || !email.trim()}
+                    data-testid="invite-submit-btn"
+                    className="h-11 w-full rounded-md bg-zinc-900 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {submitting ? (
+                      <span className="inline-flex items-center justify-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Chargement…
+                      </span>
+                    ) : (
+                      authMode === "login" ? "Se connecter" : "Créer mon compte"
+                    )}
+                  </button>
+                </form>
+
+                <p className="mt-5 text-center text-sm text-zinc-500">
+                  {authMode === "login" ? (
+                    <>
+                      Pas encore de compte ?
+                      {" "}
+                      <button
+                        type="button"
+                        className="font-medium text-zinc-900 hover:underline"
+                        onClick={() => { setAuthMode("signup"); setAuthError(""); }}
+                      >
+                        S&apos;inscrire
+                      </button>
+                    </>
                   ) : (
                     <>
-                      {authMode === "login" ? "Se connecter et activer" : "Créer mon compte et activer"}
-                      <ArrowRight className="h-4 w-4" />
+                      Déjà un compte ?
+                      {" "}
+                      <button
+                        type="button"
+                        className="font-medium text-zinc-900 hover:underline"
+                        onClick={() => { setAuthMode("login"); setAuthError(""); }}
+                      >
+                        Se connecter
+                      </button>
                     </>
                   )}
-                </button>
-              </form>
+                </p>
+              </div>
 
-              <p className="text-center text-xs text-zinc-500">
-                {authMode === "login" ? (
-                  <>
-                    Pas encore de compte ?
-                    {" "}
-                    <button type="button" className="font-semibold text-linkedin hover:underline" onClick={() => { setAuthMode("signup"); setAuthError(""); }}>
-                      S&apos;inscrire
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    Déjà un compte ?
-                    {" "}
-                    <button type="button" className="font-semibold text-linkedin hover:underline" onClick={() => { setAuthMode("login"); setAuthError(""); }}>
-                      Se connecter
-                    </button>
-                  </>
-                )}
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="rounded-3xl border border-zinc-200 bg-white p-8 text-center shadow-2xl">
-            <div className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-zinc-100 mb-5">
-              <Sparkles className="h-6 w-6 text-zinc-400" />
-            </div>
-            <h1 className="font-display text-2xl font-bold text-zinc-900">Lien d&apos;invitation invalide</h1>
-            <p className="mt-3 text-sm text-zinc-500 leading-relaxed">
-              Ce lien est manquant ou expiré. Contactez l&apos;équipe Hirly pour obtenir une nouvelle invitation.
-            </p>
-            <Link
-              to="/"
-              className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-linkedin hover:underline"
-            >
-              Retour à Hirly
-            </Link>
+              <button
+                type="button"
+                className="mx-auto mt-4 block text-xs text-zinc-400 transition-colors hover:text-zinc-600"
+                onClick={() => clearPendingInviteCode()}
+              >
+                Effacer l&apos;invitation enregistrée
+              </button>
+            </section>
           </div>
         )}
-
-        <button
-          type="button"
-          className="mx-auto mt-4 block text-xs text-zinc-400 hover:text-zinc-600 transition-colors"
-          onClick={() => clearPendingInviteCode()}
-        >
-          Effacer l&apos;invitation enregistrée
-        </button>
-      </div>
+      </main>
     </div>
   );
 }

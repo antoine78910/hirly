@@ -11,6 +11,13 @@ export const SCORED_MODULE_IDS = [
   "mod_submit_drafts",
 ];
 
+export const CONTENT_BANK_MODULE_ID = "mod_content_bank";
+
+export function isContentBankModule(module) {
+  if (!module) return false;
+  return module.module_id === CONTENT_BANK_MODULE_ID || module.category === "reference";
+}
+
 function eventsKey(courseId) {
   return `${EVENTS_PREFIX}${courseId || "default"}`;
 }
@@ -101,4 +108,17 @@ export function courseProgressFraction(courseId, modules, enrollment) {
     0,
   );
   return sum / scored.length;
+}
+
+/** True when every scored module is marked complete. */
+export function areAllScoredModulesComplete(modules) {
+  const scored = (modules || []).filter((m) => SCORED_MODULE_IDS.includes(m.module_id));
+  return scored.length > 0 && scored.every((m) => m.completed);
+}
+
+/** After completing `moduleId`, would all scored modules be done? */
+export function willAllScoredModulesBeComplete(modules, completedModuleIds, moduleId) {
+  const completed = new Set([...(completedModuleIds || []), moduleId]);
+  const scored = (modules || []).filter((m) => SCORED_MODULE_IDS.includes(m.module_id));
+  return scored.length > 0 && scored.every((m) => completed.has(m.module_id));
 }

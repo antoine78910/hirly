@@ -6,6 +6,7 @@ import { getDemoAccountResponse, isDemoAccountEnabled, patchDemoAccountResponse 
 import { isFinanceDemoEnabled } from "./demoSettings";
 import { handleDemoCvUpload, shouldMockCvUpload, extractUploadFile } from "./demoCvUpload";
 import { normalizeApiPath } from "./apiPath";
+import { getInviteDevResponse } from "./inviteDevMocks";
 
 const normalizeBackendUrl = (value) => {
   const raw = (value || "").trim();
@@ -69,6 +70,21 @@ api.interceptors.request.use((config) => {
           config,
         };
       };
+      return config;
+    }
+  }
+
+  // Known dev invite codes (123456 / 654321) — works even when the backend store is empty.
+  if (!config.adapter && process.env.NODE_ENV === "development") {
+    const inviteMock = getInviteDevResponse(config);
+    if (inviteMock !== undefined) {
+      config.adapter = () => Promise.resolve({
+        data: inviteMock,
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config,
+      });
       return config;
     }
   }
