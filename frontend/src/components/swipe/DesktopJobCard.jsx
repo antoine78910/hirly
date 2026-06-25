@@ -17,6 +17,7 @@ import {
   getJobBadgeItems,
   getJobDisplayContent,
 } from "../../lib/jobDisplayUtils";
+import { translateJobTitle, translateLocationLabel } from "../../lib/localizedDisplay";
 
 function formatPosted(iso, t) {
   if (!iso) return t("swipe.postedRecently");
@@ -93,9 +94,11 @@ function DetailSection({ title, bullets, body, theme, expanded, t }) {
   );
 }
 
-export default function DesktopJobCard({ job, theme, t }) {
+export default function DesktopJobCard({ job, theme, t, lang }) {
   const { snippet, about, detailSections } = getJobDisplayContent(job);
-  const badges = getJobBadgeItems(job);
+  const badges = getJobBadgeItems(job, { lang });
+  const title = translateJobTitle(job.title, lang);
+  const location = translateLocationLabel(job.location, lang) || t("swipe.locationNotSpecified");
 
   return (
     <div className="flex min-h-0 h-full flex-1 flex-col">
@@ -106,7 +109,7 @@ export default function DesktopJobCard({ job, theme, t }) {
               className={`font-display text-xl font-bold leading-snug lg:text-2xl ${theme.cardTitle}`}
               data-testid="job-title"
             >
-              {job.title}
+              {title}
             </h1>
             <div className="mt-2 flex items-center gap-3">
               <CompanyLogo company={job.company} size="lg" rounded="2xl" className="shrink-0" />
@@ -124,7 +127,7 @@ export default function DesktopJobCard({ job, theme, t }) {
         <div className={`flex flex-wrap items-center gap-x-4 gap-y-2 text-sm ${theme.cardMeta}`}>
           <span className="inline-flex min-w-0 items-center gap-1.5">
             <MapPin className="size-4 shrink-0" aria-hidden="true" />
-            <span className="truncate">{job.location || t("swipe.locationNotSpecified")}</span>
+            <span className="truncate">{location}</span>
           </span>
           <span className="inline-flex items-center gap-1.5">
             <Calendar className="size-4 shrink-0" aria-hidden="true" />

@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Briefcase } from "lucide-react";
 import { Input } from "./ui/input";
 import { searchRoleSuggestions } from "../lib/roleSuggestions";
+import { isFrench, translateRoleGroupLabel, translateRoleLabel } from "../lib/localizedDisplay";
 
 export default function RoleAutocomplete({
   value,
@@ -15,6 +16,7 @@ export default function RoleAutocomplete({
   onFieldFocus,
   onFieldBlur,
   disabled = false,
+  lang = "en",
 }) {
   const light = variant === "light";
   const [focused, setFocused] = useState(false);
@@ -24,8 +26,8 @@ export default function RoleAutocomplete({
 
   const trimmedValue = (value || "").trim();
   const suggestions = useMemo(
-    () => searchRoleSuggestions(trimmedValue, { limit: 8, relatedRole }),
-    [relatedRole, trimmedValue],
+    () => searchRoleSuggestions(trimmedValue, { limit: 8, relatedRole, lang }),
+    [lang, relatedRole, trimmedValue],
   );
   const visibleSuggestions = useMemo(() => {
     const exact = trimmedValue.toLowerCase();
@@ -44,7 +46,7 @@ export default function RoleAutocomplete({
     : "scrollbar-thin rounded-2xl border border-sprout-border bg-sprout-surface shadow-xl overflow-hidden max-h-60 overflow-y-auto";
   const optionClass = light
     ? "w-full text-left px-4 py-2.5 text-sm text-zinc-700 hover:bg-zinc-50 flex items-start gap-2.5"
-    : "w-full text-left px-4 py-2.5 text-sm text-zinc-800 hover:bg-sprout-mint-soft flex items-start gap-2.5";
+    : "w-full text-left px-4 py-2.5 text-sm text-white hover:bg-sprout-mint-soft flex items-start gap-2.5";
   const headerClass = light
     ? "px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400"
     : "px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-sprout-muted";
@@ -94,7 +96,9 @@ export default function RoleAutocomplete({
     setFocused(false);
   };
 
-  const dropdownTitle = trimmedValue ? "Matching roles" : "Suggested roles";
+  const dropdownTitle = isFrench(lang)
+    ? (trimmedValue ? "Métiers correspondants" : "Métiers suggérés")
+    : (trimmedValue ? "Matching roles" : "Suggested roles");
 
   return (
     <div className="min-w-0 flex-1" data-testid={testId}>
@@ -140,8 +144,8 @@ export default function RoleAutocomplete({
                   >
                     <Briefcase className={`mt-0.5 h-4 w-4 shrink-0 ${light ? "text-violet-500" : "text-sprout-mint"}`} />
                     <span className="min-w-0">
-                      <span className="block">{role}</span>
-                      <span className={`block mt-0.5 ${badgeClass}`}>{group}</span>
+                      <span className="block">{translateRoleLabel(role, lang)}</span>
+                      <span className={`block mt-0.5 ${badgeClass}`}>{translateRoleGroupLabel(group, lang)}</span>
                     </span>
                   </button>
                 ))}

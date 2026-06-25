@@ -1,3 +1,5 @@
+import { translateRoleGroupLabel, translateRoleLabel } from "./localizedDisplay";
+
 export const ROLE_GROUPS = [
   {
     group: "Technology",
@@ -101,8 +103,10 @@ export const POPULAR_ROLES = [
   "Operations Manager",
 ];
 
-function scoreRole(role, query, relatedRole) {
+function scoreRole(role, query, relatedRole, lang = "en", group = "") {
   const normalizedRole = role.toLowerCase();
+  const normalizedDisplayRole = translateRoleLabel(role, lang).toLowerCase();
+  const normalizedDisplayGroup = translateRoleGroupLabel(group, lang).toLowerCase();
   const normalizedQuery = query.trim().toLowerCase();
   let score = 0;
 
@@ -115,10 +119,17 @@ function scoreRole(role, query, relatedRole) {
     return score;
   }
 
-  if (normalizedRole === normalizedQuery) score += 120;
-  else if (normalizedRole.startsWith(normalizedQuery)) score += 90;
-  else if (normalizedRole.split(/\s+/).some((word) => word.startsWith(normalizedQuery))) score += 70;
-  else if (normalizedRole.includes(normalizedQuery)) score += 45;
+  if (normalizedRole === normalizedQuery || normalizedDisplayRole === normalizedQuery) score += 120;
+  else if (normalizedRole.startsWith(normalizedQuery) || normalizedDisplayRole.startsWith(normalizedQuery)) score += 90;
+  else if (
+    normalizedRole.split(/\s+/).some((word) => word.startsWith(normalizedQuery))
+    || normalizedDisplayRole.split(/\s+/).some((word) => word.startsWith(normalizedQuery))
+  ) score += 70;
+  else if (
+    normalizedRole.includes(normalizedQuery)
+    || normalizedDisplayRole.includes(normalizedQuery)
+    || normalizedDisplayGroup.includes(normalizedQuery)
+  ) score += 45;
 
   if (relatedRole) {
     const relatedGroup = GROUP_BY_ROLE.get(relatedRole);
@@ -129,14 +140,14 @@ function scoreRole(role, query, relatedRole) {
 }
 
 /** Ranked role suggestions for autocomplete (empty query → popular / related roles). */
-export function searchRoleSuggestions(query, { limit = 8, relatedRole } = {}) {
+export function searchRoleSuggestions(query, { limit = 8, relatedRole, lang = "en" } = {}) {
   const normalizedQuery = query.trim().toLowerCase();
 
   const ranked = ROLE_INDEX
     .map(({ role, group }) => ({
       role,
       group,
-      score: scoreRole(role, normalizedQuery, relatedRole),
+      score: scoreRole(role, normalizedQuery, relatedRole, lang, group),
     }))
     .filter((entry) => (normalizedQuery ? entry.score > 0 : entry.score >= 0))
     .sort((a, b) => b.score - a.score || a.role.localeCompare(b.role));

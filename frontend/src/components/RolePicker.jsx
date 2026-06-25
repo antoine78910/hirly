@@ -4,8 +4,9 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { sel } from "../lib/selectionTheme";
 import { ROLE_GROUPS } from "../lib/roleSuggestions";
+import { isFrench, translateRoleGroupLabel, translateRoleLabel } from "../lib/localizedDisplay";
 
-export default function RolePicker({ value, onChange, testId = "role-picker", variant = "dark" }) {
+export default function RolePicker({ value, onChange, testId = "role-picker", variant = "dark", lang = "en" }) {
   const light = variant === "light";
   const labelClass = light ? "text-sm font-semibold text-zinc-700" : "text-sm font-semibold text-zinc-200";
   const triggerClass = light
@@ -38,10 +39,14 @@ export default function RolePicker({ value, onChange, testId = "role-picker", va
     return ROLE_GROUPS
       .map((group) => ({
         ...group,
-        roles: group.roles.filter((role) => role.toLowerCase().includes(q)),
+        roles: group.roles.filter((role) => (
+          role.toLowerCase().includes(q)
+          || translateRoleLabel(role, lang).toLowerCase().includes(q)
+          || translateRoleGroupLabel(group.group, lang).toLowerCase().includes(q)
+        )),
       }))
       .filter((group) => group.roles.length > 0);
-  }, [query]);
+  }, [lang, query]);
 
   const selectRole = (role) => {
     setManual(false);
@@ -52,7 +57,7 @@ export default function RolePicker({ value, onChange, testId = "role-picker", va
   return (
     <div className="space-y-3" data-testid={testId}>
       <div className="space-y-1.5">
-        <Label className={labelClass}>Target role</Label>
+        <Label className={labelClass}>{isFrench(lang) ? "Métier ciblé" : "Target role"}</Label>
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
@@ -60,7 +65,7 @@ export default function RolePicker({ value, onChange, testId = "role-picker", va
           data-testid={`${testId}-toggle`}
         >
           <span className={valueClass}>
-            {value || "Choose a role"}
+            {translateRoleLabel(value, lang) || (isFrench(lang) ? "Choisir un métier" : "Choose a role")}
           </span>
           <ChevronDown className={`${chevronClass} transition-transform ${open ? "rotate-180" : ""}`} />
         </button>
@@ -69,13 +74,13 @@ export default function RolePicker({ value, onChange, testId = "role-picker", va
       {open && (
         <>
           <div className="space-y-1.5">
-            <Label className={labelClass}>Search roles</Label>
+            <Label className={labelClass}>{isFrench(lang) ? "Rechercher un métier" : "Search roles"}</Label>
         <div className="relative">
           <Search className={searchIconClass} />
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search common roles"
+            placeholder={isFrench(lang) ? "Rechercher des métiers courants" : "Search common roles"}
             className={inputClass}
             data-testid={`${testId}-search`}
           />
@@ -84,11 +89,11 @@ export default function RolePicker({ value, onChange, testId = "role-picker", va
 
       <div className={listClass}>
         {filteredGroups.length === 0 ? (
-          <div className={emptyClass}>No matching roles. Choose Other below.</div>
+          <div className={emptyClass}>{isFrench(lang) ? "Aucun métier correspondant. Choisissez Autre ci-dessous." : "No matching roles. Choose Other below."}</div>
         ) : (
           filteredGroups.map((group) => (
             <section key={group.group} className="py-3">
-              <h3 className={groupTitleClass}>{group.group}</h3>
+              <h3 className={groupTitleClass}>{translateRoleGroupLabel(group.group, lang)}</h3>
               <div className="space-y-1">
                 {group.roles.map((role) => (
                   <button
@@ -100,7 +105,7 @@ export default function RolePicker({ value, onChange, testId = "role-picker", va
                     }`}
                     data-testid={`${testId}-role`}
                   >
-                    {role}
+                    {translateRoleLabel(role, lang)}
                   </button>
                 ))}
               </div>
@@ -118,17 +123,17 @@ export default function RolePicker({ value, onChange, testId = "role-picker", va
           }`}
           data-testid={`${testId}-other`}
         >
-          Other
+          {isFrench(lang) ? "Autre" : "Other"}
         </button>
       </div>
 
       {manual && (
         <div className="space-y-1.5">
-          <Label className={labelClass}>Custom role</Label>
+          <Label className={labelClass}>{isFrench(lang) ? "Métier personnalisé" : "Custom role"}</Label>
           <Input
             value={value || ""}
             onChange={(e) => onChange(e.target.value)}
-            placeholder="Enter your target role"
+            placeholder={isFrench(lang) ? "Saisissez votre métier cible" : "Enter your target role"}
             className={inputClass}
             data-testid={`${testId}-manual`}
           />

@@ -5,6 +5,7 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { api } from "../lib/api";
 import { buildTypedLocationResult, searchLocationsClient } from "../lib/locationSearch";
+import { isFrench, translateLocationLabel } from "../lib/localizedDisplay";
 
 const EMPTY_SUGGESTIONS = [];
 
@@ -62,6 +63,7 @@ export default function PlacesAutocomplete({
   hideLabel = false,
   onFieldFocus,
   onFieldBlur,
+  lang = "en",
 }) {
   const light = variant === "light";
   const [loading, setLoading] = useState(false);
@@ -112,7 +114,7 @@ export default function PlacesAutocomplete({
     : "scrollbar-thin rounded-2xl border border-sprout-border bg-sprout-surface shadow-xl overflow-hidden max-h-60 overflow-y-auto";
   const optionClass = light
     ? "w-full text-left px-4 py-3 text-sm text-zinc-700 hover:bg-zinc-50 flex items-start gap-2.5"
-    : "w-full text-left px-4 py-3 text-sm text-zinc-800 hover:bg-sprout-mint-soft active:bg-sprout-mint-soft focus:bg-sprout-mint-soft focus:outline-none flex items-start gap-2.5";
+    : "w-full text-left px-4 py-3 text-sm text-white hover:bg-sprout-mint-soft active:bg-sprout-mint-soft focus:bg-sprout-mint-soft focus:outline-none flex items-start gap-2.5";
   const chipOnClass = "selection-chip-on";
   const chipOffClass = light ? "selection-chip-off" : "selection-chip-off bg-zinc-50";
 
@@ -213,10 +215,15 @@ export default function PlacesAutocomplete({
   }, [trimmedValue, hasSelection, suggestions]);
 
   const helperText = useMemo(() => {
+    if (isFrench(lang)) {
+      if (isInvalid) return "Sélectionnez une des localisations proposées.";
+      if (trimmedValue) return "Choisissez une ville, un village ou une région dans la liste.";
+      return optional ? "Facultatif" : "Tapez une ville, un village ou une région partout dans le monde";
+    }
     if (isInvalid) return "Select one of the suggested locations.";
     if (trimmedValue) return "Pick a city, town, village, or region from the list.";
     return optional ? "Optional" : "Start typing any city, town, or village worldwide";
-  }, [isInvalid, optional, trimmedValue]);
+  }, [isInvalid, lang, optional, trimmedValue]);
 
   const handleChange = (next) => {
     setTouched(true);
@@ -289,17 +296,17 @@ export default function PlacesAutocomplete({
   const kindLabel = (kind) => {
     if (!kind || kind === "geocode" || kind === "place") return null;
     const labels = {
-      village: "Village",
-      hamlet: "Hamlet",
-      town: "Town",
-      city: "City",
-      municipality: "Municipality",
-      county: "Department / county",
-      state: "Region / state",
-      region: "Region",
-      state_district: "District",
-      suburb: "Suburb",
-      borough: "Borough",
+      village: isFrench(lang) ? "Village" : "Village",
+      hamlet: isFrench(lang) ? "Hameau" : "Hamlet",
+      town: isFrench(lang) ? "Ville" : "Town",
+      city: isFrench(lang) ? "Ville" : "City",
+      municipality: isFrench(lang) ? "Commune" : "Municipality",
+      county: isFrench(lang) ? "Département" : "Department / county",
+      state: isFrench(lang) ? "Région / État" : "Region / state",
+      region: isFrench(lang) ? "Région" : "Region",
+      state_district: isFrench(lang) ? "District" : "District",
+      suburb: isFrench(lang) ? "Quartier" : "Suburb",
+      borough: isFrench(lang) ? "Arrondissement" : "Borough",
     };
     return labels[kind] || kind;
   };
@@ -308,7 +315,7 @@ export default function PlacesAutocomplete({
     <div className={inline ? "min-w-0 flex-1" : "space-y-1.5"} data-testid={testId}>
       {!hideLabel && !inline && label ? (
       <Label className={labelClass}>
-        {label} {optional && <span className={optionalClass}>(optional)</span>}
+        {label} {optional && <span className={optionalClass}>({isFrench(lang) ? "facultatif" : "optional"})</span>}
       </Label>
       ) : null}
       <div className="relative" ref={anchorRef}>
@@ -344,7 +351,7 @@ export default function PlacesAutocomplete({
                 {showPopularDropdown ? (
                   <>
                     <p className={`px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] ${light ? "text-zinc-400" : "text-sprout-muted"}`}>
-                      Popular locations
+                      {isFrench(lang) ? "Lieux populaires" : "Popular locations"}
                     </p>
                     {visibleSuggestions.slice(0, maxSuggestions || 10).map((suggestion) => (
                       <button
@@ -357,7 +364,7 @@ export default function PlacesAutocomplete({
                         role="option"
                       >
                         <MapPin className={`w-4 h-4 shrink-0 mt-0.5 ${light ? "text-linkedin" : "text-sprout-mint"}`} />
-                        <span className="block">{suggestion}</span>
+                        <span className="block">{translateLocationLabel(suggestion, lang)}</span>
                       </button>
                     ))}
                   </>
@@ -365,7 +372,7 @@ export default function PlacesAutocomplete({
                   <>
                 {searching && results.length === 0 && (
                   <div className={`px-4 py-3 text-sm ${light ? "text-zinc-500" : "text-zinc-500"}`}>
-                    Searching cities, towns, and villages…
+                    {isFrench(lang) ? "Recherche de villes, villages et régions..." : "Searching cities, towns, and villages..."}
                   </div>
                 )}
                 {results.map((result) => {
@@ -382,7 +389,7 @@ export default function PlacesAutocomplete({
                     >
                       <MapPin className={`w-4 h-4 shrink-0 mt-0.5 ${light ? "text-linkedin" : "text-sprout-mint"}`} />
                       <span className="min-w-0">
-                        <span className="block">{result.label}</span>
+                        <span className="block">{translateLocationLabel(result.label, lang)}</span>
                         {badge ? (
                           <span className={`block text-xs mt-0.5 ${light ? "text-zinc-400" : "text-zinc-500"}`}>
                             {badge}
@@ -394,7 +401,9 @@ export default function PlacesAutocomplete({
                 })}
                 {!searching && results.length === 0 && (
                   <div className={`px-4 py-3 text-sm ${light ? "text-zinc-500" : "text-zinc-500"}`}>
-                    No locations found. Try a nearby city or region name, or pick a popular location below.
+                    {isFrench(lang)
+                      ? "Aucune localisation trouvée. Essayez une ville ou une région proche, ou choisissez un lieu populaire."
+                      : "No locations found. Try a nearby city or region name, or pick a popular location below."}
                   </div>
                 )}
                   </>
@@ -408,7 +417,7 @@ export default function PlacesAutocomplete({
       {!inline && visibleSuggestions.length > 0 && !trimmedValue && (
         <div className="pt-0.5">
           <p className={`text-[11px] font-medium mb-1.5 ${light ? "text-zinc-500" : "text-sprout-muted"}`}>
-            Popular locations
+            {isFrench(lang) ? "Lieux populaires" : "Popular locations"}
           </p>
           <div className={`flex flex-wrap ${compactChips ? "gap-1.5" : "gap-2"}`}>
             {visibleSuggestions.map((suggestion) => {
@@ -424,7 +433,7 @@ export default function PlacesAutocomplete({
                   data-testid={`${testId}-suggestion`}
                 >
                   <MapPin className="w-3.5 h-3.5 shrink-0" />
-                  {suggestion}
+                  {translateLocationLabel(suggestion, lang)}
                 </button>
               );
             })}

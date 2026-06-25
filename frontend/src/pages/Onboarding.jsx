@@ -797,6 +797,7 @@ export default function Onboarding() {
                 suggestions={SUGGESTED_ONBOARDING_LOCATIONS}
                 compactChips
                 maxSuggestions={8}
+                lang={lang}
                 testId="onboarding-location"
               />
             </div>

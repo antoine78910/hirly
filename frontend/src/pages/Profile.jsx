@@ -44,7 +44,7 @@ const PROFILE_TAB_ICONS = {
 };
 
 function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
-  const { t } = useAppLocale();
+  const { t, lang } = useAppLocale();
   const [targetRole, setTargetRole] = useState("");
   const [targetLocation, setTargetLocation] = useState("");
   const [targetLocationData, setTargetLocationData] = useState(null);
@@ -95,10 +95,11 @@ function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
       footer={<SaveButton saving={saving} onClick={save} testId="job-preferences-save" />}
     >
       <div className="space-y-4">
-        <RolePicker value={targetRole} onChange={setTargetRole} testId="job-prefs-role" />
+        <RolePicker value={targetRole} onChange={setTargetRole} testId="job-prefs-role" lang={lang} />
         <PlacesAutocomplete
           label={t("profile.targetLocation")}
           optional
+          lang={lang}
           value={targetLocation}
           selectedLocation={targetLocationData}
           onInputChange={setTargetLocation}

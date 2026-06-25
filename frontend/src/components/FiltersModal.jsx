@@ -7,6 +7,7 @@ import PlacesAutocomplete, { hasGooglePlacesKey } from "./PlacesAutocomplete";
 import { formatMinSalary } from "../lib/jobFilters";
 import SearchRadiusSlider from "./swipe/SearchRadiusSlider";
 import { useAppLocale } from "../context/AppLocaleContext";
+import { isFrench, translateLocationLabel } from "../lib/localizedDisplay";
 
 /**
  * Sprout-style Filters sheet — matches Swipper reference screenshots.
@@ -139,6 +140,7 @@ function TagInput({ value, onAdd, onRemove, placeholder, testId }) {
 
 export default function FiltersModal({ open, initialFilters, totalCount, onApply, onReset, onClose }) {
   const { lang } = useAppLocale();
+  const fr = isFrench(lang);
   const [f, setF] = useState({ ...DEFAULT, ...(initialFilters || {}) });
   const [locationDraft, setLocationDraft] = useState("");
 
@@ -187,7 +189,7 @@ export default function FiltersModal({ open, initialFilters, totalCount, onApply
             <button onClick={onClose} className="w-10 h-10 grid place-items-center rounded-full hover:bg-sprout-surface" data-testid="filters-close">
               <X className="w-5 h-5 text-zinc-900" />
             </button>
-            <h2 className="font-display font-bold text-xl">Filters</h2>
+            <h2 className="font-display font-bold text-xl">{fr ? "Filtres" : "Filters"}</h2>
             <span className="w-10" />
           </div>
         </div>
@@ -196,7 +198,7 @@ export default function FiltersModal({ open, initialFilters, totalCount, onApply
           {/* Salary */}
           <section>
             <div className="flex items-center gap-1.5">
-              <h3 className="font-display font-bold text-2xl">Minimum Salary</h3>
+            <h3 className="font-display font-bold text-2xl">{fr ? "Salaire minimum" : "Minimum Salary"}</h3>
               <Info className="w-4 h-4 text-sprout-mint" />
             </div>
             <div className="mt-3 flex justify-between text-sm text-zinc-500">
@@ -210,7 +212,7 @@ export default function FiltersModal({ open, initialFilters, totalCount, onApply
               className="mt-2 w-full accent-[#5EE5B5]"
               data-testid="filters-salary-slider"
             />
-            <p className="mt-1 text-xs text-sprout-muted">Current: <span className="text-sprout-mint font-semibold">{formatMinSalary(f.minSalary, lang)}</span></p>
+            <p className="mt-1 text-xs text-sprout-muted">{fr ? "Actuel" : "Current"}: <span className="text-sprout-mint font-semibold">{formatMinSalary(f.minSalary, lang)}</span></p>
           </section>
 
           {/* Date */}
@@ -267,13 +269,15 @@ export default function FiltersModal({ open, initialFilters, totalCount, onApply
 
           {/* Locations — cities/countries the user wants to target */}
           <section>
-            <h3 className="font-display font-bold text-2xl mb-3">Locations</h3>
-            <p className="text-sm text-sprout-muted -mt-2 mb-3">Choose a city, region, or country for this feed.</p>
+            <h3 className="font-display font-bold text-2xl mb-3">{fr ? "Localisations" : "Locations"}</h3>
+            <p className="text-sm text-sprout-muted -mt-2 mb-3">{fr ? "Choisissez une ville, une région ou un pays pour ce feed." : "Choose a city, region, or country for this feed."}</p>
             {hasGooglePlacesKey() ? (
               <div className="space-y-3">
                 <PlacesAutocomplete
-                  label="Add location"
+                  label={fr ? "Ajouter une localisation" : "Add location"}
                   optional
+                  variant="light"
+                  lang={lang}
                   value={locationDraft}
                   selectedLocation={null}
                   onInputChange={setLocationDraft}
@@ -293,7 +297,7 @@ export default function FiltersModal({ open, initialFilters, totalCount, onApply
                     });
                     setLocationDraft("");
                   }}
-                  placeholder="Search for a city or country"
+                  placeholder={fr ? "Rechercher une ville ou un pays" : "Search for a city or country"}
                   testId="filters-locations"
                 />
                 {selectedLocations.length > 0 && (
@@ -301,16 +305,16 @@ export default function FiltersModal({ open, initialFilters, totalCount, onApply
                     {selectedLocations.map((loc) => (
                       <div
                         key={loc.place_id || loc.location_label}
-                        className="flex items-center justify-between gap-3 rounded-2xl border border-sprout-border bg-sprout-surface-2 px-4 py-3"
+                        className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-200 bg-white px-4 py-3 shadow-sm"
                       >
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold text-zinc-900 truncate">{loc.location_label}</p>
-                          <p className="text-xs text-sprout-muted truncate">{loc.country || loc.country_code || "Selected location"}</p>
+                          <p className="text-sm font-semibold text-zinc-900 truncate">{translateLocationLabel(loc.location_label, lang)}</p>
+                          <p className="text-xs text-zinc-500 truncate">{translateLocationLabel(loc.country, lang) || loc.country_code || (fr ? "Localisation sélectionnée" : "Selected location")}</p>
                         </div>
                         <button
                           type="button"
                           onClick={() => removeLocation(locationKey(loc))}
-                          className="w-8 h-8 rounded-full grid place-items-center text-zinc-500 hover:text-zinc-900 hover:bg-sprout-surface"
+                          className="w-8 h-8 rounded-full grid place-items-center text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
                           aria-label={`Remove ${loc.location_label}`}
                         >
                           <X className="w-4 h-4" />
@@ -333,7 +337,7 @@ export default function FiltersModal({ open, initialFilters, totalCount, onApply
 
           <SearchRadiusSlider
             variant="full"
-            label="Search Distance"
+            label={fr ? "Distance de recherche" : "Search Distance"}
             value={f.searchRadius}
             onChange={(searchRadius) => setF((s) => ({ ...s, searchRadius }))}
             testId="filters-radius-slider"

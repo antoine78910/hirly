@@ -309,6 +309,7 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
                 }}
                 placeholder={t("profileSections.locationPlaceholder")}
                 variant="light"
+                lang={lang}
                 testId="personal-info-address"
               />
             ) : (

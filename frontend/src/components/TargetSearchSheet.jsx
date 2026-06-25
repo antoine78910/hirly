@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { saveTargetPreferences } from "../lib/targetPreferences";
 import RolePicker from "./RolePicker";
 import PlacesAutocomplete from "./PlacesAutocomplete";
+import { useAppLocale } from "../context/AppLocaleContext";
 
 export default function TargetSearchSheet({
   open,
@@ -14,6 +15,7 @@ export default function TargetSearchSheet({
   onClose,
   onSaved,
 }) {
+  const { lang } = useAppLocale();
   const [targetRole, setTargetRole] = useState("");
   const [targetLocation, setTargetLocation] = useState("");
   const [targetLocationData, setTargetLocationData] = useState(null);
@@ -35,11 +37,11 @@ export default function TargetSearchSheet({
         locationData: targetLocationData,
       });
       if (!saved) return;
-      toast.success("Search updated");
+      toast.success(lang === "fr" ? "Recherche mise à jour" : "Search updated");
       await onSaved?.(saved);
       onClose();
     } catch (_) {
-      toast.error("Could not save search preferences");
+      toast.error(lang === "fr" ? "Impossible d'enregistrer les préférences de recherche" : "Could not save search preferences");
     } finally {
       setSaving(false);
     }
@@ -68,7 +70,7 @@ export default function TargetSearchSheet({
           >
             <div className="mx-auto w-full max-w-md px-5 pb-safe pt-4">
               <div className="flex items-center justify-between gap-3 border-b border-zinc-100 pb-3">
-                <h2 className="font-display text-lg font-bold tracking-tight">What are you looking for?</h2>
+                <h2 className="font-display text-lg font-bold tracking-tight">{lang === "fr" ? "Que recherchez-vous ?" : "What are you looking for?"}</h2>
                 <button
                   type="button"
                   onClick={onClose}
@@ -85,12 +87,14 @@ export default function TargetSearchSheet({
                   value={targetRole}
                   onChange={setTargetRole}
                   variant="light"
+                  lang={lang}
                   testId="target-search-role"
                 />
                 <PlacesAutocomplete
-                  label="Where are you searching?"
+                  label={lang === "fr" ? "Où cherchez-vous ?" : "Where are you searching?"}
                   optional
                   light
+                  variant="light"
                   value={targetLocation}
                   selectedLocation={targetLocationData}
                   onInputChange={setTargetLocation}
@@ -98,7 +102,8 @@ export default function TargetSearchSheet({
                     setTargetLocationData(loc);
                     if (loc) setTargetLocation(loc.location_label);
                   }}
-                  placeholder="City, region, or country"
+                  placeholder={lang === "fr" ? "Ville, région ou pays" : "City, region, or country"}
+                  lang={lang}
                   testId="target-search-location"
                 />
               </div>
@@ -110,7 +115,7 @@ export default function TargetSearchSheet({
                 className="mb-4 flex h-12 w-full items-center justify-center rounded-full gradient-linkedin text-base font-semibold text-white hover:opacity-90 disabled:opacity-60"
                 data-testid="target-search-save"
               >
-                {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : "Update search"}
+                {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : (lang === "fr" ? "Mettre à jour la recherche" : "Update search")}
               </button>
             </div>
           </motion.div>

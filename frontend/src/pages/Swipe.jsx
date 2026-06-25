@@ -36,6 +36,7 @@ import {
   getSwipeErrorMessage,
 } from "../lib/appUi";
 import { getJobBadgeItems, getJobDisplayContent } from "../lib/jobDisplayUtils";
+import { translateJobTitle, translateLocationLabel, translateRoleLabel } from "../lib/localizedDisplay";
 
 const DEFAULT_SEARCH_RADIUS = "50km";
 const FILTERS_STORAGE_KEY = "swiipr.jobs.filters.v1";
@@ -99,9 +100,11 @@ function MobileDetailSection({ title, bullets, body, t }) {
   );
 }
 
-function CardFront({ job, onReport, onShare, actionsEnabled, t }) {
+function CardFront({ job, onReport, onShare, actionsEnabled, t, lang }) {
   const { snippet } = getJobDisplayContent(job);
-  const badges = getJobBadgeItems(job);
+  const badges = getJobBadgeItems(job, { lang });
+  const title = translateJobTitle(job.title, lang);
+  const location = translateLocationLabel(job.location, lang) || t("swipe.locationNotSpecified");
 
   return (
     <div className="backface-hidden absolute inset-0 flex flex-col overflow-hidden rounded-[28px] border border-sprout-border bg-sprout-surface">
@@ -156,14 +159,14 @@ function CardFront({ job, onReport, onShare, actionsEnabled, t }) {
           className="text-center font-display text-[clamp(1.65rem,6vw,2.35rem)] font-black leading-[1.05] tracking-tight text-white"
           data-testid="job-title"
         >
-          {job.title}
+          {title}
         </h2>
       </div>
 
       <div className="mt-5 flex flex-col items-center gap-1.5 text-[15px] text-sprout-muted">
         <div className="flex items-center gap-2">
           <MapPin className="h-4 w-4 text-sprout-mint" strokeWidth={1.9} />
-          <span>{job.location || t("swipe.locationNotSpecified")}</span>
+          <span>{location}</span>
         </div>
         <div className="flex items-center gap-2">
           <Calendar className="h-4 w-4 text-sprout-mint" strokeWidth={1.9} />
@@ -200,8 +203,10 @@ function CardFront({ job, onReport, onShare, actionsEnabled, t }) {
   );
 }
 
-function CardBack({ job, t }) {
+function CardBack({ job, t, lang }) {
   const { about, detailSections } = getJobDisplayContent(job);
+  const title = translateJobTitle(job.title, lang);
+  const location = translateLocationLabel(job.location, lang) || t("swipe.locationNotSpecified");
 
   return (
     <div className="backface-hidden rotate-y-180 absolute inset-0 flex flex-col overflow-hidden rounded-[28px] border border-sprout-border bg-sprout-surface">
@@ -211,7 +216,7 @@ function CardBack({ job, t }) {
       >
         <div>
           <h2 className="font-display text-[clamp(1.5rem,5.5vw,2rem)] font-black leading-tight tracking-tight text-white">
-            {job.title}
+            {title}
           </h2>
           <div className="mt-3 flex items-center gap-3">
             <CompanyLogo company={job.company} size="md" rounded="xl" className="shrink-0" />
@@ -222,7 +227,7 @@ function CardBack({ job, t }) {
         <div className="space-y-1.5 text-[15px] text-sprout-muted">
           <div className="flex items-center gap-2">
             <MapPin className="h-4 w-4 text-sprout-mint" />
-            <span>{job.location || t("swipe.locationNotSpecified")}</span>
+            <span>{location}</span>
           </div>
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4 text-sprout-mint" />
@@ -279,7 +284,7 @@ function CardBack({ job, t }) {
   );
 }
 
-function Card({ job, onSwipe, onReport, onShare, isTop, index, t }) {
+function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang }) {
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-260, 0, 260], [-14, 0, 14]);
   const opacity = useTransform(x, [-360, -260, 0, 260, 360], [0, 1, 1, 1, 0]);
@@ -337,8 +342,9 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t }) {
           onShare={onShare}
           actionsEnabled={isTop}
           t={t}
+          lang={lang}
         />
-        <CardBack job={job} t={t} />
+        <CardBack job={job} t={t} lang={lang} />
       </motion.div>
 
       {isTop && !flipped ? (
@@ -405,7 +411,7 @@ function SkeletonCard() {
 
 export default function Swipe() {
   const navigate = useNavigate();
-  const { t } = useAppLocale();
+  const { t, lang } = useAppLocale();
   const { loading: authLoading, user } = useAuth();
   const [demoWelcomeOpen, setDemoWelcomeOpen] = useState(false);
   const [jobs, setJobs] = useState([]);
@@ -980,11 +986,11 @@ export default function Swipe() {
           aria-label={t("swipe.editTarget")}
         >
           <p className="truncate text-xs font-semibold leading-tight text-zinc-900 sm:text-sm">
-            {target.role || t("swipe.setTargetRole")}
+            {translateRoleLabel(target.role, lang) || t("swipe.setTargetRole")}
           </p>
           <p className="truncate text-[9px] leading-tight text-zinc-500 sm:text-[11px]">
-            <span className="sm:hidden">{target.location || t("swipe.anywhere")}</span>
-            <span className="hidden sm:inline">{target.location || t("swipe.anywhere")} · {t("swipe.tapToEdit")}</span>
+            <span className="sm:hidden">{translateLocationLabel(target.location, lang) || t("swipe.anywhere")}</span>
+            <span className="hidden sm:inline">{translateLocationLabel(target.location, lang) || t("swipe.anywhere")} · {t("swipe.tapToEdit")}</span>
           </p>
         </button>
 
@@ -1064,6 +1070,7 @@ export default function Swipe() {
                   isTop={idx === 0}
                   index={idx}
                   t={t}
+                  lang={lang}
                 />
               );
             })}

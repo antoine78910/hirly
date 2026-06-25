@@ -70,7 +70,7 @@ export default function DesktopSwipeFeed({
 }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { t } = useAppLocale();
+  const { t, lang } = useAppLocale();
   const navItems = getDesktopNavItems(t);
   const [themeMode, setThemeMode] = useState(readDesktopTheme);
   const [exitIntent, setExitIntent] = useState(null);
@@ -339,6 +339,7 @@ export default function DesktopSwipeFeed({
                   onPick={pickRole}
                   relatedRole={target.role || ""}
                   variant={isDark ? "dark" : "light"}
+                  lang={lang}
                   onFieldFocus={() => { roleFocusedRef.current = true; }}
                   onFieldBlur={() => {
                     roleFocusedRef.current = false;
@@ -361,6 +362,7 @@ export default function DesktopSwipeFeed({
                   selectedLocation={locationDataDraft}
                   suggestions={locationSuggestions}
                   maxSuggestions={12}
+                  lang={lang}
                   onInputChange={(next) => {
                     setLocationDraft(next);
                     if (next.trim() !== (locationDataDraft?.location_label || "")) {
@@ -495,7 +497,7 @@ export default function DesktopSwipeFeed({
                     ) : null}
                   </div>
 
-                  <DesktopJobCard job={displayJob} theme={theme} t={t} />
+                  <DesktopJobCard job={displayJob} theme={theme} t={t} lang={lang} />
                 </motion.article>
                 ) : null}
               </AnimatePresence>
