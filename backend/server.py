@@ -3075,6 +3075,13 @@ async def get_feed(
                 "provider_search_key": {"$in": provider_search_keys},
             }
 
+        def _is_current_provider_job(job: Dict[str, Any]) -> bool:
+            return (
+                bool(provider_search_keys)
+                and job.get("provider") == "jsearch"
+                and str(job.get("provider_search_key") or "") in provider_search_keys
+            )
+
         def _compact_refresh_result(item: Dict[str, Any]) -> Dict[str, Any]:
             compact: Dict[str, Any] = {}
             for key, value in (item or {}).items():
@@ -3187,9 +3194,7 @@ async def get_feed(
             if not job_location and not job_country_code:
                 return include_unknown_location
             if (
-                provider_search_keys
-                and job.get("provider") == "jsearch"
-                and str(job.get("provider_search_key") or "") in provider_search_keys
+                _is_current_provider_job(job)
             ):
                 return True
             city_match = bool(selected_city_terms and any(term in job_location for term in selected_city_terms))
@@ -3339,6 +3344,8 @@ async def get_feed(
             for job in pool:
                 role_score = 10 if any_role else _role_score(job, strict_tokens if not broad else [], family_tokens)
                 location_score = _location_score(job, terms, worldwide=worldwide)
+                if not worldwide and _is_current_provider_job(job):
+                    location_score = max(location_score, 35)
                 if not worldwide and terms["labels"] and location_score <= 0:
                     continue
                 if not any_role and role_score <= 0:
