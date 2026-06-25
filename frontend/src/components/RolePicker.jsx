@@ -3,7 +3,7 @@ import { ChevronDown, Search } from "lucide-react";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { sel } from "../lib/selectionTheme";
-import { ROLE_GROUPS } from "../lib/roleSuggestions";
+import { ROLE_GROUPS, searchRoleSuggestions } from "../lib/roleSuggestions";
 import { isFrench, translateRoleGroupLabel, translateRoleLabel } from "../lib/localizedDisplay";
 
 export default function RolePicker({ value, onChange, testId = "role-picker", variant = "dark", lang = "en" }) {
@@ -34,16 +34,15 @@ export default function RolePicker({ value, onChange, testId = "role-picker", va
   const [open, setOpen] = useState(false);
 
   const filteredGroups = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = query.trim();
     if (!q) return ROLE_GROUPS;
+    const matchingRoles = new Set(
+      searchRoleSuggestions(q, { limit: 200, lang }).map((entry) => entry.role),
+    );
     return ROLE_GROUPS
       .map((group) => ({
         ...group,
-        roles: group.roles.filter((role) => (
-          role.toLowerCase().includes(q)
-          || translateRoleLabel(role, lang).toLowerCase().includes(q)
-          || translateRoleGroupLabel(group.group, lang).toLowerCase().includes(q)
-        )),
+        roles: group.roles.filter((role) => matchingRoles.has(role)),
       }))
       .filter((group) => group.roles.length > 0);
   }, [lang, query]);

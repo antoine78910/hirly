@@ -2898,9 +2898,60 @@ async def get_feed(
         ]).lower()
         return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
 
+    role_category_keywords = {
+        "technology": {"software", "developer", "developpeur", "engineer", "ingenieur", "frontend", "backend", "fullstack", "javascript", "node", "devops", "cloud", "qa"},
+        "marketing": {"marketing", "communication", "community", "seo", "brand", "contenu", "content", "digital", "growth", "social"},
+        "hr": {"hr", "rh", "human", "resources", "ressources", "humaines", "recruiter", "recrutement", "talent", "paie", "formation"},
+        "sales": {"sales", "commercial", "vente", "vendeur", "account", "business", "clientele", "customer", "support", "success"},
+        "admin": {"administrative", "administratif", "assistant", "direction", "reception", "receptionniste", "office"},
+        "finance": {"finance", "accountant", "comptable", "payroll", "paie", "auditor", "controleur"},
+        "logistics": {"warehouse", "logistics", "logistique", "magasinier", "preparateur", "driver", "chauffeur", "livreur"},
+        "service": {"retail", "store", "waiter", "serveur", "barista", "chef", "kitchen", "cuisinier", "cleaner", "security"},
+        "healthcare": {"nurse", "infirmier", "medical", "sante", "care", "soignant", "pharmacy"},
+        "education": {"teacher", "enseignant", "professeur", "trainer", "formateur", "teaching"},
+    }
+
+    def _role_category(tokens: List[str]) -> Optional[str]:
+        token_set = set(tokens)
+        for category, keywords in role_category_keywords.items():
+            if token_set & keywords:
+                return category
+        return None
+
+    target_role_category = _role_category(_role_family_tokens(feed_target_role))
+
+    def _job_role_category(job: Dict[str, Any]) -> Optional[str]:
+        title_tokens = set(_tokens(str(job.get("title") or "")))
+        text_tokens = set(_tokens(_job_text(job)))
+        for category, keywords in role_category_keywords.items():
+            if title_tokens & keywords:
+                return category
+        for category, keywords in role_category_keywords.items():
+            if text_tokens & keywords:
+                return category
+        return None
+
+    def _category_compatible(job: Dict[str, Any]) -> bool:
+        if not target_role_category:
+            return True
+        job_category = _job_role_category(job)
+        if not job_category:
+            return True
+        if target_role_category == job_category:
+            return True
+        if target_role_category == "sales" and job_category in {"marketing", "admin"}:
+            return True
+        if target_role_category == "marketing" and job_category == "sales":
+            return True
+        if target_role_category == "hr" and job_category == "admin":
+            return True
+        return False
+
     def _role_score(job: Dict[str, Any], strict_tokens: List[str], family_tokens: List[str]) -> int:
         title = unicodedata.normalize("NFKD", (job.get("title") or "").lower()).encode("ascii", "ignore").decode("ascii")
         text = _job_text(job)
+        if not _category_compatible(job):
+            return 0
         if not strict_tokens and not family_tokens:
             return 10
         strict_title_hits = sum(1 for token in strict_tokens if token in title)
@@ -3369,6 +3420,8 @@ async def get_feed(
         def rank(pool: List[Dict[str, Any]], *, worldwide: bool, broad: bool, any_role: bool = False) -> List[Dict[str, Any]]:
             ranked = []
             for job in pool:
+                if not _category_compatible(job):
+                    continue
                 role_score = 10 if any_role else _role_score(job, strict_tokens if not broad else [], family_tokens)
                 location_score = _location_score(job, terms, worldwide=worldwide)
                 if not worldwide and _is_current_provider_job(job):
@@ -3414,14 +3467,14 @@ async def get_feed(
                 logger.info("feed_filter_stage user_id=%s stage=worldwide_radius_role_family elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))
             if len(jobs) < requested_limit and not _timed_out():
                 fallback_used = "worldwide_radius_auto_apply"
-                jobs = rank(candidates, worldwide=True, broad=True, any_role=True)
+                jobs = rank(candidates, worldwide=True, broad=True, any_role=not bool(strict_tokens or family_tokens))
                 logger.info("feed_filter_stage user_id=%s stage=worldwide_radius_auto_apply elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))
         else:
             jobs = rank(candidates, worldwide=False, broad=False)
             logger.info("feed_filter_stage user_id=%s stage=strict_role_location elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))
             if len(jobs) < requested_limit and direct_refresh_jobs and not _timed_out():
                 fallback_used = "direct_provider_relaxed_role"
-                jobs = rank(candidates, worldwide=False, broad=True, any_role=True)
+                jobs = rank(candidates, worldwide=False, broad=True)
                 logger.info(
                     "feed_filter_stage user_id=%s stage=direct_provider_relaxed_role elapsed_ms=%s count=%s direct_refresh_jobs=%s",
                     user.user_id,
@@ -3461,7 +3514,7 @@ async def get_feed(
             logger.info("feed_filter_stage user_id=%s stage=worldwide_role_family elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))
         if not is_worldwide_radius and not explicit_filters and len(jobs) < requested_limit and not _timed_out():
             fallback_used = "worldwide_auto_apply"
-            jobs = rank(candidates, worldwide=True, broad=True, any_role=True)
+            jobs = rank(candidates, worldwide=True, broad=True, any_role=not bool(strict_tokens or family_tokens))
             logger.info("feed_filter_stage user_id=%s stage=worldwide_auto_apply elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))
 
         jobs = await _hydrate_feed_jobs(jobs)
