@@ -103,6 +103,7 @@ class JSearchProvider:
             "company": company,
             "company_logo": row.get("employer_logo"),
             "location": self._location(row),
+            "country_code": self._country_code(row, query),
             "remote": self._remote(row, query),
             "salary_min": self._salary(row.get("job_min_salary")),
             "salary_max": self._salary(row.get("job_max_salary")),
@@ -165,6 +166,30 @@ class JSearchProvider:
             return row["job_location"]
         parts = [row.get("job_city"), row.get("job_state"), row.get("job_country")]
         return ", ".join([p for p in parts if p]) or "Unknown"
+
+    def _country_code(self, row: Dict[str, Any], query: JobSearchQuery) -> Optional[str]:
+        raw = str(
+            row.get("job_country_code")
+            or row.get("job_country")
+            or query.country
+            or ""
+        ).strip().lower()
+        if not raw:
+            return None
+        if len(raw) == 2:
+            return raw
+        aliases = {
+            "france": "fr",
+            "united kingdom": "gb",
+            "uk": "gb",
+            "great britain": "gb",
+            "england": "gb",
+            "united states": "us",
+            "usa": "us",
+            "morocco": "ma",
+            "maroc": "ma",
+        }
+        return aliases.get(raw)
 
     def _remote(self, row: Dict[str, Any], query: JobSearchQuery) -> str:
         if row.get("job_is_remote") is True or row.get("job_work_from_home") is True:

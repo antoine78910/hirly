@@ -134,6 +134,7 @@ async def _get_feed_job_candidates(base_query: Dict[str, Any], limit: int) -> Li
     if (
         _feed_job_pool_cache["query_key"] == cache_key
         and _feed_job_pool_cache["rows"]
+        and len(_feed_job_pool_cache["rows"]) >= limit
         and (now - float(_feed_job_pool_cache["fetched_at"])) < _FEED_JOB_POOL_TTL_SECONDS
     ):
         return list(_feed_job_pool_cache["rows"][:limit])
@@ -3035,8 +3036,10 @@ async def get_feed(
                 "ats_provider": {"$in": ats_supported},
             }
         candidate_limit = max(80, requested_limit * 16) if explicit_filters else max(120, requested_limit * 24)
+        if explicit_location_filter:
+            candidate_limit = max(candidate_limit, 1000)
         if is_worldwide_radius:
-            candidate_limit = max(candidate_limit, requested_limit * 80, 400)
+            candidate_limit = max(candidate_limit, requested_limit * 80, 1000)
 
         refresh_results = []
         if not _timed_out():
@@ -3096,6 +3099,21 @@ async def get_feed(
 
         selected_city_terms = _city_terms_from_locations()
         selected_country_terms = _country_terms_from_locations()
+
+        def _country_codes_from_locations() -> List[str]:
+            values: List[str] = []
+            for loc in selected_locations:
+                code = str(loc.get("country_code") or "").lower().strip()
+                if code:
+                    values.append(code)
+            if only_my_country:
+                profile_location_data = _profile_feed_location_data()
+                code = str(profile_location_data.get("country_code") or "").lower().strip()
+                if code:
+                    values.append(code)
+            return list(dict.fromkeys(values))
+
+        selected_country_codes = _country_codes_from_locations()
 
         def _job_work_location(job: Dict[str, Any]) -> str:
             raw = job.get("remote")
@@ -3274,6 +3292,31 @@ async def get_feed(
             explicit_filters,
         )
 
+        async def _load_mixed_candidates() -> List[Dict[str, Any]]:
+            queries: List[Dict[str, Any]] = []
+            if selected_country_codes:
+                queries.append({"country_code": {"$in": selected_country_codes}})
+            queries.append({})
+
+            mixed_by_id: Dict[str, Dict[str, Any]] = {}
+            for query in queries:
+                for job in await _get_feed_job_candidates(query, candidate_limit):
+                    job_id = job.get("job_id")
+                    if not job_id or job_id in swiped_ids or job_id in mixed_by_id:
+                        continue
+                    mixed_by_id[job_id] = job
+
+            mixed = [job for job in mixed_by_id.values() if _matches_explicit_filters(job)]
+            logger.info(
+                "feed_filter_stage user_id=%s stage=mixed_candidate_pool elapsed_ms=%s queries=%s count=%s unfiltered_count=%s",
+                user.user_id,
+                _elapsed_ms(),
+                queries,
+                len(mixed),
+                len(mixed_by_id),
+            )
+            return mixed
+
         def rank(pool: List[Dict[str, Any]], *, worldwide: bool, broad: bool, any_role: bool = False) -> List[Dict[str, Any]]:
             ranked = []
             for job in pool:
@@ -3356,6 +3399,30 @@ async def get_feed(
             jobs = rank(candidates, worldwide=True, broad=True, any_role=True)
             logger.info("feed_filter_stage user_id=%s stage=worldwide_auto_apply elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))
 
+        mixed_fallback_used = False
+        if not include_non_auto_apply and not jobs and not _timed_out():
+            mixed_candidates = await _load_mixed_candidates()
+            if mixed_candidates:
+                mixed_fallback_used = True
+                candidates = mixed_candidates
+                fallback_used = "mixed_non_auto_apply_location_fallback"
+                jobs = rank(
+                    mixed_candidates,
+                    worldwide=is_worldwide_radius,
+                    broad=True,
+                    any_role=is_worldwide_radius,
+                )
+                if not jobs and explicit_filters:
+                    jobs = rank(mixed_candidates, worldwide=True, broad=True)
+                if not jobs:
+                    jobs = rank(mixed_candidates, worldwide=True, broad=True, any_role=True)
+                logger.info(
+                    "feed_filter_stage user_id=%s stage=mixed_non_auto_apply_fallback elapsed_ms=%s count=%s",
+                    user.user_id,
+                    _elapsed_ms(),
+                    len(jobs),
+                )
+
         jobs = await _hydrate_feed_jobs(jobs)
 
         clean_jobs = []
@@ -3378,7 +3445,7 @@ async def get_feed(
         return {
             "jobs": clean_jobs,
             "total": len(clean_jobs),
-            "feed_mode": "auto_apply_only" if not include_non_auto_apply else "mixed",
+            "feed_mode": "mixed_fallback" if mixed_fallback_used else ("auto_apply_only" if not include_non_auto_apply else "mixed"),
             "auto_apply_count": sum(1 for job in clean_jobs if job.get("auto_apply_supported") is True),
             "total_count": len(candidates),
             "fallback_reason": None if fallback_used == "none" else fallback_used,
@@ -3400,14 +3467,16 @@ async def get_feed(
                 "target_role": target_role or None,
                 "role_tokens": strict_tokens,
                 "broader_role_tokens": family_tokens,
-                "auto_apply_supported": not include_non_auto_apply,
-                "ats_provider": ats_supported if not include_non_auto_apply else None,
+                "auto_apply_supported": False if mixed_fallback_used else not include_non_auto_apply,
+                "ats_provider": None if mixed_fallback_used or include_non_auto_apply else ats_supported,
+                "auto_apply_fallback": mixed_fallback_used,
                 "search_radius": search_radius,
                 "explicit_filters": explicit_filters,
                 "work_location": work_location,
                 "locations": [loc.get("location_label") for loc in selected_locations if loc.get("location_label")],
                 "selected_city_terms": selected_city_terms,
                 "selected_country_terms": selected_country_terms,
+                "selected_country_codes": selected_country_codes,
                 "only_my_country": only_my_country,
                 "min_salary": min_salary,
                 "posted_within": posted_within,
