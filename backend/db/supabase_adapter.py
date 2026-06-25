@@ -68,6 +68,7 @@ TABLE_FILTER_COLUMNS = {
         "posted_at",
         "imported_at",
         "last_seen_at",
+        "provider_search_key",
     },
     "company_boards": {"board_id", "ats_provider", "company", "board_token", "enabled", "priority", "last_synced_at"},
     "profiles": {"user_id", "target_role", "target_location", "updated_at"},
@@ -434,6 +435,21 @@ def _postgrest_value(value: Any) -> str:
     return str(value)
 
 
+def _postgrest_in_value(value: Any) -> str:
+    if isinstance(value, bool):
+        return _postgrest_value(value)
+    text = str(value)
+    if any(char in text for char in (",", "(", ")", ":", " ")):
+        return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    return text
+
+
+def _postgrest_filter_key(table: str, key: str) -> str:
+    if table == "jobs" and key == "provider_search_key":
+        return "data->>provider_search_key"
+    return key
+
+
 def _postgrest_filter_params(table: str, filter: Optional[Filter]) -> Optional[Dict[str, str]]:
     if not filter:
         return {}
@@ -442,16 +458,17 @@ def _postgrest_filter_params(table: str, filter: Optional[Filter]) -> Optional[D
     for key, condition in filter.items():
         if key.startswith("$") or "." in key or key not in columns:
             return None
+        param_key = _postgrest_filter_key(table, key)
         if isinstance(condition, dict):
             if "$in" in condition and len(condition) == 1:
-                values = ",".join(_postgrest_value(item) for item in (condition.get("$in") or []))
-                params[key] = f"in.({values})"
+                values = ",".join(_postgrest_in_value(item) for item in (condition.get("$in") or []))
+                params[param_key] = f"in.({values})"
             elif "$gte" in condition and len(condition) == 1:
-                params[key] = f"gte.{_postgrest_value(condition.get('$gte'))}"
+                params[param_key] = f"gte.{_postgrest_value(condition.get('$gte'))}"
             else:
                 return None
         else:
-            params[key] = f"eq.{_postgrest_value(condition)}"
+            params[param_key] = f"eq.{_postgrest_value(condition)}"
     return params
 
 
