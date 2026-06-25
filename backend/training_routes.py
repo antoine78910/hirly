@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 import training_service as training
 from training_media import resolve_media_file
+from creator_invite_store import create_standalone_invitation, list_training_invites
 
 
 class CreatorRegisterBody(BaseModel):
@@ -42,16 +43,26 @@ class QuizSubmitBody(BaseModel):
     answers: Dict[str, str] = Field(default_factory=dict)
 
 
-def register_training_routes(router: APIRouter, get_current_user, db) -> None:
+def register_training_routes(
+    router: APIRouter,
+    get_current_user,
+    db,
+    require_training_user,
+    get_training_access_payload,
+) -> None:
     async def _require_creator(user):
         creator = await training.get_creator_by_user_id(db, user.user_id)
         if not creator:
             raise HTTPException(status_code=403, detail="Creator access required")
         return creator
 
+    @router.get("/training/access")
+    async def training_access_status(user=Depends(get_current_user)):
+        return await get_training_access_payload(user)
+
     @router.get("/training/catalog")
     async def training_catalog(
-        user=Depends(get_current_user),
+        user=Depends(require_training_user),
         lang: str = Query("en"),
     ):
         locale = training._normalize_lang(lang)
@@ -69,7 +80,7 @@ def register_training_routes(router: APIRouter, get_current_user, db) -> None:
     @router.get("/training/courses/{course_id}")
     async def training_course_detail(
         course_id: str,
-        user=Depends(get_current_user),
+        user=Depends(require_training_user),
         lang: str = Query("en"),
     ):
         locale = training._normalize_lang(lang)
@@ -79,7 +90,7 @@ def register_training_routes(router: APIRouter, get_current_user, db) -> None:
         return detail
 
     @router.post("/training/courses/{course_id}/enroll")
-    async def training_enroll(course_id: str, user=Depends(get_current_user)):
+    async def training_enroll(course_id: str, user=Depends(require_training_user)):
         try:
             enrollment = await training.enroll_user(db, user.user_id, course_id)
         except ValueError as exc:
@@ -87,7 +98,7 @@ def register_training_routes(router: APIRouter, get_current_user, db) -> None:
         return {"ok": True, "enrollment": enrollment}
 
     @router.post("/training/courses/{course_id}/modules/{module_id}/complete")
-    async def training_complete_module(course_id: str, module_id: str, user=Depends(get_current_user)):
+    async def training_complete_module(course_id: str, module_id: str, user=Depends(require_training_user)):
         try:
             result = await training.complete_module(db, user.user_id, course_id, module_id)
         except ValueError as exc:
@@ -95,7 +106,7 @@ def register_training_routes(router: APIRouter, get_current_user, db) -> None:
         return {"ok": True, **result}
 
     @router.post("/training/courses/{course_id}/activity")
-    async def training_track_activity(course_id: str, body: TrainingActivityBody, user=Depends(get_current_user)):
+    async def training_track_activity(course_id: str, body: TrainingActivityBody, user=Depends(require_training_user)):
         try:
             result = await training.track_activity(
                 db, user.user_id, course_id, body.module_id, body.section_id,
@@ -109,7 +120,7 @@ def register_training_routes(router: APIRouter, get_current_user, db) -> None:
         course_id: str,
         quiz_id: str,
         body: QuizSubmitBody,
-        user=Depends(get_current_user),
+        user=Depends(require_training_user),
     ):
         try:
             result = await training.submit_quiz(db, user.user_id, course_id, quiz_id, body.answers)
@@ -118,35 +129,35 @@ def register_training_routes(router: APIRouter, get_current_user, db) -> None:
         return {"ok": True, **result}
 
     @router.post("/training/creator/register")
-    async def training_creator_register(body: CreatorRegisterBody, user=Depends(get_current_user)):
+    async def training_creator_register(body: CreatorRegisterBody, user=Depends(require_training_user)):
         creator = await training.register_creator(db, user.model_dump(), body.display_name)
         return {"ok": True, "creator": creator}
 
     @router.get("/training/creator/dashboard")
-    async def training_creator_dashboard(user=Depends(get_current_user)):
+    async def training_creator_dashboard(user=Depends(require_training_user)):
         creator = await _require_creator(user)
         return await training.creator_dashboard(db, creator["creator_id"])
 
     @router.get("/training/creator/students")
-    async def training_creator_students(user=Depends(get_current_user)):
+    async def training_creator_students(user=Depends(require_training_user)):
         creator = await _require_creator(user)
         students = await training.list_creator_students(db, creator["creator_id"])
         return {"students": students}
 
     @router.get("/training/creator/leads")
-    async def training_creator_leads(user=Depends(get_current_user)):
+    async def training_creator_leads(user=Depends(require_training_user)):
         creator = await _require_creator(user)
         leads = await training.list_creator_leads(db, creator["creator_id"])
         return {"leads": leads, "stages": training.CRM_STAGES}
 
     @router.post("/training/creator/leads")
-    async def training_creator_create_lead(body: LeadCreateBody, user=Depends(get_current_user)):
+    async def training_creator_create_lead(body: LeadCreateBody, user=Depends(require_training_user)):
         creator = await _require_creator(user)
         lead = await training.create_lead(db, creator["creator_id"], body.model_dump())
         return {"ok": True, "lead": lead}
 
     @router.patch("/training/creator/leads/{lead_id}")
-    async def training_creator_update_lead(lead_id: str, body: LeadUpdateBody, user=Depends(get_current_user)):
+    async def training_creator_update_lead(lead_id: str, body: LeadUpdateBody, user=Depends(require_training_user)):
         creator = await _require_creator(user)
         try:
             lead = await training.update_lead(db, creator["creator_id"], lead_id, body.model_dump(exclude_unset=True))
@@ -201,3 +212,24 @@ def register_training_admin_routes(router: APIRouter, require_admin_user, db) ->
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return result
+
+    @router.get("/admin/training/invites")
+    async def admin_training_invites_list(admin=Depends(require_admin_user)):
+        return {"invites": list_training_invites()}
+
+    @router.post("/admin/training/invites")
+    async def admin_training_invites_create(
+        payload: Dict[str, Any],
+        admin=Depends(require_admin_user),
+    ):
+        invitation = create_standalone_invitation(
+            course_id=(payload.get("course_id") or "course_job_search_mastery").strip(),
+            email_hint=(payload.get("email_hint") or "").strip(),
+            label=(payload.get("label") or "").strip(),
+        )
+        return {
+            "ok": True,
+            "invitation": invitation,
+            "code": invitation.get("code"),
+            "course_id": invitation.get("course_id"),
+        }

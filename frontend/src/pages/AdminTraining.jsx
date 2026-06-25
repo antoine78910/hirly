@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, Loader2, RefreshCw, Upload, Video } from "lucide-react";
+import { CheckCircle2, Copy, Link2, Loader2, RefreshCw, Sparkles, Upload, Video } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
+import { buildInviteUrl } from "../lib/creatorInvite";
 import { Button } from "../components/ui/button";
 import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
 
@@ -28,6 +29,167 @@ function StatCard({ label, value, hint }) {
       <p className="mt-1 font-display text-2xl font-bold text-zinc-900">{value}</p>
       {hint ? <p className="mt-1 text-xs text-zinc-500">{hint}</p> : null}
     </div>
+  );
+}
+
+async function copyText(label, value) {
+  try {
+    await navigator.clipboard.writeText(value);
+    toast.success(`${label} copied`);
+  } catch {
+    toast.error(`Could not copy ${label.toLowerCase()}`);
+  }
+}
+
+function TrainingInvitesPanel() {
+  const [invites, setInvites] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [label, setLabel] = useState("");
+  const [emailHint, setEmailHint] = useState("");
+  const [latestInvite, setLatestInvite] = useState(null);
+
+  const loadInvites = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await api.get("/admin/training/invites");
+      const rows = data?.invites || [];
+      setInvites(rows);
+      if (!latestInvite && rows[0]) setLatestInvite(rows[0]);
+    } catch (err) {
+      if (err?.response?.status !== 403) {
+        toast.error(err?.response?.data?.detail || "Could not load training invites");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadInvites();
+  }, [loadInvites]);
+
+  const createInvite = async () => {
+    setCreating(true);
+    try {
+      const { data } = await api.post("/admin/training/invites", {
+        label: label.trim(),
+        email_hint: emailHint.trim(),
+        course_id: COURSE_ID,
+      });
+      const invitation = data?.invitation || data;
+      setLatestInvite(invitation);
+      setLabel("");
+      setEmailHint("");
+      toast.success("Training invitation created");
+      await loadInvites();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Could not create invitation");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const code = latestInvite?.code || "";
+  const inviteUrl = code ? buildInviteUrl(code) : "";
+
+  return (
+    <section className="rounded-xl border border-zinc-200 bg-white shadow-sm">
+      <div className="border-b border-zinc-100 px-5 py-4">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-5 w-5 text-violet-600" />
+          <div>
+            <h2 className="font-display text-lg font-bold">Training invitations</h2>
+            <p className="text-sm text-zinc-500">
+              Generate a personal link. Learners must open it before they can access /training.
+            </p>
+          </div>
+        </div>
+      </div>
+      <div className="space-y-4 px-5 py-4">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Label (optional)</label>
+            <input
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="e.g. March cohort — Lisa"
+              className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Email hint (optional)</label>
+            <input
+              type="email"
+              value={emailHint}
+              onChange={(e) => setEmailHint(e.target.value)}
+              placeholder="creator@email.com"
+              className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+            />
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button disabled={creating} onClick={createInvite}>
+            {creating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+            Generate invitation link
+          </Button>
+        </div>
+
+        {code ? (
+          <div className="space-y-3 rounded-lg bg-violet-50/80 p-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">6-digit code</p>
+              <div className="mt-1 flex items-center justify-between gap-2">
+                <span className="font-mono text-2xl font-bold tracking-[0.2em] text-zinc-900">{code}</span>
+                <Button size="sm" variant="outline" onClick={() => copyText("Code", code)}>
+                  <Copy className="h-4 w-4" />
+                  Copy
+                </Button>
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Invitation link</p>
+              <div className="mt-1 flex items-start gap-2">
+                <p className="flex-1 break-all text-sm text-zinc-700">{inviteUrl}</p>
+                <Button size="sm" variant="outline" onClick={() => copyText("Link", inviteUrl)}>
+                  <Link2 className="h-4 w-4" />
+                  Copy
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {loading ? (
+          <p className="text-sm text-zinc-500">Loading recent invitations…</p>
+        ) : invites.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b border-zinc-100 text-left text-xs uppercase tracking-wide text-zinc-500">
+                  <th className="py-2 pr-4">Code</th>
+                  <th className="py-2 pr-4">Label</th>
+                  <th className="py-2 pr-4">Created</th>
+                  <th className="py-2">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {invites.slice(0, 8).map((row) => (
+                  <tr key={row.invite_id || row.code} className="border-b border-zinc-50">
+                    <td className="py-2 pr-4 font-mono text-xs">{row.code}</td>
+                    <td className="py-2 pr-4 text-zinc-600">{row.label || row.email_hint || "—"}</td>
+                    <td className="py-2 pr-4 text-zinc-500">{fmtDate(row.created_at)}</td>
+                    <td className="py-2 text-zinc-600">
+                      {row.redeemed_at ? "Redeemed" : row.revoked ? "Revoked" : "Active"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </div>
+    </section>
   );
 }
 
@@ -200,6 +362,8 @@ export default function AdminTraining() {
 
       {!accessDenied && !loading ? (
         <div className="space-y-8">
+          <TrainingInvitesPanel />
+
           <section className="rounded-xl border border-zinc-200 bg-white shadow-sm">
             <div className="border-b border-zinc-100 px-5 py-4">
               <div className="flex items-center gap-2">

@@ -130,8 +130,8 @@ export async function fetchTrainingCatalog(lang) {
         }],
       };
     }
-  } catch {
-    /* static fallback */
+  } catch (err) {
+    if (err?.response?.status === 403) throw err;
   }
   return staticData;
 }
@@ -165,8 +165,8 @@ export async function fetchTrainingCourseDetail(courseId, lang) {
           enrollment: mergeEnrollment(staticData.enrollment, data.enrollment, id),
         });
       }
-    } catch {
-      /* static fallback */
+    } catch (err) {
+      if (err?.response?.status === 403) throw err;
     }
     return applyCompletion({
       ...staticData,
@@ -185,8 +185,8 @@ export async function fetchTrainingCourseDetail(courseId, lang) {
         enrollment: mergeEnrollment(staticData.enrollment, data.enrollment, id),
       });
     }
-  } catch {
-    /* static fallback */
+  } catch (err) {
+    if (err?.response?.status === 403) throw err;
   }
   return applyCompletion({
     ...staticData,

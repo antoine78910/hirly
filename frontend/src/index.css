@@ -380,6 +380,103 @@ body.training-page .App {
   overflow: visible !important;
 }
 
+/* Training chrome — portaled to <body>, fixed to the viewport. */
+.training-topbar {
+  position: fixed !important;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  border-bottom: 1px solid rgba(228, 228, 231, 0.7);
+  background: rgba(255, 255, 255, 0.95);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+.training-page-offset {
+  padding-top: calc(3.5rem + 1.5rem);
+}
+
+.training-viewport-fill {
+  height: calc(100dvh - 3.5rem - 1.5rem);
+}
+
+.training-sidebar-rail {
+  position: fixed !important;
+  top: 3.5rem;
+  left: 0;
+  z-index: 40;
+  height: calc(100dvh - 3.5rem);
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-right: 1px solid rgba(228, 228, 231, 0.9);
+  background: rgba(255, 255, 255, 0.98);
+  padding-top: 1rem;
+  padding-left: 0.5rem;
+  padding-right: 0.75rem;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+@media (min-width: 640px) {
+  .training-sidebar-rail {
+    padding-left: 0.75rem;
+    padding-right: 1rem;
+  }
+}
+
+/* Main column when the fixed chapter rail is visible (sidebar width + gap). */
+.training-main-with-sidebar {
+  margin-left: calc(7.25rem + 1.5rem);
+  padding-right: 1rem;
+  min-width: 0;
+}
+
+@media (min-width: 640px) {
+  .training-main-with-sidebar {
+    margin-left: calc(11rem + 2rem);
+    padding-right: 2rem;
+  }
+}
+
+/* Hirly example themes: nested side nav + example cards */
+.training-theme-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.5rem;
+}
+
+@media (min-width: 640px) {
+  .training-theme-layout {
+    gap: 2rem;
+  }
+}
+
+.training-theme-layout__panel {
+  min-width: 0;
+  flex: 1;
+  padding-left: 0.5rem;
+}
+
+@media (min-width: 640px) {
+  .training-theme-layout__panel {
+    padding-left: 0.75rem;
+  }
+}
+
+.training-sidebar-sticky {
+  position: sticky;
+  top: 3.5rem;
+  z-index: 20;
+  align-self: flex-start;
+  max-height: calc(100dvh - 3.5rem);
+  overflow-x: visible;
+  overflow-y: auto;
+  border-right: 1px solid rgba(228, 228, 231, 0.8);
+  padding-right: 0.5rem;
+  padding-top: 0.25rem;
+}
+
 /* Marketing + training: native document scroll (mouse wheel / trackpad). */
 html.document-scroll,
 body.document-scroll {

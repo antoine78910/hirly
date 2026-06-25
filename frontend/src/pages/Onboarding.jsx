@@ -116,7 +116,7 @@ const introSlideMotion = {
 export default function Onboarding() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { user, setHasProfile, setHasPreferences, checkAuth } = useAuth();
+  const { user, setHasProfile, setHasPreferences, checkAuth, setHasTrainingAccess } = useAuth();
   const { lang, setLang } = useAppLocale();
   const introNavDirection = useRef(1);
 
@@ -426,6 +426,9 @@ export default function Onboarding() {
       });
       if (redeemed?.demo_account) {
         setDemoAccountFromUser({ ...user, demo_account: true });
+      }
+      if (redeemed?.training_access) {
+        setHasTrainingAccess(true);
       }
       toast.success(
         redeemed?.master_code

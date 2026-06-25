@@ -18,7 +18,7 @@ import { useAppLocale } from "../context/AppLocaleContext";
 export default function InviteLanding() {
   const { code } = useParams();
   const navigate = useNavigate();
-  const { user, loading: authLoading, setUser } = useAuth();
+  const { user, loading: authLoading, setUser, setHasTrainingAccess } = useAuth();
   const { lang } = useAppLocale();
   const [checking, setChecking] = useState(true);
   const [inviteMeta, setInviteMeta] = useState(null);
@@ -59,7 +59,10 @@ export default function InviteLanding() {
         const data = await redeemCreatorInvite(api, normalized);
         if (data?.demo_account && user) {
           setDemoAccountFromUser({ ...user, demo_account: true });
-          setUser({ ...user, demo_account: true });
+          setUser({ ...user, demo_account: true, training_access: true });
+        }
+        if (data?.training_access) {
+          setHasTrainingAccess(true);
         }
         navigate("/training", { replace: true });
       } catch (err) {
@@ -74,7 +77,7 @@ export default function InviteLanding() {
         setRedeeming(false);
       }
     })();
-  }, [authLoading, checking, user, normalized, invalid, navigate, redeeming, setUser, lang]);
+  }, [authLoading, checking, user, normalized, invalid, navigate, redeeming, setUser, setHasTrainingAccess, lang]);
 
   const handleEmailSubmit = (e) => {
     e.preventDefault();

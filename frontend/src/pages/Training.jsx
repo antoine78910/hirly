@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Loader2, LayoutDashboard, PlayCircle } from "lucide-react";
-import { api } from "../lib/api";
+import { Loader2 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useTrainingLocale } from "../context/TrainingLocaleContext";
-import TrainingShell, { TrainingHero, useTrainingPageMode } from "../components/training/TrainingShell";
+import TrainingShell, { useTrainingPageMode } from "../components/training/TrainingShell";
 import ModuleGalleryCard from "../components/training/ModuleGalleryCard";
 import { fetchTrainingCatalog, fetchTrainingCourseDetail } from "../lib/trainingData";
 import { TRAINING_COURSE_ID } from "../lib/demoTrainingData";
@@ -13,7 +12,6 @@ import { courseProgressFraction } from "../lib/trainingProgress";
 import {
   parseTrainingLocale,
   trainingModulePath,
-  trainingPath,
 } from "../lib/trainingRoutes";
 
 export default function Training() {
@@ -22,11 +20,10 @@ export default function Training() {
   const location = useLocation();
   const routeLocale = parseTrainingLocale(location.pathname);
   const { lang, t } = useTrainingLocale();
-  const { isTrainingCreator, setIsTrainingCreator } = useAuth();
+  const { setIsTrainingCreator } = useAuth();
   const [loading, setLoading] = useState(true);
   const [catalog, setCatalog] = useState([]);
   const [catalogModules, setCatalogModules] = useState([]);
-  const [registering, setRegistering] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -53,40 +50,6 @@ export default function Training() {
 
   useEffect(() => { load(); }, [load]);
 
-  const becomeCreator = async () => {
-    setRegistering(true);
-    try {
-      await api.post("/training/creator/register", {});
-      setIsTrainingCreator(true);
-      toast.success(t("creatorUnlocked"));
-      navigate(trainingPath(routeLocale || lang, "creator"));
-    } catch (e) {
-      toast.error(e?.response?.data?.detail || t("creatorError"));
-    } finally {
-      setRegistering(false);
-    }
-  };
-
-  const headerActions = isTrainingCreator ? (
-    <button
-      type="button"
-      onClick={() => navigate(trainingPath(routeLocale || lang, "creator"))}
-      className="inline-flex items-center gap-1.5 rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-800"
-    >
-      <LayoutDashboard className="h-4 w-4" />
-      <span className="hidden sm:inline">{t("creatorStudio")}</span>
-    </button>
-  ) : (
-    <button
-      type="button"
-      onClick={becomeCreator}
-      disabled={registering}
-      className="rounded-md border border-zinc-200 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-white disabled:opacity-50"
-    >
-      {registering ? "…" : t("becomeCreator")}
-    </button>
-  );
-
   const featured = catalog[0];
   const courseId = featured?.course_id || TRAINING_COURSE_ID;
   const progressPct = useMemo(
@@ -104,71 +67,57 @@ export default function Training() {
   }
 
   return (
-    <TrainingShell
-      isCreator={isTrainingCreator}
-      showSidebar={false}
-      actions={headerActions}
-      hero={(
-        <TrainingHero
-          title={t("hubTitle")}
-          subtitle={t("hubSubtitle")}
-          hint={t("scrollHint")}
-        />
-      )}
-    >
+    <TrainingShell showSidebar={false}>
       {featured && catalogModules.length > 0 ? (
-        <section className="border-b border-zinc-200/80 bg-white px-4 py-8 sm:px-8 sm:py-10">
-          <div className="mx-auto max-w-6xl">
-            {/* Progress card */}
-            <div className="mb-6 rounded-2xl border border-zinc-200 bg-white p-4 sm:p-5 shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-semibold text-zinc-800">
-                Progression globale
-                </span>
-                <span className="text-sm font-bold text-violet-600">{progressPct}%</span>
+        <div className="mx-auto flex h-full max-w-6xl flex-col overflow-hidden px-4 py-2 sm:px-6">
+          <div className="shrink-0">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <h1 className="font-display text-xl font-bold tracking-tight text-zinc-900 sm:text-2xl">
+                  {t("hubTitle")}
+                </h1>
+                <p className="mt-0.5 text-xs text-zinc-500 sm:text-sm">{t("hubSubtitle")}</p>
               </div>
-              <div className="h-2.5 w-full overflow-hidden rounded-full bg-zinc-100">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-violet-500 via-violet-400 to-indigo-400 transition-[width] duration-700 ease-out"
-                  style={{ width: `${progressPct}%` }}
-                />
-              </div>
-              <p className="mt-2 text-xs text-zinc-400">
-                {completedCount}/{catalogModules.length} {t("lessons")}
-              </p>
-            </div>
-
-            <p className="text-sm leading-relaxed text-zinc-500 sm:text-base">
-              {t("modulesHint")}
-            </p>
-            <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-              <span className="inline-flex items-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 py-1.5 text-sm font-medium text-violet-700">
-                <PlayCircle className="h-4 w-4" />
-                {t("courseModules")}
-              </span>
-            </div>
-            <div className="mt-6 rounded-xl border border-zinc-200 bg-white p-4 sm:p-5">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {catalogModules.map((mod, index) => (
-                  <ModuleGalleryCard
-                    key={mod.module_id}
-                    module={mod}
-                    index={index}
-                    active={index === 0}
-                    locked={false}
-                    onSelect={() => {
-                      const firstSection = mod.sections?.[0]?.section_id;
-                      navigate(trainingModulePath(routeLocale, courseId, mod.module_id, firstSection));
-                    }}
-                    t={t}
+              <div className="w-full shrink-0 sm:max-w-[14rem]">
+                <div className="flex items-center justify-between gap-2 text-[11px] font-semibold text-zinc-700 sm:text-xs">
+                  <span>{t("yourProgress")}</span>
+                  <span className="text-violet-600">{progressPct}%</span>
+                </div>
+                <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-zinc-100">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-violet-500 via-violet-400 to-indigo-400 transition-[width] duration-700 ease-out"
+                    style={{ width: `${progressPct}%` }}
                   />
-                ))}
+                </div>
+                <p className="mt-0.5 text-[10px] text-zinc-400 sm:text-[11px]">
+                  {completedCount}/{catalogModules.length} {t("lessons")}
+                </p>
               </div>
             </div>
           </div>
-        </section>
+
+          <div className="mt-3 min-h-0 flex-1">
+            <div className="grid h-full grid-cols-2 grid-rows-3 gap-2 sm:gap-2.5 md:grid-cols-3 md:grid-rows-2">
+              {catalogModules.map((mod, index) => (
+                <ModuleGalleryCard
+                  key={mod.module_id}
+                  module={mod}
+                  index={index}
+                  active={index === 0}
+                  locked={false}
+                  size="hub"
+                  onSelect={() => {
+                    const firstSection = mod.sections?.[0]?.section_id;
+                    navigate(trainingModulePath(routeLocale, courseId, mod.module_id, firstSection));
+                  }}
+                  t={t}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
       ) : (
-        <section className="px-4 py-12 text-center sm:px-8">
+        <section className="flex flex-1 flex-col items-center justify-center px-4 py-12 text-center sm:px-8">
           <p className="text-sm text-zinc-500">{t("noCourses")}</p>
           <button
             type="button"

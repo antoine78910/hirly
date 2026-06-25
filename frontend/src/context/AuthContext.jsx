@@ -26,6 +26,7 @@ export const AuthProvider = ({ children }) => {
   const [hasProfile, setHasProfile] = useState(false);
   const [hasPreferences, setHasPreferences] = useState(false);
   const [isTrainingCreator, setIsTrainingCreator] = useState(false);
+  const [hasTrainingAccess, setHasTrainingAccess] = useState(devBypassAuth);
   const [loading, setLoading] = useState(true);
 
   const checkAuth = useCallback(async () => {
@@ -36,9 +37,11 @@ export const AuthProvider = ({ children }) => {
       setHasProfile(data.has_profile);
       setHasPreferences(data.has_preferences);
       setIsTrainingCreator(Boolean(data.is_training_creator));
+      setHasTrainingAccess(Boolean(data.has_training_access));
     } catch (e) {
       setUser(null);
       setIsTrainingCreator(false);
+      setHasTrainingAccess(false);
     } finally {
       setLoading(false);
     }
@@ -54,6 +57,7 @@ export const AuthProvider = ({ children }) => {
           setDemoAccountFromUser(user);
           setHasProfile(Boolean(data?.has_profile));
           setHasPreferences(Boolean(data?.has_preferences));
+          setHasTrainingAccess(true);
         } catch (error) {
           console.warn("Tutorial session bootstrap failed; trying stored session.", error);
           const existingToken = getSessionToken();
@@ -65,6 +69,7 @@ export const AuthProvider = ({ children }) => {
               setDemoAccountFromUser(user);
               setHasProfile(Boolean(data?.has_profile));
               setHasPreferences(Boolean(data?.has_preferences));
+              setHasTrainingAccess(Boolean(data?.has_training_access));
               setLoading(false);
               return;
             } catch (storedError) {
@@ -87,6 +92,7 @@ export const AuthProvider = ({ children }) => {
       setHasProfile(true);
       setHasPreferences(true);
       setIsTrainingCreator(false);
+      setHasTrainingAccess(true);
       setLoading(false);
       return;
     }
@@ -111,6 +117,7 @@ export const AuthProvider = ({ children }) => {
     setHasProfile(false);
     setHasPreferences(false);
     setIsTrainingCreator(false);
+    setHasTrainingAccess(false);
   };
 
   return (
@@ -120,6 +127,8 @@ export const AuthProvider = ({ children }) => {
       hasPreferences,
       isTrainingCreator,
       setIsTrainingCreator,
+      hasTrainingAccess,
+      setHasTrainingAccess,
       loading,
       checkAuth,
       setUser,

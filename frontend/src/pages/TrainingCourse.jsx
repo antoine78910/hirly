@@ -7,7 +7,6 @@ import { useTrainingLocale } from "../context/TrainingLocaleContext";
 import { TrainingTopBar, useTrainingPageMode } from "../components/training/TrainingShell";
 import ModuleDocView from "../components/training/ModuleDocView";
 import ModuleSectionNav from "../components/training/ModuleSectionNav";
-import TrainingSectionBadge from "../components/training/TrainingSectionBadge";
 import ModuleQuiz from "../components/training/ModuleQuiz";
 import TrainingModuleStepper from "../components/training/TrainingModuleStepper";
 import ScrollToContinueHint from "../components/training/ScrollToContinueHint";
@@ -30,8 +29,12 @@ import {
   trainingHubPath,
   trainingModulePath,
 } from "../lib/trainingRoutes";
-
-const SECTION_SIDEBAR_MODULE_IDS = new Set(["mod_content_bank"]);
+import { structureContentBankBlocks } from "../lib/contentBankDocStructure";
+import BunnyVideoIframe from "../components/training/BunnyVideoIframe";
+import {
+  stripDuplicateSectionHeadings,
+  TRAINING_PAGE_OFFSET_CLASS,
+} from "../components/training/trainingLayoutConstants";
 
 function bunnyEmbedUrl(resolvedUrl) {
   const playMatch = resolvedUrl.match(/mediadelivery\.net\/play\/(\d+)\/([a-f0-9-]+)/i);
@@ -41,58 +44,6 @@ function bunnyEmbedUrl(resolvedUrl) {
   const url = new URL(`https://iframe.mediadelivery.net/embed/${ids[1]}/${ids[2]}`);
   url.searchParams.set("playerjs", "true");
   return url.toString();
-}
-
-function BunnyVideoIframe({ embedUrl, title, onVideoEnded }) {
-  const iframeRef = useRef(null);
-
-  useEffect(() => {
-    const iframe = iframeRef.current;
-    if (!iframe || !onVideoEnded) return undefined;
-
-    let player = null;
-    let cancelled = false;
-
-    const attach = () => {
-      if (cancelled || !iframeRef.current || !window.playerjs?.Player) return;
-      player = new window.playerjs.Player(iframeRef.current);
-      player.on("ended", onVideoEnded);
-    };
-
-    if (window.playerjs?.Player) {
-      attach();
-    } else {
-      const existing = document.querySelector('script[data-bunny-playerjs="true"]');
-      if (existing) {
-        existing.addEventListener("load", attach);
-      } else {
-        const script = document.createElement("script");
-        script.src = "https://assets.mediadelivery.net/playerjs/playerjs-latest.min.js";
-        script.dataset.bunnyPlayerjs = "true";
-        script.onload = attach;
-        document.head.appendChild(script);
-      }
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [embedUrl, onVideoEnded]);
-
-  return (
-    <div className="overflow-hidden rounded-lg bg-zinc-900 shadow-lg ring-1 ring-zinc-700/50">
-      <div className="relative aspect-video">
-        <iframe
-          ref={iframeRef}
-          title={title}
-          src={embedUrl}
-          className="absolute inset-0 h-full w-full"
-          allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
-          allowFullScreen
-        />
-      </div>
-    </div>
-  );
 }
 
 function VideoBlock({ url, t, onVideoEnded }) {
@@ -295,6 +246,22 @@ export default function TrainingCourse() {
   const displayContent = hasSections
     ? activeSection?.content
     : activeModule?.content;
+
+  const visibleContent = useMemo(() => {
+    const sectionTitle = hasSections ? activeSection?.title : activeModule?.title;
+    let content = stripDuplicateSectionHeadings(displayContent, sectionTitle);
+    if (activeModule?.module_id === "mod_content_bank") {
+      content = structureContentBankBlocks(content, lang);
+    }
+    return content;
+  }, [
+    displayContent,
+    hasSections,
+    activeSection?.title,
+    activeModule?.title,
+    activeModule?.module_id,
+    lang,
+  ]);
 
   const goToModule = (moduleId) => {
     const mod = modules.find((m) => m.module_id === moduleId);
@@ -509,24 +476,9 @@ export default function TrainingCourse() {
   ) : null;
 
   const hasVideo = Boolean(showPresentationVideoAtTop || displayVideoUrl);
-  const useSectionSidebar = SECTION_SIDEBAR_MODULE_IDS.has(activeModule?.module_id);
 
   const sectionBody = (
     <>
-      {hasSections && activeSection ? (
-        <div className="relative">
-          {activeSection.badge ? (
-            <TrainingSectionBadge
-              label={activeSection.badge}
-              className="absolute right-0 top-0"
-            />
-          ) : null}
-          <h2 className={`text-lg font-semibold text-zinc-800 ${activeSection.badge ? "pr-28" : ""}`}>
-            {activeSection.title}
-          </h2>
-        </div>
-      ) : null}
-
       {!showPresentationVideoAtTop && displayVideoUrl ? (
         <div>
           <div ref={videoContainerRef}>
@@ -536,8 +488,8 @@ export default function TrainingCourse() {
         </div>
       ) : null}
 
-      {displayContent?.length ? (
-        <ModuleDocView blocks={displayContent} lang={lang} />
+      {visibleContent?.length ? (
+        <ModuleDocView blocks={visibleContent} lang={lang} />
       ) : !hasSections && activeModule?.description ? (
         <p className="leading-relaxed text-zinc-700">{activeModule.description}</p>
       ) : null}
@@ -608,12 +560,24 @@ export default function TrainingCourse() {
         moduleStepper={moduleStepper}
       />
 
+      {hasSections ? (
+        <ModuleSectionNav
+          variant="sidebar"
+          placement="fixed"
+          sections={sections}
+          activeSectionId={activeSection?.section_id}
+          onSelect={selectSection}
+        />
+      ) : null}
+
       <main
-        className={`mx-auto px-4 py-8 sm:px-8 sm:py-10 ${
-          useSectionSidebar ? "max-w-6xl" : "max-w-3xl"
-        }`}
+        className={
+          hasSections
+            ? `training-main-with-sidebar ${TRAINING_PAGE_OFFSET_CLASS} pb-8 sm:pb-10`
+            : `${TRAINING_PAGE_OFFSET_CLASS} mx-auto max-w-3xl px-4 pb-8 sm:px-8 sm:pb-10`
+        }
       >
-        <div className="space-y-6">
+        <div className="mx-auto max-w-3xl space-y-6">
           <h1 className="font-display text-3xl font-bold tracking-tight text-zinc-900 sm:text-4xl">
             {activeModule.title}
           </h1>
@@ -630,28 +594,7 @@ export default function TrainingCourse() {
             </section>
           ) : null}
 
-          {hasSections && useSectionSidebar ? (
-            <div className="flex items-start gap-4 sm:gap-6">
-              <ModuleSectionNav
-                variant="sidebar"
-                sections={sections}
-                activeSectionId={activeSection?.section_id}
-                onSelect={selectSection}
-              />
-              <div className="min-w-0 flex-1 space-y-6">{sectionBody}</div>
-            </div>
-          ) : (
-            <>
-              {hasSections ? (
-                <ModuleSectionNav
-                  sections={sections}
-                  activeSectionId={activeSection?.section_id}
-                  onSelect={selectSection}
-                />
-              ) : null}
-              {sectionBody}
-            </>
-          )}
+          {sectionBody}
         </div>
       </main>
     </div>

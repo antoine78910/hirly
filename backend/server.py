@@ -50,8 +50,10 @@ from db.supabase_adapter import count_supabase_table, test_supabase_connection
 from influencer_store import create_influencer, get_influencer, list_influencers, update_influencer
 from creator_invite_store import (
     create_invitation,
+    create_standalone_invitation,
     get_invite_by_code,
     list_invites_for_influencer,
+    list_training_invites,
     mark_invite_redeemed,
     validate_invite,
 )
@@ -77,6 +79,7 @@ from training_service import (
     seed_training_content,
     sync_training_locale_content,
 )
+from training_access import require_training_access, training_access_payload
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -172,6 +175,7 @@ class User(BaseModel):
     name: str
     picture: Optional[str] = None
     demo_account: bool = False
+    training_access: bool = False
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -630,15 +634,21 @@ async def tutorial_session(response: Response):
             "name": "Alex Martin",
             "picture": None,
             "demo_account": True,
+            "training_access": True,
             "created_at": now,
         }
         await db.users.insert_one(user_doc)
     else:
         await db.users.update_one(
             {"user_id": TUTORIAL_FILMING_USER_ID},
-            {"$set": {"demo_account": True, "name": user_doc.get("name") or "Alex Martin"}},
+            {"$set": {
+                "demo_account": True,
+                "training_access": True,
+                "name": user_doc.get("name") or "Alex Martin",
+            }},
         )
         user_doc["demo_account"] = True
+        user_doc["training_access"] = True
 
     profile_payload = {
         **TUTORIAL_FILMING_PROFILE,
@@ -682,9 +692,10 @@ async def tutorial_session(response: Response):
 
 @api_router.get("/auth/me")
 async def auth_me(user: User = Depends(get_current_user)):
-    profile, creator = await asyncio.gather(
+    profile, creator, training_access = await asyncio.gather(
         db.profiles.find_one({"user_id": user.user_id}, {"_id": 0}),
         is_training_creator(db, user.user_id),
+        _resolve_training_access(user),
     )
     logger.info(
         "auth_me cv_readiness user_id=%s profile_exists=%s has_cv_text=%s has_cv_filename=%s has_preferences=%s",
@@ -699,6 +710,7 @@ async def auth_me(user: User = Depends(get_current_user)):
         "has_profile": profile is not None and bool(profile.get("cv_text")),
         "has_preferences": profile is not None and bool(profile.get("target_role")),
         "is_training_creator": creator,
+        "has_training_access": training_access,
     }
 
 
@@ -4299,10 +4311,7 @@ async def list_applications(user: User = Depends(get_current_user)):
 
 
 async def require_admin_user(user: User = Depends(get_current_user)) -> User:
-    admin_emails = {"anto.delbos@gmail.com"}
-    admin_emails |= _env_email_set("ADMIN_EMAILS")
-    user_email = (user.email or "").strip().lower()
-    if user_email and user_email in admin_emails:
+    if _is_admin_email(user.email):
         return user
 
     raise HTTPException(status_code=403, detail="Admin access denied")
@@ -4566,6 +4575,56 @@ async def _set_user_demo_account(user_id: str, demo_account: bool) -> None:
         raise HTTPException(status_code=404, detail="User not found")
 
 
+async def _set_user_training_access(user_id: str, training_access: bool) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    result = await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {"training_access": training_access, "updated_at": now}},
+    )
+    if getattr(result, "matched_count", 0) == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+
+
+def _admin_email_set() -> set[str]:
+    return {"anto.delbos@gmail.com"} | _env_email_set("ADMIN_EMAILS")
+
+
+def _is_admin_email(email: Optional[str]) -> bool:
+    normalized = (email or "").strip().lower()
+    return bool(normalized and normalized in _admin_email_set())
+
+
+async def _resolve_training_access(user: User) -> bool:
+    from training_access import user_has_training_access
+    return await user_has_training_access(
+        db,
+        user,
+        is_admin_email=_is_admin_email,
+        is_training_creator=is_training_creator,
+        tutorial_user_id=TUTORIAL_FILMING_USER_ID,
+    )
+
+
+async def _get_training_access_payload(user: User = Depends(get_current_user)) -> Dict[str, Any]:
+    return await training_access_payload(
+        db,
+        user,
+        is_admin_email=_is_admin_email,
+        is_training_creator=is_training_creator,
+        tutorial_user_id=TUTORIAL_FILMING_USER_ID,
+    )
+
+
+async def _require_training_user(user: User = Depends(get_current_user)) -> User:
+    return await require_training_access(
+        db,
+        user,
+        is_admin_email=_is_admin_email,
+        is_training_creator=is_training_creator,
+        tutorial_user_id=TUTORIAL_FILMING_USER_ID,
+    )
+
+
 async def _analytics_events() -> List[Dict[str, Any]]:
     try:
         return await db.analytics_events.find({}, {"_id": 0}).sort("created_at", -1).to_list(10000)
@@ -4807,6 +4866,7 @@ async def _redeem_creator_invite(code: str, user_id: str, user_email: Optional[s
     course_id = invitation.get("course_id") or SEED_COURSE_ID
 
     await _set_user_demo_account(user_id, True)
+    await _set_user_training_access(user_id, True)
     try:
         enrollment = await enroll_user(db, user_id, course_id)
     except ValueError as exc:
@@ -4827,6 +4887,7 @@ async def _redeem_creator_invite(code: str, user_id: str, user_email: Optional[s
         "ok": True,
         "code": normalized,
         "demo_account": True,
+        "training_access": True,
         "course_id": course_id,
         "enrollment_id": enrollment.get("enrollment_id"),
         "influencer_id": influencer_id,
@@ -9440,7 +9501,7 @@ async def dev_clean_job_descriptions():
 
 # ===================== Wire up =====================
 
-register_training_routes(api_router, get_current_user, db)
+register_training_routes(api_router, get_current_user, db, _require_training_user, _get_training_access_payload)
 register_training_admin_routes(api_router, require_admin_user, db)
 register_feedback_routes(api_router, get_current_user)
 app.include_router(api_router)

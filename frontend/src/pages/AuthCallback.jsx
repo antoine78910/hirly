@@ -11,7 +11,7 @@ import { setDemoAccountFromUser } from "../lib/demoAccount";
 
 export default function AuthCallback() {
   const navigate = useNavigate();
-  const { setUser, setHasProfile, setHasPreferences, setIsTrainingCreator } = useAuth();
+  const { setUser, setHasProfile, setHasPreferences, setIsTrainingCreator, setHasTrainingAccess } = useAuth();
   const hasProcessed = useRef(false);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -44,15 +44,19 @@ export default function AuthCallback() {
         setHasProfile(Boolean(data.has_profile));
         setHasPreferences(Boolean(data.has_preferences));
         setIsTrainingCreator(Boolean(data.is_training_creator));
+        setHasTrainingAccess(Boolean(data.has_training_access));
         if (data?.user?.demo_account) {
           setDemoAccountFromUser(data.user);
         }
         try {
           const redeemed = await tryRedeemPendingInvite(api);
           if (redeemed?.demo_account && data?.user) {
-            const nextUser = { ...data.user, demo_account: true };
+            const nextUser = { ...data.user, demo_account: true, training_access: true };
             setUser(nextUser);
             setDemoAccountFromUser(nextUser);
+          }
+          if (redeemed?.training_access) {
+            setHasTrainingAccess(true);
           }
         } catch (inviteErr) {
           console.warn("Invite redeem skipped", inviteErr?.response?.data?.detail || inviteErr?.message);

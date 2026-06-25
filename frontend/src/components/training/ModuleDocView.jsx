@@ -3,6 +3,7 @@ import TrainingShortVideo from "./TrainingShortVideo";
 import SocialExampleGrid from "./SocialExampleGrid";
 import TrainingDocTable from "./TrainingDocTable";
 import TrainingThemeSidebar from "./TrainingThemeSidebar";
+import TrainingContentBankFolds from "./TrainingContentBankFolds";
 
 const URL_PATTERN = /(https?:\/\/[^\s<]+[^\s<.,;:!?])/g;
 const MARKDOWN_LINK_PATTERN = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g;
@@ -143,6 +144,13 @@ function DocBlock({ block, lang }) {
   if (!block?.type) return null;
 
   switch (block.type) {
+    case "content_bank_folds":
+      return (
+        <TrainingContentBankFolds
+          folds={block.folds}
+          renderBlock={(child, key) => <DocBlock key={key} block={child} lang={lang} />}
+        />
+      );
     case "accordion":
       return (
         <TrainingThemeSidebar

@@ -95,6 +95,40 @@ def validate_invite(code: str) -> Dict[str, Any]:
     }
 
 
+def list_training_invites(limit: int = 50) -> List[Dict[str, Any]]:
+    rows = [row for row in load_invites() if not row.get("influencer_id")]
+    rows.sort(key=lambda item: item.get("created_at") or "", reverse=True)
+    return rows[:limit]
+
+
+def create_standalone_invitation(
+    course_id: Optional[str] = None,
+    email_hint: str = "",
+    label: str = "",
+) -> Dict[str, Any]:
+    existing_codes = {str(row.get("code")) for row in load_invites() if row.get("code")}
+    code = _generate_code(existing_codes)
+    now = _now_iso()
+    expires = (datetime.now(timezone.utc) + timedelta(days=INVITE_TTL_DAYS)).isoformat()
+    row = {
+        "invite_id": str(uuid.uuid4()),
+        "code": code,
+        "influencer_id": None,
+        "course_id": course_id or DEFAULT_COURSE_ID,
+        "email_hint": (email_hint or "").strip(),
+        "label": (label or "").strip(),
+        "created_at": now,
+        "expires_at": expires,
+        "redeemed_at": None,
+        "redeemed_by_user_id": None,
+        "revoked": False,
+    }
+    rows = load_invites()
+    rows.append(row)
+    save_invites(rows)
+    return row
+
+
 def create_invitation(influencer_id: str, course_id: Optional[str] = None) -> Dict[str, Any]:
     influencer = get_influencer(influencer_id)
     if not influencer:

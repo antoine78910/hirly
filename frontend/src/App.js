@@ -38,6 +38,7 @@ import TrainingCreator from "@/pages/TrainingCreator";
 import TrainingLayout from "@/components/training/TrainingLayout";
 import TrainingLayoutDefault from "@/components/training/TrainingLayoutDefault";
 import TrainingLegacyRedirect from "@/components/training/TrainingLegacyRedirect";
+import TrainingAccessGate from "@/components/training/TrainingAccessGate";
 import TrainingErrorBoundary from "@/components/training/TrainingErrorBoundary";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import BottomNav from "@/components/BottomNav";
@@ -57,7 +58,9 @@ function TrainingRoute({ children, localized = false }) {
   const Layout = layout;
   return (
     <TrainingErrorBoundary>
-      <Layout>{children}</Layout>
+      <TrainingAccessGate>
+        <Layout>{children}</Layout>
+      </TrainingAccessGate>
     </TrainingErrorBoundary>
   );
 }
@@ -139,7 +142,7 @@ function AppRouter() {
         <Route path="/training/creator" element={<TrainingLegacyRedirect />} />
         <Route path="/training/:courseId" element={<TrainingRoute><TrainingCourse /></TrainingRoute>} />
         <Route path="/:locale/training" element={<TrainingRoute localized><Training /></TrainingRoute>} />
-        <Route path="/:locale/training/creator" element={<AppRoute><TrainingLayout><TrainingCreator /></TrainingLayout></AppRoute>} />
+        <Route path="/:locale/training/creator" element={<TrainingRoute localized><TrainingCreator /></TrainingRoute>} />
         <Route path="/:locale/training/:courseId" element={<TrainingRoute localized><TrainingCourse /></TrainingRoute>} />
       </Routes>
       {showBottomNav ? <BottomNav /> : null}
