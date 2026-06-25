@@ -126,6 +126,7 @@ def build_profile_job_query(
     location_data_override: Optional[Dict[str, Any]] = None,
     search_radius: str = "50km",
 ) -> JobSearchQuery:
+    radius_scope = (search_radius or "").lower().strip()
     role = (
         profile.get("target_role")
         or ((profile.get("target_roles") or [None])[0])
@@ -134,12 +135,14 @@ def build_profile_job_query(
     requested_location = location_override or profile.get("target_location")
     location_data = location_data_override or profile.get("target_location_data")
     country, location = _country_and_location_from_data(location_data, requested_location)
-    if (search_radius or "").lower() in ("country", "country-wide"):
+    if radius_scope in ("country", "country-wide"):
         location = _country_name(country) or location
-    elif (search_radius or "").lower() in ("remote", "remote/worldwide", "worldwide"):
+    elif radius_scope in ("remote", "remote/worldwide", "worldwide"):
         location = None
+    if radius_scope in ("worldwide", "remote/worldwide"):
+        country = None
     remote_preference = profile.get("remote_preference") or "any"
-    if (search_radius or "").lower() in ("remote", "remote/worldwide"):
+    if radius_scope in ("remote", "remote/worldwide"):
         remote_preference = "remote"
     logger.info("JSearch query location normalized: country=%s location=%s radius=%s role=%s", country, location, search_radius, role)
     return JobSearchQuery(
@@ -153,7 +156,7 @@ def build_profile_job_query(
 
 
 def _country_name(country: str) -> Optional[str]:
-    return {"gb": "United Kingdom", "ma": "Morocco", "us": "United States"}.get((country or "").lower())
+    return {"fr": "France", "gb": "United Kingdom", "ma": "Morocco", "us": "United States"}.get((country or "").lower())
 
 
 def _dedupe(values: List[Optional[str]]) -> List[Optional[str]]:
@@ -211,10 +214,12 @@ def _fallback_locations(query: JobSearchQuery) -> List[Optional[str]]:
 
     if query.country == "gb" or any(term in location_text for term in ("egham", "united kingdom", "royaume-uni", "london")):
         locations = ["Egham, United Kingdom", "London, United Kingdom", "United Kingdom"]
+    elif query.country == "fr" or any(term in location_text for term in ("paris", "france", "ile de france", "ile-de-france")):
+        locations = ["Paris, France", "Ile-de-France, France", "France"]
     elif query.country == "ma" or any(term in location_text for term in ("casablanca", "morocco", "maroc")):
         locations = ["Casablanca, Morocco", "Morocco"]
     elif query.country and query.country != os.environ.get("JSEARCH_COUNTRY", "us"):
-        country_names = {"gb": "United Kingdom", "ma": "Morocco"}
+        country_names = {"fr": "France", "gb": "United Kingdom", "ma": "Morocco"}
         locations = [country_names.get(query.country)]
 
     seen = {query.location}

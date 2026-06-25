@@ -2966,6 +2966,7 @@ async def get_feed(
         family_tokens = _role_family_tokens(target_role)
         terms = _location_terms()
         radius_scope = (search_radius or "50km").lower().strip()
+        is_worldwide_radius = radius_scope in ("worldwide", "remote/worldwide")
         radius_km_match = re.match(r"^(\d+)\s*km$", radius_scope)
         radius_km = int(radius_km_match.group(1)) if radius_km_match else None
 
@@ -3034,6 +3035,27 @@ async def get_feed(
                 "ats_provider": {"$in": ats_supported},
             }
         candidate_limit = max(80, requested_limit * 16) if explicit_filters else max(120, requested_limit * 24)
+        if is_worldwide_radius:
+            candidate_limit = max(candidate_limit, requested_limit * 80, 400)
+
+        refresh_results = []
+        if not _timed_out():
+            max_refresh_locations = max(1, min(int(os.environ.get("FEED_MAX_REFRESH_LOCATIONS", "1")), 3))
+            refresh_locations = [None] if is_worldwide_radius else (selected_locations or [None])[:max_refresh_locations]
+            for loc_data in refresh_locations:
+                loc_label = loc_data.get("location_label") if isinstance(loc_data, dict) else None
+                refresh_result = await refresh_jobs_for_profile_if_needed(
+                    db,
+                    profile,
+                    require_auto_apply=False,
+                    target_auto_apply_count=requested_limit,
+                    location_override=loc_label,
+                    location_data_override=loc_data if isinstance(loc_data, dict) else None,
+                    search_radius=search_radius,
+                )
+                refresh_results.append(refresh_result)
+                if refresh_result.get("provider_rate_limited"):
+                    break
 
         def _country_terms_from_locations() -> List[str]:
             aliases = {
@@ -3124,7 +3146,7 @@ async def get_feed(
                 or any(str(loc.get("country_code") or "").lower().strip() == job_country_code for loc in selected_locations if loc.get("country_code"))
             )
             if only_my_country:
-                profile_location_data = profile.get("target_location_data") or {}
+                profile_location_data = _profile_feed_location_data()
                 profile_code = str(profile_location_data.get("country_code") or "").lower().strip()
                 if profile_code and job_country_code == profile_code:
                     return True
@@ -3288,9 +3310,22 @@ async def get_feed(
             return diverse[:requested_limit]
 
         fallback_used = "none"
-        jobs = rank(candidates, worldwide=False, broad=False)
-        logger.info("feed_filter_stage user_id=%s stage=strict_role_location elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))
-        if explicit_filters and len(jobs) < requested_limit and explicit_location_filter and selected_country_terms:
+        if is_worldwide_radius:
+            fallback_used = "worldwide_radius"
+            jobs = rank(candidates, worldwide=True, broad=False)
+            logger.info("feed_filter_stage user_id=%s stage=worldwide_radius_strict_role elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))
+            if len(jobs) < requested_limit and not _timed_out():
+                fallback_used = "worldwide_radius_role_family"
+                jobs = rank(candidates, worldwide=True, broad=True)
+                logger.info("feed_filter_stage user_id=%s stage=worldwide_radius_role_family elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))
+            if len(jobs) < requested_limit and not _timed_out():
+                fallback_used = "worldwide_radius_auto_apply"
+                jobs = rank(candidates, worldwide=True, broad=True, any_role=True)
+                logger.info("feed_filter_stage user_id=%s stage=worldwide_radius_auto_apply elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))
+        else:
+            jobs = rank(candidates, worldwide=False, broad=False)
+            logger.info("feed_filter_stage user_id=%s stage=strict_role_location elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))
+        if not is_worldwide_radius and explicit_filters and len(jobs) < requested_limit and explicit_location_filter and selected_country_terms:
             relaxed = [
                 job for job in candidates
                 if _matches_explicit_filters(job) or (
@@ -3312,11 +3347,11 @@ async def get_feed(
                 )
         if explicit_filters and len(jobs) < requested_limit:
             fallback_used = "none_due_to_explicit_filters" if fallback_used == "none" else fallback_used
-        if not explicit_filters and len(jobs) < requested_limit and not _timed_out():
+        if not is_worldwide_radius and not explicit_filters and len(jobs) < requested_limit and not _timed_out():
             fallback_used = "worldwide_role_family"
             jobs = rank(candidates, worldwide=True, broad=True)
             logger.info("feed_filter_stage user_id=%s stage=worldwide_role_family elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))
-        if not explicit_filters and len(jobs) < requested_limit and not _timed_out():
+        if not is_worldwide_radius and not explicit_filters and len(jobs) < requested_limit and not _timed_out():
             fallback_used = "worldwide_auto_apply"
             jobs = rank(candidates, worldwide=True, broad=True, any_role=True)
             logger.info("feed_filter_stage user_id=%s stage=worldwide_auto_apply elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))
@@ -3355,8 +3390,9 @@ async def get_feed(
             "widened_search": fallback_used.startswith("worldwide"),
             "original_location": terms["labels"][0] if terms["labels"] else profile.get("target_location"),
             "final_location_used": "worldwide" if fallback_used.startswith("worldwide") else (terms["labels"][0] if terms["labels"] else profile.get("target_location")),
-            "provider_rate_limited": False,
-            "provider_cooldown_until": None,
+            "provider_rate_limited": any(item.get("provider_rate_limited") for item in refresh_results),
+            "provider_cooldown_until": next((item.get("provider_cooldown_until") for item in refresh_results if item.get("provider_cooldown_until")), None),
+            "refresh_results": refresh_results,
             "matched_role": target_role or None,
             "matched_location": terms["labels"],
             "companies_returned": sorted({job.get("company") for job in clean_jobs if job.get("company")}),
