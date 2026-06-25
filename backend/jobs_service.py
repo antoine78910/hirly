@@ -6,6 +6,7 @@ the active database adapter.
 
 import logging
 import os
+import re
 import time
 import unicodedata
 from datetime import datetime, timezone, timedelta
@@ -818,15 +819,60 @@ def _provider_attempt_queries(query: JobSearchQuery, search_radius: str, provide
     primary_location = query.location
     fallback_locations = [loc for loc in locations if loc != primary_location]
     attempts: List[JobSearchQuery] = []
+    primary_roles = role_variants[:2]
+    secondary_roles = role_variants[2:]
 
-    for role in role_variants:
+    for role in primary_roles:
         attempts.append(_copy_query_with_role_and_location(query, role, primary_location))
 
     for fallback_location in fallback_locations:
-        for role in role_variants[:2]:
+        for role in primary_roles:
+            attempts.append(_copy_query_with_role_and_location(query, role, fallback_location))
+
+    for role in secondary_roles:
+        attempts.append(_copy_query_with_role_and_location(query, role, primary_location))
+
+    for fallback_location in fallback_locations[:2]:
+        for role in secondary_roles[:2]:
             attempts.append(_copy_query_with_role_and_location(query, role, fallback_location))
 
     return _dedupe_queries(attempts, provider)
+
+
+def _query_family_tokens(role: str, country: Optional[str]) -> List[str]:
+    text = " ".join(_localized_role_variants(role, country)).lower()
+    base = set()
+    for token in re.findall(r"[a-z0-9]+", text):
+        if len(token) > 2:
+            base.add(token)
+    lower = (role or "").lower()
+    if any(term in lower for term in ("marketing", "communication", "community", "seo", "brand", "digital", "social")):
+        base.update(["marketing", "communication", "community", "seo", "brand", "digital", "social", "content", "contenu", "growth"])
+    if any(term in lower for term in ("hr", "human resources", "ressources humaines", "recruiter", "talent")):
+        base.update(["hr", "rh", "ressources", "humaines", "recrutement", "recruteur", "talent", "paie", "formation"])
+    if any(term in lower for term in ("sales", "commercial", "business developer", "account", "customer", "support")):
+        base.update(["sales", "commercial", "vente", "vendeur", "account", "customer", "client", "support", "success"])
+    if any(term in lower for term in ("software", "developer", "engineer", "frontend", "backend", "devops")):
+        base.update(["software", "developer", "developpeur", "engineer", "ingenieur", "frontend", "backend", "devops", "cloud"])
+    if any(term in lower for term in ("administrative", "receptionist", "office", "executive assistant")):
+        base.update(["administratif", "administrative", "assistant", "direction", "reception", "office"])
+    if any(term in lower for term in ("finance", "accountant", "bookkeeper", "payroll")):
+        base.update(["finance", "comptable", "accounting", "paie", "payroll", "audit"])
+    return list(base)
+
+
+def _job_matches_query_family(job: Dict[str, Any], query: JobSearchQuery) -> bool:
+    tokens = _query_family_tokens(query.role, query.country)
+    if not tokens:
+        return True
+    text = " ".join([
+        str(job.get("title") or ""),
+        str(job.get("description") or ""),
+        str(job.get("clean_description") or ""),
+        " ".join(str(item) for item in (job.get("requirements") or [])),
+    ]).lower()
+    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+    return any(token in text for token in tokens)
 
 
 def _ats_attempt_countries(query: JobSearchQuery, search_radius: str) -> List[Optional[str]]:
@@ -1012,16 +1058,25 @@ async def refresh_jobs_for_profile_if_needed(
     ttl_minutes = _env_int("JOB_IMPORT_TTL_MINUTES", 360)
     stale_cutoff = (datetime.now(timezone.utc) - timedelta(minutes=ttl_minutes)).isoformat()
 
-    fresh_count = 0
-    for key in search_keys:
-        fresh_count += await db.jobs.count_documents({
-            "provider": provider.name,
-            "provider_search_key": key,
-            "imported_at": {"$gte": stale_cutoff},
-        })
     min_fresh_count = max(target_auto_apply_count, _env_int("JOB_IMPORT_MIN_FRESH_COUNT", 10))
-    if fresh_count >= min_fresh_count and not require_auto_apply:
-        return {"attempted": False, "reason": "cache_fresh", "search_key": search_key, "search_keys": search_keys, "count": fresh_count, **base_metadata}
+    fresh_query = {
+        "provider": provider.name,
+        "provider_search_key": {"$in": search_keys},
+        "imported_at": {"$gte": stale_cutoff},
+    }
+    fresh_jobs = await db.jobs.find(fresh_query, {"_id": 0}).limit(300).to_list(300) if search_keys else []
+    fresh_count = len(fresh_jobs)
+    fresh_relevant_count = sum(1 for job in fresh_jobs if _job_matches_query_family(job, query))
+    if fresh_relevant_count >= min_fresh_count and not require_auto_apply:
+        return {
+            "attempted": False,
+            "reason": "cache_fresh",
+            "search_key": search_key,
+            "search_keys": search_keys,
+            "count": fresh_count,
+            "relevant_count": fresh_relevant_count,
+            **base_metadata,
+        }
     any_cached = 0
     for key in search_keys:
         any_cached += await db.jobs.count_documents({
@@ -1033,30 +1088,34 @@ async def refresh_jobs_for_profile_if_needed(
         max_provider_requests = max(1, min(_env_int("JOB_IMPORT_MAX_PROVIDER_REQUESTS", 7), 12))
         provider_requests = 0
         total_imported = 0
+        relevant_imported = fresh_relevant_count
         imported_jobs: List[Dict[str, Any]] = []
         imported = 0
         fallback_used = None
         for attempt_query in query_variants:
-            if provider_requests >= max_provider_requests or total_imported >= min_fresh_count:
+            if provider_requests >= max_provider_requests or relevant_imported >= min_fresh_count:
                 break
             provider_requests += 1
             import_stats = await _import_provider_jobs(db, provider, attempt_query)
             imported = import_stats["total_imported"]
+            relevant = sum(1 for job in (import_stats.get("jobs") or []) if _job_matches_query_family(job, query))
             total_imported += imported
+            relevant_imported += relevant
             imported_jobs.extend(import_stats.get("jobs") or [])
             if imported > 0 and fallback_used is None and attempt_query.location != query.location:
                 fallback_used = attempt_query.location
             logger.info(
-                "JSearch refresh attempt: role=%s location=%s country=%s query=%s total_imported=%s auto_apply_supported_imported=%s unknown_ats_imported=%s",
+                "JSearch refresh attempt: role=%s location=%s country=%s query=%s total_imported=%s relevant_imported=%s auto_apply_supported_imported=%s unknown_ats_imported=%s",
                 attempt_query.role,
                 attempt_query.location,
                 attempt_query.country,
                 provider._query_string(attempt_query),
                 import_stats["total_imported"],
+                relevant,
                 import_stats["auto_apply_supported_imported"],
                 import_stats["unknown_ats_imported"],
             )
-        if total_imported < min_fresh_count and provider_requests < max_provider_requests:
+        if relevant_imported < min_fresh_count and provider_requests < max_provider_requests:
             broad_location = query.location or _country_name(query.country) or "remote"
             broad_query = JobSearchQuery(
                 role=f"{query_variants[0].role if query_variants else query.role} jobs in {broad_location}",
@@ -1070,12 +1129,14 @@ async def refresh_jobs_for_profile_if_needed(
             provider_requests += 1
             broad_stats = await _import_provider_jobs(db, provider, broad_query)
             total_imported += broad_stats["total_imported"]
+            relevant_imported += sum(1 for job in (broad_stats.get("jobs") or []) if _job_matches_query_family(job, query))
             imported_jobs.extend(broad_stats.get("jobs") or [])
             logger.info(
-                "JSearch broad local attempt: query=%s country=%s total_imported=%s auto_apply_supported_imported=%s unknown_ats_imported=%s",
+                "JSearch broad local attempt: query=%s country=%s total_imported=%s relevant_imported=%s auto_apply_supported_imported=%s unknown_ats_imported=%s",
                 provider._query_string(broad_query),
                 broad_query.country,
                 broad_stats["total_imported"],
+                relevant_imported,
                 broad_stats["auto_apply_supported_imported"],
                 broad_stats["unknown_ats_imported"],
             )
@@ -1108,6 +1169,16 @@ async def refresh_jobs_for_profile_if_needed(
             **base_metadata,
         }
 
+    combined_jobs: List[Dict[str, Any]] = []
+    seen_job_ids = set()
+    for job in [*fresh_jobs, *imported_jobs]:
+        job_id = job.get("job_id")
+        if job_id and job_id in seen_job_ids:
+            continue
+        if job_id:
+            seen_job_ids.add(job_id)
+        combined_jobs.append(job)
+
     return {
         "attempted": True,
         "ok": True,
@@ -1115,7 +1186,8 @@ async def refresh_jobs_for_profile_if_needed(
         "search_key": search_key,
         "search_keys": search_keys,
         "imported": total_imported,
-        "jobs": imported_jobs[:200],
+        "relevant_imported": relevant_imported,
+        "jobs": combined_jobs[:200],
         "fallback_used": fallback_used,
         "ats_targeted_imported": ats_targeted_imported,
         **base_metadata,
