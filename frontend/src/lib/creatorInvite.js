@@ -26,18 +26,20 @@ export function storePendingInviteCode(code) {
   const normalized = String(code || "").trim();
   if (!/^\d{6}$/.test(normalized)) return false;
   if (typeof window === "undefined") return false;
-  sessionStorage.setItem(PENDING_INVITE_KEY, normalized);
+  // localStorage persists across tabs — required for email-verification links
+  // which Supabase opens in a fresh tab (sessionStorage would be empty).
+  localStorage.setItem(PENDING_INVITE_KEY, normalized);
   return true;
 }
 
 export function getPendingInviteCode() {
   if (typeof window === "undefined") return "";
-  return sessionStorage.getItem(PENDING_INVITE_KEY) || "";
+  return localStorage.getItem(PENDING_INVITE_KEY) || "";
 }
 
 export function clearPendingInviteCode() {
   if (typeof window === "undefined") return;
-  sessionStorage.removeItem(PENDING_INVITE_KEY);
+  localStorage.removeItem(PENDING_INVITE_KEY);
 }
 
 export function inviteDestination(redeemData, inviteMeta) {
