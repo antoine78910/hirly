@@ -21,17 +21,17 @@ const SIZE_STYLES = {
     footerText: "text-xs sm:text-sm",
   },
   hub: {
-    shell: "h-full min-h-0 rounded-lg",
-    cover: "min-h-0 flex-1 px-3 py-2 sm:px-4",
-    title: "text-base font-bold leading-tight sm:text-lg",
-    refBadge: "px-1.5 py-px text-[8px] sm:text-[9px]",
-    iconWrap: "p-0.5",
-    checkIcon: "h-4 w-4",
-    lockIcon: "h-3.5 w-3.5",
-    lockWrap: "p-1",
-    footer: "shrink-0 px-2.5 py-1.5 sm:px-3",
-    footerIcon: "h-3 w-3",
-    footerText: "text-[11px] sm:text-xs",
+    shell: "w-full rounded-lg",
+    cover: "flex aspect-[16/10] w-full items-center justify-center px-4 py-3 sm:aspect-[2/1]",
+    title: "text-lg font-bold leading-tight sm:text-xl",
+    refBadge: "px-2 py-0.5 text-[9px] sm:text-[10px]",
+    iconWrap: "p-1",
+    checkIcon: "h-5 w-5",
+    lockIcon: "h-4 w-4",
+    lockWrap: "p-1.5",
+    footer: "px-3 py-2.5",
+    footerIcon: "h-3.5 w-3.5",
+    footerText: "text-xs sm:text-sm",
   },
   compact: {
     shell: "rounded-md",
@@ -69,7 +69,7 @@ export default function ModuleGalleryCard({
       disabled={locked}
       className={`group flex w-full flex-col overflow-hidden text-left shadow-md transition-all ${s.shell} ${
         active
-          ? "ring-2 ring-violet-500 ring-offset-1 ring-offset-white"
+          ? "ring-2 ring-violet-500 ring-offset-2 ring-offset-white"
           : "hover:ring-1 hover:ring-violet-400/40"
       } ${locked ? "cursor-not-allowed opacity-45" : ""}`}
     >
@@ -99,7 +99,7 @@ export default function ModuleGalleryCard({
           </span>
         ) : null}
       </div>
-      <div className={`flex min-h-0 shrink-0 items-center gap-1.5 bg-black ${s.footer}`}>
+      <div className={`flex shrink-0 items-center gap-2 bg-black ${s.footer}`}>
         <Play className={`shrink-0 fill-white text-white ${s.footerIcon}`} />
         <span className={`min-w-0 truncate font-medium text-zinc-200 ${s.footerText}`}>
           {module.title}

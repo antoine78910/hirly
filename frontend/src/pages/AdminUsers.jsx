@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Loader2, RefreshCw } from "lucide-react";
 import { api } from "../lib/api";
+import { adminApiErrorMessage } from "../lib/adminApi";
 import { Button } from "../components/ui/button";
 import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
 
@@ -31,7 +32,7 @@ export default function AdminUsers() {
         setAccessDenied(true);
         setError("Admin access denied");
       } else {
-        setError(err?.response?.data?.detail || "Could not load users");
+        setError(adminApiErrorMessage(err, "Could not load users"));
       }
     } finally {
       setLoading(false);

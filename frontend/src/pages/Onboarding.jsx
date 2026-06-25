@@ -63,6 +63,7 @@ import { trackEvent } from "../lib/analytics";
 import { preloadOnboardingIntroImages, preloadOnboardingShowcaseImages } from "../lib/onboardingImagePreload";
 import { getPendingInviteCode, redeemCreatorInvite, storePendingInviteCode } from "../lib/creatorInvite";
 import { setDemoAccountFromUser } from "../lib/demoAccount";
+import { queueDemoWelcome } from "../lib/demoWelcome";
 
 const STEP_ORDER = ONBOARDING_STEP_ORDER;
 const ONBOARDING_CHECKOUT_STATE_KEY = "hirly.onboarding.checkoutState";
@@ -426,6 +427,7 @@ export default function Onboarding() {
       });
       if (redeemed?.demo_account) {
         setDemoAccountFromUser({ ...user, demo_account: true });
+        queueDemoWelcome();
       }
       if (redeemed?.training_access) {
         setHasTrainingAccess(true);

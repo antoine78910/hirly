@@ -14,10 +14,7 @@ const normalizeBackendUrl = (value) => {
   return withProtocol.replace(/\/+$/, "").replace(/\/api$/i, "");
 };
 
-const BACKEND_URL = normalizeBackendUrl(
-  process.env.REACT_APP_BACKEND_URL
-    || (process.env.NODE_ENV === "development" ? "http://localhost:8001" : ""),
-);
+const BACKEND_URL = normalizeBackendUrl(process.env.REACT_APP_BACKEND_URL || "");
 export const API = BACKEND_URL ? `${BACKEND_URL}/api` : "/api";
 
 /** Resolve API-relative media paths (e.g. uploaded training videos). */
@@ -137,6 +134,15 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.request.use((config) => {
   const method = (config.method || "get").toLowerCase();
+  let path = "";
+  try {
+    path = normalizeApiPath(axios.getUri(config));
+  } catch {
+    path = normalizeApiPath(config.url || "");
+  }
+  if (path.startsWith("/admin")) {
+    config.timeout = Math.max(config.timeout || 0, 60000);
+  }
   if (method === "post") {
     let path = "";
     try {

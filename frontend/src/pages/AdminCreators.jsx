@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 import { api } from "../lib/api";
+import { adminApiErrorMessage } from "../lib/adminApi";
 import { Button } from "../components/ui/button";
 import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
 
@@ -36,7 +37,7 @@ export default function AdminCreators() {
         setAccessDenied(true);
         setError("Admin access denied");
       } else {
-        setError(err?.response?.data?.detail || "Could not load creators");
+        setError(adminApiErrorMessage(err, "Could not load creators"));
       }
     } finally {
       setLoading(false);

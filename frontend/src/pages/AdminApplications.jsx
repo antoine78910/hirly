@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Loader2, RefreshCw } from "lucide-react";
 import { api } from "../lib/api";
+import { adminApiErrorMessage } from "../lib/adminApi";
 import { Button } from "../components/ui/button";
 import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
 
@@ -66,7 +67,7 @@ export default function AdminApplications() {
         setAccessDenied(true);
         setError("Admin access denied");
       } else {
-        setError(err?.response?.data?.detail || "Could not load admin applications");
+        setError(adminApiErrorMessage(err, "Could not load admin applications"));
       }
     } finally {
       setLoading(false);

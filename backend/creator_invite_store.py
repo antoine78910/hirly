@@ -12,6 +12,20 @@ from influencer_store import get_influencer, load_influencers, save_influencers
 STORE_PATH = __import__("pathlib").Path(__file__).resolve().parent / "data" / "creator_invites.json"
 DEFAULT_COURSE_ID = "course_job_search_mastery"
 INVITE_TTL_DAYS = 90
+INVITE_TYPE_TRAINING = "training"
+INVITE_TYPE_DEMO = "demo"
+INVITE_TYPE_CREATOR = "creator"  # legacy: grants both training + demo
+
+
+def resolve_invite_type(row: Optional[Dict[str, Any]]) -> str:
+    if not row:
+        return INVITE_TYPE_TRAINING
+    explicit = str(row.get("invite_type") or "").strip().lower()
+    if explicit in {INVITE_TYPE_TRAINING, INVITE_TYPE_DEMO, INVITE_TYPE_CREATOR}:
+        return explicit
+    if row.get("influencer_id"):
+        return INVITE_TYPE_CREATOR
+    return INVITE_TYPE_TRAINING
 
 
 def _now_iso() -> str:
@@ -92,19 +106,40 @@ def validate_invite(code: str) -> Dict[str, Any]:
         "invitation": row,
         "influencer_name": (influencer or {}).get("name"),
         "course_id": row.get("course_id") or DEFAULT_COURSE_ID,
+        "invite_type": resolve_invite_type(row),
     }
 
 
 def list_training_invites(limit: int = 50) -> List[Dict[str, Any]]:
-    rows = [row for row in load_invites() if not row.get("influencer_id")]
+    rows = [
+        row for row in load_invites()
+        if not row.get("influencer_id") and resolve_invite_type(row) == INVITE_TYPE_TRAINING
+    ]
     rows.sort(key=lambda item: item.get("created_at") or "", reverse=True)
     return rows[:limit]
+
+
+def list_demo_invites(limit: int = 50) -> List[Dict[str, Any]]:
+    rows = [
+        row for row in load_invites()
+        if resolve_invite_type(row) == INVITE_TYPE_DEMO
+    ]
+    rows.sort(key=lambda item: item.get("created_at") or "", reverse=True)
+    return rows[:limit]
+
+
+def _append_invitation(row: Dict[str, Any]) -> Dict[str, Any]:
+    rows = load_invites()
+    rows.append(row)
+    save_invites(rows)
+    return row
 
 
 def create_standalone_invitation(
     course_id: Optional[str] = None,
     email_hint: str = "",
     label: str = "",
+    invite_type: str = INVITE_TYPE_TRAINING,
 ) -> Dict[str, Any]:
     existing_codes = {str(row.get("code")) for row in load_invites() if row.get("code")}
     code = _generate_code(existing_codes)
@@ -114,6 +149,7 @@ def create_standalone_invitation(
         "invite_id": str(uuid.uuid4()),
         "code": code,
         "influencer_id": None,
+        "invite_type": invite_type if invite_type in {INVITE_TYPE_TRAINING, INVITE_TYPE_DEMO} else INVITE_TYPE_TRAINING,
         "course_id": course_id or DEFAULT_COURSE_ID,
         "email_hint": (email_hint or "").strip(),
         "label": (label or "").strip(),
@@ -123,10 +159,47 @@ def create_standalone_invitation(
         "redeemed_by_user_id": None,
         "revoked": False,
     }
-    rows = load_invites()
-    rows.append(row)
-    save_invites(rows)
-    return row
+    return _append_invitation(row)
+
+
+def create_demo_invitation(
+    influencer_id: Optional[str] = None,
+    email_hint: str = "",
+    label: str = "",
+) -> Dict[str, Any]:
+    if influencer_id and not get_influencer(influencer_id):
+        raise ValueError("Influencer not found")
+
+    existing_codes = {str(row.get("code")) for row in load_invites() if row.get("code")}
+    code = _generate_code(existing_codes)
+    now = _now_iso()
+    expires = (datetime.now(timezone.utc) + timedelta(days=INVITE_TTL_DAYS)).isoformat()
+    row = {
+        "invite_id": str(uuid.uuid4()),
+        "code": code,
+        "influencer_id": influencer_id,
+        "invite_type": INVITE_TYPE_DEMO,
+        "course_id": DEFAULT_COURSE_ID,
+        "email_hint": (email_hint or "").strip(),
+        "label": (label or "").strip(),
+        "created_at": now,
+        "expires_at": expires,
+        "redeemed_at": None,
+        "redeemed_by_user_id": None,
+        "revoked": False,
+    }
+    invitation = _append_invitation(row)
+
+    if influencer_id:
+        for index, inf in enumerate(load_influencers()):
+            if inf.get("influencer_id") != influencer_id:
+                continue
+            inf_rows = load_influencers()
+            inf_rows[index] = {**inf, "latest_demo_invite_code": code, "updated_at": now}
+            save_influencers(inf_rows)
+            break
+
+    return invitation
 
 
 def create_invitation(influencer_id: str, course_id: Optional[str] = None) -> Dict[str, Any]:
@@ -142,6 +215,7 @@ def create_invitation(influencer_id: str, course_id: Optional[str] = None) -> Di
         "invite_id": str(uuid.uuid4()),
         "code": code,
         "influencer_id": influencer_id,
+        "invite_type": INVITE_TYPE_TRAINING,
         "course_id": course_id or DEFAULT_COURSE_ID,
         "email_hint": influencer.get("email") or "",
         "created_at": now,
@@ -150,9 +224,7 @@ def create_invitation(influencer_id: str, course_id: Optional[str] = None) -> Di
         "redeemed_by_user_id": None,
         "revoked": False,
     }
-    rows = load_invites()
-    rows.append(row)
-    save_invites(rows)
+    invitation = _append_invitation(row)
 
     for index, inf in enumerate(load_influencers()):
         if inf.get("influencer_id") != influencer_id:
@@ -162,7 +234,7 @@ def create_invitation(influencer_id: str, course_id: Optional[str] = None) -> Di
         save_influencers(inf_rows)
         break
 
-    return row
+    return invitation
 
 
 def mark_invite_redeemed(code: str, user_id: str) -> Optional[Dict[str, Any]]:

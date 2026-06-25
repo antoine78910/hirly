@@ -6,7 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import { Loader2 } from "lucide-react";
 import { supabase, supabaseConfigured } from "../lib/supabase";
 import { trackEvent } from "../lib/analytics";
-import { tryRedeemPendingInvite } from "../lib/creatorInvite";
+import { applyRedeemToAuth, inviteDestination, tryRedeemPendingInvite } from "../lib/creatorInvite";
 import { setDemoAccountFromUser } from "../lib/demoAccount";
 
 export default function AuthCallback() {
@@ -48,15 +48,16 @@ export default function AuthCallback() {
         if (data?.user?.demo_account) {
           setDemoAccountFromUser(data.user);
         }
+        let inviteRedirect = null;
         try {
           const redeemed = await tryRedeemPendingInvite(api);
-          if (redeemed?.demo_account && data?.user) {
-            const nextUser = { ...data.user, demo_account: true, training_access: true };
-            setUser(nextUser);
-            setDemoAccountFromUser(nextUser);
-          }
-          if (redeemed?.training_access) {
-            setHasTrainingAccess(true);
+          if (redeemed) {
+            applyRedeemToAuth(redeemed, data?.user, {
+              setUser,
+              setHasTrainingAccess,
+              setDemoAccountFromUser,
+            });
+            inviteRedirect = inviteDestination(redeemed);
           }
         } catch (inviteErr) {
           console.warn("Invite redeem skipped", inviteErr?.response?.data?.detail || inviteErr?.message);
@@ -70,12 +71,14 @@ export default function AuthCallback() {
 
         window.history.replaceState({}, "", window.location.pathname);
         const onboardingIncomplete = !data.has_profile || !data.has_preferences;
-        let destination = nextPath.startsWith("/") ? nextPath : "/swipe";
-        if (onboardingIncomplete) {
+        let destination = inviteRedirect || (nextPath.startsWith("/") ? nextPath : "/swipe");
+        if (onboardingIncomplete && !inviteRedirect) {
           destination = destination.startsWith("/onboarding")
             ? destination
             : "/onboarding?step=jobSearch";
-        } else if (destination.startsWith("/onboarding")) {
+        } else if (onboardingIncomplete && inviteRedirect === "/swipe") {
+          destination = "/onboarding?step=jobSearch";
+        } else if (!inviteRedirect && destination.startsWith("/onboarding")) {
           destination = "/swipe";
         }
         navigate(destination, { replace: true });
@@ -86,7 +89,7 @@ export default function AuthCallback() {
         setErrorMessage(`${step}: ${message}`);
       }
     })();
-  }, [navigate, setUser, setHasProfile, setHasPreferences, setIsTrainingCreator]);
+  }, [navigate, setUser, setHasProfile, setHasPreferences, setIsTrainingCreator, setHasTrainingAccess]);
 
   return (
     <div className="min-h-dvh flex items-center justify-center bg-white" data-testid="auth-callback">

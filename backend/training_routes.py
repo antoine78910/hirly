@@ -11,7 +11,11 @@ from pydantic import BaseModel, Field
 
 import training_service as training
 from training_media import resolve_media_file
-from creator_invite_store import create_standalone_invitation, list_training_invites
+from creator_invite_store import (
+    INVITE_TYPE_TRAINING,
+    create_standalone_invitation,
+    list_training_invites,
+)
 
 
 class CreatorRegisterBody(BaseModel):
@@ -226,10 +230,12 @@ def register_training_admin_routes(router: APIRouter, require_admin_user, db) ->
             course_id=(payload.get("course_id") or "course_job_search_mastery").strip(),
             email_hint=(payload.get("email_hint") or "").strip(),
             label=(payload.get("label") or "").strip(),
+            invite_type=INVITE_TYPE_TRAINING,
         )
         return {
             "ok": True,
             "invitation": invitation,
             "code": invitation.get("code"),
             "course_id": invitation.get("course_id"),
+            "invite_type": INVITE_TYPE_TRAINING,
         }

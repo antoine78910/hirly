@@ -2,9 +2,20 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any, Callable, Dict, Optional
 
 from fastapi import HTTPException
+
+
+def training_open_access_enabled() -> bool:
+    """When true, any signed-in user can access /training (temporary rollout mode)."""
+    return (os.environ.get("TRAINING_OPEN_ACCESS") or "true").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 
 async def user_has_training_access(
@@ -15,6 +26,8 @@ async def user_has_training_access(
     is_training_creator,
     tutorial_user_id: Optional[str] = None,
 ) -> bool:
+    if training_open_access_enabled():
+        return True
     user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0}) or {}
     if user_doc.get("training_access"):
         return True
@@ -68,4 +81,5 @@ async def training_access_payload(
     return {
         "has_access": has_access,
         "training_access": bool(user_doc.get("training_access")),
+        "open_access": training_open_access_enabled(),
     }

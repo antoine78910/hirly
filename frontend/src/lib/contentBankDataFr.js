@@ -219,22 +219,45 @@ export const CONTENT_BANK_FR = [
     section_id: "sec_cb_marry",
     title: "Trend épouser/embrasser",
     content: [
-      heading(1, "Vidéo trend : Je vais épouser/embrasser la personne qui m'a montré ça"),
+      heading(1, "Vidéo trend : je pourrais littéralement embrasser la personne qui m'a montré ça"),
+      heading(3, "Exemples"),
+      examplesGrid([
+        ex("Vidéo de Britney — 40K vues", "https://www.instagram.com/reels/DVZmZ1Xkoix/"),
+        ex(
+          "Vidéo de Sarah — 40K vues",
+          "https://www.tiktok.com/@careerwithsarah/video/7618403948361190670?_r=1&_t=ZP-95OIBEdrNrb",
+        ),
+        ex(
+          "Vidéo de Nicole J — 155K vues (variante tableur)",
+          "https://www.instagram.com/reels/DVjze1Iib6K/",
+        ),
+        ex(
+          "Vidéo de Carol — 15K vues (variante tableur)",
+          "https://www.instagram.com/reels/DW7TF7tiZyz/",
+        ),
+      ]),
+      heading(3, "Consignes"),
+      warningGuideline(
+        "Commence face caméra, puis flip l'écran pour montrer la démo Hirly. Mets des emojis dans tes textes à l'écran aussi !\nAjoute un lien vers le tableur d'offres dans ta légende.",
+      ),
       heading(3, "Accroche texte dans la vidéo"),
       bulletList([
-        "Je vais épouser la personne qui m'a montré ça",
-        "Je vais embrasser la personne qui m'a montré ça",
-        "Je vais épouser l'employé Google qui m'a montré ça 🤯🤯",
-        "Celui/celle qui m'a montré ça va se faire sucer l'orteil 🤯🤯",
+        "Je pourrais littéralement embrasser la personne qui m'a montré ça",
+        "Je pourrais épouser l'employé Google qui m'a montré ça 🤯🤯",
+        "Celui ou celle qui m'a montré ça, je lui dois ma vie 🤯🤯",
       ]),
       heading(3, "Légende hors vidéo"),
       bulletList([
-        `Je ne postulerai plus jamais manuellement ${frHashtagLine("recrutement", "alternance", "rechercheemploi", "stage", "emploi")}`,
+        `Je ne postulerai plus jamais à la main ${frHashtagLine("recrutement", "alternance", "rechercheemploi", "stage", "emploi")}`,
         `J'ai peur que ça ait changé ma vie 😭 ${frHashtagLine("rechercheemploi", "recrutement", "alternance", "stage", "carriere")}`,
       ]),
       heading(2, "Script principal"),
       infoScript(
-        '[PREMIER CLIP] Air choqué/main sur la bouche, flip l\'écran vers Hirly\n[CLIP SUIVANT] Texte à l\'écran (fais apparaître ces textes en montrant l\'UI) :\n« trouve le job que tu veux »\n« upload ton CV sur Hirly »\n« swipe à droite sur les jobs »\n« l\'IA postule en auto avec un CV/lettre adaptés pour chaque offre »\n« directement sur le site de l\'entreprise »',
+        "[PREMIER CLIP] Fais la tête choquée, main sur la bouche, puis flip l'écran vers Hirly\n\n[CLIP SUIVANT] Texte à l'écran (fais apparaître ces phrases pendant que tu montres l'interface) :\n\n« trouve le job que tu veux »\n« upload ton CV sur Hirly »\n« swipe à droite sur les offres »\n« l'IA postule en auto avec un CV et une lettre adaptés pour chaque annonce »\n« directement sur le site de l'entreprise »",
+      ),
+      heading(2, "Variante"),
+      infoScript(
+        "[PREMIER CLIP] Même énergie — choqué, main sur la bouche, flip vers Hirly\n\n[CLIP SUIVANT] Texte à l'écran :\n\n« upload ton CV »\n« swipe à droite sur les offres avec une candidature personnalisée »\n« l'app s'appelle Hirly au fait »",
       ),
     ],
   }),

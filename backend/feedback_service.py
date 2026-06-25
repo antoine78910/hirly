@@ -37,7 +37,12 @@ ALLOWED_MIME = {
     "image/gif",
 }
 
-STORAGE_DIR = Path(__file__).parent / "storage" / "feature_suggestions"
+import feedback_store as store
+from feedback_store import (
+    FEEDBACK_FEATURE_CREATOR,
+    FEEDBACK_FEATURE_USER,
+    FEEDBACK_TRAINING_COMPLETION,
+)
 
 
 def _category_label(category: str) -> str:
@@ -153,6 +158,42 @@ def _send_via_smtp(
     return True
 
 
+def _persist_feature_submission(
+    *,
+    user_email: str,
+    user_name: str,
+    user_id: str,
+    category: str,
+    message: str,
+    audience: str,
+    attachments: List[Tuple[str, bytes, str]],
+    transport: str,
+) -> str:
+    submission_id = uuid.uuid4().hex
+    folder = store.STORAGE_ROOT / submission_id
+    folder.mkdir(parents=True, exist_ok=True)
+    attachment_rows = []
+    for name, content, mime in attachments:
+        safe_name = Path(name).name or "attachment"
+        path = folder / safe_name
+        path.write_bytes(content)
+        attachment_rows.append({"filename": safe_name, "mime": mime, "bytes": len(content)})
+
+    feedback_type = FEEDBACK_FEATURE_CREATOR if audience == "creator" else FEEDBACK_FEATURE_USER
+    saved = store.save_submission({
+        "feedback_type": feedback_type,
+        "audience": audience,
+        "user_email": user_email,
+        "user_name": user_name,
+        "user_id": user_id,
+        "category": category,
+        "message": message,
+        "attachments": attachment_rows,
+        "transport": transport,
+    })
+    return saved["id"]
+
+
 def _archive_submission(
     *,
     user_email: str,
@@ -160,33 +201,21 @@ def _archive_submission(
     user_id: str,
     category: str,
     message: str,
+    audience: str,
     attachments: List[Tuple[str, bytes, str]],
 ) -> str:
-    STORAGE_DIR.mkdir(parents=True, exist_ok=True)
-    submission_id = uuid.uuid4().hex
-    folder = STORAGE_DIR / submission_id
-    folder.mkdir(parents=True, exist_ok=True)
-
-    meta = {
-        "id": submission_id,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "to": FEEDBACK_TO_EMAIL,
-        "user_email": user_email,
-        "user_name": user_name,
-        "user_id": user_id,
-        "category": category,
-        "message": message,
-        "attachments": [],
-    }
-    for name, content, mime in attachments:
-        safe_name = Path(name).name or "attachment"
-        path = folder / safe_name
-        path.write_bytes(content)
-        meta["attachments"].append({"filename": safe_name, "mime": mime, "bytes": len(content)})
-
-    (folder / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
-    logger.warning("Feature suggestion archived locally at %s (email transport not configured)", folder)
-    return submission_id
+    archive_id = _persist_feature_submission(
+        user_email=user_email,
+        user_name=user_name,
+        user_id=user_id,
+        category=category,
+        message=message,
+        audience=audience,
+        attachments=attachments,
+        transport="archive",
+    )
+    logger.warning("Feature suggestion archived locally (email transport not configured): %s", archive_id)
+    return archive_id
 
 
 async def send_feature_suggestion(
@@ -197,6 +226,7 @@ async def send_feature_suggestion(
     category: str,
     message: str,
     attachments: List[Tuple[str, bytes, str]],
+    audience: str = "user",
 ) -> dict:
     text = (message or "").strip()
     if not text:
@@ -213,6 +243,10 @@ async def send_feature_suggestion(
         if len(content) > MAX_ATTACHMENT_BYTES:
             raise ValueError("Each attachment must be 5 MB or smaller")
         cleaned.append((Path(name).name or "screenshot.png", content, mime_type))
+
+    audience_norm = (audience or "user").strip().lower()
+    if audience_norm not in {"user", "creator"}:
+        audience_norm = "user"
 
     subject, plain, html = _build_email_body(
         user_email=user_email,
@@ -232,16 +266,95 @@ async def send_feature_suggestion(
         except Exception as exc:
             logger.exception("SMTP feature suggestion failed: %s", exc)
             sent = False
+            transport = "archive"
 
-    if sent:
-        return {"ok": True, "transport": transport}
+    if not sent:
+        archive_id = _archive_submission(
+            user_email=user_email,
+            user_name=user_name,
+            user_id=user_id,
+            category=category,
+            message=text,
+            audience=audience_norm,
+            attachments=cleaned,
+        )
+        return {"ok": True, "transport": "archive", "archive_id": archive_id, "submission_id": archive_id}
 
-    archive_id = _archive_submission(
+    submission_id = _persist_feature_submission(
         user_email=user_email,
         user_name=user_name,
         user_id=user_id,
         category=category,
         message=text,
+        audience=audience_norm,
         attachments=cleaned,
+        transport=transport,
     )
-    return {"ok": True, "transport": "archive", "archive_id": archive_id}
+    return {"ok": True, "transport": transport, "submission_id": submission_id}
+
+
+async def submit_training_completion_feedback(
+    *,
+    user_email: str,
+    user_name: str,
+    user_id: str,
+    course_id: str,
+    beneficial: str,
+    rating: int,
+    message: str,
+) -> dict:
+    beneficial_norm = (beneficial or "").strip().lower()
+    if beneficial_norm not in {"very", "somewhat", "not_really"}:
+        raise ValueError("Invalid beneficial value")
+
+    rating_value = int(rating or 0)
+    if rating_value < 1 or rating_value > 5:
+        raise ValueError("Rating must be between 1 and 5")
+
+    text = (message or "").strip()
+    subject = f"[Hirly] Training feedback — {user_email or user_id}"
+    plain = "\n".join([
+        "Training completion feedback",
+        f"Course: {course_id}",
+        f"Beneficial: {beneficial_norm}",
+        f"Rating: {rating_value}/5",
+        f"From: {user_name or '—'} <{user_email or '—'}>",
+        f"User ID: {user_id}",
+        "",
+        text or "(no additional comments)",
+    ])
+    html = f"""
+    <div style="font-family:system-ui,sans-serif;line-height:1.5;color:#18181b">
+      <p><strong>Training completion feedback</strong></p>
+      <p><strong>Course:</strong> {course_id}</p>
+      <p><strong>Beneficial:</strong> {beneficial_norm}</p>
+      <p><strong>Rating:</strong> {rating_value}/5</p>
+      <p><strong>From:</strong> {user_name or "—"} &lt;{user_email or "—"}&gt;</p>
+      <p><strong>User ID:</strong> {user_id}</p>
+      <hr />
+      <p style="white-space:pre-wrap">{text or "(no additional comments)"}</p>
+    </div>
+    """
+    sent = await _send_via_resend(subject, plain, html, [])
+    transport = "resend"
+    if not sent:
+        try:
+            sent = _send_via_smtp(subject, plain, html, [])
+            transport = "smtp"
+        except Exception as exc:
+            logger.exception("SMTP training feedback failed: %s", exc)
+            sent = False
+            transport = "none"
+
+    saved = store.save_submission({
+        "feedback_type": FEEDBACK_TRAINING_COMPLETION,
+        "user_email": user_email,
+        "user_name": user_name,
+        "user_id": user_id,
+        "course_id": course_id,
+        "beneficial": beneficial_norm,
+        "rating": rating_value,
+        "message": text,
+        "transport": transport if sent else "store_only",
+    })
+    return {"ok": True, "submission_id": saved["id"], "transport": transport if sent else "store_only"}

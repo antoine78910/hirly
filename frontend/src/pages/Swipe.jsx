@@ -17,6 +17,8 @@ import { shareJob } from "../lib/shareJob";
 import { trackEvent } from "../lib/analytics";
 import { useAuth } from "../context/AuthContext";
 import { cacheJobForDemo, isDemoAccountEnabled, seedTutorialShowcaseIfEmpty } from "../lib/demoAccount";
+import { dismissDemoWelcome, shouldOpenDemoWelcome } from "../lib/demoWelcome";
+import DemoWelcomeModal from "../components/demo/DemoWelcomeModal";
 import { TUTORIAL_BYPASS_AUTH } from "../lib/dev";
 import { DEMO_SETTINGS_CHANGED, isFinanceDemoEnabled, isDemoSwipeMode } from "../lib/demoSettings";
 import { getFinanceDemoFeedData, performFinanceDemoSwipe, performFinanceDemoUndo } from "../lib/financeDemoApi";
@@ -404,7 +406,8 @@ function SkeletonCard() {
 export default function Swipe() {
   const navigate = useNavigate();
   const { t } = useAppLocale();
-  const { loading: authLoading } = useAuth();
+  const { loading: authLoading, user } = useAuth();
+  const [demoWelcomeOpen, setDemoWelcomeOpen] = useState(false);
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [appLoading, setAppLoading] = useState(false);
@@ -434,6 +437,26 @@ export default function Swipe() {
   useEffect(() => {
     targetRef.current = target;
   }, [target]);
+
+  useEffect(() => {
+    if (authLoading || !user?.user_id) return;
+    if (!isDemoAccountEnabled()) return;
+    if (shouldOpenDemoWelcome(user.user_id)) {
+      setDemoWelcomeOpen(true);
+    }
+  }, [authLoading, user?.user_id]);
+
+  const handleDismissDemoWelcome = () => {
+    dismissDemoWelcome(user?.user_id);
+    setDemoWelcomeOpen(false);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("demoWelcome")) {
+        url.searchParams.delete("demoWelcome");
+        window.history.replaceState({}, "", `${url.pathname}${url.search}`);
+      }
+    }
+  };
 
   const applyFinanceDemoTarget = useCallback(() => {
     const demo = getFinanceDemoSearchTarget();
@@ -1107,6 +1130,14 @@ export default function Swipe() {
         job={reportJob}
         onClose={() => setReportJob(null)}
         onSubmit={handleReportSubmit}
+      />
+
+      <DemoWelcomeModal
+        open={demoWelcomeOpen}
+        onOpenChange={(next) => {
+          if (next) setDemoWelcomeOpen(true);
+        }}
+        onDismiss={handleDismissDemoWelcome}
       />
     </>
   );

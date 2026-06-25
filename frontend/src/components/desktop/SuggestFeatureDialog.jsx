@@ -13,8 +13,8 @@ function readFilePreview(file) {
   return URL.createObjectURL(file);
 }
 
-export default function SuggestFeatureDialog({ open, onClose, isDark = false }) {
-  const { user } = useAuth();
+export default function SuggestFeatureDialog({ open, onClose, isDark = false, audience = "user" }) {
+  const { user, hasTrainingAccess } = useAuth();
   const { t } = useAppLocale();
   const fileInputRef = useRef(null);
 
@@ -100,6 +100,7 @@ export default function SuggestFeatureDialog({ open, onClose, isDark = false }) 
       const form = new FormData();
       form.append("message", text);
       form.append("category", category);
+      form.append("audience", audience === "creator" || hasTrainingAccess ? "creator" : "user");
       files.forEach(({ file }) => form.append("files", file));
 
       await api.post("/feedback/suggest-feature", form, {

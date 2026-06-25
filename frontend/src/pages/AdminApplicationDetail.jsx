@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
+import { adminApiErrorMessage } from "../lib/adminApi";
 import { Button } from "../components/ui/button";
 import { Textarea } from "../components/ui/textarea";
 import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
@@ -95,7 +96,7 @@ export default function AdminApplicationDetail() {
         setAccessDenied(true);
         setError("Admin access denied");
       } else {
-        setError(err?.response?.data?.detail || "Could not load application");
+        setError(adminApiErrorMessage(err, "Could not load application"));
       }
     } finally {
       setLoading(false);

@@ -209,6 +209,26 @@ const CONTENT_BANK_EN = [
     title: "Marry/Kiss Trending",
     content: [
       heading(1, "Song Trending Video: I Could MARRY/KISS the Person That Showed Me This"),
+      heading(3, "Examples"),
+      examplesGrid([
+        ex("Britney's 40K Video", "https://www.instagram.com/reels/DVZmZ1Xkoix/"),
+        ex(
+          "Sarah's 40K Video",
+          "https://www.tiktok.com/@careerwithsarah/video/7618403948361190670?_r=1&_t=ZP-95OIBEdrNrb",
+        ),
+        ex(
+          "Nicole J's 155K Video (spreadsheet variant)",
+          "https://www.instagram.com/reels/DVjze1Iib6K/",
+        ),
+        ex(
+          "Carol's 15K Video (spreadsheet variant)",
+          "https://www.instagram.com/reels/DW7TF7tiZyz/",
+        ),
+      ]),
+      heading(3, "Guidelines"),
+      warningGuideline(
+        "Face first, then flip screen to show Hirly demo. Add emojis to your on-screen text too!\nLink to the job spreadsheet in your caption.",
+      ),
       heading(3, "Video Text Hook"),
       bulletList([
         "I could MARRY/KISS the person that showed me this",
@@ -222,7 +242,11 @@ const CONTENT_BANK_EN = [
       ]),
       heading(2, "Main Script"),
       infoScript(
-        '[FIRST CLIP] Act shocked/hand covering mouth, flip screen to Hirly\n[NEXT CLIP] On-Screen Text (have these texts pop up as you are showing the UI):\n"find the job you want"\n"upload your resume onto Hirly"\n"swipe right on jobs"\n"the ai auto-applies with a tailored resume/cover letter for every listing"\n"directly on the company\'s website"',
+        '[FIRST CLIP] Act shocked/hand covering mouth, flip screen to Hirly\n\n[NEXT CLIP] On-Screen Text (have these texts pop up as you are showing the UI):\n\n"find the job you want"\n"upload your resume onto Hirly"\n"swipe right on jobs"\n"the ai auto-applies with a tailored resume/cover letter for every listing"\n"directly on the company\'s website"',
+      ),
+      heading(2, "Variation"),
+      infoScript(
+        '[FIRST CLIP] Act shocked/hand covering mouth, flip screen to Hirly\n\n[NEXT CLIP] On-Screen Text (have these texts pop up as you are showing the UI):\n\n"upload your resume"\n"swipe right on jobs with a tailored application"\n"the app/website is called Hirly btw"',
       ),
     ],
   }),

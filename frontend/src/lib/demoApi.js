@@ -273,6 +273,122 @@ export function getDemoResponse(config) {
     };
   }
 
+  if (method === "get" && path === "/admin/users") {
+    return { users: [] };
+  }
+
+  if (method === "get" && path === "/admin/creators") {
+    return { creators: [] };
+  }
+
+  if (method === "get" && path === "/admin/analytics") {
+    return {
+      funnel: {
+        landing_views: 0,
+        signups: 0,
+        onboarding_started: 0,
+        onboarding_completed: 0,
+        cv_uploaded: 0,
+        first_swipe: 0,
+        first_apply: 0,
+      },
+      conversion_rates: {},
+      ats_performance: {},
+      events_available: false,
+    };
+  }
+
+  if (method === "get" && path.startsWith("/admin/applications")) {
+    return { applications: [], filter: params.filter || "all" };
+  }
+
+  if (method === "get" && path === "/admin/training/invites") {
+    return { invites: [] };
+  }
+
+  if (method === "get" && path === "/admin/training/analytics") {
+    return {
+      course_id: "course_job_search_mastery",
+      enrolled: 0,
+      modules: [],
+    };
+  }
+
+  if (method === "get" && path === "/admin/training/videos") {
+    return { slots: [] };
+  }
+
+  if (method === "get" && path === "/admin/demo/invites") {
+    return { invites: [] };
+  }
+
+  if (method === "post" && path === "/admin/demo/invites") {
+    return {
+      ok: true,
+      invitation: { code: "654321", invite_type: "demo" },
+      code: "654321",
+      invite_type: "demo",
+    };
+  }
+
+  if (method === "post" && /^\/admin\/influencers\/[^/]+\/demo-invite$/.test(path)) {
+    return {
+      ok: true,
+      invitation: { code: "654321", invite_type: "demo" },
+      code: "654321",
+      invite_type: "demo",
+    };
+  }
+
+  if (method === "post" && /^\/admin\/influencers\/[^/]+\/invite$/.test(path)) {
+    return {
+      ok: true,
+      invitation: { code: "123456", invite_type: "training" },
+      code: "123456",
+      invite_type: "training",
+    };
+  }
+
+  if (method === "post" && path === "/admin/training/invites") {
+    const payload = typeof body === "string" ? JSON.parse(body) : body;
+    return {
+      ok: true,
+      invitation: {
+        code: "123456",
+        invite_url: "http://localhost:3000/invite/123456",
+        email_hint: payload?.email_hint || "",
+        invite_type: "training",
+      },
+    };
+  }
+
+  if (method === "get" && path === "/admin/feedback") {
+    const tab = params?.tab || "users";
+    if (tab === "creators") {
+      return { tab: "creators", feature_suggestions: [], training_feedback: [] };
+    }
+    return { tab: "users", feature_suggestions: [] };
+  }
+
+  if (method === "get" && path.startsWith("/admin/feedback/")) {
+    return {
+      submission: {
+        id: path.split("/").pop(),
+        feedback_type: "feature_user",
+        message: "Demo feedback entry",
+        created_at: new Date().toISOString(),
+      },
+    };
+  }
+
+  if (method === "post" && path === "/feedback/training-completion") {
+    return { ok: true, submission_id: "demo_training_feedback" };
+  }
+
+  if (method === "post" && path === "/feedback/suggest-feature") {
+    return { ok: true, submission_id: "demo_feature", transport: "archive" };
+  }
+
   if (method === "get" && path === "/admin/influencers") {
     return { influencers: [] };
   }

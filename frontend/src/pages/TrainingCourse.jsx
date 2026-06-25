@@ -29,6 +29,7 @@ import {
   trainingHubPath,
   trainingModulePath,
 } from "../lib/trainingRoutes";
+import { queueTrainingCompletionFeedback } from "../lib/trainingCompletionFeedback";
 import { structureContentBankBlocks } from "../lib/contentBankDocStructure";
 import BunnyVideoIframe from "../components/training/BunnyVideoIframe";
 import {
@@ -247,6 +248,11 @@ export default function TrainingCourse() {
     ? activeSection?.content
     : activeModule?.content;
 
+  const pageTitle =
+    activeModule?.module_id === "mod_content_bank" && activeSection?.title
+      ? activeSection.title
+      : activeModule?.title;
+
   const visibleContent = useMemo(() => {
     const sectionTitle = hasSections ? activeSection?.title : activeModule?.title;
     let content = stripDuplicateSectionHeadings(displayContent, sectionTitle);
@@ -424,6 +430,7 @@ export default function TrainingCourse() {
           setCompleting(false);
         }, 900);
       } else {
+        queueTrainingCompletionFeedback(courseId);
         toast.success(t("courseCompleted"));
         setTimeout(() => {
           navigate(hubPath, { replace: true });
@@ -579,7 +586,7 @@ export default function TrainingCourse() {
       >
         <div className="mx-auto max-w-3xl space-y-6">
           <h1 className="font-display text-3xl font-bold tracking-tight text-zinc-900 sm:text-4xl">
-            {activeModule.title}
+            {pageTitle}
           </h1>
 
           {showPresentationVideoAtTop ? (

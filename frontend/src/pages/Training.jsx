@@ -6,9 +6,14 @@ import { useAuth } from "../context/AuthContext";
 import { useTrainingLocale } from "../context/TrainingLocaleContext";
 import TrainingShell, { useTrainingPageMode } from "../components/training/TrainingShell";
 import ModuleGalleryCard from "../components/training/ModuleGalleryCard";
+import TrainingCompletionFeedbackModal from "../components/training/TrainingCompletionFeedbackModal";
 import { fetchTrainingCatalog, fetchTrainingCourseDetail } from "../lib/trainingData";
 import { TRAINING_COURSE_ID } from "../lib/demoTrainingData";
-import { courseProgressFraction } from "../lib/trainingProgress";
+import { SCORED_MODULE_IDS, courseProgressFraction } from "../lib/trainingProgress";
+import {
+  dismissTrainingCompletionFeedback,
+  shouldShowTrainingCompletionFeedback,
+} from "../lib/trainingCompletionFeedback";
 import {
   parseTrainingLocale,
   trainingModulePath,
@@ -20,10 +25,12 @@ export default function Training() {
   const location = useLocation();
   const routeLocale = parseTrainingLocale(location.pathname);
   const { lang, t } = useTrainingLocale();
-  const { setIsTrainingCreator } = useAuth();
+  const { user, setIsTrainingCreator } = useAuth();
   const [loading, setLoading] = useState(true);
   const [catalog, setCatalog] = useState([]);
   const [catalogModules, setCatalogModules] = useState([]);
+  const [enrollment, setEnrollment] = useState(null);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -36,10 +43,12 @@ export default function Training() {
       const firstCourseId = courses[0]?.course_id || TRAINING_COURSE_ID;
       const detail = await fetchTrainingCourseDetail(firstCourseId, lang);
       setCatalogModules(detail?.modules?.length ? detail.modules : []);
+      setEnrollment(detail?.enrollment || null);
     } catch (e) {
       const fallback = await fetchTrainingCourseDetail(TRAINING_COURSE_ID, lang);
       setCatalog([{ course_id: TRAINING_COURSE_ID }]);
       setCatalogModules(fallback?.modules || []);
+      setEnrollment(fallback?.enrollment || null);
       if (!fallback?.modules?.length) {
         toast.error(e?.response?.data?.detail || t("loadError"));
       }
@@ -53,9 +62,27 @@ export default function Training() {
   const featured = catalog[0];
   const courseId = featured?.course_id || TRAINING_COURSE_ID;
   const progressPct = useMemo(
-    () => Math.round(courseProgressFraction(courseId, catalogModules, null) * 100),
-    [courseId, catalogModules],
+    () => Math.round(courseProgressFraction(courseId, catalogModules, enrollment) * 100),
+    [courseId, catalogModules, enrollment],
   );
+  const scoredComplete = useMemo(() => {
+    const scored = catalogModules.filter((m) => SCORED_MODULE_IDS.includes(m.module_id));
+    if (!scored.length) return false;
+    return scored.every((m) => m.completed);
+  }, [catalogModules]);
+
+  useEffect(() => {
+    if (!user?.user_id || loading) return;
+    if (progressPct < 100 && !scoredComplete) return;
+    if (shouldShowTrainingCompletionFeedback(courseId, user.user_id)) {
+      setFeedbackOpen(true);
+    }
+  }, [user?.user_id, loading, progressPct, scoredComplete, courseId]);
+
+  const handleFeedbackDismiss = ({ submitted = false } = {}) => {
+    dismissTrainingCompletionFeedback(courseId, user?.user_id, { submitted });
+    setFeedbackOpen(false);
+  };
   const completedCount = catalogModules.filter((m) => m.completed).length;
 
   if (loading) {
@@ -68,36 +95,42 @@ export default function Training() {
 
   return (
     <TrainingShell showSidebar={false}>
+      <TrainingCompletionFeedbackModal
+        open={feedbackOpen}
+        courseId={courseId}
+        onDismiss={handleFeedbackDismiss}
+        onSubmitted={() => handleFeedbackDismiss({ submitted: true })}
+      />
       {featured && catalogModules.length > 0 ? (
-        <div className="mx-auto flex h-full max-w-6xl flex-col overflow-hidden px-4 py-2 sm:px-6">
-          <div className="shrink-0">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mx-auto max-w-6xl px-4 py-4 sm:px-6 sm:py-5">
+          <div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div className="min-w-0">
-                <h1 className="font-display text-xl font-bold tracking-tight text-zinc-900 sm:text-2xl">
+                <h1 className="font-display text-2xl font-bold tracking-tight text-zinc-900 sm:text-3xl">
                   {t("hubTitle")}
                 </h1>
-                <p className="mt-0.5 text-xs text-zinc-500 sm:text-sm">{t("hubSubtitle")}</p>
+                <p className="mt-1 text-sm text-zinc-500">{t("hubSubtitle")}</p>
               </div>
-              <div className="w-full shrink-0 sm:max-w-[14rem]">
-                <div className="flex items-center justify-between gap-2 text-[11px] font-semibold text-zinc-700 sm:text-xs">
+              <div className="w-full shrink-0 sm:max-w-[16rem]">
+                <div className="flex items-center justify-between gap-2 text-xs font-semibold text-zinc-700">
                   <span>{t("yourProgress")}</span>
                   <span className="text-violet-600">{progressPct}%</span>
                 </div>
-                <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-zinc-100">
+                <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-zinc-100">
                   <div
                     className="h-full rounded-full bg-gradient-to-r from-violet-500 via-violet-400 to-indigo-400 transition-[width] duration-700 ease-out"
                     style={{ width: `${progressPct}%` }}
                   />
                 </div>
-                <p className="mt-0.5 text-[10px] text-zinc-400 sm:text-[11px]">
+                <p className="mt-1 text-[11px] text-zinc-400">
                   {completedCount}/{catalogModules.length} {t("lessons")}
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="mt-3 min-h-0 flex-1">
-            <div className="grid h-full grid-cols-2 grid-rows-3 gap-2 sm:gap-2.5 md:grid-cols-3 md:grid-rows-2">
+          <div className="mt-5">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 md:gap-4">
               {catalogModules.map((mod, index) => (
                 <ModuleGalleryCard
                   key={mod.module_id}

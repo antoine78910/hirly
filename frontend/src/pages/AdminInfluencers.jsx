@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { Copy, Link2, Loader2, Plus, RefreshCw, Sparkles } from "lucide-react";
+import { Copy, Link2, Loader2, MonitorPlay, Plus, RefreshCw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
+import { adminApiErrorMessage } from "../lib/adminApi";
 import { buildInviteUrl } from "../lib/creatorInvite";
 import { Button } from "../components/ui/button";
 import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
@@ -32,22 +33,27 @@ async function copyText(label, value) {
   }
 }
 
-function InviteModal({ open, onClose, influencer, invite, creating, onCreate }) {
+function InviteModal({ open, onClose, influencer, invite, creating, onCreate, variant = "training" }) {
   if (!open || !influencer) return null;
 
   const code = invite?.code || "";
   const inviteUrl = code ? buildInviteUrl(code) : "";
+  const isDemo = variant === "demo";
+  const title = isDemo ? "Demo account link" : "Training invitation";
+  const description = isDemo
+    ? "Send this link so they can sign up and get demo-only access for screen recordings."
+    : "Send this link so they can sign up and access the creator training program.";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="w-full max-w-lg rounded-xl border border-zinc-200 bg-white p-5 shadow-xl">
-        <h3 className="font-display text-lg font-bold">Creator invitation</h3>
+        <h3 className="font-display text-lg font-bold">{title}</h3>
         <p className="mt-1 text-sm text-zinc-600">
           Send this link to
           {" "}
           <span className="font-semibold text-zinc-900">{influencer.name}</span>
           {" "}
-          so they can create an account, access training, and get a demo account automatically.
+          {description}
         </p>
 
         {invite ? (
@@ -101,8 +107,15 @@ export default function AdminInfluencers() {
   const [creating, setCreating] = useState(false);
   const [grantingId, setGrantingId] = useState(null);
   const [inviteTarget, setInviteTarget] = useState(null);
+  const [inviteVariant, setInviteVariant] = useState("training");
   const [inviteData, setInviteData] = useState(null);
   const [inviteCreating, setInviteCreating] = useState(false);
+  const [demoInvites, setDemoInvites] = useState([]);
+  const [demoInviteLoading, setDemoInviteLoading] = useState(true);
+  const [demoInviteCreating, setDemoInviteCreating] = useState(false);
+  const [latestDemoInvite, setLatestDemoInvite] = useState(null);
+  const [demoLabel, setDemoLabel] = useState("");
+  const [demoEmailHint, setDemoEmailHint] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -117,16 +130,33 @@ export default function AdminInfluencers() {
         setAccessDenied(true);
         setError("Admin access denied");
       } else {
-        setError(err?.response?.data?.detail || "Could not load influencers");
+        setError(adminApiErrorMessage(err, "Could not load influencers"));
       }
     } finally {
       setLoading(false);
     }
   }, []);
 
+  const loadDemoInvites = useCallback(async () => {
+    setDemoInviteLoading(true);
+    try {
+      const { data } = await api.get("/admin/demo/invites");
+      const rows = data?.invites || [];
+      setDemoInvites(rows);
+      if (!latestDemoInvite && rows[0]) setLatestDemoInvite(rows[0]);
+    } catch (err) {
+      if (err?.response?.status !== 403) {
+        toast.error(adminApiErrorMessage(err, "Could not load demo invites"));
+      }
+    } finally {
+      setDemoInviteLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     load();
-  }, [load]);
+    loadDemoInvites();
+  }, [load, loadDemoInvites]);
 
   const createInfluencer = async (event) => {
     event.preventDefault();
@@ -160,18 +190,23 @@ export default function AdminInfluencers() {
     }
   };
 
-  const openInviteModal = (row) => {
+  const openInviteModal = (row, variant = "training") => {
     setInviteTarget(row);
-    setInviteData(row.latest_invite_code ? { code: row.latest_invite_code } : null);
+    setInviteVariant(variant);
+    const code = variant === "demo" ? row.latest_demo_invite_code : row.latest_invite_code;
+    setInviteData(code ? { code } : null);
   };
 
   const createInvite = async () => {
     if (!inviteTarget?.influencer_id) return;
     setInviteCreating(true);
     try {
-      const { data } = await api.post(`/admin/influencers/${inviteTarget.influencer_id}/invite`, {});
+      const path = inviteVariant === "demo"
+        ? `/admin/influencers/${inviteTarget.influencer_id}/demo-invite`
+        : `/admin/influencers/${inviteTarget.influencer_id}/invite`;
+      const { data } = await api.post(path, {});
       setInviteData(data.invitation || { code: data.code });
-      toast.success("Invitation link created");
+      toast.success(inviteVariant === "demo" ? "Demo link created" : "Training link created");
       await load();
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Could not create invitation");
@@ -180,10 +215,33 @@ export default function AdminInfluencers() {
     }
   };
 
+  const createStandaloneDemoInvite = async () => {
+    setDemoInviteCreating(true);
+    try {
+      const { data } = await api.post("/admin/demo/invites", {
+        label: demoLabel.trim(),
+        email_hint: demoEmailHint.trim(),
+      });
+      const invitation = data?.invitation || data;
+      setLatestDemoInvite(invitation);
+      setDemoLabel("");
+      setDemoEmailHint("");
+      toast.success("Demo invitation created");
+      await loadDemoInvites();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Could not create demo invitation");
+    } finally {
+      setDemoInviteCreating(false);
+    }
+  };
+
+  const demoCode = latestDemoInvite?.code || "";
+  const demoInviteUrl = demoCode ? buildInviteUrl(demoCode) : "";
+
   return (
     <AdminShell
       title="Influencers"
-      subtitle="Track creators, send training invitations, and grant demo accounts for screen recordings."
+      subtitle="Track creators, send training or demo WhatsApp links, and grant demo access manually."
       actions={(
         <Button variant="outline" onClick={load} disabled={loading}>
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
@@ -241,6 +299,50 @@ export default function AdminInfluencers() {
             </form>
           </section>
 
+          <section className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center gap-2">
+              <MonitorPlay className="h-5 w-5 text-violet-600" />
+              <div>
+                <h2 className="font-display text-lg font-bold">Demo account links</h2>
+                <p className="text-sm text-zinc-500">Standalone demo invites (no training access). Share via WhatsApp.</p>
+              </div>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <input
+                value={demoLabel}
+                onChange={(e) => setDemoLabel(e.target.value)}
+                placeholder="Label (optional)"
+                className="rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+              />
+              <input
+                type="email"
+                value={demoEmailHint}
+                onChange={(e) => setDemoEmailHint(e.target.value)}
+                placeholder="Email hint (optional)"
+                className="rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+              />
+            </div>
+            <Button className="mt-3" disabled={demoInviteCreating} onClick={createStandaloneDemoInvite}>
+              {demoInviteCreating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MonitorPlay className="mr-2 h-4 w-4" />}
+              Generate demo link
+            </Button>
+            {demoCode ? (
+              <div className="mt-4 space-y-2 rounded-lg bg-violet-50/80 p-4">
+                <p className="font-mono text-xl font-bold tracking-[0.2em]">{demoCode}</p>
+                <div className="flex items-start gap-2">
+                  <p className="flex-1 break-all text-sm text-zinc-700">{demoInviteUrl}</p>
+                  <Button size="sm" variant="outline" onClick={() => copyText("Link", demoInviteUrl)}>
+                    <Link2 className="h-4 w-4" />
+                    Copy
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+            {demoInviteLoading ? (
+              <p className="mt-3 text-sm text-zinc-500">Loading recent demo links…</p>
+            ) : null}
+          </section>
+
           <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
             <table className="w-full min-w-[1080px] text-left text-sm">
               <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
@@ -277,9 +379,13 @@ export default function AdminInfluencers() {
                     <td className="px-4 py-3 text-zinc-500">{fmtDate(row.updated_at)}</td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
-                        <Button size="sm" variant="default" onClick={() => openInviteModal(row)}>
+                        <Button size="sm" variant="default" onClick={() => openInviteModal(row, "training")}>
                           <Link2 className="h-4 w-4" />
-                          Invite
+                          Training link
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => openInviteModal(row, "demo")}>
+                          <MonitorPlay className="h-4 w-4" />
+                          Demo link
                         </Button>
                         <Button
                           size="sm"
@@ -311,6 +417,7 @@ export default function AdminInfluencers() {
         invite={inviteData}
         creating={inviteCreating}
         onCreate={createInvite}
+        variant={inviteVariant}
       />
     </AdminShell>
   );

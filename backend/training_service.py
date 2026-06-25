@@ -157,18 +157,6 @@ MODULE_I18N = {
             "video_url": SUBMIT_DRAFTS_VIDEO_URL,
         },
     },
-    "mod_resources": {
-        "en": {
-            "title": "Resources",
-            "description": "Templates, checklists, and links to keep handy.",
-            "category": "resources",
-        },
-        "fr": {
-            "title": "Ressources",
-            "description": "Modèles, checklists et liens utiles à garder sous la main.",
-            "category": "resources",
-        },
-    },
     "mod_bonus": {
         "en": {
             "title": "Bonus: War is Over",
@@ -197,8 +185,7 @@ MODULE_SEED = [
     {"module_id": "mod_content_policy", "sort_order": 5, "duration_seconds": 480},
     {"module_id": "mod_account_management", "sort_order": 6, "duration_seconds": 420},
     {"module_id": "mod_submit_drafts", "sort_order": 7, "duration_seconds": 480},
-    {"module_id": "mod_resources", "sort_order": 8, "duration_seconds": 300},
-    {"module_id": "mod_bonus", "sort_order": 9, "duration_seconds": 360},
+    {"module_id": "mod_bonus", "sort_order": 8, "duration_seconds": 360},
 ]
 
 

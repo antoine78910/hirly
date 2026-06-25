@@ -50,12 +50,18 @@ from db import create_database_adapter
 from db.supabase_adapter import count_supabase_table, test_supabase_connection
 from influencer_store import create_influencer, get_influencer, list_influencers, update_influencer
 from creator_invite_store import (
+    INVITE_TYPE_CREATOR,
+    INVITE_TYPE_DEMO,
+    INVITE_TYPE_TRAINING,
+    create_demo_invitation,
     create_invitation,
     create_standalone_invitation,
     get_invite_by_code,
+    list_demo_invites,
     list_invites_for_influencer,
     list_training_invites,
     mark_invite_redeemed,
+    resolve_invite_type,
     validate_invite,
 )
 from jobs_service import (
@@ -4646,29 +4652,56 @@ def _admin_blocker_labels(app_doc: Dict[str, Any]) -> List[str]:
     return labels or ["Unknown blocker"]
 
 
-async def _admin_safe_find(collection, limit: int = 10000) -> List[Dict[str, Any]]:
+async def _admin_safe_find(
+    collection,
+    filter: Optional[Dict[str, Any]] = None,
+    limit: int = 10000,
+    sort: Optional[Any] = None,
+) -> List[Dict[str, Any]]:
     name = getattr(collection, "name", None) or getattr(collection, "table_name", "unknown")
     try:
-        cursor = collection.find({}, {"_id": 0})
+        cursor = collection.find(filter or {}, {"_id": 0})
+        if sort is not None and hasattr(cursor, "sort"):
+            cursor = cursor.sort(sort)
         if hasattr(cursor, "limit"):
             cursor = cursor.limit(limit)
         return await cursor.to_list(limit)
     except Exception as exc:
-        logger.warning("admin_base_data_read_failed collection=%s error=%s", name, str(exc)[:200])
+        logger.warning("admin_safe_find_failed collection=%s error=%s", name, str(exc)[:200])
         return []
 
 
-async def _admin_base_data() -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
+async def _admin_safe_find_one(collection, filter: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    name = getattr(collection, "name", None) or getattr(collection, "table_name", "unknown")
+    try:
+        return await collection.find_one(filter, {"_id": 0})
+    except Exception as exc:
+        logger.warning("admin_safe_find_one_failed collection=%s error=%s", name, str(exc)[:200])
+        return None
+
+
+async def _admin_jobs_for_ids(job_ids: List[str]) -> List[Dict[str, Any]]:
+    unique_ids = list(dict.fromkeys(job_id for job_id in job_ids if job_id))
+    if not unique_ids:
+        return []
+    jobs: List[Dict[str, Any]] = []
+    chunk_size = 80
+    for index in range(0, len(unique_ids), chunk_size):
+        chunk = unique_ids[index:index + chunk_size]
+        jobs.extend(await _admin_safe_find(db.jobs, {"job_id": {"$in": chunk}}, limit=len(chunk)))
+    return jobs
+
+
+async def _admin_base_data(
+    *,
+    include_swipes: bool = True,
+) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
     users = await _admin_safe_find(db.users)
     profiles = await _admin_safe_find(db.profiles)
-    swipes = await _admin_safe_find(db.swipes)
+    swipes = await _admin_safe_find(db.swipes) if include_swipes else []
     applications = await _admin_safe_find(db.applications)
     job_ids = list({app.get("job_id") for app in applications if app.get("job_id")})
-    if not job_ids:
-        jobs: List[Dict[str, Any]] = []
-    else:
-        job_id_set = set(job_ids)
-        jobs = [job for job in await _admin_safe_find(db.jobs) if job.get("job_id") in job_id_set]
+    jobs = await _admin_jobs_for_ids(job_ids)
     return users, profiles, swipes, applications, jobs
 
 
@@ -4789,7 +4822,7 @@ def _rate(numerator: int, denominator: int) -> float:
 
 @api_router.get("/admin/overview")
 async def admin_overview(admin: User = Depends(require_admin_user)):
-    users, profiles, _swipes, applications, jobs = await _admin_base_data()
+    users, profiles, _swipes, applications, jobs = await _admin_base_data(include_swipes=False)
     normalized_apps = [_normalize_application_status_fields(app_doc) for app_doc in applications]
     user_map = {item.get("user_id"): item for item in users}
     job_map = {item.get("job_id"): item for item in jobs}
@@ -4841,7 +4874,7 @@ async def admin_overview(admin: User = Depends(require_admin_user)):
 
 @api_router.get("/admin/users")
 async def admin_list_users(admin: User = Depends(require_admin_user)):
-    users, profiles, _swipes, applications, _jobs = await _admin_base_data()
+    users, profiles, _swipes, applications, _jobs = await _admin_base_data(include_swipes=False)
     profile_map = {item.get("user_id"): item for item in profiles}
     app_counts: Dict[str, int] = {}
     last_app_at: Dict[str, Any] = {}
@@ -4927,7 +4960,7 @@ async def admin_list_influencers(admin: User = Depends(require_admin_user)):
     user_ids = [row.get("user_id") for row in rows if row.get("user_id")]
     user_map: Dict[str, Dict[str, Any]] = {}
     for uid in user_ids:
-        user_doc = await db.users.find_one({"user_id": uid}, {"_id": 0})
+        user_doc = await _admin_safe_find_one(db.users, {"user_id": uid})
         if user_doc:
             user_map[uid] = user_doc
     enriched = []
@@ -4985,21 +5018,29 @@ async def _redeem_creator_invite(code: str, user_id: str, user_email: Optional[s
 
     influencer_id = invitation.get("influencer_id")
     course_id = invitation.get("course_id") or SEED_COURSE_ID
+    invite_type = resolve_invite_type(invitation)
+    grant_demo = invite_type in {INVITE_TYPE_DEMO, INVITE_TYPE_CREATOR}
+    grant_training = invite_type in {INVITE_TYPE_TRAINING, INVITE_TYPE_CREATOR}
 
-    await _set_user_demo_account(user_id, True)
-    await _set_user_training_access(user_id, True)
-    try:
-        enrollment = await enroll_user(db, user_id, course_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    enrollment = None
+    if grant_demo:
+        await _set_user_demo_account(user_id, True)
+    if grant_training:
+        await _set_user_training_access(user_id, True)
+        try:
+            enrollment = await enroll_user(db, user_id, course_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     if influencer_id:
-        update_influencer(influencer_id, {
+        influencer_patch: Dict[str, Any] = {
             "user_id": user_id,
-            "demo_granted": True,
             "status": "active",
             **({"email": user_email.strip().lower()} if user_email else {}),
-        })
+        }
+        if grant_demo:
+            influencer_patch["demo_granted"] = True
+        update_influencer(influencer_id, influencer_patch)
 
     if not invitation.get("redeemed_at"):
         mark_invite_redeemed(normalized, user_id)
@@ -5007,10 +5048,11 @@ async def _redeem_creator_invite(code: str, user_id: str, user_email: Optional[s
     return {
         "ok": True,
         "code": normalized,
-        "demo_account": True,
-        "training_access": True,
+        "invite_type": invite_type,
+        "demo_account": grant_demo,
+        "training_access": grant_training,
         "course_id": course_id,
-        "enrollment_id": enrollment.get("enrollment_id"),
+        "enrollment_id": (enrollment or {}).get("enrollment_id"),
         "influencer_id": influencer_id,
     }
 
@@ -5034,6 +5076,7 @@ async def validate_creator_invite(code: str):
         "reason": check.get("reason"),
         "influencer_name": check.get("influencer_name"),
         "course_id": check.get("course_id") or invitation.get("course_id") or SEED_COURSE_ID,
+        "invite_type": check.get("invite_type") or resolve_invite_type(invitation),
         "already_redeemed": check.get("reason") == "already_redeemed",
     }
 
@@ -5080,7 +5123,53 @@ async def admin_create_influencer_invite(
         "invitation": invitation,
         "code": invitation.get("code"),
         "course_id": invitation.get("course_id"),
+        "invite_type": resolve_invite_type(invitation),
         "influencer": get_influencer(influencer_id),
+    }
+
+
+@api_router.post("/admin/influencers/{influencer_id}/demo-invite")
+async def admin_create_influencer_demo_invite(
+    influencer_id: str,
+    payload: Dict[str, Any] = None,
+    admin: User = Depends(require_admin_user),
+):
+    row = get_influencer(influencer_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Influencer not found")
+    try:
+        invitation = create_demo_invitation(influencer_id=influencer_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {
+        "ok": True,
+        "invitation": invitation,
+        "code": invitation.get("code"),
+        "invite_type": INVITE_TYPE_DEMO,
+        "influencer": get_influencer(influencer_id),
+    }
+
+
+@api_router.get("/admin/demo/invites")
+async def admin_list_demo_invites(admin: User = Depends(require_admin_user)):
+    return {"invites": list_demo_invites()}
+
+
+@api_router.post("/admin/demo/invites")
+async def admin_create_demo_invite(
+    payload: Dict[str, Any],
+    admin: User = Depends(require_admin_user),
+):
+    payload = payload or {}
+    invitation = create_demo_invitation(
+        email_hint=(payload.get("email_hint") or "").strip(),
+        label=(payload.get("label") or "").strip(),
+    )
+    return {
+        "ok": True,
+        "invitation": invitation,
+        "code": invitation.get("code"),
+        "invite_type": INVITE_TYPE_DEMO,
     }
 
 
@@ -5129,9 +5218,9 @@ async def admin_grant_influencer_demo(
 
 @api_router.get("/admin/creators")
 async def admin_list_creators(admin: User = Depends(require_admin_user)):
-    creators = await db.training_creators.find({}, {"_id": 0}).to_list(500)
-    courses = await db.training_courses.find({}, {"_id": 0}).to_list(1000)
-    enrollments = await db.training_enrollments.find({}, {"_id": 0}).to_list(5000)
+    creators = await _admin_safe_find(db.training_creators, limit=500)
+    courses = await _admin_safe_find(db.training_courses, limit=1000)
+    enrollments = await _admin_safe_find(db.training_enrollments, limit=5000)
 
     course_counts: Dict[str, int] = {}
     course_ids_by_creator: Dict[str, set[str]] = {}
@@ -5212,7 +5301,7 @@ async def admin_training_analytics(
 
 @api_router.get("/admin/analytics")
 async def admin_analytics(admin: User = Depends(require_admin_user)):
-    users, profiles, swipes, applications, jobs = await _admin_base_data()
+    users, profiles, swipes, applications, jobs = await _admin_base_data(include_swipes=True)
     events = await _analytics_events()
     normalized_apps = [_normalize_application_status_fields(app_doc) for app_doc in applications]
     job_map = {item.get("job_id"): item for item in jobs}
@@ -5364,7 +5453,7 @@ async def admin_list_applications(
     admin: User = Depends(require_admin_user),
 ):
     status_filter = status_filter or status
-    apps = await db.applications.find({}, {"_id": 0}).sort("updated_at", -1).to_list(1000)
+    apps = await _admin_safe_find(db.applications, sort=[("updated_at", -1)], limit=1000)
     allowed_statuses = _admin_status_filter(status_filter)
     if allowed_statuses is not None:
         apps = [
@@ -5382,8 +5471,8 @@ async def admin_list_applications(
 
     user_ids = list({app.get("user_id") for app in apps if app.get("user_id")})
     job_ids = list({app.get("job_id") for app in apps if app.get("job_id")})
-    users = await db.users.find({"user_id": {"$in": user_ids}}, {"_id": 0}).to_list(1000) if user_ids else []
-    jobs = await db.jobs.find({"job_id": {"$in": job_ids}}, {"_id": 0}).to_list(1000) if job_ids else []
+    users = await _admin_safe_find(db.users, {"user_id": {"$in": user_ids}}, limit=len(user_ids)) if user_ids else []
+    jobs = await _admin_jobs_for_ids(job_ids) if job_ids else []
     user_map = {item.get("user_id"): item for item in users}
     job_map = {item.get("job_id"): item for item in jobs}
     return {
@@ -9624,7 +9713,7 @@ async def dev_clean_job_descriptions():
 
 register_training_routes(api_router, get_current_user, db, _require_training_user, _get_training_access_payload)
 register_training_admin_routes(api_router, require_admin_user, db)
-register_feedback_routes(api_router, get_current_user)
+register_feedback_routes(api_router, get_current_user, require_admin_user)
 app.include_router(api_router)
 
 app.add_middleware(

@@ -1,20 +1,26 @@
 import { useEffect, useState } from "react";
+import { Navigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { devBypassAuth } from "../../lib/dev";
 import { api } from "../../lib/api";
 import ProtectedRoute from "../ProtectedRoute";
-import TrainingAccessDenied from "./TrainingAccessDenied";
+
+/** Set to false when training is invite-only again (must match backend TRAINING_OPEN_ACCESS). */
+const TRAINING_OPEN_ACCESS = (process.env.REACT_APP_TRAINING_OPEN_ACCESS ?? "true").toLowerCase() !== "false";
 
 export default function TrainingAccessGate({ children }) {
   const { user, loading: authLoading, hasTrainingAccess, setHasTrainingAccess } = useAuth();
-  const [checking, setChecking] = useState(true);
-  const [allowed, setAllowed] = useState(devBypassAuth);
+  const [checking, setChecking] = useState(!TRAINING_OPEN_ACCESS);
+  const [allowed, setAllowed] = useState(devBypassAuth || TRAINING_OPEN_ACCESS);
 
   useEffect(() => {
-    if (devBypassAuth) {
+    if (devBypassAuth || TRAINING_OPEN_ACCESS) {
       setAllowed(true);
       setChecking(false);
+      if (TRAINING_OPEN_ACCESS && user && !hasTrainingAccess) {
+        setHasTrainingAccess(true);
+      }
       return;
     }
     if (authLoading) return;
@@ -53,6 +59,10 @@ export default function TrainingAccessGate({ children }) {
 
   if (devBypassAuth) return children;
 
+  if (TRAINING_OPEN_ACCESS) {
+    return <ProtectedRoute>{children}</ProtectedRoute>;
+  }
+
   return (
     <ProtectedRoute>
       {authLoading || checking ? (
@@ -62,7 +72,7 @@ export default function TrainingAccessGate({ children }) {
       ) : allowed ? (
         children
       ) : (
-        <TrainingAccessDenied />
+        <Navigate to="/" replace />
       )}
     </ProtectedRoute>
   );

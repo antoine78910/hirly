@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, Copy, Link2, Loader2, RefreshCw, Sparkles, Upload, Video } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
+import { adminApiErrorMessage } from "../lib/adminApi";
 import { buildInviteUrl } from "../lib/creatorInvite";
 import { Button } from "../components/ui/button";
 import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
@@ -58,7 +59,7 @@ function TrainingInvitesPanel() {
       if (!latestInvite && rows[0]) setLatestInvite(rows[0]);
     } catch (err) {
       if (err?.response?.status !== 403) {
-        toast.error(err?.response?.data?.detail || "Could not load training invites");
+        toast.error(adminApiErrorMessage(err, "Could not load training invites"));
       }
     } finally {
       setLoading(false);
@@ -101,7 +102,8 @@ function TrainingInvitesPanel() {
           <div>
             <h2 className="font-display text-lg font-bold">Training invitations</h2>
             <p className="text-sm text-zinc-500">
-              Generate a personal link. Learners must open it before they can access /training.
+              Generate a personal training link. Learners must open it before they can access /training.
+              They will see a confidentiality notice — demo access is not included.
             </p>
           </div>
         </div>
@@ -288,7 +290,7 @@ export default function AdminTraining() {
       setVideoSlots(payload?.slots || []);
     } catch (err) {
       if (err?.response?.status !== 403) {
-        toast.error(err?.response?.data?.detail || "Could not load training videos");
+        toast.error(adminApiErrorMessage(err, "Could not load training videos"));
       }
     } finally {
       setVideosLoading(false);
@@ -307,7 +309,7 @@ export default function AdminTraining() {
         setAccessDenied(true);
         setError("Admin access denied");
       } else {
-        setError(err?.response?.data?.detail || "Could not load training analytics");
+        setError(adminApiErrorMessage(err, "Could not load training analytics"));
       }
     } finally {
       setLoading(false);

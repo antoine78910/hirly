@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
+import { adminApiErrorMessage } from "../lib/adminApi";
 import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
 
 const fmtDate = (value) => {
@@ -46,7 +47,7 @@ export default function AdminUserDetail() {
         setAccessDenied(true);
         setError("Admin access denied");
       } else {
-        setError(err?.response?.data?.detail || "Could not load user");
+        setError(adminApiErrorMessage(err, "Could not load user"));
       }
     } finally {
       setLoading(false);
