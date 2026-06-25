@@ -44,6 +44,13 @@ const SWIPE_EXIT = {
   apply: { x: 720, rotate: 10, opacity: 0, scale: 0.92 },
 };
 
+const feedFallbackMessage = (t, feedMeta) => {
+  if (!feedMeta?.fallback_reason) return t("swipe.noJobs");
+  if (feedMeta.provider_rate_limited) return t("swipe.providerRateLimited");
+  if (feedMeta.fallback_reason === "no_auto_apply_jobs_found") return t("swipe.noJobsFilters");
+  return t("swipe.noJobsFiltered");
+};
+
 export default function DesktopSwipeFeed({
   job,
   loading,
@@ -429,7 +436,7 @@ export default function DesktopSwipeFeed({
           ) : !displayJob ? (
             <div className="mx-auto max-w-lg py-20 text-center">
               <p className={`text-lg font-semibold ${theme.emptyTitle}`}>
-                {feedError || feedMeta?.fallback_reason || t("swipe.noJobs")}
+                {feedError || feedFallbackMessage(t, feedMeta)}
               </p>
               <button
                 type="button"

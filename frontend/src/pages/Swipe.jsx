@@ -67,6 +67,13 @@ const clearPersistedFilters = () => {
   } catch (_) {}
 };
 
+const feedFallbackMessage = (t, feedMeta) => {
+  if (!feedMeta?.fallback_reason) return t("swipe.tryWidenSearch");
+  if (feedMeta.provider_rate_limited) return t("swipe.providerRateLimited");
+  if (feedMeta.fallback_reason === "no_auto_apply_jobs_found") return t("swipe.widenFiltersHint");
+  return t("swipe.tryWidenSearch");
+};
+
 /* ============================================================
    Swipe card — tap to flip for full job details (mobile).
 ============================================================ */
@@ -1043,9 +1050,7 @@ export default function Swipe() {
                   ? feedError
                   : feedMeta?.provider_rate_limited
                   ? t("swipe.providerRateLimited")
-                  : feedMeta?.fallback_reason === "no_auto_apply_jobs_found"
-                    ? t("swipe.widenFiltersHint")
-                  : feedMeta?.fallback_reason || t("swipe.tryWidenSearch")}
+                  : feedFallbackMessage(t, feedMeta)}
               </p>
               <button
                 onClick={() => loadFeed(true)}

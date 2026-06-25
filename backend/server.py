@@ -2859,13 +2859,29 @@ async def get_feed(
         role_lower = (role or "").lower()
         family = list(tokens)
         if any(token in tokens for token in ("developer", "engineer", "javascript", "node", "frontend", "backend")):
-            family.extend(["developer", "developpeur", "software", "engineer", "frontend", "backend", "fullstack", "full-stack", "javascript", "node"])
+            family.extend(["developer", "developpeur", "ingenieur", "logiciel", "software", "engineer", "frontend", "backend", "fullstack", "full-stack", "javascript", "node"])
         if "analyst" in tokens:
-            family.extend(["analyst", "analytics", "analysis", "insights", "business", "market"])
+            family.extend(["analyst", "analyste", "analytics", "analysis", "insights", "business", "market", "etudes", "charge"])
         if "manager" in tokens:
-            family.extend(["manager", "management", "lead", "operations", "product"])
+            family.extend(["manager", "management", "responsable", "chef", "lead", "operations", "product", "produit", "projet"])
         if "full-stack" in role_lower or "full stack" in role_lower:
             family.extend(["fullstack", "full-stack", "frontend", "backend"])
+        if any(token in tokens for token in ("research", "researcher")):
+            family.extend(["research", "researcher", "recherche", "etudes", "charge", "r&d", "rd"])
+        if any(token in tokens for token in ("sales", "commercial")):
+            family.extend(["sales", "commercial", "vente", "vendeur", "conseiller"])
+        if "marketing" in tokens:
+            family.extend(["marketing", "charge", "responsable"])
+        if any(token in tokens for token in ("finance", "accountant", "bookkeeper", "payroll")):
+            family.extend(["finance", "comptable", "paie", "assistant"])
+        if any(token in tokens for token in ("customer", "support", "success")):
+            family.extend(["customer", "support", "success", "client", "clientele", "charge"])
+        if any(token in tokens for token in ("driver", "delivery")):
+            family.extend(["driver", "delivery", "chauffeur", "livreur"])
+        if any(token in tokens for token in ("warehouse", "logistics")):
+            family.extend(["warehouse", "logistics", "logistique", "magasinier", "preparateur"])
+        if any(token in tokens for token in ("retail", "store", "waiter", "barista", "chef", "kitchen")):
+            family.extend(["retail", "store", "vendeur", "serveur", "barista", "cuisinier", "employe polyvalent"])
         return list(dict.fromkeys(token for token in family if token))
 
     def _job_text(job: Dict[str, Any]) -> str:
@@ -3421,8 +3437,12 @@ async def get_feed(
                 )
             ]
             if relaxed:
-                fallback_used = "relaxed_country"
-                jobs = rank(relaxed, worldwide=False, broad=False)
+                relaxed_jobs = rank(relaxed, worldwide=True, broad=False)
+                if len(relaxed_jobs) < requested_limit:
+                    relaxed_jobs = rank(relaxed, worldwide=True, broad=True)
+                if relaxed_jobs:
+                    fallback_used = "relaxed_country"
+                    jobs = relaxed_jobs
                 logger.info(
                     "feed_filter_stage user_id=%s stage=relaxed_country elapsed_ms=%s count=%s",
                     user.user_id,

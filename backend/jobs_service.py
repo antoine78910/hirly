@@ -729,19 +729,37 @@ def _localized_role_variants(role: str, country: Optional[str]) -> List[str]:
 
     if country_code in ("fr", "ma", "be", "ch"):
         if any(term in lower for term in ("software", "engineer", "developer", "full stack", "full-stack", "frontend", "backend")):
-            variants = ["developpeur", "ingenieur logiciel", normalized]
+            variants = ["developpeur", "developpeur logiciel", "ingenieur logiciel", normalized]
         elif "data" in lower and "analyst" in lower:
             variants = ["analyste data", "analyste donnees", normalized]
         elif "analyst" in lower:
-            variants = ["analyste", normalized]
+            variants = ["analyste", "charge d'etudes", normalized]
         elif "product" in lower and "manager" in lower:
             variants = ["chef de produit", "product manager", normalized]
         elif "project" in lower and "manager" in lower:
             variants = ["chef de projet", normalized]
-        elif "sales" in lower:
-            variants = ["commercial", normalized]
+        elif any(term in lower for term in ("research", "researcher")):
+            variants = ["charge de recherche", "charge d'etudes", "recherche", "r&d", normalized]
+        elif any(term in lower for term in ("sales", "business development", "commercial")):
+            variants = ["commercial", "vendeur", "conseiller commercial", normalized]
+        elif "marketing" in lower:
+            variants = ["marketing", "charge marketing", "responsable marketing", normalized]
+        elif "operations" in lower:
+            variants = ["operations", "responsable operations", "assistant operations", normalized]
+        elif any(term in lower for term in ("finance", "accountant", "bookkeeper", "payroll")):
+            variants = ["comptable", "finance", "gestionnaire paie", "assistant comptable", normalized]
+        elif any(term in lower for term in ("teacher", "teaching")):
+            variants = ["enseignant", "professeur", "formateur", normalized]
+        elif any(term in lower for term in ("nurse", "medical", "healthcare", "care assistant")):
+            variants = ["infirmier", "aide soignant", "secretaire medical", normalized]
+        elif any(term in lower for term in ("driver", "delivery")):
+            variants = ["chauffeur", "livreur", normalized]
+        elif any(term in lower for term in ("warehouse", "logistics")):
+            variants = ["preparateur commande", "magasinier", "logistique", normalized]
+        elif any(term in lower for term in ("retail", "store", "waiter", "barista", "chef", "kitchen")):
+            variants = ["vendeur", "serveur", "cuisinier", "employe polyvalent", normalized]
         elif "customer" in lower and "success" in lower:
-            variants = ["customer success", "charge de clientele", normalized]
+            variants = ["customer success", "charge de clientele", "support client", normalized]
 
     return [value for value in _dedupe(variants) if value]
 
