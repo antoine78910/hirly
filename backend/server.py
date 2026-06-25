@@ -3400,22 +3400,28 @@ async def get_feed(
             logger.info("feed_filter_stage user_id=%s stage=worldwide_auto_apply elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))
 
         mixed_fallback_used = False
-        if not include_non_auto_apply and not jobs and not _timed_out():
+        if not include_non_auto_apply and len(jobs) < requested_limit and not _timed_out():
             mixed_candidates = await _load_mixed_candidates()
             if mixed_candidates:
                 mixed_fallback_used = True
                 candidates = mixed_candidates
                 fallback_used = "mixed_non_auto_apply_location_fallback"
-                jobs = rank(
+                mixed_jobs = rank(
                     mixed_candidates,
                     worldwide=is_worldwide_radius,
                     broad=True,
                     any_role=is_worldwide_radius,
                 )
-                if not jobs and explicit_filters:
-                    jobs = rank(mixed_candidates, worldwide=True, broad=True)
-                if not jobs:
-                    jobs = rank(mixed_candidates, worldwide=True, broad=True, any_role=True)
+                if len(mixed_jobs) < requested_limit and explicit_filters:
+                    mixed_jobs = rank(mixed_candidates, worldwide=True, broad=True)
+                if len(mixed_jobs) < requested_limit:
+                    mixed_jobs = rank(mixed_candidates, worldwide=True, broad=True, any_role=True)
+                combined_by_id: Dict[str, Dict[str, Any]] = {}
+                for job in [*jobs, *mixed_jobs]:
+                    job_id = job.get("job_id")
+                    if job_id and job_id not in combined_by_id:
+                        combined_by_id[job_id] = job
+                jobs = list(combined_by_id.values())[:requested_limit]
                 logger.info(
                     "feed_filter_stage user_id=%s stage=mixed_non_auto_apply_fallback elapsed_ms=%s count=%s",
                     user.user_id,

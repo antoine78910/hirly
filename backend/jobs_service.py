@@ -82,6 +82,8 @@ def _country_and_location(target_location: Optional[str]) -> Tuple[str, Optional
         country = "gb"
         if location:
             location = location.replace("Royaume-Uni", "United Kingdom").replace("royaume-uni", "United Kingdom")
+    elif any(term in text for term in ("france", "paris", "ile de france", "ile-de-france")):
+        country = "fr"
     elif any(term in text for term in ("morocco", "maroc", "casablanca")):
         country = "ma"
 
@@ -151,7 +153,7 @@ def build_profile_job_query(
         remote_preference=remote_preference,
         country=country,
         language=os.environ.get("JSEARCH_LANGUAGE", "en"),
-        limit=_env_int("JOB_IMPORT_LIMIT", 20),
+        limit=max(20, min(_env_int("JOB_IMPORT_LIMIT", 50), 100)),
     )
 
 
@@ -873,7 +875,8 @@ async def refresh_jobs_for_profile_if_needed(
         "provider_search_key": search_key,
         "imported_at": {"$gte": stale_cutoff},
     })
-    if fresh_count > 0 and not require_auto_apply:
+    min_fresh_count = max(target_auto_apply_count, _env_int("JOB_IMPORT_MIN_FRESH_COUNT", 60))
+    if fresh_count >= min_fresh_count and not require_auto_apply:
         return {"attempted": False, "reason": "cache_fresh", "search_key": search_key, "count": fresh_count, **base_metadata}
     any_cached = await db.jobs.count_documents({
         "provider": provider.name,
@@ -881,10 +884,11 @@ async def refresh_jobs_for_profile_if_needed(
     })
 
     try:
-        max_provider_requests = 2
+        max_provider_requests = max(1, min(_env_int("JOB_IMPORT_MAX_PROVIDER_REQUESTS", 5), 10))
         provider_requests = 1
         import_stats = await _import_provider_jobs(db, provider, query)
         imported = import_stats["total_imported"]
+        total_imported = imported
         logger.info(
             "JSearch refresh attempt: role=%s location=%s country=%s total_imported=%s auto_apply_supported_imported=%s unknown_ats_imported=%s",
             query.role,
@@ -895,10 +899,12 @@ async def refresh_jobs_for_profile_if_needed(
             import_stats["unknown_ats_imported"],
         )
         fallback_used = None
-        if imported == 0:
+        if total_imported < min_fresh_count and provider_requests < max_provider_requests:
             for fallback_location in _nearby_locations(query, search_radius):
                 if fallback_location == query.location:
                     continue
+                if provider_requests >= max_provider_requests:
+                    break
                 fallback_query = JobSearchQuery(
                     role=query.role,
                     location=fallback_location,
@@ -910,6 +916,7 @@ async def refresh_jobs_for_profile_if_needed(
                 provider_requests += 1
                 fallback_stats = await _import_provider_jobs(db, provider, fallback_query)
                 imported = fallback_stats["total_imported"]
+                total_imported += imported
                 logger.info(
                     "JSearch fallback attempt: role=%s location=%s country=%s total_imported=%s auto_apply_supported_imported=%s unknown_ats_imported=%s",
                     fallback_query.role,
@@ -919,10 +926,34 @@ async def refresh_jobs_for_profile_if_needed(
                     fallback_stats["auto_apply_supported_imported"],
                     fallback_stats["unknown_ats_imported"],
                 )
-                if imported > 0:
+                if imported > 0 and fallback_used is None:
                     fallback_used = fallback_query.location
+                if total_imported >= min_fresh_count:
                     break
-                break
+        if total_imported < min_fresh_count and provider_requests < max_provider_requests:
+            broad_location = query.location or _country_name(query.country) or "remote"
+            broad_query = JobSearchQuery(
+                role=f"jobs in {broad_location}",
+                location=query.location,
+                remote_preference=query.remote_preference,
+                country=query.country,
+                language=query.language,
+                limit=query.limit,
+                raw_query=True,
+            )
+            provider_requests += 1
+            broad_stats = await _import_provider_jobs(db, provider, broad_query)
+            total_imported += broad_stats["total_imported"]
+            logger.info(
+                "JSearch broad local attempt: query=%s country=%s total_imported=%s auto_apply_supported_imported=%s unknown_ats_imported=%s",
+                provider._query_string(broad_query),
+                broad_query.country,
+                broad_stats["total_imported"],
+                broad_stats["auto_apply_supported_imported"],
+                broad_stats["unknown_ats_imported"],
+            )
+            if broad_stats["total_imported"] > 0 and fallback_used is None:
+                fallback_used = broad_location
         ats_targeted_imported = 0
     except Exception as exc:
         if _is_rate_limit_error(exc):
@@ -953,7 +984,7 @@ async def refresh_jobs_for_profile_if_needed(
         "ok": True,
         "reason": "imported",
         "search_key": search_key,
-        "imported": imported,
+        "imported": total_imported,
         "fallback_used": fallback_used,
         "ats_targeted_imported": ats_targeted_imported,
         **base_metadata,
