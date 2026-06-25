@@ -172,7 +172,7 @@ const QUIZZES_EN = {
 
       q("cc2", "Recommended total video length and new-account target:", [
 
-        { id: "a", label: "7–60 seconds total; under 45 seconds for new creators/accounts" },
+        { id: "a", label: "7–45 seconds total; under 30 seconds for new creators/accounts" },
 
         { id: "b", label: "45–90 seconds total; always above 60 seconds for authority" },
 
@@ -562,7 +562,7 @@ const QUIZZES_FR = {
 
       q("cc2", "Durée totale recommandée et cible nouveaux comptes :", [
 
-        { id: "a", label: "7–60 s au total ; moins de 45 s pour nouveaux créateurs/comptes" },
+        { id: "a", label: "7–45 s au total ; pas plus de 30 s pour débutants/comptes récents" },
 
         { id: "b", label: "45–90 s au total ; toujours plus de 60 s pour l'autorité" },
 

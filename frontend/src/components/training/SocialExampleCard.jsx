@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, Instagram, Pause, Play, Volume2, VolumeX } from "lucide-react";
 import {
   embedFrameClassName,
@@ -38,14 +38,42 @@ export default function SocialExampleCard({ label, url, lang = "en" }) {
   const [hovered, setHovered] = useState(false);
   const [withSound, setWithSound] = useState(false);
   const [paused, setPaused] = useState(false);
+  const [instagramReloadKey, setInstagramReloadKey] = useState(0);
 
   const showEmbed = Boolean(parsed?.embedUrl && (hovered || withSound || paused));
-  const embedSrc = useMemo(
-    () => embedSrcFor(parsed, { muted: true, autoplay: true }),
-    [parsed],
-  );
+
+  const embedSrc = useMemo(() => {
+    if (!parsed?.embedUrl) return null;
+    if (parsed.platform === "tiktok") {
+      // muted=1 locks volume on TikTok's player — must reload with muted=0 to enable sound.
+      return embedSrcFor(parsed, { muted: !withSound, autoplay: true });
+    }
+    return embedSrcFor(parsed, { muted: true, autoplay: true });
+  }, [parsed, withSound]);
 
   const keepPreviewOpen = withSound || paused;
+
+  const sendTikTokPlayWithSound = useCallback((iframe) => {
+    if (!iframe) return;
+    postTikTokPlayerMessage(iframe, "unMute");
+    postTikTokPlayerMessage(iframe, "play");
+  }, []);
+
+  useEffect(() => {
+    if (!withSound || parsed?.platform !== "tiktok") return undefined;
+    const iframe = iframeRef.current;
+    if (!iframe) return undefined;
+
+    const onMessage = (event) => {
+      if (event.source !== iframe.contentWindow) return;
+      if (event.data?.["x-tiktok-player"] && event.data?.type === "onPlayerReady") {
+        sendTikTokPlayWithSound(iframe);
+      }
+    };
+
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [withSound, embedSrc, parsed?.platform, sendTikTokPlayWithSound]);
 
   const togglePause = useCallback(
     (event) => {
@@ -79,22 +107,26 @@ export default function SocialExampleCard({ label, url, lang = "en" }) {
 
       const nextWithSound = !withSound;
       if (parsed.platform === "tiktok") {
+        const nextSrc = embedSrcFor(parsed, { muted: !nextWithSound, autoplay: true });
+        if (iframe.src !== nextSrc) iframe.src = nextSrc;
         if (nextWithSound) {
-          iframe.src = embedSrcFor(parsed, { muted: false, autoplay: true });
+          sendTikTokPlayWithSound(iframe);
+          const onLoad = () => {
+            sendTikTokPlayWithSound(iframe);
+            iframe.removeEventListener("load", onLoad);
+          };
+          iframe.addEventListener("load", onLoad);
           setPaused(false);
         } else {
           postTikTokPlayerMessage(iframe, "mute");
         }
       } else if (parsed.platform === "instagram") {
-        const src = instagramSrcRef.current || embedSrc;
-        instagramSrcRef.current = src;
-        iframe.src = "about:blank";
-        iframe.src = src;
+        setInstagramReloadKey((n) => n + 1);
         if (paused) setPaused(false);
       }
       setWithSound(nextWithSound);
     },
-    [parsed, withSound, paused, embedSrc],
+    [parsed, withSound, paused, sendTikTokPlayWithSound],
   );
 
   const activatePreview = useCallback(() => {
@@ -144,13 +176,17 @@ export default function SocialExampleCard({ label, url, lang = "en" }) {
         {showEmbed && embedSrc ? (
           <div className="absolute inset-0 overflow-hidden bg-black">
             <iframe
+              key={
+                parsed?.platform === "instagram"
+                  ? `ig-${parsed?.id}-${instagramReloadKey}`
+                  : undefined
+              }
               ref={iframeRef}
               title={label}
               src={embedSrc}
               className={embedFrameClassName(parsed?.platform)}
               allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
               allowFullScreen
-              loading="lazy"
             />
 
             <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-3 pt-10">

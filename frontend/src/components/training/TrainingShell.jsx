@@ -6,7 +6,6 @@ import {
 import Logo from "../Logo";
 import { BRAND } from "../../lib/brand";
 import { useTrainingLocale } from "../../context/TrainingLocaleContext";
-import TrainingLanguageToggle from "./TrainingLanguageToggle";
 import { parseTrainingLocale, trainingHubPath, trainingPath } from "../../lib/trainingRoutes";
 
 export function useTrainingPageMode() {
@@ -32,7 +31,7 @@ export function useTrainingPageMode() {
   }, []);
 }
 
-export function TrainingTopBar({ actions, backTo, progressPct = null }) {
+export function TrainingTopBar({ actions, backTo, progressPct = null, moduleStepper = null }) {
   const navigate = useNavigate();
   const location = useLocation();
   const routeLocale = parseTrainingLocale(location.pathname);
@@ -66,7 +65,7 @@ export function TrainingTopBar({ actions, backTo, progressPct = null }) {
         </div>
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-          <TrainingLanguageToggle />
+          {moduleStepper}
           {actions}
           <button
             type="button"

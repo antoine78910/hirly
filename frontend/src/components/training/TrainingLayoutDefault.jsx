@@ -1,10 +1,9 @@
 import { TrainingLocaleProvider } from "../../context/TrainingLocaleContext";
-import { storedTrainingLocale } from "../../lib/trainingRoutes";
 
-/** Training pages at /training (no /en|/fr prefix) — locale from storage, default en. */
+/** Training pages at /training — always French. */
 export default function TrainingLayoutDefault({ children }) {
   return (
-    <TrainingLocaleProvider initialLang={storedTrainingLocale()}>
+    <TrainingLocaleProvider>
       {children}
     </TrainingLocaleProvider>
   );

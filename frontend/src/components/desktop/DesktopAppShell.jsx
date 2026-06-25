@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { Headphones, Sun } from "lucide-react";
+import { Sun } from "lucide-react";
 import { useAppLocale } from "../../context/AppLocaleContext";
 import DesktopCreditsPill from "./DesktopCreditsPill";
 import DesktopAccountMenu from "./DesktopAccountMenu";
@@ -10,6 +10,7 @@ import {
   saveDesktopTheme,
 } from "../swipe/desktopFeedTheme";
 import { getDesktopNavItems } from "./desktopNav";
+import DesktopSidebarSupport from "./DesktopSidebarSupport";
 import LanguageSwitcher from "../settings/LanguageSwitcher";
 
 const DesktopThemeContext = createContext({ themeMode: "light", isDark: false, theme: DESKTOP_THEMES.light });
@@ -73,14 +74,8 @@ export default function DesktopAppShell({ children, headerRight = null }) {
           ))}
         </nav>
 
-        <div className="mt-auto space-y-3 px-1 pt-6">
-          <button
-            type="button"
-            className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm ${theme.supportBtn}`}
-          >
-            <Headphones className="h-4 w-4" />
-            {t("common.support")}
-          </button>
+        <div className="mt-auto px-1 pt-6">
+          <DesktopSidebarSupport supportBtnClass={theme.supportBtn} isDark={isDark} />
         </div>
       </aside>
 

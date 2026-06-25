@@ -67,6 +67,7 @@ export function embedSrcFor(parsed, { muted = true, autoplay = false } = {}) {
       rel: "0",
       native_context_menu: "0",
       closed_caption: "0",
+      // muted=1 locks volume on TikTok's player (unMute postMessage won't work until muted=0).
       muted: muted ? "1" : "0",
       loop: "1",
     });

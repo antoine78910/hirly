@@ -1,13 +1,8 @@
 import { AlertTriangle, ExternalLink, Info } from "lucide-react";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "../ui/accordion";
 import TrainingShortVideo from "./TrainingShortVideo";
 import SocialExampleGrid from "./SocialExampleGrid";
 import TrainingDocTable from "./TrainingDocTable";
+import TrainingThemeSidebar from "./TrainingThemeSidebar";
 
 const URL_PATTERN = /(https?:\/\/[^\s<]+[^\s<.,;:!?])/g;
 const MARKDOWN_LINK_PATTERN = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g;
@@ -150,20 +145,12 @@ function DocBlock({ block, lang }) {
   switch (block.type) {
     case "accordion":
       return (
-        <Accordion type="multiple" className="w-full rounded-lg border border-zinc-200 bg-white px-1">
-          {(block.items || []).map((item, index) => (
-            <AccordionItem key={item.title || `acc-${index}`} value={`acc-${index}`}>
-              <AccordionTrigger className="px-3 text-left text-sm font-semibold text-zinc-900 hover:no-underline">
-                {item.title}
-              </AccordionTrigger>
-              <AccordionContent className="space-y-4 px-3 pb-4">
-                {(item.content || []).map((child, childIndex) => (
-                  <DocBlock key={`${index}-${childIndex}`} block={child} lang={lang} />
-                ))}
-              </AccordionContent>
-            </AccordionItem>
-          ))}
-        </Accordion>
+        <TrainingThemeSidebar
+          items={block.items}
+          renderContent={(child, key) => (
+            <DocBlock key={key} block={child} lang={lang} />
+          )}
+        />
       );
     case "short_video":
       return <TrainingShortVideo block={block} lang={lang} />;

@@ -56,7 +56,7 @@ export default function ModuleGalleryCard({
       <div className="flex items-center gap-2 bg-black px-3 py-2.5">
         <Play className="h-3.5 w-3.5 shrink-0 fill-white text-white" />
         <span className="min-w-0 truncate text-xs font-medium text-zinc-200 sm:text-sm">
-          {t("moduleLine", { n: index + 1, title: module.title })}
+          {module.title}
         </span>
       </div>
     </button>

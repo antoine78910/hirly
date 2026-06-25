@@ -7,8 +7,10 @@ import { useTrainingLocale } from "../context/TrainingLocaleContext";
 import { TrainingTopBar, useTrainingPageMode } from "../components/training/TrainingShell";
 import ModuleDocView from "../components/training/ModuleDocView";
 import ModuleSectionNav from "../components/training/ModuleSectionNav";
+import TrainingSectionBadge from "../components/training/TrainingSectionBadge";
 import ModuleQuiz from "../components/training/ModuleQuiz";
-import TrainingProgressBar from "../components/training/TrainingProgressBar";
+import TrainingModuleStepper from "../components/training/TrainingModuleStepper";
+import ScrollToContinueHint from "../components/training/ScrollToContinueHint";
 import {
   SCORED_MODULE_IDS,
   courseProgressFraction,
@@ -29,24 +31,85 @@ import {
   trainingModulePath,
 } from "../lib/trainingRoutes";
 
-function VideoBlock({ url, t }) {
+const SECTION_SIDEBAR_MODULE_IDS = new Set(["mod_content_bank"]);
+
+function bunnyEmbedUrl(resolvedUrl) {
+  const playMatch = resolvedUrl.match(/mediadelivery\.net\/play\/(\d+)\/([a-f0-9-]+)/i);
+  const embedMatch = resolvedUrl.match(/mediadelivery\.net\/embed\/(\d+)\/([a-f0-9-]+)/i);
+  const ids = playMatch || embedMatch;
+  if (!ids) return null;
+  const url = new URL(`https://iframe.mediadelivery.net/embed/${ids[1]}/${ids[2]}`);
+  url.searchParams.set("playerjs", "true");
+  return url.toString();
+}
+
+function BunnyVideoIframe({ embedUrl, title, onVideoEnded }) {
+  const iframeRef = useRef(null);
+
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe || !onVideoEnded) return undefined;
+
+    let player = null;
+    let cancelled = false;
+
+    const attach = () => {
+      if (cancelled || !iframeRef.current || !window.playerjs?.Player) return;
+      player = new window.playerjs.Player(iframeRef.current);
+      player.on("ended", onVideoEnded);
+    };
+
+    if (window.playerjs?.Player) {
+      attach();
+    } else {
+      const existing = document.querySelector('script[data-bunny-playerjs="true"]');
+      if (existing) {
+        existing.addEventListener("load", attach);
+      } else {
+        const script = document.createElement("script");
+        script.src = "https://assets.mediadelivery.net/playerjs/playerjs-latest.min.js";
+        script.dataset.bunnyPlayerjs = "true";
+        script.onload = attach;
+        document.head.appendChild(script);
+      }
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [embedUrl, onVideoEnded]);
+
+  return (
+    <div className="overflow-hidden rounded-lg bg-zinc-900 shadow-lg ring-1 ring-zinc-700/50">
+      <div className="relative aspect-video">
+        <iframe
+          ref={iframeRef}
+          title={title}
+          src={embedUrl}
+          className="absolute inset-0 h-full w-full"
+          allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
+          allowFullScreen
+        />
+      </div>
+    </div>
+  );
+}
+
+function VideoBlock({ url, t, onVideoEnded }) {
   const resolvedUrl = resolveApiAssetUrl(url);
+  const handleEnded = () => {
+    onVideoEnded?.();
+  };
+
   if (resolvedUrl) {
-    const bunnyMatch = resolvedUrl.match(/mediadelivery\.net\/play\/(\d+)\/([a-f0-9-]+)/i);
-    if (bunnyMatch) {
-      const embed = `https://iframe.mediadelivery.net/embed/${bunnyMatch[1]}/${bunnyMatch[2]}`;
+    const bunnyEmbed = bunnyEmbedUrl(resolvedUrl);
+    if (bunnyEmbed) {
       return (
-        <div className="overflow-hidden rounded-lg bg-zinc-900 shadow-lg ring-1 ring-zinc-700/50">
-          <div className="relative aspect-video">
-            <iframe
-              title={t("videoTitle")}
-              src={embed}
-              className="absolute inset-0 h-full w-full"
-              allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
-              allowFullScreen
-            />
-          </div>
-        </div>
+        <BunnyVideoIframe
+          embedUrl={bunnyEmbed}
+          title={t("videoTitle")}
+          onVideoEnded={onVideoEnded}
+        />
       );
     }
 
@@ -71,7 +134,12 @@ function VideoBlock({ url, t }) {
     }
 
     return (
-      <video src={embed} controls className="aspect-video w-full rounded-lg bg-black ring-1 ring-zinc-700/50" />
+      <video
+        src={embed}
+        controls
+        onEnded={handleEnded}
+        className="aspect-video w-full rounded-lg bg-black ring-1 ring-zinc-700/50"
+      />
     );
   }
 
@@ -97,6 +165,8 @@ export default function TrainingCourse() {
   const [activeModuleId, setActiveModuleId] = useState(null);
   const [quizPassed, setQuizPassed] = useState(false);
   const [progressTick, setProgressTick] = useState(0);
+  const [showScrollHint, setShowScrollHint] = useState(false);
+  const [celebrateModuleId, setCelebrateModuleId] = useState(null);
 
   // Refs for progress observation
   const videoContainerRef = useRef(null);
@@ -226,6 +296,22 @@ export default function TrainingCourse() {
     ? activeSection?.content
     : activeModule?.content;
 
+  const goToModule = (moduleId) => {
+    const mod = modules.find((m) => m.module_id === moduleId);
+    if (!mod) return;
+    const firstSection = mod.sections?.[0]?.section_id;
+    navigate(trainingModulePath(routeLocale, courseId, moduleId, firstSection), { replace: true });
+  };
+
+  const handleVideoEnded = useCallback(() => {
+    setShowScrollHint(true);
+  }, []);
+
+  // Reset scroll hint when changing section/module
+  useEffect(() => {
+    setShowScrollHint(false);
+  }, [activeModuleId, sectionParam]);
+
   const selectSection = (sectionId) => {
     navigate(trainingModulePath(routeLocale, courseId, activeModule.module_id, sectionId), { replace: true });
   };
@@ -265,7 +351,9 @@ export default function TrainingCourse() {
     const obs = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          timer = setTimeout(() => recordEvent(activeModuleId, "video"), 4000);
+          timer = setTimeout(() => {
+            recordEvent(activeModuleId, "video");
+          }, 4000);
           videoTimerRef.current = timer;
         } else {
           clearTimeout(timer);
@@ -289,6 +377,7 @@ export default function TrainingCourse() {
       ([entry]) => {
         if (entry.isIntersecting) {
           recordEvent(activeModuleId, "scrolled");
+          setShowScrollHint(false);
           obs.disconnect();
         }
       },
@@ -316,7 +405,23 @@ export default function TrainingCourse() {
       const result = await trySubmitQuiz(courseId, quizId, answers, scored);
       if (result?.passed) {
         setQuizPassed(true);
-        await load();
+        setProgressTick((n) => n + 1);
+        setData((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            enrollment: {
+              ...prev.enrollment,
+              quiz_results: {
+                ...(prev.enrollment?.quiz_results || {}),
+                [quizId]: {
+                  passed: true,
+                  score: result.score,
+                },
+              },
+            },
+          };
+        });
       }
       return result;
     } finally {
@@ -335,23 +440,31 @@ export default function TrainingCourse() {
       return;
     }
     setCompleting(true);
+    const completedId = activeModule.module_id;
     try {
-      await tryCompleteModule(courseId, activeModule.module_id);
+      await tryCompleteModule(courseId, completedId);
+      setCelebrateModuleId(completedId);
       await load();
-      const idx = modules.findIndex((m) => m.module_id === activeModule.module_id);
+      const idx = modules.findIndex((m) => m.module_id === completedId);
       const next = modules[idx + 1];
       if (next) {
-        setActiveModuleId(next.module_id);
-        const nextSections = next.sections || [];
-        const nextSection = nextSections[0]?.section_id;
-        navigate(trainingModulePath(routeLocale, courseId, next.module_id, nextSection), { replace: true });
+        setTimeout(() => {
+          setCelebrateModuleId(null);
+          setActiveModuleId(next.module_id);
+          const nextSections = next.sections || [];
+          const nextSection = nextSections[0]?.section_id;
+          navigate(trainingModulePath(routeLocale, courseId, next.module_id, nextSection), { replace: true });
+          setCompleting(false);
+        }, 900);
       } else {
         toast.success(t("courseCompleted"));
-        navigate(hubPath, { replace: true });
+        setTimeout(() => {
+          navigate(hubPath, { replace: true });
+          setCompleting(false);
+        }, 1200);
       }
     } catch (e) {
       toast.error(e?.message || e?.response?.data?.detail || t("saveError"));
-    } finally {
       setCompleting(false);
     }
   };
@@ -382,121 +495,163 @@ export default function TrainingCourse() {
     SCORED_MODULE_IDS.includes(m.module_id),
   );
 
+  const moduleStepper = scoredModules.length > 0 ? (
+    <TrainingModuleStepper
+      modules={scoredModules}
+      activeModuleId={activeModuleId}
+      courseId={courseId}
+      enrollment={data?.enrollment}
+      lang={lang}
+      progressTick={progressTick}
+      celebrateModuleId={celebrateModuleId}
+      onModuleSelect={goToModule}
+    />
+  ) : null;
+
+  const hasVideo = Boolean(showPresentationVideoAtTop || displayVideoUrl);
+  const useSectionSidebar = SECTION_SIDEBAR_MODULE_IDS.has(activeModule?.module_id);
+
+  const sectionBody = (
+    <>
+      {hasSections && activeSection ? (
+        <div className="relative">
+          {activeSection.badge ? (
+            <TrainingSectionBadge
+              label={activeSection.badge}
+              className="absolute right-0 top-0"
+            />
+          ) : null}
+          <h2 className={`text-lg font-semibold text-zinc-800 ${activeSection.badge ? "pr-28" : ""}`}>
+            {activeSection.title}
+          </h2>
+        </div>
+      ) : null}
+
+      {!showPresentationVideoAtTop && displayVideoUrl ? (
+        <div>
+          <div ref={videoContainerRef}>
+            <VideoBlock url={displayVideoUrl} t={t} onVideoEnded={handleVideoEnded} />
+          </div>
+          <ScrollToContinueHint visible={showScrollHint && hasVideo} lang={lang} />
+        </div>
+      ) : null}
+
+      {displayContent?.length ? (
+        <ModuleDocView blocks={displayContent} lang={lang} />
+      ) : !hasSections && activeModule?.description ? (
+        <p className="leading-relaxed text-zinc-700">{activeModule.description}</p>
+      ) : null}
+
+      {activeSection?.resources?.length ? (
+        <section className="space-y-4 border-t border-zinc-100 pt-8">
+          <h3 className="text-lg font-semibold text-zinc-900">
+            Ressources
+          </h3>
+          <ModuleDocView blocks={activeSection.resources} lang={lang} />
+        </section>
+      ) : null}
+
+      <div ref={scrollSentinelRef} aria-hidden className="h-px" />
+
+      {atChapterEnd && moduleQuiz ? (
+        <ModuleQuiz
+          quiz={moduleQuiz}
+          lang={lang}
+          initialPassed={quizPassed}
+          submitting={quizSubmitting}
+          continuing={completing}
+          onSubmit={handleQuizSubmit}
+          onContinue={markComplete}
+        />
+      ) : null}
+
+      <div className="border-t border-zinc-100 pt-6">
+        {!(atChapterEnd && moduleQuiz && quizPassed) ? (
+          <button
+            type="button"
+            onClick={markComplete}
+            disabled={completing || (atChapterEnd && !canComplete && !hasNextSection)}
+            className="inline-flex items-center gap-2 rounded-md bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50"
+          >
+            {completing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : hasNextSection ? (
+              <>
+                {t("next")}
+                <ChevronRight className="h-4 w-4" />
+              </>
+            ) : activeModule?.completed ? (
+              <>
+                <CheckCircle2 className="h-4 w-4" />
+                {t("completed")}
+              </>
+            ) : (
+              <>
+                <Play className="h-4 w-4" />
+                {t("markComplete")}
+              </>
+            )}
+          </button>
+        ) : null}
+        {atChapterEnd && !quizPassed && !activeModule?.completed ? (
+          <p className="mt-2 text-sm text-amber-700">{t("quizRequired")}</p>
+        ) : null}
+      </div>
+    </>
+  );
+
   return (
     <div className="min-h-dvh bg-white text-zinc-900">
-      <TrainingTopBar backTo={hubPath} progressPct={overallProgressPct} />
+      <TrainingTopBar
+        backTo={hubPath}
+        progressPct={overallProgressPct}
+        moduleStepper={moduleStepper}
+      />
 
-      <main className="mx-auto max-w-3xl px-4 py-8 sm:px-8 sm:py-10">
+      <main
+        className={`mx-auto px-4 py-8 sm:px-8 sm:py-10 ${
+          useSectionSidebar ? "max-w-6xl" : "max-w-3xl"
+        }`}
+      >
         <div className="space-y-6">
           <h1 className="font-display text-3xl font-bold tracking-tight text-zinc-900 sm:text-4xl">
             {activeModule.title}
           </h1>
 
-          {scoredModules.length > 0 && (
-            <TrainingProgressBar
-              modules={scoredModules}
-              activeModuleId={activeModuleId}
-              courseId={courseId}
-              enrollment={data?.enrollment}
-              lang={lang}
-              progressTick={progressTick}
-            />
-          )}
-
           {showPresentationVideoAtTop ? (
             <section className="space-y-2" data-testid="training-presentation-video">
               <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                {lang === "fr" ? "Vidéo de présentation" : "Presentation video"}
+                Vidéo de présentation
               </p>
               <div ref={videoContainerRef}>
-                <VideoBlock url={activeSection?.video_url || ""} t={t} />
+                <VideoBlock url={activeSection?.video_url || ""} t={t} onVideoEnded={handleVideoEnded} />
               </div>
+              <ScrollToContinueHint visible={showScrollHint && hasVideo} lang={lang} />
             </section>
           ) : null}
 
-          {hasSections ? (
-            <ModuleSectionNav
-              sections={sections}
-              activeSectionId={activeSection?.section_id}
-              onSelect={selectSection}
-            />
-          ) : null}
-
-          {hasSections && activeSection ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-lg font-semibold text-zinc-800">{activeSection.title}</h2>
-              {activeSection.badge ? (
-                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-amber-900">
-                  {activeSection.badge}
-                </span>
+          {hasSections && useSectionSidebar ? (
+            <div className="flex items-start gap-4 sm:gap-6">
+              <ModuleSectionNav
+                variant="sidebar"
+                sections={sections}
+                activeSectionId={activeSection?.section_id}
+                onSelect={selectSection}
+              />
+              <div className="min-w-0 flex-1 space-y-6">{sectionBody}</div>
+            </div>
+          ) : (
+            <>
+              {hasSections ? (
+                <ModuleSectionNav
+                  sections={sections}
+                  activeSectionId={activeSection?.section_id}
+                  onSelect={selectSection}
+                />
               ) : null}
-            </div>
-          ) : null}
-
-          {!showPresentationVideoAtTop && displayVideoUrl ? (
-            <div ref={videoContainerRef}>
-              <VideoBlock url={displayVideoUrl} t={t} />
-            </div>
-          ) : null}
-
-          {displayContent?.length ? (
-            <ModuleDocView blocks={displayContent} lang={lang} />
-          ) : !hasSections && activeModule.description ? (
-            <p className="leading-relaxed text-zinc-700">{activeModule.description}</p>
-          ) : null}
-
-          {activeSection?.resources?.length ? (
-            <section className="space-y-4 border-t border-zinc-100 pt-8">
-              <h3 className="text-lg font-semibold text-zinc-900">
-                {lang === "fr" ? "Ressources" : "Resources"}
-              </h3>
-              <ModuleDocView blocks={activeSection.resources} lang={lang} />
-            </section>
-          ) : null}
-
-          {/* Scroll sentinel — fires "scrolled" event when user reaches this point */}
-          <div ref={scrollSentinelRef} aria-hidden className="h-px" />
-
-          {atChapterEnd && moduleQuiz ? (
-            <ModuleQuiz
-              quiz={moduleQuiz}
-              lang={lang}
-              initialPassed={quizPassed}
-              submitting={quizSubmitting}
-              onSubmit={handleQuizSubmit}
-            />
-          ) : null}
-
-          <div className="border-t border-zinc-100 pt-6">
-            <button
-              type="button"
-              onClick={markComplete}
-              disabled={completing || (atChapterEnd && !canComplete && !hasNextSection)}
-              className="inline-flex items-center gap-2 rounded-md bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50"
-            >
-              {completing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : hasNextSection ? (
-                <>
-                  {t("next")}
-                  <ChevronRight className="h-4 w-4" />
-                </>
-              ) : activeModule.completed ? (
-                <>
-                  <CheckCircle2 className="h-4 w-4" />
-                  {t("completed")}
-                </>
-              ) : (
-                <>
-                  <Play className="h-4 w-4" />
-                  {t("markComplete")}
-                </>
-              )}
-            </button>
-            {atChapterEnd && !quizPassed && !activeModule.completed ? (
-              <p className="mt-2 text-sm text-amber-700">{t("quizRequired")}</p>
-            ) : null}
-          </div>
+              {sectionBody}
+            </>
+          )}
         </div>
       </main>
     </div>

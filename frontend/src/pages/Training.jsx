@@ -108,7 +108,6 @@ export default function Training() {
       isCreator={isTrainingCreator}
       showSidebar={false}
       actions={headerActions}
-      progressPct={progressPct > 0 ? progressPct : null}
       hero={(
         <TrainingHero
           title={t("hubTitle")}
@@ -124,7 +123,7 @@ export default function Training() {
             <div className="mb-6 rounded-2xl border border-zinc-200 bg-white p-4 sm:p-5 shadow-sm">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm font-semibold text-zinc-800">
-                  {lang === "fr" ? "Progression globale" : "Overall progress"}
+                Progression globale
                 </span>
                 <span className="text-sm font-bold text-violet-600">{progressPct}%</span>
               </div>

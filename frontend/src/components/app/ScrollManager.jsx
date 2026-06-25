@@ -11,8 +11,13 @@ function usesDocumentScroll(pathname) {
   return false;
 }
 
+/** Bottom-nav app pages scroll inside AppPageScroll / DesktopAppShell — lock the document. */
 function usesAppShellScroll(pathname) {
-  return pathname === "/swipe" || pathname === "/app";
+  if (usesDocumentScroll(pathname)) return false;
+  if (pathname.startsWith("/invite/")) return false;
+  if (pathname === "/onboarding" || pathname.startsWith("/onboarding/")) return false;
+  if (pathname === "/billing") return false;
+  return true;
 }
 
 /** Route-aware scroll: force native document scroll on long pages. */

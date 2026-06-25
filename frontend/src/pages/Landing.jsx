@@ -1,6 +1,6 @@
 ﻿// REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
 import { Button } from "../components/ui/button";
-import { ArrowRight, Sparkles, Zap, FileCheck2, Inbox, Heart, X, Star, ShieldCheck } from "lucide-react";
+import { ArrowRight, Sparkles, Zap, FileCheck2, Inbox, Heart, X, Star } from "lucide-react";
 import { motion } from "framer-motion";
 import { useEffect } from "react";
 import Logo from "../components/Logo";
@@ -11,6 +11,7 @@ import { useAuth } from "../context/AuthContext";
 import { trackEvent } from "../lib/analytics";
 import { preloadOnboardingIntroImages } from "../lib/onboardingImagePreload";
 import { useAppLocale } from "../context/AppLocaleContext";
+import LandingFaq from "../components/landing/LandingFaq";
 
 export default function Landing() {
   const navigate = useNavigate();
@@ -78,7 +79,7 @@ export default function Landing() {
             className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-linkedin/20 bg-white shadow-sm text-xs font-semibold text-linkedin mb-7"
           >
             <Sparkles className="w-3.5 h-3.5" />
-            {lang === "fr" ? "Candidatures personnalisées par IA. En 1 seconde." : "AI-tailored applications. 1 second each."}
+            {lang === "fr" ? "Candidatures personnalisées par IA." : "AI-tailored applications."}
           </motion.div>
 
           <motion.h1
@@ -87,8 +88,11 @@ export default function Landing() {
             transition={{ duration: 0.6, delay: 0.05 }}
             className="font-display font-black text-5xl sm:text-6xl lg:text-7xl tracking-tighter leading-[0.95]"
           >
-            {lang === "fr" ? "Swipez les offres." : "Swipe jobs."}<br />
-            <span className="italic text-swiipr-gradient">{lang === "fr" ? "Décrochez un emploi." : "Get hired."}</span>
+            {lang === "fr" ? (
+              <>Ton prochain job,<br /><span className="italic text-swiipr-gradient">trouvé cette semaine.</span></>
+            ) : (
+              <>Your next job,<br /><span className="italic text-swiipr-gradient">found this week.</span></>
+            )}
           </motion.h1>
 
           <motion.p
@@ -97,11 +101,9 @@ export default function Landing() {
             transition={{ duration: 0.6, delay: 0.15 }}
             className="mt-6 text-lg sm:text-xl text-zinc-600 max-w-2xl mx-auto leading-relaxed"
           >
-            {lang === "fr" ? (
-              <>Swipez à droite. Notre IA adapte votre CV et lettre de motivation à chaque offre. Candidatez en <span className="text-linkedin font-semibold">1 seconde</span> au lieu de 20 minutes.</>
-            ) : (
-              <>Swipe right. Our AI tailors your CV and cover letter for every role. Apply in <span className="text-linkedin font-semibold">1 second</span> instead of 20 minutes.</>
-            )}
+            {lang === "fr"
+              ? "Swipe les offres qui te correspondent. On s'occupe de postuler pour toi."
+              : "Swipe jobs that match you. AI applies for you."}
           </motion.p>
 
           <motion.div
@@ -117,12 +119,9 @@ export default function Landing() {
               size="lg"
               className="rounded-full gradient-linkedin hover:opacity-90 text-white font-semibold h-12 px-7 text-base pulse-ring"
             >
-              {lang === "fr" ? "Commencer à Swiper" : BRAND.CTA_PRIMARY}
+              {lang === "fr" ? "Trouve ton job maintenant" : "Find your job now"}
               <ArrowRight className="ml-1.5 w-4 h-4" />
             </Button>
-            <p className="flex items-center gap-1 text-xs text-zinc-500">
-              <ShieldCheck className="w-3.5 h-3.5" /> {lang === "fr" ? "Gratuit · Sans carte bancaire" : "Free · No credit card"}
-            </p>
           </motion.div>
 
           {/* Demo card mockup */}
@@ -234,23 +233,33 @@ export default function Landing() {
         </div>
       </section>
 
+      <LandingFaq lang={lang} />
+
       {/* CTA */}
       <section className="mx-auto max-w-6xl px-6 pt-20 pb-20 sm:pt-28 sm:pb-28">
-        <div className="overflow-hidden rounded-[48px] shadow-[0_24px_80px_-32px_rgba(124,58,237,0.28)]">
-          <div className="gradient-linkedin relative px-8 py-12 text-center text-white sm:px-16 sm:py-16">
-            <div className="pointer-events-none absolute inset-0 opacity-10 bg-grid" aria-hidden />
-            <h2 className="relative font-display text-4xl font-black tracking-tighter sm:text-5xl">
-              {lang === "fr" ? "Commencez à swiper." : "Start swiping."}
+        <div className="overflow-hidden rounded-[48px] border border-zinc-200/80 bg-white shadow-[0_24px_80px_-32px_rgba(124,58,237,0.18)]">
+          <div className="gradient-linkedin-soft relative px-8 py-12 text-center sm:px-16 sm:py-16">
+            <div className="pointer-events-none absolute inset-0 bg-grid mask-radial opacity-60" aria-hidden />
+            <h2 className="relative font-display text-4xl font-black tracking-tighter text-zinc-900 sm:text-5xl">
+              {lang === "fr" ? (
+                <>Commencez à <span className="italic text-swiipr-gradient">swiper.</span></>
+              ) : (
+                <>Start <span className="italic text-swiipr-gradient">swiping.</span></>
+              )}
             </h2>
-            <p className="relative mt-3 text-white/80">{lang === "fr" ? "Votre prochain emploi est à un swipe." : "Your next job is one swipe away."}</p>
+            <p className="relative mt-3 text-lg text-zinc-600">
+              {lang === "fr" ? "Votre prochain emploi est à un swipe." : "Your next job is one swipe away."}
+            </p>
             <Button
               data-testid="footer-cta-btn"
               onClick={onStartSwiping}
               disabled={loading}
               size="lg"
-              className="relative mt-8 h-12 rounded-full bg-white px-7 text-base font-semibold text-linkedin hover:bg-zinc-100"
+              variant="brand"
+              className="relative mt-8 h-12 rounded-full px-7 text-base font-semibold"
             >
-              {lang === "fr" ? "Trouver un emploi aujourd'hui" : BRAND.CTA_SECONDARY} <ArrowRight className="ml-1.5 w-4 h-4" />
+              {lang === "fr" ? "Commencer à swiper" : BRAND.CTA_PRIMARY}{" "}
+              <ArrowRight className="ml-1.5 w-4 h-4" />
             </Button>
           </div>
         </div>

@@ -70,7 +70,7 @@ export const CREATING_CONTENT_SECTIONS_EN = [
       {
         type: "list",
         style: "bullet",
-        items: ["7–60 seconds total", "Under 45 seconds for new creators or new accounts"],
+        items: ["7–45 seconds total", "Under 30 seconds for new creators or new accounts"],
       },
       { type: "paragraph", text: "Shorter videos perform better for growth and retention." },
       { type: "heading", level: 3, text: "6. Framing & Camera Shots" },
@@ -91,18 +91,6 @@ export const CREATING_CONTENT_SECTIONS_EN = [
         items: ["Long shot", "Medium shot", "Close-up shot"],
       },
       { type: "paragraph", text: "Switch shots every few seconds to make the video feel faster." },
-      { type: "heading", level: 3, text: "7. In-Video Captions" },
-      { type: "paragraph", text: "Important because ~50% of viewers watch without sound." },
-      { type: "paragraph", text: "Best practices:" },
-      {
-        type: "list",
-        style: "bullet",
-        items: [
-          "Use auto captions with the font named Custom/Standard",
-          "Keep captions to 1–2 lines max — avoid huge 3–4 text blocks",
-          "Place captions centered, not on edges",
-        ],
-      },
     ],
   },
   {
@@ -165,7 +153,82 @@ export const CREATING_CONTENT_SECTIONS_EN = [
     section_id: "sec_cc_editing",
     title: "Editing Playbook",
     video_url: CREATING_CONTENT_EDITING_VIDEO_URL,
-    content: [],
+    content: [
+      { type: "paragraph", text: "Edit in CapCut (mobile or desktop). Follow this order:" },
+      { type: "heading", level: 3, text: "1. Import & Trim" },
+      {
+        type: "list",
+        style: "bullet",
+        items: [
+          "Import all clips from filming — keep every angle you shot.",
+          "Split and delete long pauses, \"ums,\" mistakes, and dead air.",
+          "Keep only the high-energy takes. Tighter trims feel more professional instantly.",
+        ],
+      },
+      { type: "heading", level: 3, text: "2. Jump Cuts & Pacing" },
+      {
+        type: "list",
+        style: "bullet",
+        items: [
+          "Use jump cuts wherever energy dips or you removed a section.",
+          "Cut every 1.5–3 seconds on Shorts — fast pacing keeps viewers watching.",
+          "Only keep pauses for punchlines or comedic timing.",
+        ],
+      },
+      { type: "heading", level: 3, text: "3. Cut Between Angles" },
+      {
+        type: "list",
+        style: "bullet",
+        items: [
+          "Alternate between long, medium, and close-up shots every few seconds.",
+          "Match your eye line between clips so cuts feel smooth, not jarring.",
+          "Add a light 10–20% zoom in or out between clips if you only have one angle.",
+        ],
+      },
+      { type: "heading", level: 3, text: "4. Speed Adjustments" },
+      {
+        type: "list",
+        style: "bullet",
+        items: [
+          "Slow B-roll or action clips to 0.5–1× when the format calls for it.",
+          "Do not speed up talking-head dialogue — it sounds unnatural.",
+          "Use speed changes on visual clips only, not your main voiceover.",
+        ],
+      },
+      { type: "heading", level: 3, text: "5. Audio & Trending Sound" },
+      {
+        type: "list",
+        style: "bullet",
+        items: [
+          "Add trending audio at low volume under your voice when the format uses music.",
+          "Keep your voice clear and louder than the background track.",
+          "Sync cuts to the beat on music-driven formats (Good/Better/Best, trending songs, etc.).",
+        ],
+      },
+      { type: "heading", level: 3, text: "6. On-Screen Text & Hooks" },
+      {
+        type: "list",
+        style: "bullet",
+        items: [
+          "Add a text hook in the first 1–2 seconds if the verbal hook needs reinforcement.",
+          "Pop up key phrases as you speak — especially for product demos (include \"Hirly\" on screen).",
+          "Keep text inside safe zones — avoid the top and bottom UI overlay areas.",
+        ],
+      },
+      { type: "heading", level: 3, text: "7. In-Video Captions" },
+      { type: "paragraph", text: "Important because ~50% of viewers watch without sound." },
+      { type: "paragraph", text: "Best practices:" },
+      {
+        type: "list",
+        style: "bullet",
+        items: [
+          "Use auto captions with the font named Custom/Standard",
+          "Keep captions to 1–2 lines max — avoid huge 3–4 text blocks",
+          "Place captions centered, not on edges",
+        ],
+      },
+      ...postingHoursBlocks("en"),
+    ],
   },
 ];
 
@@ -228,7 +291,7 @@ export const CREATING_CONTENT_SECTIONS_FR = [
       {
         type: "list",
         style: "bullet",
-        items: ["7–60 secondes au total", "Moins de 45 secondes pour les nouveaux créateurs ou comptes récents"],
+        items: ["7–45 secondes au total", "Pas plus de 30 secondes pour les débutants ou comptes récents"],
       },
       { type: "paragraph", text: "Les vidéos courtes performent mieux pour la croissance et la rétention." },
       { type: "heading", level: 3, text: "6. Cadrage & plans caméra" },
@@ -255,19 +318,6 @@ export const CREATING_CONTENT_SECTIONS_FR = [
         type: "paragraph",
         text: "Change de plan toutes les quelques secondes pour que la vidéo paraisse plus rapide.",
       },
-      { type: "heading", level: 3, text: "7. Sous-titres dans la vidéo" },
-      { type: "paragraph", text: "Important : ~50 % des spectateurs regardent sans le son." },
-      { type: "paragraph", text: "Bonnes pratiques :" },
-      {
-        type: "list",
-        style: "bullet",
-        items: [
-          "Utilise les sous-titres auto avec la police Custom/Standard",
-          "Max 1–2 lignes — évite les blocs énormes de 3–4 lignes",
-          "Place les sous-titres centrés, pas sur les bords",
-        ],
-      },
-      ...postingHoursBlocks("fr"),
     ],
   },
   {
@@ -330,6 +380,81 @@ export const CREATING_CONTENT_SECTIONS_FR = [
     section_id: "sec_cc_editing",
     title: "Guide de montage",
     video_url: CREATING_CONTENT_EDITING_VIDEO_URL,
-    content: [],
+    content: [
+      { type: "paragraph", text: "Monte dans CapCut (mobile ou desktop). Suis cet ordre :" },
+      { type: "heading", level: 3, text: "1. Import & découpe" },
+      {
+        type: "list",
+        style: "bullet",
+        items: [
+          "Importe tous les clips du tournage — garde chaque angle filmé.",
+          "Coupe et supprime les longues pauses, les « euh », les erreurs et les blancs.",
+          "Garde uniquement les prises les plus énergiques. Un montage serré paraît tout de suite plus pro.",
+        ],
+      },
+      { type: "heading", level: 3, text: "2. Jump cuts & rythme" },
+      {
+        type: "list",
+        style: "bullet",
+        items: [
+          "Utilise des jump cuts dès que l'énergie baisse ou que tu as retiré un passage.",
+          "Coupe toutes les 1,5–3 secondes sur les Shorts — le rythme rapide retient l'attention.",
+          "Garde les pauses seulement pour les punchlines ou le timing comique.",
+        ],
+      },
+      { type: "heading", level: 3, text: "3. Alterner les angles" },
+      {
+        type: "list",
+        style: "bullet",
+        items: [
+          "Alterne plan large, moyen et gros plan toutes les quelques secondes.",
+          "Aligne le regard entre les clips pour que les coupes soient fluides, pas saccadées.",
+          "Ajoute un léger zoom 10–20 % entre les clips si tu n'as qu'un seul angle.",
+        ],
+      },
+      { type: "heading", level: 3, text: "4. Ajustements de vitesse" },
+      {
+        type: "list",
+        style: "bullet",
+        items: [
+          "Ralentis le B-roll ou les plans d'action à 0,5–1× quand le format le demande.",
+          "N'accélère pas la voix face caméra — ça sonne artificiel.",
+          "Réserve les changements de vitesse aux plans visuels, pas à la voix principale.",
+        ],
+      },
+      { type: "heading", level: 3, text: "5. Audio & son trending" },
+      {
+        type: "list",
+        style: "bullet",
+        items: [
+          "Ajoute un son trending à faible volume sous ta voix quand le format utilise de la musique.",
+          "Garde ta voix claire et plus forte que la piste de fond.",
+          "Synchronise les coupes sur le beat pour les formats musicaux (Good/Better/Best, sons trending, etc.).",
+        ],
+      },
+      { type: "heading", level: 3, text: "6. Texte à l'écran & hooks" },
+      {
+        type: "list",
+        style: "bullet",
+        items: [
+          "Ajoute un hook texte dans les 1–2 premières secondes si le hook verbal a besoin d'un renfort.",
+          "Fais apparaître les phrases clés pendant que tu parles — surtout pour les démos produit (affiche « Hirly » à l'écran).",
+          "Garde le texte dans les zones safe — évite le haut et le bas où se superposent les UI TikTok/IG.",
+        ],
+      },
+      { type: "heading", level: 3, text: "7. Sous-titres dans la vidéo" },
+      { type: "paragraph", text: "Important : ~50 % des spectateurs regardent sans le son." },
+      { type: "paragraph", text: "Bonnes pratiques :" },
+      {
+        type: "list",
+        style: "bullet",
+        items: [
+          "Utilise les sous-titres auto avec la police Custom/Standard",
+          "Max 1–2 lignes — évite les blocs énormes de 3–4 lignes",
+          "Place les sous-titres centrés, pas sur les bords",
+        ],
+      },
+      ...postingHoursBlocks("fr"),
+    ],
   },
 ];

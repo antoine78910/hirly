@@ -22,7 +22,7 @@ export const INTRODUCE_HIRLY_RESOURCES_FR = [
   { type: "heading", level: 4, text: "Fonctionnalités principales + script" },
   {
     type: "table",
-    columns: ["Tags", "Script"],
+    columns: ["Fonctionnalités", "Script"],
     rows: [
       [
         FR_TAGS.upload,
@@ -88,7 +88,7 @@ export const INTRODUCE_HIRLY_RESOURCES_EN = [
   { type: "heading", level: 4, text: "Main features + script" },
   {
     type: "table",
-    columns: ["Tags", "Script"],
+    columns: ["Fonctionnalités", "Script"],
     rows: [
       [
         EN_TAGS.upload,

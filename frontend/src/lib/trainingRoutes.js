@@ -17,9 +17,6 @@ export function parseTrainingLocale(pathname) {
 }
 
 export function storedTrainingLocale() {
-  if (typeof window === "undefined") return "fr";
-  const stored = localStorage.getItem("hirly_training_lang");
-  if (stored === "en" || stored === "fr") return stored;
   return "fr";
 }
 

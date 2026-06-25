@@ -87,7 +87,7 @@ QUIZZES: Dict[str, Dict[str, Any]] = {
                 {"id": "c", "label": "First 30 seconds — suspense"},
             ], "a"),
             _q("cc2", "Video length guidance?", [
-                {"id": "a", "label": "7-60s total; under 45s for new accounts"},
+                {"id": "a", "label": "7-45s total; under 30s for new accounts"},
                 {"id": "b", "label": "45-90s; always above 60s"},
                 {"id": "c", "label": "3-7 minutes minimum"},
             ], "a"),
