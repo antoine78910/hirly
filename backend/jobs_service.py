@@ -7,6 +7,7 @@ the active database adapter.
 import logging
 import os
 import time
+import unicodedata
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -82,12 +83,27 @@ def _country_and_location(target_location: Optional[str]) -> Tuple[str, Optional
         country = "gb"
         if location:
             location = location.replace("Royaume-Uni", "United Kingdom").replace("royaume-uni", "United Kingdom")
-    elif any(term in text for term in ("france", "paris", "ile de france", "ile-de-france")):
+    elif _looks_like_france_location(text):
         country = "fr"
     elif any(term in text for term in ("morocco", "maroc", "casablanca")):
         country = "ma"
 
     return country, location
+
+
+def _looks_like_france_location(text: str) -> bool:
+    normalized = (text or "").lower()
+    normalized_ascii = unicodedata.normalize("NFKD", normalized).encode("ascii", "ignore").decode("ascii")
+    france_markers = {
+        "france", "paris", "ile de france", "ile-de-france", "bordeaux", "lyon", "marseille",
+        "toulouse", "nice", "nantes", "strasbourg", "lille", "montpellier", "rennes",
+        "grenoble", "dijon", "limoges", "poitiers", "angers", "caen", "rouen", "reims",
+        "metz", "nancy", "tours", "clermont ferrand", "clermont-ferrand", "besancon",
+        "brest", "amiens", "orleans", "perpignan", "bayonne", "pau", "la rochelle",
+        "avignon", "annecy", "chambery", "valence", "nimes", "mulhouse", "colmar",
+        "lorient", "vannes", "quimper", "saint etienne", "saint-etienne",
+    }
+    return any(marker in normalized_ascii for marker in france_markers)
 
 
 def _country_and_location_from_data(location_data: Optional[Dict[str, Any]], fallback_location: Optional[str]) -> Tuple[str, Optional[str]]:
@@ -103,6 +119,16 @@ def _country_and_location_from_data(location_data: Optional[Dict[str, Any]], fal
     if country_code:
         return country_code, location
     return _country_and_location(location)
+
+
+def _language_for_country(country: Optional[str]) -> str:
+    explicit = os.environ.get("JSEARCH_LANGUAGE")
+    if explicit:
+        return explicit
+    country_code = (country or "").lower()
+    if country_code in ("fr", "be", "ch", "ma"):
+        return "fr"
+    return "en"
 
 
 def _next_radius(search_radius: str) -> Optional[str]:
@@ -154,7 +180,7 @@ def build_profile_job_query(
         location=location,
         remote_preference=remote_preference,
         country=country,
-        language=os.environ.get("JSEARCH_LANGUAGE", "en"),
+        language=_language_for_country(country),
         limit=max(20, min(_env_int("JOB_IMPORT_LIMIT", 50), 100)),
     )
 
@@ -218,8 +244,8 @@ def _fallback_locations(query: JobSearchQuery) -> List[Optional[str]]:
 
     if query.country == "gb" or any(term in location_text for term in ("egham", "united kingdom", "royaume-uni", "london")):
         locations = ["Egham, United Kingdom", "London, United Kingdom", "United Kingdom"]
-    elif query.country == "fr" or any(term in location_text for term in ("paris", "france", "ile de france", "ile-de-france")):
-        locations = ["Paris, France", "Ile-de-France, France", "France"]
+    elif query.country == "fr" or _looks_like_france_location(location_text):
+        locations = ["France", "Paris, France", "Ile-de-France, France", "Lyon, France", "Bordeaux, France"]
     elif query.country == "ma" or any(term in location_text for term in ("casablanca", "morocco", "maroc")):
         locations = ["Casablanca, Morocco", "Morocco"]
     elif query.country and query.country != os.environ.get("JSEARCH_COUNTRY", "us"):
@@ -732,6 +758,53 @@ def _copy_query_with_role(query: JobSearchQuery, role: str, *, raw_query: bool =
     )
 
 
+def _copy_query_with_role_and_location(
+    query: JobSearchQuery,
+    role: str,
+    location: Optional[str],
+    *,
+    raw_query: bool = False,
+) -> JobSearchQuery:
+    return JobSearchQuery(
+        role=role,
+        location=location,
+        remote_preference=query.remote_preference,
+        country=query.country,
+        language=query.language,
+        limit=query.limit,
+        raw_query=raw_query,
+    )
+
+
+def _dedupe_queries(queries: List[JobSearchQuery], provider) -> List[JobSearchQuery]:
+    seen = set()
+    out: List[JobSearchQuery] = []
+    for item in queries:
+        key = provider.search_key(item)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(item)
+    return out
+
+
+def _provider_attempt_queries(query: JobSearchQuery, search_radius: str, provider) -> List[JobSearchQuery]:
+    role_variants = _localized_role_variants(query.role, query.country)
+    locations = _nearby_locations(query, search_radius)
+    primary_location = query.location
+    fallback_locations = [loc for loc in locations if loc != primary_location]
+    attempts: List[JobSearchQuery] = []
+
+    for role in role_variants:
+        attempts.append(_copy_query_with_role_and_location(query, role, primary_location))
+
+    for fallback_location in fallback_locations:
+        for role in role_variants[:2]:
+            attempts.append(_copy_query_with_role_and_location(query, role, fallback_location))
+
+    return _dedupe_queries(attempts, provider)
+
+
 def _ats_attempt_countries(query: JobSearchQuery, search_radius: str) -> List[Optional[str]]:
     country = (query.country or "").lower() or None
     if (search_radius or "").lower() == "worldwide":
@@ -909,10 +982,7 @@ async def refresh_jobs_for_profile_if_needed(
             "provider_cooldown_until": cooldown_until.isoformat(),
         }
 
-    query_variants = [
-        _copy_query_with_role(query, role)
-        for role in _localized_role_variants(query.role, query.country)
-    ]
+    query_variants = _provider_attempt_queries(query, search_radius, provider)
     search_keys = [provider.search_key(item) for item in query_variants]
     search_key = search_keys[0] if search_keys else provider.search_key(query)
     ttl_minutes = _env_int("JOB_IMPORT_TTL_MINUTES", 360)
@@ -936,11 +1006,12 @@ async def refresh_jobs_for_profile_if_needed(
         })
 
     try:
-        max_provider_requests = max(1, min(_env_int("JOB_IMPORT_MAX_PROVIDER_REQUESTS", 5), 10))
+        max_provider_requests = max(1, min(_env_int("JOB_IMPORT_MAX_PROVIDER_REQUESTS", 7), 12))
         provider_requests = 0
         total_imported = 0
         imported_jobs: List[Dict[str, Any]] = []
         imported = 0
+        fallback_used = None
         for attempt_query in query_variants:
             if provider_requests >= max_provider_requests or total_imported >= min_fresh_count:
                 break
@@ -949,6 +1020,8 @@ async def refresh_jobs_for_profile_if_needed(
             imported = import_stats["total_imported"]
             total_imported += imported
             imported_jobs.extend(import_stats.get("jobs") or [])
+            if imported > 0 and fallback_used is None and attempt_query.location != query.location:
+                fallback_used = attempt_query.location
             logger.info(
                 "JSearch refresh attempt: role=%s location=%s country=%s query=%s total_imported=%s auto_apply_supported_imported=%s unknown_ats_imported=%s",
                 attempt_query.role,
@@ -959,39 +1032,6 @@ async def refresh_jobs_for_profile_if_needed(
                 import_stats["auto_apply_supported_imported"],
                 import_stats["unknown_ats_imported"],
             )
-        fallback_used = None
-        if total_imported < min_fresh_count and provider_requests < max_provider_requests:
-            for fallback_location in _nearby_locations(query, search_radius):
-                if fallback_location == query.location:
-                    continue
-                if provider_requests >= max_provider_requests:
-                    break
-                fallback_query = JobSearchQuery(
-                    role=query_variants[0].role if query_variants else query.role,
-                    location=fallback_location,
-                    remote_preference=query.remote_preference,
-                    country=query.country,
-                    language=query.language,
-                    limit=query.limit,
-                )
-                provider_requests += 1
-                fallback_stats = await _import_provider_jobs(db, provider, fallback_query)
-                imported = fallback_stats["total_imported"]
-                total_imported += imported
-                imported_jobs.extend(fallback_stats.get("jobs") or [])
-                logger.info(
-                    "JSearch fallback attempt: role=%s location=%s country=%s total_imported=%s auto_apply_supported_imported=%s unknown_ats_imported=%s",
-                    fallback_query.role,
-                    fallback_query.location,
-                    fallback_query.country,
-                    fallback_stats["total_imported"],
-                    fallback_stats["auto_apply_supported_imported"],
-                    fallback_stats["unknown_ats_imported"],
-                )
-                if imported > 0 and fallback_used is None:
-                    fallback_used = fallback_query.location
-                if total_imported >= min_fresh_count:
-                    break
         if total_imported < min_fresh_count and provider_requests < max_provider_requests:
             broad_location = query.location or _country_name(query.country) or "remote"
             broad_query = JobSearchQuery(
