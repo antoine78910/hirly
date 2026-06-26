@@ -875,6 +875,34 @@ def _job_matches_query_family(job: Dict[str, Any], query: JobSearchQuery) -> boo
     return any(token in text for token in tokens)
 
 
+def _job_matches_query_location(job: Dict[str, Any], query: JobSearchQuery, search_radius: str) -> bool:
+    radius = (search_radius or "50km").lower().strip()
+    if radius in ("worldwide", "remote/worldwide"):
+        return True
+    if radius == "remote":
+        return str(job.get("remote") or "").lower() == "remote"
+
+    job_location = unicodedata.normalize(
+        "NFKD",
+        str(job.get("location") or "").lower(),
+    ).encode("ascii", "ignore").decode("ascii")
+    job_country = str(job.get("country_code") or "").lower().strip()
+    query_country = str(query.country or "").lower().strip()
+    if query_country and job_country == query_country:
+        return True
+
+    country_name = (_country_name(query_country) or "").lower()
+    if country_name and country_name in job_location:
+        return True
+
+    location = unicodedata.normalize(
+        "NFKD",
+        str(query.location or "").lower(),
+    ).encode("ascii", "ignore").decode("ascii")
+    city = re.split(r"[,/|-]", location, maxsplit=1)[0].strip()
+    return bool(city and city in job_location)
+
+
 def _ats_attempt_countries(query: JobSearchQuery, search_radius: str) -> List[Optional[str]]:
     country = (query.country or "").lower() or None
     if (search_radius or "").lower() == "worldwide":
@@ -975,6 +1003,7 @@ async def refresh_jobs_for_profile_if_needed(
     location_data_override: Optional[Dict[str, Any]] = None,
     search_radius: str = "50km",
     role_override: Optional[str] = None,
+    force_provider_refresh: bool = False,
 ) -> Dict[str, Any]:
     query = build_profile_job_query(
         profile,
@@ -1059,6 +1088,10 @@ async def refresh_jobs_for_profile_if_needed(
     stale_cutoff = (datetime.now(timezone.utc) - timedelta(minutes=ttl_minutes)).isoformat()
 
     min_fresh_count = max(target_auto_apply_count, _env_int("JOB_IMPORT_MIN_FRESH_COUNT", 10))
+    min_feed_ready_count = max(
+        min_fresh_count,
+        target_auto_apply_count * max(1, _env_int("JOB_IMPORT_CACHE_FRESH_MULTIPLIER", 4)),
+    )
     fresh_query = {
         "provider": provider.name,
         "provider_search_key": {"$in": search_keys},
@@ -1067,14 +1100,28 @@ async def refresh_jobs_for_profile_if_needed(
     fresh_jobs = await db.jobs.find(fresh_query, {"_id": 0}).limit(300).to_list(300) if search_keys else []
     fresh_count = len(fresh_jobs)
     fresh_relevant_count = sum(1 for job in fresh_jobs if _job_matches_query_family(job, query))
-    if fresh_relevant_count >= min_fresh_count and not require_auto_apply:
+    swiped_ids = set()
+    user_id = profile.get("user_id")
+    if user_id:
+        swiped_rows = await db.swipes.find({"user_id": user_id}, {"_id": 0, "job_id": 1}).limit(1000).to_list(1000)
+        swiped_ids = {row.get("job_id") for row in swiped_rows if row.get("job_id")}
+    fresh_feed_ready_count = sum(
+        1
+        for job in fresh_jobs
+        if job.get("job_id") not in swiped_ids
+        and _job_matches_query_family(job, query)
+        and _job_matches_query_location(job, query, search_radius)
+    )
+    if fresh_feed_ready_count >= min_feed_ready_count and not require_auto_apply and not force_provider_refresh:
         return {
             "attempted": False,
-            "reason": "cache_fresh",
+            "reason": "cache_fresh_feed_ready",
             "search_key": search_key,
             "search_keys": search_keys,
             "count": fresh_count,
             "relevant_count": fresh_relevant_count,
+            "feed_ready_count": fresh_feed_ready_count,
+            "min_feed_ready_count": min_feed_ready_count,
             **base_metadata,
         }
     any_cached = 0
@@ -1086,19 +1133,28 @@ async def refresh_jobs_for_profile_if_needed(
 
     try:
         max_provider_requests = max(1, min(_env_int("JOB_IMPORT_MAX_PROVIDER_REQUESTS", 7), 12))
+        min_provider_requests = 1 if force_provider_refresh else 0
         provider_requests = 0
         total_imported = 0
-        relevant_imported = fresh_relevant_count
+        relevant_imported = fresh_feed_ready_count
         imported_jobs: List[Dict[str, Any]] = []
         imported = 0
         fallback_used = None
         for attempt_query in query_variants:
-            if provider_requests >= max_provider_requests or relevant_imported >= min_fresh_count:
+            if provider_requests >= max_provider_requests or (
+                provider_requests >= min_provider_requests
+                and relevant_imported >= min_feed_ready_count
+            ):
                 break
             provider_requests += 1
             import_stats = await _import_provider_jobs(db, provider, attempt_query)
             imported = import_stats["total_imported"]
-            relevant = sum(1 for job in (import_stats.get("jobs") or []) if _job_matches_query_family(job, query))
+            relevant = sum(
+                1
+                for job in (import_stats.get("jobs") or [])
+                if _job_matches_query_family(job, query)
+                and _job_matches_query_location(job, query, search_radius)
+            )
             total_imported += imported
             relevant_imported += relevant
             imported_jobs.extend(import_stats.get("jobs") or [])
@@ -1115,7 +1171,7 @@ async def refresh_jobs_for_profile_if_needed(
                 import_stats["auto_apply_supported_imported"],
                 import_stats["unknown_ats_imported"],
             )
-        if relevant_imported < min_fresh_count and provider_requests < max_provider_requests:
+        if relevant_imported < min_feed_ready_count and provider_requests < max_provider_requests:
             broad_location = query.location or _country_name(query.country) or "remote"
             broad_query = JobSearchQuery(
                 role=f"{query_variants[0].role if query_variants else query.role} jobs in {broad_location}",
@@ -1129,7 +1185,12 @@ async def refresh_jobs_for_profile_if_needed(
             provider_requests += 1
             broad_stats = await _import_provider_jobs(db, provider, broad_query)
             total_imported += broad_stats["total_imported"]
-            relevant_imported += sum(1 for job in (broad_stats.get("jobs") or []) if _job_matches_query_family(job, query))
+            relevant_imported += sum(
+                1
+                for job in (broad_stats.get("jobs") or [])
+                if _job_matches_query_family(job, query)
+                and _job_matches_query_location(job, query, search_radius)
+            )
             imported_jobs.extend(broad_stats.get("jobs") or [])
             logger.info(
                 "JSearch broad local attempt: query=%s country=%s total_imported=%s relevant_imported=%s auto_apply_supported_imported=%s unknown_ats_imported=%s",

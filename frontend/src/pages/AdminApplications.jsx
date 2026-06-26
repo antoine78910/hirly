@@ -86,7 +86,7 @@ export default function AdminApplications() {
   return (
     <AdminShell
       title="Operations Queue"
-      subtitle="Resolve failed and blocked applications."
+      subtitle="Complete generated applications manually and resolve blocked submissions."
       actions={(
         <Button variant="outline" onClick={load} disabled={loading}>
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}

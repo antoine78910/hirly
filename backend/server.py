@@ -2234,11 +2234,22 @@ def _build_generated_application_doc(
         }
         package_status = "generated_text_only"
 
+    now = datetime.now(timezone.utc).isoformat()
     return {
         "application_id": f"app_{uuid.uuid4().hex[:12]}",
         "user_id": user.user_id,
         "job_id": job["job_id"],
         "status": "applied",
+        "admin_status": "manual_review_needed",
+        "manual_status": "manual_review_needed",
+        "manual_status_updated_at": now,
+        "admin_timeline": [{
+            "event_id": f"timeline_{uuid.uuid4().hex[:12]}",
+            "type": "manual_status",
+            "manual_status": "manual_review_needed",
+            "note": "Queued for manual fulfillment after user swipe.",
+            "created_at": now,
+        }],
         "package_status": package_status,
         "generation_status": generation_status,
         "generation_error": generation_error,
@@ -2253,7 +2264,8 @@ def _build_generated_application_doc(
         "match_score": gen.get("match_score", 75),
         "match_reasons": gen.get("match_reasons", []),
         "interview_prep": gen.get("interview_prep", []),
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": now,
+        "updated_at": now,
     }
 
 
@@ -2268,6 +2280,16 @@ def _pending_application_doc(user: User, job: Dict[str, Any], error: Optional[Ex
         "user_id": user.user_id,
         "job_id": job["job_id"],
         "status": "applied",
+        "admin_status": "manual_review_needed",
+        "manual_status": "manual_review_needed",
+        "manual_status_updated_at": now,
+        "admin_timeline": [{
+            "event_id": f"timeline_{uuid.uuid4().hex[:12]}",
+            "type": "manual_status",
+            "manual_status": "manual_review_needed",
+            "note": "Queued for manual fulfillment after user swipe; package generation is pending.",
+            "created_at": now,
+        }],
         "package_status": "pending_generation",
         "submission_status": "not_submitted",
         "submitted_at": None,
@@ -3311,6 +3333,7 @@ async def get_feed(
         if not _timed_out():
             max_refresh_locations = max(1, min(int(os.environ.get("FEED_MAX_REFRESH_LOCATIONS", "1")), 3))
             refresh_locations = [None] if is_worldwide_radius else (selected_locations or [None])[:max_refresh_locations]
+            force_provider_refresh = os.environ.get("JOB_FEED_ON_DEMAND_JSEARCH", "true").lower() in ("1", "true", "yes", "on")
             for loc_data in refresh_locations:
                 loc_label = loc_data.get("location_label") if isinstance(loc_data, dict) else None
                 refresh_result = await refresh_jobs_for_profile_if_needed(
@@ -3322,6 +3345,7 @@ async def get_feed(
                     location_data_override=loc_data if isinstance(loc_data, dict) else None,
                     search_radius=search_radius,
                     role_override=target_role,
+                    force_provider_refresh=force_provider_refresh,
                 )
                 refresh_results.append(refresh_result)
                 if refresh_result.get("provider_rate_limited"):
@@ -3580,6 +3604,17 @@ async def get_feed(
                 and _matches_industry(job)
             )
 
+        def _matches_non_location_filters(job: Dict[str, Any]) -> bool:
+            return (
+                _matches_work_location(job)
+                and _matches_salary(job)
+                and _matches_posted_date(job)
+                and _matches_job_type(job)
+                and _matches_experience(job)
+                and _matches_company(job)
+                and _matches_industry(job)
+            )
+
         swiped_rows = await db.swipes.find({"user_id": user.user_id}, {"_id": 0, "job_id": 1}).limit(500).to_list(500)
         swiped_ids = {row.get("job_id") for row in swiped_rows if row.get("job_id")}
         if direct_refresh_jobs:
@@ -3588,12 +3623,14 @@ async def get_feed(
             candidates = await _get_feed_job_candidates(base_query, candidate_limit)
         candidates = [job for job in candidates if job.get("job_id") not in swiped_ids]
         unfiltered_count = len(candidates)
+        pre_filter_candidates = list(candidates)
         candidates = [job for job in candidates if _matches_explicit_filters(job)]
         if provider_search_keys and not candidates and not _timed_out():
             fallback_query: Dict[str, Any] = {}
             fallback_candidates = await _get_feed_job_candidates(fallback_query, candidate_limit)
             fallback_candidates = [job for job in fallback_candidates if job.get("job_id") not in swiped_ids]
             unfiltered_count = len(fallback_candidates)
+            pre_filter_candidates = list(fallback_candidates)
             candidates = [job for job in fallback_candidates if _matches_explicit_filters(job)]
             base_query = fallback_query
         logger.info(
@@ -3674,13 +3711,13 @@ async def get_feed(
                 )
         if not is_worldwide_radius and explicit_filters and len(jobs) < requested_limit and explicit_location_filter and selected_country_terms:
             relaxed = [
-                job for job in candidates
-                if _matches_explicit_filters(job) or (
-                    _role_score(job, strict_tokens, family_tokens) > 0
-                    and (
-                        bool(selected_country_terms and any(term in str(job.get("location") or "").lower() for term in selected_country_terms))
-                        or str(job.get("remote") or "").lower() == "remote"
-                    )
+                job for job in pre_filter_candidates
+                if _matches_non_location_filters(job)
+                and _role_score(job, strict_tokens, family_tokens) > 0
+                and (
+                    _matches_location(job)
+                    or bool(selected_country_terms and any(term in str(job.get("location") or "").lower() for term in selected_country_terms))
+                    or str(job.get("remote") or "").lower() == "remote"
                 )
             ]
             if relaxed:
@@ -3696,6 +3733,17 @@ async def get_feed(
                     _elapsed_ms(),
                     len(jobs),
                 )
+        if not is_worldwide_radius and explicit_filters and len(jobs) < requested_limit and not _timed_out():
+            widened = [
+                job for job in pre_filter_candidates
+                if _matches_non_location_filters(job)
+                and _role_score(job, strict_tokens, family_tokens) > 0
+            ]
+            widened_jobs = rank(widened, worldwide=True, broad=True)
+            if widened_jobs:
+                fallback_used = "explicit_filters_worldwide_role_family"
+                jobs = widened_jobs
+            logger.info("feed_filter_stage user_id=%s stage=explicit_filters_worldwide_role_family elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))
         if explicit_filters and len(jobs) < requested_limit:
             fallback_used = "none_due_to_explicit_filters" if fallback_used == "none" else fallback_used
         if not is_worldwide_radius and not explicit_filters and len(jobs) < requested_limit and not _timed_out():
@@ -4385,6 +4433,8 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
                 "package_status": normalized["package_status"],
                 "application_status": normalized["package_status"],
                 "submission_status": normalized["submission_status"],
+                "manual_status": _effective_manual_status(normalized),
+                "manual_fulfillment": _manual_application_fulfillment_enabled(),
                 "billing": billing_credit_status,
             }
             phase = "response_build_done"
@@ -4479,6 +4529,7 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
 
         if (
             req.direction == "right"
+            and not _manual_application_fulfillment_enabled()
             and job.get("ats_provider") == "greenhouse"
             and saved_doc.get("package_status") == "generated"
         ):
@@ -4569,6 +4620,7 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
             final_submission_status_saved=saved_doc.get("submission_status"),
             submission_status=saved_doc.get("submission_status"),
             credits_remaining=credit_result.get("credits_remaining"),
+            manual_fulfillment=_manual_application_fulfillment_enabled(),
         )
 
         phase = "response_build_start"
@@ -4587,6 +4639,8 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
             "package_status": saved_doc["package_status"],
             "application_status": saved_doc["package_status"],
             "submission_status": saved_doc["submission_status"],
+            "manual_status": _effective_manual_status(saved_doc),
+            "manual_fulfillment": _manual_application_fulfillment_enabled(),
             "billing": credit_result,
         }
         phase = "response_build_done"
@@ -4727,6 +4781,10 @@ def _env_enabled(name: str, default: str = "false") -> bool:
 def _greenhouse_real_submit_allowed_emails() -> set[str]:
     explicit = _env_email_set("REAL_SUBMIT_ALLOWED_EMAILS")
     return explicit or _env_email_set("ADMIN_EMAILS")
+
+
+def _manual_application_fulfillment_enabled() -> bool:
+    return _env_enabled("MANUAL_APPLICATION_FULFILLMENT", "true")
 
 
 def _require_greenhouse_real_submit_allowed(user: User) -> None:

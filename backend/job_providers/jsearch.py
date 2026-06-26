@@ -19,29 +19,64 @@ class JSearchProvider:
         self.timeout = timeout
 
     async def search(self, query: JobSearchQuery) -> ProviderResult:
-        params: Dict[str, Any] = {
+        base_params: Dict[str, Any] = {
             "query": self._query_string(query),
             "language": query.language,
         }
         if query.country:
-            params["country"] = query.country
+            base_params["country"] = query.country
         if query.remote_preference == "remote":
-            params["work_from_home"] = "true"
+            base_params["work_from_home"] = "true"
+        date_posted = os.environ.get("JSEARCH_DATE_POSTED")
+        if date_posted:
+            base_params["date_posted"] = date_posted
 
+        max_pages = max(1, min(self._env_int("JSEARCH_MAX_PAGES", 3), 10))
+        page_size = max(10, min(self._env_int("JSEARCH_PAGE_SIZE", query.limit), 100))
+        target_count = max(query.limit, min(page_size * max_pages, 300))
+
+        payloads: List[Any] = []
+        rows: List[Dict[str, Any]] = []
+        seen_ids = set()
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.get(
-                f"{self.base_url}/search-v2",
-                params=params,
-                headers={"x-api-key": self.api_key},
-            )
-            response.raise_for_status()
-            payload = response.json()
+            for page in range(1, max_pages + 1):
+                params = dict(base_params)
+                params["num_pages"] = max_pages if page == 1 else 1
+                if page_size:
+                    params["page_size"] = page_size
+                if page > 1:
+                    params["page"] = page
+                response = await client.get(
+                    f"{self.base_url}/search-v2",
+                    params=params,
+                    headers={"x-api-key": self.api_key},
+                )
+                response.raise_for_status()
+                payload = response.json()
+                payloads.append(payload)
+                page_rows = self._extract_jobs(payload)
+                new_rows = 0
+                for row in page_rows:
+                    external_id = row.get("job_id") or row.get("id") or row.get("job_google_link") or row.get("job_apply_link")
+                    dedupe_key = str(external_id or hashlib.sha1(repr(sorted(row.items())).encode("utf-8")).hexdigest())
+                    if dedupe_key in seen_ids:
+                        continue
+                    seen_ids.add(dedupe_key)
+                    rows.append(row)
+                    new_rows += 1
+                if not page_rows or new_rows == 0 or len(rows) >= target_count:
+                    break
 
-        rows = self._extract_jobs(payload)
         imported_at = datetime.now(timezone.utc).isoformat()
-        jobs = [self.normalize_job(row, query, imported_at) for row in rows[: query.limit]]
+        jobs = [self.normalize_job(row, query, imported_at) for row in rows[:target_count]]
         jobs = [job for job in jobs if job is not None]
-        return ProviderResult(jobs=jobs, raw_response=payload)
+        return ProviderResult(raw_response={"pages": payloads, "rows_seen": len(rows)}, jobs=jobs[:target_count])
+
+    def _env_int(self, name: str, default: int) -> int:
+        try:
+            return int(os.environ.get(name, default))
+        except (TypeError, ValueError):
+            return default
 
     def _extract_jobs(self, payload: Any) -> List[Dict[str, Any]]:
         if isinstance(payload, list):

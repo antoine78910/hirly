@@ -1638,6 +1638,10 @@ export function getSwipeSuccessCopy(t, data, job) {
   const pkg = data?.package_status || data?.application_status;
   const company = job?.company || "";
 
+  if (data?.manual_fulfillment || data?.manual_status === "manual_review_needed") {
+    return { title: t("swipe.swipePackageFor", { company }), description: t("swipe.swipePackageReady") };
+  }
+
   if (submission === "prepared") {
     const reviewOn = readAiSettings().reviewDocuments;
     return {
