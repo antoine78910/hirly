@@ -16,7 +16,6 @@ import {
 } from "../lib/creatorInvite";
 import { getLocalDevInviteMeta } from "../lib/inviteDevMocks";
 import { startGoogleLogin } from "../lib/auth";
-import { supabase, supabaseConfigured } from "../lib/supabase";
 import { TrainingAuthForm, TrainingAuthPopup } from "../components/training/TrainingAuthPopup";
 
 function isTrainingInvite(meta) {
@@ -99,31 +98,11 @@ export default function InviteLanding() {
     })();
   }, [authLoading, checking, user, normalized, invalid, navigate, redeeming, inviteMeta]);
 
-  const establishSession = async (session) => {
-    const accessToken = session?.access_token;
-    if (!accessToken) {
-      setAuthNotice("Vérifiez votre boîte mail pour confirmer votre compte, puis rouvrez ce lien pour finaliser l'activation.");
-      return null;
-    }
-    const { data } = await api.post("/auth/supabase-session", { access_token: accessToken });
-    if (data?.session_token) setSessionToken(data.session_token);
-    setUser(data.user);
-    setHasProfile(Boolean(data.has_profile));
-    setHasPreferences(Boolean(data.has_preferences));
-    if (data?.user?.demo_account) setDemoAccountFromUser(data.user);
-    if (data?.has_training_access) setHasTrainingAccess(true);
-    return data.user;
-  };
-
   const onEmailSubmit = async (event) => {
     event.preventDefault();
     setAuthError("");
     setAuthNotice("");
 
-    if (!supabaseConfigured || !supabase) {
-      setAuthError("L'authentification par e-mail n'est pas configurée.");
-      return;
-    }
     if (!email.trim() || password.length < 6) {
       setAuthError("Saisissez un e-mail et un mot de passe d'au moins 6 caractères.");
       return;
@@ -132,17 +111,29 @@ export default function InviteLanding() {
     setSubmitting(true);
     storePendingInviteCode(normalized);
     try {
-      const authCall = authMode === "login"
-        ? supabase.auth.signInWithPassword({ email: email.trim(), password })
-        : supabase.auth.signUp({ email: email.trim(), password });
-      const { data, error } = await authCall;
-      if (error) throw error;
-      const sessionUser = await establishSession(data?.session);
-      if (!sessionUser) return;
+      const { data } = await api.post("/auth/invite-email", {
+        email: email.trim(),
+        password,
+        code: normalized,
+        mode: authMode,
+      });
+      if (data?.session_token) setSessionToken(data.session_token);
+      setUser(data.user);
+      setHasProfile(Boolean(data.has_profile));
+      setHasPreferences(Boolean(data.has_preferences));
+      if (data?.user?.demo_account) setDemoAccountFromUser(data.user);
+      if (data?.has_training_access) setHasTrainingAccess(true);
       const redeemData = await redeemCreatorInvite(api, normalized);
-      await finishRedeemAndNavigate(sessionUser, redeemData);
+      await finishRedeemAndNavigate(data.user, redeemData);
     } catch (err) {
-      setAuthError(err?.response?.data?.detail || err?.message || "Échec de l'authentification. Réessayez.");
+      const detail = err?.response?.data?.detail;
+      const message = typeof detail === "string" ? detail : err?.message;
+      if (authMode === "signup" && /already been registered|already registered/i.test(message || "")) {
+        setAuthNotice("Un compte existe déjà avec cet e-mail. Passez en mode connexion.");
+        setAuthMode("login");
+      } else {
+        setAuthError(message || "Échec de l'authentification. Réessayez.");
+      }
     } finally {
       setSubmitting(false);
     }

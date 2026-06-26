@@ -68,5 +68,28 @@ export function getInviteDevResponse(config) {
     return redeemDevInvite(code);
   }
 
+  if (method === "post" && path === "/auth/invite-email") {
+    const body = typeof config.data === "string" ? JSON.parse(config.data) : config.data;
+    const code = String(body?.code || "").trim();
+    const meta = getLocalDevInviteMeta(code);
+    if (!meta) return undefined;
+    const inviteType = meta.invite_type;
+    const email = String(body?.email || "dev@example.com").trim();
+    return {
+      user: {
+        user_id: `dev_invite_${Date.now()}`,
+        email,
+        name: email.split("@")[0],
+        demo_account: inviteType === "demo" || inviteType === "creator",
+        training_access: inviteType === "training" || inviteType === "creator",
+      },
+      has_profile: false,
+      has_preferences: false,
+      has_training_access: inviteType === "training" || inviteType === "creator",
+      is_training_creator: false,
+      session_token: `dev_invite_session_${Date.now()}`,
+    };
+  }
+
   return undefined;
 }

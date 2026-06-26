@@ -31,7 +31,7 @@ import time
 import hashlib
 import unicodedata
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import quote as url_quote, urlparse
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Dict, Any, Literal
 from datetime import datetime, timezone, timedelta
@@ -246,6 +246,13 @@ class LeverSubmissionBenchmarkRequest(BaseModel):
 
 class SupabaseSessionRequest(BaseModel):
     access_token: str
+
+
+class InviteEmailAuthRequest(BaseModel):
+    email: str
+    password: str
+    code: str
+    mode: Literal["signup", "login"] = "signup"
 
 
 class AnalyticsEventRequest(BaseModel):
@@ -474,18 +481,105 @@ def _set_app_session_cookie(response: Response, session_token: str) -> None:
     )
 
 
-@api_router.post("/auth/supabase-session")
-async def auth_supabase_session(body: SupabaseSessionRequest, response: Response):
-    """Exchange a verified Supabase access token for the app's session_token."""
-    access_token = (body.access_token or "").strip()
-    if not access_token:
-        raise HTTPException(status_code=400, detail="access_token required")
-
+def _supabase_admin_config() -> tuple[str, str]:
     supabase_url = _normalize_supabase_url(os.environ.get("SUPABASE_URL"))
     supabase_secret = os.environ.get("SUPABASE_SECRET_KEY", "")
     if not supabase_url or not supabase_secret:
         raise HTTPException(status_code=503, detail="Supabase auth is not configured")
+    return supabase_url, supabase_secret
 
+
+async def _supabase_admin_request(
+    method: str,
+    path: str,
+    json_body: Optional[Dict[str, Any]] = None,
+) -> httpx.Response:
+    supabase_url, supabase_secret = _supabase_admin_config()
+    headers = {
+        "apikey": supabase_secret,
+        "Authorization": f"Bearer {supabase_secret}",
+        "Content-Type": "application/json",
+    }
+    async with httpx.AsyncClient(timeout=15.0) as http:
+        return await http.request(
+            method,
+            f"{supabase_url}{path}",
+            headers=headers,
+            json=json_body,
+        )
+
+
+async def _supabase_password_access_token(email: str, password: str) -> str:
+    response = await _supabase_admin_request(
+        "POST",
+        "/auth/v1/token?grant_type=password",
+        {"email": email.strip().lower(), "password": password},
+    )
+    if response.status_code != 200:
+        payload = response.json() if response.content else {}
+        detail = payload.get("error_description") or payload.get("msg") or "Invalid email or password"
+        raise HTTPException(status_code=401, detail=detail)
+    access_token = (response.json() or {}).get("access_token")
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Authentication failed")
+    return access_token
+
+
+async def _supabase_admin_find_user_by_email(email: str) -> Optional[Dict[str, Any]]:
+    normalized = email.strip().lower()
+    response = await _supabase_admin_request(
+        "GET",
+        f"/auth/v1/admin/users?email={url_quote(normalized)}",
+    )
+    if response.status_code != 200:
+        return None
+    users = (response.json() or {}).get("users") or []
+    return users[0] if users else None
+
+
+async def _supabase_admin_ensure_confirmed_user(email: str, password: str) -> None:
+    normalized = email.strip().lower()
+    create_response = await _supabase_admin_request(
+        "POST",
+        "/auth/v1/admin/users",
+        {
+            "email": normalized,
+            "password": password,
+            "email_confirm": True,
+            "user_metadata": {"full_name": normalized.split("@")[0]},
+        },
+    )
+    if create_response.status_code in (200, 201):
+        return
+
+    existing = await _supabase_admin_find_user_by_email(normalized)
+    if not existing:
+        payload = create_response.json() if create_response.content else {}
+        detail = payload.get("msg") or payload.get("error_description") or "Could not create account"
+        raise HTTPException(status_code=400, detail=detail)
+
+    user_id = existing.get("id")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Could not resolve existing account")
+
+    update_response = await _supabase_admin_request(
+        "PUT",
+        f"/auth/v1/admin/users/{user_id}",
+        {"email_confirm": True, "password": password},
+    )
+    if update_response.status_code not in (200, 201):
+        payload = update_response.json() if update_response.content else {}
+        detail = payload.get("msg") or payload.get("error_description") or "Could not update account"
+        raise HTTPException(status_code=400, detail=detail)
+
+
+async def _session_payload_from_supabase_token(
+    access_token: str,
+    response: Response,
+    *,
+    source: str = "supabase",
+) -> Dict[str, Any]:
+    supabase_url, supabase_secret = _supabase_admin_config()
     async with httpx.AsyncClient(timeout=15.0) as http:
         r = await http.get(
             f"{supabase_url}/auth/v1/user",
@@ -523,19 +617,79 @@ async def auth_supabase_session(body: SupabaseSessionRequest, response: Response
             "last_login_at": datetime.now(timezone.utc).isoformat(),
         },
     )
-    session_token = await _create_app_session(user_doc["user_id"], "supabase_google")
+    session_token = await _create_app_session(user_doc["user_id"], source)
     _set_app_session_cookie(response, session_token)
 
     profile = await db.profiles.find_one({"user_id": user_doc["user_id"]}, {"_id": 0, "cv_text": 1, "target_role": 1})
+    creator_flag, training_access = await asyncio.gather(
+        is_training_creator(db, user_doc["user_id"]),
+        _resolve_training_access_from_user_doc(user_doc),
+    )
     logger.info("supabase_session success user_id=%s email=%s", user_doc["user_id"], email)
-    creator_flag = await is_training_creator(db, user_doc["user_id"])
     return {
         "user": user_doc,
         "has_profile": profile is not None and bool(profile.get("cv_text")),
         "has_preferences": profile is not None and bool(profile.get("target_role")),
         "is_training_creator": creator_flag,
+        "has_training_access": training_access,
         "session_token": session_token,
     }
+
+
+async def _resolve_training_access_from_user_doc(user_doc: Dict[str, Any]) -> bool:
+    from training_access import training_open_access_enabled
+
+    if training_open_access_enabled():
+        return True
+    user_id = user_doc.get("user_id")
+    if not user_id:
+        return False
+    if user_doc.get("training_access"):
+        return True
+    if user_id == TUTORIAL_FILMING_USER_ID:
+        return True
+    if _is_admin_email(user_doc.get("email")):
+        return True
+    return await is_training_creator(db, user_id)
+
+
+@api_router.post("/auth/supabase-session")
+async def auth_supabase_session(body: SupabaseSessionRequest, response: Response):
+    """Exchange a verified Supabase access token for the app's session_token."""
+    access_token = (body.access_token or "").strip()
+    if not access_token:
+        raise HTTPException(status_code=400, detail="access_token required")
+    return await _session_payload_from_supabase_token(access_token, response, source="supabase_google")
+
+
+@api_router.post("/auth/invite-email")
+async def auth_invite_email(body: InviteEmailAuthRequest, response: Response):
+    """Sign up or sign in via email for creator invites — no Supabase confirmation email."""
+    email = (body.email or "").strip().lower()
+    password = body.password or ""
+    code = (body.code or "").strip()
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="Valid email required")
+    if len(password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    if not re.fullmatch(r"\d{6}", code):
+        raise HTTPException(status_code=400, detail="Enter a valid 6-digit invitation code")
+
+    check = validate_invite(code)
+    if not check.get("valid") and check.get("reason") not in {"already_redeemed"}:
+        reason = check.get("reason")
+        if reason == "expired":
+            raise HTTPException(status_code=410, detail="This invitation has expired")
+        if reason == "revoked":
+            raise HTTPException(status_code=410, detail="This invitation is no longer valid")
+        raise HTTPException(status_code=400, detail="Invalid invitation code")
+
+    if body.mode == "signup":
+        await _supabase_admin_ensure_confirmed_user(email, password)
+
+    access_token = await _supabase_password_access_token(email, password)
+    source = "supabase_invite_signup" if body.mode == "signup" else "supabase_invite_login"
+    return await _session_payload_from_supabase_token(access_token, response, source=source)
 
 
 @api_router.post("/dev/login")
