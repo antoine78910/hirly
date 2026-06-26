@@ -52,11 +52,11 @@ export default function TrainingCompletionFeedbackModal({
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) onDismiss?.({ submitted: false }); }}>
       <DialogContent
-        className="max-w-md gap-0 overflow-hidden border-violet-200 p-0 sm:rounded-3xl"
+        className="flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md flex-col gap-0 overflow-hidden border-violet-200 p-0 sm:rounded-3xl"
         data-testid="training-completion-feedback-modal"
         onPointerDownOutside={(event) => event.preventDefault()}
       >
-        <div className="bg-gradient-to-br from-violet-600 to-indigo-600 px-6 py-7 text-center text-white">
+        <div className="shrink-0 bg-gradient-to-br from-violet-600 to-indigo-600 px-6 py-6 text-center text-white sm:py-7">
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15">
             <GraduationCap className="h-6 w-6" />
           </div>
@@ -70,7 +70,8 @@ export default function TrainingCompletionFeedbackModal({
           </DialogHeader>
         </div>
 
-        <form className="space-y-4 px-6 py-5" onSubmit={handleSubmit}>
+        <form className="flex min-h-0 flex-1 flex-col overflow-hidden" onSubmit={handleSubmit}>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-6 py-5">
           <div>
             <p className="text-sm font-semibold text-zinc-900">
               Cette formation vous a-t-elle été utile ?
@@ -127,8 +128,9 @@ export default function TrainingCompletionFeedbackModal({
               data-testid="training-feedback-message"
             />
           </label>
+          </div>
 
-          <DialogFooter className="flex-col gap-2 sm:flex-col">
+          <DialogFooter className="shrink-0 flex-col gap-2 border-t border-zinc-100 px-6 py-4 sm:flex-col">
             <Button
               type="submit"
               disabled={submitting}

@@ -14,11 +14,11 @@ export default function TrainingWelcomeModal({ open, onOpenChange, onDismiss }) 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-md gap-0 overflow-hidden border-violet-200 p-0 sm:rounded-3xl"
+        className="flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md flex-col gap-0 overflow-hidden border-violet-200 p-0 sm:rounded-3xl"
         data-testid="training-welcome-modal"
         onPointerDownOutside={(event) => event.preventDefault()}
       >
-        <div className="bg-gradient-to-br from-violet-600 to-indigo-600 px-6 py-7 text-center text-white">
+        <div className="shrink-0 bg-gradient-to-br from-violet-600 to-indigo-600 px-6 py-6 text-center text-white sm:py-7">
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15">
             <GraduationCap className="h-6 w-6" />
           </div>
@@ -32,7 +32,7 @@ export default function TrainingWelcomeModal({ open, onOpenChange, onDismiss }) 
           </DialogHeader>
         </div>
 
-        <div className="space-y-4 px-6 py-5">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-6 py-5">
           <div className="flex gap-3 rounded-2xl border border-violet-100 bg-violet-50/60 px-4 py-3">
             <BookOpen className="mt-0.5 h-5 w-5 shrink-0 text-violet-600" />
             <div className="text-sm text-zinc-700">
@@ -60,7 +60,7 @@ export default function TrainingWelcomeModal({ open, onOpenChange, onDismiss }) 
           </p>
         </div>
 
-        <DialogFooter className="border-t border-zinc-100 px-6 py-4 sm:justify-center">
+        <DialogFooter className="shrink-0 border-t border-zinc-100 px-6 py-4 sm:justify-center">
           <Button
             type="button"
             className="h-11 w-full rounded-full font-bold sm:w-auto sm:min-w-[200px]"

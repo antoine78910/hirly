@@ -28,17 +28,17 @@ export function TrainingAuthPopup({ aside, children, testId = "training-auth-pop
         <span>{BRAND.NAME}</span>
       </Link>
 
-      <div className="flex min-h-dvh items-center justify-center px-4 py-16 sm:px-6">
+      <div className="flex min-h-dvh items-center justify-center overflow-y-auto px-4 py-16 sm:px-6 sm:py-20">
         <div
-          className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-violet-200/70 bg-white shadow-[0_32px_80px_-28px_rgba(124,58,237,0.38)] md:max-w-4xl lg:max-w-5xl"
+          className="relative my-auto flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-violet-200/70 bg-white shadow-[0_32px_80px_-28px_rgba(124,58,237,0.38)] md:max-h-[calc(100dvh-2rem)] md:max-w-4xl lg:max-w-5xl"
           role="dialog"
           aria-modal="true"
         >
-          <div className="flex flex-col md:min-h-[440px] md:flex-row">
-            <aside className="gradient-linkedin px-6 py-8 text-white md:flex md:w-[42%] md:flex-col md:justify-center md:px-8 md:py-10 lg:w-[44%]">
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain md:flex-row md:overflow-hidden">
+            <aside className="shrink-0 gradient-linkedin px-6 py-8 text-white md:flex md:w-[42%] md:flex-col md:justify-center md:overflow-y-auto md:px-8 md:py-10 lg:w-[44%]">
               {aside}
             </aside>
-            <div className="flex flex-1 flex-col justify-center px-6 py-7 sm:px-8 sm:py-9">
+            <div className="flex min-h-0 flex-1 flex-col justify-center overflow-y-auto overscroll-contain px-6 py-7 sm:px-8 sm:py-9">
               {children}
             </div>
           </div>
