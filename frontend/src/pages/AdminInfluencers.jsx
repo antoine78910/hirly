@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { api } from "../lib/api";
 import { adminApiErrorMessage } from "../lib/adminApi";
 import { buildInviteUrl } from "../lib/creatorInvite";
+import { formatInviteClicked, formatInviteConnectedAccount, formatInviteStatus } from "../lib/adminInviteTracking";
 import { Button } from "../components/ui/button";
 import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
 
@@ -340,6 +341,33 @@ export default function AdminInfluencers() {
             ) : null}
             {demoInviteLoading ? (
               <p className="mt-3 text-sm text-zinc-500">Loading recent demo links…</p>
+            ) : demoInvites.length > 0 ? (
+              <div className="mt-4 overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-zinc-100 text-left text-xs uppercase tracking-wide text-zinc-500">
+                      <th className="py-2 pr-4">Code</th>
+                      <th className="py-2 pr-4">Label</th>
+                      <th className="py-2 pr-4">Created</th>
+                      <th className="py-2 pr-4">Link opened</th>
+                      <th className="py-2 pr-4">Connected account</th>
+                      <th className="py-2">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {demoInvites.slice(0, 8).map((row) => (
+                      <tr key={row.invite_id || row.code} className="border-b border-zinc-50">
+                        <td className="py-2 pr-4 font-mono text-xs">{row.code}</td>
+                        <td className="py-2 pr-4 text-zinc-600">{row.label || row.email_hint || "—"}</td>
+                        <td className="py-2 pr-4 text-zinc-500">{fmtDate(row.created_at)}</td>
+                        <td className="py-2 pr-4 text-zinc-600">{formatInviteClicked(row, fmtDate)}</td>
+                        <td className="py-2 pr-4 text-zinc-700">{formatInviteConnectedAccount(row)}</td>
+                        <td className="py-2 text-zinc-600">{formatInviteStatus(row)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             ) : null}
           </section>
 

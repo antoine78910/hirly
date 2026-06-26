@@ -303,17 +303,23 @@ def create_invitation(influencer_id: str, course_id: Optional[str] = None) -> Di
     return invitation
 
 
-def mark_invite_redeemed(code: str, user_id: str) -> Optional[Dict[str, Any]]:
+def mark_invite_clicked(code: str) -> Optional[Dict[str, Any]]:
+    """Record that an invite landing page was opened."""
+    normalized = str(code or "").strip()
+    if not normalized:
+        return None
     rows = load_invites()
     updated = None
     now = _now_iso()
     for index, row in enumerate(rows):
-        if str(row.get("code")) != str(code).strip():
+        if str(row.get("code")) != normalized:
             continue
+        click_count = int(row.get("click_count") or 0) + 1
         next_row = {
             **row,
-            "redeemed_at": now,
-            "redeemed_by_user_id": user_id,
+            "click_count": click_count,
+            "first_clicked_at": row.get("first_clicked_at") or now,
+            "last_clicked_at": now,
         }
         rows[index] = next_row
         updated = next_row
@@ -322,3 +328,44 @@ def mark_invite_redeemed(code: str, user_id: str) -> Optional[Dict[str, Any]]:
         return None
     save_invites(rows)
     return updated
+
+
+def mark_invite_redeemed(code: str, user_id: str, user_email: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    rows = load_invites()
+    updated = None
+    now = _now_iso()
+    email_norm = (user_email or "").strip().lower()
+    for index, row in enumerate(rows):
+        if str(row.get("code")) != str(code).strip():
+            continue
+        next_row = {
+            **row,
+            "redeemed_at": now,
+            "redeemed_by_user_id": user_id,
+            "redeemed_by_email": email_norm or row.get("redeemed_by_email"),
+        }
+        rows[index] = next_row
+        updated = next_row
+        break
+    if updated is None:
+        return None
+    save_invites(rows)
+    return updated
+
+
+def enrich_invite_rows(
+    rows: List[Dict[str, Any]],
+    users_by_id: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> List[Dict[str, Any]]:
+    """Attach linked account email/name for admin views."""
+    lookup = users_by_id or {}
+    enriched: List[Dict[str, Any]] = []
+    for row in rows:
+        copy = dict(row)
+        user_id = copy.get("redeemed_by_user_id")
+        if user_id and user_id in lookup:
+            user = lookup[user_id]
+            copy.setdefault("redeemed_by_email", user.get("email"))
+            copy["redeemed_by_name"] = user.get("name")
+        enriched.append(copy)
+    return enriched

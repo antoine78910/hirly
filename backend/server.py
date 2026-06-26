@@ -61,7 +61,9 @@ from creator_invite_store import (
     list_demo_invites,
     list_invites_for_influencer,
     list_training_invites,
+    mark_invite_clicked,
     mark_invite_redeemed,
+    enrich_invite_rows,
     resolve_invite_type,
     validate_invite,
 )
@@ -5227,6 +5229,18 @@ async def admin_update_influencer(
     return {"ok": True, "influencer": row}
 
 
+async def _enrich_invite_rows_for_admin(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    user_ids = list({row.get("redeemed_by_user_id") for row in rows if row.get("redeemed_by_user_id")})
+    users_by_id: Dict[str, Dict[str, Any]] = {}
+    if user_ids:
+        users = await db.users.find(
+            {"user_id": {"$in": user_ids}},
+            {"_id": 0, "user_id": 1, "email": 1, "name": 1},
+        ).to_list(len(user_ids))
+        users_by_id = {user["user_id"]: user for user in users if user.get("user_id")}
+    return enrich_invite_rows(rows, users_by_id)
+
+
 async def _redeem_creator_invite(code: str, user_id: str, user_email: Optional[str] = None) -> Dict[str, Any]:
     normalized = (code or "").strip()
     if not re.fullmatch(r"\d{6}", normalized):
@@ -5275,7 +5289,7 @@ async def _redeem_creator_invite(code: str, user_id: str, user_email: Optional[s
         update_influencer(influencer_id, influencer_patch)
 
     if not invitation.get("redeemed_at"):
-        mark_invite_redeemed(normalized, user_id)
+        mark_invite_redeemed(normalized, user_id, user_email)
 
     return {
         "ok": True,
@@ -5301,6 +5315,7 @@ async def validate_creator_invite(code: str):
             "already_redeemed": False,
             "master_code": True,
         }
+    mark_invite_clicked(normalized)
     check = validate_invite(code)
     invitation = check.get("invitation") or {}
     return {
@@ -5384,7 +5399,7 @@ async def admin_create_influencer_demo_invite(
 
 @api_router.get("/admin/demo/invites")
 async def admin_list_demo_invites(admin: User = Depends(require_admin_user)):
-    return {"invites": list_demo_invites()}
+    return {"invites": await _enrich_invite_rows_for_admin(list_demo_invites())}
 
 
 @api_router.post("/admin/demo/invites")
@@ -5412,7 +5427,7 @@ async def admin_list_influencer_invites(
 ):
     if not get_influencer(influencer_id):
         raise HTTPException(status_code=404, detail="Influencer not found")
-    return {"invites": list_invites_for_influencer(influencer_id)}
+    return {"invites": await _enrich_invite_rows_for_admin(list_invites_for_influencer(influencer_id))}
 
 
 @api_router.post("/admin/influencers/{influencer_id}/grant-demo")
@@ -9944,7 +9959,7 @@ async def dev_clean_job_descriptions():
 # ===================== Wire up =====================
 
 register_training_routes(api_router, get_current_user, db, _require_training_user, _get_training_access_payload)
-register_training_admin_routes(api_router, require_admin_user, db)
+register_training_admin_routes(api_router, require_admin_user, db, _enrich_invite_rows_for_admin)
 register_feedback_routes(api_router, get_current_user, require_admin_user)
 app.include_router(api_router)
 

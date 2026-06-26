@@ -17,7 +17,6 @@ from creator_invite_store import (
     list_training_invites,
 )
 
-
 class CreatorRegisterBody(BaseModel):
     display_name: Optional[str] = None
 
@@ -187,7 +186,7 @@ def register_training_routes(
         )
 
 
-def register_training_admin_routes(router: APIRouter, require_admin_user, db) -> None:
+def register_training_admin_routes(router: APIRouter, require_admin_user, db, enrich_invites_for_admin=None) -> None:
     @router.get("/admin/training/videos")
     async def admin_training_videos_list(
         admin=Depends(require_admin_user),
@@ -219,7 +218,10 @@ def register_training_admin_routes(router: APIRouter, require_admin_user, db) ->
 
     @router.get("/admin/training/invites")
     async def admin_training_invites_list(admin=Depends(require_admin_user)):
-        return {"invites": list_training_invites()}
+        rows = list_training_invites()
+        if enrich_invites_for_admin:
+            rows = await enrich_invites_for_admin(rows)
+        return {"invites": rows}
 
     @router.post("/admin/training/invites")
     async def admin_training_invites_create(
