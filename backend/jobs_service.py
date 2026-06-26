@@ -845,7 +845,7 @@ def _direct_apply_raw_query(role: str, location: Optional[str], country: Optiona
 
 
 def _direct_apply_attempt_queries(query: JobSearchQuery, roles: List[str], locations: List[Optional[str]]) -> List[JobSearchQuery]:
-    if not _env_bool("JOB_DIRECT_APPLY_SEARCH_ENABLED", True):
+    if not _env_bool("JOB_DIRECT_APPLY_SEARCH_ENABLED", False):
         return []
     max_attempts = max(1, min(_env_int("JOB_DIRECT_APPLY_SEARCH_MAX_ATTEMPTS", 2), 8))
     groups = _domain_groups(_direct_apply_search_domains())
@@ -861,6 +861,22 @@ def _direct_apply_attempt_queries(query: JobSearchQuery, roles: List[str], locat
                 ))
                 if len(attempts) >= max_attempts:
                     return attempts
+    return attempts
+
+
+def _raw_location_attempt_queries(query: JobSearchQuery, roles: List[str], locations: List[Optional[str]]) -> List[JobSearchQuery]:
+    attempts: List[JobSearchQuery] = []
+    for role in roles[:2]:
+        for location in locations[:3]:
+            if not location:
+                continue
+            raw_role = f"{' '.join((role or '').split()) or 'job'} {_localized_jobs_word(query.country)} in {location}"
+            attempts.append(_copy_query_with_role_and_location(
+                query,
+                raw_role,
+                None,
+                raw_query=True,
+            ))
     return attempts
 
 
@@ -885,7 +901,7 @@ def _provider_attempt_queries(query: JobSearchQuery, search_radius: str, provide
     primary_roles = role_variants[:2]
     secondary_roles = role_variants[2:]
 
-    attempts.extend(_direct_apply_attempt_queries(query, primary_roles, [primary_location, *fallback_locations]))
+    attempts.extend(_raw_location_attempt_queries(query, primary_roles, [primary_location, *fallback_locations]))
 
     for role in primary_roles:
         attempts.append(_copy_query_with_role_and_location(query, role, primary_location))
@@ -900,6 +916,8 @@ def _provider_attempt_queries(query: JobSearchQuery, search_radius: str, provide
     for fallback_location in fallback_locations[:2]:
         for role in secondary_roles[:2]:
             attempts.append(_copy_query_with_role_and_location(query, role, fallback_location))
+
+    attempts.extend(_direct_apply_attempt_queries(query, primary_roles, [primary_location, *fallback_locations]))
 
     return _dedupe_queries(attempts, provider)
 
@@ -1211,6 +1229,9 @@ async def refresh_jobs_for_profile_if_needed(
         total_imported = 0
         relevant_imported = fresh_feed_ready_count
         manual_ready_imported = 0
+        provider_errors: List[str] = []
+        provider_rate_limited = False
+        provider_cooldown_until = None
         imported_jobs: List[Dict[str, Any]] = []
         imported = 0
         fallback_used = None
@@ -1231,7 +1252,32 @@ async def refresh_jobs_for_profile_if_needed(
                 direct_apply_requests += 1
             else:
                 broad_provider_requests += 1
-            import_stats = await _import_provider_jobs(db, provider, attempt_query)
+            try:
+                import_stats = await _import_provider_jobs(db, provider, attempt_query)
+            except Exception as exc:
+                if _is_rate_limit_error(exc):
+                    cooldown_until = _set_rate_limit_cooldown(provider.name)
+                    provider_rate_limited = True
+                    provider_cooldown_until = cooldown_until.isoformat()
+                    logger.warning(
+                        "JSearch refresh attempt rate-limited: role=%s location=%s country=%s query=%s cooldown_until=%s",
+                        attempt_query.role,
+                        attempt_query.location,
+                        attempt_query.country,
+                        provider._query_string(attempt_query),
+                        provider_cooldown_until,
+                    )
+                    break
+                provider_errors.append(f"{exc.__class__.__name__}: {str(exc)[:160]}")
+                logger.warning(
+                    "JSearch refresh attempt failed; continuing: role=%s location=%s country=%s query=%s error=%s",
+                    attempt_query.role,
+                    attempt_query.location,
+                    attempt_query.country,
+                    provider._query_string(attempt_query),
+                    exc,
+                )
+                continue
             imported = import_stats["total_imported"]
             manual_ready = sum(1 for job in (import_stats.get("jobs") or []) if is_manual_fulfillment_ready(job))
             relevant = sum(
@@ -1260,11 +1306,11 @@ async def refresh_jobs_for_profile_if_needed(
                 import_stats["auto_apply_supported_imported"],
                 import_stats["unknown_ats_imported"],
             )
-        if relevant_imported < min_feed_ready_count and broad_provider_requests < max_provider_requests:
+        if relevant_imported < min_feed_ready_count and broad_provider_requests < max_provider_requests and not provider_rate_limited:
             broad_location = query.location or _country_name(query.country) or "remote"
             broad_query = JobSearchQuery(
                 role=f"{query.role} jobs in {broad_location}",
-                location=query.location,
+                location=None,
                 remote_preference=query.remote_preference,
                 country=query.country,
                 language=query.language,
@@ -1273,7 +1319,18 @@ async def refresh_jobs_for_profile_if_needed(
             )
             provider_requests += 1
             broad_provider_requests += 1
-            broad_stats = await _import_provider_jobs(db, provider, broad_query)
+            try:
+                broad_stats = await _import_provider_jobs(db, provider, broad_query)
+            except Exception as exc:
+                if _is_rate_limit_error(exc):
+                    cooldown_until = _set_rate_limit_cooldown(provider.name)
+                    provider_rate_limited = True
+                    provider_cooldown_until = cooldown_until.isoformat()
+                    logger.warning("JSearch broad local attempt rate-limited; cooldown active until %s", provider_cooldown_until)
+                else:
+                    provider_errors.append(f"{exc.__class__.__name__}: {str(exc)[:160]}")
+                    logger.warning("JSearch broad local attempt failed; continuing with imported/cache jobs: %s", exc)
+                broad_stats = {"total_imported": 0, "jobs": [], "auto_apply_supported_imported": 0, "unknown_ats_imported": 0}
             total_imported += broad_stats["total_imported"]
             manual_ready_broad = sum(1 for job in (broad_stats.get("jobs") or []) if is_manual_fulfillment_ready(job))
             manual_ready_imported += manual_ready_broad
@@ -1346,6 +1403,9 @@ async def refresh_jobs_for_profile_if_needed(
         "provider_requests": provider_requests,
         "direct_apply_requests": direct_apply_requests,
         "broad_provider_requests": broad_provider_requests,
+        "provider_errors": provider_errors[:5],
+        "provider_rate_limited": provider_rate_limited,
+        "provider_cooldown_until": provider_cooldown_until,
         "jobs": combined_jobs[:200],
         "fallback_used": fallback_used,
         "ats_targeted_imported": ats_targeted_imported,
