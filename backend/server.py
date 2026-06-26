@@ -79,6 +79,7 @@ from jobs_service import (
     seed_lever_company_boards,
 )
 from job_providers import get_board_provider, get_job_provider
+from job_providers.apply_eligibility import classify_apply_link, is_manual_fulfillment_ready
 from job_providers.base import JobSearchQuery
 from location_search import search_locations
 from llm_client import LLMProviderNotConfigured, complete_json_text
@@ -182,6 +183,34 @@ async def _hydrate_feed_jobs(jobs: List[Dict[str, Any]]) -> List[Dict[str, Any]]
                 merged[key] = value
         hydrated.append(merged)
     return hydrated
+
+
+def _apply_fulfillment_fields(job: Dict[str, Any]) -> Dict[str, Any]:
+    if job.get("apply_fulfillment_status") and job.get("manual_fulfillment_ready") is not None:
+        return {
+            "apply_fulfillment_status": job.get("apply_fulfillment_status"),
+            "apply_fulfillment_reason": job.get("apply_fulfillment_reason"),
+            "apply_url_source": job.get("apply_url_source"),
+            "apply_url_provider": job.get("apply_url_provider"),
+            "selected_apply_url": job.get("selected_apply_url") or job.get("external_url"),
+            "manual_fulfillment_ready": bool(job.get("manual_fulfillment_ready")),
+            "job_board_account_required": bool(job.get("job_board_account_required")),
+        }
+    return classify_apply_link(
+        job.get("external_url") or job.get("apply_url") or job.get("hosted_url"),
+        source=job.get("source") or job.get("provider"),
+        apply_options=job.get("apply_options") or [],
+    )
+
+
+def _job_is_applyable(job: Dict[str, Any]) -> bool:
+    return is_manual_fulfillment_ready(job)
+
+
+def _with_apply_fulfillment_fields(job: Dict[str, Any]) -> Dict[str, Any]:
+    fields = _apply_fulfillment_fields(job)
+    external_url = fields.get("selected_apply_url") or job.get("external_url")
+    return {**job, **fields, "external_url": external_url}
 
 
 # ===================== Models =====================
@@ -3750,6 +3779,8 @@ async def get_feed(
             candidates = await _get_feed_job_candidates(base_query, candidate_limit)
         candidates = [job for job in candidates if job.get("job_id") not in swiped_ids]
         unfiltered_count = len(candidates)
+        candidates = [_with_apply_fulfillment_fields(job) for job in candidates if _job_is_applyable(job)]
+        applyable_count = len(candidates)
         pre_filter_candidates = list(candidates)
         candidates = [job for job in candidates if _matches_explicit_filters(job)]
         if provider_search_keys and not candidates and not _timed_out():
@@ -3757,16 +3788,19 @@ async def get_feed(
             fallback_candidates = await _get_feed_job_candidates(fallback_query, candidate_limit)
             fallback_candidates = [job for job in fallback_candidates if job.get("job_id") not in swiped_ids]
             unfiltered_count = len(fallback_candidates)
+            fallback_candidates = [_with_apply_fulfillment_fields(job) for job in fallback_candidates if _job_is_applyable(job)]
+            applyable_count = len(fallback_candidates)
             pre_filter_candidates = list(fallback_candidates)
             candidates = [job for job in fallback_candidates if _matches_explicit_filters(job)]
             base_query = fallback_query
         logger.info(
-            "feed_filter_stage user_id=%s stage=candidate_pool elapsed_ms=%s query=%s count=%s unfiltered_count=%s swiped_count=%s explicit_filters=%s",
+            "feed_filter_stage user_id=%s stage=candidate_pool elapsed_ms=%s query=%s count=%s unfiltered_count=%s applyable_count=%s swiped_count=%s explicit_filters=%s",
             user.user_id,
             _elapsed_ms(),
             base_query,
             len(candidates),
             unfiltered_count,
+            applyable_count,
             len(swiped_ids),
             explicit_filters,
         )
@@ -3937,6 +3971,7 @@ async def get_feed(
                 "provider_search_keys": provider_search_keys,
                 "search_radius": search_radius,
                 "explicit_filters": explicit_filters,
+                "manual_fulfillment_ready": True,
                 "work_location": work_location,
                 "locations": [loc.get("location_label") for loc in selected_locations if loc.get("location_label")],
                 "selected_city_terms": selected_city_terms,
@@ -4282,6 +4317,7 @@ async def get_feed(
     async def _fetch(q: Dict[str, Any], wanted: int) -> List[Dict[str, Any]]:
         candidate_limit = max(wanted * 100, 500)
         rows = await db.jobs.find(q, {"_id": 0}).limit(candidate_limit).to_list(candidate_limit)
+        rows = [_with_apply_fulfillment_fields(row) for row in rows if _job_is_applyable(row)]
         return _rank_jobs(rows, wanted)
 
     base_query = {**query}
@@ -4319,6 +4355,7 @@ async def get_feed(
         "remote_preference": remote_pref,
         "auto_apply_supported": not include_non_auto_apply,
         "ats_provider": ["greenhouse", "lever", "ashby"] if not include_non_auto_apply else None,
+        "manual_fulfillment_ready": True,
     }
     if provider_rate_limited:
         fallback_reason = "provider_rate_limited"
@@ -4487,16 +4524,34 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
         job = await db.jobs.find_one({"job_id": req.job_id}, {"_id": 0})
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
+        job = _with_apply_fulfillment_fields(job)
         log_phase(
             "job_loaded",
             job_provider=job.get("provider"),
             ats_provider=job.get("ats_provider"),
+            apply_fulfillment_status=job.get("apply_fulfillment_status"),
             has_description=bool(job.get("description") or job.get("clean_description")),
             job_keys=sorted(list(job.keys()))[:60],
         )
 
         billing_credit_status = None
         if req.direction == "right":
+            if not _job_is_applyable(job):
+                log_phase(
+                    "apply_fulfillment_blocked",
+                    apply_fulfillment_status=job.get("apply_fulfillment_status"),
+                    apply_fulfillment_reason=job.get("apply_fulfillment_reason"),
+                    source=job.get("source"),
+                    external_url=job.get("external_url"),
+                )
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "message": "This job cannot be fulfilled by Hirly.",
+                        "apply_fulfillment_status": job.get("apply_fulfillment_status"),
+                        "apply_fulfillment_reason": job.get("apply_fulfillment_reason"),
+                    },
+                )
             phase = "billing_credit_check"
             billing_credit_status = await _billing_apply_credit_status(user)
             if not billing_credit_status.get("is_premium") or int(billing_credit_status.get("credits_remaining") or 0) <= 0:

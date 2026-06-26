@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import httpx
 
 from job_providers import get_board_provider, get_job_provider
+from job_providers.apply_eligibility import is_manual_fulfillment_ready
 from job_providers.base import BoardQuery, JobSearchQuery
 
 logger = logging.getLogger(__name__)
@@ -801,6 +802,68 @@ def _copy_query_with_role_and_location(
     )
 
 
+def _direct_apply_search_domains() -> List[str]:
+    configured = [
+        domain.strip().lower().removeprefix("www.")
+        for domain in os.environ.get("JOB_DIRECT_APPLY_SEARCH_DOMAINS", "").split(",")
+        if domain.strip()
+    ]
+    defaults = [
+        "greenhouse.io",
+        "jobs.lever.co",
+        "ashbyhq.com",
+        "workable.com",
+        "smartrecruiters.com",
+        "teamtailor.com",
+        "recruitee.com",
+        "breezy.hr",
+        "jazz.co",
+        "applytojob.com",
+        "bamboohr.com",
+        "personio.com",
+    ]
+    return [domain for domain in _dedupe(configured or defaults) if domain]
+
+
+def _domain_groups(domains: List[str]) -> List[List[str]]:
+    size = max(1, min(_env_int("JOB_DIRECT_APPLY_SEARCH_BATCH_SIZE", 4), 8))
+    return [domains[index:index + size] for index in range(0, len(domains), size)]
+
+
+def _localized_jobs_word(country: Optional[str]) -> str:
+    if (country or "").lower() in ("fr", "be", "ch", "ma"):
+        return "emploi"
+    return "jobs"
+
+
+def _direct_apply_raw_query(role: str, location: Optional[str], country: Optional[str], domains: List[str]) -> str:
+    parts = [" ".join((role or "").split()) or "software engineer", _localized_jobs_word(country)]
+    if location:
+        parts.extend(["in", location])
+    domain_expr = " OR ".join(f"site:{domain}" for domain in domains)
+    return f"{' '.join(parts)} ({domain_expr})"
+
+
+def _direct_apply_attempt_queries(query: JobSearchQuery, roles: List[str], locations: List[Optional[str]]) -> List[JobSearchQuery]:
+    if not _env_bool("JOB_DIRECT_APPLY_SEARCH_ENABLED", True):
+        return []
+    max_attempts = max(1, min(_env_int("JOB_DIRECT_APPLY_SEARCH_MAX_ATTEMPTS", 4), 12))
+    groups = _domain_groups(_direct_apply_search_domains())
+    attempts: List[JobSearchQuery] = []
+    for role in roles[:2]:
+        for location in locations[:2]:
+            for domains in groups:
+                attempts.append(_copy_query_with_role_and_location(
+                    query,
+                    _direct_apply_raw_query(role, location, query.country, domains),
+                    location,
+                    raw_query=True,
+                ))
+                if len(attempts) >= max_attempts:
+                    return attempts
+    return attempts
+
+
 def _dedupe_queries(queries: List[JobSearchQuery], provider) -> List[JobSearchQuery]:
     seen = set()
     out: List[JobSearchQuery] = []
@@ -821,6 +884,8 @@ def _provider_attempt_queries(query: JobSearchQuery, search_radius: str, provide
     attempts: List[JobSearchQuery] = []
     primary_roles = role_variants[:2]
     secondary_roles = role_variants[2:]
+
+    attempts.extend(_direct_apply_attempt_queries(query, primary_roles, [primary_location, *fallback_locations]))
 
     for role in primary_roles:
         attempts.append(_copy_query_with_role_and_location(query, role, primary_location))
@@ -1111,6 +1176,7 @@ async def refresh_jobs_for_profile_if_needed(
         if job.get("job_id") not in swiped_ids
         and _job_matches_query_family(job, query)
         and _job_matches_query_location(job, query, search_radius)
+        and is_manual_fulfillment_ready(job)
     )
     if fresh_feed_ready_count >= min_feed_ready_count and not require_auto_apply and not force_provider_refresh:
         return {
@@ -1154,6 +1220,7 @@ async def refresh_jobs_for_profile_if_needed(
                 for job in (import_stats.get("jobs") or [])
                 if _job_matches_query_family(job, query)
                 and _job_matches_query_location(job, query, search_radius)
+                and is_manual_fulfillment_ready(job)
             )
             total_imported += imported
             relevant_imported += relevant
@@ -1190,6 +1257,7 @@ async def refresh_jobs_for_profile_if_needed(
                 for job in (broad_stats.get("jobs") or [])
                 if _job_matches_query_family(job, query)
                 and _job_matches_query_location(job, query, search_radius)
+                and is_manual_fulfillment_ready(job)
             )
             imported_jobs.extend(broad_stats.get("jobs") or [])
             logger.info(

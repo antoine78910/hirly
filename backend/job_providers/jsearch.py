@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 import httpx
 
 from .base import JobSearchQuery, ProviderResult
+from .apply_eligibility import classify_apply_link
 
 
 class JSearchProvider:
@@ -129,7 +130,11 @@ class JSearchProvider:
         first_apply = apply_options[0] if apply_options else {}
         external_url = row.get("job_apply_link") or first_apply.get("apply_link") or row.get("job_google_link")
         source = row.get("job_publisher") or first_apply.get("publisher") or "JSearch"
-        ats_provider = self._detect_ats(external_url, apply_options)
+        apply_classification = classify_apply_link(external_url, source=source, apply_options=apply_options)
+        selected_apply_url = apply_classification.get("selected_apply_url") or external_url
+        ats_provider = self._detect_ats(selected_apply_url, apply_options)
+        if ats_provider == "unknown" and apply_classification.get("apply_url_provider") not in {"company", "unknown"}:
+            ats_provider = str(apply_classification.get("apply_url_provider") or "unknown")
         auto_apply_supported = ats_provider in ("greenhouse", "lever", "ashby")
 
         return {
@@ -150,7 +155,7 @@ class JSearchProvider:
             "posted_at": self._posted_at(row) or imported_at,
             "provider": self.name,
             "external_id": external_id,
-            "external_url": external_url,
+            "external_url": selected_apply_url,
             "source": source,
             "ats_provider": ats_provider,
             "auto_apply_supported": auto_apply_supported,
@@ -159,6 +164,8 @@ class JSearchProvider:
                 if auto_apply_supported
                 else "Unsupported or unknown ATS provider for V1 auto-apply"
             ),
+            "apply_options": apply_options,
+            **apply_classification,
             "imported_at": imported_at,
             "last_seen_at": imported_at,
             "provider_query": self._query_string(query),
