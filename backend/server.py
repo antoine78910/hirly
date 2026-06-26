@@ -65,6 +65,8 @@ from creator_invite_store import (
     mark_invite_redeemed,
     enrich_invite_rows,
     migrate_file_invites_to_db,
+    bootstrap_invites_from_influencers,
+    materialize_invite_from_link,
     resolve_invite_type,
     validate_invite,
 )
@@ -5279,6 +5281,8 @@ async def _redeem_creator_invite(code: str, user_id: str, user_email: Optional[s
     check = await validate_invite(db, normalized)
     invitation = check.get("invitation") or await get_invite_by_code(db, normalized)
     if not invitation:
+        invitation = await materialize_invite_from_link(db, normalized)
+    if not invitation:
         raise HTTPException(status_code=404, detail="Invitation not found")
 
     if invitation.get("redeemed_by_user_id") and invitation.get("redeemed_by_user_id") != user_id:
@@ -10007,6 +10011,7 @@ async def _startup_seed_impl():
     """Seed boards and training content without blocking HTTP readiness."""
     try:
         await migrate_file_invites_to_db(db)
+        await bootstrap_invites_from_influencers(db)
         await ensure_dev_test_invites(db)
         await seed_greenhouse_company_boards(db)
         await seed_lever_company_boards(db)

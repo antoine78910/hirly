@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import random
+import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -92,11 +93,15 @@ async def load_invites(db=None) -> List[Dict[str, Any]]:
 
 async def _upsert_invite(db, row: Dict[str, Any]) -> Dict[str, Any]:
     doc = dict(row)
-    if not doc.get("invite_id"):
-        doc["invite_id"] = str(uuid.uuid4())
+    code = str(doc.get("code") or "").strip()
     doc["updated_at"] = _now_iso()
     if _has_invite_db(db):
         try:
+            existing = await get_invite_by_code(db, code) if code else None
+            if existing and existing.get("invite_id"):
+                doc["invite_id"] = existing["invite_id"]
+            elif not doc.get("invite_id"):
+                doc["invite_id"] = f"invite_{code}" if code else str(uuid.uuid4())
             await db.creator_invites.update_one(
                 {"invite_id": doc["invite_id"]},
                 {"$set": doc},
@@ -105,6 +110,8 @@ async def _upsert_invite(db, row: Dict[str, Any]) -> Dict[str, Any]:
             return doc
         except Exception as exc:
             logger.warning("creator_invites db upsert failed: %s", exc)
+    if not doc.get("invite_id"):
+        doc["invite_id"] = f"invite_{code}" if code else str(uuid.uuid4())
     rows = _load_invites_file()
     replaced = False
     for index, existing in enumerate(rows):
@@ -119,23 +126,41 @@ async def _upsert_invite(db, row: Dict[str, Any]) -> Dict[str, Any]:
 
 
 async def migrate_file_invites_to_db(db) -> None:
-    """One-time bootstrap: copy file-backed invites into Supabase."""
+    """Bootstrap: copy file-backed invites into Supabase (upsert by code)."""
     if not _has_invite_db(db):
         return
     file_rows = _load_invites_file()
-    if not file_rows:
-        return
     for row in file_rows:
         code = str(row.get("code") or "").strip()
         if not code:
-            continue
-        existing = await db.creator_invites.find_one({"code": code}, {"_id": 0})
-        if existing:
             continue
         try:
             await _upsert_invite(db, row)
         except Exception as exc:
             logger.warning("invite migration failed code=%s: %s", code, exc)
+
+
+async def bootstrap_invites_from_influencers(db) -> None:
+    """Recover invite codes referenced on influencer rows."""
+    for inf in load_influencers():
+        influencer_id = inf.get("influencer_id")
+        for field, invite_type in (
+            ("latest_invite_code", INVITE_TYPE_TRAINING),
+            ("latest_demo_invite_code", INVITE_TYPE_DEMO),
+        ):
+            code = str(inf.get(field) or "").strip()
+            if not re.fullmatch(r"\d{6}", code):
+                continue
+            try:
+                await materialize_invite_from_link(
+                    db,
+                    code,
+                    invite_type=invite_type,
+                    influencer_id=influencer_id,
+                    label=f"Recovered from influencer {influencer_id}",
+                )
+            except Exception as exc:
+                logger.warning("influencer invite bootstrap failed code=%s: %s", code, exc)
 
 
 def _should_seed_dev_test_invites() -> bool:
@@ -199,14 +224,53 @@ async def get_invite_by_code(db, code: str) -> Optional[Dict[str, Any]]:
     if _has_invite_db(db):
         try:
             row = await db.creator_invites.find_one({"code": normalized}, {"_id": 0})
-            if row:
+            if row and str(row.get("code") or "").strip() == normalized:
                 return row
         except Exception as exc:
             logger.warning("creator_invites db lookup failed code=%s: %s", normalized, exc)
+    for row in await load_invites(db):
+        if str(row.get("code") or "").strip() == normalized:
+            return row
     for row in _load_invites_file():
-        if str(row.get("code")) == normalized:
+        if str(row.get("code") or "").strip() == normalized:
             return row
     return None
+
+
+async def materialize_invite_from_link(
+    db,
+    code: str,
+    *,
+    invite_type: Optional[str] = None,
+    influencer_id: Optional[str] = None,
+    label: str = "",
+) -> Optional[Dict[str, Any]]:
+    """Create a durable invite row from a 6-digit link code (restores pre-Supabase links)."""
+    normalized = (code or "").strip()
+    if not re.fullmatch(r"\d{6}", normalized):
+        return None
+    existing = await get_invite_by_code(db, normalized)
+    if existing:
+        return existing
+
+    now = _now_iso()
+    resolved_type = invite_type or INVITE_TYPE_CREATOR
+    row = {
+        "invite_id": f"invite_legacy_{normalized}",
+        "code": normalized,
+        "influencer_id": influencer_id,
+        "invite_type": resolved_type,
+        "course_id": DEFAULT_COURSE_ID,
+        "email_hint": "",
+        "label": label or "Restored invite link",
+        "created_at": now,
+        "redeemed_at": None,
+        "redeemed_by_user_id": None,
+        "revoked": False,
+        "legacy_auto_created": True,
+    }
+    logger.info("materialized legacy invite code=%s type=%s", normalized, resolved_type)
+    return await _upsert_invite(db, row)
 
 
 async def list_invites_for_influencer(db, influencer_id: str) -> List[Dict[str, Any]]:
@@ -238,7 +302,10 @@ def validate_invite_row(row: Optional[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 async def validate_invite(db, code: str) -> Dict[str, Any]:
-    row = await get_invite_by_code(db, code)
+    normalized = (code or "").strip()
+    row = await get_invite_by_code(db, normalized)
+    if not row:
+        row = await materialize_invite_from_link(db, normalized)
     return validate_invite_row(row)
 
 

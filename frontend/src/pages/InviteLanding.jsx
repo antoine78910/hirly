@@ -42,11 +42,13 @@ export default function InviteLanding() {
   const [authError, setAuthError] = useState("");
   const [authNotice, setAuthNotice] = useState("");
   const autoRedeemStarted = useRef(false);
+  const [redeemFailed, setRedeemFailed] = useState(false);
 
   const normalized = String(code || "").trim();
   const invalid = !/^\d{6}$/.test(normalized);
   const trainingInvite = isTrainingInvite(inviteMeta);
   const demoInvite = isDemoInvite(inviteMeta);
+  const isValid = !invalid && inviteMeta?.valid === true;
 
   useEffect(() => {
     if (invalid) {
@@ -77,8 +79,8 @@ export default function InviteLanding() {
   };
 
   useEffect(() => {
-    if (authLoading || checking || !user || redeeming || autoRedeemStarted.current) return;
-    if (invalid) return;
+    if (authLoading || checking || !user || redeeming || autoRedeemStarted.current || redeemFailed) return;
+    if (!isValid) return;
     autoRedeemStarted.current = true;
     (async () => {
       setRedeeming(true);
@@ -86,17 +88,17 @@ export default function InviteLanding() {
         const data = await redeemCreatorInvite(api, normalized);
         await finishRedeemAndNavigate(user, data);
       } catch (err) {
-        autoRedeemStarted.current = false;
+        setRedeemFailed(true);
         if (err?.response?.status === 409) {
           navigate(inviteDestination(null, inviteMeta), { replace: true });
         } else {
-          toast.error(err?.response?.data?.detail || "Impossible d'activer l'invitation");
+          toast.error(err?.response?.data?.detail || "Could not activate this invitation");
         }
       } finally {
         setRedeeming(false);
       }
     })();
-  }, [authLoading, checking, user, normalized, invalid, navigate, redeeming, inviteMeta]);
+  }, [authLoading, checking, user, normalized, invalid, isValid, navigate, redeeming, redeemFailed, inviteMeta]);
 
   const onEmailSubmit = async (event) => {
     event.preventDefault();
@@ -150,18 +152,17 @@ export default function InviteLanding() {
     setAuthNotice("");
   };
 
-  if (checking || redeeming || (user && !invalid)) {
+  if (checking || redeeming || (user && isValid && !redeemFailed)) {
     return (
       <div className="min-h-dvh flex items-center justify-center bg-white">
         <div className="flex flex-col items-center gap-3 text-zinc-500">
           <Loader2 className="h-6 w-6 animate-spin text-linkedin" />
-          <p className="text-sm">Activation de votre accès…</p>
+          <p className="text-sm">Activating your access…</p>
         </div>
       </div>
     );
   }
 
-  const isValid = !invalid && inviteMeta?.valid === true;
   const influencerName = inviteMeta?.influencer_name;
 
   if (!isValid) {
