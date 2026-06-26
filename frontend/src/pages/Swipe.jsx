@@ -16,7 +16,13 @@ import { BRAND } from "../lib/brand";
 import { shareJob } from "../lib/shareJob";
 import { trackEvent } from "../lib/analytics";
 import { useAuth } from "../context/AuthContext";
-import { cacheJobForDemo, isDemoAccountEnabled, seedTutorialShowcaseIfEmpty } from "../lib/demoAccount";
+import {
+  cacheJobForDemo,
+  ensureDemoAccountDefaults,
+  getDemoAccountSearchTarget,
+  isDemoAccountEnabled,
+  seedTutorialShowcaseIfEmpty,
+} from "../lib/demoAccount";
 import { dismissDemoWelcome, shouldOpenDemoWelcome } from "../lib/demoWelcome";
 import DemoWelcomeModal from "../components/demo/DemoWelcomeModal";
 import { TUTORIAL_BYPASS_AUTH } from "../lib/dev";
@@ -490,9 +496,44 @@ export default function Swipe() {
     return nextFilters;
   }, []);
 
+  const applyDemoAccountTarget = useCallback(() => {
+    const demo = getDemoAccountSearchTarget();
+    const nextTarget = { role: demo.role, location: demo.location };
+    setTarget(nextTarget);
+    targetRef.current = nextTarget;
+    setTargetLocationData(demo.locationData);
+    const nextFilters = clearMenuFilters({
+      searchRadius: filtersRef.current?.searchRadius || DEFAULT_SEARCH_RADIUS,
+    });
+    if (demo.locationData) {
+      nextFilters.locationsData = [demo.locationData];
+    }
+    filtersRef.current = nextFilters;
+    setFilters(nextFilters);
+    savePersistedFilters(nextFilters);
+    return nextFilters;
+  }, []);
+
   const loadProfile = useCallback(async () => {
     if (isFinanceDemoEnabled()) {
       applyFinanceDemoTarget();
+      return;
+    }
+    if (isDemoAccountEnabled()) {
+      try {
+        const { data } = await api.get("/profile");
+        if (data?.target_role || data?.cv_text) {
+          const nextTarget = {
+            role: data.target_role || "",
+            location: data.target_location || "",
+          };
+          setTarget(nextTarget);
+          targetRef.current = nextTarget;
+          setTargetLocationData(data.target_location_data || null);
+          return;
+        }
+      } catch (_) {}
+      applyDemoAccountTarget();
       return;
     }
     try {
@@ -507,7 +548,7 @@ export default function Swipe() {
         setTargetLocationData(data.target_location_data || null);
       }
     } catch (_) {}
-  }, [applyFinanceDemoTarget]);
+  }, [applyFinanceDemoTarget, applyDemoAccountTarget]);
 
   const buildFeedParams = (f) => {
     const params = new URLSearchParams({ limit: "5", search_radius: DEFAULT_SEARCH_RADIUS });
@@ -690,6 +731,7 @@ export default function Swipe() {
 
   useEffect(() => {
     if (authLoading) return;
+    ensureDemoAccountDefaults();
     loadProfile();
     api.get("/billing/status")
       .then(({ data }) => setBilling(data))
@@ -697,6 +739,10 @@ export default function Swipe() {
     if (isFinanceDemoEnabled()) {
       const financeFilters = applyFinanceDemoTarget();
       loadFeed(true, financeFilters);
+      return;
+    }
+    if (isDemoAccountEnabled()) {
+      loadFeed(true, filtersRef.current);
       return;
     }
     const persistedFilters = readPersistedFilters();

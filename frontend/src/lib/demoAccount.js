@@ -2,15 +2,30 @@ export const DEMO_CREDITS_MAX = 600;
 export const DEMO_CREDITS_CHANGED = "hirly:demo-credits-changed";
 export const DEMO_ACCOUNT_CHANGED = "hirly:demo-account-changed";
 
-import { isFinanceDemoEnabled } from "./demoSettings";
+import { isFinanceDemoEnabled, readDemoSettings, saveDemoSettings, DEMO_SETTINGS_STORAGE_KEY } from "./demoSettings";
 import { mergeDemoCvIntoProfile, hasDemoCvStored, shouldMockCvUpload } from "./demoCvUpload";
 import axios from "axios";
 import { normalizeApiPath } from "./apiPath";
 
 let cachedDemoAccount = false;
 
+/** Turn on the Paris finance swipe preview by default for new creator demo accounts. */
+export function ensureDemoAccountDefaults() {
+  if (!cachedDemoAccount || typeof window === "undefined") return;
+  try {
+    const hasSavedSettings = window.localStorage.getItem(DEMO_SETTINGS_STORAGE_KEY) != null;
+    if (hasSavedSettings) return;
+  } catch {
+    return;
+  }
+  saveDemoSettings({ ...readDemoSettings(), financeJobFeed: true });
+}
+
 export function setDemoAccountFromUser(user) {
   cachedDemoAccount = Boolean(user?.demo_account);
+  if (cachedDemoAccount) {
+    ensureDemoAccountDefaults();
+  }
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent(DEMO_ACCOUNT_CHANGED));
   }
@@ -429,4 +444,12 @@ export function patchDemoAccountResponse(response) {
   }
 
   return response;
+}
+
+export function getDemoAccountSearchTarget() {
+  return {
+    role: TUTORIAL_PROFILE_DEFAULT.target_role,
+    location: TUTORIAL_PROFILE_DEFAULT.target_location,
+    locationData: TUTORIAL_PROFILE_DEFAULT.target_location_data,
+  };
 }

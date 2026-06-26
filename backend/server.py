@@ -787,6 +787,35 @@ MSc Computer Science, 2019
 }
 
 
+def _demo_profile_for_feed(user_id: str, profile: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Demo creators can swipe without uploading a CV — use a seeded profile for feed scoring."""
+    base = dict(profile or {})
+    merged = {**TUTORIAL_FILMING_PROFILE, **base, "user_id": user_id}
+    if not merged.get("cv_text"):
+        merged["cv_text"] = TUTORIAL_FILMING_PROFILE["cv_text"]
+    if not merged.get("target_role"):
+        merged["target_role"] = TUTORIAL_FILMING_PROFILE["target_role"]
+    if not merged.get("target_roles"):
+        merged["target_roles"] = TUTORIAL_FILMING_PROFILE["target_roles"]
+    if not merged.get("target_location"):
+        merged["target_location"] = TUTORIAL_FILMING_PROFILE["target_location"]
+    if not merged.get("target_location_data"):
+        merged["target_location_data"] = TUTORIAL_FILMING_PROFILE["target_location_data"]
+    return merged
+
+
+async def _ensure_demo_feed_profile(user_id: str) -> None:
+    existing = await db.profiles.find_one({"user_id": user_id}, {"_id": 0, "cv_text": 1})
+    if existing and existing.get("cv_text"):
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    await db.profiles.update_one(
+        {"user_id": user_id},
+        {"$set": {**TUTORIAL_FILMING_PROFILE, "user_id": user_id, "updated_at": now}},
+        upsert=True,
+    )
+
+
 @api_router.post("/tutorial/session")
 async def tutorial_session(response: Response):
     """Temporary filming endpoint: demo account + seeded profile for real job feed."""
@@ -2971,7 +3000,9 @@ async def get_feed(
         location,
     )
     profile = await db.profiles.find_one({"user_id": user.user_id}, {"_id": 0})
-    if not profile or not profile.get("cv_text"):
+    if user.demo_account:
+        profile = _demo_profile_for_feed(user.user_id, profile)
+    elif not profile or not profile.get("cv_text"):
         logger.info(
             "jobs/feed cv_readiness_failed user_id=%s profile_exists=%s has_cv_text=%s has_cv_filename=%s profile_keys=%s",
             user.user_id,
@@ -5271,6 +5302,7 @@ async def _redeem_creator_invite(code: str, user_id: str, user_email: Optional[s
     enrollment = None
     if grant_demo:
         await _set_user_demo_account(user_id, True)
+        await _ensure_demo_feed_profile(user_id)
     if grant_training:
         await _set_user_training_access(user_id, True)
         try:
@@ -5449,6 +5481,7 @@ async def admin_grant_influencer_demo(
 
     user_id = user_doc["user_id"]
     await _set_user_demo_account(user_id, True)
+    await _ensure_demo_feed_profile(user_id)
     updated = update_influencer(influencer_id, {
         "user_id": user_id,
         "demo_granted": True,
