@@ -3640,11 +3640,9 @@ async def get_feed(
             job_location = str(job.get("location") or "").lower()
             job_country_code = str(job.get("country_code") or "").lower().strip()
             if not job_location and not job_country_code:
+                if explicit_location_filter and radius_km is not None:
+                    return False
                 return include_unknown_location
-            if (
-                _is_current_provider_job(job)
-            ):
-                return True
             city_match = bool(selected_city_terms and any(term in job_location for term in selected_city_terms))
             country_match = bool(
                 (selected_country_terms and any(term in job_location for term in selected_country_terms))
@@ -3659,7 +3657,7 @@ async def get_feed(
             if radius_scope in ("worldwide", "remote", "remote/worldwide"):
                 return True
             if radius_km is not None:
-                return city_match or country_match
+                return city_match if selected_city_terms else country_match
             return city_match or country_match
 
         def _matches_salary(job: Dict[str, Any]) -> bool:
@@ -3870,7 +3868,8 @@ async def get_feed(
                     len(jobs),
                     len(direct_refresh_jobs),
                 )
-        if not is_worldwide_radius and explicit_filters and len(jobs) < requested_limit and explicit_location_filter and selected_country_terms:
+        allow_location_widening = not explicit_location_filter or radius_km is None
+        if not is_worldwide_radius and explicit_filters and allow_location_widening and len(jobs) < requested_limit and explicit_location_filter and selected_country_terms:
             relaxed = [
                 job for job in pre_filter_candidates
                 if _matches_non_location_filters(job)
@@ -3894,7 +3893,7 @@ async def get_feed(
                     _elapsed_ms(),
                     len(jobs),
                 )
-        if not is_worldwide_radius and explicit_filters and len(jobs) < requested_limit and not _timed_out():
+        if not is_worldwide_radius and explicit_filters and allow_location_widening and len(jobs) < requested_limit and not _timed_out():
             widened = [
                 job for job in pre_filter_candidates
                 if _matches_non_location_filters(job)
