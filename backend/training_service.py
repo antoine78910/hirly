@@ -212,6 +212,21 @@ def _pct(completed: List[str], total: int) -> int:
     return min(100, round((len(completed) / total) * 100))
 
 
+def _enrollment_tracking_fields(enrollment: Dict[str, Any]) -> Dict[str, Any]:
+    """Read progress fields from enrollment doc or nested Supabase data blob."""
+    nested = enrollment.get("data") if isinstance(enrollment.get("data"), dict) else {}
+    completed = enrollment.get("completed_module_ids") or nested.get("completed_module_ids") or []
+    quiz_results = enrollment.get("quiz_results") or nested.get("quiz_results") or {}
+    activity = enrollment.get("activity") or nested.get("activity") or {}
+    quiz_attempts_log = enrollment.get("quiz_attempts_log") or nested.get("quiz_attempts_log") or []
+    return {
+        "completed_module_ids": list(completed),
+        "quiz_results": quiz_results if isinstance(quiz_results, dict) else {},
+        "activity": activity if isinstance(activity, dict) else {},
+        "quiz_attempts_log": list(quiz_attempts_log) if isinstance(quiz_attempts_log, list) else [],
+    }
+
+
 async def get_creator_by_user_id(db, user_id: str) -> Optional[Dict[str, Any]]:
     return await db.training_creators.find_one({"user_id": user_id}, {"_id": 0})
 
@@ -276,7 +291,8 @@ async def get_course_detail(db, course_id: str, user_id: Optional[str] = None, l
             {"_id": 0},
         )
 
-    completed = set((enrollment or {}).get("completed_module_ids") or [])
+    tracking = _enrollment_tracking_fields(enrollment or {})
+    completed = set(tracking["completed_module_ids"])
     module_rows = []
     for mod in modules:
         localized = _localize_fields(mod, lang, ["title", "description", "category", "content", "video_url", "sections"])
@@ -297,13 +313,8 @@ async def get_course_detail(db, course_id: str, user_id: Optional[str] = None, l
     if progress is None and module_rows:
         progress = _pct(list(completed), len(module_rows))
 
-    enrollment_data = (enrollment or {}).get("data") or {}
-    if isinstance(enrollment_data, dict):
-        quiz_results = enrollment_data.get("quiz_results") or (enrollment or {}).get("quiz_results") or {}
-        activity = enrollment_data.get("activity") or (enrollment or {}).get("activity") or {}
-    else:
-        quiz_results = (enrollment or {}).get("quiz_results") or {}
-        activity = (enrollment or {}).get("activity") or {}
+    quiz_results = tracking["quiz_results"]
+    activity = tracking["activity"]
 
     creator = await db.training_creators.find_one({"creator_id": course.get("creator_id")}, {"_id": 0})
     creator_local = _localize_fields(creator or {}, lang, ["display_name", "bio"]) if creator else None
@@ -493,21 +504,36 @@ async def admin_training_analytics(db, course_id: Optional[str] = None) -> Dict[
     for enr in enrollments:
         uid = enr.get("user_id")
         user = user_map.get(uid) or {}
-        completed_ids = set(enr.get("completed_module_ids") or [])
+        tracking = _enrollment_tracking_fields(enr)
+        completed_ids = set(tracking["completed_module_ids"])
         for mid in completed_ids:
             if mid in module_completion:
                 module_completion[mid] += 1
 
-        activity = enr.get("activity") or {}
+        activity = tracking["activity"]
         last_module = activity.get("last_module_id")
         if last_module and last_module in module_dropoff:
             module_dropoff[last_module] += 1
 
-        quiz_results = enr.get("quiz_results") or {}
+        quiz_results = tracking["quiz_results"]
         for qid, qres in quiz_results.items():
             quiz_attempt_counts[qid] = quiz_attempt_counts.get(qid, 0) + int(qres.get("attempts") or 1)
             if qres.get("passed"):
                 quiz_pass_counts[qid] = quiz_pass_counts.get(qid, 0) + 1
+
+        quiz_summaries = []
+        for qid, qres in quiz_results.items():
+            quiz_def = get_quiz(qid) or {}
+            quiz_summaries.append({
+                "quiz_id": qid,
+                "module_id": quiz_def.get("module_id") or qres.get("module_id"),
+                "score": qres.get("score"),
+                "passed": bool(qres.get("passed")),
+                "attempts": int(qres.get("attempts") or 1),
+                "answers": qres.get("answers") or {},
+                "submitted_at": qres.get("submitted_at"),
+            })
+        quiz_summaries.sort(key=lambda row: row.get("submitted_at") or "")
 
         learner_rows.append({
             "user_id": uid,
@@ -515,9 +541,12 @@ async def admin_training_analytics(db, course_id: Optional[str] = None) -> Dict[
             "name": user.get("name"),
             "progress_percent": enr.get("progress_percent", 0),
             "completed_module_ids": list(completed_ids),
+            "modules_viewed": activity.get("modules_viewed") or [],
             "last_module_id": last_module,
             "last_section_id": activity.get("last_section_id"),
             "quiz_results": quiz_results,
+            "quiz_summaries": quiz_summaries,
+            "quiz_attempts_log": tracking["quiz_attempts_log"][-20:],
             "updated_at": enr.get("updated_at"),
         })
 

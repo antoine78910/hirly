@@ -21,6 +21,7 @@ import {
   fetchTrainingCourseDetail,
   isQuizPassed,
   loadLocalTrainingProgress,
+  syncLocalTrainingProgress,
   tryCompleteModule,
   tryEnrollCourse,
   trySubmitQuiz,
@@ -150,6 +151,7 @@ export default function TrainingCourse() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      await syncLocalTrainingProgress(courseId);
       const payload = await fetchTrainingCourseDetail(courseId, lang);
       if (!payload) {
         toast.error(t("courseNotFound"));

@@ -6,9 +6,11 @@ import {
 } from "./demoTrainingData";
 import { quizIdForModule } from "./trainingQuizzes";
 
-/** Set REACT_APP_TRAINING_API=true when the live training backend is ready. */
-function isLiveTrainingApiEnabled() {
-  return process.env.REACT_APP_TRAINING_API === "true";
+/** Persist training progress to the backend (enabled in production by default). */
+export function isLiveTrainingApiEnabled() {
+  if (process.env.REACT_APP_TRAINING_API === "false") return false;
+  if (process.env.REACT_APP_TRAINING_API === "true") return true;
+  return process.env.NODE_ENV === "production";
 }
 
 function progressStorageKey(courseId) {
@@ -276,6 +278,51 @@ export async function tryCompleteModule(courseId, moduleId) {
   if (!isLiveTrainingApiEnabled()) return;
   try {
     await api.post(`/training/courses/${courseId}/modules/${moduleId}/complete`);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Push local-only progress to the API once (e.g. after enabling live sync in production). */
+export async function syncLocalTrainingProgress(courseId) {
+  if (!isLiveTrainingApiEnabled() || typeof window === "undefined") return;
+  const local = loadLocalTrainingProgress(courseId);
+  const hasLocal = Boolean(
+    local.quiz_results
+    || local.completed_module_ids?.length
+    || local.activity?.last_module_id,
+  );
+  if (!hasLocal) return;
+
+  try {
+    await tryEnrollCourse(courseId);
+    for (const [quizId, result] of Object.entries(local.quiz_results || {})) {
+      if (!result?.answers) continue;
+      try {
+        await api.post(`/training/courses/${courseId}/quizzes/${quizId}/submit`, {
+          answers: result.answers,
+        });
+      } catch {
+        /* ignore per-quiz sync errors */
+      }
+    }
+    for (const moduleId of local.completed_module_ids || []) {
+      try {
+        await api.post(`/training/courses/${courseId}/modules/${moduleId}/complete`);
+      } catch {
+        /* module may not be completable until quiz passes server-side */
+      }
+    }
+    if (local.activity?.last_module_id) {
+      try {
+        await api.post(`/training/courses/${courseId}/activity`, {
+          module_id: local.activity.last_module_id,
+          section_id: local.activity.last_section_id || null,
+        });
+      } catch {
+        /* ignore */
+      }
+    }
   } catch {
     /* ignore */
   }

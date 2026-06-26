@@ -234,6 +234,11 @@ export default function AdminTraining() {
   const moduleStats = data?.module_stats || [];
   const learners = data?.learners || [];
 
+  const moduleTitleById = useMemo(
+    () => Object.fromEntries(moduleStats.map((mod) => [mod.module_id, mod.title || mod.module_id])),
+    [moduleStats],
+  );
+
   const maxStopped = useMemo(
     () => Math.max(1, ...moduleStats.map((m) => m.stopped_here_count || 0)),
     [moduleStats],
@@ -339,7 +344,7 @@ export default function AdminTraining() {
                         <th className="px-5 py-3">User</th>
                         <th className="px-5 py-3">Progress</th>
                         <th className="px-5 py-3">Last module</th>
-                        <th className="px-5 py-3">Quizzes passed</th>
+                        <th className="px-5 py-3">Quizzes</th>
                         <th className="px-5 py-3">Updated</th>
                       </tr>
                     </thead>
@@ -352,21 +357,66 @@ export default function AdminTraining() {
                         </tr>
                       ) : (
                         learners.map((row) => {
-                          const passedQuizzes = Object.values(row.quiz_results || {}).filter((q) => q.passed).length;
+                          const quizSummaries = row.quiz_summaries?.length
+                            ? row.quiz_summaries
+                            : Object.entries(row.quiz_results || {}).map(([quizId, qres]) => ({
+                                quiz_id: quizId,
+                                module_id: qres?.module_id,
+                                score: qres?.score,
+                                passed: qres?.passed,
+                                attempts: qres?.attempts,
+                                answers: qres?.answers,
+                                submitted_at: qres?.submitted_at,
+                              }));
+                          const passedQuizzes = quizSummaries.filter((q) => q.passed).length;
+                          const lastModuleLabel = row.last_module_id
+                            ? (moduleTitleById[row.last_module_id] || row.last_module_id)
+                            : "—";
                           return (
-                            <tr key={row.user_id} className="border-b border-zinc-50">
+                            <tr key={row.user_id} className="border-b border-zinc-50 align-top">
                               <td className="px-5 py-3">
                                 <p className="font-medium text-zinc-800">{row.name || row.email || row.user_id}</p>
                                 {row.email ? <p className="text-xs text-zinc-500">{row.email}</p> : null}
                               </td>
                               <td className="px-5 py-3 text-zinc-600">{row.progress_percent ?? 0}%</td>
                               <td className="px-5 py-3 text-zinc-600">
-                                {row.last_module_id || "—"}
+                                {lastModuleLabel}
                                 {row.last_section_id ? (
                                   <span className="block text-xs text-zinc-400">{row.last_section_id}</span>
                                 ) : null}
                               </td>
-                              <td className="px-5 py-3 text-zinc-600">{passedQuizzes}</td>
+                              <td className="px-5 py-3 text-zinc-600">
+                                <p className="font-medium">{passedQuizzes} passed</p>
+                                {quizSummaries.length === 0 ? (
+                                  <p className="text-xs text-zinc-400">No quiz attempts yet</p>
+                                ) : (
+                                  <ul className="mt-2 space-y-2 text-xs">
+                                    {quizSummaries.map((quiz) => (
+                                      <li
+                                        key={`${row.user_id}-${quiz.quiz_id}`}
+                                        className="rounded-md border border-zinc-100 bg-zinc-50 px-2 py-1.5"
+                                      >
+                                        <p className="font-medium text-zinc-700">
+                                          {moduleTitleById[quiz.module_id] || quiz.module_id || quiz.quiz_id}
+                                          {" · "}
+                                          <span className={quiz.passed ? "text-emerald-700" : "text-amber-700"}>
+                                            {quiz.passed ? "Passed" : "Not passed"}
+                                          </span>
+                                          {typeof quiz.score === "number" ? ` (${quiz.score}%)` : ""}
+                                        </p>
+                                        {quiz.answers && Object.keys(quiz.answers).length > 0 ? (
+                                          <p className="mt-1 text-zinc-500">
+                                            Answers:{" "}
+                                            {Object.entries(quiz.answers)
+                                              .map(([questionId, choiceId]) => `${questionId}=${choiceId}`)
+                                              .join(", ")}
+                                          </p>
+                                        ) : null}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </td>
                               <td className="px-5 py-3 text-zinc-500">{fmtDate(row.updated_at)}</td>
                             </tr>
                           );

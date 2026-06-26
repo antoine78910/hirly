@@ -8,7 +8,7 @@ import TrainingShell, { useTrainingPageMode } from "../components/training/Train
 import ModuleGalleryCard from "../components/training/ModuleGalleryCard";
 import TrainingCompletionFeedbackModal from "../components/training/TrainingCompletionFeedbackModal";
 import TrainingWelcomeModal from "../components/training/TrainingWelcomeModal";
-import { fetchTrainingCatalog, fetchTrainingCourseDetail } from "../lib/trainingData";
+import { fetchTrainingCatalog, fetchTrainingCourseDetail, syncLocalTrainingProgress, tryEnrollCourse } from "../lib/trainingData";
 import { TRAINING_COURSE_ID } from "../lib/demoTrainingData";
 import { areAllScoredModulesComplete, courseProgressFraction } from "../lib/trainingProgress";
 import {
@@ -45,6 +45,8 @@ export default function Training() {
       if (data.is_training_creator) setIsTrainingCreator(true);
 
       const firstCourseId = courses[0]?.course_id || TRAINING_COURSE_ID;
+      await syncLocalTrainingProgress(firstCourseId);
+      await tryEnrollCourse(firstCourseId);
       const detail = await fetchTrainingCourseDetail(firstCourseId, lang);
       setCatalogModules(detail?.modules?.length ? detail.modules : []);
       setEnrollment(detail?.enrollment || null);

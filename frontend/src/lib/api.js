@@ -15,8 +15,22 @@ const normalizeBackendUrl = (value) => {
   return withProtocol.replace(/\/+$/, "").replace(/\/api$/i, "");
 };
 
+const isLocalBackendUrl = (value) => /localhost|127\.0\.0\.1/i.test(value || "");
+
+/** Prefer same-origin /api in production (Vercel rewrite → Railway). */
+function resolveApiBase() {
+  if (typeof window !== "undefined" && process.env.NODE_ENV === "production") {
+    return "/api";
+  }
+  const envUrl = normalizeBackendUrl(process.env.REACT_APP_BACKEND_URL || "");
+  if (typeof window !== "undefined" && isLocalBackendUrl(envUrl)) {
+    return "/api";
+  }
+  return envUrl ? `${envUrl}/api` : "/api";
+}
+
 const BACKEND_URL = normalizeBackendUrl(process.env.REACT_APP_BACKEND_URL || "");
-export const API = BACKEND_URL ? `${BACKEND_URL}/api` : "/api";
+export const API = resolveApiBase();
 
 /** Resolve API-relative media paths (e.g. uploaded training videos). */
 export function resolveApiAssetUrl(path) {
@@ -27,7 +41,8 @@ export function resolveApiAssetUrl(path) {
   if (typeof window !== "undefined" && (normalized.startsWith("/api/") || normalized.startsWith("/training-videos/"))) {
     return normalized;
   }
-  const base = (BACKEND_URL || (typeof window !== "undefined" ? window.location.origin : "")).replace(/\/+$/, "");
+  const apiOrigin = API.startsWith("http") ? API.replace(/\/api\/?$/i, "") : "";
+  const base = (apiOrigin || BACKEND_URL || (typeof window !== "undefined" ? window.location.origin : "")).replace(/\/+$/, "");
   return `${base}${normalized}`;
 }
 
