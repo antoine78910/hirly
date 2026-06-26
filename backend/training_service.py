@@ -483,17 +483,14 @@ async def admin_training_analytics(db, course_id: Optional[str] = None) -> Dict[
     course_id = course_id or SEED_COURSE_ID
     modules = await db.training_modules.find({"course_id": course_id}).sort("sort_order", 1).to_list(200)
     enrollments = await db.training_enrollments.find({"course_id": course_id}).to_list(5000)
-    users = await db.users.find({}, {"_id": 0, "user_id": 1, "email": 1, "name": 1}).to_list(10000)
+    users = await db.users.find(
+        {},
+        {"_id": 0, "user_id": 1, "email": 1, "name": 1, "training_access": 1, "created_at": 1, "updated_at": 1},
+    ).to_list(10000)
     user_map = {u["user_id"]: u for u in users if u.get("user_id")}
 
     module_ids = [m["module_id"] for m in modules]
     module_titles = {m["module_id"]: m.get("title") or m["module_id"] for m in modules}
-
-    total_enrolled = len(enrollments)
-    completed_course = sum(1 for e in enrollments if int(e.get("progress_percent") or 0) >= 100)
-    avg_progress = 0
-    if enrollments:
-        avg_progress = round(sum(int(e.get("progress_percent") or 0) for e in enrollments) / total_enrolled)
 
     module_completion: Dict[str, int] = {mid: 0 for mid in module_ids}
     module_dropoff: Dict[str, int] = {mid: 0 for mid in module_ids}
@@ -550,6 +547,38 @@ async def admin_training_analytics(db, course_id: Optional[str] = None) -> Dict[
             "updated_at": enr.get("updated_at"),
         })
 
+    enrolled_user_ids = {row.get("user_id") for row in learner_rows if row.get("user_id")}
+    for user in users:
+        uid = user.get("user_id")
+        if not uid or uid in enrolled_user_ids:
+            continue
+        if not user.get("training_access"):
+            continue
+        learner_rows.append({
+            "user_id": uid,
+            "email": user.get("email"),
+            "name": user.get("name"),
+            "progress_percent": 0,
+            "completed_module_ids": [],
+            "modules_viewed": [],
+            "last_module_id": None,
+            "last_section_id": None,
+            "quiz_results": {},
+            "quiz_summaries": [],
+            "quiz_attempts_log": [],
+            "updated_at": user.get("updated_at") or user.get("created_at"),
+            "legacy_no_enrollment": True,
+        })
+        enrolled_user_ids.add(uid)
+
+    total_enrolled = len(learner_rows)
+    completed_course = sum(1 for row in learner_rows if int(row.get("progress_percent") or 0) >= 100)
+    avg_progress = 0
+    if learner_rows:
+        avg_progress = round(
+            sum(int(row.get("progress_percent") or 0) for row in learner_rows) / total_enrolled
+        )
+
     module_stats = []
     for mod in modules:
         mid = mod["module_id"]
@@ -578,6 +607,27 @@ async def admin_training_analytics(db, course_id: Optional[str] = None) -> Dict[
         "module_stats": module_stats,
         "learners": sorted(learner_rows, key=lambda r: r.get("updated_at") or "", reverse=True),
     }
+
+
+async def ensure_training_enrollments_for_access_users(db, course_id: Optional[str] = None) -> None:
+    """Create missing enrollments for users who already have training_access."""
+    course_id = course_id or SEED_COURSE_ID
+    try:
+        users = await db.users.find(
+            {"training_access": True},
+            {"_id": 0, "user_id": 1},
+        ).to_list(10000)
+    except Exception as exc:
+        logger.warning("training enrollment backfill user list failed: %s", exc)
+        return
+    for user in users:
+        uid = user.get("user_id")
+        if not uid:
+            continue
+        try:
+            await enroll_user(db, uid, course_id)
+        except Exception as exc:
+            logger.warning("training enrollment backfill failed user=%s: %s", uid, exc)
 
 
 async def admin_training_videos(db, course_id: Optional[str] = None) -> Dict[str, Any]:

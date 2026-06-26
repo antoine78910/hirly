@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import hashlib
 import random
 import re
 import uuid
@@ -25,6 +26,16 @@ DEV_TEST_INVITE_SPECS = (
     {"code": "123456", "invite_type": INVITE_TYPE_TRAINING, "label": "Dev training invite"},
     {"code": "654321", "invite_type": INVITE_TYPE_DEMO, "label": "Dev demo invite"},
 )
+
+
+def _legacy_recovery_code(user_id: str, kind: str) -> str:
+    """Deterministic 6-digit code for admin-recovered invites (unique per user + kind)."""
+    digest = hashlib.sha256(f"legacy:{kind}:{user_id}".encode()).hexdigest()
+    num = int(digest[:8], 16) % 900000 + 100000
+    code = str(num)
+    if code in {spec["code"] for spec in DEV_TEST_INVITE_SPECS}:
+        code = str((num + 1) % 900000 + 100000)
+    return code
 
 
 def resolve_invite_type(row: Optional[Dict[str, Any]]) -> str:
@@ -312,19 +323,88 @@ async def validate_invite(db, code: str) -> Dict[str, Any]:
 async def list_training_invites(db, limit: int = 50) -> List[Dict[str, Any]]:
     rows = [
         row for row in await load_invites(db)
-        if not row.get("influencer_id") and resolve_invite_type(row) == INVITE_TYPE_TRAINING
+        if not row.get("influencer_id")
+        and resolve_invite_type(row) in {INVITE_TYPE_TRAINING, INVITE_TYPE_CREATOR}
     ]
-    rows.sort(key=lambda item: item.get("created_at") or "", reverse=True)
+    rows.sort(key=lambda item: item.get("created_at") or item.get("redeemed_at") or "", reverse=True)
     return rows[:limit]
 
 
 async def list_demo_invites(db, limit: int = 50) -> List[Dict[str, Any]]:
     rows = [
         row for row in await load_invites(db)
-        if resolve_invite_type(row) == INVITE_TYPE_DEMO
+        if resolve_invite_type(row) in {INVITE_TYPE_DEMO, INVITE_TYPE_CREATOR}
     ]
-    rows.sort(key=lambda item: item.get("created_at") or "", reverse=True)
+    rows.sort(key=lambda item: item.get("created_at") or item.get("redeemed_at") or "", reverse=True)
     return rows[:limit]
+
+
+async def _load_all_users(db) -> List[Dict[str, Any]]:
+    if db is None or not hasattr(db, "users"):
+        return []
+    try:
+        return await db.users.find({}, {"_id": 0}).to_list(10000)
+    except Exception as exc:
+        logger.warning("users list failed during invite backfill: %s", exc)
+        return []
+
+
+async def _user_already_linked(invites: List[Dict[str, Any]], user_id: str, invite_type: str) -> bool:
+    for row in invites:
+        if row.get("redeemed_by_user_id") != user_id:
+            continue
+        resolved = resolve_invite_type(row)
+        if resolved == invite_type or resolved == INVITE_TYPE_CREATOR:
+            return True
+    return False
+
+
+async def backfill_invites_from_users(db) -> None:
+    """Recreate admin-visible invite rows for accounts that got access before Supabase persistence."""
+    users = await _load_all_users(db)
+    if not users:
+        return
+    invites = await load_invites(db)
+    for user in users:
+        uid = user.get("user_id")
+        if not uid:
+            continue
+        email = (user.get("email") or "").strip().lower()
+        redeemed_at = user.get("updated_at") or user.get("created_at") or _now_iso()
+        if user.get("demo_account") and not await _user_already_linked(invites, uid, INVITE_TYPE_DEMO):
+            row = await _upsert_invite(db, {
+                "invite_id": f"user_demo_{uid}",
+                "code": _legacy_recovery_code(uid, INVITE_TYPE_DEMO),
+                "influencer_id": None,
+                "invite_type": INVITE_TYPE_DEMO,
+                "course_id": DEFAULT_COURSE_ID,
+                "email_hint": email,
+                "label": "Recovered demo account",
+                "created_at": redeemed_at,
+                "redeemed_at": redeemed_at,
+                "redeemed_by_user_id": uid,
+                "redeemed_by_email": email,
+                "revoked": False,
+                "legacy_from_user": True,
+            })
+            invites.append(row)
+        if user.get("training_access") and not await _user_already_linked(invites, uid, INVITE_TYPE_TRAINING):
+            row = await _upsert_invite(db, {
+                "invite_id": f"user_training_{uid}",
+                "code": _legacy_recovery_code(uid, INVITE_TYPE_TRAINING),
+                "influencer_id": None,
+                "invite_type": INVITE_TYPE_TRAINING,
+                "course_id": DEFAULT_COURSE_ID,
+                "email_hint": email,
+                "label": "Recovered training account",
+                "created_at": redeemed_at,
+                "redeemed_at": redeemed_at,
+                "redeemed_by_user_id": uid,
+                "redeemed_by_email": email,
+                "revoked": False,
+                "legacy_from_user": True,
+            })
+            invites.append(row)
 
 
 async def create_standalone_invitation(

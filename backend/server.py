@@ -66,6 +66,7 @@ from creator_invite_store import (
     enrich_invite_rows,
     migrate_file_invites_to_db,
     bootstrap_invites_from_influencers,
+    backfill_invites_from_users,
     materialize_invite_from_link,
     resolve_invite_type,
     validate_invite,
@@ -86,8 +87,9 @@ from feedback_routes import register_feedback_routes
 from training_routes import register_training_routes, register_training_admin_routes
 from training_service import (
     SEED_COURSE_ID,
-    admin_training_analytics,
+    admin_training_analytics as compute_training_analytics,
     enroll_user,
+    ensure_training_enrollments_for_access_users,
     is_training_creator,
     seed_training_content,
     sync_training_locale_content,
@@ -5574,11 +5576,11 @@ async def admin_list_creators(admin: User = Depends(require_admin_user)):
 
 
 @api_router.get("/admin/training/analytics")
-async def admin_training_analytics(
+async def admin_training_analytics_endpoint(
     admin: User = Depends(require_admin_user),
     course_id: str = Query("course_job_search_mastery"),
 ):
-    return await admin_training_analytics(db, course_id)
+    return await compute_training_analytics(db, course_id)
 
 
 @api_router.get("/admin/analytics")
@@ -10012,11 +10014,13 @@ async def _startup_seed_impl():
     try:
         await migrate_file_invites_to_db(db)
         await bootstrap_invites_from_influencers(db)
+        await backfill_invites_from_users(db)
         await ensure_dev_test_invites(db)
         await seed_greenhouse_company_boards(db)
         await seed_lever_company_boards(db)
         await seed_training_content(db)
         await sync_training_locale_content(db)
+        await ensure_training_enrollments_for_access_users(db)
 
         fallback_mock = os.environ.get("JOB_PROVIDER_FALLBACK_MOCK", "false").lower() in ("1", "true", "yes", "on")
         if not fallback_mock:
