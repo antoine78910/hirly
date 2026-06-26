@@ -847,7 +847,7 @@ def _direct_apply_raw_query(role: str, location: Optional[str], country: Optiona
 def _direct_apply_attempt_queries(query: JobSearchQuery, roles: List[str], locations: List[Optional[str]]) -> List[JobSearchQuery]:
     if not _env_bool("JOB_DIRECT_APPLY_SEARCH_ENABLED", True):
         return []
-    max_attempts = max(1, min(_env_int("JOB_DIRECT_APPLY_SEARCH_MAX_ATTEMPTS", 4), 12))
+    max_attempts = max(1, min(_env_int("JOB_DIRECT_APPLY_SEARCH_MAX_ATTEMPTS", 2), 8))
     groups = _domain_groups(_direct_apply_search_domains())
     attempts: List[JobSearchQuery] = []
     for role in roles[:2]:
@@ -902,6 +902,10 @@ def _provider_attempt_queries(query: JobSearchQuery, search_radius: str, provide
             attempts.append(_copy_query_with_role_and_location(query, role, fallback_location))
 
     return _dedupe_queries(attempts, provider)
+
+
+def _is_direct_apply_raw_query(query: JobSearchQuery) -> bool:
+    return bool(query.raw_query and "site:" in (query.role or "").lower())
 
 
 def _query_family_tokens(role: str, country: Optional[str]) -> List[str]:
@@ -1199,22 +1203,37 @@ async def refresh_jobs_for_profile_if_needed(
 
     try:
         max_provider_requests = max(1, min(_env_int("JOB_IMPORT_MAX_PROVIDER_REQUESTS", 7), 12))
+        max_direct_apply_requests = max(0, min(_env_int("JOB_DIRECT_APPLY_SEARCH_MAX_ATTEMPTS", 2), 8))
         min_provider_requests = 1 if force_provider_refresh else 0
         provider_requests = 0
+        direct_apply_requests = 0
+        broad_provider_requests = 0
         total_imported = 0
         relevant_imported = fresh_feed_ready_count
+        manual_ready_imported = 0
         imported_jobs: List[Dict[str, Any]] = []
         imported = 0
         fallback_used = None
         for attempt_query in query_variants:
-            if provider_requests >= max_provider_requests or (
-                provider_requests >= min_provider_requests
+            is_direct_apply_attempt = _is_direct_apply_raw_query(attempt_query)
+            if is_direct_apply_attempt:
+                if direct_apply_requests >= max_direct_apply_requests:
+                    continue
+            elif broad_provider_requests >= max_provider_requests:
+                break
+            if (
+                broad_provider_requests >= min_provider_requests
                 and relevant_imported >= min_feed_ready_count
             ):
                 break
             provider_requests += 1
+            if is_direct_apply_attempt:
+                direct_apply_requests += 1
+            else:
+                broad_provider_requests += 1
             import_stats = await _import_provider_jobs(db, provider, attempt_query)
             imported = import_stats["total_imported"]
+            manual_ready = sum(1 for job in (import_stats.get("jobs") or []) if is_manual_fulfillment_ready(job))
             relevant = sum(
                 1
                 for job in (import_stats.get("jobs") or [])
@@ -1224,24 +1243,27 @@ async def refresh_jobs_for_profile_if_needed(
             )
             total_imported += imported
             relevant_imported += relevant
+            manual_ready_imported += manual_ready
             imported_jobs.extend(import_stats.get("jobs") or [])
             if imported > 0 and fallback_used is None and attempt_query.location != query.location:
                 fallback_used = attempt_query.location
             logger.info(
-                "JSearch refresh attempt: role=%s location=%s country=%s query=%s total_imported=%s relevant_imported=%s auto_apply_supported_imported=%s unknown_ats_imported=%s",
+                "JSearch refresh attempt: role=%s location=%s country=%s direct_apply_attempt=%s query=%s total_imported=%s manual_ready_imported=%s relevant_imported=%s auto_apply_supported_imported=%s unknown_ats_imported=%s",
                 attempt_query.role,
                 attempt_query.location,
                 attempt_query.country,
+                is_direct_apply_attempt,
                 provider._query_string(attempt_query),
                 import_stats["total_imported"],
+                manual_ready,
                 relevant,
                 import_stats["auto_apply_supported_imported"],
                 import_stats["unknown_ats_imported"],
             )
-        if relevant_imported < min_feed_ready_count and provider_requests < max_provider_requests:
+        if relevant_imported < min_feed_ready_count and broad_provider_requests < max_provider_requests:
             broad_location = query.location or _country_name(query.country) or "remote"
             broad_query = JobSearchQuery(
-                role=f"{query_variants[0].role if query_variants else query.role} jobs in {broad_location}",
+                role=f"{query.role} jobs in {broad_location}",
                 location=query.location,
                 remote_preference=query.remote_preference,
                 country=query.country,
@@ -1250,8 +1272,11 @@ async def refresh_jobs_for_profile_if_needed(
                 raw_query=True,
             )
             provider_requests += 1
+            broad_provider_requests += 1
             broad_stats = await _import_provider_jobs(db, provider, broad_query)
             total_imported += broad_stats["total_imported"]
+            manual_ready_broad = sum(1 for job in (broad_stats.get("jobs") or []) if is_manual_fulfillment_ready(job))
+            manual_ready_imported += manual_ready_broad
             relevant_imported += sum(
                 1
                 for job in (broad_stats.get("jobs") or [])
@@ -1261,10 +1286,11 @@ async def refresh_jobs_for_profile_if_needed(
             )
             imported_jobs.extend(broad_stats.get("jobs") or [])
             logger.info(
-                "JSearch broad local attempt: query=%s country=%s total_imported=%s relevant_imported=%s auto_apply_supported_imported=%s unknown_ats_imported=%s",
+                "JSearch broad local attempt: query=%s country=%s total_imported=%s manual_ready_imported=%s relevant_imported=%s auto_apply_supported_imported=%s unknown_ats_imported=%s",
                 provider._query_string(broad_query),
                 broad_query.country,
                 broad_stats["total_imported"],
+                manual_ready_broad,
                 relevant_imported,
                 broad_stats["auto_apply_supported_imported"],
                 broad_stats["unknown_ats_imported"],
@@ -1316,6 +1342,10 @@ async def refresh_jobs_for_profile_if_needed(
         "search_keys": search_keys,
         "imported": total_imported,
         "relevant_imported": relevant_imported,
+        "manual_ready_imported": manual_ready_imported,
+        "provider_requests": provider_requests,
+        "direct_apply_requests": direct_apply_requests,
+        "broad_provider_requests": broad_provider_requests,
         "jobs": combined_jobs[:200],
         "fallback_used": fallback_used,
         "ats_targeted_imported": ats_targeted_imported,
