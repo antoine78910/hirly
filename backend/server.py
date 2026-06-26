@@ -64,6 +64,7 @@ from creator_invite_store import (
     mark_invite_clicked,
     mark_invite_redeemed,
     enrich_invite_rows,
+    migrate_file_invites_to_db,
     resolve_invite_type,
     validate_invite,
 )
@@ -677,11 +678,9 @@ async def auth_invite_email(body: InviteEmailAuthRequest, response: Response):
     if not re.fullmatch(r"\d{6}", code):
         raise HTTPException(status_code=400, detail="Enter a valid 6-digit invitation code")
 
-    check = validate_invite(code)
-    if not check.get("valid") and check.get("reason") not in {"already_redeemed"}:
+    check = await validate_invite(db, code)
+    if not check.get("valid"):
         reason = check.get("reason")
-        if reason == "expired":
-            raise HTTPException(status_code=410, detail="This invitation has expired")
         if reason == "revoked":
             raise HTTPException(status_code=410, detail="This invitation is no longer valid")
         raise HTTPException(status_code=400, detail="Invalid invitation code")
@@ -5277,18 +5276,16 @@ async def _redeem_creator_invite(code: str, user_id: str, user_email: Optional[s
     if not re.fullmatch(r"\d{6}", normalized):
         raise HTTPException(status_code=400, detail="Enter a valid 6-digit invitation code")
 
-    check = validate_invite(normalized)
-    invitation = check.get("invitation") or get_invite_by_code(normalized)
+    check = await validate_invite(db, normalized)
+    invitation = check.get("invitation") or await get_invite_by_code(db, normalized)
     if not invitation:
         raise HTTPException(status_code=404, detail="Invitation not found")
 
     if invitation.get("redeemed_by_user_id") and invitation.get("redeemed_by_user_id") != user_id:
         raise HTTPException(status_code=409, detail="This invitation was already used by another account")
 
-    if not check.get("valid") and check.get("reason") not in {"already_redeemed"}:
+    if not check.get("valid"):
         reason = check.get("reason")
-        if reason == "expired":
-            raise HTTPException(status_code=410, detail="This invitation has expired")
         if reason == "revoked":
             raise HTTPException(status_code=410, detail="This invitation is no longer valid")
         raise HTTPException(status_code=400, detail="Invalid invitation code")
@@ -5321,7 +5318,7 @@ async def _redeem_creator_invite(code: str, user_id: str, user_email: Optional[s
         update_influencer(influencer_id, influencer_patch)
 
     if not invitation.get("redeemed_at"):
-        mark_invite_redeemed(normalized, user_id, user_email)
+        await mark_invite_redeemed(db, normalized, user_id, user_email)
 
     return {
         "ok": True,
@@ -5347,8 +5344,8 @@ async def validate_creator_invite(code: str):
             "already_redeemed": False,
             "master_code": True,
         }
-    mark_invite_clicked(normalized)
-    check = validate_invite(code)
+    await mark_invite_clicked(db, normalized)
+    check = await validate_invite(db, code)
     invitation = check.get("invitation") or {}
     return {
         "valid": bool(check.get("valid")),
@@ -5394,7 +5391,7 @@ async def admin_create_influencer_invite(
     payload = payload or {}
     course_id = (payload.get("course_id") or SEED_COURSE_ID).strip()
     try:
-        invitation = create_invitation(influencer_id, course_id=course_id)
+        invitation = await create_invitation(db, influencer_id, course_id=course_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {
@@ -5417,7 +5414,7 @@ async def admin_create_influencer_demo_invite(
     if not row:
         raise HTTPException(status_code=404, detail="Influencer not found")
     try:
-        invitation = create_demo_invitation(influencer_id=influencer_id)
+        invitation = await create_demo_invitation(db, influencer_id=influencer_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {
@@ -5431,7 +5428,7 @@ async def admin_create_influencer_demo_invite(
 
 @api_router.get("/admin/demo/invites")
 async def admin_list_demo_invites(admin: User = Depends(require_admin_user)):
-    return {"invites": await _enrich_invite_rows_for_admin(list_demo_invites())}
+    return {"invites": await _enrich_invite_rows_for_admin(await list_demo_invites(db))}
 
 
 @api_router.post("/admin/demo/invites")
@@ -5440,7 +5437,8 @@ async def admin_create_demo_invite(
     admin: User = Depends(require_admin_user),
 ):
     payload = payload or {}
-    invitation = create_demo_invitation(
+    invitation = await create_demo_invitation(
+        db,
         email_hint=(payload.get("email_hint") or "").strip(),
         label=(payload.get("label") or "").strip(),
     )
@@ -5459,7 +5457,7 @@ async def admin_list_influencer_invites(
 ):
     if not get_influencer(influencer_id):
         raise HTTPException(status_code=404, detail="Influencer not found")
-    return {"invites": await _enrich_invite_rows_for_admin(list_invites_for_influencer(influencer_id))}
+    return {"invites": await _enrich_invite_rows_for_admin(await list_invites_for_influencer(db, influencer_id))}
 
 
 @api_router.post("/admin/influencers/{influencer_id}/grant-demo")
@@ -10008,7 +10006,8 @@ app.add_middleware(
 async def _startup_seed_impl():
     """Seed boards and training content without blocking HTTP readiness."""
     try:
-        ensure_dev_test_invites()
+        await migrate_file_invites_to_db(db)
+        await ensure_dev_test_invites(db)
         await seed_greenhouse_company_boards(db)
         await seed_lever_company_boards(db)
         await seed_training_content(db)

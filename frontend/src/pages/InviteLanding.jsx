@@ -59,7 +59,7 @@ export default function InviteLanding() {
         const { data } = await api.get(`/invites/${normalized}/validate`);
         setInviteMeta(data);
       } catch {
-        const local = getLocalDevInviteMeta(normalized);
+        const local = process.env.NODE_ENV === "development" ? getLocalDevInviteMeta(normalized) : null;
         setInviteMeta(local || { valid: false, reason: "not_found" });
       } finally {
         setChecking(false);
@@ -161,7 +161,7 @@ export default function InviteLanding() {
     );
   }
 
-  const isValid = !invalid && inviteMeta?.valid !== false;
+  const isValid = !invalid && inviteMeta?.valid === true;
   const influencerName = inviteMeta?.influencer_name;
 
   if (!isValid) {
@@ -179,15 +179,15 @@ export default function InviteLanding() {
             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-violet-100">
               <Sparkles className="h-6 w-6 text-violet-500" />
             </div>
-            <h1 className="font-display text-2xl font-bold tracking-tight">Lien d&apos;invitation invalide</h1>
+            <h1 className="font-display text-2xl font-bold tracking-tight">Invalid invitation link</h1>
             <p className="mt-3 text-sm leading-relaxed text-zinc-500">
-              Ce lien est manquant ou expiré. Contactez l&apos;équipe Hirly pour obtenir une nouvelle invitation.
+              This link is not recognized. Contact the Hirly team to get a new invitation.
             </p>
             <Link
               to="/"
               className="mt-6 inline-block text-sm font-semibold text-linkedin hover:text-linkedin-dark"
             >
-              Retour à Hirly
+              Back to Hirly
             </Link>
           </div>
         </div>

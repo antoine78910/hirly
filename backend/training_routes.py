@@ -218,7 +218,7 @@ def register_training_admin_routes(router: APIRouter, require_admin_user, db, en
 
     @router.get("/admin/training/invites")
     async def admin_training_invites_list(admin=Depends(require_admin_user)):
-        rows = list_training_invites()
+        rows = await list_training_invites(db)
         if enrich_invites_for_admin:
             rows = await enrich_invites_for_admin(rows)
         return {"invites": rows}
@@ -228,7 +228,8 @@ def register_training_admin_routes(router: APIRouter, require_admin_user, db, en
         payload: Dict[str, Any],
         admin=Depends(require_admin_user),
     ):
-        invitation = create_standalone_invitation(
+        invitation = await create_standalone_invitation(
+            db,
             course_id=(payload.get("course_id") or "course_job_search_mastery").strip(),
             email_hint=(payload.get("email_hint") or "").strip(),
             label=(payload.get("label") or "").strip(),
