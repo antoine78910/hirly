@@ -134,6 +134,8 @@ export const APP_UI = {
       swipeMoreJobDesc: "This job post does not include enough detail for a strong tailored package.",
       swipeAppSaved: "Application saved",
       swipeAppSavedDesc: "Generation failed. Open Tracker to review or retry later.",
+      swipeQueued: "Application queued for {company}",
+      swipeQueuedDesc: "We are generating the tailored CV and cover letter in the background.",
       swipePackageFor: "Application package generated for {company}",
       swipePackageReady: "CV and cover letter are ready. Not submitted yet.",
       demoApplied: "Applied (demo)",
@@ -1637,6 +1639,15 @@ export function getSwipeSuccessCopy(t, data, job) {
   const submission = data?.submission_status || "not_submitted";
   const pkg = data?.package_status || data?.application_status;
   const company = job?.company || "";
+
+  if (data?.queued_for_generation || data?.generation_status === "pending_generation") {
+    const queuedTitle = t("swipe.swipeQueued", { company });
+    const queuedDesc = t("swipe.swipeQueuedDesc");
+    return {
+      title: queuedTitle === "swipe.swipeQueued" ? t("swipe.swipePackageFor", { company }) : queuedTitle,
+      description: queuedDesc === "swipe.swipeQueuedDesc" ? t("swipe.swipePackageReady") : queuedDesc,
+    };
+  }
 
   if (data?.manual_fulfillment || data?.manual_status === "manual_review_needed") {
     return { title: t("swipe.swipePackageFor", { company }), description: t("swipe.swipePackageReady") };

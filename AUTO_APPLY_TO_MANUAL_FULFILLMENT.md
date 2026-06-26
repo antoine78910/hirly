@@ -34,13 +34,15 @@ For now, right swipe means:
 
 1. User chooses a job and swipes right.
 2. Hirly checks credits.
-3. Hirly generates the tailored application package.
-4. Hirly saves the application with:
+3. Hirly immediately saves a queued application and returns to the app.
+4. The user can keep swiping without waiting for AI generation.
+5. A per-user background worker generates queued applications one at a time in swipe order.
+6. Hirly saves the application with:
    - `submission_status=not_submitted`
    - `manual_status=manual_review_needed`
    - `admin_status=manual_review_needed`
-5. The admin queue receives the application.
-6. An operator manually completes the application using:
+7. The admin queue receives the application.
+8. An operator manually completes the application using:
    - user contact/profile information
    - original CV text
    - tailored CV file
@@ -48,11 +50,13 @@ For now, right swipe means:
    - generated application answers
    - job application URL
    - notes and status controls
-7. The operator marks the application as:
+9. The operator marks the application as:
    - `manual_in_progress`
    - `manually_submitted`
    - `manual_blocked`
    - `needs_user_input`
+
+If a user swipes right multiple times in seconds, each application is inserted immediately with `generation_status=pending_generation`. The background worker processes the user's queue sequentially: first swipe first, second swipe second, and so on. This avoids blocking the UI and avoids running many expensive AI/document-generation jobs in parallel for the same user.
 
 ## Admin Workflow
 

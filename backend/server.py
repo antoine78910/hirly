@@ -132,6 +132,8 @@ def _cors_origins() -> List[str]:
 
 DATABASE_PROVIDER = "supabase"
 db = create_database_adapter()
+_application_generation_locks: Dict[str, asyncio.Lock] = {}
+_application_generation_tasks: Dict[str, asyncio.Task] = {}
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -295,6 +297,8 @@ class Application(BaseModel):
     job_id: str
     status: Literal["applied", "viewed", "interview", "rejected", "offer"] = "applied"
     package_status: Literal["not_generated", "generated", "generated_text_only", "failed", "pending_generation", "needs_profile_data", "needs_job_data"] = "not_generated"
+    generation_status: Optional[Literal["pending_generation", "generating", "generated", "failed"]] = None
+    generation_error: Optional[str] = None
     submission_status: Literal["not_submitted", "ready", "prepared", "submitted", "failed", "blocked", "action_required", "blocked_captcha", "prepare_failed", "unknown"] = "not_submitted"
     submitted_at: Optional[str] = None
     submission_provider: Optional[str] = None
@@ -2342,6 +2346,129 @@ def _application_text_lengths(app_doc: Dict[str, Any]) -> Dict[str, int]:
         "tailored_resume_length": len(json.dumps(tailored_resume, default=str)) if tailored_resume else 0,
         "cover_letter_length": len(cover_letter_to_text(cover_letter)) if cover_letter else 0,
     }
+
+
+def _application_generation_update(generated_doc: Dict[str, Any], existing_app: Dict[str, Any]) -> Dict[str, Any]:
+    now = datetime.now(timezone.utc).isoformat()
+    timeline = _append_admin_timeline(existing_app, {
+        "event_id": f"timeline_{uuid.uuid4().hex[:12]}",
+        "type": "generation_completed",
+        "package_status": generated_doc.get("package_status"),
+        "generation_status": generated_doc.get("generation_status"),
+        "generation_error": generated_doc.get("generation_error"),
+        "created_at": now,
+    })
+    preserved = {
+        "application_id": existing_app.get("application_id"),
+        "user_id": existing_app.get("user_id"),
+        "job_id": existing_app.get("job_id"),
+        "created_at": existing_app.get("created_at"),
+        "admin_status": existing_app.get("admin_status") or "manual_review_needed",
+        "manual_status": existing_app.get("manual_status") or "manual_review_needed",
+        "manual_status_updated_at": existing_app.get("manual_status_updated_at") or now,
+        "admin_timeline": timeline,
+        "updated_at": now,
+    }
+    update_doc = {
+        key: value
+        for key, value in generated_doc.items()
+        if key not in {"application_id", "user_id", "job_id", "created_at", "admin_status", "manual_status", "manual_status_updated_at", "admin_timeline"}
+    }
+    if update_doc.get("generation_status") == "pending_generation" and update_doc.get("generation_error"):
+        update_doc["generation_status"] = "failed"
+        update_doc["package_status"] = "failed"
+    return {**update_doc, **preserved}
+
+
+async def _process_application_generation_queue(user_id: str) -> None:
+    lock = _application_generation_locks.setdefault(user_id, asyncio.Lock())
+    async with lock:
+        while True:
+            pending = await db.applications.find(
+                {"user_id": user_id, "generation_status": {"$in": ["pending_generation", "generating"]}},
+                {"_id": 0},
+            ).sort("created_at", 1).limit(1).to_list(1)
+            if not pending:
+                return
+
+            app_doc = pending[0]
+            application_id = app_doc.get("application_id")
+            job_id = app_doc.get("job_id")
+            now = datetime.now(timezone.utc).isoformat()
+            await db.applications.update_one(
+                {"application_id": application_id, "user_id": user_id},
+                {"$set": {"generation_status": "generating", "generation_started_at": now, "updated_at": now}},
+            )
+            try:
+                user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+                profile = await db.profiles.find_one({"user_id": user_id}, {"_id": 0})
+                job = await db.jobs.find_one({"job_id": job_id}, {"_id": 0})
+                if not user_doc or not profile or not job:
+                    raise RuntimeError("Missing user, profile, or job for queued application generation")
+                queued_user = User(
+                    user_id=user_doc.get("user_id"),
+                    email=user_doc.get("email") or "",
+                    name=user_doc.get("name") or "",
+                    picture=user_doc.get("picture"),
+                    demo_account=bool(user_doc.get("demo_account")),
+                    training_access=bool(user_doc.get("training_access")),
+                )
+                generated_doc = await _generate_application_doc(queued_user, profile, job)
+                latest_app = await db.applications.find_one({"application_id": application_id, "user_id": user_id}, {"_id": 0}) or app_doc
+                update_doc = _application_generation_update(generated_doc, latest_app)
+                await db.applications.update_one(
+                    {"application_id": application_id, "user_id": user_id},
+                    {"$set": update_doc},
+                )
+                logger.info(
+                    "queued_application_generation_complete user_id=%s application_id=%s job_id=%s package_status=%s",
+                    user_id,
+                    application_id,
+                    job_id,
+                    update_doc.get("package_status"),
+                )
+            except Exception as exc:
+                logger.exception("queued_application_generation_failed user_id=%s application_id=%s job_id=%s", user_id, application_id, job_id)
+                failed_at = datetime.now(timezone.utc).isoformat()
+                latest_app = await db.applications.find_one({"application_id": application_id, "user_id": user_id}, {"_id": 0}) or app_doc
+                timeline = _append_admin_timeline(latest_app, {
+                    "event_id": f"timeline_{uuid.uuid4().hex[:12]}",
+                    "type": "generation_failed",
+                    "generation_error": (str(exc).strip() or exc.__class__.__name__)[:500],
+                    "created_at": failed_at,
+                })
+                await db.applications.update_one(
+                    {"application_id": application_id, "user_id": user_id},
+                    {"$set": {
+                        "generation_status": "failed",
+                        "generation_error": (str(exc).strip() or exc.__class__.__name__)[:500],
+                        "package_status": "failed",
+                        "submission_error": (str(exc).strip() or exc.__class__.__name__)[:500],
+                        "admin_timeline": timeline,
+                        "updated_at": failed_at,
+                    }},
+                )
+
+
+def _schedule_application_generation(user_id: str) -> None:
+    task = _application_generation_tasks.get(user_id)
+    if task and not task.done():
+        return
+    _application_generation_tasks[user_id] = asyncio.create_task(_process_application_generation_queue(user_id))
+
+
+async def _resume_pending_application_generation() -> None:
+    try:
+        rows = await db.applications.find(
+            {"generation_status": {"$in": ["pending_generation", "generating"]}},
+            {"_id": 0, "user_id": 1},
+        ).limit(500).to_list(500)
+        for user_id in sorted({row.get("user_id") for row in rows if row.get("user_id")}):
+            _schedule_application_generation(user_id)
+        if rows:
+            logger.info("resumed_pending_application_generation users=%s applications=%s", len({row.get("user_id") for row in rows if row.get("user_id")}), len(rows))
+    except Exception as exc:
+        logger.warning("resume_pending_application_generation_failed: %s", exc)
 
 
 # ===================== Career Coach (Interviews + Improve) =====================
@@ -4413,6 +4540,8 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
         existing_app = await db.applications.find_one({"user_id": user.user_id, "job_id": req.job_id}, {"_id": 0})
         if existing_app:
             normalized = _normalize_application_status_fields(existing_app)
+            if normalized.get("generation_status") in {"pending_generation", "generating"}:
+                _schedule_application_generation(user.user_id)
             duplicate_lengths = _application_text_lengths(normalized)
             phase = "response_build_start"
             log_phase(
@@ -4435,6 +4564,8 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
                 "submission_status": normalized["submission_status"],
                 "manual_status": _effective_manual_status(normalized),
                 "manual_fulfillment": _manual_application_fulfillment_enabled(),
+                "queued_for_generation": normalized.get("generation_status") in {"pending_generation", "generating"},
+                "generation_status": normalized.get("generation_status"),
                 "billing": billing_credit_status,
             }
             phase = "response_build_done"
@@ -4453,38 +4584,9 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
             )
             return response
 
-        phase = "application_generation_start"
-        generation_started_at = time.perf_counter()
-        log_phase("application_generation_start")
-        try:
-            doc = await _generate_application_doc(user, profile, job)
-            generation_elapsed_ms = int((time.perf_counter() - generation_started_at) * 1000)
-            phase = "application_generation_done"
-            log_phase(
-                "application_generation_done",
-                application_id=doc.get("application_id"),
-                package_status=doc.get("package_status"),
-                submission_status=doc.get("submission_status"),
-                **_application_text_lengths(doc),
-                elapsed_ms=generation_elapsed_ms,
-            )
-        except Exception as exc:
-            generation_elapsed_ms = int((time.perf_counter() - generation_started_at) * 1000)
-            phase = "application_generation_failed"
-            log_phase(
-                "application_generation_failed",
-                elapsed_ms=generation_elapsed_ms,
-                exception_class=exc.__class__.__name__,
-                message=(str(exc).strip() or exc.__class__.__name__)[:500],
-            )
-            logger.exception(
-                "application_generation_failed user_id=%s job_id=%s elapsed_ms=%s exception=%s",
-                user.user_id,
-                req.job_id,
-                generation_elapsed_ms,
-                exc.__class__.__name__,
-            )
-            doc = _pending_application_doc(user, job, exc)
+        phase = "application_queue_start"
+        log_phase("application_queue_start")
+        doc = _pending_application_doc(user, job)
 
         phase = "application_upsert_start"
         log_phase("application_upsert_start", application_id=doc.get("application_id"))
@@ -4527,89 +4629,9 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
         saved_doc = _normalize_application_status_fields(saved_doc)
         browser_prepare_started = False
 
-        if (
-            req.direction == "right"
-            and not _manual_application_fulfillment_enabled()
-            and job.get("ats_provider") == "greenhouse"
-            and saved_doc.get("package_status") == "generated"
-        ):
-            browser_prepare_started = True
-            phase = "greenhouse_prepare_start"
-            log_phase(
-                "greenhouse_prepare_start",
-                application_id=saved_doc.get("application_id"),
-                browser_prepare_started=True,
-                package_status=saved_doc.get("package_status"),
-                **_application_text_lengths(saved_doc),
-            )
-            prepare_started_at = time.perf_counter()
-            try:
-                prepare_timeout = int(os.environ.get("GREENHOUSE_PREPARE_AFTER_SWIPE_TIMEOUT_SECONDS", "90"))
-                prepare_result = await asyncio.wait_for(
-                    _prepare_greenhouse_browser_fill(req.job_id, user, click_submit=False),
-                    timeout=prepare_timeout,
-                )
-                phase = "greenhouse_prepare_done"
-                log_phase(
-                    "greenhouse_prepare_done",
-                    elapsed_ms=int((time.perf_counter() - prepare_started_at) * 1000),
-                    application_id=saved_doc.get("application_id"),
-                    ready_for_final_click=prepare_result.get("ready_for_final_click"),
-                    action_required=prepare_result.get("action_required"),
-                    captcha_required=prepare_result.get("captcha_required"),
-                    blockers_count=len(prepare_result.get("blockers") or []),
-                    browser_prepare_result_status=prepare_result.get("submission_status"),
-                )
-                refreshed_doc = await db.applications.find_one(
-                    {"application_id": saved_doc["application_id"]},
-                    {"_id": 0},
-                )
-                if refreshed_doc:
-                    saved_doc = _normalize_application_status_fields(refreshed_doc)
-                log_phase(
-                    "greenhouse_prepare_status_refreshed",
-                    application_id=saved_doc.get("application_id"),
-                    final_submission_status_saved=saved_doc.get("submission_status"),
-                    browser_prepare_result_status=prepare_result.get("submission_status"),
-                )
-            except Exception as exc:
-                phase = "greenhouse_prepare_failed"
-                elapsed_ms = int((time.perf_counter() - prepare_started_at) * 1000)
-                log_phase(
-                    "greenhouse_prepare_failed",
-                    elapsed_ms=elapsed_ms,
-                    exception_class=exc.__class__.__name__,
-                    message=(str(exc).strip() or exc.__class__.__name__)[:500],
-                )
-                logger.exception(
-                    "greenhouse_prepare_after_swipe_failed user_id=%s job_id=%s application_id=%s elapsed_ms=%s",
-                    user.user_id,
-                    req.job_id,
-                    saved_doc.get("application_id"),
-                    elapsed_ms,
-                )
-                now = datetime.now(timezone.utc).isoformat()
-                await db.applications.update_one(
-                    {"application_id": saved_doc["application_id"], "user_id": user.user_id},
-                    {"$set": {
-                        "submission_status": "prepare_failed",
-                        "submission_error": "greenhouse_browser_prepare_failed",
-                        "greenhouse_browser_prepare_error": {
-                            "exception_class": exc.__class__.__name__,
-                            "message": (str(exc).strip() or exc.__class__.__name__)[:500],
-                            "elapsed_ms": elapsed_ms,
-                        },
-                        "updated_at": now,
-                    }},
-                )
-                saved_doc = {
-                    **saved_doc,
-                    "submission_status": "prepare_failed",
-                    "submission_error": "greenhouse_browser_prepare_failed",
-                }
-
         phase = "application_upsert_done"
         credit_result = await _consume_application_credit(user.user_id)
+        _schedule_application_generation(user.user_id)
         log_phase(
             "application_upsert_done",
             application_id=saved_doc.get("application_id"),
@@ -4621,6 +4643,7 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
             submission_status=saved_doc.get("submission_status"),
             credits_remaining=credit_result.get("credits_remaining"),
             manual_fulfillment=_manual_application_fulfillment_enabled(),
+            queued_for_generation=True,
         )
 
         phase = "response_build_start"
@@ -4639,6 +4662,8 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
             "package_status": saved_doc["package_status"],
             "application_status": saved_doc["package_status"],
             "submission_status": saved_doc["submission_status"],
+            "generation_status": saved_doc.get("generation_status"),
+            "queued_for_generation": True,
             "manual_status": _effective_manual_status(saved_doc),
             "manual_fulfillment": _manual_application_fulfillment_enabled(),
             "billing": credit_result,
@@ -10111,6 +10136,7 @@ async def startup_seed():
         os.environ.get("PORT"),
     )
     asyncio.create_task(_startup_seed_impl())
+    asyncio.create_task(_resume_pending_application_generation())
 
 
 @app.on_event("shutdown")

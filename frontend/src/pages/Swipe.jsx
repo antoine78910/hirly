@@ -843,7 +843,6 @@ export default function Swipe() {
         ats_provider: job.ats_provider,
         demo: demoApply,
       });
-      setAppLoading(true);
       setAppliedToday((n) => n + 1);
     }
     trackEvent(intent === "apply" ? "job_swiped_right" : "job_swiped_left", {
@@ -852,9 +851,6 @@ export default function Swipe() {
       ats_provider: job.ats_provider,
       location: job.location,
     });
-    const loadingToastId = intent === "apply" && !demoApply
-      ? toast.loading(t("toasts.generatingApp"), { description: t("toasts.generatingAppDesc") })
-      : null;
     try {
       let data;
       if (isFinanceDemoEnabled()) {
@@ -881,9 +877,8 @@ export default function Swipe() {
           trackApplicationOutcome(data, job);
           const copy = getSwipeSuccessCopy(t, data, job);
           toast.success(copy.title, {
-            id: loadingToastId,
             description: copy.description,
-            duration: 3500,
+            duration: 2200,
           });
         }
       }
@@ -894,10 +889,9 @@ export default function Swipe() {
         openUpgrade();
       }
       if (!demoSwipe) {
-        toast.error(getSwipeErrorMessage(t, e), loadingToastId ? { id: loadingToastId } : undefined);
+        toast.error(getSwipeErrorMessage(t, e));
       }
     }
-    finally { if (intent === "apply") setAppLoading(false); }
     if (jobs.length <= 3) loadFeed();
   };
 
