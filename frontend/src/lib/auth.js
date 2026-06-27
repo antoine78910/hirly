@@ -4,10 +4,11 @@ import { supabase, supabaseConfigured } from "./supabase";
 export const GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 
 export function supabaseSessionPayload(session) {
+  const identityData = session?.user?.identities?.[0]?.identity_data || {};
   return {
     access_token: session?.access_token || "",
     provider_token: session?.provider_token || "",
-    provider_refresh_token: session?.provider_refresh_token || "",
+    provider_refresh_token: session?.provider_refresh_token || identityData.provider_refresh_token || identityData.refresh_token || "",
     provider_token_expires_at: session?.expires_at || null,
   };
 }
@@ -44,8 +45,7 @@ export async function startGoogleLogin(returnPath = "/swipe", opts = {}) {
   const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(path)}`;
   const queryParams = {
     access_type: "offline",
-    prompt: "consent select_account",
-    include_granted_scopes: "true",
+    prompt: "consent",
     ...(opts.login_hint ? { login_hint: opts.login_hint } : {}),
   };
   const { error } = await supabase.auth.signInWithOAuth({

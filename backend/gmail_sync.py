@@ -242,6 +242,9 @@ async def store_gmail_tokens(
         "provider": "gmail",
         "scope": GMAIL_READONLY_SCOPE,
         "connected": True,
+        "provider_token_received": bool(provider_token),
+        "provider_refresh_token_received": bool(provider_refresh_token),
+        "token_capture_updated_at": now,
         "updated_at": now,
     }
     if provider_token:
