@@ -1,6 +1,17 @@
 import { api, setSessionToken } from "./api";
 import { supabase, supabaseConfigured } from "./supabase";
 
+export const GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+
+export function supabaseSessionPayload(session) {
+  return {
+    access_token: session?.access_token || "",
+    provider_token: session?.provider_token || "",
+    provider_refresh_token: session?.provider_refresh_token || "",
+    provider_token_expires_at: session?.expires_at || null,
+  };
+}
+
 /** Start auth and return to the requested app path after login.
  * @param {string} returnPath - App path to redirect to after successful login.
  * @param {{ login_hint?: string }} [opts] - Optional OAuth hints (e.g. email pre-fill).
@@ -31,10 +42,19 @@ export async function startGoogleLogin(returnPath = "/swipe", opts = {}) {
   }
 
   const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(path)}`;
-  const queryParams = opts.login_hint ? { login_hint: opts.login_hint } : undefined;
+  const queryParams = {
+    access_type: "offline",
+    prompt: "consent select_account",
+    include_granted_scopes: "true",
+    ...(opts.login_hint ? { login_hint: opts.login_hint } : {}),
+  };
   const { error } = await supabase.auth.signInWithOAuth({
     provider: "google",
-    options: { redirectTo, ...(queryParams ? { queryParams } : {}) },
+    options: {
+      redirectTo,
+      scopes: `openid email profile ${GMAIL_READONLY_SCOPE}`,
+      queryParams,
+    },
   });
   if (error) {
     console.error("Supabase Google login failed.", error);

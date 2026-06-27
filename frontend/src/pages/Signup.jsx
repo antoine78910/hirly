@@ -5,7 +5,7 @@ import Logo from "../components/Logo";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { BRAND } from "../lib/brand";
-import { startGoogleLogin } from "../lib/auth";
+import { startGoogleLogin, supabaseSessionPayload } from "../lib/auth";
 import { api, setSessionToken } from "../lib/api";
 import { supabase, supabaseConfigured } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
@@ -64,7 +64,7 @@ export default function Signup() {
       return;
     }
 
-    const { data } = await api.post("/auth/supabase-session", { access_token: accessToken });
+    const { data } = await api.post("/auth/supabase-session", supabaseSessionPayload(session));
     if (data?.session_token) setSessionToken(data.session_token);
     setUser(data.user);
     setHasProfile(Boolean(data.has_profile));

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { GraduationCap } from "lucide-react";
 import { api, setSessionToken } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
-import { startGoogleLogin } from "../../lib/auth";
+import { startGoogleLogin, supabaseSessionPayload } from "../../lib/auth";
 import { supabase, supabaseConfigured } from "../../lib/supabase";
 import { setDemoAccountFromUser } from "../../lib/demoAccount";
 import { TrainingAuthForm, TrainingAuthPopup } from "./TrainingAuthPopup";
@@ -27,7 +27,7 @@ export default function TrainingLoginPage() {
       setAuthNotice("Vérifiez votre boîte mail pour confirmer votre compte, puis reconnectez-vous.");
       return null;
     }
-    const { data } = await api.post("/auth/supabase-session", { access_token: accessToken });
+    const { data } = await api.post("/auth/supabase-session", supabaseSessionPayload(session));
     if (data?.session_token) setSessionToken(data.session_token);
     setUser(data.user);
     setHasProfile(Boolean(data.has_profile));

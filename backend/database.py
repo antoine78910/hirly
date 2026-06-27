@@ -24,6 +24,8 @@ TABLE_META: Dict[str, Dict[str, Any]] = {
     "jobs": {"pk": "job_id", "indexed": ["provider", "external_id"]},
     "swipes": {"pk": None, "composite": ("user_id", "job_id")},
     "applications": {"pk": "application_id", "indexed": ["user_id"]},
+    "gmail_connections": {"pk": "user_id", "indexed": ["email"]},
+    "application_emails": {"pk": "email_id", "indexed": ["user_id", "application_id", "gmail_message_id"]},
     "company_boards": {"pk": "board_id"},
     "analytics_events": {"pk": "event_id", "indexed": ["user_id", "anonymous_id", "event"]},
     "stripe_events": {"pk": "event_id", "indexed": ["type"]},
@@ -321,6 +323,12 @@ class Collection:
             if doc.get("job_id") is not None:
                 cols.append("job_id")
                 vals.append(doc["job_id"])
+        if self.name == "gmail_connections":
+            cols.append("email")
+            vals.append(doc.get("email"))
+        if self.name == "application_emails":
+            cols.extend(["user_id", "application_id", "job_id"])
+            vals.extend([doc.get("user_id"), doc.get("application_id"), doc.get("job_id")])
         return cols, vals
 
     async def find_one(
@@ -415,6 +423,55 @@ class Collection:
                     doc["application_id"],
                     doc["user_id"],
                     doc.get("job_id"),
+                    payload,
+                )
+            elif self.name == "gmail_connections":
+                await conn.execute(
+                    """
+                    INSERT INTO gmail_connections (user_id, email, connected, last_synced_at, updated_at, data)
+                    VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+                    ON CONFLICT (user_id) DO UPDATE
+                    SET email = EXCLUDED.email,
+                        connected = EXCLUDED.connected,
+                        last_synced_at = EXCLUDED.last_synced_at,
+                        updated_at = EXCLUDED.updated_at,
+                        data = EXCLUDED.data
+                    """,
+                    doc["user_id"],
+                    doc.get("email"),
+                    bool(doc.get("connected", True)),
+                    doc.get("last_synced_at"),
+                    doc.get("updated_at"),
+                    payload,
+                )
+            elif self.name == "application_emails":
+                await conn.execute(
+                    """
+                    INSERT INTO application_emails (
+                        email_id, user_id, application_id, job_id, provider,
+                        gmail_message_id, gmail_thread_id, received_at, classification, data
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
+                    ON CONFLICT (email_id) DO UPDATE
+                    SET user_id = EXCLUDED.user_id,
+                        application_id = EXCLUDED.application_id,
+                        job_id = EXCLUDED.job_id,
+                        provider = EXCLUDED.provider,
+                        gmail_message_id = EXCLUDED.gmail_message_id,
+                        gmail_thread_id = EXCLUDED.gmail_thread_id,
+                        received_at = EXCLUDED.received_at,
+                        classification = EXCLUDED.classification,
+                        data = EXCLUDED.data
+                    """,
+                    doc["email_id"],
+                    doc.get("user_id"),
+                    doc.get("application_id"),
+                    doc.get("job_id"),
+                    doc.get("provider"),
+                    doc.get("gmail_message_id"),
+                    doc.get("gmail_thread_id"),
+                    doc.get("received_at"),
+                    doc.get("classification"),
                     payload,
                 )
             elif self.name == "company_boards":
@@ -532,6 +589,8 @@ class Database:
         self.jobs = Collection("jobs", pool)
         self.swipes = Collection("swipes", pool)
         self.applications = Collection("applications", pool)
+        self.gmail_connections = Collection("gmail_connections", pool)
+        self.application_emails = Collection("application_emails", pool)
         self.company_boards = Collection("company_boards", pool)
         self.analytics_events = Collection("analytics_events", pool)
         self.stripe_events = Collection("stripe_events", pool)

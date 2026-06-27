@@ -5,6 +5,7 @@ import { api, setSessionToken } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { Loader2 } from "lucide-react";
 import { supabase, supabaseConfigured } from "../lib/supabase";
+import { supabaseSessionPayload } from "../lib/auth";
 import { trackEvent } from "../lib/analytics";
 import { applyRedeemToAuth, inviteDestination, tryRedeemPendingInvite } from "../lib/creatorInvite";
 import { setDemoAccountFromUser } from "../lib/demoAccount";
@@ -34,10 +35,11 @@ export default function AuthCallback() {
           ? await supabase.auth.exchangeCodeForSession(code)
           : await supabase.auth.getSession();
         if (error) throw error;
-        const accessToken = sessionData?.session?.access_token;
+        const session = sessionData?.session;
+        const accessToken = session?.access_token;
         if (!accessToken) throw new Error("Supabase session not found");
         step = "backend_session";
-        const response = await api.post("/auth/supabase-session", { access_token: accessToken });
+        const response = await api.post("/auth/supabase-session", supabaseSessionPayload(session));
         const data = response.data;
         if (data?.session_token) setSessionToken(data.session_token);
         setUser(data.user);

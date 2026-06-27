@@ -85,6 +85,13 @@ from location_search import search_locations
 from llm_client import LLMProviderNotConfigured, complete_json_text
 from onboarding_suggestions import suggest_categories, suggest_roles
 from feedback_routes import register_feedback_routes
+from gmail_sync import (
+    GMAIL_READONLY_SCOPE,
+    gmail_connected_payload,
+    public_email_message,
+    store_gmail_tokens,
+    sync_gmail_application_emails,
+)
 from training_routes import register_training_routes, register_training_admin_routes
 from training_service import (
     SEED_COURSE_ID,
@@ -284,6 +291,9 @@ class LeverSubmissionBenchmarkRequest(BaseModel):
 
 class SupabaseSessionRequest(BaseModel):
     access_token: str
+    provider_token: Optional[str] = None
+    provider_refresh_token: Optional[str] = None
+    provider_token_expires_at: Optional[Any] = None
 
 
 class InviteEmailAuthRequest(BaseModel):
@@ -618,6 +628,9 @@ async def _session_payload_from_supabase_token(
     response: Response,
     *,
     source: str = "supabase",
+    provider_token: Optional[str] = None,
+    provider_refresh_token: Optional[str] = None,
+    provider_token_expires_at: Optional[Any] = None,
 ) -> Dict[str, Any]:
     supabase_url, supabase_secret = _supabase_admin_config()
     async with httpx.AsyncClient(timeout=15.0) as http:
@@ -660,6 +673,29 @@ async def _session_payload_from_supabase_token(
     session_token = await _create_app_session(user_doc["user_id"], source)
     _set_app_session_cookie(response, session_token)
 
+    gmail_connection = {"connected": False, "email": None, "last_synced_at": None}
+    if provider_token or provider_refresh_token:
+        try:
+            await store_gmail_tokens(
+                db,
+                user_id=user_doc["user_id"],
+                email=email,
+                provider_token=provider_token,
+                provider_refresh_token=provider_refresh_token,
+                expires_at=provider_token_expires_at,
+            )
+            gmail_connection = gmail_connected_payload(
+                await db.gmail_connections.find_one({"user_id": user_doc["user_id"]}, {"_id": 0})
+            )
+        except Exception as exc:
+            logger.warning("gmail_token_store_failed user_id=%s error=%s", user_doc["user_id"], str(exc)[:200])
+            gmail_connection = {
+                "connected": False,
+                "email": email,
+                "last_synced_at": None,
+                "last_sync_error": str(exc)[:200],
+            }
+
     profile = await db.profiles.find_one({"user_id": user_doc["user_id"]}, {"_id": 0, "cv_text": 1, "target_role": 1})
     creator_flag, training_access = await asyncio.gather(
         is_training_creator(db, user_doc["user_id"]),
@@ -672,6 +708,7 @@ async def _session_payload_from_supabase_token(
         "has_preferences": profile is not None and bool(profile.get("target_role")),
         "is_training_creator": creator_flag,
         "has_training_access": training_access,
+        "gmail": gmail_connection,
         "session_token": session_token,
     }
 
@@ -699,7 +736,14 @@ async def auth_supabase_session(body: SupabaseSessionRequest, response: Response
     access_token = (body.access_token or "").strip()
     if not access_token:
         raise HTTPException(status_code=400, detail="access_token required")
-    return await _session_payload_from_supabase_token(access_token, response, source="supabase_google")
+    return await _session_payload_from_supabase_token(
+        access_token,
+        response,
+        source="supabase_google",
+        provider_token=(body.provider_token or "").strip() or None,
+        provider_refresh_token=(body.provider_refresh_token or "").strip() or None,
+        provider_token_expires_at=body.provider_token_expires_at,
+    )
 
 
 @api_router.post("/auth/invite-email")
@@ -8910,6 +8954,71 @@ async def update_status(application_id: str, update: StatusUpdate, user: User = 
     return {"ok": True}
 
 
+# ===================== Application email inbox =====================
+
+@api_router.get("/emails/status")
+async def gmail_inbox_status(user: User = Depends(get_current_user)):
+    try:
+        connection = await db.gmail_connections.find_one({"user_id": user.user_id}, {"_id": 0})
+    except Exception as exc:
+        logger.warning("gmail_status_failed user_id=%s error=%s", user.user_id, str(exc)[:200])
+        return {
+            "gmail": {
+                "connected": False,
+                "email": user.email,
+                "last_synced_at": None,
+                "last_sync_error": "Gmail inbox storage is not initialized",
+            },
+            "required_scope": GMAIL_READONLY_SCOPE,
+        }
+    return {"gmail": gmail_connected_payload(connection), "required_scope": GMAIL_READONLY_SCOPE}
+
+
+@api_router.post("/emails/sync")
+async def sync_application_emails(user: User = Depends(get_current_user)):
+    try:
+        result = await sync_gmail_application_emails(db, user_id=user.user_id)
+        return result
+    except Exception as exc:
+        logger.warning("gmail_sync_failed user_id=%s error=%s", user.user_id, str(exc)[:300])
+        raise HTTPException(status_code=503, detail=str(exc)[:300])
+
+
+@api_router.get("/emails")
+async def list_application_emails(
+    sync: bool = Query(default=True),
+    limit: int = Query(default=50, ge=1, le=100),
+    user: User = Depends(get_current_user),
+):
+    sync_result: Dict[str, Any] = {"ok": True, "skipped": not sync}
+    if sync:
+        try:
+            sync_result = await sync_gmail_application_emails(db, user_id=user.user_id)
+        except Exception as exc:
+            logger.warning("gmail_list_sync_failed user_id=%s error=%s", user.user_id, str(exc)[:300])
+            sync_result = {"ok": False, "error": str(exc)[:300]}
+    try:
+        connection = await db.gmail_connections.find_one({"user_id": user.user_id}, {"_id": 0})
+        rows = await db.application_emails.find({"user_id": user.user_id}, {"_id": 0}).sort("received_at", -1).to_list(limit)
+    except Exception as exc:
+        logger.warning("gmail_list_failed user_id=%s error=%s", user.user_id, str(exc)[:300])
+        return {
+            "messages": [],
+            "gmail": {
+                "connected": False,
+                "email": user.email,
+                "last_synced_at": None,
+                "last_sync_error": "Gmail inbox storage is not initialized",
+            },
+            "sync": {"ok": False, "error": str(exc)[:300]},
+        }
+    return {
+        "messages": [public_email_message(row) for row in rows],
+        "gmail": gmail_connected_payload(connection),
+        "sync": sync_result,
+    }
+
+
 # ===================== Seed =====================
 
 MOCK_JOBS = [
@@ -9883,6 +9992,8 @@ async def dev_database_usage_audit():
         "profiles",
         "jobs",
         "applications",
+        "gmail_connections",
+        "application_emails",
         "swipes",
         "company_boards",
         "browser_submission_runs",
@@ -9893,11 +10004,12 @@ async def dev_database_usage_audit():
     }
 
     route_collections = {
-        "login:/api/auth/supabase-session": ["users", "user_sessions", "profiles"],
+        "login:/api/auth/supabase-session": ["users", "user_sessions", "profiles", "gmail_connections"],
         "auth_me:/api/auth/me": ["user_sessions", "users", "profiles"],
         "profile:/api/profile*": ["user_sessions", "users", "profiles", "swipes", "applications"],
         "swipes:/api/swipe*": ["user_sessions", "users", "swipes", "jobs", "profiles", "applications"],
         "applications:/api/applications*": ["user_sessions", "users", "applications", "jobs", "profiles", "browser_submission_runs"],
+        "emails:/api/emails*": ["user_sessions", "users", "gmail_connections", "application_emails", "applications", "jobs"],
         "jobs_feed:/api/jobs/feed": ["user_sessions", "users", "profiles", "swipes", "jobs"],
         "company_boards:startup_and_import_dev_routes": ["company_boards", "jobs"],
     }

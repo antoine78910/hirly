@@ -7,6 +7,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { BRAND } from "../lib/brand";
 import { toast } from "sonner";
+import { api } from "../lib/api";
 import Logo from "../components/Logo";
 import CompanyLogo from "../components/CompanyLogo";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -26,13 +27,13 @@ const getInboxFilters = (t) => [
   { key: "offer", label: t("emails.offer"), activeClass: "bg-teal-100 text-teal-700", idleClass: "bg-teal-50 text-teal-600" },
 ];
 
-const INBOX_MESSAGES = [];
-
 const sortInboxMessages = (items) =>
   [...items].sort((a, b) => {
     if (a.variant === "welcome") return 1;
     if (b.variant === "welcome") return -1;
-    return b.id - a.id;
+    const aTime = Date.parse(a.received_at || a.date || 0) || 0;
+    const bTime = Date.parse(b.received_at || b.date || 0) || 0;
+    return bTime - aTime;
   });
 
 const MOCK_JOBS = [
@@ -927,6 +928,36 @@ export default function Emails() {
   const [read, setRead] = useState({});
   const [archived, setArchived] = useState({});
   const [selectedMessage, setSelectedMessage] = useState(null);
+  const [inboxMessages, setInboxMessages] = useState([]);
+  const [loadingInbox, setLoadingInbox] = useState(true);
+  const [gmailStatus, setGmailStatus] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadInbox() {
+      setLoadingInbox(true);
+      try {
+        const { data } = await api.get("/emails", { params: { sync: true, limit: 100 } });
+        if (cancelled) return;
+        setInboxMessages(Array.isArray(data?.messages) ? data.messages : []);
+        setGmailStatus(data?.gmail || null);
+        if (data?.sync && data.sync.ok === false && data.sync.error) {
+          console.warn("Gmail sync skipped", data.sync.error);
+        }
+      } catch (error) {
+        if (cancelled) return;
+        console.warn("Inbox load failed", error?.response?.data?.detail || error?.message);
+        setInboxMessages([]);
+        setGmailStatus({ connected: false, last_sync_error: error?.response?.data?.detail || error?.message });
+      } finally {
+        if (!cancelled) setLoadingInbox(false);
+      }
+    }
+    loadInbox();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleSaveDraft = (draft) => {
     const updated = [draft, ...drafts];
@@ -956,7 +987,7 @@ export default function Emails() {
   };
 
   const messages = sortInboxMessages(
-    INBOX_MESSAGES.filter((m) => {
+    inboxMessages.filter((m) => {
       if (archived[m.id]) return false;
       if (m.filter !== filter) return false;
       if (!query.trim()) return true;
@@ -1040,11 +1071,20 @@ export default function Emails() {
             })}
           </div>
           <p className="mb-2 text-xs font-medium capitalize text-zinc-400 md:mt-0">{filter}</p>
-          {messages.length === 0 ? (
+          {loadingInbox ? (
+            <div className="py-16 text-center">
+              <Mail className="mx-auto mb-3 h-8 w-8 text-zinc-300" />
+              <p className="text-sm font-medium text-zinc-700">{t("common.loading") || "Loading"}</p>
+            </div>
+          ) : messages.length === 0 ? (
             <div className="py-16 text-center">
               <Mail className="mx-auto mb-3 h-8 w-8 text-zinc-300" />
               <p className="text-sm font-medium text-zinc-700">{t("emails.emptyFolder")}</p>
-              <p className="mx-auto mt-2 max-w-sm text-sm text-zinc-500">{t("emails.syncInbox")}</p>
+              <p className="mx-auto mt-2 max-w-sm text-sm text-zinc-500">
+                {gmailStatus?.connected === false && gmailStatus?.last_sync_error
+                  ? gmailStatus.last_sync_error
+                  : t("emails.syncInbox")}
+              </p>
             </div>
           ) : (
             <ul className="divide-y divide-zinc-100">

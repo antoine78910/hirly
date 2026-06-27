@@ -9,7 +9,7 @@ import httpx
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
-SCOPES = "openid email profile"
+SCOPES = "openid email profile https://www.googleapis.com/auth/gmail.readonly"
 
 
 def encode_state(redirect_path: str) -> str:
@@ -30,8 +30,9 @@ def build_google_login_url(client_id: str, redirect_uri: str, redirect_path: str
         "redirect_uri": redirect_uri,
         "response_type": "code",
         "scope": SCOPES,
-        "access_type": "online",
-        "prompt": "select_account",
+        "access_type": "offline",
+        "prompt": "consent select_account",
+        "include_granted_scopes": "true",
         "state": encode_state(redirect_path),
     }
     return f"{GOOGLE_AUTH_URL}?{urlencode(params)}"

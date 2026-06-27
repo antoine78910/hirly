@@ -8,6 +8,7 @@ pydantic==2.13.4
 httpx==0.28.1
 openai==1.99.9
 stripe==15.1.0
+cryptography==42.0.8
 
 # Document parsing / generation
 pypdf==6.12.1

@@ -25,6 +25,8 @@ MIGRATED_TABLES = {
     "profiles",
     "swipes",
     "applications",
+    "gmail_connections",
+    "application_emails",
     "browser_submission_runs",
     "analytics_events",
     "stripe_events",
@@ -43,6 +45,8 @@ TABLE_PRIMARY_KEYS = {
     "profiles": "user_id",
     "swipes": "swipe_id",
     "applications": "application_id",
+    "gmail_connections": "user_id",
+    "application_emails": "email_id",
     "browser_submission_runs": "run_id",
     "analytics_events": "event_id",
     "stripe_events": "event_id",
@@ -76,6 +80,8 @@ TABLE_FILTER_COLUMNS = {
     "profiles": {"user_id", "target_role", "target_location", "updated_at"},
     "swipes": {"swipe_id", "user_id", "job_id", "direction", "created_at"},
     "applications": {"application_id", "user_id", "job_id", "status", "package_status", "submission_status", "created_at", "updated_at"},
+    "gmail_connections": {"user_id", "email", "connected", "last_synced_at", "updated_at"},
+    "application_emails": {"email_id", "user_id", "application_id", "job_id", "provider", "gmail_message_id", "gmail_thread_id", "received_at", "classification"},
     "browser_submission_runs": {"run_id", "application_id", "job_id", "user_id", "provider", "status", "dry_run", "created_at"},
     "analytics_events": {"event_id", "user_id", "anonymous_id", "event", "page", "source", "created_at"},
     "stripe_events": {"event_id", "type", "created_at", "processed_at"},
@@ -214,6 +220,28 @@ def _supabase_row(table: str, document: Document) -> Dict[str, Any]:
             "submission_status": doc.get("submission_status"),
             "created_at": doc.get("created_at"),
             "updated_at": doc.get("updated_at"),
+            "data": doc,
+        }
+    if table == "gmail_connections":
+        return {
+            "user_id": _document_key(table, doc),
+            "email": doc.get("email"),
+            "connected": bool(doc.get("connected", True)),
+            "last_synced_at": doc.get("last_synced_at"),
+            "updated_at": doc.get("updated_at"),
+            "data": doc,
+        }
+    if table == "application_emails":
+        return {
+            "email_id": _document_key(table, doc),
+            "user_id": doc.get("user_id"),
+            "application_id": doc.get("application_id"),
+            "job_id": doc.get("job_id"),
+            "provider": doc.get("provider"),
+            "gmail_message_id": doc.get("gmail_message_id"),
+            "gmail_thread_id": doc.get("gmail_thread_id"),
+            "received_at": doc.get("received_at"),
+            "classification": doc.get("classification"),
             "data": doc,
         }
     if table == "browser_submission_runs":
@@ -762,6 +790,8 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
         self.profiles = SupabaseCollectionAdapter("profiles", supabase_url, secret_key)
         self.jobs = SupabaseCollectionAdapter("jobs", supabase_url, secret_key)
         self.applications = SupabaseCollectionAdapter("applications", supabase_url, secret_key)
+        self.gmail_connections = SupabaseCollectionAdapter("gmail_connections", supabase_url, secret_key)
+        self.application_emails = SupabaseCollectionAdapter("application_emails", supabase_url, secret_key)
         self.swipes = SupabaseCollectionAdapter("swipes", supabase_url, secret_key)
         self.company_boards = SupabaseCollectionAdapter("company_boards", supabase_url, secret_key)
         self.browser_submission_runs = SupabaseCollectionAdapter("browser_submission_runs", supabase_url, secret_key)

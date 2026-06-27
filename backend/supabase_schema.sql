@@ -48,6 +48,32 @@ CREATE TABLE IF NOT EXISTS applications (
 );
 CREATE INDEX IF NOT EXISTS idx_applications_user_id ON applications (user_id);
 
+CREATE TABLE IF NOT EXISTS gmail_connections (
+  user_id TEXT PRIMARY KEY,
+  email TEXT,
+  connected BOOLEAN DEFAULT TRUE,
+  last_synced_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ,
+  data JSONB NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_gmail_connections_email ON gmail_connections (email);
+
+CREATE TABLE IF NOT EXISTS application_emails (
+  email_id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  application_id TEXT,
+  job_id TEXT,
+  provider TEXT,
+  gmail_message_id TEXT,
+  gmail_thread_id TEXT,
+  received_at TIMESTAMPTZ,
+  classification TEXT,
+  data JSONB NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_application_emails_user_id ON application_emails (user_id);
+CREATE INDEX IF NOT EXISTS idx_application_emails_application_id ON application_emails (application_id);
+CREATE INDEX IF NOT EXISTS idx_application_emails_gmail_message_id ON application_emails (gmail_message_id);
+
 CREATE TABLE IF NOT EXISTS company_boards (
   board_id TEXT PRIMARY KEY,
   data JSONB NOT NULL
