@@ -43,18 +43,10 @@ export async function startGoogleLogin(returnPath = "/swipe", opts = {}) {
   }
 
   const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(path)}`;
-  const queryParams = {
-    access_type: "offline",
-    prompt: "consent",
-    ...(opts.login_hint ? { login_hint: opts.login_hint } : {}),
-  };
+  const queryParams = opts.login_hint ? { login_hint: opts.login_hint } : undefined;
   const { error } = await supabase.auth.signInWithOAuth({
     provider: "google",
-    options: {
-      redirectTo,
-      scopes: `openid email profile ${GMAIL_READONLY_SCOPE}`,
-      queryParams,
-    },
+    options: { redirectTo, ...(queryParams ? { queryParams } : {}) },
   });
   if (error) {
     console.error("Supabase Google login failed.", error);
