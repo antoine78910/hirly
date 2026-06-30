@@ -72,12 +72,14 @@ from creator_invite_store import (
     validate_invite,
 )
 from jobs_service import (
+    build_profile_job_query,
     refresh_greenhouse_boards,
     refresh_jobs_for_profile_if_needed,
     refresh_lever_boards,
     seed_greenhouse_company_boards,
     seed_lever_company_boards,
 )
+import jobs_service as jobs_service_module
 from job_providers import get_board_provider, get_job_provider
 from job_providers.apply_eligibility import classify_apply_link, is_manual_fulfillment_ready
 from job_providers.base import JobSearchQuery
@@ -391,6 +393,15 @@ class AdminJobsExpireStaleRequest(BaseModel):
 class AdminJobsMaintenanceRequest(BaseModel):
     dry_run: bool = False
     refresh_popular: Optional[bool] = None
+
+
+class AdminJobsFeedDiagnosticRequest(BaseModel):
+    search_role: Optional[str] = None
+    location: Optional[str] = None
+    country_code: Optional[str] = None
+    search_radius: str = "worldwide"
+    limit: int = 5
+    dry_run: bool = True
 
 
 class AdminAtsDiscoverSourcesRequest(BaseModel):
@@ -3385,6 +3396,151 @@ async def get_feed(
         or ""
     ).strip()
 
+    async def _legacy_jsearch_only_feed() -> Dict[str, Any]:
+        legacy_started = time.perf_counter()
+        api_key = os.environ.get("JSEARCH_API_KEY")
+        if not api_key:
+            logger.warning("jobs/feed legacy_jsearch missing_api_key")
+            return {
+                "jobs": [],
+                "total": 0,
+                "feed_mode": "legacy_jsearch_only",
+                "fallback_reason": "missing_jsearch_api_key",
+                "provider_rate_limited": False,
+                "refresh_results": [{"attempted": False, "reason": "missing_api_key"}],
+            }
+        selected_location_data = None
+        selected_location_label = None
+        if locations_json:
+            try:
+                parsed_locations = json.loads(locations_json)
+                if isinstance(parsed_locations, list) and parsed_locations:
+                    first = parsed_locations[0]
+                    if isinstance(first, dict):
+                        selected_location_data = first
+                        selected_location_label = first.get("location_label")
+            except json.JSONDecodeError:
+                pass
+        if location_label:
+            selected_location_label = location_label
+            selected_location_data = {
+                "location_label": location_label,
+                "place_id": place_id,
+                "country": country,
+                "country_code": country_code,
+                "lat": lat,
+                "lng": lng,
+            }
+        elif location and not selected_location_label:
+            selected_location_label = location[0]
+
+        query = build_profile_job_query(
+            profile,
+            location_override=selected_location_label,
+            location_data_override=selected_location_data,
+            search_radius=search_radius,
+            role_override=feed_target_role,
+        )
+        query = JobSearchQuery(
+            role=query.role,
+            location=query.location,
+            remote_preference=query.remote_preference,
+            country=query.country,
+            language=query.language,
+            limit=max(5, min(int(limit or 5) * 4, _env_int("JOBS_FEED_LEGACY_JSEARCH_LIMIT", 25))),
+            raw_query=query.raw_query,
+            max_pages=max(1, min(_env_int("JOBS_FEED_LEGACY_JSEARCH_MAX_PAGES", 1), 3)),
+            page_size=max(5, min(_env_int("JOBS_FEED_LEGACY_JSEARCH_PAGE_SIZE", 20), 50)),
+        )
+        provider = get_job_provider(os.environ.get("JOB_PROVIDER_PRIMARY", "jsearch"), api_key)
+        jsearch_attempted = True
+        jsearch_error = None
+        try:
+            result = await provider.search(query)
+            raw_jobs = result.jobs
+        except Exception as exc:
+            raw_jobs = []
+            jsearch_error = f"{exc.__class__.__name__}: {str(exc)[:160]}"
+            logger.warning("jobs/feed legacy_jsearch provider_error=%s", jsearch_error)
+
+        swiped_rows = await db.swipes.find({"user_id": user.user_id}, {"_id": 0, "job_id": 1}).limit(500).to_list(500)
+        swiped_ids = {row.get("job_id") for row in swiped_rows if row.get("job_id")}
+        jobs = []
+        for job in raw_jobs:
+            if job.get("job_id") in swiped_ids:
+                continue
+            enriched = _with_apply_fulfillment_fields(job)
+            clean = {key: value for key, value in enriched.items() if not key.startswith("_")}
+            jobs.append({
+                **clean,
+                "match_score": clean.get("match_score") or random.randint(72, 94),
+                "match_reasons": clean.get("match_reasons") or ["Fresh JSearch result from emergency legacy feed mode."],
+            })
+            if len(jobs) >= max(1, min(int(limit or 5), 25)):
+                break
+        elapsed = int((time.perf_counter() - legacy_started) * 1000)
+        debug = {
+            "mode": "legacy_jsearch_only",
+            "request": {
+                "search_role": search_role,
+                "search_radius": search_radius,
+                "work_location": work_location,
+                "job_type": job_type,
+                "experience": experience,
+                "posted_within": posted_within,
+                "min_salary": min_salary,
+                "only_my_country": only_my_country,
+                "include_unknown_location": include_unknown_location,
+                "include_unknown_salary": include_unknown_salary,
+            },
+            "jsearch_attempted": jsearch_attempted,
+            "jsearch_count": len(raw_jobs),
+            "jsearch_error": jsearch_error,
+            "swiped_count": len(swiped_ids),
+            "final_returned_count": len(jobs),
+            "duration_ms": elapsed,
+        }
+        logger.info(
+            "jobs/feed legacy_jsearch_complete user_id_hash=%s jsearch_count=%s returned=%s elapsed_ms=%s error=%s",
+            hashlib.sha1(user.user_id.encode("utf-8")).hexdigest()[:12],
+            len(raw_jobs),
+            len(jobs),
+            elapsed,
+            bool(jsearch_error),
+        )
+        response = {
+            "jobs": jobs,
+            "total": len(jobs),
+            "feed_mode": "legacy_jsearch_only",
+            "auto_apply_count": sum(1 for job in jobs if job.get("auto_apply_supported") is True),
+            "total_count": len(raw_jobs),
+            "fallback_reason": "legacy_jsearch_only",
+            "searched_location": query.location,
+            "searched_locations": [query.location] if query.location else [],
+            "search_radius": search_radius,
+            "suggested_next_radius": None if jobs else "worldwide",
+            "only_my_country": only_my_country,
+            "widened_search": search_radius in ("worldwide", "remote/worldwide"),
+            "original_location": selected_location_label or profile.get("target_location"),
+            "final_location_used": query.location or "worldwide",
+            "provider_rate_limited": False,
+            "provider_cooldown_until": None,
+            "refresh_results": [{"attempted": jsearch_attempted, "reason": "legacy_jsearch_only", "count": len(raw_jobs), "error": jsearch_error}],
+            "matched_role": feed_target_role or None,
+            "matched_location": [query.location] if query.location else [],
+            "companies_returned": sorted({job.get("company") for job in jobs if job.get("company")}),
+            "filters_applied": {"target_role": feed_target_role or None, "search_radius": search_radius, "legacy_jsearch_only": True},
+            "feed_elapsed_ms": elapsed,
+            "fallback_used": "legacy_jsearch_only",
+            "explicit_filters": True,
+        }
+        if _env_bool("JOBS_FEED_DEBUG_DIAGNOSTICS", False) and _is_admin_email(user.email):
+            response["debug"] = debug
+        return response
+
+    if _env_bool("JOBS_FEED_LEGACY_JSEARCH_ONLY", False):
+        return await _legacy_jsearch_only_feed()
+
     max_elapsed_seconds = 8.0
     ats_supported = ["greenhouse", "lever", "ashby"]
 
@@ -4111,7 +4267,8 @@ async def get_feed(
                         len(candidates),
                     )
 
-        cooldown_active = time.monotonic() < _feed_sync_refresh_cooldown_until
+        cooldown_enabled = _env_bool("JOBS_FEED_FALLBACK_COOLDOWN_ENABLED", True)
+        cooldown_active = cooldown_enabled and time.monotonic() < _feed_sync_refresh_cooldown_until
         should_refresh = (
             sync_refresh_enabled
             and not _timed_out()
@@ -4172,7 +4329,8 @@ async def get_feed(
                         timeout=sync_refresh_max_seconds,
                     )
                 except asyncio.TimeoutError:
-                    _feed_sync_refresh_cooldown_until = time.monotonic() + sync_refresh_cooldown_seconds
+                    if cooldown_enabled:
+                        _feed_sync_refresh_cooldown_until = time.monotonic() + sync_refresh_cooldown_seconds
                     refresh_result = {
                         "attempted": True,
                         "ok": False,
@@ -4186,7 +4344,8 @@ async def get_feed(
                         sync_refresh_cooldown_seconds,
                     )
                 except Exception as exc:
-                    _feed_sync_refresh_cooldown_until = time.monotonic() + sync_refresh_cooldown_seconds
+                    if cooldown_enabled:
+                        _feed_sync_refresh_cooldown_until = time.monotonic() + sync_refresh_cooldown_seconds
                     refresh_result = {
                         "attempted": True,
                         "ok": False,
@@ -5386,6 +5545,32 @@ def _require_ats_direct_enabled() -> None:
         raise HTTPException(status_code=403, detail="Direct ATS refresh endpoints are disabled.")
 
 
+@api_router.post("/admin/jobs/clear-feed-provider-cooldown")
+async def admin_clear_feed_provider_cooldown(admin: User = Depends(require_admin_user)):
+    global _feed_sync_refresh_cooldown_until
+    now = time.monotonic()
+    previous_feed_until = _feed_sync_refresh_cooldown_until
+    provider_cooldowns = {
+        key: value.isoformat()
+        for key, value in getattr(jobs_service_module, "_PROVIDER_COOLDOWN_UNTIL", {}).items()
+    }
+    _feed_sync_refresh_cooldown_until = 0.0
+    if hasattr(jobs_service_module, "_PROVIDER_COOLDOWN_UNTIL"):
+        jobs_service_module._PROVIDER_COOLDOWN_UNTIL.clear()
+    logger.info(
+        "admin_clear_feed_provider_cooldown admin=%s previous_feed_active=%s provider_cooldowns=%s",
+        admin.email,
+        previous_feed_until > now,
+        list(provider_cooldowns.keys()),
+    )
+    return {
+        "cleared": True,
+        "previous_feed_cooldown_active": previous_feed_until > now,
+        "previous_feed_cooldown_remaining_seconds": max(0, int(previous_feed_until - now)),
+        "previous_provider_cooldowns": provider_cooldowns,
+    }
+
+
 @api_router.post("/admin/jobs/refresh")
 async def admin_jobs_refresh(body: AdminJobsRefreshRequest, admin: User = Depends(require_admin_user)):
     _require_job_maintenance_enabled()
@@ -5472,6 +5657,53 @@ async def admin_jobs_cache_status(admin: User = Depends(require_admin_user)):
     _require_job_maintenance_enabled()
     logger.info("admin_jobs_cache_status_requested admin=%s", admin.email)
     return await job_cache_status(db)
+
+
+@api_router.post("/admin/jobs/feed-diagnostic")
+async def admin_jobs_feed_diagnostic(body: AdminJobsFeedDiagnosticRequest, admin: User = Depends(require_admin_user)):
+    _require_job_maintenance_enabled()
+    started = time.perf_counter()
+    strict_query = {"validation_status": "valid", "applyability_tier": {"$in": ["A", "B"]}}
+    legacy_query = {"provider": {"$in": ["greenhouse", "lever", "ashby"]}, "auto_apply_supported": True}
+    strict_rows = await db.jobs.find(strict_query, {"_id": 0}).limit(1000).to_list(1000)
+    legacy_rows = await db.jobs.find(legacy_query, {"_id": 0}).limit(1000).to_list(1000)
+    legacy_applyable = [_with_apply_fulfillment_fields(job) for job in legacy_rows if _job_is_applyable(job)]
+    jsearch_attempted = False
+    jsearch_count = 0
+    jsearch_error = None
+    if os.environ.get("JSEARCH_API_KEY"):
+        try:
+            provider = get_job_provider(os.environ.get("JOB_PROVIDER_PRIMARY", "jsearch"), os.environ["JSEARCH_API_KEY"])
+            query = JobSearchQuery(
+                role=body.search_role or "sales",
+                location=body.location,
+                country=(body.country_code or os.environ.get("JSEARCH_COUNTRY", "fr")).lower(),
+                language=os.environ.get("JSEARCH_LANGUAGE", "fr"),
+                limit=max(1, min(body.limit, 20)),
+                max_pages=1,
+                page_size=max(5, min(body.limit * 2, 20)),
+            )
+            jsearch_attempted = True
+            result = await provider.search(query)
+            jsearch_count = len(result.jobs)
+        except Exception as exc:
+            jsearch_error = f"{exc.__class__.__name__}: {str(exc)[:160]}"
+    return {
+        "db_strict_count": len(strict_rows),
+        "db_legacy_direct_count": len(legacy_rows),
+        "db_legacy_applyable_count": len(legacy_applyable),
+        "jsearch_attempted": jsearch_attempted,
+        "jsearch_count": jsearch_count,
+        "jsearch_error": jsearch_error,
+        "final_new_feed_count_estimate": min(len(strict_rows) or len(legacy_applyable), body.limit),
+        "final_legacy_feed_count_estimate": min(jsearch_count, body.limit),
+        "cooldown": {
+            "feed_active": time.monotonic() < _feed_sync_refresh_cooldown_until,
+            "feed_remaining_seconds": max(0, int(_feed_sync_refresh_cooldown_until - time.monotonic())),
+            "provider_cooldowns": list(getattr(jobs_service_module, "_PROVIDER_COOLDOWN_UNTIL", {}).keys()),
+        },
+        "timing_ms": int((time.perf_counter() - started) * 1000),
+    }
 
 
 @api_router.post("/admin/jobs/ats/discover-sources")
@@ -9843,6 +10075,23 @@ async def seed_jobs():
 @api_router.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@api_router.get("/version")
+async def version():
+    return {
+        "git_sha": os.environ.get("APP_GIT_SHA") or os.environ.get("RAILWAY_GIT_COMMIT_SHA") or os.environ.get("VERCEL_GIT_COMMIT_SHA"),
+        "app_version": os.environ.get("APP_VERSION"),
+        "deployed_at": os.environ.get("DEPLOYED_AT") or os.environ.get("RAILWAY_DEPLOYMENT_CREATED_AT"),
+        "flags": {
+            "JOBS_DB_FIRST_ENABLED": _env_bool("JOBS_DB_FIRST_ENABLED", True),
+            "JOBS_FEED_LEGACY_JSEARCH_ONLY": _env_bool("JOBS_FEED_LEGACY_JSEARCH_ONLY", False),
+            "JOBS_FEED_SYNC_REFRESH_ENABLED": _env_bool("JOBS_FEED_SYNC_REFRESH_ENABLED", True),
+            "JOBS_FEED_SYNC_REFRESH_COOLDOWN_SECONDS": _env_int("JOBS_FEED_SYNC_REFRESH_COOLDOWN_SECONDS", 300),
+            "JOBS_FEED_FALLBACK_COOLDOWN_ENABLED": _env_bool("JOBS_FEED_FALLBACK_COOLDOWN_ENABLED", True),
+            "JOBS_FEED_DEBUG_DIAGNOSTICS": _env_bool("JOBS_FEED_DEBUG_DIAGNOSTICS", False),
+        },
+    }
 
 
 @api_router.get("/")

@@ -154,6 +154,57 @@ def _run_feed(monkeypatch, jobs, *, env=None, refresh=None, swiped_ids=None, sea
     return response, calls
 
 
+def _run_legacy_feed(monkeypatch, provider_jobs, *, env=None):
+    env = {
+        "JOBS_FEED_LEGACY_JSEARCH_ONLY": "true",
+        "JSEARCH_API_KEY": "test-key",
+        **(env or {}),
+    }
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    fake_db = _FakeDB([], _profile(), [])
+    monkeypatch.setattr(server, "db", fake_db)
+    calls = {"search": 0}
+
+    class _Provider:
+        async def search(self, query):
+            calls["search"] += 1
+            calls["query"] = query
+            return type("Result", (), {"jobs": provider_jobs})()
+
+    monkeypatch.setattr(server, "get_job_provider", lambda _name, _api_key: _Provider())
+    user = server.User(user_id="user_1", email="user@example.com", name="User")
+    response = asyncio.run(server.get_feed(
+        user=user,
+        limit=5,
+        min_salary=0,
+        posted_within=None,
+        work_location=None,
+        job_type=None,
+        experience=None,
+        location=None,
+        only_company=None,
+        hide_company=None,
+        only_industry=None,
+        hide_industry=None,
+        include_unknown_location=True,
+        include_unknown_salary=True,
+        include_non_auto_apply=False,
+        search_radius="worldwide",
+        locations_json=None,
+        only_my_country=False,
+        location_label=None,
+        place_id=None,
+        country=None,
+        country_code=None,
+        lat=None,
+        lng=None,
+        score=False,
+        search_role=None,
+    ))
+    return response, calls
+
+
 def _legacy_direct_job(index, *, country_code="gb", location="London, United Kingdom", title="Marketing Manager"):
     job = _job(index, title=title)
     job.update({
@@ -178,6 +229,45 @@ def test_db_first_enough_jobs_does_not_call_jsearch(monkeypatch):
     assert response["jobs"]
     assert response["total"] <= 5
     assert response["filters_applied"]["manual_fulfillment_ready"] is True
+
+
+def test_legacy_jsearch_only_calls_provider_without_validation_fields(monkeypatch):
+    job = _job(1)
+    job["validation_status"] = None
+    job["applyability_tier"] = None
+    response, calls = _run_legacy_feed(monkeypatch, [job])
+    assert calls["search"] == 1
+    assert response["feed_mode"] == "legacy_jsearch_only"
+    assert [item["job_id"] for item in response["jobs"]] == ["job_1"]
+
+
+def test_legacy_jsearch_only_ignores_feed_cooldown(monkeypatch):
+    monkeypatch.setattr(server, "_feed_sync_refresh_cooldown_until", 999999999999.0)
+    response, calls = _run_legacy_feed(monkeypatch, [_job(1)])
+    assert calls["search"] == 1
+    assert response["jobs"]
+    monkeypatch.setattr(server, "_feed_sync_refresh_cooldown_until", 0.0)
+
+
+def test_version_endpoint_exposes_safe_flags(monkeypatch):
+    monkeypatch.setenv("APP_GIT_SHA", "abc123")
+    monkeypatch.setenv("JOBS_FEED_LEGACY_JSEARCH_ONLY", "true")
+    response = asyncio.run(server.version())
+    assert response["git_sha"] == "abc123"
+    assert response["flags"]["JOBS_FEED_LEGACY_JSEARCH_ONLY"] is True
+    assert "JSEARCH_API_KEY" not in str(response)
+
+
+def test_admin_clear_feed_provider_cooldown(monkeypatch):
+    monkeypatch.setattr(server, "_feed_sync_refresh_cooldown_until", 999999999999.0)
+    server.jobs_service_module._PROVIDER_COOLDOWN_UNTIL["jsearch"] = datetime.now(timezone.utc)
+    admin = server.User(user_id="admin", email="admin@tryhirly.com", name="Admin")
+    monkeypatch.setattr(server, "_is_admin_email", lambda _email: True)
+    response = asyncio.run(server.admin_clear_feed_provider_cooldown(admin=admin))
+    assert response["cleared"] is True
+    assert response["previous_feed_cooldown_active"] is True
+    assert server._feed_sync_refresh_cooldown_until == 0.0
+    assert server.jobs_service_module._PROVIDER_COOLDOWN_UNTIL == {}
 
 
 def test_weak_but_nonzero_db_returns_without_sync_jsearch(monkeypatch):
