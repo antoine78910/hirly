@@ -19,7 +19,11 @@ import time
 import pytest
 import requests
 
-BASE_URL = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
+pytestmark = pytest.mark.skipif(
+    not os.environ.get("REACT_APP_BACKEND_URL"),
+    reason="REACT_APP_BACKEND_URL is required for live swipe jobs endpoint tests",
+)
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "http://testserver").rstrip("/")
 
 SAMPLE_CV = (
     "Jane Doe\n"

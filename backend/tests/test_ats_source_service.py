@@ -1,0 +1,198 @@
+import asyncio
+from datetime import datetime, timezone, timedelta
+
+import pytest
+from fastapi import HTTPException
+
+import ats_source_service as service
+import job_cache_maintenance
+import server
+
+
+class _Cursor:
+    def __init__(self, rows):
+        self.rows = list(rows)
+
+    def limit(self, count):
+        self.rows = self.rows[:count]
+        return self
+
+    async def to_list(self, length):
+        return list(self.rows[:length])
+
+
+class _Collection:
+    def __init__(self, rows=None):
+        self.rows = list(rows or [])
+        self.updated = []
+
+    def find(self, filter=None, projection=None):
+        return _Cursor([dict(row) for row in self.rows if _matches(row, filter or {})])
+
+    async def find_one(self, filter, projection=None):
+        for row in self.rows:
+            if _matches(row, filter):
+                return dict(row)
+        return None
+
+    async def update_one(self, filter, update, upsert=False):
+        self.updated.append((dict(filter), dict(update), upsert))
+        for row in self.rows:
+            if _matches(row, filter):
+                row.update(update.get("$set") or {})
+                return {"matched_count": 1, "modified_count": 1}
+        if upsert:
+            doc = {**filter, **(update.get("$set") or {})}
+            self.rows.append(doc)
+            return {"matched_count": 0, "upserted_id": doc.get("id") or doc.get("job_id")}
+        return {"matched_count": 0, "modified_count": 0}
+
+
+class _FakeDB:
+    def __init__(self, jobs=None, sources=None):
+        self.jobs = _Collection(jobs or [])
+        self.ats_company_sources = _Collection(sources or [])
+
+
+class _FakeAdapter:
+    provider = "greenhouse"
+
+    async def fetch_jobs(self, source_key, *, limit=None):
+        return [{"id": "1", "title": "Marketing Manager"}]
+
+    def normalize_job(self, raw_job, *, source_key):
+        return {
+            "job_id": "job_greenhouse_1",
+            "provider": "greenhouse",
+            "external_id": f"{source_key}:1",
+            "title": raw_job["title"],
+            "company": source_key,
+            "location": "Paris, France",
+            "description": "Build campaigns",
+            "external_url": f"https://boards.greenhouse.io/{source_key}/jobs/1",
+            "selected_apply_url": f"https://boards.greenhouse.io/{source_key}/jobs/1",
+            "ats_provider": "greenhouse",
+            "auto_apply_supported": True,
+            "manual_fulfillment_ready": True,
+        }
+
+
+class _FailingAdapter(_FakeAdapter):
+    async def fetch_jobs(self, source_key, *, limit=None):
+        raise RuntimeError("board failed")
+
+
+def _matches(row, filter):
+    for key, expected in (filter or {}).items():
+        value = row.get(key)
+        if isinstance(expected, dict):
+            if "$in" in expected and value not in expected["$in"]:
+                return False
+        elif value != expected:
+            return False
+    return True
+
+
+def test_discover_ats_sources_from_cached_jobs():
+    db = _FakeDB(jobs=[{
+        "job_id": "job_1",
+        "ats_provider": "greenhouse",
+        "company": "Acme",
+        "country_code": "fr",
+        "selected_apply_url": "https://boards.greenhouse.io/acme/jobs/123",
+    }])
+    result = asyncio.run(service.discover_ats_sources_from_cached_jobs(db))
+    assert result["scanned_count"] == 1
+    assert result["discovered_count"] == 1
+    assert db.ats_company_sources.rows[0]["id"] == "greenhouse:acme"
+
+
+def test_refresh_source_calls_adapter_and_upserts_jobs(monkeypatch):
+    db = _FakeDB()
+    calls = {"jobs": 0}
+
+    async def fake_upsert(db_arg, jobs, **kwargs):
+        calls["jobs"] = len(jobs)
+        return {"total_imported": len(jobs)}
+
+    monkeypatch.setattr(service, "get_ats_adapter", lambda provider: _FakeAdapter())
+    monkeypatch.setattr(service, "upsert_imported_jobs", fake_upsert)
+    result = asyncio.run(service.refresh_ats_source(db, ats_provider="greenhouse", source_key="acme"))
+    assert calls["jobs"] == 1
+    assert result["imported_count"] == 1
+    assert result["valid_count"] == 1
+
+
+def test_failed_source_refresh_records_failure(monkeypatch):
+    db = _FakeDB()
+    monkeypatch.setattr(service, "get_ats_adapter", lambda provider: _FailingAdapter())
+    result = asyncio.run(service.refresh_ats_source(db, ats_provider="greenhouse", source_key="acme"))
+    assert result["errors"]
+    assert db.ats_company_sources.rows[0]["failure_count"] == 1
+    assert "board failed" in db.ats_company_sources.rows[0]["last_error"]
+
+
+def test_refresh_known_sources_respects_limit_and_age(monkeypatch):
+    old = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    db = _FakeDB(sources=[
+        {"id": "greenhouse:a", "ats_provider": "greenhouse", "source_key": "a", "is_active": True, "last_checked_at": old},
+        {"id": "greenhouse:b", "ats_provider": "greenhouse", "source_key": "b", "is_active": True, "last_checked_at": old},
+    ])
+    refreshed = []
+
+    async def fake_refresh(*args, **kwargs):
+        refreshed.append(kwargs["source_key"])
+        return {"errors": [], "source_key": kwargs["source_key"]}
+
+    monkeypatch.setattr(service, "refresh_ats_source", fake_refresh)
+    result = asyncio.run(service.refresh_known_ats_sources(db, limit=1, older_than_hours=12))
+    assert result["refreshed_sources_count"] == 1
+    assert refreshed == ["a"]
+
+
+def test_admin_ats_endpoint_is_protected():
+    user = server.User(user_id="u", email="user@example.com", name="User")
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(server.require_admin_user(user))
+    assert exc.value.status_code == 403
+
+
+def test_admin_ats_refresh_source_endpoint_uses_service(monkeypatch):
+    calls = {"count": 0}
+
+    async def fake_refresh(*args, **kwargs):
+        calls["count"] += 1
+        assert kwargs["ats_provider"] == "greenhouse"
+        assert kwargs["source_key"] == "acme"
+        return {"imported_count": 1}
+
+    monkeypatch.setattr(server, "refresh_ats_source", fake_refresh)
+    monkeypatch.setenv("JOBS_MAINTENANCE_ENABLED", "true")
+    monkeypatch.setenv("JOBS_ATS_DIRECT_ENABLED", "true")
+    admin = server.User(user_id="admin", email="anto.delbos@gmail.com", name="Admin")
+    body = server.AdminAtsRefreshSourceRequest(ats_provider="greenhouse", source_key="acme")
+    result = asyncio.run(server.admin_jobs_ats_refresh_source(body, admin=admin))
+    assert calls["count"] == 1
+    assert result["imported_count"] == 1
+
+
+def test_maintenance_respects_ats_flag(monkeypatch):
+    calls = []
+
+    async def fake_expire(*args, **kwargs):
+        return {"expired_count": 0}
+
+    async def fake_revalidate(*args, **kwargs):
+        return {"updated_count": 0}
+
+    async def fake_ats(*args, **kwargs):
+        calls.append("ats")
+        return {"enabled": True}
+
+    monkeypatch.setattr(job_cache_maintenance, "expire_stale_jobs", fake_expire)
+    monkeypatch.setattr(job_cache_maintenance, "revalidate_cached_jobs", fake_revalidate)
+    monkeypatch.setattr(job_cache_maintenance, "run_ats_direct_maintenance", fake_ats)
+    monkeypatch.setenv("JOBS_ATS_DIRECT_ENABLED", "true")
+    result = asyncio.run(job_cache_maintenance.run_job_cache_maintenance(_FakeDB(), refresh_popular=False))
+    assert calls == ["ats"]
+    assert result["ats_direct"]["enabled"] is True

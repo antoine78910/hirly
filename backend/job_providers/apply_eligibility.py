@@ -3,48 +3,16 @@
 from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Optional
-from urllib.parse import urlparse
 
+from .ats_detection import (
+    ATS_DOMAINS,
+    DISCOVERY_ONLY_DOMAINS,
+    LOGIN_REQUIRED_DOMAINS,
+    detect_job_platform,
+)
 
-DIRECT_ATS_DOMAINS = {
-    "greenhouse.io": "greenhouse",
-    "boards.greenhouse.io": "greenhouse",
-    "job-boards.greenhouse.io": "greenhouse",
-    "jobs.lever.co": "lever",
-    "ashbyhq.com": "ashby",
-    "jobs.ashbyhq.com": "ashby",
-    "workable.com": "workable",
-    "apply.workable.com": "workable",
-    "smartrecruiters.com": "smartrecruiters",
-    "jobs.smartrecruiters.com": "smartrecruiters",
-    "teamtailor.com": "teamtailor",
-    "recruitee.com": "recruitee",
-    "breezy.hr": "breezy",
-    "jazz.co": "jazzhr",
-    "applytojob.com": "jazzhr",
-    "bamboohr.com": "bamboohr",
-    "personio.com": "personio",
-    "jobs.personio.com": "personio",
-}
-
-ACCOUNT_REQUIRED_DOMAINS = {
-    "linkedin.com": "linkedin",
-    "indeed.com": "indeed",
-    "glassdoor.com": "glassdoor",
-    "ziprecruiter.com": "ziprecruiter",
-    "monster.com": "monster",
-    "careerbuilder.com": "careerbuilder",
-    "dice.com": "dice",
-}
-
-DISCOVERY_ONLY_DOMAINS = {
-    "talent.com": "talent",
-    "jooble.org": "jooble",
-    "simplyhired.com": "simplyhired",
-    "adzuna.com": "adzuna",
-    "google.com": "google_jobs",
-    "www.google.com": "google_jobs",
-}
+DIRECT_ATS_DOMAINS = ATS_DOMAINS
+ACCOUNT_REQUIRED_DOMAINS = LOGIN_REQUIRED_DOMAINS
 
 
 def classify_apply_link(
@@ -107,6 +75,10 @@ def classify_apply_link(
 def is_manual_fulfillment_ready(job: Dict[str, Any]) -> bool:
     """Return True only when a job can be fulfilled by Hirly/admins."""
 
+    validation_status = str(job.get("validation_status") or "").strip().lower()
+    applyability_tier = str(job.get("applyability_tier") or "").strip().upper()
+    if validation_status == "invalid" or applyability_tier in {"D", "E"}:
+        return False
     stored = job.get("manual_fulfillment_ready")
     if stored is not None:
         return bool(stored)
@@ -147,30 +119,19 @@ def _candidate_urls(
 
 
 def _direct_provider(url: str) -> Optional[str]:
-    host = _host(url)
-    if not host:
-        return None
-    for domain, provider in DIRECT_ATS_DOMAINS.items():
-        if host == domain or host.endswith(f".{domain}"):
-            return provider
-    return None
+    platform = detect_job_platform(url)
+    return platform.get("provider") if platform.get("category") == "direct_ats" else None
 
 
 def _blocked_provider(url: str, *, source: Optional[str] = None) -> Optional[str]:
-    text = f"{_host(url)} {source or ''}".lower()
-    for domain, provider in ACCOUNT_REQUIRED_DOMAINS.items():
-        if domain in text or provider in text:
-            return provider
-    for domain, provider in DISCOVERY_ONLY_DOMAINS.items():
-        if domain in text or provider in text:
+    platform = detect_job_platform(url)
+    if platform.get("category") in {"account_required", "discovery_only"}:
+        return str(platform.get("provider") or "third_party")
+    text = (source or "").lower()
+    for provider in {**ACCOUNT_REQUIRED_DOMAINS, **DISCOVERY_ONLY_DOMAINS}.values():
+        if provider in text:
             return provider
     return None
-
-
-def _host(url: str) -> str:
-    parsed = urlparse((url or "").strip())
-    host = parsed.netloc or parsed.path.split("/", 1)[0]
-    return host.lower().removeprefix("www.")
 
 
 def _result(

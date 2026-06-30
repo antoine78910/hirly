@@ -81,6 +81,20 @@ from jobs_service import (
 from job_providers import get_board_provider, get_job_provider
 from job_providers.apply_eligibility import classify_apply_link, is_manual_fulfillment_ready
 from job_providers.base import JobSearchQuery
+from job_cache_maintenance import (
+    env_bool as job_cache_env_bool,
+    expire_stale_jobs,
+    job_cache_status,
+    refresh_jobs_for_query_or_filters,
+    revalidate_cached_jobs,
+    run_job_cache_maintenance,
+)
+from ats_source_service import (
+    discover_ats_sources_from_cached_jobs,
+    refresh_ats_source,
+    refresh_known_ats_sources,
+)
+from job_validation import cheap_validate_job_applyability
 from location_search import search_locations
 from llm_client import LLMProviderNotConfigured, complete_json_text
 from onboarding_suggestions import suggest_categories, suggest_roles
@@ -192,6 +206,20 @@ async def _hydrate_feed_jobs(jobs: List[Dict[str, Any]]) -> List[Dict[str, Any]]
     return hydrated
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.lower() in ("1", "true", "yes", "on")
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
 def _apply_fulfillment_fields(job: Dict[str, Any]) -> Dict[str, Any]:
     if job.get("apply_fulfillment_status") and job.get("manual_fulfillment_ready") is not None:
         return {
@@ -211,6 +239,15 @@ def _apply_fulfillment_fields(job: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _job_is_applyable(job: Dict[str, Any]) -> bool:
+    validation_status = str(job.get("validation_status") or "").strip().lower()
+    applyability_tier = str(job.get("applyability_tier") or "").strip().upper()
+    if validation_status == "invalid" or applyability_tier in {"D", "E"}:
+        return False
+    if validation_status or applyability_tier:
+        if not (job.get("selected_apply_url") or job.get("external_url") or job.get("apply_url") or job.get("hosted_url")):
+            return False
+        if job.get("requires_login") is True or job.get("requires_account_creation") is True or job.get("captcha_detected") is True:
+            return False
     return is_manual_fulfillment_ready(job)
 
 
@@ -218,6 +255,54 @@ def _with_apply_fulfillment_fields(job: Dict[str, Any]) -> Dict[str, Any]:
     fields = _apply_fulfillment_fields(job)
     external_url = fields.get("selected_apply_url") or job.get("external_url")
     return {**job, **fields, "external_url": external_url}
+
+
+async def validate_job_before_application(job: Dict[str, Any]) -> Dict[str, Any]:
+    """Revalidate and persist a job before credits or application creation."""
+    job_id = job.get("job_id")
+    latest_job = job
+    if job_id:
+        latest_job = await db.jobs.find_one({"job_id": job_id}, {"_id": 0}) or job
+    validation = cheap_validate_job_applyability(latest_job)
+    updated_job = {**latest_job, **validation}
+    if job_id:
+        await db.jobs.update_one({"job_id": job_id}, {"$set": validation})
+
+    tier = str(validation.get("applyability_tier") or "").upper()
+    status = str(validation.get("validation_status") or "").lower()
+    allow_unknown = _env_bool("JOBS_ALLOW_UNKNOWN_TIER_APPLICATION", False)
+    selected_apply_url = validation.get("selected_apply_url")
+    blocked_reason = None
+
+    if status == "invalid" or tier in {"D", "E"}:
+        blocked_reason = validation.get("validation_reason") or validation.get("rejection_reason") or "Job is not applyable."
+    elif not selected_apply_url:
+        blocked_reason = "No apply URL is available."
+    elif validation.get("requires_login") is True or validation.get("requires_account_creation") is True:
+        blocked_reason = "This job requires a candidate login or account creation."
+    elif validation.get("captcha_detected") is True:
+        blocked_reason = "This job appears protected by CAPTCHA or bot protection."
+    elif tier == "C":
+        if not allow_unknown:
+            blocked_reason = "This job needs additional validation before applications can be submitted."
+        elif updated_job.get("manual_fulfillment_ready") is not True:
+            blocked_reason = "This job is not ready for manual fulfillment."
+    elif tier not in {"A", "B"} or status != "valid":
+        blocked_reason = validation.get("validation_reason") or "Job validation did not confirm an applyable job."
+
+    allowed = blocked_reason is None
+    return {
+        "allowed": allowed,
+        "reason": "Job passed pre-application validation." if allowed else blocked_reason,
+        "validation_status": validation.get("validation_status"),
+        "applyability_tier": validation.get("applyability_tier"),
+        "selected_apply_url": selected_apply_url,
+        "requires_login": bool(validation.get("requires_login")),
+        "requires_account_creation": bool(validation.get("requires_account_creation")),
+        "captcha_detected": bool(validation.get("captcha_detected")),
+        "job": updated_job,
+        "validation": validation,
+    }
 
 
 # ===================== Models =====================
@@ -273,6 +358,60 @@ class Job(BaseModel):
 class SwipeRequest(BaseModel):
     job_id: str
     direction: Literal["left", "right"]
+
+
+class AdminJobsRefreshRequest(BaseModel):
+    search_role: Optional[str] = None
+    location: Optional[str] = None
+    country_code: Optional[str] = None
+    remote: Optional[bool] = None
+    limit: Optional[int] = None
+    pages: Optional[int] = None
+    dry_run: bool = False
+
+
+class AdminJobsRevalidateRequest(BaseModel):
+    validation_status: Optional[str] = None
+    applyability_tier: Optional[str] = None
+    older_than_hours: Optional[int] = None
+    country_code: Optional[str] = None
+    limit: Optional[int] = None
+    dry_run: bool = False
+
+
+class AdminJobsExpireStaleRequest(BaseModel):
+    older_than_days: Optional[int] = None
+    provider: Optional[str] = None
+    country_code: Optional[str] = None
+    limit: Optional[int] = None
+    dry_run: bool = False
+
+
+class AdminJobsMaintenanceRequest(BaseModel):
+    dry_run: bool = False
+    refresh_popular: Optional[bool] = None
+
+
+class AdminAtsDiscoverSourcesRequest(BaseModel):
+    provider: Optional[Literal["greenhouse", "lever", "ashby"]] = None
+    country_code: Optional[str] = None
+    limit: Optional[int] = 500
+    dry_run: bool = False
+
+
+class AdminAtsRefreshSourceRequest(BaseModel):
+    ats_provider: Literal["greenhouse", "lever", "ashby"]
+    source_key: str
+    limit: Optional[int] = None
+    dry_run: bool = False
+
+
+class AdminAtsRefreshKnownSourcesRequest(BaseModel):
+    provider: Optional[Literal["greenhouse", "lever", "ashby"]] = None
+    country_code: Optional[str] = None
+    limit: Optional[int] = 25
+    older_than_hours: Optional[int] = 12
+    dry_run: bool = False
 
 
 class GreenhousePrepareSubmitRequest(BaseModel):
@@ -3455,6 +3594,10 @@ async def get_feed(
 
     async def _fast_cached_feed() -> Dict[str, Any]:
         requested_limit = max(1, min(int(limit or 5), 25))
+        db_first_enabled = _env_bool("JOBS_DB_FIRST_ENABLED", True)
+        db_min_good_results = max(1, _env_int("JOBS_DB_MIN_GOOD_RESULTS_BEFORE_JSEARCH", 30))
+        db_weak_results_threshold = max(0, _env_int("JOBS_DB_WEAK_RESULTS_THRESHOLD", 10))
+        allow_unknown_tier = _env_bool("JOBS_ALLOW_UNKNOWN_TIER_IN_FEED", False)
         target_role = feed_target_role
         strict_tokens = _tokens(target_role)
         family_tokens = _role_family_tokens(target_role)
@@ -3530,42 +3673,8 @@ async def get_feed(
             candidate_limit = max(candidate_limit, requested_limit * 80, 1000)
 
         refresh_results = []
-        if not _timed_out():
-            max_refresh_locations = max(1, min(int(os.environ.get("FEED_MAX_REFRESH_LOCATIONS", "1")), 3))
-            refresh_locations = [None] if is_worldwide_radius else (selected_locations or [None])[:max_refresh_locations]
-            force_provider_refresh = os.environ.get("JOB_FEED_ON_DEMAND_JSEARCH", "true").lower() in ("1", "true", "yes", "on")
-            for loc_data in refresh_locations:
-                loc_label = loc_data.get("location_label") if isinstance(loc_data, dict) else None
-                refresh_result = await refresh_jobs_for_profile_if_needed(
-                    db,
-                    profile,
-                    require_auto_apply=False,
-                    target_auto_apply_count=requested_limit,
-                    location_override=loc_label,
-                    location_data_override=loc_data if isinstance(loc_data, dict) else None,
-                    search_radius=search_radius,
-                    role_override=target_role,
-                    force_provider_refresh=force_provider_refresh,
-                )
-                refresh_results.append(refresh_result)
-                if refresh_result.get("provider_rate_limited"):
-                    break
-
         provider_search_keys: List[str] = []
         direct_refresh_jobs: List[Dict[str, Any]] = []
-        for refresh_result in refresh_results:
-            direct_refresh_jobs.extend(job for job in (refresh_result.get("jobs") or []) if isinstance(job, dict))
-            for key in refresh_result.get("search_keys") or []:
-                if key:
-                    provider_search_keys.append(str(key))
-            if refresh_result.get("search_key"):
-                provider_search_keys.append(str(refresh_result.get("search_key")))
-        provider_search_keys = list(dict.fromkeys(provider_search_keys))
-        if provider_search_keys:
-            base_query = {
-                "provider": "jsearch",
-                "provider_search_key": {"$in": provider_search_keys},
-            }
 
         def _is_current_provider_job(job: Dict[str, Any]) -> bool:
             return (
@@ -3641,6 +3750,47 @@ async def get_feed(
             return list(dict.fromkeys(values))
 
         selected_country_codes = _country_codes_from_locations()
+
+        def _validated_cache_query(*, include_unknown: bool = False) -> Dict[str, Any]:
+            query: Dict[str, Any] = {
+                "applyability_tier": {"$in": ["A", "B", "C"] if include_unknown else ["A", "B"]},
+            }
+            if not include_unknown:
+                query["validation_status"] = "valid"
+            if selected_country_codes and radius_scope not in ("worldwide", "remote", "remote/worldwide"):
+                query["country_code"] = {"$in": selected_country_codes}
+            if posted_within and posted_within != "any":
+                days_map = {"1d": 1, "7d": 7, "30d": 30}
+                days = days_map.get(posted_within)
+                if days:
+                    query["posted_at"] = {"$gte": (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()}
+            if min_salary and min_salary > 0 and not include_unknown_salary:
+                query["salary_max"] = {"$gte": min_salary}
+            if work_location:
+                wanted = {
+                    ("onsite" if str(item).lower() in ("in-person", "in_person", "on-site", "onsite") else str(item).lower())
+                    for item in work_location
+                }
+                if wanted == {"remote"}:
+                    query["remote"] = True
+            return query
+
+        def _tier_rank(job: Dict[str, Any]) -> int:
+            return {"A": 0, "B": 1, "C": 2}.get(str(job.get("applyability_tier") or "").upper(), 9)
+
+        def _quality_sort_key(job: Dict[str, Any]) -> tuple:
+            score_value = job.get("applyability_score")
+            try:
+                applyability_score = float(score_value if score_value is not None else 0)
+            except (TypeError, ValueError):
+                applyability_score = 0.0
+            return (
+                _tier_rank(job),
+                -applyability_score,
+                0 if job.get("auto_apply_supported") is True else 1,
+                0 if job.get("manual_fulfillment_ready") is True else 1,
+                -_recency_score(job),
+            )
 
         def _job_work_location(job: Dict[str, Any]) -> str:
             raw = job.get("remote")
@@ -3813,36 +3963,160 @@ async def get_feed(
                 and _matches_industry(job)
             )
 
+        def _role_compatible_for_threshold(job: Dict[str, Any]) -> bool:
+            if not _category_compatible(job):
+                return False
+            if not strict_tokens and not family_tokens:
+                return True
+            return _role_score(job, strict_tokens, family_tokens) > 0
+
         swiped_rows = await db.swipes.find({"user_id": user.user_id}, {"_id": 0, "job_id": 1}).limit(500).to_list(500)
         swiped_ids = {row.get("job_id") for row in swiped_rows if row.get("job_id")}
-        if direct_refresh_jobs:
-            candidates = direct_refresh_jobs
-        else:
-            candidates = await _get_feed_job_candidates(base_query, candidate_limit)
-        candidates = [job for job in candidates if job.get("job_id") not in swiped_ids]
-        unfiltered_count = len(candidates)
-        candidates = [_with_apply_fulfillment_fields(job) for job in candidates if _job_is_applyable(job)]
-        applyable_count = len(candidates)
-        pre_filter_candidates = list(candidates)
-        candidates = [job for job in candidates if _matches_explicit_filters(job)]
-        if provider_search_keys and not candidates and not _timed_out():
-            fallback_query: Dict[str, Any] = {}
-            fallback_candidates = await _get_feed_job_candidates(fallback_query, candidate_limit)
-            fallback_candidates = [job for job in fallback_candidates if job.get("job_id") not in swiped_ids]
-            unfiltered_count = len(fallback_candidates)
-            fallback_candidates = [_with_apply_fulfillment_fields(job) for job in fallback_candidates if _job_is_applyable(job)]
-            applyable_count = len(fallback_candidates)
-            pre_filter_candidates = list(fallback_candidates)
-            candidates = [job for job in fallback_candidates if _matches_explicit_filters(job)]
-            base_query = fallback_query
+
+        async def _load_db_candidates(*, include_unknown: bool = False) -> tuple[List[Dict[str, Any]], Dict[str, Any], int, int, int]:
+            query = _validated_cache_query(include_unknown=include_unknown)
+            rows = await _get_feed_job_candidates(query, candidate_limit)
+            rows = [job for job in rows if job.get("job_id") not in swiped_ids]
+            unfiltered = len(rows)
+            rejected = sum(
+                1
+                for job in rows
+                if str(job.get("validation_status") or "").lower() == "invalid"
+                or str(job.get("applyability_tier") or "").upper() in {"D", "E"}
+            )
+            rows = [_with_apply_fulfillment_fields(job) for job in rows if _job_is_applyable(job)]
+            applyable = len(rows)
+            rows = [job for job in rows if _matches_explicit_filters(job)]
+            rows.sort(key=_quality_sort_key)
+            return rows, query, unfiltered, applyable, rejected
+
+        base_query = _validated_cache_query(include_unknown=False)
+        candidates: List[Dict[str, Any]] = []
+        unfiltered_count = 0
+        applyable_count = 0
+        pre_filter_candidates: List[Dict[str, Any]] = []
+        db_good_count = 0
+        db_rejected_count = 0
+        feed_source = "db_first_disabled"
+        jsearch_fallback_triggered = False
+
+        if db_first_enabled:
+            candidates, base_query, unfiltered_count, applyable_count, db_rejected_count = await _load_db_candidates(include_unknown=False)
+            db_good_count = sum(1 for job in candidates if _role_compatible_for_threshold(job))
+            pre_filter_candidates = list(candidates)
+            feed_source = "db_cache"
+            logger.info(
+                "jobs/feed db_first: user_id=%s elapsed_ms=%s good_count=%s candidate_count=%s unfiltered_count=%s applyable_count=%s rejected_de_count=%s query=%s min_good=%s weak_threshold=%s allow_unknown=%s",
+                user.user_id,
+                _elapsed_ms(),
+                db_good_count,
+                len(candidates),
+                unfiltered_count,
+                applyable_count,
+                db_rejected_count,
+                base_query,
+                db_min_good_results,
+                db_weak_results_threshold,
+                allow_unknown_tier,
+            )
+            if allow_unknown_tier and db_good_count < requested_limit:
+                c_candidates, c_query, c_unfiltered, c_applyable, c_rejected = await _load_db_candidates(include_unknown=True)
+                seen_ids = {job.get("job_id") for job in candidates}
+                candidates.extend(job for job in c_candidates if job.get("job_id") not in seen_ids)
+                pre_filter_candidates = list(candidates)
+                unfiltered_count += c_unfiltered
+                applyable_count += c_applyable
+                db_rejected_count += c_rejected
+                base_query = c_query
+                logger.info(
+                    "jobs/feed db_first_unknown_tier: user_id=%s elapsed_ms=%s combined_count=%s c_unfiltered=%s",
+                    user.user_id,
+                    _elapsed_ms(),
+                    len(candidates),
+                    c_unfiltered,
+                )
+
+        should_refresh = (
+            not _timed_out()
+            and (not db_first_enabled or db_good_count < db_weak_results_threshold)
+        )
+        if should_refresh:
+            jsearch_fallback_triggered = True
+            max_refresh_locations = max(1, min(int(os.environ.get("FEED_MAX_REFRESH_LOCATIONS", "1")), 3))
+            refresh_locations = [None] if is_worldwide_radius else (selected_locations or [None])[:max_refresh_locations]
+            force_provider_refresh = os.environ.get("JOB_FEED_ON_DEMAND_JSEARCH", "true").lower() in ("1", "true", "yes", "on")
+            logger.info(
+                "jobs/feed jsearch_fallback_start: user_id=%s db_good_count=%s weak_threshold=%s refresh_locations=%s force_provider_refresh=%s",
+                user.user_id,
+                db_good_count,
+                db_weak_results_threshold,
+                len(refresh_locations),
+                force_provider_refresh,
+            )
+            for loc_data in refresh_locations:
+                loc_label = loc_data.get("location_label") if isinstance(loc_data, dict) else None
+                refresh_result = await refresh_jobs_for_profile_if_needed(
+                    db,
+                    profile,
+                    require_auto_apply=False,
+                    target_auto_apply_count=max(requested_limit, db_min_good_results),
+                    location_override=loc_label,
+                    location_data_override=loc_data if isinstance(loc_data, dict) else None,
+                    search_radius=search_radius,
+                    role_override=target_role,
+                    force_provider_refresh=force_provider_refresh,
+                )
+                refresh_results.append(refresh_result)
+                if refresh_result.get("provider_rate_limited"):
+                    break
+
+            for refresh_result in refresh_results:
+                direct_refresh_jobs.extend(job for job in (refresh_result.get("jobs") or []) if isinstance(job, dict))
+                for key in refresh_result.get("search_keys") or []:
+                    if key:
+                        provider_search_keys.append(str(key))
+                if refresh_result.get("search_key"):
+                    provider_search_keys.append(str(refresh_result.get("search_key")))
+            provider_search_keys = list(dict.fromkeys(provider_search_keys))
+
+            candidates, base_query, unfiltered_count, applyable_count, db_rejected_count = await _load_db_candidates(include_unknown=False)
+            if allow_unknown_tier and len(candidates) < requested_limit:
+                c_candidates, c_query, c_unfiltered, c_applyable, c_rejected = await _load_db_candidates(include_unknown=True)
+                seen_ids = {job.get("job_id") for job in candidates}
+                candidates.extend(job for job in c_candidates if job.get("job_id") not in seen_ids)
+                unfiltered_count += c_unfiltered
+                applyable_count += c_applyable
+                db_rejected_count += c_rejected
+                base_query = c_query
+            pre_filter_candidates = list(candidates)
+            feed_source = "db_after_jsearch_fallback"
+            logger.info(
+                "jobs/feed jsearch_fallback_complete: user_id=%s imported_results=%s provider_search_keys=%s db_after_count=%s db_after_role_good_count=%s unfiltered_count=%s applyable_count=%s rejected_de_count=%s",
+                user.user_id,
+                [item.get("jobs_imported", item.get("count")) for item in refresh_results if isinstance(item, dict)],
+                len(provider_search_keys),
+                len(candidates),
+                sum(1 for job in candidates if _role_compatible_for_threshold(job)),
+                unfiltered_count,
+                applyable_count,
+                db_rejected_count,
+            )
+        elif not db_first_enabled:
+            candidates, base_query, unfiltered_count, applyable_count, db_rejected_count = await _load_db_candidates(include_unknown=allow_unknown_tier)
+            pre_filter_candidates = list(candidates)
+
         logger.info(
-            "feed_filter_stage user_id=%s stage=candidate_pool elapsed_ms=%s query=%s count=%s unfiltered_count=%s applyable_count=%s swiped_count=%s explicit_filters=%s",
+            "feed_filter_stage user_id=%s stage=candidate_pool elapsed_ms=%s source=%s jsearch_fallback=%s query=%s count=%s db_good_count=%s unfiltered_count=%s applyable_count=%s rejected_de_count=%s swiped_count=%s explicit_filters=%s",
             user.user_id,
             _elapsed_ms(),
+            feed_source,
+            jsearch_fallback_triggered,
             base_query,
             len(candidates),
+            db_good_count,
             unfiltered_count,
             applyable_count,
+            db_rejected_count,
             len(swiped_ids),
             explicit_filters,
         )
@@ -3862,7 +4136,7 @@ async def get_feed(
                     continue
                 ranked.append({
                     **job,
-                    "_feed_rank_score": role_score * 3 + location_score * 2 + _recency_score(job),
+                    "_feed_rank_score": role_score * 3 + location_score * 2 + _recency_score(job) + max(0, 30 - _tier_rank(job) * 10),
                     "_role_match_score": role_score,
                     "_location_match_score": location_score,
                 })
@@ -4579,6 +4853,46 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
 
         billing_credit_status = None
         if req.direction == "right":
+            phase = "pre_apply_validation"
+            log_phase("pre_apply_validation_start")
+            pre_apply = await validate_job_before_application(job)
+            job = _with_apply_fulfillment_fields(pre_apply.get("job") or job)
+            if not pre_apply.get("allowed"):
+                log_phase(
+                    "pre_apply_validation_blocked",
+                    reason=pre_apply.get("reason"),
+                    validation_status=pre_apply.get("validation_status"),
+                    applyability_tier=pre_apply.get("applyability_tier"),
+                    selected_apply_url=pre_apply.get("selected_apply_url"),
+                    requires_login=pre_apply.get("requires_login"),
+                    requires_account_creation=pre_apply.get("requires_account_creation"),
+                    captcha_detected=pre_apply.get("captcha_detected"),
+                    credit_skipped=True,
+                    application_skipped=True,
+                )
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "success": False,
+                        "ok": False,
+                        "blocked": True,
+                        "reason": pre_apply.get("reason"),
+                        "message": pre_apply.get("reason"),
+                        "job_id": req.job_id,
+                        "validation_status": pre_apply.get("validation_status"),
+                        "applyability_tier": pre_apply.get("applyability_tier"),
+                        "selected_apply_url": pre_apply.get("selected_apply_url"),
+                        "requires_login": pre_apply.get("requires_login"),
+                        "requires_account_creation": pre_apply.get("requires_account_creation"),
+                        "captcha_detected": pre_apply.get("captcha_detected"),
+                    },
+                )
+            log_phase(
+                "pre_apply_validation_allowed",
+                validation_status=pre_apply.get("validation_status"),
+                applyability_tier=pre_apply.get("applyability_tier"),
+                selected_apply_url=pre_apply.get("selected_apply_url"),
+            )
             if not _job_is_applyable(job):
                 log_phase(
                     "apply_fulfillment_blocked",
@@ -4790,7 +5104,7 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
             },
         ) from exc
     except HTTPException as exc:
-        if exc.status_code == 402:
+        if exc.status_code == 402 or (exc.status_code == 422 and isinstance(exc.detail, dict) and exc.detail.get("blocked") is True):
             raise exc
         raise safe_error(exc) from exc
     except Exception as exc:
@@ -4908,6 +5222,167 @@ def _greenhouse_real_submit_allowed_emails() -> set[str]:
 
 def _manual_application_fulfillment_enabled() -> bool:
     return _env_enabled("MANUAL_APPLICATION_FULFILLMENT", "true")
+
+
+def _require_job_maintenance_enabled() -> None:
+    if not job_cache_env_bool("JOBS_MAINTENANCE_ENABLED", True):
+        raise HTTPException(status_code=403, detail="Job maintenance endpoints are disabled.")
+
+
+def _require_ats_direct_enabled() -> None:
+    _require_job_maintenance_enabled()
+    if not job_cache_env_bool("JOBS_ATS_DIRECT_ENABLED", True):
+        raise HTTPException(status_code=403, detail="Direct ATS refresh endpoints are disabled.")
+
+
+@api_router.post("/admin/jobs/refresh")
+async def admin_jobs_refresh(body: AdminJobsRefreshRequest, admin: User = Depends(require_admin_user)):
+    _require_job_maintenance_enabled()
+    logger.info(
+        "admin_jobs_refresh_requested admin=%s role=%s location=%s country_code=%s dry_run=%s",
+        admin.email,
+        body.search_role,
+        body.location,
+        body.country_code,
+        body.dry_run,
+    )
+    return await refresh_jobs_for_query_or_filters(
+        db,
+        search_role=body.search_role,
+        location=body.location,
+        country_code=body.country_code,
+        remote=body.remote,
+        limit=body.limit,
+        dry_run=body.dry_run,
+    )
+
+
+@api_router.post("/admin/jobs/revalidate")
+async def admin_jobs_revalidate(body: AdminJobsRevalidateRequest, admin: User = Depends(require_admin_user)):
+    _require_job_maintenance_enabled()
+    logger.info(
+        "admin_jobs_revalidate_requested admin=%s validation_status=%s tier=%s country_code=%s dry_run=%s",
+        admin.email,
+        body.validation_status,
+        body.applyability_tier,
+        body.country_code,
+        body.dry_run,
+    )
+    return await revalidate_cached_jobs(
+        db,
+        validation_status=body.validation_status,
+        applyability_tier=body.applyability_tier,
+        older_than_hours=body.older_than_hours,
+        country_code=body.country_code,
+        limit=body.limit,
+        dry_run=body.dry_run,
+    )
+
+
+@api_router.post("/admin/jobs/expire-stale")
+async def admin_jobs_expire_stale(body: AdminJobsExpireStaleRequest, admin: User = Depends(require_admin_user)):
+    _require_job_maintenance_enabled()
+    logger.info(
+        "admin_jobs_expire_stale_requested admin=%s older_than_days=%s provider=%s country_code=%s dry_run=%s",
+        admin.email,
+        body.older_than_days,
+        body.provider,
+        body.country_code,
+        body.dry_run,
+    )
+    return await expire_stale_jobs(
+        db,
+        older_than_days=body.older_than_days,
+        provider=body.provider,
+        country_code=body.country_code,
+        limit=body.limit,
+        dry_run=body.dry_run,
+    )
+
+
+@api_router.post("/admin/jobs/maintenance")
+async def admin_jobs_maintenance(body: AdminJobsMaintenanceRequest, admin: User = Depends(require_admin_user)):
+    _require_job_maintenance_enabled()
+    logger.info(
+        "admin_jobs_maintenance_requested admin=%s dry_run=%s refresh_popular=%s",
+        admin.email,
+        body.dry_run,
+        body.refresh_popular,
+    )
+    return await run_job_cache_maintenance(
+        db,
+        dry_run=body.dry_run,
+        refresh_popular=body.refresh_popular,
+    )
+
+
+@api_router.get("/admin/jobs/cache-status")
+async def admin_jobs_cache_status(admin: User = Depends(require_admin_user)):
+    _require_job_maintenance_enabled()
+    logger.info("admin_jobs_cache_status_requested admin=%s", admin.email)
+    return await job_cache_status(db)
+
+
+@api_router.post("/admin/jobs/ats/discover-sources")
+async def admin_jobs_ats_discover_sources(body: AdminAtsDiscoverSourcesRequest, admin: User = Depends(require_admin_user)):
+    _require_ats_direct_enabled()
+    logger.info(
+        "admin_jobs_ats_discover_requested admin=%s provider=%s country_code=%s limit=%s dry_run=%s",
+        admin.email,
+        body.provider,
+        body.country_code,
+        body.limit,
+        body.dry_run,
+    )
+    return await discover_ats_sources_from_cached_jobs(
+        db,
+        provider=body.provider,
+        country_code=body.country_code,
+        limit=body.limit,
+        dry_run=body.dry_run,
+    )
+
+
+@api_router.post("/admin/jobs/ats/refresh-source")
+async def admin_jobs_ats_refresh_source(body: AdminAtsRefreshSourceRequest, admin: User = Depends(require_admin_user)):
+    _require_ats_direct_enabled()
+    logger.info(
+        "admin_jobs_ats_refresh_source_requested admin=%s provider=%s source_key=%s limit=%s dry_run=%s",
+        admin.email,
+        body.ats_provider,
+        body.source_key,
+        body.limit,
+        body.dry_run,
+    )
+    return await refresh_ats_source(
+        db,
+        ats_provider=body.ats_provider,
+        source_key=body.source_key,
+        limit=body.limit,
+        dry_run=body.dry_run,
+    )
+
+
+@api_router.post("/admin/jobs/ats/refresh-known-sources")
+async def admin_jobs_ats_refresh_known_sources(body: AdminAtsRefreshKnownSourcesRequest, admin: User = Depends(require_admin_user)):
+    _require_ats_direct_enabled()
+    logger.info(
+        "admin_jobs_ats_refresh_known_requested admin=%s provider=%s country_code=%s limit=%s older_than_hours=%s dry_run=%s",
+        admin.email,
+        body.provider,
+        body.country_code,
+        body.limit,
+        body.older_than_hours,
+        body.dry_run,
+    )
+    return await refresh_known_ats_sources(
+        db,
+        provider=body.provider,
+        country_code=body.country_code,
+        limit=body.limit,
+        older_than_hours=body.older_than_hours,
+        dry_run=body.dry_run,
+    )
 
 
 def _require_greenhouse_real_submit_allowed(user: User) -> None:
