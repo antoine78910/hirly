@@ -164,7 +164,7 @@ def _run_legacy_feed(monkeypatch, provider_jobs, *, env=None):
         monkeypatch.setenv(key, value)
     fake_db = _FakeDB([], _profile(), [])
     monkeypatch.setattr(server, "db", fake_db)
-    calls = {"search": 0}
+    calls = {"search": 0, "upsert": 0}
 
     class _Provider:
         async def search(self, query):
@@ -173,6 +173,13 @@ def _run_legacy_feed(monkeypatch, provider_jobs, *, env=None):
             return type("Result", (), {"jobs": provider_jobs})()
 
     monkeypatch.setattr(server, "get_job_provider", lambda _name, _api_key: _Provider())
+
+    async def _upsert(_db, jobs, **_kwargs):
+        calls["upsert"] += 1
+        calls["upserted_jobs"] = list(jobs)
+        return {"total_imported": len(jobs), "auto_apply_supported_imported": 0, "unknown_ats_imported": 0}
+
+    monkeypatch.setattr(server.jobs_service_module, "upsert_imported_jobs", _upsert)
     user = server.User(user_id="user_1", email="user@example.com", name="User")
     response = asyncio.run(server.get_feed(
         user=user,
@@ -237,6 +244,8 @@ def test_legacy_jsearch_only_calls_provider_without_validation_fields(monkeypatc
     job["applyability_tier"] = None
     response, calls = _run_legacy_feed(monkeypatch, [job])
     assert calls["search"] == 1
+    assert calls["upsert"] == 1
+    assert calls["upserted_jobs"][0]["job_id"] == "job_1"
     assert response["feed_mode"] == "legacy_jsearch_only"
     assert [item["job_id"] for item in response["jobs"]] == ["job_1"]
 

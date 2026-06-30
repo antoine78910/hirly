@@ -3462,6 +3462,21 @@ async def get_feed(
             raw_jobs = []
             jsearch_error = f"{exc.__class__.__name__}: {str(exc)[:160]}"
             logger.warning("jobs/feed legacy_jsearch provider_error=%s", jsearch_error)
+        if raw_jobs:
+            try:
+                import_stats = await jobs_service_module.upsert_imported_jobs(db, raw_jobs)
+                logger.info(
+                    "jobs/feed legacy_jsearch_upserted fetched=%s imported=%s auto_apply_supported=%s",
+                    len(raw_jobs),
+                    import_stats.get("total_imported", 0),
+                    import_stats.get("auto_apply_supported_imported", 0),
+                )
+            except Exception as exc:
+                logger.warning(
+                    "jobs/feed legacy_jsearch_upsert_failed fetched=%s error=%s",
+                    len(raw_jobs),
+                    f"{exc.__class__.__name__}: {str(exc)[:160]}",
+                )
 
         swiped_rows = await db.swipes.find({"user_id": user.user_id}, {"_id": 0, "job_id": 1}).limit(500).to_list(500)
         swiped_ids = {row.get("job_id") for row in swiped_rows if row.get("job_id")}
