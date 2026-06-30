@@ -17,6 +17,7 @@ import httpx
 from job_providers import get_board_provider, get_job_provider
 from job_providers.apply_eligibility import is_manual_fulfillment_ready
 from job_providers.base import BoardQuery, JobSearchQuery
+from job_validation import cheap_validate_job_applyability
 
 logger = logging.getLogger(__name__)
 _PROVIDER_COOLDOWN_UNTIL: Dict[str, datetime] = {}
@@ -267,6 +268,7 @@ async def _import_provider_jobs(db, provider, query: JobSearchQuery) -> Dict[str
         "jobs": [],
     }
     for job in result.jobs:
+        job = _with_cheap_validation(job)
         await db.jobs.update_one(
             {"provider": job["provider"], "external_id": job["external_id"]},
             {"$set": job},
@@ -288,6 +290,7 @@ async def _upsert_job_batch(db, jobs: List[Dict[str, Any]], progress: Optional[D
         "unknown_ats_imported": 0,
     }
     for job in jobs:
+        job = _with_cheap_validation(job)
         await db.jobs.update_one(
             {"provider": job["provider"], "external_id": job["external_id"]},
             {"$set": job},
@@ -301,6 +304,26 @@ async def _upsert_job_batch(db, jobs: List[Dict[str, Any]], progress: Optional[D
         if job.get("ats_provider") == "unknown":
             stats["unknown_ats_imported"] += 1
     return stats
+
+
+async def upsert_imported_jobs(db, jobs: List[Dict[str, Any]], progress: Optional[Dict[str, Any]] = None, progress_base: int = 0) -> Dict[str, int]:
+    """Persist imported jobs through the shared validation/upsert path."""
+    return await _upsert_job_batch(db, jobs, progress=progress, progress_base=progress_base)
+
+
+def _with_cheap_validation(job: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        validation = cheap_validate_job_applyability(job)
+    except Exception as exc:
+        logger.warning("cheap job validation failed job_id=%s error=%s", job.get("job_id"), exc)
+        validation = {
+            "validation_status": "unknown",
+            "validation_reason": f"Validator failed: {exc.__class__.__name__}",
+            "validation_checked_at": datetime.now(timezone.utc).isoformat(),
+            "applyability_tier": "C",
+            "applyability_score": 0.45,
+        }
+    return {**job, **validation}
 
 
 def _greenhouse_board_doc(token: str, company: str) -> Dict[str, Any]:

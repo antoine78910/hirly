@@ -9,6 +9,7 @@ import httpx
 
 from .base import JobSearchQuery, ProviderResult
 from .apply_eligibility import classify_apply_link
+from .ats_detection import PRIMARY_AUTO_APPLY_ATS, detect_job_platform
 
 
 class JSearchProvider:
@@ -132,10 +133,11 @@ class JSearchProvider:
         source = row.get("job_publisher") or first_apply.get("publisher") or "JSearch"
         apply_classification = classify_apply_link(external_url, source=source, apply_options=apply_options)
         selected_apply_url = apply_classification.get("selected_apply_url") or external_url
-        ats_provider = self._detect_ats(selected_apply_url, apply_options)
+        platform = detect_job_platform(selected_apply_url)
+        ats_provider = platform.get("ats_provider") or "unknown"
         if ats_provider == "unknown" and apply_classification.get("apply_url_provider") not in {"company", "unknown"}:
             ats_provider = str(apply_classification.get("apply_url_provider") or "unknown")
-        auto_apply_supported = ats_provider in ("greenhouse", "lever", "ashby")
+        auto_apply_supported = ats_provider in PRIMARY_AUTO_APPLY_ATS
 
         return {
             "job_id": self._internal_job_id(external_id),
@@ -188,21 +190,6 @@ class JSearchProvider:
     def _internal_job_id(self, external_id: str) -> str:
         digest = hashlib.sha1(f"{self.name}:{external_id}".encode("utf-8")).hexdigest()[:16]
         return f"job_{digest}"
-
-    def _detect_ats(self, external_url: Optional[str], apply_options: List[Dict[str, Any]]) -> str:
-        urls = [external_url or ""]
-        for option in apply_options:
-            if isinstance(option, dict):
-                urls.append(option.get("apply_link") or "")
-
-        text = " ".join(urls).lower()
-        if "greenhouse.io" in text or "boards.greenhouse.io" in text or "job-boards.greenhouse.io" in text:
-            return "greenhouse"
-        if "jobs.lever.co" in text:
-            return "lever"
-        if "ashbyhq.com" in text or "jobs.ashbyhq.com" in text:
-            return "ashby"
-        return "unknown"
 
     def _location(self, row: Dict[str, Any]) -> str:
         if row.get("job_location"):

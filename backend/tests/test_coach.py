@@ -12,7 +12,11 @@ import pytest
 import requests
 from datetime import datetime, timezone, timedelta
 
-BASE_URL = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
+pytestmark = pytest.mark.skipif(
+    not os.environ.get("REACT_APP_BACKEND_URL"),
+    reason="REACT_APP_BACKEND_URL is required for live coach endpoint tests",
+)
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "http://testserver").rstrip("/")
 CLAUDE_TIMEOUT = 45  # first call can be 5-15s; 502s when LLM is unavailable
 
 

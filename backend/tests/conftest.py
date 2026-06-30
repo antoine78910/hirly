@@ -6,17 +6,22 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-import psycopg2
 import pytest
-import requests
+
+try:
+    import psycopg2
+except ModuleNotFoundError:
+    psycopg2 = None
+try:
+    import requests
+except ModuleNotFoundError:
+    requests = None
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent
 if str(_BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(_BACKEND_ROOT))
 
-from pg_helpers import TestDatabase  # noqa: E402
-
-BASE_URL = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "http://testserver").rstrip("/")
 DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_DB_URL")
 
 
@@ -27,6 +32,8 @@ def base_url():
 
 @pytest.fixture(scope="session")
 def pg_conn():
+    if psycopg2 is None:
+        pytest.skip("psycopg2 is not installed")
     if not DATABASE_URL:
         pytest.skip("DATABASE_URL is not configured")
     conn = psycopg2.connect(DATABASE_URL)
@@ -42,6 +49,8 @@ def pg_conn():
 @pytest.fixture(scope="session")
 def mongo_db(pg_conn):
     """MongoDB-compatible test DB backed by Supabase/PostgreSQL."""
+    from pg_helpers import TestDatabase
+
     return TestDatabase(pg_conn)
 
 
@@ -83,6 +92,8 @@ def test_user(pg_conn):
 
 @pytest.fixture(scope="session")
 def auth_client(test_user):
+    if requests is None:
+        pytest.skip("requests is not installed")
     session = requests.Session()
     session.headers.update({"Authorization": f"Bearer {test_user['session_token']}"})
     return session
@@ -90,4 +101,6 @@ def auth_client(test_user):
 
 @pytest.fixture(scope="session")
 def anon_client():
+    if requests is None:
+        pytest.skip("requests is not installed")
     return requests.Session()

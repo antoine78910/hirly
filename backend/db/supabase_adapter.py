@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 import httpx
+
+from job_normalization import extract_normalized_job_columns
 
 from .base import CollectionPort, CursorPort, DatabaseAdapter, Document, Filter, Projection
 
@@ -21,6 +23,7 @@ MIGRATED_TABLES = {
     "users",
     "user_sessions",
     "jobs",
+    "ats_company_sources",
     "company_boards",
     "profiles",
     "swipes",
@@ -41,6 +44,7 @@ TABLE_PRIMARY_KEYS = {
     "users": "user_id",
     "user_sessions": "session_token",
     "jobs": "job_id",
+    "ats_company_sources": "id",
     "company_boards": "board_id",
     "profiles": "user_id",
     "swipes": "swipe_id",
@@ -64,17 +68,58 @@ TABLE_FILTER_COLUMNS = {
         "job_id",
         "provider",
         "external_id",
-        "ats_provider",
-        "auto_apply_supported",
-        "company",
         "title",
+        "normalized_title",
+        "company",
+        "normalized_company",
         "location",
+        "city",
+        "region",
         "country_code",
         "remote",
+        "salary_min",
+        "salary_max",
+        "currency",
         "posted_at",
         "imported_at",
         "last_seen_at",
         "provider_search_key",
+        "ats_provider",
+        "auto_apply_supported",
+        "manual_fulfillment_ready",
+        "apply_fulfillment_status",
+        "apply_url_provider",
+        "selected_apply_url",
+        "validation_status",
+        "validation_reason",
+        "validation_checked_at",
+        "requires_login",
+        "requires_account_creation",
+        "captcha_detected",
+        "has_cv_upload",
+        "has_cover_letter",
+        "has_custom_questions",
+        "applyability_score",
+        "applyability_tier",
+        "rejection_reason",
+        "fingerprint",
+    },
+    "ats_company_sources": {
+        "id",
+        "ats_provider",
+        "source_key",
+        "company_name",
+        "careers_url",
+        "country_code",
+        "discovered_from_url",
+        "discovered_from_job_id",
+        "is_active",
+        "last_checked_at",
+        "last_success_at",
+        "last_error",
+        "failure_count",
+        "created_at",
+        "updated_at",
     },
     "company_boards": {"board_id", "ats_provider", "company", "board_token", "enabled", "priority", "last_synced_at"},
     "profiles": {"user_id", "target_role", "target_location", "updated_at"},
@@ -164,20 +209,36 @@ def _supabase_row(table: str, document: Document) -> Dict[str, Any]:
             "data": doc,
         }
     if table == "jobs":
+        columns = extract_normalized_job_columns(doc)
         return {
             "job_id": _document_key(table, doc),
             "provider": doc.get("provider"),
             "external_id": doc.get("external_id"),
+            **columns,
+            "data": doc,
+        }
+    if table == "ats_company_sources":
+        now = datetime.now(timezone.utc).isoformat()
+        doc.setdefault("id", f"{doc.get('ats_provider')}:{doc.get('source_key')}")
+        doc.setdefault("created_at", now)
+        doc.setdefault("updated_at", now)
+        return {
+            "id": _document_key(table, doc),
             "ats_provider": doc.get("ats_provider"),
-            "auto_apply_supported": bool(doc.get("auto_apply_supported")),
-            "company": doc.get("company"),
-            "title": doc.get("title"),
-            "location": doc.get("location"),
+            "source_key": doc.get("source_key"),
+            "company_name": doc.get("company_name"),
+            "careers_url": doc.get("careers_url"),
             "country_code": doc.get("country_code"),
-            "remote": bool(doc.get("remote")),
-            "posted_at": doc.get("posted_at"),
-            "imported_at": doc.get("imported_at"),
-            "last_seen_at": doc.get("last_seen_at"),
+            "discovered_from_url": doc.get("discovered_from_url"),
+            "discovered_from_job_id": doc.get("discovered_from_job_id"),
+            "is_active": bool(doc.get("is_active", True)),
+            "last_checked_at": doc.get("last_checked_at"),
+            "last_success_at": doc.get("last_success_at"),
+            "last_error": doc.get("last_error"),
+            "failure_count": int(doc.get("failure_count") or 0),
+            "raw_metadata": doc.get("raw_metadata"),
+            "created_at": doc.get("created_at"),
+            "updated_at": doc.get("updated_at"),
             "data": doc,
         }
     if table == "company_boards":
@@ -488,8 +549,6 @@ def _postgrest_in_value(value: Any) -> str:
 
 
 def _postgrest_filter_key(table: str, key: str) -> str:
-    if table == "jobs" and key == "provider_search_key":
-        return "data->>provider_search_key"
     return key
 
 
@@ -789,6 +848,7 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
         self.user_sessions = SupabaseCollectionAdapter("user_sessions", supabase_url, secret_key)
         self.profiles = SupabaseCollectionAdapter("profiles", supabase_url, secret_key)
         self.jobs = SupabaseCollectionAdapter("jobs", supabase_url, secret_key)
+        self.ats_company_sources = SupabaseCollectionAdapter("ats_company_sources", supabase_url, secret_key)
         self.applications = SupabaseCollectionAdapter("applications", supabase_url, secret_key)
         self.gmail_connections = SupabaseCollectionAdapter("gmail_connections", supabase_url, secret_key)
         self.application_emails = SupabaseCollectionAdapter("application_emails", supabase_url, secret_key)
