@@ -4268,7 +4268,7 @@ async def get_feed(
         def rank(pool: List[Dict[str, Any]], *, worldwide: bool, broad: bool, any_role: bool = False) -> List[Dict[str, Any]]:
             ranked = []
             for job in pool:
-                if not _category_compatible(job):
+                if not any_role and not _category_compatible(job):
                     continue
                 role_score = 10 if any_role else _role_score(job, strict_tokens if not broad else [], family_tokens)
                 location_score = _location_score(job, terms, worldwide=worldwide)
@@ -4315,8 +4315,15 @@ async def get_feed(
                 logger.info("feed_filter_stage user_id=%s stage=worldwide_radius_role_family elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))
             if len(jobs) < requested_limit and not _timed_out():
                 fallback_used = "worldwide_radius_auto_apply"
-                jobs = rank(candidates, worldwide=True, broad=True, any_role=not bool(strict_tokens or family_tokens))
-                logger.info("feed_filter_stage user_id=%s stage=worldwide_radius_auto_apply elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))
+                jobs = rank(candidates, worldwide=True, broad=True, any_role=True)
+                logger.info(
+                    "feed_filter_stage user_id=%s stage=worldwide_radius_auto_apply elapsed_ms=%s count=%s candidate_pool=%s source=%s",
+                    user.user_id,
+                    _elapsed_ms(),
+                    len(jobs),
+                    len(candidates),
+                    feed_source,
+                )
         else:
             jobs = rank(candidates, worldwide=False, broad=False)
             logger.info("feed_filter_stage user_id=%s stage=strict_role_location elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))

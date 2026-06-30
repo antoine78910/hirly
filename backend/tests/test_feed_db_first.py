@@ -235,6 +235,18 @@ def test_worldwide_legacy_direct_ats_can_include_unknown_location(monkeypatch):
     assert [job["job_id"] for job in response["jobs"]] == ["job_1"]
 
 
+def test_worldwide_final_fallback_relaxes_role_when_legacy_candidates_exist(monkeypatch):
+    response, calls = _run_feed(
+        monkeypatch,
+        [_legacy_direct_job(1, title="ADAS Data Collection Driver")],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+        search_radius="worldwide",
+    )
+    assert calls["refresh"] == 0
+    assert [job["job_id"] for job in response["jobs"]] == ["job_1"]
+    assert response["fallback_used"] == "worldwide_radius_auto_apply"
+
+
 def test_only_my_country_still_filters_legacy_direct_ats(monkeypatch):
     response, _calls = _run_feed(
         monkeypatch,
