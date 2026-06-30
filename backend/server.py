@@ -165,6 +165,7 @@ logger = logging.getLogger(__name__)
 
 _feed_job_pool_cache: Dict[str, Any] = {"query_key": "", "rows": [], "fetched_at": 0.0}
 _FEED_JOB_POOL_TTL_SECONDS = 90.0
+_feed_sync_refresh_cooldown_until = 0.0
 
 
 async def _get_feed_job_candidates(base_query: Dict[str, Any], limit: int) -> List[Dict[str, Any]]:
@@ -3593,11 +3594,18 @@ async def get_feed(
         return 0
 
     async def _fast_cached_feed() -> Dict[str, Any]:
+        global _feed_sync_refresh_cooldown_until
         requested_limit = max(1, min(int(limit or 5), 25))
         db_first_enabled = _env_bool("JOBS_DB_FIRST_ENABLED", True)
         db_min_good_results = max(1, _env_int("JOBS_DB_MIN_GOOD_RESULTS_BEFORE_JSEARCH", 30))
         db_weak_results_threshold = max(0, _env_int("JOBS_DB_WEAK_RESULTS_THRESHOLD", 10))
         allow_unknown_tier = _env_bool("JOBS_ALLOW_UNKNOWN_TIER_IN_FEED", False)
+        sync_refresh_enabled = _env_bool("JOBS_FEED_SYNC_REFRESH_ENABLED", True)
+        sync_refresh_max_seconds = max(1, min(_env_int("JOBS_FEED_SYNC_REFRESH_MAX_SECONDS", 8), 20))
+        sync_refresh_max_results = max(1, min(_env_int("JOBS_FEED_SYNC_REFRESH_MAX_RESULTS", 20), 50))
+        sync_refresh_max_pages = max(1, min(_env_int("JSEARCH_FEED_FALLBACK_MAX_PAGES", 1), 3))
+        sync_refresh_page_size = max(1, min(_env_int("JSEARCH_FEED_FALLBACK_PAGE_SIZE", 10), 50))
+        sync_refresh_cooldown_seconds = max(30, min(_env_int("JOBS_FEED_SYNC_REFRESH_COOLDOWN_SECONDS", 300), 1800))
         target_role = feed_target_role
         strict_tokens = _tokens(target_role)
         family_tokens = _role_family_tokens(target_role)
@@ -3975,7 +3983,9 @@ async def get_feed(
 
         async def _load_db_candidates(*, include_unknown: bool = False) -> tuple[List[Dict[str, Any]], Dict[str, Any], int, int, int]:
             query = _validated_cache_query(include_unknown=include_unknown)
+            db_started = time.perf_counter()
             rows = await _get_feed_job_candidates(query, candidate_limit)
+            db_elapsed_ms = int((time.perf_counter() - db_started) * 1000)
             rows = [job for job in rows if job.get("job_id") not in swiped_ids]
             unfiltered = len(rows)
             rejected = sum(
@@ -3988,6 +3998,16 @@ async def get_feed(
             applyable = len(rows)
             rows = [job for job in rows if _matches_explicit_filters(job)]
             rows.sort(key=_quality_sort_key)
+            logger.info(
+                "jobs/feed db_query_complete: user_id=%s elapsed_ms=%s include_unknown=%s query=%s raw_rows=%s applyable=%s filtered=%s",
+                user.user_id,
+                db_elapsed_ms,
+                include_unknown,
+                query,
+                unfiltered,
+                applyable,
+                len(rows),
+            )
             return rows, query, unfiltered, applyable, rejected
 
         base_query = _validated_cache_query(include_unknown=False)
@@ -4036,38 +4056,107 @@ async def get_feed(
                     c_unfiltered,
                 )
 
+        cooldown_active = time.monotonic() < _feed_sync_refresh_cooldown_until
         should_refresh = (
-            not _timed_out()
-            and (not db_first_enabled or db_good_count < db_weak_results_threshold)
+            sync_refresh_enabled
+            and not _timed_out()
+            and not cooldown_active
+            and (not db_first_enabled or db_good_count == 0)
         )
+        if db_good_count > 0 and db_good_count < db_weak_results_threshold:
+            logger.info(
+                "jobs/feed sync_refresh_skipped_db_has_results: user_id=%s db_good_count=%s weak_threshold=%s",
+                user.user_id,
+                db_good_count,
+                db_weak_results_threshold,
+            )
+        elif cooldown_active:
+            logger.info(
+                "jobs/feed sync_refresh_skipped_cooldown: user_id=%s cooldown_remaining_seconds=%s",
+                user.user_id,
+                max(0, int(_feed_sync_refresh_cooldown_until - time.monotonic())),
+            )
         if should_refresh:
             jsearch_fallback_triggered = True
             max_refresh_locations = max(1, min(int(os.environ.get("FEED_MAX_REFRESH_LOCATIONS", "1")), 3))
             refresh_locations = [None] if is_worldwide_radius else (selected_locations or [None])[:max_refresh_locations]
             force_provider_refresh = os.environ.get("JOB_FEED_ON_DEMAND_JSEARCH", "true").lower() in ("1", "true", "yes", "on")
             logger.info(
-                "jobs/feed jsearch_fallback_start: user_id=%s db_good_count=%s weak_threshold=%s refresh_locations=%s force_provider_refresh=%s",
+                "jobs/feed jsearch_fallback_start: user_id=%s db_good_count=%s weak_threshold=%s refresh_locations=%s force_provider_refresh=%s max_seconds=%s max_results=%s max_pages=%s page_size=%s",
                 user.user_id,
                 db_good_count,
                 db_weak_results_threshold,
                 len(refresh_locations),
                 force_provider_refresh,
+                sync_refresh_max_seconds,
+                sync_refresh_max_results,
+                sync_refresh_max_pages,
+                sync_refresh_page_size,
             )
             for loc_data in refresh_locations:
                 loc_label = loc_data.get("location_label") if isinstance(loc_data, dict) else None
-                refresh_result = await refresh_jobs_for_profile_if_needed(
-                    db,
-                    profile,
-                    require_auto_apply=False,
-                    target_auto_apply_count=max(requested_limit, db_min_good_results),
-                    location_override=loc_label,
-                    location_data_override=loc_data if isinstance(loc_data, dict) else None,
-                    search_radius=search_radius,
-                    role_override=target_role,
-                    force_provider_refresh=force_provider_refresh,
-                )
+                refresh_started = time.perf_counter()
+                try:
+                    refresh_result = await asyncio.wait_for(
+                        refresh_jobs_for_profile_if_needed(
+                            db,
+                            profile,
+                            require_auto_apply=False,
+                            target_auto_apply_count=min(sync_refresh_max_results, max(requested_limit, 1)),
+                            location_override=loc_label,
+                            location_data_override=loc_data if isinstance(loc_data, dict) else None,
+                            search_radius=search_radius,
+                            role_override=target_role,
+                            force_provider_refresh=force_provider_refresh,
+                            query_limit_override=sync_refresh_max_results,
+                            provider_max_pages=sync_refresh_max_pages,
+                            provider_page_size=sync_refresh_page_size,
+                            max_provider_requests_override=1,
+                            max_direct_apply_requests_override=0,
+                        ),
+                        timeout=sync_refresh_max_seconds,
+                    )
+                except asyncio.TimeoutError:
+                    _feed_sync_refresh_cooldown_until = time.monotonic() + sync_refresh_cooldown_seconds
+                    refresh_result = {
+                        "attempted": True,
+                        "ok": False,
+                        "reason": "feed_sync_refresh_timeout",
+                        "elapsed_ms": int((time.perf_counter() - refresh_started) * 1000),
+                    }
+                    logger.warning(
+                        "jobs/feed jsearch_fallback_timeout: user_id=%s elapsed_ms=%s cooldown_seconds=%s",
+                        user.user_id,
+                        refresh_result["elapsed_ms"],
+                        sync_refresh_cooldown_seconds,
+                    )
+                except Exception as exc:
+                    _feed_sync_refresh_cooldown_until = time.monotonic() + sync_refresh_cooldown_seconds
+                    refresh_result = {
+                        "attempted": True,
+                        "ok": False,
+                        "reason": "feed_sync_refresh_error",
+                        "error_type": exc.__class__.__name__,
+                        "elapsed_ms": int((time.perf_counter() - refresh_started) * 1000),
+                    }
+                    logger.warning(
+                        "jobs/feed jsearch_fallback_error: user_id=%s elapsed_ms=%s error=%s",
+                        user.user_id,
+                        refresh_result["elapsed_ms"],
+                        exc,
+                    )
+                else:
+                    logger.info(
+                        "jobs/feed jsearch_fallback_location_complete: user_id=%s elapsed_ms=%s reason=%s imported=%s",
+                        user.user_id,
+                        int((time.perf_counter() - refresh_started) * 1000),
+                        refresh_result.get("reason"),
+                        refresh_result.get("jobs_imported", refresh_result.get("count")),
+                    )
                 refresh_results.append(refresh_result)
                 if refresh_result.get("provider_rate_limited"):
+                    break
+                if refresh_result.get("reason") in {"feed_sync_refresh_timeout", "feed_sync_refresh_error"}:
                     break
 
             for refresh_result in refresh_results:

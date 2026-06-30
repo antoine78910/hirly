@@ -67,6 +67,8 @@ Confirm the response contains `expire_stale`, `revalidate`, `popular_refresh`, a
 
 ## F. Refresh One France Query
 
+Do this before judging the user-facing feed. First user feed requests are intentionally bounded and should not be used to backfill a full market cache.
+
 ```bash
 curl -X POST "$BACKEND_URL/api/admin/jobs/refresh" \
   -H "Authorization: Bearer $ADMIN_AUTH_TOKEN" \

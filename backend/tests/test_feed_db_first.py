@@ -112,8 +112,12 @@ def _run_feed(monkeypatch, jobs, *, env=None, refresh=None, swiped_ids=None):
 
     async def _refresh(*args, **kwargs):
         calls["refresh"] += 1
+        calls["refresh_kwargs"] = kwargs
         if refresh:
-            fake_db.jobs.rows.extend(refresh())
+            result = refresh()
+            if asyncio.iscoroutine(result):
+                result = await result
+            fake_db.jobs.rows.extend(result)
         return {"attempted": True, "jobs_imported": len(fake_db.jobs.rows), "search_keys": ["jsearch:test"]}
 
     monkeypatch.setattr(server, "refresh_jobs_for_profile_if_needed", _refresh)
@@ -158,15 +162,67 @@ def test_db_first_enough_jobs_does_not_call_jsearch(monkeypatch):
     assert response["filters_applied"]["manual_fulfillment_ready"] is True
 
 
-def test_weak_db_calls_jsearch_and_requeries_db(monkeypatch):
+def test_weak_but_nonzero_db_returns_without_sync_jsearch(monkeypatch):
     response, calls = _run_feed(
         monkeypatch,
         [_job(1), _job(2)],
         refresh=lambda: [_job(i) for i in range(3, 20)],
     )
-    assert calls["refresh"] == 1
+    assert calls["refresh"] == 0
     assert response["jobs"]
-    assert response["fallback_used"] in {"none", None}
+    assert response["fallback_used"] in {"none", "none_due_to_explicit_filters", None}
+
+
+def test_zero_db_uses_limited_sync_jsearch_fallback(monkeypatch):
+    response, calls = _run_feed(
+        monkeypatch,
+        [],
+        env={
+            "JOBS_FEED_SYNC_REFRESH_MAX_RESULTS": "10",
+            "JSEARCH_FEED_FALLBACK_MAX_PAGES": "1",
+            "JSEARCH_FEED_FALLBACK_PAGE_SIZE": "10",
+        },
+        refresh=lambda: [_job(i) for i in range(1, 4)],
+    )
+    assert calls["refresh"] == 1
+    assert calls["refresh_kwargs"]["query_limit_override"] == 10
+    assert calls["refresh_kwargs"]["provider_max_pages"] == 1
+    assert calls["refresh_kwargs"]["provider_page_size"] == 10
+    assert calls["refresh_kwargs"]["max_provider_requests_override"] == 1
+    assert response["jobs"]
+
+
+def test_slow_sync_jsearch_fallback_times_out_and_sets_cooldown(monkeypatch):
+    async def slow_refresh():
+        await asyncio.sleep(1.2)
+        return [_job(1)]
+
+    monkeypatch.setattr(server, "_feed_sync_refresh_cooldown_until", 0.0)
+    response, calls = _run_feed(
+        monkeypatch,
+        [],
+        env={
+            "JOBS_FEED_SYNC_REFRESH_MAX_SECONDS": "1",
+            "JOBS_FEED_SYNC_REFRESH_COOLDOWN_SECONDS": "30",
+        },
+        refresh=slow_refresh,
+    )
+    assert calls["refresh"] == 1
+    assert response["jobs"] == []
+    assert server._feed_sync_refresh_cooldown_until > 0
+
+    response, calls = _run_feed(
+        monkeypatch,
+        [],
+        env={
+            "JOBS_FEED_SYNC_REFRESH_MAX_SECONDS": "1",
+            "JOBS_FEED_SYNC_REFRESH_COOLDOWN_SECONDS": "30",
+        },
+        refresh=lambda: [_job(2)],
+    )
+    assert calls["refresh"] == 0
+    assert response["jobs"] == []
+    monkeypatch.setattr(server, "_feed_sync_refresh_cooldown_until", 0.0)
 
 
 def test_d_and_e_jobs_are_excluded(monkeypatch):

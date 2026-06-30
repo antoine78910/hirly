@@ -13,6 +13,8 @@ class JobSearchQuery:
     language: str = "en"
     limit: int = 20
     raw_query: bool = False
+    max_pages: Optional[int] = None
+    page_size: Optional[int] = None
 
 
 @dataclass(frozen=True)

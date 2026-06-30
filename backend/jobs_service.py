@@ -804,6 +804,8 @@ def _copy_query_with_role(query: JobSearchQuery, role: str, *, raw_query: bool =
         language=query.language,
         limit=query.limit,
         raw_query=raw_query,
+        max_pages=query.max_pages,
+        page_size=query.page_size,
     )
 
 
@@ -822,6 +824,8 @@ def _copy_query_with_role_and_location(
         language=query.language,
         limit=query.limit,
         raw_query=raw_query,
+        max_pages=query.max_pages,
+        page_size=query.page_size,
     )
 
 
@@ -1114,6 +1118,11 @@ async def refresh_jobs_for_profile_if_needed(
     search_radius: str = "50km",
     role_override: Optional[str] = None,
     force_provider_refresh: bool = False,
+    query_limit_override: Optional[int] = None,
+    provider_max_pages: Optional[int] = None,
+    provider_page_size: Optional[int] = None,
+    max_provider_requests_override: Optional[int] = None,
+    max_direct_apply_requests_override: Optional[int] = None,
 ) -> Dict[str, Any]:
     query = build_profile_job_query(
         profile,
@@ -1122,6 +1131,18 @@ async def refresh_jobs_for_profile_if_needed(
         search_radius=search_radius,
         role_override=role_override,
     )
+    if query_limit_override or provider_max_pages or provider_page_size:
+        query = JobSearchQuery(
+            role=query.role,
+            location=query.location,
+            remote_preference=query.remote_preference,
+            country=query.country,
+            language=query.language,
+            limit=max(1, min(int(query_limit_override or query.limit), 100)),
+            raw_query=query.raw_query,
+            max_pages=provider_max_pages,
+            page_size=provider_page_size,
+        )
     base_metadata = {
         "searched_location": query.location,
         "search_radius": search_radius,
@@ -1243,8 +1264,8 @@ async def refresh_jobs_for_profile_if_needed(
         })
 
     try:
-        max_provider_requests = max(1, min(_env_int("JOB_IMPORT_MAX_PROVIDER_REQUESTS", 7), 12))
-        max_direct_apply_requests = max(0, min(_env_int("JOB_DIRECT_APPLY_SEARCH_MAX_ATTEMPTS", 2), 8))
+        max_provider_requests = max(1, min(int(max_provider_requests_override or _env_int("JOB_IMPORT_MAX_PROVIDER_REQUESTS", 7)), 12))
+        max_direct_apply_requests = max(0, min(int(max_direct_apply_requests_override if max_direct_apply_requests_override is not None else _env_int("JOB_DIRECT_APPLY_SEARCH_MAX_ATTEMPTS", 2)), 8))
         min_provider_requests = 1 if force_provider_refresh else 0
         provider_requests = 0
         direct_apply_requests = 0
@@ -1339,6 +1360,8 @@ async def refresh_jobs_for_profile_if_needed(
                 language=query.language,
                 limit=query.limit,
                 raw_query=True,
+                max_pages=query.max_pages,
+                page_size=query.page_size,
             )
             provider_requests += 1
             broad_provider_requests += 1

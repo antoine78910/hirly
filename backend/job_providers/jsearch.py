@@ -33,8 +33,8 @@ class JSearchProvider:
         if date_posted:
             base_params["date_posted"] = date_posted
 
-        max_pages = max(1, min(self._env_int("JSEARCH_MAX_PAGES", 3), 10))
-        page_size = max(10, min(self._env_int("JSEARCH_PAGE_SIZE", query.limit), 100))
+        max_pages = max(1, min(int(query.max_pages or self._env_int("JSEARCH_MAX_PAGES", 3)), 10))
+        page_size = max(1, min(int(query.page_size or self._env_int("JSEARCH_PAGE_SIZE", query.limit)), 100))
         target_count = max(query.limit, min(page_size * max_pages, 300))
 
         payloads: List[Any] = []
