@@ -63,7 +63,7 @@ class _Collection:
 
 class _FakeDB:
     def __init__(self, job):
-        self.jobs = _Collection([job], key="job_id")
+        self.jobs = _Collection([job] if job else [], key="job_id")
         self.swipes = _Collection([], key="swipe_id")
         self.applications = _Collection([], key="application_id")
         self.profiles = _Collection([{"user_id": "user_1", "cv_text": "CV"}], key="user_id")
@@ -206,4 +206,18 @@ def test_left_swipe_does_not_require_application_validation(monkeypatch):
     response = asyncio.run(server.swipe(req, user=user))
     assert response["applied"] is False
     assert len(fake_db.swipes.rows) == 1
+    assert len(fake_db.applications.rows) == 0
+
+
+def test_left_swipe_missing_job_records_skip_without_404(monkeypatch):
+    fake_db = _FakeDB(None)
+    monkeypatch.setattr(server, "db", fake_db)
+    user = server.User(user_id="user_1", email="user@example.com", name="User")
+    req = server.SwipeRequest(job_id="provider_only_job", direction="left")
+    response = asyncio.run(server.swipe(req, user=user))
+    assert response["ok"] is True
+    assert response["applied"] is False
+    assert response["missing_job"] is True
+    assert len(fake_db.swipes.rows) == 1
+    assert fake_db.swipes.rows[0]["job_id"] == "provider_only_job"
     assert len(fake_db.applications.rows) == 0

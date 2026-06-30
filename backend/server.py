@@ -5150,6 +5150,17 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
         phase = "job_loaded"
         job = await db.jobs.find_one({"job_id": req.job_id}, {"_id": 0})
         if not job:
+            if req.direction != "right":
+                existing = await db.swipes.find_one({"user_id": user.user_id, "job_id": req.job_id}, {"_id": 0})
+                if not existing:
+                    await db.swipes.insert_one({
+                        "user_id": user.user_id,
+                        "job_id": req.job_id,
+                        "direction": req.direction,
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                    })
+                log_phase("left_swipe_missing_job_recorded", duplicate=bool(existing))
+                return {"ok": True, "applied": False, "duplicate": bool(existing), "missing_job": True}
             raise HTTPException(status_code=404, detail="Job not found")
         job = _with_apply_fulfillment_fields(job)
         log_phase(

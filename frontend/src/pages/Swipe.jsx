@@ -888,7 +888,7 @@ export default function Swipe() {
         if (nextBilling) setBilling(nextBilling);
         openUpgrade();
       }
-      if (!demoSwipe) {
+      if (!demoSwipe && intent === "apply") {
         toast.error(getSwipeErrorMessage(t, e));
       }
     }
