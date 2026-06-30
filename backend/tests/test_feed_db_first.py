@@ -94,7 +94,7 @@ def _job(index, *, tier="A", status="valid", title="Marketing Manager", swiped=F
     }
 
 
-def _run_feed(monkeypatch, jobs, *, env=None, refresh=None, swiped_ids=None):
+def _run_feed(monkeypatch, jobs, *, env=None, refresh=None, swiped_ids=None, search_radius="50km", only_my_country=False):
     env = env or {}
     for key, value in {
         "JOBS_DB_FIRST_ENABLED": "true",
@@ -139,9 +139,9 @@ def _run_feed(monkeypatch, jobs, *, env=None, refresh=None, swiped_ids=None):
         include_unknown_location=True,
         include_unknown_salary=True,
         include_non_auto_apply=False,
-        search_radius="50km",
+        search_radius=search_radius,
         locations_json=None,
-        only_my_country=False,
+        only_my_country=only_my_country,
         location_label=None,
         place_id=None,
         country=None,
@@ -152,6 +152,24 @@ def _run_feed(monkeypatch, jobs, *, env=None, refresh=None, swiped_ids=None):
         search_role=None,
     ))
     return response, calls
+
+
+def _legacy_direct_job(index, *, country_code="gb", location="London, United Kingdom", title="Marketing Manager"):
+    job = _job(index, title=title)
+    job.update({
+        "provider": "lever",
+        "ats_provider": "lever",
+        "country_code": country_code,
+        "location": location,
+        "external_url": f"https://jobs.lever.co/company/{index}",
+        "selected_apply_url": None,
+        "validation_status": None,
+        "applyability_tier": None,
+        "manual_fulfillment_ready": None,
+        "apply_fulfillment_status": None,
+        "auto_apply_supported": True,
+    })
+    return job
 
 
 def test_db_first_enough_jobs_does_not_call_jsearch(monkeypatch):
@@ -190,6 +208,44 @@ def test_zero_db_uses_limited_sync_jsearch_fallback(monkeypatch):
     assert calls["refresh_kwargs"]["provider_page_size"] == 10
     assert calls["refresh_kwargs"]["max_provider_requests_override"] == 1
     assert response["jobs"]
+
+
+def test_worldwide_uses_legacy_direct_ats_when_validated_cache_empty(monkeypatch):
+    response, calls = _run_feed(
+        monkeypatch,
+        [
+            _legacy_direct_job(1, country_code="gb", location="London, United Kingdom"),
+            _legacy_direct_job(2, country_code="us", location="New York, United States"),
+        ],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+        search_radius="worldwide",
+    )
+    assert calls["refresh"] == 0
+    assert {job["job_id"] for job in response["jobs"]} == {"job_1", "job_2"}
+
+
+def test_worldwide_legacy_direct_ats_can_include_unknown_location(monkeypatch):
+    job = _legacy_direct_job(1, country_code="", location="")
+    response, _calls = _run_feed(
+        monkeypatch,
+        [job],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+        search_radius="worldwide",
+    )
+    assert [job["job_id"] for job in response["jobs"]] == ["job_1"]
+
+
+def test_only_my_country_still_filters_legacy_direct_ats(monkeypatch):
+    response, _calls = _run_feed(
+        monkeypatch,
+        [
+            _legacy_direct_job(1, country_code="fr", location="Paris, France"),
+            _legacy_direct_job(2, country_code="gb", location="London, United Kingdom"),
+        ],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+        only_my_country=True,
+    )
+    assert [job["job_id"] for job in response["jobs"]] == ["job_1"]
 
 
 def test_slow_sync_jsearch_fallback_times_out_and_sets_cooldown(monkeypatch):

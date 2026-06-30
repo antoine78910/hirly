@@ -4010,6 +4010,44 @@ async def get_feed(
             )
             return rows, query, unfiltered, applyable, rejected
 
+        async def _load_legacy_direct_ats_candidates() -> tuple[List[Dict[str, Any]], Dict[str, Any], int, int, int]:
+            query: Dict[str, Any] = {
+                "provider": {"$in": ats_supported},
+                "auto_apply_supported": True,
+            }
+            db_started = time.perf_counter()
+            rows = await _get_feed_job_candidates(query, candidate_limit)
+            db_elapsed_ms = int((time.perf_counter() - db_started) * 1000)
+            rows = [job for job in rows if job.get("job_id") not in swiped_ids]
+            unfiltered = len(rows)
+            rejected = sum(
+                1
+                for job in rows
+                if str(job.get("validation_status") or "").lower() == "invalid"
+                or str(job.get("applyability_tier") or "").upper() in {"D", "E"}
+            )
+            rows = [
+                _with_apply_fulfillment_fields(job)
+                for job in rows
+                if not job.get("validation_status")
+                and str(job.get("applyability_tier") or "").upper() not in {"D", "E"}
+                and str(job.get("provider") or "").lower() in set(ats_supported)
+                and _job_is_applyable(job)
+            ]
+            applyable = len(rows)
+            rows = [job for job in rows if _matches_explicit_filters(job)]
+            rows.sort(key=_quality_sort_key)
+            logger.info(
+                "jobs/feed legacy_direct_ats_query_complete: user_id=%s elapsed_ms=%s query=%s raw_rows=%s applyable=%s filtered=%s",
+                user.user_id,
+                db_elapsed_ms,
+                query,
+                unfiltered,
+                applyable,
+                len(rows),
+            )
+            return rows, query, unfiltered, applyable, rejected
+
         base_query = _validated_cache_query(include_unknown=False)
         candidates: List[Dict[str, Any]] = []
         unfiltered_count = 0
@@ -4055,6 +4093,23 @@ async def get_feed(
                     len(candidates),
                     c_unfiltered,
                 )
+            if db_good_count == 0 and not allow_unknown_tier:
+                legacy_candidates, legacy_query, legacy_unfiltered, legacy_applyable, legacy_rejected = await _load_legacy_direct_ats_candidates()
+                if legacy_candidates:
+                    candidates = legacy_candidates
+                    base_query = legacy_query
+                    unfiltered_count = legacy_unfiltered
+                    applyable_count = legacy_applyable
+                    db_rejected_count += legacy_rejected
+                    db_good_count = sum(1 for job in candidates if _role_compatible_for_threshold(job))
+                    pre_filter_candidates = list(candidates)
+                    feed_source = "legacy_direct_ats_cache"
+                    logger.info(
+                        "jobs/feed legacy_direct_ats_used: user_id=%s good_count=%s candidate_count=%s",
+                        user.user_id,
+                        db_good_count,
+                        len(candidates),
+                    )
 
         cooldown_active = time.monotonic() < _feed_sync_refresh_cooldown_until
         should_refresh = (
