@@ -97,6 +97,7 @@ from ats_source_service import (
     refresh_known_ats_sources,
 )
 from job_validation import cheap_validate_job_applyability
+from location_intelligence import expand_location_radius, normalize_place_name
 from location_search import search_locations
 from llm_client import LLMProviderNotConfigured, complete_json_text
 from onboarding_suggestions import suggest_categories, suggest_roles
@@ -3929,6 +3930,120 @@ async def get_feed(
             return list(dict.fromkeys(values))
 
         selected_country_codes = _country_codes_from_locations()
+        location_intelligence_enabled = _env_bool("JOBS_LOCATION_INTELLIGENCE_ENABLED", True)
+        location_max_expanded_cities = max(1, min(_env_int("JOBS_LOCATION_MAX_EXPANDED_CITIES", 10), 50))
+        location_min_radius_km = max(1, _env_int("JOBS_LOCATION_MIN_RADIUS_KM", 10))
+        location_include_cross_border = _env_bool("JOBS_LOCATION_INCLUDE_CROSS_BORDER", True) and not only_my_country
+        location_min_population = max(0, _env_int("JOBS_LOCATION_MIN_POPULATION", 1000))
+
+        async def _build_location_context() -> Dict[str, Any]:
+            context: Dict[str, Any] = {
+                "enabled": False,
+                "used": False,
+                "radius_km": radius_km,
+                "origin_locations": [],
+                "expanded_places": [],
+                "city_terms": [],
+                "country_codes": selected_country_codes,
+                "include_cross_border": location_include_cross_border,
+                "reason": None,
+            }
+            if not location_intelligence_enabled:
+                context["reason"] = "disabled"
+                return context
+            if radius_km is None or radius_scope in ("worldwide", "remote", "remote/worldwide"):
+                context["reason"] = "non_numeric_or_global_radius"
+                return context
+            if radius_km < location_min_radius_km:
+                context["reason"] = "radius_below_minimum"
+                return context
+            if not selected_locations:
+                context["reason"] = "no_selected_locations"
+                return context
+
+            context["enabled"] = True
+            expanded: List[Dict[str, Any]] = []
+            seen = set()
+            per_location_cap = max(location_max_expanded_cities, 1)
+            for loc in selected_locations[:5]:
+                label = str(loc.get("location_label") or loc.get("label") or "").strip()
+                country_hint = str(loc.get("country_code") or "").lower().strip() or None
+                loc_lat = loc.get("lat")
+                loc_lng = loc.get("lng")
+                context["origin_locations"].append({
+                    "location_label": label,
+                    "country_code": country_hint,
+                    "has_coordinates": loc_lat not in (None, "") and loc_lng not in (None, ""),
+                })
+                try:
+                    places = await expand_location_radius(
+                        location_label=label,
+                        lat=loc_lat,
+                        lng=loc_lng,
+                        country_hint=country_hint,
+                        radius_km=radius_km,
+                        max_cities=per_location_cap,
+                        include_cross_border=location_include_cross_border,
+                        min_population=location_min_population,
+                        db=db,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "jobs/feed location_intelligence_failed label=%s radius_km=%s error=%s",
+                        label,
+                        radius_km,
+                        f"{exc.__class__.__name__}: {str(exc)[:160]}",
+                    )
+                    continue
+                for place in places:
+                    key = f"{normalize_place_name(place.get('name') or place.get('ascii_name'))}:{str(place.get('country_code') or '').lower()}"
+                    if not key or key in seen:
+                        continue
+                    seen.add(key)
+                    expanded.append(place)
+                    if len(expanded) >= location_max_expanded_cities:
+                        break
+                if len(expanded) >= location_max_expanded_cities:
+                    break
+
+            city_terms: List[str] = []
+            country_codes: List[str] = []
+            for place in expanded:
+                names = [
+                    place.get("name"),
+                    place.get("ascii_name"),
+                    place.get("normalized_name"),
+                    *(place.get("alternate_names") or []),
+                ]
+                for name in names:
+                    normalized = normalize_place_name(str(name or ""))
+                    if normalized:
+                        city_terms.append(normalized)
+                code = str(place.get("country_code") or "").lower().strip()
+                if code:
+                    country_codes.append(code)
+            context["expanded_places"] = expanded
+            context["city_terms"] = list(dict.fromkeys(city_terms))
+            context["country_codes"] = list(dict.fromkeys(country_codes or selected_country_codes))
+            context["used"] = bool(expanded)
+            context["reason"] = "expanded" if expanded else "no_places_found"
+            return context
+
+        location_context = await _build_location_context()
+        expanded_city_terms = location_context.get("city_terms") or []
+        expanded_country_codes = location_context.get("country_codes") or selected_country_codes
+        logger.info(
+            "jobs/feed location_intelligence user_id=%s enabled=%s used=%s radius_km=%s origins=%s expanded=%s countries=%s cross_border=%s reason=%s",
+            user.user_id,
+            location_context.get("enabled"),
+            location_context.get("used"),
+            location_context.get("radius_km"),
+            len(location_context.get("origin_locations") or []),
+            len(location_context.get("expanded_places") or []),
+            expanded_country_codes,
+            location_context.get("include_cross_border"),
+            location_context.get("reason"),
+        )
 
         def _validated_cache_query(*, include_unknown: bool = False) -> Dict[str, Any]:
             query: Dict[str, Any] = {
@@ -3936,8 +4051,9 @@ async def get_feed(
             }
             if not include_unknown:
                 query["validation_status"] = "valid"
-            if selected_country_codes and radius_scope not in ("worldwide", "remote", "remote/worldwide"):
-                query["country_code"] = {"$in": selected_country_codes}
+            country_filter_codes = expanded_country_codes if location_context.get("used") else selected_country_codes
+            if country_filter_codes and radius_scope not in ("worldwide", "remote", "remote/worldwide"):
+                query["country_code"] = {"$in": country_filter_codes}
             if posted_within and posted_within != "any":
                 days_map = {"1d": 1, "7d": 7, "30d": 30}
                 days = days_map.get(posted_within)
@@ -3989,6 +4105,36 @@ async def get_feed(
                 return "onsite"
             return "unknown"
 
+        def _normalized_job_location_text(job: Dict[str, Any]) -> str:
+            return normalize_place_name(" ".join([
+                str(job.get("city") or ""),
+                str(job.get("region") or ""),
+                str(job.get("location") or ""),
+                str((job.get("data") or {}).get("location") or "") if isinstance(job.get("data"), dict) else "",
+            ]))
+
+        def _expanded_location_match(job: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+            if not location_context.get("used"):
+                return None
+            job_text = _normalized_job_location_text(job)
+            job_country_code = str(job.get("country_code") or "").lower().strip()
+            if not job_text and not job_country_code:
+                return None
+            for place in location_context.get("expanded_places") or []:
+                place_country = str(place.get("country_code") or "").lower().strip()
+                if place_country and job_country_code and place_country != job_country_code:
+                    continue
+                names = [
+                    place.get("name"),
+                    place.get("ascii_name"),
+                    place.get("normalized_name"),
+                    *(place.get("alternate_names") or []),
+                ]
+                normalized_names = [normalize_place_name(str(name or "")) for name in names]
+                if any(name and name in job_text for name in normalized_names):
+                    return place
+            return None
+
         def _matches_work_location(job: Dict[str, Any]) -> bool:
             if not work_location:
                 return True
@@ -4013,9 +4159,10 @@ async def get_feed(
             job_location = str(job.get("location") or "").lower()
             job_country_code = str(job.get("country_code") or "").lower().strip()
             if not job_location and not job_country_code:
-                if explicit_location_filter and radius_km is not None:
-                    return False
                 return include_unknown_location
+            expanded_match = _expanded_location_match(job)
+            if expanded_match:
+                return True
             city_match = bool(selected_city_terms and any(term in job_location for term in selected_city_terms))
             country_match = bool(
                 (selected_country_terms and any(term in job_location for term in selected_country_terms))
@@ -4030,6 +4177,8 @@ async def get_feed(
             if radius_scope in ("worldwide", "remote", "remote/worldwide"):
                 return True
             if radius_km is not None:
+                if location_context.get("used"):
+                    return False
                 return city_match if selected_city_terms else country_match
             return city_match or country_match
 
@@ -4156,6 +4305,15 @@ async def get_feed(
             query = _validated_cache_query(include_unknown=include_unknown)
             db_started = time.perf_counter()
             rows = await _get_feed_job_candidates(query, candidate_limit)
+            if include_unknown_location and "country_code" in query:
+                unknown_query = {key: value for key, value in query.items() if key != "country_code"}
+                unknown_rows = await _get_feed_job_candidates(unknown_query, min(candidate_limit, 500))
+                seen_ids = {row.get("job_id") for row in rows}
+                for row in unknown_rows:
+                    has_location = bool(row.get("location") or row.get("city") or row.get("region") or row.get("country_code"))
+                    if not has_location and row.get("job_id") not in seen_ids:
+                        rows.append(row)
+                        seen_ids.add(row.get("job_id"))
             db_elapsed_ms = int((time.perf_counter() - db_started) * 1000)
             rows = [job for job in rows if job.get("job_id") not in swiped_ids]
             unfiltered = len(rows)
@@ -4439,13 +4597,28 @@ async def get_feed(
             explicit_filters,
         )
 
+        def _feed_location_score(job: Dict[str, Any], *, worldwide: bool) -> int:
+            if worldwide:
+                return 10
+            expanded_match = _expanded_location_match(job)
+            if expanded_match:
+                distance = float(expanded_match.get("distance_km") or 0)
+                if expanded_match.get("is_origin"):
+                    return 75
+                distance_score = max(0, 45 - int(distance))
+                population_bonus = min(15, int((int(expanded_match.get("population") or 0) ** 0.5) / 40))
+                return 30 + distance_score + population_bonus
+            if include_unknown_location and not (job.get("location") or job.get("city") or job.get("region") or job.get("country_code")):
+                return 5
+            return _location_score(job, terms, worldwide=False)
+
         def rank(pool: List[Dict[str, Any]], *, worldwide: bool, broad: bool, any_role: bool = False) -> List[Dict[str, Any]]:
             ranked = []
             for job in pool:
                 if not any_role and not _category_compatible(job):
                     continue
                 role_score = 10 if any_role else _role_score(job, strict_tokens if not broad else [], family_tokens)
-                location_score = _location_score(job, terms, worldwide=worldwide)
+                location_score = _feed_location_score(job, worldwide=worldwide)
                 if not worldwide and _is_current_provider_job(job):
                     location_score = max(location_score, 35)
                 if not worldwide and terms["labels"] and location_score <= 0:
@@ -4619,6 +4792,24 @@ async def get_feed(
                 "selected_city_terms": selected_city_terms,
                 "selected_country_terms": selected_country_terms,
                 "selected_country_codes": selected_country_codes,
+                "location_intelligence": {
+                    "enabled": location_context.get("enabled"),
+                    "used": location_context.get("used"),
+                    "reason": location_context.get("reason"),
+                    "radius_km": location_context.get("radius_km"),
+                    "include_cross_border": location_context.get("include_cross_border"),
+                    "expanded_country_codes": expanded_country_codes,
+                    "expanded_places": [
+                        {
+                            "name": place.get("name"),
+                            "country_code": place.get("country_code"),
+                            "distance_km": place.get("distance_km"),
+                            "population": place.get("population"),
+                            "is_origin": bool(place.get("is_origin")),
+                        }
+                        for place in (location_context.get("expanded_places") or [])[:20]
+                    ],
+                },
                 "only_my_country": only_my_country,
                 "min_salary": min_salary,
                 "posted_within": posted_within,

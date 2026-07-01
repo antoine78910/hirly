@@ -15,6 +15,11 @@ These variables control the DB-first job cache, validation gates, maintenance en
 | `JOBS_FEED_SYNC_REFRESH_COOLDOWN_SECONDS` | `300` | `300` | `300` | Too low can repeat slow provider calls; too high delays automatic recovery after a temporary provider issue. |
 | `JSEARCH_FEED_FALLBACK_MAX_PAGES` | `1` | `1` | `1` | Higher values make user feed requests wait on more provider pages. Use admin refresh for broader backfill. |
 | `JSEARCH_FEED_FALLBACK_PAGE_SIZE` | `10` | `10` | `10` | Higher values can slow provider/import work inside a user request. |
+| `JOBS_LOCATION_INTELLIGENCE_ENABLED` | `true` | `true` | `true` | If false, numeric radius search falls back to exact city/country text behavior. |
+| `JOBS_LOCATION_MAX_EXPANDED_CITIES` | `10` | `10` | `10` | Too low can miss nearby job hubs; too high can broaden DB filtering too much. |
+| `JOBS_LOCATION_MIN_RADIUS_KM` | `10` | `10` | `10` | Below this radius, feed uses exact/origin behavior to avoid over-expansion. |
+| `JOBS_LOCATION_INCLUDE_CROSS_BORDER` | `true` | `true` | `true` | If false, border searches will not include nearby cities in another country unless `only_my_country` is already intended. |
+| `JOBS_LOCATION_MIN_POPULATION` | `1000` | `1000` | `1000` | Too high can miss small towns; too low can add villages that are not useful job markets. |
 | `JOBS_MAINTENANCE_ENABLED` | `true` | `true` | `true` | If false, admin refresh/revalidate/maintenance endpoints are disabled. |
 | `JOBS_MAINTENANCE_DEFAULT_COUNTRY` | `FR` | `FR` | `FR` | Wrong country can refresh irrelevant markets. |
 | `JOBS_MAINTENANCE_REVALIDATE_LIMIT` | `100` | `100` | `100` | Too high can create slow admin requests; too low slows cleanup. |
@@ -44,6 +49,12 @@ JOBS_FEED_SYNC_REFRESH_MAX_RESULTS=20
 JOBS_FEED_SYNC_REFRESH_COOLDOWN_SECONDS=300
 JSEARCH_FEED_FALLBACK_MAX_PAGES=1
 JSEARCH_FEED_FALLBACK_PAGE_SIZE=10
+
+JOBS_LOCATION_INTELLIGENCE_ENABLED=true
+JOBS_LOCATION_MAX_EXPANDED_CITIES=10
+JOBS_LOCATION_MIN_RADIUS_KM=10
+JOBS_LOCATION_INCLUDE_CROSS_BORDER=true
+JOBS_LOCATION_MIN_POPULATION=1000
 
 JOBS_MAINTENANCE_ENABLED=true
 JOBS_MAINTENANCE_DEFAULT_COUNTRY=FR

@@ -1,5 +1,7 @@
 import asyncio
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 
 import server
 
@@ -36,8 +38,9 @@ class _Collection:
 
 
 class _FakeDB:
-    def __init__(self, jobs, profile, swipes=None):
+    def __init__(self, jobs, profile, swipes=None, geo_places=None):
         self.jobs = _Collection(jobs)
+        self.geo_places = _Collection(geo_places or [])
         self.profiles = _Collection([profile])
         self.swipes = _Collection(swipes or [])
 
@@ -94,7 +97,34 @@ def _job(index, *, tier="A", status="valid", title="Marketing Manager", swiped=F
     }
 
 
-def _run_feed(monkeypatch, jobs, *, env=None, refresh=None, swiped_ids=None, search_radius="50km", only_my_country=False):
+def _geo_places():
+    path = Path(__file__).parent / "fixtures" / "geo_places_sample.json"
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _location_payload(name="Ciboure", *, country_code="fr", lat=43.3849, lng=-1.6682):
+    return json.dumps([{
+        "location_label": f"{name}, France" if country_code == "fr" else name,
+        "country": "France" if country_code == "fr" else "",
+        "country_code": country_code,
+        "lat": lat,
+        "lng": lng,
+    }])
+
+
+def _run_feed(
+    monkeypatch,
+    jobs,
+    *,
+    env=None,
+    refresh=None,
+    swiped_ids=None,
+    search_radius="50km",
+    only_my_country=False,
+    locations_json=None,
+    include_unknown_location=True,
+    geo_places=None,
+):
     env = env or {}
     for key, value in {
         "JOBS_DB_FIRST_ENABLED": "true",
@@ -105,7 +135,7 @@ def _run_feed(monkeypatch, jobs, *, env=None, refresh=None, swiped_ids=None, sea
     }.items():
         monkeypatch.setenv(key, value)
     swipes = [{"user_id": "user_1", "job_id": job_id} for job_id in (swiped_ids or [])]
-    fake_db = _FakeDB(jobs, _profile(), swipes)
+    fake_db = _FakeDB(jobs, _profile(), swipes, geo_places=geo_places)
     monkeypatch.setattr(server, "db", fake_db)
     server._feed_job_pool_cache.update({"query_key": "", "rows": [], "fetched_at": 0.0})
     calls = {"refresh": 0}
@@ -136,11 +166,11 @@ def _run_feed(monkeypatch, jobs, *, env=None, refresh=None, swiped_ids=None, sea
         hide_company=None,
         only_industry=None,
         hide_industry=None,
-        include_unknown_location=True,
+        include_unknown_location=include_unknown_location,
         include_unknown_salary=True,
         include_non_auto_apply=False,
         search_radius=search_radius,
-        locations_json=None,
+        locations_json=locations_json,
         only_my_country=only_my_country,
         location_label=None,
         place_id=None,
@@ -357,6 +387,187 @@ def test_only_my_country_still_filters_legacy_direct_ats(monkeypatch):
         only_my_country=True,
     )
     assert [job["job_id"] for job in response["jobs"]] == ["job_1"]
+
+
+def test_ciboure_radius_returns_cached_biarritz_job(monkeypatch):
+    biarritz = _job(1)
+    biarritz.update({"location": "Biarritz, France", "city": "Biarritz", "country_code": "fr"})
+    response, calls = _run_feed(
+        monkeypatch,
+        [biarritz],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+        locations_json=_location_payload(),
+        geo_places=_geo_places(),
+    )
+    assert calls["refresh"] == 0
+    assert [job["job_id"] for job in response["jobs"]] == ["job_1"]
+    assert response["filters_applied"]["location_intelligence"]["used"] is True
+
+
+def test_ciboure_radius_returns_cached_bayonne_and_anglet_jobs(monkeypatch):
+    bayonne = _job(1)
+    bayonne.update({"location": "Bayonne, France", "city": "Bayonne", "country_code": "fr"})
+    anglet = _job(2)
+    anglet.update({"location": "Anglet, France", "city": "Anglet", "country_code": "fr"})
+    response, _calls = _run_feed(
+        monkeypatch,
+        [bayonne, anglet],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+        locations_json=_location_payload(),
+        geo_places=_geo_places(),
+    )
+    assert {job["job_id"] for job in response["jobs"]} == {"job_1", "job_2"}
+
+
+def test_ciboure_radius_returns_cross_border_jobs_when_enabled(monkeypatch):
+    irun = _job(1)
+    irun.update({"location": "Irun, Spain", "city": "Irun", "country_code": "es"})
+    san_sebastian = _job(2)
+    san_sebastian.update({"location": "San Sebastián, Spain", "city": "San Sebastián", "country_code": "es"})
+    response, _calls = _run_feed(
+        monkeypatch,
+        [irun, san_sebastian],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false", "JOBS_LOCATION_INCLUDE_CROSS_BORDER": "true"},
+        locations_json=_location_payload(),
+        geo_places=_geo_places(),
+    )
+    assert {job["job_id"] for job in response["jobs"]} == {"job_1", "job_2"}
+    assert set(response["filters_applied"]["location_intelligence"]["expanded_country_codes"]) >= {"fr", "es"}
+
+
+def test_ciboure_radius_excludes_cross_border_when_only_my_country(monkeypatch):
+    fr_job = _job(1)
+    fr_job.update({"location": "Biarritz, France", "city": "Biarritz", "country_code": "fr"})
+    es_job = _job(2)
+    es_job.update({"location": "Irun, Spain", "city": "Irun", "country_code": "es"})
+    response, _calls = _run_feed(
+        monkeypatch,
+        [fr_job, es_job],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+        locations_json=_location_payload(),
+        geo_places=_geo_places(),
+        only_my_country=True,
+    )
+    assert [job["job_id"] for job in response["jobs"]] == ["job_1"]
+    assert response["filters_applied"]["location_intelligence"]["include_cross_border"] is False
+
+
+def test_ciboure_radius_excludes_cross_border_when_env_disabled(monkeypatch):
+    es_job = _job(1)
+    es_job.update({"location": "Irun, Spain", "city": "Irun", "country_code": "es"})
+    response, _calls = _run_feed(
+        monkeypatch,
+        [es_job],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false", "JOBS_LOCATION_INCLUDE_CROSS_BORDER": "false"},
+        locations_json=_location_payload(),
+        geo_places=_geo_places(),
+    )
+    assert response["jobs"] == []
+
+
+def test_worldwide_skips_location_intelligence_expansion(monkeypatch):
+    london = _job(1)
+    london.update({"location": "London, United Kingdom", "city": "London", "country_code": "gb"})
+    response, _calls = _run_feed(
+        monkeypatch,
+        [london],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+        search_radius="worldwide",
+        locations_json=_location_payload(),
+        geo_places=_geo_places(),
+    )
+    assert response["jobs"]
+    assert response["filters_applied"]["location_intelligence"]["used"] is False
+    assert response["filters_applied"]["location_intelligence"]["reason"] == "non_numeric_or_global_radius"
+
+
+def test_radius_below_minimum_does_not_over_expand(monkeypatch):
+    biarritz = _job(1)
+    biarritz.update({"location": "Biarritz, France", "city": "Biarritz", "country_code": "fr"})
+    response, _calls = _run_feed(
+        monkeypatch,
+        [biarritz],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false", "JOBS_LOCATION_MIN_RADIUS_KM": "100"},
+        locations_json=_location_payload(),
+        geo_places=_geo_places(),
+    )
+    assert response["jobs"] == []
+    assert response["filters_applied"]["location_intelligence"]["reason"] == "radius_below_minimum"
+
+
+def test_multiple_selected_locations_merge_expanded_places(monkeypatch):
+    biarritz = _job(1)
+    biarritz.update({"location": "Biarritz, France", "city": "Biarritz", "country_code": "fr"})
+    london = _job(2)
+    london.update({"location": "London, United Kingdom", "city": "London", "country_code": "gb"})
+    locations = json.dumps([
+        {"location_label": "Ciboure, France", "country_code": "fr", "lat": 43.3849, "lng": -1.6682},
+        {"location_label": "London, United Kingdom", "country_code": "gb", "lat": 51.5074, "lng": -0.1278},
+    ])
+    response, _calls = _run_feed(
+        monkeypatch,
+        [biarritz, london],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false", "JOBS_LOCATION_MAX_EXPANDED_CITIES": "20"},
+        locations_json=locations,
+        geo_places=_geo_places(),
+    )
+    assert {job["job_id"] for job in response["jobs"]} == {"job_1", "job_2"}
+
+
+def test_include_unknown_location_still_includes_unknown_with_radius_expansion(monkeypatch):
+    unknown = _job(1)
+    unknown.update({"location": "", "city": "", "region": "", "country_code": ""})
+    response, _calls = _run_feed(
+        monkeypatch,
+        [unknown],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+        locations_json=_location_payload(),
+        geo_places=_geo_places(),
+        include_unknown_location=True,
+    )
+    assert [job["job_id"] for job in response["jobs"]] == ["job_1"]
+
+
+def test_invalid_de_jobs_remain_excluded_with_location_intelligence(monkeypatch):
+    invalid = _job(1, tier="D", status="invalid")
+    invalid.update({"location": "Biarritz, France", "city": "Biarritz", "country_code": "fr"})
+    response, _calls = _run_feed(
+        monkeypatch,
+        [invalid],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+        locations_json=_location_payload(),
+        geo_places=_geo_places(),
+    )
+    assert response["jobs"] == []
+
+
+def test_already_swiped_jobs_remain_excluded_with_location_intelligence(monkeypatch):
+    biarritz = _job(1)
+    biarritz.update({"location": "Biarritz, France", "city": "Biarritz", "country_code": "fr"})
+    response, _calls = _run_feed(
+        monkeypatch,
+        [biarritz],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+        locations_json=_location_payload(),
+        geo_places=_geo_places(),
+        swiped_ids=["job_1"],
+    )
+    assert response["jobs"] == []
+
+
+def test_existing_validated_a_b_jobs_remain_preferred(monkeypatch):
+    a_job = _job(1, tier="A")
+    a_job.update({"location": "Biarritz, France", "city": "Biarritz", "country_code": "fr"})
+    b_job = _job(2, tier="B")
+    b_job.update({"location": "Bayonne, France", "city": "Bayonne", "country_code": "fr"})
+    response, _calls = _run_feed(
+        monkeypatch,
+        [b_job, a_job],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+        locations_json=_location_payload(),
+        geo_places=_geo_places(),
+    )
+    assert response["jobs"][0]["job_id"] == "job_1"
 
 
 def test_slow_sync_jsearch_fallback_times_out_and_sets_cooldown(monkeypatch):
