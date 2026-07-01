@@ -9,12 +9,20 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
 
+from ats_source_service import (
+    discover_ats_sources_from_cached_jobs,
+    refresh_known_ats_sources,
+    run_ats_direct_maintenance,
+)
+from job_providers import get_job_provider
+from job_providers.base import JobSearchQuery
 from job_validation import cheap_validate_job_applyability
-from jobs_service import refresh_jobs_for_profile_if_needed
-from ats_source_service import run_ats_direct_maintenance
+from jobs_service import refresh_jobs_for_profile_if_needed, upsert_imported_jobs
+from location_intelligence import country_to_jsearch_language, expand_location_radius
 
 
 logger = logging.getLogger(__name__)
@@ -44,6 +52,13 @@ async def refresh_jobs_for_query_or_filters(
     search_role: Optional[str] = None,
     location: Optional[str] = None,
     country_code: Optional[str] = None,
+    lat: Optional[float] = None,
+    lng: Optional[float] = None,
+    search_radius: Optional[str] = None,
+    include_cross_border: Optional[bool] = None,
+    discover_ats_sources: bool = False,
+    refresh_discovered_ats_sources: bool = False,
+    ats_refresh_limit: Optional[int] = None,
     remote: Optional[bool] = None,
     limit: Optional[int] = None,
     dry_run: bool = False,
@@ -52,6 +67,30 @@ async def refresh_jobs_for_query_or_filters(
     country = (country_code or default_country_code()).strip().lower()
     role = (search_role or "marketing").strip()
     location_label = (location or _default_location_for_country(country)).strip()
+    radius_km = _parse_radius_km(search_radius)
+    if (
+        env_bool("JOBS_ADMIN_LOCATION_EXPANSION_ENABLED", True)
+        and location_label
+        and radius_km is not None
+        and radius_km >= env_int("JOBS_ADMIN_LOCATION_MIN_RADIUS_KM", 10)
+    ):
+        return await _refresh_jobs_for_expanded_locations(
+            db,
+            role=role,
+            location_label=location_label,
+            country_code=country,
+            lat=lat,
+            lng=lng,
+            radius_km=radius_km,
+            include_cross_border=include_cross_border,
+            refresh_limit=refresh_limit,
+            dry_run=dry_run,
+            discover_ats_sources=discover_ats_sources,
+            refresh_discovered_ats_sources=refresh_discovered_ats_sources,
+            ats_refresh_limit=ats_refresh_limit,
+            remote=remote,
+        )
+
     profile = _synthetic_profile(role, location_label, country, remote)
     summary = _empty_refresh_summary(dry_run=dry_run)
     summary.update({
@@ -59,6 +98,8 @@ async def refresh_jobs_for_query_or_filters(
         "location": location_label,
         "country_code": country,
         "limit": refresh_limit,
+        "search_radius": search_radius or "50km",
+        "location_expansion_used": False,
     })
 
     logger.info(
@@ -83,7 +124,7 @@ async def refresh_jobs_for_query_or_filters(
             target_auto_apply_count=refresh_limit,
             location_override=location_label,
             location_data_override=profile["target_location_data"],
-            search_radius="50km" if location_label else "country",
+            search_radius=search_radius or ("50km" if location_label else "country"),
             role_override=role,
             force_provider_refresh=True,
         )
@@ -105,6 +146,192 @@ async def refresh_jobs_for_query_or_filters(
         logger.exception("job_cache_refresh_failed role=%s location=%s", role, location_label)
         summary["errors"].append(f"{exc.__class__.__name__}: {str(exc)[:200]}")
         return summary
+
+
+async def _refresh_jobs_for_expanded_locations(
+    db,
+    *,
+    role: str,
+    location_label: str,
+    country_code: str,
+    lat: Optional[float],
+    lng: Optional[float],
+    radius_km: int,
+    include_cross_border: Optional[bool],
+    refresh_limit: int,
+    dry_run: bool,
+    discover_ats_sources: bool,
+    refresh_discovered_ats_sources: bool,
+    ats_refresh_limit: Optional[int],
+    remote: Optional[bool],
+) -> Dict[str, Any]:
+    max_cities = max(1, min(env_int("JOBS_ADMIN_LOCATION_MAX_CITIES", 8), 50))
+    query_budget = max(1, min(env_int("JOBS_ADMIN_LOCATION_PROVIDER_QUERY_BUDGET", 8), 50))
+    cross_border = env_bool("JOBS_ADMIN_LOCATION_INCLUDE_CROSS_BORDER", True) if include_cross_border is None else bool(include_cross_border)
+    min_population = max(0, env_int("JOBS_ADMIN_LOCATION_MIN_POPULATION", 1000))
+    expanded_places = await expand_location_radius(
+        location_label=location_label,
+        lat=lat,
+        lng=lng,
+        country_hint=country_code,
+        radius_km=radius_km,
+        max_cities=max_cities,
+        include_cross_border=cross_border,
+        min_population=min_population,
+        db=db,
+    )
+    expanded_places = _dedupe_expanded_places(expanded_places)[:query_budget]
+    if not expanded_places:
+        logger.info("job_cache_location_expansion_empty role=%s location=%s radius_km=%s; falling back", role, location_label, radius_km)
+        profile = _synthetic_profile(role, location_label, country_code, remote)
+        result = await refresh_jobs_for_profile_if_needed(
+            db,
+            profile,
+            require_auto_apply=False,
+            target_auto_apply_count=refresh_limit,
+            location_override=location_label,
+            location_data_override=profile["target_location_data"],
+            search_radius=f"{radius_km}km",
+            role_override=role,
+            force_provider_refresh=True,
+        )
+        summary = _empty_refresh_summary(dry_run=dry_run)
+        jobs = [job for job in (result.get("jobs") or []) if isinstance(job, dict)]
+        summary.update({
+            "search_role": role,
+            "location": location_label,
+            "country_code": country_code,
+            "search_radius": f"{radius_km}km",
+            "location_expansion_used": False,
+            "jsearch_called": bool(result.get("attempted")),
+            "discovered_count": len(jobs),
+            "imported_count": int(result.get("imported") or result.get("jobs_imported") or len(jobs) or 0),
+            **_validation_counts(jobs),
+        })
+        return summary
+
+    summary = _empty_refresh_summary(dry_run=dry_run)
+    summary.update({
+        "search_role": role,
+        "location": location_label,
+        "country_code": country_code,
+        "search_radius": f"{radius_km}km",
+        "location_expansion_used": True,
+        "include_cross_border": cross_border,
+        "expanded_locations": [_public_place_summary(place) for place in expanded_places],
+        "provider_queries_attempted": 0,
+        "provider_results_by_location": {},
+        "provider_query_budget": query_budget,
+        "deduped_count": 0,
+        "validated_counts": {"A": 0, "B": 0, "C": 0, "D": 0, "E": 0, "unknown": 0},
+        "direct_ats_sources_discovered": 0,
+        "direct_ats_sources_refreshed": 0,
+        "ats_discovery": None,
+        "ats_refresh": None,
+    })
+    logger.info(
+        "job_cache_location_expanded_refresh_start role=%s origin=%s radius_km=%s expanded=%s budget=%s dry_run=%s",
+        role,
+        location_label,
+        radius_km,
+        [f"{p.get('name')}:{p.get('country_code')}" for p in expanded_places],
+        query_budget,
+        dry_run,
+    )
+    if dry_run:
+        summary["reason"] = "dry_run"
+        return summary
+
+    api_key = os.environ.get("JSEARCH_API_KEY")
+    if not api_key:
+        summary["errors"].append("missing_jsearch_api_key")
+        return summary
+    provider = get_job_provider(os.environ.get("JOB_PROVIDER_PRIMARY", "jsearch"), api_key)
+    per_query_limit = max(1, min(refresh_limit, env_int("JOBS_ADMIN_LOCATION_REFRESH_RESULTS_PER_CITY", 30), 100))
+    page_size = max(5, min(env_int("JSEARCH_FEED_FALLBACK_PAGE_SIZE", 10), 50))
+    max_pages = max(1, min(env_int("JSEARCH_FEED_FALLBACK_MAX_PAGES", 1), 3))
+    imported_job_ids = set()
+    all_imported_jobs: List[Dict[str, Any]] = []
+
+    for place in expanded_places:
+        if int(summary["provider_queries_attempted"]) >= query_budget:
+            break
+        place_country = str(place.get("country_code") or country_code or "").lower() or None
+        query = JobSearchQuery(
+            role=role,
+            location=_jsearch_location_label(place),
+            remote_preference="remote" if remote else "any",
+            country=place_country,
+            language=country_to_jsearch_language(place_country),
+            limit=per_query_limit,
+            max_pages=max_pages,
+            page_size=page_size,
+        )
+        summary["provider_queries_attempted"] += 1
+        key = f"{place.get('name')}|{place_country}"
+        try:
+            result = await provider.search(query)
+            jobs = [job for job in result.jobs if isinstance(job, dict)]
+            import_stats = await upsert_imported_jobs(db, jobs)
+            imported_jobs = [job for job in jobs if job.get("job_id") not in imported_job_ids]
+            imported_job_ids.update(job.get("job_id") for job in imported_jobs if job.get("job_id"))
+            all_imported_jobs.extend(imported_jobs)
+            summary["provider_results_by_location"][key] = {
+                "country_code": place_country,
+                "language": query.language,
+                "result_count": len(jobs),
+                "imported_count": int(import_stats.get("total_imported") or 0),
+            }
+            logger.info(
+                "job_cache_location_refresh_query_complete role=%s location=%s country=%s language=%s results=%s imported=%s",
+                role,
+                query.location,
+                query.country,
+                query.language,
+                len(jobs),
+                import_stats.get("total_imported"),
+            )
+        except Exception as exc:
+            error = f"{exc.__class__.__name__}: {str(exc)[:160]}"
+            summary["errors"].append({"location": key, "error": error})
+            summary["provider_results_by_location"][key] = {
+                "country_code": place_country,
+                "language": query.language,
+                "result_count": 0,
+                "imported_count": 0,
+                "error": error,
+            }
+            logger.warning("job_cache_location_refresh_query_failed role=%s location=%s error=%s", role, key, exc)
+
+    counts = _validation_counts(all_imported_jobs)
+    unique_count = len(imported_job_ids) or len(all_imported_jobs)
+    summary.update({
+        "jsearch_called": int(summary["provider_queries_attempted"]) > 0,
+        "discovered_count": len(all_imported_jobs),
+        "imported_count": unique_count,
+        "deduped_count": max(0, len(all_imported_jobs) - unique_count),
+        "validated_counts": _tier_counts(all_imported_jobs),
+        **counts,
+    })
+    if discover_ats_sources:
+        discovery = await discover_ats_sources_from_cached_jobs(
+            db,
+            limit=max(100, min(len(all_imported_jobs) * 5 or refresh_limit * 5, 1000)),
+            dry_run=False,
+        )
+        summary["ats_discovery"] = discovery
+        summary["direct_ats_sources_discovered"] = int(discovery.get("discovered_count") or 0)
+    if refresh_discovered_ats_sources:
+        refresh = await refresh_known_ats_sources(
+            db,
+            limit=max(1, min(int(ats_refresh_limit or env_int("JOBS_ATS_REFRESH_LIMIT", 25)), 100)),
+            dry_run=False,
+        )
+        summary["ats_refresh"] = refresh
+        summary["direct_ats_sources_refreshed"] = int(refresh.get("refreshed_sources_count") or 0)
+
+    logger.info("job_cache_location_expanded_refresh_complete summary=%s", _loggable_summary(summary))
+    return summary
 
 
 async def revalidate_cached_jobs(
@@ -363,6 +590,17 @@ def _validation_counts(jobs: List[Dict[str, Any]]) -> Dict[str, int]:
     return summary
 
 
+def _tier_counts(jobs: List[Dict[str, Any]]) -> Dict[str, int]:
+    counts = {"A": 0, "B": 0, "C": 0, "D": 0, "E": 0, "unknown": 0}
+    for job in jobs:
+        tier = str(job.get("applyability_tier") or "").upper()
+        if tier in counts and tier != "UNKNOWN":
+            counts[tier] += 1
+        else:
+            counts["unknown"] += 1
+    return counts
+
+
 def _increment_validation_count(summary: Dict[str, Any], validation: Dict[str, Any]) -> None:
     status = str(validation.get("validation_status") or "").lower()
     tier = str(validation.get("applyability_tier") or "").upper()
@@ -410,3 +648,46 @@ def _loggable_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
         compact["runs_count"] = len(compact["runs"])
         compact.pop("runs", None)
     return compact
+
+
+def _parse_radius_km(search_radius: Optional[str]) -> Optional[int]:
+    text = str(search_radius or "").strip().lower()
+    if text in {"", "worldwide", "remote", "remote/worldwide", "country", "country-wide"}:
+        return None
+    match = re.match(r"^\s*(\d+(?:\.\d+)?)\s*km\s*$", text)
+    if not match:
+        return None
+    return max(1, min(int(float(match.group(1))), 500))
+
+
+def _dedupe_expanded_places(places: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    seen = set()
+    out: List[Dict[str, Any]] = []
+    for place in places:
+        key = (
+            str(place.get("normalized_name") or place.get("name") or "").strip().lower(),
+            str(place.get("country_code") or "").strip().lower(),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(place)
+    return out
+
+
+def _public_place_summary(place: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "name": place.get("name"),
+        "ascii_name": place.get("ascii_name"),
+        "country_code": place.get("country_code"),
+        "distance_km": place.get("distance_km"),
+        "population": place.get("population"),
+        "is_origin": bool(place.get("is_origin")),
+    }
+
+
+def _jsearch_location_label(place: Dict[str, Any]) -> Optional[str]:
+    name = place.get("ascii_name") or place.get("name")
+    if not name:
+        return None
+    return str(name)

@@ -186,6 +186,194 @@ def test_refresh_limits_are_respected(monkeypatch):
     assert captured["target_auto_apply_count"] == 300
 
 
+def _expanded_basque_places():
+    return [
+        {"name": "Ciboure", "ascii_name": "Ciboure", "country_code": "fr", "distance_km": 0.0, "population": 6814, "is_origin": True},
+        {"name": "Biarritz", "ascii_name": "Biarritz", "country_code": "fr", "distance_km": 14.0, "population": 33188},
+        {"name": "Irun", "ascii_name": "Irun", "country_code": "es", "distance_km": 11.0, "population": 61983},
+        {"name": "Donostia / San Sebastián", "ascii_name": "san sebastian", "country_code": "es", "distance_km": 26.0, "population": 185357},
+    ]
+
+
+class _FakeProvider:
+    name = "jsearch"
+
+    def __init__(self):
+        self.queries = []
+
+    async def search(self, query):
+        self.queries.append(query)
+        return type("Result", (), {"jobs": [
+            _job(
+                len(self.queries),
+                job_id=f"{query.country}:{query.location}",
+                title=f"{query.role} {query.location}",
+                provider="jsearch",
+                external_id=f"{query.country}:{query.location}",
+                location=query.location,
+                country_code=query.country,
+                validation_status="valid",
+                applyability_tier="A",
+            )
+        ]})()
+
+
+def test_admin_refresh_uses_expanded_locations_and_country_language(monkeypatch):
+    provider = _FakeProvider()
+
+    async def fake_expand(*args, **kwargs):
+        assert kwargs["include_cross_border"] is True
+        return _expanded_basque_places()
+
+    async def fake_upsert(db, jobs):
+        return {"total_imported": len(jobs)}
+
+    monkeypatch.setenv("JOBS_ADMIN_LOCATION_PROVIDER_QUERY_BUDGET", "4")
+    monkeypatch.setattr(maintenance, "expand_location_radius", fake_expand)
+    monkeypatch.setattr(maintenance, "get_job_provider", lambda *args, **kwargs: provider)
+    monkeypatch.setattr(maintenance, "upsert_imported_jobs", fake_upsert)
+    monkeypatch.setenv("JSEARCH_API_KEY", "test")
+
+    result = asyncio.run(maintenance.refresh_jobs_for_query_or_filters(
+        _FakeDB(),
+        search_role="business developer",
+        location="Ciboure, France",
+        country_code="fr",
+        lat=43.384,
+        lng=-1.668,
+        search_radius="50km",
+        limit=30,
+        include_cross_border=True,
+    ))
+
+    assert result["location_expansion_used"] is True
+    assert [item["name"] for item in result["expanded_locations"]] == [
+        "Ciboure",
+        "Biarritz",
+        "Irun",
+        "Donostia / San Sebastián",
+    ]
+    assert result["provider_queries_attempted"] == 4
+    assert [(query.location, query.country, query.language) for query in provider.queries] == [
+        ("Ciboure", "fr", "fr"),
+        ("Biarritz", "fr", "fr"),
+        ("Irun", "es", "es"),
+        ("san sebastian", "es", "es"),
+    ]
+    assert result["imported_count"] == 4
+    assert result["valid_count"] == 4
+
+
+def test_admin_refresh_respects_provider_query_budget(monkeypatch):
+    provider = _FakeProvider()
+
+    async def fake_expand(*args, **kwargs):
+        return _expanded_basque_places()
+
+    async def fake_upsert(db, jobs):
+        return {"total_imported": len(jobs)}
+
+    monkeypatch.setenv("JOBS_ADMIN_LOCATION_PROVIDER_QUERY_BUDGET", "2")
+    monkeypatch.setattr(maintenance, "expand_location_radius", fake_expand)
+    monkeypatch.setattr(maintenance, "get_job_provider", lambda *args, **kwargs: provider)
+    monkeypatch.setattr(maintenance, "upsert_imported_jobs", fake_upsert)
+    monkeypatch.setenv("JSEARCH_API_KEY", "test")
+
+    result = asyncio.run(maintenance.refresh_jobs_for_query_or_filters(
+        _FakeDB(),
+        search_role="business developer",
+        location="Ciboure, France",
+        country_code="fr",
+        search_radius="50km",
+    ))
+    assert result["provider_queries_attempted"] == 2
+    assert [query.location for query in provider.queries] == ["Ciboure", "Biarritz"]
+
+
+def test_admin_refresh_cross_border_disabled_passed_to_expansion(monkeypatch):
+    captured = {}
+
+    async def fake_expand(*args, **kwargs):
+        captured.update(kwargs)
+        return [place for place in _expanded_basque_places() if place["country_code"] == "fr"]
+
+    monkeypatch.setattr(maintenance, "expand_location_radius", fake_expand)
+    result = asyncio.run(maintenance.refresh_jobs_for_query_or_filters(
+        _FakeDB(),
+        search_role="business developer",
+        location="Ciboure, France",
+        country_code="fr",
+        search_radius="50km",
+        include_cross_border=False,
+        dry_run=True,
+    ))
+    assert captured["include_cross_border"] is False
+    assert {item["country_code"] for item in result["expanded_locations"]} == {"fr"}
+
+
+def test_admin_refresh_expansion_failure_falls_back_to_old_path(monkeypatch):
+    calls = {"old": 0}
+
+    async def fake_expand(*args, **kwargs):
+        return []
+
+    async def fake_refresh(*args, **kwargs):
+        calls["old"] += 1
+        return {"attempted": True, "jobs": []}
+
+    monkeypatch.setattr(maintenance, "expand_location_radius", fake_expand)
+    monkeypatch.setattr(maintenance, "refresh_jobs_for_profile_if_needed", fake_refresh)
+    result = asyncio.run(maintenance.refresh_jobs_for_query_or_filters(
+        _FakeDB(),
+        search_role="business developer",
+        location="Unknownville",
+        country_code="fr",
+        search_radius="50km",
+    ))
+    assert calls["old"] == 1
+    assert result["location_expansion_used"] is False
+
+
+def test_admin_refresh_can_run_ats_discovery_after_expanded_import(monkeypatch):
+    provider = _FakeProvider()
+    calls = {"discover": 0, "refresh": 0}
+
+    async def fake_expand(*args, **kwargs):
+        return _expanded_basque_places()[:1]
+
+    async def fake_upsert(db, jobs):
+        return {"total_imported": len(jobs)}
+
+    async def fake_discover(*args, **kwargs):
+        calls["discover"] += 1
+        return {"discovered_count": 3}
+
+    async def fake_refresh_known(*args, **kwargs):
+        calls["refresh"] += 1
+        return {"refreshed_sources_count": 2}
+
+    monkeypatch.setattr(maintenance, "expand_location_radius", fake_expand)
+    monkeypatch.setattr(maintenance, "get_job_provider", lambda *args, **kwargs: provider)
+    monkeypatch.setattr(maintenance, "upsert_imported_jobs", fake_upsert)
+    monkeypatch.setattr(maintenance, "discover_ats_sources_from_cached_jobs", fake_discover)
+    monkeypatch.setattr(maintenance, "refresh_known_ats_sources", fake_refresh_known)
+    monkeypatch.setenv("JSEARCH_API_KEY", "test")
+
+    result = asyncio.run(maintenance.refresh_jobs_for_query_or_filters(
+        _FakeDB(),
+        search_role="business developer",
+        location="Ciboure, France",
+        country_code="fr",
+        search_radius="50km",
+        discover_ats_sources=True,
+        refresh_discovered_ats_sources=True,
+        ats_refresh_limit=10,
+    ))
+    assert calls == {"discover": 1, "refresh": 1}
+    assert result["direct_ats_sources_discovered"] == 3
+    assert result["direct_ats_sources_refreshed"] == 2
+
+
 def test_one_job_error_does_not_crash_batch(monkeypatch):
     db = _FakeDB([_job(1), _job(2)])
     original = maintenance.cheap_validate_job_applyability
@@ -214,12 +402,24 @@ def test_admin_refresh_endpoint_uses_maintenance_service(monkeypatch):
     async def fake_refresh(*args, **kwargs):
         calls["count"] += 1
         assert kwargs["search_role"] == "marketing"
+        assert kwargs["lat"] == 43.384
+        assert kwargs["lng"] == -1.668
+        assert kwargs["search_radius"] == "50km"
+        assert kwargs["include_cross_border"] is True
         return {"jsearch_called": True, "imported_count": 1, "valid_count": 1, "errors": []}
 
     monkeypatch.setattr(server, "refresh_jobs_for_query_or_filters", fake_refresh)
     monkeypatch.setenv("JOBS_MAINTENANCE_ENABLED", "true")
     admin = server.User(user_id="admin", email="anto.delbos@gmail.com", name="Admin")
-    body = server.AdminJobsRefreshRequest(search_role="marketing", location="Paris", country_code="FR")
+    body = server.AdminJobsRefreshRequest(
+        search_role="marketing",
+        location="Paris",
+        country_code="FR",
+        lat=43.384,
+        lng=-1.668,
+        search_radius="50km",
+        include_cross_border=True,
+    )
     result = asyncio.run(server.admin_jobs_refresh(body, admin=admin))
     assert calls["count"] == 1
     assert result["jsearch_called"] is True

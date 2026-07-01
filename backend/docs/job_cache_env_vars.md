@@ -20,6 +20,13 @@ These variables control the DB-first job cache, validation gates, maintenance en
 | `JOBS_LOCATION_MIN_RADIUS_KM` | `10` | `10` | `10` | Below this radius, feed uses exact/origin behavior to avoid over-expansion. |
 | `JOBS_LOCATION_INCLUDE_CROSS_BORDER` | `true` | `true` | `true` | If false, border searches will not include nearby cities in another country unless `only_my_country` is already intended. |
 | `JOBS_LOCATION_MIN_POPULATION` | `1000` | `1000` | `1000` | Too high can miss small towns; too low can add villages that are not useful job markets. |
+| `JOBS_ADMIN_LOCATION_EXPANSION_ENABLED` | `true` | `true` | `true` | If false, admin refresh uses the older single-location/country refresh path instead of radius-expanded city refresh. |
+| `JOBS_ADMIN_LOCATION_MAX_CITIES` | `8` | `8` | `8` | Too high multiplies admin JSearch calls; too low can miss nearby employment hubs. |
+| `JOBS_ADMIN_LOCATION_PROVIDER_QUERY_BUDGET` | `8` | `8` | `8` | Caps JSearch calls for one admin radius refresh. Raise only for controlled backfills. |
+| `JOBS_ADMIN_LOCATION_MIN_RADIUS_KM` | `10` | `10` | `10` | Below this radius, admin refresh falls back to the existing exact/single-location behavior. |
+| `JOBS_ADMIN_LOCATION_INCLUDE_CROSS_BORDER` | `true` | `true` | `true` | If false, admin radius refresh does not query nearby cities across borders unless explicitly requested. |
+| `JOBS_ADMIN_LOCATION_MIN_POPULATION` | `1000` | `1000` | `1000` | Too high misses small towns; too low spends calls on places with low job supply. |
+| `JOBS_ADMIN_LOCATION_REFRESH_RESULTS_PER_CITY` | `30` | `30` | `30` | Caps provider results requested per expanded city during admin refresh. |
 | `JOBS_MAINTENANCE_ENABLED` | `true` | `true` | `true` | If false, admin refresh/revalidate/maintenance endpoints are disabled. |
 | `JOBS_MAINTENANCE_DEFAULT_COUNTRY` | `FR` | `FR` | `FR` | Wrong country can refresh irrelevant markets. |
 | `JOBS_MAINTENANCE_REVALIDATE_LIMIT` | `100` | `100` | `100` | Too high can create slow admin requests; too low slows cleanup. |
@@ -55,6 +62,13 @@ JOBS_LOCATION_MAX_EXPANDED_CITIES=10
 JOBS_LOCATION_MIN_RADIUS_KM=10
 JOBS_LOCATION_INCLUDE_CROSS_BORDER=true
 JOBS_LOCATION_MIN_POPULATION=1000
+JOBS_ADMIN_LOCATION_EXPANSION_ENABLED=true
+JOBS_ADMIN_LOCATION_MAX_CITIES=8
+JOBS_ADMIN_LOCATION_PROVIDER_QUERY_BUDGET=8
+JOBS_ADMIN_LOCATION_MIN_RADIUS_KM=10
+JOBS_ADMIN_LOCATION_INCLUDE_CROSS_BORDER=true
+JOBS_ADMIN_LOCATION_MIN_POPULATION=1000
+JOBS_ADMIN_LOCATION_REFRESH_RESULTS_PER_CITY=30
 
 JOBS_MAINTENANCE_ENABLED=true
 JOBS_MAINTENANCE_DEFAULT_COUNTRY=FR
