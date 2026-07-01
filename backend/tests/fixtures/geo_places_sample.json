@@ -1,0 +1,14 @@
+[
+  {"geoname_id": "3025062", "name": "Ciboure", "normalized_name": "ciboure", "ascii_name": "ciboure", "alternate_names": ["Ziburu"], "country_code": "fr", "latitude": 43.3849, "longitude": -1.6682, "population": 6200, "source": "test"},
+  {"geoname_id": "2979328", "name": "Saint-Jean-de-Luz", "normalized_name": "saint jean de luz", "ascii_name": "saint jean de luz", "alternate_names": ["Donibane Lohizune"], "country_code": "fr", "latitude": 43.3887, "longitude": -1.6627, "population": 14500, "source": "test"},
+  {"geoname_id": "3032797", "name": "Biarritz", "normalized_name": "biarritz", "ascii_name": "biarritz", "alternate_names": [], "country_code": "fr", "latitude": 43.4832, "longitude": -1.5586, "population": 25100, "source": "test"},
+  {"geoname_id": "3037598", "name": "Anglet", "normalized_name": "anglet", "ascii_name": "anglet", "alternate_names": [], "country_code": "fr", "latitude": 43.4817, "longitude": -1.5141, "population": 39800, "source": "test"},
+  {"geoname_id": "3034483", "name": "Bayonne", "normalized_name": "bayonne", "ascii_name": "bayonne", "alternate_names": ["Baiona"], "country_code": "fr", "latitude": 43.4933, "longitude": -1.4751, "population": 52200, "source": "test"},
+  {"geoname_id": "3013525", "name": "Hendaye", "normalized_name": "hendaye", "ascii_name": "hendaye", "alternate_names": ["Hendaia"], "country_code": "fr", "latitude": 43.3717, "longitude": -1.7738, "population": 17000, "source": "test"},
+  {"geoname_id": "3120304", "name": "Irun", "normalized_name": "irun", "ascii_name": "irun", "alternate_names": ["Irún"], "country_code": "es", "latitude": 43.3390, "longitude": -1.7894, "population": 62000, "source": "test"},
+  {"geoname_id": "3110044", "name": "San Sebastián", "normalized_name": "san sebastian", "ascii_name": "san sebastian", "alternate_names": ["Donostia", "Donostia-San Sebastian"], "country_code": "es", "latitude": 43.3183, "longitude": -1.9812, "population": 188000, "source": "test"},
+  {"geoname_id": "2988507", "name": "Paris", "normalized_name": "paris", "ascii_name": "paris", "alternate_names": [], "country_code": "fr", "latitude": 48.8566, "longitude": 2.3522, "population": 2148000, "source": "test"},
+  {"geoname_id": "2996944", "name": "Lyon", "normalized_name": "lyon", "ascii_name": "lyon", "alternate_names": [], "country_code": "fr", "latitude": 45.7640, "longitude": 4.8357, "population": 522000, "source": "test"},
+  {"geoname_id": "2643743", "name": "London", "normalized_name": "london", "ascii_name": "london", "alternate_names": [], "country_code": "gb", "latitude": 51.5074, "longitude": -0.1278, "population": 8900000, "source": "test"},
+  {"geoname_id": "5128581", "name": "New York", "normalized_name": "new york", "ascii_name": "new york", "alternate_names": ["NYC"], "country_code": "us", "latitude": 40.7128, "longitude": -74.0060, "population": 8400000, "source": "test"}
+]

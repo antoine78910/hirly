@@ -163,6 +163,34 @@ CREATE INDEX IF NOT EXISTS idx_ats_company_sources_country_code ON ats_company_s
 CREATE INDEX IF NOT EXISTS idx_ats_company_sources_is_active ON ats_company_sources (is_active);
 CREATE INDEX IF NOT EXISTS idx_ats_company_sources_last_checked_at ON ats_company_sources (last_checked_at);
 
+CREATE TABLE IF NOT EXISTS geo_places (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  geoname_id TEXT UNIQUE,
+  name TEXT NOT NULL,
+  normalized_name TEXT NOT NULL,
+  ascii_name TEXT,
+  alternate_names JSONB,
+  country_code TEXT NOT NULL,
+  admin1_code TEXT,
+  admin2_code TEXT,
+  feature_class TEXT,
+  feature_code TEXT,
+  latitude DOUBLE PRECISION NOT NULL,
+  longitude DOUBLE PRECISION NOT NULL,
+  population INTEGER DEFAULT 0,
+  timezone TEXT,
+  source TEXT DEFAULT 'geonames',
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  data JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+CREATE INDEX IF NOT EXISTS idx_geo_places_normalized_name ON geo_places(normalized_name);
+CREATE INDEX IF NOT EXISTS idx_geo_places_ascii_name ON geo_places(ascii_name);
+CREATE INDEX IF NOT EXISTS idx_geo_places_country_code ON geo_places(country_code);
+CREATE INDEX IF NOT EXISTS idx_geo_places_population ON geo_places(population);
+CREATE INDEX IF NOT EXISTS idx_geo_places_lat_lng ON geo_places(latitude, longitude);
+CREATE INDEX IF NOT EXISTS idx_geo_places_geoname_id ON geo_places(geoname_id);
+
 CREATE TABLE IF NOT EXISTS swipes (
   user_id TEXT NOT NULL,
   job_id TEXT NOT NULL,

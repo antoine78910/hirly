@@ -24,6 +24,7 @@ MIGRATED_TABLES = {
     "user_sessions",
     "jobs",
     "ats_company_sources",
+    "geo_places",
     "company_boards",
     "profiles",
     "swipes",
@@ -45,6 +46,7 @@ TABLE_PRIMARY_KEYS = {
     "user_sessions": "session_token",
     "jobs": "job_id",
     "ats_company_sources": "id",
+    "geo_places": "geoname_id",
     "company_boards": "board_id",
     "profiles": "user_id",
     "swipes": "swipe_id",
@@ -118,6 +120,26 @@ TABLE_FILTER_COLUMNS = {
         "last_success_at",
         "last_error",
         "failure_count",
+        "created_at",
+        "updated_at",
+    },
+    "geo_places": {
+        "id",
+        "geoname_id",
+        "name",
+        "normalized_name",
+        "ascii_name",
+        "alternate_names",
+        "country_code",
+        "admin1_code",
+        "admin2_code",
+        "feature_class",
+        "feature_code",
+        "latitude",
+        "longitude",
+        "population",
+        "timezone",
+        "source",
         "created_at",
         "updated_at",
     },
@@ -237,6 +259,30 @@ def _supabase_row(table: str, document: Document) -> Dict[str, Any]:
             "last_error": doc.get("last_error"),
             "failure_count": int(doc.get("failure_count") or 0),
             "raw_metadata": doc.get("raw_metadata"),
+            "created_at": doc.get("created_at"),
+            "updated_at": doc.get("updated_at"),
+            "data": doc,
+        }
+    if table == "geo_places":
+        now = datetime.now(timezone.utc).isoformat()
+        doc.setdefault("created_at", now)
+        doc["updated_at"] = doc.get("updated_at") or now
+        return {
+            "geoname_id": _document_key(table, doc),
+            "name": doc.get("name"),
+            "normalized_name": doc.get("normalized_name"),
+            "ascii_name": doc.get("ascii_name"),
+            "alternate_names": doc.get("alternate_names") or [],
+            "country_code": str(doc.get("country_code") or "").lower(),
+            "admin1_code": doc.get("admin1_code"),
+            "admin2_code": doc.get("admin2_code"),
+            "feature_class": doc.get("feature_class"),
+            "feature_code": doc.get("feature_code"),
+            "latitude": doc.get("latitude"),
+            "longitude": doc.get("longitude"),
+            "population": int(doc.get("population") or 0),
+            "timezone": doc.get("timezone"),
+            "source": doc.get("source") or "geonames",
             "created_at": doc.get("created_at"),
             "updated_at": doc.get("updated_at"),
             "data": doc,
@@ -466,6 +512,15 @@ def _match_operator(value: Any, operator: str, expected: Any, condition: Dict[st
             return left >= right
         except TypeError:
             return False
+    if operator == "$lte":
+        if value is None:
+            return False
+        left = _comparable(value)
+        right = _comparable(expected)
+        try:
+            return left <= right
+        except TypeError:
+            return False
     if operator == "$exists":
         exists = value is not None
         return exists is bool(expected)
@@ -567,6 +622,8 @@ def _postgrest_filter_params(table: str, filter: Optional[Filter]) -> Optional[D
                 params[param_key] = f"in.({values})"
             elif "$gte" in condition and len(condition) == 1:
                 params[param_key] = f"gte.{_postgrest_value(condition.get('$gte'))}"
+            elif "$lte" in condition and len(condition) == 1:
+                params[param_key] = f"lte.{_postgrest_value(condition.get('$lte'))}"
             else:
                 return None
         else:
@@ -715,6 +772,51 @@ class SupabaseCollectionAdapter(CollectionPort):
         """Read rows with an explicit PostgREST select list."""
         return await self._read_documents(filter, read_limit=limit, select=select)
 
+    async def find_geo_places_by_bounding_box(
+        self,
+        *,
+        min_lat: float,
+        max_lat: float,
+        min_lng: float,
+        max_lng: float,
+        min_population: int = 0,
+        country_codes: Optional[List[str]] = None,
+        limit: int = 500,
+    ) -> List[Document]:
+        """Read geo_places within a bounding box using repeated PostgREST params."""
+        if self.table_name != "geo_places":
+            raise RuntimeError("find_geo_places_by_bounding_box is only available for geo_places")
+        self._require_read_supported()
+        assert self.supabase_url is not None
+        assert self.secret_key is not None
+
+        params: List[tuple[str, str]] = [
+            ("select", "data"),
+            ("latitude", f"gte.{_postgrest_value(min_lat)}"),
+            ("latitude", f"lte.{_postgrest_value(max_lat)}"),
+            ("longitude", f"gte.{_postgrest_value(min_lng)}"),
+            ("longitude", f"lte.{_postgrest_value(max_lng)}"),
+            ("population", f"gte.{_postgrest_value(min_population)}"),
+            ("order", "population.desc.nullslast"),
+            ("limit", str(max(1, min(int(limit), 5000)))),
+        ]
+        codes = [str(code).lower() for code in (country_codes or []) if code]
+        if codes:
+            params.append(("country_code", f"in.({','.join(_postgrest_in_value(code) for code in codes)})"))
+
+        client = _get_shared_http_client()
+        response = await client.get(
+            self.supabase_url.rstrip("/") + "/rest/v1/geo_places",
+            params=params,
+            headers=_supabase_headers(self.secret_key),
+        )
+        if response.status_code not in (200, 206):
+            raise RuntimeError(f"Supabase geo_places bbox read returned HTTP {response.status_code}: {response.text[:300]}")
+        rows = response.json()
+        if not isinstance(rows, list):
+            return []
+        return [_restore_document(row) for row in rows]
+
     async def insert_one(self, document: Document):
         result = await upsert_supabase_documents(self.supabase_url or "", self.secret_key or "", self.table_name, [document])
         if not result.get("ok"):
@@ -849,6 +951,7 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
         self.profiles = SupabaseCollectionAdapter("profiles", supabase_url, secret_key)
         self.jobs = SupabaseCollectionAdapter("jobs", supabase_url, secret_key)
         self.ats_company_sources = SupabaseCollectionAdapter("ats_company_sources", supabase_url, secret_key)
+        self.geo_places = SupabaseCollectionAdapter("geo_places", supabase_url, secret_key)
         self.applications = SupabaseCollectionAdapter("applications", supabase_url, secret_key)
         self.gmail_connections = SupabaseCollectionAdapter("gmail_connections", supabase_url, secret_key)
         self.application_emails = SupabaseCollectionAdapter("application_emails", supabase_url, secret_key)
