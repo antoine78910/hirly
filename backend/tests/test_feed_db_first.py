@@ -403,6 +403,97 @@ def test_explicit_paris_radius_does_not_return_new_jersey_legacy_direct_job(monk
     assert response["filters_applied"]["explicit_local_intent"] is True
 
 
+def test_explicit_paris_radius_returns_local_c_tier_manual_job(monkeypatch):
+    local_c = _job(1, tier="C", status="unknown", title="Marketing Manager")
+    local_c.update({"location": "Paris, France", "city": "Paris", "country_code": "fr"})
+    response, _calls = _run_feed(
+        monkeypatch,
+        [local_c],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+        locations_json=_location_payload("Paris", lat=48.8566, lng=2.3522),
+        geo_places=_geo_places(),
+    )
+    assert [job["job_id"] for job in response["jobs"]] == ["job_1"]
+    assert response["jobs"][0]["application_mode"] == "manual"
+    assert response["jobs"][0]["can_auto_apply"] is False
+    assert response["jobs"][0]["requires_manual_review"] is True
+    assert response["feed_summary"]["manual_count"] == 1
+
+
+def test_explicit_paris_radius_returns_local_null_tier_jsearch_job(monkeypatch):
+    local_null = _job(1, tier=None, status=None, title="Marketing Manager")
+    local_null.update({
+        "provider": "jsearch",
+        "location": "Paris, France",
+        "city": "Paris",
+        "country_code": "fr",
+        "validation_status": None,
+        "applyability_tier": None,
+        "auto_apply_supported": False,
+    })
+    response, _calls = _run_feed(
+        monkeypatch,
+        [local_null],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+        locations_json=_location_payload("Paris", lat=48.8566, lng=2.3522),
+        geo_places=_geo_places(),
+    )
+    assert [job["job_id"] for job in response["jobs"]] == ["job_1"]
+    assert response["jobs"][0]["application_mode"] == "manual"
+    assert response["jobs"][0]["can_auto_apply"] is False
+
+
+def test_ab_jobs_rank_before_manual_local_jobs(monkeypatch):
+    manual = _job(1, tier="C", status="unknown", title="Marketing Manager")
+    manual.update({"location": "Paris, France", "city": "Paris", "country_code": "fr"})
+    auto = _job(2, tier="A", status="valid", title="Marketing Manager")
+    auto.update({"location": "Paris, France", "city": "Paris", "country_code": "fr"})
+    response, _calls = _run_feed(
+        monkeypatch,
+        [manual, auto],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+        locations_json=_location_payload("Paris", lat=48.8566, lng=2.3522),
+        geo_places=_geo_places(),
+    )
+    assert [job["job_id"] for job in response["jobs"][:2]] == ["job_2", "job_1"]
+    assert response["jobs"][0]["application_mode"] == "auto_apply"
+
+
+def test_explicit_local_jsearch_fallback_returns_imported_manual_local_job(monkeypatch):
+    imported = _job(1, tier="C", status="unknown", title="Marketing Manager")
+    imported.update({"location": "Paris, France", "city": "Paris", "country_code": "fr"})
+    response, calls = _run_feed(
+        monkeypatch,
+        [],
+        env={
+            "JOBS_FEED_LOCAL_DISCOVERY_MAX_CITIES": "2",
+            "JOBS_FEED_SYNC_REFRESH_MAX_SECONDS": "5",
+        },
+        refresh=lambda: [imported],
+        locations_json=_location_payload("Paris", lat=48.8566, lng=2.3522),
+        geo_places=_geo_places(),
+    )
+    assert calls["refresh"] >= 1
+    assert calls["refresh"] <= 2
+    assert calls["refresh_kwargs"]["max_provider_requests_override"] == 1
+    assert [job["job_id"] for job in response["jobs"]] == ["job_1"]
+    assert response["jobs"][0]["application_mode"] == "manual"
+
+
+def test_ciboure_radius_can_return_local_manual_biarritz_job(monkeypatch):
+    biarritz = _job(1, tier="C", status="unknown", title="Marketing Manager")
+    biarritz.update({"location": "Biarritz, France", "city": "Biarritz", "country_code": "fr"})
+    response, _calls = _run_feed(
+        monkeypatch,
+        [biarritz],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+        locations_json=_location_payload(),
+        geo_places=_geo_places(),
+    )
+    assert [job["job_id"] for job in response["jobs"]] == ["job_1"]
+    assert response["jobs"][0]["application_mode"] == "manual"
+
+
 def test_explicit_local_search_blocks_global_unknown_country_direct_ats(monkeypatch):
     global_job = _legacy_direct_job(
         1,

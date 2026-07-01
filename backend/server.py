@@ -255,6 +255,81 @@ def _job_is_applyable(job: Dict[str, Any]) -> bool:
     return is_manual_fulfillment_ready(job)
 
 
+def _job_url_candidates(job: Dict[str, Any]) -> List[str]:
+    urls: List[str] = []
+    data = job.get("data") if isinstance(job.get("data"), dict) else {}
+    for value in (
+        job.get("selected_apply_url"),
+        job.get("external_url"),
+        job.get("apply_url"),
+        job.get("hosted_url"),
+        data.get("selected_apply_url"),
+        data.get("external_url"),
+        data.get("job_apply_link"),
+        data.get("job_google_link"),
+        data.get("employer_website"),
+    ):
+        if isinstance(value, str) and value.strip():
+            urls.append(value.strip())
+    for key in ("job_apply_links", "apply_options", "related_links"):
+        items = data.get(key) or job.get(key) or []
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if isinstance(item, str) and item.strip():
+                urls.append(item.strip())
+            elif isinstance(item, dict):
+                for field in ("url", "link", "apply_url", "job_apply_link"):
+                    value = item.get(field)
+                    if isinstance(value, str) and value.strip():
+                        urls.append(value.strip())
+    return list(dict.fromkeys(urls))
+
+
+def _job_has_usable_apply_url(job: Dict[str, Any]) -> bool:
+    return bool(_job_url_candidates(job))
+
+
+def _job_is_blocked_for_feed(job: Dict[str, Any]) -> bool:
+    validation_status = str(job.get("validation_status") or "").strip().lower()
+    applyability_tier = str(job.get("applyability_tier") or "").strip().upper()
+    return (
+        validation_status == "invalid"
+        or applyability_tier in {"D", "E"}
+        or job.get("requires_login") is True
+        or job.get("requires_account_creation") is True
+        or job.get("captcha_detected") is True
+    )
+
+
+def _with_application_capability_fields(job: Dict[str, Any]) -> Dict[str, Any]:
+    job = _with_apply_fulfillment_fields(job)
+    tier = str(job.get("applyability_tier") or "").strip().upper()
+    status = str(job.get("validation_status") or "").strip().lower()
+    direct_provider = str(job.get("provider") or "").lower() in {"greenhouse", "lever", "ashby"}
+    can_auto_apply = (
+        not _job_is_blocked_for_feed(job)
+        and _job_has_usable_apply_url(job)
+        and _job_is_applyable(job)
+        and (
+            (status == "valid" and tier in {"A", "B"})
+            or (direct_provider and job.get("auto_apply_supported") is True)
+        )
+    )
+    if can_auto_apply:
+        mode = "auto_apply"
+    elif not _job_is_blocked_for_feed(job) and _job_has_usable_apply_url(job):
+        mode = "manual"
+    else:
+        mode = "blocked"
+    return {
+        **job,
+        "application_mode": mode,
+        "can_auto_apply": can_auto_apply,
+        "requires_manual_review": mode != "auto_apply",
+    }
+
+
 def _with_apply_fulfillment_fields(job: Dict[str, Any]) -> Dict[str, Any]:
     fields = _apply_fulfillment_fields(job)
     external_url = fields.get("selected_apply_url") or job.get("external_url")
@@ -4409,10 +4484,52 @@ async def get_feed(
             )
             return rows, query, unfiltered, applyable, rejected
 
+        async def _load_local_visible_candidates() -> tuple[List[Dict[str, Any]], Dict[str, Any], int, int, int]:
+            country_filter_codes = expanded_country_codes if location_context.get("used") else selected_country_codes
+            query: Dict[str, Any] = {}
+            if country_filter_codes and radius_scope not in ("worldwide", "remote", "remote/worldwide"):
+                query["country_code"] = {"$in": country_filter_codes}
+            db_started = time.perf_counter()
+            rows = await _get_feed_job_candidates(query, candidate_limit)
+            if explicit_local_intent:
+                broad_rows = await _get_feed_job_candidates({}, candidate_limit)
+                seen_ids = {row.get("job_id") for row in rows}
+                for row in broad_rows:
+                    job_id = row.get("job_id")
+                    if job_id and job_id not in seen_ids:
+                        rows.append(row)
+                        seen_ids.add(job_id)
+            db_elapsed_ms = int((time.perf_counter() - db_started) * 1000)
+            rows = [job for job in rows if job.get("job_id") not in swiped_ids]
+            unfiltered = len(rows)
+            rejected = sum(1 for job in rows if _job_is_blocked_for_feed(job))
+            rows = [
+                _with_application_capability_fields(job)
+                for job in rows
+                if not _job_is_blocked_for_feed(job) and _job_has_usable_apply_url(job)
+            ]
+            visible = len(rows)
+            rows = [job for job in rows if _matches_explicit_filters(job)]
+            rows.sort(key=_quality_sort_key)
+            logger.info(
+                "jobs/feed local_visible_query_complete: user_id=%s elapsed_ms=%s query=%s raw_rows=%s visible=%s filtered=%s rejected=%s",
+                user.user_id,
+                db_elapsed_ms,
+                query,
+                unfiltered,
+                visible,
+                len(rows),
+                rejected,
+            )
+            return rows, query, unfiltered, visible, rejected
+
         base_query = _validated_cache_query(include_unknown=False)
         candidates: List[Dict[str, Any]] = []
         unfiltered_count = 0
         applyable_count = 0
+        local_visible_count = 0
+        local_manual_count = 0
+        local_blocked_hidden_count = 0
         pre_filter_candidates: List[Dict[str, Any]] = []
         db_good_count = 0
         db_rejected_count = 0
@@ -4471,6 +4588,28 @@ async def get_feed(
                         db_good_count,
                         len(candidates),
                     )
+            if explicit_local_intent and len(candidates) < requested_limit:
+                visible_candidates, visible_query, visible_unfiltered, visible_applyable, visible_rejected = await _load_local_visible_candidates()
+                seen_ids = {job.get("job_id") for job in candidates}
+                additions = [job for job in visible_candidates if job.get("job_id") not in seen_ids]
+                if additions:
+                    candidates.extend(additions)
+                    pre_filter_candidates = list(candidates)
+                    base_query = visible_query if not base_query else base_query
+                    feed_source = f"{feed_source}+local_visible"
+                unfiltered_count += visible_unfiltered
+                applyable_count += visible_applyable
+                db_rejected_count += visible_rejected
+                local_visible_count += len(visible_candidates)
+                local_manual_count += sum(1 for job in visible_candidates if job.get("application_mode") != "auto_apply")
+                local_blocked_hidden_count += visible_rejected
+                logger.info(
+                    "jobs/feed local_visible_used: user_id=%s visible_count=%s added=%s manual_count=%s",
+                    user.user_id,
+                    len(visible_candidates),
+                    len(additions),
+                    local_manual_count,
+                )
 
         cooldown_enabled = _env_bool("JOBS_FEED_FALLBACK_COOLDOWN_ENABLED", True)
         cooldown_active = cooldown_enabled and time.monotonic() < _feed_sync_refresh_cooldown_until
@@ -4478,7 +4617,11 @@ async def get_feed(
             sync_refresh_enabled
             and not _timed_out()
             and not cooldown_active
-            and (not db_first_enabled or db_good_count == 0)
+            and (
+                not db_first_enabled
+                or db_good_count == 0
+                or (explicit_local_intent and len(candidates) < requested_limit)
+            )
         )
         if db_good_count > 0 and db_good_count < db_weak_results_threshold:
             logger.info(
@@ -4496,7 +4639,23 @@ async def get_feed(
         if should_refresh:
             jsearch_fallback_triggered = True
             max_refresh_locations = max(1, min(int(os.environ.get("FEED_MAX_REFRESH_LOCATIONS", "1")), 3))
-            refresh_locations = [None] if is_worldwide_radius else (selected_locations or [None])[:max_refresh_locations]
+            if explicit_local_intent:
+                max_refresh_locations = max(1, min(_env_int("JOBS_FEED_LOCAL_DISCOVERY_MAX_CITIES", 3), 4))
+            if is_worldwide_radius:
+                refresh_locations = [None]
+            elif explicit_local_intent and location_context.get("expanded_places"):
+                refresh_locations = [
+                    {
+                        "location_label": place.get("query_label") or place.get("name") or place.get("ascii_name"),
+                        "country_code": str(place.get("country_code") or "").lower().strip(),
+                        "lat": place.get("latitude"),
+                        "lng": place.get("longitude"),
+                    }
+                    for place in (location_context.get("expanded_places") or [])
+                    if place.get("name") or place.get("ascii_name")
+                ][:max_refresh_locations]
+            else:
+                refresh_locations = (selected_locations or [None])[:max_refresh_locations]
             force_provider_refresh = os.environ.get("JOB_FEED_ON_DEMAND_JSEARCH", "true").lower() in ("1", "true", "yes", "on")
             logger.info(
                 "jobs/feed jsearch_fallback_start: user_id=%s db_good_count=%s weak_threshold=%s refresh_locations=%s force_provider_refresh=%s max_seconds=%s max_results=%s max_pages=%s page_size=%s",
@@ -4596,8 +4755,23 @@ async def get_feed(
                 applyable_count += c_applyable
                 db_rejected_count += c_rejected
                 base_query = c_query
+            if explicit_local_intent and len(candidates) < requested_limit:
+                visible_candidates, visible_query, visible_unfiltered, visible_applyable, visible_rejected = await _load_local_visible_candidates()
+                seen_ids = {job.get("job_id") for job in candidates}
+                additions = [job for job in visible_candidates if job.get("job_id") not in seen_ids]
+                candidates.extend(additions)
+                unfiltered_count += visible_unfiltered
+                applyable_count += visible_applyable
+                db_rejected_count += visible_rejected
+                local_visible_count += len(visible_candidates)
+                local_manual_count += sum(1 for job in visible_candidates if job.get("application_mode") != "auto_apply")
+                local_blocked_hidden_count += visible_rejected
+                if additions:
+                    base_query = visible_query if not base_query else base_query
+                    feed_source = "db_after_jsearch_fallback+local_visible"
             pre_filter_candidates = list(candidates)
-            feed_source = "db_after_jsearch_fallback"
+            if feed_source != "db_after_jsearch_fallback+local_visible":
+                feed_source = "db_after_jsearch_fallback"
             logger.info(
                 "jobs/feed jsearch_fallback_complete: user_id=%s imported_results=%s provider_search_keys=%s db_after_count=%s db_after_role_good_count=%s unfiltered_count=%s applyable_count=%s rejected_de_count=%s",
                 user.user_id,
@@ -4612,6 +4786,17 @@ async def get_feed(
         elif not db_first_enabled:
             candidates, base_query, unfiltered_count, applyable_count, db_rejected_count = await _load_db_candidates(include_unknown=allow_unknown_tier)
             pre_filter_candidates = list(candidates)
+
+        deduped_candidates: List[Dict[str, Any]] = []
+        seen_candidate_ids = set()
+        for job in candidates:
+            key = job.get("job_id") or job.get("fingerprint") or f"{job.get('provider')}:{job.get('external_id')}"
+            if key in seen_candidate_ids:
+                continue
+            seen_candidate_ids.add(key)
+            deduped_candidates.append(job)
+        candidates = deduped_candidates
+        pre_filter_candidates = list(candidates)
 
         logger.info(
             "feed_filter_stage user_id=%s stage=candidate_pool elapsed_ms=%s source=%s jsearch_fallback=%s query=%s count=%s db_good_count=%s unfiltered_count=%s applyable_count=%s rejected_de_count=%s swiped_count=%s explicit_filters=%s",
@@ -4796,6 +4981,7 @@ async def get_feed(
                 )
 
         jobs = await _hydrate_feed_jobs(jobs)
+        jobs = [_with_application_capability_fields(job) for job in jobs]
 
         clean_jobs = []
         for job in jobs[:requested_limit]:
@@ -4830,16 +5016,26 @@ async def get_feed(
                 "code": "NO_LOCAL_AUTO_APPLY_JOBS",
                 "message": "No verified auto-apply jobs found in this location yet.",
                 "local_candidates_count": local_candidate_count,
-                "local_c_tier_count": None,
-                "local_blocked_count": db_rejected_count,
+                "local_c_tier_count": sum(1 for job in pre_filter_candidates if str(job.get("applyability_tier") or "").upper() == "C"),
+                "local_blocked_count": local_blocked_hidden_count or db_rejected_count,
                 "suggested_action": "broaden_location_or_enable_assisted_jobs",
             }
+        feed_summary = {
+            "auto_apply_count": sum(1 for job in clean_jobs if job.get("application_mode") == "auto_apply"),
+            "assisted_count": sum(1 for job in clean_jobs if job.get("application_mode") == "assisted"),
+            "manual_count": sum(1 for job in clean_jobs if job.get("application_mode") == "manual"),
+            "blocked_hidden_count": local_blocked_hidden_count or db_rejected_count,
+            "location_expansion_used": bool(location_context.get("used")),
+            "local_visible_count": local_visible_count,
+            "local_manual_count": local_manual_count,
+        }
         return {
             "jobs": clean_jobs,
             "total": len(clean_jobs),
             "empty_reason": empty_reason,
+            "feed_summary": feed_summary,
             "feed_mode": "mixed",
-            "auto_apply_count": sum(1 for job in clean_jobs if job.get("auto_apply_supported") is True),
+            "auto_apply_count": feed_summary["auto_apply_count"],
             "total_count": len(candidates),
             "fallback_reason": None if fallback_used == "none" else fallback_used,
             "searched_location": terms["labels"][0] if terms["labels"] else profile.get("target_location"),
@@ -4871,6 +5067,9 @@ async def get_feed(
                 "hard_location_post_count": len(jobs),
                 "hard_location_rejected_count": hard_location_rejected_count,
                 "global_fallback_suppressed": global_fallback_suppressed,
+                "local_visible_count": local_visible_count,
+                "local_manual_count": local_manual_count,
+                "local_blocked_hidden_count": local_blocked_hidden_count,
                 "manual_fulfillment_ready": True,
                 "work_location": work_location,
                 "locations": [loc.get("location_label") for loc in selected_locations if loc.get("location_label")],
