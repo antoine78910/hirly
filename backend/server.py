@@ -3820,11 +3820,13 @@ async def get_feed(
                 selected.extend({"location_label": item} for item in location if item)
             return selected
 
-        selected_locations = _parse_selected_locations()
+        request_selected_locations = _parse_selected_locations()
+        selected_locations = list(request_selected_locations)
         if not selected_locations and _profile_feed_location_data():
             selected_locations = [_profile_feed_location_data()]
         elif not selected_locations and _profile_feed_location_label():
             selected_locations = [{"location_label": _profile_feed_location_label()}]
+        explicit_local_intent = bool(request_selected_locations) and radius_km is not None and not is_worldwide_radius
         explicit_location_filter = bool(
             selected_locations
             or location
@@ -4160,6 +4162,17 @@ async def get_feed(
                 return True
             return False
 
+        def _explicit_local_remote_allowed(job: Dict[str, Any]) -> bool:
+            if _job_work_location(job) != "remote":
+                return False
+            if not work_location:
+                return True
+            wanted = {
+                ("onsite" if str(item).lower() in ("in-person", "in_person", "on-site", "onsite") else str(item).lower())
+                for item in work_location
+            }
+            return "remote" in wanted
+
         def _matches_location(job: Dict[str, Any]) -> bool:
             if not explicit_location_filter and not only_my_country:
                 return True
@@ -4167,6 +4180,8 @@ async def get_feed(
             job_country_code = str(job.get("country_code") or "").lower().strip()
             if not job_location and not job_country_code:
                 return include_unknown_location
+            if explicit_local_intent and _explicit_local_remote_allowed(job):
+                return True
             expanded_match = _expanded_location_match(job)
             if expanded_match:
                 return True
@@ -4188,6 +4203,16 @@ async def get_feed(
                     return False
                 return city_match if selected_city_terms else country_match
             return city_match or country_match
+
+        def _passes_explicit_local_hard_constraint(job: Dict[str, Any]) -> bool:
+            if not explicit_local_intent:
+                return True
+            has_known_location = bool(job.get("location") or job.get("city") or job.get("region") or job.get("country_code"))
+            if not has_known_location:
+                return bool(include_unknown_location)
+            if _explicit_local_remote_allowed(job):
+                return True
+            return _matches_location(job)
 
         def _matches_salary(job: Dict[str, Any]) -> bool:
             if not min_salary or min_salary <= 0:
@@ -4607,6 +4632,8 @@ async def get_feed(
         def _feed_location_score(job: Dict[str, Any], *, worldwide: bool) -> int:
             if worldwide:
                 return 10
+            if explicit_local_intent and _explicit_local_remote_allowed(job):
+                return 25
             expanded_match = _expanded_location_match(job)
             if expanded_match:
                 distance = float(expanded_match.get("distance_km") or 0)
@@ -4738,6 +4765,36 @@ async def get_feed(
             jobs = rank(candidates, worldwide=True, broad=True, any_role=not bool(strict_tokens or family_tokens))
             logger.info("feed_filter_stage user_id=%s stage=worldwide_auto_apply elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))
 
+        hard_location_pre_count = len(jobs)
+        hard_location_rejected_count = 0
+        global_fallback_suppressed = False
+        if explicit_local_intent:
+            constrained_jobs = [job for job in jobs if _passes_explicit_local_hard_constraint(job)]
+            hard_location_rejected_count = hard_location_pre_count - len(constrained_jobs)
+            if hard_location_rejected_count:
+                global_fallback_suppressed = (
+                    fallback_used in {
+                        "relaxed_country",
+                        "explicit_filters_worldwide_role_family",
+                        "worldwide_role_family",
+                        "worldwide_auto_apply",
+                        "worldwide_radius_auto_apply",
+                        "direct_provider_relaxed_role",
+                    }
+                    or feed_source == "legacy_direct_ats_cache"
+                )
+                jobs = constrained_jobs
+                logger.info(
+                    "feed_filter_stage user_id=%s stage=explicit_local_hard_constraint elapsed_ms=%s before=%s after=%s rejected=%s fallback_used=%s source=%s",
+                    user.user_id,
+                    _elapsed_ms(),
+                    hard_location_pre_count,
+                    len(jobs),
+                    hard_location_rejected_count,
+                    fallback_used,
+                    feed_source,
+                )
+
         jobs = await _hydrate_feed_jobs(jobs)
 
         clean_jobs = []
@@ -4762,9 +4819,25 @@ async def get_feed(
             len(candidates),
         )
         safe_refresh_results = [_compact_refresh_result(item) for item in refresh_results if isinstance(item, dict)]
+        local_candidate_count = (
+            len([job for job in pre_filter_candidates if _passes_explicit_local_hard_constraint(job)])
+            if explicit_local_intent
+            else len(pre_filter_candidates)
+        )
+        empty_reason = None
+        if explicit_local_intent and not clean_jobs:
+            empty_reason = {
+                "code": "NO_LOCAL_AUTO_APPLY_JOBS",
+                "message": "No verified auto-apply jobs found in this location yet.",
+                "local_candidates_count": local_candidate_count,
+                "local_c_tier_count": None,
+                "local_blocked_count": db_rejected_count,
+                "suggested_action": "broaden_location_or_enable_assisted_jobs",
+            }
         return {
             "jobs": clean_jobs,
             "total": len(clean_jobs),
+            "empty_reason": empty_reason,
             "feed_mode": "mixed",
             "auto_apply_count": sum(1 for job in clean_jobs if job.get("auto_apply_supported") is True),
             "total_count": len(candidates),
@@ -4793,6 +4866,11 @@ async def get_feed(
                 "provider_search_keys": provider_search_keys,
                 "search_radius": search_radius,
                 "explicit_filters": explicit_filters,
+                "explicit_local_intent": explicit_local_intent,
+                "hard_location_pre_count": hard_location_pre_count,
+                "hard_location_post_count": len(jobs),
+                "hard_location_rejected_count": hard_location_rejected_count,
+                "global_fallback_suppressed": global_fallback_suppressed,
                 "manual_fulfillment_ready": True,
                 "work_location": work_location,
                 "locations": [loc.get("location_label") for loc in selected_locations if loc.get("location_label")],

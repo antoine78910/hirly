@@ -123,6 +123,7 @@ def _run_feed(
     only_my_country=False,
     locations_json=None,
     include_unknown_location=True,
+    work_location=None,
     geo_places=None,
 ):
     env = env or {}
@@ -158,7 +159,7 @@ def _run_feed(
         limit=5,
         min_salary=0,
         posted_within=None,
-        work_location=None,
+        work_location=work_location,
         job_type=None,
         experience=None,
         location=None,
@@ -184,7 +185,7 @@ def _run_feed(
     return response, calls
 
 
-def _run_legacy_feed(monkeypatch, provider_jobs, *, env=None):
+def _run_legacy_feed(monkeypatch, provider_jobs, *, env=None, work_location=None):
     env = {
         "JOBS_FEED_LEGACY_JSEARCH_ONLY": "true",
         "JSEARCH_API_KEY": "test-key",
@@ -216,7 +217,7 @@ def _run_legacy_feed(monkeypatch, provider_jobs, *, env=None):
         limit=5,
         min_salary=0,
         posted_within=None,
-        work_location=None,
+        work_location=work_location,
         job_type=None,
         experience=None,
         location=None,
@@ -374,6 +375,129 @@ def test_worldwide_final_fallback_relaxes_role_when_legacy_candidates_exist(monk
     assert calls["refresh"] == 0
     assert [job["job_id"] for job in response["jobs"]] == ["job_1"]
     assert response["fallback_used"] == "worldwide_radius_auto_apply"
+
+
+def test_explicit_paris_radius_does_not_return_new_jersey_legacy_direct_job(monkeypatch):
+    paris = _legacy_direct_job(1, country_code="fr", location="Paris, France", title="Marketing Manager")
+    new_jersey = _legacy_direct_job(
+        2,
+        country_code="",
+        location="Florham Park - New Jersey - United States",
+        title="Marketing Manager",
+    )
+    locations = json.dumps([{
+        "location_label": "Paris, France",
+        "country": "France",
+        "country_code": "fr",
+        "lat": 48.8566,
+        "lng": 2.3522,
+    }])
+    response, _calls = _run_feed(
+        monkeypatch,
+        [new_jersey, paris],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+        locations_json=locations,
+        geo_places=_geo_places(),
+    )
+    assert [job["job_id"] for job in response["jobs"]] == ["job_1"]
+    assert response["filters_applied"]["explicit_local_intent"] is True
+
+
+def test_explicit_local_search_blocks_global_unknown_country_direct_ats(monkeypatch):
+    global_job = _legacy_direct_job(
+        1,
+        country_code="",
+        location="Florham Park - New Jersey - United States",
+        title="Marketing Manager",
+    )
+    response, _calls = _run_feed(
+        monkeypatch,
+        [global_job],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+        locations_json=_location_payload("Paris", lat=48.8566, lng=2.3522),
+        geo_places=_geo_places(),
+    )
+    assert response["jobs"] == []
+    assert response["empty_reason"]["code"] == "NO_LOCAL_AUTO_APPLY_JOBS"
+
+
+def test_explicit_local_search_can_return_remote_when_allowed(monkeypatch):
+    remote = _legacy_direct_job(
+        1,
+        country_code="us",
+        location="Remote - United States",
+        title="Marketing Manager",
+    )
+    remote["remote"] = True
+    response, _calls = _run_feed(
+        monkeypatch,
+        [remote],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+        locations_json=_location_payload("Paris", lat=48.8566, lng=2.3522),
+        work_location=["remote"],
+        geo_places=_geo_places(),
+    )
+    assert [job["job_id"] for job in response["jobs"]] == ["job_1"]
+
+
+def test_explicit_local_search_excludes_remote_when_onsite_only(monkeypatch):
+    remote = _legacy_direct_job(
+        1,
+        country_code="us",
+        location="Remote - United States",
+        title="Marketing Manager",
+    )
+    remote["remote"] = True
+    response, _calls = _run_feed(
+        monkeypatch,
+        [remote],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+        locations_json=_location_payload("Paris", lat=48.8566, lng=2.3522),
+        work_location=["onsite"],
+        geo_places=_geo_places(),
+    )
+    assert response["jobs"] == []
+
+
+def test_explicit_local_search_excludes_unknown_location_unless_allowed(monkeypatch):
+    unknown = _legacy_direct_job(1, country_code="", location="", title="Marketing Manager")
+    response, _calls = _run_feed(
+        monkeypatch,
+        [unknown],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+        locations_json=_location_payload("Paris", lat=48.8566, lng=2.3522),
+        include_unknown_location=False,
+        geo_places=_geo_places(),
+    )
+    assert response["jobs"] == []
+
+    response, _calls = _run_feed(
+        monkeypatch,
+        [unknown],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+        locations_json=_location_payload("Paris", lat=48.8566, lng=2.3522),
+        include_unknown_location=True,
+        geo_places=_geo_places(),
+    )
+    assert [job["job_id"] for job in response["jobs"]] == ["job_1"]
+
+
+def test_ciboure_radius_returns_empty_reason_instead_of_unrelated_global_jobs(monkeypatch):
+    global_job = _legacy_direct_job(
+        1,
+        country_code="",
+        location="Florham Park - New Jersey - United States",
+        title="Marketing Manager",
+    )
+    response, _calls = _run_feed(
+        monkeypatch,
+        [global_job],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+        locations_json=_location_payload(),
+        geo_places=_geo_places(),
+    )
+    assert response["jobs"] == []
+    assert response["empty_reason"]["code"] == "NO_LOCAL_AUTO_APPLY_JOBS"
 
 
 def test_only_my_country_still_filters_legacy_direct_ats(monkeypatch):
