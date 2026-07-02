@@ -124,7 +124,6 @@ def _run_feed(
     locations_json=None,
     include_unknown_location=True,
     work_location=None,
-    force_provider_refresh=False,
     geo_places=None,
 ):
     env = env or {}
@@ -180,7 +179,6 @@ def _run_feed(
         country_code=None,
         lat=None,
         lng=None,
-        force_provider_refresh=force_provider_refresh,
         score=False,
         search_role=None,
     ))
@@ -239,7 +237,6 @@ def _run_legacy_feed(monkeypatch, provider_jobs, *, env=None, work_location=None
         country_code=None,
         lat=None,
         lng=None,
-        force_provider_refresh=False,
         score=False,
         search_role=None,
     ))
@@ -614,207 +611,6 @@ def test_global_remote_jobs_do_not_prevent_explicit_local_jsearch_discovery(monk
     assert calls["refresh"] == 1
     assert [job["job_id"] for job in response["jobs"]] == ["job_2"]
     assert response["jobs"][0]["application_mode"] == "manual"
-
-
-def test_raw_payload_locations_do_not_count_as_local_unknown_jobs(monkeypatch):
-    global_rows = []
-    for index, location in enumerate([
-        "Pune, India",
-        "Jacksonville - Florida - United States",
-        "United States",
-        "San Francisco Bay Area",
-        "San Francisco, CA",
-    ], start=1):
-        job = _legacy_direct_job(index, country_code="", location="", title="Marketing Manager")
-        job["data"] = {"location": location}
-        global_rows.append(job)
-
-    imported = _job(10, tier="C", status="unknown", title="Marketing Manager")
-    imported.update({"location": "Paris, France", "city": "Paris", "country_code": "fr"})
-
-    response, calls = _run_feed(
-        monkeypatch,
-        global_rows,
-        env={
-            "JOBS_FEED_LOCAL_DISCOVERY_MAX_CITIES": "1",
-            "JOBS_FEED_SYNC_REFRESH_MAX_SECONDS": "5",
-            "JOBS_FEED_DEBUG_DIAGNOSTICS": "true",
-        },
-        refresh=lambda: [imported],
-        locations_json=_location_payload("Paris", lat=48.8566, lng=2.3522),
-        geo_places=_geo_places(),
-    )
-
-    assert calls["refresh"] == 1
-    assert response["request_trace"]["db_local_candidate_count_after_filters"] == 0
-    assert [job["job_id"] for job in response["jobs"]] == ["job_10"]
-    assert response["jobs"][0]["application_mode"] == "manual"
-
-
-def test_nested_raw_provider_location_does_not_leak_into_explicit_local_feed(monkeypatch):
-    lafayette = _legacy_direct_job(1, country_code="", location="", title="Marketing Manager")
-    lafayette["data"] = {
-        "raw_provider_payload": {
-            "job_location": "Lafayette, Indiana",
-        }
-    }
-    imported = _job(10, tier="C", status="unknown", title="Marketing Manager")
-    imported.update({"location": "Paris, France", "city": "Paris", "country_code": "fr"})
-
-    response, calls = _run_feed(
-        monkeypatch,
-        [lafayette],
-        env={
-            "JOBS_FEED_LOCAL_DISCOVERY_MAX_CITIES": "1",
-            "JOBS_FEED_SYNC_REFRESH_MAX_SECONDS": "5",
-            "JOBS_FEED_DEBUG_DIAGNOSTICS": "true",
-        },
-        refresh=lambda: [imported],
-        locations_json=_location_payload("Paris", lat=48.8566, lng=2.3522),
-        geo_places=_geo_places(),
-    )
-
-    assert calls["refresh"] == 1
-    assert [job["job_id"] for job in response["jobs"]] == ["job_10"]
-
-
-def test_hydrated_location_cannot_leak_into_explicit_local_response(monkeypatch):
-    hidden_location = _legacy_direct_job(1, country_code="", location="", title="Marketing Manager")
-    imported = _job(10, tier="C", status="unknown", title="Marketing Manager")
-    imported.update({"location": "Paris, France", "city": "Paris", "country_code": "fr"})
-
-    original_hydrate = server._hydrate_feed_jobs
-
-    async def _hydrate_with_late_location(jobs):
-        hydrated = await original_hydrate(jobs)
-        for job in hydrated:
-            if job.get("job_id") == "job_1":
-                job["location"] = "Poland"
-        return hydrated
-
-    monkeypatch.setattr(server, "_hydrate_feed_jobs", _hydrate_with_late_location)
-
-    response, calls = _run_feed(
-        monkeypatch,
-        [hidden_location],
-        env={
-            "JOBS_FEED_LOCAL_DISCOVERY_MAX_CITIES": "1",
-            "JOBS_FEED_SYNC_REFRESH_MAX_SECONDS": "5",
-            "JOBS_FEED_DEBUG_DIAGNOSTICS": "true",
-        },
-        refresh=lambda: [imported],
-        locations_json=_location_payload("Paris", lat=48.8566, lng=2.3522),
-        geo_places=_geo_places(),
-    )
-
-    assert calls["refresh"] == 1
-    assert [job["job_id"] for job in response["jobs"]] == ["job_10"]
-
-
-def test_hydrated_global_candidates_do_not_satisfy_local_inventory(monkeypatch):
-    global_rows = [
-        _legacy_direct_job(index, country_code="", location="", title="Marketing Manager")
-        for index in range(1, 7)
-    ]
-    late_locations = {
-        "job_1": "Poland",
-        "job_2": "Brazil",
-        "job_3": "Dublin - Ireland",
-        "job_4": "San Francisco Bay Area",
-        "job_5": "San Francisco, CA",
-        "job_6": "Lafayette, Indiana",
-    }
-    imported = _job(20, tier="C", status="unknown", title="Marketing Manager")
-    imported.update({"location": "Paris, France", "city": "Paris", "country_code": "fr"})
-
-    original_hydrate = server._hydrate_feed_jobs
-
-    async def _hydrate_with_late_locations(jobs):
-        hydrated = await original_hydrate(jobs)
-        for job in hydrated:
-            if job.get("job_id") in late_locations:
-                job["location"] = late_locations[job.get("job_id")]
-        return hydrated
-
-    monkeypatch.setattr(server, "_hydrate_feed_jobs", _hydrate_with_late_locations)
-
-    response, calls = _run_feed(
-        monkeypatch,
-        global_rows,
-        env={
-            "JOBS_FEED_LOCAL_DISCOVERY_MAX_CITIES": "1",
-            "JOBS_FEED_SYNC_REFRESH_MAX_SECONDS": "5",
-            "JOBS_FEED_DEBUG_DIAGNOSTICS": "true",
-        },
-        refresh=lambda: [imported],
-        locations_json=_location_payload("Paris", lat=48.8566, lng=2.3522),
-        geo_places=_geo_places(),
-    )
-
-    assert calls["refresh"] == 1
-    assert response["request_trace"]["db_local_candidate_count_after_filters"] < 5
-    assert [job["job_id"] for job in response["jobs"]] == ["job_20"]
-
-
-def test_primary_location_wins_over_raw_provider_metadata_for_radius_match(monkeypatch):
-    dublin = _legacy_direct_job(1, country_code="", location="Dublin, Ireland", title="Marketing Manager")
-    dublin["data"] = {
-        "raw_provider_payload": {
-            "location": "Dublin, Ireland",
-            "offices": [{"location": "Madrid, Spain"}],
-            "job_location": "Dublin, Ireland",
-        }
-    }
-    imported = _job(20, tier="C", status="unknown", title="Marketing Manager")
-    imported.update({"location": "Paris, France", "city": "Paris", "country_code": "fr"})
-
-    response, calls = _run_feed(
-        monkeypatch,
-        [dublin],
-        env={
-            "JOBS_FEED_LOCAL_DISCOVERY_MAX_CITIES": "1",
-            "JOBS_FEED_SYNC_REFRESH_MAX_SECONDS": "5",
-            "JOBS_FEED_DEBUG_DIAGNOSTICS": "true",
-        },
-        refresh=lambda: [imported],
-        locations_json=_location_payload("Paris", lat=48.8566, lng=2.3522),
-        geo_places=_geo_places(),
-    )
-
-    assert calls["refresh"] == 1
-    assert [job["job_id"] for job in response["jobs"]] == ["job_20"]
-    assert all(
-        item.get("job_id") != "job_1"
-        for item in response["request_trace"].get("response_hard_location_pass_reasons", [])
-    )
-
-
-def test_force_provider_refresh_fetches_more_for_explicit_local_stack(monkeypatch):
-    local_jobs = []
-    for index in range(1, 6):
-        job = _job(index, tier="A", status="valid", title="Marketing Manager")
-        job.update({"location": "Paris, France", "city": "Paris", "country_code": "fr"})
-        local_jobs.append(job)
-    imported = _job(20, tier="C", status="unknown", title="Marketing Manager")
-    imported.update({"location": "Paris, France", "city": "Paris", "country_code": "fr"})
-
-    response, calls = _run_feed(
-        monkeypatch,
-        local_jobs,
-        env={
-            "JOBS_FEED_LOCAL_DISCOVERY_MAX_CITIES": "1",
-            "JOBS_FEED_SYNC_REFRESH_MAX_SECONDS": "5",
-            "JOBS_FEED_DEBUG_DIAGNOSTICS": "true",
-        },
-        refresh=lambda: [imported],
-        locations_json=_location_payload("Paris", lat=48.8566, lng=2.3522),
-        force_provider_refresh=True,
-        geo_places=_geo_places(),
-    )
-
-    assert calls["refresh"] == 1
-    assert response["request_trace"]["received_query_params"]["force_provider_refresh"] is True
-    assert response["request_trace"]["local_jsearch_discovery_attempted"] is True
 
 
 def test_explicit_local_search_excludes_remote_when_onsite_only(monkeypatch):

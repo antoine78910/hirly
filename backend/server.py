@@ -3446,7 +3446,6 @@ async def get_feed(
     country_code: Optional[str] = None,
     lat: Optional[float] = None,
     lng: Optional[float] = None,
-    force_provider_refresh: bool = False,
     score: bool = False,                                  # opt-in AI scoring (slow); default off for snappy UX
     search_role: Optional[str] = None,                    # override profile target_role for this feed request
 ):
@@ -4136,7 +4135,6 @@ async def get_feed(
                 "include_unknown_salary": include_unknown_salary,
                 "posted_within": posted_within,
                 "min_salary": min_salary,
-                "force_provider_refresh": force_provider_refresh,
             },
             "parsed_locations_count": len(request_selected_locations),
             "parsed_locations": [
@@ -4234,65 +4232,15 @@ async def get_feed(
                 -_recency_score(job),
             )
 
-        def _primary_job_location_parts(job: Dict[str, Any]) -> List[str]:
-            return [
-                str(job.get("city") or ""),
-                str(job.get("region") or ""),
-                str(job.get("location") or ""),
-                str(job.get("country") or ""),
-                str(job.get("job_location") or ""),
-                str(job.get("job_city") or ""),
-                str(job.get("job_state") or ""),
-                str(job.get("job_country") or ""),
-            ]
-
-        def _job_location_parts(job: Dict[str, Any]) -> List[str]:
-            def _append_location_value(parts_list: List[str], value: Any) -> None:
-                if isinstance(value, (list, tuple)):
-                    for item in value:
-                        _append_location_value(parts_list, item)
-                elif isinstance(value, dict):
-                    for key in (
-                        "location",
-                        "locations",
-                        "job_location",
-                        "job_city",
-                        "job_state",
-                        "job_country",
-                        "city",
-                        "region",
-                        "country",
-                        "candidate_required_location",
-                        "workplace",
-                        "workplace_type",
-                        "raw_provider_payload",
-                        "categories",
-                        "detected_extensions",
-                    ):
-                        if key in value:
-                            _append_location_value(parts_list, value.get(key))
-                else:
-                    parts_list.append(str(value or ""))
-
-            parts: List[str] = _primary_job_location_parts(job)
-            for container in (
-                job.get("data"),
-                job.get("raw_provider_payload"),
-                job.get("categories"),
-                job.get("detected_extensions"),
-            ):
-                _append_location_value(parts, container)
-            return parts
-
         def _job_work_location(job: Dict[str, Any]) -> str:
             raw = job.get("remote")
             if isinstance(raw, bool):
                 return "remote" if raw else "onsite"
             text = " ".join([
                 str(raw or ""),
+                str(job.get("location") or ""),
                 str(job.get("workplace_type") or ""),
                 str(job.get("work_location") or ""),
-                *_job_location_parts(job),
             ]).lower()
             if "hybrid" in text:
                 return "hybrid"
@@ -4303,16 +4251,17 @@ async def get_feed(
             return "unknown"
 
         def _normalized_job_location_text(job: Dict[str, Any]) -> str:
-            return normalize_place_name(" ".join(_job_location_parts(job)))
-
-        def _normalized_primary_job_location_text(job: Dict[str, Any]) -> str:
-            return normalize_place_name(" ".join(_primary_job_location_parts(job)))
+            return normalize_place_name(" ".join([
+                str(job.get("city") or ""),
+                str(job.get("region") or ""),
+                str(job.get("location") or ""),
+                str((job.get("data") or {}).get("location") or "") if isinstance(job.get("data"), dict) else "",
+            ]))
 
         def _expanded_location_match(job: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             if not location_context.get("used"):
                 return None
-            primary_job_text = _normalized_primary_job_location_text(job)
-            job_text = primary_job_text or _normalized_job_location_text(job)
+            job_text = _normalized_job_location_text(job)
             job_country_code = str(job.get("country_code") or "").lower().strip()
             if not job_text and not job_country_code:
                 return None
@@ -4329,12 +4278,6 @@ async def get_feed(
                 normalized_names = [normalize_place_name(str(name or "")) for name in names]
                 if any(name and name in job_text for name in normalized_names):
                     return place
-            # If the display/top-level location is known and does not match, do
-            # not let broad raw provider metadata override it. Some ATS payloads
-            # include company-wide offices or board metadata that mention the
-            # searched city even when the actual job is elsewhere.
-            if primary_job_text:
-                return None
             return None
 
         def _matches_work_location(job: Dict[str, Any]) -> bool:
@@ -4369,8 +4312,7 @@ async def get_feed(
         def _matches_location(job: Dict[str, Any]) -> bool:
             if not explicit_location_filter and not only_my_country:
                 return True
-            primary_job_location = _normalized_primary_job_location_text(job)
-            job_location = primary_job_location or _normalized_job_location_text(job)
+            job_location = str(job.get("location") or "").lower()
             job_country_code = str(job.get("country_code") or "").lower().strip()
             if not job_location and not job_country_code:
                 return include_unknown_location
@@ -4401,36 +4343,12 @@ async def get_feed(
         def _passes_explicit_local_hard_constraint(job: Dict[str, Any]) -> bool:
             if not explicit_local_intent:
                 return True
-            has_known_location = bool(_normalized_primary_job_location_text(job) or _normalized_job_location_text(job) or job.get("country_code"))
+            has_known_location = bool(job.get("location") or job.get("city") or job.get("region") or job.get("country_code"))
             if not has_known_location:
                 return bool(include_unknown_location)
             if _explicit_local_remote_allowed(job):
                 return True
             return _matches_location(job)
-
-        def _explicit_local_hard_constraint_reason(job: Dict[str, Any]) -> tuple[bool, str]:
-            if not explicit_local_intent:
-                return True, "not_explicit_local"
-            normalized_location = _normalized_primary_job_location_text(job) or _normalized_job_location_text(job)
-            job_country_code = str(job.get("country_code") or "").lower().strip()
-            if not normalized_location and not job_country_code:
-                return bool(include_unknown_location), "unknown_location_allowed" if include_unknown_location else "unknown_location_blocked"
-            if _explicit_local_remote_allowed(job):
-                return True, "explicit_remote_allowed"
-            expanded_match = _expanded_location_match(job)
-            if expanded_match:
-                return True, f"expanded_location_match:{expanded_match.get('name') or expanded_match.get('ascii_name')}"
-            return False, "outside_explicit_location"
-
-        def _counts_as_explicit_local_inventory(job: Dict[str, Any]) -> bool:
-            allowed, reason = _explicit_local_hard_constraint_reason(job)
-            if not allowed:
-                return False
-            if reason == "unknown_location_allowed":
-                return False
-            if reason == "explicit_remote_allowed" and not remote_explicitly_selected:
-                return False
-            return True
 
         def _matches_salary(job: Dict[str, Any]) -> bool:
             if not min_salary or min_salary <= 0:
@@ -4767,33 +4685,13 @@ async def get_feed(
                     len(candidates),
                     db_good_count,
                 )
-            pre_hydrate_candidate_count = len(candidates)
-            candidates = await _hydrate_feed_jobs(candidates)
-            candidates = [_with_application_capability_fields(job) for job in candidates]
-            candidates = [job for job in candidates if _passes_explicit_local_hard_constraint(job)]
-            if len(candidates) != pre_hydrate_candidate_count:
-                db_good_count = sum(1 for job in candidates if _role_compatible_for_threshold(job))
-                pre_filter_candidates = list(candidates)
-                logger.info(
-                    "jobs/feed explicit_local_pre_refresh_hydrated_constraint: user_id=%s before=%s after=%s db_good_count=%s",
-                    user.user_id,
-                    pre_hydrate_candidate_count,
-                    len(candidates),
-                    db_good_count,
-                )
 
-        local_inventory_count = (
-            sum(1 for job in candidates if _counts_as_explicit_local_inventory(job))
-            if explicit_local_intent
-            else len(candidates)
-        )
         request_trace["db_local_candidate_count_before_filters"] = pre_refresh_candidate_count
-        request_trace["db_local_candidate_count_after_filters"] = local_inventory_count
-        request_trace["db_candidate_count_after_filters"] = len(candidates)
+        request_trace["db_local_candidate_count_after_filters"] = len(candidates)
         request_trace["manual_candidate_count"] = sum(1 for job in candidates if job.get("application_mode") in {"manual", "assisted"})
         request_trace["auto_apply_candidate_count"] = sum(1 for job in candidates if job.get("application_mode") == "auto_apply")
         request_trace["blocked_hidden_count"] = local_blocked_hidden_count or db_rejected_count
-        request_trace["local_inventory_weak"] = bool(explicit_local_intent and local_inventory_count < requested_limit)
+        request_trace["local_inventory_weak"] = bool(explicit_local_intent and len(candidates) < requested_limit)
 
         def _explicit_local_cooldown_key() -> str:
             location_parts: List[str] = []
@@ -4831,14 +4729,13 @@ async def get_feed(
             if explicit_local_intent
             else _feed_sync_refresh_cooldown_until
         )
-        force_explicit_local_refresh = bool(explicit_local_intent and force_provider_refresh)
-        cooldown_active = cooldown_enabled and cooldown_now < cooldown_until and not force_explicit_local_refresh
+        cooldown_active = cooldown_enabled and cooldown_now < cooldown_until
         request_trace["feed_provider_cooldown_key"] = cooldown_key
         request_trace["feed_provider_cooldown_active"] = bool(cooldown_active)
         request_trace["feed_provider_cooldown_remaining_seconds"] = max(0, int(cooldown_until - cooldown_now))
         explicit_local_after_budget_refresh = (
             explicit_local_intent
-            and local_inventory_count < requested_limit
+            and len(candidates) < requested_limit
             and _env_bool("JOBS_FEED_EXPLICIT_LOCAL_DISCOVERY_AFTER_DB_TIMEOUT", True)
         )
         refresh_budget_available = not _timed_out() or explicit_local_after_budget_refresh
@@ -4847,11 +4744,9 @@ async def get_feed(
             and refresh_budget_available
             and not cooldown_active
             and (
-                force_explicit_local_refresh
-                or
                 not db_first_enabled
                 or db_good_count == 0
-                or (explicit_local_intent and local_inventory_count < requested_limit)
+                or (explicit_local_intent and len(candidates) < requested_limit)
             )
         )
         request_trace["local_jsearch_discovery_should_run"] = bool(should_refresh and explicit_local_intent)
@@ -4862,9 +4757,7 @@ async def get_feed(
                 request_trace["local_jsearch_skip_reason"] = "feed_timeout_budget_exhausted"
             elif cooldown_active:
                 request_trace["local_jsearch_skip_reason"] = "provider_cooldown_active"
-            elif force_provider_refresh:
-                request_trace["local_jsearch_skip_reason"] = "force_refresh_not_eligible"
-            elif local_inventory_count >= requested_limit:
+            elif len(candidates) >= requested_limit:
                 request_trace["local_jsearch_skip_reason"] = "local_candidate_count_sufficient"
             elif db_first_enabled and db_good_count > 0:
                 request_trace["local_jsearch_skip_reason"] = "db_good_count_nonzero"
@@ -4911,14 +4804,14 @@ async def get_feed(
                 }
                 for loc in refresh_locations
             ]
-            force_provider_query_refresh = os.environ.get("JOB_FEED_ON_DEMAND_JSEARCH", "true").lower() in ("1", "true", "yes", "on")
+            force_provider_refresh = os.environ.get("JOB_FEED_ON_DEMAND_JSEARCH", "true").lower() in ("1", "true", "yes", "on")
             logger.info(
                 "jobs/feed jsearch_fallback_start: user_id=%s db_good_count=%s weak_threshold=%s refresh_locations=%s force_provider_refresh=%s max_seconds=%s max_results=%s max_pages=%s page_size=%s",
                 user.user_id,
                 db_good_count,
                 db_weak_results_threshold,
                 len(refresh_locations),
-                force_provider_query_refresh,
+                force_provider_refresh,
                 sync_refresh_max_seconds,
                 sync_refresh_max_results,
                 sync_refresh_max_pages,
@@ -4942,7 +4835,7 @@ async def get_feed(
                             location_data_override=loc_data if isinstance(loc_data, dict) else None,
                             search_radius=search_radius,
                             role_override=target_role,
-                            force_provider_refresh=force_provider_query_refresh,
+                            force_provider_refresh=force_provider_refresh,
                             query_limit_override=sync_refresh_max_results,
                             provider_max_pages=sync_refresh_max_pages,
                             provider_page_size=sync_refresh_page_size,
@@ -5255,53 +5148,15 @@ async def get_feed(
 
         jobs = await _hydrate_feed_jobs(jobs)
         jobs = [_with_application_capability_fields(job) for job in jobs]
-        hydrated_hard_location_pre_count = len(jobs)
-        hydrated_hard_location_rejected_count = 0
-        if explicit_local_intent:
-            jobs = [job for job in jobs if _passes_explicit_local_hard_constraint(job)]
-            hydrated_hard_location_rejected_count = hydrated_hard_location_pre_count - len(jobs)
-            if hydrated_hard_location_rejected_count:
-                logger.info(
-                    "feed_filter_stage user_id=%s stage=explicit_local_hydrated_hard_constraint elapsed_ms=%s before=%s after=%s rejected=%s",
-                    user.user_id,
-                    _elapsed_ms(),
-                    hydrated_hard_location_pre_count,
-                    len(jobs),
-                    hydrated_hard_location_rejected_count,
-                )
 
         clean_jobs = []
-        response_location_rejections: List[Dict[str, Any]] = []
-        response_location_pass_reasons: List[Dict[str, Any]] = []
-        for job in jobs:
-            if explicit_local_intent:
-                allowed, reason = _explicit_local_hard_constraint_reason(job)
-                if not allowed:
-                    if len(response_location_rejections) < 10:
-                        response_location_rejections.append({
-                            "job_id": job.get("job_id"),
-                            "title": job.get("title"),
-                            "company": job.get("company"),
-                            "location": job.get("location"),
-                            "country_code": job.get("country_code"),
-                            "reason": reason,
-                        })
-                    continue
-                if len(response_location_pass_reasons) < 10:
-                    response_location_pass_reasons.append({
-                        "job_id": job.get("job_id"),
-                        "location": job.get("location"),
-                        "country_code": job.get("country_code"),
-                        "reason": reason,
-                    })
+        for job in jobs[:requested_limit]:
             clean = {key: value for key, value in job.items() if not key.startswith("_")}
             clean_jobs.append({
                 **clean,
                 "match_score": clean.get("match_score") or random.randint(78, 96),
                 "match_reasons": clean.get("match_reasons") or ["Auto-apply compatible role from a supported ATS."],
             })
-            if len(clean_jobs) >= requested_limit:
-                break
         elapsed = _elapsed_ms()
         logger.info(
             "jobs/feed fast complete: user_id=%s feed_elapsed_ms=%s returned=%s fallback_used=%s timed_out=%s direct_refresh_jobs=%s provider_search_keys=%s unfiltered_count=%s candidates=%s",
@@ -5344,9 +5199,6 @@ async def get_feed(
         request_trace["auto_apply_candidate_count"] = feed_summary["auto_apply_count"]
         request_trace["blocked_hidden_count"] = feed_summary["blocked_hidden_count"]
         request_trace["final_jobs_count"] = len(clean_jobs)
-        request_trace["response_hard_location_rejected_count"] = len(response_location_rejections)
-        request_trace["response_hard_location_rejections"] = response_location_rejections
-        request_trace["response_hard_location_pass_reasons"] = response_location_pass_reasons
         request_trace["frontend_relevant_application_modes"] = sorted({
             str(job.get("application_mode") or "")
             for job in clean_jobs

@@ -597,14 +597,6 @@ export default function Swipe() {
     setFeedError("");
     if (replace) setJobs([]);
     const params = buildFeedParams(f);
-    if (
-      reason === "after_swipe_low_stack"
-      || reason === "after_dismiss_low_stack"
-      || reason === "desktop_refresh"
-      || reason === "empty_refresh"
-    ) {
-      params.set("force_provider_refresh", "true");
-    }
     const requestUrl = `/jobs/feed?${params.toString()}`;
     console.group("[FeedDebug] loadFeed");
     console.log("reason", reason);
