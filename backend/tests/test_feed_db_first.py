@@ -342,7 +342,7 @@ def test_zero_db_uses_limited_sync_jsearch_fallback(monkeypatch):
     assert calls["refresh_kwargs"]["query_limit_override"] == 10
     assert calls["refresh_kwargs"]["provider_max_pages"] == 1
     assert calls["refresh_kwargs"]["provider_page_size"] == 10
-    assert calls["refresh_kwargs"]["max_provider_requests_override"] == 1
+    assert calls["refresh_kwargs"]["max_provider_requests_override"] == 2
     assert response["jobs"]
 
 
@@ -508,7 +508,7 @@ def test_explicit_local_jsearch_fallback_returns_imported_manual_local_job(monke
     )
     assert calls["refresh"] >= 1
     assert calls["refresh"] <= 2
-    assert calls["refresh_kwargs"]["max_provider_requests_override"] == 1
+    assert calls["refresh_kwargs"]["max_provider_requests_override"] == 2
     assert [job["job_id"] for job in response["jobs"]] == ["job_1"]
     assert response["jobs"][0]["application_mode"] == "manual"
 

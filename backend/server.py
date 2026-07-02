@@ -3867,6 +3867,7 @@ async def get_feed(
         sync_refresh_page_size = max(1, min(_env_int("JSEARCH_FEED_FALLBACK_PAGE_SIZE", 10), 50))
         sync_refresh_cooldown_seconds = max(30, min(_env_int("JOBS_FEED_SYNC_REFRESH_COOLDOWN_SECONDS", 300), 1800))
         sync_refresh_total_seconds = max(2, min(_env_int("JOBS_FEED_SYNC_REFRESH_TOTAL_SECONDS", 12), 25))
+        sync_refresh_attempts_per_city = max(1, min(_env_int("JOBS_FEED_PROVIDER_ATTEMPTS_PER_CITY", 2), 4))
         target_role = feed_target_role
         strict_tokens = _tokens(target_role)
         family_tokens = _role_family_tokens(target_role)
@@ -4180,6 +4181,8 @@ async def get_feed(
             "local_jsearch_skip_reason": None,
             "jsearch_queries_planned": [],
             "jsearch_queries_executed": [],
+            "jsearch_attempts_per_city": sync_refresh_attempts_per_city,
+            "jsearch_refresh_results": [],
             "jsearch_results_count": 0,
             "final_jobs_count": 0,
             "frontend_relevant_application_modes": [],
@@ -4926,7 +4929,7 @@ async def get_feed(
             ]
             provider_force_refresh = force_provider_refresh or os.environ.get("JOB_FEED_ON_DEMAND_JSEARCH", "true").lower() in ("1", "true", "yes", "on")
             logger.info(
-                "jobs/feed jsearch_fallback_start: user_id=%s db_good_count=%s weak_threshold=%s refresh_locations=%s force_provider_refresh=%s max_seconds=%s total_seconds=%s max_results=%s max_pages=%s page_size=%s",
+                "jobs/feed jsearch_fallback_start: user_id=%s db_good_count=%s weak_threshold=%s refresh_locations=%s force_provider_refresh=%s max_seconds=%s total_seconds=%s max_results=%s max_pages=%s page_size=%s attempts_per_city=%s",
                 user.user_id,
                 db_good_count,
                 db_weak_results_threshold,
@@ -4937,6 +4940,7 @@ async def get_feed(
                 sync_refresh_max_results,
                 sync_refresh_max_pages,
                 sync_refresh_page_size,
+                sync_refresh_attempts_per_city,
             )
             provider_refresh_deadline = time.perf_counter() + sync_refresh_total_seconds
             for loc_data in refresh_locations:
@@ -4972,7 +4976,7 @@ async def get_feed(
                             query_limit_override=sync_refresh_max_results,
                             provider_max_pages=sync_refresh_max_pages,
                             provider_page_size=sync_refresh_page_size,
-                            max_provider_requests_override=1,
+                            max_provider_requests_override=sync_refresh_attempts_per_city,
                             max_direct_apply_requests_override=0,
                         ),
                         timeout=per_location_timeout,
@@ -5042,8 +5046,24 @@ async def get_feed(
                     provider_search_keys.append(str(refresh_result.get("search_key")))
             provider_search_keys = list(dict.fromkeys(provider_search_keys))
             request_trace["local_jsearch_discovery_attempted"] = bool(explicit_local_intent)
+            request_trace["jsearch_refresh_results"] = [
+                {
+                    "reason": item.get("reason"),
+                    "ok": item.get("ok"),
+                    "imported": item.get("jobs_imported", item.get("imported", item.get("count", 0))),
+                    "relevant_imported": item.get("relevant_imported"),
+                    "manual_ready_imported": item.get("manual_ready_imported"),
+                    "provider_requests": item.get("provider_requests"),
+                    "provider_errors": item.get("provider_errors"),
+                    "provider_rate_limited": item.get("provider_rate_limited"),
+                    "elapsed_ms": item.get("elapsed_ms"),
+                    "final_location_used": item.get("final_location_used"),
+                }
+                for item in refresh_results
+                if isinstance(item, dict)
+            ]
             request_trace["jsearch_results_count"] = sum(
-                int(item.get("jobs_imported", item.get("count") or 0) or 0)
+                int(item.get("jobs_imported", item.get("imported", item.get("count") or 0)) or 0)
                 for item in refresh_results
                 if isinstance(item, dict)
             )

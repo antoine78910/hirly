@@ -18,6 +18,7 @@ from job_providers import get_board_provider, get_job_provider
 from job_providers.apply_eligibility import is_manual_fulfillment_ready
 from job_providers.base import BoardQuery, JobSearchQuery
 from job_validation import cheap_validate_job_applyability
+from location_intelligence import country_to_jsearch_language
 
 logger = logging.getLogger(__name__)
 _PROVIDER_COOLDOWN_UNTIL: Dict[str, datetime] = {}
@@ -128,10 +129,7 @@ def _language_for_country(country: Optional[str]) -> str:
     explicit = os.environ.get("JSEARCH_LANGUAGE")
     if explicit:
         return explicit
-    country_code = (country or "").lower()
-    if country_code in ("fr", "be", "ch", "ma"):
-        return "fr"
-    return "en"
+    return country_to_jsearch_language(country)
 
 
 def _next_radius(search_radius: str) -> Optional[str]:
@@ -1444,6 +1442,7 @@ async def refresh_jobs_for_profile_if_needed(
         "search_key": search_key,
         "search_keys": search_keys,
         "imported": total_imported,
+        "jobs_imported": total_imported,
         "relevant_imported": relevant_imported,
         "manual_ready_imported": manual_ready_imported,
         "provider_requests": provider_requests,

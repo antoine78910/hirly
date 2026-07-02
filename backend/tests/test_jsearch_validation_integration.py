@@ -1,4 +1,5 @@
 from db.supabase_adapter import _supabase_row
+from jobs_service import build_profile_job_query
 from job_providers.base import JobSearchQuery
 from job_providers.jsearch import JSearchProvider
 from job_validation import cheap_validate_job_applyability
@@ -48,3 +49,17 @@ def test_supabase_upsert_receives_validation_fields():
     assert row["apply_fulfillment_status"] == "manual_ready"
     assert row["applyability_tier"] == "A"
     assert row["data"]["validation_status"] == "valid"
+
+
+def test_profile_job_query_uses_country_local_language(monkeypatch):
+    monkeypatch.delenv("JSEARCH_LANGUAGE", raising=False)
+    query = build_profile_job_query(
+        {"target_role": "Software Engineer"},
+        location_override="Madrid, Spain",
+        location_data_override={"location_label": "Madrid, Spain", "country_code": "es"},
+        search_radius="50km",
+        role_override="Software Engineer",
+    )
+
+    assert query.country == "es"
+    assert query.language == "es"
