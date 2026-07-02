@@ -45,44 +45,6 @@ import { getJobBadgeItems, getJobDisplayContent } from "../lib/jobDisplayUtils";
 import { translateJobTitle, translateLocationLabel, translateRoleLabel } from "../lib/localizedDisplay";
 
 const DEFAULT_SEARCH_RADIUS = "50km";
-const normalizeLocationText = (value = "") =>
-  String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-
-const isExplicitLocalRadius = (filters) => {
-  const radius = String(filters?.searchRadius || DEFAULT_SEARCH_RADIUS).trim().toLowerCase();
-  return /^\d+\s*km$/.test(radius) && Boolean(filters?.locationsData?.length || filters?.locationData || filters?.locations?.length);
-};
-
-const jobMatchesFeedLocationTrace = (job, requestTrace) => {
-  if (!requestTrace?.explicit_local_intent) return true;
-  const locationText = normalizeLocationText([
-    job?.location,
-    job?.city,
-    job?.region,
-    job?.country,
-    job?.job_location,
-    job?.data?.location,
-    job?.data?.job_location,
-    job?.data?.raw_provider_payload?.location,
-    job?.data?.raw_provider_payload?.job_location,
-  ].filter(Boolean).join(" "));
-  const countryCode = String(job?.country_code || "").toLowerCase().trim();
-  const isRemote = job?.remote === true || /\bremote\b/.test(locationText);
-  if (isRemote && requestTrace.remote_explicitly_selected) return true;
-  if (!locationText && !countryCode) return Boolean(requestTrace.include_unknown_location);
-  const places = requestTrace.expanded_places || [];
-  return places.some((place) => {
-    const placeCountry = String(place?.country_code || "").toLowerCase().trim();
-    if (placeCountry && countryCode && placeCountry !== countryCode) return false;
-    const name = normalizeLocationText(place?.name);
-    return Boolean(name && locationText.includes(name));
-  });
-};
 const FILTERS_STORAGE_KEY = "swiipr.jobs.filters.v1";
 
 const readPersistedFilters = () => {
@@ -635,7 +597,12 @@ export default function Swipe() {
     setFeedError("");
     if (replace) setJobs([]);
     const params = buildFeedParams(f);
-    if (reason === "after_swipe_low_stack" || reason === "after_dismiss_low_stack") {
+    if (
+      reason === "after_swipe_low_stack"
+      || reason === "after_dismiss_low_stack"
+      || reason === "desktop_refresh"
+      || reason === "empty_refresh"
+    ) {
       params.set("force_provider_refresh", "true");
     }
     const requestUrl = `/jobs/feed?${params.toString()}`;
@@ -694,33 +661,6 @@ export default function Swipe() {
         }
       }
       if (requestId !== feedRequestIdRef.current) return;
-      const rawJobs = Array.isArray(data?.jobs) ? data.jobs : [];
-      const visibleJobs = isExplicitLocalRadius(mergeFilters(f))
-        ? rawJobs.filter((job) => jobMatchesFeedLocationTrace(job, data?.request_trace))
-        : rawJobs;
-      if (visibleJobs.length !== rawJobs.length) {
-        console.warn("[FeedDebug] filtered outside explicit local jobs", {
-          before: rawJobs.length,
-          after: visibleJobs.length,
-          removed: rawJobs.slice(0, 10).filter((job) => !visibleJobs.includes(job)).map((job) => ({
-            title: job.title,
-            company: job.company,
-            location: job.location,
-            country_code: job.country_code,
-          })),
-        });
-      }
-      data = {
-        ...data,
-        jobs: visibleJobs,
-        total: visibleJobs.length,
-        feed_summary: data?.feed_summary
-          ? {
-              ...data.feed_summary,
-              frontend_outside_location_hidden_count: rawJobs.length - visibleJobs.length,
-            }
-          : data?.feed_summary,
-      };
       console.group("[FeedDebug] response");
       console.log("jobs count", data?.jobs?.length || 0);
       console.log("feed_summary", data?.feed_summary);
