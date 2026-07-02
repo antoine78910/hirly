@@ -9,6 +9,8 @@
   {"geoname_id": "3110044", "name": "San Sebastián", "normalized_name": "san sebastian", "ascii_name": "san sebastian", "alternate_names": ["Donostia", "Donostia-San Sebastian"], "country_code": "es", "latitude": 43.3183, "longitude": -1.9812, "population": 188000, "source": "test"},
   {"geoname_id": "2988507", "name": "Paris", "normalized_name": "paris", "ascii_name": "paris", "alternate_names": [], "country_code": "fr", "latitude": 48.8566, "longitude": 2.3522, "population": 2148000, "source": "test"},
   {"geoname_id": "2996944", "name": "Lyon", "normalized_name": "lyon", "ascii_name": "lyon", "alternate_names": [], "country_code": "fr", "latitude": 45.7640, "longitude": 4.8357, "population": 522000, "source": "test"},
+  {"geoname_id": "2972315", "name": "Toulouse", "normalized_name": "toulouse", "ascii_name": "toulouse", "alternate_names": [], "country_code": "fr", "latitude": 43.6047, "longitude": 1.4442, "population": 498000, "source": "test"},
+  {"geoname_id": "2993002", "name": "Montauban", "normalized_name": "montauban", "ascii_name": "montauban", "alternate_names": [], "country_code": "fr", "latitude": 44.0176, "longitude": 1.3550, "population": 62000, "source": "test"},
   {"geoname_id": "2643743", "name": "London", "normalized_name": "london", "ascii_name": "london", "alternate_names": [], "country_code": "gb", "latitude": 51.5074, "longitude": -0.1278, "population": 8900000, "source": "test"},
   {"geoname_id": "5128581", "name": "New York", "normalized_name": "new york", "ascii_name": "new york", "alternate_names": ["NYC"], "country_code": "us", "latitude": 40.7128, "longitude": -74.0060, "population": 8400000, "source": "test"}
 ]

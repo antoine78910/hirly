@@ -4694,9 +4694,15 @@ async def get_feed(
 
         cooldown_enabled = _env_bool("JOBS_FEED_FALLBACK_COOLDOWN_ENABLED", True)
         cooldown_active = cooldown_enabled and time.monotonic() < _feed_sync_refresh_cooldown_until
+        explicit_local_after_budget_refresh = (
+            explicit_local_intent
+            and len(candidates) < requested_limit
+            and _env_bool("JOBS_FEED_EXPLICIT_LOCAL_DISCOVERY_AFTER_DB_TIMEOUT", True)
+        )
+        refresh_budget_available = not _timed_out() or explicit_local_after_budget_refresh
         should_refresh = (
             sync_refresh_enabled
-            and not _timed_out()
+            and refresh_budget_available
             and not cooldown_active
             and (
                 not db_first_enabled
@@ -4708,7 +4714,7 @@ async def get_feed(
         if explicit_local_intent and not should_refresh:
             if not sync_refresh_enabled:
                 request_trace["local_jsearch_skip_reason"] = "sync_refresh_disabled"
-            elif _timed_out():
+            elif _timed_out() and not explicit_local_after_budget_refresh:
                 request_trace["local_jsearch_skip_reason"] = "feed_timeout_budget_exhausted"
             elif cooldown_active:
                 request_trace["local_jsearch_skip_reason"] = "provider_cooldown_active"

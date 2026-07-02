@@ -480,6 +480,41 @@ def test_explicit_local_jsearch_fallback_returns_imported_manual_local_job(monke
     assert response["jobs"][0]["application_mode"] == "manual"
 
 
+def test_real_app_text_only_toulouse_request_triggers_local_discovery(monkeypatch):
+    imported = _job(1, tier="C", status="unknown", title="Marketing Manager")
+    imported.update({"location": "Toulouse, France", "city": "Toulouse", "country_code": "fr"})
+    locations_json = json.dumps([{
+        "location_label": "Toulouse, France",
+        "place_id": "",
+        "country": "France",
+        "country_code": "",
+        "lat": None,
+        "lng": None,
+        "source": "local",
+        "kind": "city",
+    }])
+    response, calls = _run_feed(
+        monkeypatch,
+        [],
+        env={
+            "JOBS_FEED_LOCAL_DISCOVERY_MAX_CITIES": "2",
+            "JOBS_FEED_SYNC_REFRESH_MAX_SECONDS": "5",
+            "JOBS_FEED_DEBUG_DIAGNOSTICS": "true",
+        },
+        refresh=lambda: [imported],
+        locations_json=locations_json,
+        search_radius="52km",
+        geo_places=_geo_places(),
+    )
+    assert calls["refresh"] >= 1
+    assert response["request_trace"]["explicit_local_intent"] is True
+    assert response["request_trace"]["location_intelligence_used"] is True
+    assert response["request_trace"]["expanded_country_codes"] == ["fr"]
+    assert response["request_trace"]["local_jsearch_discovery_attempted"] is True
+    assert [job["job_id"] for job in response["jobs"]] == ["job_1"]
+    assert response["jobs"][0]["application_mode"] == "manual"
+
+
 def test_ciboure_radius_can_return_local_manual_biarritz_job(monkeypatch):
     biarritz = _job(1, tier="C", status="unknown", title="Marketing Manager")
     biarritz.update({"location": "Biarritz, France", "city": "Biarritz", "country_code": "fr"})

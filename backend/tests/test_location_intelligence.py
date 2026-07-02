@@ -117,6 +117,21 @@ def test_resolve_location_by_name_and_country_hint():
     assert result["country_code"] == "fr"
 
 
+def test_resolve_location_city_country_text_without_country_hint():
+    result = asyncio.run(resolve_location("Toulouse, France", country_hint=None, db=_DB(_fixture_rows())))
+    assert result["name"] == "Toulouse"
+    assert result["country_code"] == "fr"
+    assert result["latitude"] == 43.6047
+
+
+def test_expand_location_radius_city_country_text_without_coordinates():
+    rows = asyncio.run(expand_location_radius("Toulouse, France", radius_km=52, db=_DB(_fixture_rows()), max_cities=5))
+    names = _names(rows)
+    assert "Toulouse" in names
+    assert "Montauban" in names
+    assert all(row["country_code"] == "fr" for row in rows)
+
+
 def test_expand_ciboure_radius_includes_nearby_cross_border_cities():
     rows = asyncio.run(expand_location_radius("Ciboure", country_hint="fr", radius_km=50, db=_DB(_fixture_rows()), max_cities=10))
     names = _names(rows)

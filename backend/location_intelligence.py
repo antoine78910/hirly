@@ -13,6 +13,27 @@ from typing import Any, Dict, List, Optional
 
 EARTH_RADIUS_KM = 6371.0088
 
+COUNTRY_NAME_TO_CODE = {
+    "france": "fr",
+    "espagne": "es",
+    "spain": "es",
+    "united states": "us",
+    "usa": "us",
+    "united kingdom": "gb",
+    "uk": "gb",
+    "great britain": "gb",
+    "england": "gb",
+    "germany": "de",
+    "allemagne": "de",
+    "italy": "it",
+    "italie": "it",
+    "portugal": "pt",
+    "netherlands": "nl",
+    "pays bas": "nl",
+    "morocco": "ma",
+    "maroc": "ma",
+}
+
 
 def normalize_place_name(value: Optional[str]) -> str:
     text = unicodedata.normalize("NFKD", value or "")
@@ -20,6 +41,36 @@ def normalize_place_name(value: Optional[str]) -> str:
     text = text.lower().strip()
     text = re.sub(r"[^a-z0-9\s]", " ", text)
     return " ".join(text.split())
+
+
+def _country_code_from_text(value: Optional[str]) -> Optional[str]:
+    normalized = normalize_place_name(value)
+    if not normalized:
+        return None
+    return COUNTRY_NAME_TO_CODE.get(normalized)
+
+
+def _split_place_label(value: Optional[str]) -> tuple[List[str], Optional[str]]:
+    raw = str(value or "").strip()
+    if not raw:
+        return [], None
+    parts = [part.strip() for part in re.split(r"[,|/]", raw) if part.strip()]
+    country_code = _country_code_from_text(parts[-1]) if len(parts) > 1 else None
+    candidates = [raw]
+    if parts:
+        candidates.append(parts[0])
+    if country_code and len(parts) > 1:
+        without_country = ", ".join(parts[:-1]).strip()
+        if without_country:
+            candidates.append(without_country)
+    normalized_seen = set()
+    ordered = []
+    for candidate in candidates:
+        normalized = normalize_place_name(candidate)
+        if normalized and normalized not in normalized_seen:
+            normalized_seen.add(normalized)
+            ordered.append(candidate)
+    return ordered, country_code
 
 
 def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -132,28 +183,34 @@ async def resolve_location(
 ) -> Optional[Dict[str, Any]]:
     lat_value = _as_float(lat)
     lng_value = _as_float(lng)
+    label_candidates, label_country_hint = _split_place_label(location_label)
+    effective_country_hint = str(country_hint or label_country_hint or "").lower().strip() or None
     if lat_value is not None and lng_value is not None:
         name = location_label or ""
         return {
             "name": name,
             "normalized_name": normalize_place_name(name),
-            "country_code": str(country_hint or "").lower() or None,
+            "country_code": effective_country_hint,
             "latitude": lat_value,
             "longitude": lng_value,
             "population": 0,
             "source": "frontend_coordinates",
         }
 
-    normalized = normalize_place_name(location_label)
-    if not normalized:
+    if not label_candidates:
         return None
-    candidates = await _find_name_candidates(db, normalized, country_hint)
-    if candidates:
-        return _place_document(candidates[0])
+    normalized = normalize_place_name(label_candidates[0])
+    for candidate_label in label_candidates:
+        candidate_normalized = normalize_place_name(candidate_label)
+        if not candidate_normalized:
+            continue
+        candidates = await _find_name_candidates(db, candidate_normalized, effective_country_hint)
+        if candidates:
+            return _place_document(candidates[0])
     return {
         "name": location_label or "",
         "normalized_name": normalized,
-        "country_code": str(country_hint or "").lower() or None,
+        "country_code": effective_country_hint,
         "latitude": None,
         "longitude": None,
         "population": 0,
