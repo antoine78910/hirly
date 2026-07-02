@@ -1165,7 +1165,23 @@ export default function Swipe() {
         onSaved={({ role, location, locationData }) => {
           setTarget({ role, location });
           setTargetLocationData(locationData);
-          loadFeed(true, filtersRef.current);
+          const nextFilters = {
+            ...(filtersRef.current || {}),
+            searchRadius: filtersRef.current?.searchRadius || DEFAULT_SEARCH_RADIUS,
+          };
+          if (locationData) {
+            nextFilters.locationsData = [locationData];
+            delete nextFilters.locations;
+            delete nextFilters.locationData;
+          } else if (location && location !== "Anywhere") {
+            nextFilters.locations = [location];
+            delete nextFilters.locationsData;
+            delete nextFilters.locationData;
+          }
+          filtersRef.current = nextFilters;
+          setFilters(nextFilters);
+          savePersistedFilters(nextFilters);
+          loadFeed(true, nextFilters);
         }}
       />
 
