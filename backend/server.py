@@ -4234,6 +4234,18 @@ async def get_feed(
                 -_recency_score(job),
             )
 
+        def _primary_job_location_parts(job: Dict[str, Any]) -> List[str]:
+            return [
+                str(job.get("city") or ""),
+                str(job.get("region") or ""),
+                str(job.get("location") or ""),
+                str(job.get("country") or ""),
+                str(job.get("job_location") or ""),
+                str(job.get("job_city") or ""),
+                str(job.get("job_state") or ""),
+                str(job.get("job_country") or ""),
+            ]
+
         def _job_location_parts(job: Dict[str, Any]) -> List[str]:
             def _append_location_value(parts_list: List[str], value: Any) -> None:
                 if isinstance(value, (list, tuple)):
@@ -4262,16 +4274,7 @@ async def get_feed(
                 else:
                     parts_list.append(str(value or ""))
 
-            parts: List[str] = [
-                str(job.get("city") or ""),
-                str(job.get("region") or ""),
-                str(job.get("location") or ""),
-                str(job.get("country") or ""),
-                str(job.get("job_location") or ""),
-                str(job.get("job_city") or ""),
-                str(job.get("job_state") or ""),
-                str(job.get("job_country") or ""),
-            ]
+            parts: List[str] = _primary_job_location_parts(job)
             for container in (
                 job.get("data"),
                 job.get("raw_provider_payload"),
@@ -4302,10 +4305,14 @@ async def get_feed(
         def _normalized_job_location_text(job: Dict[str, Any]) -> str:
             return normalize_place_name(" ".join(_job_location_parts(job)))
 
+        def _normalized_primary_job_location_text(job: Dict[str, Any]) -> str:
+            return normalize_place_name(" ".join(_primary_job_location_parts(job)))
+
         def _expanded_location_match(job: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             if not location_context.get("used"):
                 return None
-            job_text = _normalized_job_location_text(job)
+            primary_job_text = _normalized_primary_job_location_text(job)
+            job_text = primary_job_text or _normalized_job_location_text(job)
             job_country_code = str(job.get("country_code") or "").lower().strip()
             if not job_text and not job_country_code:
                 return None
@@ -4322,6 +4329,12 @@ async def get_feed(
                 normalized_names = [normalize_place_name(str(name or "")) for name in names]
                 if any(name and name in job_text for name in normalized_names):
                     return place
+            # If the display/top-level location is known and does not match, do
+            # not let broad raw provider metadata override it. Some ATS payloads
+            # include company-wide offices or board metadata that mention the
+            # searched city even when the actual job is elsewhere.
+            if primary_job_text:
+                return None
             return None
 
         def _matches_work_location(job: Dict[str, Any]) -> bool:
@@ -4356,7 +4369,8 @@ async def get_feed(
         def _matches_location(job: Dict[str, Any]) -> bool:
             if not explicit_location_filter and not only_my_country:
                 return True
-            job_location = _normalized_job_location_text(job)
+            primary_job_location = _normalized_primary_job_location_text(job)
+            job_location = primary_job_location or _normalized_job_location_text(job)
             job_country_code = str(job.get("country_code") or "").lower().strip()
             if not job_location and not job_country_code:
                 return include_unknown_location
@@ -4387,7 +4401,7 @@ async def get_feed(
         def _passes_explicit_local_hard_constraint(job: Dict[str, Any]) -> bool:
             if not explicit_local_intent:
                 return True
-            has_known_location = bool(_normalized_job_location_text(job) or job.get("country_code"))
+            has_known_location = bool(_normalized_primary_job_location_text(job) or _normalized_job_location_text(job) or job.get("country_code"))
             if not has_known_location:
                 return bool(include_unknown_location)
             if _explicit_local_remote_allowed(job):
@@ -4397,7 +4411,7 @@ async def get_feed(
         def _explicit_local_hard_constraint_reason(job: Dict[str, Any]) -> tuple[bool, str]:
             if not explicit_local_intent:
                 return True, "not_explicit_local"
-            normalized_location = _normalized_job_location_text(job)
+            normalized_location = _normalized_primary_job_location_text(job) or _normalized_job_location_text(job)
             job_country_code = str(job.get("country_code") or "").lower().strip()
             if not normalized_location and not job_country_code:
                 return bool(include_unknown_location), "unknown_location_allowed" if include_unknown_location else "unknown_location_blocked"

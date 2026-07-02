@@ -756,6 +756,39 @@ def test_hydrated_global_candidates_do_not_satisfy_local_inventory(monkeypatch):
     assert [job["job_id"] for job in response["jobs"]] == ["job_20"]
 
 
+def test_primary_location_wins_over_raw_provider_metadata_for_radius_match(monkeypatch):
+    dublin = _legacy_direct_job(1, country_code="", location="Dublin, Ireland", title="Marketing Manager")
+    dublin["data"] = {
+        "raw_provider_payload": {
+            "location": "Dublin, Ireland",
+            "offices": [{"location": "Madrid, Spain"}],
+            "job_location": "Dublin, Ireland",
+        }
+    }
+    imported = _job(20, tier="C", status="unknown", title="Marketing Manager")
+    imported.update({"location": "Paris, France", "city": "Paris", "country_code": "fr"})
+
+    response, calls = _run_feed(
+        monkeypatch,
+        [dublin],
+        env={
+            "JOBS_FEED_LOCAL_DISCOVERY_MAX_CITIES": "1",
+            "JOBS_FEED_SYNC_REFRESH_MAX_SECONDS": "5",
+            "JOBS_FEED_DEBUG_DIAGNOSTICS": "true",
+        },
+        refresh=lambda: [imported],
+        locations_json=_location_payload("Paris", lat=48.8566, lng=2.3522),
+        geo_places=_geo_places(),
+    )
+
+    assert calls["refresh"] == 1
+    assert [job["job_id"] for job in response["jobs"]] == ["job_20"]
+    assert all(
+        item.get("job_id") != "job_1"
+        for item in response["request_trace"].get("response_hard_location_pass_reasons", [])
+    )
+
+
 def test_force_provider_refresh_fetches_more_for_explicit_local_stack(monkeypatch):
     local_jobs = []
     for index in range(1, 6):
