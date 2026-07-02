@@ -926,8 +926,6 @@ def _provider_attempt_queries(query: JobSearchQuery, search_radius: str, provide
     primary_roles = role_variants[:2]
     secondary_roles = role_variants[2:]
 
-    attempts.extend(_raw_location_attempt_queries(query, primary_roles, [primary_location, *fallback_locations]))
-
     for role in primary_roles:
         attempts.append(_copy_query_with_role_and_location(query, role, primary_location))
 
@@ -942,6 +940,7 @@ def _provider_attempt_queries(query: JobSearchQuery, search_radius: str, provide
         for role in secondary_roles[:2]:
             attempts.append(_copy_query_with_role_and_location(query, role, fallback_location))
 
+    attempts.extend(_raw_location_attempt_queries(query, primary_roles, [primary_location, *fallback_locations]))
     attempts.extend(_direct_apply_attempt_queries(query, primary_roles, [primary_location, *fallback_locations]))
 
     return _dedupe_queries(attempts, provider)

@@ -15,10 +15,15 @@ from .ats_detection import PRIMARY_AUTO_APPLY_ATS, detect_job_platform
 class JSearchProvider:
     name = "jsearch"
 
-    def __init__(self, api_key: str, base_url: Optional[str] = None, timeout: float = 15.0):
+    def __init__(self, api_key: str, base_url: Optional[str] = None, timeout: Optional[float] = None):
         self.api_key = api_key
         self.base_url = (base_url or os.environ.get("JSEARCH_BASE_URL") or "https://api.openwebninja.com/jsearch").rstrip("/")
-        self.timeout = timeout
+        if timeout is None:
+            try:
+                timeout = float(os.environ.get("JSEARCH_HTTP_TIMEOUT_SECONDS", "6"))
+            except (TypeError, ValueError):
+                timeout = 6.0
+        self.timeout = max(1.0, min(float(timeout), 30.0))
 
     async def search(self, query: JobSearchQuery) -> ProviderResult:
         base_params: Dict[str, Any] = {

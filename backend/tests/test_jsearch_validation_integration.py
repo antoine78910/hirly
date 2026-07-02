@@ -1,5 +1,5 @@
 from db.supabase_adapter import _supabase_row
-from jobs_service import build_profile_job_query
+from jobs_service import _provider_attempt_queries, build_profile_job_query
 from job_providers.base import JobSearchQuery
 from job_providers.jsearch import JSearchProvider
 from job_validation import cheap_validate_job_applyability
@@ -63,3 +63,22 @@ def test_profile_job_query_uses_country_local_language(monkeypatch):
 
     assert query.country == "es"
     assert query.language == "es"
+
+
+def test_provider_attempt_queries_try_structured_search_before_raw_location():
+    provider = JSearchProvider(api_key="test")
+    query = JobSearchQuery(
+        role="Software Engineer",
+        location="saint etienne, FR",
+        country="fr",
+        language="fr",
+        max_pages=1,
+        page_size=10,
+    )
+
+    attempts = _provider_attempt_queries(query, "70km", provider)
+
+    assert attempts
+    assert attempts[0].raw_query is False
+    assert attempts[0].location == "saint etienne, FR"
+    assert any(item.raw_query for item in attempts[1:])
