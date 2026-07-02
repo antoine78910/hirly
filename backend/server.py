@@ -4392,6 +4392,30 @@ async def get_feed(
                 return True
             return _matches_location(job)
 
+        def _explicit_local_hard_constraint_reason(job: Dict[str, Any]) -> tuple[bool, str]:
+            if not explicit_local_intent:
+                return True, "not_explicit_local"
+            normalized_location = _normalized_job_location_text(job)
+            job_country_code = str(job.get("country_code") or "").lower().strip()
+            if not normalized_location and not job_country_code:
+                return bool(include_unknown_location), "unknown_location_allowed" if include_unknown_location else "unknown_location_blocked"
+            if _explicit_local_remote_allowed(job):
+                return True, "explicit_remote_allowed"
+            expanded_match = _expanded_location_match(job)
+            if expanded_match:
+                return True, f"expanded_location_match:{expanded_match.get('name') or expanded_match.get('ascii_name')}"
+            return False, "outside_explicit_location"
+
+        def _counts_as_explicit_local_inventory(job: Dict[str, Any]) -> bool:
+            allowed, reason = _explicit_local_hard_constraint_reason(job)
+            if not allowed:
+                return False
+            if reason == "unknown_location_allowed":
+                return False
+            if reason == "explicit_remote_allowed" and not remote_explicitly_selected:
+                return False
+            return True
+
         def _matches_salary(job: Dict[str, Any]) -> bool:
             if not min_salary or min_salary <= 0:
                 return True
@@ -4728,12 +4752,18 @@ async def get_feed(
                     db_good_count,
                 )
 
+        local_inventory_count = (
+            sum(1 for job in candidates if _counts_as_explicit_local_inventory(job))
+            if explicit_local_intent
+            else len(candidates)
+        )
         request_trace["db_local_candidate_count_before_filters"] = pre_refresh_candidate_count
-        request_trace["db_local_candidate_count_after_filters"] = len(candidates)
+        request_trace["db_local_candidate_count_after_filters"] = local_inventory_count
+        request_trace["db_candidate_count_after_filters"] = len(candidates)
         request_trace["manual_candidate_count"] = sum(1 for job in candidates if job.get("application_mode") in {"manual", "assisted"})
         request_trace["auto_apply_candidate_count"] = sum(1 for job in candidates if job.get("application_mode") == "auto_apply")
         request_trace["blocked_hidden_count"] = local_blocked_hidden_count or db_rejected_count
-        request_trace["local_inventory_weak"] = bool(explicit_local_intent and len(candidates) < requested_limit)
+        request_trace["local_inventory_weak"] = bool(explicit_local_intent and local_inventory_count < requested_limit)
 
         def _explicit_local_cooldown_key() -> str:
             location_parts: List[str] = []
@@ -4777,7 +4807,7 @@ async def get_feed(
         request_trace["feed_provider_cooldown_remaining_seconds"] = max(0, int(cooldown_until - cooldown_now))
         explicit_local_after_budget_refresh = (
             explicit_local_intent
-            and len(candidates) < requested_limit
+            and local_inventory_count < requested_limit
             and _env_bool("JOBS_FEED_EXPLICIT_LOCAL_DISCOVERY_AFTER_DB_TIMEOUT", True)
         )
         refresh_budget_available = not _timed_out() or explicit_local_after_budget_refresh
@@ -4788,7 +4818,7 @@ async def get_feed(
             and (
                 not db_first_enabled
                 or db_good_count == 0
-                or (explicit_local_intent and len(candidates) < requested_limit)
+                or (explicit_local_intent and local_inventory_count < requested_limit)
             )
         )
         request_trace["local_jsearch_discovery_should_run"] = bool(should_refresh and explicit_local_intent)
@@ -4799,7 +4829,7 @@ async def get_feed(
                 request_trace["local_jsearch_skip_reason"] = "feed_timeout_budget_exhausted"
             elif cooldown_active:
                 request_trace["local_jsearch_skip_reason"] = "provider_cooldown_active"
-            elif len(candidates) >= requested_limit:
+            elif local_inventory_count >= requested_limit:
                 request_trace["local_jsearch_skip_reason"] = "local_candidate_count_sufficient"
             elif db_first_enabled and db_good_count > 0:
                 request_trace["local_jsearch_skip_reason"] = "db_good_count_nonzero"
@@ -5206,13 +5236,37 @@ async def get_feed(
                 )
 
         clean_jobs = []
-        for job in jobs[:requested_limit]:
+        response_location_rejections: List[Dict[str, Any]] = []
+        response_location_pass_reasons: List[Dict[str, Any]] = []
+        for job in jobs:
+            if explicit_local_intent:
+                allowed, reason = _explicit_local_hard_constraint_reason(job)
+                if not allowed:
+                    if len(response_location_rejections) < 10:
+                        response_location_rejections.append({
+                            "job_id": job.get("job_id"),
+                            "title": job.get("title"),
+                            "company": job.get("company"),
+                            "location": job.get("location"),
+                            "country_code": job.get("country_code"),
+                            "reason": reason,
+                        })
+                    continue
+                if len(response_location_pass_reasons) < 10:
+                    response_location_pass_reasons.append({
+                        "job_id": job.get("job_id"),
+                        "location": job.get("location"),
+                        "country_code": job.get("country_code"),
+                        "reason": reason,
+                    })
             clean = {key: value for key, value in job.items() if not key.startswith("_")}
             clean_jobs.append({
                 **clean,
                 "match_score": clean.get("match_score") or random.randint(78, 96),
                 "match_reasons": clean.get("match_reasons") or ["Auto-apply compatible role from a supported ATS."],
             })
+            if len(clean_jobs) >= requested_limit:
+                break
         elapsed = _elapsed_ms()
         logger.info(
             "jobs/feed fast complete: user_id=%s feed_elapsed_ms=%s returned=%s fallback_used=%s timed_out=%s direct_refresh_jobs=%s provider_search_keys=%s unfiltered_count=%s candidates=%s",
@@ -5255,6 +5309,9 @@ async def get_feed(
         request_trace["auto_apply_candidate_count"] = feed_summary["auto_apply_count"]
         request_trace["blocked_hidden_count"] = feed_summary["blocked_hidden_count"]
         request_trace["final_jobs_count"] = len(clean_jobs)
+        request_trace["response_hard_location_rejected_count"] = len(response_location_rejections)
+        request_trace["response_hard_location_rejections"] = response_location_rejections
+        request_trace["response_hard_location_pass_reasons"] = response_location_pass_reasons
         request_trace["frontend_relevant_application_modes"] = sorted({
             str(job.get("application_mode") or "")
             for job in clean_jobs

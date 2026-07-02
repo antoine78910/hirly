@@ -675,6 +675,39 @@ def test_nested_raw_provider_location_does_not_leak_into_explicit_local_feed(mon
     assert [job["job_id"] for job in response["jobs"]] == ["job_10"]
 
 
+def test_hydrated_location_cannot_leak_into_explicit_local_response(monkeypatch):
+    hidden_location = _legacy_direct_job(1, country_code="", location="", title="Marketing Manager")
+    imported = _job(10, tier="C", status="unknown", title="Marketing Manager")
+    imported.update({"location": "Paris, France", "city": "Paris", "country_code": "fr"})
+
+    original_hydrate = server._hydrate_feed_jobs
+
+    async def _hydrate_with_late_location(jobs):
+        hydrated = await original_hydrate(jobs)
+        for job in hydrated:
+            if job.get("job_id") == "job_1":
+                job["location"] = "Poland"
+        return hydrated
+
+    monkeypatch.setattr(server, "_hydrate_feed_jobs", _hydrate_with_late_location)
+
+    response, calls = _run_feed(
+        monkeypatch,
+        [hidden_location],
+        env={
+            "JOBS_FEED_LOCAL_DISCOVERY_MAX_CITIES": "1",
+            "JOBS_FEED_SYNC_REFRESH_MAX_SECONDS": "5",
+            "JOBS_FEED_DEBUG_DIAGNOSTICS": "true",
+        },
+        refresh=lambda: [imported],
+        locations_json=_location_payload("Paris", lat=48.8566, lng=2.3522),
+        geo_places=_geo_places(),
+    )
+
+    assert calls["refresh"] == 1
+    assert [job["job_id"] for job in response["jobs"]] == ["job_10"]
+
+
 def test_explicit_local_search_excludes_remote_when_onsite_only(monkeypatch):
     remote = _legacy_direct_job(
         1,
