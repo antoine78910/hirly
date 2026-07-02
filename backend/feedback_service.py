@@ -159,6 +159,7 @@ def _send_via_smtp(
 
 
 def _persist_feature_submission(
+    db,
     *,
     user_email: str,
     user_name: str,
@@ -194,7 +195,46 @@ def _persist_feature_submission(
     return saved["id"]
 
 
+async def _persist_feature_submission_async(
+    db,
+    *,
+    user_email: str,
+    user_name: str,
+    user_id: str,
+    category: str,
+    message: str,
+    audience: str,
+    attachments: List[Tuple[str, bytes, str]],
+    transport: str,
+) -> str:
+    submission_id = uuid.uuid4().hex
+    folder = store.STORAGE_ROOT / submission_id
+    folder.mkdir(parents=True, exist_ok=True)
+    attachment_rows = []
+    for name, content, mime in attachments:
+        safe_name = Path(name).name or "attachment"
+        path = folder / safe_name
+        path.write_bytes(content)
+        attachment_rows.append({"filename": safe_name, "mime": mime, "bytes": len(content)})
+
+    feedback_type = FEEDBACK_FEATURE_CREATOR if audience == "creator" else FEEDBACK_FEATURE_USER
+    saved = await store.save_submission_async(db, {
+        "id": submission_id,
+        "feedback_type": feedback_type,
+        "audience": audience,
+        "user_email": user_email,
+        "user_name": user_name,
+        "user_id": user_id,
+        "category": category,
+        "message": message,
+        "attachments": attachment_rows,
+        "transport": transport,
+    })
+    return saved["id"]
+
+
 def _archive_submission(
+    db,
     *,
     user_email: str,
     user_name: str,
@@ -205,6 +245,7 @@ def _archive_submission(
     attachments: List[Tuple[str, bytes, str]],
 ) -> str:
     archive_id = _persist_feature_submission(
+        db,
         user_email=user_email,
         user_name=user_name,
         user_id=user_id,
@@ -219,6 +260,7 @@ def _archive_submission(
 
 
 async def send_feature_suggestion(
+    db,
     *,
     user_email: str,
     user_name: str,
@@ -269,7 +311,8 @@ async def send_feature_suggestion(
             transport = "archive"
 
     if not sent:
-        archive_id = _archive_submission(
+        archive_id = await _persist_feature_submission_async(
+            db,
             user_email=user_email,
             user_name=user_name,
             user_id=user_id,
@@ -277,10 +320,13 @@ async def send_feature_suggestion(
             message=text,
             audience=audience_norm,
             attachments=cleaned,
+            transport="archive",
         )
+        logger.warning("Feature suggestion archived locally (email transport not configured): %s", archive_id)
         return {"ok": True, "transport": "archive", "archive_id": archive_id, "submission_id": archive_id}
 
-    submission_id = _persist_feature_submission(
+    submission_id = await _persist_feature_submission_async(
+        db,
         user_email=user_email,
         user_name=user_name,
         user_id=user_id,
@@ -294,6 +340,7 @@ async def send_feature_suggestion(
 
 
 async def submit_training_completion_feedback(
+    db,
     *,
     user_email: str,
     user_name: str,
@@ -346,7 +393,7 @@ async def submit_training_completion_feedback(
             sent = False
             transport = "none"
 
-    saved = store.save_submission({
+    saved = await store.save_submission_async(db, {
         "feedback_type": FEEDBACK_TRAINING_COMPLETION,
         "user_email": user_email,
         "user_name": user_name,

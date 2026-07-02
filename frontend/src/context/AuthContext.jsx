@@ -27,21 +27,24 @@ export const AuthProvider = ({ children }) => {
   const [hasPreferences, setHasPreferences] = useState(false);
   const [isTrainingCreator, setIsTrainingCreator] = useState(false);
   const [hasTrainingAccess, setHasTrainingAccess] = useState(devBypassAuth);
+  const [isAdmin, setIsAdmin] = useState(devBypassAuth);
   const [loading, setLoading] = useState(true);
 
   const checkAuth = useCallback(async () => {
     try {
       const { data } = await api.get("/auth/me");
       setUser(data.user);
-      setDemoAccountFromUser(data.user);
+      setDemoAccountFromUser(data.user, Boolean(data.is_admin));
       setHasProfile(data.has_profile);
       setHasPreferences(data.has_preferences);
       setIsTrainingCreator(Boolean(data.is_training_creator));
       setHasTrainingAccess(Boolean(data.has_training_access));
+      setIsAdmin(Boolean(data.is_admin));
     } catch (e) {
       setUser(null);
       setIsTrainingCreator(false);
       setHasTrainingAccess(false);
+      setIsAdmin(false);
     } finally {
       setLoading(false);
     }
@@ -54,10 +57,11 @@ export const AuthProvider = ({ children }) => {
           const data = await bootstrapTutorialSession();
           const user = { ...(data?.user || TUTORIAL_FALLBACK_USER), demo_account: true };
           setUser(user);
-          setDemoAccountFromUser(user);
+          setDemoAccountFromUser(user, Boolean(data?.is_admin));
           setHasProfile(Boolean(data?.has_profile));
           setHasPreferences(Boolean(data?.has_preferences));
           setHasTrainingAccess(true);
+          setIsAdmin(Boolean(data?.is_admin));
         } catch (error) {
           console.warn("Tutorial session bootstrap failed; trying stored session.", error);
           const existingToken = getSessionToken();
@@ -66,10 +70,11 @@ export const AuthProvider = ({ children }) => {
               const { data } = await api.get("/auth/me");
               const user = { ...(data?.user || TUTORIAL_FALLBACK_USER), demo_account: true };
               setUser(user);
-              setDemoAccountFromUser(user);
+              setDemoAccountFromUser(user, Boolean(data?.is_admin));
               setHasProfile(Boolean(data?.has_profile));
               setHasPreferences(Boolean(data?.has_preferences));
               setHasTrainingAccess(Boolean(data?.has_training_access));
+              setIsAdmin(Boolean(data?.is_admin));
               setLoading(false);
               return;
             } catch (storedError) {
@@ -77,9 +82,10 @@ export const AuthProvider = ({ children }) => {
             }
           }
           setUser(TUTORIAL_FALLBACK_USER);
-          setDemoAccountFromUser(TUTORIAL_FALLBACK_USER);
+          setDemoAccountFromUser(TUTORIAL_FALLBACK_USER, false);
           setHasProfile(true);
           setHasPreferences(true);
+          setIsAdmin(false);
         } finally {
           setLoading(false);
         }
@@ -93,11 +99,12 @@ export const AuthProvider = ({ children }) => {
         return;
       }
       setUser(DEV_MOCK_USER);
-      setDemoAccountFromUser(DEV_MOCK_USER);
+      setDemoAccountFromUser(DEV_MOCK_USER, true);
       setHasProfile(true);
       setHasPreferences(true);
       setIsTrainingCreator(false);
       setHasTrainingAccess(true);
+      setIsAdmin(true);
       setLoading(false);
       return;
     }
@@ -118,11 +125,12 @@ export const AuthProvider = ({ children }) => {
     try { await api.post("/auth/logout"); } catch (_) {}
     setSessionToken(null);
     setUser(null);
-    setDemoAccountFromUser(null);
+    setDemoAccountFromUser(null, false);
     setHasProfile(false);
     setHasPreferences(false);
     setIsTrainingCreator(false);
     setHasTrainingAccess(false);
+    setIsAdmin(false);
   };
 
   return (
@@ -134,6 +142,8 @@ export const AuthProvider = ({ children }) => {
       setIsTrainingCreator,
       hasTrainingAccess,
       setHasTrainingAccess,
+      isAdmin,
+      setIsAdmin,
       loading,
       checkAuth,
       setUser,

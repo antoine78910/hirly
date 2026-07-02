@@ -102,6 +102,7 @@ from location_search import search_locations
 from llm_client import LLMProviderNotConfigured, complete_json_text
 from onboarding_suggestions import suggest_categories, suggest_roles
 from feedback_routes import register_feedback_routes
+from feedback_store import migrate_file_feedback_to_db
 from gmail_sync import (
     GMAIL_READONLY_SCOPE,
     gmail_connected_payload,
@@ -399,6 +400,7 @@ class User(BaseModel):
     picture: Optional[str] = None
     demo_account: bool = False
     training_access: bool = False
+    is_admin: bool = False
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -1224,6 +1226,7 @@ async def auth_me(user: User = Depends(get_current_user)):
         "has_preferences": profile is not None and bool(profile.get("target_role")),
         "is_training_creator": creator,
         "has_training_access": training_access,
+        "is_admin": _is_admin_email(user.email) or bool(getattr(user, "is_admin", False)),
     }
 
 
@@ -6395,7 +6398,7 @@ async def list_applications(user: User = Depends(get_current_user)):
 
 
 async def require_admin_user(user: User = Depends(get_current_user)) -> User:
-    if _is_admin_email(user.email):
+    if _is_admin_email(user.email) or bool(getattr(user, "is_admin", False)):
         return user
 
     raise HTTPException(status_code=403, detail="Admin access denied")
@@ -12030,7 +12033,7 @@ async def dev_clean_job_descriptions():
 
 register_training_routes(api_router, get_current_user, db, _require_training_user, _get_training_access_payload)
 register_training_admin_routes(api_router, require_admin_user, db, _enrich_invite_rows_for_admin)
-register_feedback_routes(api_router, get_current_user, require_admin_user)
+register_feedback_routes(api_router, get_current_user, require_admin_user, db)
 app.include_router(api_router)
 
 app.add_middleware(
@@ -12046,6 +12049,7 @@ async def _startup_seed_impl():
     """Seed boards and training content without blocking HTTP readiness."""
     try:
         await migrate_file_invites_to_db(db)
+        await migrate_file_feedback_to_db(db)
         await bootstrap_invites_from_influencers(db)
         await backfill_invites_from_users(db)
         await ensure_dev_test_invites(db)

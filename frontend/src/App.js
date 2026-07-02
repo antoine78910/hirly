@@ -42,6 +42,7 @@ import TrainingLegacyRedirect from "@/components/training/TrainingLegacyRedirect
 import TrainingAccessGate from "@/components/training/TrainingAccessGate";
 import TrainingErrorBoundary from "@/components/training/TrainingErrorBoundary";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import AdminRoute from "@/components/AdminRoute";
 import BottomNav from "@/components/BottomNav";
 import AppLayout from "@/components/desktop/AppLayout";
 import ScrollManager from "@/components/app/ScrollManager";
@@ -81,6 +82,14 @@ function shouldShowBottomNav(pathname) {
   return true;
 }
 
+function AdminPage({ children }) {
+  return (
+    <AppRoute>
+      <AdminRoute>{children}</AdminRoute>
+    </AppRoute>
+  );
+}
+
 function AppRouter() {
   const location = useLocation();
   const showBottomNav = shouldShowBottomNav(location.pathname);
@@ -111,17 +120,17 @@ function AppRouter() {
         <Route path="/signup" element={<Signup />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/invite/:code" element={<InviteLanding />} />
-        <Route path="/admin" element={<AppRoute><Navigate to="/admin/overview" replace /></AppRoute>} />
-        <Route path="/admin/overview" element={<AppRoute><AdminOverview /></AppRoute>} />
-        <Route path="/admin/applications" element={<AppRoute><AdminApplications /></AppRoute>} />
-        <Route path="/admin/applications/:id" element={<AppRoute><AdminApplicationDetail /></AppRoute>} />
-        <Route path="/admin/users" element={<AppRoute><AdminUsers /></AppRoute>} />
-        <Route path="/admin/users/:userId" element={<AppRoute><AdminUserDetail /></AppRoute>} />
-        <Route path="/admin/influencers" element={<AppRoute><AdminInfluencers /></AppRoute>} />
-        <Route path="/admin/creators" element={<AppRoute><AdminCreators /></AppRoute>} />
-        <Route path="/admin/training" element={<AppRoute><AdminTraining /></AppRoute>} />
-        <Route path="/admin/features" element={<AppRoute><AdminFeatures /></AppRoute>} />
-        <Route path="/admin/analytics" element={<AppRoute><AdminAnalytics /></AppRoute>} />
+        <Route path="/admin" element={<AdminPage><Navigate to="/admin/overview" replace /></AdminPage>} />
+        <Route path="/admin/overview" element={<AdminPage><AdminOverview /></AdminPage>} />
+        <Route path="/admin/applications" element={<AdminPage><AdminApplications /></AdminPage>} />
+        <Route path="/admin/applications/:id" element={<AdminPage><AdminApplicationDetail /></AdminPage>} />
+        <Route path="/admin/users" element={<AdminPage><AdminUsers /></AdminPage>} />
+        <Route path="/admin/users/:userId" element={<AdminPage><AdminUserDetail /></AdminPage>} />
+        <Route path="/admin/influencers" element={<AdminPage><AdminInfluencers /></AdminPage>} />
+        <Route path="/admin/creators" element={<AdminPage><AdminCreators /></AdminPage>} />
+        <Route path="/admin/training" element={<AdminPage><AdminTraining /></AdminPage>} />
+        <Route path="/admin/features" element={<AdminPage><AdminFeatures /></AdminPage>} />
+        <Route path="/admin/analytics" element={<AdminPage><AdminAnalytics /></AdminPage>} />
         <Route path="/onboarding" element={<Onboarding />} />
         <Route element={<AppLayout />}>
         <Route path="/app" element={<AppRoute requireProfile><Swipe /></AppRoute>} />

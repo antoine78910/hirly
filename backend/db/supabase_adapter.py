@@ -40,6 +40,7 @@ MIGRATED_TABLES = {
     "training_enrollments",
     "training_crm_leads",
     "creator_invites",
+    "user_feedback",
 }
 TABLE_PRIMARY_KEYS = {
     "users": "user_id",
@@ -62,6 +63,7 @@ TABLE_PRIMARY_KEYS = {
     "training_enrollments": "enrollment_id",
     "training_crm_leads": "lead_id",
     "creator_invites": "invite_id",
+    "user_feedback": "submission_id",
 }
 TABLE_FILTER_COLUMNS = {
     "users": {"user_id", "email", "name", "created_at"},
@@ -158,6 +160,7 @@ TABLE_FILTER_COLUMNS = {
     "training_enrollments": {"enrollment_id", "user_id", "course_id", "progress_percent", "enrolled_at", "updated_at"},
     "training_crm_leads": {"lead_id", "creator_id", "email", "name", "stage", "source", "created_at", "updated_at"},
     "creator_invites": {"invite_id", "code", "influencer_id", "invite_type", "course_id", "redeemed_by_user_id", "created_at", "updated_at"},
+    "user_feedback": {"submission_id", "feedback_type", "user_id", "user_email", "created_at", "updated_at"},
 }
 MAX_READ_ROWS = 10000
 READ_PAGE_SIZE = 1000
@@ -443,6 +446,16 @@ def _supabase_row(table: str, document: Document) -> Dict[str, Any]:
             "invite_type": doc.get("invite_type"),
             "course_id": doc.get("course_id"),
             "redeemed_by_user_id": doc.get("redeemed_by_user_id"),
+            "created_at": doc.get("created_at"),
+            "updated_at": doc.get("updated_at"),
+            "data": doc,
+        }
+    if table == "user_feedback":
+        return {
+            "submission_id": _document_key(table, doc),
+            "feedback_type": doc.get("feedback_type"),
+            "user_id": doc.get("user_id"),
+            "user_email": doc.get("user_email"),
             "created_at": doc.get("created_at"),
             "updated_at": doc.get("updated_at"),
             "data": doc,
@@ -966,6 +979,7 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
         self.training_enrollments = SupabaseCollectionAdapter("training_enrollments", supabase_url, secret_key)
         self.training_crm_leads = SupabaseCollectionAdapter("training_crm_leads", supabase_url, secret_key)
         self.creator_invites = SupabaseCollectionAdapter("creator_invites", supabase_url, secret_key)
+        self.user_feedback = SupabaseCollectionAdapter("user_feedback", supabase_url, secret_key)
 
     async def close(self) -> None:
         return None

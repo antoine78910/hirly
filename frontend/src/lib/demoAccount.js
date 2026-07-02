@@ -21,8 +21,8 @@ export function ensureDemoAccountDefaults() {
   saveDemoSettings({ ...readDemoSettings(), financeJobFeed: true });
 }
 
-export function setDemoAccountFromUser(user) {
-  cachedDemoAccount = Boolean(user?.demo_account);
+export function setDemoAccountFromUser(user, isAdmin = false) {
+  cachedDemoAccount = Boolean(user?.demo_account) && !isAdmin && !Boolean(user?.is_admin);
   if (cachedDemoAccount) {
     ensureDemoAccountDefaults();
   }

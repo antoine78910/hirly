@@ -48,7 +48,7 @@ export default function AuthCallback() {
         setIsTrainingCreator(Boolean(data.is_training_creator));
         setHasTrainingAccess(Boolean(data.has_training_access));
         if (data?.user?.demo_account) {
-          setDemoAccountFromUser(data.user);
+          setDemoAccountFromUser(data.user, Boolean(data.is_admin));
         }
         let inviteRedirect = null;
         try {

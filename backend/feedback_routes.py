@@ -23,7 +23,7 @@ class TrainingCompletionFeedbackBody(BaseModel):
     message: str = ""
 
 
-def register_feedback_routes(api_router: APIRouter, get_current_user, require_admin=None) -> None:
+def register_feedback_routes(api_router: APIRouter, get_current_user, require_admin=None, db=None) -> None:
     @api_router.post("/feedback/suggest-feature")
     async def suggest_feature(
         message: str = Form(...),
@@ -51,6 +51,7 @@ def register_feedback_routes(api_router: APIRouter, get_current_user, require_ad
 
         try:
             result = await feedback.send_feature_suggestion(
+                db,
                 user_email=getattr(user, "email", "") or "",
                 user_name=getattr(user, "name", "") or "",
                 user_id=getattr(user, "user_id", "") or "",
@@ -73,6 +74,7 @@ def register_feedback_routes(api_router: APIRouter, get_current_user, require_ad
     ):
         try:
             result = await feedback.submit_training_completion_feedback(
+                db,
                 user_email=getattr(user, "email", "") or "",
                 user_name=getattr(user, "name", "") or "",
                 user_id=getattr(user, "user_id", "") or "",
@@ -99,8 +101,8 @@ def register_feedback_routes(api_router: APIRouter, get_current_user, require_ad
     ):
         tab_norm = (tab or "users").strip().lower()
         if tab_norm == "creators":
-            features = store.list_submissions(FEEDBACK_FEATURE_CREATOR, limit=limit)
-            training = store.list_submissions(FEEDBACK_TRAINING_COMPLETION, limit=limit)
+            features = await store.list_submissions(db, FEEDBACK_FEATURE_CREATOR, limit=limit)
+            training = await store.list_submissions(db, FEEDBACK_TRAINING_COMPLETION, limit=limit)
             return {
                 "tab": "creators",
                 "feature_suggestions": features,
@@ -109,16 +111,16 @@ def register_feedback_routes(api_router: APIRouter, get_current_user, require_ad
         if tab_norm == "training":
             return {
                 "tab": "training",
-                "training_feedback": store.list_submissions(FEEDBACK_TRAINING_COMPLETION, limit=limit),
+                "training_feedback": await store.list_submissions(db, FEEDBACK_TRAINING_COMPLETION, limit=limit),
             }
         return {
             "tab": "users",
-            "feature_suggestions": store.list_submissions(FEEDBACK_FEATURE_USER, limit=limit),
+            "feature_suggestions": await store.list_submissions(db, FEEDBACK_FEATURE_USER, limit=limit),
         }
 
     @api_router.get("/admin/feedback/{submission_id}")
     async def admin_get_feedback(submission_id: str, admin=Depends(require_admin)):
-        row = store.get_submission(submission_id)
+        row = await store.get_submission(db, submission_id)
         if not row:
             raise HTTPException(status_code=404, detail="Feedback not found")
         return {"submission": row}
