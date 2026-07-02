@@ -4241,7 +4241,7 @@ async def get_feed(
             if _job_work_location(job) != "remote":
                 return False
             if not work_location:
-                return True
+                return False
             wanted = {
                 ("onsite" if str(item).lower() in ("in-person", "in_person", "on-site", "onsite") else str(item).lower())
                 for item in work_location
@@ -4609,6 +4609,20 @@ async def get_feed(
                     len(visible_candidates),
                     len(additions),
                     local_manual_count,
+                )
+
+        pre_refresh_candidate_count = len(candidates)
+        if explicit_local_intent and candidates:
+            candidates = [job for job in candidates if _passes_explicit_local_hard_constraint(job)]
+            if len(candidates) != pre_refresh_candidate_count:
+                db_good_count = sum(1 for job in candidates if _role_compatible_for_threshold(job))
+                pre_filter_candidates = list(candidates)
+                logger.info(
+                    "jobs/feed explicit_local_pre_refresh_constraint: user_id=%s before=%s after=%s db_good_count=%s",
+                    user.user_id,
+                    pre_refresh_candidate_count,
+                    len(candidates),
+                    db_good_count,
                 )
 
         cooldown_enabled = _env_bool("JOBS_FEED_FALLBACK_COOLDOWN_ENABLED", True)

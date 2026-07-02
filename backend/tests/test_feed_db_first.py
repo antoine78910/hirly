@@ -531,6 +531,51 @@ def test_explicit_local_search_can_return_remote_when_allowed(monkeypatch):
     assert [job["job_id"] for job in response["jobs"]] == ["job_1"]
 
 
+def test_explicit_local_search_does_not_return_remote_by_default(monkeypatch):
+    remote = _legacy_direct_job(
+        1,
+        country_code="us",
+        location="Remote - United States",
+        title="Marketing Manager",
+    )
+    remote["remote"] = True
+    response, _calls = _run_feed(
+        monkeypatch,
+        [remote],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+        locations_json=_location_payload("Paris", lat=48.8566, lng=2.3522),
+        geo_places=_geo_places(),
+    )
+    assert response["jobs"] == []
+    assert response["empty_reason"]["code"] == "NO_LOCAL_AUTO_APPLY_JOBS"
+
+
+def test_global_remote_jobs_do_not_prevent_explicit_local_jsearch_discovery(monkeypatch):
+    remote = _legacy_direct_job(
+        1,
+        country_code="us",
+        location="Remote - United States",
+        title="Marketing Manager",
+    )
+    remote["remote"] = True
+    imported = _job(2, tier="C", status="unknown", title="Marketing Manager")
+    imported.update({"location": "Paris, France", "city": "Paris", "country_code": "fr"})
+    response, calls = _run_feed(
+        monkeypatch,
+        [remote],
+        env={
+            "JOBS_FEED_LOCAL_DISCOVERY_MAX_CITIES": "1",
+            "JOBS_FEED_SYNC_REFRESH_MAX_SECONDS": "5",
+        },
+        refresh=lambda: [imported],
+        locations_json=_location_payload("Paris", lat=48.8566, lng=2.3522),
+        geo_places=_geo_places(),
+    )
+    assert calls["refresh"] == 1
+    assert [job["job_id"] for job in response["jobs"]] == ["job_2"]
+    assert response["jobs"][0]["application_mode"] == "manual"
+
+
 def test_explicit_local_search_excludes_remote_when_onsite_only(monkeypatch):
     remote = _legacy_direct_job(
         1,
