@@ -441,6 +441,7 @@ export default function Swipe() {
   const [totalCount, setTotalCount] = useState(null);
   const [feedMeta, setFeedMeta] = useState(null);
   const [feedError, setFeedError] = useState("");
+  const [lastFeedDebug, setLastFeedDebug] = useState(null);
   const [reportJob, setReportJob] = useState(null);
   const [billing, setBilling] = useState(null);
   const { upgradeOpen, openUpgrade } = useUpgradeModal();
@@ -581,7 +582,7 @@ export default function Swipe() {
     return params;
   };
 
-  const loadFeed = useCallback(async (replace = false, f = filtersRef.current) => {
+  const loadFeed = useCallback(async (replace = false, f = filtersRef.current, reason = "unspecified") => {
     if (feedAbortRef.current) {
       feedAbortRef.current.abort();
       feedAbortRef.current = null;
@@ -595,8 +596,28 @@ export default function Swipe() {
     setLoading(true);
     setFeedError("");
     if (replace) setJobs([]);
+    const params = buildFeedParams(f);
+    const requestUrl = `/jobs/feed?${params.toString()}`;
+    console.group("[FeedDebug] loadFeed");
+    console.log("reason", reason);
+    console.log("forceRefresh", replace);
+    console.log("filters passed to loadFeed", f);
+    console.log("filtersRef.current", filtersRef.current);
+    console.log("request url", requestUrl);
+    console.log("request params", Object.fromEntries(params.entries()));
+    console.log("request param entries", Array.from(params.entries()));
+    console.groupEnd();
+    setLastFeedDebug({
+      reason,
+      forceRefresh: replace,
+      filters: f || null,
+      filtersRef: filtersRef.current || null,
+      requestUrl,
+      requestParams: Object.fromEntries(params.entries()),
+      requestParamEntries: Array.from(params.entries()),
+      response: null,
+    });
     const requestFeed = async () => {
-      const params = buildFeedParams(f);
       if (isFinanceDemoEnabled()) {
         const demoData = getFinanceDemoFeedData({
           filters: f == null ? null : mergeFilters(f),
@@ -605,7 +626,7 @@ export default function Swipe() {
         });
         if (demoData) return demoData;
       }
-      const { data } = await api.get(`/jobs/feed?${params.toString()}`, {
+      const { data } = await api.get(requestUrl, {
         timeout: 45000,
         signal: controller.signal,
       });
@@ -613,7 +634,7 @@ export default function Swipe() {
     };
     try {
       console.log("JOB_FEED_PARAMS", {
-        params: buildFeedParams(f).toString(),
+        params: params.toString(),
         locations: f?.locationsData || (f?.locationData ? [f.locationData] : []),
         search_radius: f?.searchRadius || DEFAULT_SEARCH_RADIUS,
         only_my_country: Boolean(f?.onlyMyCountry),
@@ -632,6 +653,34 @@ export default function Swipe() {
         }
       }
       if (requestId !== feedRequestIdRef.current) return;
+      console.group("[FeedDebug] response");
+      console.log("jobs count", data?.jobs?.length || 0);
+      console.log("feed_summary", data?.feed_summary);
+      console.log("request_trace", data?.request_trace);
+      console.log("first jobs", data?.jobs?.slice?.(0, 5));
+      console.groupEnd();
+      setLastFeedDebug({
+        reason,
+        forceRefresh: replace,
+        filters: f || null,
+        filtersRef: filtersRef.current || null,
+        requestUrl,
+        requestParams: Object.fromEntries(params.entries()),
+        requestParamEntries: Array.from(params.entries()),
+        response: {
+          jobsCount: data?.jobs?.length || 0,
+          feedSummary: data?.feed_summary || null,
+          requestTrace: data?.request_trace || null,
+          firstJobs: (data?.jobs || []).slice(0, 5).map((job) => ({
+            title: job.title,
+            company: job.company,
+            location: job.location,
+            application_mode: job.application_mode,
+            can_auto_apply: job.can_auto_apply,
+            provider: job.provider,
+          })),
+        },
+      });
       setTotalCount(typeof data.total === "number" ? data.total : null);
       setFeedMeta(data || null);
       if (TUTORIAL_BYPASS_AUTH) {
@@ -679,7 +728,7 @@ export default function Swipe() {
       if (!financeOn) {
         loadProfile();
       }
-      loadFeed(true, nextFilters);
+      loadFeed(true, nextFilters, "demo_settings_changed");
     };
     window.addEventListener(DEMO_SETTINGS_CHANGED, onDemoSettings);
     return () => window.removeEventListener(DEMO_SETTINGS_CHANGED, onDemoSettings);
@@ -715,7 +764,7 @@ export default function Swipe() {
       filtersRef.current = nextFilters;
       setFilters(nextFilters);
       savePersistedFilters(nextFilters);
-      loadFeed(true, nextFilters);
+      loadFeed(true, nextFilters, "target_search_save");
       toast.success(t("toasts.searchUpdated"));
 
       saveTargetPreferences({ role: trimmedRole, location: locationLabel, locationData: normalizedLocationData })
@@ -738,21 +787,21 @@ export default function Swipe() {
       .catch(() => setBilling({ is_premium: false }));
     if (isFinanceDemoEnabled()) {
       const financeFilters = applyFinanceDemoTarget();
-      loadFeed(true, financeFilters);
+      loadFeed(true, financeFilters, "initial_finance_demo");
       return;
     }
     if (isDemoAccountEnabled()) {
-      loadFeed(true, filtersRef.current);
+      loadFeed(true, filtersRef.current, "initial_demo_account");
       return;
     }
     const persistedFilters = readPersistedFilters();
     if (persistedFilters) {
       filtersRef.current = persistedFilters;
       setFilters(persistedFilters);
-      loadFeed(true, persistedFilters);
+      loadFeed(true, persistedFilters, "initial_persisted_filters");
       return;
     }
-    loadFeed(true, null);
+    loadFeed(true, null, "initial_default");
   }, [authLoading, loadProfile, loadFeed, applyFinanceDemoTarget]);
 
   useEffect(() => {
@@ -779,7 +828,7 @@ export default function Swipe() {
     setTotalCount(null);
     setFeedMeta(null);
     setFeedError("");
-    loadFeed(true, f);
+    loadFeed(true, f, "filters_apply");
   };
 
   const resetFilters = () => {
@@ -792,7 +841,7 @@ export default function Swipe() {
     setTotalCount(null);
     setFeedMeta(null);
     setFeedError("");
-    loadFeed(true, null);
+    loadFeed(true, null, "filters_reset");
   };
 
   const handleRadiusChange = (searchRadius) => {
@@ -892,7 +941,7 @@ export default function Swipe() {
         toast.error(getSwipeErrorMessage(t, e));
       }
     }
-    if (jobs.length <= 3) loadFeed();
+    if (jobs.length <= 3) loadFeed(false, filtersRef.current, "after_swipe_low_stack");
   };
 
   const handleUndo = async () => {
@@ -900,7 +949,7 @@ export default function Swipe() {
       const data = isFinanceDemoEnabled()
         ? performFinanceDemoUndo()
         : (await api.post("/swipe/undo")).data;
-      if (data.ok) { toast(t("toasts.undone")); loadFeed(true); }
+      if (data.ok) { toast(t("toasts.undone")); loadFeed(true, filtersRef.current, "undo_refresh"); }
     } catch (e) { toast.error(t("toasts.nothingToUndo")); }
   };
 
@@ -921,7 +970,7 @@ export default function Swipe() {
     } else {
       api.post("/swipe", { job_id: jobId, direction: "left" }).catch(() => {});
     }
-    if (jobs.length <= 3) loadFeed();
+    if (jobs.length <= 3) loadFeed(false, filtersRef.current, "after_dismiss_low_stack");
   }, [jobs.length, loadFeed]);
 
   const handleReportSubmit = async (reason) => {
@@ -974,6 +1023,23 @@ export default function Swipe() {
     upgradeOpen,
   ]);
 
+  const feedDebugEnabled = typeof window !== "undefined" && window.localStorage.getItem("feed_debug") === "true";
+  const feedDebugPanelData = lastFeedDebug
+    ? {
+        reason: lastFeedDebug.reason,
+        forceRefresh: lastFeedDebug.forceRefresh,
+        requestUrl: lastFeedDebug.requestUrl,
+        requestParams: lastFeedDebug.requestParams,
+        requestParamEntries: lastFeedDebug.requestParamEntries,
+        jobsCount: lastFeedDebug.response?.jobsCount ?? null,
+        feedSummary: lastFeedDebug.response?.feedSummary ?? null,
+        requestTrace: lastFeedDebug.response?.requestTrace ?? null,
+        firstJobLocations: (lastFeedDebug.response?.firstJobs || []).map((job) => job.location),
+        firstJobApplicationModes: (lastFeedDebug.response?.firstJobs || []).map((job) => job.application_mode),
+        firstJobs: lastFeedDebug.response?.firstJobs || [],
+      }
+    : null;
+
   return (
     <>
       <div className="hidden md:block">
@@ -995,7 +1061,7 @@ export default function Swipe() {
           onApply={() => handleSwipe("apply")}
           onReport={setReportJob}
           onShare={handleShareJob}
-          onRefresh={() => loadFeed(true)}
+          onRefresh={() => loadFeed(true, filtersRef.current, "desktop_refresh")}
           onRadiusChange={handleRadiusChange}
           shouldGateApply={shouldGateApply}
           onApplyBlocked={openUpgrade}
@@ -1093,7 +1159,7 @@ export default function Swipe() {
                   : feedFallbackMessage(t, feedMeta)}
               </p>
               <button
-                onClick={() => loadFeed(true)}
+                onClick={() => loadFeed(true, filtersRef.current, "empty_refresh")}
                 className="mt-6 rounded-full bg-sprout-mint text-white font-semibold h-11 px-6 hover:opacity-90 transition-opacity"
                 data-testid="refresh-feed-btn"
               >
@@ -1181,7 +1247,7 @@ export default function Swipe() {
           filtersRef.current = nextFilters;
           setFilters(nextFilters);
           savePersistedFilters(nextFilters);
-          loadFeed(true, nextFilters);
+          loadFeed(true, nextFilters, "target_sheet_saved");
         }}
       />
 
@@ -1208,6 +1274,17 @@ export default function Swipe() {
         }}
         onDismiss={handleDismissDemoWelcome}
       />
+
+      {feedDebugEnabled && (
+        <div className="fixed inset-x-3 bottom-3 z-[100] max-h-[45vh] overflow-auto rounded-xl border border-zinc-300 bg-white p-3 text-xs text-zinc-900 shadow-2xl md:left-auto md:right-4 md:w-[560px]">
+          <details open>
+            <summary className="cursor-pointer font-semibold">Feed debug</summary>
+            <pre className="mt-2 whitespace-pre-wrap break-words">
+              {JSON.stringify(feedDebugPanelData || { message: "No feed request captured yet." }, null, 2)}
+            </pre>
+          </details>
+        </div>
+      )}
     </>
   );
 }
