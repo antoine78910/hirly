@@ -80,6 +80,74 @@ const feedFallbackMessage = (t, feedMeta) => {
   return t("swipe.tryWidenSearch");
 };
 
+const normalizeSearchText = (value) =>
+  String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
+const isNumericRadius = (value) => /^\d+\s*km$/i.test(String(value || "").trim());
+
+const compactCityLabel = (value) => {
+  const first = String(value || "").split(/[,\-/|]/)[0] || "";
+  return normalizeSearchText(first);
+};
+
+const buildLocalFeedGuard = ({ params, response }) => {
+  const radius = params.get("search_radius") || DEFAULT_SEARCH_RADIUS;
+  if (!isNumericRadius(radius) || !params.get("locations_json")) return null;
+  let selectedLocations = [];
+  try {
+    const parsed = JSON.parse(params.get("locations_json") || "[]");
+    if (Array.isArray(parsed)) selectedLocations = parsed.filter((item) => item && typeof item === "object");
+  } catch (_) {
+    selectedLocations = [];
+  }
+  if (!selectedLocations.length) return null;
+
+  const intelligence = response?.filters_applied?.location_intelligence || {};
+  const expandedPlaces = Array.isArray(intelligence.expanded_places) ? intelligence.expanded_places : [];
+  const cityTerms = new Set();
+  const countryCodes = new Set();
+  [...expandedPlaces, ...selectedLocations].forEach((place) => {
+    [
+      place?.name,
+      place?.ascii_name,
+      place?.normalized_name,
+      place?.location_label,
+      compactCityLabel(place?.location_label),
+    ].forEach((value) => {
+      const normalized = normalizeSearchText(value);
+      if (normalized) cityTerms.add(normalized);
+    });
+    const code = String(place?.country_code || "").toLowerCase().trim();
+    if (code) countryCodes.add(code);
+  });
+  const workLocations = params.getAll("work_location").map((item) => String(item || "").toLowerCase());
+  const remoteExplicit = workLocations.includes("remote");
+
+  return (job) => {
+    const remote = job?.remote === true || normalizeSearchText(job?.location).includes("remote");
+    if (remote && remoteExplicit) return true;
+    const text = normalizeSearchText([
+      job?.city,
+      job?.region,
+      job?.location,
+      job?.country,
+      job?.country_code,
+    ].filter(Boolean).join(" "));
+    const countryCode = String(job?.country_code || "").toLowerCase().trim();
+    if (!text && !countryCode) return false;
+    if (countryCode && countryCodes.size && !countryCodes.has(countryCode)) return false;
+    for (const term of cityTerms) {
+      if (term && text.includes(term)) return true;
+    }
+    return false;
+  };
+};
+
 /* ============================================================
    Swipe card — tap to flip for full job details (mobile).
 ============================================================ */
@@ -653,11 +721,27 @@ export default function Swipe() {
         }
       }
       if (requestId !== feedRequestIdRef.current) return;
+      const localFeedGuard = buildLocalFeedGuard({ params, response: data });
+      const responseJobs = Array.isArray(data?.jobs) ? data.jobs : [];
+      const safeJobs = localFeedGuard ? responseJobs.filter(localFeedGuard) : responseJobs;
+      const outsideLocationHiddenCount = responseJobs.length - safeJobs.length;
+      if (outsideLocationHiddenCount > 0) {
+        data = {
+          ...(data || {}),
+          jobs: safeJobs,
+          total: safeJobs.length,
+          feed_summary: {
+            ...(data?.feed_summary || {}),
+            frontend_outside_location_hidden_count:
+              Number(data?.feed_summary?.frontend_outside_location_hidden_count || 0) + outsideLocationHiddenCount,
+          },
+        };
+      }
       console.group("[FeedDebug] response");
-      console.log("jobs count", data?.jobs?.length || 0);
+      console.log("jobs count", safeJobs.length);
       console.log("feed_summary", data?.feed_summary);
       console.log("request_trace", data?.request_trace);
-      console.log("first jobs", data?.jobs?.slice?.(0, 5));
+      console.log("first jobs", safeJobs.slice(0, 5));
       console.groupEnd();
       setLastFeedDebug({
         reason,
@@ -668,10 +752,10 @@ export default function Swipe() {
         requestParams: Object.fromEntries(params.entries()),
         requestParamEntries: Array.from(params.entries()),
         response: {
-          jobsCount: data?.jobs?.length || 0,
+          jobsCount: safeJobs.length,
           feedSummary: data?.feed_summary || null,
           requestTrace: data?.request_trace || null,
-          firstJobs: (data?.jobs || []).slice(0, 5).map((job) => ({
+          firstJobs: safeJobs.slice(0, 5).map((job) => ({
             title: job.title,
             company: job.company,
             location: job.location,
@@ -684,14 +768,14 @@ export default function Swipe() {
       setTotalCount(typeof data.total === "number" ? data.total : null);
       setFeedMeta(data || null);
       if (TUTORIAL_BYPASS_AUTH) {
-        (data.jobs || []).forEach((job) => cacheJobForDemo(job));
-        seedTutorialShowcaseIfEmpty(data.jobs || []);
+        safeJobs.forEach((job) => cacheJobForDemo(job));
+        seedTutorialShowcaseIfEmpty(safeJobs);
       }
       setJobs((prev) => {
-        const base = replace ? [] : prev;
+        const base = replace ? [] : (localFeedGuard ? prev.filter(localFeedGuard) : prev);
         const seen = new Set(base.map((j) => j.job_id));
         const merged = [...base];
-        (data.jobs || []).forEach((j) => { if (!seen.has(j.job_id)) merged.push(j); });
+        safeJobs.forEach((j) => { if (!seen.has(j.job_id)) merged.push(j); });
         return merged;
       });
     } catch (e) {
