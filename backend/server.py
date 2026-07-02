@@ -169,6 +169,7 @@ logger = logging.getLogger(__name__)
 _feed_job_pool_cache: Dict[str, Any] = {"query_key": "", "rows": [], "fetched_at": 0.0}
 _FEED_JOB_POOL_TTL_SECONDS = 90.0
 _feed_sync_refresh_cooldown_until = 0.0
+_feed_sync_refresh_cooldowns: Dict[str, float] = {}
 
 
 async def _get_feed_job_candidates(base_query: Dict[str, Any], limit: int) -> List[Dict[str, Any]]:
@@ -3848,7 +3849,7 @@ async def get_feed(
         return 0
 
     async def _fast_cached_feed() -> Dict[str, Any]:
-        global _feed_sync_refresh_cooldown_until
+        global _feed_sync_refresh_cooldown_until, _feed_sync_refresh_cooldowns
         requested_limit = max(1, min(int(limit or 5), 25))
         db_first_enabled = _env_bool("JOBS_DB_FIRST_ENABLED", True)
         db_min_good_results = max(1, _env_int("JOBS_DB_MIN_GOOD_RESULTS_BEFORE_JSEARCH", 30))
@@ -4692,8 +4693,46 @@ async def get_feed(
         request_trace["blocked_hidden_count"] = local_blocked_hidden_count or db_rejected_count
         request_trace["local_inventory_weak"] = bool(explicit_local_intent and len(candidates) < requested_limit)
 
+        def _explicit_local_cooldown_key() -> str:
+            location_parts: List[str] = []
+            if location_context.get("expanded_places"):
+                for place in (location_context.get("expanded_places") or [])[:6]:
+                    name = normalize_place_name(str(place.get("name") or place.get("ascii_name") or ""))
+                    country_value = str(place.get("country_code") or "").lower().strip()
+                    if name:
+                        location_parts.append(f"{name}:{country_value}")
+            if not location_parts:
+                for loc in request_selected_locations[:5]:
+                    label = normalize_place_name(str(loc.get("location_label") or loc.get("label") or ""))
+                    country_value = str(loc.get("country_code") or loc.get("country") or "").lower().strip()
+                    if label:
+                        location_parts.append(f"{label}:{country_value}")
+            role_value = normalize_place_name(target_role or "")
+            return "|".join([
+                "explicit_local",
+                role_value,
+                radius_scope,
+                ",".join(location_parts) or "unknown_location",
+            ])
+
+        def _prune_feed_cooldowns(now_value: float) -> None:
+            expired = [key for key, until in _feed_sync_refresh_cooldowns.items() if until <= now_value]
+            for key in expired:
+                _feed_sync_refresh_cooldowns.pop(key, None)
+
         cooldown_enabled = _env_bool("JOBS_FEED_FALLBACK_COOLDOWN_ENABLED", True)
-        cooldown_active = cooldown_enabled and time.monotonic() < _feed_sync_refresh_cooldown_until
+        cooldown_now = time.monotonic()
+        _prune_feed_cooldowns(cooldown_now)
+        cooldown_key = _explicit_local_cooldown_key() if explicit_local_intent else "global"
+        cooldown_until = (
+            _feed_sync_refresh_cooldowns.get(cooldown_key, 0.0)
+            if explicit_local_intent
+            else _feed_sync_refresh_cooldown_until
+        )
+        cooldown_active = cooldown_enabled and cooldown_now < cooldown_until
+        request_trace["feed_provider_cooldown_key"] = cooldown_key
+        request_trace["feed_provider_cooldown_active"] = bool(cooldown_active)
+        request_trace["feed_provider_cooldown_remaining_seconds"] = max(0, int(cooldown_until - cooldown_now))
         explicit_local_after_budget_refresh = (
             explicit_local_intent
             and len(candidates) < requested_limit
@@ -4733,9 +4772,10 @@ async def get_feed(
             )
         elif cooldown_active:
             logger.info(
-                "jobs/feed sync_refresh_skipped_cooldown: user_id=%s cooldown_remaining_seconds=%s",
+                "jobs/feed sync_refresh_skipped_cooldown: user_id=%s cooldown_key=%s cooldown_remaining_seconds=%s",
                 user.user_id,
-                max(0, int(_feed_sync_refresh_cooldown_until - time.monotonic())),
+                cooldown_key,
+                max(0, int(cooldown_until - time.monotonic())),
             )
         if should_refresh:
             jsearch_fallback_triggered = True
@@ -4806,7 +4846,11 @@ async def get_feed(
                     )
                 except asyncio.TimeoutError:
                     if cooldown_enabled:
-                        _feed_sync_refresh_cooldown_until = time.monotonic() + sync_refresh_cooldown_seconds
+                        next_until = time.monotonic() + sync_refresh_cooldown_seconds
+                        if explicit_local_intent:
+                            _feed_sync_refresh_cooldowns[cooldown_key] = next_until
+                        else:
+                            _feed_sync_refresh_cooldown_until = next_until
                     refresh_result = {
                         "attempted": True,
                         "ok": False,
@@ -4821,7 +4865,11 @@ async def get_feed(
                     )
                 except Exception as exc:
                     if cooldown_enabled:
-                        _feed_sync_refresh_cooldown_until = time.monotonic() + sync_refresh_cooldown_seconds
+                        next_until = time.monotonic() + sync_refresh_cooldown_seconds
+                        if explicit_local_intent:
+                            _feed_sync_refresh_cooldowns[cooldown_key] = next_until
+                        else:
+                            _feed_sync_refresh_cooldown_until = next_until
                     refresh_result = {
                         "attempted": True,
                         "ok": False,
@@ -6178,26 +6226,34 @@ def _require_ats_direct_enabled() -> None:
 
 @api_router.post("/admin/jobs/clear-feed-provider-cooldown")
 async def admin_clear_feed_provider_cooldown(admin: User = Depends(require_admin_user)):
-    global _feed_sync_refresh_cooldown_until
+    global _feed_sync_refresh_cooldown_until, _feed_sync_refresh_cooldowns
     now = time.monotonic()
     previous_feed_until = _feed_sync_refresh_cooldown_until
+    previous_scoped_cooldowns = dict(_feed_sync_refresh_cooldowns)
     provider_cooldowns = {
         key: value.isoformat()
         for key, value in getattr(jobs_service_module, "_PROVIDER_COOLDOWN_UNTIL", {}).items()
     }
     _feed_sync_refresh_cooldown_until = 0.0
+    _feed_sync_refresh_cooldowns = {}
     if hasattr(jobs_service_module, "_PROVIDER_COOLDOWN_UNTIL"):
         jobs_service_module._PROVIDER_COOLDOWN_UNTIL.clear()
     logger.info(
-        "admin_clear_feed_provider_cooldown admin=%s previous_feed_active=%s provider_cooldowns=%s",
+        "admin_clear_feed_provider_cooldown admin=%s previous_feed_active=%s scoped_cooldowns=%s provider_cooldowns=%s",
         admin.email,
         previous_feed_until > now,
+        len(previous_scoped_cooldowns),
         list(provider_cooldowns.keys()),
     )
     return {
         "cleared": True,
-        "previous_feed_cooldown_active": previous_feed_until > now,
+        "previous_feed_cooldown_active": previous_feed_until > now or any(until > now for until in previous_scoped_cooldowns.values()),
         "previous_feed_cooldown_remaining_seconds": max(0, int(previous_feed_until - now)),
+        "previous_scoped_feed_cooldowns": {
+            key: max(0, int(until - now))
+            for key, until in previous_scoped_cooldowns.items()
+            if until > now
+        },
         "previous_provider_cooldowns": provider_cooldowns,
     }
 
@@ -6338,6 +6394,12 @@ async def admin_jobs_feed_diagnostic(body: AdminJobsFeedDiagnosticRequest, admin
         "cooldown": {
             "feed_active": time.monotonic() < _feed_sync_refresh_cooldown_until,
             "feed_remaining_seconds": max(0, int(_feed_sync_refresh_cooldown_until - time.monotonic())),
+            "feed_scoped_active_count": sum(1 for until in _feed_sync_refresh_cooldowns.values() if until > time.monotonic()),
+            "feed_scoped_cooldowns": {
+                key: max(0, int(until - time.monotonic()))
+                for key, until in _feed_sync_refresh_cooldowns.items()
+                if until > time.monotonic()
+            },
             "provider_cooldowns": list(getattr(jobs_service_module, "_PROVIDER_COOLDOWN_UNTIL", {}).keys()),
         },
         "timing_ms": int((time.perf_counter() - started) * 1000),

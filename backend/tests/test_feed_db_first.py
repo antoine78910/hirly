@@ -300,6 +300,7 @@ def test_version_endpoint_exposes_safe_flags(monkeypatch):
 
 def test_admin_clear_feed_provider_cooldown(monkeypatch):
     monkeypatch.setattr(server, "_feed_sync_refresh_cooldown_until", 999999999999.0)
+    monkeypatch.setattr(server, "_feed_sync_refresh_cooldowns", {"explicit_local:test": 999999999999.0})
     server.jobs_service_module._PROVIDER_COOLDOWN_UNTIL["jsearch"] = datetime.now(timezone.utc)
     admin = server.User(user_id="admin", email="admin@tryhirly.com", name="Admin")
     monkeypatch.setattr(server, "_is_admin_email", lambda _email: True)
@@ -307,6 +308,7 @@ def test_admin_clear_feed_provider_cooldown(monkeypatch):
     assert response["cleared"] is True
     assert response["previous_feed_cooldown_active"] is True
     assert server._feed_sync_refresh_cooldown_until == 0.0
+    assert server._feed_sync_refresh_cooldowns == {}
     assert server.jobs_service_module._PROVIDER_COOLDOWN_UNTIL == {}
 
 
@@ -871,6 +873,7 @@ def test_slow_sync_jsearch_fallback_times_out_and_sets_cooldown(monkeypatch):
         return [_job(1)]
 
     monkeypatch.setattr(server, "_feed_sync_refresh_cooldown_until", 0.0)
+    monkeypatch.setattr(server, "_feed_sync_refresh_cooldowns", {})
     response, calls = _run_feed(
         monkeypatch,
         [],
@@ -896,6 +899,65 @@ def test_slow_sync_jsearch_fallback_times_out_and_sets_cooldown(monkeypatch):
     assert calls["refresh"] == 0
     assert response["jobs"] == []
     monkeypatch.setattr(server, "_feed_sync_refresh_cooldown_until", 0.0)
+    monkeypatch.setattr(server, "_feed_sync_refresh_cooldowns", {})
+
+
+def test_explicit_local_timeout_does_not_block_different_city_discovery(monkeypatch):
+    async def slow_refresh():
+        await asyncio.sleep(1.2)
+        return [_job(1)]
+
+    monkeypatch.setattr(server, "_feed_sync_refresh_cooldown_until", 0.0)
+    monkeypatch.setattr(server, "_feed_sync_refresh_cooldowns", {})
+    paris_payload = json.dumps([{
+        "location_label": "Paris, France",
+        "country": "France",
+        "country_code": "",
+        "lat": None,
+        "lng": None,
+    }])
+    response, calls = _run_feed(
+        monkeypatch,
+        [],
+        env={
+            "JOBS_FEED_SYNC_REFRESH_MAX_SECONDS": "1",
+            "JOBS_FEED_SYNC_REFRESH_COOLDOWN_SECONDS": "30",
+        },
+        refresh=slow_refresh,
+        locations_json=paris_payload,
+        geo_places=_geo_places(),
+    )
+    assert calls["refresh"] == 1
+    assert response["jobs"] == []
+    assert server._feed_sync_refresh_cooldowns
+
+    imported = _job(2, tier="C", status="unknown", title="Marketing Manager")
+    imported.update({"location": "Toulouse, France", "city": "Toulouse", "country_code": "fr"})
+    toulouse_payload = json.dumps([{
+        "location_label": "Toulouse, France",
+        "country": "France",
+        "country_code": "",
+        "lat": None,
+        "lng": None,
+    }])
+    response, calls = _run_feed(
+        monkeypatch,
+        [],
+        env={
+            "JOBS_FEED_SYNC_REFRESH_MAX_SECONDS": "1",
+            "JOBS_FEED_SYNC_REFRESH_COOLDOWN_SECONDS": "30",
+            "JOBS_FEED_DEBUG_DIAGNOSTICS": "true",
+        },
+        refresh=lambda: [imported],
+        locations_json=toulouse_payload,
+        search_radius="52km",
+        geo_places=_geo_places(),
+    )
+    assert calls["refresh"] >= 1
+    assert response["request_trace"]["local_jsearch_skip_reason"] is None
+    assert response["request_trace"]["feed_provider_cooldown_active"] is False
+    assert [job["job_id"] for job in response["jobs"]] == ["job_2"]
+    monkeypatch.setattr(server, "_feed_sync_refresh_cooldowns", {})
 
 
 def test_d_and_e_jobs_are_excluded(monkeypatch):
