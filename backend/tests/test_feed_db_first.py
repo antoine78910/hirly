@@ -144,12 +144,14 @@ def _run_feed(
     async def _refresh(*args, **kwargs):
         calls["refresh"] += 1
         calls["refresh_kwargs"] = kwargs
+        imported = []
         if refresh:
             result = refresh()
             if asyncio.iscoroutine(result):
                 result = await result
-            fake_db.jobs.rows.extend(result)
-        return {"attempted": True, "jobs_imported": len(fake_db.jobs.rows), "search_keys": ["jsearch:test"]}
+            imported = list(result or [])
+            fake_db.jobs.rows.extend(imported)
+        return {"attempted": True, "jobs_imported": len(imported), "jobs": imported, "search_keys": ["jsearch:test"]}
 
     monkeypatch.setattr(server, "refresh_jobs_for_profile_if_needed", _refresh)
     user = server.User(user_id="user_1", email="user@example.com", name="User")
@@ -479,6 +481,41 @@ def test_explicit_local_jsearch_fallback_returns_imported_manual_local_job(monke
     assert calls["refresh"] <= 2
     assert calls["refresh_kwargs"]["max_provider_requests_override"] == 1
     assert [job["job_id"] for job in response["jobs"]] == ["job_1"]
+    assert response["jobs"][0]["application_mode"] == "manual"
+
+
+def test_explicit_local_discovery_returns_fresh_job_when_country_cache_is_full(monkeypatch):
+    stale_country_rows = []
+    for index in range(1000):
+        job = _job(index, tier="A", status="valid", title="Marketing Manager")
+        job.update({"location": "Lyon, France", "city": "Lyon", "country_code": "fr"})
+        stale_country_rows.append(job)
+    imported = _job(1001, tier="C", status="unknown", title="Marketing Manager")
+    imported.update({"location": "Montpellier, France", "city": "Montpellier", "country_code": "fr"})
+    locations_json = json.dumps([{
+        "location_label": "Montpellier, France",
+        "country": "France",
+        "country_code": "fr",
+        "lat": 43.6108,
+        "lng": 3.8767,
+    }])
+    response, calls = _run_feed(
+        monkeypatch,
+        stale_country_rows,
+        env={
+            "JOBS_FEED_LOCAL_DISCOVERY_MAX_CITIES": "1",
+            "JOBS_FEED_SYNC_REFRESH_MAX_SECONDS": "5",
+            "JOBS_FEED_DEBUG_DIAGNOSTICS": "true",
+        },
+        refresh=lambda: [imported],
+        locations_json=locations_json,
+        search_radius="50km",
+        geo_places=_geo_places(),
+    )
+    assert calls["refresh"] == 1
+    assert response["request_trace"]["local_inventory_weak"] is True
+    assert response["request_trace"]["local_jsearch_discovery_attempted"] is True
+    assert [job["job_id"] for job in response["jobs"]] == ["job_1001"]
     assert response["jobs"][0]["application_mode"] == "manual"
 
 

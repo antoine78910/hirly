@@ -172,6 +172,10 @@ _feed_sync_refresh_cooldown_until = 0.0
 _feed_sync_refresh_cooldowns: Dict[str, float] = {}
 
 
+def _clear_feed_job_pool_cache() -> None:
+    _feed_job_pool_cache.update({"query_key": "", "rows": [], "fetched_at": 0.0})
+
+
 async def _get_feed_job_candidates(base_query: Dict[str, Any], limit: int) -> List[Dict[str, Any]]:
     cache_key = json.dumps(base_query, sort_keys=True, default=str)
     now = time.monotonic()
@@ -4685,13 +4689,19 @@ async def get_feed(
                     len(candidates),
                     db_good_count,
                 )
+        local_inventory_count = (
+            sum(1 for job in candidates if _role_compatible_for_threshold(job))
+            if explicit_local_intent
+            else len(candidates)
+        )
 
         request_trace["db_local_candidate_count_before_filters"] = pre_refresh_candidate_count
         request_trace["db_local_candidate_count_after_filters"] = len(candidates)
+        request_trace["local_role_compatible_count"] = local_inventory_count
         request_trace["manual_candidate_count"] = sum(1 for job in candidates if job.get("application_mode") in {"manual", "assisted"})
         request_trace["auto_apply_candidate_count"] = sum(1 for job in candidates if job.get("application_mode") == "auto_apply")
         request_trace["blocked_hidden_count"] = local_blocked_hidden_count or db_rejected_count
-        request_trace["local_inventory_weak"] = bool(explicit_local_intent and len(candidates) < requested_limit)
+        request_trace["local_inventory_weak"] = bool(explicit_local_intent and local_inventory_count < requested_limit)
 
         def _explicit_local_cooldown_key() -> str:
             location_parts: List[str] = []
@@ -4735,7 +4745,7 @@ async def get_feed(
         request_trace["feed_provider_cooldown_remaining_seconds"] = max(0, int(cooldown_until - cooldown_now))
         explicit_local_after_budget_refresh = (
             explicit_local_intent
-            and len(candidates) < requested_limit
+            and local_inventory_count < requested_limit
             and _env_bool("JOBS_FEED_EXPLICIT_LOCAL_DISCOVERY_AFTER_DB_TIMEOUT", True)
         )
         refresh_budget_available = not _timed_out() or explicit_local_after_budget_refresh
@@ -4746,7 +4756,7 @@ async def get_feed(
             and (
                 not db_first_enabled
                 or db_good_count == 0
-                or (explicit_local_intent and len(candidates) < requested_limit)
+                or (explicit_local_intent and local_inventory_count < requested_limit)
             )
         )
         request_trace["local_jsearch_discovery_should_run"] = bool(should_refresh and explicit_local_intent)
@@ -4757,7 +4767,7 @@ async def get_feed(
                 request_trace["local_jsearch_skip_reason"] = "feed_timeout_budget_exhausted"
             elif cooldown_active:
                 request_trace["local_jsearch_skip_reason"] = "provider_cooldown_active"
-            elif len(candidates) >= requested_limit:
+            elif local_inventory_count >= requested_limit:
                 request_trace["local_jsearch_skip_reason"] = "local_candidate_count_sufficient"
             elif db_first_enabled and db_good_count > 0:
                 request_trace["local_jsearch_skip_reason"] = "db_good_count_nonzero"
@@ -4912,6 +4922,7 @@ async def get_feed(
                 if isinstance(item, dict)
             )
 
+            _clear_feed_job_pool_cache()
             candidates, base_query, unfiltered_count, applyable_count, db_rejected_count = await _load_db_candidates(include_unknown=False)
             if allow_unknown_tier and len(candidates) < requested_limit:
                 c_candidates, c_query, c_unfiltered, c_applyable, c_rejected = await _load_db_candidates(include_unknown=True)
@@ -4935,8 +4946,32 @@ async def get_feed(
                 if additions:
                     base_query = visible_query if not base_query else base_query
                     feed_source = "db_after_jsearch_fallback+local_visible"
+            if direct_refresh_jobs:
+                seen_ids = {job.get("job_id") for job in candidates}
+                fresh_additions: List[Dict[str, Any]] = []
+                for job in direct_refresh_jobs:
+                    job_id = job.get("job_id")
+                    if job_id and job_id in seen_ids:
+                        continue
+                    if job_id and job_id in swiped_ids:
+                        continue
+                    if _job_is_blocked_for_feed(job) or not _job_has_usable_apply_url(job):
+                        continue
+                    candidate = _with_application_capability_fields(job)
+                    if explicit_local_intent and not _passes_explicit_local_hard_constraint(candidate):
+                        continue
+                    if not _matches_explicit_filters(candidate):
+                        continue
+                    fresh_additions.append(candidate)
+                    if job_id:
+                        seen_ids.add(job_id)
+                if fresh_additions:
+                    candidates.extend(fresh_additions)
+                    local_visible_count += len(fresh_additions)
+                    local_manual_count += sum(1 for job in fresh_additions if job.get("application_mode") != "auto_apply")
+                    feed_source = f"{feed_source}+fresh_provider_jobs"
             pre_filter_candidates = list(candidates)
-            if feed_source != "db_after_jsearch_fallback+local_visible":
+            if not str(feed_source).startswith("db_after_jsearch_fallback"):
                 feed_source = "db_after_jsearch_fallback"
             logger.info(
                 "jobs/feed jsearch_fallback_complete: user_id=%s imported_results=%s provider_search_keys=%s db_after_count=%s db_after_role_good_count=%s unfiltered_count=%s applyable_count=%s rejected_de_count=%s",
