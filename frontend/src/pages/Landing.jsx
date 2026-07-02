@@ -355,8 +355,89 @@ export default function Landing() {
       </section>
 
       <footer className="border-t border-zinc-100">
-        <div className="max-w-6xl mx-auto px-6 py-8 text-sm text-zinc-400">
-          <p>© {new Date().getFullYear()} {BRAND.NAME}</p>
+        <div className="max-w-6xl mx-auto px-6 py-12">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-8 mb-10">
+
+            <div>
+              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-3">
+                {lang === "fr" ? "Produit" : "Product"}
+              </p>
+              <ul className="space-y-2">
+                {[
+                  { label: lang === "fr" ? "Comment ça marche" : "How it works", href: "/how-it-works" },
+                  { label: lang === "fr" ? "Cas d'usage" : "Use cases", href: "/use-cases" },
+                  { label: lang === "fr" ? "Pour les juniors" : "For juniors", href: "/for/juniors" },
+                  { label: lang === "fr" ? "Reconversion pro" : "Career changers", href: "/for/reconversion" },
+                  { label: lang === "fr" ? "Pour les devs" : "For developers", href: "/for/developpeurs" },
+                ].map((l) => (
+                  <li key={l.href}>
+                    <a href={l.href} className="text-sm text-zinc-500 hover:text-zinc-900 transition-colors">
+                      {l.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-3">
+                {lang === "fr" ? "Comparatifs" : "Compare"}
+              </p>
+              <ul className="space-y-2">
+                {[
+                  { label: "Hirly vs LinkedIn", href: "/compare/hirly-vs-linkedin" },
+                  { label: "Hirly vs Indeed", href: "/compare/hirly-vs-indeed" },
+                ].map((l) => (
+                  <li key={l.href}>
+                    <a href={l.href} className="text-sm text-zinc-500 hover:text-zinc-900 transition-colors">
+                      {l.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-3">Blog</p>
+              <ul className="space-y-2">
+                {[
+                  { label: lang === "fr" ? "Trouver un emploi vite" : "Find a job fast", href: "/blog/trouver-emploi-rapidement" },
+                  { label: lang === "fr" ? "Meilleures apps emploi 2026" : "Best job apps 2026", href: "/blog/meilleures-apps-emploi-2026" },
+                  { label: lang === "fr" ? "Automatiser sa recherche" : "Automate job search", href: "/blog/automatiser-recherche-emploi" },
+                  { label: lang === "fr" ? "Passer les filtres ATS" : "Beat ATS filters", href: "/blog/passer-filtres-ats-recrutement" },
+                  { label: lang === "fr" ? "Tous les articles" : "All articles", href: "/blog" },
+                ].map((l) => (
+                  <li key={l.href}>
+                    <a href={l.href} className="text-sm text-zinc-500 hover:text-zinc-900 transition-colors">
+                      {l.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-3">
+                {lang === "fr" ? "Ressources" : "Resources"}
+              </p>
+              <ul className="space-y-2">
+                {[
+                  { label: lang === "fr" ? "Job matching, c'est quoi ?" : "What is job matching?", href: "/blog/job-matching-app" },
+                  { label: lang === "fr" ? "Tinder pour l'emploi" : "Tinder for jobs", href: "/blog/tinder-emploi-app" },
+                ].map((l) => (
+                  <li key={l.href}>
+                    <a href={l.href} className="text-sm text-zinc-500 hover:text-zinc-900 transition-colors">
+                      {l.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+          </div>
+          <div className="border-t border-zinc-100 pt-6 text-sm text-zinc-400">
+            <p>© {new Date().getFullYear()} {BRAND.NAME}</p>
+          </div>
         </div>
       </footer>
     </div>
