@@ -645,6 +645,32 @@ def test_explicit_local_discovery_continues_after_one_location_timeout(monkeypat
     assert [job["job_id"] for job in response["jobs"]] == ["job_1"]
 
 
+def test_explicit_local_discovery_respects_total_provider_budget(monkeypatch):
+    async def slow_refresh():
+        await asyncio.sleep(1.1)
+        return []
+
+    response, feed_calls = _run_feed(
+        monkeypatch,
+        [],
+        env={
+            "JOBS_FEED_LOCAL_DISCOVERY_MAX_CITIES": "4",
+            "JOBS_FEED_SYNC_REFRESH_MAX_SECONDS": "5",
+            "JOBS_FEED_SYNC_REFRESH_TOTAL_SECONDS": "2",
+            "JOBS_FEED_DEBUG_DIAGNOSTICS": "true",
+        },
+        refresh=slow_refresh,
+        locations_json=_location_payload(),
+        geo_places=_geo_places(),
+        force_provider_refresh=True,
+    )
+    assert feed_calls["refresh"] <= 2
+    assert response["request_trace"]["local_jsearch_discovery_attempted"] is True
+    assert response["request_trace"].get("local_jsearch_budget_exhausted") is True
+    assert response["jobs"] == []
+    assert response["empty_reason"]["code"] == "NO_LOCAL_AUTO_APPLY_JOBS"
+
+
 def test_real_app_text_only_toulouse_request_triggers_local_discovery(monkeypatch):
     imported = _job(1, tier="C", status="unknown", title="Marketing Manager")
     imported.update({"location": "Toulouse, France", "city": "Toulouse", "country_code": "fr"})
@@ -774,6 +800,49 @@ def test_global_remote_jobs_do_not_prevent_explicit_local_jsearch_discovery(monk
     assert calls["refresh"] == 1
     assert [job["job_id"] for job in response["jobs"]] == ["job_2"]
     assert response["jobs"][0]["application_mode"] == "manual"
+
+
+def test_visible_outside_locations_do_not_count_as_explicit_local_inventory(monkeypatch):
+    outside_jobs = []
+    for index, location in enumerate([
+        "Pune, India",
+        "Jacksonville - Florida - United States",
+        "Dublin, Ireland",
+        "Poland",
+        "Brazil",
+    ], start=1):
+        job = _legacy_direct_job(index, country_code="", location=location, title="Marketing Manager")
+        job["data"] = {"location": "Madrid, Community of Madrid, Spain"}
+        outside_jobs.append(job)
+
+    imported = _job(99, tier="C", status="unknown", title="Marketing Manager")
+    imported.update({"location": "Madrid, Spain", "city": "Madrid", "country_code": "es"})
+
+    madrid_location = json.dumps([{
+        "location_label": "Madrid, Community of Madrid, Spain",
+        "country": "Spain",
+        "country_code": "es",
+        "lat": 40.416782,
+        "lng": -3.703507,
+    }])
+    response, calls = _run_feed(
+        monkeypatch,
+        outside_jobs,
+        env={
+            "JOBS_FEED_LOCAL_DISCOVERY_MAX_CITIES": "1",
+            "JOBS_FEED_SYNC_REFRESH_MAX_SECONDS": "5",
+            "JOBS_FEED_DEBUG_DIAGNOSTICS": "true",
+        },
+        refresh=lambda: [imported],
+        locations_json=madrid_location,
+        search_radius="38km",
+        work_location=["onsite"],
+        geo_places=_geo_places(),
+    )
+
+    assert calls["refresh"] == 1
+    assert response["request_trace"]["local_jsearch_discovery_attempted"] is True
+    assert [job["job_id"] for job in response["jobs"]] == ["job_99"]
 
 
 def test_explicit_local_search_excludes_remote_when_onsite_only(monkeypatch):

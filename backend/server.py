@@ -97,7 +97,7 @@ from ats_source_service import (
     refresh_known_ats_sources,
 )
 from job_validation import cheap_validate_job_applyability
-from location_intelligence import expand_location_radius, normalize_place_name
+from location_intelligence import COUNTRY_NAME_TO_CODE, expand_location_radius, normalize_place_name
 from location_search import search_locations
 from llm_client import LLMProviderNotConfigured, complete_json_text
 from onboarding_suggestions import suggest_categories, suggest_roles
@@ -3866,6 +3866,7 @@ async def get_feed(
         sync_refresh_max_pages = max(1, min(_env_int("JSEARCH_FEED_FALLBACK_MAX_PAGES", 1), 3))
         sync_refresh_page_size = max(1, min(_env_int("JSEARCH_FEED_FALLBACK_PAGE_SIZE", 10), 50))
         sync_refresh_cooldown_seconds = max(30, min(_env_int("JOBS_FEED_SYNC_REFRESH_COOLDOWN_SECONDS", 300), 1800))
+        sync_refresh_total_seconds = max(2, min(_env_int("JOBS_FEED_SYNC_REFRESH_TOTAL_SECONDS", 12), 25))
         target_role = feed_target_role
         strict_tokens = _tokens(target_role)
         family_tokens = _role_family_tokens(target_role)
@@ -4256,18 +4257,90 @@ async def get_feed(
                 return "onsite"
             return "unknown"
 
-        def _normalized_job_location_text(job: Dict[str, Any]) -> str:
+        extra_country_name_to_code = {
+            "ireland": "ie",
+            "india": "in",
+            "brazil": "br",
+            "poland": "pl",
+            "canada": "ca",
+            "australia": "au",
+            "singapore": "sg",
+            "switzerland": "ch",
+            "belgium": "be",
+            "austria": "at",
+            "denmark": "dk",
+            "sweden": "se",
+            "norway": "no",
+            "finland": "fi",
+            "czech republic": "cz",
+            "czechia": "cz",
+            "romania": "ro",
+            "hungary": "hu",
+            "mexico": "mx",
+            "argentina": "ar",
+            "chile": "cl",
+            "colombia": "co",
+            "japan": "jp",
+            "south korea": "kr",
+            "korea": "kr",
+            "china": "cn",
+            "hong kong": "hk",
+            "united arab emirates": "ae",
+            "uae": "ae",
+        }
+        country_name_to_code = {**COUNTRY_NAME_TO_CODE, **extra_country_name_to_code}
+
+        def _visible_job_location_text(job: Dict[str, Any]) -> str:
             return normalize_place_name(" ".join([
                 str(job.get("city") or ""),
                 str(job.get("region") or ""),
                 str(job.get("location") or ""),
-                str((job.get("data") or {}).get("location") or "") if isinstance(job.get("data"), dict) else "",
             ]))
+
+        def _raw_job_location_text(job: Dict[str, Any]) -> str:
+            data = job.get("data") if isinstance(job.get("data"), dict) else {}
+            raw_parts = [
+                data.get("location"),
+                data.get("job_city"),
+                data.get("job_state"),
+                data.get("job_country"),
+                data.get("job_location"),
+            ]
+            return normalize_place_name(" ".join(str(part or "") for part in raw_parts))
+
+        def _normalized_job_location_text(job: Dict[str, Any]) -> str:
+            visible_text = _visible_job_location_text(job)
+            return visible_text or _raw_job_location_text(job)
+
+        def _country_code_from_location_text(text: str) -> Optional[str]:
+            normalized = normalize_place_name(text)
+            if not normalized:
+                return None
+            padded = f" {normalized} "
+            for country_name, code in sorted(country_name_to_code.items(), key=lambda item: len(item[0]), reverse=True):
+                if f" {normalize_place_name(country_name)} " in padded:
+                    return code
+            return None
+
+        def _known_outside_expanded_country(job: Dict[str, Any]) -> bool:
+            if not explicit_local_intent:
+                return False
+            allowed = {str(code).lower().strip() for code in expanded_country_codes if code}
+            if not allowed:
+                return False
+            job_country_code = str(job.get("country_code") or "").lower().strip()
+            if job_country_code:
+                return job_country_code not in allowed
+            visible_country_code = _country_code_from_location_text(_visible_job_location_text(job))
+            return bool(visible_country_code and visible_country_code not in allowed)
 
         def _expanded_location_match(job: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             if not location_context.get("used"):
                 return None
-            job_text = _normalized_job_location_text(job)
+            if _known_outside_expanded_country(job):
+                return None
+            visible_text = _visible_job_location_text(job)
+            job_text = visible_text or _raw_job_location_text(job)
             job_country_code = str(job.get("country_code") or "").lower().strip()
             if not job_text and not job_country_code:
                 return None
@@ -4284,6 +4357,10 @@ async def get_feed(
                 normalized_names = [normalize_place_name(str(name or "")) for name in names]
                 if any(name and name in job_text for name in normalized_names):
                     return place
+            selected_terms = [term for term in selected_city_terms if len(term) >= 4]
+            if selected_terms and any(term in job_text for term in selected_terms):
+                places = location_context.get("expanded_places") or []
+                return places[0] if places else {"name": "selected_location", "distance_km": 0, "is_origin": True}
             return None
 
         def _matches_work_location(job: Dict[str, Any]) -> bool:
@@ -4324,6 +4401,8 @@ async def get_feed(
                 return include_unknown_location
             if explicit_local_intent and _explicit_local_remote_allowed(job):
                 return True
+            if explicit_local_intent and _known_outside_expanded_country(job):
+                return False
             expanded_match = _expanded_location_match(job)
             if expanded_match:
                 return True
@@ -4354,6 +4433,8 @@ async def get_feed(
                 return False
             if _explicit_local_remote_allowed(job):
                 return True
+            if _known_outside_expanded_country(job):
+                return False
             return _matches_location(job)
 
         def _matches_salary(job: Dict[str, Any]) -> bool:
@@ -4845,18 +4926,30 @@ async def get_feed(
             ]
             provider_force_refresh = force_provider_refresh or os.environ.get("JOB_FEED_ON_DEMAND_JSEARCH", "true").lower() in ("1", "true", "yes", "on")
             logger.info(
-                "jobs/feed jsearch_fallback_start: user_id=%s db_good_count=%s weak_threshold=%s refresh_locations=%s force_provider_refresh=%s max_seconds=%s max_results=%s max_pages=%s page_size=%s",
+                "jobs/feed jsearch_fallback_start: user_id=%s db_good_count=%s weak_threshold=%s refresh_locations=%s force_provider_refresh=%s max_seconds=%s total_seconds=%s max_results=%s max_pages=%s page_size=%s",
                 user.user_id,
                 db_good_count,
                 db_weak_results_threshold,
                 len(refresh_locations),
                 provider_force_refresh,
                 sync_refresh_max_seconds,
+                sync_refresh_total_seconds,
                 sync_refresh_max_results,
                 sync_refresh_max_pages,
                 sync_refresh_page_size,
             )
+            provider_refresh_deadline = time.perf_counter() + sync_refresh_total_seconds
             for loc_data in refresh_locations:
+                remaining_seconds = provider_refresh_deadline - time.perf_counter()
+                if remaining_seconds <= 0.5:
+                    request_trace["local_jsearch_budget_exhausted"] = True
+                    logger.info(
+                        "jobs/feed jsearch_fallback_budget_exhausted: user_id=%s attempted_locations=%s total_seconds=%s",
+                        user.user_id,
+                        len(refresh_results),
+                        sync_refresh_total_seconds,
+                    )
+                    break
                 loc_label = loc_data.get("location_label") if isinstance(loc_data, dict) else None
                 request_trace["jsearch_queries_executed"].append({
                     "location_label": loc_label,
@@ -4864,6 +4957,7 @@ async def get_feed(
                 })
                 refresh_started = time.perf_counter()
                 try:
+                    per_location_timeout = max(0.5, min(float(sync_refresh_max_seconds), remaining_seconds))
                     refresh_result = await asyncio.wait_for(
                         refresh_jobs_for_profile_if_needed(
                             db,
@@ -4881,10 +4975,10 @@ async def get_feed(
                             max_provider_requests_override=1,
                             max_direct_apply_requests_override=0,
                         ),
-                        timeout=sync_refresh_max_seconds,
+                        timeout=per_location_timeout,
                     )
                 except asyncio.TimeoutError:
-                    if cooldown_enabled:
+                    if cooldown_enabled and not (force_provider_refresh and explicit_local_intent):
                         next_until = time.monotonic() + sync_refresh_cooldown_seconds
                         if explicit_local_intent:
                             _feed_sync_refresh_cooldowns[cooldown_key] = next_until
@@ -4897,13 +4991,14 @@ async def get_feed(
                         "elapsed_ms": int((time.perf_counter() - refresh_started) * 1000),
                     }
                     logger.warning(
-                        "jobs/feed jsearch_fallback_timeout: user_id=%s elapsed_ms=%s cooldown_seconds=%s",
+                        "jobs/feed jsearch_fallback_timeout: user_id=%s elapsed_ms=%s cooldown_seconds=%s location=%s",
                         user.user_id,
                         refresh_result["elapsed_ms"],
                         sync_refresh_cooldown_seconds,
+                        loc_label,
                     )
                 except Exception as exc:
-                    if cooldown_enabled:
+                    if cooldown_enabled and not (force_provider_refresh and explicit_local_intent):
                         next_until = time.monotonic() + sync_refresh_cooldown_seconds
                         if explicit_local_intent:
                             _feed_sync_refresh_cooldowns[cooldown_key] = next_until
