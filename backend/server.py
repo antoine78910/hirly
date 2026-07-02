@@ -4813,6 +4813,17 @@ async def get_feed(
             if is_worldwide_radius:
                 refresh_locations = [None]
             elif explicit_local_intent and location_context.get("expanded_places"):
+                def _provider_place_sort_key(place: Dict[str, Any]) -> tuple:
+                    population = int(place.get("population") or 0)
+                    distance = float(place.get("distance_km") or 0)
+                    is_origin = bool(place.get("is_origin"))
+                    origin_penalty = 1 if is_origin and population < 10000 else 0
+                    return (origin_penalty, -population, distance)
+
+                expanded_for_provider = sorted(
+                    location_context.get("expanded_places") or [],
+                    key=_provider_place_sort_key,
+                )
                 refresh_locations = [
                     {
                         "location_label": place.get("query_label") or place.get("name") or place.get("ascii_name"),
@@ -4820,7 +4831,7 @@ async def get_feed(
                         "lat": place.get("latitude"),
                         "lng": place.get("longitude"),
                     }
-                    for place in (location_context.get("expanded_places") or [])
+                    for place in expanded_for_provider
                     if place.get("name") or place.get("ascii_name")
                 ][:max_refresh_locations]
             else:
@@ -4923,7 +4934,9 @@ async def get_feed(
                 if refresh_result.get("provider_rate_limited"):
                     break
                 if refresh_result.get("reason") in {"feed_sync_refresh_timeout", "feed_sync_refresh_error"}:
-                    break
+                    if not explicit_local_intent:
+                        break
+                    continue
 
             for refresh_result in refresh_results:
                 direct_refresh_jobs.extend(job for job in (refresh_result.get("jobs") or []) if isinstance(job, dict))

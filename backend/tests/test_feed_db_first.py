@@ -615,6 +615,36 @@ def test_force_provider_refresh_bypasses_explicit_local_cooldown(monkeypatch):
     assert [job["job_id"] for job in response["jobs"]] == ["job_1"]
 
 
+def test_explicit_local_discovery_continues_after_one_location_timeout(monkeypatch):
+    imported = _job(1, tier="C", status="unknown", title="Marketing Manager")
+    imported.update({"location": "Biarritz, France", "city": "Biarritz", "country_code": "fr"})
+    calls = {"count": 0}
+
+    async def refresh():
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise asyncio.TimeoutError()
+        return [imported]
+
+    response, feed_calls = _run_feed(
+        monkeypatch,
+        [],
+        env={
+            "JOBS_FEED_LOCAL_DISCOVERY_MAX_CITIES": "2",
+            "JOBS_FEED_SYNC_REFRESH_MAX_SECONDS": "5",
+            "JOBS_FEED_DEBUG_DIAGNOSTICS": "true",
+        },
+        refresh=refresh,
+        locations_json=_location_payload(),
+        geo_places=_geo_places(),
+        force_provider_refresh=True,
+    )
+    assert feed_calls["refresh"] == 2
+    assert response["request_trace"]["local_jsearch_discovery_attempted"] is True
+    assert response["request_trace"]["jsearch_results_count"] == 1
+    assert [job["job_id"] for job in response["jobs"]] == ["job_1"]
+
+
 def test_real_app_text_only_toulouse_request_triggers_local_discovery(monkeypatch):
     imported = _job(1, tier="C", status="unknown", title="Marketing Manager")
     imported.update({"location": "Toulouse, France", "city": "Toulouse", "country_code": "fr"})
