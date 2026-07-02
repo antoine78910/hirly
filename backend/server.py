@@ -4232,15 +4232,42 @@ async def get_feed(
                 -_recency_score(job),
             )
 
+        def _job_location_parts(job: Dict[str, Any]) -> List[str]:
+            parts: List[str] = [
+                str(job.get("city") or ""),
+                str(job.get("region") or ""),
+                str(job.get("location") or ""),
+                str(job.get("country") or ""),
+            ]
+            data = job.get("data")
+            if isinstance(data, dict):
+                for key in (
+                    "location",
+                    "job_location",
+                    "job_city",
+                    "job_state",
+                    "job_country",
+                    "candidate_required_location",
+                    "workplace",
+                ):
+                    value = data.get(key)
+                    if isinstance(value, (list, tuple)):
+                        parts.extend(str(item or "") for item in value)
+                    elif isinstance(value, dict):
+                        parts.extend(str(item or "") for item in value.values())
+                    else:
+                        parts.append(str(value or ""))
+            return parts
+
         def _job_work_location(job: Dict[str, Any]) -> str:
             raw = job.get("remote")
             if isinstance(raw, bool):
                 return "remote" if raw else "onsite"
             text = " ".join([
                 str(raw or ""),
-                str(job.get("location") or ""),
                 str(job.get("workplace_type") or ""),
                 str(job.get("work_location") or ""),
+                *_job_location_parts(job),
             ]).lower()
             if "hybrid" in text:
                 return "hybrid"
@@ -4251,12 +4278,7 @@ async def get_feed(
             return "unknown"
 
         def _normalized_job_location_text(job: Dict[str, Any]) -> str:
-            return normalize_place_name(" ".join([
-                str(job.get("city") or ""),
-                str(job.get("region") or ""),
-                str(job.get("location") or ""),
-                str((job.get("data") or {}).get("location") or "") if isinstance(job.get("data"), dict) else "",
-            ]))
+            return normalize_place_name(" ".join(_job_location_parts(job)))
 
         def _expanded_location_match(job: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             if not location_context.get("used"):
@@ -4312,7 +4334,7 @@ async def get_feed(
         def _matches_location(job: Dict[str, Any]) -> bool:
             if not explicit_location_filter and not only_my_country:
                 return True
-            job_location = str(job.get("location") or "").lower()
+            job_location = _normalized_job_location_text(job)
             job_country_code = str(job.get("country_code") or "").lower().strip()
             if not job_location and not job_country_code:
                 return include_unknown_location
@@ -4343,7 +4365,7 @@ async def get_feed(
         def _passes_explicit_local_hard_constraint(job: Dict[str, Any]) -> bool:
             if not explicit_local_intent:
                 return True
-            has_known_location = bool(job.get("location") or job.get("city") or job.get("region") or job.get("country_code"))
+            has_known_location = bool(_normalized_job_location_text(job) or job.get("country_code"))
             if not has_known_location:
                 return bool(include_unknown_location)
             if _explicit_local_remote_allowed(job):

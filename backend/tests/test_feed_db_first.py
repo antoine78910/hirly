@@ -613,6 +613,41 @@ def test_global_remote_jobs_do_not_prevent_explicit_local_jsearch_discovery(monk
     assert response["jobs"][0]["application_mode"] == "manual"
 
 
+def test_raw_payload_locations_do_not_count_as_local_unknown_jobs(monkeypatch):
+    global_rows = []
+    for index, location in enumerate([
+        "Pune, India",
+        "Jacksonville - Florida - United States",
+        "United States",
+        "San Francisco Bay Area",
+        "San Francisco, CA",
+    ], start=1):
+        job = _legacy_direct_job(index, country_code="", location="", title="Marketing Manager")
+        job["data"] = {"location": location}
+        global_rows.append(job)
+
+    imported = _job(10, tier="C", status="unknown", title="Marketing Manager")
+    imported.update({"location": "Paris, France", "city": "Paris", "country_code": "fr"})
+
+    response, calls = _run_feed(
+        monkeypatch,
+        global_rows,
+        env={
+            "JOBS_FEED_LOCAL_DISCOVERY_MAX_CITIES": "1",
+            "JOBS_FEED_SYNC_REFRESH_MAX_SECONDS": "5",
+            "JOBS_FEED_DEBUG_DIAGNOSTICS": "true",
+        },
+        refresh=lambda: [imported],
+        locations_json=_location_payload("Paris", lat=48.8566, lng=2.3522),
+        geo_places=_geo_places(),
+    )
+
+    assert calls["refresh"] == 1
+    assert response["request_trace"]["db_local_candidate_count_after_filters"] == 0
+    assert [job["job_id"] for job in response["jobs"]] == ["job_10"]
+    assert response["jobs"][0]["application_mode"] == "manual"
+
+
 def test_explicit_local_search_excludes_remote_when_onsite_only(monkeypatch):
     remote = _legacy_direct_job(
         1,
