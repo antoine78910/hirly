@@ -664,8 +664,8 @@ export default function Swipe() {
     setLoading(true);
     setFeedError("");
     if (replace) setJobs([]);
-    const params = buildFeedParams(f);
-    const requestUrl = `/jobs/feed?${params.toString()}`;
+    let params = buildFeedParams(f);
+    let requestUrl = `/jobs/feed?${params.toString()}`;
     console.group("[FeedDebug] loadFeed");
     console.log("reason", reason);
     console.log("forceRefresh", replace);
@@ -685,7 +685,7 @@ export default function Swipe() {
       requestParamEntries: Array.from(params.entries()),
       response: null,
     });
-    const requestFeed = async () => {
+    const requestFeed = async (url = requestUrl) => {
       if (isFinanceDemoEnabled()) {
         const demoData = getFinanceDemoFeedData({
           filters: f == null ? null : mergeFilters(f),
@@ -694,7 +694,7 @@ export default function Swipe() {
         });
         if (demoData) return demoData;
       }
-      const { data } = await api.get(requestUrl, {
+      const { data } = await api.get(url, {
         timeout: 45000,
         signal: controller.signal,
       });
@@ -721,10 +721,31 @@ export default function Swipe() {
         }
       }
       if (requestId !== feedRequestIdRef.current) return;
-      const localFeedGuard = buildLocalFeedGuard({ params, response: data });
-      const responseJobs = Array.isArray(data?.jobs) ? data.jobs : [];
-      const safeJobs = localFeedGuard ? responseJobs.filter(localFeedGuard) : responseJobs;
-      const outsideLocationHiddenCount = responseJobs.length - safeJobs.length;
+      let localFeedGuard = buildLocalFeedGuard({ params, response: data });
+      let responseJobs = Array.isArray(data?.jobs) ? data.jobs : [];
+      let safeJobs = localFeedGuard ? responseJobs.filter(localFeedGuard) : responseJobs;
+      let outsideLocationHiddenCount = responseJobs.length - safeJobs.length;
+      const trace = data?.request_trace || {};
+      const shouldForceLocalRetry = Boolean(
+        localFeedGuard
+        && safeJobs.length === 0
+        && !params.get("force_provider_refresh")
+        && trace.explicit_local_intent
+        && trace.local_jsearch_discovery_attempted !== true
+      );
+      if (shouldForceLocalRetry) {
+        const retryParams = new URLSearchParams(params);
+        retryParams.set("force_provider_refresh", "true");
+        params = retryParams;
+        requestUrl = `/jobs/feed?${retryParams.toString()}`;
+        console.log("[FeedDebug] forcing local provider refresh", requestUrl);
+        data = await requestFeed(requestUrl);
+        if (requestId !== feedRequestIdRef.current) return;
+        localFeedGuard = buildLocalFeedGuard({ params: retryParams, response: data });
+        responseJobs = Array.isArray(data?.jobs) ? data.jobs : [];
+        safeJobs = localFeedGuard ? responseJobs.filter(localFeedGuard) : responseJobs;
+        outsideLocationHiddenCount = responseJobs.length - safeJobs.length;
+      }
       if (outsideLocationHiddenCount > 0) {
         data = {
           ...(data || {}),

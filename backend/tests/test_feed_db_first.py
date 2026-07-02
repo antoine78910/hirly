@@ -125,6 +125,7 @@ def _run_feed(
     include_unknown_location=True,
     work_location=None,
     geo_places=None,
+    force_provider_refresh=False,
 ):
     env = env or {}
     for key, value in {
@@ -181,6 +182,7 @@ def _run_feed(
         country_code=None,
         lat=None,
         lng=None,
+        force_provider_refresh=force_provider_refresh,
         score=False,
         search_role=None,
     ))
@@ -580,6 +582,37 @@ def test_explicit_local_discovery_runs_when_hydrated_candidates_are_outside(monk
     assert calls["refresh"] == 1
     assert response["request_trace"]["local_inventory_weak"] is True
     assert [job["job_id"] for job in response["jobs"]] == ["job_20"]
+
+
+def test_force_provider_refresh_bypasses_explicit_local_cooldown(monkeypatch):
+    imported = _job(1, tier="C", status="unknown", title="Marketing Manager")
+    imported.update({"location": "Paris, France", "city": "Paris", "country_code": "fr"})
+    monkeypatch.setattr(server, "_feed_sync_refresh_cooldowns", {
+        "explicit_local|marketing manager|50km|paris france:fr,paris:fr": 999999999999.0
+    })
+    response, calls = _run_feed(
+        monkeypatch,
+        [],
+        env={
+            "JOBS_FEED_LOCAL_DISCOVERY_MAX_CITIES": "1",
+            "JOBS_FEED_SYNC_REFRESH_MAX_SECONDS": "5",
+            "JOBS_FEED_DEBUG_DIAGNOSTICS": "true",
+        },
+        refresh=lambda: [imported],
+        locations_json=json.dumps([{
+            "location_label": "Paris, France",
+            "country": "France",
+            "country_code": "fr",
+            "lat": 48.8566,
+            "lng": 2.3522,
+        }]),
+        geo_places=_geo_places(),
+        force_provider_refresh=True,
+    )
+    assert calls["refresh"] == 1
+    assert response["request_trace"]["feed_provider_cooldown_active"] is False
+    assert response["request_trace"]["local_jsearch_discovery_attempted"] is True
+    assert [job["job_id"] for job in response["jobs"]] == ["job_1"]
 
 
 def test_real_app_text_only_toulouse_request_triggers_local_discovery(monkeypatch):

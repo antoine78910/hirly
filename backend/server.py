@@ -3450,6 +3450,7 @@ async def get_feed(
     country_code: Optional[str] = None,
     lat: Optional[float] = None,
     lng: Optional[float] = None,
+    force_provider_refresh: bool = False,
     score: bool = False,                                  # opt-in AI scoring (slow); default off for snappy UX
     search_role: Optional[str] = None,                    # override profile target_role for this feed request
 ):
@@ -4139,6 +4140,7 @@ async def get_feed(
                 "include_unknown_salary": include_unknown_salary,
                 "posted_within": posted_within,
                 "min_salary": min_salary,
+                "force_provider_refresh": force_provider_refresh,
             },
             "parsed_locations_count": len(request_selected_locations),
             "parsed_locations": [
@@ -4753,7 +4755,7 @@ async def get_feed(
             if explicit_local_intent
             else _feed_sync_refresh_cooldown_until
         )
-        cooldown_active = cooldown_enabled and cooldown_now < cooldown_until
+        cooldown_active = cooldown_enabled and cooldown_now < cooldown_until and not (force_provider_refresh and explicit_local_intent)
         request_trace["feed_provider_cooldown_key"] = cooldown_key
         request_trace["feed_provider_cooldown_active"] = bool(cooldown_active)
         request_trace["feed_provider_cooldown_remaining_seconds"] = max(0, int(cooldown_until - cooldown_now))
@@ -4765,9 +4767,11 @@ async def get_feed(
         refresh_budget_available = not _timed_out() or explicit_local_after_budget_refresh
         should_refresh = (
             sync_refresh_enabled
-            and refresh_budget_available
+            and (refresh_budget_available or (force_provider_refresh and explicit_local_intent))
             and not cooldown_active
             and (
+                (force_provider_refresh and explicit_local_intent)
+                or
                 not db_first_enabled
                 or db_good_count == 0
                 or (explicit_local_intent and local_inventory_count < requested_limit)
@@ -4828,14 +4832,14 @@ async def get_feed(
                 }
                 for loc in refresh_locations
             ]
-            force_provider_refresh = os.environ.get("JOB_FEED_ON_DEMAND_JSEARCH", "true").lower() in ("1", "true", "yes", "on")
+            provider_force_refresh = force_provider_refresh or os.environ.get("JOB_FEED_ON_DEMAND_JSEARCH", "true").lower() in ("1", "true", "yes", "on")
             logger.info(
                 "jobs/feed jsearch_fallback_start: user_id=%s db_good_count=%s weak_threshold=%s refresh_locations=%s force_provider_refresh=%s max_seconds=%s max_results=%s max_pages=%s page_size=%s",
                 user.user_id,
                 db_good_count,
                 db_weak_results_threshold,
                 len(refresh_locations),
-                force_provider_refresh,
+                provider_force_refresh,
                 sync_refresh_max_seconds,
                 sync_refresh_max_results,
                 sync_refresh_max_pages,
@@ -4859,7 +4863,7 @@ async def get_feed(
                             location_data_override=loc_data if isinstance(loc_data, dict) else None,
                             search_radius=search_radius,
                             role_override=target_role,
-                            force_provider_refresh=force_provider_refresh,
+                            force_provider_refresh=provider_force_refresh,
                             query_limit_override=sync_refresh_max_results,
                             provider_max_pages=sync_refresh_max_pages,
                             provider_page_size=sync_refresh_page_size,
