@@ -4349,7 +4349,7 @@ async def get_feed(
                 return True
             has_known_location = bool(job.get("location") or job.get("city") or job.get("region") or job.get("country_code"))
             if not has_known_location:
-                return bool(include_unknown_location)
+                return False
             if _explicit_local_remote_allowed(job):
                 return True
             return _matches_location(job)
@@ -4689,6 +4689,20 @@ async def get_feed(
                     len(candidates),
                     db_good_count,
                 )
+            if candidates:
+                hydrated_candidates = await _hydrate_feed_jobs(candidates)
+                hydrated_candidates = [_with_application_capability_fields(job) for job in hydrated_candidates]
+                hydrated_candidates = [job for job in hydrated_candidates if _passes_explicit_local_hard_constraint(job)]
+                if len(hydrated_candidates) != len(candidates):
+                    logger.info(
+                        "jobs/feed explicit_local_pre_refresh_hydrated_constraint: user_id=%s before=%s after=%s",
+                        user.user_id,
+                        len(candidates),
+                        len(hydrated_candidates),
+                    )
+                candidates = hydrated_candidates
+                db_good_count = sum(1 for job in candidates if _role_compatible_for_threshold(job))
+                pre_filter_candidates = list(candidates)
         local_inventory_count = (
             sum(1 for job in candidates if _role_compatible_for_threshold(job))
             if explicit_local_intent
@@ -4997,6 +5011,20 @@ async def get_feed(
             seen_candidate_ids.add(key)
             deduped_candidates.append(job)
         candidates = deduped_candidates
+        if explicit_local_intent and candidates:
+            ranked_pre_hydrate_count = len(candidates)
+            candidates = await _hydrate_feed_jobs(candidates)
+            candidates = [_with_application_capability_fields(job) for job in candidates]
+            candidates = [job for job in candidates if _passes_explicit_local_hard_constraint(job)]
+            if len(candidates) != ranked_pre_hydrate_count:
+                logger.info(
+                    "feed_filter_stage user_id=%s stage=explicit_local_candidate_hydrated_constraint elapsed_ms=%s before=%s after=%s rejected=%s",
+                    user.user_id,
+                    _elapsed_ms(),
+                    ranked_pre_hydrate_count,
+                    len(candidates),
+                    ranked_pre_hydrate_count - len(candidates),
+                )
         pre_filter_candidates = list(candidates)
 
         logger.info(
@@ -5183,6 +5211,20 @@ async def get_feed(
 
         jobs = await _hydrate_feed_jobs(jobs)
         jobs = [_with_application_capability_fields(job) for job in jobs]
+        if explicit_local_intent:
+            hydrated_pre_count = len(jobs)
+            jobs = [job for job in jobs if _passes_explicit_local_hard_constraint(job)]
+            hydrated_rejected = hydrated_pre_count - len(jobs)
+            if hydrated_rejected:
+                hard_location_rejected_count += hydrated_rejected
+                logger.info(
+                    "feed_filter_stage user_id=%s stage=explicit_local_hydrated_hard_constraint elapsed_ms=%s before=%s after=%s rejected=%s",
+                    user.user_id,
+                    _elapsed_ms(),
+                    hydrated_pre_count,
+                    len(jobs),
+                    hydrated_rejected,
+                )
 
         clean_jobs = []
         for job in jobs[:requested_limit]:

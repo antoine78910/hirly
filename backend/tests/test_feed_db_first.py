@@ -407,6 +407,33 @@ def test_explicit_paris_radius_does_not_return_new_jersey_legacy_direct_job(monk
     assert response["filters_applied"]["explicit_local_intent"] is True
 
 
+def test_explicit_local_search_rechecks_location_after_hydration(monkeypatch):
+    local_projection = _job(1, tier="A", status="valid", title="Marketing Manager")
+    local_projection.update({"location": "Paris, France", "city": "Paris", "country_code": "fr"})
+
+    async def hydrate_outside(jobs):
+        return [
+            {
+                **job,
+                "location": "Pune, India",
+                "city": "Pune",
+                "country_code": "in",
+            }
+            for job in jobs
+        ]
+
+    monkeypatch.setattr(server, "_hydrate_feed_jobs", hydrate_outside)
+    response, _calls = _run_feed(
+        monkeypatch,
+        [local_projection],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+        locations_json=_location_payload("Paris", lat=48.8566, lng=2.3522),
+        geo_places=_geo_places(),
+    )
+    assert response["jobs"] == []
+    assert response["empty_reason"]["code"] == "NO_LOCAL_AUTO_APPLY_JOBS"
+
+
 def test_explicit_paris_radius_returns_local_c_tier_manual_job(monkeypatch):
     local_c = _job(1, tier="C", status="unknown", title="Marketing Manager")
     local_c.update({"location": "Paris, France", "city": "Paris", "country_code": "fr"})
@@ -517,6 +544,42 @@ def test_explicit_local_discovery_returns_fresh_job_when_country_cache_is_full(m
     assert response["request_trace"]["local_jsearch_discovery_attempted"] is True
     assert [job["job_id"] for job in response["jobs"]] == ["job_1001"]
     assert response["jobs"][0]["application_mode"] == "manual"
+
+
+def test_explicit_local_discovery_runs_when_hydrated_candidates_are_outside(monkeypatch):
+    compact_rows = []
+    for index in range(1, 6):
+        job = _job(index, tier="A", status="valid", title="Marketing Manager")
+        job.update({"location": "Paris, France", "city": "Paris", "country_code": "fr"})
+        compact_rows.append(job)
+    imported = _job(20, tier="C", status="unknown", title="Marketing Manager")
+    imported.update({"location": "Paris, France", "city": "Paris", "country_code": "fr"})
+
+    async def hydrate_misleading_rows(jobs):
+        hydrated = []
+        for job in jobs:
+            if job.get("job_id") in {f"job_{index}" for index in range(1, 6)}:
+                hydrated.append({**job, "location": "Pune, India", "city": "Pune", "country_code": "in"})
+            else:
+                hydrated.append(job)
+        return hydrated
+
+    monkeypatch.setattr(server, "_hydrate_feed_jobs", hydrate_misleading_rows)
+    response, calls = _run_feed(
+        monkeypatch,
+        compact_rows,
+        env={
+            "JOBS_FEED_LOCAL_DISCOVERY_MAX_CITIES": "1",
+            "JOBS_FEED_SYNC_REFRESH_MAX_SECONDS": "5",
+            "JOBS_FEED_DEBUG_DIAGNOSTICS": "true",
+        },
+        refresh=lambda: [imported],
+        locations_json=_location_payload("Paris", lat=48.8566, lng=2.3522),
+        geo_places=_geo_places(),
+    )
+    assert calls["refresh"] == 1
+    assert response["request_trace"]["local_inventory_weak"] is True
+    assert [job["job_id"] for job in response["jobs"]] == ["job_20"]
 
 
 def test_real_app_text_only_toulouse_request_triggers_local_discovery(monkeypatch):
@@ -669,7 +732,7 @@ def test_explicit_local_search_excludes_remote_when_onsite_only(monkeypatch):
     assert response["jobs"] == []
 
 
-def test_explicit_local_search_excludes_unknown_location_unless_allowed(monkeypatch):
+def test_explicit_local_search_excludes_unknown_location_even_when_allowed(monkeypatch):
     unknown = _legacy_direct_job(1, country_code="", location="", title="Marketing Manager")
     response, _calls = _run_feed(
         monkeypatch,
@@ -689,7 +752,8 @@ def test_explicit_local_search_excludes_unknown_location_unless_allowed(monkeypa
         include_unknown_location=True,
         geo_places=_geo_places(),
     )
-    assert [job["job_id"] for job in response["jobs"]] == ["job_1"]
+    assert response["jobs"] == []
+    assert response["empty_reason"]["code"] == "NO_LOCAL_AUTO_APPLY_JOBS"
 
 
 def test_ciboure_radius_returns_empty_reason_instead_of_unrelated_global_jobs(monkeypatch):
@@ -848,7 +912,7 @@ def test_multiple_selected_locations_merge_expanded_places(monkeypatch):
     assert {job["job_id"] for job in response["jobs"]} == {"job_1", "job_2"}
 
 
-def test_include_unknown_location_still_includes_unknown_with_radius_expansion(monkeypatch):
+def test_include_unknown_location_does_not_fill_explicit_radius_feed(monkeypatch):
     unknown = _job(1)
     unknown.update({"location": "", "city": "", "region": "", "country_code": ""})
     response, _calls = _run_feed(
@@ -859,7 +923,8 @@ def test_include_unknown_location_still_includes_unknown_with_radius_expansion(m
         geo_places=_geo_places(),
         include_unknown_location=True,
     )
-    assert [job["job_id"] for job in response["jobs"]] == ["job_1"]
+    assert response["jobs"] == []
+    assert response["empty_reason"]["code"] == "NO_LOCAL_AUTO_APPLY_JOBS"
 
 
 def test_invalid_de_jobs_remain_excluded_with_location_intelligence(monkeypatch):
