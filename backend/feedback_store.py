@@ -154,13 +154,23 @@ async def list_submissions(
     feedback_type: Optional[str] = None,
     limit: int = 100,
 ) -> List[Dict[str, Any]]:
-    db_rows = await _load_rows_db(db, feedback_type=feedback_type, limit=limit)
-    if db_rows:
-        return db_rows
-
-    rows = _load_index()
+    db_rows = await _load_rows_db(db, feedback_type=feedback_type, limit=max(limit, 100))
+    file_rows = _load_index()
     if feedback_type:
-        rows = [row for row in rows if row.get("feedback_type") == feedback_type]
+        file_rows = [row for row in file_rows if row.get("feedback_type") == feedback_type]
+
+    merged: Dict[str, Dict[str, Any]] = {}
+    for row in db_rows + file_rows:
+        row_id = str(row.get("id") or row.get("submission_id") or "").strip()
+        if not row_id:
+            continue
+        merged[row_id] = row
+
+    rows = sorted(
+        merged.values(),
+        key=lambda item: item.get("created_at") or "",
+        reverse=True,
+    )
     return rows[:limit]
 
 

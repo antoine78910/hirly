@@ -124,3 +124,10 @@ def register_feedback_routes(api_router: APIRouter, get_current_user, require_ad
         if not row:
             raise HTTPException(status_code=404, detail="Feedback not found")
         return {"submission": row}
+
+    @api_router.post("/admin/feedback/backfill-resend")
+    async def admin_backfill_feedback_from_resend(admin=Depends(require_admin)):
+        from feedback_resend_backfill import backfill_feedback_from_resend
+
+        stats = await backfill_feedback_from_resend(db)
+        return {"ok": True, **stats}

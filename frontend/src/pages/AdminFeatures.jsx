@@ -159,6 +159,7 @@ export default function AdminFeatures() {
   const [trainingRows, setTrainingRows] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [selectedDetail, setSelectedDetail] = useState(null);
+  const [recovering, setRecovering] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -185,6 +186,31 @@ export default function AdminFeatures() {
     }
   }, [tab]);
 
+  const recoverFromResend = useCallback(async () => {
+    setRecovering(true);
+    try {
+      const { data } = await api.post("/admin/feedback/backfill-resend");
+      const imported = Number(data?.imported || 0);
+      const scanned = Number(data?.scanned || 0);
+      if (imported > 0) {
+        toast.success(`Recovered ${imported} feedback item(s) from email history`);
+        await load();
+      } else if (scanned > 0) {
+        toast.message("No new feedback to recover", {
+          description: `${scanned} Hirly email(s) were already imported.`,
+        });
+      } else {
+        toast.message("No feedback found in Resend history", {
+          description: "Older items may only exist in your Gmail inbox if email delivery failed.",
+        });
+      }
+    } catch (err) {
+      toast.error(adminApiErrorMessage(err, "Could not recover feedback from email history"));
+    } finally {
+      setRecovering(false);
+    }
+  }, [load]);
+
   useEffect(() => {
     load();
   }, [load]);
@@ -205,10 +231,16 @@ export default function AdminFeatures() {
       title="Features & feedback"
       subtitle="Feature ideas from app users and creators, plus training completion reviews."
       actions={(
-        <Button variant="outline" onClick={load} disabled={loading}>
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-          Refresh
-        </Button>
+        <>
+          <Button variant="outline" onClick={recoverFromResend} disabled={loading || recovering}>
+            {recovering ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            Recover from email
+          </Button>
+          <Button variant="outline" onClick={load} disabled={loading || recovering}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            Refresh
+          </Button>
+        </>
       )}
     >
       {accessDenied ? (

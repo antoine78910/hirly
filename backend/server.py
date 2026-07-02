@@ -103,6 +103,7 @@ from llm_client import LLMProviderNotConfigured, complete_json_text
 from onboarding_suggestions import suggest_categories, suggest_roles
 from feedback_routes import register_feedback_routes
 from feedback_store import migrate_file_feedback_to_db
+from feedback_resend_backfill import backfill_feedback_from_resend
 from gmail_sync import (
     GMAIL_READONLY_SCOPE,
     gmail_connected_payload,
@@ -12050,6 +12051,7 @@ async def _startup_seed_impl():
     try:
         await migrate_file_invites_to_db(db)
         await migrate_file_feedback_to_db(db)
+        await backfill_feedback_from_resend(db)
         await bootstrap_invites_from_influencers(db)
         await backfill_invites_from_users(db)
         await ensure_dev_test_invites(db)
