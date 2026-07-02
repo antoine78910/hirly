@@ -4233,30 +4233,50 @@ async def get_feed(
             )
 
         def _job_location_parts(job: Dict[str, Any]) -> List[str]:
+            def _append_location_value(parts_list: List[str], value: Any) -> None:
+                if isinstance(value, (list, tuple)):
+                    for item in value:
+                        _append_location_value(parts_list, item)
+                elif isinstance(value, dict):
+                    for key in (
+                        "location",
+                        "locations",
+                        "job_location",
+                        "job_city",
+                        "job_state",
+                        "job_country",
+                        "city",
+                        "region",
+                        "country",
+                        "candidate_required_location",
+                        "workplace",
+                        "workplace_type",
+                        "raw_provider_payload",
+                        "categories",
+                        "detected_extensions",
+                    ):
+                        if key in value:
+                            _append_location_value(parts_list, value.get(key))
+                else:
+                    parts_list.append(str(value or ""))
+
             parts: List[str] = [
                 str(job.get("city") or ""),
                 str(job.get("region") or ""),
                 str(job.get("location") or ""),
                 str(job.get("country") or ""),
+                str(job.get("job_location") or ""),
+                str(job.get("job_city") or ""),
+                str(job.get("job_state") or ""),
+                str(job.get("job_country") or ""),
             ]
-            data = job.get("data")
-            if isinstance(data, dict):
-                for key in (
-                    "location",
-                    "job_location",
-                    "job_city",
-                    "job_state",
-                    "job_country",
-                    "candidate_required_location",
-                    "workplace",
-                ):
-                    value = data.get(key)
-                    if isinstance(value, (list, tuple)):
-                        parts.extend(str(item or "") for item in value)
-                    elif isinstance(value, dict):
-                        parts.extend(str(item or "") for item in value.values())
-                    else:
-                        parts.append(str(value or ""))
+            for container in (
+                job.get("data"),
+                job.get("raw_provider_payload"),
+                job.get("categories"),
+                job.get("detected_extensions"),
+            ):
+                _append_location_value(parts, container)
             return parts
 
         def _job_work_location(job: Dict[str, Any]) -> str:
@@ -5170,6 +5190,20 @@ async def get_feed(
 
         jobs = await _hydrate_feed_jobs(jobs)
         jobs = [_with_application_capability_fields(job) for job in jobs]
+        hydrated_hard_location_pre_count = len(jobs)
+        hydrated_hard_location_rejected_count = 0
+        if explicit_local_intent:
+            jobs = [job for job in jobs if _passes_explicit_local_hard_constraint(job)]
+            hydrated_hard_location_rejected_count = hydrated_hard_location_pre_count - len(jobs)
+            if hydrated_hard_location_rejected_count:
+                logger.info(
+                    "feed_filter_stage user_id=%s stage=explicit_local_hydrated_hard_constraint elapsed_ms=%s before=%s after=%s rejected=%s",
+                    user.user_id,
+                    _elapsed_ms(),
+                    hydrated_hard_location_pre_count,
+                    len(jobs),
+                    hydrated_hard_location_rejected_count,
+                )
 
         clean_jobs = []
         for job in jobs[:requested_limit]:
