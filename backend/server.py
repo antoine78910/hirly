@@ -4913,7 +4913,7 @@ async def get_feed(
                 )
                 refresh_locations = [
                     {
-                        "location_label": place.get("query_label") or place.get("name") or place.get("ascii_name"),
+                        "location_label": place.get("name") or place.get("ascii_name") or place.get("query_label"),
                         "country_code": str(place.get("country_code") or "").lower().strip(),
                         "lat": place.get("latitude"),
                         "lng": place.get("longitude"),

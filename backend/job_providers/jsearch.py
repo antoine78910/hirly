@@ -20,9 +20,9 @@ class JSearchProvider:
         self.base_url = (base_url or os.environ.get("JSEARCH_BASE_URL") or "https://api.openwebninja.com/jsearch").rstrip("/")
         if timeout is None:
             try:
-                timeout = float(os.environ.get("JSEARCH_HTTP_TIMEOUT_SECONDS", "6"))
+                timeout = float(os.environ.get("JSEARCH_HTTP_TIMEOUT_SECONDS", "10"))
             except (TypeError, ValueError):
-                timeout = 6.0
+                timeout = 10.0
         self.timeout = max(1.0, min(float(timeout), 30.0))
 
     async def search(self, query: JobSearchQuery) -> ProviderResult:

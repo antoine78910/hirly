@@ -671,6 +671,26 @@ def test_explicit_local_discovery_respects_total_provider_budget(monkeypatch):
     assert response["empty_reason"]["code"] == "NO_LOCAL_AUTO_APPLY_JOBS"
 
 
+def test_explicit_local_provider_queries_use_clean_city_labels(monkeypatch):
+    response, _feed_calls = _run_feed(
+        monkeypatch,
+        [],
+        env={
+            "JOBS_FEED_LOCAL_DISCOVERY_MAX_CITIES": "3",
+            "JOBS_FEED_SYNC_REFRESH_MAX_SECONDS": "5",
+            "JOBS_FEED_DEBUG_DIAGNOSTICS": "true",
+        },
+        refresh=lambda: [],
+        locations_json=_location_payload(),
+        geo_places=_geo_places(),
+        force_provider_refresh=True,
+    )
+
+    planned = response["request_trace"]["jsearch_queries_planned"]
+    assert planned
+    assert all(", FR" not in str(item.get("location_label") or "") for item in planned)
+
+
 def test_real_app_text_only_toulouse_request_triggers_local_discovery(monkeypatch):
     imported = _job(1, tier="C", status="unknown", title="Marketing Manager")
     imported.update({"location": "Toulouse, France", "city": "Toulouse", "country_code": "fr"})
