@@ -98,6 +98,7 @@ from ats_source_service import (
 )
 from job_validation import cheap_validate_job_applyability
 from location_intelligence import COUNTRY_NAME_TO_CODE, expand_location_radius, normalize_place_name
+from datafast_attribution import datafast_stripe_metadata, merge_stripe_metadata
 from location_search import search_locations
 from llm_client import LLMProviderNotConfigured, complete_json_text
 from onboarding_suggestions import suggest_categories, suggest_roles
@@ -557,6 +558,8 @@ class BillingCheckoutRequest(BaseModel):
     plan: Literal["basic", "pro", "ultra", "monthly", "quarterly"]
     interval: Optional[Literal["weekly", "monthly", "quarterly"]] = None
     source: Optional[Literal["app", "credits", "onboarding"]] = None
+    datafast_visitor_id: Optional[str] = None
+    datafast_session_id: Optional[str] = None
 
 
 class BillingMasterCodeRequest(BaseModel):
@@ -1677,7 +1680,11 @@ async def _consume_application_credit(user_id: str) -> Dict[str, int]:
 
 
 @api_router.post("/billing/create-checkout-session")
-async def create_billing_checkout_session(body: BillingCheckoutRequest, user: User = Depends(get_current_user)):
+async def create_billing_checkout_session(
+    body: BillingCheckoutRequest,
+    request: Request,
+    user: User = Depends(get_current_user),
+):
     _stripe_secret_key()
     checkout_source = body.source or "app"
     billing_plan = body.plan if checkout_source == "onboarding" else _canonical_billing_plan(body.plan)
@@ -1691,6 +1698,14 @@ async def create_billing_checkout_session(body: BillingCheckoutRequest, user: Us
     else:
         success_url = f"{frontend_url}/credits?checkout=success"
         cancel_url = f"{frontend_url}/credits?checkout=cancelled"
+    base_metadata = {
+        "user_id": user.user_id,
+        "plan": billing_plan,
+        "interval": billing_interval,
+        "source": checkout_source,
+    }
+    datafast_metadata = datafast_stripe_metadata(cookies=request.cookies, body=body.model_dump())
+    checkout_metadata = merge_stripe_metadata(base_metadata, datafast_metadata)
     session = stripe.checkout.Session.create(
         mode="subscription",
         customer=customer_id,
@@ -1698,8 +1713,8 @@ async def create_billing_checkout_session(body: BillingCheckoutRequest, user: Us
         success_url=success_url,
         cancel_url=cancel_url,
         client_reference_id=user.user_id,
-        metadata={"user_id": user.user_id, "plan": billing_plan, "interval": billing_interval, "source": checkout_source},
-        subscription_data={"metadata": {"user_id": user.user_id, "plan": billing_plan, "interval": billing_interval, "source": checkout_source}},
+        metadata=checkout_metadata,
+        subscription_data={"metadata": checkout_metadata},
     )
     return {"url": session["url"]}
 

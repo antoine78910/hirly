@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
+import { withDatafastAttribution } from "../lib/datafast";
 import { shouldMockCvUpload, uploadProfileCv } from "../lib/demoCvUpload";
 import { useAuth } from "../context/AuthContext";
 import { useAppLocale } from "../context/AppLocaleContext";
@@ -545,11 +546,11 @@ export default function Onboarding() {
         selectedPlan,
         creatorAccessCode,
       }));
-      const { data } = await api.post("/billing/create-checkout-session", {
+      const { data } = await api.post("/billing/create-checkout-session", withDatafastAttribution({
         plan: selectedPlan,
         interval: selectedPlan,
         source: "onboarding",
-      });
+      }));
       if (!data?.url) throw new Error("Missing checkout URL");
       trackEvent("checkout_started", { source: "onboarding", plan: selectedPlan });
       window.location.href = data.url;

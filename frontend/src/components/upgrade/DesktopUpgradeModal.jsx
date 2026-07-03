@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
+import { withDatafastAttribution } from "@/lib/datafast";
 import Logo from "@/components/Logo";
 import { useAppLocale } from "@/context/AppLocaleContext";
 import { getUpgradeContent } from "@/lib/appUi";
@@ -133,10 +134,10 @@ export default function DesktopUpgradeModal({ open, onClose }) {
         onClose?.();
         return;
       }
-      const { data } = await api.post("/billing/create-checkout-session", {
+      const { data } = await api.post("/billing/create-checkout-session", withDatafastAttribution({
         plan: selectedTier,
         interval: billingInterval,
-      });
+      }));
       if (data?.url) {
         window.location.href = data.url;
         return;

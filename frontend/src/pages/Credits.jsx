@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { X, Check, Gift } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
+import { withDatafastAttribution } from "../lib/datafast";
 import DesktopPageHeader from "../components/desktop/DesktopPageHeader";
 import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
 
@@ -54,7 +55,7 @@ export default function Credits() {
   const getPremium = async () => {
     setLoadingPlan(selectedPlan);
     try {
-      const { data } = await api.post("/billing/create-checkout-session", { plan: selectedPlan });
+      const { data } = await api.post("/billing/create-checkout-session", withDatafastAttribution({ plan: selectedPlan }));
       if (!data?.url) throw new Error("Missing checkout URL");
       window.location.href = data.url;
     } catch (error) {
