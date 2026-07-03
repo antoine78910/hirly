@@ -117,10 +117,10 @@ export default function TrainingModuleStepper({
 
   return (
     <div
-      className="flex items-center gap-1 rounded-full border border-zinc-200/80 bg-white/95 px-3 py-2 shadow-sm shadow-violet-100/40 backdrop-blur-sm sm:gap-0 sm:pr-3.5"
+      className="flex max-w-full items-center gap-0.5 rounded-full border border-zinc-200/80 bg-white/95 px-2 py-1.5 shadow-sm shadow-violet-100/40 backdrop-blur-sm sm:gap-1 sm:px-3 sm:py-2"
       data-testid="training-module-stepper"
     >
-      <div className="flex items-center gap-1.5 px-0.5">
+      <div className="flex items-center gap-1 px-0.5 sm:gap-1.5">
         {scored.map((m, i) => {
           const stepNum = m.sort_order ?? i + 1;
           const isActive = m.module_id === activeModuleId;
@@ -137,7 +137,7 @@ export default function TrainingModuleStepper({
               animate={isCelebrating ? { scale: [1, 1.35, 1] } : { scale: 1 }}
               transition={{ duration: 0.55, ease: "easeOut" }}
               className={[
-                "relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold tabular-nums leading-none transition-all duration-300",
+                "relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold tabular-nums leading-none transition-all duration-300 sm:h-6 sm:w-6 sm:text-[10px]",
                 isValidated
                   ? "bg-emerald-500 text-white shadow-sm shadow-emerald-200"
                   : isActive
@@ -174,7 +174,7 @@ export default function TrainingModuleStepper({
             <span key={m.module_id} className="contents">
               {dot}
               {!isLast ? (
-                <span className="relative mx-1 flex h-[2px] w-3.5 shrink-0 overflow-hidden rounded-full bg-zinc-100 sm:w-4">
+                <span className="relative mx-0.5 flex h-[2px] w-2.5 shrink-0 overflow-hidden rounded-full bg-zinc-100 sm:mx-1 sm:w-4">
                   <span
                     className={`absolute inset-y-0 left-0 rounded-full transition-[width] duration-700 ease-out ${
                       isValidated ? "bg-emerald-400" : "bg-violet-400"

@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 
+from employment_kind import contract_type_query_hint, enrich_job_employment_kind, resolve_profile_contract_type
 from job_providers import get_board_provider, get_job_provider
 from job_providers.apply_eligibility import is_manual_fulfillment_ready
 from job_providers.base import BoardQuery, JobSearchQuery
@@ -175,7 +176,11 @@ def build_profile_job_query(
     remote_preference = "remote" if str(profile.get("remote_preference") or "").lower().strip() == "remote" else "any"
     if radius_scope in ("remote", "remote/worldwide"):
         remote_preference = "remote"
-    logger.info("JSearch query location normalized: country=%s location=%s radius=%s role=%s", country, location, search_radius, role)
+    contract_hint = contract_type_query_hint(resolve_profile_contract_type(profile))
+    logger.info(
+        "JSearch query location normalized: country=%s location=%s radius=%s role=%s contract_hint=%s",
+        country, location, search_radius, role, contract_hint,
+    )
     return JobSearchQuery(
         role=role,
         location=location,
@@ -183,6 +188,7 @@ def build_profile_job_query(
         country=country,
         language=_language_for_country(country),
         limit=max(20, min(_env_int("JOB_IMPORT_LIMIT", 50), 100)),
+        contract_hint=contract_hint,
     )
 
 
@@ -288,6 +294,7 @@ async def _upsert_job_batch(db, jobs: List[Dict[str, Any]], progress: Optional[D
         "unknown_ats_imported": 0,
     }
     for job in jobs:
+        job = enrich_job_employment_kind(dict(job))
         job = _with_cheap_validation(job)
         await db.jobs.update_one(
             {"provider": job["provider"], "external_id": job["external_id"]},

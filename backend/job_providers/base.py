@@ -15,6 +15,7 @@ class JobSearchQuery:
     raw_query: bool = False
     max_pages: Optional[int] = None
     page_size: Optional[int] = None
+    contract_hint: Optional[str] = None
 
 
 @dataclass(frozen=True)

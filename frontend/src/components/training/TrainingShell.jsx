@@ -89,9 +89,9 @@ export function TrainingTopBar({ actions, backTo, progressPct = null, moduleStep
 
     <header className={TRAINING_TOPBAR_CLASS} data-training-topbar>
 
-      <div className="relative mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4 sm:px-8">
+      <div className="relative mx-auto flex h-14 max-w-6xl items-center justify-between gap-2 px-3 sm:gap-4 sm:px-8">
 
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
 
           {backTo ? (
 
@@ -125,10 +125,8 @@ export function TrainingTopBar({ actions, backTo, progressPct = null, moduleStep
 
             <Logo size={24} />
 
-            <span className="truncate text-sm font-semibold text-zinc-800">
-
+            <span className="hidden truncate text-sm font-semibold text-zinc-800 sm:inline">
               {BRAND.NAME} {t("academy")}
-
             </span>
 
           </button>
@@ -137,13 +135,13 @@ export function TrainingTopBar({ actions, backTo, progressPct = null, moduleStep
 
 
 
-        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-
-          {moduleStepper}
-
+        <div className="flex max-w-[58%] shrink-0 items-center justify-end gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] sm:max-w-none sm:gap-3 [&::-webkit-scrollbar]:hidden">
+          {moduleStepper ? (
+            <div className="shrink-0">{moduleStepper}</div>
+          ) : null}
           {accountEmail ? (
             <span
-              className="flex max-w-[140px] items-center gap-1.5 truncate text-xs font-medium text-zinc-500 sm:max-w-[200px]"
+              className="hidden max-w-[200px] items-center gap-1.5 truncate text-xs font-medium text-zinc-500 md:flex"
               title={accountEmail}
               data-testid="training-account-email"
             >
@@ -403,7 +401,7 @@ export default function TrainingShell({
           </div>
 
         ) : (
-          <div className={`${TRAINING_VIEWPORT_FILL_CLASS} flex min-h-0 flex-col overflow-hidden`}>
+          <div className={`${TRAINING_VIEWPORT_FILL_CLASS} flex min-h-0 flex-col overflow-x-hidden`}>
             {children}
           </div>
         )}

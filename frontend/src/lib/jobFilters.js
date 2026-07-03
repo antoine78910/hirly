@@ -29,11 +29,35 @@ export const DATE_OPTIONS = [
 export const WORK_LOCATIONS = ["onsite", "hybrid", "remote"];
 export const WORK_LABELS = { onsite: "In Person", hybrid: "Hybrid", remote: "Remote" };
 
-export const JOB_TYPES = ["full_time", "part_time", "internship"];
+export const JOB_TYPES = [
+  "full_time",
+  "part_time",
+  "internship",
+  "fixed_term",
+  "apprenticeship",
+  "summer_job",
+  "seasonal",
+  "freelance",
+];
 export const JOB_LABELS = {
-  full_time: "Full Time",
+  full_time: "Full Time (CDI)",
   part_time: "Part Time",
   internship: "Internship",
+  fixed_term: "Fixed-term (CDD)",
+  apprenticeship: "Apprenticeship",
+  summer_job: "Summer job",
+  seasonal: "Seasonal",
+  freelance: "Freelance",
+};
+export const JOB_LABELS_FR = {
+  full_time: "CDI / Temps plein",
+  part_time: "Temps partiel",
+  internship: "Stage",
+  fixed_term: "CDD",
+  apprenticeship: "Alternance",
+  summer_job: "Job d'été",
+  seasonal: "Saisonnier",
+  freelance: "Freelance",
 };
 
 export const EXPERIENCE_LEVELS = ["entry", "mid", "senior", "executive"];

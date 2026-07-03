@@ -4,7 +4,7 @@ import { X, Plus, Info } from "lucide-react";
 import { toast } from "sonner";
 import { Switch } from "../components/ui/switch";
 import PlacesAutocomplete, { hasGooglePlacesKey } from "./PlacesAutocomplete";
-import { formatMinSalary } from "../lib/jobFilters";
+import { formatMinSalary, JOB_TYPES, JOB_LABELS, JOB_LABELS_FR } from "../lib/jobFilters";
 import SearchRadiusSlider from "./swipe/SearchRadiusSlider";
 import { useAppLocale } from "../context/AppLocaleContext";
 import { isFrench, translateLocationLabel } from "../lib/localizedDisplay";
@@ -24,9 +24,6 @@ const DATE_OPTIONS = [
 
 const WORK_LOCATIONS = ["onsite", "hybrid", "remote"];
 const WORK_LABELS    = { onsite: "In Person", hybrid: "Hybrid", remote: "Remote" };
-
-const JOB_TYPES   = ["full_time", "part_time", "internship"];
-const JOB_LABELS  = { full_time: "Full Time", part_time: "Part Time", internship: "Internship" };
 
 const EXPERIENCE  = ["entry", "mid", "senior", "executive"];
 const EXP_LABELS  = { entry: "Entry Level", mid: "Mid Level", senior: "Senior Level", executive: "Executive Level" };
@@ -249,7 +246,7 @@ export default function FiltersModal({ open, initialFilters, totalCount, onApply
             <div className="flex flex-wrap gap-2">
               {JOB_TYPES.map((j) => (
                 <Chip key={j} active={f.jobTypes.includes(j)} onClick={() => toggleArr("jobTypes", j)} testId={`filters-job-${j}`}>
-                  {JOB_LABELS[j]}
+                  {(fr ? JOB_LABELS_FR : JOB_LABELS)[j]}
                 </Chip>
               ))}
             </div>

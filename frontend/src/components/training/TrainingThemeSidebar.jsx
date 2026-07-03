@@ -38,7 +38,7 @@ export default function TrainingThemeSidebar({ items, renderContent, className =
 
       >
 
-        <ul className="flex flex-col gap-0.5">
+        <ul className="flex gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] md:flex-col md:overflow-visible [&::-webkit-scrollbar]:hidden">
 
           {safeItems.map((item, index) => {
 
@@ -54,7 +54,7 @@ export default function TrainingThemeSidebar({ items, renderContent, className =
 
                   onClick={() => setActiveIndex(index)}
 
-                  className={`w-full rounded-md px-2 py-2 text-left text-xs font-medium leading-snug transition-colors sm:px-3 sm:text-sm ${
+                  className={`shrink-0 rounded-md px-2.5 py-2 text-left text-xs font-medium leading-snug transition-colors sm:px-3 sm:text-sm md:w-full ${
 
                     activeItem
 

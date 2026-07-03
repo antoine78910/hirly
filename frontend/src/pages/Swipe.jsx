@@ -34,6 +34,7 @@ import { useUpgradeModal } from "../context/UpgradeModalContext";
 import DesktopSwipeFeed from "../components/swipe/DesktopSwipeFeed";
 import { saveTargetPreferences, normalizeLocationData } from "../lib/targetPreferences";
 import { hasActiveFilters, mergeFilters, clearMenuFilters } from "../lib/jobFilters";
+import { buildDefaultFiltersFromProfile, mergeProfileFilterDefaults } from "../lib/contractTypeMapping";
 import { useAppLocale } from "../context/AppLocaleContext";
 import { BILLING_UPDATED } from "../lib/billingEvents";
 import {
@@ -515,6 +516,7 @@ export default function Swipe() {
   const { upgradeOpen, openUpgrade } = useUpgradeModal();
   const fetchingRef = useRef(false);
   const filtersRef = useRef(filters);
+  const profileRef = useRef(null);
   const targetRef = useRef(target);
   const pendingFiltersRef = useRef(undefined);
   const feedAbortRef = useRef(null);
@@ -586,11 +588,12 @@ export default function Swipe() {
   const loadProfile = useCallback(async () => {
     if (isFinanceDemoEnabled()) {
       applyFinanceDemoTarget();
-      return;
+      return null;
     }
     if (isDemoAccountEnabled()) {
       try {
         const { data } = await api.get("/profile");
+        profileRef.current = data || null;
         if (data?.target_role || data?.cv_text) {
           const nextTarget = {
             role: data.target_role || "",
@@ -599,14 +602,15 @@ export default function Swipe() {
           setTarget(nextTarget);
           targetRef.current = nextTarget;
           setTargetLocationData(data.target_location_data || null);
-          return;
+          return data;
         }
       } catch (_) {}
       applyDemoAccountTarget();
-      return;
+      return profileRef.current;
     }
     try {
       const { data } = await api.get("/profile");
+      profileRef.current = data || null;
       if (data) {
         const nextTarget = {
           role: data.target_role || "",
@@ -616,7 +620,10 @@ export default function Swipe() {
         targetRef.current = nextTarget;
         setTargetLocationData(data.target_location_data || null);
       }
-    } catch (_) {}
+      return data || null;
+    } catch (_) {
+      return null;
+    }
   }, [applyFinanceDemoTarget, applyDemoAccountTarget]);
 
   const buildFeedParams = (f) => {
@@ -934,27 +941,30 @@ export default function Swipe() {
   useEffect(() => {
     if (authLoading) return;
     ensureDemoAccountDefaults();
-    loadProfile();
-    api.get("/billing/status")
-      .then(({ data }) => setBilling(data))
-      .catch(() => setBilling({ is_premium: false }));
-    if (isFinanceDemoEnabled()) {
-      const financeFilters = applyFinanceDemoTarget();
-      loadFeed(true, financeFilters, "initial_finance_demo");
-      return;
-    }
-    if (isDemoAccountEnabled()) {
-      loadFeed(true, filtersRef.current, "initial_demo_account");
-      return;
-    }
-    const persistedFilters = readPersistedFilters();
-    if (persistedFilters) {
-      filtersRef.current = persistedFilters;
-      setFilters(persistedFilters);
-      loadFeed(true, persistedFilters, "initial_persisted_filters");
-      return;
-    }
-    loadFeed(true, null, "initial_default");
+    const bootstrap = async () => {
+      await loadProfile();
+      api.get("/billing/status")
+        .then(({ data }) => setBilling(data))
+        .catch(() => setBilling({ is_premium: false }));
+      if (isFinanceDemoEnabled()) {
+        const financeFilters = applyFinanceDemoTarget();
+        loadFeed(true, financeFilters, "initial_finance_demo");
+        return;
+      }
+      if (isDemoAccountEnabled()) {
+        const demoFilters = mergeProfileFilterDefaults(readPersistedFilters(), profileRef.current);
+        filtersRef.current = demoFilters;
+        setFilters(demoFilters);
+        loadFeed(true, demoFilters, "initial_demo_account");
+        return;
+      }
+      const persistedFilters = readPersistedFilters();
+      const mergedFilters = mergeProfileFilterDefaults(persistedFilters, profileRef.current);
+      filtersRef.current = mergedFilters;
+      setFilters(mergedFilters);
+      loadFeed(true, mergedFilters, persistedFilters ? "initial_persisted_filters" : "initial_profile_defaults");
+    };
+    bootstrap();
   }, [authLoading, loadProfile, loadFeed, applyFinanceDemoTarget]);
 
   useEffect(() => {
@@ -986,15 +996,16 @@ export default function Swipe() {
 
   const resetFilters = () => {
     clearPersistedFilters();
-    filtersRef.current = null;
-    setFilters(null);
+    const defaults = buildDefaultFiltersFromProfile(profileRef.current);
+    filtersRef.current = defaults;
+    setFilters(defaults);
     setFiltersOpen(false);
     setJobs([]);
     setLoading(true);
     setTotalCount(null);
     setFeedMeta(null);
     setFeedError("");
-    loadFeed(true, null, "filters_reset");
+    loadFeed(true, defaults, "filters_reset");
   };
 
   const handleRadiusChange = (searchRadius) => {

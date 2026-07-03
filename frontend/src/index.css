@@ -394,11 +394,23 @@ body.training-page .App {
 }
 
 .training-page-offset {
-  padding-top: calc(3.5rem + 1.5rem);
+  padding-top: calc(3.5rem + 0.75rem);
+}
+
+@media (min-width: 640px) {
+  .training-page-offset {
+    padding-top: calc(3.5rem + 1.5rem);
+  }
 }
 
 .training-viewport-fill {
-  height: calc(100dvh - 3.5rem - 1.5rem);
+  min-height: calc(100dvh - 3.5rem - 0.75rem);
+}
+
+@media (min-width: 640px) {
+  .training-viewport-fill {
+    min-height: calc(100dvh - 3.5rem - 1.5rem);
+  }
 }
 
 .training-sidebar-rail {
@@ -427,23 +439,51 @@ body.training-page .App {
 
 /* Main column when the fixed chapter rail is visible (sidebar width + gap). */
 .training-main-with-sidebar {
-  margin-left: calc(7.25rem + 1.5rem);
+  margin-left: 0;
+  padding-left: 1rem;
   padding-right: 1rem;
   min-width: 0;
 }
 
-@media (min-width: 640px) {
+@media (min-width: 1024px) {
+  .training-sidebar-rail {
+    display: block !important;
+  }
+
   .training-main-with-sidebar {
     margin-left: calc(11rem + 2rem);
+    padding-left: 0;
     padding-right: 2rem;
+  }
+}
+
+@media (max-width: 1023px) {
+  .training-sidebar-rail {
+    display: none !important;
+  }
+}
+
+@media (min-width: 640px) and (max-width: 1023px) {
+  .training-main-with-sidebar {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
   }
 }
 
 /* Hirly example themes: nested side nav + example cards */
 .training-theme-layout {
   display: flex;
-  align-items: flex-start;
-  gap: 1.5rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1rem;
+}
+
+@media (min-width: 768px) {
+  .training-theme-layout {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 1.5rem;
+  }
 }
 
 @media (min-width: 640px) {
@@ -452,13 +492,43 @@ body.training-page .App {
   }
 }
 
+.training-theme-layout .training-sidebar-sticky {
+  position: relative;
+  top: auto;
+  max-height: none;
+  width: 100%;
+  border-right: 0;
+  border-bottom: 1px solid rgba(228, 228, 231, 0.8);
+  padding-right: 0;
+  padding-bottom: 0.75rem;
+}
+
+@media (min-width: 768px) {
+  .training-theme-layout .training-sidebar-sticky {
+    position: sticky;
+    top: 3.5rem;
+    max-height: calc(100dvh - 3.5rem);
+    width: auto;
+    border-right: 1px solid rgba(228, 228, 231, 0.8);
+    border-bottom: 0;
+    padding-right: 0.5rem;
+    padding-bottom: 0;
+  }
+}
+
 .training-theme-layout__panel {
   min-width: 0;
   flex: 1;
-  padding-left: 0.5rem;
+  padding-left: 0;
 }
 
 @media (min-width: 640px) {
+  .training-theme-layout__panel {
+    padding-left: 0;
+  }
+}
+
+@media (min-width: 768px) {
   .training-theme-layout__panel {
     padding-left: 0.75rem;
   }

@@ -97,8 +97,15 @@ from ats_source_service import (
     refresh_known_ats_sources,
 )
 from job_validation import cheap_validate_job_applyability
-from location_intelligence import COUNTRY_NAME_TO_CODE, expand_location_radius, normalize_place_name
 from datafast_attribution import datafast_stripe_metadata, merge_stripe_metadata
+from employment_kind import (
+    contract_type_to_job_types,
+    employment_kind_rank_bonus,
+    enrich_job_employment_kind,
+    job_matches_job_types,
+    resolve_profile_contract_type,
+)
+from location_intelligence import COUNTRY_NAME_TO_CODE, expand_location_radius, normalize_place_name
 from location_search import search_locations
 from llm_client import LLMProviderNotConfigured, complete_json_text
 from onboarding_suggestions import suggest_categories, suggest_roles
@@ -626,6 +633,7 @@ class PreferencesUpdate(BaseModel):
     target_location_data: Optional[Dict[str, Any]] = None
     remote_preference: Optional[str] = None
     seniority: Optional[str] = None
+    contract_type: Optional[str] = None
 
 
 class ContactUpdate(BaseModel):
@@ -3560,7 +3568,7 @@ async def get_feed(
     min_salary: int = 0,
     posted_within: Optional[str] = None,            # any | 1d | 7d | 30d
     work_location: Optional[List[str]] = Query(None),   # remote | hybrid | onsite
-    job_type: Optional[List[str]] = Query(None),        # full_time | part_time | internship  (placeholder)
+    job_type: Optional[List[str]] = Query(None),        # full_time | part_time | internship | fixed_term | apprenticeship | summer_job | seasonal | freelance
     experience: Optional[List[str]] = Query(None),      # entry | mid | senior | executive
     location: Optional[List[str]] = Query(None),        # free-text city/country tokens, OR-matched on `location` field
     only_company: Optional[List[str]] = Query(None),
@@ -3998,6 +4006,13 @@ async def get_feed(
         sync_refresh_total_seconds = max(2, min(_env_int("JOBS_FEED_SYNC_REFRESH_TOTAL_SECONDS", 12), 25))
         sync_refresh_attempts_per_city = max(1, min(_env_int("JOBS_FEED_PROVIDER_ATTEMPTS_PER_CITY", 2), 4))
         target_role = feed_target_role
+        profile_contract_type = resolve_profile_contract_type(profile)
+        effective_job_types = list(job_type or [])
+        if not effective_job_types and profile_contract_type:
+            effective_job_types = contract_type_to_job_types(profile_contract_type)
+        profile_for_refresh = dict(profile or {})
+        if profile_contract_type and not profile_for_refresh.get("contract_type"):
+            profile_for_refresh["contract_type"] = profile_contract_type
         strict_tokens = _tokens(target_role)
         family_tokens = _role_family_tokens(target_role)
         terms = _location_terms()
@@ -4053,7 +4068,7 @@ async def get_feed(
             min_salary > 0
             or (posted_within and posted_within != "any")
             or work_location
-            or job_type
+            or effective_job_types
             or experience
             or explicit_location_filter
             or only_company
@@ -4599,21 +4614,7 @@ async def get_feed(
             return parsed >= datetime.now(timezone.utc) - timedelta(days=days)
 
         def _matches_job_type(job: Dict[str, Any]) -> bool:
-            if not job_type:
-                return True
-            text = " ".join([
-                str(job.get("job_type") or ""),
-                str(job.get("employment_type") or ""),
-                str(job.get("contract_type") or ""),
-                str(job.get("title") or ""),
-                str(job.get("description") or ""),
-            ]).lower()
-            aliases = {
-                "full_time": ["full time", "full-time", "permanent", "cdi"],
-                "part_time": ["part time", "part-time"],
-                "internship": ["intern", "internship", "stage"],
-            }
-            return any(any(alias in text for alias in aliases.get(kind, [kind])) for kind in job_type)
+            return job_matches_job_types(job, effective_job_types)
 
         def _matches_experience(job: Dict[str, Any]) -> bool:
             if not experience:
@@ -5094,7 +5095,7 @@ async def get_feed(
                     refresh_result = await asyncio.wait_for(
                         refresh_jobs_for_profile_if_needed(
                             db,
-                            profile,
+                            profile_for_refresh,
                             require_auto_apply=False,
                             target_auto_apply_count=min(sync_refresh_max_results, max(requested_limit, 1)),
                             location_override=loc_label,
@@ -5335,8 +5336,8 @@ async def get_feed(
                 if not any_role and role_score <= 0:
                     continue
                 ranked.append({
-                    **job,
-                    "_feed_rank_score": role_score * 3 + location_score * 2 + _recency_score(job) + max(0, 30 - _tier_rank(job) * 10),
+                    **enrich_job_employment_kind(job),
+                    "_feed_rank_score": role_score * 3 + location_score * 2 + _recency_score(job) + max(0, 30 - _tier_rank(job) * 10) + employment_kind_rank_bonus(job, effective_job_types),
                     "_role_match_score": role_score,
                     "_location_match_score": location_score,
                 })
@@ -5393,7 +5394,7 @@ async def get_feed(
                     len(jobs),
                     len(direct_refresh_jobs),
                 )
-        allow_location_widening = not explicit_location_filter or radius_km is None
+        allow_location_widening = (not explicit_location_filter or radius_km is None) and not explicit_local_intent
         if not is_worldwide_radius and explicit_filters and allow_location_widening and len(jobs) < requested_limit and explicit_location_filter and selected_country_terms:
             relaxed = [
                 job for job in pre_filter_candidates
@@ -5585,6 +5586,8 @@ async def get_feed(
                 "local_blocked_hidden_count": local_blocked_hidden_count,
                 "manual_fulfillment_ready": True,
                 "work_location": work_location,
+                "job_type": effective_job_types or None,
+                "profile_contract_type": profile_contract_type or None,
                 "locations": [loc.get("location_label") for loc in selected_locations if loc.get("location_label")],
                 "selected_city_terms": selected_city_terms,
                 "selected_country_terms": selected_country_terms,

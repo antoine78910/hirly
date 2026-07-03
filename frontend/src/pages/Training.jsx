@@ -137,11 +137,11 @@ export default function Training() {
         onSubmitted={() => handleFeedbackDismiss({ submitted: true })}
       />
       {featured && catalogModules.length > 0 ? (
-        <div className="mx-auto max-w-6xl px-4 py-4 sm:px-6 sm:py-5">
+        <div className="mx-auto max-w-6xl px-4 py-4 pb-8 sm:px-6 sm:py-5 sm:pb-10">
           <div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div className="min-w-0">
-                <h1 className="font-display text-2xl font-bold tracking-tight text-zinc-900 sm:text-3xl">
+                <h1 className="font-display text-xl font-bold tracking-tight text-zinc-900 sm:text-3xl">
                   {t("hubTitle")}
                 </h1>
                 <p className="mt-1 text-sm text-zinc-500">{t("hubSubtitle")}</p>
@@ -164,7 +164,7 @@ export default function Training() {
             </div>
           </div>
 
-          <div className="mt-5">
+          <div className="mt-4 sm:mt-5">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 md:gap-4">
               {catalogModules.map((mod, index) => (
                 <ModuleGalleryCard

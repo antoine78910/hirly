@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
+from employment_kind import enrich_job_employment_kind
 from .base import JobSearchQuery, ProviderResult
 from .apply_eligibility import classify_apply_link
 from .ats_detection import PRIMARY_AUTO_APPLY_ATS, detect_job_platform
@@ -110,7 +111,11 @@ class JSearchProvider:
     def _query_string(self, query: JobSearchQuery) -> str:
         if query.raw_query:
             return " ".join((query.role or "").split()) or "software engineer"
-        parts = [query.role.strip() or "software engineer", "jobs"]
+        role = (query.role or "").strip() or "software engineer"
+        hint = (query.contract_hint or "").strip()
+        if hint and hint.lower() not in role.lower():
+            role = f"{role} {hint}"
+        parts = [role, "jobs"]
         location = (query.location or "").strip()
         if query.remote_preference == "remote":
             parts.append("remote")
@@ -143,8 +148,10 @@ class JSearchProvider:
         if ats_provider == "unknown" and apply_classification.get("apply_url_provider") not in {"company", "unknown"}:
             ats_provider = str(apply_classification.get("apply_url_provider") or "unknown")
         auto_apply_supported = ats_provider in PRIMARY_AUTO_APPLY_ATS
+        employment_type = row.get("job_employment_type") or row.get("employment_type")
+        contract_type = row.get("job_contract_type") or employment_type
 
-        return {
+        job_doc = {
             "job_id": self._internal_job_id(external_id),
             "title": title,
             "company": company,
@@ -179,6 +186,11 @@ class JSearchProvider:
             "provider_search_key": self.search_key(query),
             "raw_provider_payload": row if os.environ.get("JOB_IMPORT_STORE_RAW", "false").lower() == "true" else None,
         }
+        if employment_type:
+            job_doc["employment_type"] = employment_type
+        if contract_type:
+            job_doc["contract_type"] = contract_type
+        return enrich_job_employment_kind(job_doc)
 
     def search_key(self, query: JobSearchQuery) -> str:
         remote_preference = "remote" if (query.remote_preference or "").strip().lower() == "remote" else "any"

@@ -1,12 +1,7 @@
 import { mergeFilters } from "./jobFilters";
+import { JOB_TYPE_ALIASES } from "./contractTypeMapping";
 
 const POSTED_DAYS = { "1d": 1, "7d": 7, "30d": 30 };
-
-const JOB_TYPE_ALIASES = {
-  full_time: ["full time", "full-time", "permanent", "cdi"],
-  part_time: ["part time", "part-time"],
-  internship: ["intern", "internship", "stage"],
-};
 
 const EXPERIENCE_ALIASES = {
   entry: ["junior", "entry"],
@@ -70,6 +65,8 @@ function matchesPostedDate(job, filters) {
 function matchesJobType(job, filters) {
   const wanted = filters.jobTypes || [];
   if (!wanted.length) return true;
+  const kind = String(job.employment_kind || "").toLowerCase();
+  if (kind && wanted.includes(kind)) return true;
   const text = [
     job.job_type,
     job.employment_type,

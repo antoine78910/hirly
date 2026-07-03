@@ -489,6 +489,7 @@ export default function Onboarding() {
         target_location_data: onboardingLocationData,
         remote_preference: "any",
         seniority: exp?.backend,
+        contract_type: contractType || undefined,
       });
       const nameParts = splitFullName(user?.name || profile?.contact?.name || "");
       await api.put("/profile/contact", {

@@ -627,8 +627,19 @@ export default function TrainingCourse() {
             : `${TRAINING_PAGE_OFFSET_CLASS} mx-auto max-w-3xl px-4 pb-8 sm:px-8 sm:pb-10`
         }
       >
-        <div className="mx-auto max-w-3xl space-y-6">
-          <h1 className="font-display text-3xl font-bold tracking-tight text-zinc-900 sm:text-4xl">
+        {hasSections ? (
+          <div className="mb-4 lg:hidden">
+            <ModuleSectionNav
+              variant="tabs"
+              sections={sections}
+              activeSectionId={activeSection?.section_id}
+              onSelect={selectSection}
+            />
+          </div>
+        ) : null}
+
+        <div className="mx-auto max-w-3xl space-y-5 sm:space-y-6">
+          <h1 className="font-display text-2xl font-bold tracking-tight text-zinc-900 sm:text-4xl">
             {pageTitle}
           </h1>
 

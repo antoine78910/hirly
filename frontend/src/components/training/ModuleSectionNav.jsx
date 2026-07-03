@@ -136,7 +136,10 @@ export default function ModuleSectionNav({
 
   return (
 
-    <nav className="flex flex-wrap gap-2.5 border-b border-zinc-100 pb-4" aria-label="Sub-chapters">
+    <nav
+      className="-mx-1 flex gap-2 overflow-x-auto border-b border-zinc-100 px-1 pb-3 [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:overflow-visible sm:pb-4 [&::-webkit-scrollbar]:hidden"
+      aria-label="Sub-chapters"
+    >
 
       {sections.map((section, index) => {
 
@@ -152,7 +155,7 @@ export default function ModuleSectionNav({
 
             onClick={() => onSelect(section.section_id)}
 
-            className={`relative inline-flex max-w-full overflow-visible rounded-full px-3 py-1.5 text-left text-sm font-medium transition-colors ${
+            className={`relative inline-flex max-w-full shrink-0 overflow-visible rounded-full px-3 py-1.5 text-left text-xs font-medium transition-colors sm:text-sm ${
 
               section.badge ? "mt-1 mr-1" : ""
 
