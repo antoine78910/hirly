@@ -99,6 +99,7 @@ export default function BlogPost() {
       <SEOHead
         title={`${post.metaTitle} | Hirly`}
         description={post.metaDescription}
+        keywords={post.keywords}
         canonical={`/blog/${post.slug}`}
         jsonLd={[jsonLd, faqLd]}
       />

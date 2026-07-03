@@ -1,117 +1,143 @@
 /**
  * All blog post content for Hirly SEO.
- * Each post follows the pseo.md + aiseo.md rules:
- * - Unique H1 in `title`
- * - metaTitle (without " | Hirly"), ≤ 63 chars so total ≤ 70
- * - metaDescription 150–160 chars
- * - sections array: H2 sections with body paragraphs + optional lists
- * - faq array: 4–6 Q&A
- * - cta: one mid-article CTA and one conclusion CTA
+ * Each post follows pseo.md + aiseo.md rules.
  */
 export const blogPosts = [
   {
     slug: "trouver-emploi-rapidement",
     title: "Comment trouver un emploi rapidement sans envoyer 200 CVs",
     metaTitle: "Trouver un emploi rapidement sans envoyer 200 CVs",
-    metaDescription: "Méthode concrète pour trouver un emploi en moins de 3 semaines : prioriser les offres, automatiser les candidatures et suivre ses relances efficacement.",
+    metaDescription:
+      "Trouver un emploi rapidement : méthode ciblée, CV et LM personnalisés, candidature automatisée, plan 7 jours pour décrocher un entretien sous 3 semaines.",
+    keywords:
+      "trouver un emploi rapidement, recherche d'emploi, candidature personnalisée, CV adapté, lettre de motivation, entretien embauche, Hirly, automatiser candidature, ATS Greenhouse, job matching",
     category: "Recherche d'emploi",
-    readTime: "7 min",
+    readTime: "9 min",
     date: "2026-07-03",
-    intro: "Envoyer des dizaines de candidatures identiques ne mène généralement nulle part. Les candidats qui décrochent vite ne travaillent pas plus — ils travaillent mieux, en ciblant juste et en automatisant le reste. L'objectif est de maximiser ses chances sans raccourcis douteux ni méthodes qui nuisent à la crédibilité.",
+    intro:
+      "Trouver un emploi rapidement ne veut pas dire multiplier les candidatures au hasard. Les profils qui décrochent un entretien en moins de 3 semaines ciblent les bonnes offres, adaptent leur CV et leur lettre de motivation, et automatisent le reste. L'objectif est de maximiser ses chances sans raccourcis douteux ni méthodes qui nuisent à la crédibilité.",
     ctaMid: { text: "Laisse Hirly postuler pour toi", href: "https://hirly.app" },
     ctaEnd: { text: "Commence à swiper tes prochaines offres", href: "https://hirly.app" },
     sections: [
       {
-        h2: "Pourquoi envoyer beaucoup de CVs est contre-productif",
+        h2: "Pourquoi envoyer beaucoup de CVs est contre-productif en recherche d'emploi",
         body: [
-          "La logique 'volume = résultats' est fausse en recherche d'emploi. Un recruteur voit en quelques secondes si une candidature est générique ou ciblée. Une lettre de motivation copiée-collée, un CV non adapté à la fiche de poste : c'est éliminé avant même d'être lu.",
-          "Les données du marché le confirment : le taux de réponse moyen sur une candidature non ciblée est inférieur à 5 %. Sur une candidature adaptée — CV ajusté, LM qui reprend les mots-clés de l'offre — il monte à 20–35 %.",
+          "La logique volume = résultats est fausse quand on cherche un emploi. Un recruteur identifie en quelques secondes une candidature générique : CV non adapté, lettre de motivation copiée-collée, compétences absentes de la fiche de poste.",
+          "Les chiffres du marché sont clairs : une candidature non ciblée obtient moins de 5 % de réponses. Une candidature personnalisée — CV ajusté, mots-clés de l'offre repris, exemple concret par compétence — monte entre 20 % et 35 %.",
         ],
         list: [
-          "Candidature générique : taux de réponse < 5 %",
-          "Candidature ciblée (CV + LM adaptés) : 20–35 %",
-          "Candidature via réseau direct : 40–60 %",
+          "Candidature générique : taux de réponse inférieur à 5 %",
+          "Candidature ciblée (CV + lettre de motivation adaptés) : 20–35 %",
+          "Mise en relation directe (réseau, recommandation) : 40–60 %",
+          "Candidature via ATS mal formatée : souvent éliminée avant lecture humaine",
         ],
       },
       {
-        h2: "La méthode en 4 étapes pour postuler vite et bien",
+        h2: "La méthode en 4 étapes pour trouver un emploi rapidement",
         body: [
-          "Plutôt que de partir sur tous les fronts, concentrez-vous sur 3 à 5 offres par jour, sélectionnées selon des critères précis. La vitesse d'exécution vient ensuite de l'automatisation, pas de la répétition manuelle.",
+          "Plutôt que de postuler partout, concentrez-vous sur 3 à 5 offres par jour, sélectionnées selon des critères précis. La vitesse vient de l'automatisation intelligente, pas de la répétition manuelle.",
         ],
         numbered: [
-          "Définir 3 critères non négociables (secteur, niveau, localisation ou remote) et filtrer uniquement sur ces critères.",
-          "Pour chaque offre retenue, adapter le CV en 3 points : titre du poste, compétences clés reprises dans l'offre, et un exemple chiffré pertinent.",
-          "Rédiger une lettre de motivation en 3 paragraphes max : pourquoi ce poste, pourquoi vous, prochaine étape.",
-          "Suivre chaque candidature dans un outil dédié pour relancer au bon moment (J+7 si pas de réponse).",
+          "Définir 3 critères non négociables : secteur, niveau d'expérience, localisation ou télétravail.",
+          "Adapter le CV en 3 points par offre : titre du poste, compétences clés, un résultat chiffré pertinent.",
+          "Rédiger une lettre de motivation en 3 paragraphes : pourquoi ce poste, pourquoi vous, prochaine étape.",
+          "Suivre chaque candidature et relancer entre J+7 et J+10 si aucune réponse.",
         ],
       },
       {
-        h2: "Comment l'IA change la donne pour les candidats",
+        h2: "Checklist avant d'envoyer une candidature",
         body: [
-          "Les outils d'IA permettent aujourd'hui de générer un CV et une lettre de motivation adaptés à chaque offre en quelques secondes — sans perdre en qualité. Le principe : vous importez votre profil une fois, l'IA analyse l'offre, et produit une candidature sur-mesure.",
-          "Hirly fait exactement ça. Vous swipez sur les offres qui vous correspondent, et l'application génère automatiquement un dossier de candidature personnalisé, puis le soumet directement à l'ATS (Greenhouse, Lever) du recruteur. Résultat : vous postulez à 5 offres en 5 minutes au lieu de 5 heures.",
-        ],
-      },
-      {
-        h2: "Les erreurs qui font perdre du temps (et des opportunités)",
-        body: [
-          "La plupart des candidats perdent un temps considérable sur des détails qui ne changent pas le résultat, et négligent ce qui compte vraiment.",
+          "Avant chaque envoi, cette checklist évite les erreurs qui font perdre des semaines en recherche d'emploi :",
         ],
         list: [
-          "Passer 2h à reformater le CV graphiquement → les ATS ne lisent pas le design, ils lisent le texte",
-          "Envoyer la même LM à 30 entreprises → détecté et ignoré",
-          "Postuler à tout ce qui correspond vaguement au titre → dilue l'énergie et baisse la qualité",
-          "Ne pas relancer → 30–40 % des offres ont un suivi lacunaire côté RH",
-          "Ignorer les jobs via ATS direct → c'est là que se passent 70 % des recrutements B2B tech",
+          "Le titre du poste apparaît clairement dans le CV (pas seulement dans la lettre de motivation)",
+          "Les 5 compétences les plus citées dans l'offre sont visibles dans le CV avec un contexte réel",
+          "Le CV est en PDF texte (pas image) et compatible ATS",
+          "La lettre de motivation mentionne l'entreprise et le poste sans formulation générique",
+          "Vous avez vérifié que l'offre est encore active (date de publication, pas de doublon)",
+          "Vous savez qui relancer et quand en cas de silence",
+        ],
+      },
+      {
+        h2: "Comment l'IA accélère une recherche d'emploi sans sacrifier la qualité",
+        body: [
+          "Les outils d'IA permettent aujourd'hui de générer un CV et une lettre de motivation adaptés à chaque offre en quelques secondes. Vous importez votre profil une fois ; l'IA analyse la fiche de poste et produit une candidature sur-mesure.",
+          "Hirly applique ce principe de bout en bout : vous swipez sur les offres qui correspondent à votre profil, l'app génère le dossier de candidature personnalisé, puis le soumet directement à l'ATS du recruteur (Greenhouse, Lever). Résultat : 5 candidatures ciblées en 5 minutes au lieu de 5 heures de formulaires.",
+        ],
+      },
+      {
+        h2: "Exemple concret : un junior marketing qui décroche 3 entretiens en 2 semaines",
+        body: [
+          "Profil : jeune diplômé, 1 stage, recherche d'un premier CDI en marketing digital à Paris ou en remote.",
+          "Méthode appliquée : 8 offres ciblées par semaine (pas 40), CV adapté à chaque fiche (SEO, paid, content selon l'offre), relance J+7 sur les 4 candidatures sans réponse.",
+          "Stack utilisée : Hirly pour le matching et l'envoi ATS, LinkedIn pour la visibilité passive, un tableur pour le suivi des relances.",
+          "Résultat : 3 entretiens obtenus en 14 jours, dont 1 via une offre découverte grâce au score de matching — une annonce qu'il n'aurait pas trouvée en cherchant manuellement « marketing digital junior ».",
+        ],
+      },
+      {
+        h2: "Les erreurs qui ralentissent une recherche d'emploi",
+        body: [
+          "La plupart des candidats perdent du temps sur des actions à faible impact et négligent ce qui change réellement le taux de réponse.",
+        ],
+        list: [
+          "Reformater le CV graphiquement 2 h par candidature — les ATS lisent le texte, pas le design",
+          "Envoyer la même lettre de motivation à 30 entreprises — facilement détectable et ignoré",
+          "Postuler à tout ce qui correspond vaguement au titre — dilue l'énergie et baisse la qualité",
+          "Ne jamais relancer — 30 à 40 % des processus RH ont un suivi lacunaire côté recruteur",
+          "Ignorer les offres via ATS direct — 70 % des recrutements B2B tech passent par Greenhouse ou Lever",
         ],
       },
       {
         h2: "Plan d'action 7 jours pour décrocher un entretien",
         body: [
-          "Ce plan est conçu pour quelqu'un qui cherche activement un emploi et peut y consacrer 1h30 à 2h par jour.",
+          "Ce plan convient à un candidat en recherche active pouvant consacrer 1h30 à 2 h par jour.",
         ],
         numbered: [
-          "J1 : Mettre à jour son profil LinkedIn et son CV de base. Définir ses 3 critères clés.",
-          "J2 : Identifier 10 offres cibles sur les principales plateformes (LinkedIn, Indeed, Welcome to the Jungle). Éliminer les 4 moins pertinentes.",
-          "J3–J4 : Postuler aux 6 offres sélectionnées avec CV + LM adaptés à chacune.",
-          "J5 : Activer son réseau — envoyer 3 messages personnalisés à des contacts dans des entreprises cibles.",
-          "J6 : Créer des alertes sur les plateformes d'emploi et Hirly pour les prochaines offres.",
-          "J7 : Relancer les candidatures envoyées J3–J4 si pas de réponse automatique reçue.",
-        ],
-      },
-      {
-        h2: "Suivre ses candidatures sans perdre le fil",
-        body: [
-          "Sans suivi, vous relancez trop tôt, pas assez, ou au mauvais interlocuteur. Un tracker simple — même un tableur — suffit à condition d'y noter : l'entreprise, le poste, la date de candidature, le statut, et la date de relance prévue.",
-          "Hirly intègre ce tracker directement dans l'application. Chaque candidature envoyée est suivie en temps réel : statut, historique, et rappels de relance automatiques.",
+          "J1 : Mettre à jour LinkedIn et le CV de base. Définir secteur, niveau et localisation cibles.",
+          "J2 : Identifier 10 offres pertinentes (LinkedIn, Indeed, Welcome to the Jungle, Hirly). Éliminer les 4 moins alignées.",
+          "J3–J4 : Postuler aux 6 offres retenues avec CV et lettre de motivation adaptés à chacune.",
+          "J5 : Activer le réseau — 3 messages personnalisés vers des contacts dans des entreprises cibles.",
+          "J6 : Configurer des alertes emploi et activer le matching Hirly pour les prochaines offres.",
+          "J7 : Relancer les candidatures J3–J4 sans réponse, avec un message court et contextualisé.",
         ],
       },
     ],
     faq: [
       {
         id: 1,
-        question: "En combien de temps peut-on trouver un emploi avec cette méthode ?",
-        answer: "Le délai dépend du secteur et du niveau de poste, mais une méthode ciblée permet généralement d'obtenir un premier entretien en 1 à 3 semaines. Les secteurs tech et marketing répondent souvent plus vite.",
+        question: "En combien de temps peut-on trouver un emploi rapidement avec cette méthode ?",
+        answer:
+          "Le délai dépend du secteur et du niveau de poste. Une recherche ciblée permet souvent d'obtenir un premier entretien en 1 à 3 semaines. La tech, le marketing digital et les startups répondent généralement plus vite que les secteurs très réglementés.",
       },
       {
         id: 2,
-        question: "Faut-il obligatoirement utiliser un outil comme Hirly ?",
-        answer: "Non, la méthode fonctionne sans outil. Mais automatiser la génération de candidatures personnalisées et le suivi fait gagner plusieurs heures par semaine, ce qui permet de se concentrer sur la préparation aux entretiens.",
+        question: "Combien de candidatures envoyer par semaine pour trouver un emploi ?",
+        answer:
+          "5 à 10 candidatures ciblées par semaine est une cadence soutenable. Au-delà, la qualité baisse et le taux de réponse avec. Mieux vaut 6 candidatures adaptées que 30 génériques.",
       },
       {
         id: 3,
-        question: "Combien de candidatures envoyer par semaine ?",
-        answer: "Qualité > quantité. 5 à 10 candidatures ciblées par semaine est une cadence raisonnable et soutenable. Au-delà, la qualité chute et les taux de réponse avec.",
+        question: "Faut-il utiliser Hirly pour trouver un emploi plus vite ?",
+        answer:
+          "Ce n'est pas obligatoire, mais Hirly automatise l'adaptation du CV, la lettre de motivation et la soumission ATS. Vous gagnez plusieurs heures par semaine à investir dans la préparation aux entretiens.",
       },
       {
         id: 4,
-        question: "Comment adapter son CV rapidement à chaque offre ?",
-        answer: "Identifiez les 3 compétences les plus importantes de l'offre et vérifiez qu'elles apparaissent clairement dans votre CV, avec un exemple concret pour chacune. Les outils IA comme Hirly font cette adaptation automatiquement.",
+        question: "Comment adapter son CV rapidement à chaque offre d'emploi ?",
+        answer:
+          "Identifiez les 3 à 5 compétences les plus importantes de l'offre et vérifiez qu'elles apparaissent dans votre CV avec un exemple concret. Hirly fait cette adaptation automatiquement à partir de votre profil.",
       },
       {
         id: 5,
         question: "Doit-on toujours écrire une lettre de motivation ?",
-        answer: "Pour les postes seniors ou dans des entreprises avec un processus RH structuré, oui. Pour les startups et postes tech, une LM courte et directe (3 paragraphes) suffit souvent. L'important est qu'elle soit adaptée à l'offre, pas générique.",
+        answer:
+          "Pour les postes seniors ou les entreprises avec un processus RH structuré, oui. Pour les startups et postes tech, une lettre courte (3 paragraphes) adaptée à l'offre suffit souvent. L'important est la personnalisation, pas la longueur.",
+      },
+      {
+        id: 6,
+        question: "Trouver un emploi rapidement fonctionne-t-il en télétravail ?",
+        answer:
+          "Oui. Filtrez explicitement sur remote ou hybrid, ciblez les entreprises SaaS et startups tech, et adaptez votre CV pour mettre en avant l'autonomie, la communication async et les outils collaboratifs.",
       },
     ],
   },
@@ -119,116 +145,143 @@ export const blogPosts = [
   {
     slug: "meilleures-apps-emploi-2026",
     title: "Les meilleures apps pour trouver un emploi en 2026",
-    metaTitle: "Meilleures apps pour trouver un emploi en 2026",
-    metaDescription: "Comparatif honnête des meilleures applications pour trouver un emploi en 2026 : LinkedIn, Indeed, Hirly, Welcome to the Jungle. Critères, forces et limites.",
+    metaTitle: "Meilleures apps emploi 2026 : comparatif honnête",
+    metaDescription:
+      "Meilleures apps emploi 2026 : comparatif LinkedIn, Indeed, WTTJ et Hirly. Forces, limites et quel outil choisir selon votre profil pour trouver un job.",
+    keywords:
+      "meilleure app emploi 2026, application recherche emploi, LinkedIn emploi, Indeed France, Welcome to the Jungle, Hirly, job matching, candidature automatique, app pour trouver un travail",
     category: "Outils",
-    readTime: "8 min",
+    readTime: "10 min",
     date: "2026-07-03",
-    intro: "Le marché des apps d'emploi a beaucoup évolué ces 3 dernières années. L'IA a changé ce que l'on peut attendre d'un outil de recherche d'emploi. Ce comparatif est honnête — il présente les forces et limites de chaque app, sans publicité déguisée. L'objectif : vous aider à choisir l'outil qui correspond à votre profil et à votre situation.",
+    intro:
+      "Choisir la meilleure app emploi en 2026 dépend moins du volume d'offres que de la qualité du processus de candidature. L'IA a changé la donne : matching, CV personnalisé, soumission ATS automatique. Ce comparatif est honnête — forces et limites de chaque outil, sans publicité déguisée. L'objectif est de maximiser vos chances sans raccourcis douteux ni méthodes qui nuisent à la crédibilité.",
     ctaMid: { text: "Essayer Hirly gratuitement", href: "https://hirly.app" },
     ctaEnd: { text: "Commencer avec Hirly", href: "https://hirly.app" },
     sections: [
       {
-        h2: "Critères de comparaison",
+        h2: "Comment comparer les meilleures apps emploi en 2026",
         body: [
-          "Pour comparer ces apps objectivement, nous avons retenu 5 critères qui comptent vraiment pour un candidat actif :",
+          "Pour évaluer une application de recherche d'emploi, cinq critères comptent vraiment pour un candidat actif :",
         ],
         list: [
           "Qualité et fraîcheur des offres d'emploi",
-          "Personnalisation de la recherche (filtres, matching)",
-          "Aide à la candidature (CV, lettre de motivation, ATS)",
-          "Suivi des candidatures",
-          "Expérience mobile",
+          "Matching et filtres (remote, salaire, niveau, secteur)",
+          "Aide à la candidature (CV adapté, lettre de motivation, ATS)",
+          "Suivi des candidatures et relances",
+          "Expérience mobile et rapidité d'exécution",
         ],
       },
       {
-        h2: "LinkedIn — La référence, mais pas pour tout le monde",
+        h2: "LinkedIn — le réseau professionnel n°1, limité pour postuler vite",
         body: [
-          "LinkedIn reste la plateforme la plus utilisée par les recruteurs. Son avantage principal : la visibilité passive. En gardant un profil à jour, vous êtes chassé sans effort. Pour les profils seniors et les postes en entreprise établie, c'est souvent le canal numéro 1.",
-          "Les limites : les offres sont souvent ancienneS ou déjà pourvues, le processus de candidature est manuel (formulaire à remplir offre par offre), et les notifications sont intrusives. Pour une recherche active et rapide, LinkedIn seul n'est pas la meilleure solution.",
+          "LinkedIn reste la plateforme la plus utilisée par les recruteurs en France et à l'international. Son atout principal : la visibilité passive. Un profil à jour attire chasseurs de têtes et opportunités entrantes.",
+          "Pour une recherche d'emploi active, les limites sont réelles : candidature manuelle offre par offre, offres parfois obsolètes, notifications intrusives. LinkedIn Premium (environ 29 €/mois) ajoute des insights mais ne personnalise pas vos candidatures.",
         ],
         list: [
-          "Pour : profils visibles, réseau, chasseurs de têtes",
-          "Contre : candidature manuelle et lente, offres parfois obsolètes",
-          "Idéal pour : profils seniors, freelances, postes en entreprise",
+          "Pour : réseau, visibilité passive, profils seniors, freelances",
+          "Contre : candidature lente, pas de CV adapté automatiquement",
+          "Idéal pour : être visible sans postuler massivement",
         ],
       },
       {
-        h2: "Indeed — Le volume, mais peu de valeur ajoutée",
+        h2: "Indeed — le plus grand volume d'offres, peu d'aide à la candidature",
         body: [
-          "Indeed agrège les offres de centaines de sources. C'est son principal atout : le volume. Pour un candidat qui cherche dans un secteur peu tech ou dans une région spécifique, Indeed est souvent incontournable.",
-          "En revanche, l'expérience de candidature est basique. Pas de personnalisation du CV, pas de LM générée, suivi limité. Le modèle push-CV-partout montre ses limites en 2026.",
+          "Indeed agrège les offres de centaines de sources. C'est l'app emploi avec la couverture la plus large en France, notamment pour le commerce, l'industrie, la santé et l'administration.",
+          "Indeed Apply accélère certains formulaires, mais ne génère pas de CV ou de lettre de motivation adaptés. Le modèle « envoyer le même CV partout » montre ses limites en 2026.",
         ],
         list: [
-          "Pour : couverture géographique, volume d'offres, secteurs non-tech",
-          "Contre : zéro aide à la candidature, pas de matching IA",
-          "Idéal pour : candidats qui cherchent dans des secteurs traditionnels",
+          "Pour : volume, couverture géographique, secteurs non-tech",
+          "Contre : zéro matching IA, candidatures peu personnalisées",
+          "Idéal pour : vue d'ensemble du marché et secteurs traditionnels",
         ],
       },
       {
-        h2: "Welcome to the Jungle — L'expérience marque employeur",
+        h2: "Welcome to the Jungle — culture d'entreprise et startups",
         body: [
-          "Welcome to the Jungle s'est différencié par la qualité des contenus employeurs : vidéos d'entreprise, fiches culture, interviews d'équipes. Pour un candidat qui veut vraiment comprendre l'environnement de travail avant de postuler, c'est une référence.",
-          "Les offres sont de bonne qualité, majoritairement tech et startups. La limite : ce n'est pas un outil de candidature rapide. Les processus restent manuels, et la plateforme est plus orientée inspiration que productivité.",
+          "Welcome to the Jungle se distingue par la qualité des contenus employeurs : vidéos, fiches culture, interviews d'équipes. Les offres sont majoritairement tech, startup et scale-up.",
+          "C'est une excellente app pour comprendre l'environnement avant de postuler. En revanche, le processus de candidature reste manuel et la plateforme est orientée inspiration plus que productivité.",
         ],
         list: [
-          "Pour : culture d'entreprise, startups, profils tech",
-          "Contre : processus de candidature manuel, pas d'automatisation",
-          "Idéal pour : candidats qui priorisent la culture et l'environnement",
+          "Pour : culture d'entreprise, startups, profils créatifs et tech",
+          "Contre : pas d'automatisation de candidature",
+          "Idéal pour : choisir une entreprise, pas pour postuler à volume",
         ],
       },
       {
-        h2: "Hirly — Le matching IA et l'auto-candidature",
+        h2: "Hirly — job matching IA et candidature automatique via ATS",
         body: [
-          "Hirly prend une approche différente : plutôt que de lister des offres et vous laisser postuler manuellement, l'app analyse votre profil, vous propose des jobs avec un score de matching, et génère automatiquement votre candidature (CV adapté + lettre de motivation) pour chaque offre que vous validez par un swipe.",
-          "La candidature est soumise directement à l'ATS du recruteur (Greenhouse, Lever) sans que vous ayez à remplir de formulaire. Le tracker intégré suit chaque candidature en temps réel.",
-          "La limite actuelle : le catalogue d'offres est plus restreint que LinkedIn ou Indeed, et certains secteurs sont peu couverts (ex. secteur public, commerce de proximité).",
+          "Hirly est une app emploi orientée exécution : matching IA sur votre profil, interface swipe, génération automatique du CV et de la lettre de motivation, soumission directe à l'ATS (Greenhouse, Lever).",
+          "Pour un candidat actif en tech, startup ou SaaS, Hirly réduit le temps de candidature de 20 minutes à quelques secondes par offre. La limite actuelle : couverture plus étroite que LinkedIn ou Indeed, centrée sur les entreprises utilisant Greenhouse et Lever.",
         ],
         list: [
           "Pour : gain de temps, candidatures personnalisées, profils tech et startup",
-          "Contre : couverture offres plus étroite, principalement Greenhouse/Lever",
-          "Idéal pour : candidats actifs qui cherchent dans la tech, les startups et le SaaS",
+          "Contre : catalogue d'offres plus restreint, secteurs publics peu couverts",
+          "Idéal pour : recherche active avec candidatures de qualité à volume",
         ],
       },
       {
-        h2: "Quel outil choisir selon votre profil ?",
+        h2: "Tableau récapitulatif : quelle app emploi pour quel besoin",
         body: [
-          "Il n'y a pas d'app universelle. Le bon choix dépend de votre situation :",
+          "Synthèse pour choisir la meilleure application selon votre situation en 2026 :",
         ],
         list: [
-          "Profil tech / startup / SaaS en recherche active → Hirly + LinkedIn complémentaire",
-          "Reconversion professionnelle → Hirly pour l'automatisation + Welcome pour la culture",
-          "Secteurs traditionnels, commerce, industrie → Indeed + LinkedIn",
-          "Profil senior visible → LinkedIn en priorité, laisser venir les opportunités",
+          "Tech / startup / SaaS, recherche active → Hirly + LinkedIn en complément",
           "Premier emploi / junior → Hirly + Welcome to the Jungle",
+          "Reconversion professionnelle → Hirly (automatisation) + Welcome (culture)",
+          "Secteurs traditionnels, PME locales → Indeed + LinkedIn",
+          "Profil senior visible → LinkedIn en priorité, opportunités entrantes",
+          "Remote international → Hirly + LinkedIn Job Alerts remote",
+        ],
+      },
+      {
+        h2: "Erreurs fréquentes dans le choix d'une app emploi",
+        body: [
+          "Utiliser une seule plateforme, croire que le volume de candidatures suffit, ou négliger l'adaptation du CV à chaque offre sont les erreurs les plus courantes en 2026.",
+        ],
+        list: [
+          "Se limiter à LinkedIn alors que l'offre cible est sur un ATS externe",
+          "Confondre visibilité passive et recherche active — ce sont deux stratégies différentes",
+          "Payer Premium sans automatiser la partie candidature — le goulot d'étranglement reste le formulaire",
+          "Ignorer les apps de matching IA alors que le marché tech standardise les ATS",
         ],
       },
     ],
     faq: [
       {
         id: 1,
-        question: "Quelle app trouve le plus d'offres d'emploi en France ?",
-        answer: "Indeed est celle qui agrège le plus grand volume d'offres, toutes catégories confondues. LinkedIn et Welcome to the Jungle ont une meilleure qualité d'offres dans la tech et les startups.",
+        question: "Quelle est la meilleure app emploi en France en 2026 ?",
+        answer:
+          "Il n'y a pas d'app universelle. Indeed pour le volume, LinkedIn pour le réseau, Welcome to the Jungle pour les startups, Hirly pour automatiser les candidatures ciblées en tech et SaaS.",
       },
       {
         id: 2,
         question: "Hirly est-il gratuit ?",
-        answer: "Hirly propose un accès gratuit pour débuter. Certaines fonctionnalités avancées (volume de candidatures automatiques, accès prioritaire aux offres) sont disponibles dans les formules payantes.",
+        answer:
+          "Hirly propose un accès gratuit pour démarrer. Les fonctionnalités avancées (volume de candidatures automatiques, accès prioritaire) sont disponibles dans les formules payantes.",
       },
       {
         id: 3,
-        question: "Peut-on utiliser plusieurs apps en parallèle ?",
-        answer: "Oui, et c'est recommandé. Une combinaison efficace : Hirly pour les candidatures actives automatisées, LinkedIn pour la visibilité passive et le réseau.",
+        question: "Peut-on combiner plusieurs apps emploi ?",
+        answer:
+          "Oui, c'est recommandé. Hirly pour les candidatures actives automatisées, LinkedIn pour la visibilité et le réseau, Indeed ou Welcome pour élargir la veille.",
       },
       {
         id: 4,
-        question: "Ces apps fonctionnent-elles pour les postes en remote ?",
-        answer: "Oui, toutes proposent des filtres remote. Hirly et Welcome to the Jungle ont une bonne couverture des postes full-remote dans la tech.",
+        question: "Les apps emploi fonctionnent-elles pour le télétravail ?",
+        answer:
+          "Oui. LinkedIn, Indeed, Welcome to the Jungle et Hirly proposent des filtres remote. Hirly et Welcome ont une bonne couverture des postes full-remote en tech.",
       },
       {
         id: 5,
-        question: "Les ATS bloquent-ils les candidatures automatiques ?",
-        answer: "Non, Hirly soumet les candidatures via l'API officielle des ATS (Greenhouse, Lever), exactement comme si vous postuliez manuellement. La candidature est indistinguable d'une soumission manuelle côté recruteur.",
+        question: "Les ATS bloquent-ils les candidatures automatiques de Hirly ?",
+        answer:
+          "Non. Hirly soumet via l'API officielle de Greenhouse et Lever. La candidature est identique à une soumission manuelle côté recruteur.",
+      },
+      {
+        id: 6,
+        question: "LinkedIn Premium ou Hirly : que choisir ?",
+        answer:
+          "LinkedIn Premium améliore la visibilité et l'accès InMail. Hirly automatise la candidature (CV, LM, soumission ATS). Pour une recherche active, Hirly apporte plus de gain de temps concret.",
       },
     ],
   },
@@ -236,99 +289,127 @@ export const blogPosts = [
   {
     slug: "automatiser-recherche-emploi",
     title: "Comment automatiser sa recherche d'emploi en 2026",
-    metaTitle: "Comment automatiser sa recherche d'emploi en 2026",
-    metaDescription: "Guide pratique pour automatiser sa recherche d'emploi : alertes, génération de CV par IA, soumission ATS automatique et suivi des candidatures en 2026.",
+    metaTitle: "Automatiser sa recherche d'emploi en 2026",
+    metaDescription:
+      "Automatiser sa recherche d'emploi en 2026 : alertes, CV IA, soumission ATS Greenhouse/Lever et suivi. Guide pour postuler vite sans sacrifier la qualité.",
+    keywords:
+      "automatiser recherche emploi, candidature automatique, CV IA, lettre de motivation automatique, ATS Greenhouse, ATS Lever, Hirly, automatisation emploi, job search automation",
     category: "Productivité",
-    readTime: "6 min",
+    readTime: "9 min",
     date: "2026-07-03",
-    intro: "Chercher un emploi est chronophage. Adapter son CV, écrire une lettre de motivation, remplir un formulaire ATS, relancer — chaque étape prend du temps. En 2026, une grande partie de ce travail peut être automatisée sans sacrifier la qualité. Voici comment construire une stack d'outils pour postuler plus vite et mieux, sans raccourcis douteux ni méthodes qui nuisent à votre crédibilité.",
+    intro:
+      "Automatiser sa recherche d'emploi en 2026 ne signifie pas envoyer des centaines de CVs génériques. Cela signifie déléguer les tâches répétitives — veille, adaptation du CV, soumission ATS, suivi — pour concentrer votre énergie sur les entretiens. Voici comment construire une stack efficace, sans raccourcis douteux ni méthodes qui nuisent à la crédibilité.",
     ctaMid: { text: "Tester l'automatisation avec Hirly", href: "https://hirly.app" },
     ctaEnd: { text: "Automatise tes candidatures avec Hirly", href: "https://hirly.app" },
     sections: [
       {
-        h2: "Ce qui peut être automatisé dans une recherche d'emploi",
+        h2: "Diagnostic : pourquoi la recherche d'emploi manuelle prend autant de temps",
         body: [
-          "Tout ne peut pas être délégué à un outil — la préparation aux entretiens, la réflexion sur ses objectifs de carrière, et les décisions finales restent humaines. Mais voici ce qui peut être automatisé sans perte de qualité :",
-        ],
-        list: [
-          "Veille des nouvelles offres (alertes email ou in-app)",
-          "Personnalisation du CV en fonction des mots-clés de l'offre",
-          "Génération de la lettre de motivation adaptée",
-          "Soumission de la candidature à l'ATS",
-          "Suivi et relances des candidatures envoyées",
+          "Un candidat actif passe en moyenne 15 à 20 minutes par candidature : lire l'offre, adapter le CV, rédiger la lettre de motivation, remplir le formulaire ATS, noter le suivi. À 10 candidatures par semaine, c'est 3 heures minimum — souvent le double.",
+          "L'automatisation cible ces étapes répétitives sans toucher à ce qui doit rester humain : choix des offres, préparation aux entretiens, négociation salariale.",
         ],
       },
       {
-        h2: "Étape 1 — Automatiser la veille des offres",
+        h2: "Ce qui peut être automatisé (et ce qui ne le peut pas)",
         body: [
-          "La première étape est de ne plus chercher activement, mais de recevoir les offres pertinentes. Chaque grande plateforme propose des alertes par email (LinkedIn, Indeed, Welcome to the Jungle). La clé est de configurer des alertes précises : titre exact + localisation + niveau d'expérience.",
-          "Hirly va plus loin : l'algorithme de matching apprend de vos swipes pour affiner les offres proposées. Moins de bruit, plus de pertinence.",
+          "Tout ne doit pas être délégué à un outil. Voici la frontière claire entre automatisable et humain :",
+        ],
+        list: [
+          "Automatisable : veille offres, matching, adaptation CV, lettre de motivation, soumission ATS, rappels de relance",
+          "Humain obligatoire : choix final de l'offre, préparation entretien, messages réseau personnalisés, négociation",
+          "À vérifier avant envoi : relire une candidature générée par IA si le poste est stratégique",
+        ],
+      },
+      {
+        h2: "Étape 1 — Automatiser la veille et le matching des offres",
+        body: [
+          "La première étape : recevoir les offres pertinentes au lieu de les chercher. LinkedIn Job Alerts, Indeed et Welcome to the Jungle permettent des alertes par mots-clés.",
+          "Hirly va plus loin avec un score de matching basé sur votre profil complet (compétences, expériences, préférences). Chaque swipe affine les recommandations.",
         ],
         numbered: [
-          "Créer une alerte LinkedIn avec votre titre exact + remote ou ville + niveau senior/junior",
-          "Créer la même alerte sur Indeed pour couvrir les offres non publiées sur LinkedIn",
-          "Activer les notifications Hirly pour les offres avec un score de matching > 80 %",
+          "Configurer une alerte LinkedIn : titre exact + ville ou remote + niveau",
+          "Dupliquer l'alerte sur Indeed pour couvrir les offres absentes de LinkedIn",
+          "Activer Hirly et filtrer sur les offres avec un score de matching supérieur à 80 %",
         ],
       },
       {
-        h2: "Étape 2 — Automatiser la personnalisation du CV",
+        h2: "Étape 2 — Automatiser l'adaptation du CV et de la lettre de motivation",
         body: [
-          "Le CV générique, c'est terminé. En 2026, les ATS analysent la correspondance entre votre CV et la fiche de poste avant qu'un recruteur ne pose les yeux dessus. Un CV non adapté ne passe pas.",
-          "La bonne nouvelle : les outils IA comme Hirly font cette adaptation automatiquement. Vous importez votre profil une fois. Pour chaque offre que vous validez, l'IA identifie les compétences prioritaires de l'offre et les met en avant dans votre CV — sans inventer quoi que ce soit.",
+          "En 2026, les ATS filtrent les CV avant qu'un recruteur ne les lise. Un CV générique est éliminé. L'automatisation intelligente adapte le CV aux mots-clés de chaque offre sans inventer d'expérience.",
+          "Hirly importe votre profil une fois, analyse chaque fiche de poste, et génère un CV et une lettre de motivation personnalisés pour chaque candidature validée.",
         ],
       },
       {
-        h2: "Étape 3 — Automatiser la soumission à l'ATS",
+        h2: "Étape 3 — Automatiser la soumission ATS (Greenhouse, Lever)",
         body: [
-          "La plupart des entreprises tech utilisent un ATS (Applicant Tracking System) pour gérer les candidatures : Greenhouse, Lever, Workday, Ashby. Remplir ces formulaires manuellement prend en moyenne 18 minutes par candidature.",
-          "Hirly soumet votre candidature directement via l'API officielle de l'ATS. Résultat : votre candidature est dans leur système en quelques secondes, avec le bon format, les bonnes pièces jointes, et sans erreur de formulaire.",
+          "Les entreprises tech utilisent massivement Greenhouse et Lever. Remplir ces formulaires manuellement prend 15 à 20 minutes par candidature.",
+          "Hirly soumet directement via l'API officielle : données structurées, CV PDF, lettre de motivation, sans erreur de champ. Temps moyen : moins de 10 secondes par offre.",
         ],
         list: [
-          "Greenhouse : soumission directe via l'API v1",
-          "Lever : soumission directe via l'API officielle",
-          "Formats acceptés : PDF pour le CV, texte structuré pour la LM",
+          "Greenhouse : API v1, standard des startups Series A+",
+          "Lever : API officielle, populaire chez les équipes RH actives",
+          "Formats : PDF pour le CV, texte structuré pour la lettre de motivation",
         ],
       },
       {
         h2: "Étape 4 — Automatiser le suivi et les relances",
         body: [
-          "80 % des candidats ne relancent jamais. Pourtant, une relance bien timée (J+7 à J+10) augmente significativement le taux de réponse. Le problème : sans système de suivi, on perd le fil.",
-          "Un tracker de candidatures — qu'il soit dans un tableur ou dans Hirly — vous rappelle automatiquement quand relancer, à qui, et avec quel message.",
+          "80 % des candidats ne relancent jamais. Une relance entre J+7 et J+10 augmente le taux de réponse. Sans tracker, on perd le fil.",
+          "Hirly intègre un suivi en temps réel : statut de chaque candidature, historique, rappels de relance. Alternative : un tableur Notion avec colonnes entreprise, poste, date, statut, date de relance.",
         ],
       },
       {
-        h2: "Les limites de l'automatisation — ce qui reste humain",
+        h2: "Plan d'automatisation sur 7 jours",
         body: [
-          "Automatiser ne veut pas dire déléguer sa recherche d'emploi à une machine. Certaines étapes ne doivent pas être automatisées :",
+          "Mise en place progressive pour automatiser sa recherche d'emploi sans tout changer d'un coup :",
         ],
-        list: [
-          "La préparation aux entretiens : aucun outil ne remplace la connaissance de l'entreprise et la pratique",
-          "La décision finale sur une offre : ne laissez pas un algorithme choisir votre prochain employeur",
-          "Les messages de réseau personnalisés : un message généré par IA se reconnaît, et nuit à votre image",
-          "La vérification des candidatures avant envoi : toujours relire ce qui part en votre nom",
+        numbered: [
+          "J1 : Importer son CV dans Hirly et compléter le profil (compétences, préférences, localisation).",
+          "J2 : Configurer les alertes LinkedIn et Indeed sur 2 à 3 titres de poste cibles.",
+          "J3 : Swiper 10 offres sur Hirly pour calibrer le matching.",
+          "J4 : Envoyer 3 à 5 candidatures automatisées et vérifier la qualité des CV/LM générés.",
+          "J5 : Mettre en place le tracker (Hirly ou tableur) pour toutes les candidatures en cours.",
+          "J6 : Préparer 2 modèles de messages de relance courts et personnalisables.",
+          "J7 : Bilan : taux de réponse, offres les plus pertinentes, ajuster les critères de filtrage.",
         ],
       },
     ],
     faq: [
       {
         id: 1,
-        question: "L'automatisation des candidatures est-elle bien vue par les recruteurs ?",
-        answer: "Une candidature bien personnalisée et soumise via l'API officielle de l'ATS est indistinguable d'une candidature manuelle. Ce qui compte pour le recruteur, c'est la pertinence du profil, pas la méthode d'envoi.",
+        question: "Automatiser sa recherche d'emploi est-il bien vu par les recruteurs ?",
+        answer:
+          "Oui, si la candidature reste personnalisée et soumise via l'API officielle de l'ATS. Le recruteur voit un dossier adapté au poste — la méthode d'envoi est invisible.",
       },
       {
         id: 2,
-        question: "Quels outils utiliser pour automatiser sa recherche d'emploi en 2026 ?",
-        answer: "Hirly pour les candidatures automatiques, LinkedIn Job Alerts pour la veille passive, et un tableur ou Notion pour le suivi si vous n'utilisez pas le tracker intégré.",
+        question: "Quels outils pour automatiser sa recherche d'emploi en 2026 ?",
+        answer:
+          "Hirly pour le matching et la candidature automatique, LinkedIn Job Alerts pour la veille, Notion ou le tracker Hirly pour le suivi et les relances.",
       },
       {
         id: 3,
         question: "Les ATS détectent-ils les candidatures automatiques ?",
-        answer: "Hirly utilise les API officielles des ATS (Greenhouse, Lever). La candidature est soumise exactement comme si vous l'aviez remplie manuellement. Il n'y a pas de détection possible.",
+        answer:
+          "Hirly utilise les API officielles Greenhouse et Lever. La candidature est soumise comme une soumission manuelle. Aucun signal technique ne distingue les deux.",
       },
       {
         id: 4,
-        question: "Peut-on vraiment automatiser la lettre de motivation ?",
-        answer: "Oui, à condition que l'outil dispose de votre profil complet et analyse précisément l'offre. Hirly génère une LM adaptée à chaque offre à partir de votre profil. Elle reste personnalisée, pas générique.",
+        question: "Peut-on automatiser la lettre de motivation sans perdre en qualité ?",
+        answer:
+          "Oui, à condition que l'outil dispose de votre profil complet et analyse précisément l'offre. Hirly génère une lettre adaptée à chaque poste, pas un template générique.",
+      },
+      {
+        id: 5,
+        question: "Automatiser veut-il dire postuler à plus d'offres ?",
+        answer:
+          "Pas nécessairement. L'automatisation libère du temps pour cibler mieux, pas pour spammer. 5 à 10 candidatures ciblées par semaine reste la cadence recommandée.",
+      },
+      {
+        id: 6,
+        question: "Hirly automatise-t-il aussi la préparation aux entretiens ?",
+        answer:
+          "Hirly se concentre sur la candidature et le suivi. La préparation aux entretiens reste votre responsabilité — c'est l'étape que l'automatisation vous libère du temps d'aborder sérieusement.",
       },
     ],
   },
@@ -336,85 +417,97 @@ export const blogPosts = [
   {
     slug: "passer-filtres-ats-recrutement",
     title: "ATS : comment passer les filtres des logiciels de recrutement",
-    metaTitle: "ATS : comment passer les filtres des logiciels de recrutement",
-    metaDescription: "Comprendre comment fonctionnent les ATS (Greenhouse, Lever, Workday) et adapter son CV pour passer les filtres automatiques et atteindre un recruteur humain.",
+    metaTitle: "Passer les filtres ATS : guide CV et candidature 2026",
+    metaDescription:
+      "Passer les filtres ATS en 2026 : Greenhouse, Lever, Workday. CV ATS-friendly, erreurs de parsing à éviter et candidature qui arrive chez le recruteur humain.",
+    keywords:
+      "passer filtres ATS, CV ATS, logiciel recrutement, Applicant Tracking System, Greenhouse candidature, Lever emploi, optimiser CV ATS, parsing CV, Hirly ATS",
     category: "Stratégie",
-    readTime: "7 min",
+    readTime: "10 min",
     date: "2026-07-03",
-    intro: "Plus de 70 % des grandes entreprises et startups tech utilisent un ATS pour trier les candidatures avant qu'un recruteur humain n'intervienne. Si votre CV n'est pas formaté pour être lu par ces systèmes, vous êtes éliminé avant même d'être vu. Voici comment les ATS fonctionnent, ce qu'ils cherchent, et comment soumettre des candidatures qui passent — sans tricher, juste en comprenant les règles du jeu.",
+    intro:
+      "Passer les filtres ATS est souvent la première étape invisible d'une candidature. Plus de 70 % des startups et ETI tech utilisent un logiciel de recrutement (Greenhouse, Lever, Workday, Ashby) pour trier les CV avant qu'un humain ne les lise. Si votre CV n'est pas lisible par ces systèmes, vous êtes éliminé sans retour. Voici comment les ATS fonctionnent et comment optimiser chaque candidature — sans raccourcis douteux ni méthodes qui nuisent à la crédibilité.",
     ctaMid: { text: "Laisser Hirly soumettre directement à l'ATS", href: "https://hirly.app" },
     ctaEnd: { text: "Postuler via Hirly et bypasser les formulaires", href: "https://hirly.app" },
     sections: [
       {
-        h2: "Qu'est-ce qu'un ATS et comment ça fonctionne",
+        h2: "Mythe vs réalité : comment fonctionne un ATS en 2026",
         body: [
-          "Un ATS (Applicant Tracking System) est un logiciel qui centralise les candidatures reçues par une entreprise, les classe, et filtre celles qui correspondent à la fiche de poste avant de les présenter au recruteur. Les plus utilisés dans la tech et les startups : Greenhouse, Lever, Workday, Ashby, BambooHR.",
-          "Ces systèmes fonctionnent en 3 étapes : parsing (lecture du CV en texte brut), scoring (correspondance CV / fiche de poste), et ranking (classement des candidats). Si votre CV n'est pas parseable correctement, vous perdez des points dès la première étape.",
+          "Mythe : l'ATS rejette automatiquement 75 % des CVs au hasard. Réalité : l'ATS parse le CV, calcule un score de correspondance avec la fiche de poste, et classe les candidats. Le recruteur consulte en priorité les profils les mieux classés.",
+          "Les ATS les plus utilisés en tech : Greenhouse (startups Series A+), Lever (équipes RH actives), Workday (grands comptes), Ashby (startups tech récentes), BambooHR (PME).",
         ],
         list: [
-          "Greenhouse : très répandu dans les startups Series A et au-delà",
-          "Lever : préféré des équipes RH qui font du sourcing actif",
-          "Workday : entreprises mid-market et grands comptes",
-          "Ashby : nouvelles startups tech, UX soignée",
+          "Étape 1 — Parsing : lecture du CV en texte brut",
+          "Étape 2 — Scoring : correspondance CV / mots-clés de l'offre",
+          "Étape 3 — Ranking : classement des candidats pour le recruteur",
         ],
       },
       {
-        h2: "Les erreurs de CV qui font échouer le parsing",
+        h2: "Les erreurs de CV qui font échouer le parsing ATS",
         body: [
-          "Le parsing, c'est la lecture automatique de votre CV par l'ATS. Si l'outil ne peut pas lire correctement votre document, les informations sont perdues ou mal interprétées. Voici ce qui pose problème :",
+          "Le parsing est la lecture automatique de votre CV. Si le système ne peut pas extraire le texte correctement, vos compétences et expériences sont perdues ou mal interprétées.",
         ],
         list: [
-          "CV en format image ou scan : l'ATS ne voit qu'une image, pas du texte",
-          "Tableaux et colonnes complexes : désorganisent le parsing",
-          "Polices non-standard ou icônes à la place de texte",
-          "En-têtes et pieds de page avec des informations clés (certains ATS ne les lisent pas)",
-          "PDF avec sécurité activée (protection contre la copie du texte)",
+          "CV en image ou scan : l'ATS ne voit pas le texte",
+          "Design Canva avec colonnes et icônes : structure illisible",
+          "Polices non standard, puces graphiques, zones de texte",
+          "PDF protégé contre la copie",
+          "Informations clés dans l'en-tête ou le pied de page (parfois ignorés)",
         ],
       },
       {
-        h2: "Comment adapter son CV aux mots-clés de l'offre",
+        h2: "Comment optimiser son CV pour passer les filtres ATS",
         body: [
-          "Les ATS comparent votre CV à la fiche de poste via des algorithmes de matching lexical. Plus les mots-clés de l'offre apparaissent dans votre CV (dans un contexte pertinent), plus votre score monte.",
-          "La méthode concrète : lisez l'offre, identifiez les 5 à 8 compétences ou outils les plus mentionnés, et vérifiez qu'ils apparaissent dans votre CV avec un contexte clair (pas juste une liste de mots).",
+          "Les ATS comparent votre CV à la fiche de poste par matching lexical et sémantique. Plus les compétences de l'offre apparaissent dans votre CV avec un contexte réel, plus le score monte.",
         ],
         numbered: [
-          "Copier la description du poste dans un outil de comptage de mots",
-          "Identifier les 5–8 termes techniques les plus fréquents",
-          "Vérifier qu'ils apparaissent dans votre CV avec une phrase de contexte",
-          "Ne pas 'keyword stuff' : intégrer naturellement, dans des expériences réelles",
+          "Copier la description du poste et identifier les 5 à 8 termes les plus fréquents",
+          "Vérifier que chaque terme clé apparaît dans le CV avec une phrase de contexte",
+          "Utiliser le titre exact du poste (ou un équivalent direct) en en-tête du CV",
+          "Éviter le keyword stuffing : intégrer naturellement dans des expériences réelles",
         ],
       },
       {
-        h2: "Le format de CV optimal pour les ATS",
+        h2: "Checklist CV ATS-friendly",
         body: [
-          "Un CV ATS-friendly n'est pas forcément beau. Il est lisible, structuré, et en texte pur. Voici les règles de base :",
+          "Avant chaque candidature via ATS, vérifiez ces points :",
         ],
         list: [
-          "Format PDF (texte, pas image) ou Word",
-          "Structure simple : sections claires (Expériences, Compétences, Formation)",
+          "Format PDF texte ou Word (pas image)",
+          "Sections claires : Expériences, Compétences, Formation",
           "Dates au format standard (mois/année ou année)",
-          "Titre du poste qui reprend exactement celui de l'offre ou un équivalent direct",
           "Polices standard : Arial, Calibri, Georgia, Times New Roman",
-          "Pas de tableaux, colonnes multiples, ou zones de texte",
+          "Pas de tableaux, colonnes multiples ou graphiques",
+          "Titre du poste cible visible en haut du CV",
+          "Mots-clés de l'offre présents dans au moins 2 sections",
         ],
       },
       {
-        h2: "La solution Hirly : soumission directe via l'API ATS",
+        h2: "Passer les filtres ATS avec Hirly : soumission directe via API",
         body: [
-          "Hirly contourne le problème différemment. Plutôt que d'espérer que votre PDF soit bien parsé, Hirly soumet votre candidature directement via l'API officielle de l'ATS (Greenhouse, Lever). Les données — nom, email, poste visé, CV, lettre de motivation — sont transmises au bon endroit, au bon format, sans passer par le formulaire web.",
-          "C'est l'équivalent de ce que fait un recruteur quand il crée un candidat manuellement dans l'ATS : les données arrivent propres, structurées, et correctement catégorisées.",
+          "Plutôt que de parier sur le parsing de votre PDF, Hirly soumet la candidature via l'API officielle de Greenhouse ou Lever. Les données arrivent structurées : nom, email, poste, CV, lettre de motivation — au bon format, sans formulaire web.",
+          "C'est l'équivalent d'une saisie manuelle par un recruteur dans l'ATS : propre, catégorisé, sans perte d'information liée au parsing.",
         ],
       },
       {
-        h2: "Vérifier que votre candidature est bien reçue",
+        h2: "Exemple : pourquoi un dev React voit son CV rejeté par l'ATS",
         body: [
-          "Après avoir postulé, voici comment vérifier que votre candidature est bien dans le système :",
+          "Offre : « Senior Frontend Engineer — React, TypeScript, 5 ans d'expérience ».",
+          "CV soumis : design Canva en 2 colonnes, titre « Développeur web », compétences listées en icônes sans texte, mot « React » absent du corps du CV (seulement dans l'URL du portfolio).",
+          "Résultat ATS : parsing partiel, score faible sur React et TypeScript, classement bas. Le recruteur ne voit jamais le profil.",
+          "Correction : CV texte simple, titre « Frontend Engineer», React et TypeScript mentionnés dans 2 expériences avec résultats chiffrés. Score ATS multiplié, entretien obtenu.",
+        ],
+      },
+      {
+        h2: "Vérifier que votre candidature ATS est bien reçue",
+        body: [
+          "Après soumission, quelques vérifications simples :",
         ],
         numbered: [
-          "Vérifier l'email de confirmation : Greenhouse et Lever envoient toujours un accusé de réception",
-          "Si pas d'email après 24h : relancer poliment par email ou LinkedIn",
-          "Ne pas repostuler avec un profil différent : risque de doublon et de signal négatif",
-          "Attendre J+7 à J+10 avant de relancer, pas avant",
+          "Attendre l'email de confirmation Greenhouse ou Lever (généralement sous 24 h)",
+          "Si pas de confirmation : relancer poliment par email ou LinkedIn",
+          "Ne pas repostuler avec un email différent — risque de doublon",
+          "Relancer entre J+7 et J+10, pas avant",
         ],
       },
     ],
@@ -422,27 +515,38 @@ export const blogPosts = [
       {
         id: 1,
         question: "Tous les recruteurs utilisent-ils un ATS ?",
-        answer: "Non, les petites structures (< 10 salariés) gèrent souvent les candidatures par email. Mais les startups Series A+ et les ETI/grandes entreprises utilisent quasi-systématiquement un ATS.",
+        answer:
+          "Les petites structures (moins de 10 salariés) gèrent souvent les CV par email. Les startups Series A+, scale-ups et ETI utilisent quasi-systématiquement un ATS.",
       },
       {
         id: 2,
-        question: "Un CV Canva passe-t-il dans un ATS ?",
-        answer: "Rarement bien. Les designs Canva avec colonnes, icônes et blocs graphiques sont souvent mal parsés. Pour les candidatures via ATS, préférez un CV Word ou PDF simple.",
+        question: "Un CV Canva passe-t-il les filtres ATS ?",
+        answer:
+          "Rarement. Les designs avec colonnes, icônes et blocs graphiques sont mal parsés. Pour les candidatures ATS, préférez un CV Word ou PDF simple et textuel.",
       },
       {
         id: 3,
-        question: "Peut-on voir son score ATS avant d'envoyer ?",
-        answer: "Certains outils comme Jobscan permettent de comparer votre CV à une offre et d'estimer votre score ATS. Hirly fait cette analyse automatiquement et adapte le CV en conséquence.",
+        question: "Comment savoir si mon CV passera les filtres ATS ?",
+        answer:
+          "Comparez les mots-clés de l'offre avec votre CV. Des outils comme Jobscan estiment le score. Hirly adapte automatiquement le CV aux mots-clés de chaque offre.",
       },
       {
         id: 4,
         question: "L'ATS lit-il la lettre de motivation ?",
-        answer: "L'ATS l'indexe mais c'est principalement le recruteur humain qui la lit. Ce qui compte pour l'ATS, c'est le CV. La LM compte pour convaincre le recruteur après le filtre automatique.",
+        answer:
+          "L'ATS l'indexe, mais le score principal vient du CV. La lettre de motivation convainc le recruteur humain après le filtre automatique.",
       },
       {
         id: 5,
         question: "Hirly fonctionne-t-il avec Workday et Ashby ?",
-        answer: "Hirly est actuellement intégré avec Greenhouse et Lever. La compatibilité Workday et Ashby est en cours de développement.",
+        answer:
+          "Hirly est intégré avec Greenhouse et Lever. La compatibilité Workday et Ashby est en cours de développement.",
+      },
+      {
+        id: 6,
+        question: "Peut-on tricher les filtres ATS avec des mots-clés cachés ?",
+        answer:
+          "Non, et c'est risqué. Le keyword stuffing (texte blanc, listes cachées) est détecté par la plupart des ATS modernes et nuit à votre crédibilité si découvert par le recruteur.",
       },
     ],
   },
@@ -450,94 +554,126 @@ export const blogPosts = [
   {
     slug: "job-matching-app",
     title: "Job matching : qu'est-ce que c'est et pourquoi c'est l'avenir de la recherche d'emploi",
-    metaTitle: "Job matching : définition, fonctionnement et meilleures apps",
-    metaDescription: "Le job matching par IA change la recherche d'emploi : définition, comment ça fonctionne, différence avec les jobboards classiques, et meilleures apps en 2026.",
+    metaTitle: "Job matching app : définition et meilleures apps 2026",
+    metaDescription:
+      "Job matching app : définition, algorithme IA, jobboards vs matching et meilleures apps emploi 2026 pour candidats actifs, juniors et profils tech en France.",
+    keywords:
+      "job matching app, application matching emploi, algorithme recrutement, matching IA emploi, Hirly, jobboard vs matching, score matching emploi, app emploi IA",
     category: "Tendances",
-    readTime: "6 min",
+    readTime: "9 min",
     date: "2026-07-03",
-    intro: "Poster son CV sur un jobboard et attendre n'est plus une stratégie efficace. Le job matching est une approche différente : plutôt que de chercher, vous être trouvé — ou plutôt, l'algorithme trouve pour vous les offres qui correspondent exactement à votre profil. Voici ce que c'est, comment ça fonctionne, et pourquoi ça change fondamentalement la façon dont on cherche un emploi.",
+    intro:
+      "Une job matching app ne se contente pas de lister des offres : elle analyse votre profil et calcule un score de compatibilité avec chaque poste. Contrairement aux jobboards classiques où vous cherchez par mots-clés, le job matching inverse la logique — l'algorithme vous propose les offres pertinentes. Voici comment ça fonctionne, et pourquoi c'est l'avenir de la recherche d'emploi, sans raccourcis douteux ni méthodes qui nuisent à la crédibilité.",
     ctaMid: { text: "Essayer le matching IA de Hirly", href: "https://hirly.app" },
     ctaEnd: { text: "Trouvez vos prochaines offres avec Hirly", href: "https://hirly.app" },
     sections: [
       {
-        h2: "Définition du job matching",
+        h2: "Définition : qu'est-ce qu'une job matching app ?",
         body: [
-          "Le job matching est un processus qui consiste à mettre en correspondance automatiquement un profil de candidat (compétences, expérience, préférences) avec des offres d'emploi, selon des critères de compatibilité précis. Le résultat est un score de matching : plus il est élevé, plus l'offre est pertinente pour vous.",
-          "Contrairement à une recherche par mots-clés classique, le matching IA analyse le contexte — pas juste la présence d'un titre ou d'un outil dans votre CV, mais la profondeur de votre expérience sur ce sujet.",
+          "Le job matching est un processus qui met en correspondance automatique un profil candidat (compétences, expériences, préférences) avec des offres d'emploi. Le résultat est un score de matching : plus il est élevé, plus l'offre correspond à votre profil.",
+          "Contrairement à une recherche par mots-clés (« développeur Paris »), le matching IA analyse le contexte : profondeur d'expérience, adéquation des compétences, compatibilité des préférences (remote, salaire, secteur).",
         ],
       },
       {
         h2: "Comment fonctionne un algorithme de job matching",
         body: [
-          "Les algorithmes de matching combinent plusieurs types d'analyse :",
+          "Les job matching apps combinent plusieurs couches d'analyse pour produire un score fiable :",
         ],
         list: [
-          "NLP (traitement du langage naturel) : comparaison sémantique CV / offre",
-          "Analyse des compétences explicites (langages, outils, certifications)",
-          "Préférences déclarées (remote, localisation, salaire, secteur)",
-          "Comportement implicite (offres swipées à droite vs gauche, temps passé sur une fiche)",
-          "Historique des candidatures (pour affiner les recommandations)",
+          "NLP (traitement du langage naturel) : comparaison sémantique CV / fiche de poste",
+          "Extraction de compétences : langages, outils, certifications, soft skills",
+          "Préférences déclarées : remote, localisation, fourchette salariale, secteur",
+          "Signaux comportementaux : offres swipées à droite vs gauche, temps passé sur une fiche",
+          "Historique : candidatures passées pour affiner les recommandations futures",
         ],
       },
       {
-        h2: "Jobboard classique vs job matching : quelle différence ?",
+        h2: "Jobboard classique vs job matching app : les différences clés",
         body: [
-          "Sur un jobboard classique (Indeed, Monster), vous entrez un mot-clé et obtenez une liste triée par date ou pertinence basique. C'est vous qui filtrez, vous qui adapatez, vous qui postulez.",
-          "Avec une app de job matching comme Hirly, le processus s'inverse : l'algorithme présente des offres pré-filtrées selon votre profil avec un score de correspondance, et l'application génère et soumet votre candidature automatiquement quand vous swipez à droite.",
+          "Sur Indeed ou LinkedIn, vous tapez un mot-clé et obtenez une liste brute. Vous filtrez, adaptez votre CV, remplissez un formulaire — pour chaque offre.",
+          "Avec une job matching app comme Hirly, l'algorithme présente des offres pré-filtrées avec un score de correspondance. Vous validez d'un swipe, l'app génère et soumet la candidature automatiquement.",
         ],
         list: [
-          "Jobboard : vous cherchez → vous filtrez → vous postulez manuellement",
-          "Job matching : l'algorithme propose → vous validez → l'app postule automatiquement",
+          "Jobboard : vous cherchez → vous filtrez → vous postulez manuellement (15–20 min/offre)",
+          "Job matching : l'algorithme propose → vous validez → l'app postule automatiquement (< 10 sec/offre)",
+        ],
+      },
+      {
+        h2: "Les meilleures job matching apps en 2026",
+        body: [
+          "Le marché des applications de matching emploi reste jeune. Voici les acteurs principaux et leur positionnement :",
+        ],
+        list: [
+          "Hirly : matching IA + swipe + candidature auto ATS (Greenhouse, Lever). Idéal tech/startup.",
+          "LinkedIn : matching basique par mots-clés et recommandations. Fort sur le réseau, faible sur l'automatisation.",
+          "Indeed : correspondance par mots-clés, pas de matching IA avancé. Fort sur le volume.",
+          "Huntr : tracker de candidatures avec matching limité. Pas de soumission ATS automatique.",
         ],
       },
       {
         h2: "Les avantages concrets du job matching pour les candidats",
         body: [
-          "Le matching IA réduit considérablement le temps passé sur des offres non pertinentes et améliore la qualité des candidatures soumises.",
+          "Le matching IA réduit le bruit et augmente la qualité des candidatures — pas seulement la quantité.",
         ],
         list: [
-          "Gain de temps : 80 % de moins de temps passé à chercher des offres",
-          "Pertinence : les offres proposées correspondent vraiment à votre profil",
-          "Qualité des candidatures : CV et LM adaptés à chaque offre automatiquement",
-          "Réduction du biais : l'algorithme ne juge pas la photo ou le nom",
-          "Découverte : des offres que vous n'auriez pas trouvées en cherchant vous-même",
+          "Gain de temps : jusqu'à 80 % de temps en moins sur la recherche d'offres",
+          "Pertinence : les offres proposées correspondent réellement au profil",
+          "Qualité : CV et lettre de motivation adaptés à chaque offre automatiquement",
+          "Découverte : des offres que vous n'auriez pas trouvées en cherchant manuellement",
+          "Moins de biais : l'algorithme ne filtre pas sur la photo ou le nom",
         ],
       },
       {
-        h2: "Le swipe comme interface de matching — pourquoi ça fonctionne",
+        h2: "Le swipe comme interface de job matching",
         body: [
-          "Hirly utilise une interface swipe (à gauche = pas intéressé, à droite = je postule) pour plusieurs raisons. D'abord, c'est rapide — une décision en 2 à 5 secondes. Ensuite, c'est un signal comportemental riche : chaque swipe apprend à l'algorithme ce que vous recherchez vraiment, pas juste ce que vous avez déclaré.",
-          "C'est la même logique que les apps de rencontre ou de streaming : votre comportement réel est plus informatif que vos préférences déclarées.",
+          "Hirly utilise une interface swipe (gauche = passer, droite = postuler) pour deux raisons. D'abord, la rapidité : une décision en 2 à 5 secondes. Ensuite, le signal comportemental : chaque swipe apprend à l'algorithme ce que vous recherchez vraiment, au-delà de vos préférences déclarées.",
+          "C'est la même logique que les apps de streaming : votre comportement réel est plus informatif que vos déclarations initiales.",
         ],
       },
       {
-        h2: "Les limites du job matching — ce qu'il faut savoir",
+        h2: "Limites du job matching — ce qu'il faut garder en tête",
         body: [
-          "Le matching IA n'est pas parfait. Il peut proposer des offres sur-qualifiées ou sous-qualifiées si votre profil est atypique. Et il dépend de la qualité des données disponibles — si les offres sont mal rédigées ou si votre CV est incomplet, les scores sont moins fiables.",
-          "La bonne approche : utiliser le matching comme un premier filtre, pas comme une décision automatique. Vous gardez le contrôle sur chaque candidature envoyée.",
+          "Le matching IA n'est pas infaillible. Profils atypiques (reconversion, parcours non linéaire) peuvent obtenir des scores moins précis. Offres mal rédigées ou CV incomplet dégradent les résultats.",
+          "La bonne approche : utiliser le matching comme premier filtre intelligent, pas comme décision automatique. Vous gardez le contrôle sur chaque candidature envoyée.",
         ],
       },
     ],
     faq: [
       {
         id: 1,
-        question: "Le job matching remplace-t-il LinkedIn ?",
-        answer: "Non, ils sont complémentaires. LinkedIn est une plateforme de réseau et de visibilité passive. Le job matching est un outil de recherche active et d'automatisation. La combinaison des deux est souvent la plus efficace.",
+        question: "Une job matching app remplace-t-elle LinkedIn ?",
+        answer:
+          "Non, elles sont complémentaires. LinkedIn pour le réseau et la visibilité passive. Une job matching app comme Hirly pour la recherche active et l'automatisation des candidatures.",
       },
       {
         id: 2,
-        question: "Le matching IA respecte-t-il la confidentialité des données ?",
-        answer: "Les apps sérieuses comme Hirly stockent les données de profil de façon sécurisée et ne les revendent pas à des tiers. Les candidatures sont soumises en votre nom via les API officielles des ATS.",
+        question: "Comment améliorer son score de matching sur Hirly ?",
+        answer:
+          "Complétez votre profil (compétences, expériences détaillées, préférences claires). Swipez régulièrement : chaque action affine l'algorithme.",
       },
       {
         id: 3,
-        question: "Comment améliorer son score de matching ?",
-        answer: "Un profil complet (compétences, expériences détaillées, préférences claires) donne de meilleurs résultats. Swiper régulièrement affine aussi l'algorithme.",
+        question: "Le job matching fonctionne-t-il pour tous les secteurs ?",
+        answer:
+          "Les apps de matching sont plus efficaces en tech, digital et startups. Les secteurs traditionnels (industrie, santé, commerce) sont moins couverts selon l'outil.",
       },
       {
         id: 4,
-        question: "Le job matching fonctionne-t-il pour tous les secteurs ?",
-        answer: "Les apps de matching actuelles sont plus efficaces dans la tech, le digital et les startups. La couverture des secteurs traditionnels (industrie, commerce, santé) est variable selon l'outil.",
+        question: "Le matching IA est-il fiable pour une reconversion ?",
+        answer:
+          "Oui, si l'app sait valoriser les compétences transférables. Hirly recontextualise votre parcours selon le métier cible, même si vos titres de poste précédents sont différents.",
+      },
+      {
+        id: 5,
+        question: "Hirly est-il une job matching app gratuite ?",
+        answer:
+          "Hirly propose un accès gratuit pour démarrer. Les fonctionnalités avancées (volume de candidatures, priorité) sont dans les formules payantes.",
+      },
+      {
+        id: 6,
+        question: "Quelle différence entre job matching et chasse de tête ?",
+        answer:
+          "Le job matching est automatisé et côté candidat. La chasse de tête est humaine et côté entreprise. Les deux peuvent coexister : matching pour la recherche active, chasseurs pour les profils très seniors.",
       },
     ],
   },
@@ -545,86 +681,132 @@ export const blogPosts = [
   {
     slug: "tinder-emploi-app",
     title: "Tinder pour l'emploi : mythe ou réalité en 2026 ?",
-    metaTitle: "Tinder pour l'emploi : mythe ou réalité en 2026 ?",
-    metaDescription: "L'idée d'un Tinder pour l'emploi fait son chemin. En 2026, des apps comme Hirly rendent ce concept réel : matching IA, swipe, candidature automatique en 1 tap.",
+    metaTitle: "App emploi type Tinder : swipe, matching et Hirly",
+    metaDescription:
+      "App emploi type Tinder en 2026 : swipe, matching IA et candidature auto. Hirly transforme le concept en workflow concret pour trouver un job tech ou startup.",
+    keywords:
+      "tinder emploi, app emploi swipe, tinder pour trouver un travail, application emploi swipe, Hirly, matching emploi, candidature automatique, app job swipe",
     category: "Tendances",
-    readTime: "5 min",
+    readTime: "8 min",
     date: "2026-07-03",
-    intro: "L'idée circule depuis des années dans la tech : et si trouver un emploi était aussi simple que matcher sur Tinder ? En 2026, ce n'est plus un concept — c'est une réalité. Des apps comme Hirly ont rendu le swipe pour l'emploi opérationnel, avec une couche IA qui personnalise les candidatures automatiquement. Voici ce que ça change vraiment.",
+    intro:
+      "L'idée d'une app emploi type Tinder — swiper à droite sur une offre, à gauche pour passer — circule depuis des années. En 2026, ce n'est plus un concept : des apps comme Hirly ont rendu le swipe pour l'emploi opérationnel, avec une couche IA qui génère et soumet les candidatures automatiquement. Voici ce que ça change concrètement, sans raccourcis douteux ni méthodes qui nuisent à la crédibilité.",
     ctaMid: { text: "Swiper tes premières offres sur Hirly", href: "https://hirly.app" },
     ctaEnd: { text: "Essayer l'app maintenant", href: "https://hirly.app" },
     sections: [
       {
-        h2: "L'idée originale : appliquer la logique Tinder au recrutement",
+        h2: "Le concept « Tinder pour l'emploi » : origine et promesse",
         body: [
-          "Tinder a révolutionné les rencontres en simplifiant la décision à une seule action : swipe à gauche ou à droite. L'idée de transposer cette mécanique au recrutement est naturelle : un candidat voit une fiche de poste, swipe à droite s'il est intéressé, et si le recruteur swipe aussi à droite = match.",
-          "Le problème de la première génération d'apps 'Tinder de l'emploi' (Jobr, Switch, etc.) : elles n'allaient pas assez loin. Le swipe n'était qu'une interface — la candidature restait manuelle derrière. Ce n'était pas assez différent d'un jobboard classique.",
+          "Tinder a simplifié les rencontres à un geste : swipe gauche ou droite. Transposer cette mécanique au recrutement est intuitif — un candidat voit une fiche de poste, swipe droite s'il est intéressé, et le match ouvre la suite.",
+          "La première génération d'apps (Jobr, Switch) a prouvé l'attrait du format mais échoué sur l'exécution : le swipe était une coquille vide, la candidature restait manuelle derrière. Pas assez différent d'un jobboard classique.",
         ],
       },
       {
-        h2: "Ce qui a changé avec l'IA en 2024–2026",
+        h2: "Réalité 2026 : le swipe ne suffit pas, l'IA fait la différence",
         body: [
-          "La vraie rupture n'est pas le swipe en lui-même — c'est ce qui se passe après. Avec les LLM modernes (GPT-4 class), il est possible de générer une candidature personnalisée et pertinente pour chaque offre en quelques secondes.",
-          "Hirly combine les deux : l'interface swipe pour la décision rapide, et l'IA pour générer et soumettre la candidature automatiquement. Swiper à droite = votre dossier complet (CV adapté + LM) est envoyé à l'ATS du recruteur sans que vous ayez à lever le petit doigt.",
+          "La rupture n'est pas le swipe — c'est ce qui se passe après. Avec les LLM modernes, une app emploi type Tinder peut générer une candidature personnalisée (CV + lettre de motivation) en quelques secondes et la soumettre à l'ATS du recruteur.",
+          "Hirly combine interface swipe et automatisation complète : swipe droite = dossier de candidature adapté envoyé via Greenhouse ou Lever. Temps total : moins de 10 secondes.",
         ],
         list: [
-          "Génération automatique du CV adapté à l'offre",
+          "Swipe droite → analyse de l'offre par l'IA",
+          "Génération du CV adapté aux mots-clés du poste",
           "Génération de la lettre de motivation personnalisée",
-          "Soumission directe à l'ATS (Greenhouse, Lever) via API officielle",
-          "Tracking de la candidature en temps réel",
+          "Soumission directe à l'ATS via API officielle",
+          "Suivi de la candidature dans le tracker intégré",
         ],
       },
       {
-        h2: "Le matching bilateral — est-ce que les employeurs swipent aussi ?",
+        h2: "Comment une app emploi swipe fonctionne en pratique",
         body: [
-          "Dans la logique Tinder originale, les deux parties doivent matcher. Dans le recrutement, ce modèle bilatéral est plus complexe : les recruteurs travaillent avec des ATS, pas avec des apps grand public.",
-          "Le matching côté employeur se fait de façon asymétrique : l'algorithme de Hirly présente les offres aux candidats selon un score de compatibilité, pendant que le recruteur reçoit des candidatures via son ATS habituel. Ce n'est pas un double swipe, mais le résultat est similaire : le bon profil arrive sur la bonne offre.",
+          "Le workflow Hirly en 4 étapes, de l'inscription à la candidature envoyée :",
+        ],
+        numbered: [
+          "Importer son CV : extraction automatique des compétences, expériences et préférences.",
+          "Découvrir les offres : chaque carte affiche le poste, l'entreprise et un score de matching.",
+          "Swiper : droite pour postuler, gauche pour passer. L'algorithme apprend de chaque geste.",
+          "Candidature envoyée : CV + LM générés et soumis à l'ATS sans formulaire à remplir.",
         ],
       },
       {
-        h2: "Hirly vs les autres apps de 'swipe emploi'",
+        h2: "Le matching bilatéral : est-ce que les recruteurs swipent aussi ?",
         body: [
-          "Plusieurs apps ont essayé le concept avant Hirly. La différence principale est l'intégration complète du workflow : de la découverte de l'offre à la soumission ATS, tout se passe dans l'app sans friction.",
+          "Dans Tinder, les deux parties matchent. En recrutement, le modèle est asymétrique : le candidat swipe sur Hirly, le recruteur reçoit la candidature dans son ATS habituel (Greenhouse, Lever).",
+          "Le résultat est similaire : le bon profil arrive sur la bonne offre, sans que le recruteur ait besoin d'adopter une nouvelle app.",
+        ],
+      },
+      {
+        h2: "Hirly vs les autres apps emploi swipe",
+        body: [
+          "Plusieurs apps ont testé le concept. La différence de Hirly : le workflow complet, de la découverte à la soumission ATS.",
         ],
         list: [
-          "Jobr (fermé) : swipe mais candidature manuelle",
-          "Switch (limité) : matching mais pas d'auto-candidature",
-          "Hirly : swipe + IA + auto-candidature ATS en 1 tap",
+          "Jobr (fermé) : swipe sans automatisation de candidature",
+          "Switch (limité) : matching basique, pas de soumission ATS",
+          "Hirly : swipe + IA + candidature auto Greenhouse/Lever en 1 tap",
         ],
       },
       {
-        h2: "Pour qui cette approche est-elle adaptée ?",
+        h2: "Pour qui une app emploi type Tinder est-elle adaptée ?",
         body: [
-          "Le modèle swipe + auto-candidature est particulièrement adapté à certains profils :",
+          "Le modèle swipe + auto-candidature convient particulièrement à :",
         ],
         list: [
-          "Candidats actifs qui veulent postuler à volume sans perdre en qualité",
-          "Profils tech (dev, data, product, design) où les offres ATS sont dominantes",
-          "Reconversions où l'on ne sait pas exactement ce qu'on cherche au départ",
-          "Candidats passifs qui veulent rester ouverts sans effort actif",
+          "Candidats actifs qui veulent postuler à volume sans sacrifier la qualité",
+          "Profils tech (dev, data, product, design) où les ATS dominent",
+          "Juniors et jeunes diplômés sans réseau établi",
+          "Reconversions professionnelles avec un parcours atypique",
+          "Candidats passifs qui veulent rester ouverts sans effort quotidien",
+        ],
+      },
+      {
+        h2: "Erreurs à éviter avec une app emploi swipe",
+        body: [
+          "Swiper droite sur toutes les offres sans lire la fiche, ne pas compléter son profil, ou ignorer la prévisualisation des candidatures générées sont les erreurs les plus fréquentes.",
+        ],
+        list: [
+          "Swiper sans critères : dilue la qualité et fatigue l'algorithme",
+          "Profil incomplet : scores de matching peu fiables",
+          "Ne jamais relire une candidature IA sur un poste stratégique",
+          "Confondre swipe rapide et candidature non réfléchie — le swipe valide, il ne remplace pas le jugement",
         ],
       },
     ],
     faq: [
       {
         id: 1,
-        question: "Hirly est-il vraiment comme Tinder mais pour l'emploi ?",
-        answer: "L'interface swipe est similaire, mais ce qui se passe après est très différent : Hirly génère et soumet une candidature personnalisée pour chaque swipe à droite, ce que Tinder ne fait évidemment pas pour les rencontres.",
+        question: "Hirly est-il vraiment un Tinder pour l'emploi ?",
+        answer:
+          "L'interface swipe est similaire, mais Hirly va plus loin : génération et soumission automatique de la candidature pour chaque swipe à droite. Ce n'est pas juste un geste, c'est un workflow complet.",
       },
       {
         id: 2,
-        question: "Les recruteurs voient-ils qu'une app a postulé à leur place ?",
-        answer: "Non. La candidature arrive dans l'ATS exactement comme une candidature manuelle. Rien n'indique qu'un outil a été utilisé.",
+        question: "Les recruteurs savent-ils qu'une app a postulé à leur place ?",
+        answer:
+          "Non. La candidature arrive dans l'ATS exactement comme une soumission manuelle. Aucun indicateur ne signale l'utilisation d'un outil.",
       },
       {
         id: 3,
-        question: "Peut-on contrôler les candidatures avant qu'elles soient envoyées ?",
-        answer: "Oui, Hirly propose un mode prévisualisation pour voir le CV et la LM générés avant envoi. Vous pouvez modifier ou annuler avant la soumission.",
+        question: "Peut-on prévisualiser la candidature avant l'envoi ?",
+        answer:
+          "Oui. Hirly propose un mode prévisualisation pour voir le CV et la lettre de motivation générés. Vous pouvez modifier ou annuler avant soumission.",
       },
       {
         id: 4,
-        question: "Cette approche fonctionne-t-elle pour les postes non-tech ?",
-        answer: "Pour l'instant, Hirly est surtout optimisé pour les secteurs tech, startup et SaaS où Greenhouse et Lever sont dominants. Les secteurs non-tech sont moins bien couverts.",
+        question: "Une app emploi swipe fonctionne-t-elle hors tech ?",
+        answer:
+          "Hirly est optimisé pour la tech, les startups et le SaaS (Greenhouse, Lever). Les secteurs non-tech sont moins couverts pour l'instant.",
+      },
+      {
+        id: 5,
+        question: "Swiper sur Hirly est-il gratuit ?",
+        answer:
+          "Hirly propose un accès gratuit pour démarrer. Le volume de candidatures automatiques dépend de votre plan.",
+      },
+      {
+        id: 6,
+        question: "Tinder emploi vs LinkedIn : lequel est plus efficace ?",
+        answer:
+          "LinkedIn pour le réseau et la visibilité passive. Une app emploi swipe comme Hirly pour la recherche active et l'automatisation. Les combiner est souvent le plus efficace.",
       },
     ],
   },

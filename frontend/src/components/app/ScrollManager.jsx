@@ -6,6 +6,10 @@ import { isTrainingRoute } from "../../lib/trainingRoutes";
 function usesDocumentScroll(pathname) {
   if (pathname === "/" || pathname === "/signup" || pathname === "/auth/callback") return true;
   if (pathname === "/credits" || pathname === "/referral") return true;
+  if (pathname === "/how-it-works" || pathname === "/use-cases") return true;
+  if (pathname === "/blog" || pathname.startsWith("/blog/")) return true;
+  if (pathname.startsWith("/compare/")) return true;
+  if (pathname.startsWith("/for/")) return true;
   if (isTrainingRoute(pathname)) return true;
   if (pathname === "/admin" || pathname.startsWith("/admin/")) return true;
   return false;
