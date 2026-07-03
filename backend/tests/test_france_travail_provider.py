@@ -7,6 +7,62 @@ from job_providers.config import is_job_provider_configured, primary_job_provide
 from job_providers.france_travail import FranceTravailProvider
 
 
+def test_france_travail_keywords_use_french_comma_separated_tokens():
+    provider = FranceTravailProvider(client_id="PAR_test", client_secret="secret")
+    query = JobSearchQuery(
+        role="Software Engineer",
+        location="Dijon, France",
+        country="fr",
+        language="fr",
+        radius_km=50,
+    )
+    keywords = provider._keywords(query)
+    assert "developpeur" in keywords
+    assert "logiciel" in keywords or "informatique" in keywords
+    assert "Software Engineer" not in keywords
+    assert "," in keywords
+
+
+def test_france_travail_search_distance_uses_query_radius():
+    provider = FranceTravailProvider(client_id="PAR_test", client_secret="secret")
+    query = JobSearchQuery(role="developpeur", location="Dijon", country="fr", language="fr", radius_km=50)
+    assert provider._search_distance_km(query) == 50
+
+
+def test_france_travail_build_search_params_includes_commune_and_distance():
+    provider = FranceTravailProvider(client_id="PAR_test", client_secret="secret")
+    query = JobSearchQuery(
+        role="Software Engineer",
+        location="Dijon",
+        country="fr",
+        language="fr",
+        radius_km=50,
+    )
+
+    async def _run():
+        with patch.object(provider, "_lookup_commune_code_and_departement", AsyncMock(return_value=("21231", "21"))):
+            return await provider._build_search_params(query)
+
+    params = asyncio.run(_run())
+    assert params["commune"] == "21231"
+    assert params["distance"] == 50
+    assert "developpeur" in params["motsCles"]
+    assert "departement" not in params
+
+
+def test_france_travail_build_search_params_falls_back_to_departement():
+    provider = FranceTravailProvider(client_id="PAR_test", client_secret="secret")
+    query = JobSearchQuery(role="developpeur", location="Unknownville", country="fr", language="fr", radius_km=50)
+
+    async def _run():
+        with patch.object(provider, "_lookup_commune_code_and_departement", AsyncMock(return_value=(None, "21"))):
+            return await provider._build_search_params(query)
+
+    params = asyncio.run(_run())
+    assert params["departement"] == "21"
+    assert "commune" not in params
+
+
 def test_france_travail_normalization_maps_core_fields():
     provider = FranceTravailProvider(client_id="PAR_test", client_secret="secret")
     job = provider.normalize_job(

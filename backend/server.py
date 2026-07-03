@@ -4044,7 +4044,11 @@ async def get_feed(
     def _location_score(job: Dict[str, Any], terms: Dict[str, List[str]], worldwide: bool = False) -> int:
         if worldwide:
             return 10
-        job_location = (job.get("location") or "").lower()
+        job_location = normalize_place_name(" ".join([
+            str(job.get("city") or ""),
+            str(job.get("region") or ""),
+            str(job.get("location") or ""),
+        ]))
         remote_value = str(job.get("remote") or "").lower()
         score_value = 0
         if any(term and term in job_location for term in terms["city"]):
@@ -4247,6 +4251,10 @@ async def get_feed(
                 code = str(loc.get("country_code") or "").lower().strip()
                 if code:
                     values.append(code)
+                    continue
+                label = str(loc.get("location_label") or loc.get("label") or "")
+                if label and jobs_service_module._looks_like_france_location(label):
+                    values.append("fr")
             if only_my_country:
                 profile_location_data = _profile_feed_location_data()
                 code = str(profile_location_data.get("country_code") or "").lower().strip()
@@ -5417,6 +5425,10 @@ async def get_feed(
                 distance_score = max(0, 45 - int(distance))
                 population_bonus = min(15, int((int(expanded_match.get("population") or 0) ** 0.5) / 40))
                 return 30 + distance_score + population_bonus
+            if explicit_local_intent and selected_city_terms:
+                job_text = _normalized_job_location_text(job)
+                if any(term in job_text for term in selected_city_terms if len(term) >= 3):
+                    return 60
             if include_unknown_location and not (job.get("location") or job.get("city") or job.get("region") or job.get("country_code")):
                 return 5
             return _location_score(job, terms, worldwide=False)

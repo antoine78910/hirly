@@ -75,6 +75,23 @@ function scorePhotonResult(query, result) {
   return score;
 }
 
+const FRENCH_CITY_MARKERS = new Set([
+  "dijon", "paris", "lyon", "marseille", "toulouse", "nice", "nantes", "strasbourg",
+  "lille", "montpellier", "rennes", "grenoble", "bordeaux", "reims", "metz", "nancy",
+  "angers", "caen", "rouen", "tours", "besancon", "brest", "amiens", "orleans",
+  "perpignan", "bayonne", "pau", "avignon", "annecy", "chambery", "valence", "nimes",
+  "mulhouse", "colmar", "lorient", "vannes", "quimper", "saint etienne", "clermont ferrant",
+]);
+
+function looksLikeFranceLocation(text) {
+  const normalized = normalizeLabel(text);
+  if (!normalized) return false;
+  if (normalized.includes("france")) return true;
+  if (FRENCH_CITY_MARKERS.has(normalized)) return true;
+  const cityPart = normalized.split(",")[0]?.trim();
+  return Boolean(cityPart && FRENCH_CITY_MARKERS.has(cityPart));
+}
+
 export function buildTypedLocationResult(query) {
   const trimmed = (query || "").trim();
   if (trimmed.length < 2) return [];
@@ -84,13 +101,18 @@ export function buildTypedLocationResult(query) {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(" ");
 
+  const isFrench = looksLikeFranceLocation(label);
+  const displayLabel = isFrench && !label.toLowerCase().includes("france")
+    ? `${label}, France`
+    : label;
+
   return [{
-    id: `typed:${normalizeLabel(label)}`,
-    label,
+    id: `typed:${normalizeLabel(displayLabel)}`,
+    label: displayLabel,
     source: "typed",
     place_id: "",
-    country: "",
-    country_code: "",
+    country: isFrench ? "France" : "",
+    country_code: isFrench ? "fr" : "",
     lat: null,
     lng: null,
     kind: "city",

@@ -126,6 +126,7 @@ def _run_feed(
     work_location=None,
     geo_places=None,
     force_provider_refresh=False,
+    search_role=None,
 ):
     env = env or {}
     for key, value in {
@@ -184,7 +185,7 @@ def _run_feed(
         lng=None,
         force_provider_refresh=force_provider_refresh,
         score=False,
-        search_role=None,
+        search_role=search_role,
     ))
     return response, calls
 
@@ -689,6 +690,39 @@ def test_explicit_local_provider_queries_use_clean_city_labels(monkeypatch):
     planned = response["request_trace"]["jsearch_queries_planned"]
     assert planned
     assert all(", FR" not in str(item.get("location_label") or "") for item in planned)
+
+
+def test_real_app_bare_dijon_label_without_country_code_triggers_local_discovery(monkeypatch):
+    imported = _job(1, tier="C", status="unknown", title="Developpeur web")
+    imported.update({"location": "Dijon (21)", "city": "Dijon", "country_code": "fr", "provider": "france_travail"})
+    locations_json = json.dumps([{
+        "location_label": "Dijon",
+        "place_id": "",
+        "country": "",
+        "country_code": "",
+        "lat": None,
+        "lng": None,
+        "source": "typed",
+        "kind": "city",
+    }])
+    response, calls = _run_feed(
+        monkeypatch,
+        [],
+        env={
+            "JOBS_FEED_LOCAL_DISCOVERY_MAX_CITIES": "2",
+            "JOBS_FEED_SYNC_REFRESH_MAX_SECONDS": "5",
+            "JOBS_FEED_DEBUG_DIAGNOSTICS": "true",
+        },
+        refresh=lambda: [imported],
+        locations_json=locations_json,
+        search_role="Software Engineer",
+        search_radius="50km",
+        geo_places=[],
+    )
+    assert calls["refresh"] >= 1
+    assert response["request_trace"]["explicit_local_intent"] is True
+    assert "fr" in (response["request_trace"].get("expanded_country_codes") or [])
+    assert [job["job_id"] for job in response["jobs"]] == ["job_1"]
 
 
 def test_real_app_text_only_dijon_request_triggers_local_discovery(monkeypatch):

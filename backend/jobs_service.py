@@ -195,6 +195,7 @@ def build_profile_job_query(
         language=_language_for_country(country),
         limit=max(20, min(_env_int("JOB_IMPORT_LIMIT", 50), 100)),
         contract_hint=contract_hint,
+        radius_km=_radius_km(search_radius),
     )
 
 
@@ -821,6 +822,8 @@ def _copy_query_with_role(query: JobSearchQuery, role: str, *, raw_query: bool =
         raw_query=raw_query,
         max_pages=query.max_pages,
         page_size=query.page_size,
+        contract_hint=query.contract_hint,
+        radius_km=query.radius_km,
     )
 
 
@@ -841,6 +844,8 @@ def _copy_query_with_role_and_location(
         raw_query=raw_query,
         max_pages=query.max_pages,
         page_size=query.page_size,
+        contract_hint=query.contract_hint,
+        radius_km=query.radius_km,
     )
 
 
@@ -1018,21 +1023,25 @@ def _job_matches_query_location(job: Dict[str, Any], query: JobSearchQuery, sear
             str(job.get("region") or ""),
         ]).lower(),
     ).encode("ascii", "ignore").decode("ascii")
-    job_country = str(job.get("country_code") or "").lower().strip()
-    query_country = str(query.country or "").lower().strip()
-    if query_country and job_country == query_country:
-        return True
-
-    country_name = (_country_name(query_country) or "").lower()
-    if country_name and country_name in job_location:
-        return True
-
-    location = unicodedata.normalize(
+    query_location = unicodedata.normalize(
         "NFKD",
         str(query.location or "").lower(),
     ).encode("ascii", "ignore").decode("ascii")
-    city = re.split(r"[,/|-]", location, maxsplit=1)[0].strip()
-    return bool(city and city in job_location)
+    city = re.split(r"[,/|-]", query_location, maxsplit=1)[0].strip()
+    if city and city in job_location:
+        return True
+
+    query_country = str(query.country or "").lower().strip()
+    job_country = str(job.get("country_code") or "").lower().strip()
+    if not query.location and query_country and job_country == query_country:
+        return True
+
+    if not query.location and query_country:
+        country_name = (_country_name(query_country) or "").lower()
+        if country_name and country_name in job_location:
+            return True
+
+    return False
 
 
 def _ats_attempt_countries(query: JobSearchQuery, search_radius: str) -> List[Optional[str]]:
@@ -1160,6 +1169,8 @@ async def refresh_jobs_for_profile_if_needed(
             raw_query=query.raw_query,
             max_pages=provider_max_pages,
             page_size=provider_page_size,
+            contract_hint=query.contract_hint,
+            radius_km=query.radius_km,
         )
     base_metadata = {
         "searched_location": query.location,
@@ -1380,6 +1391,8 @@ async def refresh_jobs_for_profile_if_needed(
                 raw_query=True,
                 max_pages=query.max_pages,
                 page_size=query.page_size,
+                contract_hint=query.contract_hint,
+                radius_km=query.radius_km,
             )
             provider_requests += 1
             broad_provider_requests += 1

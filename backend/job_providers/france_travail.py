@@ -7,6 +7,7 @@ import hashlib
 import os
 import re
 import time
+import unicodedata
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote
@@ -33,6 +34,59 @@ _CONTRACT_HINT_TO_TYPE_CONTRAT = {
 }
 
 _DEPARTEMENT_RE = re.compile(r"\b(\d{2}|2[AB])\b", re.IGNORECASE)
+
+_ROLE_KEYWORD_HINTS = {
+    "software": ("developpeur", "logiciel", "informatique", "programmeur"),
+    "engineer": ("ingenieur", "ingenieur logiciel"),
+    "developer": ("developpeur", "logiciel", "informatique"),
+    "frontend": ("frontend", "front-end", "web"),
+    "backend": ("backend", "back-end", "serveur"),
+    "fullstack": ("fullstack", "full-stack"),
+    "data": ("data", "donnees", "analyste"),
+    "analyst": ("analyste", "etudes"),
+    "marketing": ("marketing", "communication", "digital"),
+    "commercial": ("commercial", "vente", "vendeur"),
+    "product": ("produit", "chef de produit"),
+    "manager": ("manager", "responsable", "chef"),
+}
+
+
+def _ascii_fold(value: str) -> str:
+    return unicodedata.normalize("NFKD", value or "").encode("ascii", "ignore").decode("ascii").lower()
+
+
+def _france_travail_keyword_tokens(role: str, country: Optional[str]) -> List[str]:
+    normalized = " ".join((role or "").split()) or "emploi"
+    lower = _ascii_fold(normalized)
+    tokens: List[str] = []
+    if (country or "").lower() in ("fr", "france", ""):
+        if any(term in lower for term in ("software", "engineer", "developer", "full stack", "full-stack", "frontend", "backend", "devops")):
+            tokens.extend(["developpeur", "logiciel", "informatique", "ingenieur"])
+        elif "data" in lower and "analyst" in lower:
+            tokens.extend(["analyste", "data", "donnees"])
+        elif "analyst" in lower:
+            tokens.extend(["analyste", "etudes"])
+        elif "marketing" in lower:
+            tokens.extend(["marketing", "communication", "digital"])
+        elif any(term in lower for term in ("sales", "commercial")):
+            tokens.extend(["commercial", "vente", "vendeur"])
+        elif "product" in lower and "manager" in lower:
+            tokens.extend(["chef de produit", "product manager"])
+        for token in re.findall(r"[a-z0-9]+", lower):
+            if len(token) >= 3:
+                tokens.extend(list(_ROLE_KEYWORD_HINTS.get(token, ())))
+    for token in re.findall(r"[a-z0-9]+", lower):
+        if len(token) >= 3:
+            tokens.append(token)
+    deduped: List[str] = []
+    seen = set()
+    for token in tokens:
+        cleaned = token.strip().lower()
+        if len(cleaned) < 2 or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        deduped.append(cleaned)
+    return deduped[:8] or ["emploi"]
 
 
 class FranceTravailProvider:
@@ -135,13 +189,16 @@ class FranceTravailProvider:
         type_contrat = self._type_contrat(query.contract_hint)
         if type_contrat:
             params["typeContrat"] = type_contrat
-        departement = self._departement_from_location(query.location)
-        if departement:
-            params["departement"] = departement
-        commune, distance = await self._commune_and_distance(query)
+        commune, distance, departement = await self._commune_distance_departement(query)
         if commune:
             params["commune"] = commune
             params["distance"] = distance
+        elif departement:
+            params["departement"] = departement
+        else:
+            departement = self._departement_from_location(query.location)
+            if departement:
+                params["departement"] = departement
         return params
 
     def normalize_job(
@@ -264,11 +321,13 @@ class FranceTravailProvider:
         return []
 
     def _keywords(self, query: JobSearchQuery) -> str:
-        role = " ".join((query.role or "").split()) or "emploi"
+        tokens = _france_travail_keyword_tokens(query.role, query.country)
         hint = (query.contract_hint or "").strip()
-        if hint and hint.lower() not in role.lower():
-            return f"{role} {hint}".strip()
-        return role
+        if hint:
+            hint_token = _ascii_fold(hint).replace(" ", "")
+            if hint_token and hint_token not in tokens:
+                tokens.append(hint_token)
+        return ",".join(tokens)
 
     def _publiee_depuis_days(self, query: JobSearchQuery) -> int:
         hint = (query.contract_hint or "").lower()
@@ -298,37 +357,54 @@ class FranceTravailProvider:
             return None
         return match.group(1).upper().replace("ab", "2A").replace("AB", "2A")
 
-    async def _commune_and_distance(self, query: JobSearchQuery) -> Tuple[Optional[str], int]:
-        distance = max(1, min(self._env_int("FRANCE_TRAVAIL_SEARCH_DISTANCE_KM", 30), 200))
+    async def _commune_distance_departement(self, query: JobSearchQuery) -> Tuple[Optional[str], int, Optional[str]]:
+        distance = self._search_distance_km(query)
         location = (query.location or "").strip()
         if not location:
-            return None, distance
+            return None, distance, None
         city = location.split(",")[0].strip()
         if not city or len(city) < 2:
-            return None, distance
-        commune_code = await self._lookup_commune_code(city)
-        return commune_code, distance
+            return None, distance, None
+        commune_code, departement = await self._lookup_commune_code_and_departement(city)
+        return commune_code, distance, departement
+
+    def _search_distance_km(self, query: JobSearchQuery) -> int:
+        if query.radius_km is not None:
+            return max(0, min(int(query.radius_km), 200))
+        return max(0, min(self._env_int("FRANCE_TRAVAIL_SEARCH_DISTANCE_KM", 30), 200))
 
     async def _lookup_commune_code(self, city_name: str) -> Optional[str]:
+        commune_code, _departement = await self._lookup_commune_code_and_departement(city_name)
+        return commune_code
+
+    async def _lookup_commune_code_and_departement(self, city_name: str) -> Tuple[Optional[str], Optional[str]]:
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 response = await client.get(
                     "https://geo.api.gouv.fr/communes",
                     params={
                         "nom": city_name,
-                        "fields": "nom,code",
+                        "fields": "nom,code,codesPostaux,departement,population",
                         "boost": "population",
-                        "limit": 1,
+                        "limit": 5,
                     },
                 )
                 response.raise_for_status()
                 rows = response.json()
-                if isinstance(rows, list) and rows:
-                    code = rows[0].get("code")
-                    return str(code) if code else None
+                if not isinstance(rows, list) or not rows:
+                    return None, None
+                best = max(rows, key=lambda row: int(row.get("population") or 0))
+                code = best.get("code")
+                departement = best.get("departement")
+                if isinstance(departement, dict):
+                    departement_code = departement.get("code")
+                else:
+                    departement_code = None
+                if not departement_code and code:
+                    departement_code = str(code)[:2]
+                return (str(code) if code else None, str(departement_code) if departement_code else None)
         except Exception:
-            return None
-        return None
+            return None, None
 
     def _internal_job_id(self, external_id: str) -> str:
         digest = hashlib.sha1(f"{self.name}:{external_id}".encode("utf-8")).hexdigest()[:16]
