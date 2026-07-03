@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import PlacesAutocomplete from "../components/PlacesAutocomplete";
+import { buildTypedLocationResult } from "../lib/locationSearch";
 import { BRAND } from "../lib/brand";
 import {
   ProfileSetupStep,
@@ -293,6 +294,22 @@ export default function Onboarding() {
         return;
       }
     }
+    // Auto-create a typed location when the user continues without picking from the list
+    if (step === "location" && onboardingLocation.trim() && !onboardingLocationData?.location_label) {
+      const typed = buildTypedLocationResult(onboardingLocation.trim());
+      if (typed[0]) {
+        setOnboardingLocationData({
+          location_label: typed[0].label,
+          place_id: "",
+          country: "",
+          country_code: "",
+          lat: null,
+          lng: null,
+          source: "typed",
+          kind: "city",
+        });
+      }
+    }
     if (stepIndex < STEP_ORDER.length - 1) setStepIndex((i) => i + 1);
   };
 
@@ -552,7 +569,7 @@ export default function Onboarding() {
         return !!jobSearchStatus;
       case "location":
         if (!onboardingLocation.trim()) return false;
-        if (!onboardingLocationData?.location_label) return false;
+        // Allow free-form text — we'll create a typed location if nothing was picked
         return true;
       case "contractType":
         return !!contractType;

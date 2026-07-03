@@ -69,7 +69,6 @@ export default function PlacesAutocomplete({
   const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState([]);
-  const [touched, setTouched] = useState(false);
   const [focused, setFocused] = useState(false);
   const blurTimerRef = useRef(null);
   const requestIdRef = useRef(0);
@@ -83,10 +82,12 @@ export default function PlacesAutocomplete({
     selectedLocation?.location_label
     && selectedLocation.location_label === value,
   );
-  const isInvalid = touched && trimmedValue && !hasSelection;
+
+  // Never show red — we only suggest, never block
+  const isInvalid = false;
 
   const showSearchDropdown = focused
-    && trimmedValue.length >= 1
+    && trimmedValue.length >= 2
     && !hasSelection;
   const showPopularDropdown = inline
     && focused
@@ -101,14 +102,12 @@ export default function PlacesAutocomplete({
       light ? "text-zinc-900 placeholder:text-zinc-400" : "text-white placeholder:text-sprout-dim"
     }`
     : light
-    ? `h-11 rounded-xl bg-white border-zinc-200 text-zinc-900 placeholder:text-zinc-400 pr-10 ${isInvalid ? "border-rose-500" : focused ? "border-linkedin ring-2 ring-linkedin/20" : ""}`
-    : `h-11 rounded-xl bg-sprout-surface-2 border-sprout-border text-white placeholder:text-sprout-dim pr-10 ${isInvalid ? "border-rose-500" : ""}`;
+    ? `h-11 rounded-xl bg-white border-zinc-200 text-zinc-900 placeholder:text-zinc-400 pr-10 ${focused ? "border-linkedin ring-2 ring-linkedin/20" : ""}`
+    : `h-11 rounded-xl bg-sprout-surface-2 border-sprout-border text-white placeholder:text-sprout-dim pr-10`;
   const iconClass = inline
     ? "hidden"
     : light ? "w-4 h-4 text-zinc-400 absolute right-3 top-3.5" : "w-4 h-4 text-sprout-muted absolute right-3 top-3.5";
-  const helperClass = light
-    ? `text-xs ${isInvalid ? "text-rose-500" : "text-zinc-500"}`
-    : `text-xs ${isInvalid ? "text-rose-300" : "text-sprout-muted"}`;
+  const helperClass = light ? "text-xs text-zinc-500" : "text-xs text-sprout-muted";
   const dropdownClass = light
     ? "scrollbar-thin rounded-2xl border border-zinc-200 bg-white shadow-xl overflow-hidden max-h-60 overflow-y-auto"
     : "scrollbar-thin rounded-2xl border border-sprout-border bg-sprout-surface shadow-xl overflow-hidden max-h-60 overflow-y-auto";
@@ -152,7 +151,7 @@ export default function PlacesAutocomplete({
   }, [showDropdown, trimmedValue, updateDropdownRect]);
 
   useEffect(() => {
-    if (!trimmedValue || hasSelection) {
+    if (!trimmedValue || hasSelection || trimmedValue.length < 2) {
       abortRef.current?.abort();
       setResults([]);
       setSearching(false);
@@ -161,8 +160,9 @@ export default function PlacesAutocomplete({
 
     const requestId = ++requestIdRef.current;
     const fallback = localSuggestionResults(trimmedValue, suggestions, 10);
-    setSearching(true);
+    // Show local matches immediately while the network request is in flight
     setResults(fallback);
+    setSearching(true);
 
     const handle = setTimeout(async () => {
       abortRef.current?.abort();
@@ -170,28 +170,47 @@ export default function PlacesAutocomplete({
       abortRef.current = controller;
 
       const resolveResults = async () => {
-        try {
-          const { data } = await api.get("/locations/search", {
+        // Run backend and Photon client-side in parallel — use whichever wins
+        const backendPromise = api
+          .get("/locations/search", {
             params: { q: trimmedValue, limit: 12 },
-            timeout: 20000,
+            timeout: 8000,
             signal: controller.signal,
+          })
+          .then((res) => res.data?.results || [])
+          .catch((err) => {
+            if (err?.code === "ERR_CANCELED" || err?.name === "AbortError") throw err;
+            return [];
           });
-          const apiResults = data?.results || [];
-          if (apiResults.length > 0) return apiResults;
-        } catch (error) {
-          if (error?.code === "ERR_CANCELED") throw error;
-        }
 
-        try {
-          const clientResults = await searchLocationsClient(trimmedValue, 12, controller.signal);
-          if (clientResults.length > 0) return clientResults;
-        } catch (error) {
-          if (error?.name === "AbortError" || error?.code === "ERR_CANCELED") throw error;
-        }
+        const photonPromise = searchLocationsClient(trimmedValue, 12, controller.signal).catch(
+          (err) => {
+            if (err?.name === "AbortError" || err?.code === "ERR_CANCELED") throw err;
+            return [];
+          },
+        );
 
+        // Show the first non-empty result as a quick preview, then merge both
+        const [backendResults, photonResults] = await Promise.all([
+          backendPromise,
+          photonPromise,
+        ]);
+
+        // Merge: backend first (better quality), then Photon for extra coverage
+        const seen = new Set();
+        const merged = [];
+        for (const result of [...backendResults, ...photonResults]) {
+          const key = (result.label || "").toLowerCase().trim();
+          if (key && !seen.has(key)) {
+            seen.add(key);
+            merged.push(result);
+          }
+        }
+        if (merged.length > 0) return merged.slice(0, 12);
+
+        // Last resort: let user confirm what they typed as a free-form city
         const typed = buildTypedLocationResult(trimmedValue);
-        if (typed.length > 0) return [...fallback, ...typed];
-        return fallback;
+        return typed.length > 0 ? [...fallback, ...typed] : fallback;
       };
 
       try {
@@ -201,12 +220,11 @@ export default function PlacesAutocomplete({
       } catch (error) {
         if (requestId !== requestIdRef.current || error?.code === "ERR_CANCELED") return;
         const typed = buildTypedLocationResult(trimmedValue);
-        const nextResults = typed.length > 0 ? [...fallback, ...typed] : fallback;
-        setResults(nextResults);
+        setResults(typed.length > 0 ? [...fallback, ...typed] : fallback);
       } finally {
         if (requestId === requestIdRef.current) setSearching(false);
       }
-    }, 200);
+    }, 350);
 
     return () => {
       clearTimeout(handle);
@@ -216,17 +234,14 @@ export default function PlacesAutocomplete({
 
   const helperText = useMemo(() => {
     if (isFrench(lang)) {
-      if (isInvalid) return "Sélectionnez une des localisations proposées.";
-      if (trimmedValue) return "Choisissez une ville, un village ou une région dans la liste.";
-      return optional ? "Facultatif" : "Tapez une ville, un village ou une région partout dans le monde";
+      if (trimmedValue && !hasSelection) return "Choisissez une ville dans la liste ci-dessous.";
+      return optional ? "Facultatif" : "Tapez 2 lettres pour voir des suggestions";
     }
-    if (isInvalid) return "Select one of the suggested locations.";
-    if (trimmedValue) return "Pick a city, town, village, or region from the list.";
-    return optional ? "Optional" : "Start typing any city, town, or village worldwide";
-  }, [isInvalid, lang, optional, trimmedValue]);
+    if (trimmedValue && !hasSelection) return "Pick a city from the list below.";
+    return optional ? "Optional" : "Type 2+ letters to see suggestions";
+  }, [lang, optional, trimmedValue, hasSelection]);
 
   const handleChange = (next) => {
-    setTouched(true);
     onInputChange(next);
     onSelect(null);
   };
@@ -400,11 +415,27 @@ export default function PlacesAutocomplete({
                   );
                 })}
                 {!searching && results.length === 0 && (
-                  <div className={`px-4 py-3 text-sm ${light ? "text-zinc-500" : "text-zinc-500"}`}>
-                    {isFrench(lang)
-                      ? "Aucune localisation trouvée. Essayez une ville ou une région proche, ou choisissez un lieu populaire."
-                      : "No locations found. Try a nearby city or region name, or pick a popular location below."}
-                  </div>
+                  <>
+                    <div className={`px-4 py-3 text-sm ${light ? "text-zinc-500" : "text-zinc-500"}`}>
+                      {isFrench(lang)
+                        ? "Aucune localisation trouvée. Essayez une ville voisine ou choisissez un lieu populaire :"
+                        : "No locations found. Try a nearby city or pick a popular location:"}
+                    </div>
+                    {visibleSuggestions.slice(0, 5).map((suggestion) => (
+                      <button
+                        key={suggestion}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => selectSuggestion(suggestion)}
+                        className={optionClass}
+                        data-testid={`${testId}-popular-option`}
+                        role="option"
+                      >
+                        <MapPin className={`w-4 h-4 shrink-0 mt-0.5 ${light ? "text-linkedin" : "text-sprout-mint"}`} />
+                        <span className="block">{translateLocationLabel(suggestion, lang)}</span>
+                      </button>
+                    ))}
+                  </>
                 )}
                   </>
                 )}
