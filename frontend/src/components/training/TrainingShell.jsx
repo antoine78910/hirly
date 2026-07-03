@@ -135,22 +135,23 @@ export function TrainingTopBar({ actions, backTo, progressPct = null, moduleStep
 
 
 
-        <div className="flex max-w-[58%] shrink-0 items-center justify-end gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] sm:max-w-none sm:gap-3 [&::-webkit-scrollbar]:hidden">
+        <div className="flex min-w-0 shrink-0 items-center justify-end gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] sm:gap-3 [&::-webkit-scrollbar]:hidden">
           {moduleStepper ? (
             <div className="shrink-0">{moduleStepper}</div>
           ) : null}
+
+          {actions}
+
           {accountEmail ? (
             <span
-              className="hidden max-w-[200px] items-center gap-1.5 truncate text-xs font-medium text-zinc-500 md:flex"
+              className="flex min-w-0 max-w-[6.5rem] shrink-0 items-center gap-1 truncate text-[10px] font-medium text-zinc-500 sm:max-w-[10rem] sm:gap-1.5 sm:text-xs md:max-w-[200px]"
               title={accountEmail}
               data-testid="training-account-email"
             >
-              <User className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              <User className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" aria-hidden />
               <span className="truncate">{accountEmail}</span>
             </span>
           ) : null}
-
-          {actions}
 
         </div>
 
