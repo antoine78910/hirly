@@ -34,7 +34,7 @@ import { useUpgradeModal } from "../context/UpgradeModalContext";
 import DesktopSwipeFeed from "../components/swipe/DesktopSwipeFeed";
 import { saveTargetPreferences, normalizeLocationData } from "../lib/targetPreferences";
 import { hasActiveFilters, mergeFilters, clearMenuFilters } from "../lib/jobFilters";
-import { buildDefaultFiltersFromProfile, mergeProfileFilterDefaults } from "../lib/contractTypeMapping";
+import { buildDefaultFiltersFromProfile, mergeProfileFilterDefaults, reconcileFiltersForUser } from "../lib/contractTypeMapping";
 import { useAppLocale } from "../context/AppLocaleContext";
 import { BILLING_UPDATED } from "../lib/billingEvents";
 import {
@@ -586,7 +586,7 @@ export default function Swipe() {
   }, []);
 
   const loadProfile = useCallback(async () => {
-    if (isFinanceDemoEnabled()) {
+    if (isFinanceDemoEnabled() && isDemoAccountEnabled()) {
       applyFinanceDemoTarget();
       return null;
     }
@@ -881,10 +881,11 @@ export default function Swipe() {
 
   useEffect(() => {
     const onDemoSettings = (event) => {
+      if (!isDemoAccountEnabled()) return;
       const financeOn = Boolean(event?.detail?.financeJobFeed ?? isFinanceDemoEnabled());
       const nextFilters = financeOn
         ? applyFinanceDemoTarget()
-        : filtersRef.current;
+        : reconcileFiltersForUser(readPersistedFilters(), profileRef.current);
       if (!financeOn) {
         loadProfile();
       }
@@ -946,23 +947,24 @@ export default function Swipe() {
       api.get("/billing/status")
         .then(({ data }) => setBilling(data))
         .catch(() => setBilling({ is_premium: false }));
-      if (isFinanceDemoEnabled()) {
+      if (isFinanceDemoEnabled() && isDemoAccountEnabled()) {
         const financeFilters = applyFinanceDemoTarget();
         loadFeed(true, financeFilters, "initial_finance_demo");
         return;
       }
       if (isDemoAccountEnabled()) {
-        const demoFilters = mergeProfileFilterDefaults(readPersistedFilters(), profileRef.current);
+        const demoFilters = reconcileFiltersForUser(readPersistedFilters(), profileRef.current);
         filtersRef.current = demoFilters;
         setFilters(demoFilters);
+        savePersistedFilters(demoFilters);
         loadFeed(true, demoFilters, "initial_demo_account");
         return;
       }
-      const persistedFilters = readPersistedFilters();
-      const mergedFilters = mergeProfileFilterDefaults(persistedFilters, profileRef.current);
+      const mergedFilters = reconcileFiltersForUser(readPersistedFilters(), profileRef.current);
       filtersRef.current = mergedFilters;
       setFilters(mergedFilters);
-      loadFeed(true, mergedFilters, persistedFilters ? "initial_persisted_filters" : "initial_profile_defaults");
+      savePersistedFilters(mergedFilters);
+      loadFeed(true, mergedFilters, readPersistedFilters() ? "initial_persisted_filters" : "initial_profile_defaults");
     };
     bootstrap();
   }, [authLoading, loadProfile, loadFeed, applyFinanceDemoTarget]);

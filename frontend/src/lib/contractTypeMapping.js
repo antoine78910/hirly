@@ -70,3 +70,31 @@ export function mergeProfileFilterDefaults(persisted, profile) {
   }
   return merged;
 }
+
+const normalizeLocationKey = (value) =>
+  String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
+/** Drop Paris/finance demo filters that leaked into localStorage for normal users. */
+export function reconcileFiltersForUser(persisted, profile) {
+  const profileLocation = profile?.target_location_data?.location_label || profile?.target_location || "";
+  const profileKey = normalizeLocationKey(profileLocation);
+  let next = persisted;
+
+  if (next && profileKey) {
+    const persistedLabel =
+      next.locationsData?.[0]?.location_label || next.locations?.[0] || "";
+    const persistedKey = normalizeLocationKey(persistedLabel);
+    const looksLikeFinanceDemoParis =
+      /paris/.test(persistedKey) && profileKey && persistedKey !== profileKey;
+    if (looksLikeFinanceDemoParis) {
+      next = null;
+    }
+  }
+
+  return mergeProfileFilterDefaults(next, profile);
+}

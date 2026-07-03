@@ -4,8 +4,25 @@ export const DEMO_SETTINGS_STORAGE_KEY = "hirly.demo.settings.v1";
 export const DEMO_SETTINGS_CHANGED = "hirly:demo-settings-changed";
 
 export const DEFAULT_DEMO_SETTINGS = {
-  financeJobFeed: TUTORIAL_BYPASS_AUTH,
+  financeJobFeed: false,
 };
+
+let demoAccountEligible = false;
+
+/** Called from demoAccount when auth resolves demo vs normal user. */
+export function setFinanceDemoEligibility(isDemoAccount) {
+  demoAccountEligible = Boolean(isDemoAccount);
+  if (!demoAccountEligible && typeof window !== "undefined") {
+    try {
+      const current = readDemoSettings();
+      if (current.financeJobFeed) {
+        saveDemoSettings({ ...current, financeJobFeed: false });
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+}
 
 export function readDemoSettings() {
   if (typeof window === "undefined") return { ...DEFAULT_DEMO_SETTINGS };
@@ -14,12 +31,12 @@ export function readDemoSettings() {
     const merged = raw
       ? { ...DEFAULT_DEMO_SETTINGS, ...JSON.parse(raw) }
       : { ...DEFAULT_DEMO_SETTINGS };
-    if (TUTORIAL_BYPASS_AUTH) {
+    if (TUTORIAL_BYPASS_AUTH && demoAccountEligible) {
       merged.financeJobFeed = true;
     }
     return merged;
   } catch {
-    return { ...DEFAULT_DEMO_SETTINGS, financeJobFeed: TUTORIAL_BYPASS_AUTH || false };
+    return { ...DEFAULT_DEMO_SETTINGS };
   }
 }
 
@@ -34,6 +51,7 @@ export function saveDemoSettings(settings) {
 }
 
 export function isFinanceDemoEnabled() {
+  if (!demoAccountEligible) return false;
   return Boolean(readDemoSettings().financeJobFeed);
 }
 

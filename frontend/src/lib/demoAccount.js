@@ -2,7 +2,7 @@ export const DEMO_CREDITS_MAX = 600;
 export const DEMO_CREDITS_CHANGED = "hirly:demo-credits-changed";
 export const DEMO_ACCOUNT_CHANGED = "hirly:demo-account-changed";
 
-import { isFinanceDemoEnabled, readDemoSettings, saveDemoSettings, DEMO_SETTINGS_STORAGE_KEY } from "./demoSettings";
+import { isFinanceDemoEnabled, readDemoSettings, saveDemoSettings, DEMO_SETTINGS_STORAGE_KEY, setFinanceDemoEligibility } from "./demoSettings";
 import { mergeDemoCvIntoProfile, hasDemoCvStored, shouldMockCvUpload } from "./demoCvUpload";
 import axios from "axios";
 import { normalizeApiPath } from "./apiPath";
@@ -23,6 +23,7 @@ export function ensureDemoAccountDefaults() {
 
 export function setDemoAccountFromUser(user, isAdmin = false) {
   cachedDemoAccount = Boolean(user?.demo_account) && !isAdmin && !Boolean(user?.is_admin);
+  setFinanceDemoEligibility(cachedDemoAccount);
   if (cachedDemoAccount) {
     ensureDemoAccountDefaults();
   }
@@ -32,7 +33,7 @@ export function setDemoAccountFromUser(user, isAdmin = false) {
 }
 
 export function isDemoAccountEnabled() {
-  return cachedDemoAccount || isFinanceDemoEnabled();
+  return cachedDemoAccount;
 }
 
 const CREDITS_KEY = "hirly.demo.credits.remaining";
