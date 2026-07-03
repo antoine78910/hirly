@@ -422,6 +422,10 @@ export default function Landing() {
               </p>
               <ul className="space-y-2">
                 {[
+                  { label: "Try Hirly", href: "/try-hirly/" },
+                  { label: lang === "fr" ? "Hirly emploi" : "Hirly jobs", href: lang === "fr" ? "/emploi/" : "/jobs/" },
+                  { label: lang === "fr" ? "Hirly travail" : "Hirly in English", href: lang === "fr" ? "/travail/" : "/en/" },
+                  { label: lang === "fr" ? "Hirly en anglais" : "Hirly en francais", href: lang === "fr" ? "/en/" : "/fr/" },
                   { label: lang === "fr" ? "Job matching, c'est quoi ?" : "What is job matching?", href: "/blog/job-matching-app" },
                   { label: lang === "fr" ? "Tinder pour l'emploi" : "Tinder for jobs", href: "/blog/tinder-emploi-app" },
                 ].map((l) => (
