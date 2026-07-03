@@ -58,7 +58,7 @@ export default function CompanyLogo({
     className,
   ].join(" ");
 
-  const logoUrl = urls[urlIndex];
+  const activeLogoUrl = urls[urlIndex];
 
   const handleError = () => {
     if (urlIndex < urls.length - 1) {
@@ -68,7 +68,7 @@ export default function CompanyLogo({
     }
   };
 
-  if (!logoUrl || failed) {
+  if (!activeLogoUrl || failed) {
     return (
       <div className={`${boxClass} font-display font-bold ${styles.text} text-zinc-800`}>
         {initial}
@@ -79,8 +79,8 @@ export default function CompanyLogo({
   return (
     <div className={boxClass}>
       <img
-        key={logoUrl}
-        src={logoUrl}
+        key={activeLogoUrl}
+        src={activeLogoUrl}
         alt={`${resolved} logo`}
         className={`${styles.img} object-contain`}
         onError={handleError}
