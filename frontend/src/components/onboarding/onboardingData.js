@@ -163,6 +163,16 @@ export function buildProfileWelcomeItems({
   ];
 }
 
+/** Hero tagline on late onboarding steps (welcome + showcase). */
+export const ONBOARDING_VALUE_TAGLINE = {
+  fr: "2× plus d'entretiens. 5× moins d'efforts.",
+  en: "2× more interviews. 5× less effort.",
+};
+
+export function getOnboardingValueTagline(lang = "fr") {
+  return ONBOARDING_VALUE_TAGLINE[lang === "fr" ? "fr" : "en"];
+}
+
 /** Steps from profile welcome through pricing (preview / dev shortcuts). */
 export const ONBOARDING_LATE_STEP_IDS = [
   "profileSetup",

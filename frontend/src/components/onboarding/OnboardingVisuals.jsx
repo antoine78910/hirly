@@ -15,6 +15,43 @@ import { ob } from "./onboardingTheme";
 const EASE_OUT = [0.4, 0, 0.2, 1];
 const EASE_SMOOTH = [0.16, 1, 0.3, 1];
 
+const CHART_COPY = {
+  en: {
+    interviewRateLabel: "Your interview rate",
+    interviewRateCaption: (brand) =>
+      `${brand} makes it easy to apply to more of the right jobs, increasing interviews.`,
+    compareOwn: "On your own",
+    compareWith: (brand) => `With ${brand}`,
+    compareCaption: (brand) =>
+      `${brand} makes it easy to apply to more of the right jobs, increasing interviews.`,
+    jobOffersAxis: "# of Job Offers",
+    month2: "Month 2",
+    month6: "Month 6",
+    traditionalSearch: "Traditional Job Search",
+    longTermCaption: (brand) =>
+      `80% of ${brand} users significantly increased job offers in 6 months.`,
+  },
+  fr: {
+    interviewRateLabel: "Votre taux d'entretiens",
+    interviewRateCaption: (brand) =>
+      `${brand} vous aide à postuler plus facilement aux bonnes offres, et à obtenir plus d'entretiens.`,
+    compareOwn: "Tout seul",
+    compareWith: (brand) => `Avec ${brand}`,
+    compareCaption: (brand) =>
+      `${brand} vous aide à postuler plus facilement aux bonnes offres, et à obtenir plus d'entretiens.`,
+    jobOffersAxis: "Nombre d'offres",
+    month2: "Mois 2",
+    month6: "Mois 6",
+    traditionalSearch: "Recherche classique",
+    longTermCaption: (brand) =>
+      `80 % des utilisateurs ${brand} ont nettement augmenté leurs offres en 6 mois.`,
+  },
+};
+
+function chartCopy(lang) {
+  return CHART_COPY[lang === "fr" ? "fr" : "en"];
+}
+
 function ChartCard({ label, children, caption }) {
   return (
     <div className={`${ob.card} p-3 sm:p-4`}>
@@ -37,9 +74,10 @@ const RATE_POINTS = [
 const DIAMOND_DELAY = 1.3;
 const RATE_END = { x: 264, y: 32 };
 
-export function InterviewRateChart() {
+export function InterviewRateChart({ lang = "en" }) {
+  const copy = chartCopy(lang);
   return (
-    <ChartCard label="Your interview rate">
+    <ChartCard label={copy.interviewRateLabel}>
       <svg viewBox="0 0 320 160" className="w-full max-h-[22dvh] sm:max-h-[26dvh] h-auto" aria-hidden>
         <defs>
           <linearGradient id="rateFillLight" x1="0" y1="0" x2="0" y2="1">
@@ -158,7 +196,7 @@ export function InterviewRateChart() {
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5, delay: 1.65 }}
       >
-        {`${BRAND.NAME} makes it easy to apply to more of the right jobs, increasing interviews.`}
+        {copy.interviewRateCaption(BRAND.NAME)}
       </motion.p>
     </ChartCard>
   );
@@ -166,23 +204,32 @@ export function InterviewRateChart() {
 
 const OWN_TARGET_PCT = 5;
 const SWIIPR_TARGET_X = 2;
+const SWIIPR_START_X = 1;
 /** Max column height (px) inside the track — scales visually via transform */
 const OWN_BAR_PX = 44;
 const SWIIPR_BAR_PX = 104;
 const SWIIPR_SCALE_AT_1X = OWN_BAR_PX / SWIIPR_BAR_PX;
 
-export function Compare2xChart() {
+function formatMultiplierLabel(value) {
+  const clamped = Math.min(SWIIPR_TARGET_X, Math.max(SWIIPR_START_X, value));
+  if (clamped >= 1.95) return "2x";
+  return `${clamped.toFixed(1)}x`;
+}
+
+export function Compare2xChart({ lang = "en" }) {
+  const copy = chartCopy(lang);
   const ownTarget = useMotionValue(0);
-  const swiiprTarget = useMotionValue(1);
+  const swiiprMultiplier = useMotionValue(SWIIPR_START_X);
   const ownMotion = useSpring(ownTarget, { stiffness: 85, damping: 20, mass: 0.5 });
-  const swiiprMotion = useSpring(swiiprTarget, { stiffness: 70, damping: 22, mass: 0.6 });
 
   const [ownLabel, setOwnLabel] = useState(0);
+  const [swiiprLabel, setSwiiprLabel] = useState("1.0x");
   const [endReveal, setEndReveal] = useState(false);
 
   useEffect(() => {
     ownTarget.set(0);
-    swiiprTarget.set(1);
+    swiiprMultiplier.set(SWIIPR_START_X);
+    setSwiiprLabel("1.0x");
     setEndReveal(false);
 
     const ownAnim = animate(ownTarget, OWN_TARGET_PCT, {
@@ -190,18 +237,22 @@ export function Compare2xChart() {
       delay: 0.2,
       ease: EASE_SMOOTH,
     });
-    const swiiprAnim = animate(swiiprTarget, SWIIPR_TARGET_X, {
-      duration: 2.4,
+    const swiiprAnim = animate(swiiprMultiplier, SWIIPR_TARGET_X, {
+      duration: 2.6,
       delay: 0.55,
       ease: EASE_SMOOTH,
-      onComplete: () => setEndReveal(true),
+      onUpdate: (value) => setSwiiprLabel(formatMultiplierLabel(value)),
+      onComplete: () => {
+        setSwiiprLabel("2x");
+        setEndReveal(true);
+      },
     });
 
     return () => {
       ownAnim.stop();
       swiiprAnim.stop();
     };
-  }, [ownTarget, swiiprTarget]);
+  }, [ownTarget, swiiprMultiplier]);
 
   useMotionValueEvent(ownMotion, "change", (v) => {
     setOwnLabel(Math.round(v));
@@ -209,17 +260,18 @@ export function Compare2xChart() {
 
   const ownScale = useTransform(ownMotion, [0, OWN_TARGET_PCT], [0, 1]);
   const swiiprScale = useTransform(
-    swiiprMotion,
-    [1, SWIIPR_TARGET_X],
+    swiiprMultiplier,
+    [SWIIPR_START_X, SWIIPR_TARGET_X],
     [SWIIPR_SCALE_AT_1X, 1],
   );
   const ownLabelBottom = useTransform(ownScale, (s) => 8 + (OWN_BAR_PX * s) / 2);
+  const swiiprLabelBottom = useTransform(swiiprScale, (s) => 8 + (SWIIPR_BAR_PX * s) / 2);
 
   return (
     <div className={`${ob.card} mx-auto w-full max-w-lg p-5 sm:p-6`}>
       <div className="flex items-end justify-center gap-6 sm:gap-12">
         <div className="flex flex-1 max-w-[9.5rem] flex-col items-center sm:max-w-[11rem]">
-          <p className="mb-4 text-center text-sm font-medium text-zinc-600 sm:text-base">On your own</p>
+          <p className="mb-4 text-center text-sm font-medium text-zinc-600 sm:text-base">{copy.compareOwn}</p>
           <div className="relative flex h-48 w-full flex-col justify-end overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 p-2 sm:h-60 sm:p-2.5">
             <motion.div
               className="w-full origin-bottom rounded-xl bg-zinc-300 will-change-transform"
@@ -235,29 +287,36 @@ export function Compare2xChart() {
         </div>
 
         <div className="flex flex-1 max-w-[9.5rem] flex-col items-center sm:max-w-[11rem]">
-          <p className={`mb-4 text-center text-sm font-semibold sm:text-base ${ob.accent}`}>With {BRAND.NAME}</p>
+          <p className={`mb-4 text-center text-sm font-semibold sm:text-base ${ob.accent}`}>{copy.compareWith(BRAND.NAME)}</p>
           <div className="relative flex h-48 w-full flex-col justify-end overflow-hidden rounded-2xl border border-violet-200 bg-zinc-50 p-2 shadow-sm sm:h-60 sm:p-2.5">
             <motion.div
               className="gradient-linkedin w-full origin-bottom rounded-xl will-change-transform"
               style={{ height: SWIIPR_BAR_PX, scaleY: swiiprScale }}
             />
-            <motion.div
-              className="pointer-events-none absolute inset-x-2 bottom-2 flex flex-col items-center gap-1.5 sm:inset-x-2.5 sm:bottom-2.5 sm:gap-2"
-              initial={false}
-              animate={{
-                opacity: endReveal ? 1 : 0,
-                scale: endReveal ? 1 : 0.94,
-              }}
-              transition={{ duration: 0.45, ease: EASE_SMOOTH }}
-            >
-              <span className="rounded-xl bg-white/95 p-1.5 shadow-sm sm:p-2">
-                <Logo size={28} className="sm:hidden" />
-                <Logo size={36} className="hidden sm:block" />
-              </span>
-              <span className="font-display text-xl font-black leading-none tabular-nums text-white sm:text-3xl">
-                2x
-              </span>
-            </motion.div>
+
+            {!endReveal ? (
+              <motion.span
+                className="pointer-events-none absolute left-1/2 -translate-x-1/2 translate-y-1/2 font-display text-xl font-black leading-none tabular-nums text-white drop-shadow-sm sm:text-3xl"
+                style={{ bottom: swiiprLabelBottom }}
+              >
+                {swiiprLabel}
+              </motion.span>
+            ) : (
+              <motion.div
+                className="pointer-events-none absolute inset-x-2 bottom-2 flex flex-col items-center gap-1.5 sm:inset-x-2.5 sm:bottom-2.5 sm:gap-2"
+                initial={{ opacity: 0, scale: 0.88, y: 6 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ duration: 0.45, ease: EASE_SMOOTH }}
+              >
+                <span className="rounded-xl bg-white/95 p-1.5 shadow-sm sm:p-2">
+                  <Logo size={28} className="sm:hidden" />
+                  <Logo size={36} className="hidden sm:block" />
+                </span>
+                <span className="font-display text-xl font-black leading-none tabular-nums text-white sm:text-3xl">
+                  2x
+                </span>
+              </motion.div>
+            )}
           </div>
         </div>
       </div>
@@ -268,7 +327,7 @@ export function Compare2xChart() {
         animate={{ opacity: endReveal ? 1 : 0, y: endReveal ? 0 : 6 }}
         transition={{ duration: 0.55, ease: EASE_SMOOTH, delay: endReveal ? 0.12 : 0 }}
       >
-        {`${BRAND.NAME} makes it easy to apply to more of the right jobs, increasing interviews.`}
+        {copy.compareCaption(BRAND.NAME)}
       </motion.p>
     </div>
   );
@@ -319,7 +378,8 @@ function LongTermBrandBadge({ x, y, delay }) {
   );
 }
 
-export function LongTermResultsChart() {
+export function LongTermResultsChart({ lang = "en" }) {
+  const copy = chartCopy(lang);
   const gridY = [60, 92, 124];
   const gridX = [56, 160, 264];
 
@@ -335,7 +395,7 @@ export function LongTermResultsChart() {
         </defs>
 
         <text x={LT_AXIS.left} y={24} fill="#52525B" fontSize="11" fontWeight="600">
-          # of Job Offers
+          {copy.jobOffersAxis}
         </text>
 
         {gridY.map((y, i) => (
@@ -393,10 +453,10 @@ export function LongTermResultsChart() {
         />
 
         <text x={LT_START.x - 8} y={168} fill="#71717A" fontSize="11" textAnchor="middle">
-          Month 2
+          {copy.month2}
         </text>
         <text x={LT_SWIIPR_END.x} y={168} fill="#71717A" fontSize="11" textAnchor="middle">
-          Month 6
+          {copy.month6}
         </text>
 
         <motion.path
@@ -478,7 +538,7 @@ export function LongTermResultsChart() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 1.55 }}
         >
-          Traditional Job Search
+          {copy.traditionalSearch}
         </motion.text>
 
         <LongTermBrandBadge x={LT_SWIIPR_END.x} y={LT_SWIIPR_END.y - 18} delay={1.25} />
@@ -490,7 +550,7 @@ export function LongTermResultsChart() {
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5, delay: 1.7 }}
       >
-        {`80% of ${BRAND.NAME} users significantly increased job offers in 6 months.`}
+        {copy.longTermCaption(BRAND.NAME)}
       </motion.p>
     </ChartCard>
   );

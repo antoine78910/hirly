@@ -17,7 +17,23 @@ import {
   ONBOARDING_PAIN_POINTS_FR,
   buildPainMarqueeRows,
   buildProfileWelcomeItems,
+  getOnboardingValueTagline,
 } from "./onboardingData";
+
+function OnboardingValueTagline({ className = "", prominent = false }) {
+  const { lang } = useAppLocale();
+  return (
+    <p
+      className={
+        prominent
+          ? `font-display text-[1.35rem] font-black leading-[1.15] tracking-tight text-zinc-900 sm:text-[1.65rem] ${className}`
+          : `text-sm font-semibold leading-snug text-linkedin sm:text-base ${className}`
+      }
+    >
+      {getOnboardingValueTagline(lang)}
+    </p>
+  );
+}
 
 const welcomeListReveal = {
   container: {
@@ -220,7 +236,8 @@ export function ProfileWelcomeStep({
         transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
       >
         <h1 className={ob.title}>{lang === "fr" ? `Bienvenue sur ${BRAND.NAME} !` : `Welcome to ${BRAND.NAME}!`}</h1>
-        <p className={ob.subtitle}>
+        <OnboardingValueTagline prominent className="mt-2" />
+        <p className={`${ob.subtitle} mt-2`}>
           {lang === "fr" ? "Voici comment nous allons vous aider à réussir :" : "Based on your profile, here\u2019s how we\u2019ll help you succeed:"}
         </p>
       </motion.div>
@@ -261,10 +278,7 @@ export function ShowcaseLandingStep() {
           <span className="font-display text-base font-bold text-swiipr-gradient">{BRAND.NAME}</span>
         </div>
 
-        <p className={`text-base sm:text-lg ${ob.muted}`}>{lang === "fr" ? "Arrêtez de postuler." : "Stop applying."}</p>
-        <h1 className="mt-0.5 font-display text-[1.55rem] font-black leading-[1.1] tracking-tight text-zinc-900 sm:text-[2rem]">
-          {lang === "fr" ? "Commencez à décrocher des entretiens." : "Start landing interviews."}
-        </h1>
+        <OnboardingValueTagline prominent className="mt-1" />
       </div>
 
       <div className="mt-1 flex min-h-0 flex-1 items-center justify-center sm:mt-1.5">
@@ -292,7 +306,8 @@ export function ShowcaseAllInOneStep() {
         <span className="font-display text-base font-bold text-swiipr-gradient">{BRAND.NAME}</span>
       </div>
 
-      <h1 className="font-display text-[1.4rem] font-black leading-tight tracking-tight text-zinc-900 sm:text-2xl">
+      <OnboardingValueTagline prominent className="mt-1" />
+      <h1 className="mt-2 font-display text-lg font-bold leading-tight tracking-tight text-zinc-900 sm:text-xl">
         {lang === "fr" ? "Tout au même endroit" : "All in one place"}
       </h1>
       <p className={`mt-1.5 max-w-sm px-2 text-sm leading-snug sm:text-base ${ob.muted}`}>
@@ -339,10 +354,10 @@ export function ShowcasePricingStep({ selectedPlan, onSelectPlan }) {
           <Logo size={22} />
           <span className="font-display text-sm font-bold text-swiipr-gradient sm:text-base">{BRAND.NAME}</span>
         </div>
-        <h1 className="font-display text-[1.2rem] font-black leading-tight tracking-tight text-zinc-900 sm:text-[1.45rem]">
+        <OnboardingValueTagline prominent className="mt-1 px-2" />
+        <p className={`mt-1 text-xs font-medium ${ob.muted}`}>
           {lang === "fr" ? "Recherche d\u2019emploi tout-en-un." : "All-in-one job search."}
-        </h1>
-        <p className={`mt-0.5 text-xs font-medium ${ob.muted}`}>{lang === "fr" ? "Partout, tout le temps." : "Anywhere, anytime."}</p>
+        </p>
       </div>
 
       <div className="mt-1 flex min-h-0 flex-1 flex-col gap-1.5 overflow-hidden sm:mt-1.5 sm:gap-2">
@@ -421,7 +436,7 @@ export function FinishOnboardingButton({ saving, onClick }) {
           {lang === "fr" ? "Démarrage…" : "Starting…"}
         </span>
       ) : (
-        lang === "fr" ? "Commencer" : "Start landing interviews"
+        getOnboardingValueTagline(lang)
       )}
     </button>
   );

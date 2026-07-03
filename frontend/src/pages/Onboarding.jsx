@@ -56,6 +56,7 @@ import {
   iconForCategoryLabel,
   SUGGESTED_ONBOARDING_LOCATIONS,
   readOnboardingPreviewBoot,
+  getOnboardingValueTagline,
 } from "../components/onboarding/onboardingData";
 import { devBypassAuth } from "../lib/dev";
 import { splitFullName } from "../lib/personalInfoOptions";
@@ -650,23 +651,33 @@ export default function Onboarding() {
 
   const footer = !hideFooter ? (
     step === "showcasePricing" ? (
-      <ContinueButton
-        onClick={startOnboardingCheckout}
-        disabled={checkoutLoading || redeemingAccessCode || saving}
-        testId="showcase-pricing-continue"
-      >
-        {checkoutLoading
-          ? (lang === "fr" ? "Ouverture du paiement..." : "Opening checkout...")
-          : redeemingAccessCode || saving
-            ? (lang === "fr" ? "Activation..." : "Activating...")
-            : (lang === "fr" ? "Continuer" : "Continue")}
-      </ContinueButton>
+      <div className="space-y-2">
+        <p className="text-center text-xs font-semibold text-linkedin">{getOnboardingValueTagline(lang)}</p>
+        <ContinueButton
+          onClick={startOnboardingCheckout}
+          disabled={checkoutLoading || redeemingAccessCode || saving}
+          testId="showcase-pricing-continue"
+        >
+          {checkoutLoading
+            ? (lang === "fr" ? "Ouverture du paiement..." : "Opening checkout...")
+            : redeemingAccessCode || saving
+              ? (lang === "fr" ? "Activation..." : "Activating...")
+              : (lang === "fr" ? "Continuer" : "Continue")}
+        </ContinueButton>
+      </div>
     ) : step === "profileWelcome" ? (
       <div className="space-y-2">
         <ContinueButton onClick={onContinue} testId="profile-welcome-continue">
           {lang === "fr" ? "Continuer" : "Continue"}
         </ContinueButton>
-        <p className="text-center text-xs text-zinc-500">{lang === "fr" ? "Assurons-nous que vous êtes prêt" : "Let\u2019s make sure you\u2019re ready"}</p>
+        <p className="text-center text-xs font-semibold text-linkedin">{getOnboardingValueTagline(lang)}</p>
+      </div>
+    ) : step === "showcaseLanding" || step === "showcaseAllInOne" ? (
+      <div className="space-y-2">
+        <p className="text-center text-xs font-semibold text-linkedin">{getOnboardingValueTagline(lang)}</p>
+        <ContinueButton onClick={onContinue} disabled={!canContinue() || parsing}>
+          {lang === "fr" ? "Continuer" : "Continue"}
+        </ContinueButton>
       </div>
     ) : step === "referralCode" ? (
       <div className="space-y-2.5">
@@ -1079,7 +1090,7 @@ export default function Onboarding() {
           <motion.div key="potentialChart" {...stepMotion}>
             <h1 className={stepTitleClass}>{lang === "fr" ? "Vous avez le potentiel pour dépasser votre objectif" : "You have great potential to crush your goal"}</h1>
             <div className={ob.stepBody}>
-              <InterviewRateChart />
+              <InterviewRateChart lang={lang} />
             </div>
           </motion.div>
         )}
@@ -1092,7 +1103,7 @@ export default function Onboarding() {
                 : `Land twice as many interviews with ${BRAND.NAME} vs on your own.`}
             </h1>
             <div className={`${ob.stepBody} items-center justify-center`}>
-              <Compare2xChart />
+              <Compare2xChart lang={lang} />
             </div>
           </motion.div>
         )}
@@ -1101,7 +1112,7 @@ export default function Onboarding() {
           <motion.div key="longTerm" {...stepMotion}>
             <h1 className={stepTitleClass}>{lang === "fr" ? `${BRAND.NAME} crée des résultats durables` : `${BRAND.NAME} creates long-term results`}</h1>
             <div className={ob.stepBody}>
-              <LongTermResultsChart />
+              <LongTermResultsChart lang={lang} />
             </div>
           </motion.div>
         )}
