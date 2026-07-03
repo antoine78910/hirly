@@ -18,7 +18,7 @@ from ats_source_service import (
     refresh_known_ats_sources,
     run_ats_direct_maintenance,
 )
-from job_providers import get_job_provider
+from job_providers import get_job_provider, is_job_provider_configured, primary_job_provider_name
 from job_providers.base import JobSearchQuery
 from job_validation import cheap_validate_job_applyability
 from jobs_service import refresh_jobs_for_profile_if_needed, upsert_imported_jobs
@@ -242,11 +242,12 @@ async def _refresh_jobs_for_expanded_locations(
         summary["reason"] = "dry_run"
         return summary
 
-    api_key = os.environ.get("JSEARCH_API_KEY")
-    if not api_key:
-        summary["errors"].append("missing_jsearch_api_key")
+    provider_name = primary_job_provider_name()
+    if not is_job_provider_configured(provider_name):
+        summary["errors"].append("missing_job_provider_credentials")
         return summary
-    provider = get_job_provider(os.environ.get("JOB_PROVIDER_PRIMARY", "jsearch"), api_key)
+    api_key = os.environ.get("JSEARCH_API_KEY") or ""
+    provider = get_job_provider(provider_name, api_key)
     per_query_limit = max(1, min(refresh_limit, env_int("JOBS_ADMIN_LOCATION_REFRESH_RESULTS_PER_CITY", 30), 100))
     page_size = max(5, min(env_int("JSEARCH_FEED_FALLBACK_PAGE_SIZE", 10), 50))
     max_pages = max(1, min(env_int("JSEARCH_FEED_FALLBACK_MAX_PAGES", 1), 3))

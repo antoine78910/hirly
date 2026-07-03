@@ -15,7 +15,13 @@ from typing import Any, Dict, List, Optional, Tuple
 import httpx
 
 from employment_kind import contract_type_query_hint, enrich_job_employment_kind, resolve_profile_contract_type
-from job_providers import get_board_provider, get_job_provider
+from job_providers import (
+    get_board_provider,
+    get_job_provider,
+    is_job_provider_configured,
+    is_job_provider_enabled,
+    primary_job_provider_name,
+)
 from job_providers.apply_eligibility import is_manual_fulfillment_ready
 from job_providers.base import BoardQuery, JobSearchQuery
 from job_validation import cheap_validate_job_applyability
@@ -1196,18 +1202,18 @@ async def refresh_jobs_for_profile_if_needed(
                 **base_metadata,
             }
 
-    if not _env_bool("JSEARCH_ENABLED", True):
+    provider_name = primary_job_provider_name()
+    if not is_job_provider_enabled(provider_name):
         return {"attempted": bool(greenhouse_result or lever_result), "reason": "disabled", "greenhouse": greenhouse_result, "lever": lever_result, **base_metadata}
 
-    api_key = os.environ.get("JSEARCH_API_KEY")
-    if not api_key:
+    if not is_job_provider_configured(provider_name):
         return {"attempted": bool(greenhouse_result or lever_result), "reason": "missing_api_key", "greenhouse": greenhouse_result, "lever": lever_result, **base_metadata}
 
-    provider_name = os.environ.get("JOB_PROVIDER_PRIMARY", "jsearch")
+    api_key = os.environ.get("JSEARCH_API_KEY") or ""
     provider = get_job_provider(provider_name, api_key)
     cooldown_until = _cooldown_until(provider.name)
     if cooldown_until:
-        logger.info("Skipping JSearch refresh during provider cooldown until %s", cooldown_until.isoformat())
+        logger.info("Skipping %s refresh during provider cooldown until %s", provider.name, cooldown_until.isoformat())
         return {
             "attempted": False,
             "reason": "provider_rate_limited",

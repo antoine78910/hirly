@@ -80,7 +80,14 @@ from jobs_service import (
     seed_lever_company_boards,
 )
 import jobs_service as jobs_service_module
-from job_providers import get_board_provider, get_job_provider
+from job_providers import (
+    get_board_provider,
+    get_configured_job_provider,
+    get_job_provider,
+    is_job_provider_configured,
+    is_job_provider_enabled,
+    primary_job_provider_name,
+)
 from job_providers.apply_eligibility import classify_apply_link, is_manual_fulfillment_ready
 from job_providers.base import JobSearchQuery
 from job_cache_maintenance import (
@@ -3624,17 +3631,18 @@ async def get_feed(
 
     async def _legacy_jsearch_only_feed() -> Dict[str, Any]:
         legacy_started = time.perf_counter()
-        api_key = os.environ.get("JSEARCH_API_KEY")
-        if not api_key:
-            logger.warning("jobs/feed legacy_jsearch missing_api_key")
+        provider_name = primary_job_provider_name()
+        if not is_job_provider_configured(provider_name):
+            logger.warning("jobs/feed legacy_provider missing_api_key provider=%s", provider_name)
             return {
                 "jobs": [],
                 "total": 0,
                 "feed_mode": "legacy_jsearch_only",
-                "fallback_reason": "missing_jsearch_api_key",
+                "fallback_reason": "missing_job_provider_credentials",
                 "provider_rate_limited": False,
                 "refresh_results": [{"attempted": False, "reason": "missing_api_key"}],
             }
+        api_key = os.environ.get("JSEARCH_API_KEY") or ""
         selected_location_data = None
         selected_location_label = None
         if locations_json:
@@ -3678,7 +3686,7 @@ async def get_feed(
             max_pages=max(1, min(_env_int("JOBS_FEED_LEGACY_JSEARCH_MAX_PAGES", 1), 3)),
             page_size=max(5, min(_env_int("JOBS_FEED_LEGACY_JSEARCH_PAGE_SIZE", 20), 50)),
         )
-        provider = get_job_provider(os.environ.get("JOB_PROVIDER_PRIMARY", "jsearch"), api_key)
+        provider = get_job_provider(provider_name, api_key)
         jsearch_attempted = True
         jsearch_error = None
         try:
@@ -5632,8 +5640,9 @@ async def get_feed(
 
     return await _fast_cached_feed()
 
-    provider_enabled = os.environ.get("JSEARCH_ENABLED", "true").lower() in ("1", "true", "yes", "on")
-    provider_configured = bool(os.environ.get("JSEARCH_API_KEY"))
+    provider_name = primary_job_provider_name()
+    provider_enabled = is_job_provider_enabled(provider_name)
+    provider_configured = is_job_provider_configured(provider_name)
     fallback_mock = os.environ.get("JOB_PROVIDER_FALLBACK_MOCK", "false").lower() in ("1", "true", "yes", "on")
     profile_location_data = profile.get("target_location_data") or {}
     profile_country_code = (profile_location_data.get("country_code") or "").strip().lower()
@@ -6703,12 +6712,12 @@ async def admin_jobs_feed_diagnostic(body: AdminJobsFeedDiagnosticRequest, admin
     strict_rows = await db.jobs.find(strict_query, {"_id": 0}).limit(1000).to_list(1000)
     legacy_rows = await db.jobs.find(legacy_query, {"_id": 0}).limit(1000).to_list(1000)
     legacy_applyable = [_with_apply_fulfillment_fields(job) for job in legacy_rows if _job_is_applyable(job)]
-    jsearch_attempted = False
-    jsearch_count = 0
-    jsearch_error = None
-    if os.environ.get("JSEARCH_API_KEY"):
+    provider_attempted = False
+    provider_count = 0
+    provider_error = None
+    if is_job_provider_configured(primary_job_provider_name()):
         try:
-            provider = get_job_provider(os.environ.get("JOB_PROVIDER_PRIMARY", "jsearch"), os.environ["JSEARCH_API_KEY"])
+            provider = get_configured_job_provider()
             query = JobSearchQuery(
                 role=body.search_role or "sales",
                 location=body.location,
@@ -6718,20 +6727,24 @@ async def admin_jobs_feed_diagnostic(body: AdminJobsFeedDiagnosticRequest, admin
                 max_pages=1,
                 page_size=max(5, min(body.limit * 2, 20)),
             )
-            jsearch_attempted = True
+            provider_attempted = True
             result = await provider.search(query)
-            jsearch_count = len(result.jobs)
+            provider_count = len(result.jobs)
         except Exception as exc:
-            jsearch_error = f"{exc.__class__.__name__}: {str(exc)[:160]}"
+            provider_error = f"{exc.__class__.__name__}: {str(exc)[:160]}"
     return {
         "db_strict_count": len(strict_rows),
         "db_legacy_direct_count": len(legacy_rows),
         "db_legacy_applyable_count": len(legacy_applyable),
-        "jsearch_attempted": jsearch_attempted,
-        "jsearch_count": jsearch_count,
-        "jsearch_error": jsearch_error,
+        "jsearch_attempted": provider_attempted,
+        "jsearch_count": provider_count,
+        "jsearch_error": provider_error,
+        "provider_attempted": provider_attempted,
+        "provider_count": provider_count,
+        "provider_error": provider_error,
+        "provider_name": primary_job_provider_name(),
         "final_new_feed_count_estimate": min(len(strict_rows) or len(legacy_applyable), body.limit),
-        "final_legacy_feed_count_estimate": min(jsearch_count, body.limit),
+        "final_legacy_feed_count_estimate": min(provider_count, body.limit),
         "cooldown": {
             "feed_active": time.monotonic() < _feed_sync_refresh_cooldown_until,
             "feed_remaining_seconds": max(0, int(_feed_sync_refresh_cooldown_until - time.monotonic())),
@@ -11149,11 +11162,10 @@ async def dev_jsearch_test(q: str = "software engineer", location: str = "New Yo
     if not dev_enabled:
         raise HTTPException(status_code=404, detail="Not found")
 
-    api_key = os.environ.get("JSEARCH_API_KEY")
-    if not api_key:
-        raise HTTPException(status_code=500, detail="JSEARCH_API_KEY is not configured")
+    if not is_job_provider_configured(primary_job_provider_name()):
+        raise HTTPException(status_code=500, detail="Primary job provider credentials are not configured")
 
-    provider = get_job_provider(os.environ.get("JOB_PROVIDER_PRIMARY", "jsearch"), api_key)
+    provider = get_configured_job_provider()
     query = JobSearchQuery(
         role=q,
         location=location,
@@ -11165,12 +11177,46 @@ async def dev_jsearch_test(q: str = "software engineer", location: str = "New Yo
     try:
         result = await provider.search(query)
     except ValueError as exc:
-        logger.warning("Dev JSearch response parse failed: %s", exc)
+        logger.warning("Dev job provider response parse failed: %s", exc)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except Exception as exc:
-        logger.warning("Dev JSearch test failed: %s", exc)
-        raise HTTPException(status_code=502, detail="JSearch provider request failed") from exc
-    return {"jobs": result.jobs, "count": len(result.jobs)}
+        logger.warning("Dev job provider test failed: %s", exc)
+        raise HTTPException(status_code=502, detail="Job provider request failed") from exc
+    return {"provider": provider.name, "jobs": result.jobs, "count": len(result.jobs)}
+
+
+@api_router.get("/dev/france-travail-test")
+async def dev_france_travail_test(q: str = "développeur", location: str = "Lyon, France", limit: int = 5):
+    dev_enabled = (
+        os.environ.get("ENVIRONMENT", "").lower() == "development"
+        or os.environ.get("DEV_TOOLS_ENABLED", "false").lower() in ("1", "true", "yes", "on")
+    )
+    if not dev_enabled:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    if not is_job_provider_configured("france_travail"):
+        raise HTTPException(status_code=500, detail="France Travail credentials are not configured")
+
+    provider = get_job_provider("france_travail", "")
+    query = JobSearchQuery(
+        role=q,
+        location=location,
+        remote_preference="any",
+        country="fr",
+        language="fr",
+        limit=max(1, min(limit, 20)),
+        max_pages=1,
+        page_size=max(5, min(limit * 3, 20)),
+    )
+    try:
+        result = await provider.search(query)
+    except ValueError as exc:
+        logger.warning("Dev France Travail response parse failed: %s", exc)
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.warning("Dev France Travail test failed: %s", exc)
+        raise HTTPException(status_code=502, detail="France Travail provider request failed") from exc
+    return {"provider": provider.name, "jobs": result.jobs, "count": len(result.jobs), "raw": result.raw_response}
 
 
 @api_router.get("/dev/greenhouse-import-test")
