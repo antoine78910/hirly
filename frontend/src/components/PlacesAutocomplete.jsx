@@ -9,6 +9,23 @@ import { isFrench, translateLocationLabel } from "../lib/localizedDisplay";
 
 const EMPTY_SUGGESTIONS = [];
 
+function isAbort(err) {
+  return err?.name === "AbortError" || err?.code === "ERR_CANCELED";
+}
+
+function dedupeResults(items) {
+  const seen = new Set();
+  const out = [];
+  for (const item of items) {
+    const key = (item.label || "").toLowerCase().trim();
+    if (key && !seen.has(key)) {
+      seen.add(key);
+      out.push(item);
+    }
+  }
+  return out;
+}
+
 function resultToLocation(result) {
   return {
     location_label: result.label || "",
@@ -70,11 +87,11 @@ export default function PlacesAutocomplete({
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState([]);
   const [focused, setFocused] = useState(false);
+  const [dropdownRect, setDropdownRect] = useState(null);
   const blurTimerRef = useRef(null);
   const requestIdRef = useRef(0);
   const abortRef = useRef(null);
   const anchorRef = useRef(null);
-  const [dropdownRect, setDropdownRect] = useState(null);
 
   const visibleSuggestions = maxSuggestions ? suggestions.slice(0, maxSuggestions) : suggestions;
   const trimmedValue = (value || "").trim();
@@ -82,9 +99,6 @@ export default function PlacesAutocomplete({
     selectedLocation?.location_label
     && selectedLocation.location_label === value,
   );
-
-  // Never show red — we only suggest, never block
-  const isInvalid = false;
 
   const showSearchDropdown = focused
     && trimmedValue.length >= 2
@@ -119,19 +133,21 @@ export default function PlacesAutocomplete({
 
   const applyLocation = useCallback((location) => {
     setResults([]);
-    setTouched(false);
     setFocused(false);
     onSelect(location);
     onInputChange(location.location_label);
   }, [onInputChange, onSelect]);
 
+  // Compute dropdown position using pageY offsets (works with mobile keyboard scroll)
   const updateDropdownRect = useCallback(() => {
     const node = anchorRef.current;
     if (!node) return;
     const rect = node.getBoundingClientRect();
+    // getBoundingClientRect is relative to the visual viewport.
+    // Adding pageY/pageX gives absolute document coords, correct for position:absolute on body.
     setDropdownRect({
-      top: rect.bottom + 4,
-      left: rect.left,
+      top: rect.bottom + (window.pageYOffset ?? window.scrollY ?? 0) + 4,
+      left: rect.left + (window.pageXOffset ?? window.scrollX ?? 0),
       width: rect.width,
     });
   }, []);
@@ -144,9 +160,18 @@ export default function PlacesAutocomplete({
     updateDropdownRect();
     window.addEventListener("resize", updateDropdownRect);
     window.addEventListener("scroll", updateDropdownRect, true);
+    const vv = window.visualViewport;
+    if (vv) {
+      vv.addEventListener("resize", updateDropdownRect);
+      vv.addEventListener("scroll", updateDropdownRect);
+    }
     return () => {
       window.removeEventListener("resize", updateDropdownRect);
       window.removeEventListener("scroll", updateDropdownRect, true);
+      if (vv) {
+        vv.removeEventListener("resize", updateDropdownRect);
+        vv.removeEventListener("scroll", updateDropdownRect);
+      }
     };
   }, [showDropdown, trimmedValue, updateDropdownRect]);
 
@@ -159,9 +184,11 @@ export default function PlacesAutocomplete({
     }
 
     const requestId = ++requestIdRef.current;
-    const fallback = localSuggestionResults(trimmedValue, suggestions, 10);
-    // Show local matches immediately while the network request is in flight
-    setResults(fallback);
+    const localMatches = localSuggestionResults(trimmedValue, suggestions, 10);
+    const typedNow = buildTypedLocationResult(trimmedValue);
+    // Show local matches + typed entry immediately so there's always something visible
+    const immediate = dedupeResults([...localMatches, ...typedNow]);
+    setResults(immediate);
     setSearching(true);
 
     const handle = setTimeout(async () => {
@@ -169,9 +196,9 @@ export default function PlacesAutocomplete({
       const controller = new AbortController();
       abortRef.current = controller;
 
-      const resolveResults = async () => {
-        // Run backend and Photon client-side in parallel — use whichever wins
-        const backendPromise = api
+      try {
+        // Run backend and Photon client-side in parallel
+        const safeBackend = api
           .get("/locations/search", {
             params: { q: trimmedValue, limit: 12 },
             timeout: 8000,
@@ -179,48 +206,29 @@ export default function PlacesAutocomplete({
           })
           .then((res) => res.data?.results || [])
           .catch((err) => {
-            if (err?.code === "ERR_CANCELED" || err?.name === "AbortError") throw err;
+            if (isAbort(err)) throw err;
             return [];
           });
 
-        const photonPromise = searchLocationsClient(trimmedValue, 12, controller.signal).catch(
+        const safePhoton = searchLocationsClient(trimmedValue, 12, controller.signal).catch(
           (err) => {
-            if (err?.name === "AbortError" || err?.code === "ERR_CANCELED") throw err;
+            if (isAbort(err)) throw err;
             return [];
           },
         );
 
-        // Show the first non-empty result as a quick preview, then merge both
-        const [backendResults, photonResults] = await Promise.all([
-          backendPromise,
-          photonPromise,
-        ]);
+        const [backendResults, photonResults] = await Promise.all([safeBackend, safePhoton]);
 
-        // Merge: backend first (better quality), then Photon for extra coverage
-        const seen = new Set();
-        const merged = [];
-        for (const result of [...backendResults, ...photonResults]) {
-          const key = (result.label || "").toLowerCase().trim();
-          if (key && !seen.has(key)) {
-            seen.add(key);
-            merged.push(result);
-          }
-        }
-        if (merged.length > 0) return merged.slice(0, 12);
-
-        // Last resort: let user confirm what they typed as a free-form city
-        const typed = buildTypedLocationResult(trimmedValue);
-        return typed.length > 0 ? [...fallback, ...typed] : fallback;
-      };
-
-      try {
-        const nextResults = await resolveResults();
         if (requestId !== requestIdRef.current) return;
-        setResults(nextResults);
-      } catch (error) {
-        if (requestId !== requestIdRef.current || error?.code === "ERR_CANCELED") return;
+
+        // Merge: backend first (higher quality), then Photon, then typed entry as anchor
         const typed = buildTypedLocationResult(trimmedValue);
-        setResults(typed.length > 0 ? [...fallback, ...typed] : fallback);
+        const merged = dedupeResults([...backendResults, ...photonResults, ...typed]);
+        setResults(merged.length > 0 ? merged.slice(0, 12) : immediate);
+      } catch (error) {
+        if (requestId !== requestIdRef.current || isAbort(error)) return;
+        // Both APIs failed — keep the immediate results (local + typed)
+        setResults(immediate);
       } finally {
         if (requestId === requestIdRef.current) setSearching(false);
       }
@@ -356,7 +364,7 @@ export default function PlacesAutocomplete({
                 className={dropdownClass}
                 role="listbox"
                 style={{
-                  position: "fixed",
+                  position: "absolute",
                   top: dropdownRect.top,
                   left: dropdownRect.left,
                   width: dropdownRect.width,
@@ -385,58 +393,35 @@ export default function PlacesAutocomplete({
                   </>
                 ) : (
                   <>
-                {searching && results.length === 0 && (
-                  <div className={`px-4 py-3 text-sm ${light ? "text-zinc-500" : "text-zinc-500"}`}>
-                    {isFrench(lang) ? "Recherche de villes, villages et régions..." : "Searching cities, towns, and villages..."}
-                  </div>
-                )}
-                {results.map((result) => {
-                  const badge = kindLabel(result.kind);
-                  return (
-                    <button
-                      key={result.id}
-                      type="button"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => selectResult(result)}
-                      className={optionClass}
-                      data-testid={`${testId}-option`}
-                      role="option"
-                    >
-                      <MapPin className={`w-4 h-4 shrink-0 mt-0.5 ${light ? "text-linkedin" : "text-sprout-mint"}`} />
-                      <span className="min-w-0">
-                        <span className="block">{translateLocationLabel(result.label, lang)}</span>
-                        {badge ? (
-                          <span className={`block text-xs mt-0.5 ${light ? "text-zinc-400" : "text-zinc-500"}`}>
-                            {badge}
+                    {searching && results.length === 0 && (
+                      <div className={`px-4 py-3 text-sm ${light ? "text-zinc-500" : "text-zinc-500"}`}>
+                        {isFrench(lang) ? "Recherche..." : "Searching..."}
+                      </div>
+                    )}
+                    {results.map((result) => {
+                      const badge = kindLabel(result.kind);
+                      return (
+                        <button
+                          key={result.id}
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => selectResult(result)}
+                          className={optionClass}
+                          data-testid={`${testId}-option`}
+                          role="option"
+                        >
+                          <MapPin className={`w-4 h-4 shrink-0 mt-0.5 ${light ? "text-linkedin" : "text-sprout-mint"}`} />
+                          <span className="min-w-0">
+                            <span className="block">{translateLocationLabel(result.label, lang)}</span>
+                            {badge ? (
+                              <span className={`block text-xs mt-0.5 ${light ? "text-zinc-400" : "text-zinc-500"}`}>
+                                {badge}
+                              </span>
+                            ) : null}
                           </span>
-                        ) : null}
-                      </span>
-                    </button>
-                  );
-                })}
-                {!searching && results.length === 0 && (
-                  <>
-                    <div className={`px-4 py-3 text-sm ${light ? "text-zinc-500" : "text-zinc-500"}`}>
-                      {isFrench(lang)
-                        ? "Aucune localisation trouvée. Essayez une ville voisine ou choisissez un lieu populaire :"
-                        : "No locations found. Try a nearby city or pick a popular location:"}
-                    </div>
-                    {visibleSuggestions.slice(0, 5).map((suggestion) => (
-                      <button
-                        key={suggestion}
-                        type="button"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => selectSuggestion(suggestion)}
-                        className={optionClass}
-                        data-testid={`${testId}-popular-option`}
-                        role="option"
-                      >
-                        <MapPin className={`w-4 h-4 shrink-0 mt-0.5 ${light ? "text-linkedin" : "text-sprout-mint"}`} />
-                        <span className="block">{translateLocationLabel(suggestion, lang)}</span>
-                      </button>
-                    ))}
-                  </>
-                )}
+                        </button>
+                      );
+                    })}
                   </>
                 )}
               </div>,
