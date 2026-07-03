@@ -2398,16 +2398,114 @@ Return JSON: {{"matches": [{{"job_id": "...", "score": 0-100, "reasons": ["...",
     return parsed.get("matches", [])
 
 
+# ATS-specific formatting constraints passed to Claude for each known provider.
+_ATS_HINTS: Dict[str, str] = {
+    "greenhouse": (
+        "This job is posted on Greenhouse ATS. "
+        "Greenhouse parses structured fields (role title, dates, company name) and plain text bullets. "
+        "Avoid tables, columns, text boxes, graphics, headers/footers, and icons. "
+        "Use standard section titles: Summary, Experience, Education, Skills. "
+        "Dates must follow MM/YYYY or YYYY format. "
+        "Bullet points should start with strong action verbs and include measurable outcomes where possible."
+    ),
+    "lever": (
+        "This job is posted on Lever ATS. "
+        "Lever uses keyword matching against the job description. "
+        "Avoid multi-column layouts, tables, and embedded images. "
+        "Section titles must be standard (Experience, Education, Skills). "
+        "Mirror the exact terminology used in the job description for skills and tools."
+    ),
+    "ashby": (
+        "This job is posted on Ashby ATS. "
+        "Ashby parses single-column PDF/DOCX resumes cleanly. "
+        "Use standard section order: Summary, Experience, Education, Skills. "
+        "Dates in MM/YYYY format. Bullet action verbs + quantified results preferred."
+    ),
+    "workday": (
+        "This job is posted on Workday ATS. "
+        "Workday is strict on parsing: use a single-column layout, plain text bullets, no tables or graphics. "
+        "Job titles must be standard industry titles, not creative/custom ones. "
+        "Dates: Month YYYY — Month YYYY format. "
+        "Workday scores keywords heavily — mirror exact phrases from the job description."
+    ),
+    "icims": (
+        "This job is posted on iCIMS ATS. "
+        "iCIMS performs aggressive keyword matching. Use the exact skill/tool names from the job description. "
+        "Single-column layout, no tables. Standard section titles only."
+    ),
+    "smartrecruiters": (
+        "This job is posted on SmartRecruiters ATS. "
+        "SmartRecruiters parses standard single-column resumes. "
+        "Mirror job description keywords precisely. Standard section titles. No graphics."
+    ),
+    "teamtailor": (
+        "This job is posted on Teamtailor ATS. "
+        "Teamtailor performs basic keyword extraction. Plain text, single-column format recommended. "
+        "Mirror exact skill names from the job description."
+    ),
+    "workable": (
+        "This job is posted on Workable ATS. "
+        "Workable scores resumes on keyword density vs. the job description. "
+        "Single-column layout, plain text bullets. Mirror exact terminology from the job requirements."
+    ),
+    "successfactors": (
+        "This job is posted on SAP SuccessFactors ATS. "
+        "SuccessFactors is strict on format: single-column, no tables/graphics, standard section titles. "
+        "Dates: MM/YYYY. Job titles must be standard. Heavy keyword scoring against description."
+    ),
+    "personio": (
+        "This job is posted on Personio ATS. "
+        "Personio uses keyword-based screening. Plain text, single-column. "
+        "Mirror exact skill and role terminology from the job posting."
+    ),
+    "bamboohr": (
+        "This job is posted on BambooHR ATS. "
+        "BambooHR parses single-column resumes. Standard sections, plain bullets, no graphics."
+    ),
+    "flatchr": (
+        "This job is posted on Flatchr ATS (French market). "
+        "Flatchr uses keyword matching. Mirror exact French and English terms from the job description. "
+        "Single-column layout, standard section titles."
+    ),
+    "taleez": (
+        "This job is posted on Taleez ATS (French market). "
+        "Taleez scores on keyword coverage. Use exact French terminology from the job posting."
+    ),
+    "recruitee": (
+        "This job is posted on Recruitee ATS. "
+        "Single-column format, plain text bullets, standard section titles. Mirror job description keywords."
+    ),
+}
+
+_ATS_DEFAULT_HINT = (
+    "The ATS used by this company is unknown. "
+    "Apply conservative ATS-safe defaults: single-column layout, no tables or graphics, "
+    "standard section titles (Summary, Experience, Education, Skills), plain text bullets, "
+    "and mirror the exact keywords and skill names from the job description."
+)
+
+
+def _ats_hint_for_job(job: Dict[str, Any]) -> str:
+    provider = (job.get("ats_provider") or "").strip().lower()
+    return _ATS_HINTS.get(provider, _ATS_DEFAULT_HINT)
+
+
 async def claude_generate_application(profile: Dict[str, Any], job: Dict[str, Any]) -> Dict[str, Any]:
     system_message = (
-        "You are an elite career coach and resume tailoring specialist. "
+        "You are an elite ATS optimization specialist and resume tailoring expert. "
         "Return ONLY valid JSON. Do not invent facts, companies, dates, degrees, "
         "certifications, metrics, work authorization, or tools not present in the candidate data."
     )
 
     job_description = job.get("clean_description") or job.get("description") or ""
     job_requirements = job.get("requirements") or []
-    prompt = f"""Create a tailored application package for this job.
+    ats_hint = _ats_hint_for_job(job)
+    ats_provider_label = (job.get("ats_provider") or "unknown").upper()
+
+    prompt = f"""Create an ATS-optimized tailored application package for this job.
+
+ATS CONTEXT — {ats_provider_label}:
+{ats_hint}
 
 Rules:
 - Use the uploaded CV text, structured profile, full job description, and requirements.
@@ -2415,6 +2513,7 @@ Rules:
 - Preserve candidate identity/contact details.
 - Rewrite summary, reorder skills, and rewrite existing bullets to emphasize relevant experience.
 - Do not add employers, roles, degrees, dates, certifications, tools, or achievements not supported by the CV/profile.
+- Mirror the exact keywords, skill names, and tool names from the job description (ATS keyword matching).
 - Generate likely/common application question answers only when answerable from candidate data. If unknown, answer conservatively.
 
 Candidate profile:
@@ -2437,6 +2536,7 @@ Job:
 - Title: {job.get('title')}
 - Company: {job.get('company')}
 - Location: {job.get('location')} ({job.get('remote')})
+- ATS: {ats_provider_label}
 - Description: {job_description}
 - Requirements: {json.dumps(job_requirements)}
 - Tech: {json.dumps(job.get('tech_stack', []))}
@@ -2445,11 +2545,11 @@ Return JSON with this exact schema:
 {{
   "tailored_resume_structured": {{
     "contact": {{"name": "...", "email": "...", "phone": "...", "location": "...", "linkedin": "...", "website": "..."}},
-    "summary": "Rewritten 2-3 sentence summary tailored for the role",
-    "skills": ["skill1", "skill2", "max 12, most relevant first"],
-    "experience": [{{"role": "...", "company": "...", "duration": "...", "location": "...", "highlights": ["rewritten bullet 1", "rewritten bullet 2", "rewritten bullet 3"]}}],
+    "summary": "Rewritten 2-3 sentence summary tailored for the role and ATS-optimized",
+    "skills": ["skill1", "skill2", "max 12, most relevant first, mirroring job description terminology"],
+    "experience": [{{"role": "...", "company": "...", "duration": "...", "location": "...", "highlights": ["action verb + result bullet 1", "action verb + result bullet 2", "action verb + result bullet 3"]}}],
     "education": [{{"degree": "...", "school": "...", "year": "..."}}],
-    "content_plan": ["short instruction for how the original CV should be adjusted"]
+    "content_plan": ["short instruction for how the original CV should be adjusted for ATS"]
   }},
   "tailored_cover_letter": {{
     "greeting": "Dear {job['company']} team,",
@@ -2459,7 +2559,13 @@ Return JSON with this exact schema:
   "application_answers": [{{"question": "Why are you interested in this role?", "answer": "truthful concise answer grounded in candidate data"}}],
   "match_score": 0-100,
   "match_reasons": ["short reason 1", "short reason 2", "short reason 3"],
-  "interview_prep": ["likely question 1", "likely question 2", "likely question 3"]
+  "interview_prep": ["likely question 1", "likely question 2", "likely question 3"],
+  "ats_score_before": <integer 0-100, estimate of ATS score for the original CV against this job description, based on keyword coverage and format>,
+  "ats_score_after": <integer 0-100, estimated ATS score after your optimizations above>,
+  "ats_provider": "{ats_provider_label}",
+  "keywords_gap": [
+    {{"keyword": "exact keyword from job description", "present_in_original": true/false, "added_in_optimized": true/false}}
+  ]
 }}"""
     response = await complete_json_text(system_message, prompt)
     parsed = _parse_json_from_llm(response)
@@ -2584,6 +2690,10 @@ def _build_generated_application_doc(
         "match_score": gen.get("match_score", 75),
         "match_reasons": gen.get("match_reasons", []),
         "interview_prep": gen.get("interview_prep", []),
+        "ats_provider": gen.get("ats_provider") or job.get("ats_provider") or None,
+        "ats_score_before": gen.get("ats_score_before"),
+        "ats_score_after": gen.get("ats_score_after"),
+        "keywords_gap": gen.get("keywords_gap") or [],
         "created_at": now,
         "updated_at": now,
     }
