@@ -37,7 +37,7 @@ export default function SEOHead({ title, description, keywords, canonical, jsonL
       document.head.appendChild(link);
     }
     const prev = link.getAttribute("href");
-    link.setAttribute("href", `https://hirly.app${canonical}`);
+    link.setAttribute("href", `https://tryhirly.com${canonical}`);
     return () => {
       if (created) link.remove();
       else link.setAttribute("href", prev ?? "");

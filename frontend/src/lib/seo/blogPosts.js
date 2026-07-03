@@ -16,8 +16,8 @@ export const blogPosts = [
     date: "2026-07-03",
     intro:
       "Trouver un emploi rapidement ne veut pas dire multiplier les candidatures au hasard. Les profils qui décrochent un entretien en moins de 3 semaines ciblent les bonnes offres, adaptent leur CV et leur lettre de motivation, et automatisent le reste. L'objectif est de maximiser ses chances sans raccourcis douteux ni méthodes qui nuisent à la crédibilité.",
-    ctaMid: { text: "Laisse Hirly postuler pour toi", href: "https://hirly.app" },
-    ctaEnd: { text: "Commence à swiper tes prochaines offres", href: "https://hirly.app" },
+    ctaMid: { text: "Laisse Hirly postuler pour toi", href: "https://tryhirly.com" },
+    ctaEnd: { text: "Commence à swiper tes prochaines offres", href: "https://tryhirly.com" },
     sections: [
       {
         h2: "Pourquoi envoyer beaucoup de CVs est contre-productif en recherche d'emploi",
@@ -155,8 +155,8 @@ export const blogPosts = [
     date: "2026-07-03",
     intro:
       "Choisir la meilleure app emploi en 2026 dépend moins du volume d'offres que de la qualité du processus de candidature. L'IA a changé la donne : matching, CV personnalisé, soumission ATS automatique. Ce comparatif est honnête — forces et limites de chaque outil, sans publicité déguisée. L'objectif est de maximiser vos chances sans raccourcis douteux ni méthodes qui nuisent à la crédibilité.",
-    ctaMid: { text: "Essayer Hirly gratuitement", href: "https://hirly.app" },
-    ctaEnd: { text: "Commencer avec Hirly", href: "https://hirly.app" },
+    ctaMid: { text: "Essayer Hirly gratuitement", href: "https://tryhirly.com" },
+    ctaEnd: { text: "Commencer avec Hirly", href: "https://tryhirly.com" },
     sections: [
       {
         h2: "Comment comparer les meilleures apps emploi en 2026",
@@ -299,8 +299,8 @@ export const blogPosts = [
     date: "2026-07-03",
     intro:
       "Automatiser sa recherche d'emploi en 2026 ne signifie pas envoyer des centaines de CVs génériques. Cela signifie déléguer les tâches répétitives — veille, adaptation du CV, soumission ATS, suivi — pour concentrer votre énergie sur les entretiens. Voici comment construire une stack efficace, sans raccourcis douteux ni méthodes qui nuisent à la crédibilité.",
-    ctaMid: { text: "Tester l'automatisation avec Hirly", href: "https://hirly.app" },
-    ctaEnd: { text: "Automatise tes candidatures avec Hirly", href: "https://hirly.app" },
+    ctaMid: { text: "Tester l'automatisation avec Hirly", href: "https://tryhirly.com" },
+    ctaEnd: { text: "Automatise tes candidatures avec Hirly", href: "https://tryhirly.com" },
     sections: [
       {
         h2: "Diagnostic : pourquoi la recherche d'emploi manuelle prend autant de temps",
@@ -427,8 +427,8 @@ export const blogPosts = [
     date: "2026-07-03",
     intro:
       "Passer les filtres ATS est souvent la première étape invisible d'une candidature. Plus de 70 % des startups et ETI tech utilisent un logiciel de recrutement (Greenhouse, Lever, Workday, Ashby) pour trier les CV avant qu'un humain ne les lise. Si votre CV n'est pas lisible par ces systèmes, vous êtes éliminé sans retour. Voici comment les ATS fonctionnent et comment optimiser chaque candidature — sans raccourcis douteux ni méthodes qui nuisent à la crédibilité.",
-    ctaMid: { text: "Laisser Hirly soumettre directement à l'ATS", href: "https://hirly.app" },
-    ctaEnd: { text: "Postuler via Hirly et bypasser les formulaires", href: "https://hirly.app" },
+    ctaMid: { text: "Laisser Hirly soumettre directement à l'ATS", href: "https://tryhirly.com" },
+    ctaEnd: { text: "Postuler via Hirly et bypasser les formulaires", href: "https://tryhirly.com" },
     sections: [
       {
         h2: "Mythe vs réalité : comment fonctionne un ATS en 2026",
@@ -564,8 +564,8 @@ export const blogPosts = [
     date: "2026-07-03",
     intro:
       "Une job matching app ne se contente pas de lister des offres : elle analyse votre profil et calcule un score de compatibilité avec chaque poste. Contrairement aux jobboards classiques où vous cherchez par mots-clés, le job matching inverse la logique — l'algorithme vous propose les offres pertinentes. Voici comment ça fonctionne, et pourquoi c'est l'avenir de la recherche d'emploi, sans raccourcis douteux ni méthodes qui nuisent à la crédibilité.",
-    ctaMid: { text: "Essayer le matching IA de Hirly", href: "https://hirly.app" },
-    ctaEnd: { text: "Trouvez vos prochaines offres avec Hirly", href: "https://hirly.app" },
+    ctaMid: { text: "Essayer le matching IA de Hirly", href: "https://tryhirly.com" },
+    ctaEnd: { text: "Trouvez vos prochaines offres avec Hirly", href: "https://tryhirly.com" },
     sections: [
       {
         h2: "Définition : qu'est-ce qu'une job matching app ?",
@@ -691,8 +691,8 @@ export const blogPosts = [
     date: "2026-07-03",
     intro:
       "L'idée d'une app emploi type Tinder — swiper à droite sur une offre, à gauche pour passer — circule depuis des années. En 2026, ce n'est plus un concept : des apps comme Hirly ont rendu le swipe pour l'emploi opérationnel, avec une couche IA qui génère et soumet les candidatures automatiquement. Voici ce que ça change concrètement, sans raccourcis douteux ni méthodes qui nuisent à la crédibilité.",
-    ctaMid: { text: "Swiper tes premières offres sur Hirly", href: "https://hirly.app" },
-    ctaEnd: { text: "Essayer l'app maintenant", href: "https://hirly.app" },
+    ctaMid: { text: "Swiper tes premières offres sur Hirly", href: "https://tryhirly.com" },
+    ctaEnd: { text: "Essayer l'app maintenant", href: "https://tryhirly.com" },
     sections: [
       {
         h2: "Le concept « Tinder pour l'emploi » : origine et promesse",

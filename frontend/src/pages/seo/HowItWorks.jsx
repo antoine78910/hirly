@@ -72,8 +72,8 @@ const jsonLd = {
   "@type": "WebPage",
   "name": "Comment fonctionne Hirly — Matching IA et candidature automatique",
   "description": "Hirly : importez votre CV, swipez les offres compatibles, et l'IA génère et soumet vos candidatures automatiquement via Greenhouse et Lever.",
-  "url": "https://hirly.app/how-it-works",
-  "publisher": { "@type": "Organization", "name": "Hirly", "url": "https://hirly.app" },
+  "url": "https://tryhirly.com/how-it-works",
+  "publisher": { "@type": "Organization", "name": "Hirly", "url": "https://tryhirly.com" },
 };
 
 const appLd = {
@@ -83,7 +83,7 @@ const appLd = {
   "applicationCategory": "BusinessApplication",
   "operatingSystem": "Web",
   "description": "Application de job matching et de candidature automatique. Swipez les offres, l'IA génère et soumet vos candidatures via ATS en 1 tap.",
-  "url": "https://hirly.app",
+  "url": "https://tryhirly.com",
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
 };
 

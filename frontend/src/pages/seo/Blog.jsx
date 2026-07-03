@@ -9,11 +9,11 @@ const jsonLd = {
   "@type": "Blog",
   "name": "Hirly Blog",
   "description": "Conseils, méthodes et guides pour trouver un emploi plus vite avec l'IA.",
-  "url": "https://hirly.app/blog",
+  "url": "https://tryhirly.com/blog",
   "publisher": {
     "@type": "Organization",
     "name": "Hirly",
-    "url": "https://hirly.app",
+    "url": "https://tryhirly.com",
   },
 };
 

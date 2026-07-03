@@ -18,8 +18,8 @@ export default function Compare() {
     "headline": page.title,
     "description": page.metaDescription,
     "datePublished": "2026-07-03",
-    "publisher": { "@type": "Organization", "name": "Hirly", "url": "https://hirly.app" },
-    "mainEntityOfPage": { "@type": "WebPage", "@id": `https://hirly.app/compare/${page.slug}` },
+    "publisher": { "@type": "Organization", "name": "Hirly", "url": "https://tryhirly.com" },
+    "mainEntityOfPage": { "@type": "WebPage", "@id": `https://tryhirly.com/compare/${page.slug}` },
   };
 
   const faqLd = {

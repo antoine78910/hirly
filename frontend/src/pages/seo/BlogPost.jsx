@@ -80,8 +80,8 @@ export default function BlogPost() {
     "description": post.metaDescription,
     "datePublished": post.date,
     "dateModified": post.date,
-    "mainEntityOfPage": { "@type": "WebPage", "@id": `https://hirly.app/blog/${post.slug}` },
-    "publisher": { "@type": "Organization", "name": "Hirly", "url": "https://hirly.app" },
+    "mainEntityOfPage": { "@type": "WebPage", "@id": `https://tryhirly.com/blog/${post.slug}` },
+    "publisher": { "@type": "Organization", "name": "Hirly", "url": "https://tryhirly.com" },
   };
 
   const faqLd = {

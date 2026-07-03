@@ -58,8 +58,8 @@ const jsonLd = {
   "@type": "WebPage",
   "name": "Cas d'usage Hirly — Matching IA pour tous les profils",
   "description": "Hirly pour les juniors, les reconversions, les développeurs et les candidats actifs. Matching IA, candidature auto, intégrations Greenhouse et Lever.",
-  "url": "https://hirly.app/use-cases",
-  "publisher": { "@type": "Organization", "name": "Hirly", "url": "https://hirly.app" },
+  "url": "https://tryhirly.com/use-cases",
+  "publisher": { "@type": "Organization", "name": "Hirly", "url": "https://tryhirly.com" },
 };
 
 const appLd = {
@@ -69,7 +69,7 @@ const appLd = {
   "applicationCategory": "BusinessApplication",
   "operatingSystem": "Web",
   "description": "Hirly est une application de job matching et de candidature automatique. L'IA propose des offres pertinentes, génère des candidatures personnalisées (CV + LM), et les soumet directement via Greenhouse et Lever. Pour les juniors, reconversions, développeurs et candidats actifs.",
-  "url": "https://hirly.app",
+  "url": "https://tryhirly.com",
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
   "featureList": features.map(f => f.title).join(", "),
 };

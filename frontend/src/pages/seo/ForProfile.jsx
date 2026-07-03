@@ -18,8 +18,8 @@ export default function ForProfile() {
     "@type": "WebPage",
     "name": page.title,
     "description": page.metaDescription,
-    "url": `https://hirly.app/for/${page.slug}`,
-    "publisher": { "@type": "Organization", "name": "Hirly", "url": "https://hirly.app" },
+    "url": `https://tryhirly.com/for/${page.slug}`,
+    "publisher": { "@type": "Organization", "name": "Hirly", "url": "https://tryhirly.com" },
   };
 
   const faqLd = {
