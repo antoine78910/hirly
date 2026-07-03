@@ -95,10 +95,10 @@ export default function PlacesAutocomplete({
 
   const visibleSuggestions = maxSuggestions ? suggestions.slice(0, maxSuggestions) : suggestions;
   const trimmedValue = (value || "").trim();
-  const hasSelection = Boolean(
-    selectedLocation?.location_label
-    && selectedLocation.location_label === value,
-  );
+  const selectedLabel = (selectedLocation?.location_label || "").trim();
+  // Only treat as "picked" when the input still matches the saved label.
+  // If the user edits the text, search again even if the parent hasn't cleared yet.
+  const hasSelection = Boolean(selectedLabel && selectedLabel === trimmedValue);
 
   const showSearchDropdown = focused
     && trimmedValue.length >= 2
@@ -133,7 +133,6 @@ export default function PlacesAutocomplete({
 
   const applyLocation = useCallback((location) => {
     setResults([]);
-    setFocused(false);
     onSelect(location);
     onInputChange(location.location_label);
   }, [onInputChange, onSelect]);
@@ -250,8 +249,9 @@ export default function PlacesAutocomplete({
   }, [lang, optional, trimmedValue, hasSelection]);
 
   const handleChange = (next) => {
+    setFocused(true);
     onInputChange(next);
-    onSelect(null);
+    onSelect?.(null);
   };
 
   const selectResult = (result) => {
