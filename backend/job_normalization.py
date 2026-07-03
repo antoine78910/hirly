@@ -142,6 +142,21 @@ def build_job_fingerprint(job_dict: Dict[str, Any]) -> Optional[str]:
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()
 
 
+def normalize_company_logo_url(value: Any) -> Optional[str]:
+    if value in (None, ""):
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.startswith("//"):
+        return f"https:{text}"
+    if text.startswith("/"):
+        return f"https://www.francetravail.fr{text}"
+    if text.lower().startswith(("http://", "https://")):
+        return text
+    return None
+
+
 def extract_normalized_job_columns(job_dict: Dict[str, Any]) -> Dict[str, Any]:
     location_parts = _parse_location_parts(job_dict)
     title = _first_present(job_dict, "title", "job_title")

@@ -19,10 +19,11 @@ import { trackEvent } from "../lib/analytics";
 const MAX_CV_BYTES = 10 * 1024 * 1024;
 const ACCEPTED_TYPES = [
   "application/pdf",
+  "image/png",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "text/plain",
 ];
-const ACCEPTED_EXT = [".pdf", ".docx", ".txt"];
+const ACCEPTED_EXT = [".pdf", ".png", ".docx", ".txt"];
 
 function isAcceptedFile(file) {
   if (!file) return false;
@@ -43,7 +44,7 @@ export default function ResumeSheet({ open, profile, onClose, onUploaded }) {
   const handleFile = useCallback(async (file) => {
     if (!file) return;
     if (!isAcceptedFile(file)) {
-      toast.error("Please upload a PDF, DOCX, or TXT file.");
+      toast.error(t("resumeSheet.fileTypeError"));
       return;
     }
     if (file.size > MAX_CV_BYTES) {

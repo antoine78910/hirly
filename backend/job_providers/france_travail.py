@@ -14,6 +14,7 @@ from urllib.parse import quote
 import httpx
 
 from employment_kind import enrich_job_employment_kind
+from job_normalization import normalize_company_logo_url
 from .apply_eligibility import classify_apply_link
 from .ats_detection import detect_job_platform
 from .base import JobSearchQuery, ProviderResult
@@ -170,13 +171,17 @@ class FranceTravailProvider:
         lieu = row.get("lieuTravail") if isinstance(row.get("lieuTravail"), dict) else {}
         salaire = row.get("salaire") if isinstance(row.get("salaire"), dict) else {}
         requirements = self._requirements(row)
+        city = str(lieu.get("commune") or "").strip()
+        region = str(lieu.get("libelle") or "").strip()
 
         job_doc = {
             "job_id": self._internal_job_id(str(external_id)),
             "title": title,
             "company": company,
-            "company_logo": entreprise.get("logo"),
+            "company_logo": normalize_company_logo_url(entreprise.get("logo")),
             "location": self._location(lieu),
+            "city": city or None,
+            "region": region or None,
             "country_code": "fr",
             "remote": self._remote(row, description),
             "salary_min": self._salary(salaire.get("salaireMin") or salaire.get("complement1")),

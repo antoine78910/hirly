@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 import httpx
 
 from employment_kind import enrich_job_employment_kind
+from job_normalization import normalize_company_logo_url
 from .base import JobSearchQuery, ProviderResult
 from .apply_eligibility import classify_apply_link
 from .ats_detection import PRIMARY_AUTO_APPLY_ATS, detect_job_platform
@@ -155,7 +156,7 @@ class JSearchProvider:
             "job_id": self._internal_job_id(external_id),
             "title": title,
             "company": company,
-            "company_logo": row.get("employer_logo"),
+            "company_logo": normalize_company_logo_url(row.get("employer_logo")),
             "location": self._location(row),
             "country_code": self._country_code(row, query),
             "remote": self._remote(row, query),

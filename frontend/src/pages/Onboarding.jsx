@@ -1194,7 +1194,7 @@ export default function Onboarding() {
                     <FileText className={`w-6 h-6 ${ob.accent}`} />
                   </div>
                   <p className="font-semibold text-sm sm:text-base text-zinc-900">{lang === "fr" ? "Aucun CV sélectionné" : "No resume selected"}</p>
-                  <p className={`text-xs sm:text-sm ${ob.muted} mt-1`}>{lang === "fr" ? "PDF ou DOCX acceptés" : "PDF or DOCX supported"}</p>
+                  <p className={`text-xs sm:text-sm ${ob.muted} mt-1`}>{lang === "fr" ? "PDF ou PNG acceptés" : "PDF or PNG supported"}</p>
                 </>
               ) : (
                 <div className="flex items-center justify-center gap-2 text-zinc-700">
@@ -1207,7 +1207,7 @@ export default function Onboarding() {
                 id="cv-input"
                 data-testid="cv-file-input"
                 type="file"
-                accept=".pdf,.docx,.txt"
+                accept=".pdf,.png,.docx,.txt"
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0];

@@ -114,7 +114,7 @@ from employment_kind import (
 )
 from location_intelligence import COUNTRY_NAME_TO_CODE, expand_location_radius, normalize_place_name
 from location_search import search_locations
-from llm_client import LLMProviderNotConfigured, complete_json_text
+from llm_client import LLMProviderNotConfigured, complete_json_text, extract_text_from_image_bytes
 from onboarding_suggestions import suggest_categories, suggest_roles
 from feedback_routes import register_feedback_routes
 from feedback_store import migrate_file_feedback_to_db
@@ -215,11 +215,17 @@ async def _get_feed_job_candidates(base_query: Dict[str, Any], limit: int) -> Li
 
 
 async def _hydrate_feed_jobs(jobs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Load full job payloads (descriptions) only for jobs shown in the feed."""
-    job_ids = [job.get("job_id") for job in jobs if job.get("job_id")]
-    if not job_ids:
+    """Load full job payloads (descriptions) only for jobs missing text fields."""
+    if not jobs:
         return jobs
-    full_rows = await db.jobs.find({"job_id": {"$in": job_ids}}, {"_id": 0}).to_list(len(job_ids))
+    missing_ids = [
+        job.get("job_id")
+        for job in jobs
+        if job.get("job_id") and not (job.get("description") or job.get("clean_description"))
+    ]
+    if not missing_ids:
+        return jobs
+    full_rows = await db.jobs.find({"job_id": {"$in": missing_ids}}, {"_id": 0}).to_list(len(missing_ids))
     by_id = {row.get("job_id"): row for row in full_rows if row.get("job_id")}
     hydrated: List[Dict[str, Any]] = []
     for job in jobs:
@@ -1930,19 +1936,81 @@ async def stripe_webhook(request: Request):
 
 # ===================== CV parsing =====================
 
-def extract_text_from_upload(filename: str, content: bytes) -> str:
+CV_UPLOAD_EXTENSIONS = {".pdf", ".png", ".docx", ".txt"}
+
+
+def _detect_cv_format(filename: str, content: bytes) -> str:
     name = (filename or "").lower()
-    if name.endswith(".pdf"):
-        reader = PdfReader(io.BytesIO(content))
-        return "\n".join((page.extract_text() or "") for page in reader.pages)
+    if name.endswith(".pdf") or content[:4] == b"%PDF":
+        return "pdf"
+    if name.endswith(".png") or content[:8] == b"\x89PNG\r\n\x1a\n":
+        return "png"
     if name.endswith(".docx"):
+        return "docx"
+    if name.endswith(".txt"):
+        return "txt"
+    if content[:2] == b"PK":
+        return "docx"
+    return "txt"
+
+
+def _extract_pdf_text(content: bytes) -> str:
+    reader = PdfReader(io.BytesIO(content))
+    return "\n".join((page.extract_text() or "") for page in reader.pages).strip()
+
+
+def _extract_pdf_image_bytes(content: bytes) -> list[bytes]:
+    """Collect embedded page images (e.g. scanned PDF pages)."""
+    images: list[bytes] = []
+    try:
+        reader = PdfReader(io.BytesIO(content))
+        for page in reader.pages:
+            for image in getattr(page, "images", []) or []:
+                data = getattr(image, "data", None)
+                if data:
+                    images.append(data)
+    except Exception:
+        pass
+    return images
+
+
+def extract_text_from_upload(filename: str, content: bytes) -> str:
+    fmt = _detect_cv_format(filename, content)
+    if fmt == "pdf":
+        return _extract_pdf_text(content)
+    if fmt == "docx":
         document = docx_lib.Document(io.BytesIO(content))
         return "\n".join(p.text for p in document.paragraphs)
-    # txt or anything else
+    if fmt == "png":
+        return ""
     try:
         return content.decode("utf-8", errors="ignore")
     except Exception:
         return ""
+
+
+async def extract_cv_text_from_upload(filename: str, content: bytes) -> str:
+    fmt = _detect_cv_format(filename, content)
+    if fmt == "pdf":
+        text = _extract_pdf_text(content)
+        if text.strip():
+            return text
+        image_parts: list[str] = []
+        for image_bytes in _extract_pdf_image_bytes(content):
+            try:
+                part = await extract_text_from_image_bytes(image_bytes, "image/png")
+            except LLMProviderNotConfigured:
+                raise
+            except Exception as exc:
+                logger.warning("cv_pdf_image_ocr_failed error=%s", exc)
+                continue
+            if part.strip():
+                image_parts.append(part.strip())
+        return "\n\n".join(image_parts)
+    if fmt == "png":
+        mime = _mime_from_profile_document_filename(filename)
+        return await extract_text_from_image_bytes(content, mime)
+    return extract_text_from_upload(filename, content)
 
 
 def _parse_json_from_llm(text: str) -> Dict[str, Any]:
@@ -3046,7 +3114,19 @@ async def coach_streak(user: User = Depends(get_current_user)):
 async def upload_cv(file: UploadFile = File(...), user: User = Depends(get_current_user)):
     import base64
     content = await file.read()
-    cv_text = extract_text_from_upload(file.filename, content)
+    if len(content) > MAX_PROFILE_DOCUMENT_BYTES:
+        raise HTTPException(status_code=400, detail="File must be 10MB or smaller")
+    filename = file.filename or "cv"
+    fmt = _detect_cv_format(filename, content)
+    if fmt not in {"pdf", "png", "docx", "txt"}:
+        raise HTTPException(status_code=400, detail="Please upload a PDF or PNG resume")
+    try:
+        cv_text = await extract_cv_text_from_upload(filename, content)
+    except LLMProviderNotConfigured:
+        raise HTTPException(
+            status_code=503,
+            detail="AI provider is not configured. PNG resumes require vision OCR.",
+        )
     if not cv_text.strip():
         raise HTTPException(status_code=400, detail="Could not extract text from CV")
 
@@ -3059,14 +3139,7 @@ async def upload_cv(file: UploadFile = File(...), user: User = Depends(get_curre
         logger.exception("CV extraction failed")
         raise HTTPException(status_code=500, detail=f"AI extraction failed: {e}")
 
-    # Determine mime type from filename
-    name_lower = (file.filename or "").lower()
-    if name_lower.endswith(".pdf"):
-        mime = "application/pdf"
-    elif name_lower.endswith(".docx"):
-        mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    else:
-        mime = "text/plain"
+    mime = _mime_from_profile_document_filename(filename)
 
     intelligence = _build_profile_intelligence(extracted, cv_text)
     if extracted.get("extraction_fallback_reason"):
@@ -3100,7 +3173,7 @@ async def upload_cv(file: UploadFile = File(...), user: User = Depends(get_curre
     profile_doc = {
         "user_id": user.user_id,
         "cv_text": cv_text,
-        "cv_filename": file.filename,
+        "cv_filename": filename,
         "cv_original_b64": base64.b64encode(content).decode("ascii"),
         "cv_mime": mime,
         "contact": contact,
@@ -3595,6 +3668,7 @@ async def get_feed(
     lat: Optional[float] = None,
     lng: Optional[float] = None,
     force_provider_refresh: bool = False,
+    prefetch: bool = False,
     score: bool = False,                                  # opt-in AI scoring (slow); default off for snappy UX
     search_role: Optional[str] = None,                    # override profile target_role for this feed request
 ):
@@ -4094,10 +4168,13 @@ async def get_feed(
         )
 
         base_query: Dict[str, Any] = {}
-        candidate_limit = max(80, requested_limit * 16) if explicit_filters else max(120, requested_limit * 24)
-        if explicit_location_filter:
+        if prefetch:
+            candidate_limit = min(max(40, requested_limit * 6), 120)
+        else:
+            candidate_limit = max(80, requested_limit * 16) if explicit_filters else max(120, requested_limit * 24)
+        if explicit_location_filter and not prefetch:
             candidate_limit = max(candidate_limit, 1000)
-        if is_worldwide_radius:
+        if is_worldwide_radius and not prefetch:
             candidate_limit = max(candidate_limit, requested_limit * 80, 1000)
 
         refresh_results = []
@@ -4550,18 +4627,24 @@ async def get_feed(
         def _matches_location(job: Dict[str, Any]) -> bool:
             if not explicit_location_filter and not only_my_country:
                 return True
-            job_location = str(job.get("location") or "").lower()
+            normalized_job_location = _normalized_job_location_text(job)
             job_country_code = str(job.get("country_code") or "").lower().strip()
-            if not job_location and not job_country_code:
+            if not normalized_job_location and not job_country_code:
                 return include_unknown_location
             if explicit_local_intent and _explicit_local_remote_allowed(job):
                 return True
             if explicit_local_intent and _known_outside_expanded_country(job):
                 return False
+            city_match = bool(
+                selected_city_terms
+                and any(term in normalized_job_location for term in selected_city_terms)
+            )
+            if city_match:
+                return True
             expanded_match = _expanded_location_match(job)
             if expanded_match:
                 return True
-            city_match = bool(selected_city_terms and any(term in job_location for term in selected_city_terms))
+            job_location = str(job.get("location") or "").lower()
             country_match = bool(
                 (selected_country_terms and any(term in job_location for term in selected_country_terms))
                 or any(str(loc.get("country_code") or "").lower().strip() == job_country_code for loc in selected_locations if loc.get("country_code"))
@@ -4577,8 +4660,8 @@ async def get_feed(
             if radius_km is not None:
                 if location_context.get("used"):
                     return False
-                return city_match if selected_city_terms else country_match
-            return city_match or country_match
+                return country_match if selected_country_terms else False
+            return country_match
 
         def _passes_explicit_local_hard_constraint(job: Dict[str, Any]) -> bool:
             if not explicit_local_intent:
@@ -4988,7 +5071,8 @@ async def get_feed(
         )
         refresh_budget_available = not _timed_out() or explicit_local_after_budget_refresh
         should_refresh = (
-            sync_refresh_enabled
+            not prefetch
+            and sync_refresh_enabled
             and (refresh_budget_available or (force_provider_refresh and explicit_local_intent))
             and not cooldown_active
             and (
@@ -4999,6 +5083,13 @@ async def get_feed(
                 or (explicit_local_intent and local_inventory_count < requested_limit)
             )
         )
+        if prefetch and explicit_local_intent and local_inventory_count < requested_limit:
+            should_refresh = True
+            request_trace["prefetch"] = True
+            request_trace["prefetch_forced_local_discovery"] = True
+        elif prefetch:
+            request_trace["prefetch"] = True
+            request_trace["local_jsearch_skip_reason"] = "prefetch_db_only"
         request_trace["local_jsearch_discovery_should_run"] = bool(should_refresh and explicit_local_intent)
         if explicit_local_intent and not should_refresh:
             if not sync_refresh_enabled:

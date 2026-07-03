@@ -112,7 +112,7 @@ export default function DesktopJobCard({ job, theme, t, lang }) {
               {title}
             </h1>
             <div className="mt-2 flex items-center gap-3">
-              <CompanyLogo company={job.company} size="lg" rounded="2xl" className="shrink-0" />
+              <CompanyLogo job={job} size="lg" rounded="2xl" className="shrink-0" />
               <p className={`min-w-0 text-base font-medium leading-snug ${theme.cardCompany}`}>{job.company}</p>
             </div>
           </div>

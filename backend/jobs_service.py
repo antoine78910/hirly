@@ -258,7 +258,11 @@ def _fallback_locations(query: JobSearchQuery) -> List[Optional[str]]:
     if query.country == "gb" or any(term in location_text for term in ("egham", "united kingdom", "royaume-uni", "london")):
         locations = ["Egham, United Kingdom", "London, United Kingdom", "United Kingdom"]
     elif query.country == "fr" or _looks_like_france_location(location_text):
-        locations = ["France", "Paris, France", "Ile-de-France, France", "Lyon, France", "Bordeaux, France"]
+        city = re.split(r"[,/|-]", query.location or "", maxsplit=1)[0].strip().lower()
+        if city and city not in {"france"} and len(city) >= 3:
+            locations = []
+        else:
+            locations = ["France", "Paris, France", "Ile-de-France, France", "Lyon, France", "Bordeaux, France"]
     elif query.country == "ma" or any(term in location_text for term in ("casablanca", "morocco", "maroc")):
         locations = ["Casablanca, Morocco", "Morocco"]
     elif query.country and query.country != os.environ.get("JSEARCH_COUNTRY", "us"):
@@ -1008,7 +1012,11 @@ def _job_matches_query_location(job: Dict[str, Any], query: JobSearchQuery, sear
 
     job_location = unicodedata.normalize(
         "NFKD",
-        str(job.get("location") or "").lower(),
+        " ".join([
+            str(job.get("location") or ""),
+            str(job.get("city") or ""),
+            str(job.get("region") or ""),
+        ]).lower(),
     ).encode("ascii", "ignore").decode("ascii")
     job_country = str(job.get("country_code") or "").lower().strip()
     query_country = str(query.country or "").lower().strip()

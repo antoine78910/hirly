@@ -691,6 +691,37 @@ def test_explicit_local_provider_queries_use_clean_city_labels(monkeypatch):
     assert all(", FR" not in str(item.get("location_label") or "") for item in planned)
 
 
+def test_real_app_text_only_dijon_request_triggers_local_discovery(monkeypatch):
+    imported = _job(1, tier="C", status="unknown", title="Assistant commercial")
+    imported.update({"location": "Dijon (21)", "city": "Dijon", "country_code": "fr"})
+    locations_json = json.dumps([{
+        "location_label": "Dijon, France",
+        "place_id": "",
+        "country": "France",
+        "country_code": "fr",
+        "lat": None,
+        "lng": None,
+        "source": "typed",
+        "kind": "city",
+    }])
+    response, calls = _run_feed(
+        monkeypatch,
+        [],
+        env={
+            "JOBS_FEED_LOCAL_DISCOVERY_MAX_CITIES": "2",
+            "JOBS_FEED_SYNC_REFRESH_MAX_SECONDS": "5",
+            "JOBS_FEED_DEBUG_DIAGNOSTICS": "true",
+        },
+        refresh=lambda: [imported],
+        locations_json=locations_json,
+        search_radius="50km",
+        geo_places=[],
+    )
+    assert calls["refresh"] >= 1
+    assert response["request_trace"]["explicit_local_intent"] is True
+    assert [job["job_id"] for job in response["jobs"]] == ["job_1"]
+
+
 def test_real_app_text_only_toulouse_request_triggers_local_discovery(monkeypatch):
     imported = _job(1, tier="C", status="unknown", title="Marketing Manager")
     imported.update({"location": "Toulouse, France", "city": "Toulouse", "country_code": "fr"})

@@ -45,7 +45,11 @@ import {
 import { getJobBadgeItems, getJobDisplayContent } from "../lib/jobDisplayUtils";
 import { translateJobTitle, translateLocationLabel, translateRoleLabel } from "../lib/localizedDisplay";
 
+import { preloadCompanyLogos } from "../lib/companyLogos";
+
 const DEFAULT_SEARCH_RADIUS = "50km";
+const FEED_BATCH_SIZE = 12;
+const FEED_PREFETCH_THRESHOLD = 7;
 const FILTERS_STORAGE_KEY = "swiipr.jobs.filters.v1";
 
 const readPersistedFilters = () => {
@@ -97,6 +101,9 @@ const compactCityLabel = (value) => {
 };
 
 const buildLocalFeedGuard = ({ params, response }) => {
+  if (response?.filters_applied?.explicit_local_intent || response?.request_trace?.explicit_local_intent) {
+    return null;
+  }
   const radius = params.get("search_radius") || DEFAULT_SEARCH_RADIUS;
   if (!isNumericRadius(radius) || !params.get("locations_json")) return null;
   let selectedLocations = [];
@@ -110,7 +117,10 @@ const buildLocalFeedGuard = ({ params, response }) => {
 
   const intelligence = response?.filters_applied?.location_intelligence || {};
   const expandedPlaces = Array.isArray(intelligence.expanded_places) ? intelligence.expanded_places : [];
-  const cityTerms = new Set();
+  const backendCityTerms = (response?.filters_applied?.selected_city_terms || [])
+    .map((term) => normalizeSearchText(term))
+    .filter(Boolean);
+  const cityTerms = new Set(backendCityTerms);
   const countryCodes = new Set();
   [...expandedPlaces, ...selectedLocations].forEach((place) => {
     [
@@ -226,7 +236,7 @@ function CardFront({ job, onReport, onShare, actionsEnabled, t, lang }) {
       </div>
 
       <div className="mt-1 flex justify-center">
-        <CompanyLogo company={job.company} size="lg" rounded="2xl" />
+        <CompanyLogo job={job} size="lg" rounded="2xl" />
       </div>
 
       <div className="mt-4 px-5 text-center sm:px-7">
@@ -301,7 +311,7 @@ function CardBack({ job, t, lang }) {
             {title}
           </h2>
           <div className="mt-3 flex items-center gap-3">
-            <CompanyLogo company={job.company} size="md" rounded="xl" className="shrink-0" />
+            <CompanyLogo job={job} size="md" rounded="xl" className="shrink-0" />
             <p className="text-lg font-semibold text-white">{job.company}</p>
           </div>
         </div>
@@ -373,10 +383,12 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang }) {
   const applyOpacity = useTransform(x, [0, 80, 160], [0, 0.5, 1]);
   const skipOpacity = useTransform(x, [-160, -80, 0], [1, 0.5, 0]);
   const [flipped, setFlipped] = useState(false);
+  const [showBack, setShowBack] = useState(false);
   const dragRef = useRef({ distance: 0 });
 
   useEffect(() => {
     setFlipped(false);
+    setShowBack(false);
   }, [job.job_id, isTop]);
 
   return (
@@ -408,6 +420,7 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang }) {
       }}
       onTap={() => {
         if (!isTop || dragRef.current.distance > 8) return;
+        setShowBack(true);
         setFlipped((current) => !current);
       }}
       transition={{ type: "spring", stiffness: 280, damping: 28 }}
@@ -426,7 +439,11 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang }) {
           t={t}
           lang={lang}
         />
-        <CardBack job={job} t={t} lang={lang} />
+        {showBack ? (
+          <CardBack job={job} t={t} lang={lang} />
+        ) : (
+          <div className="backface-hidden rotate-y-180 absolute inset-0 rounded-[28px] border border-sprout-border bg-sprout-surface" aria-hidden="true" />
+        )}
       </motion.div>
 
       {isTop && !flipped ? (
@@ -521,8 +538,13 @@ export default function Swipe() {
   const pendingFiltersRef = useRef(undefined);
   const feedAbortRef = useRef(null);
   const feedRequestIdRef = useRef(0);
+  const jobsRef = useRef([]);
   const viewedJobIdsRef = useRef(new Set());
   const handleSwipeRef = useRef(null);
+
+  useEffect(() => {
+    jobsRef.current = jobs;
+  }, [jobs]);
 
   useEffect(() => {
     targetRef.current = target;
@@ -627,7 +649,7 @@ export default function Swipe() {
   }, [applyFinanceDemoTarget, applyDemoAccountTarget]);
 
   const buildFeedParams = (f) => {
-    const params = new URLSearchParams({ limit: "5", search_radius: DEFAULT_SEARCH_RADIUS });
+    const params = new URLSearchParams({ limit: String(FEED_BATCH_SIZE), search_radius: DEFAULT_SEARCH_RADIUS });
     const activeTarget = targetRef.current;
     if (activeTarget?.role?.trim()) {
       params.set("search_role", activeTarget.role.trim());
@@ -667,11 +689,17 @@ export default function Swipe() {
     const controller = new AbortController();
     feedAbortRef.current = controller;
     pendingFiltersRef.current = undefined;
+    const stackPrefetch = !replace && jobsRef.current.length > 0;
     fetchingRef.current = true;
-    setLoading(true);
+    if (!stackPrefetch) {
+      setLoading(true);
+      if (replace) setJobs([]);
+    }
     setFeedError("");
-    if (replace) setJobs([]);
     let params = buildFeedParams(f);
+    if (stackPrefetch) {
+      params.set("prefetch", "true");
+    }
     let requestUrl = `/jobs/feed?${params.toString()}`;
     console.group("[FeedDebug] loadFeed");
     console.log("reason", reason);
@@ -804,6 +832,7 @@ export default function Swipe() {
         const seen = new Set(base.map((j) => j.job_id));
         const merged = [...base];
         safeJobs.forEach((j) => { if (!seen.has(j.job_id)) merged.push(j); });
+        preloadCompanyLogos(merged.slice(0, 6));
         return merged;
       });
     } catch (e) {
@@ -872,7 +901,7 @@ export default function Swipe() {
       toast.error(typeof detail === "string" ? detail : t("toasts.loadJobsError"));
     } finally {
       if (requestId === feedRequestIdRef.current) {
-        setLoading(false);
+        if (!stackPrefetch) setLoading(false);
         fetchingRef.current = false;
         if (feedAbortRef.current === controller) feedAbortRef.current = null;
       }
@@ -1033,6 +1062,7 @@ export default function Swipe() {
     if (!topJob?.job_id) return;
     if (viewedJobIdsRef.current.has(topJob.job_id)) return;
     viewedJobIdsRef.current.add(topJob.job_id);
+    preloadCompanyLogos(jobs.slice(0, 4));
     trackEvent("job_card_viewed", {
       job_id: topJob.job_id,
       company: topJob.company,
@@ -1049,7 +1079,11 @@ export default function Swipe() {
     const demoSwipe = isDemoSwipeMode() || isDemoAccountEnabled();
     const demoApply = intent === "apply" && demoSwipe;
     cacheJobForDemo(job);
+    const remainingAfterSwipe = jobs.length - 1;
     setJobs((prev) => prev.slice(1));
+    if (remainingAfterSwipe <= FEED_PREFETCH_THRESHOLD && !fetchingRef.current) {
+      loadFeed(false, filtersRef.current, "after_swipe_low_stack");
+    }
     const direction = intent === "apply" ? "right" : "left";   // backend semantic
     if (intent === "apply") {
       trackEvent("application_generation_started", {
@@ -1107,7 +1141,6 @@ export default function Swipe() {
         toast.error(getSwipeErrorMessage(t, e));
       }
     }
-    if (jobs.length <= 3) loadFeed(false, filtersRef.current, "after_swipe_low_stack");
   };
 
   const handleUndo = async () => {
@@ -1130,13 +1163,16 @@ export default function Swipe() {
   };
 
   const dismissJob = useCallback((jobId) => {
+    const remainingAfterDismiss = jobs.length - 1;
     setJobs((prev) => prev.filter((j) => j.job_id !== jobId));
     if (isFinanceDemoEnabled()) {
       performFinanceDemoSwipe({ job_id: jobId, direction: "left" });
     } else {
       api.post("/swipe", { job_id: jobId, direction: "left" }).catch(() => {});
     }
-    if (jobs.length <= 3) loadFeed(false, filtersRef.current, "after_dismiss_low_stack");
+    if (remainingAfterDismiss <= FEED_PREFETCH_THRESHOLD && !fetchingRef.current) {
+      loadFeed(false, filtersRef.current, "after_dismiss_low_stack");
+    }
   }, [jobs.length, loadFeed]);
 
   const handleReportSubmit = async (reason) => {

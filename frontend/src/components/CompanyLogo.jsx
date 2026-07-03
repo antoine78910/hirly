@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getCompanyLogoUrls, resolveCompanyName } from "../lib/companyLogos";
+import { getCompanyLogoUrls, getJobCompanyLogoUrl, resolveCompanyName } from "../lib/companyLogos";
 
 const SIZE_STYLES = {
   sm: {
@@ -30,19 +30,22 @@ const ROUNDED = {
 
 export default function CompanyLogo({
   company,
+  job,
+  logoUrl,
   size = "md",
   rounded = "2xl",
   className = "",
 }) {
-  const resolved = resolveCompanyName(company) || company;
-  const urls = getCompanyLogoUrls(resolved);
+  const resolved = resolveCompanyName(company || job?.company) || company || job?.company;
+  const resolvedLogoUrl = logoUrl ?? getJobCompanyLogoUrl(job);
+  const urls = getCompanyLogoUrls(resolved, resolvedLogoUrl);
   const [urlIndex, setUrlIndex] = useState(0);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     setUrlIndex(0);
     setFailed(false);
-  }, [resolved]);
+  }, [resolved, resolvedLogoUrl]);
 
   const styles = SIZE_STYLES[size] || SIZE_STYLES.md;
   const round = ROUNDED[rounded] || ROUNDED["2xl"];
@@ -83,6 +86,7 @@ export default function CompanyLogo({
         onError={handleError}
         loading="lazy"
         decoding="async"
+        referrerPolicy="no-referrer"
       />
     </div>
   );

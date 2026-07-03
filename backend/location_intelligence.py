@@ -174,6 +174,48 @@ async def _find_name_candidates(db: Any, normalized: str, country_hint: Optional
     return rows
 
 
+async def _lookup_french_commune(label: str) -> Optional[Dict[str, Any]]:
+    """Resolve a French city label to coordinates via geo.api.gouv.fr."""
+    city = re.split(r"[,/|-]", str(label or ""), maxsplit=1)[0].strip()
+    if len(city) < 2:
+        return None
+    try:
+        import httpx
+
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(
+                "https://geo.api.gouv.fr/communes",
+                params={
+                    "nom": city,
+                    "fields": "nom,code,codesPostaux,centre,population",
+                    "boost": "population",
+                    "limit": 1,
+                },
+            )
+            response.raise_for_status()
+            rows = response.json()
+            if not isinstance(rows, list) or not rows:
+                return None
+            row = rows[0]
+            centre = row.get("centre") if isinstance(row.get("centre"), dict) else {}
+            coords = centre.get("coordinates") if isinstance(centre, dict) else None
+            if not coords or len(coords) < 2:
+                return None
+            name = str(row.get("nom") or city)
+            return {
+                "name": name,
+                "normalized_name": normalize_place_name(name),
+                "ascii_name": name,
+                "country_code": "fr",
+                "latitude": float(coords[1]),
+                "longitude": float(coords[0]),
+                "population": int(row.get("population") or 0),
+                "source": "geo_api_gouv",
+            }
+    except Exception:
+        return None
+
+
 async def resolve_location(
     location_label: Optional[str] = None,
     lat: Optional[float] = None,
@@ -207,6 +249,11 @@ async def resolve_location(
         candidates = await _find_name_candidates(db, candidate_normalized, effective_country_hint)
         if candidates:
             return _place_document(candidates[0])
+    country_from_label = _country_code_from_text(location_label) or effective_country_hint
+    if country_from_label in (None, "fr", "france") or not country_from_label:
+        geo = await _lookup_french_commune(label_candidates[0] if label_candidates else (location_label or ""))
+        if geo:
+            return _place_document(geo)
     return {
         "name": location_label or "",
         "normalized_name": normalized,
