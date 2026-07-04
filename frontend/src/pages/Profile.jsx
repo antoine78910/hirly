@@ -4,18 +4,14 @@ import { api } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { demoMode } from "../lib/dev";
 import { DEMO_PROFILE } from "../lib/demoData";
-import { useSwipeCredits } from "../components/desktop/DesktopCreditsPill";
 import { useUpgradeModal } from "../context/UpgradeModalContext";
 import {
   User as UserIcon,
   FileText,
   FolderOpen,
   Settings as SettingsIcon,
-  ChevronRight,
-  Zap,
   Pencil,
   Plus,
-  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import ProfilePersonalInfoTab from "../components/profile/ProfilePersonalInfoTab";

@@ -203,7 +203,7 @@ QUIZZES: Dict[str, Dict[str, Any]] = {
                 {"id": "c", "label": "Whoever paid most recently"},
             ], "a"),
             _q("cb6", "Official Hirly logo source?", [
-                {"id": "a", "label": "Shared Google Drive folder in Company Logos section"},
+                {"id": "a", "label": "Shared Google Drive folder in Good. Better. Best. → Resources"},
                 {"id": "b", "label": "Screenshot from app or website"},
                 {"id": "c", "label": "Logo you recreated yourself"},
             ], "a"),

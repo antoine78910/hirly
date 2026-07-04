@@ -44,7 +44,7 @@ const SWIPE_EXIT = {
   apply: { x: 720, rotate: 10, opacity: 0, scale: 0.92 },
 };
 
-const DESKTOP_CARD_WIDTH = "w-full max-w-4xl lg:max-w-5xl xl:max-w-6xl";
+const DESKTOP_CARD_WIDTH = "w-full max-w-3xl";
 
 const feedFallbackMessage = (t, feedMeta) => {
   if (!feedMeta?.fallback_reason) return t("swipe.noJobs");

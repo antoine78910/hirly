@@ -231,10 +231,6 @@ function CardFront({ job, onReport, onShare, actionsEnabled, t, lang }) {
             <Share2 className="h-5 w-5" strokeWidth={1.8} />
           </button>
         </div>
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-sprout-mint px-3 py-1 text-xs font-bold text-white">
-          <Zap className="h-3.5 w-3.5" fill="white" />
-          1
-        </span>
       </div>
 
       <div className="mt-1 flex justify-center">
@@ -304,20 +300,24 @@ function CardBack({ job, t, lang }) {
 
   return (
     <div className="backface-hidden rotate-y-180 absolute inset-0 flex flex-col overflow-hidden rounded-[28px] border border-sprout-border bg-sprout-surface">
-      <div
-        className="app-scroll no-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-6 pb-4 touch-pan-y sm:px-6"
-        data-testid="swipe-card-scroll"
-      >
-        <div>
-          <h2 className="font-display text-[clamp(1.5rem,5.5vw,2rem)] font-black leading-tight tracking-tight text-white">
+      <div className="flex h-1/4 min-h-0 shrink-0 items-center border-b border-sprout-border px-5 py-3 sm:px-6">
+        <CompanyLogo job={job} size="md" rounded="xl" className="mr-3 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <h2
+            className="line-clamp-2 font-display text-lg font-black leading-tight tracking-tight text-white sm:text-xl"
+            data-testid="job-title-back"
+          >
             {title}
           </h2>
-          <div className="mt-3 flex items-center gap-3">
-            <CompanyLogo job={job} size="md" rounded="xl" className="shrink-0" />
-            <p className="text-lg font-semibold text-white">{job.company}</p>
-          </div>
+          <p className="mt-0.5 truncate text-sm font-semibold text-white sm:text-base">{job.company}</p>
         </div>
+      </div>
 
+      <div className="flex h-3/4 min-h-0 flex-col">
+      <div
+        className="app-scroll no-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-4 pb-2 touch-pan-y sm:px-6"
+        data-testid="swipe-card-scroll"
+      >
         <div className="space-y-1.5 text-[15px] text-sprout-muted">
           <div className="flex items-center gap-2">
             <MapPin className="h-4 w-4 text-sprout-mint" />
@@ -364,7 +364,7 @@ function CardBack({ job, t, lang }) {
         </div>
       </div>
 
-      <div className="flex shrink-0 items-center justify-between border-t border-sprout-border px-6 py-4 text-[13px] text-sprout-muted">
+      <div className="flex shrink-0 items-center justify-between border-t border-sprout-border px-6 py-3 text-[13px] text-sprout-muted">
         <span className="flex items-center gap-1.5 font-display font-bold text-white">
           <Logo size={18} />
           {BRAND.NAME}
@@ -373,6 +373,7 @@ function CardBack({ job, t, lang }) {
           {t("swipe.tapToFlipBack")}
           <Info className="h-4 w-4" />
         </span>
+      </div>
       </div>
     </div>
   );

@@ -69,7 +69,9 @@ export function useSwipeCredits() {
 export default function DesktopCreditsPill({ isDark = false, className = "" }) {
   const { openUpgrade } = useUpgradeModal();
   const { t } = useAppLocale();
-  const { displayCredits, loading, isPremium } = useSwipeCredits();
+  const { displayCredits, loading, isPremium, demoAccount } = useSwipeCredits();
+
+  if (demoAccount) return null;
 
   return (
     <button

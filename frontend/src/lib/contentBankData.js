@@ -109,6 +109,14 @@ const CONTENT_BANK_EN = [
       infoScript(
         "Good. Better. Best. Job application edition.\n\nGood. LinkedIn and Indeed.\nYour standard job platforms. You see they use tons of listings, but you're competing with hundreds of applicants and most of the times it's a hit or miss.\n\nBetter. Handshake. More curated, especially for students. You'll find internships and early career roles, but you still have to apply to everything yourself.\n\nBest. Hirly. All you have to do is swipe right on the jobs you want and it auto-applies to hundreds of applications without you needing to do anything. It generates a tailored resume and cover letter per role and submits directly on the company's website.",
       ),
+      heading(3, "Resources"),
+      linkBlock("Logos: Open official Hirly logos folder (Google Drive)", BRAND_ASSETS_DRIVE_URL),
+      warningGuideline(
+        "Point to each tier (Good, Better, Best) on screen as you say it. Use transparent PNG logos from the shared folder for overlays — don't stretch, recolor, or add effects.",
+      ),
+      infoScript(
+        "Good. Better. Best. Company logo edition.\n\nGood. Screenshot the logo from Google or the company website.\nIt's blurry, the background is wrong, and it looks unprofessional in your video.\n\nBetter. Recreate the logo yourself or grab a random PNG from the internet.\nWrong colors, outdated version — the brand team will notice.\n\nBest. Use the official Hirly logo files from our shared Google Drive folder.\nTransparent PNG, correct colors, ready for video overlays.\n\nSave this and always pull logos from the folder before you post.",
+      ),
     ],
   }),
 
@@ -358,26 +366,6 @@ const CONTENT_BANK_EN = [
       heading(2, "Variation 2"),
       infoScript(
         "Nobody's hiring right now? Maybe it's just you.\nMaybe you're just looking in the wrong places.\n\nIf you don't know about these two websites, let me put you on.\nOne of them is called Handshake, and it has thousands of opportunities for students and recent grads that most people completely overlook.\n\nBut the next one?\nIt's called Hirly. Instead of you spending hours applying, it actually auto-applies directly on the company's website for you with a tailored resume and cover letter. You literally set your preferences, and it does the heavy lifting.\n\nSo if you're tired of filling out the same application over and over again, this might be the move.\n\nLet me know if any of you end up using it.",
-      ),
-    ],
-  }),
-
-  sectionBlock({
-    section_id: "sec_cb_company_logos",
-    title: "Company Logos",
-    badge: "Top format",
-    content: [
-      heading(1, "Company Logos"),
-      heading(3, "Guidelines"),
-      linkBlock("Open the official Hirly logos folder (Google Drive)", BRAND_ASSETS_DRIVE_URL),
-      warningGuideline(
-        "Point to each tier (Good, Better, Best) on screen as you say it. Use transparent PNG logos from the shared folder for overlays — don't stretch, recolor, or add effects.",
-      ),
-      heading(3, "Video Captions"),
-      paragraph("Good, better, best: Company logo edition! #contentcreation #hirly #brand #jobsearch"),
-      heading(2, "Main Script"),
-      infoScript(
-        "Good. Better. Best. Company logo edition.\n\nGood. Screenshot the logo from Google or the company website.\nIt's blurry, the background is wrong, and it looks unprofessional in your video.\n\nBetter. Recreate the logo yourself or grab a random PNG from the internet.\nWrong colors, outdated version — the brand team will notice.\n\nBest. Use the official Hirly logo files from our shared Google Drive folder.\nTransparent PNG, correct colors, ready for video overlays. Link is in the Content Bank.\n\nSave this and always pull logos from the folder before you post.",
       ),
     ],
   }),

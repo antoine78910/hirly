@@ -410,7 +410,7 @@ const QUIZZES_EN = {
 
       q("cb6", "Where should you get the official Hirly logo for videos?", [
 
-        { id: "a", label: "The shared Google Drive folder in the Company Logos section" },
+        { id: "a", label: "The shared Google Drive folder in Good. Better. Best. → Resources" },
 
         { id: "b", label: "Any screenshot taken from the app or website" },
 
@@ -804,7 +804,7 @@ const QUIZZES_FR = {
 
       q("cb6", "Où récupérer le logo officiel Hirly pour tes vidéos ?", [
 
-        { id: "a", label: "Le dossier Google Drive partagé dans la section Logos des compagnies" },
+        { id: "a", label: "Le dossier Google Drive partagé dans Bien. Mieux. Le top. → Ressources" },
 
         { id: "b", label: "N'importe quelle capture d'écran de l'app ou du site" },
 

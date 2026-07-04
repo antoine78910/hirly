@@ -6,12 +6,14 @@ const LABELS = {
     guidelines: "Consignes",
     captions: "Exemples de légendes",
     scripts: "Scripts",
+    resources: "Ressources",
   },
   en: {
     examples: "Video examples",
     guidelines: "Guidelines",
     captions: "Caption examples",
     scripts: "Scripts",
+    resources: "Resources",
   },
 };
 
@@ -34,6 +36,7 @@ function categorizeHeading(text) {
   }
   if (/^main script$|^script principal$/.test(h)) return "script";
   if (/^variation\s*\d+/.test(h)) return "script";
+  if (/^resources?$|^ressources?$/.test(h)) return "resources";
   return "other";
 }
 
@@ -53,6 +56,7 @@ export function structureContentBankBlocks(blocks, lang = "fr") {
     examples: [],
     guidelines: [],
     captions: [],
+    resources: [],
   };
   const scriptItems = [];
   let scriptFold = null;
@@ -91,6 +95,10 @@ export function structureContentBankBlocks(blocks, lang = "fr") {
       }
       if (cat === "captions") {
         setBucket("captions");
+        continue;
+      }
+      if (cat === "resources") {
+        setBucket("resources");
         continue;
       }
       if (cat === "script") {
@@ -143,6 +151,7 @@ export function structureContentBankBlocks(blocks, lang = "fr") {
     { id: "examples", title: t.examples, blocks: buckets.examples, defaultOpen: true },
     { id: "guidelines", title: t.guidelines, blocks: buckets.guidelines, defaultOpen: false },
     { id: "captions", title: t.captions, blocks: buckets.captions, defaultOpen: false },
+    { id: "resources", title: t.resources, blocks: buckets.resources, defaultOpen: false },
   ].filter((fold) => fold.blocks?.length);
 
   if (scriptFold) result.push(scriptFold);

@@ -8,7 +8,6 @@ import {
   Laptop,
   MapPin,
   Star,
-  Zap,
 } from "lucide-react";
 import Logo from "../Logo";
 import CompanyLogo from "../CompanyLogo";
@@ -102,27 +101,22 @@ export default function DesktopJobCard({ job, theme, t, lang }) {
 
   return (
     <div className="flex min-h-0 h-full flex-1 flex-col">
-      <div className={`shrink-0 border-b p-5 pr-24 lg:p-6 lg:pr-28 ${theme.cardHeader}`}>
-        <div className="flex min-w-0 gap-4">
+      <div className={`flex h-1/4 min-h-0 shrink-0 items-center border-b px-5 py-3 pr-24 lg:px-6 lg:pr-28 ${theme.cardHeader}`}>
+        <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-4">
+          <CompanyLogo job={job} size="lg" rounded="2xl" className="shrink-0" />
           <div className="min-w-0 flex-1">
             <h1
-              className={`font-display text-xl font-bold leading-snug lg:text-2xl xl:text-[1.75rem] ${theme.cardTitle}`}
+              className={`line-clamp-2 font-display text-lg font-bold leading-snug sm:text-xl lg:text-2xl ${theme.cardTitle}`}
               data-testid="job-title"
             >
               {title}
             </h1>
-            <div className="mt-2 flex items-center gap-3">
-              <CompanyLogo job={job} size="lg" rounded="2xl" className="shrink-0" />
-              <p className={`min-w-0 text-base font-medium leading-snug ${theme.cardCompany}`}>{job.company}</p>
-            </div>
+            <p className={`mt-0.5 truncate text-sm font-medium sm:text-base ${theme.cardCompany}`}>{job.company}</p>
           </div>
-          <span className={`inline-flex h-fit shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${theme.matchBadge}`}>
-            <Zap className="h-3.5 w-3.5" fill="currentColor" />
-            1
-          </span>
         </div>
       </div>
 
+      <div className="flex h-3/4 min-h-0 flex-col">
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-6 py-4 pb-24 outline-none lg:px-8 lg:py-5 lg:pb-28">
         <div className={`flex flex-wrap items-center gap-x-4 gap-y-2 text-sm ${theme.cardMeta}`}>
           <span className="inline-flex min-w-0 items-center gap-1.5">
@@ -186,6 +180,7 @@ export default function DesktopJobCard({ job, theme, t, lang }) {
           <Logo size={44} className="h-11 w-11" />
           <p className={`text-center text-sm font-semibold font-display ${theme.cardCompany}`}>{BRAND.NAME}</p>
         </div>
+      </div>
       </div>
     </div>
   );
