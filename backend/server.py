@@ -4303,6 +4303,17 @@ async def get_feed(
             return list(dict.fromkeys(values))
 
         selected_country_codes = _country_codes_from_locations()
+        # When searching France with France Travail configured, boost timeouts so
+        # the OAuth + commune-code lookup + API pagination have enough headroom.
+        _ft_configured = is_job_provider_configured("france_travail")
+        _search_is_france = bool(selected_country_codes) and all(cc == "fr" for cc in selected_country_codes)
+        if _search_is_france and _ft_configured:
+            sync_refresh_max_pages = max(sync_refresh_max_pages, min(_env_int("FRANCE_TRAVAIL_MAX_PAGES", 2), 4))
+            sync_refresh_page_size = max(sync_refresh_page_size, min(_env_int("FRANCE_TRAVAIL_PAGE_SIZE", 50), 150))
+            sync_refresh_max_results = max(sync_refresh_max_results, min(_env_int("FRANCE_TRAVAIL_PAGE_SIZE", 50), 100))
+            sync_refresh_attempts_per_city = 1
+            sync_refresh_max_seconds = max(sync_refresh_max_seconds, 18)
+            sync_refresh_total_seconds = max(sync_refresh_total_seconds, 22)
         location_intelligence_enabled = _env_bool("JOBS_LOCATION_INTELLIGENCE_ENABLED", True)
         location_max_expanded_cities = max(1, min(_env_int("JOBS_LOCATION_MAX_EXPANDED_CITIES", 10), 50))
         location_min_radius_km = max(1, _env_int("JOBS_LOCATION_MIN_RADIUS_KM", 10))

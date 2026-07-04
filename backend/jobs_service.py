@@ -18,6 +18,7 @@ from employment_kind import contract_type_query_hint, enrich_job_employment_kind
 from job_providers import (
     get_board_provider,
     get_job_provider,
+    is_france_travail_provider,
     is_job_provider_configured,
     is_job_provider_enabled,
     primary_job_provider_name,
@@ -1227,6 +1228,22 @@ async def refresh_jobs_for_profile_if_needed(
             }
 
     provider_name = primary_job_provider_name()
+
+    # Auto-select France Travail for French searches when it is configured,
+    # regardless of the primary provider setting.
+    query_is_france = (
+        (query.country or "").lower().strip() == "fr"
+        or _looks_like_france_location(query.location or "")
+    )
+    ft_configured = is_job_provider_configured("france_travail")
+    if query_is_france and ft_configured and not is_france_travail_provider(provider_name):
+        provider_name = "france_travail"
+        logger.info(
+            "JSearch provider overridden: using france_travail for French query location=%s country=%s",
+            query.location,
+            query.country,
+        )
+
     if not is_job_provider_enabled(provider_name):
         return {"attempted": bool(greenhouse_result or lever_result), "reason": "disabled", "greenhouse": greenhouse_result, "lever": lever_result, **base_metadata}
 
