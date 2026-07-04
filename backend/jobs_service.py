@@ -940,6 +940,11 @@ def _dedupe_queries(queries: List[JobSearchQuery], provider) -> List[JobSearchQu
 
 
 def _provider_attempt_queries(query: JobSearchQuery, search_radius: str, provider) -> List[JobSearchQuery]:
+    if getattr(provider, "name", None) == "france_travail":
+        role_variants = _localized_role_variants(query.role, query.country)
+        best_role = role_variants[0] if role_variants else query.role
+        return [_copy_query_with_role(query, best_role)]
+
     role_variants = _localized_role_variants(query.role, query.country)
     locations = _nearby_locations(query, search_radius)
     primary_location = query.location
@@ -1252,6 +1257,8 @@ async def refresh_jobs_for_profile_if_needed(
         min_fresh_count,
         target_auto_apply_count * max(1, _env_int("JOB_IMPORT_CACHE_FRESH_MULTIPLIER", 4)),
     )
+    if query_limit_override:
+        min_feed_ready_count = max(3, min(int(query_limit_override), min_feed_ready_count))
     fresh_query = {
         "provider": provider.name,
         "provider_search_key": {"$in": search_keys},

@@ -3,27 +3,31 @@ import { api } from "./api";
 import { isDemoAccountEnabled } from "./demoAccount";
 import { TUTORIAL_BYPASS_AUTH } from "./dev";
 
+import { enrichLocationData } from "./locationSearch";
+
 const COUNTRY_CODE_BY_NAME = {
-  france: "FR",
-  "united kingdom": "GB",
-  uk: "GB",
-  england: "GB",
-  "united states": "US",
-  usa: "US",
-  morocco: "MA",
-  maroc: "MA",
-  germany: "DE",
-  spain: "ES",
-  espana: "ES",
-  italy: "IT",
-  canada: "CA",
-  belgium: "BE",
-  switzerland: "CH",
-  netherlands: "NL",
+  france: "fr",
+  "united kingdom": "gb",
+  uk: "gb",
+  england: "gb",
+  "united states": "us",
+  usa: "us",
+  morocco: "ma",
+  maroc: "ma",
+  germany: "de",
+  spain: "es",
+  espana: "es",
+  italy: "it",
+  canada: "ca",
+  belgium: "be",
+  switzerland: "ch",
+  netherlands: "nl",
 };
 
 export function normalizeLocationData(location, locationData) {
-  if (locationData?.location_label) return locationData;
+  if (locationData?.location_label) {
+    return enrichLocationData(locationData);
+  }
 
   const trimmed = (location || "").trim();
   if (!trimmed) return null;
@@ -31,7 +35,7 @@ export function normalizeLocationData(location, locationData) {
   const parts = trimmed.split(",").map((part) => part.trim()).filter(Boolean);
   const country = parts.length > 1 ? parts[parts.length - 1] : "";
 
-  return {
+  return enrichLocationData({
     location_label: trimmed,
     place_id: "",
     country,
@@ -39,7 +43,7 @@ export function normalizeLocationData(location, locationData) {
     lat: null,
     lng: null,
     source: "local",
-  };
+  });
 }
 
 export async function saveTargetPreferences({ role, location, locationData }) {

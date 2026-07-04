@@ -88,7 +88,7 @@ from job_providers import (
     is_job_provider_enabled,
     primary_job_provider_name,
 )
-from job_providers.apply_eligibility import classify_apply_link, is_manual_fulfillment_ready
+from job_providers.apply_eligibility import classify_apply_link, is_manual_fulfillment_ready, is_france_travail_offer
 from job_providers.base import JobSearchQuery
 from job_cache_maintenance import (
     env_bool as job_cache_env_bool,
@@ -271,6 +271,18 @@ def _apply_fulfillment_fields(job: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _job_is_applyable(job: Dict[str, Any]) -> bool:
+    if is_france_travail_offer(
+        provider=str(job.get("provider") or ""),
+        source=str(job.get("source") or ""),
+        url=str(job.get("external_url") or job.get("selected_apply_url") or ""),
+    ):
+        validation_status = str(job.get("validation_status") or "").strip().lower()
+        applyability_tier = str(job.get("applyability_tier") or "").strip().upper()
+        if validation_status == "invalid" and applyability_tier == "E":
+            return False
+        if applyability_tier == "E":
+            return False
+        return bool(job.get("selected_apply_url") or job.get("external_url") or job.get("apply_url") or job.get("hosted_url"))
     validation_status = str(job.get("validation_status") or "").strip().lower()
     applyability_tier = str(job.get("applyability_tier") or "").strip().upper()
     if validation_status == "invalid" or applyability_tier in {"D", "E"}:
@@ -319,6 +331,14 @@ def _job_has_usable_apply_url(job: Dict[str, Any]) -> bool:
 
 
 def _job_is_blocked_for_feed(job: Dict[str, Any]) -> bool:
+    if is_france_travail_offer(
+        provider=str(job.get("provider") or ""),
+        source=str(job.get("source") or ""),
+        url=str(job.get("external_url") or job.get("selected_apply_url") or ""),
+    ):
+        validation_status = str(job.get("validation_status") or "").strip().lower()
+        applyability_tier = str(job.get("applyability_tier") or "").strip().upper()
+        return applyability_tier == "E" or job.get("captcha_detected") is True
     validation_status = str(job.get("validation_status") or "").strip().lower()
     applyability_tier = str(job.get("applyability_tier") or "").strip().upper()
     return (
@@ -4091,6 +4111,11 @@ async def get_feed(
         sync_refresh_cooldown_seconds = max(30, min(_env_int("JOBS_FEED_SYNC_REFRESH_COOLDOWN_SECONDS", 300), 1800))
         sync_refresh_total_seconds = max(2, min(_env_int("JOBS_FEED_SYNC_REFRESH_TOTAL_SECONDS", 12), 25))
         sync_refresh_attempts_per_city = max(1, min(_env_int("JOBS_FEED_PROVIDER_ATTEMPTS_PER_CITY", 2), 4))
+        if primary_job_provider_name() == "france_travail":
+            sync_refresh_max_pages = max(sync_refresh_max_pages, min(_env_int("FRANCE_TRAVAIL_MAX_PAGES", 2), 4))
+            sync_refresh_page_size = max(sync_refresh_page_size, min(_env_int("FRANCE_TRAVAIL_PAGE_SIZE", 50), 150))
+            sync_refresh_max_results = max(sync_refresh_max_results, min(_env_int("FRANCE_TRAVAIL_PAGE_SIZE", 50), 100))
+            sync_refresh_attempts_per_city = 1
         target_role = feed_target_role
         profile_contract_type = resolve_profile_contract_type(profile)
         effective_job_types = list(job_type or [])
@@ -4131,7 +4156,22 @@ async def get_feed(
                 })
             if location:
                 selected.extend({"location_label": item} for item in location if item)
-            return selected
+            return [_enrich_feed_location(loc) for loc in selected]
+
+        def _enrich_feed_location(loc: Dict[str, Any]) -> Dict[str, Any]:
+            enriched = dict(loc)
+            label = str(enriched.get("location_label") or enriched.get("label") or "").strip()
+            if not label:
+                return enriched
+            country_code = str(enriched.get("country_code") or "").lower().strip()
+            if not country_code and jobs_service_module._looks_like_france_location(label):
+                country_code = "fr"
+                enriched["country_code"] = country_code
+                enriched["country"] = enriched.get("country") or "France"
+                if "france" not in label.lower():
+                    city = label.split(",")[0].strip()
+                    enriched["location_label"] = f"{city}, France"
+            return enriched
 
         request_selected_locations = _parse_selected_locations()
         selected_locations = list(request_selected_locations)
@@ -5495,6 +5535,17 @@ async def get_feed(
         else:
             jobs = rank(candidates, worldwide=False, broad=False)
             logger.info("feed_filter_stage user_id=%s stage=strict_role_location elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))
+            if len(jobs) < requested_limit and not _timed_out():
+                relaxed_local = rank(candidates, worldwide=False, broad=True)
+                if relaxed_local:
+                    fallback_used = "explicit_local_role_family"
+                    jobs = relaxed_local
+                logger.info(
+                    "feed_filter_stage user_id=%s stage=explicit_local_role_family elapsed_ms=%s count=%s",
+                    user.user_id,
+                    _elapsed_ms(),
+                    len(jobs),
+                )
             if len(jobs) < requested_limit and direct_refresh_jobs and not _timed_out():
                 fallback_used = "direct_provider_relaxed_role"
                 jobs = rank(candidates, worldwide=False, broad=True)

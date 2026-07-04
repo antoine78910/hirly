@@ -92,6 +92,28 @@ function looksLikeFranceLocation(text) {
   return Boolean(cityPart && FRENCH_CITY_MARKERS.has(cityPart));
 }
 
+export function enrichLocationData(locationData) {
+  if (!locationData || typeof locationData !== "object") return locationData;
+
+  const label = String(locationData.location_label || locationData.label || "").trim();
+  if (!label) return locationData;
+
+  const isFrench = looksLikeFranceLocation(label);
+  const displayLabel = isFrench && !label.toLowerCase().includes("france")
+    ? `${label.split(",")[0].trim()}, France`
+    : label;
+  const countryCode = String(locationData.country_code || "").toLowerCase().trim()
+    || (isFrench ? "fr" : "");
+
+  return {
+    ...locationData,
+    location_label: displayLabel,
+    label: displayLabel,
+    country: locationData.country || (isFrench ? "France" : ""),
+    country_code: countryCode,
+  };
+}
+
 export function buildTypedLocationResult(query) {
   const trimmed = (query || "").trim();
   if (trimmed.length < 2) return [];
@@ -106,7 +128,7 @@ export function buildTypedLocationResult(query) {
     ? `${label}, France`
     : label;
 
-  return [{
+  return [enrichLocationData({
     id: `typed:${normalizeLabel(displayLabel)}`,
     label: displayLabel,
     source: "typed",
@@ -116,7 +138,7 @@ export function buildTypedLocationResult(query) {
     lat: null,
     lng: null,
     kind: "city",
-  }];
+  })];
 }
 
 /** Browser-side fallback when the backend location API is unavailable. */

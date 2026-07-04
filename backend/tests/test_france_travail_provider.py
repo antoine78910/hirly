@@ -29,6 +29,48 @@ def test_france_travail_search_distance_uses_query_radius():
     assert provider._search_distance_km(query) == 50
 
 
+def test_france_travail_search_param_variants_dijon_uses_commune_and_departement_fallback():
+    provider = FranceTravailProvider(client_id="PAR_test", client_secret="secret")
+    query = JobSearchQuery(
+        role="Software Engineer",
+        location="Dijon",
+        country="fr",
+        language="fr",
+        radius_km=50,
+    )
+
+    async def _run():
+        with patch.object(provider, "_lookup_commune_code_and_departement", AsyncMock(return_value=("21231", "21"))):
+            return await provider._search_param_variants(query)
+
+    variants = asyncio.run(_run())
+    assert len(variants) >= 2
+    assert variants[0]["commune"] == "21231"
+    assert variants[0]["distance"] == 50
+    assert variants[1]["departement"] == "21"
+    assert "commune" not in variants[1]
+
+
+def test_france_travail_search_param_variants_paris_uses_departement():
+    provider = FranceTravailProvider(client_id="PAR_test", client_secret="secret")
+    query = JobSearchQuery(
+        role="Software Engineer",
+        location="Paris, France",
+        country="fr",
+        language="fr",
+        radius_km=50,
+    )
+
+    async def _run():
+        with patch.object(provider, "_lookup_commune_code_and_departement", AsyncMock(return_value=("75056", "75"))):
+            return await provider._search_param_variants(query)
+
+    variants = asyncio.run(_run())
+    assert len(variants) == 1
+    assert variants[0]["departement"] == "75"
+    assert "commune" not in variants[0]
+
+
 def test_france_travail_build_search_params_includes_commune_and_distance():
     provider = FranceTravailProvider(client_id="PAR_test", client_secret="secret")
     query = JobSearchQuery(
@@ -89,6 +131,9 @@ def test_france_travail_normalization_maps_core_fields():
     assert job["ats_provider"] == "francetravail"
     assert "francetravail.fr" in job["external_url"]
     assert job["employment_kind"] in ("full_time", "permanent", "fixed_term")
+    assert job["manual_fulfillment_ready"] is True
+    assert job["apply_fulfillment_status"] == "manual_ready"
+    assert "francetravail.fr" in job["external_url"]
 
 
 def test_france_travail_publiee_depuis_uses_summer_ttl():

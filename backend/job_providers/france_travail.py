@@ -35,6 +35,14 @@ _CONTRACT_HINT_TO_TYPE_CONTRAT = {
 
 _DEPARTEMENT_RE = re.compile(r"\b(\d{2}|2[AB])\b", re.IGNORECASE)
 
+# France Travail expects arrondissement INSEE codes for Paris/Lyon/Marseille, not global city codes.
+_MUNICIPALITY_AGGREGATION_CODES = {"75056", "69123", "13055"}
+_MEGA_CITY_DEPARTEMENT = {
+    "paris": "75",
+    "lyon": "69",
+    "marseille": "13",
+}
+
 _ROLE_KEYWORD_HINTS = {
     "software": ("developpeur", "logiciel", "informatique", "programmeur"),
     "engineer": ("ingenieur", "ingenieur logiciel"),
@@ -135,50 +143,116 @@ class FranceTravailProvider:
         page_size = max(1, min(int(query.page_size or self._env_int("FRANCE_TRAVAIL_PAGE_SIZE", 50)), 150))
         max_pages = max(1, min(int(query.max_pages or self._env_int("FRANCE_TRAVAIL_MAX_PAGES", 2)), 10))
         target_count = max(query.limit, min(page_size * max_pages, 300))
+        min_results_before_fallback = max(1, self._env_int("FRANCE_TRAVAIL_MIN_RESULTS_BEFORE_FALLBACK", 8))
 
+        param_variants = await self._search_param_variants(query)
         payloads: List[Any] = []
         rows: List[Dict[str, Any]] = []
         seen_ids = set()
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             token = await self._get_access_token(client)
             headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
-            for page_index in range(max_pages):
-                start = page_index * page_size
-                end = start + page_size - 1
-                page_params = dict(params)
-                page_params["range"] = f"{start}-{end}"
-                response = await client.get(self.search_url, params=page_params, headers=headers)
-                if response.status_code == 204:
+            for variant_index, variant_params in enumerate(param_variants):
+                if variant_index > 0:
+                    if len(rows) >= min_results_before_fallback:
+                        break
+                    await asyncio.sleep(self._request_interval())
+                variant_rows, variant_payloads = await self._fetch_search_pages(
+                    client,
+                    headers,
+                    variant_params,
+                    page_size=page_size,
+                    max_pages=max_pages,
+                    target_count=target_count - len(rows),
+                    seen_ids=seen_ids,
+                )
+                payloads.extend(variant_payloads)
+                rows.extend(variant_rows)
+                if len(rows) >= target_count:
                     break
-                if response.status_code == 429:
-                    retry_after = self._retry_after_seconds(response)
-                    await asyncio.sleep(retry_after)
-                    response = await client.get(self.search_url, params=page_params, headers=headers)
-                response.raise_for_status()
-                payload = response.json() if response.content else {}
-                payloads.append({"status_code": response.status_code, "payload": payload})
-                page_rows = self._extract_offers(payload)
-                new_rows = 0
-                for row in page_rows:
-                    external_id = row.get("id")
-                    dedupe_key = str(external_id or hashlib.sha1(repr(sorted(row.items())).encode("utf-8")).hexdigest())
-                    if dedupe_key in seen_ids:
-                        continue
-                    seen_ids.add(dedupe_key)
-                    rows.append(row)
-                    new_rows += 1
-                has_more = response.status_code == 206 or bool(payload.get("has_more"))
-                if not page_rows or new_rows == 0 or len(rows) >= target_count or not has_more:
-                    break
-                await asyncio.sleep(max(0.0, self._env_float("FRANCE_TRAVAIL_REQUEST_INTERVAL_SECONDS", 0.26)))
 
         imported_at = datetime.now(timezone.utc).isoformat()
         jobs = [self.normalize_job(row, query, imported_at) for row in rows[:target_count]]
         jobs = [job for job in jobs if job is not None]
         return ProviderResult(
-            raw_response={"pages": payloads, "rows_seen": len(rows), "params": params},
+            raw_response={"pages": payloads, "rows_seen": len(rows), "params_variants": param_variants},
             jobs=jobs[:target_count],
         )
+
+    async def _fetch_search_pages(
+        self,
+        client: httpx.AsyncClient,
+        headers: Dict[str, str],
+        params: Dict[str, Any],
+        *,
+        page_size: int,
+        max_pages: int,
+        target_count: int,
+        seen_ids: set,
+    ) -> Tuple[List[Dict[str, Any]], List[Any]]:
+        payloads: List[Any] = []
+        rows: List[Dict[str, Any]] = []
+        for page_index in range(max_pages):
+            if len(rows) >= target_count:
+                break
+            if page_index > 0:
+                await asyncio.sleep(self._request_interval())
+            start = page_index * page_size
+            end = start + page_size - 1
+            page_params = dict(params)
+            page_params["range"] = f"{start}-{end}"
+            response = await client.get(self.search_url, params=page_params, headers=headers)
+            if response.status_code == 204:
+                break
+            if response.status_code == 429:
+                retry_after = self._retry_after_seconds(response)
+                await asyncio.sleep(retry_after)
+                response = await client.get(self.search_url, params=page_params, headers=headers)
+            response.raise_for_status()
+            payload = response.json() if response.content else {}
+            payloads.append({"status_code": response.status_code, "payload": payload, "params": page_params})
+            page_rows = self._extract_offers(payload)
+            new_rows = 0
+            for row in page_rows:
+                external_id = row.get("id")
+                dedupe_key = str(external_id or hashlib.sha1(repr(sorted(row.items())).encode("utf-8")).hexdigest())
+                if dedupe_key in seen_ids:
+                    continue
+                seen_ids.add(dedupe_key)
+                rows.append(row)
+                new_rows += 1
+            has_more = response.status_code == 206 or bool(payload.get("has_more"))
+            if not page_rows or new_rows == 0 or len(rows) >= target_count or not has_more:
+                break
+        return rows, payloads
+
+    async def _search_param_variants(self, query: JobSearchQuery) -> List[Dict[str, Any]]:
+        base = await self._build_search_params(query)
+        city = (query.location or "").split(",")[0].strip().lower()
+        distance = self._search_distance_km(query)
+        _, _, departement = await self._commune_distance_departement(query)
+        variants: List[Dict[str, Any]] = []
+
+        if city in _MEGA_CITY_DEPARTEMENT:
+            variants.append({**base, "departement": _MEGA_CITY_DEPARTEMENT[city]})
+            for key in ("commune", "distance"):
+                variants[0].pop(key, None)
+            return variants
+
+        commune = base.get("commune")
+        if commune and str(commune) not in _MUNICIPALITY_AGGREGATION_CODES:
+            variants.append(dict(base))
+
+        dept_code = departement or base.get("departement") or _MEGA_CITY_DEPARTEMENT.get(city)
+        if dept_code:
+            dept_params = dict(base)
+            dept_params.pop("commune", None)
+            dept_params.pop("distance", None)
+            dept_params["departement"] = str(dept_code)
+            if not variants or dept_params != variants[0]:
+                variants.append(dept_params)
+
+        return variants or [base]
 
     async def _build_search_params(self, query: JobSearchQuery) -> Dict[str, Any]:
         params: Dict[str, Any] = {
@@ -190,7 +264,7 @@ class FranceTravailProvider:
         if type_contrat:
             params["typeContrat"] = type_contrat
         commune, distance, departement = await self._commune_distance_departement(query)
-        if commune:
+        if commune and str(commune) not in _MUNICIPALITY_AGGREGATION_CODES:
             params["commune"] = commune
             params["distance"] = distance
         elif departement:
@@ -477,6 +551,9 @@ class FranceTravailProvider:
         if any(token in text for token in ("junior", "débutant", "debutant", "stage", "alternance")):
             return "junior"
         return "mid"
+
+    def _request_interval(self) -> float:
+        return max(0.5, self._env_float("FRANCE_TRAVAIL_REQUEST_INTERVAL_SECONDS", 1.0))
 
     def _retry_after_seconds(self, response: httpx.Response) -> float:
         raw = response.headers.get("Retry-After")

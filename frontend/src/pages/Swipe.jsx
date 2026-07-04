@@ -33,6 +33,7 @@ import { ensureTutorialSession } from "../lib/tutorialSession";
 import { useUpgradeModal } from "../context/UpgradeModalContext";
 import DesktopSwipeFeed from "../components/swipe/DesktopSwipeFeed";
 import { saveTargetPreferences, normalizeLocationData } from "../lib/targetPreferences";
+import { enrichLocationData } from "../lib/locationSearch";
 import { hasActiveFilters, mergeFilters, clearMenuFilters } from "../lib/jobFilters";
 import { buildDefaultFiltersFromProfile, mergeProfileFilterDefaults, reconcileFiltersForUser } from "../lib/contractTypeMapping";
 import { useAppLocale } from "../context/AppLocaleContext";
@@ -58,7 +59,14 @@ const readPersistedFilters = () => {
     const raw = window.localStorage.getItem(FILTERS_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : null;
+    if (!parsed || typeof parsed !== "object") return null;
+    const next = { ...parsed };
+    if (Array.isArray(next.locationsData) && next.locationsData.length) {
+      next.locationsData = next.locationsData.map((item) => enrichLocationData(item)).filter(Boolean);
+    } else if (next.locationData) {
+      next.locationData = enrichLocationData(next.locationData);
+    }
+    return next;
   } catch (_) {
     return null;
   }
@@ -700,6 +708,11 @@ export default function Swipe() {
     if (stackPrefetch) {
       params.set("prefetch", "true");
     }
+    const hasExplicitLocalSearch = isNumericRadius(params.get("search_radius") || DEFAULT_SEARCH_RADIUS)
+      && Boolean(params.get("locations_json"));
+    if (replace && hasExplicitLocalSearch && !params.get("force_provider_refresh")) {
+      params.set("force_provider_refresh", "true");
+    }
     let requestUrl = `/jobs/feed?${params.toString()}`;
     console.group("[FeedDebug] loadFeed");
     console.log("reason", reason);
@@ -762,11 +775,13 @@ export default function Swipe() {
       let outsideLocationHiddenCount = responseJobs.length - safeJobs.length;
       const trace = data?.request_trace || {};
       const shouldForceLocalRetry = Boolean(
-        localFeedGuard
-        && safeJobs.length === 0
+        safeJobs.length === 0
         && !params.get("force_provider_refresh")
-        && trace.explicit_local_intent
-        && trace.local_jsearch_discovery_attempted !== true
+        && (trace.explicit_local_intent || data?.filters_applied?.explicit_local_intent)
+        && (
+          trace.local_jsearch_discovery_attempted !== true
+          || Number(trace.jsearch_results_count || 0) === 0
+        )
       );
       if (shouldForceLocalRetry) {
         const retryParams = new URLSearchParams(params);
