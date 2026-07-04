@@ -4,7 +4,6 @@ import { api } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { demoMode } from "../lib/dev";
 import { DEMO_PROFILE } from "../lib/demoData";
-import { useUpgradeModal } from "../context/UpgradeModalContext";
 import {
   User as UserIcon,
   FileText,
@@ -357,13 +356,10 @@ export default function Profile() {
   const { t } = useAppLocale();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { displayCredits, isPremium } = useSwipeCredits();
-  const { openUpgrade } = useUpgradeModal();
   const [profile, setProfile] = useState(() => (demoMode ? DEMO_PROFILE : null));
   const [loading, setLoading] = useState(!demoMode);
   const [tab, setTab] = useState("resume");
   const [openSheet, setOpenSheet] = useState(null);
-  const [creditsDismissed, setCreditsDismissed] = useState(false);
 
   const profileTabs = useMemo(() => ([
     { key: "resume", label: t("profile.resume"), icon: PROFILE_TAB_ICONS.resume },
@@ -394,7 +390,6 @@ export default function Profile() {
   }, [reload]);
 
   const completion = useMemo(() => profileCompletion(profile), [profile]);
-  const swipeCredits = displayCredits;
 
   const sectionCount = (key) => {
     if (!key) return 0;
@@ -437,38 +432,6 @@ export default function Profile() {
             </button>
           )}
         />
-        {!creditsDismissed ? (
-          <div className="shell-surface flex items-center gap-3 px-3 py-3">
-            <button
-              type="button"
-              onClick={() => setCreditsDismissed(true)}
-              className="text-zinc-300 hover:text-zinc-500"
-              aria-label={t("profileSections.dismiss")}
-            >
-              <X className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (!isPremium) openUpgrade();
-              }}
-              className={`flex min-w-0 flex-1 items-center gap-3 text-left ${isPremium ? "cursor-default" : ""}`}
-              data-testid="profile-credits-card"
-            >
-              <div className="grid h-10 w-10 place-items-center rounded-full bg-violet-100">
-                <Zap className="h-5 w-5 text-linkedin" fill="currentColor" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-bold">
-                  <span className="text-amber-500">{swipeCredits}</span> {t("common.credits")}
-                </p>
-                <p className="text-xs shell-body">{isPremium ? t("profile.creditsRemaining") : t("profile.upgradePlan")}</p>
-              </div>
-              <ChevronRight className="h-5 w-5 shrink-0 text-zinc-300" />
-            </button>
-          </div>
-        ) : null}
-
         <div className={`shell-surface p-4 ${showSkeleton ? "animate-pulse" : ""}`}>
           <div className="flex items-center gap-4">
             <div
