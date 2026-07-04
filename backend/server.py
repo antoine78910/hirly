@@ -2027,9 +2027,75 @@ def _detect_cv_format(filename: str, content: bytes, content_type: Optional[str]
     return "txt"
 
 
+def _extract_pdf_text_pypdf(content: bytes) -> str:
+    try:
+        reader = PdfReader(io.BytesIO(content))
+        if reader.is_encrypted:
+            try:
+                reader.decrypt("")
+            except Exception:
+                pass
+        return "\n".join((page.extract_text() or "") for page in reader.pages).strip()
+    except Exception as exc:
+        logger.warning("cv_pdf_pypdf_extract_failed error=%s", exc)
+        return ""
+
+
+def _extract_pdf_text_pymupdf(content: bytes) -> str:
+    try:
+        import fitz
+    except ImportError:
+        return ""
+    try:
+        doc = fitz.open(stream=content, filetype="pdf")
+        parts = [(page.get_text() or "").strip() for page in doc]
+        return "\n".join(part for part in parts if part).strip()
+    except Exception as exc:
+        logger.warning("cv_pdf_pymupdf_extract_failed error=%s", exc)
+        return ""
+
+
 def _extract_pdf_text(content: bytes) -> str:
-    reader = PdfReader(io.BytesIO(content))
-    return "\n".join((page.extract_text() or "") for page in reader.pages).strip()
+    candidates = [_extract_pdf_text_pypdf(content), _extract_pdf_text_pymupdf(content)]
+    return max(candidates, key=len, default="")
+
+
+def _cv_text_looks_usable(text: str, min_chars: int = 40) -> bool:
+    cleaned = " ".join((text or "").split())
+    if len(cleaned) >= min_chars:
+        return True
+    return len(cleaned.split()) >= 8
+
+
+def _guess_image_mime(image_bytes: bytes) -> str:
+    if image_bytes[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if image_bytes[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if len(image_bytes) >= 12 and image_bytes[:4] == b"RIFF" and image_bytes[8:12] == b"WEBP":
+        return "image/webp"
+    return "image/png"
+
+
+def _dedupe_image_candidates(images: list[bytes]) -> list[bytes]:
+    seen: set[tuple[int, bytes]] = set()
+    unique: list[bytes] = []
+    for image_bytes in images:
+        if not image_bytes:
+            continue
+        fingerprint = (len(image_bytes), image_bytes[:32])
+        if fingerprint in seen:
+            continue
+        seen.add(fingerprint)
+        unique.append(image_bytes)
+    return unique
+
+
+def _pdf_ocr_image_candidates(content: bytes, max_pages: int = 4, dpi: int = 200) -> list[bytes]:
+    """Prefer rendered pages for OCR — more reliable than raw embedded XObject bytes."""
+    rendered = _rasterize_pdf_pages(content, max_pages=max_pages, dpi=dpi)
+    embedded = _extract_pdf_image_bytes(content)
+    return _dedupe_image_candidates([*rendered, *embedded])
 
 
 def _extract_pdf_image_bytes(content: bytes) -> list[bytes]:
@@ -2066,7 +2132,7 @@ def _extract_pdf_image_bytes(content: bytes) -> list[bytes]:
     return images
 
 
-def _rasterize_pdf_pages(content: bytes, max_pages: int = 2, dpi: int = 144) -> list[bytes]:
+def _rasterize_pdf_pages(content: bytes, max_pages: int = 4, dpi: int = 200) -> list[bytes]:
     """Render PDF pages to PNG when no text layer exists (common for mobile scans)."""
     try:
         import fitz
@@ -2156,12 +2222,11 @@ async def extract_cv_text_from_upload(
     fmt = _detect_cv_format(filename, content, content_type)
     if fmt == "pdf":
         text = _extract_pdf_text(content)
-        if text.strip():
+        if _cv_text_looks_usable(text):
             return text
         image_parts: list[str] = []
-        image_sources = _extract_pdf_image_bytes(content) or _rasterize_pdf_pages(content)
-        for image_bytes in image_sources:
-            mime = "image/png" if image_bytes[:8] == b"\x89PNG\r\n\x1a\n" else "image/jpeg"
+        for image_bytes in _pdf_ocr_image_candidates(content):
+            mime = _guess_image_mime(image_bytes)
             try:
                 part = await _ocr_cv_image_bytes(image_bytes, mime)
             except LLMProviderNotConfigured:
@@ -2171,7 +2236,12 @@ async def extract_cv_text_from_upload(
                 continue
             if part.strip():
                 image_parts.append(part.strip())
-        return "\n\n".join(image_parts)
+        ocr_text = "\n\n".join(image_parts)
+        if _cv_text_looks_usable(ocr_text):
+            return ocr_text
+        if text.strip():
+            return text
+        return ocr_text
     if fmt in CV_IMAGE_FORMATS:
         image_bytes = content
         mime = _cv_image_mime(fmt, filename, content_type)
@@ -3293,10 +3363,13 @@ async def upload_cv(file: UploadFile = File(...), user: User = Depends(get_curre
     except LLMProviderNotConfigured:
         raise HTTPException(
             status_code=503,
-            detail="AI provider is not configured. Photo resumes (PNG, JPG, HEIC) require vision OCR.",
+            detail="AI provider is not configured. Scanned or photo resumes require vision OCR.",
         )
     if not cv_text.strip():
-        raise HTTPException(status_code=400, detail="Could not extract text from CV")
+        raise HTTPException(
+            status_code=400,
+            detail="Could not extract text from CV. Try a clearer PDF or a DOCX export from your editor.",
+        )
 
     try:
         extracted = await claude_extract_profile(cv_text)
