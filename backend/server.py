@@ -5369,63 +5369,77 @@ async def get_feed(
                 for item in refresh_results
                 if isinstance(item, dict)
             ]
-            request_trace["jsearch_results_count"] = sum(
+            total_provider_imported = sum(
                 int(item.get("jobs_imported", item.get("imported", item.get("count") or 0)) or 0)
                 for item in refresh_results
                 if isinstance(item, dict)
             )
+            request_trace["jsearch_results_count"] = total_provider_imported
 
-            _clear_feed_job_pool_cache()
-            candidates, base_query, unfiltered_count, applyable_count, db_rejected_count = await _load_db_candidates(include_unknown=False)
-            if allow_unknown_tier and len(candidates) < requested_limit:
-                c_candidates, c_query, c_unfiltered, c_applyable, c_rejected = await _load_db_candidates(include_unknown=True)
-                seen_ids = {job.get("job_id") for job in candidates}
-                candidates.extend(job for job in c_candidates if job.get("job_id") not in seen_ids)
-                unfiltered_count += c_unfiltered
-                applyable_count += c_applyable
-                db_rejected_count += c_rejected
-                base_query = c_query
-            if explicit_local_intent and len(candidates) < requested_limit:
-                visible_candidates, visible_query, visible_unfiltered, visible_applyable, visible_rejected = await _load_local_visible_candidates()
-                seen_ids = {job.get("job_id") for job in candidates}
-                additions = [job for job in visible_candidates if job.get("job_id") not in seen_ids]
-                candidates.extend(additions)
-                unfiltered_count += visible_unfiltered
-                applyable_count += visible_applyable
-                db_rejected_count += visible_rejected
-                local_visible_count += len(visible_candidates)
-                local_manual_count += sum(1 for job in visible_candidates if job.get("application_mode") != "auto_apply")
-                local_blocked_hidden_count += visible_rejected
-                if additions:
-                    base_query = visible_query if not base_query else base_query
-                    feed_source = "db_after_jsearch_fallback+local_visible"
-            if direct_refresh_jobs:
-                seen_ids = {job.get("job_id") for job in candidates}
-                fresh_additions: List[Dict[str, Any]] = []
-                for job in direct_refresh_jobs:
-                    job_id = job.get("job_id")
-                    if job_id and job_id in seen_ids:
-                        continue
-                    if job_id and job_id in swiped_ids:
-                        continue
-                    if _job_is_blocked_for_feed(job) or not _job_has_usable_apply_url(job):
-                        continue
-                    candidate = _with_application_capability_fields(job)
-                    if explicit_local_intent and not _passes_explicit_local_hard_constraint(candidate):
-                        continue
-                    if not _matches_explicit_filters(candidate):
-                        continue
-                    fresh_additions.append(candidate)
-                    if job_id:
-                        seen_ids.add(job_id)
-                if fresh_additions:
-                    candidates.extend(fresh_additions)
-                    local_visible_count += len(fresh_additions)
-                    local_manual_count += sum(1 for job in fresh_additions if job.get("application_mode") != "auto_apply")
-                    feed_source = f"{feed_source}+fresh_provider_jobs"
-            pre_filter_candidates = list(candidates)
-            if not str(feed_source).startswith("db_after_jsearch_fallback"):
-                feed_source = "db_after_jsearch_fallback"
+            skip_candidate_reload = (
+                total_provider_imported == 0
+                and not direct_refresh_jobs
+                and bool(candidates)
+            )
+            if skip_candidate_reload:
+                logger.info(
+                    "jobs/feed jsearch_fallback_no_new_jobs_skip_reload: user_id=%s elapsed_ms=%s existing_candidates=%s",
+                    user.user_id,
+                    _elapsed_ms(),
+                    len(candidates),
+                )
+            if not skip_candidate_reload:
+                _clear_feed_job_pool_cache()
+                candidates, base_query, unfiltered_count, applyable_count, db_rejected_count = await _load_db_candidates(include_unknown=False)
+                if allow_unknown_tier and len(candidates) < requested_limit:
+                    c_candidates, c_query, c_unfiltered, c_applyable, c_rejected = await _load_db_candidates(include_unknown=True)
+                    seen_ids = {job.get("job_id") for job in candidates}
+                    candidates.extend(job for job in c_candidates if job.get("job_id") not in seen_ids)
+                    unfiltered_count += c_unfiltered
+                    applyable_count += c_applyable
+                    db_rejected_count += c_rejected
+                    base_query = c_query
+                if explicit_local_intent and len(candidates) < requested_limit:
+                    visible_candidates, visible_query, visible_unfiltered, visible_applyable, visible_rejected = await _load_local_visible_candidates()
+                    seen_ids = {job.get("job_id") for job in candidates}
+                    additions = [job for job in visible_candidates if job.get("job_id") not in seen_ids]
+                    candidates.extend(additions)
+                    unfiltered_count += visible_unfiltered
+                    applyable_count += visible_applyable
+                    db_rejected_count += visible_rejected
+                    local_visible_count += len(visible_candidates)
+                    local_manual_count += sum(1 for job in visible_candidates if job.get("application_mode") != "auto_apply")
+                    local_blocked_hidden_count += visible_rejected
+                    if additions:
+                        base_query = visible_query if not base_query else base_query
+                        feed_source = "db_after_jsearch_fallback+local_visible"
+                if direct_refresh_jobs:
+                    seen_ids = {job.get("job_id") for job in candidates}
+                    fresh_additions: List[Dict[str, Any]] = []
+                    for job in direct_refresh_jobs:
+                        job_id = job.get("job_id")
+                        if job_id and job_id in seen_ids:
+                            continue
+                        if job_id and job_id in swiped_ids:
+                            continue
+                        if _job_is_blocked_for_feed(job) or not _job_has_usable_apply_url(job):
+                            continue
+                        candidate = _with_application_capability_fields(job)
+                        if explicit_local_intent and not _passes_explicit_local_hard_constraint(candidate):
+                            continue
+                        if not _matches_explicit_filters(candidate):
+                            continue
+                        fresh_additions.append(candidate)
+                        if job_id:
+                            seen_ids.add(job_id)
+                    if fresh_additions:
+                        candidates.extend(fresh_additions)
+                        local_visible_count += len(fresh_additions)
+                        local_manual_count += sum(1 for job in fresh_additions if job.get("application_mode") != "auto_apply")
+                        feed_source = f"{feed_source}+fresh_provider_jobs"
+                pre_filter_candidates = list(candidates)
+                if not str(feed_source).startswith("db_after_jsearch_fallback"):
+                    feed_source = "db_after_jsearch_fallback"
             logger.info(
                 "jobs/feed jsearch_fallback_complete: user_id=%s imported_results=%s provider_search_keys=%s db_after_count=%s db_after_role_good_count=%s unfiltered_count=%s applyable_count=%s rejected_de_count=%s",
                 user.user_id,

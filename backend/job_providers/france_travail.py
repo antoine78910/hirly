@@ -9,8 +9,6 @@ import os
 import re
 import time
 import unicodedata
-
-_logger = logging.getLogger(__name__)
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote
@@ -23,6 +21,7 @@ from .apply_eligibility import classify_apply_link
 from .ats_detection import detect_job_platform
 from .base import JobSearchQuery, ProviderResult
 
+_logger = logging.getLogger(__name__)
 _TOKEN_CACHE: Dict[str, Any] = {"access_token": None, "expires_at": 0.0}
 
 _CONTRACT_HINT_TO_TYPE_CONTRAT = {
@@ -70,40 +69,52 @@ def _ascii_fold(value: str) -> str:
     return unicodedata.normalize("NFKD", value or "").encode("ascii", "ignore").decode("ascii").lower()
 
 
-def _france_travail_keyword_tokens(role: str, country: Optional[str]) -> List[str]:
+def _france_travail_keyword_variants(role: str, country: Optional[str]) -> List[str]:
+    """Return an ordered list of standalone motsCles candidates to try.
+
+    IMPORTANT: France Travail's `motsCles` param treats comma-separated terms as a
+    logical AND (an offer must contain every term to match), not an OR. Combining
+    synonyms like "barista,serveur,barman" into one request therefore returns
+    (almost) nothing. Instead we return each candidate separately so the caller can
+    try them one request at a time (real OR semantics emulated via multiple calls).
+    """
     normalized = " ".join((role or "").split()) or "emploi"
     lower = _ascii_fold(normalized)
-    tokens: List[str] = []
+    variants: List[str] = []
     if (country or "").lower() in ("fr", "france", ""):
         if any(term in lower for term in ("software", "engineer", "developer", "full stack", "full-stack", "frontend", "backend", "devops")):
-            tokens.extend(["developpeur", "logiciel", "informatique", "ingenieur"])
+            variants.extend(["developpeur", "ingenieur logiciel", "informatique"])
         elif "data" in lower and "analyst" in lower:
-            tokens.extend(["analyste", "data", "donnees"])
+            variants.extend(["data analyste", "analyste donnees"])
         elif "analyst" in lower:
-            tokens.extend(["analyste", "etudes"])
+            variants.extend(["analyste", "charge d'etudes"])
         elif "marketing" in lower:
-            tokens.extend(["marketing", "communication", "digital"])
+            variants.extend(["marketing", "communication", "charge marketing"])
         elif any(term in lower for term in ("sales", "commercial")):
-            tokens.extend(["commercial", "vente", "vendeur"])
+            variants.extend(["commercial", "vendeur", "conseiller commercial"])
         elif any(term in lower for term in ("barista", "barman", "bartender", "waiter", "waitress", "serveur", "serveuse", "hospitality", "restaurant", "cafe", "coffee")):
-            tokens.extend(["barista", "serveur", "serveuse", "barman", "cafe", "restaurant"])
+            variants.extend(["barista", "serveur", "barman", "cafe"])
         elif "product" in lower and "manager" in lower:
-            tokens.extend(["chef de produit", "product manager"])
+            variants.extend(["chef de produit", "product manager"])
+        else:
+            for token in re.findall(r"[a-z0-9]+", lower):
+                if len(token) >= 3 and token in _ROLE_KEYWORD_HINTS:
+                    variants.extend(_ROLE_KEYWORD_HINTS[token][:3])
+                    break
+    if not variants:
+        variants.append(normalized)
         for token in re.findall(r"[a-z0-9]+", lower):
             if len(token) >= 3:
-                tokens.extend(list(_ROLE_KEYWORD_HINTS.get(token, ())))
-    for token in re.findall(r"[a-z0-9]+", lower):
-        if len(token) >= 3:
-            tokens.append(token)
+                variants.append(token)
     deduped: List[str] = []
     seen = set()
-    for token in tokens:
-        cleaned = token.strip().lower()
+    for item in variants:
+        cleaned = item.strip().lower()
         if len(cleaned) < 2 or cleaned in seen:
             continue
         seen.add(cleaned)
         deduped.append(cleaned)
-    return deduped[:8] or ["emploi"]
+    return deduped[:5] or ["emploi"]
 
 
 class FranceTravailProvider:
@@ -263,32 +274,51 @@ class FranceTravailProvider:
         return rows, payloads
 
     async def _search_param_variants(self, query: JobSearchQuery) -> List[Dict[str, Any]]:
+        """Build ordered param variants: one per keyword candidate at the resolved
+        location, since France Travail's motsCles has no OR operator (see
+        `_france_travail_keyword_variants`). A department-wide fallback (using only
+        the primary keyword) is appended last in case the commune itself has no
+        matching offers at all.
+        """
         city = (query.location or "").split(",")[0].strip().lower()
         commune_code, distance, departement = await self._commune_distance_departement(query)
-        base = await self._build_search_params_from_resolved(query, commune_code, distance, departement)
+        keyword_variants = self._keyword_variants(query)
+
         variants: List[Dict[str, Any]] = []
 
         if city in _MEGA_CITY_DEPARTEMENT:
-            variants.append({**base, "departement": _MEGA_CITY_DEPARTEMENT[city]})
-            for key in ("commune", "distance"):
-                variants[0].pop(key, None)
+            dept_code = _MEGA_CITY_DEPARTEMENT[city]
+            for keyword in keyword_variants:
+                variants.append(await self._build_search_params_from_resolved(
+                    query, None, distance, dept_code, keywords=keyword,
+                ))
             return variants
 
-        commune = base.get("commune")
-        if commune and str(commune) not in _MUNICIPALITY_AGGREGATION_CODES:
-            variants.append(dict(base))
+        if commune_code and str(commune_code) not in _MUNICIPALITY_AGGREGATION_CODES:
+            for keyword in keyword_variants:
+                variants.append(await self._build_search_params_from_resolved(
+                    query, commune_code, distance, None, keywords=keyword,
+                ))
+            dept_fallback = departement or self._departement_from_location(query.location)
+            if dept_fallback:
+                variants.append(await self._build_search_params_from_resolved(
+                    query, None, distance, str(dept_fallback), keywords=keyword_variants[0],
+                ))
             return variants
 
-        dept_code = departement or base.get("departement") or _MEGA_CITY_DEPARTEMENT.get(city)
+        dept_code = departement or self._departement_from_location(query.location) or _MEGA_CITY_DEPARTEMENT.get(city)
         if dept_code:
-            dept_params = dict(base)
-            dept_params.pop("commune", None)
-            dept_params.pop("distance", None)
-            dept_params["departement"] = str(dept_code)
-            if not variants or dept_params != variants[0]:
-                variants.append(dept_params)
+            for keyword in keyword_variants:
+                variants.append(await self._build_search_params_from_resolved(
+                    query, None, distance, str(dept_code), keywords=keyword,
+                ))
+            return variants
 
-        return variants or [base]
+        for keyword in keyword_variants:
+            variants.append(await self._build_search_params_from_resolved(
+                query, None, distance, None, keywords=keyword,
+            ))
+        return variants or [await self._build_search_params(query)]
 
     async def _build_search_params(self, query: JobSearchQuery) -> Dict[str, Any]:
         commune, distance, departement = await self._commune_distance_departement(query)
@@ -300,9 +330,11 @@ class FranceTravailProvider:
         commune: Optional[str],
         distance: int,
         departement: Optional[str],
+        *,
+        keywords: Optional[str] = None,
     ) -> Dict[str, Any]:
         params: Dict[str, Any] = {
-            "motsCles": self._keywords(query),
+            "motsCles": keywords if keywords is not None else self._keywords(query),
             "sort": "1",
             "publieeDepuis": self._publiee_depuis_days(query),
         }
@@ -447,14 +479,12 @@ class FranceTravailProvider:
             return [row for row in resultats if isinstance(row, dict)]
         return []
 
+    def _keyword_variants(self, query: JobSearchQuery) -> List[str]:
+        return _france_travail_keyword_variants(query.role, query.country)
+
     def _keywords(self, query: JobSearchQuery) -> str:
-        tokens = _france_travail_keyword_tokens(query.role, query.country)
-        hint = (query.contract_hint or "").strip()
-        if hint:
-            hint_token = _ascii_fold(hint).replace(" ", "")
-            if hint_token and hint_token not in tokens:
-                tokens.append(hint_token)
-        return ",".join(tokens)
+        variants = self._keyword_variants(query)
+        return variants[0] if variants else "emploi"
 
     # FT API accepts only specific values for publieeDepuis: 1, 3, 7, 14, 31
     _PUBLIEE_DEPUIS_VALID = (1, 3, 7, 14, 31)
@@ -615,7 +645,9 @@ class FranceTravailProvider:
         return "mid"
 
     def _request_interval(self) -> float:
-        return max(0.5, self._env_float("FRANCE_TRAVAIL_REQUEST_INTERVAL_SECONDS", 1.0))
+        # FT allows ~10 req/s; keep a small safety margin without adding needless
+        # latency now that we may try several motsCles variants per search.
+        return max(0.15, self._env_float("FRANCE_TRAVAIL_REQUEST_INTERVAL_SECONDS", 0.25))
 
     def _retry_after_seconds(self, response: httpx.Response) -> float:
         raw = response.headers.get("Retry-After")

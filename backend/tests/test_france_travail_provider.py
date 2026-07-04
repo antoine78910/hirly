@@ -7,7 +7,9 @@ from job_providers.config import is_job_provider_configured, primary_job_provide
 from job_providers.france_travail import FranceTravailProvider
 
 
-def test_france_travail_keywords_use_french_comma_separated_tokens():
+def test_france_travail_keywords_returns_single_term_no_and_semantics():
+    # France Travail's motsCles treats comma-separated terms as a logical AND, so a
+    # single motsCles value must never combine unrelated synonyms with commas.
     provider = FranceTravailProvider(client_id="PAR_test", client_secret="secret")
     query = JobSearchQuery(
         role="Software Engineer",
@@ -17,10 +19,13 @@ def test_france_travail_keywords_use_french_comma_separated_tokens():
         radius_km=50,
     )
     keywords = provider._keywords(query)
-    assert "developpeur" in keywords
-    assert "logiciel" in keywords or "informatique" in keywords
+    assert "," not in keywords
     assert "Software Engineer" not in keywords
-    assert "," in keywords
+
+    variants = provider._keyword_variants(query)
+    assert "developpeur" in variants
+    assert any("logiciel" in v or "informatique" in v for v in variants)
+    assert all("," not in v for v in variants)
 
 
 def test_france_travail_search_distance_uses_query_radius():
@@ -38,13 +43,14 @@ def test_france_travail_keywords_barista_use_hospitality_tokens():
         language="fr",
         radius_km=30,
     )
-    keywords = provider._keywords(query)
-    assert "barista" in keywords
-    assert "serveur" in keywords or "cafe" in keywords
-    assert "vendeur" not in keywords.split(",")[0]
+    variants = provider._keyword_variants(query)
+    assert "barista" in variants
+    assert any(v in ("serveur", "cafe") for v in variants)
+    assert "vendeur" not in variants
+    assert all("," not in v for v in variants)
 
 
-def test_france_travail_search_param_variants_dijon_uses_commune_only():
+def test_france_travail_search_param_variants_dijon_tries_each_keyword_at_commune():
     provider = FranceTravailProvider(client_id="PAR_test", client_secret="secret")
     query = JobSearchQuery(
         role="Software Engineer",
@@ -59,10 +65,21 @@ def test_france_travail_search_param_variants_dijon_uses_commune_only():
             return await provider._search_param_variants(query)
 
     variants = asyncio.run(_run())
-    assert len(variants) == 1
-    assert variants[0]["commune"] == "21231"
-    assert variants[0]["distance"] == 50
-    assert "departement" not in variants[0]
+    keyword_variants = provider._keyword_variants(query)
+    # One variant per keyword candidate at the commune, plus a last-resort
+    # department-wide fallback (using the primary keyword) if all of those miss.
+    commune_variants = variants[: len(keyword_variants)]
+    assert len(variants) == len(keyword_variants) + 1
+    for variant, keyword in zip(commune_variants, keyword_variants):
+        assert variant["commune"] == "21231"
+        assert variant["distance"] == 50
+        assert variant["motsCles"] == keyword
+        assert "departement" not in variant
+    # Distinct keyword per commune variant — no AND-joined comma list.
+    assert len({v["motsCles"] for v in commune_variants}) == len(commune_variants)
+    assert variants[-1]["departement"] == "21"
+    assert variants[-1]["motsCles"] == keyword_variants[0]
+    assert "commune" not in variants[-1]
 
 
 def test_france_travail_search_param_variants_paris_uses_departement():
@@ -80,9 +97,11 @@ def test_france_travail_search_param_variants_paris_uses_departement():
             return await provider._search_param_variants(query)
 
     variants = asyncio.run(_run())
-    assert len(variants) == 1
-    assert variants[0]["departement"] == "75"
-    assert "commune" not in variants[0]
+    keyword_variants = provider._keyword_variants(query)
+    assert len(variants) == len(keyword_variants)
+    for variant in variants:
+        assert variant["departement"] == "75"
+        assert "commune" not in variant
 
 
 def test_france_travail_build_search_params_includes_commune_and_distance():
@@ -184,6 +203,65 @@ def test_is_job_provider_configured_for_france_travail(monkeypatch):
     monkeypatch.setenv("FRANCE_TRAVAIL_CLIENT_SECRET", "secret")
     assert is_job_provider_configured() is True
     assert primary_job_provider_name() == "france_travail"
+
+
+def test_france_travail_search_falls_through_keyword_variants_until_results_found():
+    """Reproduces the reported bug: the first (most specific) keyword yields 204 No
+    Content, but a later synonym in the same city/commune does have offers. The
+    provider must try each keyword one request at a time and keep the first hit.
+    """
+    provider = FranceTravailProvider(client_id="PAR_test", client_secret="secret")
+    token_response = AsyncMock()
+    token_response.raise_for_status = lambda: None
+    token_response.json = lambda: {"access_token": "token-123", "expires_in": 1500}
+
+    empty_response = AsyncMock()
+    empty_response.status_code = 204
+    empty_response.content = b""
+    empty_response.raise_for_status = lambda: None
+
+    hit_response = AsyncMock()
+    hit_response.status_code = 200
+    hit_response.content = json.dumps(
+        {
+            "resultats": [
+                {
+                    "id": "XYZ789",
+                    "intitule": "Serveur en restauration",
+                    "description": "Service en salle.",
+                    "entreprise": {"nom": "Cafe du Coin"},
+                    "lieuTravail": {"libelle": "Auxerre (89)"},
+                    "typeContrat": "CDD",
+                }
+            ]
+        }
+    ).encode("utf-8")
+    hit_response.json = lambda: json.loads(hit_response.content)
+    hit_response.raise_for_status = lambda: None
+
+    client = AsyncMock()
+    client.post = AsyncMock(return_value=token_response)
+    client.get = AsyncMock(side_effect=[empty_response, hit_response, hit_response])
+
+    async def _run():
+        with patch.object(provider, "_lookup_commune_code_and_departement", AsyncMock(return_value=("89024", "89"))):
+            with patch("job_providers.france_travail.httpx.AsyncClient") as client_cls:
+                client_cls.return_value.__aenter__.return_value = client
+                return await provider.search(
+                    JobSearchQuery(role="Barista", location="Auxerre, France", country="fr", language="fr", limit=5)
+                )
+
+    result = asyncio.run(_run())
+
+    assert len(result.jobs) == 1
+    assert result.jobs[0]["title"] == "Serveur en restauration"
+    # First keyword attempt got 204; second attempt found the job and we stopped there.
+    assert client.get.await_count == 2
+    first_call_params = client.get.await_args_list[0].kwargs["params"]
+    second_call_params = client.get.await_args_list[1].kwargs["params"]
+    assert first_call_params["motsCles"] != second_call_params["motsCles"]
+    assert "," not in first_call_params["motsCles"]
+    assert "," not in second_call_params["motsCles"]
 
 
 def test_france_travail_search_parses_results():
