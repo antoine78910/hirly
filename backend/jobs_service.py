@@ -942,9 +942,8 @@ def _dedupe_queries(queries: List[JobSearchQuery], provider) -> List[JobSearchQu
 
 def _provider_attempt_queries(query: JobSearchQuery, search_radius: str, provider) -> List[JobSearchQuery]:
     if getattr(provider, "name", None) == "france_travail":
-        role_variants = _localized_role_variants(query.role, query.country)
-        best_role = role_variants[0] if role_variants else query.role
-        return [_copy_query_with_role(query, best_role)]
+        # Keep the user's role/location/radius — FT keyword mapping handles FR translations.
+        return [query]
 
     role_variants = _localized_role_variants(query.role, query.country)
     locations = _nearby_locations(query, search_radius)

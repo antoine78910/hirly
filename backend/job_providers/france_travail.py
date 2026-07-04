@@ -59,6 +59,10 @@ _ROLE_KEYWORD_HINTS = {
     "commercial": ("commercial", "vente", "vendeur"),
     "product": ("produit", "chef de produit"),
     "manager": ("manager", "responsable", "chef"),
+    "barista": ("barista", "serveur", "serveuse", "barman", "cafe"),
+    "waiter": ("serveur", "serveuse", "restaurant"),
+    "serveur": ("serveur", "serveuse", "restaurant"),
+    "barman": ("barman", "barista", "serveur"),
 }
 
 
@@ -81,6 +85,8 @@ def _france_travail_keyword_tokens(role: str, country: Optional[str]) -> List[st
             tokens.extend(["marketing", "communication", "digital"])
         elif any(term in lower for term in ("sales", "commercial")):
             tokens.extend(["commercial", "vente", "vendeur"])
+        elif any(term in lower for term in ("barista", "barman", "bartender", "waiter", "waitress", "serveur", "serveuse", "hospitality", "restaurant", "cafe", "coffee")):
+            tokens.extend(["barista", "serveur", "serveuse", "barman", "cafe", "restaurant"])
         elif "product" in lower and "manager" in lower:
             tokens.extend(["chef de produit", "product manager"])
         for token in re.findall(r"[a-z0-9]+", lower):
@@ -145,7 +151,6 @@ class FranceTravailProvider:
         page_size = max(1, min(int(query.page_size or self._env_int("FRANCE_TRAVAIL_PAGE_SIZE", 50)), 150))
         max_pages = max(1, min(int(query.max_pages or self._env_int("FRANCE_TRAVAIL_MAX_PAGES", 2)), 10))
         target_count = max(query.limit, min(page_size * max_pages, 300))
-        min_results_before_fallback = max(1, self._env_int("FRANCE_TRAVAIL_MIN_RESULTS_BEFORE_FALLBACK", 8))
 
         param_variants = await self._search_param_variants(query)
         payloads: List[Any] = []
@@ -157,7 +162,7 @@ class FranceTravailProvider:
             headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
             for variant_index, variant_params in enumerate(param_variants):
                 if variant_index > 0:
-                    if len(rows) >= min_results_before_fallback:
+                    if len(rows) > 0:
                         break
                     await asyncio.sleep(self._request_interval())
                 try:
@@ -272,6 +277,7 @@ class FranceTravailProvider:
         commune = base.get("commune")
         if commune and str(commune) not in _MUNICIPALITY_AGGREGATION_CODES:
             variants.append(dict(base))
+            return variants
 
         dept_code = departement or base.get("departement") or _MEGA_CITY_DEPARTEMENT.get(city)
         if dept_code:

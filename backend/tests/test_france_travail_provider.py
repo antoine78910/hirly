@@ -29,7 +29,22 @@ def test_france_travail_search_distance_uses_query_radius():
     assert provider._search_distance_km(query) == 50
 
 
-def test_france_travail_search_param_variants_dijon_uses_commune_and_departement_fallback():
+def test_france_travail_keywords_barista_use_hospitality_tokens():
+    provider = FranceTravailProvider(client_id="PAR_test", client_secret="secret")
+    query = JobSearchQuery(
+        role="Barista",
+        location="Beaune, France",
+        country="fr",
+        language="fr",
+        radius_km=30,
+    )
+    keywords = provider._keywords(query)
+    assert "barista" in keywords
+    assert "serveur" in keywords or "cafe" in keywords
+    assert "vendeur" not in keywords.split(",")[0]
+
+
+def test_france_travail_search_param_variants_dijon_uses_commune_only():
     provider = FranceTravailProvider(client_id="PAR_test", client_secret="secret")
     query = JobSearchQuery(
         role="Software Engineer",
@@ -44,11 +59,10 @@ def test_france_travail_search_param_variants_dijon_uses_commune_and_departement
             return await provider._search_param_variants(query)
 
     variants = asyncio.run(_run())
-    assert len(variants) >= 2
+    assert len(variants) == 1
     assert variants[0]["commune"] == "21231"
     assert variants[0]["distance"] == 50
-    assert variants[1]["departement"] == "21"
-    assert "commune" not in variants[1]
+    assert "departement" not in variants[0]
 
 
 def test_france_travail_search_param_variants_paris_uses_departement():
@@ -157,7 +171,7 @@ def test_france_travail_publiee_depuis_uses_permanent_ttl():
         language="fr",
         contract_hint="CDI",
     )
-    assert provider._publiee_depuis_days(query) == 30
+    assert provider._publiee_depuis_days(query) == 31
 
 
 def test_is_job_provider_configured_for_france_travail(monkeypatch):

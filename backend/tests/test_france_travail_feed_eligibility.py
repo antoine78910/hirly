@@ -69,4 +69,4 @@ def test_france_travail_provider_uses_single_attempt_query():
     query = JobSearchQuery(role="Software Engineer", location="Dijon", country="fr", language="fr", radius_km=50)
     attempts = _provider_attempt_queries(query, "50km", provider)
     assert len(attempts) == 1
-    assert attempts[0].role in {"developpeur", "Software Engineer"}
+    assert attempts[0].role == "Software Engineer"

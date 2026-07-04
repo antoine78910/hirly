@@ -11371,7 +11371,13 @@ async def dev_jsearch_test(q: str = "software engineer", location: str = "New Yo
 
 
 @api_router.get("/dev/france-travail-test")
-async def dev_france_travail_test(q: str = "développeur", location: str = "Lyon, France", limit: int = 5):
+async def dev_france_travail_test(
+    q: str = "développeur",
+    location: str = "Lyon, France",
+    limit: int = 5,
+    radius_km: int = 50,
+    contract_hint: Optional[str] = None,
+):
     dev_enabled = (
         os.environ.get("ENVIRONMENT", "").lower() == "development"
         or os.environ.get("DEV_TOOLS_ENABLED", "false").lower() in ("1", "true", "yes", "on")
@@ -11392,6 +11398,8 @@ async def dev_france_travail_test(q: str = "développeur", location: str = "Lyon
         limit=max(1, min(limit, 20)),
         max_pages=1,
         page_size=max(5, min(limit * 3, 20)),
+        radius_km=max(0, min(int(radius_km), 200)),
+        contract_hint=contract_hint,
     )
     try:
         result = await provider.search(query)
