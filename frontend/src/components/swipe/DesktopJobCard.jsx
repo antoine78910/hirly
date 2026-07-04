@@ -102,11 +102,11 @@ export default function DesktopJobCard({ job, theme, t, lang }) {
 
   return (
     <div className="flex min-h-0 h-full flex-1 flex-col">
-      <div className={`shrink-0 border-b p-5 pr-24 ${theme.cardHeader}`}>
+      <div className={`shrink-0 border-b p-5 pr-24 lg:p-6 lg:pr-28 ${theme.cardHeader}`}>
         <div className="flex min-w-0 gap-4">
           <div className="min-w-0 flex-1">
             <h1
-              className={`font-display text-xl font-bold leading-snug lg:text-2xl ${theme.cardTitle}`}
+              className={`font-display text-xl font-bold leading-snug lg:text-2xl xl:text-[1.75rem] ${theme.cardTitle}`}
               data-testid="job-title"
             >
               {title}
@@ -123,7 +123,7 @@ export default function DesktopJobCard({ job, theme, t, lang }) {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-6 py-4 outline-none">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-6 py-4 pb-24 outline-none lg:px-8 lg:py-5 lg:pb-28">
         <div className={`flex flex-wrap items-center gap-x-4 gap-y-2 text-sm ${theme.cardMeta}`}>
           <span className="inline-flex min-w-0 items-center gap-1.5">
             <MapPin className="size-4 shrink-0" aria-hidden="true" />
@@ -144,12 +144,12 @@ export default function DesktopJobCard({ job, theme, t, lang }) {
         ) : null}
 
         {snippet ? (
-          <p className={`line-clamp-3 text-sm ${theme.cardAboutBody}`}>
+          <p className={`text-sm lg:text-[15px] leading-relaxed ${theme.cardAboutBody}`}>
             {snippet}
           </p>
         ) : null}
 
-        <div className="space-y-4">
+        <div className="space-y-4 lg:space-y-5">
           {about ? (
             <DetailSection
               title="About This Role"

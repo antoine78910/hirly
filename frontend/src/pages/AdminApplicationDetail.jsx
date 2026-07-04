@@ -73,6 +73,7 @@ export default function AdminApplicationDetail() {
   const [updatingStatus, setUpdatingStatus] = useState("");
   const [updatingManualStatus, setUpdatingManualStatus] = useState("");
   const [assigning, setAssigning] = useState("");
+  const [sendingEmail, setSendingEmail] = useState(false);
   const openedTrackedRef = useRef(false);
 
   const load = useCallback(async () => {
@@ -201,6 +202,20 @@ export default function AdminApplicationDetail() {
     }
   };
 
+  const sendApplicationEmail = async () => {
+    setSendingEmail(true);
+    try {
+      const response = await api.post(`/admin/applications/${id}/send-email`, {});
+      toast.success(`Application email sent via ${response.data?.transport || "email"}`);
+      trackEvent("admin_application_email_sent", { application_id: id, transport: response.data?.transport });
+      await load();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Could not send application email");
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
   const updateAssignment = async (action) => {
     setAssigning(action);
     try {
@@ -282,6 +297,10 @@ export default function AdminApplicationDetail() {
               <Button variant="outline" onClick={() => copyText("tailored resume", tailoredResumeText)} disabled={!tailoredResumeText}>
                 Copy tailored CV text
               </Button>
+              <Button onClick={sendApplicationEmail} disabled={!job.contact_email || sendingEmail}>
+                {sendingEmail ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                Send application by email
+              </Button>
             </div>
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
               <div>
@@ -293,6 +312,16 @@ export default function AdminApplicationDetail() {
                 <p className="mt-1 text-sm capitalize text-zinc-700">{app.manual_status || app.admin_status || "Not set"}</p>
               </div>
             </div>
+            <div className="mt-4 grid gap-4 sm:grid-cols-3">
+              <Field label="Recruiter contact" value={job.contact_name} />
+              <Field label="Recruiter email" value={job.contact_email} />
+              <Field label="Recruiter phone" value={job.contact_phone} />
+            </div>
+            {app.application_email_sent_at ? (
+              <p className="mt-3 text-xs text-zinc-500">
+                Application email sent to {app.application_email_sent_to} on {fmtDate(app.application_email_sent_at)}.
+              </p>
+            ) : null}
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
               <div>
                 <h3 className="text-sm font-bold">Resolved answers</h3>

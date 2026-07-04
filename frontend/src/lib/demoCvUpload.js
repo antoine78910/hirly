@@ -3,6 +3,7 @@ import { isDemoAccountEnabled } from "./demoAccount";
 import { isFinanceDemoEnabled } from "./demoSettings";
 import { FINANCE_DEMO_PROFILE } from "./financeDemoJobs";
 import { EXAMPLE_RESUME } from "./exampleResume";
+import { normalizeCvUploadFile } from "./cvUploadFormats";
 
 const DEMO_CV_STORAGE_KEY = "hirly.demo.cv.v1";
 
@@ -154,11 +155,11 @@ export async function uploadProfileCv(file, apiClient) {
     throw new Error("No file provided");
   }
   if (shouldMockCvUpload()) {
-    const data = await handleDemoCvUpload(file);
+    const data = await handleDemoCvUpload(normalizeCvUploadFile(file));
     return { data };
   }
   const form = new FormData();
-  form.append("file", file);
+  form.append("file", normalizeCvUploadFile(file));
   return apiClient.post("/profile/cv", form, { timeout: 120000 });
 }
 

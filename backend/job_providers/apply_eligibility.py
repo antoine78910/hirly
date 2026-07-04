@@ -23,13 +23,29 @@ def is_france_travail_offer(
     source: Optional[str] = None,
     url: Optional[str] = None,
 ) -> bool:
+    """True when this offer must go through the France-Travail-hosted manual apply
+    flow (no candidate account -> can't auto-apply).
+
+    Some France Travail listings carry a genuine external apply URL from the
+    recruiter (`contact.urlPostulation`, pointing to the employer's own ATS).
+    Those should be treated like any other job from that ATS instead of being
+    forced into the FT-only manual flow, so we only return True when there is
+    no evidence of such a real external destination (empty URL, or a URL that
+    is itself hosted on francetravail.fr/pole-emploi.fr).
+    """
     provider_name = str(provider or "").strip().lower()
-    if provider_name in FRANCE_TRAVAIL_PROVIDER_NAMES:
-        return True
     source_text = str(source or "").strip().lower()
-    if "france travail" in source_text or "pole emploi" in source_text or "francetravail" in source_text:
-        return True
+    is_ft_signal = (
+        provider_name in FRANCE_TRAVAIL_PROVIDER_NAMES
+        or "france travail" in source_text
+        or "pole emploi" in source_text
+        or "francetravail" in source_text
+    )
+    if not is_ft_signal:
+        return False
     host = (url or "").lower()
+    if not host:
+        return True
     return any(marker in host for marker in FRANCE_TRAVAIL_HOST_MARKERS)
 
 

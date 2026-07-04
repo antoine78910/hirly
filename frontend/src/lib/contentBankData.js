@@ -5,10 +5,14 @@ import {
   examplesGrid,
   heading,
   infoScript,
+  linkBlock,
   paragraph,
   sectionBlock,
   warningGuideline,
 } from "./trainingDocBlocks";
+
+const BRAND_ASSETS_DRIVE_URL =
+  "https://drive.google.com/drive/folders/1_6Q7rK8LbzAHu4CUqpx6R0HkIhfrZZ4b?usp=sharing";
 
 /** Shorthand: { label, url? } */
 function ex(label, url = "") {
@@ -354,6 +358,26 @@ const CONTENT_BANK_EN = [
       heading(2, "Variation 2"),
       infoScript(
         "Nobody's hiring right now? Maybe it's just you.\nMaybe you're just looking in the wrong places.\n\nIf you don't know about these two websites, let me put you on.\nOne of them is called Handshake, and it has thousands of opportunities for students and recent grads that most people completely overlook.\n\nBut the next one?\nIt's called Hirly. Instead of you spending hours applying, it actually auto-applies directly on the company's website for you with a tailored resume and cover letter. You literally set your preferences, and it does the heavy lifting.\n\nSo if you're tired of filling out the same application over and over again, this might be the move.\n\nLet me know if any of you end up using it.",
+      ),
+    ],
+  }),
+
+  sectionBlock({
+    section_id: "sec_cb_company_logos",
+    title: "Company Logos",
+    badge: "Top format",
+    content: [
+      heading(1, "Company Logos"),
+      heading(3, "Guidelines"),
+      linkBlock("Open the official Hirly logos folder (Google Drive)", BRAND_ASSETS_DRIVE_URL),
+      warningGuideline(
+        "Point to each tier (Good, Better, Best) on screen as you say it. Use transparent PNG logos from the shared folder for overlays — don't stretch, recolor, or add effects.",
+      ),
+      heading(3, "Video Captions"),
+      paragraph("Good, better, best: Company logo edition! #contentcreation #hirly #brand #jobsearch"),
+      heading(2, "Main Script"),
+      infoScript(
+        "Good. Better. Best. Company logo edition.\n\nGood. Screenshot the logo from Google or the company website.\nIt's blurry, the background is wrong, and it looks unprofessional in your video.\n\nBetter. Recreate the logo yourself or grab a random PNG from the internet.\nWrong colors, outdated version — the brand team will notice.\n\nBest. Use the official Hirly logo files from our shared Google Drive folder.\nTransparent PNG, correct colors, ready for video overlays. Link is in the Content Bank.\n\nSave this and always pull logos from the folder before you post.",
       ),
     ],
   }),

@@ -169,6 +169,76 @@ def test_france_travail_normalization_maps_core_fields():
     assert "francetravail.fr" in job["external_url"]
 
 
+def test_france_travail_normalization_uses_direct_apply_url_when_available():
+    """When the recruiter provided contact.urlPostulation to their own ATS,
+    the job should be routed there (and auto-apply enabled) instead of being
+    forced through the France-Travail-only manual flow."""
+    provider = FranceTravailProvider(client_id="PAR_test", client_secret="secret")
+    job = provider.normalize_job(
+        {
+            "id": "048XYZQ",
+            "intitule": "Ingénieur logiciel",
+            "description": "Rejoins notre équipe produit.",
+            "entreprise": {"nom": "Acme SAS"},
+            "lieuTravail": {"libelle": "Paris (75)", "commune": "Paris"},
+            "contact": {"urlPostulation": "https://boards.greenhouse.io/acme/jobs/12345"},
+        },
+        JobSearchQuery(role="ingenieur logiciel", location="Paris, France", country="fr", language="fr"),
+        "2026-07-03T10:00:00+00:00",
+    )
+
+    assert job is not None
+    assert job["external_url"] == "https://boards.greenhouse.io/acme/jobs/12345"
+    assert job["ats_provider"] == "greenhouse"
+    assert job["auto_apply_supported"] is True
+    assert job["ft_detail_url"].startswith("https://candidat.francetravail.fr/")
+
+
+def test_france_travail_normalization_extracts_contact_email():
+    provider = FranceTravailProvider(client_id="PAR_test", client_secret="secret")
+    job = provider.normalize_job(
+        {
+            "id": "048ABCD",
+            "intitule": "Serveur",
+            "description": "Restaurant cherche serveur.",
+            "entreprise": {"nom": "Le Bistrot"},
+            "lieuTravail": {"libelle": "Lyon (69)", "commune": "Lyon"},
+            "contact": {"nom": "Mme Dupont", "courriel": "recrutement@bistrot.fr", "telephone": "0102030405"},
+        },
+        JobSearchQuery(role="serveur", location="Lyon, France", country="fr", language="fr"),
+        "2026-07-03T10:00:00+00:00",
+    )
+
+    assert job is not None
+    assert job["contact_name"] == "Mme Dupont"
+    assert job["contact_email"] == "recrutement@bistrot.fr"
+    assert job["contact_phone"] == "0102030405"
+    # No usable external URL in contact -> still routed through France Travail manually.
+    assert job["ats_provider"] == "francetravail"
+    assert job["auto_apply_supported"] is False
+
+
+def test_france_travail_direct_apply_url_ignored_when_pointing_back_to_ft():
+    provider = FranceTravailProvider(client_id="PAR_test", client_secret="secret")
+    job = provider.normalize_job(
+        {
+            "id": "048LOOP",
+            "intitule": "Comptable",
+            "description": "Cabinet comptable recrute.",
+            "entreprise": {"nom": "Cabinet Martin"},
+            "lieuTravail": {"libelle": "Nice (06)", "commune": "Nice"},
+            "contact": {"urlPostulation": "https://candidat.francetravail.fr/offres/recherche/detail/048LOOP"},
+        },
+        JobSearchQuery(role="comptable", location="Nice, France", country="fr", language="fr"),
+        "2026-07-03T10:00:00+00:00",
+    )
+
+    assert job is not None
+    assert job["ats_provider"] == "francetravail"
+    assert job["auto_apply_supported"] is False
+    assert job["manual_fulfillment_ready"] is True
+
+
 def test_france_travail_publiee_depuis_uses_summer_ttl():
     provider = FranceTravailProvider(client_id="PAR_test", client_secret="secret")
     query = JobSearchQuery(

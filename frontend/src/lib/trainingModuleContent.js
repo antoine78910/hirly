@@ -38,11 +38,6 @@ import {
   SUBMIT_DRAFTS_FR,
 } from "./submitDraftsContent";
 
-import {
-  BRAND_RESOURCES_EN,
-  BRAND_RESOURCES_FR,
-} from "./brandResourcesContent";
-
 export function moduleContentFor(moduleId, lang = "en") {
   if (moduleId === "mod_getting_started") {
     return lang === "fr" ? GETTING_STARTED_FR : GETTING_STARTED_EN;
@@ -55,9 +50,6 @@ export function moduleContentFor(moduleId, lang = "en") {
   }
   if (moduleId === "mod_submit_drafts") {
     return lang === "fr" ? SUBMIT_DRAFTS_FR : SUBMIT_DRAFTS_EN;
-  }
-  if (moduleId === "mod_resources") {
-    return lang === "fr" ? BRAND_RESOURCES_FR : BRAND_RESOURCES_EN;
   }
   return null;
 }

@@ -408,49 +408,23 @@ const QUIZZES_EN = {
 
       ], "a"),
 
-    ],
+      q("cb6", "Where should you get the official Hirly logo for videos?", [
 
-  },
+        { id: "a", label: "The shared Google Drive folder in the Company Logos section" },
 
-  quiz_mod_resources: {
-
-    quiz_id: "quiz_mod_resources",
-
-    module_id: "mod_resources",
-
-    title: "Resources — Knowledge Check",
-
-    pass_percent: PASS_PERCENT,
-
-    questions: [
-
-      q("res1", "Where should you always get the official Hirly logo from?", [
-
-        { id: "a", label: "The shared Brand Assets folder linked in this module" },
-
-        { id: "b", label: "Any screenshot taken from the app" },
+        { id: "b", label: "Any screenshot taken from the app or website" },
 
         { id: "c", label: "A logo you recreated yourself in a design tool" },
 
       ], "a"),
 
-      q("res2", "Can you recolor or add effects to the Hirly logo before using it?", [
+      q("cb7", "In the Good/Better/Best logo format, what is the Best option?", [
 
-        { id: "a", label: "Yes, any color or effect works" },
+        { id: "a", label: "Official transparent PNG files from the shared folder" },
 
-        { id: "b", label: "No — use it exactly as provided" },
+        { id: "b", label: "Screenshot from Google Images" },
 
-        { id: "c", label: "Only for sponsored posts" },
-
-      ], "b"),
-
-      q("res3", "Which file format keeps a transparent background for video overlays?", [
-
-        { id: "a", label: "PNG" },
-
-        { id: "b", label: "JPEG" },
-
-        { id: "c", label: "PDF" },
+        { id: "c", label: "Recreate the logo with your own colors" },
 
       ], "a"),
 
@@ -828,45 +802,23 @@ const QUIZZES_FR = {
 
       ], "a"),
 
-    ],
+      q("cb6", "Où récupérer le logo officiel Hirly pour tes vidéos ?", [
 
-  },
+        { id: "a", label: "Le dossier Google Drive partagé dans la section Logos des compagnies" },
 
-  quiz_mod_resources: {
-
-    ...QUIZZES_EN.quiz_mod_resources,
-
-    title: "Ressources — Quiz",
-
-    questions: [
-
-      q("res1", "Où dois-tu toujours récupérer le logo officiel Hirly ?", [
-
-        { id: "a", label: "Dans le dossier de ressources de marque partagé dans ce module" },
-
-        { id: "b", label: "N'importe quelle capture d'écran de l'app" },
+        { id: "b", label: "N'importe quelle capture d'écran de l'app ou du site" },
 
         { id: "c", label: "Un logo que tu as recréé toi-même" },
 
       ], "a"),
 
-      q("res2", "Peux-tu recolorer ou ajouter des effets au logo Hirly avant de l'utiliser ?", [
+      q("cb7", "Dans le format Good/Better/Best logos, quelle est l'option Best ?", [
 
-        { id: "a", label: "Oui, n'importe quelle couleur ou effet fonctionne" },
+        { id: "a", label: "Les fichiers PNG transparents officiels du dossier partagé" },
 
-        { id: "b", label: "Non — utilise-le exactement tel quel" },
+        { id: "b", label: "Une capture d'écran depuis Google Images" },
 
-        { id: "c", label: "Seulement pour les posts sponsorisés" },
-
-      ], "b"),
-
-      q("res3", "Quel format de fichier garde un fond transparent pour les incrustations vidéo ?", [
-
-        { id: "a", label: "PNG" },
-
-        { id: "b", label: "JPEG" },
-
-        { id: "c", label: "PDF" },
+        { id: "c", label: "Recréer le logo avec tes propres couleurs" },
 
       ], "a"),
 

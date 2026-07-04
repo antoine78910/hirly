@@ -35,7 +35,7 @@ import DesktopSwipeFeed from "../components/swipe/DesktopSwipeFeed";
 import { saveTargetPreferences, normalizeLocationData } from "../lib/targetPreferences";
 import { enrichLocationData } from "../lib/locationSearch";
 import { hasActiveFilters, mergeFilters, clearMenuFilters } from "../lib/jobFilters";
-import { buildDefaultFiltersFromProfile, mergeProfileFilterDefaults, reconcileFiltersForUser } from "../lib/contractTypeMapping";
+import { reconcileFiltersForUser } from "../lib/contractTypeMapping";
 import { useAppLocale } from "../context/AppLocaleContext";
 import { BILLING_UPDATED } from "../lib/billingEvents";
 import {
@@ -51,7 +51,7 @@ import { preloadCompanyLogos } from "../lib/companyLogos";
 const DEFAULT_SEARCH_RADIUS = "50km";
 const FEED_BATCH_SIZE = 12;
 const FEED_PREFETCH_THRESHOLD = 7;
-const FILTERS_STORAGE_KEY = "swiipr.jobs.filters.v1";
+const FILTERS_STORAGE_KEY = "swiipr.jobs.filters.v2";
 
 const readPersistedFilters = () => {
   if (typeof window === "undefined") return null;
@@ -60,13 +60,7 @@ const readPersistedFilters = () => {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return null;
-    const next = { ...parsed };
-    if (Array.isArray(next.locationsData) && next.locationsData.length) {
-      next.locationsData = next.locationsData.map((item) => enrichLocationData(item)).filter(Boolean);
-    } else if (next.locationData) {
-      next.locationData = enrichLocationData(next.locationData);
-    }
-    return next;
+    return parsed;
   } catch (_) {
     return null;
   }
@@ -531,7 +525,7 @@ export default function Swipe() {
   const [targetSheetOpen, setTargetSheetOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [desktopFiltersOpen, setDesktopFiltersOpen] = useState(false);
-  const [filters, setFilters] = useState(() => readPersistedFilters());
+  const [filters, setFilters] = useState(() => mergeFilters(readPersistedFilters()));
   const [totalCount, setTotalCount] = useState(null);
   const [feedMeta, setFeedMeta] = useState(null);
   const [feedError, setFeedError] = useState("");
@@ -543,6 +537,7 @@ export default function Swipe() {
   const filtersRef = useRef(filters);
   const profileRef = useRef(null);
   const targetRef = useRef(target);
+  const targetLocationDataRef = useRef(targetLocationData);
   const pendingFiltersRef = useRef(undefined);
   const feedAbortRef = useRef(null);
   const feedRequestIdRef = useRef(0);
@@ -557,6 +552,10 @@ export default function Swipe() {
   useEffect(() => {
     targetRef.current = target;
   }, [target]);
+
+  useEffect(() => {
+    targetLocationDataRef.current = targetLocationData;
+  }, [targetLocationData]);
 
   useEffect(() => {
     if (authLoading || !user?.user_id) return;
@@ -585,12 +584,10 @@ export default function Swipe() {
     setTarget(nextTarget);
     targetRef.current = nextTarget;
     setTargetLocationData(demo.locationData);
+    targetLocationDataRef.current = demo.locationData;
     const nextFilters = clearMenuFilters({
       searchRadius: filtersRef.current?.searchRadius || DEFAULT_SEARCH_RADIUS,
     });
-    if (demo.locationData) {
-      nextFilters.locationsData = [demo.locationData];
-    }
     filtersRef.current = nextFilters;
     setFilters(nextFilters);
     savePersistedFilters(nextFilters);
@@ -603,12 +600,10 @@ export default function Swipe() {
     setTarget(nextTarget);
     targetRef.current = nextTarget;
     setTargetLocationData(demo.locationData);
+    targetLocationDataRef.current = demo.locationData;
     const nextFilters = clearMenuFilters({
       searchRadius: filtersRef.current?.searchRadius || DEFAULT_SEARCH_RADIUS,
     });
-    if (demo.locationData) {
-      nextFilters.locationsData = [demo.locationData];
-    }
     filtersRef.current = nextFilters;
     setFilters(nextFilters);
     savePersistedFilters(nextFilters);
@@ -632,6 +627,7 @@ export default function Swipe() {
           setTarget(nextTarget);
           targetRef.current = nextTarget;
           setTargetLocationData(data.target_location_data || null);
+          targetLocationDataRef.current = data.target_location_data || null;
           return data;
         }
       } catch (_) {}
@@ -649,6 +645,7 @@ export default function Swipe() {
         setTarget(nextTarget);
         targetRef.current = nextTarget;
         setTargetLocationData(data.target_location_data || null);
+        targetLocationDataRef.current = data.target_location_data || null;
       }
       return data || null;
     } catch (_) {
@@ -669,12 +666,21 @@ export default function Swipe() {
     merged.workLocations?.forEach((v) => params.append("work_location", v));
     merged.jobTypes?.forEach((v) => params.append("job_type", v));
     merged.experience?.forEach((v) => params.append("experience", v));
-    if (merged.locationsData?.length) {
-      params.set("locations_json", JSON.stringify(merged.locationsData));
-    } else if (merged.locationData) {
-      params.set("locations_json", JSON.stringify([merged.locationData]));
+    const filterLocationsData = merged.locationsData?.length
+      ? merged.locationsData
+      : merged.locationData
+        ? [merged.locationData]
+        : [];
+    if (filterLocationsData.length) {
+      params.set("locations_json", JSON.stringify(filterLocationsData));
+    } else if (targetLocationDataRef.current) {
+      params.set("locations_json", JSON.stringify([targetLocationDataRef.current]));
     } else {
       merged.locations?.forEach((v) => params.append("location", v));
+      const targetLocation = activeTarget?.location?.trim();
+      if (!merged.locations?.length && targetLocation && targetLocation !== "Anywhere") {
+        params.append("location", targetLocation);
+      }
     }
     merged.onlyCompanies?.forEach((v) => params.append("only_company", v));
     merged.hideCompanies?.forEach((v) => params.append("hide_company", v));
@@ -953,23 +959,8 @@ export default function Swipe() {
 
       setTarget({ role: trimmedRole, location: locationLabel });
       setTargetLocationData(normalizedLocationData);
-      const nextFilters = {
-        ...(filtersRef.current || {}),
-        searchRadius: filtersRef.current?.searchRadius || DEFAULT_SEARCH_RADIUS,
-      };
-      if (normalizedLocationData) {
-        nextFilters.locationsData = [normalizedLocationData];
-        delete nextFilters.locations;
-        delete nextFilters.locationData;
-      } else if (locationLabel && locationLabel !== "Anywhere") {
-        nextFilters.locations = [locationLabel];
-        delete nextFilters.locationsData;
-        delete nextFilters.locationData;
-      }
-      filtersRef.current = nextFilters;
-      setFilters(nextFilters);
-      savePersistedFilters(nextFilters);
-      loadFeed(true, nextFilters, "target_search_save");
+      targetLocationDataRef.current = normalizedLocationData;
+      loadFeed(true, filtersRef.current, "target_search_save");
       toast.success(t("toasts.searchUpdated"));
 
       saveTargetPreferences({ role: trimmedRole, location: locationLabel, locationData: normalizedLocationData })
@@ -1042,7 +1033,7 @@ export default function Swipe() {
 
   const resetFilters = () => {
     clearPersistedFilters();
-    const defaults = buildDefaultFiltersFromProfile(profileRef.current);
+    const defaults = clearMenuFilters(filtersRef.current);
     filtersRef.current = defaults;
     setFilters(defaults);
     setFiltersOpen(false);
@@ -1448,23 +1439,8 @@ export default function Swipe() {
         onSaved={({ role, location, locationData }) => {
           setTarget({ role, location });
           setTargetLocationData(locationData);
-          const nextFilters = {
-            ...(filtersRef.current || {}),
-            searchRadius: filtersRef.current?.searchRadius || DEFAULT_SEARCH_RADIUS,
-          };
-          if (locationData) {
-            nextFilters.locationsData = [locationData];
-            delete nextFilters.locations;
-            delete nextFilters.locationData;
-          } else if (location && location !== "Anywhere") {
-            nextFilters.locations = [location];
-            delete nextFilters.locationsData;
-            delete nextFilters.locationData;
-          }
-          filtersRef.current = nextFilters;
-          setFilters(nextFilters);
-          savePersistedFilters(nextFilters);
-          loadFeed(true, nextFilters, "target_sheet_saved");
+          targetLocationDataRef.current = locationData;
+          loadFeed(true, filtersRef.current, "target_sheet_saved");
         }}
       />
 

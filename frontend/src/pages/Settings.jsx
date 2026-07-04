@@ -13,7 +13,6 @@ import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
 import DesktopAppShell from "../components/desktop/DesktopAppShell";
 import AISettingsPanel from "../components/desktop/AISettingsPanel";
 import MobileAISettings from "../components/settings/MobileAISettings";
-import DemoAccountBadge from "../components/settings/DemoAccountBadge";
 import { useUpgradeModal } from "../context/UpgradeModalContext";
 import { useAppLocale } from "../context/AppLocaleContext";
 
@@ -117,10 +116,6 @@ export default function Settings() {
       </header>
 
       <AppPageScroll className="mx-auto max-w-md px-5 pb-32" withBottomNavPad={false}>
-      <div className="mb-5">
-        <DemoAccountBadge variant="dark" />
-      </div>
-
       <Section label={t("settings.lookAndFeel")} testId="settings-appearance">
         <Row icon={Palette} label={t("settings.theme")} value={theme} onClick={() => todo(t("settings.theme"))} testId="settings-theme" />
       </Section>

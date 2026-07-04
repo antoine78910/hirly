@@ -7,6 +7,7 @@ import {
   User as UserIcon,
 } from "lucide-react";
 import { useAppLocale } from "../context/AppLocaleContext";
+import { DemoAccountAvatarIndicator } from "./settings/DemoAccountBadge";
 
 export default function BottomNav() {
   const location = useLocation();
@@ -40,11 +41,16 @@ export default function BottomNav() {
                 isActive ? "text-zinc-900" : "text-zinc-400"
               }`}
             >
-              <Icon
-                className="h-[18px] w-[18px] shrink-0 sm:h-5 sm:w-5"
-                strokeWidth={isActive ? 2.4 : 1.8}
-                fill={isActive && tab.to === "/review" ? "currentColor" : "none"}
-              />
+              <span className="relative inline-flex">
+                <Icon
+                  className="h-[18px] w-[18px] shrink-0 sm:h-5 sm:w-5"
+                  strokeWidth={isActive ? 2.4 : 1.8}
+                  fill={isActive && tab.to === "/review" ? "currentColor" : "none"}
+                />
+                {tab.to === "/profile" ? (
+                  <DemoAccountAvatarIndicator size="sm" className="-bottom-1 -right-1.5" />
+                ) : null}
+              </span>
               <span
                 className={`w-full truncate text-center text-[9px] leading-tight sm:text-[10px] ${
                   isActive ? "font-semibold" : "font-medium"

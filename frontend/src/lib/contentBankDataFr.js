@@ -6,10 +6,14 @@ import {
   examplesGrid,
   heading,
   infoScript,
+  linkBlock,
   paragraph,
   sectionBlock,
   warningGuideline,
 } from "./trainingDocBlocks";
+
+const BRAND_ASSETS_DRIVE_URL =
+  "https://drive.google.com/drive/folders/1_6Q7rK8LbzAHu4CUqpx6R0HkIhfrZZ4b?usp=sharing";
 
 function ex(label, url = "") {
   return url ? { label, url } : label;
@@ -370,6 +374,26 @@ export const CONTENT_BANK_FR = [
       heading(2, "Variation 2"),
       infoScript(
         "Personne n'embauche ? C'est peut-être juste toi.\nPeut-être que tu cherches au mauvais endroit.\n\nSi tu ne connais pas ces deux sites, laisse-moi te mettre au courant.\nL'un s'appelle France Travail, avec des milliers d'opportunités que la plupart des gens passent à côté.\n\nEt l'autre ?\nC'est Hirly. Au lieu de passer des heures à postuler, il postule en auto sur le site de l'entreprise pour toi avec un CV et une lettre adaptés. Tu règles tes préférences, et il fait le gros du travail.\n\nSi tu en as marre de remplir la même candidature encore et encore, c'est peut-être la solution.\n\nDis-moi si l'un de vous finit par l'utiliser.",
+      ),
+    ],
+  }),
+
+  sectionBlock({
+    section_id: "sec_cb_company_logos",
+    title: "Logos des compagnies",
+    badge: "Top format",
+    content: [
+      heading(1, "Logos des compagnies"),
+      heading(3, "Consignes"),
+      linkBlock("Ouvrir le dossier Google Drive (logos Hirly officiels)", BRAND_ASSETS_DRIVE_URL),
+      warningGuideline(
+        "Pointe chaque niveau (Good, Better, Best) à l'écran quand tu le dis. Utilise les PNG transparents du dossier partagé pour les incrustations — ne déforme pas, ne recolore pas et n'ajoute pas d'effets.",
+      ),
+      heading(3, "Légendes vidéo"),
+      paragraph(`Good, better, best : édition logos des compagnies ! ${frHashtagLine("creationdecontenu", "hirly", "marque", "rechercheemploi")}`),
+      heading(2, "Script principal"),
+      infoScript(
+        "Good. Better. Best. Édition logos des compagnies.\n\nGood. Tu fais une capture d'écran du logo sur Google ou le site de l'entreprise.\nC'est flou, le fond est mauvais, et ça fait amateur dans ta vidéo.\n\nBetter. Tu recrées le logo toi-même ou tu prends un PNG au hasard sur internet.\nMauvaises couleurs, version périmée — l'équipe marque le remarquera.\n\nBest. Tu utilises les fichiers logo officiels Hirly dans notre dossier Google Drive partagé.\nPNG transparent, bonnes couleurs, prêt pour les incrustations vidéo. Le lien est dans la banque de contenu.\n\nEnregistre cette vidéo et récupère toujours les logos dans le dossier avant de publier.",
       ),
     ],
   }),

@@ -3,49 +3,32 @@ import { useAuth } from "../../context/AuthContext";
 import { useAppLocale } from "../../context/AppLocaleContext";
 import { isDemoAccountEnabled } from "../../lib/demoAccount";
 
-export default function DemoAccountBadge({ className = "", compact = false, variant = "light" }) {
+export function useIsDemoAccount() {
   const { user } = useAuth();
+  return Boolean(user?.demo_account) || isDemoAccountEnabled();
+}
+
+/** Small flask badge on the bottom-right corner of a profile avatar. */
+export function DemoAccountAvatarIndicator({ className = "", size = "md" }) {
   const { t } = useAppLocale();
-  const isDemo = Boolean(user?.demo_account) || isDemoAccountEnabled();
+  const isDemo = useIsDemoAccount();
 
   if (!isDemo) return null;
 
-  const isDark = variant === "dark";
-
-  if (compact) {
-    return (
-      <span
-        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
-          isDark
-            ? "border-amber-400/30 bg-amber-400/10 text-amber-300"
-            : "border-amber-500/30 bg-amber-500/10 text-amber-600"
-        } ${className}`}
-        data-testid="demo-account-badge"
-      >
-        <FlaskConical className="h-3 w-3" aria-hidden />
-        {t("demo.badge")}
-      </span>
-    );
-  }
+  const sizes = {
+    sm: { wrap: "h-3.5 w-3.5", icon: "h-2 w-2", border: "border-[1.5px]" },
+    md: { wrap: "h-4 w-4", icon: "h-2.5 w-2.5", border: "border-2" },
+  };
+  const s = sizes[size] || sizes.md;
 
   return (
-    <div
-      className={`flex items-start gap-3 rounded-xl border px-4 py-3 ${
-        isDark
-          ? "border-amber-400/25 bg-amber-400/10"
-          : "border-amber-500/25 bg-amber-500/10"
-      } ${className}`}
-      data-testid="demo-account-banner"
+    <span
+      className={`absolute -bottom-0.5 -right-0.5 z-10 grid ${s.wrap} place-items-center rounded-full ${s.border} border-white bg-amber-500 text-white shadow-sm dark:border-zinc-900 ${className}`}
+      title={t("demo.badge")}
+      aria-label={t("demo.badge")}
+      data-testid="demo-account-avatar-indicator"
     >
-      <div className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg ${isDark ? "bg-amber-400/15" : "bg-amber-500/15"}`}>
-        <FlaskConical className={`h-4 w-4 ${isDark ? "text-amber-300" : "text-amber-600"}`} aria-hidden />
-      </div>
-      <div className="min-w-0">
-        <p className={`text-sm font-semibold ${isDark ? "text-amber-200" : "text-amber-700"}`}>{t("demo.badge")}</p>
-        <p className={`mt-0.5 text-xs leading-relaxed ${isDark ? "text-amber-200/75" : "text-amber-700/80"}`}>
-          {t("demo.banner")}
-        </p>
-      </div>
-    </div>
+      <FlaskConical className={s.icon} strokeWidth={2.5} aria-hidden />
+    </span>
   );
 }

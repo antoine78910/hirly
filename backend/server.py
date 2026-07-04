@@ -33,7 +33,7 @@ import unicodedata
 from pathlib import Path
 from urllib.parse import quote as url_quote, urlparse
 from pydantic import BaseModel, Field, ConfigDict
-from typing import List, Optional, Dict, Any, Literal
+from typing import List, Optional, Dict, Any, Literal, Tuple
 from datetime import datetime, timezone, timedelta
 import httpx
 import stripe
@@ -42,6 +42,7 @@ import stripe
 from pypdf import PdfReader
 import docx as docx_lib
 from application_documents import DOCX_MIME, build_application_package, cover_letter_to_text, sanitize_docx_text
+from application_email_service import send_application_email
 from browser_submission.base import BrowserSubmissionError, browser_submit_dry_run_enabled
 from browser_submission.greenhouse import GreenhouseBrowserSubmissionEngine
 from browser_submission.lever import LeverBrowserSubmissionEngine
@@ -658,6 +659,13 @@ class AdminStatusUpdate(BaseModel):
 class AdminManualStatusUpdate(BaseModel):
     manual_status: Literal["manual_review_needed", "manual_in_progress", "manually_submitted", "manual_blocked", "needs_user_input"]
     note: Optional[str] = None
+
+
+class AdminSendApplicationEmail(BaseModel):
+    to_email: Optional[str] = None
+    subject: Optional[str] = None
+    body_text: Optional[str] = None
+    mark_manually_submitted: bool = True
 
 
 class PreferencesUpdate(BaseModel):
@@ -1975,21 +1983,47 @@ async def stripe_webhook(request: Request):
 
 # ===================== CV parsing =====================
 
-CV_UPLOAD_EXTENSIONS = {".pdf", ".png", ".docx", ".txt"}
+CV_UPLOAD_EXTENSIONS = {".pdf", ".png", ".docx", ".txt", ".jpg", ".jpeg", ".heic", ".heif", ".webp"}
+CV_IMAGE_FORMATS = {"png", "jpeg", "webp", "heic"}
 
 
-def _detect_cv_format(filename: str, content: bytes) -> str:
+def _detect_cv_format(filename: str, content: bytes, content_type: Optional[str] = None) -> str:
     name = (filename or "").lower()
     if name.endswith(".pdf") or content[:4] == b"%PDF":
         return "pdf"
     if name.endswith(".png") or content[:8] == b"\x89PNG\r\n\x1a\n":
         return "png"
-    if name.endswith(".docx"):
+    if content[:3] == b"\xff\xd8\xff" or name.endswith((".jpg", ".jpeg")):
+        return "jpeg"
+    if len(content) >= 12 and content[:4] == b"RIFF" and content[8:12] == b"WEBP":
+        return "webp"
+    if len(content) >= 12 and content[4:8] == b"ftyp":
+        brand = content[8:12]
+        if brand in {b"heic", b"heix", b"hevc", b"hevx", b"mif1", b"msf1"}:
+            return "heic"
+    if name.endswith((".heic", ".heif")):
+        return "heic"
+    if name.endswith(".webp"):
+        return "webp"
+    if name.endswith(".docx") or content[:2] == b"PK":
         return "docx"
     if name.endswith(".txt"):
         return "txt"
-    if content[:2] == b"PK":
+    ct = (content_type or "").lower().split(";")[0].strip()
+    if ct == "application/pdf":
+        return "pdf"
+    if ct == "image/png":
+        return "png"
+    if ct in {"image/jpeg", "image/jpg"}:
+        return "jpeg"
+    if ct in {"image/heic", "image/heif"}:
+        return "heic"
+    if ct == "image/webp":
+        return "webp"
+    if ct == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
         return "docx"
+    if ct == "text/plain":
+        return "txt"
     return "txt"
 
 
@@ -2008,19 +2042,101 @@ def _extract_pdf_image_bytes(content: bytes) -> list[bytes]:
                 data = getattr(image, "data", None)
                 if data:
                     images.append(data)
+            if images:
+                continue
+            resources = page.get("/Resources")
+            if not resources:
+                continue
+            xobjects = resources.get("/XObject")
+            if not xobjects:
+                continue
+            xobjects = xobjects.get_object()
+            for ref in xobjects:
+                xobj = xobjects[ref].get_object()
+                if xobj.get("/Subtype") != "/Image":
+                    continue
+                try:
+                    data = xobj.get_data()
+                except Exception:
+                    data = None
+                if data:
+                    images.append(data)
     except Exception:
         pass
     return images
 
 
-def extract_text_from_upload(filename: str, content: bytes) -> str:
-    fmt = _detect_cv_format(filename, content)
+def _rasterize_pdf_pages(content: bytes, max_pages: int = 2, dpi: int = 144) -> list[bytes]:
+    """Render PDF pages to PNG when no text layer exists (common for mobile scans)."""
+    try:
+        import fitz
+    except ImportError:
+        return []
+    images: list[bytes] = []
+    try:
+        doc = fitz.open(stream=content, filetype="pdf")
+        for page_index in range(min(len(doc), max_pages)):
+            pix = doc[page_index].get_pixmap(dpi=dpi, alpha=False)
+            images.append(pix.tobytes("png"))
+    except Exception as exc:
+        logger.warning("cv_pdf_rasterize_failed error=%s", exc)
+    return images
+
+
+def _extract_docx_text(content: bytes) -> str:
+    document = docx_lib.Document(io.BytesIO(content))
+    parts: list[str] = []
+    for paragraph in document.paragraphs:
+        text = (paragraph.text or "").strip()
+        if text:
+            parts.append(text)
+    for table in document.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                text = (cell.text or "").strip()
+                if text:
+                    parts.append(text)
+    return "\n".join(parts)
+
+
+def _cv_image_mime(fmt: str, filename: str, content_type: Optional[str]) -> str:
+    ct = (content_type or "").lower().split(";")[0].strip()
+    if ct.startswith("image/"):
+        return ct
+    name = (filename or "").lower()
+    if fmt == "jpeg" or name.endswith((".jpg", ".jpeg")):
+        return "image/jpeg"
+    if fmt == "webp" or name.endswith(".webp"):
+        return "image/webp"
+    if fmt == "heic" or name.endswith((".heic", ".heif")):
+        return "image/heic"
+    return "image/png"
+
+
+def _heic_to_jpeg_bytes(content: bytes) -> tuple[bytes, str]:
+    try:
+        import pillow_heif
+        from PIL import Image
+
+        pillow_heif.register_heif_opener()
+        image = Image.open(io.BytesIO(content))
+        buffer = io.BytesIO()
+        image.convert("RGB").save(buffer, format="JPEG", quality=92)
+        return buffer.getvalue(), "image/jpeg"
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not read HEIC photo. Export as JPG or PDF and try again.",
+        ) from exc
+
+
+def extract_text_from_upload(filename: str, content: bytes, content_type: Optional[str] = None) -> str:
+    fmt = _detect_cv_format(filename, content, content_type)
     if fmt == "pdf":
         return _extract_pdf_text(content)
     if fmt == "docx":
-        document = docx_lib.Document(io.BytesIO(content))
-        return "\n".join(p.text for p in document.paragraphs)
-    if fmt == "png":
+        return _extract_docx_text(content)
+    if fmt in CV_IMAGE_FORMATS:
         return ""
     try:
         return content.decode("utf-8", errors="ignore")
@@ -2028,16 +2144,26 @@ def extract_text_from_upload(filename: str, content: bytes) -> str:
         return ""
 
 
-async def extract_cv_text_from_upload(filename: str, content: bytes) -> str:
-    fmt = _detect_cv_format(filename, content)
+async def _ocr_cv_image_bytes(content: bytes, mime: str) -> str:
+    return await extract_text_from_image_bytes(content, mime)
+
+
+async def extract_cv_text_from_upload(
+    filename: str,
+    content: bytes,
+    content_type: Optional[str] = None,
+) -> str:
+    fmt = _detect_cv_format(filename, content, content_type)
     if fmt == "pdf":
         text = _extract_pdf_text(content)
         if text.strip():
             return text
         image_parts: list[str] = []
-        for image_bytes in _extract_pdf_image_bytes(content):
+        image_sources = _extract_pdf_image_bytes(content) or _rasterize_pdf_pages(content)
+        for image_bytes in image_sources:
+            mime = "image/png" if image_bytes[:8] == b"\x89PNG\r\n\x1a\n" else "image/jpeg"
             try:
-                part = await extract_text_from_image_bytes(image_bytes, "image/png")
+                part = await _ocr_cv_image_bytes(image_bytes, mime)
             except LLMProviderNotConfigured:
                 raise
             except Exception as exc:
@@ -2046,10 +2172,13 @@ async def extract_cv_text_from_upload(filename: str, content: bytes) -> str:
             if part.strip():
                 image_parts.append(part.strip())
         return "\n\n".join(image_parts)
-    if fmt == "png":
-        mime = _mime_from_profile_document_filename(filename)
-        return await extract_text_from_image_bytes(content, mime)
-    return extract_text_from_upload(filename, content)
+    if fmt in CV_IMAGE_FORMATS:
+        image_bytes = content
+        mime = _cv_image_mime(fmt, filename, content_type)
+        if fmt == "heic":
+            image_bytes, mime = _heic_to_jpeg_bytes(content)
+        return await _ocr_cv_image_bytes(image_bytes, mime)
+    return extract_text_from_upload(filename, content, content_type)
 
 
 def _parse_json_from_llm(text: str) -> Dict[str, Any]:
@@ -3156,15 +3285,15 @@ async def upload_cv(file: UploadFile = File(...), user: User = Depends(get_curre
     if len(content) > MAX_PROFILE_DOCUMENT_BYTES:
         raise HTTPException(status_code=400, detail="File must be 10MB or smaller")
     filename = file.filename or "cv"
-    fmt = _detect_cv_format(filename, content)
-    if fmt not in {"pdf", "png", "docx", "txt"}:
-        raise HTTPException(status_code=400, detail="Please upload a PDF or PNG resume")
+    fmt = _detect_cv_format(filename, content, file.content_type)
+    if fmt not in {"pdf", "png", "docx", "txt", "jpeg", "webp", "heic"}:
+        raise HTTPException(status_code=400, detail="Please upload a PDF, PNG, JPG, or DOCX resume")
     try:
-        cv_text = await extract_cv_text_from_upload(filename, content)
+        cv_text = await extract_cv_text_from_upload(filename, content, file.content_type)
     except LLMProviderNotConfigured:
         raise HTTPException(
             status_code=503,
-            detail="AI provider is not configured. PNG resumes require vision OCR.",
+            detail="AI provider is not configured. Photo resumes (PNG, JPG, HEIC) require vision OCR.",
         )
     if not cv_text.strip():
         raise HTTPException(status_code=400, detail="Could not extract text from CV")
@@ -3277,6 +3406,8 @@ def _mime_from_profile_document_filename(filename: str) -> str:
         return "image/jpeg"
     if name_lower.endswith(".webp"):
         return "image/webp"
+    if name_lower.endswith((".heic", ".heif")):
+        return "image/heic"
     return "text/plain"
 
 
@@ -8310,6 +8441,95 @@ async def admin_download_cover_letter(application_id: str, admin: User = Depends
         media_type="text/plain; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{application_id}_cover_letter.txt"'},
     )
+
+
+@api_router.post("/admin/applications/{application_id}/send-email")
+async def admin_send_application_email(
+    application_id: str,
+    body: AdminSendApplicationEmail,
+    admin: User = Depends(require_admin_user),
+):
+    """Send the tailored CV + cover letter to a job's recruiter contact email.
+
+    Used for job sources (e.g. France Travail) that don't expose an apply API
+    but do publish a recruiter contact email. Sent from Hirly's own
+    transactional sender with Reply-To set to the candidate, so this never
+    requires the candidate's own mailbox credentials or a Gmail "send" OAuth
+    grant. A human operator reviews and triggers this from the manual
+    completion queue, so nothing is sent without a person in the loop.
+    """
+    app_doc = await db.applications.find_one({"application_id": application_id}, {"_id": 0})
+    if not app_doc:
+        raise HTTPException(status_code=404, detail="Application not found")
+    job = await db.jobs.find_one({"job_id": app_doc.get("job_id")}, {"_id": 0}) or {}
+    user_doc = await db.users.find_one({"user_id": app_doc.get("user_id")}, {"_id": 0}) or {}
+    profile = await db.profiles.find_one({"user_id": app_doc.get("user_id")}, {"_id": 0}) or {}
+
+    to_email = (body.to_email or job.get("contact_email") or "").strip()
+    if not to_email:
+        raise HTTPException(status_code=400, detail="No recruiter contact email available for this job")
+
+    candidate_email = app_doc.get("user_email") or user_doc.get("email") or ""
+    candidate_name = (profile.get("contact") or {}).get("name") or user_doc.get("name") or ""
+    job_title = job.get("title") or "the role"
+    company = job.get("company") or ""
+
+    subject = (body.subject or "").strip() or f"Candidature — {job_title}{f' chez {company}' if company else ''} — {candidate_name or candidate_email}"
+    cover_letter = app_doc.get("tailored_cover_letter") or app_doc.get("cover_letter") or {}
+    default_body = cover_letter_to_text(cover_letter) if cover_letter else (
+        f"Bonjour,\n\nVeuillez trouver ci-joint ma candidature pour le poste de {job_title}"
+        f"{f' chez {company}' if company else ''}.\n\nCordialement,\n{candidate_name or candidate_email}"
+    )
+    body_text = (body.body_text or "").strip() or default_body
+
+    attachments: List[Tuple[str, bytes, str]] = []
+    if app_doc.get("tailored_cv_file_b64"):
+        try:
+            attachments.append((
+                app_doc.get("tailored_cv_filename") or "CV.docx",
+                base64.b64decode(app_doc["tailored_cv_file_b64"]),
+                app_doc.get("tailored_cv_mime") or DOCX_MIME,
+            ))
+        except Exception:
+            logger.warning("admin_send_application_email_cv_decode_failed application_id=%s", application_id)
+
+    result = await send_application_email(
+        to_email=to_email,
+        candidate_email=candidate_email,
+        candidate_name=candidate_name,
+        subject=subject,
+        body_text=body_text,
+        attachments=attachments,
+    )
+    if not result.get("ok"):
+        raise HTTPException(status_code=502, detail=result.get("error") or "Failed to send application email")
+
+    now = datetime.now(timezone.utc).isoformat()
+    timeline = _append_admin_timeline(app_doc, {
+        "event_id": f"timeline_{uuid.uuid4().hex[:12]}",
+        "type": "application_email_sent",
+        "to_email": to_email,
+        "transport": result.get("transport"),
+        "author_user_id": admin.user_id,
+        "author_email": admin.email,
+        "created_at": now,
+    })
+    update: Dict[str, Any] = {
+        "admin_timeline": timeline,
+        "application_email_sent_at": now,
+        "application_email_sent_to": to_email,
+        "updated_at": now,
+    }
+    if body.mark_manually_submitted:
+        update["admin_status"] = "manually_submitted"
+        update["manual_status"] = "manually_submitted"
+        update["submission_status"] = "submitted"
+        update["submitted_at"] = app_doc.get("submitted_at") or now
+        update["manual_status_updated_by"] = admin.email
+        update["manual_status_updated_at"] = now
+    await db.applications.update_one({"application_id": application_id}, {"$set": update})
+    updated = await db.applications.find_one({"application_id": application_id}, {"_id": 0})
+    return {"ok": True, "transport": result.get("transport"), "application": _normalize_application_status_fields(updated or {})}
 
 
 @api_router.get("/applications/greenhouse/form-preview")

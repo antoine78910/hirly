@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { withDatafastAttribution } from "../lib/datafast";
 import { shouldMockCvUpload, uploadProfileCv } from "../lib/demoCvUpload";
+import { CV_ACCEPT_ATTR, isAcceptedCvFile } from "../lib/cvUploadFormats";
 import { useAuth } from "../context/AuthContext";
 import { useAppLocale } from "../context/AppLocaleContext";
 import { Slider } from "../components/ui/slider";
@@ -375,6 +376,10 @@ export default function Onboarding() {
 
   const handleUpload = async (f) => {
     if (!f) return;
+    if (!isAcceptedCvFile(f)) {
+      toast.error(lang === "fr" ? "Importez un PDF, PNG, JPG ou DOCX." : "Please upload a PDF, PNG, JPG, or DOCX resume");
+      return;
+    }
     if (!user && !shouldMockCvUpload()) {
       toast.error(lang === "fr" ? "Connectez-vous avec Google pour importer votre CV" : "Sign in with Google to upload your resume");
       return;
@@ -1194,7 +1199,7 @@ export default function Onboarding() {
                     <FileText className={`w-6 h-6 ${ob.accent}`} />
                   </div>
                   <p className="font-semibold text-sm sm:text-base text-zinc-900">{lang === "fr" ? "Aucun CV sélectionné" : "No resume selected"}</p>
-                  <p className={`text-xs sm:text-sm ${ob.muted} mt-1`}>{lang === "fr" ? "PDF ou PNG acceptés" : "PDF or PNG supported"}</p>
+                  <p className={`text-xs sm:text-sm ${ob.muted} mt-1`}>{lang === "fr" ? "PDF, PNG, JPG ou DOCX" : "PDF, PNG, JPG, or DOCX"}</p>
                 </>
               ) : (
                 <div className="flex items-center justify-center gap-2 text-zinc-700">
@@ -1207,7 +1212,7 @@ export default function Onboarding() {
                 id="cv-input"
                 data-testid="cv-file-input"
                 type="file"
-                accept=".pdf,.png,.docx,.txt"
+                accept={CV_ACCEPT_ATTR}
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0];

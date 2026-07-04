@@ -9,14 +9,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
+import { DemoAccountAvatarIndicator } from "../settings/DemoAccountBadge";
 
 function AccountAvatar({ className = "" }) {
   return (
-    <div
-      className={`grid size-8 shrink-0 place-items-center rounded-md border border-zinc-200 bg-zinc-100 text-zinc-400 ${className}`}
-      aria-hidden
-    >
-      <User className="size-4" strokeWidth={1.75} />
+    <div className={`relative shrink-0 ${className}`}>
+      <div
+        className="grid size-8 place-items-center rounded-md border border-zinc-200 bg-zinc-100 text-zinc-400 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400"
+        aria-hidden
+      >
+        <User className="size-4" strokeWidth={1.75} />
+      </div>
+      <DemoAccountAvatarIndicator />
     </div>
   );
 }

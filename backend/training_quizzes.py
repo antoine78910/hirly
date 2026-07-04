@@ -202,27 +202,15 @@ QUIZZES: Dict[str, Dict[str, Any]] = {
                 {"id": "b", "label": "Generic job app only"},
                 {"id": "c", "label": "Whoever paid most recently"},
             ], "a"),
-        ],
-    },
-    "quiz_mod_resources": {
-        "quiz_id": "quiz_mod_resources",
-        "module_id": "mod_resources",
-        "pass_percent": PASS_PERCENT,
-        "questions": [
-            _q("res1", "Where to get the official Hirly logo from?", [
-                {"id": "a", "label": "The shared Brand Assets folder"},
-                {"id": "b", "label": "Any screenshot from the app"},
-                {"id": "c", "label": "A logo you recreated yourself"},
+            _q("cb6", "Official Hirly logo source?", [
+                {"id": "a", "label": "Shared Google Drive folder in Company Logos section"},
+                {"id": "b", "label": "Screenshot from app or website"},
+                {"id": "c", "label": "Logo you recreated yourself"},
             ], "a"),
-            _q("res2", "Recolor or add effects to the logo?", [
-                {"id": "a", "label": "Yes, any color or effect works"},
-                {"id": "b", "label": "No — use it exactly as provided"},
-                {"id": "c", "label": "Only for sponsored posts"},
-            ], "b"),
-            _q("res3", "File format for transparent video overlays?", [
-                {"id": "a", "label": "PNG"},
-                {"id": "b", "label": "JPEG"},
-                {"id": "c", "label": "PDF"},
+            _q("cb7", "Good/Better/Best logos — Best option?", [
+                {"id": "a", "label": "Official transparent PNGs from shared folder"},
+                {"id": "b", "label": "Google Images screenshot"},
+                {"id": "c", "label": "Recreate with your own colors"},
             ], "a"),
         ],
     },

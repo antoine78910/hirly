@@ -18,7 +18,7 @@ import httpx
 from employment_kind import enrich_job_employment_kind
 from job_normalization import normalize_company_logo_url
 from .apply_eligibility import classify_apply_link
-from .ats_detection import detect_job_platform
+from .ats_detection import PRIMARY_AUTO_APPLY_ATS, detect_job_platform
 from .base import JobSearchQuery, ProviderResult
 
 _logger = logging.getLogger(__name__)
@@ -67,6 +67,55 @@ _ROLE_KEYWORD_HINTS = {
 
 def _ascii_fold(value: str) -> str:
     return unicodedata.normalize("NFKD", value or "").encode("ascii", "ignore").decode("ascii").lower()
+
+
+_URL_IN_TEXT_PATTERN = re.compile(r"https?://[^\s<>\"]+")
+_FT_HOSTED_APPLY_MARKERS = ("francetravail.fr", "pole-emploi.fr")
+
+
+def _direct_apply_url_from_contact(contact: Dict[str, Any]) -> Optional[str]:
+    """Extract a genuine external apply URL from the offer's `contact` block.
+
+    France Travail's Offres d'emploi v2 API exposes `contact.urlPostulation`
+    when the recruiter wants candidates to apply directly on their own site
+    (often an ATS like Greenhouse/Lever/Flatchr/Taleez...). Some offers also
+    embed the URL inside `contact.courriel` or `contact.commentaire` instead.
+    When present and not itself a francetravail.fr/pole-emploi.fr link, this
+    lets us route the candidate (and our auto-apply engine) straight to the
+    real destination instead of forcing the France-Travail-only manual flow.
+    """
+    if not isinstance(contact, dict):
+        return None
+    candidates = [
+        contact.get("urlPostulation"),
+        _URL_IN_TEXT_PATTERN.search(str(contact.get("courriel") or "")),
+        _URL_IN_TEXT_PATTERN.search(str(contact.get("commentaire") or "")),
+    ]
+    for candidate in candidates:
+        if candidate is None:
+            continue
+        url = candidate if isinstance(candidate, str) else candidate.group(0)
+        url = url.strip()
+        if not url.lower().startswith(("http://", "https://")):
+            continue
+        if any(marker in url.lower() for marker in _FT_HOSTED_APPLY_MARKERS):
+            continue
+        return url
+    return None
+
+
+def _contact_fields(contact: Dict[str, Any]) -> Dict[str, Optional[str]]:
+    if not isinstance(contact, dict):
+        return {}
+    email = str(contact.get("courriel") or "").strip()
+    if email and _URL_IN_TEXT_PATTERN.search(email):
+        email = ""  # the "courriel" field actually contains a link, not an address
+    return {
+        "contact_name": str(contact.get("nom") or "").strip() or None,
+        "contact_email": email or None,
+        "contact_phone": str(contact.get("telephone") or "").strip() or None,
+        "contact_note": str(contact.get("commentaire") or "").strip() or None,
+    }
 
 
 def _france_travail_keyword_variants(role: str, country: Optional[str]) -> List[str]:
@@ -365,14 +414,18 @@ class FranceTravailProvider:
         if not external_id or not title or not company:
             return None
 
-        external_url = (
+        ft_detail_url = (
             f"https://candidat.francetravail.fr/offres/recherche/detail/{quote(str(external_id), safe='')}"
         )
+        contact = row.get("contact") if isinstance(row.get("contact"), dict) else {}
+        direct_apply_url = _direct_apply_url_from_contact(contact)
+        external_url = direct_apply_url or ft_detail_url
         source = "France Travail"
         apply_classification = classify_apply_link(external_url, source=source)
         selected_apply_url = apply_classification.get("selected_apply_url") or external_url
         platform = detect_job_platform(selected_apply_url)
-        ats_provider = platform.get("ats_provider") or "francetravail"
+        ats_provider = platform.get("ats_provider") or ("unknown" if direct_apply_url else "francetravail")
+        auto_apply_supported = ats_provider in PRIMARY_AUTO_APPLY_ATS
         contract_type = row.get("typeContrat")
         contract_label = row.get("typeContratLibelle")
         description = self._description(row)
@@ -405,8 +458,16 @@ class FranceTravailProvider:
             "external_url": selected_apply_url,
             "source": source,
             "ats_provider": ats_provider,
-            "auto_apply_supported": False,
-            "auto_apply_reason": "France Travail offers require candidate account fulfillment",
+            "auto_apply_supported": auto_apply_supported,
+            "auto_apply_reason": (
+                f"{ats_provider} supported for V1 auto-apply"
+                if auto_apply_supported
+                else "France Travail offers require candidate account fulfillment"
+                if not direct_apply_url
+                else "Unsupported or unknown ATS provider for V1 auto-apply"
+            ),
+            "ft_detail_url": ft_detail_url,
+            **_contact_fields(contact),
             **apply_classification,
             "imported_at": imported_at,
             "last_seen_at": imported_at,
