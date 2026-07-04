@@ -1309,12 +1309,15 @@ async def refresh_jobs_for_profile_if_needed(
             "min_feed_ready_count": min_feed_ready_count,
             **base_metadata,
         }
+    # Skip per-key counts when forcing a refresh — they only appear in error
+    # metadata and wasting ~6 s of the 8 s per-location budget.
     any_cached = 0
-    for key in search_keys:
-        any_cached += await db.jobs.count_documents({
+    if not force_provider_refresh and search_keys:
+        total = await db.jobs.count_documents({
             "provider": provider.name,
-            "provider_search_key": key,
+            "provider_search_key": {"$in": search_keys},
         })
+        any_cached = total
 
     try:
         max_provider_requests = max(1, min(int(max_provider_requests_override or _env_int("JOB_IMPORT_MAX_PROVIDER_REQUESTS", 7)), 12))
