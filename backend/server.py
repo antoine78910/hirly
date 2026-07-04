@@ -598,6 +598,7 @@ class BillingCheckoutRequest(BaseModel):
     plan: Literal["basic", "pro", "ultra", "monthly", "quarterly"]
     interval: Optional[Literal["weekly", "monthly", "quarterly"]] = None
     source: Optional[Literal["app", "credits", "onboarding"]] = None
+    return_path: Optional[str] = None
     datafast_visitor_id: Optional[str] = None
     datafast_session_id: Optional[str] = None
 
@@ -1356,6 +1357,20 @@ def _frontend_url() -> str:
     return os.environ.get("FRONTEND_URL", "http://localhost:3000").strip().rstrip("/")
 
 
+def _sanitize_return_path(path: Optional[str], *, default: str = "/swipe") -> str:
+    if not path:
+        return default
+    cleaned = path.strip()
+    if not cleaned.startswith("/") or cleaned.startswith("//"):
+        return default
+    return cleaned[:512]
+
+
+def _checkout_return_url(frontend_url: str, return_path: str, status: str) -> str:
+    separator = "&" if "?" in return_path else "?"
+    return f"{frontend_url}{return_path}{separator}upgrade={status}"
+
+
 def _canonical_billing_plan(plan: str) -> str:
     aliases = {
         "monthly": "pro",
@@ -1736,6 +1751,10 @@ async def create_billing_checkout_session(
     if checkout_source == "onboarding":
         success_url = f"{frontend_url}/onboarding?step=creatorAccessCode&checkout=success"
         cancel_url = f"{frontend_url}/onboarding?step=showcasePricing&checkout=cancelled"
+    elif checkout_source == "app":
+        return_path = _sanitize_return_path(body.return_path)
+        success_url = _checkout_return_url(frontend_url, return_path, "success")
+        cancel_url = _checkout_return_url(frontend_url, return_path, "cancelled")
     else:
         success_url = f"{frontend_url}/credits?checkout=success"
         cancel_url = f"{frontend_url}/credits?checkout=cancelled"

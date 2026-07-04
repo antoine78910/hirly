@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "react-router-dom";
 import {
   Check,
   HeartHandshake,
@@ -107,6 +108,8 @@ function PricingGrid({ isMonthly, selectedTier, onSelectTier, t, lang }) {
 
 export default function DesktopUpgradeModal({ open, onClose }) {
   const { t, lang } = useAppLocale();
+  const location = useLocation();
+  const returnPath = `${location.pathname}${location.search}`;
   const { features: UPGRADE_FEATURES, stats: UPGRADE_STATS, benefits: UPGRADE_BENEFITS } = getUpgradeContent(t);
   const [billingInterval, setBillingInterval] = useState("monthly");
   const [selectedTier, setSelectedTier] = useState("ultra");
@@ -137,6 +140,8 @@ export default function DesktopUpgradeModal({ open, onClose }) {
       const { data } = await api.post("/billing/create-checkout-session", withDatafastAttribution({
         plan: selectedTier,
         interval: billingInterval,
+        source: "app",
+        return_path: returnPath,
       }));
       if (data?.url) {
         window.location.href = data.url;

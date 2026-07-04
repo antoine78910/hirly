@@ -56,7 +56,7 @@ export const SUBSCRIPTION_TIERS = [
   {
     id: "ultra",
     name: "ULTRA",
-    monthlyPrice: 79.99,
+    monthlyPrice: 69.99,
     weeklyPrice: 22.99,
     applications: 600,
     popular: true,
@@ -64,14 +64,14 @@ export const SUBSCRIPTION_TIERS = [
   {
     id: "pro",
     name: "PRO",
-    monthlyPrice: 39.99,
+    monthlyPrice: 29.99,
     weeklyPrice: 11.99,
     applications: 200,
   },
   {
     id: "basic",
     name: "BASIC",
-    monthlyPrice: 19.99,
+    monthlyPrice: 14.99,
     weeklyPrice: 5.99,
     applications: 80,
   },

@@ -55,7 +55,10 @@ export default function Credits() {
   const getPremium = async () => {
     setLoadingPlan(selectedPlan);
     try {
-      const { data } = await api.post("/billing/create-checkout-session", withDatafastAttribution({ plan: selectedPlan }));
+      const { data } = await api.post("/billing/create-checkout-session", withDatafastAttribution({
+        plan: selectedPlan,
+        source: "credits",
+      }));
       if (!data?.url) throw new Error("Missing checkout URL");
       window.location.href = data.url;
     } catch (error) {
