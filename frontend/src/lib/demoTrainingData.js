@@ -13,6 +13,7 @@ const MODULES_EN = [
   { module_id: "mod_account_management", title: "Account Management", description: "Manage your profile, settings, and creator account.", category: "interview", sort_order: 4, duration_seconds: 420, video_url: "", completed: false },
   { module_id: "mod_submit_drafts", title: "Submit Drafts & Payment", description: "How to submit work, get feedback, and how payments work.", category: "interview", sort_order: 5, duration_seconds: 480, video_url: SUBMIT_DRAFTS_VIDEO_URL, completed: false },
   { module_id: "mod_content_bank", title: "Content Bank Examples", description: "Reference scripts and formats you can reuse and adapt.", category: "reference", sort_order: 6, duration_seconds: 540, video_url: "", completed: false },
+  { module_id: "mod_resources", title: "Resources", description: "Official Hirly logos and brand assets to use in your content.", category: "reference", sort_order: 7, duration_seconds: 120, video_url: "", completed: false },
 ];
 
 const MODULES_FR = [
@@ -22,6 +23,7 @@ const MODULES_FR = [
   { module_id: "mod_account_management", title: "Gestion du compte", description: "Gère ton profil, tes paramètres et ton compte créateur.", category: "interview", sort_order: 4, duration_seconds: 420, video_url: "", completed: false },
   { module_id: "mod_submit_drafts", title: "Soumettre le contenu", description: "Comment soumettre ton travail, obtenir des retours et comment fonctionne le paiement.", category: "interview", sort_order: 5, duration_seconds: 480, video_url: SUBMIT_DRAFTS_VIDEO_URL, completed: false },
   { module_id: "mod_content_bank", title: "Exemples banque de contenu", description: "Scripts et formats de référence à réutiliser et adapter.", category: "reference", sort_order: 6, duration_seconds: 540, video_url: "", completed: false },
+  { module_id: "mod_resources", title: "Ressources", description: "Logos officiels Hirly et ressources de marque à utiliser dans ton contenu.", category: "reference", sort_order: 7, duration_seconds: 120, video_url: "", completed: false },
 ];
 
 function courseForLang(lang) {
@@ -37,8 +39,8 @@ function courseForLang(lang) {
       : "Go through each module, watch the videos, and complete the quizzes at the end of every chapter.",
     thumbnail_url: "/onboarding/intro-3.png",
     level: fr ? "Débutant" : "Beginner",
-    module_count: 6,
-    duration_minutes: 43,
+    module_count: 7,
+    duration_minutes: 45,
     creator_id: "creator_swiipr_official",
   };
 }

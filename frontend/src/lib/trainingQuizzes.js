@@ -412,6 +412,52 @@ const QUIZZES_EN = {
 
   },
 
+  quiz_mod_resources: {
+
+    quiz_id: "quiz_mod_resources",
+
+    module_id: "mod_resources",
+
+    title: "Resources — Knowledge Check",
+
+    pass_percent: PASS_PERCENT,
+
+    questions: [
+
+      q("res1", "Where should you always get the official Hirly logo from?", [
+
+        { id: "a", label: "The shared Brand Assets folder linked in this module" },
+
+        { id: "b", label: "Any screenshot taken from the app" },
+
+        { id: "c", label: "A logo you recreated yourself in a design tool" },
+
+      ], "a"),
+
+      q("res2", "Can you recolor or add effects to the Hirly logo before using it?", [
+
+        { id: "a", label: "Yes, any color or effect works" },
+
+        { id: "b", label: "No — use it exactly as provided" },
+
+        { id: "c", label: "Only for sponsored posts" },
+
+      ], "b"),
+
+      q("res3", "Which file format keeps a transparent background for video overlays?", [
+
+        { id: "a", label: "PNG" },
+
+        { id: "b", label: "JPEG" },
+
+        { id: "c", label: "PDF" },
+
+      ], "a"),
+
+    ],
+
+  },
+
 };
 
 
@@ -779,6 +825,48 @@ const QUIZZES_FR = {
         { id: "b", label: "« App emploi » générique — ne jamais dire Hirly" },
 
         { id: "c", label: "L'app qui t'a le plus payé récemment" },
+
+      ], "a"),
+
+    ],
+
+  },
+
+  quiz_mod_resources: {
+
+    ...QUIZZES_EN.quiz_mod_resources,
+
+    title: "Ressources — Quiz",
+
+    questions: [
+
+      q("res1", "Où dois-tu toujours récupérer le logo officiel Hirly ?", [
+
+        { id: "a", label: "Dans le dossier de ressources de marque partagé dans ce module" },
+
+        { id: "b", label: "N'importe quelle capture d'écran de l'app" },
+
+        { id: "c", label: "Un logo que tu as recréé toi-même" },
+
+      ], "a"),
+
+      q("res2", "Peux-tu recolorer ou ajouter des effets au logo Hirly avant de l'utiliser ?", [
+
+        { id: "a", label: "Oui, n'importe quelle couleur ou effet fonctionne" },
+
+        { id: "b", label: "Non — utilise-le exactement tel quel" },
+
+        { id: "c", label: "Seulement pour les posts sponsorisés" },
+
+      ], "b"),
+
+      q("res3", "Quel format de fichier garde un fond transparent pour les incrustations vidéo ?", [
+
+        { id: "a", label: "PNG" },
+
+        { id: "b", label: "JPEG" },
+
+        { id: "c", label: "PDF" },
 
       ], "a"),
 

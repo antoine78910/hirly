@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 SEED_CREATOR_ID = "creator_swiipr_official"
 SEED_COURSE_ID = "course_job_search_mastery"
-SEED_MODULES_VERSION = 9
+SEED_MODULES_VERSION = 10
 
 SUBMIT_DRAFTS_VIDEO_URL = (
     "https://player.mediadelivery.net/play/689678/9cdda64d-b68e-4e87-b5c9-d076bb620aec"
@@ -169,6 +169,18 @@ MODULE_I18N = {
             "category": "bonus",
         },
     },
+    "mod_resources": {
+        "en": {
+            "title": "Resources",
+            "description": "Official Hirly logos and brand assets to use in your content.",
+            "category": "reference",
+        },
+        "fr": {
+            "title": "Ressources",
+            "description": "Logos officiels Hirly et ressources de marque à utiliser dans ton contenu.",
+            "category": "reference",
+        },
+    },
 }
 
 for _module_id, _packs in MODULE_I18N.items():
@@ -186,6 +198,7 @@ MODULE_SEED = [
     {"module_id": "mod_account_management", "sort_order": 6, "duration_seconds": 420},
     {"module_id": "mod_submit_drafts", "sort_order": 7, "duration_seconds": 480},
     {"module_id": "mod_bonus", "sort_order": 8, "duration_seconds": 360},
+    {"module_id": "mod_resources", "sort_order": 9, "duration_seconds": 120},
 ]
 
 
