@@ -310,26 +310,30 @@ async def _sleep(seconds: float) -> None:
     await asyncio.sleep(seconds)
 
 
-async def _nominatim_request(query: str, limit: int) -> list[dict[str, Any]]:
+async def _nominatim_request(query: str, limit: int, country_codes: str = "fr") -> list[dict[str, Any]]:
     global _LAST_NOMINATIM_AT
 
     elapsed = time.time() - _LAST_NOMINATIM_AT
     if elapsed < 1.05:
         await _sleep(1.05 - elapsed)
 
+    params: dict[str, Any] = {
+        "q": query,
+        "format": "json",
+        "addressdetails": 1,
+        "namedetails": 1,
+        "extratags": 1,
+        "limit": max(limit * 4, 20),
+        "dedupe": 1,
+        "accept-language": "fr",
+    }
+    if country_codes:
+        params["countrycodes"] = country_codes
+
     async with httpx.AsyncClient(timeout=12.0) as client:
         response = await client.get(
             NOMINATIM_URL,
-            params={
-                "q": query,
-                "format": "json",
-                "addressdetails": 1,
-                "namedetails": 1,
-                "extratags": 1,
-                "limit": max(limit * 4, 20),
-                "dedupe": 1,
-                "accept-language": "en",
-            },
+            params=params,
             headers={"User-Agent": USER_AGENT},
         )
         _LAST_NOMINATIM_AT = time.time()
@@ -355,8 +359,8 @@ def _collect_nominatim_rows(
             collected.append(item)
 
 
-async def _search_nominatim(query: str, limit: int = 10) -> list[dict[str, Any]]:
-    cache_key = f"nominatim:{query.lower()}:{limit}"
+async def _search_nominatim(query: str, limit: int = 10, country_codes: str = "fr") -> list[dict[str, Any]]:
+    cache_key = f"nominatim:{country_codes}:{query.lower()}:{limit}"
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
@@ -366,7 +370,7 @@ async def _search_nominatim(query: str, limit: int = 10) -> list[dict[str, Any]]
     queries = _alias_queries(query)
 
     try:
-        payload = await _nominatim_request(queries[0], limit)
+        payload = await _nominatim_request(queries[0], limit, country_codes=country_codes)
         _collect_nominatim_rows(payload, query, seen_ids, collected)
     except Exception:
         pass
@@ -374,7 +378,7 @@ async def _search_nominatim(query: str, limit: int = 10) -> list[dict[str, Any]]
     if len(collected) < max(2, limit // 2):
         for q in queries[1:]:
             try:
-                payload = await _nominatim_request(q, limit)
+                payload = await _nominatim_request(q, limit, country_codes=country_codes)
             except Exception:
                 continue
             _collect_nominatim_rows(payload, query, seen_ids, collected)
@@ -471,7 +475,8 @@ def _merge_scored(query: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]
     return [{k: v for k, v in row.items() if k != "_score"} for row in rows]
 
 
-async def search_locations(query: str, limit: int = 10) -> dict[str, Any]:
+async def search_locations(query: str, limit: int = 10, country_codes: str = "fr") -> dict[str, Any]:
+    """Search for locations, restricted to France by default (country_codes='fr')."""
     q = (query or "").strip()
     if len(q) < 1:
         return {"results": [], "source": "none"}
@@ -494,6 +499,8 @@ async def search_locations(query: str, limit: int = 10) -> dict[str, Any]:
                 sources.append("google")
             for row in _merge_scored(q, google_rows):
                 label = row["label"]
+                if country_codes == "fr" and row.get("country_code") and row["country_code"] not in ("fr", ""):
+                    continue
                 if _is_duplicate(label, seen):
                     continue
                 seen.add(_normalize_label(label))
@@ -502,7 +509,7 @@ async def search_locations(query: str, limit: int = 10) -> dict[str, Any]:
             pass
 
     try:
-        nominatim_rows = await _search_nominatim(q, limit=limit * 2)
+        nominatim_rows = await _search_nominatim(q, limit=limit * 2, country_codes=country_codes)
         if nominatim_rows:
             sources.append("nominatim")
         for row in nominatim_rows:
@@ -517,6 +524,10 @@ async def search_locations(query: str, limit: int = 10) -> dict[str, Any]:
     merged = _merge_scored(q, merged)
     filtered: list[dict[str, Any]] = []
     for row in merged:
+        if country_codes == "fr":
+            cc = str(row.get("country_code") or "").lower()
+            if cc and cc != "fr":
+                continue
         label_norm = _normalize_label(row.get("label") or "")
         if any(token in label_norm for token in ("casablanca", "maroc", "morocco")):
             if not any(token in _normalize_text(q) for token in ("casablanca", "maroc", "morocco")):

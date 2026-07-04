@@ -141,16 +141,19 @@ export function buildTypedLocationResult(query) {
   })];
 }
 
-/** Browser-side fallback when the backend location API is unavailable. */
+/** Browser-side fallback using Photon, restricted to France. */
 export async function searchLocationsClient(query, limit = 12, signal) {
   const q = (query || "").trim();
   if (q.length < 1) return [];
 
+  // Photon supports bbox and countrycodes — restrict to France
+  const FRANCE_BBOX = "-5.14,41.33,9.56,51.09";
   const response = await fetch(
     `${PHOTON_URL}?${new URLSearchParams({
       q,
       limit: String(Math.min(limit * 2, 20)),
-      lang: "en",
+      lang: "fr",
+      bbox: FRANCE_BBOX,
     })}`,
     { signal },
   );
@@ -166,6 +169,9 @@ export async function searchLocationsClient(query, limit = 12, signal) {
   for (const [index, feature] of (payload.features || []).entries()) {
     const result = photonFeatureToResult(feature, index);
     if (!result) continue;
+
+    const cc = (result.country_code || "").toLowerCase();
+    if (cc && cc !== "fr") continue;
 
     const key = normalizeLabel(result.label);
     if (!key || seen.has(key)) continue;
