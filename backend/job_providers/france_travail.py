@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 import os
 import re
 import time
 import unicodedata
+
+_logger = logging.getLogger(__name__)
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote
@@ -139,7 +142,6 @@ class FranceTravailProvider:
         if country not in ("fr", "france"):
             return ProviderResult(jobs=[], raw_response={"skipped": "non_france_country"})
 
-        params = await self._build_search_params(query)
         page_size = max(1, min(int(query.page_size or self._env_int("FRANCE_TRAVAIL_PAGE_SIZE", 50)), 150))
         max_pages = max(1, min(int(query.max_pages or self._env_int("FRANCE_TRAVAIL_MAX_PAGES", 2)), 10))
         target_count = max(query.limit, min(page_size * max_pages, 300))
@@ -149,6 +151,7 @@ class FranceTravailProvider:
         payloads: List[Any] = []
         rows: List[Dict[str, Any]] = []
         seen_ids = set()
+        variant_errors: List[str] = []
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             token = await self._get_access_token(client)
             headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
@@ -157,25 +160,53 @@ class FranceTravailProvider:
                     if len(rows) >= min_results_before_fallback:
                         break
                     await asyncio.sleep(self._request_interval())
-                variant_rows, variant_payloads = await self._fetch_search_pages(
-                    client,
-                    headers,
-                    variant_params,
-                    page_size=page_size,
-                    max_pages=max_pages,
-                    target_count=target_count - len(rows),
-                    seen_ids=seen_ids,
-                )
+                try:
+                    variant_rows, variant_payloads = await self._fetch_search_pages(
+                        client,
+                        headers,
+                        variant_params,
+                        page_size=page_size,
+                        max_pages=max_pages,
+                        target_count=target_count - len(rows),
+                        seen_ids=seen_ids,
+                    )
+                except httpx.HTTPStatusError as exc:
+                    body = ""
+                    try:
+                        body = exc.response.text[:400]
+                    except Exception:
+                        pass
+                    variant_errors.append(f"variant[{variant_index}] HTTP {exc.response.status_code}: {body}")
+                    _logger.warning(
+                        "france_travail search variant %d failed (HTTP %d): params=%s body=%s",
+                        variant_index,
+                        exc.response.status_code,
+                        {k: v for k, v in variant_params.items() if k != "range"},
+                        body,
+                    )
+                    continue
+                except Exception as exc:
+                    variant_errors.append(f"variant[{variant_index}] {exc.__class__.__name__}: {str(exc)[:200]}")
+                    _logger.warning(
+                        "france_travail search variant %d failed: %s", variant_index, exc
+                    )
+                    continue
                 payloads.extend(variant_payloads)
                 rows.extend(variant_rows)
                 if len(rows) >= target_count:
                     break
 
+        if not rows and variant_errors:
+            raise RuntimeError(
+                f"France Travail provider: all {len(variant_errors)} variants failed. "
+                + "; ".join(variant_errors)
+            )
+
         imported_at = datetime.now(timezone.utc).isoformat()
         jobs = [self.normalize_job(row, query, imported_at) for row in rows[:target_count]]
         jobs = [job for job in jobs if job is not None]
         return ProviderResult(
-            raw_response={"pages": payloads, "rows_seen": len(rows), "params_variants": param_variants},
+            raw_response={"pages": payloads, "rows_seen": len(rows), "params_variants": param_variants, "variant_errors": variant_errors},
             jobs=jobs[:target_count],
         )
 
@@ -227,10 +258,9 @@ class FranceTravailProvider:
         return rows, payloads
 
     async def _search_param_variants(self, query: JobSearchQuery) -> List[Dict[str, Any]]:
-        base = await self._build_search_params(query)
         city = (query.location or "").split(",")[0].strip().lower()
-        distance = self._search_distance_km(query)
-        _, _, departement = await self._commune_distance_departement(query)
+        commune_code, distance, departement = await self._commune_distance_departement(query)
+        base = await self._build_search_params_from_resolved(query, commune_code, distance, departement)
         variants: List[Dict[str, Any]] = []
 
         if city in _MEGA_CITY_DEPARTEMENT:
@@ -255,6 +285,16 @@ class FranceTravailProvider:
         return variants or [base]
 
     async def _build_search_params(self, query: JobSearchQuery) -> Dict[str, Any]:
+        commune, distance, departement = await self._commune_distance_departement(query)
+        return await self._build_search_params_from_resolved(query, commune, distance, departement)
+
+    async def _build_search_params_from_resolved(
+        self,
+        query: JobSearchQuery,
+        commune: Optional[str],
+        distance: int,
+        departement: Optional[str],
+    ) -> Dict[str, Any]:
         params: Dict[str, Any] = {
             "motsCles": self._keywords(query),
             "sort": "1",
@@ -263,16 +303,15 @@ class FranceTravailProvider:
         type_contrat = self._type_contrat(query.contract_hint)
         if type_contrat:
             params["typeContrat"] = type_contrat
-        commune, distance, departement = await self._commune_distance_departement(query)
         if commune and str(commune) not in _MUNICIPALITY_AGGREGATION_CODES:
             params["commune"] = commune
             params["distance"] = distance
         elif departement:
             params["departement"] = departement
         else:
-            departement = self._departement_from_location(query.location)
-            if departement:
-                params["departement"] = departement
+            dept_from_loc = self._departement_from_location(query.location)
+            if dept_from_loc:
+                params["departement"] = dept_from_loc
         return params
 
     def normalize_job(
@@ -346,6 +385,14 @@ class FranceTravailProvider:
             job_doc["rome_label"] = row.get("romeLibelle")
         return enrich_job_employment_kind(job_doc)
 
+    def _query_string(self, query: JobSearchQuery) -> str:
+        """Return a human-readable query label (compat with JSearchProvider log calls)."""
+        keywords = self._keywords(query)
+        location = (query.location or "").strip()
+        if location:
+            return f"{keywords} in {location}"
+        return keywords
+
     def search_key(self, query: JobSearchQuery) -> str:
         remote_preference = "remote" if (query.remote_preference or "").strip().lower() == "remote" else "any"
         bits = [
@@ -403,13 +450,22 @@ class FranceTravailProvider:
                 tokens.append(hint_token)
         return ",".join(tokens)
 
+    # FT API accepts only specific values for publieeDepuis: 1, 3, 7, 14, 31
+    _PUBLIEE_DEPUIS_VALID = (1, 3, 7, 14, 31)
+
     def _publiee_depuis_days(self, query: JobSearchQuery) -> int:
         hint = (query.contract_hint or "").lower()
         if any(token in hint for token in ("été", "ete", "saison", "summer")):
-            return max(1, self._env_int("FRANCE_TRAVAIL_PUBLIEE_DEPUIS_SUMMER_DAYS", 7))
-        if "cdi" in hint:
-            return max(1, self._env_int("FRANCE_TRAVAIL_PUBLIEE_DEPUIS_PERMANENT_DAYS", 30))
-        return max(1, self._env_int("FRANCE_TRAVAIL_PUBLIEE_DEPUIS_DAYS", 30))
+            raw = max(1, self._env_int("FRANCE_TRAVAIL_PUBLIEE_DEPUIS_SUMMER_DAYS", 7))
+        elif "cdi" in hint:
+            raw = max(1, self._env_int("FRANCE_TRAVAIL_PUBLIEE_DEPUIS_PERMANENT_DAYS", 31))
+        else:
+            raw = max(1, self._env_int("FRANCE_TRAVAIL_PUBLIEE_DEPUIS_DAYS", 31))
+        # Snap to nearest valid value (round up to give wider window)
+        for v in self._PUBLIEE_DEPUIS_VALID:
+            if v >= raw:
+                return v
+        return self._PUBLIEE_DEPUIS_VALID[-1]
 
     def _type_contrat(self, contract_hint: Optional[str]) -> Optional[str]:
         if not contract_hint:
