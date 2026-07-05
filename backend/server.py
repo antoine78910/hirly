@@ -1783,6 +1783,7 @@ async def create_billing_checkout_session(
         client_reference_id=user.user_id,
         metadata=checkout_metadata,
         subscription_data={"metadata": checkout_metadata},
+        allow_promotion_codes=True,
     )
     return {"url": session["url"]}
 

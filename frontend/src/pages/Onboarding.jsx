@@ -387,29 +387,51 @@ export default function Onboarding() {
     setParsing(true);
     trackEvent("cv_upload_started", { source: "onboarding" });
     preloadOnboardingShowcaseImages();
-    try {
-      const { data } = await uploadProfileCv(f, api);
-      setProfile(data);
-      trackEvent("cv_upload_completed", { source: "onboarding" });
-      if (!shouldMockCvUpload()) {
-        const { data: authState } = await api.get("/auth/me");
-        setHasProfile(Boolean(authState?.has_profile));
-        if (checkAuth) await checkAuth();
-        toast.success(lang === "fr" ? "Votre profil est prêt" : "Your profile is ready");
-      } else {
-        setHasProfile(true);
-      }
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-      setStepIndex(STEP_ORDER.indexOf("profileSetup"));
-    } catch (e) {
-      console.error(e);
-      trackEvent("cv_upload_failed", { source: "onboarding", message: e?.response?.data?.detail || e?.message });
-      if (!shouldMockCvUpload()) {
-        toast.error(e?.response?.data?.detail || (lang === "fr" ? "Échec de l'analyse du CV" : "Failed to parse CV"));
-      }
-    } finally {
+
+    const CV_PARSE_UI_MAX_MS = 3000;
+    let advanced = false;
+
+    const advanceToProfileSetup = () => {
+      if (advanced) return;
+      advanced = true;
       setParsing(false);
-    }
+      setStepIndex(STEP_ORDER.indexOf("profileSetup"));
+    };
+
+    const uploadTask = (async () => {
+      try {
+        const { data } = await uploadProfileCv(f, api);
+        setProfile(data);
+        trackEvent("cv_upload_completed", { source: "onboarding" });
+        if (!shouldMockCvUpload()) {
+          const { data: authState } = await api.get("/auth/me");
+          setHasProfile(Boolean(authState?.has_profile));
+          if (checkAuth) await checkAuth();
+          toast.success(lang === "fr" ? "Votre profil est prêt" : "Your profile is ready");
+        } else {
+          setHasProfile(true);
+        }
+        if (!advanced) {
+          await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+          advanceToProfileSetup();
+        }
+      } catch (e) {
+        console.error(e);
+        trackEvent("cv_upload_failed", { source: "onboarding", message: e?.response?.data?.detail || e?.message });
+        if (!shouldMockCvUpload()) {
+          toast.error(e?.response?.data?.detail || (lang === "fr" ? "Échec de l'analyse du CV" : "Failed to parse CV"));
+        }
+        if (!advanced) {
+          setParsing(false);
+        }
+      }
+    })();
+
+    setTimeout(() => {
+      advanceToProfileSetup();
+    }, CV_PARSE_UI_MAX_MS);
+
+    await uploadTask;
   };
 
   const persistOnboardingMeta = async () => {
