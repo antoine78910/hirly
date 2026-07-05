@@ -53,6 +53,16 @@ const FEED_BATCH_SIZE = 12;
 const FEED_PREFETCH_THRESHOLD = 7;
 const FILTERS_STORAGE_KEY = "swiipr.jobs.filters.v2";
 
+// Module-level cache — survives React navigation (component unmount/remount)
+// but is cleared on a full page reload. Lets us show the last feed instantly.
+const _swipeCache = {
+  jobs: /** @type {any[]|null} */ (null),
+  meta: null,
+  target: null,
+  targetLocationData: null,
+  filters: null,
+};
+
 const readPersistedFilters = () => {
   if (typeof window === "undefined") return null;
   try {
@@ -727,8 +737,11 @@ export default function Swipe() {
     feedAbortRef.current = controller;
     pendingFiltersRef.current = undefined;
     const stackPrefetch = !replace && jobsRef.current.length > 0;
+    // Silent refresh: replace content without showing a loading skeleton when
+    // we already have cached jobs visible (e.g. navigating back to the feed).
+    const silentRefresh = replace && jobsRef.current.length > 0;
     fetchingRef.current = true;
-    if (!stackPrefetch) {
+    if (!stackPrefetch && !silentRefresh) {
       setLoading(true);
       if (replace) setJobs([]);
     }
@@ -856,6 +869,12 @@ export default function Swipe() {
         const merged = [...base];
         safeJobs.forEach((j) => { if (!seen.has(j.job_id)) merged.push(j); });
         preloadCompanyLogos(merged.slice(0, 6));
+        // Persist to module-level cache for instant restore on next navigation
+        _swipeCache.jobs = merged;
+        _swipeCache.meta = data;
+        _swipeCache.target = targetRef.current;
+        _swipeCache.targetLocationData = targetLocationDataRef.current;
+        _swipeCache.filters = filtersRef.current;
         return merged;
       });
     } catch (e) {
@@ -924,7 +943,7 @@ export default function Swipe() {
       toast.error(typeof detail === "string" ? detail : t("toasts.loadJobsError"));
     } finally {
       if (requestId === feedRequestIdRef.current) {
-        if (!stackPrefetch) setLoading(false);
+        if (!stackPrefetch && !silentRefresh) setLoading(false);
         fetchingRef.current = false;
         if (feedAbortRef.current === controller) feedAbortRef.current = null;
       }
@@ -981,16 +1000,43 @@ export default function Swipe() {
     if (authLoading) return;
     ensureDemoAccountDefaults();
     const bootstrap = async () => {
-      await loadProfile();
+      const isDemo = isDemoAccountEnabled();
+      const isFinanceDemo = isFinanceDemoEnabled() && isDemo;
+
+      // ── Instant restore from cache (only for regular users) ──────────────
+      if (!isDemo && !isFinanceDemo && _swipeCache.jobs?.length) {
+        setJobs(_swipeCache.jobs);
+        jobsRef.current = _swipeCache.jobs;
+        setFeedMeta(_swipeCache.meta);
+        if (_swipeCache.target) {
+          setTarget(_swipeCache.target);
+          targetRef.current = _swipeCache.target;
+        }
+        if (_swipeCache.targetLocationData !== undefined) {
+          setTargetLocationData(_swipeCache.targetLocationData);
+          targetLocationDataRef.current = _swipeCache.targetLocationData;
+        }
+        if (_swipeCache.filters) {
+          filtersRef.current = _swipeCache.filters;
+          setFilters(_swipeCache.filters);
+        }
+        setLoading(false);
+      }
+
+      // ── Kick off billing fetch immediately (does not block anything) ──────
       api.get("/billing/status")
         .then(({ data }) => setBilling(data))
         .catch(() => setBilling({ is_premium: false }));
-      if (isFinanceDemoEnabled() && isDemoAccountEnabled()) {
+
+      // ── Load profile (needed to derive the correct search target) ─────────
+      await loadProfile();
+
+      if (isFinanceDemo) {
         const financeFilters = applyFinanceDemoTarget();
         loadFeed(true, financeFilters, "initial_finance_demo");
         return;
       }
-      if (isDemoAccountEnabled()) {
+      if (isDemo) {
         const demoFilters = reconcileFiltersForUser(readPersistedFilters(), profileRef.current);
         filtersRef.current = demoFilters;
         setFilters(demoFilters);
@@ -998,11 +1044,17 @@ export default function Swipe() {
         loadFeed(true, demoFilters, "initial_demo_account");
         return;
       }
+
       const mergedFilters = reconcileFiltersForUser(readPersistedFilters(), profileRef.current);
       filtersRef.current = mergedFilters;
       setFilters(mergedFilters);
       savePersistedFilters(mergedFilters);
-      loadFeed(true, mergedFilters, readPersistedFilters() ? "initial_persisted_filters" : "initial_profile_defaults");
+      // If we restored from cache, loadFeed will run as a silent background
+      // refresh (no loading spinner) thanks to the silentRefresh logic.
+      const reason = _swipeCache.jobs?.length
+        ? "background_refresh_cache"
+        : (readPersistedFilters() ? "initial_persisted_filters" : "initial_profile_defaults");
+      loadFeed(true, mergedFilters, reason);
     };
     bootstrap();
   }, [authLoading, loadProfile, loadFeed, applyFinanceDemoTarget]);
