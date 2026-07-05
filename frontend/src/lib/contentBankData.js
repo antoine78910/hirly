@@ -114,9 +114,6 @@ const CONTENT_BANK_EN = [
       warningGuideline(
         "Point to each tier (Good, Better, Best) on screen as you say it. Use transparent PNG logos from the shared folder for overlays — don't stretch, recolor, or add effects.",
       ),
-      infoScript(
-        "Good. Better. Best. Company logo edition.\n\nGood. Screenshot the logo from Google or the company website.\nIt's blurry, the background is wrong, and it looks unprofessional in your video.\n\nBetter. Recreate the logo yourself or grab a random PNG from the internet.\nWrong colors, outdated version — the brand team will notice.\n\nBest. Use the official Hirly logo files from our shared Google Drive folder.\nTransparent PNG, correct colors, ready for video overlays.\n\nSave this and always pull logos from the folder before you post.",
-      ),
     ],
   }),
 

@@ -123,9 +123,6 @@ export const CONTENT_BANK_FR = [
       warningGuideline(
         "Pointe chaque niveau (Bien, Mieux, Le top) à l'écran quand tu le dis. Utilise les PNG transparents du dossier partagé pour les incrustations — ne déforme pas, ne recolore pas et n'ajoute pas d'effets.",
       ),
-      infoScript(
-        "Good. Better. Best. Édition logos des compagnies.\n\nGood. Tu fais une capture d'écran du logo sur Google ou le site de l'entreprise.\nC'est flou, le fond est mauvais, et ça fait amateur dans ta vidéo.\n\nBetter. Tu recrées le logo toi-même ou tu prends un PNG au hasard sur internet.\nMauvaises couleurs, version périmée — l'équipe marque le remarquera.\n\nBest. Tu utilises les fichiers logo officiels Hirly dans notre dossier Google Drive partagé.\nPNG transparent, bonnes couleurs, prêt pour les incrustations vidéo.\n\nEnregistre cette vidéo et récupère toujours les logos dans le dossier avant de publier.",
-      ),
     ],
   }),
 
