@@ -165,12 +165,12 @@ def build_profile_job_query(
     role_override: Optional[str] = None,
 ) -> JobSearchQuery:
     radius_scope = (search_radius or "").lower().strip()
-    role = (
-        (role_override or "").strip()
-        or profile.get("target_role")
-        or ((profile.get("target_roles") or [None])[0])
-        or "software engineer"
-    )
+    if role_override is not None:
+        role = role_override.strip()
+    else:
+        role = (
+            (profile.get("target_role") or ((profile.get("target_roles") or [None])[0]) or "")
+        ).strip()
     requested_location = location_override or profile.get("target_location")
     location_data = location_data_override or profile.get("target_location_data")
     country, location = _country_and_location_from_data(location_data, requested_location)
@@ -861,6 +861,7 @@ def _direct_apply_search_domains() -> List[str]:
         "jobs.lever.co",
         "ashbyhq.com",
         "workable.com",
+        "jobs.smartrecruiters.com",
         "smartrecruiters.com",
         "teamtailor.com",
         "recruitee.com",
@@ -1188,6 +1189,18 @@ async def refresh_jobs_for_profile_if_needed(
         "provider_cooldown_until": None,
     }
 
+    smartrecruiters_result = None
+    try:
+        from smartrecruiters_search import refresh_smartrecruiters_jobs_for_query
+
+        smartrecruiters_result = await refresh_smartrecruiters_jobs_for_query(
+            db,
+            query=query,
+            limit=query_limit_override or query.limit,
+        )
+    except Exception as exc:
+        logger.warning("smartrecruiters_search_failed error=%s", exc)
+
     greenhouse_result = None
     lever_result = None
     if require_auto_apply:
@@ -1513,6 +1526,7 @@ async def refresh_jobs_for_profile_if_needed(
         "jobs": combined_jobs[:200],
         "fallback_used": fallback_used,
         "ats_targeted_imported": ats_targeted_imported,
+        "smartrecruiters": smartrecruiters_result,
         **base_metadata,
         "widened_search": fallback_used is not None,
         "final_location_used": fallback_used or query.location,

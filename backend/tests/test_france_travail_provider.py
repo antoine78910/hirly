@@ -50,6 +50,29 @@ def test_france_travail_keywords_barista_use_hospitality_tokens():
     assert all("," not in v for v in variants)
 
 
+def test_france_travail_empty_role_uses_location_only_without_mots_cles():
+    provider = FranceTravailProvider(client_id="PAR_test", client_secret="secret")
+    query = JobSearchQuery(
+        role="",
+        location="Auxerre",
+        country="fr",
+        language="fr",
+        radius_km=50,
+    )
+    assert provider._keyword_variants(query) == []
+    assert provider._keywords(query) == ""
+
+    async def _run():
+        with patch.object(provider, "_lookup_commune_code_and_departement", AsyncMock(return_value=("89024", "89"))):
+            return await provider._search_param_variants(query)
+
+    variants = asyncio.run(_run())
+    assert len(variants) >= 1
+    for variant in variants:
+        assert "motsCles" not in variant
+        assert variant.get("commune") == "89024" or variant.get("departement") == "89"
+
+
 def test_france_travail_search_param_variants_dijon_tries_each_keyword_at_commune():
     provider = FranceTravailProvider(client_id="PAR_test", client_secret="secret")
     query = JobSearchQuery(

@@ -1,4 +1,5 @@
 import { isFrench } from "./localizedDisplay";
+import { formatMoney } from "./currency";
 
 export function stripHtml(value = "") {
   const withBreaks = String(value)
@@ -153,6 +154,19 @@ export function getJobBadgeItems(job, { lang = "en" } = {}) {
   add(job?.industry || job?.sector || industryFallback(job, lang), "factory");
 
   return items;
+}
+
+export function formatJobSalaryLabel(job, { lang = "en" } = {}) {
+  const min = job?.salary_min;
+  const max = job?.salary_max;
+  if ((min == null || min === "") && (max == null || max === "")) return "";
+  const minNum = min != null && min !== "" ? Number(min) : null;
+  const maxNum = max != null && max !== "" ? Number(max) : null;
+  if (minNum != null && maxNum != null && minNum !== maxNum) {
+    return `${formatMoney(minNum, lang)} – ${formatMoney(maxNum, lang)}`;
+  }
+  const value = maxNum ?? minNum;
+  return value != null ? formatMoney(value, lang) : "";
 }
 
 function sectionTitleMatches(title, patterns) {

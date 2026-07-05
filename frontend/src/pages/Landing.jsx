@@ -89,9 +89,9 @@ export default function Landing() {
             className="font-display font-black text-5xl sm:text-6xl lg:text-7xl tracking-tighter leading-[0.95]"
           >
             {lang === "fr" ? (
-              <>Arrête de passer des heures à postuler.</>
+              <>Arrête de passer des heures à <span className="italic text-swiipr-gradient">postuler.</span></>
             ) : (
-              <>Stop spending hours applying.</>
+              <>Stop spending hours <span className="italic text-swiipr-gradient">applying.</span></>
             )}
           </motion.h1>
 

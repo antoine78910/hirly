@@ -163,7 +163,7 @@ export function buildProfileWelcomeItems({
   ];
 }
 
-/** Hero tagline on late onboarding steps (welcome + showcase). */
+/** Hero tagline on the final onboarding pricing step only. */
 export const ONBOARDING_VALUE_TAGLINE = {
   fr: "2× plus d'entretiens. 5× moins d'efforts.",
   en: "2× more interviews. 5× less effort.",

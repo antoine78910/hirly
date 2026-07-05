@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import {
   Zap, Undo2, History, SlidersHorizontal, Flag, Share2, MapPin, Calendar,
-  Heart, X, Loader2, Info,
+  Heart, X, Loader2, Info, DollarSign, Briefcase, FileText, Star,
 } from "lucide-react";
 import { toast } from "sonner";
 import Logo from "../components/Logo";
@@ -43,7 +43,7 @@ import {
   getSwipeSuccessCopy,
   getSwipeErrorMessage,
 } from "../lib/appUi";
-import { getJobBadgeItems, getJobDisplayContent } from "../lib/jobDisplayUtils";
+import { getJobBadgeItems, getJobDisplayContent, formatJobSalaryLabel } from "../lib/jobDisplayUtils";
 import { translateJobTitle, translateLocationLabel, translateRoleLabel } from "../lib/localizedDisplay";
 
 import { preloadCompanyLogos } from "../lib/companyLogos";
@@ -169,23 +169,42 @@ function stopCardTap(e) {
   e.stopPropagation();
 }
 
+function mobileSectionMeta(title) {
+  const normalized = (title || "").toLowerCase();
+  if (/desired|nice to have|preferred|souhait|plus|atout/i.test(normalized)) {
+    return { Icon: Star, iconClass: "text-amber-500" };
+  }
+  if (/required|requirement|requis|profil recherch/i.test(normalized)) {
+    return { Icon: Briefcase, iconClass: "text-sprout-mint" };
+  }
+  if (/about/i.test(normalized)) {
+    return { Icon: FileText, iconClass: "text-sprout-mint" };
+  }
+  return { Icon: FileText, iconClass: "text-sprout-mint" };
+}
+
 function MobileDetailSection({ title, bullets, body, t }) {
   const isAbout = /about/i.test(title || "");
+  const { Icon, iconClass } = mobileSectionMeta(title);
 
   return (
     <section className="rounded-2xl border border-sprout-border bg-sprout-surface-2/40 px-4 py-3">
-      <h3 className="font-display text-base font-bold text-white">
+      <h3 className="mb-2 flex items-center gap-2 font-display text-base font-bold text-white">
+        <Icon className={`h-4 w-4 shrink-0 ${iconClass}`} aria-hidden="true" />
         {isAbout ? t("swipe.aboutRole") : title}
+        {!isAbout && bullets?.length ? (
+          <span className="font-normal text-sprout-muted">({bullets.length})</span>
+        ) : null}
       </h3>
       {body ? (
-        <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-sprout-muted">{body}</p>
+        <p className="line-clamp-6 whitespace-pre-wrap text-sm leading-relaxed text-sprout-muted">{body}</p>
       ) : null}
       {bullets?.length ? (
-        <ul className="mt-2 space-y-2">
+        <ul className="space-y-2">
           {bullets.map((bullet, index) => (
-            <li key={`${title}-${index}`} className="flex gap-2 text-sm leading-relaxed text-sprout-muted">
-              <span className="text-sprout-mint">•</span>
-              <span>{bullet}</span>
+            <li key={`${title}-${index}`} className="flex items-start gap-2 text-sm leading-relaxed text-sprout-muted">
+              <span className="mt-1.5 text-[8px] text-sprout-mint">●</span>
+              <span className="line-clamp-2">{bullet}</span>
             </li>
           ))}
         </ul>
@@ -294,16 +313,11 @@ function CardFront({ job, onReport, onShare, actionsEnabled, t, lang }) {
 }
 
 function CardBack({ job, t, lang }) {
-  const { snippet, detailSections } = getJobDisplayContent(job);
+  const { about, detailSections } = getJobDisplayContent(job);
+  const badges = getJobBadgeItems(job, { lang });
   const title = translateJobTitle(job.title, lang);
   const location = translateLocationLabel(job.location, lang) || t("swipe.locationNotSpecified");
-
-  // Keep only required + desired sections, cap bullets to 3 each
-  const keySection = detailSections.find((s) => /required|requis|profil/i.test(s.title));
-  const desiredSection = detailSections.find((s) => /desired|nice|souhait|plus|atout/i.test(s.title));
-  const shownSections = [keySection, desiredSection]
-    .filter(Boolean)
-    .map((s) => ({ ...s, bullets: (s.bullets || []).slice(0, 3) }));
+  const salaryLabel = formatJobSalaryLabel(job, { lang });
 
   return (
     <div className="backface-hidden rotate-y-180 absolute inset-0 flex flex-col overflow-hidden rounded-[28px] border border-sprout-border bg-sprout-surface">
@@ -330,19 +344,38 @@ function CardBack({ job, t, lang }) {
             <MapPin className="h-4 w-4 text-sprout-mint" />
             <span>{location}</span>
           </div>
+          {salaryLabel ? (
+            <div className="flex items-center gap-2">
+              <DollarSign className="h-4 w-4 text-sprout-mint" />
+              <span>{salaryLabel}</span>
+            </div>
+          ) : null}
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4 text-sprout-mint" />
             <span>{formatPostedDate(t, job.posted_at) || t("swipe.postedRecently")}</span>
           </div>
         </div>
 
+        {badges.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {badges.map((badge) => (
+              <span
+                key={badge.label}
+                className="inline-flex items-center rounded-full bg-sprout-surface-2 px-3 py-1.5 text-[13px] font-medium text-zinc-100"
+              >
+                {badge.label}
+              </span>
+            ))}
+          </div>
+        ) : null}
+
         <div className="border-t border-sprout-border" />
 
         <div className="space-y-3">
-          {snippet ? (
-            <p className="text-sm leading-relaxed text-sprout-muted line-clamp-4">{snippet}</p>
+          {about ? (
+            <MobileDetailSection title="About This Role" body={about} t={t} />
           ) : null}
-          {shownSections.map((section) => (
+          {detailSections.map((section) => (
             <MobileDetailSection
               key={section.title}
               title={section.title}
@@ -646,8 +679,8 @@ export default function Swipe() {
   const buildFeedParams = (f) => {
     const params = new URLSearchParams({ limit: String(FEED_BATCH_SIZE), search_radius: DEFAULT_SEARCH_RADIUS });
     const activeTarget = targetRef.current;
-    if (activeTarget?.role?.trim()) {
-      params.set("search_role", activeTarget.role.trim());
+    if (activeTarget) {
+      params.set("search_role", (activeTarget.role || "").trim());
     }
     if (f == null) return params;
     const merged = mergeFilters(f);

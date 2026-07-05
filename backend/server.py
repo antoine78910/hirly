@@ -3939,12 +3939,12 @@ async def get_feed(
         )
         raise HTTPException(status_code=400, detail="Upload CV first")
 
-    feed_target_role = (
-        (search_role or "").strip()
-        or profile.get("target_role")
-        or ((profile.get("target_roles") or [None])[0])
-        or ""
-    ).strip()
+    if search_role is not None:
+        feed_target_role = search_role.strip()
+    else:
+        feed_target_role = (
+            (profile.get("target_role") or ((profile.get("target_roles") or [None])[0]) or "")
+        ).strip()
 
     async def _legacy_jsearch_only_feed() -> Dict[str, Any]:
         legacy_started = time.perf_counter()

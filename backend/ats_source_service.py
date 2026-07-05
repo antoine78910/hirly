@@ -254,6 +254,8 @@ def _careers_url(provider: str, source_key: str) -> str:
         return f"https://jobs.lever.co/{source_key}"
     if provider == "ashby":
         return f"https://jobs.ashbyhq.com/{source_key}"
+    if provider == "smartrecruiters":
+        return f"https://jobs.smartrecruiters.com/{source_key}"
     return source_key
 
 

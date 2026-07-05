@@ -127,7 +127,9 @@ def _france_travail_keyword_variants(role: str, country: Optional[str]) -> List[
     (almost) nothing. Instead we return each candidate separately so the caller can
     try them one request at a time (real OR semantics emulated via multiple calls).
     """
-    normalized = " ".join((role or "").split()) or "emploi"
+    normalized = " ".join((role or "").split())
+    if not normalized:
+        return []
     lower = _ascii_fold(normalized)
     variants: List[str] = []
     if (country or "").lower() in ("fr", "france", ""):
@@ -163,7 +165,7 @@ def _france_travail_keyword_variants(role: str, country: Optional[str]) -> List[
             continue
         seen.add(cleaned)
         deduped.append(cleaned)
-    return deduped[:5] or ["emploi"]
+    return deduped[:5]
 
 
 class FranceTravailProvider:
@@ -333,6 +335,11 @@ class FranceTravailProvider:
         commune_code, distance, departement = await self._commune_distance_departement(query)
         keyword_variants = self._keyword_variants(query)
 
+        if not keyword_variants:
+            return await self._location_only_param_variants(
+                query, city, commune_code, distance, departement,
+            )
+
         variants: List[Dict[str, Any]] = []
 
         if city in _MEGA_CITY_DEPARTEMENT:
@@ -369,6 +376,47 @@ class FranceTravailProvider:
             ))
         return variants or [await self._build_search_params(query)]
 
+    async def _location_only_param_variants(
+        self,
+        query: JobSearchQuery,
+        city: str,
+        commune_code: Optional[str],
+        distance: int,
+        departement: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        """Location-only search (no motsCles), matching France Travail website behavior."""
+        variants: List[Dict[str, Any]] = []
+
+        if city in _MEGA_CITY_DEPARTEMENT:
+            dept_code = _MEGA_CITY_DEPARTEMENT[city]
+            variants.append(await self._build_search_params_from_resolved(
+                query, None, distance, dept_code, keywords="",
+            ))
+            return variants
+
+        if commune_code and str(commune_code) not in _MUNICIPALITY_AGGREGATION_CODES:
+            variants.append(await self._build_search_params_from_resolved(
+                query, commune_code, distance, None, keywords="",
+            ))
+            dept_fallback = departement or self._departement_from_location(query.location)
+            if dept_fallback:
+                variants.append(await self._build_search_params_from_resolved(
+                    query, None, distance, str(dept_fallback), keywords="",
+                ))
+            return variants
+
+        dept_code = departement or self._departement_from_location(query.location) or _MEGA_CITY_DEPARTEMENT.get(city)
+        if dept_code:
+            variants.append(await self._build_search_params_from_resolved(
+                query, None, distance, str(dept_code), keywords="",
+            ))
+            return variants
+
+        variants.append(await self._build_search_params_from_resolved(
+            query, None, distance, None, keywords="",
+        ))
+        return variants
+
     async def _build_search_params(self, query: JobSearchQuery) -> Dict[str, Any]:
         commune, distance, departement = await self._commune_distance_departement(query)
         return await self._build_search_params_from_resolved(query, commune, distance, departement)
@@ -383,10 +431,16 @@ class FranceTravailProvider:
         keywords: Optional[str] = None,
     ) -> Dict[str, Any]:
         params: Dict[str, Any] = {
-            "motsCles": keywords if keywords is not None else self._keywords(query),
             "sort": "1",
             "publieeDepuis": self._publiee_depuis_days(query),
         }
+        if keywords is not None:
+            if keywords:
+                params["motsCles"] = keywords
+        else:
+            default_keywords = self._keywords(query)
+            if default_keywords:
+                params["motsCles"] = default_keywords
         type_contrat = self._type_contrat(query.contract_hint)
         if type_contrat:
             params["typeContrat"] = type_contrat
@@ -545,7 +599,7 @@ class FranceTravailProvider:
 
     def _keywords(self, query: JobSearchQuery) -> str:
         variants = self._keyword_variants(query)
-        return variants[0] if variants else "emploi"
+        return variants[0] if variants else ""
 
     # FT API accepts only specific values for publieeDepuis: 1, 3, 7, 14, 31
     _PUBLIEE_DEPUIS_VALID = (1, 3, 7, 14, 31)

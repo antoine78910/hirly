@@ -2,6 +2,7 @@ import {
   BarChart3,
   Briefcase,
   Calendar,
+  DollarSign,
   Factory,
   FileText,
   GraduationCap,
@@ -15,6 +16,7 @@ import { BRAND } from "../../lib/brand";
 import {
   getJobBadgeItems,
   getJobDisplayContent,
+  formatJobSalaryLabel,
 } from "../../lib/jobDisplayUtils";
 import { translateJobTitle, translateLocationLabel } from "../../lib/localizedDisplay";
 
@@ -61,7 +63,7 @@ function sectionMeta(title) {
   return { Icon: FileText, iconClass: "text-violet-600 dark:text-violet-400" };
 }
 
-function DetailSection({ title, bullets, body, theme, expanded, t }) {
+function DetailSection({ title, bullets, body, theme, expanded = false, t }) {
   const { Icon, iconClass } = sectionMeta(title);
   const isAbout = /about/i.test(title || "");
 
@@ -94,17 +96,11 @@ function DetailSection({ title, bullets, body, theme, expanded, t }) {
 }
 
 export default function DesktopJobCard({ job, theme, t, lang }) {
-  const { snippet, detailSections } = getJobDisplayContent(job);
+  const { about, detailSections } = getJobDisplayContent(job);
   const badges = getJobBadgeItems(job, { lang });
   const title = translateJobTitle(job.title, lang);
   const location = translateLocationLabel(job.location, lang) || t("swipe.locationNotSpecified");
-
-  // Keep only required + desired sections, cap bullets to 3 each
-  const keySection = detailSections.find((s) => /required|requis|profil/i.test(s.title));
-  const desiredSection = detailSections.find((s) => /desired|nice|souhait|plus|atout/i.test(s.title));
-  const shownSections = [keySection, desiredSection]
-    .filter(Boolean)
-    .map((s) => ({ ...s, bullets: (s.bullets || []).slice(0, 3) }));
+  const salaryLabel = formatJobSalaryLabel(job, { lang });
 
   return (
     <div className="flex min-h-0 h-full flex-1 flex-col">
@@ -130,6 +126,12 @@ export default function DesktopJobCard({ job, theme, t, lang }) {
             <MapPin className="size-4 shrink-0" aria-hidden="true" />
             <span className="truncate">{location}</span>
           </span>
+          {salaryLabel ? (
+            <span className="inline-flex min-w-0 items-center gap-1.5">
+              <DollarSign className="size-4 shrink-0" aria-hidden="true" />
+              <span className="truncate">{salaryLabel}</span>
+            </span>
+          ) : null}
           <span className="inline-flex items-center gap-1.5">
             <Calendar className="size-4 shrink-0" aria-hidden="true" />
             {formatPosted(job.posted_at, t)}
@@ -144,26 +146,26 @@ export default function DesktopJobCard({ job, theme, t, lang }) {
           </div>
         ) : null}
 
-        {snippet ? (
-          <p className={`text-sm lg:text-[15px] leading-relaxed line-clamp-4 ${theme.cardAboutBody}`}>
-            {snippet}
-          </p>
-        ) : null}
+        <div className="space-y-4">
+          {about ? (
+            <DetailSection
+              title="About This Role"
+              body={about}
+              theme={theme}
+              t={t}
+            />
+          ) : null}
 
-        {shownSections.length > 0 ? (
-          <div className="space-y-3 lg:space-y-4">
-            {shownSections.map((section) => (
-              <DetailSection
-                key={section.title}
-                title={section.title}
-                bullets={section.bullets}
-                theme={theme}
-                expanded
-                t={t}
-              />
-            ))}
-          </div>
-        ) : null}
+          {detailSections.map((section) => (
+            <DetailSection
+              key={section.title}
+              title={section.title}
+              bullets={section.bullets}
+              theme={theme}
+              t={t}
+            />
+          ))}
+        </div>
 
         <div className="flex flex-col items-center justify-center gap-2 pt-2 pb-1">
           <Logo size={44} className="h-11 w-11" />
