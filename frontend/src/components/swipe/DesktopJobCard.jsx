@@ -94,10 +94,17 @@ function DetailSection({ title, bullets, body, theme, expanded, t }) {
 }
 
 export default function DesktopJobCard({ job, theme, t, lang }) {
-  const { snippet, about, detailSections } = getJobDisplayContent(job);
+  const { snippet, detailSections } = getJobDisplayContent(job);
   const badges = getJobBadgeItems(job, { lang });
   const title = translateJobTitle(job.title, lang);
   const location = translateLocationLabel(job.location, lang) || t("swipe.locationNotSpecified");
+
+  // Keep only required + desired sections, cap bullets to 3 each
+  const keySection = detailSections.find((s) => /required|requis|profil/i.test(s.title));
+  const desiredSection = detailSections.find((s) => /desired|nice|souhait|plus|atout/i.test(s.title));
+  const shownSections = [keySection, desiredSection]
+    .filter(Boolean)
+    .map((s) => ({ ...s, bullets: (s.bullets || []).slice(0, 3) }));
 
   return (
     <div className="flex min-h-0 h-full flex-1 flex-col">
@@ -138,43 +145,25 @@ export default function DesktopJobCard({ job, theme, t, lang }) {
         ) : null}
 
         {snippet ? (
-          <p className={`text-sm lg:text-[15px] leading-relaxed ${theme.cardAboutBody}`}>
+          <p className={`text-sm lg:text-[15px] leading-relaxed line-clamp-4 ${theme.cardAboutBody}`}>
             {snippet}
           </p>
         ) : null}
 
-        <div className="space-y-4 lg:space-y-5">
-          {about ? (
-            <DetailSection
-              title="About This Role"
-              body={about}
-              theme={theme}
-              expanded
-              t={t}
-            />
-          ) : null}
-
-          {detailSections.map((section) => (
-            <DetailSection
-              key={section.title}
-              title={section.title}
-              bullets={section.bullets}
-              theme={theme}
-              expanded
-              t={t}
-            />
-          ))}
-
-          {job.match_reasons?.length > 0 ? (
-            <DetailSection
-              title={t("swipe.whyFits")}
-              bullets={job.match_reasons}
-              theme={theme}
-              expanded
-              t={t}
-            />
-          ) : null}
-        </div>
+        {shownSections.length > 0 ? (
+          <div className="space-y-3 lg:space-y-4">
+            {shownSections.map((section) => (
+              <DetailSection
+                key={section.title}
+                title={section.title}
+                bullets={section.bullets}
+                theme={theme}
+                expanded
+                t={t}
+              />
+            ))}
+          </div>
+        ) : null}
 
         <div className="flex flex-col items-center justify-center gap-2 pt-2 pb-1">
           <Logo size={44} className="h-11 w-11" />

@@ -294,9 +294,16 @@ function CardFront({ job, onReport, onShare, actionsEnabled, t, lang }) {
 }
 
 function CardBack({ job, t, lang }) {
-  const { about, detailSections } = getJobDisplayContent(job);
+  const { snippet, detailSections } = getJobDisplayContent(job);
   const title = translateJobTitle(job.title, lang);
   const location = translateLocationLabel(job.location, lang) || t("swipe.locationNotSpecified");
+
+  // Keep only required + desired sections, cap bullets to 3 each
+  const keySection = detailSections.find((s) => /required|requis|profil/i.test(s.title));
+  const desiredSection = detailSections.find((s) => /desired|nice|souhait|plus|atout/i.test(s.title));
+  const shownSections = [keySection, desiredSection]
+    .filter(Boolean)
+    .map((s) => ({ ...s, bullets: (s.bullets || []).slice(0, 3) }));
 
   return (
     <div className="backface-hidden rotate-y-180 absolute inset-0 flex flex-col overflow-hidden rounded-[28px] border border-sprout-border bg-sprout-surface">
@@ -332,10 +339,10 @@ function CardBack({ job, t, lang }) {
         <div className="border-t border-sprout-border" />
 
         <div className="space-y-3">
-          {about ? (
-            <MobileDetailSection title="About This Role" body={about} t={t} />
+          {snippet ? (
+            <p className="text-sm leading-relaxed text-sprout-muted line-clamp-4">{snippet}</p>
           ) : null}
-          {detailSections.map((section) => (
+          {shownSections.map((section) => (
             <MobileDetailSection
               key={section.title}
               title={section.title}
@@ -343,24 +350,6 @@ function CardBack({ job, t, lang }) {
               t={t}
             />
           ))}
-          {job.match_reasons?.length > 0 ? (
-            <MobileDetailSection title={t("swipe.whyFits")} bullets={job.match_reasons} t={t} />
-          ) : null}
-          {job.tech_stack?.length > 0 ? (
-            <section className="rounded-2xl border border-sprout-border bg-sprout-surface-2/40 px-4 py-3">
-              <h3 className="font-display text-base font-bold text-white">{t("swipe.techStack")}</h3>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {job.tech_stack.map((tech) => (
-                  <span
-                    key={tech}
-                    className="rounded-full bg-sprout-mint-soft px-2.5 py-1 text-xs font-semibold text-sprout-mint"
-                  >
-                    {tech}
-                  </span>
-                ))}
-              </div>
-            </section>
-          ) : null}
         </div>
       </div>
 
