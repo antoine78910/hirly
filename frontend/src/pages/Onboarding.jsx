@@ -712,6 +712,20 @@ export default function Onboarding() {
           {lang === "fr" ? "Passer" : "Skip"}
         </button>
       </div>
+    ) : step === "contractType" || step === "categories" ? (
+      <div className="space-y-2.5">
+        <ContinueButton onClick={onContinue} disabled={!canContinue() || parsing}>
+          {lang === "fr" ? "Continuer" : "Continue"}
+        </ContinueButton>
+        <button
+          type="button"
+          onClick={goNext}
+          className="w-full h-11 sm:h-12 rounded-full border border-zinc-200 bg-white text-sm sm:text-base font-semibold text-linkedin hover:bg-violet-50 transition-colors"
+          data-testid={step === "categories" ? "categories-skip" : "contract-type-skip"}
+        >
+          {lang === "fr" ? "Passer" : "Skip"}
+        </button>
+      </div>
     ) : (
       <ContinueButton onClick={onContinue} disabled={!canContinue() || parsing}>
         {isLastIntroSlide ? (

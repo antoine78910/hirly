@@ -54,7 +54,7 @@ const welcomeListReveal = {
   },
 };
 
-const SETUP_PHASE_MS = 900;
+const SETUP_PHASE_MS = 2200;
 
 function ShowcaseImage({ src, alt, className = "" }) {
   const url = publicAssetUrl(src);

@@ -25,7 +25,7 @@ const CHART_COPY = {
     compareCaption: (brand) =>
       `${brand} makes it easy to apply to more of the right jobs, increasing interviews.`,
     jobOffersAxis: "# of Job Offers",
-    month2: "Month 2",
+    month2: "Month 0",
     month6: "Month 1",
     traditionalSearch: "Traditional Job Search",
     longTermCaption: (brand) =>
@@ -40,7 +40,7 @@ const CHART_COPY = {
     compareCaption: (brand) =>
       `${brand} vous aide à postuler plus facilement aux bonnes offres, et à obtenir plus d'entretiens.`,
     jobOffersAxis: "Nombre d'offres",
-    month2: "Mois 2",
+    month2: "Mois 0",
     month6: "Mois 1",
     traditionalSearch: "Recherche classique",
     longTermCaption: (brand) =>

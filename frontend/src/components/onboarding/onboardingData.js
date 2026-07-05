@@ -99,12 +99,16 @@ export const ONBOARDING_STEP_ORDER = [
 
 /** Dark setup loader — order: image 3 → 4 → 2 → 1 (user reference). */
 export const PROFILE_SETUP_PHASES = [
+  { sub: "Setting up everything…" },
   { sub: "Analyzing your profile…" },
+  { sub: "Calibrating recommendations…" },
   { sub: "Finding the perfect opportunities for you…" },
 ];
 
 export const PROFILE_SETUP_PHASES_FR = [
+  { sub: "Tout préparer…" },
   { sub: "Analyse de votre profil…" },
+  { sub: "Calibrage des recommandations…" },
   { sub: "Recherche des meilleures opportunités pour vous…" },
 ];
 
