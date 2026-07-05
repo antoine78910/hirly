@@ -52,13 +52,62 @@ export const api = axios.create({
   timeout: 20000,
 });
 
-// Fallback: if cookies are not sent (third-party context), use bearer token
+// Fallback: if cookies are not sent (third-party context), use bearer token.
+// Also mirrored in a shared cookie so app.tryhirly.com and tryhirly.com share sessions.
 const TOKEN_KEY = "session_token";
+const TOKEN_COOKIE = "hirly_session_token";
+
+function sharedCookieDomain() {
+  if (typeof window === "undefined") return null;
+  const host = window.location.hostname.toLowerCase();
+  if (host === "localhost" || host === "127.0.0.1") return null;
+  if (host === "tryhirly.com" || host.endsWith(".tryhirly.com")) return ".tryhirly.com";
+  return null;
+}
+
+function readCookie(name) {
+  if (typeof document === "undefined") return null;
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = document.cookie.match(new RegExp(`(?:^|; )${escaped}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function writeSessionCookie(token) {
+  if (typeof document === "undefined") return;
+  const domain = sharedCookieDomain();
+  const secure = typeof window !== "undefined" && window.location.protocol === "https:" ? "; Secure" : "";
+  const domainPart = domain ? `; Domain=${domain}` : "";
+  if (!token) {
+    document.cookie = `${TOKEN_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax${domainPart}${secure}`;
+    return;
+  }
+  const maxAge = 60 * 60 * 24 * 30;
+  document.cookie = `${TOKEN_COOKIE}=${encodeURIComponent(token)}; Max-Age=${maxAge}; Path=/; SameSite=Lax${domainPart}${secure}`;
+}
+
 export const setSessionToken = (t) => {
-  if (t) localStorage.setItem(TOKEN_KEY, t);
-  else localStorage.removeItem(TOKEN_KEY);
+  if (t) {
+    localStorage.setItem(TOKEN_KEY, t);
+    writeSessionCookie(t);
+  } else {
+    localStorage.removeItem(TOKEN_KEY);
+    writeSessionCookie(null);
+  }
 };
-export const getSessionToken = () => localStorage.getItem(TOKEN_KEY);
+
+export const getSessionToken = () => {
+  const local = localStorage.getItem(TOKEN_KEY);
+  const fromCookie = readCookie(TOKEN_COOKIE);
+  if (local) {
+    if (local !== fromCookie) writeSessionCookie(local);
+    return local;
+  }
+  if (fromCookie) {
+    localStorage.setItem(TOKEN_KEY, fromCookie);
+    return fromCookie;
+  }
+  return null;
+};
 
 api.interceptors.request.use((config) => {
   const t = getSessionToken();

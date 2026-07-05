@@ -36,6 +36,21 @@ export default function Landing() {
     preloadOnboardingIntroImages();
   }, []);
 
+  useEffect(() => {
+    if (loading || !user || !redirectParam?.startsWith("http")) return;
+    try {
+      const target = new URL(redirectParam);
+      if (!target.hostname.endsWith("tryhirly.com")) return;
+      if (hasProfile && hasPreferences) {
+        window.location.replace(redirectParam);
+        return;
+      }
+      navigate("/onboarding");
+    } catch (_) {
+      /* ignore malformed redirect */
+    }
+  }, [loading, user, hasProfile, hasPreferences, redirectParam, navigate]);
+
   const onSignIn = () => {
     trackEvent("cta_login_clicked", { location: "header" });
     startGoogleLogin(postLoginPath);
