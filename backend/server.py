@@ -4180,7 +4180,9 @@ async def get_feed(
         "admin": {"administrative", "administratif", "assistant", "direction", "reception", "receptionniste", "office"},
         "finance": {"finance", "accountant", "comptable", "payroll", "paie", "auditor", "controleur"},
         "logistics": {"warehouse", "logistics", "logistique", "magasinier", "preparateur", "driver", "chauffeur", "livreur"},
-        "service": {"retail", "store", "waiter", "serveur", "barista", "chef", "kitchen", "cuisinier", "cleaner", "security"},
+        # "chef" alone is excluded: in French it means "lead" (chef de projet,
+        # chef de chantier), not a kitchen chef. Use "cuisine"/"cuisinier" instead.
+        "service": {"retail", "store", "waiter", "serveur", "serveuse", "barista", "barman", "kitchen", "cuisine", "cuisinier", "cleaner", "security"},
         "healthcare": {"nurse", "infirmier", "medical", "sante", "care", "soignant", "pharmacy"},
         "education": {"teacher", "enseignant", "professeur", "trainer", "formateur", "teaching"},
     }
@@ -4192,7 +4194,13 @@ async def get_feed(
                 return category
         return None
 
-    target_role_category = _role_category(_role_family_tokens(feed_target_role))
+    # Derive the category from the user's own words first; expanded family tokens
+    # can leak into a sibling category (e.g. "barista" family includes "vendeur",
+    # which would wrongly map the target to "sales" instead of "service").
+    target_role_category = (
+        _role_category(_tokens(feed_target_role))
+        or _role_category(_role_family_tokens(feed_target_role))
+    )
 
     def _job_role_category(job: Dict[str, Any]) -> Optional[str]:
         title_tokens = set(_tokens(str(job.get("title") or "")))
@@ -4280,7 +4288,15 @@ async def get_feed(
             "us": ["united states", "usa", "new york", "san francisco"],
             "ma": ["morocco", "maroc", "casablanca"],
         }
-        city_terms = list(dict.fromkeys(token for label in raw_locations for token in _tokens(label)))
+        # Tokenize only the city part (before the comma) so the country token
+        # ("france") never counts as a city match for jobs in other cities.
+        known_country_tokens = {"france", "morocco", "maroc", "england", "uk", "usa"}
+        city_terms = list(dict.fromkeys(
+            token
+            for label in raw_locations
+            for token in _tokens(re.split(r"[,/|]", label, maxsplit=1)[0])
+            if token not in known_country_tokens
+        ))
         country_terms = list(dict.fromkeys([country_value, *aliases.get(country_code_value, [])]))
         return {"labels": [label for label in raw_locations if label], "city": city_terms, "country": [term for term in country_terms if term]}
 
@@ -4941,6 +4957,10 @@ async def get_feed(
                 return True
             if radius_km is not None:
                 if location_context.get("used"):
+                    return False
+                # A specific city with a radius must never widen to the whole
+                # country: "Paris + 50km" should not surface Lyon jobs.
+                if explicit_local_intent and selected_city_terms:
                     return False
                 return country_match if selected_country_terms else False
             return country_match

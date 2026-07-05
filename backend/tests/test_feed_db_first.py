@@ -477,6 +477,38 @@ def test_explicit_paris_radius_returns_local_null_tier_jsearch_job(monkeypatch):
     assert response["jobs"][0]["can_auto_apply"] is False
 
 
+def test_barista_paris_excludes_other_cities_and_unrelated_roles(monkeypatch):
+    # Regression: searching "Barista" at Paris must not surface a construction
+    # job in Lyon nor an insurance audit job, even when local matches are scarce.
+    barista_paris = _job(1, title="Barista")
+    barista_paris.update({
+        "location": "Paris, France", "city": "Paris", "country_code": "fr",
+        "description": "Service au bar, preparation cafe, accueil clients.",
+    })
+    chantier_lyon = _job(2, title="Technicien / Chef de Chantier Affichage Dynamique H/F")
+    chantier_lyon.update({
+        "location": "Lyon, France", "city": "Lyon", "country_code": "fr",
+        "description": "Lynx RH : Recrutement specialise en CDI, CDD et interim.",
+    })
+    auditor_paris = _job(3, title="Auditeur Secteur Assurance (H/F)")
+    auditor_paris.update({
+        "location": "Paris, France", "city": "Paris", "country_code": "fr",
+        "description": "Audit des portefeuilles assurance, controle et conformite.",
+    })
+    response, _calls = _run_feed(
+        monkeypatch,
+        [barista_paris, chantier_lyon, auditor_paris],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+        locations_json=_location_payload("Paris", lat=48.8566, lng=2.3522),
+        geo_places=_geo_places(),
+        search_role="Barista",
+    )
+    returned_ids = [job["job_id"] for job in response["jobs"]]
+    assert "job_2" not in returned_ids  # wrong city (Lyon)
+    assert "job_3" not in returned_ids  # unrelated role
+    assert returned_ids == ["job_1"]
+
+
 def test_ab_jobs_rank_before_manual_local_jobs(monkeypatch):
     manual = _job(1, tier="C", status="unknown", title="Marketing Manager")
     manual.update({"location": "Paris, France", "city": "Paris", "country_code": "fr"})

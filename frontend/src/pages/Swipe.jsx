@@ -955,7 +955,10 @@ export default function Swipe() {
       const normalizedLocationData = normalizeLocationData(trimmedLocation, locationData);
       const locationLabel = normalizedLocationData?.location_label || trimmedLocation || "Anywhere";
 
-      setTarget({ role: trimmedRole, location: locationLabel });
+      const nextTarget = { role: trimmedRole, location: locationLabel };
+      setTarget(nextTarget);
+      // Update refs synchronously: loadFeed below reads them before React re-renders.
+      targetRef.current = nextTarget;
       setTargetLocationData(normalizedLocationData);
       targetLocationDataRef.current = normalizedLocationData;
       loadFeed(true, filtersRef.current, "target_search_save");
@@ -1437,7 +1440,9 @@ export default function Swipe() {
         initialLocationData={targetLocationData}
         onClose={() => setTargetSheetOpen(false)}
         onSaved={({ role, location, locationData }) => {
-          setTarget({ role, location });
+          const nextTarget = { role, location };
+          setTarget(nextTarget);
+          targetRef.current = nextTarget;
           setTargetLocationData(locationData);
           targetLocationDataRef.current = locationData;
           loadFeed(true, filtersRef.current, "target_sheet_saved");
