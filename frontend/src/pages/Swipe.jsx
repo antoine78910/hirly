@@ -715,21 +715,7 @@ export default function Swipe() {
     if (stackPrefetch) {
       params.set("prefetch", "true");
     }
-    const hasExplicitLocalSearch = isNumericRadius(params.get("search_radius") || DEFAULT_SEARCH_RADIUS)
-      && Boolean(params.get("locations_json"));
-    if (replace && hasExplicitLocalSearch && !params.get("force_provider_refresh")) {
-      params.set("force_provider_refresh", "true");
-    }
     let requestUrl = `/jobs/feed?${params.toString()}`;
-    console.group("[FeedDebug] loadFeed");
-    console.log("reason", reason);
-    console.log("forceRefresh", replace);
-    console.log("filters passed to loadFeed", f);
-    console.log("filtersRef.current", filtersRef.current);
-    console.log("request url", requestUrl);
-    console.log("request params", Object.fromEntries(params.entries()));
-    console.log("request param entries", Array.from(params.entries()));
-    console.groupEnd();
     setLastFeedDebug({
       reason,
       forceRefresh: replace,
@@ -756,13 +742,6 @@ export default function Swipe() {
       return data;
     };
     try {
-      console.log("JOB_FEED_PARAMS", {
-        params: params.toString(),
-        locations: f?.locationsData || (f?.locationData ? [f.locationData] : []),
-        search_radius: f?.searchRadius || DEFAULT_SEARCH_RADIUS,
-        only_my_country: Boolean(f?.onlyMyCountry),
-        role: targetRef.current?.role || "",
-      });
       let data;
       try {
         data = await requestFeed();
