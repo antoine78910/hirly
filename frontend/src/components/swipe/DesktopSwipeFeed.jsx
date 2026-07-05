@@ -118,7 +118,7 @@ export default function DesktopSwipeFeed({
 
   const commitRole = useCallback(async () => {
     const trimmed = roleDraft.trim();
-    if (!trimmed || trimmed === (target.role || "")) return;
+    if (trimmed === (target.role || "")) return;
     const ok = await onTargetSave?.({
       role: trimmed,
       location: displayLocation,

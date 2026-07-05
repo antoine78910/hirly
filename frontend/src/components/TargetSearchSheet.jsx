@@ -31,12 +31,20 @@ export default function TargetSearchSheet({
   const save = async () => {
     setSaving(true);
     try {
-      const saved = await saveTargetPreferences({
-        role: targetRole,
-        location: targetLocation,
-        locationData: targetLocationData,
-      });
-      if (!saved) return;
+      const trimmedRole = (targetRole || "").trim();
+      const trimmedLocation = (targetLocation || "").trim();
+      const normalizedData = targetLocationData?.location_label === trimmedLocation ? targetLocationData : null;
+      const locationLabel = targetLocationData?.location_label || trimmedLocation || "Anywhere";
+
+      let saved = { role: trimmedRole, location: locationLabel, locationData: normalizedData };
+      if (trimmedRole) {
+        const result = await saveTargetPreferences({
+          role: trimmedRole,
+          location: trimmedLocation,
+          locationData: targetLocationData,
+        });
+        if (result) saved = result;
+      }
       toast.success(lang === "fr" ? "Recherche mise à jour" : "Search updated");
       await onSaved?.(saved);
       onClose();

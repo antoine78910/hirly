@@ -927,10 +927,6 @@ export default function Swipe() {
 
   const saveTargetSearch = useCallback(async ({ role, location, locationData }) => {
     const trimmedRole = (role || "").trim();
-    if (!trimmedRole) {
-      toast.error(t("toasts.searchSaveError"));
-      return false;
-    }
     setTargetSaving(true);
     try {
       const trimmedLocation = (location || "").trim();
@@ -943,8 +939,10 @@ export default function Swipe() {
       loadFeed(true, filtersRef.current, "target_search_save");
       toast.success(t("toasts.searchUpdated"));
 
-      saveTargetPreferences({ role: trimmedRole, location: locationLabel, locationData: normalizedLocationData })
-        .catch((error) => console.warn("Preferences save failed (feed already refreshed).", error));
+      if (trimmedRole) {
+        saveTargetPreferences({ role: trimmedRole, location: locationLabel, locationData: normalizedLocationData })
+          .catch((error) => console.warn("Preferences save failed (feed already refreshed).", error));
+      }
       return true;
     } catch (_) {
       toast.error(t("toasts.searchSaveError"));
