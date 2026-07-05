@@ -58,7 +58,6 @@ import {
   iconForCategoryLabel,
   SUGGESTED_ONBOARDING_LOCATIONS,
   readOnboardingPreviewBoot,
-  getOnboardingValueTagline,
 } from "../components/onboarding/onboardingData";
 import { devBypassAuth } from "../lib/dev";
 import { splitFullName } from "../lib/personalInfoOptions";
@@ -658,34 +657,25 @@ export default function Onboarding() {
 
   const footer = !hideFooter ? (
     step === "showcasePricing" ? (
-      <div className="space-y-2">
-        <p className="text-center text-xs font-semibold text-linkedin">{getOnboardingValueTagline(lang)}</p>
-        <ContinueButton
-          onClick={startOnboardingCheckout}
-          disabled={checkoutLoading || redeemingAccessCode || saving}
-          testId="showcase-pricing-continue"
-        >
-          {checkoutLoading
-            ? (lang === "fr" ? "Ouverture du paiement..." : "Opening checkout...")
-            : redeemingAccessCode || saving
-              ? (lang === "fr" ? "Activation..." : "Activating...")
-              : (lang === "fr" ? "Continuer" : "Continue")}
-        </ContinueButton>
-      </div>
+      <ContinueButton
+        onClick={startOnboardingCheckout}
+        disabled={checkoutLoading || redeemingAccessCode || saving}
+        testId="showcase-pricing-continue"
+      >
+        {checkoutLoading
+          ? (lang === "fr" ? "Ouverture du paiement..." : "Opening checkout...")
+          : redeemingAccessCode || saving
+            ? (lang === "fr" ? "Activation..." : "Activating...")
+            : (lang === "fr" ? "Continuer" : "Continue")}
+      </ContinueButton>
     ) : step === "profileWelcome" ? (
-      <div className="space-y-2">
-        <ContinueButton onClick={onContinue} testId="profile-welcome-continue">
-          {lang === "fr" ? "Continuer" : "Continue"}
-        </ContinueButton>
-        <p className="text-center text-xs font-semibold text-linkedin">{getOnboardingValueTagline(lang)}</p>
-      </div>
+      <ContinueButton onClick={onContinue} testId="profile-welcome-continue">
+        {lang === "fr" ? "Continuer" : "Continue"}
+      </ContinueButton>
     ) : step === "showcaseLanding" || step === "showcaseAllInOne" ? (
-      <div className="space-y-2">
-        <p className="text-center text-xs font-semibold text-linkedin">{getOnboardingValueTagline(lang)}</p>
-        <ContinueButton onClick={onContinue} disabled={!canContinue() || parsing}>
-          {lang === "fr" ? "Continuer" : "Continue"}
-        </ContinueButton>
-      </div>
+      <ContinueButton onClick={onContinue} disabled={!canContinue() || parsing}>
+        {lang === "fr" ? "Continuer" : "Continue"}
+      </ContinueButton>
     ) : step === "referralCode" ? (
       <div className="space-y-2.5">
         <ContinueButton onClick={submitReferralCode} disabled={!referralCode.trim()} testId="referral-submit">

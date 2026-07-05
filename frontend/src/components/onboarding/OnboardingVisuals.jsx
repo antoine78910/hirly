@@ -26,10 +26,10 @@ const CHART_COPY = {
       `${brand} makes it easy to apply to more of the right jobs, increasing interviews.`,
     jobOffersAxis: "# of Job Offers",
     month2: "Month 2",
-    month6: "Month 6",
+    month6: "Month 1",
     traditionalSearch: "Traditional Job Search",
     longTermCaption: (brand) =>
-      `80% of ${brand} users significantly increased job offers in 6 months.`,
+      `80% of ${brand} users significantly increased job offers in 1 month.`,
   },
   fr: {
     interviewRateLabel: "Votre taux d'entretiens",
@@ -41,10 +41,10 @@ const CHART_COPY = {
       `${brand} vous aide à postuler plus facilement aux bonnes offres, et à obtenir plus d'entretiens.`,
     jobOffersAxis: "Nombre d'offres",
     month2: "Mois 2",
-    month6: "Mois 6",
+    month6: "Mois 1",
     traditionalSearch: "Recherche classique",
     longTermCaption: (brand) =>
-      `80 % des utilisateurs ${brand} ont nettement augmenté leurs offres en 6 mois.`,
+      `80 % des utilisateurs ${brand} ont nettement augmenté leurs offres en 1 mois.`,
   },
 };
 

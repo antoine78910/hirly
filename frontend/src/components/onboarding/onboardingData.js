@@ -99,16 +99,12 @@ export const ONBOARDING_STEP_ORDER = [
 
 /** Dark setup loader — order: image 3 → 4 → 2 → 1 (user reference). */
 export const PROFILE_SETUP_PHASES = [
-  { sub: "Setting up everything…" },
   { sub: "Analyzing your profile…" },
-  { sub: "Calibrating recommendations…" },
   { sub: "Finding the perfect opportunities for you…" },
 ];
 
 export const PROFILE_SETUP_PHASES_FR = [
-  { sub: "Tout préparer…" },
   { sub: "Analyse de votre profil…" },
-  { sub: "Calibrage des recommandations…" },
   { sub: "Recherche des meilleures opportunités pour vous…" },
 ];
 
@@ -163,7 +159,7 @@ export function buildProfileWelcomeItems({
   ];
 }
 
-/** Hero tagline on late onboarding steps (welcome + showcase). */
+/** Hero tagline — final pricing showcase step only (once, in page content). */
 export const ONBOARDING_VALUE_TAGLINE = {
   fr: "2× plus d'entretiens. 5× moins d'efforts.",
   en: "2× more interviews. 5× less effort.",
