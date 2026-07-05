@@ -189,6 +189,7 @@ export default function Onboarding() {
   const [creatorAccessCode, setCreatorAccessCode] = useState(() => getPendingInviteCode());
   const [redeemingAccessCode, setRedeemingAccessCode] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [pendingCheckoutSuccess, setPendingCheckoutSuccess] = useState(false);
   const inputRef = useRef();
 
   const step = STEP_ORDER[stepIndex];
@@ -242,9 +243,13 @@ export default function Onboarding() {
       } catch (_) {
         /* ignore corrupt checkout state */
       }
-      setStepIndex(STEP_ORDER.indexOf("showcasePricing"));
-      if (checkoutStatus === "success") toast.success("Payment received");
-      if (checkoutStatus === "cancelled") toast("Checkout cancelled");
+      if (checkoutStatus === "success") {
+        setSearchParams({}, { replace: true });
+        setPendingCheckoutSuccess(true);
+      } else {
+        setStepIndex(STEP_ORDER.indexOf("showcasePricing"));
+        toast("Checkout cancelled");
+      }
       return;
     }
 
@@ -280,6 +285,18 @@ export default function Onboarding() {
     if (!user || step !== "signup") return;
     setStepIndex(STEP_ORDER.indexOf("jobSearch"));
   }, [user, step]);
+
+  // After a successful Stripe checkout Stripe redirects back here with
+  // ?checkout=success. Once the auth state is ready (user resolved) we finish
+  // the onboarding and navigate straight to /swipe.
+  useEffect(() => {
+    if (!pendingCheckoutSuccess) return;
+    if (!user) return; // wait until auth resolves
+    setPendingCheckoutSuccess(false);
+    setCheckoutLoading(true);
+    finishOnboarding().finally(() => setCheckoutLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingCheckoutSuccess, user]);
 
   useEffect(() => {
     if (step !== "categories" || !onboardingLocation.trim() || !contractType) return;
