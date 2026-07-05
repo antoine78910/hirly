@@ -89,9 +89,9 @@ export default function Landing() {
             className="font-display font-black text-5xl sm:text-6xl lg:text-7xl tracking-tighter leading-[0.95]"
           >
             {lang === "fr" ? (
-              <>Hirly trouve ton prochain job,<br /><span className="italic text-swiipr-gradient">cette semaine.</span></>
+              <>Arrête de passer des heures à postuler.</>
             ) : (
-              <>Hirly finds your next job,<br /><span className="italic text-swiipr-gradient">this week.</span></>
+              <>Stop spending hours applying.</>
             )}
           </motion.h1>
 
@@ -102,8 +102,8 @@ export default function Landing() {
             className="mt-6 text-lg sm:text-xl text-zinc-600 max-w-2xl mx-auto leading-relaxed"
           >
             {lang === "fr"
-              ? "Try Hirly, ou tryhirly, pour swiper les offres qui te correspondent. On s'occupe de postuler pour toi."
-              : "Try Hirly, also searched as tryhirly, to swipe jobs that match you. AI applies for you."}
+              ? "L'IA trouve les offres et postule pour toi."
+              : "AI finds jobs and applies for you."}
           </motion.p>
 
           <motion.div
