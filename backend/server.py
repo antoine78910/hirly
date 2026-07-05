@@ -162,9 +162,10 @@ def _cors_origins() -> List[str]:
         "http://localhost:3001",
         "https://www.tryhirly.com",
         "https://tryhirly.com",
+        "https://app.tryhirly.com",
         "https://hirly-two.vercel.app",
     ]
-    for env_name in ("FRONTEND_URL", "REACT_APP_FRONTEND_URL", "VERCEL_PROJECT_PRODUCTION_URL", "VERCEL_URL"):
+    for env_name in ("FRONTEND_URL", "APP_URL", "REACT_APP_APP_ORIGIN", "REACT_APP_FRONTEND_URL", "VERCEL_PROJECT_PRODUCTION_URL", "VERCEL_URL"):
         value = (os.environ.get(env_name) or "").strip().rstrip("/")
         if not value:
             continue
@@ -1365,6 +1366,18 @@ def _frontend_url() -> str:
     return os.environ.get("FRONTEND_URL", "http://localhost:3000").strip().rstrip("/")
 
 
+def _app_url() -> str:
+    return (
+        os.environ.get("APP_URL")
+        or os.environ.get("REACT_APP_APP_ORIGIN")
+        or _frontend_url()
+    ).strip().rstrip("/")
+
+
+def _marketing_url() -> str:
+    return _frontend_url()
+
+
 def _sanitize_return_path(path: Optional[str], *, default: str = "/swipe") -> str:
     if not path:
         return default
@@ -1755,17 +1768,18 @@ async def create_billing_checkout_session(
     billing_interval = body.interval or ("quarterly" if checkout_source == "onboarding" and billing_plan == "quarterly" else "monthly")
     user_doc = await _get_user_doc(user)
     customer_id = await _stripe_customer_for_user(user_doc)
-    frontend_url = _frontend_url()
+    marketing_url = _marketing_url()
+    app_url = _app_url()
     if checkout_source == "onboarding":
-        success_url = f"{frontend_url}/onboarding?step=creatorAccessCode&checkout=success"
-        cancel_url = f"{frontend_url}/onboarding?step=showcasePricing&checkout=cancelled"
+        success_url = f"{marketing_url}/onboarding?step=creatorAccessCode&checkout=success"
+        cancel_url = f"{marketing_url}/onboarding?step=showcasePricing&checkout=cancelled"
     elif checkout_source == "app":
         return_path = _sanitize_return_path(body.return_path)
-        success_url = _checkout_return_url(frontend_url, return_path, "success")
-        cancel_url = _checkout_return_url(frontend_url, return_path, "cancelled")
+        success_url = _checkout_return_url(app_url, return_path, "success")
+        cancel_url = _checkout_return_url(app_url, return_path, "cancelled")
     else:
-        success_url = f"{frontend_url}/credits?checkout=success"
-        cancel_url = f"{frontend_url}/credits?checkout=cancelled"
+        success_url = f"{app_url}/credits?checkout=success"
+        cancel_url = f"{app_url}/credits?checkout=cancelled"
     base_metadata = {
         "user_id": user.user_id,
         "plan": billing_plan,
@@ -1871,7 +1885,7 @@ async def create_billing_portal_session(user: User = Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="No Stripe customer found")
     session = stripe.billing_portal.Session.create(
         customer=customer_id,
-        return_url=f"{_frontend_url()}/billing",
+        return_url=f"{_app_url()}/billing",
     )
     return {"url": session["url"]}
 

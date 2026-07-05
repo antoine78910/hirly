@@ -67,6 +67,7 @@ import { preloadOnboardingIntroImages, preloadOnboardingShowcaseImages } from ".
 import { getPendingInviteCode, redeemCreatorInvite, storePendingInviteCode } from "../lib/creatorInvite";
 import { setDemoAccountFromUser } from "../lib/demoAccount";
 import { queueDemoWelcome } from "../lib/demoWelcome";
+import { goToApp } from "../lib/appDomains";
 
 const STEP_ORDER = ONBOARDING_STEP_ORDER;
 const ONBOARDING_CHECKOUT_STATE_KEY = "hirly.onboarding.checkoutState";
@@ -549,7 +550,7 @@ export default function Onboarding() {
         selected_roles: selectedRoles,
         target_location: onboardingLocationData?.location_label || onboardingLocation || "",
       });
-      navigate("/swipe", { replace: true });
+      goToApp("/swipe");
     } catch {
       toast.error(lang === "fr" ? "Échec de la configuration" : "Failed to finish setup");
     } finally {

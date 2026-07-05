@@ -1,10 +1,17 @@
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { Loader2 } from "lucide-react";
 import { devBypassAuth } from "../lib/dev";
+import {
+  domainSplitEnabled,
+  isAppHost,
+  marketingUrl,
+  appUrl,
+} from "../lib/appDomains";
 
 export default function ProtectedRoute({ children, requireProfile = false }) {
   const { user, hasProfile, hasPreferences, hasTrainingAccess, loading } = useAuth();
+  const location = useLocation();
 
   if (devBypassAuth) return children;
 
@@ -15,10 +22,21 @@ export default function ProtectedRoute({ children, requireProfile = false }) {
       </div>
     );
   }
-  if (!user) return <Navigate to="/" replace />;
+  if (!user) {
+    if (domainSplitEnabled() && isAppHost()) {
+      const redirectTarget = encodeURIComponent(appUrl(location.pathname, location.search, location.hash));
+      window.location.replace(marketingUrl("/", `?redirect=${redirectTarget}`));
+      return null;
+    }
+    return <Navigate to="/" replace />;
+  }
   // Demo and training creators bypass the job-seeker profile requirement.
   const isCreator = Boolean(user?.demo_account) || Boolean(hasTrainingAccess);
   if (requireProfile && !isCreator && (!hasProfile || !hasPreferences)) {
+    if (domainSplitEnabled() && isAppHost()) {
+      window.location.replace(marketingUrl("/onboarding"));
+      return null;
+    }
     return <Navigate to="/onboarding" replace />;
   }
   return children;

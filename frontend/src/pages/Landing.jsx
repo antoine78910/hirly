@@ -12,12 +12,23 @@ import { trackEvent } from "../lib/analytics";
 import { preloadOnboardingIntroImages } from "../lib/onboardingImagePreload";
 import { useAppLocale } from "../context/AppLocaleContext";
 import LandingFaq from "../components/landing/LandingFaq";
+import { goToApp } from "../lib/appDomains";
 
 export default function Landing() {
   const navigate = useNavigate();
   const { user, hasProfile, hasPreferences, loading } = useAuth();
   const [searchParams] = useSearchParams();
-  const postLoginPath = searchParams.get("redirect") || "/swipe";
+  const redirectParam = searchParams.get("redirect");
+  const postLoginPath = redirectParam?.startsWith("http")
+    ? (() => {
+        try {
+          const url = new URL(redirectParam);
+          return `${url.pathname}${url.search}${url.hash}` || "/swipe";
+        } catch (_) {
+          return "/swipe";
+        }
+      })()
+    : (redirectParam || "/swipe");
   const { lang, setLang } = useAppLocale();
 
   useEffect(() => {
@@ -34,7 +45,15 @@ export default function Landing() {
     if (loading) return;
     trackEvent("cta_start_swiping_clicked", { authenticated: Boolean(user) });
     if (user) {
-      navigate(hasProfile && hasPreferences ? "/swipe" : "/onboarding");
+      if (hasProfile && hasPreferences) {
+        if (redirectParam?.startsWith("http")) {
+          window.location.assign(redirectParam);
+          return;
+        }
+        goToApp(postLoginPath);
+        return;
+      }
+      navigate("/onboarding");
       return;
     }
     trackEvent("cta_signup_clicked", { location: "landing_start_swiping" });

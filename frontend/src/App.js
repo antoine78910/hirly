@@ -48,6 +48,7 @@ import TrainingLegacyRedirect from "@/components/training/TrainingLegacyRedirect
 import TrainingAccessGate from "@/components/training/TrainingAccessGate";
 import TrainingErrorBoundary from "@/components/training/TrainingErrorBoundary";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import DomainRouter from "@/components/DomainRouter";
 import AdminRoute from "@/components/AdminRoute";
 import BottomNav from "@/components/BottomNav";
 import AppLayout from "@/components/desktop/AppLayout";
@@ -121,7 +122,7 @@ function AppRouter() {
   }
 
   return (
-    <>
+    <DomainRouter>
       <ScrollManager />
       <Routes>
         <Route path="/" element={<Landing />} />
@@ -171,7 +172,7 @@ function AppRouter() {
         <Route path="/:locale/training/:courseId" element={<TrainingRoute localized><TrainingCourse /></TrainingRoute>} />
       </Routes>
       {showBottomNav ? <BottomNav /> : null}
-    </>
+    </DomainRouter>
   );
 }
 
