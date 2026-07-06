@@ -1,4 +1,5 @@
 from job_providers.ats_detection import (
+    PRIMARY_AUTO_APPLY_ATS,
     detect_ats_from_html,
     detect_ats_from_url,
     detect_job_platform,
@@ -27,10 +28,33 @@ def test_detect_public_ats_urls():
         "https://jobs.personio.com/job/123": "personio",
         "https://acme.bamboohr.com/careers/123": "bamboohr",
         "https://jobs.sap.com/job/123": "successfactors",
+        "https://careers-acme.breezy.hr/p/123-title/apply": "breezyhr",
     }
     for url, provider in cases.items():
         assert detect_ats_from_url(url) == provider
         assert detect_job_platform(url)["category"] == "direct_ats"
+
+
+def test_primary_auto_apply_ats_includes_friendly_platforms():
+    # Confirmed via live application-flow audit: no mandatory login/account
+    # creation, publicly reachable apply forms, no confirmed CAPTCHA.
+    for provider in (
+        "greenhouse",
+        "lever",
+        "ashby",
+        "teamtailor",
+        "werecruit",
+        "jobaffinity",
+        "flatchr",
+        "personio",
+        "smartrecruiters",
+        "breezyhr",
+    ):
+        assert provider in PRIMARY_AUTO_APPLY_ATS
+
+    # Platforms with confirmed CAPTCHA/mandatory-login blockers must stay out.
+    for provider in ("workday", "successfactors", "workable", "recruitee", "bamboohr"):
+        assert provider not in PRIMARY_AUTO_APPLY_ATS
 
 
 def test_detect_html_markers():

@@ -42,6 +42,7 @@ import stripe
 from pypdf import PdfReader
 import docx as docx_lib
 from application_documents import DOCX_MIME, build_application_package, cover_letter_to_text, sanitize_docx_text
+from cv_quality import normalize_application_generation, validate_resume_quality
 from browser_submission.base import BrowserSubmissionError, browser_submit_dry_run_enabled
 from browser_submission.greenhouse import GreenhouseBrowserSubmissionEngine
 from browser_submission.lever import LeverBrowserSubmissionEngine
@@ -100,6 +101,7 @@ from job_cache_maintenance import (
 )
 from ats_source_service import (
     discover_ats_sources_from_cached_jobs,
+    discover_friendly_company_career_pages,
     refresh_ats_source,
     refresh_known_ats_sources,
 )
@@ -527,6 +529,12 @@ class AdminAtsRefreshSourceRequest(BaseModel):
     ats_provider: Literal["greenhouse", "lever", "ashby"]
     source_key: str
     limit: Optional[int] = None
+    dry_run: bool = False
+
+
+class AdminDiscoverFriendlyCompanyPagesRequest(BaseModel):
+    limit: Optional[int] = 200
+    concurrency: Optional[int] = 5
     dry_run: bool = False
 
 
@@ -2049,6 +2057,7 @@ async def claude_extract_profile(cv_text: str) -> Dict[str, Any]:
   }},
   "summary": "1-2 sentence professional summary",
   "skills": ["skill1", "skill2", ...max 15],
+  "languages": ["Language - proficiency, only if explicitly present"],
   "experience": [{{"role": "...", "company": "...", "duration": "...", "location": "...", "highlights": ["...", "..."]}}],
   "education": [{{"degree": "...", "school": "...", "discipline": "field of study/major or empty", "field_of_study": "same if explicit or empty", "graduation_year": "YYYY or empty", "year": "YYYY or empty"}}],
   "target_roles": ["job title 1", "job title 2", "job title 3"],
@@ -2058,6 +2067,7 @@ async def claude_extract_profile(cv_text: str) -> Dict[str, Any]:
 
 For template_style, infer the layout aesthetic of the original CV: "two_column" if sidebar+main, "classic" if centered headers/serif feel, "minimal" if heavy whitespace and thin dividers, otherwise "modern".
 Extract only facts explicitly present in the CV. Do not infer work authorization, sponsorship, demographic data, pronouns, or legal eligibility.
+Keep languages separate from professional skills. Do not invent proficiency levels; use only what the CV states.
 
 CV:
 ---
@@ -2163,6 +2173,16 @@ def _fallback_extract_profile_from_cv(cv_text: str) -> Dict[str, Any]:
     ]
     lower_text = text.lower()
     skills = [skill for skill in known_skills if skill.lower() in lower_text][:15]
+    languages = []
+    language_patterns = (
+        ("French", r"\bfrench\b|\bfran[cç]ais\b"),
+        ("English", r"\benglish\b|\banglais\b"),
+        ("Spanish", r"\bspanish\b|\bespa[nñ]ol\b"),
+        ("Arabic", r"\barabic\b|\barabe\b"),
+    )
+    for language, pattern in language_patterns:
+        if re.search(pattern, lower_text, flags=re.I):
+            languages.append(language)
     contact = {
         "name": name,
         "email": email_match.group(0) if email_match else "",
@@ -2178,6 +2198,7 @@ def _fallback_extract_profile_from_cv(cv_text: str) -> Dict[str, Any]:
         "contact": contact,
         "summary": "",
         "skills": skills,
+        "languages": languages,
         "experience": [],
         "education": [],
         "target_roles": [],
@@ -2590,80 +2611,200 @@ def _ats_hint_for_job(job: Dict[str, Any]) -> str:
 
 async def claude_generate_application(profile: Dict[str, Any], job: Dict[str, Any]) -> Dict[str, Any]:
     system_message = (
-        "You are an elite ATS optimization specialist and resume tailoring expert. "
-        "Return ONLY valid JSON. Do not invent facts, companies, dates, degrees, "
-        "certifications, metrics, work authorization, or tools not present in the candidate data."
+        "Tu es un moteur d'analyse ATS strict. Tu analyses les CV uniquement via des regles "
+        "automatiques: parsing, mots-cles, structure, correspondance avec l'offre et scoring. "
+        "Tu ne dois faire aucune interpretation humaine, aucun conseil RH subjectif, et aucune "
+        "recommandation hors objectif ATS. Retourne UNIQUEMENT du JSON valide. "
+        "N'invente jamais d'entreprise, poste, diplome, date, certification, outil, chiffre ou resultat."
     )
 
     job_description = job.get("clean_description") or job.get("description") or ""
     job_requirements = job.get("requirements") or []
     ats_hint = _ats_hint_for_job(job)
     ats_provider_label = (job.get("ats_provider") or "unknown").upper()
+    company_name = job.get("company") or "cette entreprise"
+    candidate_payload = {
+        "contact": profile.get("contact", {}),
+        "cv_text": profile.get("cv_text", "")[:12000],
+        "summary": profile.get("summary"),
+        "skills": profile.get("skills", []),
+        "languages": profile.get("languages", []),
+        "experience": profile.get("experience", []),
+        "education": profile.get("education", []),
+        "seniority": profile.get("seniority"),
+        "target_role": profile.get("target_role"),
+        "target_roles": profile.get("target_roles", []),
+        "target_location": profile.get("target_location"),
+        "remote_preference": profile.get("remote_preference"),
+        "template_style": profile.get("template_style", "modern"),
+    }
+    job_payload = {
+        "title": job.get("title"),
+        "company": company_name,
+        "location": job.get("location"),
+        "remote": job.get("remote"),
+        "ats_provider": ats_provider_label,
+        "description": job_description,
+        "requirements": job_requirements,
+        "tech_stack": job.get("tech_stack", []),
+    }
 
-    prompt = f"""Create an ATS-optimized tailored application package for this job.
+    prompt = f"""Agis comme l'ATS utilise par {company_name}, c'est-a-dire {ats_provider_label}.
 
-ATS CONTEXT — {ats_provider_label}:
-{ats_hint}
+Tu analyses les CV uniquement via des regles automatiques : parsing, mots-cles, structure, correspondance avec l'offre et scoring.
+Tu ne dois faire aucune interpretation humaine, aucun conseil subjectif de recruteur, et aucune recommandation hors objectif ATS.
 
-Rules:
-- Use the uploaded CV text, structured profile, full job description, and requirements.
-- Keep every factual claim truthful and grounded in the candidate data.
-- Preserve candidate identity/contact details.
-- Rewrite summary, reorder skills, and rewrite existing bullets to emphasize relevant experience.
-- Do not add employers, roles, degrees, dates, certifications, tools, or achievements not supported by the CV/profile.
-- Mirror the exact keywords, skill names, and tool names from the job description (ATS keyword matching).
-- Generate likely/common application question answers only when answerable from candidate data. If unknown, answer conservatively.
+CONTEXTE
 
-Candidate profile:
-{json.dumps({
-  "contact": profile.get("contact", {}),
-  "cv_text": profile.get("cv_text", "")[:12000],
-  "summary": profile.get("summary"),
-  "skills": profile.get("skills", []),
-  "experience": profile.get("experience", []),
-  "education": profile.get("education", []),
-  "seniority": profile.get("seniority"),
-  "target_role": profile.get("target_role"),
-  "target_roles": profile.get("target_roles", []),
-  "target_location": profile.get("target_location"),
-  "remote_preference": profile.get("remote_preference"),
-  "template_style": profile.get("template_style", "modern"),
-}, indent=2)}
+Voici l'offre d'emploi a analyser :
+{json.dumps(job_payload, ensure_ascii=False, indent=2)}
 
-Job:
-- Title: {job.get('title')}
-- Company: {job.get('company')}
-- Location: {job.get('location')} ({job.get('remote')})
-- ATS: {ats_provider_label}
-- Description: {job_description}
-- Requirements: {json.dumps(job_requirements)}
-- Tech: {json.dumps(job.get('tech_stack', []))}
+Voici mon CV :
+{json.dumps(candidate_payload, ensure_ascii=False, indent=2)}
 
-Return JSON with this exact schema:
+OBJECTIF
+1. Calculer un score ATS global sur 100 pour le CV actuel.
+2. Identifier les mots-cles critiques presents dans l'offre.
+3. Verifier lesquels sont presents, absents ou partiels dans le CV.
+4. Detecter les competences, outils, experiences, intitules, verbes d'action et mots-cles metiers manquants.
+5. Detecter les problemes de structure ou de parsing qui pourraient bloquer ou reduire le score ATS.
+6. Identifier les sections faibles ou mal optimisees.
+7. Reecrire uniquement les parties necessaires du CV pour integrer les mots-cles manquants.
+8. Ameliorer la section experience sans inventer d'informations.
+9. Proposer les optimisations necessaires pour atteindre un score ATS superieur a 80 %, si cela est realiste.
+10. Si un score superieur a 80 % n'est pas atteignable sans inventer d'experience, explique clairement pourquoi.
+
+SORTIE ATTENDUE
+
+Presente ta reponse dans cet ordre :
+
+1. Score ATS global estime sur 100
+
+Indique :
+- le score actuel
+- le niveau de compatibilite avec l'offre
+- les principales raisons du score
+
+2. Tableau des mots-cles critiques
+
+Cree un tableau avec les colonnes suivantes :
+- Mot-cle / competence issue de l'offre
+- Importance : elevee / moyenne / faible
+- Present dans mon CV : oui / non / partiellement
+- Section ou il apparait
+- Recommandation d'integration
+
+3. Problemes ATS detectes
+
+Liste les problemes eventuels lies a :
+- structure du CV
+- titres de sections
+- lisibilite ATS
+- mots-cles manquants
+- intitules de poste
+- format des dates
+- competences techniques
+- experience insuffisamment alignee
+- contenu trop generique
+- elements difficiles a parser
+
+4. Optimisations prioritaires
+
+Donne une liste classee par priorite :
+- priorite 1 : changements indispensables
+- priorite 2 : changements fortement recommandes
+- priorite 3 : ameliorations secondaires
+
+5. Version optimisee de la section Experience
+
+Reecris la section experience de mon CV pour l'adapter a l'offre.
+
+Contraintes :
+- ne pas inventer d'entreprise
+- ne pas inventer de poste
+- ne pas inventer de diplome
+- ne pas inventer de chiffres ou resultats
+- conserver uniquement les informations credibles issues de mon CV
+- integrer les mots-cles de l'offre naturellement
+- utiliser un style factuel, professionnel, synthetique
+- privilegier les verbes d'action
+- optimiser pour un ATS, pas pour impressionner subjectivement un recruteur
+
+6. Version optimisee du resume professionnel
+
+Propose un resume professionnel ATS-friendly de 3 a 5 lignes, adapte a l'offre.
+
+7. Liste finale des modifications a appliquer
+
+Donne-moi une checklist claire des changements a faire dans mon CV avant de postuler.
+
+CONTRAINTES GENERALES
+- Reste factuel.
+- Ne donne pas de conseils RH generiques.
+- Ne fais pas de reformulation creative inutile.
+- Ne modifie pas le sens reel de mon parcours.
+- Ne mens pas.
+- Ne gonfle pas artificiellement mon experience.
+- Optimise uniquement pour la lecture automatique ATS.
+- Si une information manque dans le CV, propose une formulation uniquement si elle peut etre deduite raisonnablement.
+- Si une information ne peut pas etre deduite, indique qu'elle doit etre ajoutee manuellement par moi si elle est vraie.
+
+FORMAT TECHNIQUE OBLIGATOIRE
+
+Retourne uniquement du JSON valide. Mappe la sortie attendue ci-dessus dans ce schema exact :
 {{
   "tailored_resume_structured": {{
+    "template_recommendation": "ats_classic, modern_pro, executive_compact, luxe_minimal, studio_slate, or blue_split",
     "contact": {{"name": "...", "email": "...", "phone": "...", "location": "...", "linkedin": "...", "website": "..."}},
-    "summary": "Rewritten 2-3 sentence summary tailored for the role and ATS-optimized",
-    "skills": ["skill1", "skill2", "max 12, most relevant first, mirroring job description terminology"],
-    "experience": [{{"role": "...", "company": "...", "duration": "...", "location": "...", "highlights": ["action verb + result bullet 1", "action verb + result bullet 2", "action verb + result bullet 3"]}}],
+    "headline": "Intitule cible uniquement si coherent avec le CV",
+    "summary": "Resume professionnel ATS-friendly de 3 a 5 lignes, adapte a l'offre et factuel",
+    "role_keywords": ["mot-cle supporte 1", "mot-cle supporte 2", "max 10, terminologie exacte de l'offre uniquement si prouvee"],
+    "skills": ["competence 1", "competence 2", "max 14, pas de langues, competences les plus pertinentes d'abord"],
+    "languages": ["French - Native", "English - Full professional"],
+    "experience": [{{"role": "...", "company": "...", "duration": "...", "location": "...", "highlights": ["puce ATS factuelle optimisee", "puce ATS factuelle optimisee"], "source_evidence": "preuve courte issue du CV/profil"}}],
     "education": [{{"degree": "...", "school": "...", "year": "..."}}],
-    "content_plan": ["short instruction for how the original CV should be adjusted for ATS"]
+    "content_plan": ["modification concrete a appliquer au CV"],
+    "evidence_notes": ["mot-cle de l'offre -> preuve utilisee dans le CV"],
+    "unsupported_requirements": ["exigence importante non supportee par les donnees candidat"]
   }},
-  "tailored_cover_letter": {{
-    "greeting": "Dear {job['company']} team,",
-    "paragraphs": ["concise opener specific to role/company", "fit paragraph grounded in CV/profile", "closing paragraph with call to action"],
-    "sign_off": "Warm regards,"
-  }},
-  "application_answers": [{{"question": "Why are you interested in this role?", "answer": "truthful concise answer grounded in candidate data"}}],
   "match_score": 0-100,
-  "match_reasons": ["short reason 1", "short reason 2", "short reason 3"],
-  "interview_prep": ["likely question 1", "likely question 2", "likely question 3"],
-  "ats_score_before": <integer 0-100, estimate of ATS score for the original CV against this job description, based on keyword coverage and format>,
-  "ats_score_after": <integer 0-100, estimated ATS score after your optimizations above>,
+  "match_reasons": ["raison ATS courte 1", "raison ATS courte 2", "raison ATS courte 3"],
+  "interview_prep": [],
+  "ats_score_before": 0-100,
+  "ats_score_after": 0-100,
   "ats_provider": "{ats_provider_label}",
+  "ats_analysis": {{
+    "score_current": 0-100,
+    "score_after_optimization": 0-100,
+    "compatibility_level": "faible, moyen, eleve",
+    "score_reasons": ["principale raison du score"],
+    "critical_keywords": [
+      {{"keyword": "mot-cle / competence issue de l'offre", "importance": "elevee, moyenne, faible", "present_in_cv": "oui, non, partiellement", "section": "section ou il apparait", "integration_recommendation": "recommandation d'integration"}}
+    ],
+    "ats_issues": ["probleme ATS detecte: structure, titres, dates, mots-cles, parsing ou contenu trop generique"],
+    "priority_optimizations": {{
+      "priority_1": ["changements indispensables"],
+      "priority_2": ["changements fortement recommandes"],
+      "priority_3": ["ameliorations secondaires"]
+    }},
+    "optimized_experience_notes": ["ce qui a ete modifie dans la section experience"],
+    "optimized_summary_notes": ["ce qui a ete modifie dans le resume professionnel"],
+    "score_over_80_realistic": true,
+    "score_over_80_explanation": "Explique clairement si 80+ est realiste sans inventer d'experience.",
+    "final_checklist": ["modification claire a appliquer avant de postuler"]
+  }},
   "keywords_gap": [
-    {{"keyword": "exact keyword from job description", "present_in_original": true/false, "added_in_optimized": true/false}}
-  ]
+    {{"keyword": "mot-cle exact de l'offre", "present_in_original": true/false, "added_in_optimized": true/false}}
+  ],
+  "resume_quality_checks": {{
+    "ats_parse_safe": true/false,
+    "uses_standard_headings": true/false,
+    "no_ai_phrasing": true/false,
+    "no_unsupported_claims": true/false,
+    "no_keyword_stuffing": true/false,
+    "ats_readable": true/false,
+    "notes": ["specific remaining issue, if any"]
+  }}
 }}"""
     response = await complete_json_text(system_message, prompt)
     parsed = _parse_json_from_llm(response)
@@ -2671,7 +2812,7 @@ Return JSON with this exact schema:
         parsed["tailored_resume"] = parsed["tailored_resume_structured"]
     if "tailored_cover_letter" in parsed and "cover_letter" not in parsed:
         parsed["cover_letter"] = parsed["tailored_cover_letter"]
-    return parsed
+    return normalize_application_generation(parsed)
 
 
 async def _generate_application_doc(user: User, profile: Dict[str, Any], job: Dict[str, Any]) -> Dict[str, Any]:
@@ -2691,12 +2832,13 @@ def _build_generated_application_doc(
     gen: Dict[str, Any],
     package_builder: Any = build_application_package,
 ) -> Dict[str, Any]:
-    gen = sanitize_docx_text(gen)
+    gen = sanitize_docx_text(normalize_application_generation(gen))
     profile = sanitize_docx_text(profile)
     cv_text = str(profile.get("cv_text") or "")
     job_description = str(job.get("clean_description") or job.get("description") or "")
     tailored_resume = gen.get("tailored_resume_structured") or gen.get("tailored_resume") or {}
     cover_letter = gen.get("tailored_cover_letter") or gen.get("cover_letter") or {}
+    resume_quality_report = gen.get("resume_quality_report") or validate_resume_quality(tailored_resume)
     tailored_resume_length = len(json.dumps(tailored_resume, default=str))
     cover_letter_length = len(cover_letter_to_text(cover_letter))
     generation_mode = "ai" if gen else "fallback"
@@ -2789,9 +2931,11 @@ def _build_generated_application_doc(
         "match_reasons": gen.get("match_reasons", []),
         "interview_prep": gen.get("interview_prep", []),
         "ats_provider": gen.get("ats_provider") or job.get("ats_provider") or None,
+        "ats_analysis": gen.get("ats_analysis") or {},
         "ats_score_before": gen.get("ats_score_before"),
         "ats_score_after": gen.get("ats_score_after"),
         "keywords_gap": gen.get("keywords_gap") or [],
+        "resume_quality_report": resume_quality_report,
         "created_at": now,
         "updated_at": now,
     }
@@ -3179,6 +3323,7 @@ async def upload_cv(file: UploadFile = File(...), user: User = Depends(get_curre
         "contact": contact,
         "summary": extracted.get("summary", ""),
         "skills": intelligence.get("skills") or extracted.get("skills", []),
+        "languages": extracted.get("languages", []),
         "experience": extracted.get("experience", []),
         "education": intelligence.get("education") or extracted.get("education", []),
         "experience_summary": intelligence.get("experience_summary") or {},
@@ -6887,6 +7032,26 @@ async def admin_jobs_ats_refresh_source(body: AdminAtsRefreshSourceRequest, admi
         ats_provider=body.ats_provider,
         source_key=body.source_key,
         limit=body.limit,
+        dry_run=body.dry_run,
+    )
+
+
+@api_router.post("/admin/jobs/ats/discover-friendly-company-pages")
+async def admin_jobs_discover_friendly_company_pages(
+    body: AdminDiscoverFriendlyCompanyPagesRequest, admin: User = Depends(require_admin_user)
+):
+    _require_ats_direct_enabled()
+    logger.info(
+        "admin_jobs_discover_friendly_company_pages_requested admin=%s limit=%s concurrency=%s dry_run=%s",
+        admin.email,
+        body.limit,
+        body.concurrency,
+        body.dry_run,
+    )
+    return await discover_friendly_company_career_pages(
+        db,
+        limit=body.limit,
+        concurrency=body.concurrency,
         dry_run=body.dry_run,
     )
 

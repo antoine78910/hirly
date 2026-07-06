@@ -49,9 +49,10 @@ class _Collection:
 
 
 class _FakeDB:
-    def __init__(self, jobs=None, sources=None):
+    def __init__(self, jobs=None, sources=None, friendly_company_pages=None):
         self.jobs = _Collection(jobs or [])
         self.ats_company_sources = _Collection(sources or [])
+        self.friendly_company_career_pages = _Collection(friendly_company_pages or [])
 
 
 class _FakeAdapter:
@@ -174,6 +175,93 @@ def test_admin_ats_refresh_source_endpoint_uses_service(monkeypatch):
     result = asyncio.run(server.admin_jobs_ats_refresh_source(body, admin=admin))
     assert calls["count"] == 1
     assert result["imported_count"] == 1
+
+
+def test_discover_friendly_company_career_pages_upserts_friendly_domain(monkeypatch):
+    db = _FakeDB(jobs=[{
+        "job_id": "job_1",
+        "ats_provider": "unknown",
+        "applyability_tier": "C",
+        "company": "Acme Corp",
+        "country_code": "fr",
+        "selected_apply_url": "https://careers.acme.example/apply/123",
+    }])
+
+    async def fake_probe(url, **kwargs):
+        assert url == "https://careers.acme.example/apply/123"
+        return {"url": url, "is_friendly": True, "requires_login": False, "captcha_detected": False, "has_file_upload": True, "fetch_error": None}
+
+    monkeypatch.setattr(service, "probe_career_page_friendliness", fake_probe)
+    result = asyncio.run(service.discover_friendly_company_career_pages(db))
+    assert result["scanned_job_count"] == 1
+    assert result["candidate_domain_count"] == 1
+    assert result["friendly_count"] == 1
+    assert result["not_friendly_count"] == 0
+    assert len(db.friendly_company_career_pages.rows) == 1
+    row = db.friendly_company_career_pages.rows[0]
+    assert row["domain"] == "careers.acme.example"
+    assert row["company_name"] == "Acme Corp"
+    assert row["is_friendly"] is True
+
+
+def test_discover_friendly_company_career_pages_skips_known_domains(monkeypatch):
+    db = _FakeDB(
+        jobs=[{
+            "job_id": "job_1",
+            "ats_provider": "unknown",
+            "applyability_tier": "C",
+            "company": "Acme Corp",
+            "selected_apply_url": "https://careers.acme.example/apply/123",
+        }],
+        friendly_company_pages=[{"id": "careers.acme.example", "domain": "careers.acme.example", "is_friendly": True}],
+    )
+    calls = {"count": 0}
+
+    async def fake_probe(url, **kwargs):
+        calls["count"] += 1
+        return {"is_friendly": True, "requires_login": False, "captcha_detected": False, "has_file_upload": True, "fetch_error": None}
+
+    monkeypatch.setattr(service, "probe_career_page_friendliness", fake_probe)
+    result = asyncio.run(service.discover_friendly_company_career_pages(db))
+    assert calls["count"] == 0
+    assert result["already_known_domain_count"] == 1
+
+
+def test_discover_friendly_company_career_pages_not_friendly_is_not_upserted(monkeypatch):
+    db = _FakeDB(jobs=[{
+        "job_id": "job_1",
+        "ats_provider": "unknown",
+        "applyability_tier": "C",
+        "company": "Acme Corp",
+        "selected_apply_url": "https://careers.acme.example/apply/123",
+    }])
+
+    async def fake_probe(url, **kwargs):
+        return {"is_friendly": False, "requires_login": True, "captcha_detected": False, "has_file_upload": False, "fetch_error": None}
+
+    monkeypatch.setattr(service, "probe_career_page_friendliness", fake_probe)
+    result = asyncio.run(service.discover_friendly_company_career_pages(db))
+    assert result["not_friendly_count"] == 1
+    assert result["friendly_count"] == 0
+    assert len(db.friendly_company_career_pages.rows) == 0
+
+
+def test_discover_friendly_company_career_pages_dry_run_skips_writes(monkeypatch):
+    db = _FakeDB(jobs=[{
+        "job_id": "job_1",
+        "ats_provider": "unknown",
+        "applyability_tier": "C",
+        "company": "Acme Corp",
+        "selected_apply_url": "https://careers.acme.example/apply/123",
+    }])
+
+    async def fake_probe(url, **kwargs):
+        return {"is_friendly": True, "requires_login": False, "captcha_detected": False, "has_file_upload": True, "fetch_error": None}
+
+    monkeypatch.setattr(service, "probe_career_page_friendliness", fake_probe)
+    result = asyncio.run(service.discover_friendly_company_career_pages(db, dry_run=True))
+    assert result["friendly_count"] == 1
+    assert len(db.friendly_company_career_pages.rows) == 0
 
 
 def test_maintenance_respects_ats_flag(monkeypatch):

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
+from company_career_page_prober import probe_career_page_friendliness
 from job_providers.ats_adapters import adapter_for_url, get_ats_adapter, supported_ats_providers
 from job_validation import cheap_validate_job_applyability
 from jobs_service import upsert_imported_jobs
@@ -198,7 +201,137 @@ async def run_ats_direct_maintenance(
         older_than_hours=env_int("JOBS_ATS_REFRESH_OLDER_THAN_HOURS", 12),
         dry_run=dry_run,
     )
-    return {"enabled": True, "dry_run": dry_run, "discover": discover, "refresh": refresh}
+    friendly_company_pages = None
+    if env_bool("JOBS_DISCOVER_FRIENDLY_COMPANY_PAGES_ENABLED", False):
+        friendly_company_pages = await discover_friendly_company_career_pages(db, dry_run=dry_run)
+    return {
+        "enabled": True,
+        "dry_run": dry_run,
+        "discover": discover,
+        "refresh": refresh,
+        "friendly_company_pages": friendly_company_pages,
+    }
+
+
+async def discover_friendly_company_career_pages(
+    db,
+    *,
+    limit: Optional[int] = None,
+    concurrency: Optional[int] = None,
+    dry_run: bool = False,
+) -> Dict[str, Any]:
+    """Scan cached tier-C ("unknown ATS", plain company career page) jobs,
+    probe each distinct company domain for the same friendliness criteria used
+    to audit known ATS platforms (no mandatory login, no CAPTCHA), and record
+    friendly ones in ``friendly_company_career_pages`` for later direct
+    scraping. Never runs inline in the live feed request path -- this is a
+    maintenance/admin-triggered scan only.
+    """
+
+    scan_limit = max(1, min(int(limit or env_int("JOBS_FRIENDLY_COMPANY_PAGE_SCAN_LIMIT", 200)), 2000))
+    max_concurrency = max(1, min(int(concurrency or env_int("JOBS_FRIENDLY_COMPANY_PAGE_CONCURRENCY", 5)), 20))
+
+    summary: Dict[str, Any] = {
+        "dry_run": dry_run,
+        "scanned_job_count": 0,
+        "candidate_domain_count": 0,
+        "already_known_domain_count": 0,
+        "probed_domain_count": 0,
+        "friendly_count": 0,
+        "not_friendly_count": 0,
+        "probe_error_count": 0,
+        "errors": [],
+    }
+
+    rows = await db.jobs.find(
+        {"applyability_tier": "C"}, {"_id": 0}
+    ).limit(scan_limit).to_list(scan_limit)
+    summary["scanned_job_count"] = len(rows)
+
+    candidates_by_domain: Dict[str, Dict[str, Any]] = {}
+    for job in rows:
+        if str(job.get("ats_provider") or "unknown").strip().lower() != "unknown":
+            continue
+        url = job.get("selected_apply_url") or job.get("external_url")
+        domain = _domain_for_url(url)
+        if not domain or domain in candidates_by_domain:
+            continue
+        candidates_by_domain[domain] = {"url": url, "job": job}
+    summary["candidate_domain_count"] = len(candidates_by_domain)
+
+    known = await db.friendly_company_career_pages.find({}, {"_id": 0}).limit(5000).to_list(5000)
+    known_domains = {row.get("domain") for row in known if row.get("domain")}
+
+    to_probe = {
+        domain: entry
+        for domain, entry in candidates_by_domain.items()
+        if domain not in known_domains
+    }
+    summary["already_known_domain_count"] = len(candidates_by_domain) - len(to_probe)
+
+    semaphore = asyncio.Semaphore(max_concurrency)
+
+    async def _probe_one(domain: str, entry: Dict[str, Any]) -> None:
+        async with semaphore:
+            try:
+                result = await probe_career_page_friendliness(entry["url"])
+            except Exception as exc:  # noqa: BLE001
+                summary["probe_error_count"] += 1
+                summary["errors"].append({"domain": domain, "error": f"{exc.__class__.__name__}: {str(exc)[:160]}"})
+                return
+        summary["probed_domain_count"] += 1
+        if result.get("fetch_error"):
+            summary["probe_error_count"] += 1
+            summary["errors"].append({"domain": domain, "error": result["fetch_error"]})
+            return
+        if not result.get("is_friendly"):
+            summary["not_friendly_count"] += 1
+            return
+        summary["friendly_count"] += 1
+        if dry_run:
+            return
+        job = entry["job"]
+        now = datetime.now(timezone.utc).isoformat()
+        await db.friendly_company_career_pages.update_one(
+            {"id": domain},
+            {"$set": {
+                "id": domain,
+                "company_name": job.get("company"),
+                "career_page_url": entry["url"],
+                "domain": domain,
+                "country_code": (job.get("country_code") or "").lower() or None,
+                "discovered_from_url": entry["url"],
+                "discovered_from_job_id": job.get("job_id"),
+                "is_friendly": True,
+                "requires_login": result.get("requires_login"),
+                "captcha_detected": result.get("captcha_detected"),
+                "has_file_upload": result.get("has_file_upload"),
+                "last_checked_at": now,
+                "updated_at": now,
+            }},
+            upsert=True,
+        )
+
+    logger.info(
+        "friendly_company_page_discovery_start scanned=%s candidates=%s to_probe=%s dry_run=%s",
+        summary["scanned_job_count"],
+        summary["candidate_domain_count"],
+        len(to_probe),
+        dry_run,
+    )
+    await asyncio.gather(*(_probe_one(domain, entry) for domain, entry in to_probe.items()))
+    logger.info("friendly_company_page_discovery_complete summary=%s", {k: v for k, v in summary.items() if k != "errors"})
+    return summary
+
+
+def _domain_for_url(url: Optional[str]) -> Optional[str]:
+    if not url:
+        return None
+    try:
+        host = urlparse(str(url)).netloc.lower()
+    except ValueError:
+        return None
+    return host.removeprefix("www.") or None
 
 
 def _source_doc_from_job(job: Dict[str, Any], providers: List[str]) -> Optional[Dict[str, Any]]:

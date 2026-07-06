@@ -125,6 +125,22 @@ TABLE_FILTER_COLUMNS = {
         "created_at",
         "updated_at",
     },
+    "friendly_company_career_pages": {
+        "id",
+        "company_name",
+        "career_page_url",
+        "domain",
+        "country_code",
+        "discovered_from_url",
+        "discovered_from_job_id",
+        "is_friendly",
+        "requires_login",
+        "captcha_detected",
+        "has_file_upload",
+        "last_checked_at",
+        "created_at",
+        "updated_at",
+    },
     "geo_places": {
         "id",
         "geoname_id",
@@ -964,6 +980,7 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
         self.profiles = SupabaseCollectionAdapter("profiles", supabase_url, secret_key)
         self.jobs = SupabaseCollectionAdapter("jobs", supabase_url, secret_key)
         self.ats_company_sources = SupabaseCollectionAdapter("ats_company_sources", supabase_url, secret_key)
+        self.friendly_company_career_pages = SupabaseCollectionAdapter("friendly_company_career_pages", supabase_url, secret_key)
         self.geo_places = SupabaseCollectionAdapter("geo_places", supabase_url, secret_key)
         self.applications = SupabaseCollectionAdapter("applications", supabase_url, secret_key)
         self.gmail_connections = SupabaseCollectionAdapter("gmail_connections", supabase_url, secret_key)

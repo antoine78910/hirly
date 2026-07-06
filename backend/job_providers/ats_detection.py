@@ -38,6 +38,7 @@ ATS_DOMAINS = {
     "applytojob.com": "bamboohr",
     "successfactors.com": "successfactors",
     "jobs.sap.com": "successfactors",
+    "breezy.hr": "breezyhr",
 }
 
 LOGIN_REQUIRED_DOMAINS = {
@@ -62,7 +63,21 @@ DISCOVERY_ONLY_DOMAINS = {
 
 GOOGLE_DISCOVERY_HOSTS = {"google.com", "www.google.com"}
 
-PRIMARY_AUTO_APPLY_ATS = {"greenhouse", "lever", "ashby"}
+PRIMARY_AUTO_APPLY_ATS = {
+    "greenhouse",
+    "lever",
+    "ashby",
+    # Confirmed via live application-flow audit (2026-07-06): no mandatory
+    # candidate login/account creation, publicly reachable apply forms, and
+    # (where verifiable) no confirmed CAPTCHA/bot-wall on the real apply flow.
+    "teamtailor",
+    "werecruit",
+    "jobaffinity",
+    "flatchr",
+    "personio",
+    "smartrecruiters",
+    "breezyhr",
+}
 
 
 def detect_ats_from_url(url: Optional[str]) -> Optional[str]:
@@ -96,6 +111,7 @@ def detect_ats_from_html(html: Optional[str]) -> Optional[str]:
         ("successfactors.com", "successfactors"),
         ("jobs.sap.com", "successfactors"),
         ("icims.com", "icims"),
+        ("breezy.hr", "breezyhr"),
     ):
         if marker in text:
             return provider

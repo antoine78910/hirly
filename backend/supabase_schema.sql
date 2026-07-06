@@ -163,6 +163,44 @@ CREATE INDEX IF NOT EXISTS idx_ats_company_sources_country_code ON ats_company_s
 CREATE INDEX IF NOT EXISTS idx_ats_company_sources_is_active ON ats_company_sources (is_active);
 CREATE INDEX IF NOT EXISTS idx_ats_company_sources_last_checked_at ON ats_company_sources (last_checked_at);
 
+CREATE TABLE IF NOT EXISTS friendly_company_career_pages (
+  id TEXT PRIMARY KEY,
+  company_name TEXT,
+  career_page_url TEXT,
+  domain TEXT,
+  country_code TEXT,
+  discovered_from_url TEXT,
+  discovered_from_job_id TEXT,
+  is_friendly BOOLEAN DEFAULT TRUE,
+  requires_login BOOLEAN,
+  captcha_detected BOOLEAN,
+  has_file_upload BOOLEAN,
+  last_checked_at TIMESTAMPTZ,
+  raw_metadata JSONB,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  data JSONB NOT NULL
+);
+ALTER TABLE friendly_company_career_pages ADD COLUMN IF NOT EXISTS company_name TEXT;
+ALTER TABLE friendly_company_career_pages ADD COLUMN IF NOT EXISTS career_page_url TEXT;
+ALTER TABLE friendly_company_career_pages ADD COLUMN IF NOT EXISTS domain TEXT;
+ALTER TABLE friendly_company_career_pages ADD COLUMN IF NOT EXISTS country_code TEXT;
+ALTER TABLE friendly_company_career_pages ADD COLUMN IF NOT EXISTS discovered_from_url TEXT;
+ALTER TABLE friendly_company_career_pages ADD COLUMN IF NOT EXISTS discovered_from_job_id TEXT;
+ALTER TABLE friendly_company_career_pages ADD COLUMN IF NOT EXISTS is_friendly BOOLEAN DEFAULT TRUE;
+ALTER TABLE friendly_company_career_pages ADD COLUMN IF NOT EXISTS requires_login BOOLEAN;
+ALTER TABLE friendly_company_career_pages ADD COLUMN IF NOT EXISTS captcha_detected BOOLEAN;
+ALTER TABLE friendly_company_career_pages ADD COLUMN IF NOT EXISTS has_file_upload BOOLEAN;
+ALTER TABLE friendly_company_career_pages ADD COLUMN IF NOT EXISTS last_checked_at TIMESTAMPTZ;
+ALTER TABLE friendly_company_career_pages ADD COLUMN IF NOT EXISTS raw_metadata JSONB;
+ALTER TABLE friendly_company_career_pages ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
+ALTER TABLE friendly_company_career_pages ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+CREATE UNIQUE INDEX IF NOT EXISTS idx_friendly_company_career_pages_domain
+  ON friendly_company_career_pages (domain);
+CREATE INDEX IF NOT EXISTS idx_friendly_company_career_pages_country_code ON friendly_company_career_pages (country_code);
+CREATE INDEX IF NOT EXISTS idx_friendly_company_career_pages_is_friendly ON friendly_company_career_pages (is_friendly);
+CREATE INDEX IF NOT EXISTS idx_friendly_company_career_pages_last_checked_at ON friendly_company_career_pages (last_checked_at);
+
 CREATE TABLE IF NOT EXISTS geo_places (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   geoname_id TEXT UNIQUE,

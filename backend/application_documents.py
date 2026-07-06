@@ -13,9 +13,102 @@ from copy import deepcopy
 from typing import Any, Dict, List, Tuple
 
 import docx
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.shared import RGBColor
+from docx.shared import Inches, Pt
+
+from cv_quality import normalize_application_generation, normalize_resume_structured, validate_resume_quality
 
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 XML_INVALID_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]")
+SUPPORTED_GENERATED_TEMPLATES = {
+    "ats_classic",
+    "modern_pro",
+    "executive_compact",
+    "luxe_minimal",
+    "studio_slate",
+    "blue_split",
+}
+TEMPLATE_SPECS = {
+    "ats_classic": {
+        "font": "Arial",
+        "body_size": 10,
+        "name_size": 18,
+        "heading_size": 10.5,
+        "heading_color": RGBColor(0, 0, 0),
+        "accent_color": RGBColor(0, 0, 0),
+        "top_margin": 0.55,
+        "bottom_margin": 0.55,
+        "left_margin": 0.65,
+        "right_margin": 0.65,
+        "space_after": 3,
+    },
+    "luxe_minimal": {
+        "font": "Arial",
+        "body_size": 10,
+        "name_size": 20,
+        "heading_size": 11,
+        "heading_color": RGBColor(38, 47, 56),
+        "accent_color": RGBColor(111, 92, 74),
+        "top_margin": 0.6,
+        "bottom_margin": 0.6,
+        "left_margin": 0.72,
+        "right_margin": 0.72,
+        "space_after": 4,
+    },
+    "modern_pro": {
+        "font": "Arial",
+        "body_size": 10,
+        "name_size": 19,
+        "heading_size": 11,
+        "heading_color": RGBColor(31, 78, 121),
+        "accent_color": RGBColor(31, 78, 121),
+        "top_margin": 0.58,
+        "bottom_margin": 0.58,
+        "left_margin": 0.68,
+        "right_margin": 0.68,
+        "space_after": 4,
+    },
+    "executive_compact": {
+        "font": "Arial",
+        "body_size": 9.7,
+        "name_size": 18,
+        "heading_size": 10.5,
+        "heading_color": RGBColor(30, 30, 30),
+        "accent_color": RGBColor(90, 90, 90),
+        "top_margin": 0.48,
+        "bottom_margin": 0.48,
+        "left_margin": 0.58,
+        "right_margin": 0.58,
+        "space_after": 2,
+    },
+    "studio_slate": {
+        "font": "Arial",
+        "body_size": 10,
+        "name_size": 19,
+        "heading_size": 11,
+        "heading_color": RGBColor(49, 63, 76),
+        "accent_color": RGBColor(49, 63, 76),
+        "top_margin": 0.62,
+        "bottom_margin": 0.62,
+        "left_margin": 0.7,
+        "right_margin": 0.7,
+        "space_after": 4,
+    },
+    "blue_split": {
+        "font": "Arial",
+        "body_size": 10,
+        "name_size": 19,
+        "heading_size": 11,
+        "heading_color": RGBColor(22, 70, 122),
+        "accent_color": RGBColor(22, 70, 122),
+        "top_margin": 0.58,
+        "bottom_margin": 0.58,
+        "left_margin": 0.68,
+        "right_margin": 0.68,
+        "space_after": 4,
+    },
+}
 logger = logging.getLogger(__name__)
 
 
@@ -48,12 +141,14 @@ def _safe_set_run_text(run: Any, text: Any) -> None:
 
 def build_application_package(profile: Dict[str, Any], generated: Dict[str, Any]) -> Dict[str, Any]:
     profile = sanitize_docx_text(profile)
-    generated = sanitize_docx_text(generated)
+    generated = sanitize_docx_text(normalize_application_generation(generated))
     original_b64 = profile.get("cv_original_b64")
     original_bytes = base64.b64decode(original_b64) if original_b64 else b""
     original_mime = profile.get("cv_mime") or ""
     original_filename = profile.get("cv_filename") or "cv"
-    tailored = generated.get("tailored_resume_structured") or generated.get("tailored_resume") or {}
+    tailored = normalize_resume_structured(generated.get("tailored_resume_structured") or generated.get("tailored_resume") or {})
+    quality_report = generated.get("resume_quality_report") or validate_resume_quality(tailored)
+    template_used = _template_name(tailored)
 
     if original_mime == DOCX_MIME or original_filename.lower().endswith(".docx"):
         file_bytes, status, notes = _build_preserved_docx(original_bytes, profile, tailored)
@@ -85,6 +180,9 @@ def build_application_package(profile: Dict[str, Any], generated: Dict[str, Any]
         "tailored_cv_mime": mime,
         "template_preservation_status": status,
         "template_preservation_notes": notes,
+        "template_used": template_used,
+        "available_templates": sorted(SUPPORTED_GENERATED_TEMPLATES),
+        "resume_quality_report": quality_report,
     }
 
 
@@ -204,39 +302,108 @@ def _append_tailored_section(document, tailored: Dict[str, Any]) -> None:
 
 def _build_clean_docx(profile: Dict[str, Any], tailored: Dict[str, Any]) -> bytes:
     document = docx.Document()
+    template = _template_spec(tailored)
+    _configure_ats_safe_document(document, template)
     contact = sanitize_docx_text(deepcopy(profile.get("contact") or {}))
+    tailored_contact = tailored.get("contact") or {}
     name = contact.get("name") or "Candidate"
-    document.add_heading(_safe_text(name), level=0)
+    if tailored_contact.get("name"):
+        name = tailored_contact.get("name")
+
+    header = _safe_add_paragraph(document)
+    header.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = header.add_run(_safe_text(name))
+    run.bold = True
+    run.font.name = template["font"]
+    run.font.size = Pt(template["name_size"])
+
     contact_line = " | ".join(
-        _safe_text(contact.get(key))
+        _safe_text(tailored_contact.get(key) or contact.get(key))
         for key in ("email", "phone", "location", "linkedin", "website")
-        if contact.get(key)
+        if tailored_contact.get(key) or contact.get(key)
     )
     if contact_line:
-        _safe_add_paragraph(document, contact_line)
-    _write_tailored_content(document, tailored)
+        paragraph = _safe_add_paragraph(document, contact_line)
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        paragraph.style = document.styles["Normal"]
+
+    headline = _safe_text(tailored.get("headline"))
+    if headline:
+        paragraph = _safe_add_paragraph(document, headline)
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        paragraph.style = document.styles["Normal"]
+        for run in paragraph.runs:
+            run.italic = True
+
+    _write_tailored_content(document, tailored, template)
     out = io.BytesIO()
     document.save(out)
     return out.getvalue()
 
 
-def _write_tailored_content(document, tailored: Dict[str, Any]) -> None:
+def _template_name(tailored: Dict[str, Any]) -> str:
+    name = str(tailored.get("template_recommendation") or "ats_classic").strip()
+    return name if name in SUPPORTED_GENERATED_TEMPLATES else "ats_classic"
+
+
+def _template_spec(tailored: Dict[str, Any]) -> Dict[str, Any]:
+    return TEMPLATE_SPECS[_template_name(tailored)]
+
+
+def _configure_ats_safe_document(document: Any, template: Dict[str, Any]) -> None:
+    section = document.sections[0]
+    section.top_margin = Inches(template["top_margin"])
+    section.bottom_margin = Inches(template["bottom_margin"])
+    section.left_margin = Inches(template["left_margin"])
+    section.right_margin = Inches(template["right_margin"])
+
+    styles = document.styles
+    normal = styles["Normal"]
+    normal.font.name = template["font"]
+    normal.font.size = Pt(template["body_size"])
+    normal.paragraph_format.space_after = Pt(template["space_after"])
+    normal.paragraph_format.line_spacing = 1.0
+
+    for style_name in ("Heading 1", "Heading 2"):
+        style = styles[style_name]
+        style.font.name = template["font"]
+        style.font.bold = True
+        style.font.size = Pt(template["heading_size"] if style_name == "Heading 1" else template["body_size"])
+        style.font.color.rgb = template["heading_color"]
+        style.paragraph_format.space_before = Pt(8)
+        style.paragraph_format.space_after = Pt(3)
+
+
+def _write_tailored_content(document, tailored: Dict[str, Any], template: Dict[str, Any] | None = None) -> None:
+    template = template or TEMPLATE_SPECS["ats_classic"]
     if tailored.get("summary"):
-        document.add_heading("Summary", level=1)
+        _add_section_heading(document, "Professional Summary", template)
         _safe_add_paragraph(document, tailored["summary"])
+
+    role_keywords = tailored.get("role_keywords") or []
+    if role_keywords:
+        _add_section_heading(document, "Relevant Focus", template)
+        _safe_add_paragraph(document, " | ".join(map(_safe_text, role_keywords)))
 
     skills = tailored.get("skills") or []
     if skills:
-        document.add_heading("Skills", level=1)
-        _safe_add_paragraph(document, ", ".join(map(_safe_text, skills)))
+        _add_section_heading(document, "Core Skills", template)
+        _safe_add_paragraph(document, " | ".join(map(_safe_text, skills)))
+
+    languages = tailored.get("languages") or []
+    if languages:
+        _add_section_heading(document, "Languages", template)
+        _safe_add_paragraph(document, " | ".join(map(_safe_text, languages)))
 
     experience = tailored.get("experience") or []
     if experience:
-        document.add_heading("Experience", level=1)
+        _add_section_heading(document, "Professional Experience", template)
         for item in experience:
             title = " - ".join(str(item.get(key)) for key in ("role", "company") if item.get(key))
             if title:
-                _safe_add_paragraph(document, title, style="List Bullet")
+                paragraph = _safe_add_paragraph(document)
+                run = paragraph.add_run(_safe_text(title))
+                run.bold = True
             meta = " | ".join(_safe_text(item.get(key)) for key in ("duration", "location") if item.get(key))
             if meta:
                 _safe_add_paragraph(document, meta)
@@ -245,8 +412,18 @@ def _write_tailored_content(document, tailored: Dict[str, Any]) -> None:
 
     education = tailored.get("education") or []
     if education:
-        document.add_heading("Education", level=1)
+        _add_section_heading(document, "Education", template)
         for item in education:
             line = " - ".join(_safe_text(item.get(key)) for key in ("degree", "school", "year") if item.get(key))
             if line:
                 _safe_add_paragraph(document, line, style="List Bullet")
+
+
+def _add_section_heading(document: Any, text: str, template: Dict[str, Any]) -> Any:
+    paragraph = document.add_heading("", level=1)
+    run = paragraph.add_run(_safe_text(text))
+    run.bold = True
+    run.font.name = template["font"]
+    run.font.size = Pt(template["heading_size"])
+    run.font.color.rgb = template["heading_color"]
+    return paragraph

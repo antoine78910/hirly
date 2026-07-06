@@ -40,9 +40,13 @@ class JSearchProvider:
         if date_posted:
             base_params["date_posted"] = date_posted
 
-        max_pages = max(1, min(int(query.max_pages or self._env_int("JSEARCH_MAX_PAGES", 3)), 10))
-        page_size = max(1, min(int(query.page_size or self._env_int("JSEARCH_PAGE_SIZE", query.limit)), 100))
-        target_count = max(query.limit, min(page_size * max_pages, 300))
+        # Default to a larger per-call yield (bundled via a single num_pages=max_pages
+        # request, see the loop below) so each JSearch API call surfaces more usable
+        # jobs. Kept below the hard clamp ceiling (10 / 100) to avoid pushing a single
+        # HTTP call past the feed's synchronous refresh timeout budget.
+        max_pages = max(1, min(int(query.max_pages or self._env_int("JSEARCH_MAX_PAGES", 5)), 10))
+        page_size = max(1, min(int(query.page_size or self._env_int("JSEARCH_PAGE_SIZE", max(query.limit, 50))), 100))
+        target_count = max(query.limit, min(page_size * max_pages, 400))
 
         payloads: List[Any] = []
         rows: List[Dict[str, Any]] = []
