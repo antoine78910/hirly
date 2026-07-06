@@ -50,6 +50,7 @@ from browser_submission.matching import suggested_profile_key as browser_suggest
 from db import create_database_adapter
 from db.supabase_adapter import count_supabase_table, test_supabase_connection
 from influencer_store import create_influencer, get_influencer, list_influencers, update_influencer
+from creator_social_service import build_dashboard, refresh_all_creators, refresh_creator
 from creator_invite_store import (
     INVITE_TYPE_CREATOR,
     INVITE_TYPE_DEMO,
@@ -8422,6 +8423,40 @@ async def admin_list_creators(admin: User = Depends(require_admin_user)):
         reverse=True,
     )
     return {"creators": rows}
+
+
+@api_router.get("/admin/creator-social")
+async def admin_creator_social_dashboard(
+    admin: User = Depends(require_admin_user),
+    days: int = Query(14, ge=7, le=90),
+    creator_id: Optional[str] = Query(None),
+):
+    creator_ids = [creator_id] if creator_id else None
+    return build_dashboard(days=days, creator_ids=creator_ids)
+
+
+@api_router.post("/admin/creator-social/refresh")
+async def admin_creator_social_refresh(
+    admin: User = Depends(require_admin_user),
+    creator_id: Optional[str] = Query(None),
+):
+    if creator_id:
+        try:
+            snapshot = refresh_creator(creator_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Could not refresh creator: {exc}") from exc
+        return {"ok": True, "snapshot": snapshot, "dashboard": build_dashboard(creator_ids=[creator_id])}
+
+    snapshots = refresh_all_creators()
+    errors = [row for row in snapshots if row.get("error")]
+    return {
+        "ok": not errors or len(errors) < len(snapshots),
+        "snapshots": snapshots,
+        "dashboard": build_dashboard(),
+        "errors": errors,
+    }
 
 
 @api_router.get("/admin/training/analytics")
