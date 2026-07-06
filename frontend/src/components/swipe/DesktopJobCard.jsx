@@ -19,6 +19,7 @@ import {
   formatJobSalaryLabel,
 } from "../../lib/jobDisplayUtils";
 import JobRomeProfile from "./JobRomeProfile";
+import JobOfferDetails from "./JobOfferDetails";
 import { translateJobTitle, translateLocationLabel } from "../../lib/localizedDisplay";
 
 function formatPosted(iso, t) {
@@ -146,6 +147,8 @@ export default function DesktopJobCard({ job, theme, t, lang }) {
             ))}
           </div>
         ) : null}
+
+        <JobOfferDetails job={job} t={t} lang={lang} theme={theme} />
 
         <div className="space-y-4">
           {about ? (

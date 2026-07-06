@@ -1593,7 +1593,8 @@ def _billing_credit_limit(
     if normalized_source == "onboarding":
         return {"monthly": 80, "quarterly": 200}.get(normalized_plan, 80)
     if normalized_interval == "weekly":
-        return {"basic": 15, "pro": 35, "ultra": 100}.get(normalized_plan, 35)
+        monthly_limit = _PLAN_CREDIT_LIMITS.get(normalized_plan, 200)
+        return max(1, monthly_limit // 4)
     return _PLAN_CREDIT_LIMITS.get(normalized_plan, 200)
 
 
@@ -1884,8 +1885,8 @@ async def create_billing_checkout_session(
         success_url = _checkout_return_url(app_url, return_path, "success")
         cancel_url = _checkout_return_url(app_url, return_path, "cancelled")
     else:
-        success_url = f"{app_url}/credits?checkout=success"
-        cancel_url = f"{app_url}/credits?checkout=cancelled"
+        success_url = _checkout_return_url(app_url, "/swipe", "success")
+        cancel_url = _checkout_return_url(app_url, "/swipe", "cancelled")
     base_metadata = {
         "user_id": user.user_id,
         "plan": billing_plan,
@@ -5524,14 +5525,20 @@ async def get_feed(
         has_showable_cards = (
             local_inventory_count > 0 if explicit_local_intent else db_good_count > 0
         )
+        explicit_local_empty_inventory = bool(explicit_local_intent and local_inventory_count == 0)
+        if explicit_local_empty_inventory and not force_provider_refresh:
+            explicit_local_sync_seconds = max(1, min(_env_int("JOBS_FEED_EXPLICIT_LOCAL_SYNC_SECONDS", 5), 15))
+            sync_refresh_total_seconds = explicit_local_sync_seconds
+            sync_refresh_max_seconds = explicit_local_sync_seconds
+            sync_refresh_attempts_per_city = 1
+            request_trace["explicit_local_quick_sync_seconds"] = explicit_local_sync_seconds
         needs_provider_refresh = (
             sync_refresh_enabled
             and not cooldown_active
             and ((force_provider_refresh and explicit_local_intent) or inventory_is_weak)
         )
-        # Blocking (sync) refresh only when there is nothing to show at all or the
-        # client explicitly forced it. Otherwise serve DB cards instantly and
-        # refresh in the background.
+        # Blocking (sync) refresh when worldwide DB is empty, client forced refresh,
+        # or explicit local search has zero local inventory (quick API lookup, ~5s cap).
         should_refresh = (
             not prefetch
             and needs_provider_refresh
@@ -5539,12 +5546,14 @@ async def get_feed(
             and (
                 (force_provider_refresh and explicit_local_intent)
                 or (not has_showable_cards and not explicit_local_intent)
+                or explicit_local_empty_inventory
             )
         )
         background_refresh_wanted = (
             needs_provider_refresh
             and not should_refresh
             and not force_provider_refresh
+            and not explicit_local_empty_inventory
             and _env_bool("JOBS_FEED_BACKGROUND_REFRESH_ENABLED", True)
         )
         if prefetch and explicit_local_intent and local_inventory_count < requested_limit and not has_showable_cards:
@@ -5589,6 +5598,10 @@ async def get_feed(
                 max_refresh_locations = max(1, min(_env_int("JOBS_FEED_LOCAL_DISCOVERY_MAX_CITIES", 3), 4))
             if is_worldwide_radius:
                 return [None]
+            # Empty local inventory: query the user's city first (fast path for Avignon, etc.).
+            if explicit_local_empty_inventory and selected_locations and not force_provider_refresh:
+                origin_cap = max(1, min(_env_int("JOBS_FEED_EXPLICIT_LOCAL_SYNC_MAX_CITIES", 1), 2))
+                return selected_locations[:origin_cap]
             if explicit_local_intent and location_context.get("expanded_places"):
                 def _provider_place_sort_key(place: Dict[str, Any]) -> tuple:
                     population = int(place.get("population") or 0)
@@ -5774,6 +5787,7 @@ async def get_feed(
             remaining_locations = refresh_locations[len(refresh_results):]
             if (
                 _env_bool("JOBS_FEED_BACKGROUND_REFRESH_ENABLED", True)
+                and not explicit_local_empty_inventory
                 and (remaining_locations or sync_imported_total == 0)
             ):
                 continuation_signature = (

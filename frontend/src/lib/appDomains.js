@@ -49,7 +49,7 @@ const MARKETING_ROUTE_PREFIXES = [
   "/training",
 ];
 
-const SHARED_ROUTE_PREFIXES = ["/auth/callback"];
+const SHARED_ROUTE_PREFIXES = ["/auth/callback", "/terms", "/privacy"];
 
 export function currentHostname() {
   if (typeof window === "undefined") return "";

@@ -495,6 +495,13 @@ class FranceTravailProvider:
         requirements = self._requirements(row)
         city = str(lieu.get("commune") or "").strip()
         region = str(lieu.get("libelle") or "").strip()
+        salary_min = self._salary(salaire.get("salaireMin"))
+        salary_max = self._salary(salaire.get("salaireMax"))
+        if salary_min is None and salary_max is None:
+            parsed_min, parsed_max = self._salary_range_from_libelle(salaire.get("libelle"))
+            salary_min = parsed_min
+            salary_max = parsed_max
+        offer_details = self._build_offer_details(row)
 
         job_doc = {
             "job_id": self._internal_job_id(str(external_id)),
@@ -506,8 +513,8 @@ class FranceTravailProvider:
             "region": region or None,
             "country_code": "fr",
             "remote": self._remote(row, description),
-            "salary_min": self._salary(salaire.get("salaireMin") or salaire.get("complement1")),
-            "salary_max": self._salary(salaire.get("salaireMax") or salaire.get("complement2")),
+            "salary_min": salary_min,
+            "salary_max": salary_max,
             "currency": "EUR",
             "description": description,
             "requirements": requirements,
@@ -543,6 +550,12 @@ class FranceTravailProvider:
             job_doc["rome_code"] = row.get("romeCode")
         if row.get("romeLibelle"):
             job_doc["rome_label"] = row.get("romeLibelle")
+        if salaire.get("libelle"):
+            job_doc["salary_label"] = str(salaire.get("libelle")).strip()
+        if salaire.get("commentaire"):
+            job_doc["salary_comment"] = str(salaire.get("commentaire")).strip()
+        if offer_details:
+            job_doc["offer_details"] = offer_details
         return enrich_job_employment_kind(job_doc)
 
     def _query_string(self, query: JobSearchQuery) -> str:
@@ -714,6 +727,77 @@ class FranceTravailProvider:
             if value:
                 parts.append(str(value))
         return "\n".join(parts)
+
+    def _build_offer_details(self, row: Dict[str, Any]) -> List[Dict[str, Any]]:
+        details: List[Dict[str, Any]] = []
+
+        def add_value(key: str, value: Any) -> None:
+            text = str(value or "").strip()
+            if text:
+                details.append({"key": key, "value": text})
+
+        def add_items(key: str, items: List[str]) -> None:
+            cleaned = [str(item).strip() for item in items if str(item).strip()]
+            if cleaned:
+                details.append({"key": key, "items": cleaned})
+
+        contract_label = row.get("typeContratLibelle") or row.get("typeContrat")
+        if contract_label:
+            add_value("contract_type", contract_label)
+        nature_label = row.get("natureContratLibelle") or row.get("natureContrat")
+        if nature_label:
+            add_value("contract_nature", nature_label)
+        work_schedule = row.get("dureeTravailLibelle") or row.get("dureeTravailLibelleConverti")
+        if work_schedule:
+            add_value("work_schedule", work_schedule)
+        if row.get("experienceLibelle"):
+            add_value("experience", row.get("experienceLibelle"))
+
+        salaire = row.get("salaire") if isinstance(row.get("salaire"), dict) else {}
+        if salaire.get("libelle"):
+            add_value("salary", salaire.get("libelle"))
+        if salaire.get("commentaire"):
+            add_value("salary_note", salaire.get("commentaire"))
+        for complement_key, detail_key in (
+            ("complement1", "salary_complement_1"),
+            ("complement2", "salary_complement_2"),
+        ):
+            complement = salaire.get(complement_key)
+            if complement:
+                add_value(detail_key, complement)
+        complements = salaire.get("listeComplements") or []
+        if isinstance(complements, list):
+            benefit_labels = [
+                str(item.get("libelle")).strip()
+                for item in complements
+                if isinstance(item, dict) and str(item.get("libelle") or "").strip()
+            ]
+            add_items("benefits", benefit_labels)
+
+        if row.get("deplacementLibelle"):
+            add_value("travel", row.get("deplacementLibelle"))
+        if row.get("complementExercice"):
+            add_value("work_context", row.get("complementExercice"))
+        contexte = row.get("contexteTravail") if isinstance(row.get("contexteTravail"), dict) else {}
+        if contexte.get("conditionsExercice"):
+            add_value("work_conditions", contexte.get("conditionsExercice"))
+
+        return details
+
+    def _salary_range_from_libelle(self, libelle: Any) -> Tuple[Optional[int], Optional[int]]:
+        text = str(libelle or "").strip()
+        if not text:
+            return None, None
+        numbers = [
+            float(match.replace(",", "."))
+            for match in re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:€|euros?)", text, flags=re.IGNORECASE)
+        ]
+        if len(numbers) >= 2:
+            return int(numbers[0]), int(numbers[1])
+        if len(numbers) == 1:
+            value = int(numbers[0])
+            return value, value
+        return None, None
 
     def _requirements(self, row: Dict[str, Any]) -> List[str]:
         out: List[str] = []

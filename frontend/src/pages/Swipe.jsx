@@ -37,6 +37,7 @@ import { enrichLocationData } from "../lib/locationSearch";
 import { hasActiveFilters, mergeFilters, clearMenuFilters } from "../lib/jobFilters";
 import { reconcileFiltersForUser } from "../lib/contractTypeMapping";
 import { useAppLocale } from "../context/AppLocaleContext";
+import DesktopCreditsPill from "../components/desktop/DesktopCreditsPill";
 import { BILLING_UPDATED } from "../lib/billingEvents";
 import {
   formatPostedDate,
@@ -45,24 +46,24 @@ import {
 } from "../lib/appUi";
 import { getJobBadgeItems, getJobDisplayContent, formatJobSalaryLabel } from "../lib/jobDisplayUtils";
 import JobRomeProfile from "../components/swipe/JobRomeProfile";
+import JobOfferDetails from "../components/swipe/JobOfferDetails";
 import { translateJobTitle, translateLocationLabel, translateRoleLabel } from "../lib/localizedDisplay";
 
 import { preloadCompanyLogos } from "../lib/companyLogos";
+import {
+  buildSwipeFeedCacheKey,
+  clearSwipeFeedCache,
+  getSwipeFeedCacheSnapshot,
+  isSwipeFeedCacheFresh,
+  readSwipeFeedCache,
+  writeSwipeFeedCache,
+} from "../lib/swipeFeedCache";
 
 const DEFAULT_SEARCH_RADIUS = "50km";
 const FEED_BATCH_SIZE = 12;
 const FEED_PREFETCH_THRESHOLD = 7;
 const FILTERS_STORAGE_KEY = "swiipr.jobs.filters.v2";
-
-// Module-level cache — survives React navigation (component unmount/remount)
-// but is cleared on a full page reload. Lets us show the last feed instantly.
-const _swipeCache = {
-  jobs: /** @type {any[]|null} */ (null),
-  meta: null,
-  target: null,
-  targetLocationData: null,
-  filters: null,
-};
+const swipeFeedCacheSnapshot = getSwipeFeedCacheSnapshot();
 
 const readPersistedFilters = () => {
   if (typeof window === "undefined") return null;
@@ -93,14 +94,6 @@ const filtersForTargetSearch = (f) => {
     locationsData: [],
     locationData: null,
   };
-};
-
-const clearSwipeFeedCache = () => {
-  _swipeCache.jobs = null;
-  _swipeCache.meta = null;
-  _swipeCache.target = null;
-  _swipeCache.targetLocationData = null;
-  _swipeCache.filters = null;
 };
 
 const clearPersistedFilters = () => {
@@ -248,6 +241,7 @@ function CardFront({ job, onReport, onShare, actionsEnabled, t, lang }) {
   const badges = getJobBadgeItems(job, { lang });
   const title = translateJobTitle(job.title, lang);
   const location = translateLocationLabel(job.location, lang) || t("swipe.locationNotSpecified");
+  const salaryLabel = formatJobSalaryLabel(job, { lang });
 
   return (
     <div className="backface-hidden absolute inset-0 flex flex-col overflow-hidden rounded-[28px] border border-sprout-border bg-sprout-surface">
@@ -307,6 +301,12 @@ function CardFront({ job, onReport, onShare, actionsEnabled, t, lang }) {
           <MapPin className="h-4 w-4 text-sprout-mint" strokeWidth={1.9} />
           <span>{location}</span>
         </div>
+        {salaryLabel ? (
+          <div className="flex items-center gap-2">
+            <DollarSign className="h-4 w-4 text-sprout-mint" strokeWidth={1.9} />
+            <span className="text-center">{salaryLabel}</span>
+          </div>
+        ) : null}
         <div className="flex items-center gap-2">
           <Calendar className="h-4 w-4 text-sprout-mint" strokeWidth={1.9} />
           <span>{formatPostedDate(t, job.posted_at) || t("swipe.postedRecently")}</span>
@@ -400,6 +400,8 @@ function CardBack({ job, t, lang }) {
         ) : null}
 
         <div className="border-t border-sprout-border" />
+
+        <JobOfferDetails job={job} t={t} lang={lang} compact />
 
         <div className="space-y-3">
           {about ? (
@@ -569,19 +571,23 @@ export default function Swipe() {
   const { t, lang } = useAppLocale();
   const { loading: authLoading, user } = useAuth();
   const [demoWelcomeOpen, setDemoWelcomeOpen] = useState(false);
-  const [jobs, setJobs] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [jobs, setJobs] = useState(() => swipeFeedCacheSnapshot.jobs);
+  const [loading, setLoading] = useState(() => !swipeFeedCacheSnapshot.jobs.length);
   const [appLoading, setAppLoading] = useState(false);
   const [appliedToday, setAppliedToday] = useState(0);
-  const [target, setTarget] = useState({ role: "", location: "" });
-  const [targetLocationData, setTargetLocationData] = useState(null);
+  const [target, setTarget] = useState(() => swipeFeedCacheSnapshot.target || { role: "", location: "" });
+  const [targetLocationData, setTargetLocationData] = useState(() => swipeFeedCacheSnapshot.targetLocationData);
   const [targetSaving, setTargetSaving] = useState(false);
   const [targetSheetOpen, setTargetSheetOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [desktopFiltersOpen, setDesktopFiltersOpen] = useState(false);
-  const [filters, setFilters] = useState(() => mergeFilters(readPersistedFilters()));
+  const [filters, setFilters] = useState(() => (
+    swipeFeedCacheSnapshot.filters
+      ? mergeFilters(swipeFeedCacheSnapshot.filters)
+      : mergeFilters(readPersistedFilters())
+  ));
   const [totalCount, setTotalCount] = useState(null);
-  const [feedMeta, setFeedMeta] = useState(null);
+  const [feedMeta, setFeedMeta] = useState(() => swipeFeedCacheSnapshot.meta);
   const [feedError, setFeedError] = useState("");
   const [lastFeedDebug, setLastFeedDebug] = useState(null);
   const [reportJob, setReportJob] = useState(null);
@@ -590,12 +596,12 @@ export default function Swipe() {
   const fetchingRef = useRef(false);
   const filtersRef = useRef(filters);
   const profileRef = useRef(null);
-  const targetRef = useRef(target);
-  const targetLocationDataRef = useRef(targetLocationData);
+  const targetRef = useRef(swipeFeedCacheSnapshot.target || { role: "", location: "" });
+  const targetLocationDataRef = useRef(swipeFeedCacheSnapshot.targetLocationData);
   const pendingFiltersRef = useRef(undefined);
   const feedAbortRef = useRef(null);
   const feedRequestIdRef = useRef(0);
-  const jobsRef = useRef([]);
+  const jobsRef = useRef(swipeFeedCacheSnapshot.jobs);
   const viewedJobIdsRef = useRef(new Set());
   const handleSwipeRef = useRef(null);
   const backgroundPollTimerRef = useRef(null);
@@ -605,6 +611,25 @@ export default function Swipe() {
   useEffect(() => {
     jobsRef.current = jobs;
   }, [jobs]);
+
+  useEffect(() => {
+    if (authLoading || isDemoAccountEnabled() || isFinanceDemoEnabled()) return;
+    if (!jobs.length) return;
+    writeSwipeFeedCache({
+      jobs,
+      meta: feedMeta,
+      target: targetRef.current,
+      targetLocationData: targetLocationDataRef.current,
+      filters: filtersRef.current,
+      cacheKey: buildSwipeFeedCacheKey({
+        userId: user?.user_id,
+        target: targetRef.current,
+        targetLocationData: targetLocationDataRef.current,
+        filters: filtersRef.current,
+      }),
+      userId: user?.user_id,
+    });
+  }, [authLoading, jobs, feedMeta, user?.user_id]);
 
   useEffect(() => {
     targetRef.current = target;
@@ -885,12 +910,20 @@ export default function Swipe() {
         const merged = [...base];
         safeJobs.forEach((j) => { if (!seen.has(j.job_id)) merged.push(j); });
         preloadCompanyLogos(merged.slice(0, 6));
-        // Persist to module-level cache for instant restore on next navigation
-        _swipeCache.jobs = merged;
-        _swipeCache.meta = data;
-        _swipeCache.target = targetRef.current;
-        _swipeCache.targetLocationData = targetLocationDataRef.current;
-        _swipeCache.filters = filtersRef.current;
+        writeSwipeFeedCache({
+          jobs: merged,
+          meta: data,
+          target: targetRef.current,
+          targetLocationData: targetLocationDataRef.current,
+          filters: filtersRef.current,
+          cacheKey: buildSwipeFeedCacheKey({
+            userId: user?.user_id,
+            target: targetRef.current,
+            targetLocationData: targetLocationDataRef.current,
+            filters: filtersRef.current,
+          }),
+          userId: user?.user_id,
+        });
         return merged;
       });
       // Backend started a provider refresh in the background: silently poll a
@@ -976,7 +1009,7 @@ export default function Swipe() {
         if (feedAbortRef.current === controller) feedAbortRef.current = null;
       }
     }
-  }, [t]);
+  }, [t, user?.user_id]);
 
   loadFeedRef.current = loadFeed;
 
@@ -1050,32 +1083,10 @@ export default function Swipe() {
       const isDemo = isDemoAccountEnabled();
       const isFinanceDemo = isFinanceDemoEnabled() && isDemo;
 
-      // ── Instant restore from cache (only for regular users) ──────────────
-      if (!isDemo && !isFinanceDemo && _swipeCache.jobs?.length) {
-        setJobs(_swipeCache.jobs);
-        jobsRef.current = _swipeCache.jobs;
-        setFeedMeta(_swipeCache.meta);
-        if (_swipeCache.target) {
-          setTarget(_swipeCache.target);
-          targetRef.current = _swipeCache.target;
-        }
-        if (_swipeCache.targetLocationData !== undefined) {
-          setTargetLocationData(_swipeCache.targetLocationData);
-          targetLocationDataRef.current = _swipeCache.targetLocationData;
-        }
-        if (_swipeCache.filters) {
-          filtersRef.current = _swipeCache.filters;
-          setFilters(_swipeCache.filters);
-        }
-        setLoading(false);
-      }
-
-      // ── Kick off billing fetch immediately (does not block anything) ──────
       api.get("/billing/status")
         .then(({ data }) => setBilling(data))
         .catch(() => setBilling({ is_premium: false }));
 
-      // ── Load profile (needed to derive the correct search target) ─────────
       await loadProfile();
 
       if (isFinanceDemo) {
@@ -1096,15 +1107,43 @@ export default function Swipe() {
       filtersRef.current = mergedFilters;
       setFilters(mergedFilters);
       savePersistedFilters(mergedFilters);
-      // If we restored from cache, loadFeed will run as a silent background
-      // refresh (no loading spinner) thanks to the silentRefresh logic.
-      const reason = _swipeCache.jobs?.length
-        ? "background_refresh_cache"
-        : (readPersistedFilters() ? "initial_persisted_filters" : "initial_profile_defaults");
+
+      const cacheKey = buildSwipeFeedCacheKey({
+        userId: user?.user_id,
+        target: targetRef.current,
+        targetLocationData: targetLocationDataRef.current,
+        filters: mergedFilters,
+      });
+      const cached = readSwipeFeedCache({ userId: user?.user_id, cacheKey });
+
+      if (cached?.jobs?.length) {
+        setJobs(cached.jobs);
+        jobsRef.current = cached.jobs;
+        setFeedMeta(cached.meta);
+        setLoading(false);
+        preloadCompanyLogos(cached.jobs.slice(0, 6));
+        if (isSwipeFeedCacheFresh(cached.savedAt)) {
+          return;
+        }
+        window.setTimeout(() => {
+          loadFeed(true, mergedFilters, "background_refresh_cache");
+        }, 1200);
+        return;
+      }
+
+      if (jobsRef.current.length) {
+        clearSwipeFeedCache();
+        setJobs([]);
+        jobsRef.current = [];
+      }
+
+      const reason = readPersistedFilters()
+        ? "initial_persisted_filters"
+        : "initial_profile_defaults";
       loadFeed(true, mergedFilters, reason);
     };
     bootstrap();
-  }, [authLoading, loadProfile, loadFeed, applyFinanceDemoTarget]);
+  }, [authLoading, loadProfile, loadFeed, applyFinanceDemoTarget, user?.user_id]);
 
   useEffect(() => {
     const onBillingUpdated = (event) => {
@@ -1385,12 +1424,7 @@ export default function Swipe() {
         data-testid="swipe-header"
       >
         <div className="flex shrink-0 items-center gap-0.5">
-          <div className="flex items-center gap-0.5 px-0.5">
-            <Zap className="h-4 w-4 text-sprout-mint sm:h-5 sm:w-5" strokeWidth={2} fill="rgb(167,139,250)" />
-            <span className="text-xs font-semibold text-sprout-mint sm:text-sm" data-testid="applied-today">
-              {appliedToday}
-            </span>
-          </div>
+          <DesktopCreditsPill compact forceOpenUpgrade className="mr-0.5" />
           <button
             onClick={handleUndo}
             className="grid h-8 w-8 place-items-center rounded-full hover:bg-sprout-surface sm:h-9 sm:w-9"

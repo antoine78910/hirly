@@ -22,10 +22,11 @@ export function UpgradeModalProvider({ children }) {
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    const upgradeStatus = params.get("upgrade");
+    const upgradeStatus = params.get("upgrade") || params.get("checkout");
     if (!upgradeStatus) return;
 
     params.delete("upgrade");
+    params.delete("checkout");
     const nextSearch = params.toString();
     navigate(
       { pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : "" },

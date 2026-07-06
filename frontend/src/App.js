@@ -4,6 +4,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/context/AuthContext";
 import { UpgradeModalProvider } from "@/context/UpgradeModalContext";
 import { AppLocaleProvider } from "@/context/AppLocaleContext";
+import Terms from "@/pages/legal/Terms";
+import Privacy from "@/pages/legal/Privacy";
 import Landing from "@/pages/Landing";
 import Blog from "@/pages/seo/Blog";
 import BlogPost from "@/pages/seo/BlogPost";
@@ -24,7 +26,6 @@ import Improve from "@/pages/Improve";
 import History from "@/pages/History";
 import Review from "@/pages/Review";
 import Feedback from "@/pages/Feedback";
-import Credits from "@/pages/Credits";
 import Billing from "@/pages/Billing";
 import Referral from "@/pages/Referral";
 import AuthCallback from "@/pages/AuthCallback";
@@ -86,7 +87,8 @@ function shouldShowBottomNav(pathname) {
   if (pathname.startsWith("/blog") || pathname.startsWith("/compare") || pathname.startsWith("/for/")) return false;
   if (pathname === "/admin" || pathname.startsWith("/admin/")) return false;
   if (pathname === "/onboarding" || pathname.startsWith("/onboarding/")) return false;
-  if (pathname === "/credits" || pathname === "/billing" || pathname === "/referral") return false;
+  if (pathname === "/terms" || pathname === "/privacy") return false;
+  if (pathname === "/billing" || pathname === "/referral") return false;
   if (isTrainingRoutePath(pathname)) return false;
   return true;
 }
@@ -97,6 +99,16 @@ function AdminPage({ children }) {
       <AdminRoute>{children}</AdminRoute>
     </AppRoute>
   );
+}
+
+function CreditsRedirect() {
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  const checkout = params.get("checkout");
+  if (checkout === "success" || checkout === "cancelled") {
+    return <Navigate to={`/swipe?upgrade=${checkout}`} replace />;
+  }
+  return <Navigate to="/swipe" replace state={location.state} />;
 }
 
 function AppRouter() {
@@ -133,6 +145,8 @@ function AppRouter() {
         <Route path="/compare/:slug" element={<Compare />} />
         <Route path="/for/:slug" element={<ForProfile />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/terms" element={<Terms />} />
+        <Route path="/privacy" element={<Privacy />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/invite/:code" element={<InviteLanding />} />
         <Route path="/admin" element={<AdminPage><Navigate to="/admin/overview" replace /></AdminPage>} />
@@ -158,7 +172,7 @@ function AppRouter() {
         <Route path="/tracker" element={<AppRoute requireProfile><Tracker /></AppRoute>} />
         <Route path="/emails" element={<AppRoute requireProfile><Emails /></AppRoute>} />
         <Route path="/profile" element={<AppRoute><Profile /></AppRoute>} />
-        <Route path="/credits" element={<AppRoute><Credits /></AppRoute>} />
+        <Route path="/credits" element={<CreditsRedirect />} />
         <Route path="/billing" element={<AppRoute><Billing /></AppRoute>} />
         <Route path="/referral" element={<AppRoute><Referral /></AppRoute>} />
         <Route path="/settings" element={<AppRoute><Settings /></AppRoute>} />

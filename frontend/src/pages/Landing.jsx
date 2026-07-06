@@ -6,13 +6,14 @@ import { useEffect } from "react";
 import Logo from "../components/Logo";
 import { BRAND, supportMailto } from "../lib/brand";
 import { startGoogleLogin } from "../lib/auth";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { trackEvent } from "../lib/analytics";
 import { preloadOnboardingIntroImages } from "../lib/onboardingImagePreload";
 import { useAppLocale } from "../context/AppLocaleContext";
 import LandingFaq from "../components/landing/LandingFaq";
 import { goToApp } from "../lib/appDomains";
+import { PRIVACY_PATH, TERMS_PATH } from "../lib/legalPaths";
 
 export default function Landing() {
   const navigate = useNavigate();
@@ -475,7 +476,13 @@ export default function Landing() {
           </div>
           <div className="border-t border-zinc-100 pt-6 text-sm text-zinc-400">
             <p>© {new Date().getFullYear()} {BRAND.NAME}</p>
-            <p className="mt-2">
+            <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+              <Link to={TERMS_PATH} className="hover:text-zinc-600 transition-colors">
+                {lang === "fr" ? "Conditions d'utilisation" : "Terms of Use"}
+              </Link>
+              <Link to={PRIVACY_PATH} className="hover:text-zinc-600 transition-colors">
+                {lang === "fr" ? "Politique de confidentialité" : "Privacy Policy"}
+              </Link>
               <a href={supportMailto()} className="hover:text-zinc-600 transition-colors">
                 {BRAND.SUPPORT_EMAIL}
               </a>

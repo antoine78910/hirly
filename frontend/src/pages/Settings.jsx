@@ -131,8 +131,8 @@ export default function Settings() {
       </Section>
 
       <Section label={t("settings.privacyData")} testId="settings-security">
-        <Row icon={ShieldCheck} label={t("settings.privacyPolicy")}  onClick={() => openExternal("/privacy")} testId="settings-privacy" />
-        <Row icon={FileText}    label={t("settings.termsOfUse")}     onClick={() => openExternal("/terms")}   testId="settings-terms" />
+        <Row icon={ShieldCheck} label={t("settings.privacyPolicy")}  onClick={() => navigate("/privacy")} testId="settings-privacy" />
+        <Row icon={FileText}    label={t("settings.termsOfUse")}     onClick={() => navigate("/terms")}   testId="settings-terms" />
       </Section>
 
       <Section label={t("settings.planHelp")} testId="settings-support">

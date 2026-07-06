@@ -208,6 +208,53 @@ def test_france_travail_normalization_maps_core_fields():
     assert "francetravail.fr" in job["external_url"]
 
 
+def test_france_travail_normalization_extracts_offer_details_and_salary():
+    provider = FranceTravailProvider(client_id="PAR_test", client_secret="secret")
+    job = provider.normalize_job(
+        {
+            "id": "048SAL1",
+            "intitule": "Commercial B2B",
+            "description": "Développement commercial.",
+            "typeContrat": "CDI",
+            "typeContratLibelle": "CDI",
+            "natureContrat": "E1",
+            "natureContratLibelle": "Contrat travail",
+            "dureeTravailLibelle": "39H/semaine Travail en journée",
+            "deplacementLibelle": "Déplacements : Fréquents",
+            "entreprise": {"nom": "Acme SAS"},
+            "lieuTravail": {"libelle": "Lyon (69)", "commune": "Lyon"},
+            "salaire": {
+                "libelle": "Salaire brut : Annuel de 26400.0 Euros à 45000.0 Euros sur 12 mois",
+                "complement1": "26400€ à 45000€ / An ( fixe + variable )",
+                "listeComplements": [
+                    {"code": "TEL", "libelle": "Téléphone mobile"},
+                    {"code": "PC", "libelle": "Ordinateur portable"},
+                    {"code": "TR", "libelle": "Titres restaurant / Prime de panier"},
+                    {"code": "MUT", "libelle": "Complémentaire santé"},
+                ],
+            },
+        },
+        JobSearchQuery(role="commercial", location="Lyon, France", country="fr", language="fr"),
+        "2026-07-03T10:00:00+00:00",
+    )
+
+    assert job is not None
+    assert job["salary_min"] == 26400
+    assert job["salary_max"] == 45000
+    assert "Annuel de 26400.0 Euros" in job["salary_label"]
+    details = {item["key"]: item for item in job["offer_details"]}
+    assert details["contract_type"]["value"] == "CDI"
+    assert details["contract_nature"]["value"] == "Contrat travail"
+    assert "39H" in details["work_schedule"]["value"]
+    assert details["benefits"]["items"] == [
+        "Téléphone mobile",
+        "Ordinateur portable",
+        "Titres restaurant / Prime de panier",
+        "Complémentaire santé",
+    ]
+    assert details["travel"]["value"] == "Déplacements : Fréquents"
+
+
 def test_france_travail_normalization_uses_direct_apply_url_when_available():
     """When the recruiter provided contact.urlPostulation to their own ATS,
     the job should be routed there (and auto-apply enabled) instead of being

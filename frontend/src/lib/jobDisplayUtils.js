@@ -159,7 +159,16 @@ export function getJobBadgeItems(job, { lang = "en" } = {}) {
 export function formatJobSalaryLabel(job, { lang = "en" } = {}) {
   const min = job?.salary_min;
   const max = job?.salary_max;
-  if ((min == null || min === "") && (max == null || max === "")) return "";
+  if ((min == null || min === "") && (max == null || max === "")) {
+    const salaryLabel = stripHtml(job?.salary_label || "");
+    if (salaryLabel) return salaryLabel;
+    const complement = [
+      job?.offer_details?.find?.((item) => item?.key === "salary_complement_1")?.value,
+      job?.offer_details?.find?.((item) => item?.key === "salary_complement_2")?.value,
+    ].filter(Boolean).join(" · ");
+    if (complement) return complement;
+    return "";
+  }
   const minNum = min != null && min !== "" ? Number(min) : null;
   const maxNum = max != null && max !== "" ? Number(max) : null;
   if (minNum != null && maxNum != null && minNum !== maxNum) {
@@ -167,6 +176,140 @@ export function formatJobSalaryLabel(job, { lang = "en" } = {}) {
   }
   const value = maxNum ?? minNum;
   return value != null ? formatMoney(value, lang) : "";
+}
+
+const OFFER_DETAIL_LABEL_KEYS = {
+  contract_type: "offerContractType",
+  contract_nature: "offerContractNature",
+  work_schedule: "offerWorkSchedule",
+  experience: "offerExperience",
+  salary: "offerSalary",
+  salary_note: "offerSalaryNote",
+  salary_complement_1: "offerSalaryNote",
+  salary_complement_2: "offerSalaryNote",
+  benefits: "offerBenefits",
+  travel: "offerTravel",
+  work_context: "offerWorkContext",
+  work_conditions: "offerWorkConditions",
+};
+
+const OFFER_DETAIL_ORDER = [
+  "contract_type",
+  "contract_nature",
+  "work_schedule",
+  "experience",
+  "salary",
+  "salary_note",
+  "salary_complement_1",
+  "salary_complement_2",
+  "benefits",
+  "travel",
+  "work_context",
+  "work_conditions",
+];
+
+function offerDetailLabel(t, key) {
+  const labelKey = OFFER_DETAIL_LABEL_KEYS[key];
+  return labelKey ? t(`swipe.${labelKey}`) : key;
+}
+
+function buildFallbackOfferDetailRows(job, { t, lang }) {
+  const rows = [];
+  const contract = job?.employment_type || job?.contract_type;
+  if (contract) {
+    rows.push({
+      key: "contract_type",
+      label: offerDetailLabel(t, "contract_type"),
+      value: humanizeLabel(contract, lang),
+    });
+  }
+  const salary = formatJobSalaryLabel(job, { lang });
+  if (salary) {
+    rows.push({
+      key: "salary",
+      label: offerDetailLabel(t, "salary"),
+      value: salary,
+    });
+  }
+  if (job?.salary_comment) {
+    rows.push({
+      key: "salary_note",
+      label: offerDetailLabel(t, "salary_note"),
+      value: stripHtml(job.salary_comment),
+    });
+  }
+  return rows;
+}
+
+/** Labeled offer rows (contract, salary, benefits, travel, etc.) when available. */
+export function getJobOfferDetailRows(job, { t, lang = "en" } = {}) {
+  if (!job || typeof t !== "function") return [];
+
+  const details = Array.isArray(job.offer_details) ? job.offer_details : [];
+  if (!details.length) {
+    return buildFallbackOfferDetailRows(job, { t, lang });
+  }
+
+  const rows = [];
+  const seen = new Set();
+  const complementValues = details
+    .filter((item) => item?.key === "salary_complement_1" || item?.key === "salary_complement_2")
+    .map((item) => stripHtml(item.value || ""))
+    .filter(Boolean);
+  if (complementValues.length) {
+    rows.push({
+      key: "salary_complements",
+      label: offerDetailLabel(t, "salary_note"),
+      items: complementValues.length > 1 ? complementValues : undefined,
+      value: complementValues.length === 1 ? complementValues[0] : undefined,
+    });
+    seen.add("salary_complement_1");
+    seen.add("salary_complement_2");
+  }
+
+  for (const key of OFFER_DETAIL_ORDER) {
+    const entry = details.find((item) => item?.key === key);
+    if (!entry || seen.has(key)) continue;
+    if (Array.isArray(entry.items) && entry.items.length) {
+      rows.push({
+        key,
+        label: offerDetailLabel(t, key),
+        items: entry.items.map((item) => stripHtml(item)).filter(Boolean),
+      });
+      seen.add(key);
+      continue;
+    }
+    const value = stripHtml(entry.value || "");
+    if (!value) continue;
+    rows.push({
+      key,
+      label: offerDetailLabel(t, key),
+      value,
+    });
+    seen.add(key);
+  }
+
+  for (const entry of details) {
+    const key = entry?.key;
+    if (!key || seen.has(key)) continue;
+    if (Array.isArray(entry.items) && entry.items.length) {
+      rows.push({
+        key,
+        label: offerDetailLabel(t, key),
+        items: entry.items.map((item) => stripHtml(item)).filter(Boolean),
+      });
+      continue;
+    }
+    const value = stripHtml(entry.value || "");
+    if (!value) continue;
+    rows.push({
+      key,
+      label: offerDetailLabel(t, key),
+      value,
+    });
+  }
+
+  return rows;
 }
 
 function sectionTitleMatches(title, patterns) {

@@ -549,31 +549,42 @@ def test_explicit_local_jsearch_fallback_returns_imported_manual_local_job(monke
     assert response["jobs"][0]["application_mode"] == "manual"
 
 
-def test_explicit_local_empty_db_schedules_background_refresh_without_blocking_sync(monkeypatch):
-    scheduled = {"called": False}
+def test_explicit_local_empty_db_runs_quick_sync_provider_search(monkeypatch):
+    scheduled = {"count": 0}
 
     def fake_schedule(*_args, **_kwargs):
-        scheduled["called"] = True
+        scheduled["count"] += 1
         return True
 
     monkeypatch.setattr(server, "schedule_feed_background_refresh", fake_schedule)
+    imported = _job(1, tier="C", status="unknown", title="Charge de recrutement")
+    imported.update({
+        "location": "Avignon, France",
+        "city": "Avignon",
+        "country_code": "fr",
+        "provider": "france_travail",
+        "external_url": "https://candidat.francetravail.fr/offres/recherche/detail/123",
+        "selected_apply_url": "https://candidat.francetravail.fr/offres/recherche/detail/123",
+    })
     response, calls = _run_feed(
         monkeypatch,
         [],
         env={
             "JOBS_FEED_BACKGROUND_REFRESH_ENABLED": "true",
-            "JOBS_FEED_LOCAL_DISCOVERY_MAX_CITIES": "2",
+            "JOBS_FEED_EXPLICIT_LOCAL_SYNC_SECONDS": "5",
             "JOBS_FEED_DEBUG_DIAGNOSTICS": "true",
         },
-        refresh=lambda: [_job(1)],
-        locations_json=_location_payload("Paris", lat=48.8566, lng=2.3522),
+        refresh=lambda: [imported],
+        locations_json=_location_payload("Avignon", lat=43.9492, lng=4.8059),
+        search_role="Recruiter",
         geo_places=_geo_places(),
     )
-    assert scheduled["called"] is True
-    assert calls["refresh"] == 0
-    assert response["jobs"] == []
-    assert response["request_trace"]["background_refresh_scheduled"] is True
-    assert response["request_trace"]["local_jsearch_skip_reason"] == "background_refresh_scheduled"
+    assert calls["refresh"] >= 1
+    assert scheduled["count"] == 0
+    assert response["request_trace"]["local_jsearch_discovery_attempted"] is True
+    assert response["request_trace"]["explicit_local_quick_sync_seconds"] == 5
+    assert [job["job_id"] for job in response["jobs"]] == ["job_1"]
+    assert response["jobs"][0]["application_mode"] == "manual"
 
 
 def test_explicit_local_discovery_returns_fresh_job_when_country_cache_is_full(monkeypatch):
@@ -1310,11 +1321,11 @@ def test_explicit_local_timeout_does_not_block_different_city_discovery(monkeypa
         env={
             "JOBS_FEED_SYNC_REFRESH_MAX_SECONDS": "1",
             "JOBS_FEED_SYNC_REFRESH_COOLDOWN_SECONDS": "30",
+            "JOBS_FEED_EXPLICIT_LOCAL_SYNC_SECONDS": "1",
         },
         refresh=slow_refresh,
         locations_json=paris_payload,
         geo_places=_geo_places(),
-        force_provider_refresh=True,
     )
     assert calls["refresh"] == 1
     assert response["jobs"] == []
