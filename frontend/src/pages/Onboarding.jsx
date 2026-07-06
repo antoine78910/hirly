@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
-import { withDatafastAttribution } from "../lib/datafast";
+import { withDatafastAttribution, trackDatafastGoal, trackOnboardingContinue, trackOnboardingSkip } from "../lib/datafast";
 import { shouldMockCvUpload, uploadProfileCv } from "../lib/demoCvUpload";
 import { CV_ACCEPT_ATTR, isAcceptedCvFile } from "../lib/cvUploadFormats";
 import { useAuth } from "../context/AuthContext";
@@ -174,6 +174,7 @@ export default function Onboarding() {
 
   useEffect(() => {
     trackEvent("onboarding_started");
+    trackDatafastGoal("onboarding_started");
   }, []);
   const [suggestedCategories, setSuggestedCategories] = useState(
     () => readOnboardingPreviewBoot(STEP_ORDER)?.state?.suggestedCategories ?? [],
@@ -550,6 +551,10 @@ export default function Onboarding() {
         selected_roles: selectedRoles,
         target_location: onboardingLocationData?.location_label || onboardingLocation || "",
       });
+      trackDatafastGoal("onboarding_completed", {
+        plan: selectedPlan,
+        target_location: onboardingLocationData?.location_label || onboardingLocation || "",
+      });
       goToApp("/swipe");
     } catch {
       toast.error(lang === "fr" ? "Échec de la configuration" : "Failed to finish setup");
@@ -559,6 +564,7 @@ export default function Onboarding() {
   };
 
   const startOnboardingCheckout = async () => {
+    trackOnboardingContinue("showcasePricing", { plan: selectedPlan });
     if (!user) {
       await startGoogleLogin("/onboarding?step=showcasePricing");
       return;
@@ -598,6 +604,7 @@ export default function Onboarding() {
       }));
       if (!data?.url) throw new Error("Missing checkout URL");
       trackEvent("checkout_started", { source: "onboarding", plan: selectedPlan });
+      trackDatafastGoal("onboarding_checkout_started", { plan: selectedPlan });
       window.location.href = data.url;
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Could not start checkout");
@@ -652,6 +659,11 @@ export default function Onboarding() {
     }
   };
 
+  const skipStep = () => {
+    trackOnboardingSkip(step);
+    goNext();
+  };
+
   const submitReferralCode = () => {
     const code = referralCode.trim().toUpperCase();
     if (!code) {
@@ -663,6 +675,7 @@ export default function Onboarding() {
       setCreatorAccessCode(code);
       storePendingInviteCode(code);
       toast.success(lang === "fr" ? "Code d'accès appliqué" : "Access code applied");
+      trackOnboardingContinue("referralCode");
       goNext();
       return;
     }
@@ -672,11 +685,16 @@ export default function Onboarding() {
     }
     setReferralCode(code);
     toast.success(lang === "fr" ? "Code de parrainage appliqué" : "Referral code applied");
+    trackOnboardingContinue("referralCode");
     goNext();
   };
 
   const onContinue = () => {
     trackEvent("onboarding_step_completed", { step, step_index: stepIndex });
+    const continueParams = step === "intro"
+      ? { intro_slide: String(introIndex), intro_total: String(slides.length) }
+      : { step_index: String(stepIndex) };
+    trackOnboardingContinue(step, continueParams);
     if (step === "intro" && introIndex === slides.length - 1) {
       setStepIndex(STEP_ORDER.indexOf("signup"));
       return;
@@ -723,7 +741,7 @@ export default function Onboarding() {
         </ContinueButton>
         <button
           type="button"
-          onClick={goNext}
+          onClick={skipStep}
           className="w-full h-11 sm:h-12 rounded-full border border-zinc-200 bg-white text-sm sm:text-base font-semibold text-linkedin hover:bg-violet-50 transition-colors"
           data-testid="referral-skip"
         >
@@ -737,7 +755,7 @@ export default function Onboarding() {
         </ContinueButton>
         <button
           type="button"
-          onClick={goNext}
+          onClick={skipStep}
           className="w-full h-11 sm:h-12 rounded-full border border-zinc-200 bg-white text-sm sm:text-base font-semibold text-linkedin hover:bg-violet-50 transition-colors"
           data-testid={step === "categories" ? "categories-skip" : "contract-type-skip"}
         >
@@ -1309,7 +1327,10 @@ export default function Onboarding() {
 
         {step === "profileSetup" && !parsing && (
           <ProfileSetupStep
-            onComplete={() => setStepIndex(STEP_ORDER.indexOf("profileWelcome"))}
+            onComplete={() => {
+              trackOnboardingContinue("profileSetup");
+              setStepIndex(STEP_ORDER.indexOf("profileWelcome"));
+            }}
           />
         )}
 

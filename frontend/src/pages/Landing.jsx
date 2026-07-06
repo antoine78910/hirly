@@ -9,6 +9,7 @@ import { startGoogleLogin } from "../lib/auth";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { trackEvent } from "../lib/analytics";
+import { trackDatafastGoal } from "../lib/datafast";
 import { preloadOnboardingIntroImages } from "../lib/onboardingImagePreload";
 import { useAppLocale } from "../context/AppLocaleContext";
 import LandingFaq from "../components/landing/LandingFaq";
@@ -34,6 +35,7 @@ export default function Landing() {
 
   useEffect(() => {
     trackEvent("landing_view");
+    trackDatafastGoal("lp_view");
     preloadOnboardingIntroImages();
   }, []);
 
@@ -54,12 +56,17 @@ export default function Landing() {
 
   const onSignIn = () => {
     trackEvent("cta_login_clicked", { location: "header" });
+    trackDatafastGoal("lp_cta_sign_in", { location: "header" });
     startGoogleLogin(postLoginPath);
   };
 
-  const onStartSwiping = () => {
+  const onStartSwiping = (location = "hero") => {
     if (loading) return;
     trackEvent("cta_start_swiping_clicked", { authenticated: Boolean(user) });
+    trackDatafastGoal("lp_cta_start", {
+      location,
+      authenticated: user ? "true" : "false",
+    });
     if (user) {
       if (hasProfile && hasPreferences) {
         if (redirectParam?.startsWith("http")) {
@@ -287,7 +294,7 @@ export default function Landing() {
             </p>
             <Button
               data-testid="footer-cta-btn"
-              onClick={onStartSwiping}
+              onClick={() => onStartSwiping("footer")}
               disabled={loading}
               size="lg"
               variant="brand"

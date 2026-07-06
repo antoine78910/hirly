@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { startGoogleLogin } from "../../lib/auth";
+import { trackDatafastGoal } from "../../lib/datafast";
 
 function GoogleIcon({ className = "w-5 h-5" }) {
   return (
@@ -40,6 +41,7 @@ export default function OnboardingSignup({ onClose }) {
   }, []);
 
   const handleGoogleSignup = async () => {
+    trackDatafastGoal("onboarding_signup_google");
     const ok = await startGoogleLogin("/onboarding?step=jobSearch");
     if (!ok) {
       toast.error("Google sign-up is not configured", {
