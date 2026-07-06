@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Briefcase, GraduationCap, Layers, Sparkles, Target, Users } from "lucide-react";
-import api from "../lib/api";
+import { api } from "../../lib/api";
 
 function RomeSection({ title, items, Icon, iconClass }) {
   if (!items?.length) return null;
