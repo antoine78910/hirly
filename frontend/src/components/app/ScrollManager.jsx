@@ -5,6 +5,7 @@ import { isTrainingRoute } from "../../lib/trainingRoutes";
 
 function usesDocumentScroll(pathname) {
   if (pathname === "/" || pathname === "/signup" || pathname === "/auth/callback") return true;
+  if (pathname === "/terms" || pathname === "/privacy") return true;
   if (pathname === "/referral") return true;
   if (pathname === "/how-it-works" || pathname === "/use-cases") return true;
   if (pathname === "/blog" || pathname.startsWith("/blog/")) return true;

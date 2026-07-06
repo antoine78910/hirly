@@ -53,9 +53,13 @@ import { preloadCompanyLogos } from "../lib/companyLogos";
 import {
   buildSwipeFeedCacheKey,
   clearSwipeFeedCache,
+  filterOutSwipedJobs,
   getSwipeFeedCacheSnapshot,
   isSwipeFeedCacheFresh,
   readSwipeFeedCache,
+  recordSwipedJobId,
+  seedSwipedJobIds,
+  unrecordSwipedJobId,
   writeSwipeFeedCache,
 } from "../lib/swipeFeedCache";
 
@@ -63,7 +67,6 @@ const DEFAULT_SEARCH_RADIUS = "50km";
 const FEED_BATCH_SIZE = 12;
 const FEED_PREFETCH_THRESHOLD = 7;
 const FILTERS_STORAGE_KEY = "swiipr.jobs.filters.v2";
-const swipeFeedCacheSnapshot = getSwipeFeedCacheSnapshot();
 
 const readPersistedFilters = () => {
   if (typeof window === "undefined") return null;
@@ -571,23 +574,23 @@ export default function Swipe() {
   const { t, lang } = useAppLocale();
   const { loading: authLoading, user } = useAuth();
   const [demoWelcomeOpen, setDemoWelcomeOpen] = useState(false);
-  const [jobs, setJobs] = useState(() => swipeFeedCacheSnapshot.jobs);
-  const [loading, setLoading] = useState(() => !swipeFeedCacheSnapshot.jobs.length);
+  const [jobs, setJobs] = useState(() => getSwipeFeedCacheSnapshot().jobs);
+  const [loading, setLoading] = useState(() => !getSwipeFeedCacheSnapshot().jobs.length);
   const [appLoading, setAppLoading] = useState(false);
   const [appliedToday, setAppliedToday] = useState(0);
-  const [target, setTarget] = useState(() => swipeFeedCacheSnapshot.target || { role: "", location: "" });
-  const [targetLocationData, setTargetLocationData] = useState(() => swipeFeedCacheSnapshot.targetLocationData);
+  const [target, setTarget] = useState(() => getSwipeFeedCacheSnapshot().target || { role: "", location: "" });
+  const [targetLocationData, setTargetLocationData] = useState(() => getSwipeFeedCacheSnapshot().targetLocationData);
   const [targetSaving, setTargetSaving] = useState(false);
   const [targetSheetOpen, setTargetSheetOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [desktopFiltersOpen, setDesktopFiltersOpen] = useState(false);
   const [filters, setFilters] = useState(() => (
-    swipeFeedCacheSnapshot.filters
-      ? mergeFilters(swipeFeedCacheSnapshot.filters)
+    getSwipeFeedCacheSnapshot().filters
+      ? mergeFilters(getSwipeFeedCacheSnapshot().filters)
       : mergeFilters(readPersistedFilters())
   ));
   const [totalCount, setTotalCount] = useState(null);
-  const [feedMeta, setFeedMeta] = useState(() => swipeFeedCacheSnapshot.meta);
+  const [feedMeta, setFeedMeta] = useState(() => getSwipeFeedCacheSnapshot().meta);
   const [feedError, setFeedError] = useState("");
   const [lastFeedDebug, setLastFeedDebug] = useState(null);
   const [reportJob, setReportJob] = useState(null);
@@ -596,12 +599,12 @@ export default function Swipe() {
   const fetchingRef = useRef(false);
   const filtersRef = useRef(filters);
   const profileRef = useRef(null);
-  const targetRef = useRef(swipeFeedCacheSnapshot.target || { role: "", location: "" });
-  const targetLocationDataRef = useRef(swipeFeedCacheSnapshot.targetLocationData);
+  const targetRef = useRef(getSwipeFeedCacheSnapshot().target || { role: "", location: "" });
+  const targetLocationDataRef = useRef(getSwipeFeedCacheSnapshot().targetLocationData);
   const pendingFiltersRef = useRef(undefined);
   const feedAbortRef = useRef(null);
   const feedRequestIdRef = useRef(0);
-  const jobsRef = useRef(swipeFeedCacheSnapshot.jobs);
+  const jobsRef = useRef(getSwipeFeedCacheSnapshot().jobs);
   const viewedJobIdsRef = useRef(new Set());
   const handleSwipeRef = useRef(null);
   const backgroundPollTimerRef = useRef(null);
@@ -735,6 +738,23 @@ export default function Swipe() {
     }
   }, [applyFinanceDemoTarget, applyDemoAccountTarget]);
 
+  const syncSwipedJobsFromServer = useCallback(async (userId) => {
+    if (!userId || isDemoAccountEnabled() || isFinanceDemoEnabled()) return;
+    try {
+      const [leftRes, rightRes] = await Promise.all([
+        api.get("/swipes/history?direction=left&limit=500"),
+        api.get("/swipes/history?direction=right&limit=500"),
+      ]);
+      const ids = [
+        ...(leftRes.data?.swipes || []),
+        ...(rightRes.data?.swipes || []),
+      ].map((row) => row?.job_id).filter(Boolean);
+      seedSwipedJobIds(ids, userId);
+    } catch (_) {
+      /* offline / demo */
+    }
+  }, []);
+
   const buildFeedParams = (f) => {
     const params = new URLSearchParams({ limit: String(FEED_BATCH_SIZE), search_radius: DEFAULT_SEARCH_RADIUS });
     const activeTarget = targetRef.current;
@@ -857,6 +877,7 @@ export default function Swipe() {
       let localFeedGuard = buildLocalFeedGuard({ params, response: data });
       let responseJobs = Array.isArray(data?.jobs) ? data.jobs : [];
       let safeJobs = localFeedGuard ? responseJobs.filter(localFeedGuard) : responseJobs;
+      safeJobs = filterOutSwipedJobs(safeJobs);
       let outsideLocationHiddenCount = responseJobs.length - safeJobs.length;
       if (outsideLocationHiddenCount > 0) {
         data = {
@@ -905,13 +926,14 @@ export default function Swipe() {
         seedTutorialShowcaseIfEmpty(safeJobs);
       }
       setJobs((prev) => {
-        const base = replace ? [] : (localFeedGuard ? prev.filter(localFeedGuard) : prev);
+        const base = replace ? [] : filterOutSwipedJobs(localFeedGuard ? prev.filter(localFeedGuard) : prev);
         const seen = new Set(base.map((j) => j.job_id));
         const merged = [...base];
         safeJobs.forEach((j) => { if (!seen.has(j.job_id)) merged.push(j); });
-        preloadCompanyLogos(merged.slice(0, 6));
+        const visible = filterOutSwipedJobs(merged);
+        preloadCompanyLogos(visible.slice(0, 6));
         writeSwipeFeedCache({
-          jobs: merged,
+          jobs: visible,
           meta: data,
           target: targetRef.current,
           targetLocationData: targetLocationDataRef.current,
@@ -924,7 +946,7 @@ export default function Swipe() {
           }),
           userId: user?.user_id,
         });
-        return merged;
+        return visible;
       });
       // Backend started a provider refresh in the background: silently poll a
       // couple of times to merge freshly imported jobs into the stack.
@@ -952,7 +974,8 @@ export default function Swipe() {
           if (requestId !== feedRequestIdRef.current) return;
           const localFeedGuard = buildLocalFeedGuard({ params: retryParams, response: retryData });
           const responseJobs = Array.isArray(retryData?.jobs) ? retryData.jobs : [];
-          const safeJobs = localFeedGuard ? responseJobs.filter(localFeedGuard) : responseJobs;
+          let safeJobs = localFeedGuard ? responseJobs.filter(localFeedGuard) : responseJobs;
+          safeJobs = filterOutSwipedJobs(safeJobs);
           setLastFeedDebug({
             reason: `${reason}_timeout_retry`,
             forceRefresh: replace,
@@ -978,11 +1001,11 @@ export default function Swipe() {
           setTotalCount(typeof retryData.total === "number" ? retryData.total : null);
           setFeedMeta(retryData || null);
           setJobs((prev) => {
-            const base = replace ? [] : (localFeedGuard ? prev.filter(localFeedGuard) : prev);
+            const base = replace ? [] : filterOutSwipedJobs(localFeedGuard ? prev.filter(localFeedGuard) : prev);
             const seen = new Set(base.map((j) => j.job_id));
             const merged = [...base];
             safeJobs.forEach((j) => { if (!seen.has(j.job_id)) merged.push(j); });
-            return merged;
+            return filterOutSwipedJobs(merged);
           });
           return;
         } catch (_) {
@@ -1122,6 +1145,16 @@ export default function Swipe() {
         setFeedMeta(cached.meta);
         setLoading(false);
         preloadCompanyLogos(cached.jobs.slice(0, 6));
+        syncSwipedJobsFromServer(user?.user_id).then(() => {
+          setJobs((prev) => {
+            const visible = filterOutSwipedJobs(prev);
+            jobsRef.current = visible;
+            if (!visible.length && !fetchingRef.current) {
+              loadFeed(true, mergedFilters, "initial_empty_after_swipe_filter");
+            }
+            return visible;
+          });
+        });
         if (isSwipeFeedCacheFresh(cached.savedAt)) {
           return;
         }
@@ -1130,6 +1163,8 @@ export default function Swipe() {
         }, 1200);
         return;
       }
+
+      await syncSwipedJobsFromServer(user?.user_id);
 
       if (jobsRef.current.length) {
         clearSwipeFeedCache();
@@ -1143,7 +1178,7 @@ export default function Swipe() {
       loadFeed(true, mergedFilters, reason);
     };
     bootstrap();
-  }, [authLoading, loadProfile, loadFeed, applyFinanceDemoTarget, user?.user_id]);
+  }, [authLoading, loadProfile, loadFeed, applyFinanceDemoTarget, syncSwipedJobsFromServer, user?.user_id]);
 
   useEffect(() => {
     const onBillingUpdated = (event) => {
@@ -1226,6 +1261,7 @@ export default function Swipe() {
     const demoSwipe = isDemoSwipeMode() || isDemoAccountEnabled();
     const demoApply = intent === "apply" && demoSwipe;
     cacheJobForDemo(job);
+    recordSwipedJobId(job.job_id, user?.user_id);
     const remainingAfterSwipe = jobs.length - 1;
     setJobs((prev) => prev.slice(1));
     if (remainingAfterSwipe <= FEED_PREFETCH_THRESHOLD && !fetchingRef.current) {
@@ -1295,7 +1331,11 @@ export default function Swipe() {
       const data = isFinanceDemoEnabled()
         ? performFinanceDemoUndo()
         : (await api.post("/swipe/undo")).data;
-      if (data.ok) { toast(t("toasts.undone")); loadFeed(true, filtersRef.current, "undo_refresh"); }
+      if (data.ok) {
+        if (data.job_id) unrecordSwipedJobId(data.job_id);
+        toast(t("toasts.undone"));
+        loadFeed(true, filtersRef.current, "undo_refresh");
+      }
     } catch (e) { toast.error(t("toasts.nothingToUndo")); }
   };
 
@@ -1310,6 +1350,7 @@ export default function Swipe() {
   };
 
   const dismissJob = useCallback((jobId) => {
+    recordSwipedJobId(jobId, user?.user_id);
     const remainingAfterDismiss = jobs.length - 1;
     setJobs((prev) => prev.filter((j) => j.job_id !== jobId));
     if (isFinanceDemoEnabled()) {
@@ -1320,7 +1361,7 @@ export default function Swipe() {
     if (remainingAfterDismiss <= FEED_PREFETCH_THRESHOLD && !fetchingRef.current) {
       loadFeed(false, filtersRef.current, "after_dismiss_low_stack");
     }
-  }, [jobs.length, loadFeed]);
+  }, [jobs.length, loadFeed, user?.user_id]);
 
   const handleReportSubmit = async (reason) => {
     if (!reportJob) return;
