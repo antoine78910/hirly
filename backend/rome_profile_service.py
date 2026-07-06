@@ -7,7 +7,7 @@ Fetches and caches official occupation data from the four ROME 4.0 APIs:
 - Contextes de travail
 
 Rate limit: at most one outbound call per second (per France Travail docs).
-Results are cached in MongoDB (`rome_profiles`) for 30 days.
+Results are cached in Supabase (`rome_profiles` table) for 30 days.
 """
 
 from __future__ import annotations
@@ -332,7 +332,7 @@ async def get_rome_profile(db, rome_code: str, *, rome_label: Optional[str] = No
         return {"available": False, "reason": "rome_profile_disabled"}
 
     cache_cutoff = datetime.now(timezone.utc) - timedelta(days=CACHE_DAYS)
-    if db is not None and not force_refresh:
+    if db is not None and hasattr(db, "rome_profiles") and not force_refresh:
         cached = await db.rome_profiles.find_one({"rome_code": code}, {"_id": 0})
         if cached:
             fetched_at = cached.get("fetched_at")
@@ -373,6 +373,9 @@ async def get_rome_profile(db, rome_code: str, *, rome_label: Optional[str] = No
             for key in ("metiers", "fiches", "competences", "contextes")
         },
     }
-    if db is not None:
-        await db.rome_profiles.update_one({"rome_code": code}, {"$set": doc}, upsert=True)
+    if db is not None and hasattr(db, "rome_profiles"):
+        try:
+            await db.rome_profiles.update_one({"rome_code": code}, {"$set": doc}, upsert=True)
+        except Exception as exc:
+            logger.warning("rome_profile_cache_write_failed code=%s error=%s", code, str(exc)[:200])
     return {"available": True, "cached": False, **profile}

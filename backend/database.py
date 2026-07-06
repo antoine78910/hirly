@@ -29,6 +29,7 @@ TABLE_META: Dict[str, Dict[str, Any]] = {
     "company_boards": {"pk": "board_id"},
     "analytics_events": {"pk": "event_id", "indexed": ["user_id", "anonymous_id", "event"]},
     "stripe_events": {"pk": "event_id", "indexed": ["type"]},
+    "rome_profiles": {"pk": "rome_code", "indexed": ["rome_code"]},
 }
 
 
@@ -279,7 +280,7 @@ class Collection:
         for key, val in query.items():
             if isinstance(val, dict):
                 return None
-            if key in ("user_id", "job_id", "session_token", "email", "application_id", "board_id", "provider", "external_id"):
+            if key in ("user_id", "job_id", "session_token", "email", "application_id", "board_id", "provider", "external_id", "rome_code"):
                 clauses.append(f"{key} = ${idx}")
                 args.append(val)
                 idx += 1
@@ -594,6 +595,7 @@ class Database:
         self.company_boards = Collection("company_boards", pool)
         self.analytics_events = Collection("analytics_events", pool)
         self.stripe_events = Collection("stripe_events", pool)
+        self.rome_profiles = Collection("rome_profiles", pool)
 
 
 db: Optional[Database] = None

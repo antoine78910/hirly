@@ -260,5 +260,13 @@ CREATE TABLE IF NOT EXISTS stripe_events (
 );
 CREATE INDEX IF NOT EXISTS idx_stripe_events_type_created_at ON stripe_events (type, created_at DESC);
 
+-- Cached France Travail ROME 4.0 occupation profiles (keyed by rome_code).
+CREATE TABLE IF NOT EXISTS rome_profiles (
+  rome_code TEXT PRIMARY KEY,
+  fetched_at TIMESTAMPTZ,
+  data JSONB NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_rome_profiles_fetched_at ON rome_profiles (fetched_at DESC);
+
 -- Training platform (separate from core user data): see db/supabase_training_schema.sql
 -- Creator invites (training/demo links): see db/supabase_creator_invites_schema.sql

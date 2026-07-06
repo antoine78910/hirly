@@ -1,17 +1,15 @@
 """Continuous France Travail inventory harvester.
 
-Pulls offers from the official France Travail API (no scraping needed) across a
-rotating grid of cities x roles and upserts them into the jobs collection.
-The goal is a warm database so the feed can answer almost any role/city query
-instantly from local inventory, without blocking on providers at request time.
+Pulls offers from the official France Travail API (no scraping) for the top
+French job markets, **city-only** (no role keyword) so each query captures the
+broadest local inventory (e.g. all Paris offers, not just "barista Paris").
+
+Results are upserted into Supabase (`jobs` table). A background loop rotates
+through the top 10 cities and re-runs frequently to pick up new postings.
 
 Designed to run either:
 - as a background loop started at app startup (FT_HARVEST_ENABLED=true), or
-- on demand through the admin endpoint POST /api/admin/jobs/france-travail/harvest.
-
-API usage stays conservative: each run performs at most
-FT_HARVEST_QUERIES_PER_RUN searches, sequentially, with a small pause between
-queries (France Travail allows ~10 req/s).
+- on demand through POST /api/admin/jobs/france-travail/harvest.
 """
 
 from __future__ import annotations
@@ -20,7 +18,7 @@ import asyncio
 import logging
 import os
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from job_providers import get_job_provider, is_job_provider_configured
 from job_providers.base import JobSearchQuery
@@ -28,23 +26,18 @@ from jobs_service import upsert_imported_jobs
 
 logger = logging.getLogger(__name__)
 
-# Largest French job markets first; the rotation wraps around so every
-# city/role combo is eventually refreshed.
-DEFAULT_HARVEST_LOCATIONS = [
-    "Paris", "Lyon", "Marseille", "Toulouse", "Nice", "Nantes", "Montpellier",
-    "Strasbourg", "Bordeaux", "Lille", "Rennes", "Reims", "Toulon",
-    "Saint-Etienne", "Le Havre", "Grenoble", "Dijon", "Angers", "Nimes",
-    "Aix-en-Provence", "Clermont-Ferrand", "Tours", "Amiens", "Metz", "Rouen",
-]
-
-# "" means a broad location-only sweep (no motsCles) which captures the whole
-# local market; specific roles deepen coverage for popular searches.
-DEFAULT_HARVEST_ROLES = [
-    "", "vendeur", "serveur", "barista", "commercial", "assistant administratif",
-    "comptable", "developpeur", "marketing", "chef de projet", "logistique",
-    "chauffeur livreur", "aide soignant", "infirmier", "technicien maintenance",
-    "cuisinier", "receptionniste", "manutentionnaire", "agent d'entretien",
-    "conseiller clientele",
+# Top 10 French job markets, highest volume first.
+DEFAULT_HARVEST_CITIES = [
+    "Paris",
+    "Lyon",
+    "Marseille",
+    "Toulouse",
+    "Nice",
+    "Nantes",
+    "Montpellier",
+    "Strasbourg",
+    "Bordeaux",
+    "Lille",
 ]
 
 _harvest_cursor = 0
@@ -85,16 +78,8 @@ def harvest_enabled() -> bool:
     )
 
 
-def _harvest_combos() -> List[Tuple[str, str]]:
-    locations = _csv_env("FT_HARVEST_LOCATIONS") or DEFAULT_HARVEST_LOCATIONS
-    roles_env = os.environ.get("FT_HARVEST_ROLES")
-    roles = (
-        [item.strip() for item in roles_env.split(",")] if roles_env is not None
-        else DEFAULT_HARVEST_ROLES
-    )
-    # City-major order: broad sweep + popular roles for one city before moving
-    # to the next, so each run leaves at least one city fully covered.
-    return [(role, city) for city in locations for role in roles]
+def _harvest_cities() -> List[str]:
+    return _csv_env("FT_HARVEST_CITIES") or _csv_env("FT_HARVEST_LOCATIONS") or DEFAULT_HARVEST_CITIES
 
 
 async def harvest_france_travail(
@@ -104,29 +89,31 @@ async def harvest_france_travail(
     dry_run: bool = False,
     start_offset: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Run one harvest slice (rotating cursor over the cities x roles grid)."""
+    """Run one harvest slice: rotate through top cities with broad (no-role) queries."""
     global _harvest_cursor
     if not is_job_provider_configured("france_travail"):
         return {"enabled": False, "reason": "france_travail_not_configured", "runs": []}
 
-    combos = _harvest_combos()
-    if not combos:
-        return {"enabled": True, "reason": "no_combos_configured", "runs": []}
+    cities = _harvest_cities()
+    if not cities:
+        return {"enabled": True, "reason": "no_cities_configured", "runs": []}
 
-    queries = max(1, min(int(max_queries or _env_int("FT_HARVEST_QUERIES_PER_RUN", 12)), 60))
+    # Default: sweep all top-10 cities each cycle.
+    queries = max(1, min(int(max_queries or _env_int("FT_HARVEST_QUERIES_PER_RUN", 10)), len(cities)))
     page_size = max(10, min(_env_int("FT_HARVEST_PAGE_SIZE", 100), 150))
-    max_pages = max(1, min(_env_int("FT_HARVEST_MAX_PAGES", 2), 5))
+    max_pages = max(1, min(_env_int("FT_HARVEST_MAX_PAGES", 3), 5))
     pause_seconds = max(0.2, _env_float("FT_HARVEST_QUERY_PAUSE_SECONDS", 0.5))
 
     async with _harvest_lock:
-        cursor = start_offset % len(combos) if start_offset is not None else _harvest_cursor % len(combos)
+        cursor = start_offset % len(cities) if start_offset is not None else _harvest_cursor % len(cities)
         provider = get_job_provider("france_travail", "")
         started = time.perf_counter()
         summary: Dict[str, Any] = {
             "enabled": True,
             "dry_run": dry_run,
+            "mode": "city_only",
             "cursor_start": cursor,
-            "combos_total": len(combos),
+            "cities_total": len(cities),
             "queries_planned": queries,
             "jobs_fetched": 0,
             "jobs_upserted": 0,
@@ -134,12 +121,12 @@ async def harvest_france_travail(
             "runs": [],
         }
         for index in range(queries):
-            role, city = combos[(cursor + index) % len(combos)]
+            city = cities[(cursor + index) % len(cities)]
             location_label = f"{city}, France"
-            run: Dict[str, Any] = {"role": role or "(broad)", "location": location_label}
+            run: Dict[str, Any] = {"city": city, "location": location_label, "role": "(all)"}
             try:
                 result = await provider.search(JobSearchQuery(
-                    role=role,
+                    role="",
                     location=location_label,
                     country="fr",
                     limit=page_size * max_pages,
@@ -156,24 +143,24 @@ async def harvest_france_travail(
             except Exception as exc:
                 message = f"{exc.__class__.__name__}: {str(exc)[:200]}"
                 run["error"] = message
-                summary["errors"].append({"role": role, "location": location_label, "error": message})
-                logger.warning("ft_harvest_query_failed role=%r location=%s error=%s", role, location_label, message)
-                # Back off harder on provider errors (rate limit / auth hiccups).
+                summary["errors"].append({"city": city, "location": location_label, "error": message})
+                logger.warning("ft_harvest_query_failed city=%s error=%s", city, message)
                 await asyncio.sleep(pause_seconds * 4)
             summary["runs"].append(run)
             if index < queries - 1:
                 await asyncio.sleep(pause_seconds)
         if start_offset is None:
-            _harvest_cursor = (cursor + queries) % len(combos)
-        summary["cursor_next"] = (cursor + queries) % len(combos)
+            _harvest_cursor = (cursor + queries) % len(cities)
+        summary["cursor_next"] = (cursor + queries) % len(cities)
         summary["elapsed_ms"] = int((time.perf_counter() - started) * 1000)
 
     global _last_run_summary
     _last_run_summary = summary
     logger.info(
-        "ft_harvest_run_complete cursor=%s->%s fetched=%s upserted=%s errors=%s elapsed_ms=%s",
+        "ft_harvest_run_complete mode=city_only cursor=%s->%s cities=%s fetched=%s upserted=%s errors=%s elapsed_ms=%s",
         summary["cursor_start"],
         summary["cursor_next"],
+        queries,
         summary["jobs_fetched"],
         summary["jobs_upserted"],
         len(summary["errors"]),
@@ -191,12 +178,13 @@ async def run_france_travail_harvest_loop(db) -> None:
     if not harvest_enabled():
         logger.info("ft_harvest_loop_disabled")
         return
-    interval_minutes = max(5, _env_int("FT_HARVEST_INTERVAL_MINUTES", 20))
+    interval_minutes = max(5, _env_int("FT_HARVEST_INTERVAL_MINUTES", 10))
     initial_delay = max(0, _env_int("FT_HARVEST_INITIAL_DELAY_SECONDS", 60))
     logger.info(
-        "ft_harvest_loop_started interval_minutes=%s initial_delay_seconds=%s",
+        "ft_harvest_loop_started mode=city_only interval_minutes=%s initial_delay_seconds=%s cities=%s",
         interval_minutes,
         initial_delay,
+        len(_harvest_cities()),
     )
     await asyncio.sleep(initial_delay)
     while True:
