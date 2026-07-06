@@ -83,6 +83,25 @@ const savePersistedFilters = (filters) => {
   } catch (_) {}
 };
 
+/** Target pill search wins over location filters saved in the filters modal. */
+const filtersForTargetSearch = (f) => {
+  const merged = mergeFilters(f);
+  return {
+    ...merged,
+    locations: [],
+    locationsData: [],
+    locationData: null,
+  };
+};
+
+const clearSwipeFeedCache = () => {
+  _swipeCache.jobs = null;
+  _swipeCache.meta = null;
+  _swipeCache.target = null;
+  _swipeCache.targetLocationData = null;
+  _swipeCache.filters = null;
+};
+
 const clearPersistedFilters = () => {
   if (typeof window === "undefined") return;
   try {
@@ -745,16 +764,29 @@ export default function Swipe() {
     feedAbortRef.current = controller;
     pendingFiltersRef.current = undefined;
     const stackPrefetch = !replace && jobsRef.current.length > 0;
-    // Silent refresh: replace content without showing a loading skeleton when
-    // we already have cached jobs visible (e.g. navigating back to the feed).
-    const silentRefresh = replace && jobsRef.current.length > 0;
+    // Only restore-from-navigation should skip the loading skeleton. Any explicit
+    // target/filter change must clear the stack and show a fresh search.
+    const silentRefresh = replace && jobsRef.current.length > 0 && reason === "background_refresh_cache";
+    const isUserSearchChange = (
+      reason.startsWith("target_")
+      || reason.startsWith("filters_")
+      || reason === "empty_refresh"
+      || reason === "desktop_refresh"
+    );
     fetchingRef.current = true;
+    if (isUserSearchChange && replace) {
+      clearSwipeFeedCache();
+      jobsRef.current = [];
+    }
     if (!stackPrefetch && !silentRefresh) {
       setLoading(true);
       if (replace) setJobs([]);
     }
     setFeedError("");
     let params = buildFeedParams(f);
+    if (isUserSearchChange) {
+      params.set("force_provider_refresh", "true");
+    }
     if (stackPrefetch) {
       params.set("prefetch", "true");
     }
@@ -1007,11 +1039,21 @@ export default function Swipe() {
 
       const nextTarget = { role: trimmedRole, location: locationLabel };
       setTarget(nextTarget);
-      // Update refs synchronously: loadFeed below reads them before React re-renders.
       targetRef.current = nextTarget;
       setTargetLocationData(normalizedLocationData);
       targetLocationDataRef.current = normalizedLocationData;
-      loadFeed(true, filtersRef.current, "target_search_save");
+
+      const nextFilters = filtersForTargetSearch(filtersRef.current);
+      filtersRef.current = nextFilters;
+      setFilters(nextFilters);
+      savePersistedFilters(nextFilters);
+
+      setJobs([]);
+      setTotalCount(null);
+      setFeedMeta(null);
+      setFeedError("");
+      jobsRef.current = [];
+      await loadFeed(true, nextFilters, "target_search_save");
       toast.success(t("toasts.searchUpdated"));
 
       if (trimmedRole) {
@@ -1522,13 +1564,10 @@ export default function Swipe() {
         initialLocation={target.location}
         initialLocationData={targetLocationData}
         onClose={() => setTargetSheetOpen(false)}
-        onSaved={({ role, location, locationData }) => {
-          const nextTarget = { role, location };
-          setTarget(nextTarget);
-          targetRef.current = nextTarget;
-          setTargetLocationData(locationData);
-          targetLocationDataRef.current = locationData;
-          loadFeed(true, filtersRef.current, "target_sheet_saved");
+        onSave={async (payload) => {
+          const ok = await saveTargetSearch(payload);
+          if (ok) setTargetSheetOpen(false);
+          return ok;
         }}
       />
 
