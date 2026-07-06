@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import Logo from "../Logo";
-import { BRAND } from "../../lib/brand";
+import { BRAND, supportMailto } from "../../lib/brand";
 import { startGoogleLogin } from "../../lib/auth";
 
 export default function MarketingLayout({ children }) {
@@ -67,7 +67,12 @@ export default function MarketingLayout({ children }) {
             </div>
           </div>
           <div className="border-t border-zinc-100 pt-6 text-xs text-zinc-400">
-            © {new Date().getFullYear()} {BRAND.NAME} · All rights reserved.
+            <p>© {new Date().getFullYear()} {BRAND.NAME} · All rights reserved.</p>
+            <p className="mt-2">
+              <a href={supportMailto()} className="hover:text-zinc-600 transition-colors">
+                {BRAND.SUPPORT_EMAIL}
+              </a>
+            </p>
           </div>
         </div>
       </footer>

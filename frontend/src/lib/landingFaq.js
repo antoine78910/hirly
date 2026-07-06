@@ -1,5 +1,12 @@
 /** Landing page FAQ — adapted from Sprout, branded for Hirly. */
 
+import { BRAND, supportMailto } from "./brand";
+
+const SUPPORT_LINK = {
+  link: BRAND.SUPPORT_EMAIL,
+  href: supportMailto(),
+};
+
 const FAQ_EN = [
   {
     id: "what-is",
@@ -137,7 +144,7 @@ const FAQ_EN = [
           { text: "You can report any issue directly through " },
           { bold: "Settings → Feedback" },
           { text: " in the app or email us at " },
-          { link: "hi@hirly.com", href: "mailto:hi@hirly.com" },
+          { link: SUPPORT_LINK.link, href: SUPPORT_LINK.href },
           { text: "." },
         ],
       },
@@ -283,7 +290,7 @@ const FAQ_FR = [
           { text: "Signalez tout problème via " },
           { bold: "Paramètres → Feedback" },
           { text: " dans l'app ou écrivez-nous à " },
-          { link: "hi@hirly.com", href: "mailto:hi@hirly.com" },
+          { link: SUPPORT_LINK.link, href: SUPPORT_LINK.href },
           { text: "." },
         ],
       },

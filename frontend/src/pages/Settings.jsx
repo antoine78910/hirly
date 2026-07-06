@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import Logo from "../components/Logo";
-import { BRAND } from "../lib/brand";
+import { BRAND, supportMailto } from "../lib/brand";
 import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
 import DesktopAppShell from "../components/desktop/DesktopAppShell";
 import AISettingsPanel from "../components/desktop/AISettingsPanel";
@@ -138,7 +138,7 @@ export default function Settings() {
       <Section label={t("settings.planHelp")} testId="settings-support">
         <Row icon={CreditCard}    label={billing?.is_premium ? t("settings.manageBilling") : t("settings.upgradePlan")} onClick={openPlan} testId="settings-subscribe" />
         <Row icon={RotateCw}      label={t("settings.restorePurchase")}  onClick={() => todo(t("settings.restorePurchase"))}       testId="settings-restore" />
-        <Row icon={MessageSquare} label={t("settings.talkToUs")}        onClick={() => openExternal("mailto:hi@hirly.com")} testId="settings-chat" />
+        <Row icon={MessageSquare} label={t("settings.talkToUs")}        onClick={() => openExternal(supportMailto())} testId="settings-chat" />
       </Section>
 
       <Section label={t("settings.shareBrand", { brand: BRAND.NAME })} testId="settings-social">

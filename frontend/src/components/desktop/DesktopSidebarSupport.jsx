@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Headphones, Sparkles } from "lucide-react";
 import { useAppLocale } from "../../context/AppLocaleContext";
-import { BRAND } from "../../lib/brand";
+import { BRAND, supportMailto } from "../../lib/brand";
 import SuggestFeatureDialog from "./SuggestFeatureDialog";
 
 export default function DesktopSidebarSupport({ supportBtnClass, isDark = false }) {
@@ -9,7 +9,7 @@ export default function DesktopSidebarSupport({ supportBtnClass, isDark = false 
   const [suggestOpen, setSuggestOpen] = useState(false);
 
   const openSupport = () => {
-    window.open(`mailto:hi@hirly.com?subject=${encodeURIComponent(`${BRAND.NAME} support`)}`, "_blank", "noopener");
+    window.open(supportMailto(`${BRAND.NAME} support`), "_blank", "noopener");
   };
 
   return (

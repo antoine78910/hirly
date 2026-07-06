@@ -4,7 +4,7 @@ import { ArrowRight, Sparkles, Zap, FileCheck2, Inbox, Heart, X, Star } from "lu
 import { motion } from "framer-motion";
 import { useEffect } from "react";
 import Logo from "../components/Logo";
-import { BRAND } from "../lib/brand";
+import { BRAND, supportMailto } from "../lib/brand";
 import { startGoogleLogin } from "../lib/auth";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -475,6 +475,11 @@ export default function Landing() {
           </div>
           <div className="border-t border-zinc-100 pt-6 text-sm text-zinc-400">
             <p>© {new Date().getFullYear()} {BRAND.NAME}</p>
+            <p className="mt-2">
+              <a href={supportMailto()} className="hover:text-zinc-600 transition-colors">
+                {BRAND.SUPPORT_EMAIL}
+              </a>
+            </p>
           </div>
         </div>
       </footer>
