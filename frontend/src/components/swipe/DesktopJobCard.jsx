@@ -18,6 +18,7 @@ import {
   getJobDisplayContent,
   formatJobSalaryLabel,
 } from "../../lib/jobDisplayUtils";
+import JobRomeProfile from "./JobRomeProfile";
 import { translateJobTitle, translateLocationLabel } from "../../lib/localizedDisplay";
 
 function formatPosted(iso, t) {
@@ -165,6 +166,7 @@ export default function DesktopJobCard({ job, theme, t, lang }) {
               t={t}
             />
           ))}
+          <JobRomeProfile job={job} t={t} enabled />
         </div>
 
         <div className="flex flex-col items-center justify-center gap-2 pt-2 pb-1">

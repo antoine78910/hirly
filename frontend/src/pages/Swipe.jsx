@@ -44,6 +44,7 @@ import {
   getSwipeErrorMessage,
 } from "../lib/appUi";
 import { getJobBadgeItems, getJobDisplayContent, formatJobSalaryLabel } from "../lib/jobDisplayUtils";
+import JobRomeProfile from "../components/swipe/JobRomeProfile";
 import { translateJobTitle, translateLocationLabel, translateRoleLabel } from "../lib/localizedDisplay";
 
 import { preloadCompanyLogos } from "../lib/companyLogos";
@@ -412,6 +413,7 @@ function CardBack({ job, t, lang }) {
               t={t}
             />
           ))}
+          <JobRomeProfile job={job} t={t} enabled />
         </div>
       </div>
 
@@ -784,9 +786,6 @@ export default function Swipe() {
     }
     setFeedError("");
     let params = buildFeedParams(f);
-    if (isUserSearchChange) {
-      params.set("force_provider_refresh", "true");
-    }
     if (stackPrefetch) {
       params.set("prefetch", "true");
     }
@@ -838,6 +837,7 @@ export default function Swipe() {
       const shouldForceLocalRetry = Boolean(
         safeJobs.length === 0
         && !params.get("force_provider_refresh")
+        && !data?.background_refresh_scheduled
         && (trace.explicit_local_intent || data?.filters_applied?.explicit_local_intent)
         && (
           trace.local_jsearch_discovery_attempted !== true
@@ -919,15 +919,16 @@ export default function Swipe() {
       });
       // Backend started a provider refresh in the background: silently poll a
       // couple of times to merge freshly imported jobs into the stack.
-      if (data?.background_refresh_scheduled && backgroundPollCountRef.current < 2) {
+      if (data?.background_refresh_scheduled && backgroundPollCountRef.current < 3) {
         backgroundPollCountRef.current += 1;
         const attempt = backgroundPollCountRef.current;
+        const pollDelays = { 1: 3000, 2: 8000, 3: 15000 };
         backgroundPollTimerRef.current = setTimeout(() => {
           backgroundPollTimerRef.current = null;
           if (!fetchingRef.current) {
             loadFeedRef.current?.(false, filtersRef.current, `background_poll_${attempt}`);
           }
-        }, attempt === 1 ? 6000 : 15000);
+        }, pollDelays[attempt] || 15000);
       } else if (!data?.background_refresh_scheduled) {
         backgroundPollCountRef.current = 0;
       }

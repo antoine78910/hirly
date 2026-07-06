@@ -134,6 +134,9 @@ def _run_feed(
         "JOBS_DB_MIN_GOOD_RESULTS_BEFORE_JSEARCH": "30",
         "JOBS_DB_WEAK_RESULTS_THRESHOLD": "10",
         "JOBS_ALLOW_UNKNOWN_TIER_IN_FEED": "false",
+        # Keep sync-path tests deterministic: background continuation tasks
+        # would otherwise add extra provider refresh calls after the response.
+        "JOBS_FEED_BACKGROUND_REFRESH_ENABLED": "false",
         **env,
     }.items():
         monkeypatch.setenv(key, value)

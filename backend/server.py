@@ -99,6 +99,13 @@ from job_cache_maintenance import (
     revalidate_cached_jobs,
     run_job_cache_maintenance,
 )
+from france_travail_harvest import (
+    harvest_enabled as ft_harvest_enabled,
+    harvest_france_travail,
+    last_harvest_summary as ft_last_harvest_summary,
+    run_france_travail_harvest_loop,
+)
+from rome_profile_service import get_rome_profile, normalize_rome_code, rome_profile_enabled
 from ats_source_service import (
     discover_ats_sources_from_cached_jobs,
     refresh_ats_source,
@@ -3998,6 +4005,27 @@ async def update_contact(contact: ContactUpdate, user: User = Depends(get_curren
 
 # ===================== Jobs / Swipe =====================
 
+@api_router.get("/jobs/{job_id}/rome-profile")
+async def get_job_rome_profile(job_id: str, user: User = Depends(get_current_user)):
+    """Official France Travail ROME 4.0 occupation profile for a job card."""
+    job = await db.jobs.find_one(
+        {"job_id": job_id},
+        {"_id": 0, "rome_code": 1, "rome_label": 1, "title": 1},
+    )
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    rome_code = normalize_rome_code(job.get("rome_code"))
+    if not rome_code:
+        return {"available": False, "reason": "no_rome_code"}
+    if not rome_profile_enabled():
+        return {"available": False, "reason": "rome_profile_disabled"}
+    return await get_rome_profile(
+        db,
+        rome_code,
+        rome_label=job.get("rome_label") or job.get("title"),
+    )
+
+
 @api_router.get("/jobs/feed")
 async def get_feed(
     user: User = Depends(get_current_user),
@@ -4457,12 +4485,12 @@ async def get_feed(
         db_weak_results_threshold = max(0, _env_int("JOBS_DB_WEAK_RESULTS_THRESHOLD", 10))
         allow_unknown_tier = _env_bool("JOBS_ALLOW_UNKNOWN_TIER_IN_FEED", False)
         sync_refresh_enabled = _env_bool("JOBS_FEED_SYNC_REFRESH_ENABLED", True)
-        sync_refresh_max_seconds = max(1, min(_env_int("JOBS_FEED_SYNC_REFRESH_MAX_SECONDS", 6), 20))
+        sync_refresh_max_seconds = max(1, min(_env_int("JOBS_FEED_SYNC_REFRESH_MAX_SECONDS", 4), 20))
         sync_refresh_max_results = max(1, min(_env_int("JOBS_FEED_SYNC_REFRESH_MAX_RESULTS", 20), 50))
         sync_refresh_max_pages = max(1, min(_env_int("JSEARCH_FEED_FALLBACK_MAX_PAGES", 1), 3))
         sync_refresh_page_size = max(1, min(_env_int("JSEARCH_FEED_FALLBACK_PAGE_SIZE", 10), 50))
         sync_refresh_cooldown_seconds = max(30, min(_env_int("JOBS_FEED_SYNC_REFRESH_COOLDOWN_SECONDS", 300), 1800))
-        sync_refresh_total_seconds = max(2, min(_env_int("JOBS_FEED_SYNC_REFRESH_TOTAL_SECONDS", 8), 25))
+        sync_refresh_total_seconds = max(2, min(_env_int("JOBS_FEED_SYNC_REFRESH_TOTAL_SECONDS", 4), 25))
         sync_refresh_attempts_per_city = max(1, min(_env_int("JOBS_FEED_PROVIDER_ATTEMPTS_PER_CITY", 2), 4))
         if primary_job_provider_name() == "france_travail":
             sync_refresh_max_pages = max(sync_refresh_max_pages, min(_env_int("FRANCE_TRAVAIL_MAX_PAGES", 2), 4))
@@ -4665,8 +4693,8 @@ async def get_feed(
             sync_refresh_page_size = max(sync_refresh_page_size, min(_env_int("FRANCE_TRAVAIL_PAGE_SIZE", 50), 150))
             sync_refresh_max_results = max(sync_refresh_max_results, min(_env_int("FRANCE_TRAVAIL_PAGE_SIZE", 50), 100))
             sync_refresh_attempts_per_city = 1
-            sync_refresh_max_seconds = max(sync_refresh_max_seconds, _env_int("JOBS_FEED_SYNC_REFRESH_MAX_SECONDS", 6))
-            sync_refresh_total_seconds = max(sync_refresh_total_seconds, _env_int("JOBS_FEED_SYNC_REFRESH_TOTAL_SECONDS", 8))
+            sync_refresh_max_seconds = max(sync_refresh_max_seconds, _env_int("JOBS_FEED_SYNC_REFRESH_MAX_SECONDS", 4))
+            sync_refresh_total_seconds = max(sync_refresh_total_seconds, _env_int("JOBS_FEED_SYNC_REFRESH_TOTAL_SECONDS", 4))
         location_intelligence_enabled = _env_bool("JOBS_LOCATION_INTELLIGENCE_ENABLED", True)
         location_max_expanded_cities = max(1, min(_env_int("JOBS_LOCATION_MAX_EXPANDED_CITIES", 10), 50))
         location_min_radius_km = max(1, _env_int("JOBS_LOCATION_MIN_RADIUS_KM", 10))
@@ -5734,6 +5762,46 @@ async def get_feed(
                     if not explicit_local_intent:
                         break
                     continue
+
+            # If the short blocking budget did not finish all planned locations
+            # (or imported nothing), continue discovery in the background so the
+            # response returns quickly and the client can silently re-poll.
+            sync_imported_total = sum(
+                int(item.get("jobs_imported", item.get("imported", item.get("count") or 0)) or 0)
+                for item in refresh_results
+                if isinstance(item, dict)
+            )
+            remaining_locations = refresh_locations[len(refresh_results):]
+            if (
+                _env_bool("JOBS_FEED_BACKGROUND_REFRESH_ENABLED", True)
+                and (remaining_locations or sync_imported_total == 0)
+            ):
+                continuation_signature = (
+                    _explicit_local_cooldown_key()
+                    if explicit_local_intent
+                    else "|".join(["global", normalize_place_name(target_role or ""), radius_scope])
+                ) + "|continue"
+                continuation_scheduled = schedule_feed_background_refresh(
+                    continuation_signature,
+                    profile_for_refresh,
+                    remaining_locations or refresh_locations,
+                    search_radius=search_radius,
+                    role_override=target_role,
+                    requested_limit=requested_limit,
+                    max_results=sync_refresh_max_results,
+                    max_pages=sync_refresh_max_pages,
+                    page_size=sync_refresh_page_size,
+                    attempts_per_city=sync_refresh_attempts_per_city,
+                    user_id=user.user_id,
+                )
+                if continuation_scheduled:
+                    request_trace["background_refresh_scheduled"] = True
+                    logger.info(
+                        "jobs/feed sync_refresh_continued_in_background: user_id=%s remaining_locations=%s sync_imported=%s",
+                        user.user_id,
+                        len(remaining_locations),
+                        sync_imported_total,
+                    )
 
             for refresh_result in refresh_results:
                 direct_refresh_jobs.extend(job for job in (refresh_result.get("jobs") or []) if isinstance(job, dict))
@@ -7292,6 +7360,31 @@ async def admin_jobs_cache_status(admin: User = Depends(require_admin_user)):
     _require_job_maintenance_enabled()
     logger.info("admin_jobs_cache_status_requested admin=%s", admin.email)
     return await job_cache_status(db)
+
+
+@api_router.post("/admin/jobs/france-travail/harvest")
+async def admin_jobs_france_travail_harvest(
+    admin: User = Depends(require_admin_user),
+    max_queries: Optional[int] = None,
+    dry_run: bool = False,
+):
+    _require_job_maintenance_enabled()
+    logger.info(
+        "admin_jobs_ft_harvest_requested admin=%s max_queries=%s dry_run=%s",
+        admin.email,
+        max_queries,
+        dry_run,
+    )
+    return await harvest_france_travail(db, max_queries=max_queries, dry_run=dry_run)
+
+
+@api_router.get("/admin/jobs/france-travail/harvest-status")
+async def admin_jobs_france_travail_harvest_status(admin: User = Depends(require_admin_user)):
+    _require_job_maintenance_enabled()
+    return {
+        "harvest_enabled": ft_harvest_enabled(),
+        "last_run": ft_last_harvest_summary(),
+    }
 
 
 @api_router.post("/admin/jobs/feed-diagnostic")
@@ -12955,6 +13048,7 @@ async def startup_seed():
     )
     asyncio.create_task(_startup_seed_impl())
     asyncio.create_task(_resume_pending_application_generation())
+    asyncio.create_task(run_france_travail_harvest_loop(db))
 
 
 @app.on_event("shutdown")
