@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, Optional
 
-from job_providers.apply_eligibility import classify_apply_link
+from job_providers.apply_eligibility import classify_apply_link, is_france_travail_offer
 from job_providers.ats_detection import PRIMARY_AUTO_APPLY_ATS, detect_job_platform
 
 
@@ -102,7 +102,11 @@ def _cheap_validate_job_applyability(job: Dict[str, Any]) -> Dict[str, Any]:
             rejection_reason="captcha_or_bot_protection",
         )
 
-    if platform.get("category") == "account_required":
+    if platform.get("category") == "account_required" and not is_france_travail_offer(
+        provider=str(job.get("provider") or ""),
+        source=str(job.get("source") or ""),
+        url=selected_url,
+    ):
         return _result(
             now=now,
             status="invalid",

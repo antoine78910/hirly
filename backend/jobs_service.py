@@ -18,6 +18,7 @@ from employment_kind import contract_type_query_hint, enrich_job_employment_kind
 from job_providers import (
     get_board_provider,
     get_job_provider,
+    is_france_travail_provider,
     is_job_provider_configured,
     is_job_provider_enabled,
     primary_job_provider_name,
@@ -164,12 +165,12 @@ def build_profile_job_query(
     role_override: Optional[str] = None,
 ) -> JobSearchQuery:
     radius_scope = (search_radius or "").lower().strip()
-    role = (
-        (role_override or "").strip()
-        or profile.get("target_role")
-        or ((profile.get("target_roles") or [None])[0])
-        or "software engineer"
-    )
+    if role_override is not None:
+        role = role_override.strip()
+    else:
+        role = (
+            (profile.get("target_role") or ((profile.get("target_roles") or [None])[0]) or "")
+        ).strip()
     requested_location = location_override or profile.get("target_location")
     location_data = location_data_override or profile.get("target_location_data")
     country, location = _country_and_location_from_data(location_data, requested_location)
@@ -195,6 +196,7 @@ def build_profile_job_query(
         language=_language_for_country(country),
         limit=max(20, min(_env_int("JOB_IMPORT_LIMIT", 50), 100)),
         contract_hint=contract_hint,
+        radius_km=_radius_km(search_radius),
     )
 
 
@@ -821,6 +823,8 @@ def _copy_query_with_role(query: JobSearchQuery, role: str, *, raw_query: bool =
         raw_query=raw_query,
         max_pages=query.max_pages,
         page_size=query.page_size,
+        contract_hint=query.contract_hint,
+        radius_km=query.radius_km,
     )
 
 
@@ -841,6 +845,8 @@ def _copy_query_with_role_and_location(
         raw_query=raw_query,
         max_pages=query.max_pages,
         page_size=query.page_size,
+        contract_hint=query.contract_hint,
+        radius_km=query.radius_km,
     )
 
 
@@ -855,6 +861,7 @@ def _direct_apply_search_domains() -> List[str]:
         "jobs.lever.co",
         "ashbyhq.com",
         "workable.com",
+        "jobs.smartrecruiters.com",
         "smartrecruiters.com",
         "teamtailor.com",
         "recruitee.com",
@@ -935,6 +942,10 @@ def _dedupe_queries(queries: List[JobSearchQuery], provider) -> List[JobSearchQu
 
 
 def _provider_attempt_queries(query: JobSearchQuery, search_radius: str, provider) -> List[JobSearchQuery]:
+    if getattr(provider, "name", None) == "france_travail":
+        # Keep the user's role/location/radius — FT keyword mapping handles FR translations.
+        return [query]
+
     role_variants = _localized_role_variants(query.role, query.country)
     locations = _nearby_locations(query, search_radius)
     primary_location = query.location
@@ -1018,21 +1029,25 @@ def _job_matches_query_location(job: Dict[str, Any], query: JobSearchQuery, sear
             str(job.get("region") or ""),
         ]).lower(),
     ).encode("ascii", "ignore").decode("ascii")
-    job_country = str(job.get("country_code") or "").lower().strip()
-    query_country = str(query.country or "").lower().strip()
-    if query_country and job_country == query_country:
-        return True
-
-    country_name = (_country_name(query_country) or "").lower()
-    if country_name and country_name in job_location:
-        return True
-
-    location = unicodedata.normalize(
+    query_location = unicodedata.normalize(
         "NFKD",
         str(query.location or "").lower(),
     ).encode("ascii", "ignore").decode("ascii")
-    city = re.split(r"[,/|-]", location, maxsplit=1)[0].strip()
-    return bool(city and city in job_location)
+    city = re.split(r"[,/|-]", query_location, maxsplit=1)[0].strip()
+    if city and city in job_location:
+        return True
+
+    query_country = str(query.country or "").lower().strip()
+    job_country = str(job.get("country_code") or "").lower().strip()
+    if not query.location and query_country and job_country == query_country:
+        return True
+
+    if not query.location and query_country:
+        country_name = (_country_name(query_country) or "").lower()
+        if country_name and country_name in job_location:
+            return True
+
+    return False
 
 
 def _ats_attempt_countries(query: JobSearchQuery, search_radius: str) -> List[Optional[str]]:
@@ -1160,6 +1175,8 @@ async def refresh_jobs_for_profile_if_needed(
             raw_query=query.raw_query,
             max_pages=provider_max_pages,
             page_size=provider_page_size,
+            contract_hint=query.contract_hint,
+            radius_km=query.radius_km,
         )
     base_metadata = {
         "searched_location": query.location,
@@ -1171,6 +1188,33 @@ async def refresh_jobs_for_profile_if_needed(
         "provider_rate_limited": False,
         "provider_cooldown_until": None,
     }
+
+    smartrecruiters_result = None
+    workday_result = None
+    try:
+        from smartrecruiters_search import refresh_smartrecruiters_jobs_for_query
+
+        smartrecruiters_result = await refresh_smartrecruiters_jobs_for_query(
+            db,
+            query=query,
+            limit=query_limit_override or query.limit,
+        )
+    except Exception as exc:
+        logger.warning("smartrecruiters_search_failed error=%s", exc)
+
+    try:
+        from job_search_routing import resolve_primary_provider
+        from workday_search import refresh_workday_jobs_for_query, should_run_workday_search
+
+        primary_for_routing = resolve_primary_provider(query)
+        if should_run_workday_search(query, primary_provider=primary_for_routing):
+            workday_result = await refresh_workday_jobs_for_query(
+                db,
+                query=query,
+                limit=query_limit_override or query.limit,
+            )
+    except Exception as exc:
+        logger.warning("workday_search_failed error=%s", exc)
 
     greenhouse_result = None
     lever_result = None
@@ -1210,7 +1254,25 @@ async def refresh_jobs_for_profile_if_needed(
                 **base_metadata,
             }
 
-    provider_name = primary_job_provider_name()
+    try:
+        from job_search_routing import resolve_primary_provider
+
+        provider_name = resolve_primary_provider(query)
+    except Exception:
+        provider_name = primary_job_provider_name()
+        query_is_france = (
+            (query.country or "").lower().strip() == "fr"
+            or _looks_like_france_location(query.location or "")
+        )
+        ft_configured = is_job_provider_configured("france_travail")
+        if query_is_france and ft_configured and not is_france_travail_provider(provider_name):
+            provider_name = "france_travail"
+            logger.info(
+                "JSearch provider overridden: using france_travail for French query location=%s country=%s",
+                query.location,
+                query.country,
+            )
+
     if not is_job_provider_enabled(provider_name):
         return {"attempted": bool(greenhouse_result or lever_result), "reason": "disabled", "greenhouse": greenhouse_result, "lever": lever_result, **base_metadata}
 
@@ -1241,6 +1303,8 @@ async def refresh_jobs_for_profile_if_needed(
         min_fresh_count,
         target_auto_apply_count * max(1, _env_int("JOB_IMPORT_CACHE_FRESH_MULTIPLIER", 4)),
     )
+    if query_limit_override:
+        min_feed_ready_count = max(3, min(int(query_limit_override), min_feed_ready_count))
     fresh_query = {
         "provider": provider.name,
         "provider_search_key": {"$in": search_keys},
@@ -1274,12 +1338,15 @@ async def refresh_jobs_for_profile_if_needed(
             "min_feed_ready_count": min_feed_ready_count,
             **base_metadata,
         }
+    # Skip per-key counts when forcing a refresh — they only appear in error
+    # metadata and wasting ~6 s of the 8 s per-location budget.
     any_cached = 0
-    for key in search_keys:
-        any_cached += await db.jobs.count_documents({
+    if not force_provider_refresh and search_keys:
+        total = await db.jobs.count_documents({
             "provider": provider.name,
-            "provider_search_key": key,
+            "provider_search_key": {"$in": search_keys},
         })
+        any_cached = total
 
     try:
         max_provider_requests = max(1, min(int(max_provider_requests_override or _env_int("JOB_IMPORT_MAX_PROVIDER_REQUESTS", 7)), 12))
@@ -1380,6 +1447,8 @@ async def refresh_jobs_for_profile_if_needed(
                 raw_query=True,
                 max_pages=query.max_pages,
                 page_size=query.page_size,
+                contract_hint=query.contract_hint,
+                radius_km=query.radius_km,
             )
             provider_requests += 1
             broad_provider_requests += 1
@@ -1474,6 +1543,8 @@ async def refresh_jobs_for_profile_if_needed(
         "jobs": combined_jobs[:200],
         "fallback_used": fallback_used,
         "ats_targeted_imported": ats_targeted_imported,
+        "smartrecruiters": smartrecruiters_result,
+        "workday": workday_result,
         **base_metadata,
         "widened_search": fallback_used is not None,
         "final_location_used": fallback_used or query.location,

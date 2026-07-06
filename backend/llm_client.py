@@ -45,12 +45,13 @@ async def extract_text_from_image_bytes(content: bytes, mime: str = "image/png")
                     {
                         "type": "text",
                         "text": (
-                            "Extract all text from this resume/CV image. "
+                            "Extract all text from this resume/CV image or PDF page scan. "
+                            "The image may be slightly blurry — still transcribe every readable word. "
                             "Return plain text only, preserving headings and bullet structure. "
                             "No commentary."
                         ),
                     },
-                    {"type": "image_url", "image_url": {"url": data_url}},
+                    {"type": "image_url", "image_url": {"url": data_url, "detail": "high"}},
                 ],
             }
         ],

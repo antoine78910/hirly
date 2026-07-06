@@ -202,6 +202,16 @@ QUIZZES: Dict[str, Dict[str, Any]] = {
                 {"id": "b", "label": "Generic job app only"},
                 {"id": "c", "label": "Whoever paid most recently"},
             ], "a"),
+            _q("cb6", "Official Hirly logo source?", [
+                {"id": "a", "label": "Shared Google Drive folder in Good. Better. Best. → Resources"},
+                {"id": "b", "label": "Screenshot from app or website"},
+                {"id": "c", "label": "Logo you recreated yourself"},
+            ], "a"),
+            _q("cb7", "Good/Better/Best logos — Best option?", [
+                {"id": "a", "label": "Official transparent PNGs from shared folder"},
+                {"id": "b", "label": "Google Images screenshot"},
+                {"id": "c", "label": "Recreate with your own colors"},
+            ], "a"),
         ],
     },
 }

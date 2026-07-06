@@ -236,7 +236,6 @@ export function ProfileWelcomeStep({
         transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
       >
         <h1 className={ob.title}>{lang === "fr" ? `Bienvenue sur ${BRAND.NAME} !` : `Welcome to ${BRAND.NAME}!`}</h1>
-        <OnboardingValueTagline prominent className="mt-2" />
         <p className={`${ob.subtitle} mt-2`}>
           {lang === "fr" ? "Voici comment nous allons vous aider à réussir :" : "Based on your profile, here\u2019s how we\u2019ll help you succeed:"}
         </p>
@@ -278,7 +277,9 @@ export function ShowcaseLandingStep() {
           <span className="font-display text-base font-bold text-swiipr-gradient">{BRAND.NAME}</span>
         </div>
 
-        <OnboardingValueTagline prominent className="mt-1" />
+        <h1 className="mt-2 font-display text-lg font-bold leading-tight tracking-tight text-zinc-900 sm:text-xl">
+          {lang === "fr" ? "Postulez en un swipe" : "Apply in one swipe"}
+        </h1>
       </div>
 
       <div className="mt-1 flex min-h-0 flex-1 items-center justify-center sm:mt-1.5">
@@ -306,7 +307,6 @@ export function ShowcaseAllInOneStep() {
         <span className="font-display text-base font-bold text-swiipr-gradient">{BRAND.NAME}</span>
       </div>
 
-      <OnboardingValueTagline prominent className="mt-1" />
       <h1 className="mt-2 font-display text-lg font-bold leading-tight tracking-tight text-zinc-900 sm:text-xl">
         {lang === "fr" ? "Tout au même endroit" : "All in one place"}
       </h1>
@@ -436,7 +436,7 @@ export function FinishOnboardingButton({ saving, onClick }) {
           {lang === "fr" ? "Démarrage…" : "Starting…"}
         </span>
       ) : (
-        getOnboardingValueTagline(lang)
+        lang === "fr" ? "Commencer à swiper" : "Start swiping"
       )}
     </button>
   );

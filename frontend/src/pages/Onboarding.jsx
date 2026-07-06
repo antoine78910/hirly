@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
-import { withDatafastAttribution } from "../lib/datafast";
+import { withDatafastAttribution, trackDatafastGoal, trackOnboardingContinue, trackOnboardingSkip } from "../lib/datafast";
 import { shouldMockCvUpload, uploadProfileCv } from "../lib/demoCvUpload";
+import { CV_ACCEPT_ATTR, isAcceptedCvFile } from "../lib/cvUploadFormats";
 import { useAuth } from "../context/AuthContext";
 import { useAppLocale } from "../context/AppLocaleContext";
 import { Slider } from "../components/ui/slider";
@@ -57,7 +58,6 @@ import {
   iconForCategoryLabel,
   SUGGESTED_ONBOARDING_LOCATIONS,
   readOnboardingPreviewBoot,
-  getOnboardingValueTagline,
 } from "../components/onboarding/onboardingData";
 import { devBypassAuth } from "../lib/dev";
 import { splitFullName } from "../lib/personalInfoOptions";
@@ -67,6 +67,7 @@ import { preloadOnboardingIntroImages, preloadOnboardingShowcaseImages } from ".
 import { getPendingInviteCode, redeemCreatorInvite, storePendingInviteCode } from "../lib/creatorInvite";
 import { setDemoAccountFromUser } from "../lib/demoAccount";
 import { queueDemoWelcome } from "../lib/demoWelcome";
+import { goToApp } from "../lib/appDomains";
 
 const STEP_ORDER = ONBOARDING_STEP_ORDER;
 const ONBOARDING_CHECKOUT_STATE_KEY = "hirly.onboarding.checkoutState";
@@ -173,6 +174,7 @@ export default function Onboarding() {
 
   useEffect(() => {
     trackEvent("onboarding_started");
+    trackDatafastGoal("onboarding_started");
   }, []);
   const [suggestedCategories, setSuggestedCategories] = useState(
     () => readOnboardingPreviewBoot(STEP_ORDER)?.state?.suggestedCategories ?? [],
@@ -189,6 +191,7 @@ export default function Onboarding() {
   const [creatorAccessCode, setCreatorAccessCode] = useState(() => getPendingInviteCode());
   const [redeemingAccessCode, setRedeemingAccessCode] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [pendingCheckoutSuccess, setPendingCheckoutSuccess] = useState(false);
   const inputRef = useRef();
 
   const step = STEP_ORDER[stepIndex];
@@ -242,9 +245,13 @@ export default function Onboarding() {
       } catch (_) {
         /* ignore corrupt checkout state */
       }
-      setStepIndex(STEP_ORDER.indexOf("showcasePricing"));
-      if (checkoutStatus === "success") toast.success("Payment received");
-      if (checkoutStatus === "cancelled") toast("Checkout cancelled");
+      if (checkoutStatus === "success") {
+        setSearchParams({}, { replace: true });
+        setPendingCheckoutSuccess(true);
+      } else {
+        setStepIndex(STEP_ORDER.indexOf("showcasePricing"));
+        toast("Checkout cancelled");
+      }
       return;
     }
 
@@ -280,6 +287,18 @@ export default function Onboarding() {
     if (!user || step !== "signup") return;
     setStepIndex(STEP_ORDER.indexOf("jobSearch"));
   }, [user, step]);
+
+  // After a successful Stripe checkout Stripe redirects back here with
+  // ?checkout=success. Once the auth state is ready (user resolved) we finish
+  // the onboarding and navigate straight to /swipe.
+  useEffect(() => {
+    if (!pendingCheckoutSuccess) return;
+    if (!user) return; // wait until auth resolves
+    setPendingCheckoutSuccess(false);
+    setCheckoutLoading(true);
+    finishOnboarding().finally(() => setCheckoutLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingCheckoutSuccess, user]);
 
   useEffect(() => {
     if (step !== "categories" || !onboardingLocation.trim() || !contractType) return;
@@ -375,6 +394,10 @@ export default function Onboarding() {
 
   const handleUpload = async (f) => {
     if (!f) return;
+    if (!isAcceptedCvFile(f)) {
+      toast.error(lang === "fr" ? "Importez un PDF, PNG, JPG ou DOCX." : "Please upload a PDF, PNG, JPG, or DOCX resume");
+      return;
+    }
     if (!user && !shouldMockCvUpload()) {
       toast.error(lang === "fr" ? "Connectez-vous avec Google pour importer votre CV" : "Sign in with Google to upload your resume");
       return;
@@ -383,29 +406,51 @@ export default function Onboarding() {
     setParsing(true);
     trackEvent("cv_upload_started", { source: "onboarding" });
     preloadOnboardingShowcaseImages();
-    try {
-      const { data } = await uploadProfileCv(f, api);
-      setProfile(data);
-      trackEvent("cv_upload_completed", { source: "onboarding" });
-      if (!shouldMockCvUpload()) {
-        const { data: authState } = await api.get("/auth/me");
-        setHasProfile(Boolean(authState?.has_profile));
-        if (checkAuth) await checkAuth();
-        toast.success(lang === "fr" ? "Votre profil est prêt" : "Your profile is ready");
-      } else {
-        setHasProfile(true);
-      }
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-      setStepIndex(STEP_ORDER.indexOf("profileSetup"));
-    } catch (e) {
-      console.error(e);
-      trackEvent("cv_upload_failed", { source: "onboarding", message: e?.response?.data?.detail || e?.message });
-      if (!shouldMockCvUpload()) {
-        toast.error(e?.response?.data?.detail || (lang === "fr" ? "Échec de l'analyse du CV" : "Failed to parse CV"));
-      }
-    } finally {
+
+    const CV_PARSE_UI_MAX_MS = 3000;
+    let advanced = false;
+
+    const advanceToProfileSetup = () => {
+      if (advanced) return;
+      advanced = true;
       setParsing(false);
-    }
+      setStepIndex(STEP_ORDER.indexOf("profileSetup"));
+    };
+
+    const uploadTask = (async () => {
+      try {
+        const { data } = await uploadProfileCv(f, api);
+        setProfile(data);
+        trackEvent("cv_upload_completed", { source: "onboarding" });
+        if (!shouldMockCvUpload()) {
+          const { data: authState } = await api.get("/auth/me");
+          setHasProfile(Boolean(authState?.has_profile));
+          if (checkAuth) await checkAuth();
+          toast.success(lang === "fr" ? "Votre profil est prêt" : "Your profile is ready");
+        } else {
+          setHasProfile(true);
+        }
+        if (!advanced) {
+          await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+          advanceToProfileSetup();
+        }
+      } catch (e) {
+        console.error(e);
+        trackEvent("cv_upload_failed", { source: "onboarding", message: e?.response?.data?.detail || e?.message });
+        if (!shouldMockCvUpload()) {
+          toast.error(e?.response?.data?.detail || (lang === "fr" ? "Échec de l'analyse du CV" : "Failed to parse CV"));
+        }
+        if (!advanced) {
+          setParsing(false);
+        }
+      }
+    })();
+
+    setTimeout(() => {
+      advanceToProfileSetup();
+    }, CV_PARSE_UI_MAX_MS);
+
+    await uploadTask;
   };
 
   const persistOnboardingMeta = async () => {
@@ -506,7 +551,11 @@ export default function Onboarding() {
         selected_roles: selectedRoles,
         target_location: onboardingLocationData?.location_label || onboardingLocation || "",
       });
-      navigate("/swipe", { replace: true });
+      trackDatafastGoal("onboarding_completed", {
+        plan: selectedPlan,
+        target_location: onboardingLocationData?.location_label || onboardingLocation || "",
+      });
+      goToApp("/swipe");
     } catch {
       toast.error(lang === "fr" ? "Échec de la configuration" : "Failed to finish setup");
     } finally {
@@ -515,6 +564,7 @@ export default function Onboarding() {
   };
 
   const startOnboardingCheckout = async () => {
+    trackOnboardingContinue("showcasePricing", { plan: selectedPlan });
     if (!user) {
       await startGoogleLogin("/onboarding?step=showcasePricing");
       return;
@@ -554,6 +604,7 @@ export default function Onboarding() {
       }));
       if (!data?.url) throw new Error("Missing checkout URL");
       trackEvent("checkout_started", { source: "onboarding", plan: selectedPlan });
+      trackDatafastGoal("onboarding_checkout_started", { plan: selectedPlan });
       window.location.href = data.url;
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Could not start checkout");
@@ -608,6 +659,11 @@ export default function Onboarding() {
     }
   };
 
+  const skipStep = () => {
+    trackOnboardingSkip(step);
+    goNext();
+  };
+
   const submitReferralCode = () => {
     const code = referralCode.trim().toUpperCase();
     if (!code) {
@@ -619,6 +675,7 @@ export default function Onboarding() {
       setCreatorAccessCode(code);
       storePendingInviteCode(code);
       toast.success(lang === "fr" ? "Code d'accès appliqué" : "Access code applied");
+      trackOnboardingContinue("referralCode");
       goNext();
       return;
     }
@@ -628,11 +685,16 @@ export default function Onboarding() {
     }
     setReferralCode(code);
     toast.success(lang === "fr" ? "Code de parrainage appliqué" : "Referral code applied");
+    trackOnboardingContinue("referralCode");
     goNext();
   };
 
   const onContinue = () => {
     trackEvent("onboarding_step_completed", { step, step_index: stepIndex });
+    const continueParams = step === "intro"
+      ? { intro_slide: String(introIndex), intro_total: String(slides.length) }
+      : { step_index: String(stepIndex) };
+    trackOnboardingContinue(step, continueParams);
     if (step === "intro" && introIndex === slides.length - 1) {
       setStepIndex(STEP_ORDER.indexOf("signup"));
       return;
@@ -653,34 +715,25 @@ export default function Onboarding() {
 
   const footer = !hideFooter ? (
     step === "showcasePricing" ? (
-      <div className="space-y-2">
-        <p className="text-center text-xs font-semibold text-linkedin">{getOnboardingValueTagline(lang)}</p>
-        <ContinueButton
-          onClick={startOnboardingCheckout}
-          disabled={checkoutLoading || redeemingAccessCode || saving}
-          testId="showcase-pricing-continue"
-        >
-          {checkoutLoading
-            ? (lang === "fr" ? "Ouverture du paiement..." : "Opening checkout...")
-            : redeemingAccessCode || saving
-              ? (lang === "fr" ? "Activation..." : "Activating...")
-              : (lang === "fr" ? "Continuer" : "Continue")}
-        </ContinueButton>
-      </div>
+      <ContinueButton
+        onClick={startOnboardingCheckout}
+        disabled={checkoutLoading || redeemingAccessCode || saving}
+        testId="showcase-pricing-continue"
+      >
+        {checkoutLoading
+          ? (lang === "fr" ? "Ouverture du paiement..." : "Opening checkout...")
+          : redeemingAccessCode || saving
+            ? (lang === "fr" ? "Activation..." : "Activating...")
+            : (lang === "fr" ? "Continuer" : "Continue")}
+      </ContinueButton>
     ) : step === "profileWelcome" ? (
-      <div className="space-y-2">
-        <ContinueButton onClick={onContinue} testId="profile-welcome-continue">
-          {lang === "fr" ? "Continuer" : "Continue"}
-        </ContinueButton>
-        <p className="text-center text-xs font-semibold text-linkedin">{getOnboardingValueTagline(lang)}</p>
-      </div>
+      <ContinueButton onClick={onContinue} testId="profile-welcome-continue">
+        {lang === "fr" ? "Continuer" : "Continue"}
+      </ContinueButton>
     ) : step === "showcaseLanding" || step === "showcaseAllInOne" ? (
-      <div className="space-y-2">
-        <p className="text-center text-xs font-semibold text-linkedin">{getOnboardingValueTagline(lang)}</p>
-        <ContinueButton onClick={onContinue} disabled={!canContinue() || parsing}>
-          {lang === "fr" ? "Continuer" : "Continue"}
-        </ContinueButton>
-      </div>
+      <ContinueButton onClick={onContinue} disabled={!canContinue() || parsing}>
+        {lang === "fr" ? "Continuer" : "Continue"}
+      </ContinueButton>
     ) : step === "referralCode" ? (
       <div className="space-y-2.5">
         <ContinueButton onClick={submitReferralCode} disabled={!referralCode.trim()} testId="referral-submit">
@@ -688,9 +741,23 @@ export default function Onboarding() {
         </ContinueButton>
         <button
           type="button"
-          onClick={goNext}
+          onClick={skipStep}
           className="w-full h-11 sm:h-12 rounded-full border border-zinc-200 bg-white text-sm sm:text-base font-semibold text-linkedin hover:bg-violet-50 transition-colors"
           data-testid="referral-skip"
+        >
+          {lang === "fr" ? "Passer" : "Skip"}
+        </button>
+      </div>
+    ) : step === "contractType" || step === "categories" ? (
+      <div className="space-y-2.5">
+        <ContinueButton onClick={onContinue} disabled={!canContinue() || parsing}>
+          {lang === "fr" ? "Continuer" : "Continue"}
+        </ContinueButton>
+        <button
+          type="button"
+          onClick={skipStep}
+          className="w-full h-11 sm:h-12 rounded-full border border-zinc-200 bg-white text-sm sm:text-base font-semibold text-linkedin hover:bg-violet-50 transition-colors"
+          data-testid={step === "categories" ? "categories-skip" : "contract-type-skip"}
         >
           {lang === "fr" ? "Passer" : "Skip"}
         </button>
@@ -1194,7 +1261,7 @@ export default function Onboarding() {
                     <FileText className={`w-6 h-6 ${ob.accent}`} />
                   </div>
                   <p className="font-semibold text-sm sm:text-base text-zinc-900">{lang === "fr" ? "Aucun CV sélectionné" : "No resume selected"}</p>
-                  <p className={`text-xs sm:text-sm ${ob.muted} mt-1`}>{lang === "fr" ? "PDF ou PNG acceptés" : "PDF or PNG supported"}</p>
+                  <p className={`text-xs sm:text-sm ${ob.muted} mt-1`}>{lang === "fr" ? "PDF, PNG, JPG ou DOCX" : "PDF, PNG, JPG, or DOCX"}</p>
                 </>
               ) : (
                 <div className="flex items-center justify-center gap-2 text-zinc-700">
@@ -1207,7 +1274,7 @@ export default function Onboarding() {
                 id="cv-input"
                 data-testid="cv-file-input"
                 type="file"
-                accept=".pdf,.png,.docx,.txt"
+                accept={CV_ACCEPT_ATTR}
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
@@ -1260,7 +1327,10 @@ export default function Onboarding() {
 
         {step === "profileSetup" && !parsing && (
           <ProfileSetupStep
-            onComplete={() => setStepIndex(STEP_ORDER.indexOf("profileWelcome"))}
+            onComplete={() => {
+              trackOnboardingContinue("profileSetup");
+              setStepIndex(STEP_ORDER.indexOf("profileWelcome"));
+            }}
           />
         )}
 

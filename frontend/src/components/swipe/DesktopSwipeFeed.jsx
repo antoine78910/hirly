@@ -44,6 +44,8 @@ const SWIPE_EXIT = {
   apply: { x: 720, rotate: 10, opacity: 0, scale: 0.92 },
 };
 
+const DESKTOP_CARD_WIDTH = "w-full max-w-3xl";
+
 const feedFallbackMessage = (t, feedMeta) => {
   if (!feedMeta?.fallback_reason) return t("swipe.noJobs");
   if (feedMeta.provider_rate_limited) return t("swipe.providerRateLimited");
@@ -116,7 +118,7 @@ export default function DesktopSwipeFeed({
 
   const commitRole = useCallback(async () => {
     const trimmed = roleDraft.trim();
-    if (!trimmed || trimmed === (target.role || "")) return;
+    if (trimmed === (target.role || "")) return;
     const ok = await onTargetSave?.({
       role: trimmed,
       location: displayLocation,
@@ -275,7 +277,7 @@ export default function DesktopSwipeFeed({
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className={`flex items-center justify-end gap-4 border-b px-6 py-3 ${theme.header}`}>
+        <header className={`flex items-center justify-end gap-4 border-b px-4 py-2.5 lg:px-6 ${theme.header}`}>
           <DesktopCreditsPill isDark={isDark} />
           <button
             type="button"
@@ -304,7 +306,7 @@ export default function DesktopSwipeFeed({
           </button>
         </header>
 
-        <div className={`border-b px-6 py-4 ${theme.searchBar}`}>
+        <div className={`border-b px-4 py-3 lg:px-6 ${theme.searchBar}`}>
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex shrink-0 items-center gap-3">
               <SearchRadiusSlider
@@ -393,42 +395,9 @@ export default function DesktopSwipeFeed({
           </div>
         </div>
 
-        <div className="flex items-center justify-center gap-2 px-6 py-4">
-          <motion.button
-            type="button"
-            whileTap={{ scale: 0.98 }}
-            onClick={() => runSwipe("skip")}
-            disabled={swipeDisabled}
-            className={`inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-md border px-6 text-sm font-medium shadow-sm transition-all disabled:pointer-events-none disabled:opacity-50 ${theme.actionBtn}`}
-            aria-label={t("swipe.pass")}
-            data-testid="desktop-pass-btn"
-          >
-            {t("swipe.pass")}
-            <kbd className={`pointer-events-none inline-flex h-5 min-w-5 items-center justify-center rounded-sm px-1 font-sans text-xs font-medium ${theme.actionKbd}`}>
-              ←
-            </kbd>
-          </motion.button>
-
-          <motion.button
-            type="button"
-            whileTap={{ scale: 0.98 }}
-            onClick={() => runSwipe("apply")}
-            disabled={swipeDisabled}
-            className={`inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-md border px-6 text-sm font-medium shadow-sm transition-all disabled:pointer-events-none disabled:opacity-50 ${theme.actionBtn}`}
-            aria-label={t("swipe.apply")}
-            data-testid="desktop-apply-btn"
-          >
-            {appLoading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-            {t("swipe.apply")}
-            <kbd className={`pointer-events-none inline-flex h-5 min-w-5 items-center justify-center rounded-sm px-1 font-sans text-xs font-medium ${theme.applyKbd}`}>
-              →
-            </kbd>
-          </motion.button>
-        </div>
-
-        <div className="relative min-h-0 flex-1 px-6 pb-6">
+        <div className="relative min-h-0 flex-1 px-4 pb-4 pt-2 lg:px-6 lg:pb-5">
           {loading && !job ? (
-            <div className={`mx-auto max-w-3xl animate-pulse rounded-2xl border p-8 ${theme.skeleton}`}>
+            <div className={`mx-auto ${DESKTOP_CARD_WIDTH} animate-pulse rounded-2xl border p-8 ${theme.skeleton}`}>
               <div className={`h-8 w-2/3 rounded ${theme.skeletonBar}`} />
               <div className={`mt-4 h-4 w-1/3 rounded ${theme.skeletonBar}`} />
               <div className={`mt-8 h-32 rounded-xl ${theme.skeletonBar}`} />
@@ -447,7 +416,7 @@ export default function DesktopSwipeFeed({
               </button>
             </div>
           ) : (
-            <div className="relative mx-auto flex h-full max-w-3xl flex-col">
+            <div className={`relative mx-auto flex h-full ${DESKTOP_CARD_WIDTH} flex-col`}>
               <AnimatePresence mode="wait" initial={false}>
                 {displayJob ? (
                 <motion.article
@@ -505,6 +474,47 @@ export default function DesktopSwipeFeed({
                   </div>
 
                   <DesktopJobCard job={displayJob} theme={theme} t={t} lang={lang} />
+
+                  <div
+                    className={`pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center gap-2 px-6 pb-4 pt-12 ${
+                      isDark
+                        ? "bg-gradient-to-t from-zinc-900 via-zinc-900/95 to-transparent"
+                        : "bg-gradient-to-t from-white via-white/95 to-transparent"
+                    }`}
+                  >
+                    <div className="pointer-events-auto flex gap-2">
+                      <motion.button
+                        type="button"
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => runSwipe("skip")}
+                        disabled={swipeDisabled}
+                        className={`inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-md border px-6 text-sm font-medium shadow-sm transition-all disabled:pointer-events-none disabled:opacity-50 ${theme.actionBtn}`}
+                        aria-label={t("swipe.pass")}
+                        data-testid="desktop-pass-btn"
+                      >
+                        {t("swipe.pass")}
+                        <kbd className={`pointer-events-none inline-flex h-5 min-w-5 items-center justify-center rounded-sm px-1 font-sans text-xs font-medium ${theme.actionKbd}`}>
+                          ←
+                        </kbd>
+                      </motion.button>
+
+                      <motion.button
+                        type="button"
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => runSwipe("apply")}
+                        disabled={swipeDisabled}
+                        className={`inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-md border px-6 text-sm font-medium shadow-sm transition-all disabled:pointer-events-none disabled:opacity-50 ${theme.actionBtn}`}
+                        aria-label={t("swipe.apply")}
+                        data-testid="desktop-apply-btn"
+                      >
+                        {appLoading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+                        {t("swipe.apply")}
+                        <kbd className={`pointer-events-none inline-flex h-5 min-w-5 items-center justify-center rounded-sm px-1 font-sans text-xs font-medium ${theme.applyKbd}`}>
+                          →
+                        </kbd>
+                      </motion.button>
+                    </div>
+                  </div>
                 </motion.article>
                 ) : null}
               </AnimatePresence>

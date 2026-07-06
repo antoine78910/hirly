@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { api } from "../lib/api";
 import { fetchTrackerPageData, fetchDemoSwipeHistory } from "../lib/demoApplications";
+import { applyFromPassedJob } from "../lib/applyFromPassed";
 import { FINANCE_DEMO_CHANGED } from "../lib/financeDemoApi";
 import { DEMO_ACCOUNT_CHANGED } from "../lib/demoAccount";
 import {
@@ -31,7 +32,9 @@ import {
   getTrackerEmptyCopy,
   getTrackerFilterTabs,
   getTrackerQuickFilters,
+  getPackageErrorMessage,
 } from "../lib/appUi";
+import { useUpgradeModal } from "../context/UpgradeModalContext";
 
 const QUICK_FILTER_ICONS = {
   submitted: Send,
@@ -320,6 +323,7 @@ export default function Tracker() {
   const { t, lang } = useAppLocale();
   const activeTab = searchParams.get("tab") === "passed" ? "passed" : "applications";
   const { user } = useAuth();
+  const { openUpgrade } = useUpgradeModal();
   const displayStatuses = useMemo(() => getApplicationDisplayStatuses(t), [t]);
   const filters = useMemo(() => getTrackerFilterTabs(t), [t]);
   const quickFilters = useMemo(() => getTrackerQuickFilters(t), [t]);
@@ -363,13 +367,13 @@ export default function Tracker() {
   const applyPassedJob = async (jobId) => {
     setApplyingPassedId(jobId);
     try {
-      await api.delete(`/swipes/${jobId}`);
-      await api.post("/swipe", { job_id: jobId, direction: "right" });
+      await applyFromPassedJob(api, jobId);
       toast.success(t("history.packageGenerated"));
       await Promise.all([loadPassed(), load()]);
       setActiveTab("applications");
-    } catch {
-      toast.error(t("history.packageError"));
+    } catch (e) {
+      if (e?.response?.status === 402) openUpgrade();
+      toast.error(getPackageErrorMessage(t, e));
     } finally {
       setApplyingPassedId(null);
     }
@@ -840,6 +844,10 @@ export default function Tracker() {
               </button>
             ) : null}
           </label>
+
+          <p className="mt-3 text-xs leading-relaxed shell-body md:mt-4">
+            {t("history.generatePackageHint")}
+          </p>
 
           {pageLoading ? (
             <div className="mt-12 flex justify-center" data-testid="passed-loading">

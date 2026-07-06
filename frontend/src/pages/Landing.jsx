@@ -4,37 +4,79 @@ import { ArrowRight, Sparkles, Zap, FileCheck2, Inbox, Heart, X, Star } from "lu
 import { motion } from "framer-motion";
 import { useEffect } from "react";
 import Logo from "../components/Logo";
-import { BRAND } from "../lib/brand";
+import { BRAND, supportMailto } from "../lib/brand";
 import { startGoogleLogin } from "../lib/auth";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { trackEvent } from "../lib/analytics";
+import { trackDatafastGoal } from "../lib/datafast";
 import { preloadOnboardingIntroImages } from "../lib/onboardingImagePreload";
 import { useAppLocale } from "../context/AppLocaleContext";
 import LandingFaq from "../components/landing/LandingFaq";
+import { goToApp } from "../lib/appDomains";
+import { PRIVACY_PATH, TERMS_PATH } from "../lib/legalPaths";
 
 export default function Landing() {
   const navigate = useNavigate();
   const { user, hasProfile, hasPreferences, loading } = useAuth();
   const [searchParams] = useSearchParams();
-  const postLoginPath = searchParams.get("redirect") || "/swipe";
+  const redirectParam = searchParams.get("redirect");
+  const postLoginPath = redirectParam?.startsWith("http")
+    ? (() => {
+        try {
+          const url = new URL(redirectParam);
+          return `${url.pathname}${url.search}${url.hash}` || "/swipe";
+        } catch (_) {
+          return "/swipe";
+        }
+      })()
+    : (redirectParam || "/swipe");
   const { lang, setLang } = useAppLocale();
 
   useEffect(() => {
     trackEvent("landing_view");
+    trackDatafastGoal("lp_view");
     preloadOnboardingIntroImages();
   }, []);
 
+  useEffect(() => {
+    if (loading || !user || !redirectParam?.startsWith("http")) return;
+    try {
+      const target = new URL(redirectParam);
+      if (!target.hostname.endsWith("tryhirly.com")) return;
+      if (hasProfile && hasPreferences) {
+        window.location.replace(redirectParam);
+        return;
+      }
+      navigate("/onboarding");
+    } catch (_) {
+      /* ignore malformed redirect */
+    }
+  }, [loading, user, hasProfile, hasPreferences, redirectParam, navigate]);
+
   const onSignIn = () => {
     trackEvent("cta_login_clicked", { location: "header" });
+    trackDatafastGoal("lp_cta_sign_in", { location: "header" });
     startGoogleLogin(postLoginPath);
   };
 
-  const onStartSwiping = () => {
+  const onStartSwiping = (location = "hero") => {
     if (loading) return;
     trackEvent("cta_start_swiping_clicked", { authenticated: Boolean(user) });
+    trackDatafastGoal("lp_cta_start", {
+      location,
+      authenticated: user ? "true" : "false",
+    });
     if (user) {
-      navigate(hasProfile && hasPreferences ? "/swipe" : "/onboarding");
+      if (hasProfile && hasPreferences) {
+        if (redirectParam?.startsWith("http")) {
+          window.location.assign(redirectParam);
+          return;
+        }
+        goToApp(postLoginPath);
+        return;
+      }
+      navigate("/onboarding");
       return;
     }
     trackEvent("cta_signup_clicked", { location: "landing_start_swiping" });
@@ -89,9 +131,9 @@ export default function Landing() {
             className="font-display font-black text-5xl sm:text-6xl lg:text-7xl tracking-tighter leading-[0.95]"
           >
             {lang === "fr" ? (
-              <>Hirly trouve ton prochain job,<br /><span className="italic text-swiipr-gradient">cette semaine.</span></>
+              <>Arrête de passer des heures à <span className="italic text-swiipr-gradient">postuler.</span></>
             ) : (
-              <>Hirly finds your next job,<br /><span className="italic text-swiipr-gradient">this week.</span></>
+              <>Stop spending hours <span className="italic text-swiipr-gradient">applying.</span></>
             )}
           </motion.h1>
 
@@ -102,8 +144,8 @@ export default function Landing() {
             className="mt-6 text-lg sm:text-xl text-zinc-600 max-w-2xl mx-auto leading-relaxed"
           >
             {lang === "fr"
-              ? "Try Hirly, ou tryhirly, pour swiper les offres qui te correspondent. On s'occupe de postuler pour toi."
-              : "Try Hirly, also searched as tryhirly, to swipe jobs that match you. AI applies for you."}
+              ? "L'IA trouve les offres et postule pour toi."
+              : "AI finds jobs and applies for you."}
           </motion.p>
 
           <motion.div
@@ -252,7 +294,7 @@ export default function Landing() {
             </p>
             <Button
               data-testid="footer-cta-btn"
-              onClick={onStartSwiping}
+              onClick={() => onStartSwiping("footer")}
               disabled={loading}
               size="lg"
               variant="brand"
@@ -441,6 +483,17 @@ export default function Landing() {
           </div>
           <div className="border-t border-zinc-100 pt-6 text-sm text-zinc-400">
             <p>© {new Date().getFullYear()} {BRAND.NAME}</p>
+            <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+              <Link to={TERMS_PATH} className="hover:text-zinc-600 transition-colors">
+                {lang === "fr" ? "Conditions d'utilisation" : "Terms of Use"}
+              </Link>
+              <Link to={PRIVACY_PATH} className="hover:text-zinc-600 transition-colors">
+                {lang === "fr" ? "Politique de confidentialité" : "Privacy Policy"}
+              </Link>
+              <a href={supportMailto()} className="hover:text-zinc-600 transition-colors">
+                {BRAND.SUPPORT_EMAIL}
+              </a>
+            </p>
           </div>
         </div>
       </footer>

@@ -6,7 +6,6 @@ import {
 } from "lucide-react";
 import { useAiSettings } from "../../hooks/useAiSettings";
 import { useDesktopTheme } from "./DesktopAppShell";
-import DemoAccountBadge from "../settings/DemoAccountBadge";
 import FinanceDemoSection from "../settings/FinanceDemoSection";
 import ViralToggle from "../settings/ViralToggle";
 import { useAppLocale } from "../../context/AppLocaleContext";
@@ -67,7 +66,6 @@ export default function AISettingsPanel() {
   return (
     <div className="mx-auto max-w-3xl px-6 py-10 lg:px-10 lg:py-14">
       <div className="mb-8 space-y-5">
-        <DemoAccountBadge />
         <div>
           <h1 className={`font-display text-3xl font-bold tracking-tight lg:text-4xl ${isDark ? "text-white" : "text-zinc-900"}`}>
             {t("aiSettings.title")}

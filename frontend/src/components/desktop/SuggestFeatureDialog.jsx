@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { api } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
 import { useAppLocale } from "../../context/AppLocaleContext";
+import { BRAND } from "../../lib/brand";
 
 const MAX_FILES = 5;
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -114,7 +115,7 @@ export default function SuggestFeatureDialog({ open, onClose, isDark = false, au
       setCategory("feature");
       onClose?.();
     } catch (error) {
-      toast.error(error?.response?.data?.detail || t("suggestFeature.error"));
+      toast.error(error?.response?.data?.detail || t("suggestFeature.error", { email: BRAND.SUPPORT_EMAIL }));
     } finally {
       setSending(false);
     }

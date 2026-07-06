@@ -5,10 +5,14 @@ import {
   examplesGrid,
   heading,
   infoScript,
+  linkBlock,
   paragraph,
   sectionBlock,
   warningGuideline,
 } from "./trainingDocBlocks";
+
+const BRAND_ASSETS_DRIVE_URL =
+  "https://drive.google.com/drive/folders/1_6Q7rK8LbzAHu4CUqpx6R0HkIhfrZZ4b?usp=sharing";
 
 /** Shorthand: { label, url? } */
 function ex(label, url = "") {
@@ -104,6 +108,11 @@ const CONTENT_BANK_EN = [
       heading(2, "Main Script"),
       infoScript(
         "Good. Better. Best. Job application edition.\n\nGood. LinkedIn and Indeed.\nYour standard job platforms. You see they use tons of listings, but you're competing with hundreds of applicants and most of the times it's a hit or miss.\n\nBetter. Handshake. More curated, especially for students. You'll find internships and early career roles, but you still have to apply to everything yourself.\n\nBest. Hirly. All you have to do is swipe right on the jobs you want and it auto-applies to hundreds of applications without you needing to do anything. It generates a tailored resume and cover letter per role and submits directly on the company's website.",
+      ),
+      heading(3, "Resources"),
+      linkBlock("Logos: Open official Hirly logos folder (Google Drive)", BRAND_ASSETS_DRIVE_URL),
+      warningGuideline(
+        "Point to each tier (Good, Better, Best) on screen as you say it. Use transparent PNG logos from the shared folder for overlays — don't stretch, recolor, or add effects.",
       ),
     ],
   }),

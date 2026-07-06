@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import {
   Zap, Undo2, History, SlidersHorizontal, Flag, Share2, MapPin, Calendar,
-  Heart, X, Loader2, Info,
+  Heart, X, Loader2, Info, DollarSign, Briefcase, FileText, Star,
 } from "lucide-react";
 import { toast } from "sonner";
 import Logo from "../components/Logo";
@@ -33,24 +33,40 @@ import { ensureTutorialSession } from "../lib/tutorialSession";
 import { useUpgradeModal } from "../context/UpgradeModalContext";
 import DesktopSwipeFeed from "../components/swipe/DesktopSwipeFeed";
 import { saveTargetPreferences, normalizeLocationData } from "../lib/targetPreferences";
+import { enrichLocationData } from "../lib/locationSearch";
 import { hasActiveFilters, mergeFilters, clearMenuFilters } from "../lib/jobFilters";
-import { buildDefaultFiltersFromProfile, mergeProfileFilterDefaults, reconcileFiltersForUser } from "../lib/contractTypeMapping";
+import { reconcileFiltersForUser } from "../lib/contractTypeMapping";
 import { useAppLocale } from "../context/AppLocaleContext";
+import DesktopCreditsPill from "../components/desktop/DesktopCreditsPill";
 import { BILLING_UPDATED } from "../lib/billingEvents";
 import {
   formatPostedDate,
   getSwipeSuccessCopy,
   getSwipeErrorMessage,
 } from "../lib/appUi";
-import { getJobBadgeItems, getJobDisplayContent } from "../lib/jobDisplayUtils";
+import { getJobBadgeItems, getJobDisplayContent, formatJobSalaryLabel } from "../lib/jobDisplayUtils";
+import JobRomeProfile from "../components/swipe/JobRomeProfile";
+import JobOfferDetails from "../components/swipe/JobOfferDetails";
 import { translateJobTitle, translateLocationLabel, translateRoleLabel } from "../lib/localizedDisplay";
 
 import { preloadCompanyLogos } from "../lib/companyLogos";
+import {
+  buildSwipeFeedCacheKey,
+  clearSwipeFeedCache,
+  filterOutSwipedJobs,
+  getSwipeFeedCacheSnapshot,
+  isSwipeFeedCacheFresh,
+  readSwipeFeedCache,
+  recordSwipedJobId,
+  seedSwipedJobIds,
+  unrecordSwipedJobId,
+  writeSwipeFeedCache,
+} from "../lib/swipeFeedCache";
 
 const DEFAULT_SEARCH_RADIUS = "50km";
 const FEED_BATCH_SIZE = 12;
 const FEED_PREFETCH_THRESHOLD = 7;
-const FILTERS_STORAGE_KEY = "swiipr.jobs.filters.v1";
+const FILTERS_STORAGE_KEY = "swiipr.jobs.filters.v2";
 
 const readPersistedFilters = () => {
   if (typeof window === "undefined") return null;
@@ -58,7 +74,8 @@ const readPersistedFilters = () => {
     const raw = window.localStorage.getItem(FILTERS_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : null;
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed;
   } catch (_) {
     return null;
   }
@@ -69,6 +86,17 @@ const savePersistedFilters = (filters) => {
   try {
     window.localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(filters));
   } catch (_) {}
+};
+
+/** Target pill search wins over location filters saved in the filters modal. */
+const filtersForTargetSearch = (f) => {
+  const merged = mergeFilters(f);
+  return {
+    ...merged,
+    locations: [],
+    locationsData: [],
+    locationData: null,
+  };
 };
 
 const clearPersistedFilters = () => {
@@ -167,23 +195,42 @@ function stopCardTap(e) {
   e.stopPropagation();
 }
 
+function mobileSectionMeta(title) {
+  const normalized = (title || "").toLowerCase();
+  if (/desired|nice to have|preferred|souhait|plus|atout/i.test(normalized)) {
+    return { Icon: Star, iconClass: "text-amber-500" };
+  }
+  if (/required|requirement|requis|profil recherch/i.test(normalized)) {
+    return { Icon: Briefcase, iconClass: "text-sprout-mint" };
+  }
+  if (/about/i.test(normalized)) {
+    return { Icon: FileText, iconClass: "text-sprout-mint" };
+  }
+  return { Icon: FileText, iconClass: "text-sprout-mint" };
+}
+
 function MobileDetailSection({ title, bullets, body, t }) {
   const isAbout = /about/i.test(title || "");
+  const { Icon, iconClass } = mobileSectionMeta(title);
 
   return (
     <section className="rounded-2xl border border-sprout-border bg-sprout-surface-2/40 px-4 py-3">
-      <h3 className="font-display text-base font-bold text-white">
+      <h3 className="mb-2 flex items-center gap-2 font-display text-base font-bold text-white">
+        <Icon className={`h-4 w-4 shrink-0 ${iconClass}`} aria-hidden="true" />
         {isAbout ? t("swipe.aboutRole") : title}
+        {!isAbout && bullets?.length ? (
+          <span className="font-normal text-sprout-muted">({bullets.length})</span>
+        ) : null}
       </h3>
       {body ? (
-        <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-sprout-muted">{body}</p>
+        <p className="line-clamp-6 whitespace-pre-wrap text-sm leading-relaxed text-sprout-muted">{body}</p>
       ) : null}
       {bullets?.length ? (
-        <ul className="mt-2 space-y-2">
+        <ul className="space-y-2">
           {bullets.map((bullet, index) => (
-            <li key={`${title}-${index}`} className="flex gap-2 text-sm leading-relaxed text-sprout-muted">
-              <span className="text-sprout-mint">•</span>
-              <span>{bullet}</span>
+            <li key={`${title}-${index}`} className="flex items-start gap-2 text-sm leading-relaxed text-sprout-muted">
+              <span className="mt-1.5 text-[8px] text-sprout-mint">●</span>
+              <span className="line-clamp-2">{bullet}</span>
             </li>
           ))}
         </ul>
@@ -197,6 +244,7 @@ function CardFront({ job, onReport, onShare, actionsEnabled, t, lang }) {
   const badges = getJobBadgeItems(job, { lang });
   const title = translateJobTitle(job.title, lang);
   const location = translateLocationLabel(job.location, lang) || t("swipe.locationNotSpecified");
+  const salaryLabel = formatJobSalaryLabel(job, { lang });
 
   return (
     <div className="backface-hidden absolute inset-0 flex flex-col overflow-hidden rounded-[28px] border border-sprout-border bg-sprout-surface">
@@ -229,10 +277,6 @@ function CardFront({ job, onReport, onShare, actionsEnabled, t, lang }) {
             <Share2 className="h-5 w-5" strokeWidth={1.8} />
           </button>
         </div>
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-sprout-mint px-3 py-1 text-xs font-bold text-white">
-          <Zap className="h-3.5 w-3.5" fill="white" />
-          1
-        </span>
       </div>
 
       <div className="mt-1 flex justify-center">
@@ -260,6 +304,12 @@ function CardFront({ job, onReport, onShare, actionsEnabled, t, lang }) {
           <MapPin className="h-4 w-4 text-sprout-mint" strokeWidth={1.9} />
           <span>{location}</span>
         </div>
+        {salaryLabel ? (
+          <div className="flex items-center gap-2">
+            <DollarSign className="h-4 w-4 text-sprout-mint" strokeWidth={1.9} />
+            <span className="text-center">{salaryLabel}</span>
+          </div>
+        ) : null}
         <div className="flex items-center gap-2">
           <Calendar className="h-4 w-4 text-sprout-mint" strokeWidth={1.9} />
           <span>{formatPostedDate(t, job.posted_at) || t("swipe.postedRecently")}</span>
@@ -297,37 +347,64 @@ function CardFront({ job, onReport, onShare, actionsEnabled, t, lang }) {
 
 function CardBack({ job, t, lang }) {
   const { about, detailSections } = getJobDisplayContent(job);
+  const badges = getJobBadgeItems(job, { lang });
   const title = translateJobTitle(job.title, lang);
   const location = translateLocationLabel(job.location, lang) || t("swipe.locationNotSpecified");
+  const salaryLabel = formatJobSalaryLabel(job, { lang });
 
   return (
     <div className="backface-hidden rotate-y-180 absolute inset-0 flex flex-col overflow-hidden rounded-[28px] border border-sprout-border bg-sprout-surface">
-      <div
-        className="app-scroll no-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-6 pb-4 touch-pan-y sm:px-6"
-        data-testid="swipe-card-scroll"
-      >
-        <div>
-          <h2 className="font-display text-[clamp(1.5rem,5.5vw,2rem)] font-black leading-tight tracking-tight text-white">
+      <div className="flex h-1/4 min-h-0 shrink-0 items-center border-b border-sprout-border px-5 py-3 sm:px-6">
+        <CompanyLogo job={job} size="md" rounded="xl" className="mr-3 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <h2
+            className="line-clamp-2 font-display text-lg font-black leading-tight tracking-tight text-white sm:text-xl"
+            data-testid="job-title-back"
+          >
             {title}
           </h2>
-          <div className="mt-3 flex items-center gap-3">
-            <CompanyLogo job={job} size="md" rounded="xl" className="shrink-0" />
-            <p className="text-lg font-semibold text-white">{job.company}</p>
-          </div>
+          <p className="mt-0.5 truncate text-sm font-semibold text-white sm:text-base">{job.company}</p>
         </div>
+      </div>
 
+      <div className="flex h-3/4 min-h-0 flex-col">
+      <div
+        className="app-scroll no-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-4 pb-2 touch-pan-y sm:px-6"
+        data-testid="swipe-card-scroll"
+      >
         <div className="space-y-1.5 text-[15px] text-sprout-muted">
           <div className="flex items-center gap-2">
             <MapPin className="h-4 w-4 text-sprout-mint" />
             <span>{location}</span>
           </div>
+          {salaryLabel ? (
+            <div className="flex items-center gap-2">
+              <DollarSign className="h-4 w-4 text-sprout-mint" />
+              <span>{salaryLabel}</span>
+            </div>
+          ) : null}
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4 text-sprout-mint" />
             <span>{formatPostedDate(t, job.posted_at) || t("swipe.postedRecently")}</span>
           </div>
         </div>
 
+        {badges.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {badges.map((badge) => (
+              <span
+                key={badge.label}
+                className="inline-flex items-center rounded-full bg-sprout-surface-2 px-3 py-1.5 text-[13px] font-medium text-zinc-100"
+              >
+                {badge.label}
+              </span>
+            ))}
+          </div>
+        ) : null}
+
         <div className="border-t border-sprout-border" />
+
+        <JobOfferDetails job={job} t={t} lang={lang} compact />
 
         <div className="space-y-3">
           {about ? (
@@ -341,28 +418,11 @@ function CardBack({ job, t, lang }) {
               t={t}
             />
           ))}
-          {job.match_reasons?.length > 0 ? (
-            <MobileDetailSection title={t("swipe.whyFits")} bullets={job.match_reasons} t={t} />
-          ) : null}
-          {job.tech_stack?.length > 0 ? (
-            <section className="rounded-2xl border border-sprout-border bg-sprout-surface-2/40 px-4 py-3">
-              <h3 className="font-display text-base font-bold text-white">{t("swipe.techStack")}</h3>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {job.tech_stack.map((tech) => (
-                  <span
-                    key={tech}
-                    className="rounded-full bg-sprout-mint-soft px-2.5 py-1 text-xs font-semibold text-sprout-mint"
-                  >
-                    {tech}
-                  </span>
-                ))}
-              </div>
-            </section>
-          ) : null}
+          <JobRomeProfile job={job} t={t} enabled />
         </div>
       </div>
 
-      <div className="flex shrink-0 items-center justify-between border-t border-sprout-border px-6 py-4 text-[13px] text-sprout-muted">
+      <div className="flex shrink-0 items-center justify-between border-t border-sprout-border px-6 py-3 text-[13px] text-sprout-muted">
         <span className="flex items-center gap-1.5 font-display font-bold text-white">
           <Logo size={18} />
           {BRAND.NAME}
@@ -371,6 +431,7 @@ function CardBack({ job, t, lang }) {
           {t("swipe.tapToFlipBack")}
           <Info className="h-4 w-4" />
         </span>
+      </div>
       </div>
     </div>
   );
@@ -513,19 +574,23 @@ export default function Swipe() {
   const { t, lang } = useAppLocale();
   const { loading: authLoading, user } = useAuth();
   const [demoWelcomeOpen, setDemoWelcomeOpen] = useState(false);
-  const [jobs, setJobs] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [jobs, setJobs] = useState(() => getSwipeFeedCacheSnapshot().jobs);
+  const [loading, setLoading] = useState(() => !getSwipeFeedCacheSnapshot().jobs.length);
   const [appLoading, setAppLoading] = useState(false);
   const [appliedToday, setAppliedToday] = useState(0);
-  const [target, setTarget] = useState({ role: "", location: "" });
-  const [targetLocationData, setTargetLocationData] = useState(null);
+  const [target, setTarget] = useState(() => getSwipeFeedCacheSnapshot().target || { role: "", location: "" });
+  const [targetLocationData, setTargetLocationData] = useState(() => getSwipeFeedCacheSnapshot().targetLocationData);
   const [targetSaving, setTargetSaving] = useState(false);
   const [targetSheetOpen, setTargetSheetOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [desktopFiltersOpen, setDesktopFiltersOpen] = useState(false);
-  const [filters, setFilters] = useState(() => readPersistedFilters());
+  const [filters, setFilters] = useState(() => (
+    getSwipeFeedCacheSnapshot().filters
+      ? mergeFilters(getSwipeFeedCacheSnapshot().filters)
+      : mergeFilters(readPersistedFilters())
+  ));
   const [totalCount, setTotalCount] = useState(null);
-  const [feedMeta, setFeedMeta] = useState(null);
+  const [feedMeta, setFeedMeta] = useState(() => getSwipeFeedCacheSnapshot().meta);
   const [feedError, setFeedError] = useState("");
   const [lastFeedDebug, setLastFeedDebug] = useState(null);
   const [reportJob, setReportJob] = useState(null);
@@ -534,21 +599,48 @@ export default function Swipe() {
   const fetchingRef = useRef(false);
   const filtersRef = useRef(filters);
   const profileRef = useRef(null);
-  const targetRef = useRef(target);
+  const targetRef = useRef(getSwipeFeedCacheSnapshot().target || { role: "", location: "" });
+  const targetLocationDataRef = useRef(getSwipeFeedCacheSnapshot().targetLocationData);
   const pendingFiltersRef = useRef(undefined);
   const feedAbortRef = useRef(null);
   const feedRequestIdRef = useRef(0);
-  const jobsRef = useRef([]);
+  const jobsRef = useRef(getSwipeFeedCacheSnapshot().jobs);
   const viewedJobIdsRef = useRef(new Set());
   const handleSwipeRef = useRef(null);
+  const backgroundPollTimerRef = useRef(null);
+  const backgroundPollCountRef = useRef(0);
+  const loadFeedRef = useRef(null);
 
   useEffect(() => {
     jobsRef.current = jobs;
   }, [jobs]);
 
   useEffect(() => {
+    if (authLoading || isDemoAccountEnabled() || isFinanceDemoEnabled()) return;
+    if (!jobs.length) return;
+    writeSwipeFeedCache({
+      jobs,
+      meta: feedMeta,
+      target: targetRef.current,
+      targetLocationData: targetLocationDataRef.current,
+      filters: filtersRef.current,
+      cacheKey: buildSwipeFeedCacheKey({
+        userId: user?.user_id,
+        target: targetRef.current,
+        targetLocationData: targetLocationDataRef.current,
+        filters: filtersRef.current,
+      }),
+      userId: user?.user_id,
+    });
+  }, [authLoading, jobs, feedMeta, user?.user_id]);
+
+  useEffect(() => {
     targetRef.current = target;
   }, [target]);
+
+  useEffect(() => {
+    targetLocationDataRef.current = targetLocationData;
+  }, [targetLocationData]);
 
   useEffect(() => {
     if (authLoading || !user?.user_id) return;
@@ -577,12 +669,10 @@ export default function Swipe() {
     setTarget(nextTarget);
     targetRef.current = nextTarget;
     setTargetLocationData(demo.locationData);
+    targetLocationDataRef.current = demo.locationData;
     const nextFilters = clearMenuFilters({
       searchRadius: filtersRef.current?.searchRadius || DEFAULT_SEARCH_RADIUS,
     });
-    if (demo.locationData) {
-      nextFilters.locationsData = [demo.locationData];
-    }
     filtersRef.current = nextFilters;
     setFilters(nextFilters);
     savePersistedFilters(nextFilters);
@@ -595,12 +685,10 @@ export default function Swipe() {
     setTarget(nextTarget);
     targetRef.current = nextTarget;
     setTargetLocationData(demo.locationData);
+    targetLocationDataRef.current = demo.locationData;
     const nextFilters = clearMenuFilters({
       searchRadius: filtersRef.current?.searchRadius || DEFAULT_SEARCH_RADIUS,
     });
-    if (demo.locationData) {
-      nextFilters.locationsData = [demo.locationData];
-    }
     filtersRef.current = nextFilters;
     setFilters(nextFilters);
     savePersistedFilters(nextFilters);
@@ -624,6 +712,7 @@ export default function Swipe() {
           setTarget(nextTarget);
           targetRef.current = nextTarget;
           setTargetLocationData(data.target_location_data || null);
+          targetLocationDataRef.current = data.target_location_data || null;
           return data;
         }
       } catch (_) {}
@@ -641,6 +730,7 @@ export default function Swipe() {
         setTarget(nextTarget);
         targetRef.current = nextTarget;
         setTargetLocationData(data.target_location_data || null);
+        targetLocationDataRef.current = data.target_location_data || null;
       }
       return data || null;
     } catch (_) {
@@ -648,11 +738,28 @@ export default function Swipe() {
     }
   }, [applyFinanceDemoTarget, applyDemoAccountTarget]);
 
+  const syncSwipedJobsFromServer = useCallback(async (userId) => {
+    if (!userId || isDemoAccountEnabled() || isFinanceDemoEnabled()) return;
+    try {
+      const [leftRes, rightRes] = await Promise.all([
+        api.get("/swipes/history?direction=left&limit=500"),
+        api.get("/swipes/history?direction=right&limit=500"),
+      ]);
+      const ids = [
+        ...(leftRes.data?.swipes || []),
+        ...(rightRes.data?.swipes || []),
+      ].map((row) => row?.job_id).filter(Boolean);
+      seedSwipedJobIds(ids, userId);
+    } catch (_) {
+      /* offline / demo */
+    }
+  }, []);
+
   const buildFeedParams = (f) => {
     const params = new URLSearchParams({ limit: String(FEED_BATCH_SIZE), search_radius: DEFAULT_SEARCH_RADIUS });
     const activeTarget = targetRef.current;
-    if (activeTarget?.role?.trim()) {
-      params.set("search_role", activeTarget.role.trim());
+    if (activeTarget) {
+      params.set("search_role", (activeTarget.role || "").trim());
     }
     if (f == null) return params;
     const merged = mergeFilters(f);
@@ -661,12 +768,21 @@ export default function Swipe() {
     merged.workLocations?.forEach((v) => params.append("work_location", v));
     merged.jobTypes?.forEach((v) => params.append("job_type", v));
     merged.experience?.forEach((v) => params.append("experience", v));
-    if (merged.locationsData?.length) {
-      params.set("locations_json", JSON.stringify(merged.locationsData));
-    } else if (merged.locationData) {
-      params.set("locations_json", JSON.stringify([merged.locationData]));
+    const filterLocationsData = merged.locationsData?.length
+      ? merged.locationsData
+      : merged.locationData
+        ? [merged.locationData]
+        : [];
+    if (filterLocationsData.length) {
+      params.set("locations_json", JSON.stringify(filterLocationsData));
+    } else if (targetLocationDataRef.current) {
+      params.set("locations_json", JSON.stringify([targetLocationDataRef.current]));
     } else {
       merged.locations?.forEach((v) => params.append("location", v));
+      const targetLocation = activeTarget?.location?.trim();
+      if (!merged.locations?.length && targetLocation && targetLocation !== "Anywhere") {
+        params.append("location", targetLocation);
+      }
     }
     merged.onlyCompanies?.forEach((v) => params.append("only_company", v));
     merged.hideCompanies?.forEach((v) => params.append("hide_company", v));
@@ -684,14 +800,32 @@ export default function Swipe() {
       feedAbortRef.current.abort();
       feedAbortRef.current = null;
     }
+    if (backgroundPollTimerRef.current && !reason.startsWith("background_poll")) {
+      clearTimeout(backgroundPollTimerRef.current);
+      backgroundPollTimerRef.current = null;
+      backgroundPollCountRef.current = 0;
+    }
     const requestId = feedRequestIdRef.current + 1;
     feedRequestIdRef.current = requestId;
     const controller = new AbortController();
     feedAbortRef.current = controller;
     pendingFiltersRef.current = undefined;
     const stackPrefetch = !replace && jobsRef.current.length > 0;
+    // Only restore-from-navigation should skip the loading skeleton. Any explicit
+    // target/filter change must clear the stack and show a fresh search.
+    const silentRefresh = replace && jobsRef.current.length > 0 && reason === "background_refresh_cache";
+    const isUserSearchChange = (
+      reason.startsWith("target_")
+      || reason.startsWith("filters_")
+      || reason === "empty_refresh"
+      || reason === "desktop_refresh"
+    );
     fetchingRef.current = true;
-    if (!stackPrefetch) {
+    if (isUserSearchChange && replace) {
+      clearSwipeFeedCache();
+      jobsRef.current = [];
+    }
+    if (!stackPrefetch && !silentRefresh) {
       setLoading(true);
       if (replace) setJobs([]);
     }
@@ -701,15 +835,6 @@ export default function Swipe() {
       params.set("prefetch", "true");
     }
     let requestUrl = `/jobs/feed?${params.toString()}`;
-    console.group("[FeedDebug] loadFeed");
-    console.log("reason", reason);
-    console.log("forceRefresh", replace);
-    console.log("filters passed to loadFeed", f);
-    console.log("filtersRef.current", filtersRef.current);
-    console.log("request url", requestUrl);
-    console.log("request params", Object.fromEntries(params.entries()));
-    console.log("request param entries", Array.from(params.entries()));
-    console.groupEnd();
     setLastFeedDebug({
       reason,
       forceRefresh: replace,
@@ -736,13 +861,6 @@ export default function Swipe() {
       return data;
     };
     try {
-      console.log("JOB_FEED_PARAMS", {
-        params: params.toString(),
-        locations: f?.locationsData || (f?.locationData ? [f.locationData] : []),
-        search_radius: f?.searchRadius || DEFAULT_SEARCH_RADIUS,
-        only_my_country: Boolean(f?.onlyMyCountry),
-        role: targetRef.current?.role || "",
-      });
       let data;
       try {
         data = await requestFeed();
@@ -759,28 +877,8 @@ export default function Swipe() {
       let localFeedGuard = buildLocalFeedGuard({ params, response: data });
       let responseJobs = Array.isArray(data?.jobs) ? data.jobs : [];
       let safeJobs = localFeedGuard ? responseJobs.filter(localFeedGuard) : responseJobs;
+      safeJobs = filterOutSwipedJobs(safeJobs);
       let outsideLocationHiddenCount = responseJobs.length - safeJobs.length;
-      const trace = data?.request_trace || {};
-      const shouldForceLocalRetry = Boolean(
-        localFeedGuard
-        && safeJobs.length === 0
-        && !params.get("force_provider_refresh")
-        && trace.explicit_local_intent
-        && trace.local_jsearch_discovery_attempted !== true
-      );
-      if (shouldForceLocalRetry) {
-        const retryParams = new URLSearchParams(params);
-        retryParams.set("force_provider_refresh", "true");
-        params = retryParams;
-        requestUrl = `/jobs/feed?${retryParams.toString()}`;
-        console.log("[FeedDebug] forcing local provider refresh", requestUrl);
-        data = await requestFeed(requestUrl);
-        if (requestId !== feedRequestIdRef.current) return;
-        localFeedGuard = buildLocalFeedGuard({ params: retryParams, response: data });
-        responseJobs = Array.isArray(data?.jobs) ? data.jobs : [];
-        safeJobs = localFeedGuard ? responseJobs.filter(localFeedGuard) : responseJobs;
-        outsideLocationHiddenCount = responseJobs.length - safeJobs.length;
-      }
       if (outsideLocationHiddenCount > 0) {
         data = {
           ...(data || {}),
@@ -828,62 +926,90 @@ export default function Swipe() {
         seedTutorialShowcaseIfEmpty(safeJobs);
       }
       setJobs((prev) => {
-        const base = replace ? [] : (localFeedGuard ? prev.filter(localFeedGuard) : prev);
+        const base = replace ? [] : filterOutSwipedJobs(localFeedGuard ? prev.filter(localFeedGuard) : prev);
         const seen = new Set(base.map((j) => j.job_id));
         const merged = [...base];
         safeJobs.forEach((j) => { if (!seen.has(j.job_id)) merged.push(j); });
-        preloadCompanyLogos(merged.slice(0, 6));
-        return merged;
+        const visible = filterOutSwipedJobs(merged);
+        preloadCompanyLogos(visible.slice(0, 6));
+        writeSwipeFeedCache({
+          jobs: visible,
+          meta: data,
+          target: targetRef.current,
+          targetLocationData: targetLocationDataRef.current,
+          filters: filtersRef.current,
+          cacheKey: buildSwipeFeedCacheKey({
+            userId: user?.user_id,
+            target: targetRef.current,
+            targetLocationData: targetLocationDataRef.current,
+            filters: filtersRef.current,
+          }),
+          userId: user?.user_id,
+        });
+        return visible;
       });
+      // Backend started a provider refresh in the background: silently poll a
+      // couple of times to merge freshly imported jobs into the stack.
+      if (data?.background_refresh_scheduled && backgroundPollCountRef.current < 3) {
+        backgroundPollCountRef.current += 1;
+        const attempt = backgroundPollCountRef.current;
+        const pollDelays = { 1: 3000, 2: 8000, 3: 15000 };
+        backgroundPollTimerRef.current = setTimeout(() => {
+          backgroundPollTimerRef.current = null;
+          if (!fetchingRef.current) {
+            loadFeedRef.current?.(false, filtersRef.current, `background_poll_${attempt}`);
+          }
+        }, pollDelays[attempt] || 15000);
+      } else if (!data?.background_refresh_scheduled) {
+        backgroundPollCountRef.current = 0;
+      }
     } catch (e) {
       if (controller.signal.aborted || e?.code === "ERR_CANCELED") return;
       if (requestId !== feedRequestIdRef.current) return;
       if (e?.code === "ECONNABORTED") {
         const retryParams = new URLSearchParams(params);
-        if (buildLocalFeedGuard({ params: retryParams, response: { filters_applied: {} } }) && !retryParams.get("force_provider_refresh")) {
-          retryParams.set("force_provider_refresh", "true");
-          const retryUrl = `/jobs/feed?${retryParams.toString()}`;
-          try {
-            const retryData = await requestFeed(retryUrl);
-            if (requestId !== feedRequestIdRef.current) return;
-            const localFeedGuard = buildLocalFeedGuard({ params: retryParams, response: retryData });
-            const responseJobs = Array.isArray(retryData?.jobs) ? retryData.jobs : [];
-            const safeJobs = localFeedGuard ? responseJobs.filter(localFeedGuard) : responseJobs;
-            setLastFeedDebug({
-              reason: `${reason}_timeout_retry`,
-              forceRefresh: replace,
-              filters: f || null,
-              filtersRef: filtersRef.current || null,
-              requestUrl: retryUrl,
-              requestParams: Object.fromEntries(retryParams.entries()),
-              requestParamEntries: Array.from(retryParams.entries()),
-              response: {
-                jobsCount: safeJobs.length,
-                feedSummary: retryData?.feed_summary || null,
-                requestTrace: retryData?.request_trace || null,
-                firstJobs: safeJobs.slice(0, 5).map((job) => ({
-                  title: job.title,
-                  company: job.company,
-                  location: job.location,
-                  application_mode: job.application_mode,
-                  can_auto_apply: job.can_auto_apply,
-                  provider: job.provider,
-                })),
-              },
-            });
-            setTotalCount(typeof retryData.total === "number" ? retryData.total : null);
-            setFeedMeta(retryData || null);
-            setJobs((prev) => {
-              const base = replace ? [] : (localFeedGuard ? prev.filter(localFeedGuard) : prev);
-              const seen = new Set(base.map((j) => j.job_id));
-              const merged = [...base];
-              safeJobs.forEach((j) => { if (!seen.has(j.job_id)) merged.push(j); });
-              return merged;
-            });
-            return;
-          } catch (_) {
-            /* fall through to normal timeout message */
-          }
+        const retryUrl = `/jobs/feed?${retryParams.toString()}`;
+        try {
+          const retryData = await requestFeed(retryUrl);
+          if (requestId !== feedRequestIdRef.current) return;
+          const localFeedGuard = buildLocalFeedGuard({ params: retryParams, response: retryData });
+          const responseJobs = Array.isArray(retryData?.jobs) ? retryData.jobs : [];
+          let safeJobs = localFeedGuard ? responseJobs.filter(localFeedGuard) : responseJobs;
+          safeJobs = filterOutSwipedJobs(safeJobs);
+          setLastFeedDebug({
+            reason: `${reason}_timeout_retry`,
+            forceRefresh: replace,
+            filters: f || null,
+            filtersRef: filtersRef.current || null,
+            requestUrl: retryUrl,
+            requestParams: Object.fromEntries(retryParams.entries()),
+            requestParamEntries: Array.from(retryParams.entries()),
+            response: {
+              jobsCount: safeJobs.length,
+              feedSummary: retryData?.feed_summary || null,
+              requestTrace: retryData?.request_trace || null,
+              firstJobs: safeJobs.slice(0, 5).map((job) => ({
+                title: job.title,
+                company: job.company,
+                location: job.location,
+                application_mode: job.application_mode,
+                can_auto_apply: job.can_auto_apply,
+                provider: job.provider,
+              })),
+            },
+          });
+          setTotalCount(typeof retryData.total === "number" ? retryData.total : null);
+          setFeedMeta(retryData || null);
+          setJobs((prev) => {
+            const base = replace ? [] : filterOutSwipedJobs(localFeedGuard ? prev.filter(localFeedGuard) : prev);
+            const seen = new Set(base.map((j) => j.job_id));
+            const merged = [...base];
+            safeJobs.forEach((j) => { if (!seen.has(j.job_id)) merged.push(j); });
+            return filterOutSwipedJobs(merged);
+          });
+          return;
+        } catch (_) {
+          /* fall through to normal timeout message */
         }
       }
       const rawDetail = e?.response?.data?.detail;
@@ -901,12 +1027,21 @@ export default function Swipe() {
       toast.error(typeof detail === "string" ? detail : t("toasts.loadJobsError"));
     } finally {
       if (requestId === feedRequestIdRef.current) {
-        if (!stackPrefetch) setLoading(false);
+        if (!stackPrefetch && !silentRefresh) setLoading(false);
         fetchingRef.current = false;
         if (feedAbortRef.current === controller) feedAbortRef.current = null;
       }
     }
-  }, [t]);
+  }, [t, user?.user_id]);
+
+  loadFeedRef.current = loadFeed;
+
+  useEffect(() => () => {
+    if (backgroundPollTimerRef.current) {
+      clearTimeout(backgroundPollTimerRef.current);
+      backgroundPollTimerRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     const onDemoSettings = (event) => {
@@ -926,39 +1061,35 @@ export default function Swipe() {
 
   const saveTargetSearch = useCallback(async ({ role, location, locationData }) => {
     const trimmedRole = (role || "").trim();
-    if (!trimmedRole) {
-      toast.error(t("toasts.searchSaveError"));
-      return false;
-    }
     setTargetSaving(true);
     try {
       const trimmedLocation = (location || "").trim();
       const normalizedLocationData = normalizeLocationData(trimmedLocation, locationData);
       const locationLabel = normalizedLocationData?.location_label || trimmedLocation || "Anywhere";
 
-      setTarget({ role: trimmedRole, location: locationLabel });
+      const nextTarget = { role: trimmedRole, location: locationLabel };
+      setTarget(nextTarget);
+      targetRef.current = nextTarget;
       setTargetLocationData(normalizedLocationData);
-      const nextFilters = {
-        ...(filtersRef.current || {}),
-        searchRadius: filtersRef.current?.searchRadius || DEFAULT_SEARCH_RADIUS,
-      };
-      if (normalizedLocationData) {
-        nextFilters.locationsData = [normalizedLocationData];
-        delete nextFilters.locations;
-        delete nextFilters.locationData;
-      } else if (locationLabel && locationLabel !== "Anywhere") {
-        nextFilters.locations = [locationLabel];
-        delete nextFilters.locationsData;
-        delete nextFilters.locationData;
-      }
+      targetLocationDataRef.current = normalizedLocationData;
+
+      const nextFilters = filtersForTargetSearch(filtersRef.current);
       filtersRef.current = nextFilters;
       setFilters(nextFilters);
       savePersistedFilters(nextFilters);
-      loadFeed(true, nextFilters, "target_search_save");
+
+      setJobs([]);
+      setTotalCount(null);
+      setFeedMeta(null);
+      setFeedError("");
+      jobsRef.current = [];
+      await loadFeed(true, nextFilters, "target_search_save");
       toast.success(t("toasts.searchUpdated"));
 
-      saveTargetPreferences({ role: trimmedRole, location: locationLabel, locationData: normalizedLocationData })
-        .catch((error) => console.warn("Preferences save failed (feed already refreshed).", error));
+      if (trimmedRole) {
+        saveTargetPreferences({ role: trimmedRole, location: locationLabel, locationData: normalizedLocationData })
+          .catch((error) => console.warn("Preferences save failed (feed already refreshed).", error));
+      }
       return true;
     } catch (_) {
       toast.error(t("toasts.searchSaveError"));
@@ -972,16 +1103,21 @@ export default function Swipe() {
     if (authLoading) return;
     ensureDemoAccountDefaults();
     const bootstrap = async () => {
-      await loadProfile();
+      const isDemo = isDemoAccountEnabled();
+      const isFinanceDemo = isFinanceDemoEnabled() && isDemo;
+
       api.get("/billing/status")
         .then(({ data }) => setBilling(data))
         .catch(() => setBilling({ is_premium: false }));
-      if (isFinanceDemoEnabled() && isDemoAccountEnabled()) {
+
+      await loadProfile();
+
+      if (isFinanceDemo) {
         const financeFilters = applyFinanceDemoTarget();
         loadFeed(true, financeFilters, "initial_finance_demo");
         return;
       }
-      if (isDemoAccountEnabled()) {
+      if (isDemo) {
         const demoFilters = reconcileFiltersForUser(readPersistedFilters(), profileRef.current);
         filtersRef.current = demoFilters;
         setFilters(demoFilters);
@@ -989,14 +1125,60 @@ export default function Swipe() {
         loadFeed(true, demoFilters, "initial_demo_account");
         return;
       }
+
       const mergedFilters = reconcileFiltersForUser(readPersistedFilters(), profileRef.current);
       filtersRef.current = mergedFilters;
       setFilters(mergedFilters);
       savePersistedFilters(mergedFilters);
-      loadFeed(true, mergedFilters, readPersistedFilters() ? "initial_persisted_filters" : "initial_profile_defaults");
+
+      const cacheKey = buildSwipeFeedCacheKey({
+        userId: user?.user_id,
+        target: targetRef.current,
+        targetLocationData: targetLocationDataRef.current,
+        filters: mergedFilters,
+      });
+      const cached = readSwipeFeedCache({ userId: user?.user_id, cacheKey });
+
+      if (cached?.jobs?.length) {
+        setJobs(cached.jobs);
+        jobsRef.current = cached.jobs;
+        setFeedMeta(cached.meta);
+        setLoading(false);
+        preloadCompanyLogos(cached.jobs.slice(0, 6));
+        syncSwipedJobsFromServer(user?.user_id).then(() => {
+          setJobs((prev) => {
+            const visible = filterOutSwipedJobs(prev);
+            jobsRef.current = visible;
+            if (!visible.length && !fetchingRef.current) {
+              loadFeed(true, mergedFilters, "initial_empty_after_swipe_filter");
+            }
+            return visible;
+          });
+        });
+        if (isSwipeFeedCacheFresh(cached.savedAt)) {
+          return;
+        }
+        window.setTimeout(() => {
+          loadFeed(true, mergedFilters, "background_refresh_cache");
+        }, 1200);
+        return;
+      }
+
+      await syncSwipedJobsFromServer(user?.user_id);
+
+      if (jobsRef.current.length) {
+        clearSwipeFeedCache();
+        setJobs([]);
+        jobsRef.current = [];
+      }
+
+      const reason = readPersistedFilters()
+        ? "initial_persisted_filters"
+        : "initial_profile_defaults";
+      loadFeed(true, mergedFilters, reason);
     };
     bootstrap();
-  }, [authLoading, loadProfile, loadFeed, applyFinanceDemoTarget]);
+  }, [authLoading, loadProfile, loadFeed, applyFinanceDemoTarget, syncSwipedJobsFromServer, user?.user_id]);
 
   useEffect(() => {
     const onBillingUpdated = (event) => {
@@ -1027,7 +1209,7 @@ export default function Swipe() {
 
   const resetFilters = () => {
     clearPersistedFilters();
-    const defaults = buildDefaultFiltersFromProfile(profileRef.current);
+    const defaults = clearMenuFilters(filtersRef.current);
     filtersRef.current = defaults;
     setFilters(defaults);
     setFiltersOpen(false);
@@ -1079,6 +1261,7 @@ export default function Swipe() {
     const demoSwipe = isDemoSwipeMode() || isDemoAccountEnabled();
     const demoApply = intent === "apply" && demoSwipe;
     cacheJobForDemo(job);
+    recordSwipedJobId(job.job_id, user?.user_id);
     const remainingAfterSwipe = jobs.length - 1;
     setJobs((prev) => prev.slice(1));
     if (remainingAfterSwipe <= FEED_PREFETCH_THRESHOLD && !fetchingRef.current) {
@@ -1148,7 +1331,11 @@ export default function Swipe() {
       const data = isFinanceDemoEnabled()
         ? performFinanceDemoUndo()
         : (await api.post("/swipe/undo")).data;
-      if (data.ok) { toast(t("toasts.undone")); loadFeed(true, filtersRef.current, "undo_refresh"); }
+      if (data.ok) {
+        if (data.job_id) unrecordSwipedJobId(data.job_id);
+        toast(t("toasts.undone"));
+        loadFeed(true, filtersRef.current, "undo_refresh");
+      }
     } catch (e) { toast.error(t("toasts.nothingToUndo")); }
   };
 
@@ -1163,6 +1350,7 @@ export default function Swipe() {
   };
 
   const dismissJob = useCallback((jobId) => {
+    recordSwipedJobId(jobId, user?.user_id);
     const remainingAfterDismiss = jobs.length - 1;
     setJobs((prev) => prev.filter((j) => j.job_id !== jobId));
     if (isFinanceDemoEnabled()) {
@@ -1173,7 +1361,7 @@ export default function Swipe() {
     if (remainingAfterDismiss <= FEED_PREFETCH_THRESHOLD && !fetchingRef.current) {
       loadFeed(false, filtersRef.current, "after_dismiss_low_stack");
     }
-  }, [jobs.length, loadFeed]);
+  }, [jobs.length, loadFeed, user?.user_id]);
 
   const handleReportSubmit = async (reason) => {
     if (!reportJob) return;
@@ -1277,12 +1465,7 @@ export default function Swipe() {
         data-testid="swipe-header"
       >
         <div className="flex shrink-0 items-center gap-0.5">
-          <div className="flex items-center gap-0.5 px-0.5">
-            <Zap className="h-4 w-4 text-sprout-mint sm:h-5 sm:w-5" strokeWidth={2} fill="rgb(167,139,250)" />
-            <span className="text-xs font-semibold text-sprout-mint sm:text-sm" data-testid="applied-today">
-              {appliedToday}
-            </span>
-          </div>
+          <DesktopCreditsPill compact forceOpenUpgrade className="mr-0.5" />
           <button
             onClick={handleUndo}
             className="grid h-8 w-8 place-items-center rounded-full hover:bg-sprout-surface sm:h-9 sm:w-9"
@@ -1430,26 +1613,10 @@ export default function Swipe() {
         initialLocation={target.location}
         initialLocationData={targetLocationData}
         onClose={() => setTargetSheetOpen(false)}
-        onSaved={({ role, location, locationData }) => {
-          setTarget({ role, location });
-          setTargetLocationData(locationData);
-          const nextFilters = {
-            ...(filtersRef.current || {}),
-            searchRadius: filtersRef.current?.searchRadius || DEFAULT_SEARCH_RADIUS,
-          };
-          if (locationData) {
-            nextFilters.locationsData = [locationData];
-            delete nextFilters.locations;
-            delete nextFilters.locationData;
-          } else if (location && location !== "Anywhere") {
-            nextFilters.locations = [location];
-            delete nextFilters.locationsData;
-            delete nextFilters.locationData;
-          }
-          filtersRef.current = nextFilters;
-          setFilters(nextFilters);
-          savePersistedFilters(nextFilters);
-          loadFeed(true, nextFilters, "target_sheet_saved");
+        onSave={async (payload) => {
+          const ok = await saveTargetSearch(payload);
+          if (ok) setTargetSheetOpen(false);
+          return ok;
         }}
       />
 

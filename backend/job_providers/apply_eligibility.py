@@ -13,6 +13,57 @@ from .ats_detection import (
 
 DIRECT_ATS_DOMAINS = ATS_DOMAINS
 ACCOUNT_REQUIRED_DOMAINS = LOGIN_REQUIRED_DOMAINS
+FRANCE_TRAVAIL_PROVIDER_NAMES = {"france_travail", "francetravail", "ft"}
+FRANCE_TRAVAIL_HOST_MARKERS = ("francetravail.fr", "pole-emploi.fr")
+
+
+def is_france_travail_offer(
+    *,
+    provider: Optional[str] = None,
+    source: Optional[str] = None,
+    url: Optional[str] = None,
+) -> bool:
+    """True when this offer must go through the France-Travail-hosted manual apply
+    flow (no candidate account -> can't auto-apply).
+
+    Some France Travail listings carry a genuine external apply URL from the
+    recruiter (`contact.urlPostulation`, pointing to the employer's own ATS).
+    Those should be treated like any other job from that ATS instead of being
+    forced into the FT-only manual flow, so we only return True when there is
+    no evidence of such a real external destination (empty URL, or a URL that
+    is itself hosted on francetravail.fr/pole-emploi.fr).
+    """
+    provider_name = str(provider or "").strip().lower()
+    source_text = str(source or "").strip().lower()
+    is_ft_signal = (
+        provider_name in FRANCE_TRAVAIL_PROVIDER_NAMES
+        or "france travail" in source_text
+        or "pole emploi" in source_text
+        or "francetravail" in source_text
+    )
+    if not is_ft_signal:
+        return False
+    host = (url or "").lower()
+    if not host:
+        return True
+    return any(marker in host for marker in FRANCE_TRAVAIL_HOST_MARKERS)
+
+
+def france_travail_manual_apply_classification(
+    external_url: Optional[str],
+    *,
+    source: Optional[str] = None,
+) -> Dict[str, Any]:
+    selected_url = str(external_url or "").strip() or None
+    result = _result(
+        status="manual_ready",
+        reason="France Travail listing — apply on France Travail with guided manual fulfillment.",
+        selected_url=selected_url,
+        selected_source=source or "France Travail",
+        provider="francetravail",
+    )
+    result["job_board_account_required"] = True
+    return result
 
 
 def classify_apply_link(
@@ -22,6 +73,9 @@ def classify_apply_link(
     apply_options: Optional[Iterable[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Select the best apply URL and classify whether admins can fulfill it."""
+
+    if is_france_travail_offer(source=source, url=external_url):
+        return france_travail_manual_apply_classification(external_url, source=source)
 
     candidates = _candidate_urls(external_url, apply_options)
     if not candidates:
@@ -74,6 +128,13 @@ def classify_apply_link(
 
 def is_manual_fulfillment_ready(job: Dict[str, Any]) -> bool:
     """Return True only when a job can be fulfilled by Hirly/admins."""
+
+    if is_france_travail_offer(
+        provider=str(job.get("provider") or ""),
+        source=str(job.get("source") or ""),
+        url=str(job.get("external_url") or job.get("selected_apply_url") or ""),
+    ):
+        return True
 
     validation_status = str(job.get("validation_status") or "").strip().lower()
     applyability_tier = str(job.get("applyability_tier") or "").strip().upper()

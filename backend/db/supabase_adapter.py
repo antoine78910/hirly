@@ -41,6 +41,7 @@ MIGRATED_TABLES = {
     "training_crm_leads",
     "creator_invites",
     "user_feedback",
+    "rome_profiles",
 }
 TABLE_PRIMARY_KEYS = {
     "users": "user_id",
@@ -64,6 +65,7 @@ TABLE_PRIMARY_KEYS = {
     "training_crm_leads": "lead_id",
     "creator_invites": "invite_id",
     "user_feedback": "submission_id",
+    "rome_profiles": "rome_code",
 }
 TABLE_FILTER_COLUMNS = {
     "users": {"user_id", "email", "name", "created_at"},
@@ -177,6 +179,7 @@ TABLE_FILTER_COLUMNS = {
     "training_crm_leads": {"lead_id", "creator_id", "email", "name", "stage", "source", "created_at", "updated_at"},
     "creator_invites": {"invite_id", "code", "influencer_id", "invite_type", "course_id", "redeemed_by_user_id", "created_at", "updated_at"},
     "user_feedback": {"submission_id", "feedback_type", "user_id", "user_email", "created_at", "updated_at"},
+    "rome_profiles": {"rome_code", "fetched_at"},
 }
 MAX_READ_ROWS = 10000
 READ_PAGE_SIZE = 1000
@@ -474,6 +477,12 @@ def _supabase_row(table: str, document: Document) -> Dict[str, Any]:
             "user_email": doc.get("user_email"),
             "created_at": doc.get("created_at"),
             "updated_at": doc.get("updated_at"),
+            "data": doc,
+        }
+    if table == "rome_profiles":
+        return {
+            "rome_code": _document_key(table, doc),
+            "fetched_at": doc.get("fetched_at"),
             "data": doc,
         }
     raise ValueError(f"Unsupported Supabase table: {table}")
@@ -997,6 +1006,7 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
         self.training_crm_leads = SupabaseCollectionAdapter("training_crm_leads", supabase_url, secret_key)
         self.creator_invites = SupabaseCollectionAdapter("creator_invites", supabase_url, secret_key)
         self.user_feedback = SupabaseCollectionAdapter("user_feedback", supabase_url, secret_key)
+        self.rome_profiles = SupabaseCollectionAdapter("rome_profiles", supabase_url, secret_key)
 
     async def close(self) -> None:
         return None

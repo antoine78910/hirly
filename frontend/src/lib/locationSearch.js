@@ -75,6 +75,45 @@ function scorePhotonResult(query, result) {
   return score;
 }
 
+const FRENCH_CITY_MARKERS = new Set([
+  "dijon", "paris", "lyon", "marseille", "toulouse", "nice", "nantes", "strasbourg",
+  "lille", "montpellier", "rennes", "grenoble", "bordeaux", "reims", "metz", "nancy",
+  "angers", "caen", "rouen", "tours", "besancon", "brest", "amiens", "orleans",
+  "perpignan", "bayonne", "pau", "avignon", "annecy", "chambery", "valence", "nimes",
+  "mulhouse", "colmar", "lorient", "vannes", "quimper", "saint etienne", "clermont ferrant",
+]);
+
+function looksLikeFranceLocation(text) {
+  const normalized = normalizeLabel(text);
+  if (!normalized) return false;
+  if (normalized.includes("france")) return true;
+  if (FRENCH_CITY_MARKERS.has(normalized)) return true;
+  const cityPart = normalized.split(",")[0]?.trim();
+  return Boolean(cityPart && FRENCH_CITY_MARKERS.has(cityPart));
+}
+
+export function enrichLocationData(locationData) {
+  if (!locationData || typeof locationData !== "object") return locationData;
+
+  const label = String(locationData.location_label || locationData.label || "").trim();
+  if (!label) return locationData;
+
+  const isFrench = looksLikeFranceLocation(label);
+  const displayLabel = isFrench && !label.toLowerCase().includes("france")
+    ? `${label.split(",")[0].trim()}, France`
+    : label;
+  const countryCode = String(locationData.country_code || "").toLowerCase().trim()
+    || (isFrench ? "fr" : "");
+
+  return {
+    ...locationData,
+    location_label: displayLabel,
+    label: displayLabel,
+    country: locationData.country || (isFrench ? "France" : ""),
+    country_code: countryCode,
+  };
+}
+
 export function buildTypedLocationResult(query) {
   const trimmed = (query || "").trim();
   if (trimmed.length < 2) return [];
@@ -84,29 +123,37 @@ export function buildTypedLocationResult(query) {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(" ");
 
-  return [{
-    id: `typed:${normalizeLabel(label)}`,
-    label,
+  const isFrench = looksLikeFranceLocation(label);
+  const displayLabel = isFrench && !label.toLowerCase().includes("france")
+    ? `${label}, France`
+    : label;
+
+  return [enrichLocationData({
+    id: `typed:${normalizeLabel(displayLabel)}`,
+    label: displayLabel,
     source: "typed",
     place_id: "",
-    country: "",
-    country_code: "",
+    country: isFrench ? "France" : "",
+    country_code: isFrench ? "fr" : "",
     lat: null,
     lng: null,
     kind: "city",
-  }];
+  })];
 }
 
-/** Browser-side fallback when the backend location API is unavailable. */
+/** Browser-side fallback using Photon, restricted to France. */
 export async function searchLocationsClient(query, limit = 12, signal) {
   const q = (query || "").trim();
   if (q.length < 1) return [];
 
+  // Photon supports bbox and countrycodes — restrict to France
+  const FRANCE_BBOX = "-5.14,41.33,9.56,51.09";
   const response = await fetch(
     `${PHOTON_URL}?${new URLSearchParams({
       q,
       limit: String(Math.min(limit * 2, 20)),
-      lang: "en",
+      lang: "fr",
+      bbox: FRANCE_BBOX,
     })}`,
     { signal },
   );
@@ -122,6 +169,9 @@ export async function searchLocationsClient(query, limit = 12, signal) {
   for (const [index, feature] of (payload.features || []).entries()) {
     const result = photonFeatureToResult(feature, index);
     if (!result) continue;
+
+    const cc = (result.country_code || "").toLowerCase();
+    if (cc && cc !== "fr") continue;
 
     const key = normalizeLabel(result.label);
     if (!key || seen.has(key)) continue;

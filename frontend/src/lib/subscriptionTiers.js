@@ -52,11 +52,26 @@ export const UPGRADE_BENEFITS = [
   },
 ];
 
+export const WEEKLY_APPLICATIONS_DIVISOR = 4;
+
+export function tierApplicationsForInterval(tier, isMonthly) {
+  const monthlyApplications = tier?.applications ?? 0;
+  if (isMonthly) return monthlyApplications;
+  return Math.max(1, Math.floor(monthlyApplications / WEEKLY_APPLICATIONS_DIVISOR));
+}
+
+export function tierPricePerApplication(tier, isMonthly) {
+  const applications = tierApplicationsForInterval(tier, isMonthly);
+  if (!applications) return 0;
+  const price = isMonthly ? tier.monthlyPrice : tier.weeklyPrice;
+  return Number(price) / applications;
+}
+
 export const SUBSCRIPTION_TIERS = [
   {
     id: "ultra",
     name: "ULTRA",
-    monthlyPrice: 79.99,
+    monthlyPrice: 69.99,
     weeklyPrice: 22.99,
     applications: 600,
     popular: true,
@@ -64,14 +79,14 @@ export const SUBSCRIPTION_TIERS = [
   {
     id: "pro",
     name: "PRO",
-    monthlyPrice: 39.99,
+    monthlyPrice: 29.99,
     weeklyPrice: 11.99,
     applications: 200,
   },
   {
     id: "basic",
     name: "BASIC",
-    monthlyPrice: 19.99,
+    monthlyPrice: 14.99,
     weeklyPrice: 5.99,
     applications: 80,
   },

@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import { shouldMockCvUpload, uploadProfileCv } from "../lib/demoCvUpload";
+import { CV_ACCEPT_ATTR, isAcceptedCvFile } from "../lib/cvUploadFormats";
 import { FileText, Loader2, Upload } from "lucide-react";
 import {
   Dialog,
@@ -17,19 +18,6 @@ import { useAppLocale } from "../context/AppLocaleContext";
 import { trackEvent } from "../lib/analytics";
 
 const MAX_CV_BYTES = 10 * 1024 * 1024;
-const ACCEPTED_TYPES = [
-  "application/pdf",
-  "image/png",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "text/plain",
-];
-const ACCEPTED_EXT = [".pdf", ".png", ".docx", ".txt"];
-
-function isAcceptedFile(file) {
-  if (!file) return false;
-  const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
-  return ACCEPTED_EXT.includes(ext) || ACCEPTED_TYPES.includes(file.type);
-}
 
 /** Centered resume upload modal — drag & drop + file picker. */
 export default function ResumeSheet({ open, profile, onClose, onUploaded }) {
@@ -43,7 +31,7 @@ export default function ResumeSheet({ open, profile, onClose, onUploaded }) {
 
   const handleFile = useCallback(async (file) => {
     if (!file) return;
-    if (!isAcceptedFile(file)) {
+    if (!isAcceptedCvFile(file)) {
       toast.error(t("resumeSheet.fileTypeError"));
       return;
     }
@@ -171,7 +159,7 @@ export default function ResumeSheet({ open, profile, onClose, onUploaded }) {
           <input
             ref={inputRef}
             type="file"
-            accept={ACCEPTED_EXT.join(",")}
+            accept={CV_ACCEPT_ATTR}
             className="hidden"
             onChange={(event) => {
               const file = event.target.files?.[0];

@@ -33,7 +33,7 @@ import unicodedata
 from pathlib import Path
 from urllib.parse import quote as url_quote, urlparse
 from pydantic import BaseModel, Field, ConfigDict
-from typing import List, Optional, Dict, Any, Literal
+from typing import List, Optional, Dict, Any, Literal, Tuple
 from datetime import datetime, timezone, timedelta
 import httpx
 import stripe
@@ -43,6 +43,7 @@ from pypdf import PdfReader
 import docx as docx_lib
 from application_documents import DOCX_MIME, build_application_package, cover_letter_to_text, sanitize_docx_text
 from cv_quality import normalize_application_generation, validate_resume_quality
+from application_email_service import send_application_email
 from browser_submission.base import BrowserSubmissionError, browser_submit_dry_run_enabled
 from browser_submission.greenhouse import GreenhouseBrowserSubmissionEngine
 from browser_submission.lever import LeverBrowserSubmissionEngine
@@ -50,6 +51,7 @@ from browser_submission.matching import suggested_profile_key as browser_suggest
 from db import create_database_adapter
 from db.supabase_adapter import count_supabase_table, test_supabase_connection
 from influencer_store import create_influencer, get_influencer, list_influencers, update_influencer
+from creator_social_service import build_dashboard, refresh_all_creators, refresh_creator
 from creator_invite_store import (
     INVITE_TYPE_CREATOR,
     INVITE_TYPE_DEMO,
@@ -89,7 +91,7 @@ from job_providers import (
     is_job_provider_enabled,
     primary_job_provider_name,
 )
-from job_providers.apply_eligibility import classify_apply_link, is_manual_fulfillment_ready
+from job_providers.apply_eligibility import classify_apply_link, is_manual_fulfillment_ready, is_france_travail_offer
 from job_providers.base import JobSearchQuery
 from job_cache_maintenance import (
     env_bool as job_cache_env_bool,
@@ -99,6 +101,13 @@ from job_cache_maintenance import (
     revalidate_cached_jobs,
     run_job_cache_maintenance,
 )
+from france_travail_harvest import (
+    harvest_enabled as ft_harvest_enabled,
+    harvest_france_travail,
+    last_harvest_summary as ft_last_harvest_summary,
+    run_france_travail_harvest_loop,
+)
+from rome_profile_service import get_rome_profile, normalize_rome_code, rome_profile_enabled
 from ats_source_service import (
     discover_ats_sources_from_cached_jobs,
     discover_friendly_company_career_pages,
@@ -163,9 +172,10 @@ def _cors_origins() -> List[str]:
         "http://localhost:3001",
         "https://www.tryhirly.com",
         "https://tryhirly.com",
+        "https://app.tryhirly.com",
         "https://hirly-two.vercel.app",
     ]
-    for env_name in ("FRONTEND_URL", "REACT_APP_FRONTEND_URL", "VERCEL_PROJECT_PRODUCTION_URL", "VERCEL_URL"):
+    for env_name in ("FRONTEND_URL", "APP_URL", "REACT_APP_APP_ORIGIN", "REACT_APP_FRONTEND_URL", "VERCEL_PROJECT_PRODUCTION_URL", "VERCEL_URL"):
         value = (os.environ.get(env_name) or "").strip().rstrip("/")
         if not value:
             continue
@@ -190,9 +200,108 @@ _FEED_JOB_POOL_TTL_SECONDS = 90.0
 _feed_sync_refresh_cooldown_until = 0.0
 _feed_sync_refresh_cooldowns: Dict[str, float] = {}
 
+# Background (non-blocking) provider refresh: dedup + cooldown per query signature
+# so we never run the same discovery twice concurrently and never hammer providers.
+_feed_background_refresh_tasks: Dict[str, asyncio.Task] = {}
+_feed_background_refresh_last_run: Dict[str, float] = {}
+_FEED_BACKGROUND_REFRESH_COOLDOWN_SECONDS = 120.0
+
 
 def _clear_feed_job_pool_cache() -> None:
     _feed_job_pool_cache.update({"query_key": "", "rows": [], "fetched_at": 0.0})
+
+
+def _prune_background_refresh_state(now: float) -> None:
+    done_keys = [key for key, task in _feed_background_refresh_tasks.items() if task.done()]
+    for key in done_keys:
+        _feed_background_refresh_tasks.pop(key, None)
+    expired = [
+        key
+        for key, last_run in _feed_background_refresh_last_run.items()
+        if (now - last_run) > (_FEED_BACKGROUND_REFRESH_COOLDOWN_SECONDS * 4)
+    ]
+    for key in expired:
+        _feed_background_refresh_last_run.pop(key, None)
+
+
+def schedule_feed_background_refresh(
+    signature: str,
+    profile_for_refresh: Dict[str, Any],
+    refresh_locations: List[Any],
+    *,
+    search_radius: str,
+    role_override: Optional[str],
+    requested_limit: int,
+    max_results: int,
+    max_pages: int,
+    page_size: int,
+    attempts_per_city: int,
+    user_id: str = "",
+) -> bool:
+    """Run provider discovery in the background (non-blocking) with dedup + cooldown.
+
+    Returns True when a new background task was scheduled.
+    """
+    now = time.monotonic()
+    _prune_background_refresh_state(now)
+    if signature in _feed_background_refresh_tasks:
+        return False
+    last_run = _feed_background_refresh_last_run.get(signature, 0.0)
+    if (now - last_run) < _FEED_BACKGROUND_REFRESH_COOLDOWN_SECONDS:
+        return False
+    _feed_background_refresh_last_run[signature] = now
+
+    async def _runner() -> None:
+        imported_total = 0
+        started = time.perf_counter()
+        try:
+            for loc_data in refresh_locations:
+                loc_label = loc_data.get("location_label") if isinstance(loc_data, dict) else None
+                try:
+                    result = await refresh_jobs_for_profile_if_needed(
+                        db,
+                        profile_for_refresh,
+                        require_auto_apply=False,
+                        target_auto_apply_count=min(max_results, max(requested_limit, 1)),
+                        location_override=loc_label,
+                        location_data_override=loc_data if isinstance(loc_data, dict) else None,
+                        search_radius=search_radius,
+                        role_override=role_override,
+                        force_provider_refresh=True,
+                        query_limit_override=max_results,
+                        provider_max_pages=max_pages,
+                        provider_page_size=page_size,
+                        max_provider_requests_override=attempts_per_city,
+                        max_direct_apply_requests_override=0,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "feed_background_refresh_location_error signature=%s location=%s error=%s",
+                        signature, loc_label, str(exc)[:200],
+                    )
+                    continue
+                imported = int(result.get("jobs_imported", result.get("count") or 0) or 0)
+                imported_total += imported
+                if result.get("provider_rate_limited"):
+                    logger.info("feed_background_refresh_rate_limited signature=%s", signature)
+                    break
+            if imported_total > 0:
+                _clear_feed_job_pool_cache()
+            logger.info(
+                "feed_background_refresh_complete signature=%s user_id=%s imported=%s elapsed_ms=%s",
+                signature,
+                user_id,
+                imported_total,
+                int((time.perf_counter() - started) * 1000),
+            )
+        except Exception as exc:
+            logger.warning("feed_background_refresh_failed signature=%s error=%s", signature, str(exc)[:200])
+        finally:
+            _feed_background_refresh_tasks.pop(signature, None)
+
+    task = asyncio.create_task(_runner())
+    _feed_background_refresh_tasks[signature] = task
+    return True
 
 
 async def _get_feed_job_candidates(base_query: Dict[str, Any], limit: int) -> List[Dict[str, Any]]:
@@ -272,7 +381,62 @@ def _apply_fulfillment_fields(job: Dict[str, Any]) -> Dict[str, Any]:
     )
 
 
+def _job_snapshot_for_swipe(job: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(job, dict) or not job.get("job_id"):
+        return {}
+    return {key: value for key, value in job.items() if key != "_id"}
+
+
+async def _restore_job_from_swipe_snapshot(
+    job_id: str,
+    swipe_row: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
+    job = await db.jobs.find_one({"job_id": job_id}, {"_id": 0})
+    if job:
+        return job
+    snapshot = (swipe_row or {}).get("job_snapshot")
+    if not isinstance(snapshot, dict) or snapshot.get("job_id") != job_id:
+        return None
+    await db.jobs.update_one(
+        {"job_id": job_id},
+        {"$set": snapshot},
+        upsert=True,
+    )
+    return snapshot
+
+
+def _swipe_insert_doc(
+    user_id: str,
+    job_id: str,
+    direction: str,
+    job: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    doc: Dict[str, Any] = {
+        "user_id": user_id,
+        "job_id": job_id,
+        "direction": direction,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if direction == "left" and job:
+        snapshot = _job_snapshot_for_swipe(job)
+        if snapshot:
+            doc["job_snapshot"] = snapshot
+    return doc
+
+
 def _job_is_applyable(job: Dict[str, Any]) -> bool:
+    if is_france_travail_offer(
+        provider=str(job.get("provider") or ""),
+        source=str(job.get("source") or ""),
+        url=str(job.get("external_url") or job.get("selected_apply_url") or ""),
+    ):
+        validation_status = str(job.get("validation_status") or "").strip().lower()
+        applyability_tier = str(job.get("applyability_tier") or "").strip().upper()
+        if validation_status == "invalid" and applyability_tier == "E":
+            return False
+        if applyability_tier == "E":
+            return False
+        return bool(job.get("selected_apply_url") or job.get("external_url") or job.get("apply_url") or job.get("hosted_url"))
     validation_status = str(job.get("validation_status") or "").strip().lower()
     applyability_tier = str(job.get("applyability_tier") or "").strip().upper()
     if validation_status == "invalid" or applyability_tier in {"D", "E"}:
@@ -321,6 +485,14 @@ def _job_has_usable_apply_url(job: Dict[str, Any]) -> bool:
 
 
 def _job_is_blocked_for_feed(job: Dict[str, Any]) -> bool:
+    if is_france_travail_offer(
+        provider=str(job.get("provider") or ""),
+        source=str(job.get("source") or ""),
+        url=str(job.get("external_url") or job.get("selected_apply_url") or ""),
+    ):
+        validation_status = str(job.get("validation_status") or "").strip().lower()
+        applyability_tier = str(job.get("applyability_tier") or "").strip().upper()
+        return applyability_tier == "E" or job.get("captcha_detected") is True
     validation_status = str(job.get("validation_status") or "").strip().lower()
     applyability_tier = str(job.get("applyability_tier") or "").strip().upper()
     return (
@@ -586,6 +758,7 @@ class BillingCheckoutRequest(BaseModel):
     plan: Literal["basic", "pro", "ultra", "monthly", "quarterly"]
     interval: Optional[Literal["weekly", "monthly", "quarterly"]] = None
     source: Optional[Literal["app", "credits", "onboarding"]] = None
+    return_path: Optional[str] = None
     datafast_visitor_id: Optional[str] = None
     datafast_session_id: Optional[str] = None
 
@@ -645,6 +818,13 @@ class AdminStatusUpdate(BaseModel):
 class AdminManualStatusUpdate(BaseModel):
     manual_status: Literal["manual_review_needed", "manual_in_progress", "manually_submitted", "manual_blocked", "needs_user_input"]
     note: Optional[str] = None
+
+
+class AdminSendApplicationEmail(BaseModel):
+    to_email: Optional[str] = None
+    subject: Optional[str] = None
+    body_text: Optional[str] = None
+    mark_manually_submitted: bool = True
 
 
 class PreferencesUpdate(BaseModel):
@@ -1344,6 +1524,32 @@ def _frontend_url() -> str:
     return os.environ.get("FRONTEND_URL", "http://localhost:3000").strip().rstrip("/")
 
 
+def _app_url() -> str:
+    return (
+        os.environ.get("APP_URL")
+        or os.environ.get("REACT_APP_APP_ORIGIN")
+        or _frontend_url()
+    ).strip().rstrip("/")
+
+
+def _marketing_url() -> str:
+    return _frontend_url()
+
+
+def _sanitize_return_path(path: Optional[str], *, default: str = "/swipe") -> str:
+    if not path:
+        return default
+    cleaned = path.strip()
+    if not cleaned.startswith("/") or cleaned.startswith("//"):
+        return default
+    return cleaned[:512]
+
+
+def _checkout_return_url(frontend_url: str, return_path: str, status: str) -> str:
+    separator = "&" if "?" in return_path else "?"
+    return f"{frontend_url}{return_path}{separator}upgrade={status}"
+
+
 def _canonical_billing_plan(plan: str) -> str:
     aliases = {
         "monthly": "pro",
@@ -1439,7 +1645,8 @@ def _billing_credit_limit(
     if normalized_source == "onboarding":
         return {"monthly": 80, "quarterly": 200}.get(normalized_plan, 80)
     if normalized_interval == "weekly":
-        return {"basic": 15, "pro": 35, "ultra": 100}.get(normalized_plan, 35)
+        monthly_limit = _PLAN_CREDIT_LIMITS.get(normalized_plan, 200)
+        return max(1, monthly_limit // 4)
     return _PLAN_CREDIT_LIMITS.get(normalized_plan, 200)
 
 
@@ -1720,13 +1927,18 @@ async def create_billing_checkout_session(
     billing_interval = body.interval or ("quarterly" if checkout_source == "onboarding" and billing_plan == "quarterly" else "monthly")
     user_doc = await _get_user_doc(user)
     customer_id = await _stripe_customer_for_user(user_doc)
-    frontend_url = _frontend_url()
+    marketing_url = _marketing_url()
+    app_url = _app_url()
     if checkout_source == "onboarding":
-        success_url = f"{frontend_url}/onboarding?step=creatorAccessCode&checkout=success"
-        cancel_url = f"{frontend_url}/onboarding?step=showcasePricing&checkout=cancelled"
+        success_url = f"{marketing_url}/onboarding?step=creatorAccessCode&checkout=success"
+        cancel_url = f"{marketing_url}/onboarding?step=showcasePricing&checkout=cancelled"
+    elif checkout_source == "app":
+        return_path = _sanitize_return_path(body.return_path)
+        success_url = _checkout_return_url(app_url, return_path, "success")
+        cancel_url = _checkout_return_url(app_url, return_path, "cancelled")
     else:
-        success_url = f"{frontend_url}/credits?checkout=success"
-        cancel_url = f"{frontend_url}/credits?checkout=cancelled"
+        success_url = _checkout_return_url(app_url, "/swipe", "success")
+        cancel_url = _checkout_return_url(app_url, "/swipe", "cancelled")
     base_metadata = {
         "user_id": user.user_id,
         "plan": billing_plan,
@@ -1744,6 +1956,7 @@ async def create_billing_checkout_session(
         client_reference_id=user.user_id,
         metadata=checkout_metadata,
         subscription_data={"metadata": checkout_metadata},
+        allow_promotion_codes=True,
     )
     return {"url": session["url"]}
 
@@ -1831,7 +2044,7 @@ async def create_billing_portal_session(user: User = Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="No Stripe customer found")
     session = stripe.billing_portal.Session.create(
         customer=customer_id,
-        return_url=f"{_frontend_url()}/billing",
+        return_url=f"{_app_url()}/billing",
     )
     return {"url": session["url"]}
 
@@ -1944,27 +2157,119 @@ async def stripe_webhook(request: Request):
 
 # ===================== CV parsing =====================
 
-CV_UPLOAD_EXTENSIONS = {".pdf", ".png", ".docx", ".txt"}
+CV_UPLOAD_EXTENSIONS = {".pdf", ".png", ".docx", ".txt", ".jpg", ".jpeg", ".heic", ".heif", ".webp"}
+CV_IMAGE_FORMATS = {"png", "jpeg", "webp", "heic"}
 
 
-def _detect_cv_format(filename: str, content: bytes) -> str:
+def _detect_cv_format(filename: str, content: bytes, content_type: Optional[str] = None) -> str:
     name = (filename or "").lower()
     if name.endswith(".pdf") or content[:4] == b"%PDF":
         return "pdf"
     if name.endswith(".png") or content[:8] == b"\x89PNG\r\n\x1a\n":
         return "png"
-    if name.endswith(".docx"):
+    if content[:3] == b"\xff\xd8\xff" or name.endswith((".jpg", ".jpeg")):
+        return "jpeg"
+    if len(content) >= 12 and content[:4] == b"RIFF" and content[8:12] == b"WEBP":
+        return "webp"
+    if len(content) >= 12 and content[4:8] == b"ftyp":
+        brand = content[8:12]
+        if brand in {b"heic", b"heix", b"hevc", b"hevx", b"mif1", b"msf1"}:
+            return "heic"
+    if name.endswith((".heic", ".heif")):
+        return "heic"
+    if name.endswith(".webp"):
+        return "webp"
+    if name.endswith(".docx") or content[:2] == b"PK":
         return "docx"
     if name.endswith(".txt"):
         return "txt"
-    if content[:2] == b"PK":
+    ct = (content_type or "").lower().split(";")[0].strip()
+    if ct == "application/pdf":
+        return "pdf"
+    if ct == "image/png":
+        return "png"
+    if ct in {"image/jpeg", "image/jpg"}:
+        return "jpeg"
+    if ct in {"image/heic", "image/heif"}:
+        return "heic"
+    if ct == "image/webp":
+        return "webp"
+    if ct == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
         return "docx"
+    if ct == "text/plain":
+        return "txt"
     return "txt"
 
 
+def _extract_pdf_text_pypdf(content: bytes) -> str:
+    try:
+        reader = PdfReader(io.BytesIO(content))
+        if reader.is_encrypted:
+            try:
+                reader.decrypt("")
+            except Exception:
+                pass
+        return "\n".join((page.extract_text() or "") for page in reader.pages).strip()
+    except Exception as exc:
+        logger.warning("cv_pdf_pypdf_extract_failed error=%s", exc)
+        return ""
+
+
+def _extract_pdf_text_pymupdf(content: bytes) -> str:
+    try:
+        import fitz
+    except ImportError:
+        return ""
+    try:
+        doc = fitz.open(stream=content, filetype="pdf")
+        parts = [(page.get_text() or "").strip() for page in doc]
+        return "\n".join(part for part in parts if part).strip()
+    except Exception as exc:
+        logger.warning("cv_pdf_pymupdf_extract_failed error=%s", exc)
+        return ""
+
+
 def _extract_pdf_text(content: bytes) -> str:
-    reader = PdfReader(io.BytesIO(content))
-    return "\n".join((page.extract_text() or "") for page in reader.pages).strip()
+    candidates = [_extract_pdf_text_pypdf(content), _extract_pdf_text_pymupdf(content)]
+    return max(candidates, key=len, default="")
+
+
+def _cv_text_looks_usable(text: str, min_chars: int = 40) -> bool:
+    cleaned = " ".join((text or "").split())
+    if len(cleaned) >= min_chars:
+        return True
+    return len(cleaned.split()) >= 8
+
+
+def _guess_image_mime(image_bytes: bytes) -> str:
+    if image_bytes[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if image_bytes[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if len(image_bytes) >= 12 and image_bytes[:4] == b"RIFF" and image_bytes[8:12] == b"WEBP":
+        return "image/webp"
+    return "image/png"
+
+
+def _dedupe_image_candidates(images: list[bytes]) -> list[bytes]:
+    seen: set[tuple[int, bytes]] = set()
+    unique: list[bytes] = []
+    for image_bytes in images:
+        if not image_bytes:
+            continue
+        fingerprint = (len(image_bytes), image_bytes[:32])
+        if fingerprint in seen:
+            continue
+        seen.add(fingerprint)
+        unique.append(image_bytes)
+    return unique
+
+
+def _pdf_ocr_image_candidates(content: bytes, max_pages: int = 4, dpi: int = 200) -> list[bytes]:
+    """Prefer rendered pages for OCR — more reliable than raw embedded XObject bytes."""
+    rendered = _rasterize_pdf_pages(content, max_pages=max_pages, dpi=dpi)
+    embedded = _extract_pdf_image_bytes(content)
+    return _dedupe_image_candidates([*rendered, *embedded])
 
 
 def _extract_pdf_image_bytes(content: bytes) -> list[bytes]:
@@ -1977,19 +2282,101 @@ def _extract_pdf_image_bytes(content: bytes) -> list[bytes]:
                 data = getattr(image, "data", None)
                 if data:
                     images.append(data)
+            if images:
+                continue
+            resources = page.get("/Resources")
+            if not resources:
+                continue
+            xobjects = resources.get("/XObject")
+            if not xobjects:
+                continue
+            xobjects = xobjects.get_object()
+            for ref in xobjects:
+                xobj = xobjects[ref].get_object()
+                if xobj.get("/Subtype") != "/Image":
+                    continue
+                try:
+                    data = xobj.get_data()
+                except Exception:
+                    data = None
+                if data:
+                    images.append(data)
     except Exception:
         pass
     return images
 
 
-def extract_text_from_upload(filename: str, content: bytes) -> str:
-    fmt = _detect_cv_format(filename, content)
+def _rasterize_pdf_pages(content: bytes, max_pages: int = 4, dpi: int = 200) -> list[bytes]:
+    """Render PDF pages to PNG when no text layer exists (common for mobile scans)."""
+    try:
+        import fitz
+    except ImportError:
+        return []
+    images: list[bytes] = []
+    try:
+        doc = fitz.open(stream=content, filetype="pdf")
+        for page_index in range(min(len(doc), max_pages)):
+            pix = doc[page_index].get_pixmap(dpi=dpi, alpha=False)
+            images.append(pix.tobytes("png"))
+    except Exception as exc:
+        logger.warning("cv_pdf_rasterize_failed error=%s", exc)
+    return images
+
+
+def _extract_docx_text(content: bytes) -> str:
+    document = docx_lib.Document(io.BytesIO(content))
+    parts: list[str] = []
+    for paragraph in document.paragraphs:
+        text = (paragraph.text or "").strip()
+        if text:
+            parts.append(text)
+    for table in document.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                text = (cell.text or "").strip()
+                if text:
+                    parts.append(text)
+    return "\n".join(parts)
+
+
+def _cv_image_mime(fmt: str, filename: str, content_type: Optional[str]) -> str:
+    ct = (content_type or "").lower().split(";")[0].strip()
+    if ct.startswith("image/"):
+        return ct
+    name = (filename or "").lower()
+    if fmt == "jpeg" or name.endswith((".jpg", ".jpeg")):
+        return "image/jpeg"
+    if fmt == "webp" or name.endswith(".webp"):
+        return "image/webp"
+    if fmt == "heic" or name.endswith((".heic", ".heif")):
+        return "image/heic"
+    return "image/png"
+
+
+def _heic_to_jpeg_bytes(content: bytes) -> tuple[bytes, str]:
+    try:
+        import pillow_heif
+        from PIL import Image
+
+        pillow_heif.register_heif_opener()
+        image = Image.open(io.BytesIO(content))
+        buffer = io.BytesIO()
+        image.convert("RGB").save(buffer, format="JPEG", quality=92)
+        return buffer.getvalue(), "image/jpeg"
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not read HEIC photo. Export as JPG or PDF and try again.",
+        ) from exc
+
+
+def extract_text_from_upload(filename: str, content: bytes, content_type: Optional[str] = None) -> str:
+    fmt = _detect_cv_format(filename, content, content_type)
     if fmt == "pdf":
         return _extract_pdf_text(content)
     if fmt == "docx":
-        document = docx_lib.Document(io.BytesIO(content))
-        return "\n".join(p.text for p in document.paragraphs)
-    if fmt == "png":
+        return _extract_docx_text(content)
+    if fmt in CV_IMAGE_FORMATS:
         return ""
     try:
         return content.decode("utf-8", errors="ignore")
@@ -1997,16 +2384,25 @@ def extract_text_from_upload(filename: str, content: bytes) -> str:
         return ""
 
 
-async def extract_cv_text_from_upload(filename: str, content: bytes) -> str:
-    fmt = _detect_cv_format(filename, content)
+async def _ocr_cv_image_bytes(content: bytes, mime: str) -> str:
+    return await extract_text_from_image_bytes(content, mime)
+
+
+async def extract_cv_text_from_upload(
+    filename: str,
+    content: bytes,
+    content_type: Optional[str] = None,
+) -> str:
+    fmt = _detect_cv_format(filename, content, content_type)
     if fmt == "pdf":
         text = _extract_pdf_text(content)
-        if text.strip():
+        if _cv_text_looks_usable(text):
             return text
         image_parts: list[str] = []
-        for image_bytes in _extract_pdf_image_bytes(content):
+        for image_bytes in _pdf_ocr_image_candidates(content):
+            mime = _guess_image_mime(image_bytes)
             try:
-                part = await extract_text_from_image_bytes(image_bytes, "image/png")
+                part = await _ocr_cv_image_bytes(image_bytes, mime)
             except LLMProviderNotConfigured:
                 raise
             except Exception as exc:
@@ -2014,11 +2410,19 @@ async def extract_cv_text_from_upload(filename: str, content: bytes) -> str:
                 continue
             if part.strip():
                 image_parts.append(part.strip())
-        return "\n\n".join(image_parts)
-    if fmt == "png":
-        mime = _mime_from_profile_document_filename(filename)
-        return await extract_text_from_image_bytes(content, mime)
-    return extract_text_from_upload(filename, content)
+        ocr_text = "\n\n".join(image_parts)
+        if _cv_text_looks_usable(ocr_text):
+            return ocr_text
+        if text.strip():
+            return text
+        return ocr_text
+    if fmt in CV_IMAGE_FORMATS:
+        image_bytes = content
+        mime = _cv_image_mime(fmt, filename, content_type)
+        if fmt == "heic":
+            image_bytes, mime = _heic_to_jpeg_bytes(content)
+        return await _ocr_cv_image_bytes(image_bytes, mime)
+    return extract_text_from_upload(filename, content, content_type)
 
 
 def _parse_json_from_llm(text: str) -> Dict[str, Any]:
@@ -3261,18 +3665,21 @@ async def upload_cv(file: UploadFile = File(...), user: User = Depends(get_curre
     if len(content) > MAX_PROFILE_DOCUMENT_BYTES:
         raise HTTPException(status_code=400, detail="File must be 10MB or smaller")
     filename = file.filename or "cv"
-    fmt = _detect_cv_format(filename, content)
-    if fmt not in {"pdf", "png", "docx", "txt"}:
-        raise HTTPException(status_code=400, detail="Please upload a PDF or PNG resume")
+    fmt = _detect_cv_format(filename, content, file.content_type)
+    if fmt not in {"pdf", "png", "docx", "txt", "jpeg", "webp", "heic"}:
+        raise HTTPException(status_code=400, detail="Please upload a PDF, PNG, JPG, or DOCX resume")
     try:
-        cv_text = await extract_cv_text_from_upload(filename, content)
+        cv_text = await extract_cv_text_from_upload(filename, content, file.content_type)
     except LLMProviderNotConfigured:
         raise HTTPException(
             status_code=503,
-            detail="AI provider is not configured. PNG resumes require vision OCR.",
+            detail="AI provider is not configured. Scanned or photo resumes require vision OCR.",
         )
     if not cv_text.strip():
-        raise HTTPException(status_code=400, detail="Could not extract text from CV")
+        raise HTTPException(
+            status_code=400,
+            detail="Could not extract text from CV. Try a clearer PDF or a DOCX export from your editor.",
+        )
 
     try:
         extracted = await claude_extract_profile(cv_text)
@@ -3383,6 +3790,8 @@ def _mime_from_profile_document_filename(filename: str) -> str:
         return "image/jpeg"
     if name_lower.endswith(".webp"):
         return "image/webp"
+    if name_lower.endswith((".heic", ".heif")):
+        return "image/heic"
     return "text/plain"
 
 
@@ -3786,6 +4195,27 @@ async def update_contact(contact: ContactUpdate, user: User = Depends(get_curren
 
 # ===================== Jobs / Swipe =====================
 
+@api_router.get("/jobs/{job_id}/rome-profile")
+async def get_job_rome_profile(job_id: str, user: User = Depends(get_current_user)):
+    """Official France Travail ROME 4.0 occupation profile for a job card."""
+    job = await db.jobs.find_one(
+        {"job_id": job_id},
+        {"_id": 0, "rome_code": 1, "rome_label": 1, "title": 1},
+    )
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    rome_code = normalize_rome_code(job.get("rome_code"))
+    if not rome_code:
+        return {"available": False, "reason": "no_rome_code"}
+    if not rome_profile_enabled():
+        return {"available": False, "reason": "rome_profile_disabled"}
+    return await get_rome_profile(
+        db,
+        rome_code,
+        rome_label=job.get("rome_label") or job.get("title"),
+    )
+
+
 @api_router.get("/jobs/feed")
 async def get_feed(
     user: User = Depends(get_current_user),
@@ -3841,12 +4271,12 @@ async def get_feed(
         )
         raise HTTPException(status_code=400, detail="Upload CV first")
 
-    feed_target_role = (
-        (search_role or "").strip()
-        or profile.get("target_role")
-        or ((profile.get("target_roles") or [None])[0])
-        or ""
-    ).strip()
+    if search_role is not None:
+        feed_target_role = search_role.strip()
+    else:
+        feed_target_role = (
+            (profile.get("target_role") or ((profile.get("target_roles") or [None])[0]) or "")
+        ).strip()
 
     async def _legacy_jsearch_only_feed() -> Dict[str, Any]:
         legacy_started = time.perf_counter()
@@ -4082,7 +4512,9 @@ async def get_feed(
         "admin": {"administrative", "administratif", "assistant", "direction", "reception", "receptionniste", "office"},
         "finance": {"finance", "accountant", "comptable", "payroll", "paie", "auditor", "controleur"},
         "logistics": {"warehouse", "logistics", "logistique", "magasinier", "preparateur", "driver", "chauffeur", "livreur"},
-        "service": {"retail", "store", "waiter", "serveur", "barista", "chef", "kitchen", "cuisinier", "cleaner", "security"},
+        # "chef" alone is excluded: in French it means "lead" (chef de projet,
+        # chef de chantier), not a kitchen chef. Use "cuisine"/"cuisinier" instead.
+        "service": {"retail", "store", "waiter", "serveur", "serveuse", "barista", "barman", "kitchen", "cuisine", "cuisinier", "cleaner", "security"},
         "healthcare": {"nurse", "infirmier", "medical", "sante", "care", "soignant", "pharmacy"},
         "education": {"teacher", "enseignant", "professeur", "trainer", "formateur", "teaching"},
     }
@@ -4094,7 +4526,13 @@ async def get_feed(
                 return category
         return None
 
-    target_role_category = _role_category(_role_family_tokens(feed_target_role))
+    # Derive the category from the user's own words first; expanded family tokens
+    # can leak into a sibling category (e.g. "barista" family includes "vendeur",
+    # which would wrongly map the target to "sales" instead of "service").
+    target_role_category = (
+        _role_category(_tokens(feed_target_role))
+        or _role_category(_role_family_tokens(feed_target_role))
+    )
 
     def _job_role_category(job: Dict[str, Any]) -> Optional[str]:
         title_tokens = set(_tokens(str(job.get("title") or "")))
@@ -4182,14 +4620,26 @@ async def get_feed(
             "us": ["united states", "usa", "new york", "san francisco"],
             "ma": ["morocco", "maroc", "casablanca"],
         }
-        city_terms = list(dict.fromkeys(token for label in raw_locations for token in _tokens(label)))
+        # Tokenize only the city part (before the comma) so the country token
+        # ("france") never counts as a city match for jobs in other cities.
+        known_country_tokens = {"france", "morocco", "maroc", "england", "uk", "usa"}
+        city_terms = list(dict.fromkeys(
+            token
+            for label in raw_locations
+            for token in _tokens(re.split(r"[,/|]", label, maxsplit=1)[0])
+            if token not in known_country_tokens
+        ))
         country_terms = list(dict.fromkeys([country_value, *aliases.get(country_code_value, [])]))
         return {"labels": [label for label in raw_locations if label], "city": city_terms, "country": [term for term in country_terms if term]}
 
     def _location_score(job: Dict[str, Any], terms: Dict[str, List[str]], worldwide: bool = False) -> int:
         if worldwide:
             return 10
-        job_location = (job.get("location") or "").lower()
+        job_location = normalize_place_name(" ".join([
+            str(job.get("city") or ""),
+            str(job.get("region") or ""),
+            str(job.get("location") or ""),
+        ]))
         remote_value = str(job.get("remote") or "").lower()
         score_value = 0
         if any(term and term in job_location for term in terms["city"]):
@@ -4225,13 +4675,18 @@ async def get_feed(
         db_weak_results_threshold = max(0, _env_int("JOBS_DB_WEAK_RESULTS_THRESHOLD", 10))
         allow_unknown_tier = _env_bool("JOBS_ALLOW_UNKNOWN_TIER_IN_FEED", False)
         sync_refresh_enabled = _env_bool("JOBS_FEED_SYNC_REFRESH_ENABLED", True)
-        sync_refresh_max_seconds = max(1, min(_env_int("JOBS_FEED_SYNC_REFRESH_MAX_SECONDS", 8), 20))
+        sync_refresh_max_seconds = max(1, min(_env_int("JOBS_FEED_SYNC_REFRESH_MAX_SECONDS", 4), 20))
         sync_refresh_max_results = max(1, min(_env_int("JOBS_FEED_SYNC_REFRESH_MAX_RESULTS", 20), 50))
         sync_refresh_max_pages = max(1, min(_env_int("JSEARCH_FEED_FALLBACK_MAX_PAGES", 1), 3))
         sync_refresh_page_size = max(1, min(_env_int("JSEARCH_FEED_FALLBACK_PAGE_SIZE", 10), 50))
         sync_refresh_cooldown_seconds = max(30, min(_env_int("JOBS_FEED_SYNC_REFRESH_COOLDOWN_SECONDS", 300), 1800))
-        sync_refresh_total_seconds = max(2, min(_env_int("JOBS_FEED_SYNC_REFRESH_TOTAL_SECONDS", 12), 25))
+        sync_refresh_total_seconds = max(2, min(_env_int("JOBS_FEED_SYNC_REFRESH_TOTAL_SECONDS", 4), 25))
         sync_refresh_attempts_per_city = max(1, min(_env_int("JOBS_FEED_PROVIDER_ATTEMPTS_PER_CITY", 2), 4))
+        if primary_job_provider_name() == "france_travail":
+            sync_refresh_max_pages = max(sync_refresh_max_pages, min(_env_int("FRANCE_TRAVAIL_MAX_PAGES", 2), 4))
+            sync_refresh_page_size = max(sync_refresh_page_size, min(_env_int("FRANCE_TRAVAIL_PAGE_SIZE", 50), 150))
+            sync_refresh_max_results = max(sync_refresh_max_results, min(_env_int("FRANCE_TRAVAIL_PAGE_SIZE", 50), 100))
+            sync_refresh_attempts_per_city = 1
         target_role = feed_target_role
         profile_contract_type = resolve_profile_contract_type(profile)
         effective_job_types = list(job_type or [])
@@ -4272,7 +4727,22 @@ async def get_feed(
                 })
             if location:
                 selected.extend({"location_label": item} for item in location if item)
-            return selected
+            return [_enrich_feed_location(loc) for loc in selected]
+
+        def _enrich_feed_location(loc: Dict[str, Any]) -> Dict[str, Any]:
+            enriched = dict(loc)
+            label = str(enriched.get("location_label") or enriched.get("label") or "").strip()
+            if not label:
+                return enriched
+            country_code = str(enriched.get("country_code") or "").lower().strip()
+            if not country_code and jobs_service_module._looks_like_france_location(label):
+                country_code = "fr"
+                enriched["country_code"] = country_code
+                enriched["country"] = enriched.get("country") or "France"
+                if "france" not in label.lower():
+                    city = label.split(",")[0].strip()
+                    enriched["location_label"] = f"{city}, France"
+            return enriched
 
         request_selected_locations = _parse_selected_locations()
         selected_locations = list(request_selected_locations)
@@ -4392,6 +4862,10 @@ async def get_feed(
                 code = str(loc.get("country_code") or "").lower().strip()
                 if code:
                     values.append(code)
+                    continue
+                label = str(loc.get("location_label") or loc.get("label") or "")
+                if label and jobs_service_module._looks_like_france_location(label):
+                    values.append("fr")
             if only_my_country:
                 profile_location_data = _profile_feed_location_data()
                 code = str(profile_location_data.get("country_code") or "").lower().strip()
@@ -4400,6 +4874,17 @@ async def get_feed(
             return list(dict.fromkeys(values))
 
         selected_country_codes = _country_codes_from_locations()
+        # When searching France with France Travail configured, boost timeouts so
+        # the OAuth + commune-code lookup + API pagination have enough headroom.
+        _ft_configured = is_job_provider_configured("france_travail")
+        _search_is_france = bool(selected_country_codes) and all(cc == "fr" for cc in selected_country_codes)
+        if _search_is_france and _ft_configured:
+            sync_refresh_max_pages = max(sync_refresh_max_pages, min(_env_int("FRANCE_TRAVAIL_MAX_PAGES", 2), 4))
+            sync_refresh_page_size = max(sync_refresh_page_size, min(_env_int("FRANCE_TRAVAIL_PAGE_SIZE", 50), 150))
+            sync_refresh_max_results = max(sync_refresh_max_results, min(_env_int("FRANCE_TRAVAIL_PAGE_SIZE", 50), 100))
+            sync_refresh_attempts_per_city = 1
+            sync_refresh_max_seconds = max(sync_refresh_max_seconds, _env_int("JOBS_FEED_SYNC_REFRESH_MAX_SECONDS", 4))
+            sync_refresh_total_seconds = max(sync_refresh_total_seconds, _env_int("JOBS_FEED_SYNC_REFRESH_TOTAL_SECONDS", 4))
         location_intelligence_enabled = _env_bool("JOBS_LOCATION_INTELLIGENCE_ENABLED", True)
         location_max_expanded_cities = max(1, min(_env_int("JOBS_LOCATION_MAX_EXPANDED_CITIES", 10), 50))
         location_min_radius_km = max(1, _env_int("JOBS_LOCATION_MIN_RADIUS_KM", 10))
@@ -4804,6 +5289,10 @@ async def get_feed(
                 return True
             if radius_km is not None:
                 if location_context.get("used"):
+                    return False
+                # A specific city with a radius must never widen to the whole
+                # country: "Paris + 50km" should not surface Lyon jobs.
+                if explicit_local_intent and selected_city_terms:
                     return False
                 return country_match if selected_country_terms else False
             return country_match
@@ -5215,21 +5704,50 @@ async def get_feed(
             and _env_bool("JOBS_FEED_EXPLICIT_LOCAL_DISCOVERY_AFTER_DB_TIMEOUT", True)
         )
         refresh_budget_available = not _timed_out() or explicit_local_after_budget_refresh
+        inventory_is_weak = (
+            not db_first_enabled
+            or db_good_count == 0
+            or (explicit_local_intent and local_inventory_count < requested_limit)
+        )
+        # Cards we can serve right now without waiting on providers
+        # (role-compatible only, so we never serve irrelevant cards instead of refreshing).
+        has_showable_cards = (
+            local_inventory_count > 0 if explicit_local_intent else db_good_count > 0
+        )
+        explicit_local_empty_inventory = bool(explicit_local_intent and local_inventory_count == 0)
+        if explicit_local_empty_inventory and not force_provider_refresh:
+            explicit_local_sync_seconds = max(1, min(_env_int("JOBS_FEED_EXPLICIT_LOCAL_SYNC_SECONDS", 5), 15))
+            sync_refresh_total_seconds = explicit_local_sync_seconds
+            sync_refresh_max_seconds = explicit_local_sync_seconds
+            sync_refresh_attempts_per_city = 1
+            request_trace["explicit_local_quick_sync_seconds"] = explicit_local_sync_seconds
+        needs_provider_refresh = (
+            sync_refresh_enabled
+            and not cooldown_active
+            and ((force_provider_refresh and explicit_local_intent) or inventory_is_weak)
+        )
+        # Blocking (sync) refresh when worldwide DB is empty, client forced refresh,
+        # or explicit local search has zero local inventory (quick API lookup, ~5s cap).
         should_refresh = (
             not prefetch
-            and sync_refresh_enabled
+            and needs_provider_refresh
             and (refresh_budget_available or (force_provider_refresh and explicit_local_intent))
-            and not cooldown_active
             and (
                 (force_provider_refresh and explicit_local_intent)
-                or
-                not db_first_enabled
-                or db_good_count == 0
-                or (explicit_local_intent and local_inventory_count < requested_limit)
+                or (not has_showable_cards and not explicit_local_intent)
+                or explicit_local_empty_inventory
             )
         )
-        if prefetch and explicit_local_intent and local_inventory_count < requested_limit:
+        background_refresh_wanted = (
+            needs_provider_refresh
+            and not should_refresh
+            and not force_provider_refresh
+            and not explicit_local_empty_inventory
+            and _env_bool("JOBS_FEED_BACKGROUND_REFRESH_ENABLED", True)
+        )
+        if prefetch and explicit_local_intent and local_inventory_count < requested_limit and not has_showable_cards:
             should_refresh = True
+            background_refresh_wanted = False
             request_trace["prefetch"] = True
             request_trace["prefetch_forced_local_discovery"] = True
         elif prefetch:
@@ -5263,14 +5781,17 @@ async def get_feed(
                 cooldown_key,
                 max(0, int(cooldown_until - time.monotonic())),
             )
-        if should_refresh:
-            jsearch_fallback_triggered = True
+        def _compute_refresh_locations() -> List[Any]:
             max_refresh_locations = max(1, min(int(os.environ.get("FEED_MAX_REFRESH_LOCATIONS", "1")), 3))
             if explicit_local_intent:
                 max_refresh_locations = max(1, min(_env_int("JOBS_FEED_LOCAL_DISCOVERY_MAX_CITIES", 3), 4))
             if is_worldwide_radius:
-                refresh_locations = [None]
-            elif explicit_local_intent and location_context.get("expanded_places"):
+                return [None]
+            # Empty local inventory: query the user's city first (fast path for Avignon, etc.).
+            if explicit_local_empty_inventory and selected_locations and not force_provider_refresh:
+                origin_cap = max(1, min(_env_int("JOBS_FEED_EXPLICIT_LOCAL_SYNC_MAX_CITIES", 1), 2))
+                return selected_locations[:origin_cap]
+            if explicit_local_intent and location_context.get("expanded_places"):
                 def _provider_place_sort_key(place: Dict[str, Any]) -> tuple:
                     population = int(place.get("population") or 0)
                     distance = float(place.get("distance_km") or 0)
@@ -5282,7 +5803,7 @@ async def get_feed(
                     location_context.get("expanded_places") or [],
                     key=_provider_place_sort_key,
                 )
-                refresh_locations = [
+                return [
                     {
                         "location_label": place.get("name") or place.get("ascii_name") or place.get("query_label"),
                         "country_code": str(place.get("country_code") or "").lower().strip(),
@@ -5292,8 +5813,41 @@ async def get_feed(
                     for place in expanded_for_provider
                     if place.get("name") or place.get("ascii_name")
                 ][:max_refresh_locations]
-            else:
-                refresh_locations = (selected_locations or [None])[:max_refresh_locations]
+            return (selected_locations or [None])[:max_refresh_locations]
+
+        if background_refresh_wanted:
+            bg_signature = (
+                _explicit_local_cooldown_key()
+                if explicit_local_intent
+                else "|".join(["global", normalize_place_name(target_role or ""), radius_scope])
+            )
+            bg_scheduled = schedule_feed_background_refresh(
+                bg_signature,
+                profile_for_refresh,
+                _compute_refresh_locations(),
+                search_radius=search_radius,
+                role_override=target_role,
+                requested_limit=requested_limit,
+                max_results=sync_refresh_max_results,
+                max_pages=sync_refresh_max_pages,
+                page_size=sync_refresh_page_size,
+                attempts_per_city=sync_refresh_attempts_per_city,
+                user_id=user.user_id,
+            )
+            request_trace["background_refresh_scheduled"] = bool(bg_scheduled)
+            if bg_scheduled:
+                request_trace["local_jsearch_skip_reason"] = "background_refresh_scheduled"
+                logger.info(
+                    "jobs/feed background_refresh_scheduled: user_id=%s signature=%s inventory=%s requested=%s",
+                    user.user_id,
+                    bg_signature,
+                    local_inventory_count,
+                    requested_limit,
+                )
+
+        if should_refresh:
+            jsearch_fallback_triggered = True
+            refresh_locations = _compute_refresh_locations()
             request_trace["jsearch_queries_planned"] = [
                 {
                     "location_label": loc.get("location_label") if isinstance(loc, dict) else None,
@@ -5411,6 +5965,47 @@ async def get_feed(
                         break
                     continue
 
+            # If the short blocking budget did not finish all planned locations
+            # (or imported nothing), continue discovery in the background so the
+            # response returns quickly and the client can silently re-poll.
+            sync_imported_total = sum(
+                int(item.get("jobs_imported", item.get("imported", item.get("count") or 0)) or 0)
+                for item in refresh_results
+                if isinstance(item, dict)
+            )
+            remaining_locations = refresh_locations[len(refresh_results):]
+            if (
+                _env_bool("JOBS_FEED_BACKGROUND_REFRESH_ENABLED", True)
+                and not explicit_local_empty_inventory
+                and (remaining_locations or sync_imported_total == 0)
+            ):
+                continuation_signature = (
+                    _explicit_local_cooldown_key()
+                    if explicit_local_intent
+                    else "|".join(["global", normalize_place_name(target_role or ""), radius_scope])
+                ) + "|continue"
+                continuation_scheduled = schedule_feed_background_refresh(
+                    continuation_signature,
+                    profile_for_refresh,
+                    remaining_locations or refresh_locations,
+                    search_radius=search_radius,
+                    role_override=target_role,
+                    requested_limit=requested_limit,
+                    max_results=sync_refresh_max_results,
+                    max_pages=sync_refresh_max_pages,
+                    page_size=sync_refresh_page_size,
+                    attempts_per_city=sync_refresh_attempts_per_city,
+                    user_id=user.user_id,
+                )
+                if continuation_scheduled:
+                    request_trace["background_refresh_scheduled"] = True
+                    logger.info(
+                        "jobs/feed sync_refresh_continued_in_background: user_id=%s remaining_locations=%s sync_imported=%s",
+                        user.user_id,
+                        len(remaining_locations),
+                        sync_imported_total,
+                    )
+
             for refresh_result in refresh_results:
                 direct_refresh_jobs.extend(job for job in (refresh_result.get("jobs") or []) if isinstance(job, dict))
                 for key in refresh_result.get("search_keys") or []:
@@ -5436,63 +6031,77 @@ async def get_feed(
                 for item in refresh_results
                 if isinstance(item, dict)
             ]
-            request_trace["jsearch_results_count"] = sum(
+            total_provider_imported = sum(
                 int(item.get("jobs_imported", item.get("imported", item.get("count") or 0)) or 0)
                 for item in refresh_results
                 if isinstance(item, dict)
             )
+            request_trace["jsearch_results_count"] = total_provider_imported
 
-            _clear_feed_job_pool_cache()
-            candidates, base_query, unfiltered_count, applyable_count, db_rejected_count = await _load_db_candidates(include_unknown=False)
-            if allow_unknown_tier and len(candidates) < requested_limit:
-                c_candidates, c_query, c_unfiltered, c_applyable, c_rejected = await _load_db_candidates(include_unknown=True)
-                seen_ids = {job.get("job_id") for job in candidates}
-                candidates.extend(job for job in c_candidates if job.get("job_id") not in seen_ids)
-                unfiltered_count += c_unfiltered
-                applyable_count += c_applyable
-                db_rejected_count += c_rejected
-                base_query = c_query
-            if explicit_local_intent and len(candidates) < requested_limit:
-                visible_candidates, visible_query, visible_unfiltered, visible_applyable, visible_rejected = await _load_local_visible_candidates()
-                seen_ids = {job.get("job_id") for job in candidates}
-                additions = [job for job in visible_candidates if job.get("job_id") not in seen_ids]
-                candidates.extend(additions)
-                unfiltered_count += visible_unfiltered
-                applyable_count += visible_applyable
-                db_rejected_count += visible_rejected
-                local_visible_count += len(visible_candidates)
-                local_manual_count += sum(1 for job in visible_candidates if job.get("application_mode") != "auto_apply")
-                local_blocked_hidden_count += visible_rejected
-                if additions:
-                    base_query = visible_query if not base_query else base_query
-                    feed_source = "db_after_jsearch_fallback+local_visible"
-            if direct_refresh_jobs:
-                seen_ids = {job.get("job_id") for job in candidates}
-                fresh_additions: List[Dict[str, Any]] = []
-                for job in direct_refresh_jobs:
-                    job_id = job.get("job_id")
-                    if job_id and job_id in seen_ids:
-                        continue
-                    if job_id and job_id in swiped_ids:
-                        continue
-                    if _job_is_blocked_for_feed(job) or not _job_has_usable_apply_url(job):
-                        continue
-                    candidate = _with_application_capability_fields(job)
-                    if explicit_local_intent and not _passes_explicit_local_hard_constraint(candidate):
-                        continue
-                    if not _matches_explicit_filters(candidate):
-                        continue
-                    fresh_additions.append(candidate)
-                    if job_id:
-                        seen_ids.add(job_id)
-                if fresh_additions:
-                    candidates.extend(fresh_additions)
-                    local_visible_count += len(fresh_additions)
-                    local_manual_count += sum(1 for job in fresh_additions if job.get("application_mode") != "auto_apply")
-                    feed_source = f"{feed_source}+fresh_provider_jobs"
-            pre_filter_candidates = list(candidates)
-            if not str(feed_source).startswith("db_after_jsearch_fallback"):
-                feed_source = "db_after_jsearch_fallback"
+            skip_candidate_reload = (
+                total_provider_imported == 0
+                and not direct_refresh_jobs
+                and bool(candidates)
+            )
+            if skip_candidate_reload:
+                logger.info(
+                    "jobs/feed jsearch_fallback_no_new_jobs_skip_reload: user_id=%s elapsed_ms=%s existing_candidates=%s",
+                    user.user_id,
+                    _elapsed_ms(),
+                    len(candidates),
+                )
+            if not skip_candidate_reload:
+                _clear_feed_job_pool_cache()
+                candidates, base_query, unfiltered_count, applyable_count, db_rejected_count = await _load_db_candidates(include_unknown=False)
+                if allow_unknown_tier and len(candidates) < requested_limit:
+                    c_candidates, c_query, c_unfiltered, c_applyable, c_rejected = await _load_db_candidates(include_unknown=True)
+                    seen_ids = {job.get("job_id") for job in candidates}
+                    candidates.extend(job for job in c_candidates if job.get("job_id") not in seen_ids)
+                    unfiltered_count += c_unfiltered
+                    applyable_count += c_applyable
+                    db_rejected_count += c_rejected
+                    base_query = c_query
+                if explicit_local_intent and len(candidates) < requested_limit:
+                    visible_candidates, visible_query, visible_unfiltered, visible_applyable, visible_rejected = await _load_local_visible_candidates()
+                    seen_ids = {job.get("job_id") for job in candidates}
+                    additions = [job for job in visible_candidates if job.get("job_id") not in seen_ids]
+                    candidates.extend(additions)
+                    unfiltered_count += visible_unfiltered
+                    applyable_count += visible_applyable
+                    db_rejected_count += visible_rejected
+                    local_visible_count += len(visible_candidates)
+                    local_manual_count += sum(1 for job in visible_candidates if job.get("application_mode") != "auto_apply")
+                    local_blocked_hidden_count += visible_rejected
+                    if additions:
+                        base_query = visible_query if not base_query else base_query
+                        feed_source = "db_after_jsearch_fallback+local_visible"
+                if direct_refresh_jobs:
+                    seen_ids = {job.get("job_id") for job in candidates}
+                    fresh_additions: List[Dict[str, Any]] = []
+                    for job in direct_refresh_jobs:
+                        job_id = job.get("job_id")
+                        if job_id and job_id in seen_ids:
+                            continue
+                        if job_id and job_id in swiped_ids:
+                            continue
+                        if _job_is_blocked_for_feed(job) or not _job_has_usable_apply_url(job):
+                            continue
+                        candidate = _with_application_capability_fields(job)
+                        if explicit_local_intent and not _passes_explicit_local_hard_constraint(candidate):
+                            continue
+                        if not _matches_explicit_filters(candidate):
+                            continue
+                        fresh_additions.append(candidate)
+                        if job_id:
+                            seen_ids.add(job_id)
+                    if fresh_additions:
+                        candidates.extend(fresh_additions)
+                        local_visible_count += len(fresh_additions)
+                        local_manual_count += sum(1 for job in fresh_additions if job.get("application_mode") != "auto_apply")
+                        feed_source = f"{feed_source}+fresh_provider_jobs"
+                pre_filter_candidates = list(candidates)
+                if not str(feed_source).startswith("db_after_jsearch_fallback"):
+                    feed_source = "db_after_jsearch_fallback"
             logger.info(
                 "jobs/feed jsearch_fallback_complete: user_id=%s imported_results=%s provider_search_keys=%s db_after_count=%s db_after_role_good_count=%s unfiltered_count=%s applyable_count=%s rejected_de_count=%s",
                 user.user_id,
@@ -5562,6 +6171,10 @@ async def get_feed(
                 distance_score = max(0, 45 - int(distance))
                 population_bonus = min(15, int((int(expanded_match.get("population") or 0) ** 0.5) / 40))
                 return 30 + distance_score + population_bonus
+            if explicit_local_intent and selected_city_terms:
+                job_text = _normalized_job_location_text(job)
+                if any(term in job_text for term in selected_city_terms if len(term) >= 3):
+                    return 60
             if include_unknown_location and not (job.get("location") or job.get("city") or job.get("region") or job.get("country_code")):
                 return 5
             return _location_score(job, terms, worldwide=False)
@@ -5628,6 +6241,18 @@ async def get_feed(
         else:
             jobs = rank(candidates, worldwide=False, broad=False)
             logger.info("feed_filter_stage user_id=%s stage=strict_role_location elapsed_ms=%s count=%s", user.user_id, _elapsed_ms(), len(jobs))
+            # Allow relaxed fallback even when timed out: user already waited, show something
+            if len(jobs) < requested_limit and (not _timed_out() or len(jobs) == 0):
+                relaxed_local = rank(candidates, worldwide=False, broad=True)
+                if relaxed_local:
+                    fallback_used = "explicit_local_role_family"
+                    jobs = relaxed_local
+                logger.info(
+                    "feed_filter_stage user_id=%s stage=explicit_local_role_family elapsed_ms=%s count=%s",
+                    user.user_id,
+                    _elapsed_ms(),
+                    len(jobs),
+                )
             if len(jobs) < requested_limit and direct_refresh_jobs and not _timed_out():
                 fallback_used = "direct_provider_relaxed_role"
                 jobs = rank(candidates, worldwide=False, broad=True)
@@ -5793,6 +6418,7 @@ async def get_feed(
             "empty_reason": empty_reason,
             "feed_summary": feed_summary,
             "feed_mode": "mixed",
+            "background_refresh_scheduled": bool(request_trace.get("background_refresh_scheduled")),
             "auto_apply_count": feed_summary["auto_apply_count"],
             "total_count": len(candidates),
             "fallback_reason": None if fallback_used == "none" else fallback_used,
@@ -6386,12 +7012,7 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
                 {"_id": 0, "swipe_id": 1},
             )
             if not existing:
-                await db.swipes.insert_one({
-                    "user_id": user.user_id,
-                    "job_id": req.job_id,
-                    "direction": req.direction,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                })
+                await db.swipes.insert_one(_swipe_insert_doc(user.user_id, req.job_id, req.direction))
             log_phase("demo_account_apply_blocked")
             return {
                 "ok": True,
@@ -6501,12 +7122,7 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
         existing = await db.swipes.find_one({"user_id": user.user_id, "job_id": req.job_id}, {"_id": 0})
         log_phase("swipe_record_insert_start", duplicate=bool(existing))
         if not existing:
-            await db.swipes.insert_one({
-                "user_id": user.user_id,
-                "job_id": req.job_id,
-                "direction": req.direction,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            })
+            await db.swipes.insert_one(_swipe_insert_doc(user.user_id, req.job_id, req.direction, job))
         phase = "swipe_record_insert_done"
         log_phase("swipe_record_insert_done", duplicate=bool(existing))
 
@@ -6706,9 +7322,34 @@ async def swipes_history(
     job_map = {j["job_id"]: j for j in jobs}
     return {
         "swipes": [
-            {**r, "job": job_map.get(r["job_id"])} for r in rows
+            {
+                **r,
+                "job": job_map.get(r["job_id"]) or r.get("job_snapshot"),
+            }
+            for r in rows
         ],
     }
+
+
+@api_router.post("/swipes/{job_id}/apply-from-passed")
+async def apply_from_passed(job_id: str, user: User = Depends(get_current_user)):
+    """Convert a passed (left) swipe into an application with a tailored package."""
+    swipe_row = await db.swipes.find_one(
+        {"user_id": user.user_id, "job_id": job_id},
+        {"_id": 0},
+    )
+    if not swipe_row or swipe_row.get("direction") != "left":
+        raise HTTPException(status_code=404, detail={"message": "Passed job not found"})
+
+    restored = await _restore_job_from_swipe_snapshot(job_id, swipe_row)
+    if not restored:
+        raise HTTPException(
+            status_code=404,
+            detail={"message": "This job is no longer available. It may have expired."},
+        )
+
+    await db.swipes.delete_one({"user_id": user.user_id, "job_id": job_id})
+    return await swipe(SwipeRequest(job_id=job_id, direction="right"), user)
 
 
 @api_router.delete("/swipes/{job_id}")
@@ -6937,6 +7578,31 @@ async def admin_jobs_cache_status(admin: User = Depends(require_admin_user)):
     _require_job_maintenance_enabled()
     logger.info("admin_jobs_cache_status_requested admin=%s", admin.email)
     return await job_cache_status(db)
+
+
+@api_router.post("/admin/jobs/france-travail/harvest")
+async def admin_jobs_france_travail_harvest(
+    admin: User = Depends(require_admin_user),
+    max_queries: Optional[int] = None,
+    dry_run: bool = False,
+):
+    _require_job_maintenance_enabled()
+    logger.info(
+        "admin_jobs_ft_harvest_requested admin=%s max_queries=%s dry_run=%s",
+        admin.email,
+        max_queries,
+        dry_run,
+    )
+    return await harvest_france_travail(db, max_queries=max_queries, dry_run=dry_run)
+
+
+@api_router.get("/admin/jobs/france-travail/harvest-status")
+async def admin_jobs_france_travail_harvest_status(admin: User = Depends(require_admin_user)):
+    _require_job_maintenance_enabled()
+    return {
+        "harvest_enabled": ft_harvest_enabled(),
+        "last_run": ft_last_harvest_summary(),
+    }
 
 
 @api_router.post("/admin/jobs/feed-diagnostic")
@@ -7924,6 +8590,40 @@ async def admin_list_creators(admin: User = Depends(require_admin_user)):
     return {"creators": rows}
 
 
+@api_router.get("/admin/creator-social")
+async def admin_creator_social_dashboard(
+    admin: User = Depends(require_admin_user),
+    days: int = Query(14, ge=7, le=90),
+    creator_id: Optional[str] = Query(None),
+):
+    creator_ids = [creator_id] if creator_id else None
+    return build_dashboard(days=days, creator_ids=creator_ids)
+
+
+@api_router.post("/admin/creator-social/refresh")
+async def admin_creator_social_refresh(
+    admin: User = Depends(require_admin_user),
+    creator_id: Optional[str] = Query(None),
+):
+    if creator_id:
+        try:
+            snapshot = refresh_creator(creator_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Could not refresh creator: {exc}") from exc
+        return {"ok": True, "snapshot": snapshot, "dashboard": build_dashboard(creator_ids=[creator_id])}
+
+    snapshots = refresh_all_creators()
+    errors = [row for row in snapshots if row.get("error")]
+    return {
+        "ok": not errors or len(errors) < len(snapshots),
+        "snapshots": snapshots,
+        "dashboard": build_dashboard(),
+        "errors": errors,
+    }
+
+
 @api_router.get("/admin/training/analytics")
 async def admin_training_analytics_endpoint(
     admin: User = Depends(require_admin_user),
@@ -8367,6 +9067,95 @@ async def admin_download_cover_letter(application_id: str, admin: User = Depends
         media_type="text/plain; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{application_id}_cover_letter.txt"'},
     )
+
+
+@api_router.post("/admin/applications/{application_id}/send-email")
+async def admin_send_application_email(
+    application_id: str,
+    body: AdminSendApplicationEmail,
+    admin: User = Depends(require_admin_user),
+):
+    """Send the tailored CV + cover letter to a job's recruiter contact email.
+
+    Used for job sources (e.g. France Travail) that don't expose an apply API
+    but do publish a recruiter contact email. Sent from Hirly's own
+    transactional sender with Reply-To set to the candidate, so this never
+    requires the candidate's own mailbox credentials or a Gmail "send" OAuth
+    grant. A human operator reviews and triggers this from the manual
+    completion queue, so nothing is sent without a person in the loop.
+    """
+    app_doc = await db.applications.find_one({"application_id": application_id}, {"_id": 0})
+    if not app_doc:
+        raise HTTPException(status_code=404, detail="Application not found")
+    job = await db.jobs.find_one({"job_id": app_doc.get("job_id")}, {"_id": 0}) or {}
+    user_doc = await db.users.find_one({"user_id": app_doc.get("user_id")}, {"_id": 0}) or {}
+    profile = await db.profiles.find_one({"user_id": app_doc.get("user_id")}, {"_id": 0}) or {}
+
+    to_email = (body.to_email or job.get("contact_email") or "").strip()
+    if not to_email:
+        raise HTTPException(status_code=400, detail="No recruiter contact email available for this job")
+
+    candidate_email = app_doc.get("user_email") or user_doc.get("email") or ""
+    candidate_name = (profile.get("contact") or {}).get("name") or user_doc.get("name") or ""
+    job_title = job.get("title") or "the role"
+    company = job.get("company") or ""
+
+    subject = (body.subject or "").strip() or f"Candidature — {job_title}{f' chez {company}' if company else ''} — {candidate_name or candidate_email}"
+    cover_letter = app_doc.get("tailored_cover_letter") or app_doc.get("cover_letter") or {}
+    default_body = cover_letter_to_text(cover_letter) if cover_letter else (
+        f"Bonjour,\n\nVeuillez trouver ci-joint ma candidature pour le poste de {job_title}"
+        f"{f' chez {company}' if company else ''}.\n\nCordialement,\n{candidate_name or candidate_email}"
+    )
+    body_text = (body.body_text or "").strip() or default_body
+
+    attachments: List[Tuple[str, bytes, str]] = []
+    if app_doc.get("tailored_cv_file_b64"):
+        try:
+            attachments.append((
+                app_doc.get("tailored_cv_filename") or "CV.docx",
+                base64.b64decode(app_doc["tailored_cv_file_b64"]),
+                app_doc.get("tailored_cv_mime") or DOCX_MIME,
+            ))
+        except Exception:
+            logger.warning("admin_send_application_email_cv_decode_failed application_id=%s", application_id)
+
+    result = await send_application_email(
+        to_email=to_email,
+        candidate_email=candidate_email,
+        candidate_name=candidate_name,
+        subject=subject,
+        body_text=body_text,
+        attachments=attachments,
+    )
+    if not result.get("ok"):
+        raise HTTPException(status_code=502, detail=result.get("error") or "Failed to send application email")
+
+    now = datetime.now(timezone.utc).isoformat()
+    timeline = _append_admin_timeline(app_doc, {
+        "event_id": f"timeline_{uuid.uuid4().hex[:12]}",
+        "type": "application_email_sent",
+        "to_email": to_email,
+        "transport": result.get("transport"),
+        "author_user_id": admin.user_id,
+        "author_email": admin.email,
+        "created_at": now,
+    })
+    update: Dict[str, Any] = {
+        "admin_timeline": timeline,
+        "application_email_sent_at": now,
+        "application_email_sent_to": to_email,
+        "updated_at": now,
+    }
+    if body.mark_manually_submitted:
+        update["admin_status"] = "manually_submitted"
+        update["manual_status"] = "manually_submitted"
+        update["submission_status"] = "submitted"
+        update["submitted_at"] = app_doc.get("submitted_at") or now
+        update["manual_status_updated_by"] = admin.email
+        update["manual_status_updated_at"] = now
+    await db.applications.update_one({"application_id": application_id}, {"$set": update})
+    updated = await db.applications.find_one({"application_id": application_id}, {"_id": 0})
+    return {"ok": True, "transport": result.get("transport"), "application": _normalize_application_status_fields(updated or {})}
 
 
 @api_router.get("/applications/greenhouse/form-preview")
@@ -11442,7 +12231,13 @@ async def dev_jsearch_test(q: str = "software engineer", location: str = "New Yo
 
 
 @api_router.get("/dev/france-travail-test")
-async def dev_france_travail_test(q: str = "développeur", location: str = "Lyon, France", limit: int = 5):
+async def dev_france_travail_test(
+    q: str = "développeur",
+    location: str = "Lyon, France",
+    limit: int = 5,
+    radius_km: int = 50,
+    contract_hint: Optional[str] = None,
+):
     dev_enabled = (
         os.environ.get("ENVIRONMENT", "").lower() == "development"
         or os.environ.get("DEV_TOOLS_ENABLED", "false").lower() in ("1", "true", "yes", "on")
@@ -11463,6 +12258,8 @@ async def dev_france_travail_test(q: str = "développeur", location: str = "Lyon
         limit=max(1, min(limit, 20)),
         max_pages=1,
         page_size=max(5, min(limit * 3, 20)),
+        radius_km=max(0, min(int(radius_km), 200)),
+        contract_hint=contract_hint,
     )
     try:
         result = await provider.search(query)
@@ -12523,6 +13320,7 @@ async def startup_seed():
     )
     asyncio.create_task(_startup_seed_impl())
     asyncio.create_task(_resume_pending_application_generation())
+    asyncio.create_task(run_france_travail_harvest_loop(db))
 
 
 @app.on_event("shutdown")

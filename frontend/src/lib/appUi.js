@@ -86,6 +86,28 @@ export const APP_UI = {
       postedRecently: "Posted recently",
       locationNotSpecified: "Location not specified",
       aboutRole: "About This Role",
+      romeProfileTitle: "Official role profile (ROME)",
+      romeProfileLoading: "Loading official role details…",
+      romeProfileUnavailable: "Official role details are unavailable for this job.",
+      romeDefinition: "Role definition",
+      romeAccess: "How to enter this field",
+      romeCoreSkills: "Core skills",
+      romeEmergingSkills: "Emerging skills",
+      romeSkillGroups: "Skills by area",
+      romeKnowledge: "Knowledge",
+      romeWorkContext: "Work context",
+      romeAlsoKnownAs: "Also known as",
+      romeSectors: "Sectors",
+      offerContractType: "Contract type",
+      offerContractNature: "Employment contract",
+      offerWorkSchedule: "Working hours",
+      offerExperience: "Experience",
+      offerSalary: "Salary",
+      offerSalaryNote: "Salary details",
+      offerBenefits: "Benefits",
+      offerTravel: "Travel",
+      offerWorkContext: "Role context",
+      offerWorkConditions: "Working conditions",
       whyFits: "Why this fits you",
       requiredQualifications: "Required Qualifications",
       techStack: "Tech stack",
@@ -392,6 +414,12 @@ export const APP_UI = {
       loadError: "Failed to load history",
       packageGenerated: "Application package generated. Not submitted yet.",
       packageError: "Could not generate package. Try again.",
+      generatePackageHint: "Creates a tailored CV and cover letter for this role (uses 1 credit).",
+      packageNoCredits: "No application credits left. Upgrade to continue.",
+      packageJobUnavailable: "This job is no longer available. It may have expired.",
+      packageProfileRequired: "Upload your resume in Profile before generating a package.",
+      packageJobNotApplyable: "This job cannot be fulfilled automatically by Hirly.",
+      viewApplication: "View application",
     },
     emails: {
       searchMail: "Search in mail",
@@ -520,6 +548,7 @@ export const APP_UI = {
         uploadResume: "Upload resume",
         resumeOnFile: "Current resume on file",
         replaceResume: "Replace",
+        viewResume: "View resume",
         downloadResume: "Download resume",
         downloadError: "Could not download resume",
         resumeFallbackName: "Resume",
@@ -563,8 +592,8 @@ export const APP_UI = {
       uploadDocument: "Upload document",
       dropHint: "Drag and drop or click to browse",
       replaceZoneTitle: "Replace with a new file",
-      fileFormats: "PDF or PNG • Max 10 MB",
-      fileTypeError: "Please upload a PDF or PNG file.",
+      fileFormats: "PDF, PNG, JPG, or DOCX • Max 10 MB",
+      fileTypeError: "Please upload a PDF, PNG, JPG, or DOCX file.",
       downloadResume: "Download",
       exampleResume: "Example resume",
       exampleResumeHint: "Not sure what to upload? Here is a well-formatted entry-level resume you can use as inspiration.",
@@ -631,7 +660,7 @@ export const APP_UI = {
       send: "Send suggestion",
       sending: "Sending…",
       success: "Thanks! Your suggestion was sent to the team.",
-      error: "Could not send your suggestion. Try again or email hi@hirly.com.",
+      error: "Could not send your suggestion. Try again or email {email}.",
       imagesOnly: "Only image files are allowed.",
       fileTooLarge: "Each image must be 5 MB or smaller.",
       sentAs: "We'll include your account email ({email}) so we can follow up.",
@@ -648,6 +677,7 @@ export const APP_UI = {
       addLanguages: "Add languages",
       addSkills: "Add skills",
       languagesHint: "Highlight the languages you speak and your proficiency.",
+      professionalDetails: "Professional details",
       edit: "Edit",
       jobPreferences: "Job Preferences",
       applicationDefaults: "Application Defaults",
@@ -685,6 +715,7 @@ export const APP_UI = {
       perMonth: "/ mo",
       perWeek: "/ wk",
       applications: "{n} apps",
+      pricePerApplication: "{price} / application",
       cta: "Start Growing with Hirly",
       cancelAnytime: "Cancel anytime",
       securePayments: "Secure payments",
@@ -694,6 +725,8 @@ export const APP_UI = {
       stripe: "Secure checkout powered by Stripe",
       checkoutError: "Could not start checkout. Please try again.",
       checkoutFailed: "Checkout failed. Please try again.",
+      checkoutCancelled: "Checkout cancelled",
+      checkoutSuccess: "Payment received",
       featureSwipeTitle: "Swipe to Apply",
       featureSwipeDesc: "Apply to hundreds of jobs with just a swipe — no more tedious forms.",
       featureResumeTitle: "AI-Generated Resumes",
@@ -812,6 +845,28 @@ export const APP_UI = {
       postedRecently: "Publié récemment",
       locationNotSpecified: "Lieu non précisé",
       aboutRole: "À propos du poste",
+      romeProfileTitle: "Official role profile (ROME)",
+      romeProfileLoading: "Loading official role details…",
+      romeProfileUnavailable: "Official role details are unavailable for this job.",
+      romeDefinition: "Role definition",
+      romeAccess: "How to enter this field",
+      romeCoreSkills: "Core skills",
+      romeEmergingSkills: "Emerging skills",
+      romeSkillGroups: "Skills by area",
+      romeKnowledge: "Knowledge",
+      romeWorkContext: "Work context",
+      romeAlsoKnownAs: "Also known as",
+      romeSectors: "Sectors",
+      offerContractType: "Type de contrat",
+      offerContractNature: "Contrat travail",
+      offerWorkSchedule: "Durée du travail",
+      offerExperience: "Expérience",
+      offerSalary: "Salaire",
+      offerSalaryNote: "Détails salaire",
+      offerBenefits: "Primes",
+      offerTravel: "Déplacements",
+      offerWorkContext: "Contexte du poste",
+      offerWorkConditions: "Conditions d'exercice",
       whyFits: "Pourquoi ce poste vous convient",
       requiredQualifications: "Qualifications requises",
       techStack: "Stack technique",
@@ -1116,6 +1171,12 @@ export const APP_UI = {
       loadError: "Impossible de charger l'historique",
       packageGenerated: "Dossier généré. Pas encore envoyé.",
       packageError: "Impossible de générer le dossier. Réessayez.",
+      generatePackageHint: "Génère un CV et une lettre de motivation adaptés à ce poste (1 crédit).",
+      packageNoCredits: "Plus de crédits de candidature. Passez à l'offre supérieure pour continuer.",
+      packageJobUnavailable: "Cette offre n'est plus disponible. Elle a peut-être expiré.",
+      packageProfileRequired: "Importez votre CV dans Profil avant de générer un dossier.",
+      packageJobNotApplyable: "Cette offre ne peut pas être traitée automatiquement par Hirly.",
+      viewApplication: "Voir la candidature",
     },
     emails: {
       searchMail: "Rechercher dans les mails",
@@ -1244,6 +1305,7 @@ export const APP_UI = {
         uploadResume: "Importer CV",
         resumeOnFile: "CV actuel enregistré",
         replaceResume: "Remplacer",
+        viewResume: "Voir le CV",
         downloadResume: "Télécharger le CV",
         downloadError: "Impossible de télécharger le CV",
         resumeFallbackName: "CV",
@@ -1287,8 +1349,8 @@ export const APP_UI = {
       uploadDocument: "Importer un document",
       dropHint: "Glissez-déposez ou cliquez pour parcourir",
       replaceZoneTitle: "Remplacer par un nouveau fichier",
-      fileFormats: "PDF ou PNG • 10 Mo max",
-      fileTypeError: "Importez un fichier PDF ou PNG.",
+      fileFormats: "PDF, PNG, JPG ou DOCX • 10 Mo max",
+      fileTypeError: "Importez un PDF, PNG, JPG ou DOCX.",
       downloadResume: "Télécharger",
       exampleResume: "CV exemple",
       exampleResumeHint: "Pas sûr de quoi importer ? Voici un CV débutant bien formaté pour vous inspirer.",
@@ -1355,7 +1417,7 @@ export const APP_UI = {
       send: "Envoyer",
       sending: "Envoi…",
       success: "Merci ! Ta suggestion a été envoyée à l'équipe.",
-      error: "Impossible d'envoyer ta suggestion. Réessaie ou écris à hi@hirly.com.",
+      error: "Impossible d'envoyer ta suggestion. Réessaie ou écris à {email}.",
       imagesOnly: "Seules les images sont acceptées.",
       fileTooLarge: "Chaque image doit faire 5 Mo maximum.",
       sentAs: "On inclura ton e-mail de compte ({email}) pour te recontacter.",
@@ -1372,6 +1434,7 @@ export const APP_UI = {
       addLanguages: "Ajouter des langues",
       addSkills: "Ajouter des compétences",
       languagesHint: "Indiquez les langues parlées et votre niveau.",
+      professionalDetails: "Détails professionnels",
       edit: "Modifier",
       jobPreferences: "Préférences emploi",
       applicationDefaults: "Valeurs par défaut",
@@ -1409,7 +1472,8 @@ export const APP_UI = {
       perMonth: "/ mois",
       perWeek: "/ sem.",
       applications: "{n} candid.",
-      cta: "Grandir avec Hirly",
+      pricePerApplication: "{price} / candidature",
+      cta: "Décrocher mon prochain job",
       cancelAnytime: "Sans engagement",
       securePayments: "Paiement sécurisé",
       instantAccess: "Accès immédiat",
@@ -1418,6 +1482,8 @@ export const APP_UI = {
       stripe: "Paiement sécurisé via Stripe",
       checkoutError: "Impossible de lancer le paiement. Réessayez.",
       checkoutFailed: "Échec du paiement. Réessayez.",
+      checkoutCancelled: "Paiement annulé",
+      checkoutSuccess: "Paiement reçu",
       featureSwipeTitle: "Swipe pour postuler",
       featureSwipeDesc: "Postulez à des centaines d'offres en un swipe — fini les formulaires.",
       featureResumeTitle: "CV générés par IA",
@@ -1712,6 +1778,26 @@ export function getSwipeErrorMessage(t, e) {
   if (typeof detail === "string") return detail;
   if (detail?.message) return detail.message;
   return t("toasts.swipeFailed");
+}
+
+export function getPackageErrorMessage(t, e) {
+  const status = e?.response?.status;
+  const detail = e?.response?.data?.detail;
+  if (status === 402) return t("history.packageNoCredits");
+  if (status === 404) {
+    if (typeof detail === "string") return detail;
+    return detail?.message || t("history.packageJobUnavailable");
+  }
+  if (status === 400) {
+    const message = typeof detail === "string" ? detail : detail?.message;
+    if (message && /profile/i.test(message)) return t("history.packageProfileRequired");
+    if (message) return message;
+  }
+  if (status === 422) {
+    const message = typeof detail === "object" ? detail?.message : detail;
+    return message || t("history.packageJobNotApplyable");
+  }
+  return getSwipeErrorMessage(t, e) || t("history.packageError");
 }
 
 export function getHistoryTabs(t) {

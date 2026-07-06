@@ -1,14 +1,12 @@
 import { useCallback, useRef, useState } from "react";
-import { Eye, File, FileStack, FileText, Trash2, Upload, Download } from "lucide-react";
+import { Eye, File, FileStack, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { api, API, getSessionToken } from "../../lib/api";
-import { fetchDemoCvOriginal, shouldMockCvUpload } from "../../lib/demoCvUpload";
+import { shouldMockCvUpload } from "../../lib/demoCvUpload";
 import { useAppLocale } from "../../context/AppLocaleContext";
 import { formatUploadedDate } from "../../lib/appUi";
 import { Button } from "../ui/button";
-import ConfigureAiSettingsButton from "../settings/ConfigureAiSettingsButton";
-import ResumeCurrentPreview from "./ResumeCurrentPreview";
-import ResumeExamplePreview from "./ResumeExamplePreview";
+import ProfileResumeSection from "./ProfileResumeSection";
 import ProfileFormSection from "./ProfileFormSection";
 
 const ACCEPTED_DOCUMENTS = ".pdf,.docx,.txt,.png,.jpg,.jpeg,.webp";
@@ -85,40 +83,10 @@ export default function ProfileDocumentsTab({ profile, onUploadResume, onDocumen
   const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
 
-  const hasResume = Boolean(profile?.cv_text || profile?.cv_filename);
   const additionalDocuments = profile?.additional_documents || profile?.extras?.additional_documents || [];
 
   const openDocumentPicker = () => {
     if (!uploading) fileInputRef.current?.click();
-  };
-
-  const downloadResume = async () => {
-    try {
-      let blob = null;
-      if (shouldMockCvUpload()) {
-        blob = await fetchDemoCvOriginal();
-      }
-      if (!blob) {
-        const token = getSessionToken();
-        const res = await fetch(`${API}/profile/cv/original`, {
-          credentials: "include",
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        if (!res.ok) {
-          toast.error(t("profile.documents.downloadError"));
-          return;
-        }
-        blob = await res.blob();
-      }
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = profile?.cv_filename || "resume.pdf";
-      anchor.click();
-      URL.revokeObjectURL(url);
-    } catch (_) {
-      toast.error(t("profile.documents.downloadError"));
-    }
   };
 
   const uploadDocument = useCallback(async (file) => {
@@ -198,57 +166,10 @@ export default function ProfileDocumentsTab({ profile, onUploadResume, onDocumen
         data-testid="profile-document-input"
       />
 
-      <ProfileFormSection
-        title={t("profile.documents.resumeTitle")}
-        description={t("profile.documents.resumeSectionDesc")}
-        footer={(
-          <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs leading-relaxed shell-body">
-              {t("profile.documents.configureAiSettingsHint")}
-            </p>
-            <ConfigureAiSettingsButton className="shrink-0 sm:w-auto" testId="profile-resume-ai-settings-footer" />
-          </div>
-        )}
-      >
-        {hasResume ? (
-          <div className="space-y-4">
-            <ResumeCurrentPreview profile={profile} active compact />
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="brand"
-                onClick={onUploadResume}
-                data-testid="profile-resume-replace-btn"
-              >
-                <Upload className="h-4 w-4" />
-                {t("profile.documents.replaceResume")}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="shell-border rounded-full"
-                onClick={downloadResume}
-                data-testid="profile-resume-download-btn"
-              >
-                <Download className="h-4 w-4" />
-                {t("profile.documents.downloadResume")}
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            <DocumentEmptyState
-              icon={FileText}
-              title={t("profile.documents.noResume")}
-              description={t("profile.documents.noResumeDesc")}
-              actionLabel={t("profile.documents.uploadResume")}
-              onAction={onUploadResume}
-              testId="profile-upload-resume"
-            />
-            <ResumeExamplePreview compact />
-          </div>
-        )}
-      </ProfileFormSection>
+      <ProfileResumeSection
+        profile={profile}
+        onUploadResume={onUploadResume}
+      />
 
       <ProfileFormSection
         title={t("profile.documents.additionalTitle")}

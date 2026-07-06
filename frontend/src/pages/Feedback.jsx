@@ -5,7 +5,7 @@ import { BrandHeader } from "../components/app/AppScreenHeader";
 import { AppPage, AppPageScroll, SHELL_PAGE_CLASS } from "../components/app/AppPageShell";
 import DesktopPageHeader from "../components/desktop/DesktopPageHeader";
 import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
-import { BRAND } from "../lib/brand";
+import { BRAND, supportMailto } from "../lib/brand";
 import { useAppLocale } from "../context/AppLocaleContext";
 
 const RELEASE_NOTES = [
@@ -44,7 +44,7 @@ export default function Feedback() {
             type="button"
             className="grid h-9 w-9 place-items-center rounded-full text-linkedin hover:bg-violet-50 sm:h-10 sm:w-10"
             aria-label={t("feedback.callSupport")}
-            onClick={() => toast.message(t("feedback.supportSoon"))}
+            onClick={() => window.open(supportMailto(`${BRAND.NAME} support`), "_blank", "noopener")}
           >
             <Phone className="h-5 w-5" strokeWidth={2} />
           </button>

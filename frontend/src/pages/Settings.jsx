@@ -8,14 +8,14 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import Logo from "../components/Logo";
-import { BRAND } from "../lib/brand";
+import { BRAND, supportMailto } from "../lib/brand";
 import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
 import DesktopAppShell from "../components/desktop/DesktopAppShell";
 import AISettingsPanel from "../components/desktop/AISettingsPanel";
 import MobileAISettings from "../components/settings/MobileAISettings";
-import DemoAccountBadge from "../components/settings/DemoAccountBadge";
 import { useUpgradeModal } from "../context/UpgradeModalContext";
 import { useAppLocale } from "../context/AppLocaleContext";
+import { privacyHref, termsHref } from "../lib/legalPaths";
 
 const Section = ({ label, children, testId }) => (
   <section className="mt-7" data-testid={testId}>
@@ -117,10 +117,6 @@ export default function Settings() {
       </header>
 
       <AppPageScroll className="mx-auto max-w-md px-5 pb-32" withBottomNavPad={false}>
-      <div className="mb-5">
-        <DemoAccountBadge variant="dark" />
-      </div>
-
       <Section label={t("settings.lookAndFeel")} testId="settings-appearance">
         <Row icon={Palette} label={t("settings.theme")} value={theme} onClick={() => todo(t("settings.theme"))} testId="settings-theme" />
       </Section>
@@ -136,14 +132,14 @@ export default function Settings() {
       </Section>
 
       <Section label={t("settings.privacyData")} testId="settings-security">
-        <Row icon={ShieldCheck} label={t("settings.privacyPolicy")}  onClick={() => openExternal("/privacy")} testId="settings-privacy" />
-        <Row icon={FileText}    label={t("settings.termsOfUse")}     onClick={() => openExternal("/terms")}   testId="settings-terms" />
+        <Row icon={ShieldCheck} label={t("settings.privacyPolicy")} onClick={() => openExternal(privacyHref())} testId="settings-privacy" />
+        <Row icon={FileText} label={t("settings.termsOfUse")} onClick={() => openExternal(termsHref())} testId="settings-terms" />
       </Section>
 
       <Section label={t("settings.planHelp")} testId="settings-support">
         <Row icon={CreditCard}    label={billing?.is_premium ? t("settings.manageBilling") : t("settings.upgradePlan")} onClick={openPlan} testId="settings-subscribe" />
         <Row icon={RotateCw}      label={t("settings.restorePurchase")}  onClick={() => todo(t("settings.restorePurchase"))}       testId="settings-restore" />
-        <Row icon={MessageSquare} label={t("settings.talkToUs")}        onClick={() => openExternal("mailto:hi@hirly.com")} testId="settings-chat" />
+        <Row icon={MessageSquare} label={t("settings.talkToUs")}        onClick={() => openExternal(supportMailto())} testId="settings-chat" />
       </Section>
 
       <Section label={t("settings.shareBrand", { brand: BRAND.NAME })} testId="settings-social">

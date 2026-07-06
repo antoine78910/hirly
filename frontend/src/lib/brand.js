@@ -8,4 +8,11 @@ export const BRAND = {
   CTA: "Continue with Google",
   CTA_PRIMARY: "Start Swiping Jobs",
   CTA_SECONDARY: "Get Hired Today",
+  SUPPORT_EMAIL: "app@tryhirly.com",
+};
+
+export const supportMailto = (subject = "") => {
+  const base = `mailto:${BRAND.SUPPORT_EMAIL}`;
+  if (!subject) return base;
+  return `${base}?subject=${encodeURIComponent(subject)}`;
 };

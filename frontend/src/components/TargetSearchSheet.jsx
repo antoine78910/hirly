@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Loader2 } from "lucide-react";
-import { toast } from "sonner";
-import { saveTargetPreferences } from "../lib/targetPreferences";
 import RolePicker from "./RolePicker";
 import PlacesAutocomplete from "./PlacesAutocomplete";
 import { useAppLocale } from "../context/AppLocaleContext";
+import { normalizeLocationData } from "../lib/targetPreferences";
 
 export default function TargetSearchSheet({
   open,
@@ -13,7 +12,7 @@ export default function TargetSearchSheet({
   initialLocation = "",
   initialLocationData = null,
   onClose,
-  onSaved,
+  onSave,
 }) {
   const { lang } = useAppLocale();
   const [targetRole, setTargetRole] = useState("");
@@ -31,17 +30,17 @@ export default function TargetSearchSheet({
   const save = async () => {
     setSaving(true);
     try {
-      const saved = await saveTargetPreferences({
-        role: targetRole,
-        location: targetLocation,
-        locationData: targetLocationData,
+      const trimmedRole = (targetRole || "").trim();
+      const trimmedLocation = (targetLocation || "").trim();
+      const normalizedData = normalizeLocationData(trimmedLocation, targetLocationData);
+      const locationLabel = normalizedData?.location_label || trimmedLocation || "Anywhere";
+      const ok = await onSave?.({
+        role: trimmedRole,
+        location: locationLabel,
+        locationData: normalizedData,
       });
-      if (!saved) return;
-      toast.success(lang === "fr" ? "Recherche mise à jour" : "Search updated");
-      await onSaved?.(saved);
+      if (ok === false) return;
       onClose();
-    } catch (_) {
-      toast.error(lang === "fr" ? "Impossible d'enregistrer les préférences de recherche" : "Could not save search preferences");
     } finally {
       setSaving(false);
     }

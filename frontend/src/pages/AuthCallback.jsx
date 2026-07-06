@@ -9,6 +9,7 @@ import { supabaseSessionPayload } from "../lib/auth";
 import { trackEvent } from "../lib/analytics";
 import { applyRedeemToAuth, inviteDestination, tryRedeemPendingInvite } from "../lib/creatorInvite";
 import { setDemoAccountFromUser } from "../lib/demoAccount";
+import { resolvePostAuthDestination } from "../lib/appDomains";
 
 export default function AuthCallback() {
   const navigate = useNavigate();
@@ -82,7 +83,12 @@ export default function AuthCallback() {
         } else if (!inviteRedirect && destination.startsWith("/onboarding")) {
           destination = "/swipe";
         }
-        navigate(destination, { replace: true });
+        const resolved = resolvePostAuthDestination(destination);
+        if (resolved.type === "external") {
+          window.location.replace(resolved.url);
+          return;
+        }
+        navigate(resolved.path, { replace: true });
       } catch (e) {
         console.error("Auth callback failed", e);
         const detail = e?.response?.data?.detail || e?.message || "Unknown auth callback error";

@@ -408,6 +408,26 @@ const QUIZZES_EN = {
 
       ], "a"),
 
+      q("cb6", "Where should you get the official Hirly logo for videos?", [
+
+        { id: "a", label: "The shared Google Drive folder in Good. Better. Best. → Resources" },
+
+        { id: "b", label: "Any screenshot taken from the app or website" },
+
+        { id: "c", label: "A logo you recreated yourself in a design tool" },
+
+      ], "a"),
+
+      q("cb7", "In the Good/Better/Best logo format, what is the Best option?", [
+
+        { id: "a", label: "Official transparent PNG files from the shared folder" },
+
+        { id: "b", label: "Screenshot from Google Images" },
+
+        { id: "c", label: "Recreate the logo with your own colors" },
+
+      ], "a"),
+
     ],
 
   },
@@ -779,6 +799,26 @@ const QUIZZES_FR = {
         { id: "b", label: "« App emploi » générique — ne jamais dire Hirly" },
 
         { id: "c", label: "L'app qui t'a le plus payé récemment" },
+
+      ], "a"),
+
+      q("cb6", "Où récupérer le logo officiel Hirly pour tes vidéos ?", [
+
+        { id: "a", label: "Le dossier Google Drive partagé dans Bien. Mieux. Le top. → Ressources" },
+
+        { id: "b", label: "N'importe quelle capture d'écran de l'app ou du site" },
+
+        { id: "c", label: "Un logo que tu as recréé toi-même" },
+
+      ], "a"),
+
+      q("cb7", "Dans le format Good/Better/Best logos, quelle est l'option Best ?", [
+
+        { id: "a", label: "Les fichiers PNG transparents officiels du dossier partagé" },
+
+        { id: "b", label: "Une capture d'écran depuis Google Images" },
+
+        { id: "c", label: "Recréer le logo avec tes propres couleurs" },
 
       ], "a"),
 

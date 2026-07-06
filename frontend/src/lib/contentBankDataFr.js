@@ -6,10 +6,14 @@ import {
   examplesGrid,
   heading,
   infoScript,
+  linkBlock,
   paragraph,
   sectionBlock,
   warningGuideline,
 } from "./trainingDocBlocks";
+
+const BRAND_ASSETS_DRIVE_URL =
+  "https://drive.google.com/drive/folders/1_6Q7rK8LbzAHu4CUqpx6R0HkIhfrZZ4b?usp=sharing";
 
 function ex(label, url = "") {
   return url ? { label, url } : label;
@@ -113,6 +117,11 @@ export const CONTENT_BANK_FR = [
       heading(2, "Script principal"),
       infoScript(
         "Bien. Mieux. Le top. Édition candidature.\n\nBien. LinkedIn et Indeed.\nTes plateformes classiques. Plein d'offres, mais tu es en concurrence avec des centaines de candidats — souvent c'est hit or miss.\n\nMieux. Welcome to the Jungle / France Travail.\nPlus ciblé pour le marché français. Stages, alternances et premiers jobs, mais tu dois tout postuler toi-même.\n\nLe top. Hirly. Tu swipes à droite sur les jobs que tu veux et ça postule en auto à des centaines d'offres sans que tu fasses quoi que ce soit. CV et lettre adaptés par offre, soumis directement sur le site de l'entreprise.",
+      ),
+      heading(3, "Ressources"),
+      linkBlock("Logos : ouvrir le dossier Google Drive (logos Hirly officiels)", BRAND_ASSETS_DRIVE_URL),
+      warningGuideline(
+        "Pointe chaque niveau (Bien, Mieux, Le top) à l'écran quand tu le dis. Utilise les PNG transparents du dossier partagé pour les incrustations — ne déforme pas, ne recolore pas et n'ajoute pas d'effets.",
       ),
     ],
   }),

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "react-router-dom";
 import {
   Check,
   HeartHandshake,
@@ -21,11 +22,14 @@ import { withDatafastAttribution } from "@/lib/datafast";
 import Logo from "@/components/Logo";
 import { useAppLocale } from "@/context/AppLocaleContext";
 import { getUpgradeContent } from "@/lib/appUi";
-import { formatMoney } from "@/lib/currency";
+import { formatMoney, formatUnitMoney } from "@/lib/currency";
 import { notifyBillingUpdated } from "@/lib/billingEvents";
 import {
   SUBSCRIPTION_TIERS,
+  tierApplicationsForInterval,
+  tierPricePerApplication,
 } from "@/lib/subscriptionTiers";
+import LegalLink from "@/components/legal/LegalLink";
 
 const FEATURE_ICONS = { zap: Zap, sparkles: Sparkles, rocket: Rocket, check: Check, heart: HeartHandshake };
 
@@ -51,6 +55,8 @@ function FeatureItem({ title, description, icon, roundIcon = true }) {
 function TierCard({ tier, selected, onSelect, isMonthly, t, lang }) {
   const price = isMonthly ? tier.monthlyPrice : tier.weeklyPrice;
   const period = isMonthly ? t("upgrade.perMonth") : t("upgrade.perWeek");
+  const applicationCount = tierApplicationsForInterval(tier, isMonthly);
+  const unitPrice = tierPricePerApplication(tier, isMonthly);
 
   return (
     <button
@@ -77,7 +83,10 @@ function TierCard({ tier, selected, onSelect, isMonthly, t, lang }) {
         <div className="text-xl font-bold sm:text-2xl">{formatMoney(price, lang)}</div>
         <div className="text-xs text-muted-foreground">{period}</div>
         <div className="text-[11px] font-medium leading-tight [overflow-wrap:anywhere] sm:text-xs">
-          {t("upgrade.applications", { n: tier.applications })}
+          {t("upgrade.applications", { n: applicationCount })}
+        </div>
+        <div className="text-[10px] leading-tight text-muted-foreground sm:text-[11px]">
+          {t("upgrade.pricePerApplication", { price: formatUnitMoney(unitPrice, lang) })}
         </div>
       </div>
     </button>
@@ -107,6 +116,8 @@ function PricingGrid({ isMonthly, selectedTier, onSelectTier, t, lang }) {
 
 export default function DesktopUpgradeModal({ open, onClose }) {
   const { t, lang } = useAppLocale();
+  const location = useLocation();
+  const returnPath = `${location.pathname}${location.search}`;
   const { features: UPGRADE_FEATURES, stats: UPGRADE_STATS, benefits: UPGRADE_BENEFITS } = getUpgradeContent(t);
   const [billingInterval, setBillingInterval] = useState("monthly");
   const [selectedTier, setSelectedTier] = useState("ultra");
@@ -137,6 +148,8 @@ export default function DesktopUpgradeModal({ open, onClose }) {
       const { data } = await api.post("/billing/create-checkout-session", withDatafastAttribution({
         plan: selectedTier,
         interval: billingInterval,
+        source: "app",
+        return_path: returnPath,
       }));
       if (data?.url) {
         window.location.href = data.url;
@@ -288,22 +301,12 @@ export default function DesktopUpgradeModal({ open, onClose }) {
                 </div>
 
                 <div className="flex justify-center gap-4 text-sm text-muted-foreground">
-                  <a
-                    href="https://www.hirly.ai/terms"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs hover:text-foreground"
-                  >
+                  <LegalLink page="terms" className="text-xs hover:text-foreground">
                     {t("upgrade.terms")}
-                  </a>
-                  <a
-                    href="https://www.hirly.ai/privacy"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs hover:text-foreground"
-                  >
+                  </LegalLink>
+                  <LegalLink page="privacy" className="text-xs hover:text-foreground">
                     {t("upgrade.privacy")}
-                  </a>
+                  </LegalLink>
                 </div>
               </div>
 

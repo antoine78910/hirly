@@ -38,6 +38,18 @@ export function formatCompactMoney(value, lang = readStoredAppLang()) {
   return `€${k}k`;
 }
 
+/** Per-application unit price (2–3 decimal places). */
+export function formatUnitMoney(amount, lang = readStoredAppLang()) {
+  const value = Number(amount) || 0;
+  const fractionDigits = value > 0 && value < 0.1 ? 3 : 2;
+  return new Intl.NumberFormat(moneyLocale(lang), {
+    style: "currency",
+    currency: APP_CURRENCY,
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  }).format(value);
+}
+
 /** Alias used in onboarding copy. */
 export function formatSalary(value, lang = readStoredAppLang()) {
   return formatMoney(value, lang);

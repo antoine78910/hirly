@@ -1,0 +1,32 @@
+[
+  {
+    "creator_id": "elodie",
+    "platform": "tiktok",
+    "handle": "eloworks0",
+    "nickname": "eloworks",
+    "avatar_url": "https://p16-common-sign.tiktokcdn-eu.com/musically-maliva-obj/1594805258216454~tplv-tiktokx-cropcenter:1080:1080.jpeg?dr=10399&refresh_token=9dbc7ce9&x-expires=1783515600&x-signature=AvQWpflIidP2cupgnQCse2%2Fn5Kw%3D&t=4d5b0474&ps=13740610&shp=a5d48078&shcp=81f88b70&idc=no1a",
+    "followers": 0,
+    "following": 0,
+    "likes_total": 0,
+    "video_count": 0,
+    "views_total": 0,
+    "comments_total": 0,
+    "videos": [],
+    "recorded_at": "2026-07-06T13:44:41.477016+00:00"
+  },
+  {
+    "creator_id": "eva",
+    "platform": "tiktok",
+    "handle": "hirlyjob",
+    "nickname": "Eva",
+    "avatar_url": "https://p16-common-sign.tiktokcdn-eu.com/tos-no1a-avt-0068c001-no/f53e1f1095930895f891ffb0a27fcc45~tplv-tiktokx-cropcenter:1080:1080.jpeg?dr=10399&refresh_token=382c14d1&x-expires=1783515600&x-signature=Lb9Gx2AdW71sLIvFNTDTAIEatcU%3D&t=4d5b0474&ps=13740610&shp=a5d48078&shcp=81f88b70&idc=no1a",
+    "followers": 2,
+    "following": 3,
+    "likes_total": 132,
+    "video_count": 2,
+    "views_total": 0,
+    "comments_total": 0,
+    "videos": [],
+    "recorded_at": "2026-07-06T13:44:42.374886+00:00"
+  }
+]

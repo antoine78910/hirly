@@ -16,6 +16,7 @@ class JobSearchQuery:
     max_pages: Optional[int] = None
     page_size: Optional[int] = None
     contract_hint: Optional[str] = None
+    radius_km: Optional[int] = None
 
 
 @dataclass(frozen=True)

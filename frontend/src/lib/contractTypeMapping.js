@@ -1,4 +1,4 @@
-import { DEFAULT_SEARCH_RADIUS, mergeFilters } from "./jobFilters";
+import { mergeFilters } from "./jobFilters";
 
 export const CONTRACT_TYPE_TO_JOB_TYPES = {
   permanent: ["full_time"],
@@ -36,39 +36,14 @@ export function contractTypeToJobTypes(contractType) {
   return CONTRACT_TYPE_TO_JOB_TYPES[key] || [];
 }
 
-export function buildDefaultFiltersFromProfile(profile) {
-  const hasLocation = Boolean(
-    profile?.target_location_data?.location_label || profile?.target_location,
-  );
-  const jobTypes = contractTypeToJobTypes(resolveProfileContractType(profile));
-  const filters = mergeFilters({
-    jobTypes,
-    includeUnknownLocation: !hasLocation,
-    searchRadius: DEFAULT_SEARCH_RADIUS,
-  });
-  if (profile?.target_location_data) {
-    filters.locationsData = [profile.target_location_data];
-  } else if (profile?.target_location) {
-    filters.locations = [profile.target_location];
-  }
-  return filters;
+/** Empty filter state — role/location search lives on the target, not in filters. */
+export function buildDefaultFiltersFromProfile(_profile) {
+  return mergeFilters();
 }
 
-export function mergeProfileFilterDefaults(persisted, profile) {
-  const defaults = buildDefaultFiltersFromProfile(profile);
-  if (!persisted) return defaults;
-  const merged = mergeFilters(persisted);
-  if (!(merged.jobTypes || []).length && (defaults.jobTypes || []).length) {
-    merged.jobTypes = defaults.jobTypes;
-  }
-  if (merged.includeUnknownLocation !== false && defaults.includeUnknownLocation === false) {
-    merged.includeUnknownLocation = false;
-  }
-  if (!(merged.locationsData || []).length && !(merged.locations || []).length) {
-    if (defaults.locationsData?.length) merged.locationsData = defaults.locationsData;
-    else if (defaults.locations?.length) merged.locations = defaults.locations;
-  }
-  return merged;
+export function mergeProfileFilterDefaults(persisted, _profile) {
+  if (!persisted) return mergeFilters();
+  return mergeFilters(persisted);
 }
 
 const normalizeLocationKey = (value) =>
