@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLocation, Link } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import {
   Check,
   HeartHandshake,
@@ -29,7 +29,7 @@ import {
   tierApplicationsForInterval,
   tierPricePerApplication,
 } from "@/lib/subscriptionTiers";
-import { PRIVACY_PATH, TERMS_PATH } from "@/lib/legalPaths";
+import LegalLink from "@/components/legal/LegalLink";
 
 const FEATURE_ICONS = { zap: Zap, sparkles: Sparkles, rocket: Rocket, check: Check, heart: HeartHandshake };
 
@@ -301,18 +301,12 @@ export default function DesktopUpgradeModal({ open, onClose }) {
                 </div>
 
                 <div className="flex justify-center gap-4 text-sm text-muted-foreground">
-                  <Link
-                    to={TERMS_PATH}
-                    className="text-xs hover:text-foreground"
-                  >
+                  <LegalLink page="terms" className="text-xs hover:text-foreground">
                     {t("upgrade.terms")}
-                  </Link>
-                  <Link
-                    to={PRIVACY_PATH}
-                    className="text-xs hover:text-foreground"
-                  >
+                  </LegalLink>
+                  <LegalLink page="privacy" className="text-xs hover:text-foreground">
                     {t("upgrade.privacy")}
-                  </Link>
+                  </LegalLink>
                 </div>
               </div>
 

@@ -73,6 +73,7 @@ def _ascii_fold(value: str) -> str:
 
 
 _URL_IN_TEXT_PATTERN = re.compile(r"https?://[^\s<>\"]+")
+_MAILTO_PATTERN = re.compile(r"^mailto:([^?>\s]+)", re.IGNORECASE)
 _FT_HOSTED_APPLY_MARKERS = ("francetravail.fr", "pole-emploi.fr")
 
 
@@ -107,12 +108,25 @@ def _direct_apply_url_from_contact(contact: Dict[str, Any]) -> Optional[str]:
     return None
 
 
-def _contact_fields(contact: Dict[str, Any]) -> Dict[str, Optional[str]]:
+def _contact_fields(contact: Dict[str, Any], *, description: str = "") -> Dict[str, Optional[str]]:
     if not isinstance(contact, dict):
         return {}
-    email = str(contact.get("courriel") or "").strip()
-    if email and _URL_IN_TEXT_PATTERN.search(email):
-        email = ""  # the "courriel" field actually contains a link, not an address
+    raw_courriel = str(contact.get("courriel") or "").strip()
+    email = ""
+    mailto = _MAILTO_PATTERN.match(raw_courriel)
+    if mailto:
+        email = mailto.group(1).strip()
+    elif raw_courriel and not _URL_IN_TEXT_PATTERN.search(raw_courriel):
+        email = raw_courriel
+    if not email:
+        from france_travail_employer import extract_emails_from_text
+
+        candidates = extract_emails_from_text(
+            contact.get("commentaire"),
+            contact.get("nom"),
+            description,
+        )
+        email = candidates[0] if candidates else ""
     return {
         "contact_name": str(contact.get("nom") or "").strip() or None,
         "contact_email": email or None,
@@ -535,7 +549,7 @@ class FranceTravailProvider:
                 else "Unsupported or unknown ATS provider for V1 auto-apply"
             ),
             "ft_detail_url": ft_detail_url,
-            **_contact_fields(contact),
+            **_contact_fields(contact, description=description),
             **apply_classification,
             "imported_at": imported_at,
             "last_seen_at": imported_at,
@@ -556,7 +570,9 @@ class FranceTravailProvider:
             job_doc["salary_comment"] = str(salaire.get("commentaire")).strip()
         if offer_details:
             job_doc["offer_details"] = offer_details
-        return enrich_job_employment_kind(job_doc)
+        from france_travail_employer import enrich_france_travail_job
+
+        return enrich_job_employment_kind(enrich_france_travail_job(job_doc, row))
 
     def _query_string(self, query: JobSearchQuery) -> str:
         """Return a human-readable query label (compat with JSearchProvider log calls)."""

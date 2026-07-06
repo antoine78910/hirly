@@ -11,6 +11,10 @@ def test_normalize_company_logo_url_france_travail_relative():
         normalize_company_logo_url("/utile/images/logo.png")
         == "https://www.francetravail.fr/utile/images/logo.png"
     )
+    assert (
+        normalize_company_logo_url("/logo-employeur/localisation/abc")
+        == "https://recrute.francetravail.fr/page-employeur/gw/logo-employeur/localisation/abc"
+    )
 
 
 def test_normalize_company_logo_url_invalid():

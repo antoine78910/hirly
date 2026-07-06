@@ -299,9 +299,28 @@ def test_france_travail_normalization_extracts_contact_email():
     assert job["contact_name"] == "Mme Dupont"
     assert job["contact_email"] == "recrutement@bistrot.fr"
     assert job["contact_phone"] == "0102030405"
-    # No usable external URL in contact -> still routed through France Travail manually.
     assert job["ats_provider"] == "francetravail"
     assert job["auto_apply_supported"] is False
+
+
+def test_france_travail_normalization_extracts_email_from_commentaire(monkeypatch):
+    monkeypatch.setenv("FRANCE_TRAVAIL_EMPLOYER_ENRICH", "false")
+    provider = FranceTravailProvider(client_id="PAR_test", client_secret="secret")
+    job = provider.normalize_job(
+        {
+            "id": "048MAIL",
+            "intitule": "Assistant",
+            "description": "Poste en entreprise.",
+            "entreprise": {"nom": "Acme"},
+            "lieuTravail": {"libelle": "Lyon (69)", "commune": "Lyon"},
+            "contact": {"commentaire": "Envoyez votre CV à rh@acme.fr"},
+        },
+        JobSearchQuery(role="assistant", location="Lyon, France", country="fr", language="fr"),
+        "2026-07-03T10:00:00+00:00",
+    )
+
+    assert job is not None
+    assert job["contact_email"] == "rh@acme.fr"
 
 
 def test_france_travail_direct_apply_url_ignored_when_pointing_back_to_ft():

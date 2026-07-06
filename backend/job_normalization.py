@@ -151,6 +151,8 @@ def normalize_company_logo_url(value: Any) -> Optional[str]:
     if text.startswith("//"):
         return f"https:{text}"
     if text.startswith("/"):
+        if text.startswith("/logo-employeur/"):
+            return f"https://recrute.francetravail.fr/page-employeur/gw{text}"
         return f"https://www.francetravail.fr{text}"
     if text.lower().startswith(("http://", "https://")):
         return text

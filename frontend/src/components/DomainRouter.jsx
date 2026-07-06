@@ -26,6 +26,10 @@ export default function DomainRouter({ children }) {
     if (isSharedPath(pathname)) return;
 
     if (isAppHost()) {
+      if (pathname === "/terms" || pathname === "/privacy") {
+        window.location.replace(marketingUrl(pathname, search, hash));
+        return;
+      }
       if (pathname === "/") {
         navigate(`/swipe${search}${hash}`, { replace: true });
         return;
