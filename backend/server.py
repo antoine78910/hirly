@@ -190,9 +190,108 @@ _FEED_JOB_POOL_TTL_SECONDS = 90.0
 _feed_sync_refresh_cooldown_until = 0.0
 _feed_sync_refresh_cooldowns: Dict[str, float] = {}
 
+# Background (non-blocking) provider refresh: dedup + cooldown per query signature
+# so we never run the same discovery twice concurrently and never hammer providers.
+_feed_background_refresh_tasks: Dict[str, asyncio.Task] = {}
+_feed_background_refresh_last_run: Dict[str, float] = {}
+_FEED_BACKGROUND_REFRESH_COOLDOWN_SECONDS = 120.0
+
 
 def _clear_feed_job_pool_cache() -> None:
     _feed_job_pool_cache.update({"query_key": "", "rows": [], "fetched_at": 0.0})
+
+
+def _prune_background_refresh_state(now: float) -> None:
+    done_keys = [key for key, task in _feed_background_refresh_tasks.items() if task.done()]
+    for key in done_keys:
+        _feed_background_refresh_tasks.pop(key, None)
+    expired = [
+        key
+        for key, last_run in _feed_background_refresh_last_run.items()
+        if (now - last_run) > (_FEED_BACKGROUND_REFRESH_COOLDOWN_SECONDS * 4)
+    ]
+    for key in expired:
+        _feed_background_refresh_last_run.pop(key, None)
+
+
+def schedule_feed_background_refresh(
+    signature: str,
+    profile_for_refresh: Dict[str, Any],
+    refresh_locations: List[Any],
+    *,
+    search_radius: str,
+    role_override: Optional[str],
+    requested_limit: int,
+    max_results: int,
+    max_pages: int,
+    page_size: int,
+    attempts_per_city: int,
+    user_id: str = "",
+) -> bool:
+    """Run provider discovery in the background (non-blocking) with dedup + cooldown.
+
+    Returns True when a new background task was scheduled.
+    """
+    now = time.monotonic()
+    _prune_background_refresh_state(now)
+    if signature in _feed_background_refresh_tasks:
+        return False
+    last_run = _feed_background_refresh_last_run.get(signature, 0.0)
+    if (now - last_run) < _FEED_BACKGROUND_REFRESH_COOLDOWN_SECONDS:
+        return False
+    _feed_background_refresh_last_run[signature] = now
+
+    async def _runner() -> None:
+        imported_total = 0
+        started = time.perf_counter()
+        try:
+            for loc_data in refresh_locations:
+                loc_label = loc_data.get("location_label") if isinstance(loc_data, dict) else None
+                try:
+                    result = await refresh_jobs_for_profile_if_needed(
+                        db,
+                        profile_for_refresh,
+                        require_auto_apply=False,
+                        target_auto_apply_count=min(max_results, max(requested_limit, 1)),
+                        location_override=loc_label,
+                        location_data_override=loc_data if isinstance(loc_data, dict) else None,
+                        search_radius=search_radius,
+                        role_override=role_override,
+                        force_provider_refresh=True,
+                        query_limit_override=max_results,
+                        provider_max_pages=max_pages,
+                        provider_page_size=page_size,
+                        max_provider_requests_override=attempts_per_city,
+                        max_direct_apply_requests_override=0,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "feed_background_refresh_location_error signature=%s location=%s error=%s",
+                        signature, loc_label, str(exc)[:200],
+                    )
+                    continue
+                imported = int(result.get("jobs_imported", result.get("count") or 0) or 0)
+                imported_total += imported
+                if result.get("provider_rate_limited"):
+                    logger.info("feed_background_refresh_rate_limited signature=%s", signature)
+                    break
+            if imported_total > 0:
+                _clear_feed_job_pool_cache()
+            logger.info(
+                "feed_background_refresh_complete signature=%s user_id=%s imported=%s elapsed_ms=%s",
+                signature,
+                user_id,
+                imported_total,
+                int((time.perf_counter() - started) * 1000),
+            )
+        except Exception as exc:
+            logger.warning("feed_background_refresh_failed signature=%s error=%s", signature, str(exc)[:200])
+        finally:
+            _feed_background_refresh_tasks.pop(signature, None)
+
+    task = asyncio.create_task(_runner())
+    _feed_background_refresh_tasks[signature] = task
+    return True
 
 
 async def _get_feed_job_candidates(base_query: Dict[str, Any], limit: int) -> List[Dict[str, Any]]:
@@ -5387,21 +5486,42 @@ async def get_feed(
             and _env_bool("JOBS_FEED_EXPLICIT_LOCAL_DISCOVERY_AFTER_DB_TIMEOUT", True)
         )
         refresh_budget_available = not _timed_out() or explicit_local_after_budget_refresh
+        inventory_is_weak = (
+            not db_first_enabled
+            or db_good_count == 0
+            or (explicit_local_intent and local_inventory_count < requested_limit)
+        )
+        # Cards we can serve right now without waiting on providers
+        # (role-compatible only, so we never serve irrelevant cards instead of refreshing).
+        has_showable_cards = (
+            local_inventory_count > 0 if explicit_local_intent else db_good_count > 0
+        )
+        needs_provider_refresh = (
+            sync_refresh_enabled
+            and not cooldown_active
+            and ((force_provider_refresh and explicit_local_intent) or inventory_is_weak)
+        )
+        # Blocking (sync) refresh only when there is nothing to show at all or the
+        # client explicitly forced it. Otherwise serve DB cards instantly and
+        # refresh in the background.
         should_refresh = (
             not prefetch
-            and sync_refresh_enabled
+            and needs_provider_refresh
             and (refresh_budget_available or (force_provider_refresh and explicit_local_intent))
-            and not cooldown_active
             and (
                 (force_provider_refresh and explicit_local_intent)
-                or
-                not db_first_enabled
-                or db_good_count == 0
-                or (explicit_local_intent and local_inventory_count < requested_limit)
+                or not has_showable_cards
             )
         )
-        if prefetch and explicit_local_intent and local_inventory_count < requested_limit:
+        background_refresh_wanted = (
+            needs_provider_refresh
+            and not should_refresh
+            and not force_provider_refresh
+            and _env_bool("JOBS_FEED_BACKGROUND_REFRESH_ENABLED", True)
+        )
+        if prefetch and explicit_local_intent and local_inventory_count < requested_limit and not has_showable_cards:
             should_refresh = True
+            background_refresh_wanted = False
             request_trace["prefetch"] = True
             request_trace["prefetch_forced_local_discovery"] = True
         elif prefetch:
@@ -5435,14 +5555,13 @@ async def get_feed(
                 cooldown_key,
                 max(0, int(cooldown_until - time.monotonic())),
             )
-        if should_refresh:
-            jsearch_fallback_triggered = True
+        def _compute_refresh_locations() -> List[Any]:
             max_refresh_locations = max(1, min(int(os.environ.get("FEED_MAX_REFRESH_LOCATIONS", "1")), 3))
             if explicit_local_intent:
                 max_refresh_locations = max(1, min(_env_int("JOBS_FEED_LOCAL_DISCOVERY_MAX_CITIES", 3), 4))
             if is_worldwide_radius:
-                refresh_locations = [None]
-            elif explicit_local_intent and location_context.get("expanded_places"):
+                return [None]
+            if explicit_local_intent and location_context.get("expanded_places"):
                 def _provider_place_sort_key(place: Dict[str, Any]) -> tuple:
                     population = int(place.get("population") or 0)
                     distance = float(place.get("distance_km") or 0)
@@ -5454,7 +5573,7 @@ async def get_feed(
                     location_context.get("expanded_places") or [],
                     key=_provider_place_sort_key,
                 )
-                refresh_locations = [
+                return [
                     {
                         "location_label": place.get("name") or place.get("ascii_name") or place.get("query_label"),
                         "country_code": str(place.get("country_code") or "").lower().strip(),
@@ -5464,8 +5583,41 @@ async def get_feed(
                     for place in expanded_for_provider
                     if place.get("name") or place.get("ascii_name")
                 ][:max_refresh_locations]
-            else:
-                refresh_locations = (selected_locations or [None])[:max_refresh_locations]
+            return (selected_locations or [None])[:max_refresh_locations]
+
+        if background_refresh_wanted:
+            bg_signature = (
+                _explicit_local_cooldown_key()
+                if explicit_local_intent
+                else "|".join(["global", normalize_place_name(target_role or ""), radius_scope])
+            )
+            bg_scheduled = schedule_feed_background_refresh(
+                bg_signature,
+                profile_for_refresh,
+                _compute_refresh_locations(),
+                search_radius=search_radius,
+                role_override=target_role,
+                requested_limit=requested_limit,
+                max_results=sync_refresh_max_results,
+                max_pages=sync_refresh_max_pages,
+                page_size=sync_refresh_page_size,
+                attempts_per_city=sync_refresh_attempts_per_city,
+                user_id=user.user_id,
+            )
+            request_trace["background_refresh_scheduled"] = bool(bg_scheduled)
+            if bg_scheduled:
+                request_trace["local_jsearch_skip_reason"] = "background_refresh_scheduled"
+                logger.info(
+                    "jobs/feed background_refresh_scheduled: user_id=%s signature=%s inventory=%s requested=%s",
+                    user.user_id,
+                    bg_signature,
+                    local_inventory_count,
+                    requested_limit,
+                )
+
+        if should_refresh:
+            jsearch_fallback_triggered = True
+            refresh_locations = _compute_refresh_locations()
             request_trace["jsearch_queries_planned"] = [
                 {
                     "location_label": loc.get("location_label") if isinstance(loc, dict) else None,
@@ -5995,6 +6147,7 @@ async def get_feed(
             "empty_reason": empty_reason,
             "feed_summary": feed_summary,
             "feed_mode": "mixed",
+            "background_refresh_scheduled": bool(request_trace.get("background_refresh_scheduled")),
             "auto_apply_count": feed_summary["auto_apply_count"],
             "total_count": len(candidates),
             "fallback_reason": None if fallback_used == "none" else fallback_used,

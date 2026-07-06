@@ -577,6 +577,9 @@ export default function Swipe() {
   const jobsRef = useRef([]);
   const viewedJobIdsRef = useRef(new Set());
   const handleSwipeRef = useRef(null);
+  const backgroundPollTimerRef = useRef(null);
+  const backgroundPollCountRef = useRef(0);
+  const loadFeedRef = useRef(null);
 
   useEffect(() => {
     jobsRef.current = jobs;
@@ -731,6 +734,11 @@ export default function Swipe() {
       feedAbortRef.current.abort();
       feedAbortRef.current = null;
     }
+    if (backgroundPollTimerRef.current && !reason.startsWith("background_poll")) {
+      clearTimeout(backgroundPollTimerRef.current);
+      backgroundPollTimerRef.current = null;
+      backgroundPollCountRef.current = 0;
+    }
     const requestId = feedRequestIdRef.current + 1;
     feedRequestIdRef.current = requestId;
     const controller = new AbortController();
@@ -877,6 +885,20 @@ export default function Swipe() {
         _swipeCache.filters = filtersRef.current;
         return merged;
       });
+      // Backend started a provider refresh in the background: silently poll a
+      // couple of times to merge freshly imported jobs into the stack.
+      if (data?.background_refresh_scheduled && backgroundPollCountRef.current < 2) {
+        backgroundPollCountRef.current += 1;
+        const attempt = backgroundPollCountRef.current;
+        backgroundPollTimerRef.current = setTimeout(() => {
+          backgroundPollTimerRef.current = null;
+          if (!fetchingRef.current) {
+            loadFeedRef.current?.(false, filtersRef.current, `background_poll_${attempt}`);
+          }
+        }, attempt === 1 ? 6000 : 15000);
+      } else if (!data?.background_refresh_scheduled) {
+        backgroundPollCountRef.current = 0;
+      }
     } catch (e) {
       if (controller.signal.aborted || e?.code === "ERR_CANCELED") return;
       if (requestId !== feedRequestIdRef.current) return;
@@ -949,6 +971,15 @@ export default function Swipe() {
       }
     }
   }, [t]);
+
+  loadFeedRef.current = loadFeed;
+
+  useEffect(() => () => {
+    if (backgroundPollTimerRef.current) {
+      clearTimeout(backgroundPollTimerRef.current);
+      backgroundPollTimerRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     const onDemoSettings = (event) => {
