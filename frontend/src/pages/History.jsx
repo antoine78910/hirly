@@ -3,13 +3,15 @@ import { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Zap, Loader2 } from "lucide-react";
 import { api } from "../lib/api";
+import { applyFromPassedJob } from "../lib/applyFromPassed";
 import CompanyLogo from "../components/CompanyLogo";
 import { toast } from "sonner";
 import { AppPage, AppPageScroll, SHELL_PAGE_CLASS } from "../components/app/AppPageShell";
 import DesktopPageHeader from "../components/desktop/DesktopPageHeader";
 import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
 import { useAppLocale } from "../context/AppLocaleContext";
-import { getHistoryTabs } from "../lib/appUi";
+import { getHistoryTabs, getPackageErrorMessage } from "../lib/appUi";
+import { useUpgradeModal } from "../context/UpgradeModalContext";
 
 const formatDate = (iso) => {
   if (!iso) return "";
@@ -17,7 +19,7 @@ const formatDate = (iso) => {
   return d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" });
 };
 
-function JobRow({ row, onApplyNow, t }) {
+function JobRow({ row, tab, onApplyNow, onViewApplication, t }) {
   const job = row.job;
   if (!job) return null;
   return (
@@ -38,11 +40,11 @@ function JobRow({ row, onApplyNow, t }) {
           <span className="text-xs text-zinc-400">{formatDate(row.created_at)}</span>
           <button
             type="button"
-            onClick={() => onApplyNow(job.job_id)}
+            onClick={() => (tab === "right" ? onViewApplication() : onApplyNow(job.job_id))}
             className="h-9 rounded-full bg-linkedin px-4 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-            data-testid={`history-apply-${job.job_id}`}
+            data-testid={tab === "right" ? `history-view-${job.job_id}` : `history-apply-${job.job_id}`}
           >
-            {t("history.generatePackage")}
+            {tab === "right" ? t("history.viewApplication") : t("history.generatePackage")}
           </button>
         </div>
       </div>
@@ -53,6 +55,7 @@ function JobRow({ row, onApplyNow, t }) {
 export default function History() {
   const navigate = useNavigate();
   const { t } = useAppLocale();
+  const { openUpgrade } = useUpgradeModal();
   const tabs = getHistoryTabs(t);
   const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState("right");
@@ -91,12 +94,12 @@ export default function History() {
 
   const applyNow = async (jobId) => {
     try {
-      await api.delete(`/swipes/${jobId}`);
-      await api.post("/swipe", { job_id: jobId, direction: "right" });
+      await applyFromPassedJob(api, jobId);
       toast.success(t("history.packageGenerated"));
-      load(tab);
-    } catch {
-      toast.error(t("history.packageError"));
+      navigate("/tracker");
+    } catch (e) {
+      if (e?.response?.status === 402) openUpgrade();
+      toast.error(getPackageErrorMessage(t, e));
     }
   };
 
@@ -140,7 +143,16 @@ export default function History() {
               <p className="text-zinc-500">{t("history.noGenerated")}</p>
             </div>
           ) : null}
-          {!loading && rows.map((r) => <JobRow key={r.job_id} row={r} onApplyNow={applyNow} t={t} />)}
+          {!loading && rows.map((r) => (
+            <JobRow
+              key={r.job_id}
+              row={r}
+              tab={tab}
+              onApplyNow={applyNow}
+              onViewApplication={() => navigate("/tracker")}
+              t={t}
+            />
+          ))}
         </div>
       </AppPageScroll>
     </AppPage>

@@ -414,6 +414,12 @@ export const APP_UI = {
       loadError: "Failed to load history",
       packageGenerated: "Application package generated. Not submitted yet.",
       packageError: "Could not generate package. Try again.",
+      generatePackageHint: "Creates a tailored CV and cover letter for this role (uses 1 credit).",
+      packageNoCredits: "No application credits left. Upgrade to continue.",
+      packageJobUnavailable: "This job is no longer available. It may have expired.",
+      packageProfileRequired: "Upload your resume in Profile before generating a package.",
+      packageJobNotApplyable: "This job cannot be fulfilled automatically by Hirly.",
+      viewApplication: "View application",
     },
     emails: {
       searchMail: "Search in mail",
@@ -542,6 +548,7 @@ export const APP_UI = {
         uploadResume: "Upload resume",
         resumeOnFile: "Current resume on file",
         replaceResume: "Replace",
+        viewResume: "View resume",
         downloadResume: "Download resume",
         downloadError: "Could not download resume",
         resumeFallbackName: "Resume",
@@ -670,6 +677,7 @@ export const APP_UI = {
       addLanguages: "Add languages",
       addSkills: "Add skills",
       languagesHint: "Highlight the languages you speak and your proficiency.",
+      professionalDetails: "Professional details",
       edit: "Edit",
       jobPreferences: "Job Preferences",
       applicationDefaults: "Application Defaults",
@@ -1163,6 +1171,12 @@ export const APP_UI = {
       loadError: "Impossible de charger l'historique",
       packageGenerated: "Dossier généré. Pas encore envoyé.",
       packageError: "Impossible de générer le dossier. Réessayez.",
+      generatePackageHint: "Génère un CV et une lettre de motivation adaptés à ce poste (1 crédit).",
+      packageNoCredits: "Plus de crédits de candidature. Passez à l'offre supérieure pour continuer.",
+      packageJobUnavailable: "Cette offre n'est plus disponible. Elle a peut-être expiré.",
+      packageProfileRequired: "Importez votre CV dans Profil avant de générer un dossier.",
+      packageJobNotApplyable: "Cette offre ne peut pas être traitée automatiquement par Hirly.",
+      viewApplication: "Voir la candidature",
     },
     emails: {
       searchMail: "Rechercher dans les mails",
@@ -1291,6 +1305,7 @@ export const APP_UI = {
         uploadResume: "Importer CV",
         resumeOnFile: "CV actuel enregistré",
         replaceResume: "Remplacer",
+        viewResume: "Voir le CV",
         downloadResume: "Télécharger le CV",
         downloadError: "Impossible de télécharger le CV",
         resumeFallbackName: "CV",
@@ -1419,6 +1434,7 @@ export const APP_UI = {
       addLanguages: "Ajouter des langues",
       addSkills: "Ajouter des compétences",
       languagesHint: "Indiquez les langues parlées et votre niveau.",
+      professionalDetails: "Détails professionnels",
       edit: "Modifier",
       jobPreferences: "Préférences emploi",
       applicationDefaults: "Valeurs par défaut",
@@ -1762,6 +1778,26 @@ export function getSwipeErrorMessage(t, e) {
   if (typeof detail === "string") return detail;
   if (detail?.message) return detail.message;
   return t("toasts.swipeFailed");
+}
+
+export function getPackageErrorMessage(t, e) {
+  const status = e?.response?.status;
+  const detail = e?.response?.data?.detail;
+  if (status === 402) return t("history.packageNoCredits");
+  if (status === 404) {
+    if (typeof detail === "string") return detail;
+    return detail?.message || t("history.packageJobUnavailable");
+  }
+  if (status === 400) {
+    const message = typeof detail === "string" ? detail : detail?.message;
+    if (message && /profile/i.test(message)) return t("history.packageProfileRequired");
+    if (message) return message;
+  }
+  if (status === 422) {
+    const message = typeof detail === "object" ? detail?.message : detail;
+    return message || t("history.packageJobNotApplyable");
+  }
+  return getSwipeErrorMessage(t, e) || t("history.packageError");
 }
 
 export function getHistoryTabs(t) {

@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner";
 import ProfilePersonalInfoTab from "../components/profile/ProfilePersonalInfoTab";
 import ProfileDocumentsTab from "../components/profile/ProfileDocumentsTab";
+import ProfileResumeSection from "../components/profile/ProfileResumeSection";
 import ResumeSheet from "../components/ResumeSheet";
 import ProfessionalProfileSheet from "../components/ProfessionalProfileSheet";
 import Sheet, { Field, SaveButton } from "../components/Sheet";
@@ -489,6 +490,17 @@ export default function Profile() {
 
         {tab === "resume" && (
           <div className="space-y-5 pb-4">
+            <ProfileResumeSection
+              profile={profile}
+              onUploadResume={() => setOpenSheet("resume")}
+            />
+
+            <div className="shell-border-b pt-1">
+              <h3 className="shell-title pb-3 text-sm font-semibold uppercase tracking-wide">
+                {t("profileSections.professionalDetails")}
+              </h3>
+            </div>
+
             {resumeSections.map((section) => {
               const count = sectionCount(section.countKey);
               return (

@@ -389,6 +389,12 @@ export function getDemoAccountResponse(config) {
     return handleDemoAccountUndo();
   }
 
+  if (method === "post" && /^\/swipes\/[^/]+\/apply-from-passed$/.test(path)) {
+    const jobId = path.split("/")[2];
+    removeDemoSwipe(jobId);
+    return handleDemoAccountSwipe({ job_id: jobId, direction: "right" });
+  }
+
   if (method === "delete" && path.startsWith("/swipes/")) {
     const jobId = path.replace("/swipes/", "");
     removeDemoSwipe(jobId);

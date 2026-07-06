@@ -1190,6 +1190,7 @@ async def refresh_jobs_for_profile_if_needed(
     }
 
     smartrecruiters_result = None
+    workday_result = None
     try:
         from smartrecruiters_search import refresh_smartrecruiters_jobs_for_query
 
@@ -1200,6 +1201,20 @@ async def refresh_jobs_for_profile_if_needed(
         )
     except Exception as exc:
         logger.warning("smartrecruiters_search_failed error=%s", exc)
+
+    try:
+        from job_search_routing import resolve_primary_provider
+        from workday_search import refresh_workday_jobs_for_query, should_run_workday_search
+
+        primary_for_routing = resolve_primary_provider(query)
+        if should_run_workday_search(query, primary_provider=primary_for_routing):
+            workday_result = await refresh_workday_jobs_for_query(
+                db,
+                query=query,
+                limit=query_limit_override or query.limit,
+            )
+    except Exception as exc:
+        logger.warning("workday_search_failed error=%s", exc)
 
     greenhouse_result = None
     lever_result = None
@@ -1239,22 +1254,24 @@ async def refresh_jobs_for_profile_if_needed(
                 **base_metadata,
             }
 
-    provider_name = primary_job_provider_name()
+    try:
+        from job_search_routing import resolve_primary_provider
 
-    # Auto-select France Travail for French searches when it is configured,
-    # regardless of the primary provider setting.
-    query_is_france = (
-        (query.country or "").lower().strip() == "fr"
-        or _looks_like_france_location(query.location or "")
-    )
-    ft_configured = is_job_provider_configured("france_travail")
-    if query_is_france and ft_configured and not is_france_travail_provider(provider_name):
-        provider_name = "france_travail"
-        logger.info(
-            "JSearch provider overridden: using france_travail for French query location=%s country=%s",
-            query.location,
-            query.country,
+        provider_name = resolve_primary_provider(query)
+    except Exception:
+        provider_name = primary_job_provider_name()
+        query_is_france = (
+            (query.country or "").lower().strip() == "fr"
+            or _looks_like_france_location(query.location or "")
         )
+        ft_configured = is_job_provider_configured("france_travail")
+        if query_is_france and ft_configured and not is_france_travail_provider(provider_name):
+            provider_name = "france_travail"
+            logger.info(
+                "JSearch provider overridden: using france_travail for French query location=%s country=%s",
+                query.location,
+                query.country,
+            )
 
     if not is_job_provider_enabled(provider_name):
         return {"attempted": bool(greenhouse_result or lever_result), "reason": "disabled", "greenhouse": greenhouse_result, "lever": lever_result, **base_metadata}
@@ -1527,6 +1544,7 @@ async def refresh_jobs_for_profile_if_needed(
         "fallback_used": fallback_used,
         "ats_targeted_imported": ats_targeted_imported,
         "smartrecruiters": smartrecruiters_result,
+        "workday": workday_result,
         **base_metadata,
         "widened_search": fallback_used is not None,
         "final_location_used": fallback_used or query.location,

@@ -378,6 +378,49 @@ def _apply_fulfillment_fields(job: Dict[str, Any]) -> Dict[str, Any]:
     )
 
 
+def _job_snapshot_for_swipe(job: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(job, dict) or not job.get("job_id"):
+        return {}
+    return {key: value for key, value in job.items() if key != "_id"}
+
+
+async def _restore_job_from_swipe_snapshot(
+    job_id: str,
+    swipe_row: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
+    job = await db.jobs.find_one({"job_id": job_id}, {"_id": 0})
+    if job:
+        return job
+    snapshot = (swipe_row or {}).get("job_snapshot")
+    if not isinstance(snapshot, dict) or snapshot.get("job_id") != job_id:
+        return None
+    await db.jobs.update_one(
+        {"job_id": job_id},
+        {"$set": snapshot},
+        upsert=True,
+    )
+    return snapshot
+
+
+def _swipe_insert_doc(
+    user_id: str,
+    job_id: str,
+    direction: str,
+    job: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    doc: Dict[str, Any] = {
+        "user_id": user_id,
+        "job_id": job_id,
+        "direction": direction,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if direction == "left" and job:
+        snapshot = _job_snapshot_for_swipe(job)
+        if snapshot:
+            doc["job_snapshot"] = snapshot
+    return doc
+
+
 def _job_is_applyable(job: Dict[str, Any]) -> bool:
     if is_france_travail_offer(
         provider=str(job.get("provider") or ""),
@@ -6823,12 +6866,7 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
                 {"_id": 0, "swipe_id": 1},
             )
             if not existing:
-                await db.swipes.insert_one({
-                    "user_id": user.user_id,
-                    "job_id": req.job_id,
-                    "direction": req.direction,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                })
+                await db.swipes.insert_one(_swipe_insert_doc(user.user_id, req.job_id, req.direction))
             log_phase("demo_account_apply_blocked")
             return {
                 "ok": True,
@@ -6938,12 +6976,7 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
         existing = await db.swipes.find_one({"user_id": user.user_id, "job_id": req.job_id}, {"_id": 0})
         log_phase("swipe_record_insert_start", duplicate=bool(existing))
         if not existing:
-            await db.swipes.insert_one({
-                "user_id": user.user_id,
-                "job_id": req.job_id,
-                "direction": req.direction,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            })
+            await db.swipes.insert_one(_swipe_insert_doc(user.user_id, req.job_id, req.direction, job))
         phase = "swipe_record_insert_done"
         log_phase("swipe_record_insert_done", duplicate=bool(existing))
 
@@ -7143,9 +7176,34 @@ async def swipes_history(
     job_map = {j["job_id"]: j for j in jobs}
     return {
         "swipes": [
-            {**r, "job": job_map.get(r["job_id"])} for r in rows
+            {
+                **r,
+                "job": job_map.get(r["job_id"]) or r.get("job_snapshot"),
+            }
+            for r in rows
         ],
     }
+
+
+@api_router.post("/swipes/{job_id}/apply-from-passed")
+async def apply_from_passed(job_id: str, user: User = Depends(get_current_user)):
+    """Convert a passed (left) swipe into an application with a tailored package."""
+    swipe_row = await db.swipes.find_one(
+        {"user_id": user.user_id, "job_id": job_id},
+        {"_id": 0},
+    )
+    if not swipe_row or swipe_row.get("direction") != "left":
+        raise HTTPException(status_code=404, detail={"message": "Passed job not found"})
+
+    restored = await _restore_job_from_swipe_snapshot(job_id, swipe_row)
+    if not restored:
+        raise HTTPException(
+            status_code=404,
+            detail={"message": "This job is no longer available. It may have expired."},
+        )
+
+    await db.swipes.delete_one({"user_id": user.user_id, "job_id": job_id})
+    return await swipe(SwipeRequest(job_id=job_id, direction="right"), user)
 
 
 @api_router.delete("/swipes/{job_id}")
