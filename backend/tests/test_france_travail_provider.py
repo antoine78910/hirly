@@ -28,6 +28,22 @@ def test_france_travail_keywords_returns_single_term_no_and_semantics():
     assert all("," not in v for v in variants)
 
 
+def test_france_travail_keywords_recruiter_use_french_tokens():
+    provider = FranceTravailProvider(client_id="PAR_test", client_secret="secret")
+    query = JobSearchQuery(
+        role="Recruiter",
+        location="Avignon, France",
+        country="fr",
+        language="fr",
+        radius_km=50,
+    )
+    variants = provider._keyword_variants(query)
+    assert "recruteur" in variants
+    assert any("recrutement" in v for v in variants)
+    assert "recruiter" not in variants
+    assert all("," not in v for v in variants)
+
+
 def test_france_travail_search_distance_uses_query_radius():
     provider = FranceTravailProvider(client_id="PAR_test", client_secret="secret")
     query = JobSearchQuery(role="developpeur", location="Dijon", country="fr", language="fr", radius_km=50)

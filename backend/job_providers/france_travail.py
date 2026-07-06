@@ -62,6 +62,9 @@ _ROLE_KEYWORD_HINTS = {
     "waiter": ("serveur", "serveuse", "restaurant"),
     "serveur": ("serveur", "serveuse", "restaurant"),
     "barman": ("barman", "barista", "serveur"),
+    "recruiter": ("recruteur", "recrutement", "rh"),
+    "recruit": ("recruteur", "recrutement", "rh"),
+    "recrutement": ("recruteur", "recrutement", "rh"),
 }
 
 
@@ -143,6 +146,10 @@ def _france_travail_keyword_variants(role: str, country: Optional[str]) -> List[
             variants.extend(["marketing", "communication", "charge marketing"])
         elif any(term in lower for term in ("sales", "commercial")):
             variants.extend(["commercial", "vendeur", "conseiller commercial"])
+        elif any(term in lower for term in ("recruit", "recruiter", "headhunter", "talent acquisition")):
+            variants.extend(["recruteur", "charge de recrutement", "consultant recrutement", "rh"])
+        elif any(term in lower for term in ("rh", "ressources humaines", "human resources", "hr ")) or lower.strip() in ("rh", "hr"):
+            variants.extend(["ressources humaines", "charge rh", "assistant rh", "recruteur"])
         elif any(term in lower for term in ("barista", "barman", "bartender", "waiter", "waitress", "serveur", "serveuse", "hospitality", "restaurant", "cafe", "coffee")):
             variants.extend(["barista", "serveur", "barman", "cafe"])
         elif "product" in lower and "manager" in lower:

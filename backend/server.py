@@ -5538,7 +5538,7 @@ async def get_feed(
             and (refresh_budget_available or (force_provider_refresh and explicit_local_intent))
             and (
                 (force_provider_refresh and explicit_local_intent)
-                or not has_showable_cards
+                or (not has_showable_cards and not explicit_local_intent)
             )
         )
         background_refresh_wanted = (

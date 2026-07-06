@@ -833,30 +833,6 @@ export default function Swipe() {
       let responseJobs = Array.isArray(data?.jobs) ? data.jobs : [];
       let safeJobs = localFeedGuard ? responseJobs.filter(localFeedGuard) : responseJobs;
       let outsideLocationHiddenCount = responseJobs.length - safeJobs.length;
-      const trace = data?.request_trace || {};
-      const shouldForceLocalRetry = Boolean(
-        safeJobs.length === 0
-        && !params.get("force_provider_refresh")
-        && !data?.background_refresh_scheduled
-        && (trace.explicit_local_intent || data?.filters_applied?.explicit_local_intent)
-        && (
-          trace.local_jsearch_discovery_attempted !== true
-          || Number(trace.jsearch_results_count || 0) === 0
-        )
-      );
-      if (shouldForceLocalRetry) {
-        const retryParams = new URLSearchParams(params);
-        retryParams.set("force_provider_refresh", "true");
-        params = retryParams;
-        requestUrl = `/jobs/feed?${retryParams.toString()}`;
-        console.log("[FeedDebug] forcing local provider refresh", requestUrl);
-        data = await requestFeed(requestUrl);
-        if (requestId !== feedRequestIdRef.current) return;
-        localFeedGuard = buildLocalFeedGuard({ params: retryParams, response: data });
-        responseJobs = Array.isArray(data?.jobs) ? data.jobs : [];
-        safeJobs = localFeedGuard ? responseJobs.filter(localFeedGuard) : responseJobs;
-        outsideLocationHiddenCount = responseJobs.length - safeJobs.length;
-      }
       if (outsideLocationHiddenCount > 0) {
         data = {
           ...(data || {}),
@@ -937,50 +913,47 @@ export default function Swipe() {
       if (requestId !== feedRequestIdRef.current) return;
       if (e?.code === "ECONNABORTED") {
         const retryParams = new URLSearchParams(params);
-        if (buildLocalFeedGuard({ params: retryParams, response: { filters_applied: {} } }) && !retryParams.get("force_provider_refresh")) {
-          retryParams.set("force_provider_refresh", "true");
-          const retryUrl = `/jobs/feed?${retryParams.toString()}`;
-          try {
-            const retryData = await requestFeed(retryUrl);
-            if (requestId !== feedRequestIdRef.current) return;
-            const localFeedGuard = buildLocalFeedGuard({ params: retryParams, response: retryData });
-            const responseJobs = Array.isArray(retryData?.jobs) ? retryData.jobs : [];
-            const safeJobs = localFeedGuard ? responseJobs.filter(localFeedGuard) : responseJobs;
-            setLastFeedDebug({
-              reason: `${reason}_timeout_retry`,
-              forceRefresh: replace,
-              filters: f || null,
-              filtersRef: filtersRef.current || null,
-              requestUrl: retryUrl,
-              requestParams: Object.fromEntries(retryParams.entries()),
-              requestParamEntries: Array.from(retryParams.entries()),
-              response: {
-                jobsCount: safeJobs.length,
-                feedSummary: retryData?.feed_summary || null,
-                requestTrace: retryData?.request_trace || null,
-                firstJobs: safeJobs.slice(0, 5).map((job) => ({
-                  title: job.title,
-                  company: job.company,
-                  location: job.location,
-                  application_mode: job.application_mode,
-                  can_auto_apply: job.can_auto_apply,
-                  provider: job.provider,
-                })),
-              },
-            });
-            setTotalCount(typeof retryData.total === "number" ? retryData.total : null);
-            setFeedMeta(retryData || null);
-            setJobs((prev) => {
-              const base = replace ? [] : (localFeedGuard ? prev.filter(localFeedGuard) : prev);
-              const seen = new Set(base.map((j) => j.job_id));
-              const merged = [...base];
-              safeJobs.forEach((j) => { if (!seen.has(j.job_id)) merged.push(j); });
-              return merged;
-            });
-            return;
-          } catch (_) {
-            /* fall through to normal timeout message */
-          }
+        const retryUrl = `/jobs/feed?${retryParams.toString()}`;
+        try {
+          const retryData = await requestFeed(retryUrl);
+          if (requestId !== feedRequestIdRef.current) return;
+          const localFeedGuard = buildLocalFeedGuard({ params: retryParams, response: retryData });
+          const responseJobs = Array.isArray(retryData?.jobs) ? retryData.jobs : [];
+          const safeJobs = localFeedGuard ? responseJobs.filter(localFeedGuard) : responseJobs;
+          setLastFeedDebug({
+            reason: `${reason}_timeout_retry`,
+            forceRefresh: replace,
+            filters: f || null,
+            filtersRef: filtersRef.current || null,
+            requestUrl: retryUrl,
+            requestParams: Object.fromEntries(retryParams.entries()),
+            requestParamEntries: Array.from(retryParams.entries()),
+            response: {
+              jobsCount: safeJobs.length,
+              feedSummary: retryData?.feed_summary || null,
+              requestTrace: retryData?.request_trace || null,
+              firstJobs: safeJobs.slice(0, 5).map((job) => ({
+                title: job.title,
+                company: job.company,
+                location: job.location,
+                application_mode: job.application_mode,
+                can_auto_apply: job.can_auto_apply,
+                provider: job.provider,
+              })),
+            },
+          });
+          setTotalCount(typeof retryData.total === "number" ? retryData.total : null);
+          setFeedMeta(retryData || null);
+          setJobs((prev) => {
+            const base = replace ? [] : (localFeedGuard ? prev.filter(localFeedGuard) : prev);
+            const seen = new Set(base.map((j) => j.job_id));
+            const merged = [...base];
+            safeJobs.forEach((j) => { if (!seen.has(j.job_id)) merged.push(j); });
+            return merged;
+          });
+          return;
+        } catch (_) {
+          /* fall through to normal timeout message */
         }
       }
       const rawDetail = e?.response?.data?.detail;
