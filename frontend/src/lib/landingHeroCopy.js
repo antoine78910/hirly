@@ -48,6 +48,8 @@ export const LANDING_HERO_ROTATION_KEYS = [
   "default",
   "permanent",
   "fixed_term",
+  "summer_job",
+  "seasonal_job",
 ];
 
 const HERO_JOB_LABELS = {
@@ -57,7 +59,8 @@ const HERO_JOB_LABELS = {
     internship: "stage",
     apprenticeship: "alternance",
     summer_job: "job d'été",
-    default: "job",
+    seasonal_job: "emploi saisonnier",
+    default: "emploi",
   },
   en: {
     permanent: "full-time job",
@@ -65,6 +68,7 @@ const HERO_JOB_LABELS = {
     internship: "internship",
     apprenticeship: "apprenticeship",
     summer_job: "summer job",
+    seasonal_job: "seasonal job",
     default: "job",
   },
 };

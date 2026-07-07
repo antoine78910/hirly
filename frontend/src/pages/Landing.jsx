@@ -13,7 +13,9 @@ import { trackDatafastGoal } from "../lib/datafast";
 import { preloadOnboardingIntroImages } from "../lib/onboardingImagePreload";
 import { useAppLocale } from "../context/AppLocaleContext";
 import LandingFaq from "../components/landing/LandingFaq";
+import LandingReviews from "../components/landing/LandingReviews";
 import LandingHeroRotatingWord from "../components/landing/LandingHeroRotatingWord";
+import LandingTrustLogos from "../components/landing/LandingTrustLogos";
 import { goToApp } from "../lib/appDomains";
 import { PRIVACY_PATH, TERMS_PATH } from "../lib/legalPaths";
 import {
@@ -281,7 +283,12 @@ export default function Landing() {
               {[...Array(5)].map((_, i) => <Star key={i} className="w-4 h-4 fill-amber-400" />)}
               <span className="ml-2 text-sm font-semibold text-zinc-700">{lang === "fr" ? "4.9 · accès anticipé" : "4.9 · early access"}</span>
             </div>
-            <p className="text-xs text-zinc-500">{lang === "fr" ? "Utilisé par des candidats de Google, Stripe, Vercel et plus encore" : "Trusted by job seekers from Google, Stripe, Vercel and more"}</p>
+            <p className="mt-4 text-xs text-zinc-500">
+              {lang === "fr"
+                ? "Des milliers de candidats ont décroché un emploi dans de grandes entreprises"
+                : "Helped thousands of users land jobs at top companies"}
+            </p>
+            <LandingTrustLogos />
           </motion.div>
         </div>
       </section>
@@ -337,6 +344,8 @@ export default function Landing() {
           ))}
         </div>
       </section>
+
+      <LandingReviews lang={lang} />
 
       <LandingFaq lang={lang} />
 

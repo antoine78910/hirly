@@ -26,11 +26,13 @@ describe("landingHeroCopy", () => {
     expect(getLandingHeroJobLabel("fr", "internship")).toBe("stage");
     expect(getLandingHeroJobLabel("fr", "permanent")).toBe("CDI");
     expect(getLandingHeroRotatingLabels("fr")).toEqual([
-      "job",
       "CDI",
       "CDD",
       "stage",
+      "emploi",
+      "job d'été",
       "alternance",
+      "emploi saisonnier",
     ]);
     expect(getLandingHeroHighlightWidthCh("fr")).toBeGreaterThan(10);
     expect(getLandingHeroHeadline("fr", "apprenticeship")).toEqual({

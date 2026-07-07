@@ -322,6 +322,30 @@ h1, h2, h3, h4, .font-display {
   -webkit-mask-image: linear-gradient(to right, transparent, #000 2%, #000 98%, transparent);
 }
 
+.reviews-marquee-mask {
+  mask-image: linear-gradient(to bottom, transparent, #000 12.5%, #000 87.5%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 12.5%, #000 87.5%, transparent);
+}
+
+@keyframes reviews-marquee-up {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(0, -25%, 0); }
+}
+@keyframes reviews-marquee-down {
+  from { transform: translate3d(0, -25%, 0); }
+  to { transform: translate3d(0, 0, 0); }
+}
+.reviews-marquee-up {
+  animation: reviews-marquee-up linear infinite;
+  animation-fill-mode: both;
+  will-change: transform;
+}
+.reviews-marquee-down {
+  animation: reviews-marquee-down linear infinite;
+  animation-fill-mode: both;
+  will-change: transform;
+}
+
 /* Optional thin scrollbar for modals/dropdowns — not on main app pages. */
 .scrollbar-thin {
   scrollbar-width: thin;
