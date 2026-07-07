@@ -174,6 +174,23 @@ def _message_headers(payload: Dict[str, Any]) -> Dict[str, str]:
     return headers
 
 
+# Priority order for which classification "wins" when multiple matched
+# emails exist for the same application (e.g. a confirmation followed later
+# by an interview invite) -- higher index overwrites lower. Deliberately
+# written to a *new* field (email_confirmed_outcome), never to
+# submission_status: that field means "did our own submit attempt succeed",
+# a different question from "what happened afterward", and other code
+# (Tracker UI, admin flows) depends on its existing value set.
+_OUTCOME_PRIORITY = ["primary", "verification", "confirmation", "status", "interview", "offer"]
+
+
+def _outcome_rank(classification: str) -> int:
+    try:
+        return _OUTCOME_PRIORITY.index(classification)
+    except ValueError:
+        return -1
+
+
 def _classify_email(subject: str, snippet: str) -> str:
     text = _normalize_text(f"{subject} {snippet}")
     if any(term in text for term in ("offer", "offre", "proposition d'embauche", "job offer")):
@@ -390,6 +407,9 @@ async def sync_gmail_application_emails(
             if not job:
                 continue
             query = _gmail_query_for_application(app, job)
+            best_classification = ""
+            best_rank = -1
+            best_message: Dict[str, Any] = {}
             for row in await _gmail_list_messages(access_token, query, per_app):
                 gmail_id = row.get("id")
                 if not gmail_id:
@@ -404,6 +424,7 @@ async def sync_gmail_application_emails(
                 if existing and int(existing.get("match_score") or 0) > score:
                     continue
                 now = _now_iso()
+                classification = _classify_email(metadata.get("subject") or "", metadata.get("snippet") or "")
                 document = {
                     "email_id": email_id,
                     "user_id": user_id,
@@ -419,7 +440,7 @@ async def sync_gmail_application_emails(
                     "received_at": metadata.get("received_at"),
                     "company": job.get("company"),
                     "job_title": job.get("title"),
-                    "classification": _classify_email(metadata.get("subject") or "", metadata.get("snippet") or ""),
+                    "classification": classification,
                     "match_score": score,
                     "created_at": (existing or {}).get("created_at") or now,
                     "updated_at": now,
@@ -427,6 +448,21 @@ async def sync_gmail_application_emails(
                 await db.application_emails.update_one({"email_id": email_id}, {"$set": document}, upsert=True)
                 if not existing:
                     stored += 1
+                if _outcome_rank(classification) > best_rank:
+                    best_rank = _outcome_rank(classification)
+                    best_classification = classification
+                    best_message = document
+
+            if best_classification and best_classification != app.get("email_confirmed_outcome"):
+                await db.applications.update_one(
+                    {"application_id": app.get("application_id"), "user_id": user_id},
+                    {"$set": {
+                        "email_confirmed_outcome": best_classification,
+                        "email_confirmed_at": _now_iso(),
+                        "email_confirmed_subject": best_message.get("subject"),
+                        "email_confirmed_from": best_message.get("from"),
+                    }},
+                )
 
         await db.gmail_connections.update_one(
             {"user_id": user_id},
