@@ -21,11 +21,20 @@ def test_build_workday_search_text_combines_role_and_location():
     assert build_workday_search_text(query) == "Software Engineer Paris, France"
 
 
-def test_resolve_primary_provider_prefers_france_travail(monkeypatch):
+def test_resolve_primary_provider_does_not_auto_select_france_travail(monkeypatch):
+    # France Travail is a last-resort fallback (handled explicitly in
+    # jobs_service.refresh_jobs_for_profile_if_needed when JSearch and the DB
+    # both come up empty), not an auto-selected primary for French locations.
     monkeypatch.setenv("JOB_PROVIDER_PRIMARY", "jsearch")
     monkeypatch.setenv("FRANCE_TRAVAIL_CLIENT_ID", "id")
     monkeypatch.setenv("FRANCE_TRAVAIL_CLIENT_SECRET", "secret")
     query = JobSearchQuery(role="developer", location="Paris", country="fr")
+    assert resolve_primary_provider(query) == "jsearch"
+
+
+def test_resolve_primary_provider_respects_explicit_config(monkeypatch):
+    monkeypatch.setenv("JOB_PROVIDER_PRIMARY", "france_travail")
+    query = JobSearchQuery(role="developer", location="San Francisco", country="us")
     assert resolve_primary_provider(query) == "france_travail"
 
 

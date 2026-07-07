@@ -1259,19 +1259,10 @@ async def refresh_jobs_for_profile_if_needed(
 
         provider_name = resolve_primary_provider(query)
     except Exception:
+        # France Travail is intentionally not auto-selected here even for
+        # French locations -- it's tried only as a last-resort fallback
+        # below, after the primary provider (JSearch) yields nothing.
         provider_name = primary_job_provider_name()
-        query_is_france = (
-            (query.country or "").lower().strip() == "fr"
-            or _looks_like_france_location(query.location or "")
-        )
-        ft_configured = is_job_provider_configured("france_travail")
-        if query_is_france and ft_configured and not is_france_travail_provider(provider_name):
-            provider_name = "france_travail"
-            logger.info(
-                "JSearch provider overridden: using france_travail for French query location=%s country=%s",
-                query.location,
-                query.country,
-            )
 
     if not is_job_provider_enabled(provider_name):
         return {"attempted": bool(greenhouse_result or lever_result), "reason": "disabled", "greenhouse": greenhouse_result, "lever": lever_result, **base_metadata}
@@ -1487,6 +1478,55 @@ async def refresh_jobs_for_profile_if_needed(
             )
             if broad_stats["total_imported"] > 0 and fallback_used is None:
                 fallback_used = broad_location
+
+        france_travail_fallback_used = False
+        if (
+            relevant_imported == 0
+            and not is_france_travail_provider(provider.name)
+            and is_job_provider_configured("france_travail")
+            and is_job_provider_enabled("france_travail")
+        ):
+            try:
+                ft_provider = get_job_provider("france_travail", "")
+                if not _cooldown_until(ft_provider.name):
+                    ft_query = JobSearchQuery(
+                        role=query.role,
+                        location=query.location,
+                        remote_preference=query.remote_preference,
+                        country=query.country,
+                        language=query.language,
+                        limit=query.limit,
+                        raw_query=query.raw_query,
+                        contract_hint=query.contract_hint,
+                        radius_km=query.radius_km,
+                    )
+                    ft_stats = await _import_provider_jobs(db, ft_provider, ft_query)
+                    ft_imported = ft_stats["total_imported"]
+                    ft_manual_ready = sum(1 for job in (ft_stats.get("jobs") or []) if is_manual_fulfillment_ready(job))
+                    ft_relevant = sum(
+                        1
+                        for job in (ft_stats.get("jobs") or [])
+                        if _job_matches_query_family(job, query)
+                        and _job_matches_query_location(job, query, search_radius)
+                        and is_manual_fulfillment_ready(job)
+                    )
+                    total_imported += ft_imported
+                    relevant_imported += ft_relevant
+                    manual_ready_imported += ft_manual_ready
+                    imported_jobs.extend(ft_stats.get("jobs") or [])
+                    france_travail_fallback_used = ft_imported > 0
+                    logger.info(
+                        "France Travail last-resort fallback: role=%s location=%s total_imported=%s relevant_imported=%s",
+                        ft_query.role,
+                        ft_query.location,
+                        ft_imported,
+                        ft_relevant,
+                    )
+            except Exception as exc:
+                if _is_rate_limit_error(exc):
+                    _set_rate_limit_cooldown("france_travail")
+                logger.warning("France Travail fallback attempt failed: %s", exc)
+
         ats_targeted_imported = 0
     except Exception as exc:
         if _is_rate_limit_error(exc):
@@ -1543,6 +1583,7 @@ async def refresh_jobs_for_profile_if_needed(
         "jobs": combined_jobs[:200],
         "fallback_used": fallback_used,
         "ats_targeted_imported": ats_targeted_imported,
+        "france_travail_fallback_used": france_travail_fallback_used,
         "smartrecruiters": smartrecruiters_result,
         "workday": workday_result,
         **base_metadata,

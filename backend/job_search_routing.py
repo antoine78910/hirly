@@ -28,19 +28,15 @@ def _looks_like_france_location(location: str | None) -> bool:
 
 
 def resolve_primary_provider(query: JobSearchQuery) -> str:
-    """Pick the main search provider for a user query."""
-    provider_name = primary_job_provider_name()
-    query_is_france = (
-        (query.country or "").strip().lower() == "fr"
-        or _looks_like_france_location(query.location)
-    )
-    if (
-        query_is_france
-        and is_job_provider_configured("france_travail")
-        and not is_france_travail_provider(provider_name)
-    ):
-        return "france_travail"
-    return provider_name
+    """Pick the main search provider for a user query.
+
+    France Travail is intentionally NOT auto-selected here even for French
+    locations: it's a last-resort fallback tried only when the primary
+    provider (JSearch) and the DB both come up empty for the request, handled
+    explicitly in jobs_service.refresh_jobs_for_profile_if_needed. This
+    function just returns whatever the operator configured as primary.
+    """
+    return primary_job_provider_name()
 
 
 def supplemental_sources(query: JobSearchQuery, *, primary_provider: str) -> List[str]:
