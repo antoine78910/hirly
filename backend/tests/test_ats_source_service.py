@@ -89,6 +89,8 @@ def _matches(row, filter):
         if isinstance(expected, dict):
             if "$in" in expected and value not in expected["$in"]:
                 return False
+            if "$nin" in expected and value in expected["$nin"]:
+                return False
         elif value != expected:
             return False
     return True
@@ -131,6 +133,85 @@ def test_failed_source_refresh_records_failure(monkeypatch):
     assert result["errors"]
     assert db.ats_company_sources.rows[0]["failure_count"] == 1
     assert "board failed" in db.ats_company_sources.rows[0]["last_error"]
+
+
+def test_discover_ats_sources_prioritizing_europe_scans_france_first(monkeypatch):
+    db = _FakeDB(jobs=[
+        {
+            "job_id": "job_us",
+            "ats_provider": "greenhouse",
+            "company": "USCo",
+            "country_code": "us",
+            "selected_apply_url": "https://boards.greenhouse.io/usco/jobs/1",
+        },
+        {
+            "job_id": "job_fr",
+            "ats_provider": "greenhouse",
+            "company": "FrCo",
+            "country_code": "fr",
+            "selected_apply_url": "https://boards.greenhouse.io/frco/jobs/1",
+        },
+    ])
+    result = asyncio.run(service.discover_ats_sources_prioritizing_europe(db, limit=10, priority_limit=1))
+    assert result["priority"]["country_codes"] == service.priority_country_codes()
+    assert result["discovered_count"] == 2
+    assert {row["id"] for row in db.ats_company_sources.rows} == {"greenhouse:frco", "greenhouse:usco"}
+
+
+def test_priority_country_codes_overridable_via_env(monkeypatch):
+    monkeypatch.setenv("JOBS_ATS_PRIORITY_COUNTRY_CODES", "fr,be")
+    assert service.priority_country_codes() == ["fr", "be"]
+    monkeypatch.delenv("JOBS_ATS_PRIORITY_COUNTRY_CODES", raising=False)
+    assert service.priority_country_codes() == service.DEFAULT_PRIORITY_COUNTRY_CODES
+
+
+def test_refresh_known_sources_prioritizes_europe_over_older_non_europe(monkeypatch):
+    old = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    db = _FakeDB(sources=[
+        {"id": "greenhouse:us", "ats_provider": "greenhouse", "source_key": "us", "is_active": True, "last_checked_at": old, "country_code": "us"},
+        {"id": "greenhouse:fr", "ats_provider": "greenhouse", "source_key": "fr", "is_active": True, "last_checked_at": old, "country_code": "fr"},
+    ])
+    refreshed = []
+
+    async def fake_refresh(*args, **kwargs):
+        refreshed.append(kwargs["source_key"])
+        return {"errors": [], "source_key": kwargs["source_key"]}
+
+    monkeypatch.setattr(service, "refresh_ats_source", fake_refresh)
+    result = asyncio.run(service.refresh_known_ats_sources(db, limit=1, older_than_hours=12))
+    assert result["refreshed_sources_count"] == 1
+    assert refreshed == ["fr"]
+
+
+def test_discover_friendly_company_career_pages_prioritizes_europe(monkeypatch):
+    db = _FakeDB(jobs=[
+        {
+            "job_id": "job_us",
+            "ats_provider": "unknown",
+            "applyability_tier": "C",
+            "company": "US Corp",
+            "country_code": "us",
+            "selected_apply_url": "https://careers.us-corp.example/apply/1",
+        },
+        {
+            "job_id": "job_fr",
+            "ats_provider": "unknown",
+            "applyability_tier": "C",
+            "company": "FR Corp",
+            "country_code": "fr",
+            "selected_apply_url": "https://careers.fr-corp.example/apply/1",
+        },
+    ])
+    probed_order = []
+
+    async def fake_probe(url, **kwargs):
+        probed_order.append(url)
+        return {"is_friendly": True, "requires_login": False, "captcha_detected": False, "has_file_upload": True, "fetch_error": None}
+
+    monkeypatch.setattr(service, "probe_career_page_friendliness", fake_probe)
+    result = asyncio.run(service.discover_friendly_company_career_pages(db))
+    assert result["friendly_count"] == 2
+    assert probed_order[0] == "https://careers.fr-corp.example/apply/1"
 
 
 def test_refresh_known_sources_respects_limit_and_age(monkeypatch):

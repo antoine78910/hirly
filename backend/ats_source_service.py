@@ -17,6 +17,17 @@ from jobs_service import upsert_imported_jobs
 
 logger = logging.getLogger(__name__)
 
+# France + rest of Europe: the current focus market. Used to prioritize (not
+# exclude) discovery/refresh/probing budget so European supply grows first
+# each maintenance cycle, while the rest of the world still gets covered with
+# whatever budget remains. Override via JOBS_ATS_PRIORITY_COUNTRY_CODES
+# (comma-separated ISO codes) if the focus market changes.
+DEFAULT_PRIORITY_COUNTRY_CODES = [
+    "fr", "gb", "de", "es", "it", "nl", "be", "ch", "at", "se", "dk", "no", "fi",
+    "pl", "pt", "ie", "cz", "hu", "ro", "gr", "hr", "sk", "si", "bg", "lt", "lv",
+    "ee", "lu", "is", "mt", "cy",
+]
+
 
 def env_bool(name: str, default: bool = False) -> bool:
     value = os.environ.get(name)
@@ -32,24 +43,39 @@ def env_int(name: str, default: int) -> int:
         return default
 
 
+def priority_country_codes() -> List[str]:
+    raw = os.environ.get("JOBS_ATS_PRIORITY_COUNTRY_CODES")
+    if raw is None:
+        return list(DEFAULT_PRIORITY_COUNTRY_CODES)
+    codes = [part.strip().lower() for part in raw.split(",") if part.strip()]
+    return codes or list(DEFAULT_PRIORITY_COUNTRY_CODES)
+
+
 async def discover_ats_sources_from_cached_jobs(
     db,
     *,
     provider: Optional[str] = None,
     country_code: Optional[str] = None,
+    country_codes: Optional[List[str]] = None,
+    exclude_country_codes: Optional[List[str]] = None,
     limit: Optional[int] = None,
     dry_run: bool = False,
 ) -> Dict[str, Any]:
     providers = [provider.strip().lower()] if provider else list(supported_ats_providers())
     scan_limit = max(1, min(int(limit or 500), 5000))
     query: Dict[str, Any] = {"ats_provider": {"$in": providers}}
-    if country_code:
+    if country_codes:
+        query["country_code"] = {"$in": [str(code).strip().lower() for code in country_codes if code]}
+    elif country_code:
         query["country_code"] = country_code.strip().lower()
+    elif exclude_country_codes:
+        query["country_code"] = {"$nin": [str(code).strip().lower() for code in exclude_country_codes if code]}
     rows = await db.jobs.find(query, {"_id": 0}).limit(scan_limit).to_list(scan_limit)
     summary = {
         "dry_run": dry_run,
         "provider": provider,
         "country_code": country_code,
+        "country_codes": country_codes,
         "scanned_count": len(rows),
         "discovered_count": 0,
         "skipped_count": 0,
@@ -74,6 +100,41 @@ async def discover_ats_sources_from_cached_jobs(
             summary["errors"].append({"job_id": job.get("job_id"), "error": f"{exc.__class__.__name__}: {str(exc)[:160]}"})
     logger.info("ats_source_discovery_complete summary=%s", _compact_summary(summary))
     return summary
+
+
+async def discover_ats_sources_prioritizing_europe(
+    db,
+    *,
+    provider: Optional[str] = None,
+    limit: Optional[int] = None,
+    priority_limit: Optional[int] = None,
+    dry_run: bool = False,
+) -> Dict[str, Any]:
+    """Discover new direct-ATS company sources, spending most of the scan
+    budget on France/Europe first, then a smaller pass over everything else.
+    """
+    total_limit = max(1, min(int(limit or env_int("JOBS_ATS_DISCOVER_SCAN_LIMIT", 500)), 5000))
+    priority_scan = max(1, min(int(priority_limit or env_int("JOBS_ATS_DISCOVER_PRIORITY_SCAN_LIMIT", int(total_limit * 0.7))), total_limit))
+    rest_scan = max(1, total_limit - priority_scan)
+
+    priority_codes = priority_country_codes()
+    priority_summary = await discover_ats_sources_from_cached_jobs(
+        db, provider=provider, country_codes=priority_codes, limit=priority_scan, dry_run=dry_run,
+    )
+    rest_summary = await discover_ats_sources_from_cached_jobs(
+        db, provider=provider, exclude_country_codes=priority_codes, limit=rest_scan, dry_run=dry_run,
+    )
+    return {
+        "dry_run": dry_run,
+        "provider": provider,
+        "priority_country_codes": priority_country_codes(),
+        "priority": priority_summary,
+        "rest": rest_summary,
+        "scanned_count": priority_summary["scanned_count"] + rest_summary["scanned_count"],
+        "discovered_count": priority_summary["discovered_count"] + rest_summary["discovered_count"],
+        "skipped_count": priority_summary["skipped_count"] + rest_summary["skipped_count"],
+        "errors": priority_summary["errors"] + rest_summary["errors"],
+    }
 
 
 async def refresh_ats_source(
@@ -147,6 +208,7 @@ async def refresh_known_ats_sources(
     limit: Optional[int] = None,
     older_than_hours: Optional[int] = None,
     dry_run: bool = False,
+    prioritize_europe: bool = True,
 ) -> Dict[str, Any]:
     refresh_limit = max(1, min(int(limit or env_int("JOBS_ATS_REFRESH_LIMIT", 25)), 100))
     hours = max(1, int(older_than_hours if older_than_hours is not None else env_int("JOBS_ATS_REFRESH_OLDER_THAN_HOURS", 12)))
@@ -157,7 +219,11 @@ async def refresh_known_ats_sources(
     if country_code:
         query["country_code"] = country_code.strip().lower()
     rows = await db.ats_company_sources.find(query, {"_id": 0}).limit(refresh_limit * 5).to_list(refresh_limit * 5)
-    candidates = [row for row in rows if _checked_before(row.get("last_checked_at"), cutoff)][:refresh_limit]
+    stale = [row for row in rows if _checked_before(row.get("last_checked_at"), cutoff)]
+    if prioritize_europe and not country_code:
+        priority_codes = set(priority_country_codes())
+        stale.sort(key=lambda row: 0 if str(row.get("country_code") or "").lower() in priority_codes else 1)
+    candidates = stale[:refresh_limit]
     summary = {
         "dry_run": dry_run,
         "provider": provider,
@@ -194,7 +260,7 @@ async def run_ats_direct_maintenance(
         return {"enabled": False, "dry_run": dry_run, "discover": None, "refresh": None}
     discover = None
     if env_bool("JOBS_ATS_DISCOVER_FROM_CACHE_ENABLED", True):
-        discover = await discover_ats_sources_from_cached_jobs(db, dry_run=dry_run)
+        discover = await discover_ats_sources_prioritizing_europe(db, dry_run=dry_run)
     refresh = await refresh_known_ats_sources(
         db,
         limit=env_int("JOBS_ATS_REFRESH_LIMIT", 25),
@@ -262,6 +328,7 @@ async def discover_friendly_company_career_pages(
     limit: Optional[int] = None,
     concurrency: Optional[int] = None,
     dry_run: bool = False,
+    prioritize_europe: bool = True,
 ) -> Dict[str, Any]:
     """Scan cached tier-C ("unknown ATS", plain company career page) jobs,
     probe each distinct company domain for the same friendliness criteria used
@@ -269,6 +336,10 @@ async def discover_friendly_company_career_pages(
     friendly ones in ``friendly_company_career_pages`` for later direct
     scraping. Never runs inline in the live feed request path -- this is a
     maintenance/admin-triggered scan only.
+
+    Spends most of the scan budget on France/Europe jobs first (current focus
+    market), then tops up with a smaller pass over everything else, so
+    European coverage grows first without fully excluding other regions.
     """
 
     scan_limit = max(1, min(int(limit or env_int("JOBS_FRIENDLY_COMPANY_PAGE_SCAN_LIMIT", 200)), 2000))
@@ -286,9 +357,32 @@ async def discover_friendly_company_career_pages(
         "errors": [],
     }
 
-    rows = await db.jobs.find(
+    rows: List[Dict[str, Any]] = []
+    seen_job_ids: set = set()
+    if prioritize_europe:
+        priority_limit = max(1, int(scan_limit * 0.7))
+        priority_rows = await db.jobs.find(
+            {"applyability_tier": "C", "country_code": {"$in": priority_country_codes()}}, {"_id": 0}
+        ).limit(priority_limit).to_list(priority_limit)
+        for row in priority_rows:
+            job_id = row.get("job_id")
+            if job_id:
+                seen_job_ids.add(job_id)
+            rows.append(row)
+
+    rest_limit = max(1, scan_limit - len(rows))
+    rest_rows = await db.jobs.find(
         {"applyability_tier": "C"}, {"_id": 0}
-    ).limit(scan_limit).to_list(scan_limit)
+    ).limit(rest_limit + len(seen_job_ids)).to_list(rest_limit + len(seen_job_ids))
+    for row in rest_rows:
+        if len(rows) >= scan_limit:
+            break
+        job_id = row.get("job_id")
+        if job_id and job_id in seen_job_ids:
+            continue
+        if job_id:
+            seen_job_ids.add(job_id)
+        rows.append(row)
     summary["scanned_job_count"] = len(rows)
 
     candidates_by_domain: Dict[str, Dict[str, Any]] = {}
