@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   getLandingHeroJobLabel,
   getLandingHeroRotatingLabels,
@@ -10,7 +10,9 @@ const isMobileViewport = () =>
   typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches;
 
 /** Shorter words stay tight on the right; longer words (e.g. alternance) get side breathing room. */
-function getSlotMargins(width, widths) {
+function getSlotMargins(width, widths, stacked = false) {
+  if (stacked) return { ml: 0, mr: 0 };
+
   const minW = Math.min(...widths);
   const maxW = Math.max(...widths);
   const baseMl = isMobileViewport() ? 5 : 8;
@@ -26,15 +28,33 @@ function getSlotMargins(width, widths) {
 
   return { ml, mr };
 }
-
 /**
  * Client-only animated word cycle for the landing hero (ported from EE NewHeroAnimatedWord).
- * Words are ordered short → long; width and margins animate per word to limit layout jumps.
+ * Words follow the configured rotation order; width and margins animate per word to limit layout jumps.
  */
-export default function LandingHeroRotatingWord({ lang = "fr", contractType = null }) {
+export default function LandingHeroRotatingWord({
+  lang = "fr",
+  contractType = null,
+  stacked = false,
+  stackOnMobile = false,
+}) {
   const wordTrackRef = useRef(null);
   const wordWrapperRef = useRef(null);
   const tlRef = useRef(null);
+  const [mobileViewport, setMobileViewport] = useState(false);
+  const isStackedLayout = stacked || (stackOnMobile && mobileViewport);
+  const stackedLayoutRef = useRef(isStackedLayout);
+
+  stackedLayoutRef.current = isStackedLayout;
+
+  useEffect(() => {
+    if (!stackOnMobile) return undefined;
+    const mq = window.matchMedia("(max-width: 639px)");
+    const update = () => setMobileViewport(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, [stackOnMobile]);
 
   const labels = useMemo(() => {
     const base = getLandingHeroRotatingLabels(lang);
@@ -52,15 +72,20 @@ export default function LandingHeroRotatingWord({ lang = "fr", contractType = nu
     const wrapper = wordWrapperRef.current;
     if (!track || !wrapper) return;
 
-    const scaledMargin = (index, widths) => getSlotMargins(widths[index] ?? 0, widths);
+    const scaledMargin = (index, widths) => getSlotMargins(widths[index] ?? 0, widths, stackedLayoutRef.current);
 
     const applySlot = (index, widths, itemHeight) => {
       const w = Math.ceil(widths[index] ?? 0) + WIDTH_BUFFER;
       const m = scaledMargin(index, widths);
       wrapper.style.width = `${w}px`;
       wrapper.style.height = `${itemHeight}px`;
-      wrapper.style.marginLeft = `${m.ml}px`;
-      wrapper.style.marginRight = `${m.mr}px`;
+      if (stackedLayoutRef.current) {
+        wrapper.style.marginLeft = "auto";
+        wrapper.style.marginRight = "auto";
+      } else {
+        wrapper.style.marginLeft = `${m.ml}px`;
+        wrapper.style.marginRight = `${m.mr}px`;
+      }
     };
 
     const build = () => {
@@ -68,10 +93,15 @@ export default function LandingHeroRotatingWord({ lang = "fr", contractType = nu
         const firstChild = track.children[0];
         if (!firstChild) return;
 
-        wrapper.style.display = "inline-block";
+        const isStacked = stackedLayoutRef.current;
+        wrapper.style.display = isStacked ? "block" : "inline-block";
         wrapper.style.verticalAlign = "baseline";
         wrapper.style.width = "auto";
         wrapper.style.minWidth = "0";
+        if (isStacked) {
+          wrapper.style.marginLeft = "auto";
+          wrapper.style.marginRight = "auto";
+        }
 
         const children = Array.from(track.children);
         const measureEl = firstChild.cloneNode(false);
@@ -114,6 +144,15 @@ export default function LandingHeroRotatingWord({ lang = "fr", contractType = nu
 
         const slotTween = (index) => {
           const m = scaledMargin(index, widths);
+          if (stackedLayoutRef.current) {
+            return {
+              width: Math.ceil(widths[index] ?? 0) + WIDTH_BUFFER,
+              marginLeft: "auto",
+              marginRight: "auto",
+              duration: slide,
+              ease,
+            };
+          }
           return {
             width: Math.ceil(widths[index] ?? 0) + WIDTH_BUFFER,
             marginLeft: `${m.ml}px`,
@@ -131,11 +170,17 @@ export default function LandingHeroRotatingWord({ lang = "fr", contractType = nu
             .to({}, { duration: pause });
         }
 
-        tl.set(track, { y: 0 }).set(wrapper, {
-          width: Math.ceil(widths[0] ?? 0) + WIDTH_BUFFER,
-          marginLeft: `${scaledMargin(0, widths).ml}px`,
-          marginRight: `${scaledMargin(0, widths).mr}px`,
-        });
+        tl.set(track, { y: 0 }).set(wrapper, stackedLayoutRef.current
+          ? {
+              width: Math.ceil(widths[0] ?? 0) + WIDTH_BUFFER,
+              marginLeft: "auto",
+              marginRight: "auto",
+            }
+          : {
+              width: Math.ceil(widths[0] ?? 0) + WIDTH_BUFFER,
+              marginLeft: `${scaledMargin(0, widths).ml}px`,
+              marginRight: `${scaledMargin(0, widths).mr}px`,
+            });
 
         tlRef.current = tl;
       } catch {
@@ -186,12 +231,16 @@ export default function LandingHeroRotatingWord({ lang = "fr", contractType = nu
       if (rafId2) cancelAnimationFrame(rafId2);
       if (tlRef.current) tlRef.current.kill();
     };
-  }, [labels]);
+  }, [labels, isStackedLayout, stackOnMobile]);
 
   return (
     <span
       ref={wordWrapperRef}
-      className="relative inline-block shrink-0 align-baseline h-[1.05em] min-w-[3ch] overflow-hidden whitespace-nowrap text-violet-500 translate-y-[0.02em]"
+      className={`relative overflow-hidden whitespace-nowrap text-violet-500 translate-y-[0.02em] h-[1.05em] min-w-[3ch] ${
+        isStackedLayout
+          ? "mx-auto block w-fit shrink-0 text-center"
+          : "inline-block shrink-0 align-baseline"
+      }`}
       aria-label={initialLabel}
     >
       <div ref={wordTrackRef} className="leading-[1]">

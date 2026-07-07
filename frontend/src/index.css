@@ -292,6 +292,11 @@ h1, h2, h3, h4, .font-display {
   animation: shimmer 1.6s linear infinite;
 }
 
+@keyframes landing-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
 @keyframes pulse-mint {
   0%   { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.55); }
   70%  { box-shadow: 0 0 0 16px rgba(124, 58, 237, 0); }
@@ -320,6 +325,18 @@ h1, h2, h3, h4, .font-display {
 .pain-marquee-mask {
   mask-image: linear-gradient(to right, transparent, #000 2%, #000 98%, transparent);
   -webkit-mask-image: linear-gradient(to right, transparent, #000 2%, #000 98%, transparent);
+}
+
+.trust-marquee-mask {
+  mask-image: linear-gradient(to right, transparent, #000 0%, #000 100%, transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 0%, #000 100%, transparent);
+}
+
+@media (min-width: 640px) {
+  .trust-marquee-mask {
+    mask-image: linear-gradient(to right, transparent, #000 4%, #000 96%, transparent);
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 4%, #000 96%, transparent);
+  }
 }
 
 .reviews-marquee-mask {

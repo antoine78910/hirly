@@ -8,14 +8,12 @@ const MARQUEE_COPIES = 4;
 
 function ReviewCard({ name, subline, quote }) {
   return (
-    <article className="w-full shrink-0 rounded-xl border border-zinc-200/80 bg-white p-4 shadow-[0_0_2px_rgba(0,0,0,0.08)] sm:p-5">
-      <div className="mb-3">
-        <p className="font-display text-[0.95rem] font-bold leading-snug text-zinc-900 sm:text-base">
-          {name}
-        </p>
-        <p className="mt-0.5 text-xs font-medium text-linkedin">{subline}</p>
-      </div>
-      <p className="text-sm leading-relaxed text-zinc-600">{quote}</p>
+    <article className="w-full shrink-0 rounded-2xl border border-zinc-200 bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] sm:p-6">
+      <p className="font-display text-[0.95rem] font-bold leading-snug text-zinc-900 sm:text-base">
+        {name}
+      </p>
+      <p className="mt-1 text-sm text-linkedin">{subline}</p>
+      <p className="mt-3 text-sm leading-relaxed text-zinc-700">{quote}</p>
     </article>
   );
 }

@@ -1,6 +1,6 @@
 ﻿// REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
 import { Button } from "../components/ui/button";
-import { ArrowRight, Check, Sparkles, Zap, FileCheck2, Inbox, Heart, X, Star } from "lucide-react";
+import { ArrowRight, Check, Sparkles, Zap, FileCheck2, Inbox, Star } from "lucide-react";
 import { motion } from "framer-motion";
 import { useEffect } from "react";
 import Logo from "../components/Logo";
@@ -13,8 +13,10 @@ import { trackDatafastGoal } from "../lib/datafast";
 import { preloadOnboardingIntroImages } from "../lib/onboardingImagePreload";
 import { useAppLocale } from "../context/AppLocaleContext";
 import LandingFaq from "../components/landing/LandingFaq";
+import LandingFeatures from "../components/landing/LandingFeatures";
 import LandingReviews from "../components/landing/LandingReviews";
 import LandingHeroRotatingWord from "../components/landing/LandingHeroRotatingWord";
+import LandingHeroSwipeDemo from "../components/landing/LandingHeroSwipeDemo";
 import LandingTrustLogos from "../components/landing/LandingTrustLogos";
 import { goToApp } from "../lib/appDomains";
 import { PRIVACY_PATH, TERMS_PATH } from "../lib/legalPaths";
@@ -134,7 +136,7 @@ export default function Landing() {
       </header>
 
       {/* Hero */}
-      <section className="relative overflow-hidden gradient-linkedin-soft">
+      <section className="relative overflow-x-hidden gradient-linkedin-soft">
         <div className="absolute inset-0 bg-grid mask-radial pointer-events-none" />
         <div className="relative max-w-6xl mx-auto px-6 pt-16 pb-20 lg:pt-28 lg:pb-28 text-center">
           <motion.div
@@ -153,10 +155,17 @@ export default function Landing() {
             transition={{ duration: 0.6, delay: 0.05 }}
             className="font-display font-black text-5xl sm:text-6xl lg:text-7xl tracking-tighter leading-[0.95]"
           >
-            <span className="block">
-              <span className="inline-flex max-w-full flex-nowrap items-baseline justify-center">
-                {heroHeadline.line1Prefix}
-                <LandingHeroRotatingWord lang={lang} contractType={landingContractType} />
+            <span className="block max-sm:leading-[1.05] sm:leading-[0.95]">
+              <span className="block sm:inline">
+                <span className="sm:hidden">{heroHeadline.line1Prefix.trim()}</span>
+                <span className="hidden sm:inline">{heroHeadline.line1Prefix}</span>
+              </span>
+              <span className="mt-1 flex justify-center sm:mt-0 sm:inline-flex sm:items-baseline sm:justify-center">
+                <LandingHeroRotatingWord
+                  lang={lang}
+                  contractType={landingContractType}
+                  stackOnMobile
+                />
               </span>
             </span>
             <span className="block">{heroHeadline.line2}</span>
@@ -216,12 +225,12 @@ export default function Landing() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.3 }}
-            className="mt-5 mx-auto grid w-full max-w-lg grid-cols-1 gap-2 px-3 sm:max-w-2xl sm:grid-cols-2 lg:hidden"
+            className="mt-5 mx-auto grid w-full max-w-lg grid-cols-1 gap-2 px-3 max-sm:justify-items-center sm:max-w-2xl sm:grid-cols-2 lg:hidden"
           >
             {heroBullets.map((bullet) => (
               <li
                 key={`mobile-${bullet}`}
-                className="flex items-center gap-2 text-sm leading-snug text-zinc-600"
+                className="flex items-center justify-center gap-2 text-sm leading-snug text-zinc-600 max-sm:text-center sm:justify-start"
               >
                 <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
                   <Check className="h-3 w-3" strokeWidth={2.5} />
@@ -231,45 +240,14 @@ export default function Landing() {
             ))}
           </motion.ul>
 
-          {/* Demo card mockup */}
+          {/* Demo swipe cards */}
           <motion.div
             initial={{ opacity: 0, y: 32 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.35 }}
-            className="mt-20 relative max-w-sm mx-auto"
+            className="relative mx-auto max-w-5xl overflow-visible"
           >
-            <div className="absolute -inset-x-8 -bottom-6 h-32 bg-gradient-to-t from-white via-white/80 to-transparent pointer-events-none z-10" />
-            <div className="absolute -top-6 -left-6 right-6 h-full rounded-3xl border border-zinc-200 bg-white rotate-[-4deg] opacity-50" />
-            <div className="absolute -top-3 -right-3 left-3 h-full rounded-3xl border border-zinc-200 bg-white rotate-[3deg] opacity-70" />
-            <div className="relative bg-white border border-zinc-200 rounded-3xl p-6 shadow-[0_24px_80px_-20px_rgba(124,58,237,0.25)] text-left">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <p className="text-xs font-semibold text-linkedin">Linear</p>
-                  <h3 className="font-display font-bold text-xl">Senior Frontend Engineer</h3>
-                </div>
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-linkedin-light text-linkedin text-xs font-semibold">
-                  <Sparkles className="w-3 h-3" /> {lang === "fr" ? "94% compatibilité" : "94% match"}
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-2 mb-4">
-                <span className="text-xs font-medium px-2 py-1 rounded-full bg-zinc-100 text-zinc-700">{lang === "fr" ? "Télétravail" : "Remote"}</span>
-                <span className="text-xs font-medium px-2 py-1 rounded-full bg-zinc-100 text-zinc-700">{lang === "fr" ? "140k–200k €" : "€140k–€200k"}</span>
-                <span className="text-xs font-medium px-2 py-1 rounded-full bg-zinc-100 text-zinc-700">TypeScript</span>
-              </div>
-              <ul className="text-sm text-zinc-600 space-y-1.5">
-                <li>• {lang === "fr" ? "5 ans d'expérience TypeScript — correspondance parfaite" : "5 years TypeScript experience — perfect overlap"}</li>
-                <li>• {lang === "fr" ? "Vous avez livré des optimisations sur un dashboard SaaS complexe" : "You shipped perf wins on a complex SaaS dashboard"}</li>
-                <li>• {lang === "fr" ? "Télétravail correspond à votre préférence" : "Remote-first matches your preference"}</li>
-              </ul>
-              <div className="mt-6 flex items-center justify-between">
-                <div className="w-12 h-12 rounded-full grid place-items-center border border-zinc-200">
-                  <X className="w-5 h-5 text-zinc-400" />
-                </div>
-                <div className="w-14 h-14 rounded-full grid place-items-center gradient-linkedin text-white">
-                  <Heart className="w-6 h-6" fill="white" />
-                </div>
-              </div>
-            </div>
+            <LandingHeroSwipeDemo lang={lang} />
           </motion.div>
 
           {/* Social proof */}
@@ -344,6 +322,8 @@ export default function Landing() {
           ))}
         </div>
       </section>
+
+      <LandingFeatures lang={lang} />
 
       <LandingReviews lang={lang} />
 

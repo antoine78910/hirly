@@ -12,14 +12,16 @@ export function getLandingReviewsCopy(lang) {
     badge: "Real feedback. Real people.",
     title: "Real results from real candidates.",
     titleAccent: "They found jobs faster with Hirly.",
-    subtitle:
-      "What candidates are saying about Hirly — no filters, just real wins.",
+    subtitle: "What candidates are saying about Hirly — no filters, just real wins.",
   };
 }
 
 export function getLandingReviewColumns(lang) {
-  if (lang === "fr") {
-    return [
+  return lang === "fr" ? getFrenchReviewColumns() : getEnglishReviewColumns();
+}
+
+function getFrenchReviewColumns() {
+  return [
       [
         {
           id: "thomas",
@@ -121,8 +123,9 @@ export function getLandingReviewColumns(lang) {
         },
       ],
     ];
-  }
+}
 
+function getEnglishReviewColumns() {
   return [
     [
       {
