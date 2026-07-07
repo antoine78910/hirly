@@ -528,6 +528,53 @@ def test_ab_jobs_rank_before_manual_local_jobs(monkeypatch):
     assert response["jobs"][0]["application_mode"] == "auto_apply"
 
 
+def test_new_friendly_ats_jobs_respect_city_and_radius_filter(monkeypatch):
+    # Regression: newly whitelisted ATS providers (teamtailor, breezyhr, personio,
+    # jobaffinity, flatchr, werecruit) must go through the exact same
+    # location/radius gate as greenhouse/lever jobs -- no special-casing by
+    # ats_provider should let an out-of-radius job slip into the feed, nor
+    # should it wrongly exclude an in-radius one.
+    paris_teamtailor = _job(1, tier="A", status="valid", title="Marketing Manager")
+    paris_teamtailor.update({
+        "location": "Paris, France", "city": "Paris", "country_code": "fr",
+        "provider": "jsearch", "ats_provider": "teamtailor", "auto_apply_supported": True,
+    })
+    lyon_breezyhr = _job(2, tier="A", status="valid", title="Marketing Manager")
+    lyon_breezyhr.update({
+        "location": "Lyon, France", "city": "Lyon", "country_code": "fr",
+        "provider": "jsearch", "ats_provider": "breezyhr", "auto_apply_supported": True,
+    })
+    response, _calls = _run_feed(
+        monkeypatch,
+        [paris_teamtailor, lyon_breezyhr],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+        locations_json=_location_payload("Paris", lat=48.8566, lng=2.3522),
+        geo_places=_geo_places(),
+    )
+    returned_ids = [job["job_id"] for job in response["jobs"]]
+    assert returned_ids == ["job_1"]
+    assert "job_2" not in returned_ids  # wrong city (Lyon), even though ATS is friendly
+
+
+def test_new_friendly_ats_auto_apply_job_ranks_before_manual_local_job(monkeypatch):
+    manual = _job(1, tier="C", status="unknown", title="Marketing Manager")
+    manual.update({"location": "Paris, France", "city": "Paris", "country_code": "fr"})
+    auto = _job(2, tier="A", status="valid", title="Marketing Manager")
+    auto.update({
+        "location": "Paris, France", "city": "Paris", "country_code": "fr",
+        "provider": "jsearch", "ats_provider": "personio", "auto_apply_supported": True,
+    })
+    response, _calls = _run_feed(
+        monkeypatch,
+        [manual, auto],
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+        locations_json=_location_payload("Paris", lat=48.8566, lng=2.3522),
+        geo_places=_geo_places(),
+    )
+    assert [job["job_id"] for job in response["jobs"][:2]] == ["job_2", "job_1"]
+    assert response["jobs"][0]["application_mode"] == "auto_apply"
+
+
 def test_explicit_local_jsearch_fallback_returns_imported_manual_local_job(monkeypatch):
     imported = _job(1, tier="C", status="unknown", title="Marketing Manager")
     imported.update({"location": "Paris, France", "city": "Paris", "country_code": "fr"})
