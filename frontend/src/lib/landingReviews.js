@@ -5,7 +5,7 @@ export function getLandingReviewsCopy(lang) {
       title: "De vrais résultats, de vrais candidats.",
       titleAccent: "Ils ont trouvé plus vite avec Hirly.",
       subtitle:
-        "Ce que disent les candidats qui utilisent Hirly — sans filtre, juste des retours concrets.",
+        "Ce que disent les candidats qui utilisent Hirly — sans filtre, juste des retours honnêtes.",
     };
   }
   return {
@@ -20,6 +20,11 @@ export function getLandingReviewColumns(lang) {
   return lang === "fr" ? getFrenchReviewColumns() : getEnglishReviewColumns();
 }
 
+export function getLandingReviewsAll(lang) {
+  const [leftColumn, rightColumn] = getLandingReviewColumns(lang);
+  return [...leftColumn, ...rightColumn];
+}
+
 function getFrenchReviewColumns() {
   return [
       [
@@ -28,47 +33,47 @@ function getFrenchReviewColumns() {
           name: "Thomas W.",
           subline: "Plusieurs entretiens en quelques jours",
           quote:
-            "Je n'avais jamais eu des entretiens aussi vite. Je ne sais pas si c'est la chance, mais ça marche vraiment.",
+            "Je n'avais jamais décroché d'entretiens aussi vite. Je ne sais pas si c'est la chance, mais franchement, ça marche.",
         },
         {
           id: "verified",
           name: "Utilisateur vérifié",
-          subline: "Avis 5★",
+          subline: "Avis 5 étoiles",
           quote:
-            "Rien ne s'approche de Hirly. J'ai 5 à 10 entretiens par semaine. C'est devenu la norme.",
+            "Rien ne vaut Hirly. J'ai entre 5 et 10 entretiens par semaine. C'est devenu mon quotidien.",
         },
         {
           id: "karim",
           name: "Karim J.",
-          subline: "5+ entretiens",
-          quote: "L'app est super et m'a déjà permis d'obtenir plus de 5 entretiens.",
+          subline: "Plus de 5 entretiens",
+          quote: "Super appli : j'ai déjà décroché plus de 5 entretiens grâce à elle.",
         },
         {
           id: "lea",
           name: "Léa M.",
           subline: "Étudiante en école de commerce",
           quote:
-            "L'interface est vraiment l'une des plus clean que j'ai vues. On sent qu'ils construisent quelque chose d'utile pour les étudiants.",
+            "L'interface est vraiment l'une des plus soignées que j'ai vues. On sent qu'ils pensent vraiment aux étudiants.",
         },
         {
           id: "nicolas",
           name: "Nicolas S.",
-          subline: "40+ candidatures envoyées",
-          quote: "Hirly change complètement la façon de chercher un job.",
+          subline: "Plus de 40 candidatures envoyées",
+          quote: "Hirly change complètement la façon de chercher un emploi.",
         },
         {
           id: "sarah",
           name: "Sarah B.",
           subline: "En recherche de CDI",
           quote:
-            "Remplir son profil une fois et swiper sur des offres pertinentes, c'est un game changer.",
+            "Remplir son profil une seule fois et swiper sur des offres pertinentes, ça change vraiment la donne.",
         },
         {
           id: "hugo",
           name: "Hugo S.",
           subline: "Designer",
           quote:
-            "Une plateforme bienveillante et efficace. Un vrai soulagement pour tous ceux qui galèrent à trouver un job.",
+            "Une plateforme bienveillante et efficace. Un vrai soulagement quand on peine à trouver un emploi.",
         },
       ],
       [
@@ -77,49 +82,49 @@ function getFrenchReviewColumns() {
           name: "Antoine B.",
           subline: "CDI dans une grande banque",
           quote:
-            "Avec Hirly, j'ai eu plus de 10 entretiens et décroché un CDI dans une grande banque. J'ai déjà recommandé l'app à 7 personnes.",
+            "Avec Hirly, j'ai eu plus de 10 entretiens et décroché un CDI dans une grande banque. J'ai déjà recommandé l'appli à 7 personnes.",
         },
         {
           id: "camille",
           name: "Camille R.",
-          subline: "Alternance chez un grand groupe",
+          subline: "Alternance dans un grand groupe",
           quote:
-            "Postuler une par une ne marchait plus. Hirly m'a redonné confiance dans ma recherche.",
+            "Postuler offre par offre ne donnait plus rien. Hirly m'a redonné confiance dans ma recherche.",
         },
         {
           id: "julie",
           name: "Julie T.",
           subline: "CDI en marketing",
           quote:
-            "J'ai accepté l'offre d'une boîte où j'avais postulé via Hirly. Le process a été beaucoup plus simple.",
+            "J'ai accepté une offre dans une entreprise où j'avais postulé via Hirly. Le processus a été beaucoup plus simple.",
         },
         {
           id: "marc",
           name: "Marc D.",
           subline: "Responsable RH",
           quote:
-            "En tant que RH, je conseille toujours d'adapter son CV. Cette app comble ce gap. Le résultat est visible.",
+            "En tant que RH, je conseille toujours d'adapter son CV. Cette appli comble vraiment ce manque. Les résultats se voient.",
         },
         {
           id: "emma",
           name: "Emma L.",
           subline: "Entretiens chez plusieurs grands comptes",
           quote:
-            "Je suis bluffée par le nombre d'entretiens depuis que j'utilise Hirly. Des entreprises que je n'aurais jamais trouvées seules.",
+            "Je suis bluffée par le nombre d'entretiens depuis que j'utilise Hirly. Des entreprises que je n'aurais jamais trouvées seule.",
         },
         {
           id: "david",
           name: "David P.",
-          subline: "Entretien en tech",
+          subline: "Entretien dans la tech",
           quote:
-            "Swiper au lieu de remplir des formulaires à l'infini, ça me fait gagner un temps fou.",
+            "Swiper au lieu de remplir des formulaires sans fin, ça me fait gagner un temps fou.",
         },
         {
           id: "ines",
           name: "Inès V.",
-          subline: "Dernière étape chez un grand groupe",
+          subline: "Dernière étape dans un grand groupe",
           quote:
-            "La recherche d'emploi est épuisante. Hirly enlève une grosse partie du stress.",
+            "La recherche d'emploi, c'est épuisant. Hirly enlève une grosse partie du stress.",
         },
       ],
     ];

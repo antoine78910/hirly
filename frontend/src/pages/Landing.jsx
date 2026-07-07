@@ -1,6 +1,6 @@
 ﻿// REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
 import { Button } from "../components/ui/button";
-import { ArrowRight, Check, Sparkles, Zap, FileCheck2, Inbox, Star } from "lucide-react";
+import { ArrowRight, Check, Sparkles, Zap, FileCheck2, Inbox } from "lucide-react";
 import { motion } from "framer-motion";
 import { useEffect } from "react";
 import Logo from "../components/Logo";
@@ -13,7 +13,6 @@ import { trackDatafastGoal } from "../lib/datafast";
 import { preloadOnboardingIntroImages } from "../lib/onboardingImagePreload";
 import { useAppLocale } from "../context/AppLocaleContext";
 import LandingFaq from "../components/landing/LandingFaq";
-import LandingFeatures from "../components/landing/LandingFeatures";
 import LandingReviews from "../components/landing/LandingReviews";
 import LandingHeroRotatingWord from "../components/landing/LandingHeroRotatingWord";
 import LandingHeroSwipeDemo from "../components/landing/LandingHeroSwipeDemo";
@@ -257,11 +256,7 @@ export default function Landing() {
             transition={{ delay: 0.6, duration: 0.6 }}
             className="mt-14 flex flex-col items-center gap-2"
           >
-            <div className="flex items-center gap-1.5 text-amber-400">
-              {[...Array(5)].map((_, i) => <Star key={i} className="w-4 h-4 fill-amber-400" />)}
-              <span className="ml-2 text-sm font-semibold text-zinc-700">{lang === "fr" ? "4.9 · accès anticipé" : "4.9 · early access"}</span>
-            </div>
-            <p className="mt-4 text-xs text-zinc-500">
+            <p className="text-xs text-zinc-500">
               {lang === "fr"
                 ? "Des milliers de candidats ont décroché un emploi dans de grandes entreprises"
                 : "Helped thousands of users land jobs at top companies"}
@@ -322,8 +317,6 @@ export default function Landing() {
           ))}
         </div>
       </section>
-
-      <LandingFeatures lang={lang} />
 
       <LandingReviews lang={lang} />
 

@@ -1,14 +1,17 @@
 import { Sparkles } from "lucide-react";
 import {
   getLandingReviewColumns,
+  getLandingReviewsAll,
   getLandingReviewsCopy,
 } from "../../lib/landingReviews";
 
 const MARQUEE_COPIES = 4;
 
-function ReviewCard({ name, subline, quote }) {
+function ReviewCard({ name, subline, quote, className = "" }) {
   return (
-    <article className="w-full shrink-0 rounded-2xl border border-zinc-200 bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] sm:p-6">
+    <article
+      className={`shrink-0 rounded-2xl border border-zinc-200 bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] sm:p-6 ${className}`}
+    >
       <p className="font-display text-[0.95rem] font-bold leading-snug text-zinc-900 sm:text-base">
         {name}
       </p>
@@ -18,11 +21,11 @@ function ReviewCard({ name, subline, quote }) {
   );
 }
 
-function ReviewTrack({ reviews, suffix, hidden = false }) {
+function ReviewTrack({ reviews, suffix, hidden = false, cardClassName = "w-full" }) {
   return (
     <div className="flex shrink-0 flex-col gap-4" aria-hidden={hidden || undefined}>
       {reviews.map((review) => (
-        <ReviewCard key={`${review.id}-${suffix}`} {...review} />
+        <ReviewCard key={`${review.id}-${suffix}`} {...review} className={cardClassName} />
       ))}
     </div>
   );
@@ -48,9 +51,26 @@ function VerticalReviewMarquee({ reviews, reverse = false, duration = 52 }) {
   );
 }
 
+function MobileHorizontalReviews({ reviews }) {
+  return (
+    <div className="mt-12 md:hidden">
+      <div className="-mx-6 flex gap-4 overflow-x-auto overscroll-x-contain px-6 pb-1 no-scrollbar snap-x snap-mandatory touch-pan-x">
+        {reviews.map((review) => (
+          <ReviewCard
+            key={review.id}
+            {...review}
+            className="w-[min(84vw,320px)] snap-center"
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function LandingReviews({ lang }) {
   const copy = getLandingReviewsCopy(lang);
   const [leftColumn, rightColumn] = getLandingReviewColumns(lang);
+  const allReviews = getLandingReviewsAll(lang);
 
   return (
     <section className="relative overflow-hidden border-y border-zinc-100 gradient-linkedin-soft">
@@ -72,7 +92,9 @@ export default function LandingReviews({ lang }) {
           </p>
         </div>
 
-        <div className="mt-12 grid gap-4 md:grid-cols-2 md:gap-5">
+        <MobileHorizontalReviews reviews={allReviews} />
+
+        <div className="mt-12 hidden gap-4 md:grid md:grid-cols-2 md:gap-5">
           <VerticalReviewMarquee reviews={leftColumn} duration={54} />
           <VerticalReviewMarquee reviews={rightColumn} reverse duration={48} />
         </div>

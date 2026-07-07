@@ -23,13 +23,18 @@ const TRUST_LOGO_ROW_2 = [
 ];
 
 const LOGO_SIZE_CLASS = {
-  default: "max-h-6 sm:max-h-7 md:max-h-8 max-w-[6.5rem] sm:max-w-[9rem]",
-  lg: "max-h-8 sm:max-h-10 md:max-h-11 max-w-[8.5rem] sm:max-w-[12rem]",
+  default: "max-h-6 max-w-[5.25rem] sm:max-h-7 md:max-h-8 sm:max-w-[9rem]",
+  lg: "max-h-8 max-w-[7.25rem] sm:max-h-10 md:max-h-11 sm:max-w-[12rem]",
 };
 
 function TrustLogo({ name, src, scale = "default" }) {
+  const boxClass =
+    scale === "lg"
+      ? "h-10 w-[7.75rem] sm:h-12 sm:w-44"
+      : "h-9 w-[5.75rem] sm:h-12 sm:w-40";
+
   return (
-    <div className="flex h-9 w-[5.5rem] shrink-0 items-center justify-center sm:h-12 sm:w-40">
+    <div className={`flex shrink-0 items-center justify-center ${boxClass}`}>
       <img
         src={src}
         alt={name}
@@ -41,10 +46,12 @@ function TrustLogo({ name, src, scale = "default" }) {
   );
 }
 
-function TrustLogoTrack({ logos, suffix, hidden = false }) {
+function TrustLogoTrack({ logos, suffix, hidden = false, loose = false }) {
   return (
     <div
-      className="flex shrink-0 items-center gap-3 pr-3 sm:gap-16 sm:pr-16"
+      className={`flex shrink-0 items-center sm:gap-16 sm:pr-16 ${
+        loose ? "gap-8 pr-8" : "gap-5 pr-5"
+      }`}
       aria-hidden={hidden || undefined}
     >
       {logos.map((logo) => (
@@ -54,7 +61,7 @@ function TrustLogoTrack({ logos, suffix, hidden = false }) {
   );
 }
 
-function TrustLogoMarqueeRow({ logos, reverse = false, duration = 36 }) {
+function TrustLogoMarqueeRow({ logos, reverse = false, duration = 36, loose = false }) {
   return (
     <div className="trust-marquee-mask w-full overflow-hidden">
       <div
@@ -67,6 +74,7 @@ function TrustLogoMarqueeRow({ logos, reverse = false, duration = 36 }) {
             logos={logos}
             suffix={`c${copy}`}
             hidden={copy > 0}
+            loose={loose}
           />
         ))}
       </div>
@@ -77,9 +85,9 @@ function TrustLogoMarqueeRow({ logos, reverse = false, duration = 36 }) {
 export default function LandingTrustLogos() {
   return (
     <div className="mt-6 w-[calc(100%+3rem)] max-w-none -mx-6 sm:mx-0 sm:w-full sm:max-w-5xl">
-      <div className="relative flex flex-col gap-3 sm:gap-5">
+      <div className="relative flex flex-col gap-5 sm:gap-5">
         <TrustLogoMarqueeRow logos={TRUST_LOGO_ROW_1} duration={34} />
-        <TrustLogoMarqueeRow logos={TRUST_LOGO_ROW_2} reverse duration={38} />
+        <TrustLogoMarqueeRow logos={TRUST_LOGO_ROW_2} reverse duration={38} loose />
         <div className="pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-white to-transparent sm:w-1/4" />
         <div className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-r from-transparent to-white sm:w-1/4" />
       </div>
