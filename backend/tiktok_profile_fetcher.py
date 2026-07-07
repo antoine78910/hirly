@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
+import time
 from typing import Any, Dict, List, Optional
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -114,7 +118,7 @@ def _fetch_videos_from_api(
 
     try:
         payload = response.json()
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, ValueError, AttributeError):
         return []
 
     item_list = payload.get("itemList") or []
@@ -122,19 +126,34 @@ def _fetch_videos_from_api(
 
 
 def _fetch_videos_from_tikwm(handle: str) -> List[Dict[str, Any]]:
-    response = httpx.get(
-        TIKWM_USER_POSTS_URL,
-        params={"unique_id": handle, "count": 35},
-        headers={"User-Agent": USER_AGENT},
-        timeout=25.0,
-    )
-    response.raise_for_status()
-    payload = response.json()
-    if payload.get("code") not in (0, "0", None):
-        return []
+    last_error: Optional[Exception] = None
+    for attempt in range(3):
+        try:
+            response = httpx.get(
+                TIKWM_USER_POSTS_URL,
+                params={"unique_id": handle, "count": 35},
+                headers={"User-Agent": USER_AGENT},
+                timeout=30.0,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            if payload.get("code") not in (0, "0", None):
+                logger.warning("tikwm_nonzero_code handle=%s code=%s", handle, payload.get("code"))
+                return []
 
-    videos = (payload.get("data") or {}).get("videos") or []
-    return [_parse_tikwm_video(item, handle) for item in videos if isinstance(item, dict)]
+            videos = (payload.get("data") or {}).get("videos") or []
+            return [_parse_tikwm_video(item, handle) for item in videos if isinstance(item, dict)]
+        except Exception as exc:
+            last_error = exc
+            if attempt < 2:
+                time.sleep(1.5 * (attempt + 1))
+                continue
+            logger.warning("tikwm_fetch_failed handle=%s error=%s", handle, exc)
+            return []
+
+    if last_error:
+        logger.warning("tikwm_fetch_failed handle=%s error=%s", handle, last_error)
+    return []
 
 
 def fetch_tiktok_profile(handle: str) -> Dict[str, Any]:
@@ -146,7 +165,7 @@ def fetch_tiktok_profile(handle: str) -> Dict[str, Any]:
     with httpx.Client(
         headers={"User-Agent": USER_AGENT, "Accept-Language": "en-US,en;q=0.9"},
         follow_redirects=True,
-        timeout=25.0,
+        timeout=30.0,
     ) as client:
         response = client.get(url)
         response.raise_for_status()

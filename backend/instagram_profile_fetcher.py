@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -56,29 +57,50 @@ def _parse_media_node(node: Dict[str, Any], handle: str) -> Dict[str, Any]:
     }
 
 
+def _fetch_profile_payload(clean_handle: str, profile_url: str) -> Dict[str, Any]:
+    last_error: Optional[Exception] = None
+    for attempt in range(3):
+        try:
+            response = httpx.get(
+                "https://www.instagram.com/api/v1/users/web_profile_info/",
+                params={"username": clean_handle},
+                headers={
+                    "User-Agent": USER_AGENT,
+                    "X-IG-App-ID": IG_APP_ID,
+                    "Accept": "*/*",
+                    "Referer": profile_url,
+                },
+                follow_redirects=True,
+                timeout=30.0,
+            )
+            if response.status_code in (429, 500, 502, 503, 504) and attempt < 2:
+                time.sleep(1.5 * (attempt + 1))
+                continue
+            response.raise_for_status()
+            payload = response.json()
+            user = (payload.get("data") or {}).get("user") or {}
+            if user:
+                return user
+            raise RuntimeError("Could not parse Instagram profile payload")
+        except Exception as exc:
+            last_error = exc
+            if attempt < 2:
+                time.sleep(1.5 * (attempt + 1))
+                continue
+            raise RuntimeError(f"Instagram profile fetch failed: {exc}") from exc
+
+    if last_error:
+        raise RuntimeError(f"Instagram profile fetch failed: {last_error}") from last_error
+    raise RuntimeError("Instagram profile fetch failed")
+
+
 def fetch_instagram_profile(handle: str) -> Dict[str, Any]:
     clean_handle = (handle or "").strip().lstrip("@")
     if not clean_handle:
         raise ValueError("Instagram handle is required")
 
     profile_url = f"https://www.instagram.com/{clean_handle}/"
-    response = httpx.get(
-        "https://www.instagram.com/api/v1/users/web_profile_info/",
-        params={"username": clean_handle},
-        headers={
-            "User-Agent": USER_AGENT,
-            "X-IG-App-ID": IG_APP_ID,
-            "Accept": "*/*",
-            "Referer": profile_url,
-        },
-        follow_redirects=True,
-        timeout=25.0,
-    )
-    response.raise_for_status()
-    payload = response.json()
-    user = (payload.get("data") or {}).get("user") or {}
-    if not user:
-        raise RuntimeError("Could not parse Instagram profile payload")
+    user = _fetch_profile_payload(clean_handle, profile_url)
 
     edges = (user.get("edge_owner_to_timeline_media") or {}).get("edges") or []
     videos: List[Dict[str, Any]] = []

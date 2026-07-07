@@ -92,3 +92,42 @@ def test_fetch_tiktok_profile_uses_tikwm_fallback(monkeypatch):
     assert len(profile["videos"]) == 1
     assert profile["videos"][0]["views"] == 1495
     assert profile["views_total"] == 1495
+
+
+def test_fetch_tiktok_profile_survives_tikwm_failure(monkeypatch):
+    html = """
+    <html><body>
+    <script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application/json">
+    {"__DEFAULT_SCOPE__":{"webapp.user-detail":{"userInfo":{"user":{"uniqueId":"hirlyjob","nickname":"Eva","secUid":"sec"},"stats":{"followerCount":2,"videoCount":2,"heartCount":132},"itemList":[]}}}}
+    </script></body></html>
+    """
+
+    class FakeResponse:
+        text = html
+        status_code = 200
+
+        def raise_for_status(self):
+            return None
+
+    class FakeClient:
+        cookies = {}
+
+        def get(self, url, **kwargs):
+            return FakeResponse()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def failing_tikwm_request(*args, **kwargs):
+        raise RuntimeError("tikwm unavailable")
+
+    monkeypatch.setattr("tiktok_profile_fetcher.httpx.Client", lambda **kwargs: FakeClient())
+    monkeypatch.setattr("tiktok_profile_fetcher.httpx.get", failing_tikwm_request)
+
+    profile = fetch_tiktok_profile("hirlyjob")
+    assert profile["followers"] == 2
+    assert profile["videos"] == []
+    assert profile["video_count"] == 2

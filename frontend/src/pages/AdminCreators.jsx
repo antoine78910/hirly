@@ -414,7 +414,14 @@ export default function AdminCreators() {
       setData(payload.dashboard || payload);
       const errors = payload.errors || [];
       if (errors.length) {
-        toast.error(`Some accounts could not be refreshed (${errors.length})`);
+        const labels = errors
+          .map((item) => {
+            const handle = item.handle ? `@${item.handle}` : "";
+            const name = item.name || item.creator_id || "Account";
+            return handle ? `${name} (${handle})` : name;
+          })
+          .join(", ");
+        toast.error(`Could not refresh: ${labels}`);
       } else {
         toast.success("Creator stats refreshed");
       }

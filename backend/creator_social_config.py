@@ -38,6 +38,22 @@ DEFAULT_CREATORS: List[Dict[str, Any]] = [
         "profile_url": "https://www.tiktok.com/@Mike_ways0",
         "tags": ["hirly"],
     },
+    {
+        "creator_id": "gerece_instagram",
+        "name": "Gerece",
+        "platform": "instagram",
+        "handle": "gerece934",
+        "profile_url": "https://www.instagram.com/gerece934/",
+        "tags": ["hirly"],
+    },
+    {
+        "creator_id": "gerece_tiktok",
+        "name": "Gerece",
+        "platform": "tiktok",
+        "handle": "gereceverse",
+        "profile_url": "https://www.tiktok.com/@gereceverse",
+        "tags": ["hirly"],
+    },
 ]
 
 

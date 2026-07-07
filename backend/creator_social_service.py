@@ -69,6 +69,9 @@ def refresh_all_creators() -> List[Dict[str, Any]]:
         except Exception as exc:
             rows.append({
                 "creator_id": creator["creator_id"],
+                "name": creator.get("name"),
+                "handle": creator.get("handle"),
+                "platform": creator.get("platform"),
                 "error": str(exc),
             })
     return rows
