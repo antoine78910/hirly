@@ -1,9 +1,21 @@
-"""DOM field extraction for browser application forms."""
+"""Universal DOM field extraction -- the one implementation for every ATS and
+every arbitrary friendly custom career portal.
+
+Nothing here is provider-specific; that's the point. The old system had a
+copy of similar logic duplicated/specialized per ATS engine. Here, the exact
+same script runs against any apply page, and the LLM agent (agent.py) reads
+the resulting structured element list the way a human reads a form -- by
+label and context, not by memorized selector.
+
+Extends the field extractor's original single-document scan (main frame
+only) with iframe traversal: many arbitrary company career portals embed
+their application form in a same-origin iframe, which the original scan
+would have silently returned zero fields for.
+"""
 
 from __future__ import annotations
 
 from typing import Any, Dict, List
-
 
 FIELD_EXTRACTOR_SCRIPT = r"""
 () => {
@@ -94,7 +106,7 @@ FIELD_EXTRACTOR_SCRIPT = r"""
     while (node && node.nodeType === Node.ELEMENT_NODE && node !== document.body) {
       if (!visibleElement(node)) return true;
       const classText = String(node.className || "").toLowerCase();
-      if (node.hidden || node.getAttribute("aria-hidden") === "true" || /\\bhidden\\b|display-none|is-hidden/.test(classText)) return true;
+      if (node.hidden || node.getAttribute("aria-hidden") === "true" || /\bhidden\b|display-none|is-hidden/.test(classText)) return true;
       node = node.parentElement;
     }
     return false;
@@ -123,7 +135,7 @@ FIELD_EXTRACTOR_SCRIPT = r"""
       element.getAttribute("placeholder") || "",
       container ? textOf(container) : "",
     ].join(" ").toLowerCase();
-    return /\\*|required|mandatory/.test(text) && !/optional/.test(text);
+    return /\*|required|mandatory/.test(text) && !/optional/.test(text);
   }
 
   function stableIdFor(element, index) {
@@ -261,7 +273,28 @@ FIELD_EXTRACTOR_SCRIPT = r"""
 """
 
 
-async def extract_fields(page: Any) -> List[Dict[str, Any]]:
-    fields = await page.evaluate(FIELD_EXTRACTOR_SCRIPT)
-    return [field for field in fields if isinstance(field, dict)]
-
+async def extract_fields(page: Any, *, max_frames: int = 6) -> List[Dict[str, Any]]:
+    """Extract every interactive field from the page's main document AND any
+    same-origin child frames (many arbitrary career-portal embeds render the
+    actual application form inside an iframe). Cross-origin frames can't be
+    introspected by design (browser security), and are skipped -- a job whose
+    form only exists behind a cross-origin iframe surfaces zero fields here,
+    which the caller treats the same as any other "form not found" case
+    (blocker, fall back to manual).
+    """
+    fields: List[Dict[str, Any]] = []
+    frames = list(getattr(page, "frames", None) or [page.main_frame])
+    for frame_index, frame in enumerate(frames[:max_frames]):
+        try:
+            frame_fields = await frame.evaluate(FIELD_EXTRACTOR_SCRIPT)
+        except Exception:
+            # Cross-origin or already-navigated-away frame; skip silently.
+            continue
+        if not isinstance(frame_fields, list):
+            continue
+        for item in frame_fields:
+            if not isinstance(item, dict):
+                continue
+            item["frame_index"] = frame_index
+            fields.append(item)
+    return fields

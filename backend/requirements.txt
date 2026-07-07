@@ -18,6 +18,9 @@ pymupdf==1.25.5
 Pillow==11.1.0
 pillow-heif==0.21.0
 
+# Browser automation (auto-apply agent)
+playwright==1.49.1
+
 # Test dependencies used by backend/tests
 requests==2.34.2
 
