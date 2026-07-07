@@ -2,26 +2,18 @@ export function getLandingReviewsCopy(lang) {
   if (lang === "fr") {
     return {
       badge: "Vrais avis. Vraies personnes.",
-      titleLead: "De vrais résultats, de vrais candidats :",
-      titleAccent: "comment ils utilisent Hirly pour décrocher un job plus vite.",
+      title: "De vrais résultats, de vrais candidats.",
+      titleAccent: "Ils ont trouvé plus vite avec Hirly.",
       subtitle:
-        "Découvrez ce que disent les candidats qui utilisent Hirly — sans filtre, juste des retours concrets.",
-      ratings: [
-        { label: "4.9", suffix: "/5 en accès anticipé", icon: "early" },
-        { label: "10×", suffix: "plus rapide que postuler à la main", icon: "speed" },
-      ],
+        "Ce que disent les candidats qui utilisent Hirly — sans filtre, juste des retours concrets.",
     };
   }
   return {
     badge: "Real feedback. Real people.",
-    titleLead: "Real results, real job seekers:",
-    titleAccent: "how people use Hirly to land jobs faster.",
+    title: "Real results from real candidates.",
+    titleAccent: "They found jobs faster with Hirly.",
     subtitle:
-      "See what candidates are saying about Hirly — no filters, just real wins.",
-    ratings: [
-      { label: "4.9", suffix: "/5 early access rating", icon: "early" },
-      { label: "10×", suffix: "faster than applying manually", icon: "speed" },
-    ],
+      "What candidates are saying about Hirly — no filters, just real wins.",
   };
 }
 

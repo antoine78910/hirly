@@ -32,7 +32,7 @@ describe("landingHeroCopy", () => {
       "emploi",
       "job d'été",
       "alternance",
-      "emploi saisonnier",
+      "saisonnier",
     ]);
     expect(getLandingHeroHighlightWidthCh("fr")).toBeGreaterThan(10);
     expect(getLandingHeroHeadline("fr", "apprenticeship")).toEqual({

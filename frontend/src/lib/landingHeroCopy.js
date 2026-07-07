@@ -59,7 +59,7 @@ const HERO_JOB_LABELS = {
     internship: "stage",
     apprenticeship: "alternance",
     summer_job: "job d'été",
-    seasonal_job: "emploi saisonnier",
+    seasonal_job: "saisonnier",
     default: "emploi",
   },
   en: {

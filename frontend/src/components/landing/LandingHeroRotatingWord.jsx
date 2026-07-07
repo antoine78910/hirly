@@ -38,13 +38,13 @@ export default function LandingHeroRotatingWord({ lang = "fr", contractType = nu
 
   const labels = useMemo(() => {
     const base = getLandingHeroRotatingLabels(lang);
-    if (!base.length) return ["job"];
+    if (!base.length) return [getLandingHeroJobLabel(lang, null)];
     return [...base, base[0]];
   }, [lang]);
 
   const initialLabel = useMemo(() => {
     if (contractType) return getLandingHeroJobLabel(lang, contractType);
-    return labels[0] ?? "job";
+    return labels[0] ?? getLandingHeroJobLabel(lang, null);
   }, [contractType, lang, labels]);
 
   useEffect(() => {
