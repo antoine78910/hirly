@@ -1,26 +1,43 @@
 ﻿// REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
 import { Button } from "../components/ui/button";
-import { ArrowRight, Sparkles, Zap, FileCheck2, Inbox, Heart, X, Star } from "lucide-react";
+import { ArrowRight, Check, Sparkles, Zap, FileCheck2, Inbox, Heart, X, Star } from "lucide-react";
 import { motion } from "framer-motion";
 import { useEffect } from "react";
 import Logo from "../components/Logo";
 import { BRAND, supportMailto } from "../lib/brand";
 import { startGoogleLogin } from "../lib/auth";
-import { useNavigate, useSearchParams, Link } from "react-router-dom";
+import { useNavigate, useSearchParams, useLocation, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { trackEvent } from "../lib/analytics";
 import { trackDatafastGoal } from "../lib/datafast";
 import { preloadOnboardingIntroImages } from "../lib/onboardingImagePreload";
 import { useAppLocale } from "../context/AppLocaleContext";
 import LandingFaq from "../components/landing/LandingFaq";
+import LandingHeroRotatingWord from "../components/landing/LandingHeroRotatingWord";
 import { goToApp } from "../lib/appDomains";
 import { PRIVACY_PATH, TERMS_PATH } from "../lib/legalPaths";
+import {
+  getLandingHeroBullets,
+  getLandingHeroCta,
+  getLandingHeroHeadline,
+  getLandingHeroSubtitle,
+  getLandingContractSlug,
+  resolveLandingContractFromLocation,
+} from "../lib/landingHeroCopy";
 
 export default function Landing() {
   const navigate = useNavigate();
   const { user, hasProfile, hasPreferences, loading } = useAuth();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const redirectParam = searchParams.get("redirect");
+  const landingContractType = resolveLandingContractFromLocation(location.pathname, searchParams);
+  const landingContractSlug = getLandingContractSlug(landingContractType);
+  const { lang, setLang } = useAppLocale();
+  const heroHeadline = getLandingHeroHeadline(lang, landingContractType);
+  const heroCta = getLandingHeroCta(lang, landingContractType);
+  const heroSubtitle = getLandingHeroSubtitle(lang);
+  const heroBullets = getLandingHeroBullets(lang);
   const postLoginPath = redirectParam?.startsWith("http")
     ? (() => {
         try {
@@ -31,7 +48,6 @@ export default function Landing() {
         }
       })()
     : (redirectParam || "/swipe");
-  const { lang, setLang } = useAppLocale();
 
   useEffect(() => {
     trackEvent("landing_view");
@@ -60,12 +76,17 @@ export default function Landing() {
     startGoogleLogin(postLoginPath);
   };
 
-  const onStartSwiping = (location = "hero") => {
+  const onboardingPath = landingContractSlug
+    ? `/onboarding?contract=${landingContractSlug}`
+    : "/onboarding";
+
+  const onStartSwiping = (ctaLocation = "hero") => {
     if (loading) return;
     trackEvent("cta_start_swiping_clicked", { authenticated: Boolean(user) });
     trackDatafastGoal("lp_cta_start", {
-      location,
+      location: ctaLocation,
       authenticated: user ? "true" : "false",
+      contract: landingContractSlug || "",
     });
     if (user) {
       if (hasProfile && hasPreferences) {
@@ -76,11 +97,11 @@ export default function Landing() {
         goToApp(postLoginPath);
         return;
       }
-      navigate("/onboarding");
+      navigate(onboardingPath);
       return;
     }
     trackEvent("cta_signup_clicked", { location: "landing_start_swiping" });
-    navigate("/onboarding");
+    navigate(onboardingPath);
   };
 
   return (
@@ -130,29 +151,33 @@ export default function Landing() {
             transition={{ duration: 0.6, delay: 0.05 }}
             className="font-display font-black text-5xl sm:text-6xl lg:text-7xl tracking-tighter leading-[0.95]"
           >
-            {lang === "fr" ? (
-              <>Arrête de passer des heures à <span className="italic text-swiipr-gradient">postuler.</span></>
-            ) : (
-              <>Stop spending hours <span className="italic text-swiipr-gradient">applying.</span></>
-            )}
+            <span className="block">
+              <span className="inline-flex max-w-full flex-nowrap items-baseline justify-center">
+                {heroHeadline.line1Prefix}
+                <LandingHeroRotatingWord lang={lang} contractType={landingContractType} />
+              </span>
+            </span>
+            <span className="block">{heroHeadline.line2}</span>
+            <span className="block">
+              {heroHeadline.line3Prefix}
+              <span className="italic text-swiipr-gradient">{heroHeadline.accent}</span>
+            </span>
           </motion.h1>
 
           <motion.p
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.15 }}
-            className="mt-6 text-lg sm:text-xl text-zinc-600 max-w-2xl mx-auto leading-relaxed"
+            className="mt-5 text-sm sm:text-base text-zinc-500 max-w-xl mx-auto leading-relaxed"
           >
-            {lang === "fr"
-              ? "L'IA trouve les offres et postule pour toi."
-              : "AI finds jobs and applies for you."}
+            {heroSubtitle}
           </motion.p>
 
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.25 }}
-            className="mt-10 flex flex-col items-center justify-center gap-3"
+            className="mt-8 flex flex-col items-center justify-center gap-3"
           >
             <Button
               data-testid="hero-cta-btn"
@@ -161,10 +186,48 @@ export default function Landing() {
               size="lg"
               className="rounded-full gradient-linkedin hover:opacity-90 text-white font-semibold h-12 px-7 text-base pulse-ring"
             >
-              {lang === "fr" ? "Trouve ton job maintenant" : "Find your job now"}
+              {heroCta}
               <ArrowRight className="ml-1.5 w-4 h-4" />
             </Button>
           </motion.div>
+
+          <motion.ul
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.3 }}
+            className="mt-5 mx-auto hidden w-full max-w-3xl grid-cols-2 gap-2 px-2 lg:grid"
+          >
+            {heroBullets.map((bullet) => (
+              <li
+                key={bullet}
+                className="flex items-center justify-center gap-2 text-sm leading-snug text-zinc-600"
+              >
+                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                  <Check className="h-3 w-3" strokeWidth={2.5} />
+                </span>
+                <span>{bullet}</span>
+              </li>
+            ))}
+          </motion.ul>
+
+          <motion.ul
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.3 }}
+            className="mt-5 mx-auto grid w-full max-w-lg grid-cols-1 gap-2 px-3 sm:max-w-2xl sm:grid-cols-2 lg:hidden"
+          >
+            {heroBullets.map((bullet) => (
+              <li
+                key={`mobile-${bullet}`}
+                className="flex items-center gap-2 text-sm leading-snug text-zinc-600"
+              >
+                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                  <Check className="h-3 w-3" strokeWidth={2.5} />
+                </span>
+                <span>{bullet}</span>
+              </li>
+            ))}
+          </motion.ul>
 
           {/* Demo card mockup */}
           <motion.div

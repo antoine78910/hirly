@@ -37,6 +37,7 @@ import {
   LongTermResultsChart,
   InterviewTargetDashes,
 } from "../components/onboarding/OnboardingVisuals";
+import { resolveLandingContractType } from "../lib/landingHeroCopy";
 import {
   INTRO_SLIDES,
   INTRO_SLIDES_FR,
@@ -156,9 +157,12 @@ export default function Onboarding() {
   const [onboardingLocationData, setOnboardingLocationData] = useState(
     () => readOnboardingPreviewBoot(STEP_ORDER)?.state?.onboardingLocationData ?? null,
   );
-  const [contractType, setContractType] = useState(
-    () => readOnboardingPreviewBoot(STEP_ORDER)?.state?.contractType ?? null,
-  );
+  const [contractType, setContractType] = useState(() => {
+    const bootType = readOnboardingPreviewBoot(STEP_ORDER)?.state?.contractType;
+    if (bootType) return bootType;
+    const params = new URLSearchParams(window.location.search);
+    return resolveLandingContractType(params.get("contract") || params.get("type"));
+  });
   const [triedOtherApps, setTriedOtherApps] = useState(
     () => readOnboardingPreviewBoot(STEP_ORDER)?.state?.triedOtherApps ?? null,
   );

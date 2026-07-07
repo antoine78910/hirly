@@ -53,6 +53,17 @@ const MARKETING_ROUTE_PREFIXES = [
 
 const SHARED_ROUTE_PREFIXES = ["/auth/callback"];
 
+/** Keep in sync with `LANDING_CONTRACT_PATH_SLUGS` in landingHeroCopy.js */
+const CONTRACT_LANDING_PATHS = new Set([
+  "/cdi",
+  "/cdd",
+  "/stage",
+  "/alternance",
+  "/job-ete",
+  "/job-d-ete",
+  "/summer-job",
+]);
+
 export function currentHostname() {
   if (typeof window === "undefined") return "";
   return window.location.hostname.toLowerCase();
@@ -89,6 +100,7 @@ export function isAppPath(pathname) {
 export function isMarketingPath(pathname) {
   const path = pathname || "";
   if (path === "/") return true;
+  if (CONTRACT_LANDING_PATHS.has(path)) return true;
   return MARKETING_ROUTE_PREFIXES.some(
     (prefix) => path === prefix || path.startsWith(`${prefix}/`),
   );

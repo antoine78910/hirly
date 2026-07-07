@@ -7,6 +7,7 @@ import { AppLocaleProvider } from "@/context/AppLocaleContext";
 import Terms from "@/pages/legal/Terms";
 import Privacy from "@/pages/legal/Privacy";
 import Landing from "@/pages/Landing";
+import { LANDING_CONTRACT_PATH_SLUGS } from "@/lib/landingHeroCopy";
 import Blog from "@/pages/seo/Blog";
 import BlogPost from "@/pages/seo/BlogPost";
 import Compare from "@/pages/seo/Compare";
@@ -81,6 +82,7 @@ function isTrainingRoutePath(pathname) {
 
 function shouldShowBottomNav(pathname) {
   if (pathname === "/" || pathname === "/auth/callback") return false;
+  if (LANDING_CONTRACT_PATH_SLUGS.some((slug) => pathname === `/${slug}`)) return false;
   if (pathname === "/signup") return false;
   if (pathname.startsWith("/invite/")) return false;
   if (pathname === "/how-it-works" || pathname === "/use-cases") return false;
@@ -138,6 +140,9 @@ function AppRouter() {
       <ScrollManager />
       <Routes>
         <Route path="/" element={<Landing />} />
+        {LANDING_CONTRACT_PATH_SLUGS.map((slug) => (
+          <Route key={`landing-${slug}`} path={`/${slug}`} element={<Landing />} />
+        ))}
         <Route path="/how-it-works" element={<HowItWorks />} />
         <Route path="/use-cases" element={<UseCases />} />
         <Route path="/blog" element={<Blog />} />
