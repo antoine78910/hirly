@@ -8,11 +8,20 @@ from .ashby import AshbyAtsAdapter
 from .base import AtsJobAdapter
 from .greenhouse import GreenhouseAtsAdapter
 from .lever import LeverAtsAdapter
+from .personio import PersonioAtsAdapter
 from .smartrecruiters import SmartRecruitersAtsAdapter
+from .teamtailor import TeamtailorAtsAdapter
 
 
 def default_ats_adapters() -> Dict[str, AtsJobAdapter]:
-    adapters = [GreenhouseAtsAdapter(), LeverAtsAdapter(), AshbyAtsAdapter(), SmartRecruitersAtsAdapter()]
+    adapters = [
+        GreenhouseAtsAdapter(),
+        LeverAtsAdapter(),
+        AshbyAtsAdapter(),
+        SmartRecruitersAtsAdapter(),
+        PersonioAtsAdapter(),
+        TeamtailorAtsAdapter(),
+    ]
     return {adapter.provider: adapter for adapter in adapters}
 
 

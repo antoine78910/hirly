@@ -202,7 +202,7 @@ async def run_ats_direct_maintenance(
         dry_run=dry_run,
     )
     friendly_company_pages = None
-    if env_bool("JOBS_DISCOVER_FRIENDLY_COMPANY_PAGES_ENABLED", False):
+    if env_bool("JOBS_DISCOVER_FRIENDLY_COMPANY_PAGES_ENABLED", True):
         friendly_company_pages = await discover_friendly_company_career_pages(db, dry_run=dry_run)
     return {
         "enabled": True,
@@ -211,6 +211,49 @@ async def run_ats_direct_maintenance(
         "refresh": refresh,
         "friendly_company_pages": friendly_company_pages,
     }
+
+
+_maintenance_loop_lock = asyncio.Lock()
+_last_maintenance_summary: Optional[Dict[str, Any]] = None
+
+
+def ats_direct_maintenance_loop_enabled() -> bool:
+    return env_bool("JOBS_ATS_DIRECT_ENABLED", True) and env_bool("JOBS_ATS_DIRECT_MAINTENANCE_LOOP_ENABLED", True)
+
+
+def last_maintenance_summary() -> Optional[Dict[str, Any]]:
+    return _last_maintenance_summary
+
+
+async def run_ats_direct_maintenance_loop(db) -> None:
+    """Periodic driver for run_ats_direct_maintenance, started from app startup.
+
+    Before this loop existed, growing direct-ATS coverage (discovering new
+    company boards from cached jobs, refreshing known boards directly, and
+    probing unknown career pages for friendliness) only happened if someone
+    manually called POST /admin/jobs/maintenance -- so in practice it almost
+    never ran. This makes it self-sustaining.
+    """
+    if not ats_direct_maintenance_loop_enabled():
+        logger.info("ats_direct_maintenance_loop_disabled")
+        return
+    interval_minutes = max(5, env_int("JOBS_ATS_DIRECT_MAINTENANCE_INTERVAL_MINUTES", 30))
+    initial_delay = max(0, env_int("JOBS_ATS_DIRECT_MAINTENANCE_INITIAL_DELAY_SECONDS", 90))
+    logger.info(
+        "ats_direct_maintenance_loop_started interval_minutes=%s initial_delay_seconds=%s",
+        interval_minutes,
+        initial_delay,
+    )
+    await asyncio.sleep(initial_delay)
+    while True:
+        global _last_maintenance_summary
+        try:
+            if ats_direct_maintenance_loop_enabled():
+                async with _maintenance_loop_lock:
+                    _last_maintenance_summary = await run_ats_direct_maintenance(db)
+        except Exception as exc:
+            logger.warning("ats_direct_maintenance_loop_error error=%s", str(exc)[:300])
+        await asyncio.sleep(interval_minutes * 60)
 
 
 async def discover_friendly_company_career_pages(
@@ -389,6 +432,10 @@ def _careers_url(provider: str, source_key: str) -> str:
         return f"https://jobs.ashbyhq.com/{source_key}"
     if provider == "smartrecruiters":
         return f"https://jobs.smartrecruiters.com/{source_key}"
+    if provider == "personio":
+        return f"https://{source_key}.jobs.personio.com/"
+    if provider == "teamtailor":
+        return f"https://{source_key}.teamtailor.com/jobs"
     return source_key
 
 

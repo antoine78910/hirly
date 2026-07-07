@@ -264,6 +264,56 @@ def test_discover_friendly_company_career_pages_dry_run_skips_writes(monkeypatch
     assert len(db.friendly_company_career_pages.rows) == 0
 
 
+def test_ats_direct_maintenance_loop_disabled_flag(monkeypatch):
+    monkeypatch.setenv("JOBS_ATS_DIRECT_MAINTENANCE_LOOP_ENABLED", "false")
+    assert service.ats_direct_maintenance_loop_enabled() is False
+
+
+def test_run_ats_direct_maintenance_loop_runs_and_records_summary(monkeypatch):
+    # Regression: growing direct-ATS coverage used to require someone to
+    # manually POST /admin/jobs/maintenance -- this loop is what makes it
+    # self-sustaining. Verify it actually invokes run_ats_direct_maintenance
+    # on its own once started, without needing an external trigger.
+    calls = {"count": 0}
+
+    async def fake_maintenance(db, *, dry_run=False):
+        calls["count"] += 1
+        return {"enabled": True, "run": calls["count"]}
+
+    monkeypatch.setenv("JOBS_ATS_DIRECT_MAINTENANCE_INITIAL_DELAY_SECONDS", "0")
+    monkeypatch.setenv("JOBS_ATS_DIRECT_MAINTENANCE_INTERVAL_MINUTES", "5")
+    monkeypatch.setattr(service, "run_ats_direct_maintenance", fake_maintenance)
+
+    async def run_briefly():
+        task = asyncio.ensure_future(service.run_ats_direct_maintenance_loop(_FakeDB()))
+        for _ in range(50):
+            await asyncio.sleep(0)
+            if calls["count"] >= 1:
+                break
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    asyncio.run(run_briefly())
+    assert calls["count"] >= 1
+    assert service.last_maintenance_summary() == {"enabled": True, "run": calls["count"]}
+
+
+def test_run_ats_direct_maintenance_loop_noop_when_disabled(monkeypatch):
+    calls = {"count": 0}
+
+    async def fake_maintenance(db, *, dry_run=False):
+        calls["count"] += 1
+        return {"enabled": True}
+
+    monkeypatch.setenv("JOBS_ATS_DIRECT_MAINTENANCE_LOOP_ENABLED", "false")
+    monkeypatch.setattr(service, "run_ats_direct_maintenance", fake_maintenance)
+    asyncio.run(service.run_ats_direct_maintenance_loop(_FakeDB()))
+    assert calls["count"] == 0
+
+
 def test_maintenance_respects_ats_flag(monkeypatch):
     calls = []
 

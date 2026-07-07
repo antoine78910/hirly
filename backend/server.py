@@ -113,6 +113,7 @@ from ats_source_service import (
     discover_friendly_company_career_pages,
     refresh_ats_source,
     refresh_known_ats_sources,
+    run_ats_direct_maintenance_loop,
 )
 from job_validation import cheap_validate_job_applyability
 from datafast_attribution import datafast_stripe_metadata, merge_stripe_metadata
@@ -13342,6 +13343,7 @@ async def startup_seed():
     asyncio.create_task(_startup_seed_impl())
     asyncio.create_task(_resume_pending_application_generation())
     asyncio.create_task(run_france_travail_harvest_loop(db))
+    asyncio.create_task(run_ats_direct_maintenance_loop(db))
 
 
 @app.on_event("shutdown")
