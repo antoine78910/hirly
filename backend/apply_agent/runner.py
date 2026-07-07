@@ -174,6 +174,11 @@ async def run_apply_attempt(
                 return result
 
             await _click_submit_and_verify(page, result)
+            if db is not None and recipe_key and not result.captcha_required:
+                # CAPTCHA outcomes are excluded from trust scoring -- they
+                # reflect the site's bot-wall policy, not whether our fills
+                # were correct, so they'd distort the success rate either way.
+                await recipes_module.record_submit_outcome(db, recipe_key, provider, success=result.success_detected)
             return result
 
 

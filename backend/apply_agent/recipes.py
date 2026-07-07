@@ -137,3 +137,69 @@ async def record_recipe_failure(db, key: str) -> None:
         )
     except Exception as exc:
         logger.warning("apply_agent_recipe_failure_record_failed key=%s error=%s", key, str(exc)[:200])
+
+
+# --- Per-domain trust scoring (Phase 4) -----------------------------------
+# Deliberately a *separate* counter pair from success_count/failure_count
+# above: those measure "did the cached field mapping still work" (a fill-
+# quality signal used to decide whether replaying beats re-asking the
+# agent). These measure "did a real submit attempt on this domain actually
+# get confirmed" -- the signal a human reviewing this data would use to
+# decide whether a domain has earned unattended trust. Nothing in this
+# codebase currently *acts* on that trust automatically (no unattended
+# auto-submit trigger exists) -- this only makes the evidence real and
+# visible instead of the static, unverified ATS allowlist it replaces.
+
+MIN_SUBMITS_FOR_TRUST = 5
+MIN_SUCCESS_RATE_FOR_TRUST = 0.85
+
+
+async def record_submit_outcome(db, key: str, provider: str, *, success: bool) -> None:
+    if db is None or not key:
+        return
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        existing = await db.apply_agent_recipes.find_one({"id": key}, {"_id": 0}) or {}
+        field = "submit_success_count" if success else "submit_failure_count"
+        await db.apply_agent_recipes.update_one(
+            {"id": key},
+            {"$set": {
+                "id": key,
+                "provider": provider,
+                field: int(existing.get(field) or 0) + 1,
+                "last_used_at": now,
+                "updated_at": now,
+                "created_at": existing.get("created_at") or now,
+            }},
+            upsert=True,
+        )
+    except Exception as exc:
+        logger.warning("apply_agent_submit_outcome_record_failed key=%s error=%s", key, str(exc)[:200])
+
+
+def domain_trust_summary(recipe: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    recipe = recipe or {}
+    successes = int(recipe.get("submit_success_count") or 0)
+    failures = int(recipe.get("submit_failure_count") or 0)
+    total = successes + failures
+    rate = round(successes / total, 4) if total else None
+    trusted = bool(
+        total >= MIN_SUBMITS_FOR_TRUST
+        and rate is not None
+        and rate >= MIN_SUCCESS_RATE_FOR_TRUST
+    )
+    return {
+        "submit_success_count": successes,
+        "submit_failure_count": failures,
+        "total_submits": total,
+        "success_rate": rate,
+        "trusted_for_unattended_submit": trusted,
+        "min_submits_required": MIN_SUBMITS_FOR_TRUST,
+        "min_success_rate_required": MIN_SUCCESS_RATE_FOR_TRUST,
+    }
+
+
+async def get_domain_trust(db, key: str) -> Dict[str, Any]:
+    recipe = await get_recipe(db, key) if db is not None and key else None
+    return domain_trust_summary(recipe)

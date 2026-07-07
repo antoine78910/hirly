@@ -149,6 +149,8 @@ TABLE_FILTER_COLUMNS = {
         "field_recipes",
         "success_count",
         "failure_count",
+        "submit_success_count",
+        "submit_failure_count",
         "last_used_at",
         "last_success_at",
         "created_at",

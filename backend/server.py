@@ -9443,11 +9443,18 @@ async def _run_agent_apply(job_id: str, user: User, click_submit: bool = False) 
             }},
         )
 
+    from apply_agent.recipes import get_domain_trust, recipe_key_for_url
+    domain_trust = None
+    if result_dict.get("application_url"):
+        recipe_key = recipe_key_for_url(result_dict["application_url"])
+        domain_trust = await get_domain_trust(db, recipe_key)
+
     return {
         "job_id": job["job_id"],
         "application_id": app_doc["application_id"],
         "company": job.get("company"),
         "title": job.get("title"),
+        "domain_trust": domain_trust,
         **result_dict,
     }
 

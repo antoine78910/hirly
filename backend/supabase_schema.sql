@@ -207,6 +207,8 @@ CREATE TABLE IF NOT EXISTS apply_agent_recipes (
   field_recipes JSONB,
   success_count INTEGER DEFAULT 0,
   failure_count INTEGER DEFAULT 0,
+  submit_success_count INTEGER DEFAULT 0,
+  submit_failure_count INTEGER DEFAULT 0,
   last_used_at TIMESTAMPTZ,
   last_success_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT now(),
@@ -216,6 +218,8 @@ CREATE TABLE IF NOT EXISTS apply_agent_recipes (
 ALTER TABLE apply_agent_recipes ADD COLUMN IF NOT EXISTS provider TEXT;
 ALTER TABLE apply_agent_recipes ADD COLUMN IF NOT EXISTS field_recipes JSONB;
 ALTER TABLE apply_agent_recipes ADD COLUMN IF NOT EXISTS success_count INTEGER DEFAULT 0;
+ALTER TABLE apply_agent_recipes ADD COLUMN IF NOT EXISTS submit_success_count INTEGER DEFAULT 0;
+ALTER TABLE apply_agent_recipes ADD COLUMN IF NOT EXISTS submit_failure_count INTEGER DEFAULT 0;
 ALTER TABLE apply_agent_recipes ADD COLUMN IF NOT EXISTS failure_count INTEGER DEFAULT 0;
 ALTER TABLE apply_agent_recipes ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ;
 ALTER TABLE apply_agent_recipes ADD COLUMN IF NOT EXISTS last_success_at TIMESTAMPTZ;
