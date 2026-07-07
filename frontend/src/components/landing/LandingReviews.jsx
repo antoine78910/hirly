@@ -6,25 +6,39 @@ import {
 
 const MARQUEE_COPIES = 4;
 
-function ReviewCard({ name, subline, quote }) {
+const MOBILE_CARD_CLASS = "w-[calc((100vw-3.75rem)/2)] max-w-[11.5rem]";
+
+function ReviewCard({ name, subline, quote, className = "", compact = false }) {
   return (
-    <article className="w-full shrink-0 rounded-xl border border-zinc-200/80 bg-white p-4 shadow-[0_0_2px_rgba(0,0,0,0.08)] sm:p-5">
-      <div className="mb-3">
-        <p className="font-display text-[0.95rem] font-bold leading-snug text-zinc-900 sm:text-base">
-          {name}
-        </p>
-        <p className="mt-0.5 text-xs font-medium text-linkedin">{subline}</p>
-      </div>
-      <p className="text-sm leading-relaxed text-zinc-600">{quote}</p>
+    <article
+      className={`shrink-0 rounded-2xl border border-zinc-200 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)] ${
+        compact ? "p-3.5" : "p-5 sm:p-6"
+      } ${className}`}
+    >
+      <p
+        className={`font-display font-bold leading-snug text-zinc-900 ${
+          compact ? "text-[0.85rem]" : "text-[0.95rem] sm:text-base"
+        }`}
+      >
+        {name}
+      </p>
+      <p className={`mt-1 text-linkedin ${compact ? "text-[11px] leading-snug" : "text-sm"}`}>{subline}</p>
+      <p
+        className={`mt-2 leading-relaxed text-zinc-700 ${
+          compact ? "line-clamp-4 text-[11px]" : "mt-3 text-sm"
+        }`}
+      >
+        {quote}
+      </p>
     </article>
   );
 }
 
-function ReviewTrack({ reviews, suffix, hidden = false }) {
+function ReviewTrack({ reviews, suffix, hidden = false, cardClassName = "w-full" }) {
   return (
     <div className="flex shrink-0 flex-col gap-4" aria-hidden={hidden || undefined}>
       {reviews.map((review) => (
-        <ReviewCard key={`${review.id}-${suffix}`} {...review} />
+        <ReviewCard key={`${review.id}-${suffix}`} {...review} className={cardClassName} />
       ))}
     </div>
   );
@@ -46,6 +60,45 @@ function VerticalReviewMarquee({ reviews, reverse = false, duration = 52 }) {
           />
         ))}
       </div>
+    </div>
+  );
+}
+
+function HorizontalReviewTrack({ reviews, suffix, hidden = false }) {
+  return (
+    <div className="flex shrink-0 items-stretch gap-3 pr-3" aria-hidden={hidden || undefined}>
+      {reviews.map((review) => (
+        <ReviewCard key={`${review.id}-${suffix}`} {...review} className={MOBILE_CARD_CLASS} compact />
+      ))}
+    </div>
+  );
+}
+
+function MobileHorizontalReviewRow({ reviews, reverse = false, duration = 52 }) {
+  return (
+    <div className="pain-marquee-mask w-full overflow-hidden">
+      <div
+        className={`flex w-max flex-nowrap items-stretch ${reverse ? "pain-marquee-right" : "pain-marquee-left"}`}
+        style={{ animationDuration: `${duration}s` }}
+      >
+        {Array.from({ length: MARQUEE_COPIES }, (_, copy) => (
+          <HorizontalReviewTrack
+            key={copy}
+            reviews={reviews}
+            suffix={`m${copy}`}
+            hidden={copy > 0}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MobileHorizontalReviews({ leftColumn, rightColumn }) {
+  return (
+    <div className="-mx-6 mt-12 flex flex-col gap-4 px-6 md:hidden">
+      <MobileHorizontalReviewRow reviews={leftColumn} duration={54} />
+      <MobileHorizontalReviewRow reviews={rightColumn} reverse duration={48} />
     </div>
   );
 }
@@ -74,7 +127,9 @@ export default function LandingReviews({ lang }) {
           </p>
         </div>
 
-        <div className="mt-12 grid gap-4 md:grid-cols-2 md:gap-5">
+        <MobileHorizontalReviews leftColumn={leftColumn} rightColumn={rightColumn} />
+
+        <div className="mt-12 hidden gap-4 md:grid md:grid-cols-2 md:gap-5">
           <VerticalReviewMarquee reviews={leftColumn} duration={54} />
           <VerticalReviewMarquee reviews={rightColumn} reverse duration={48} />
         </div>

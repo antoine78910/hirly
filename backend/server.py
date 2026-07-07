@@ -14,7 +14,7 @@ import asyncio
 if sys.platform.startswith("win"):
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, UploadFile, File, Depends, Cookie, Header, Query
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, UploadFile, File, Depends, Cookie, Header, Query, Body
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -50,6 +50,7 @@ from db import create_database_adapter
 from db.supabase_adapter import count_supabase_table, test_supabase_connection
 from influencer_store import create_influencer, get_influencer, list_influencers, update_influencer
 from creator_social_service import build_dashboard, refresh_all_creators, refresh_creator
+from creator_social_config import add_creator as add_tracked_creator
 from creator_invite_store import (
     INVITE_TYPE_CREATOR,
     INVITE_TYPE_DEMO,
@@ -3040,6 +3041,7 @@ async def claude_generate_application(profile: Dict[str, Any], job: Dict[str, An
         "target_location": profile.get("target_location"),
         "remote_preference": profile.get("remote_preference"),
         "template_style": profile.get("template_style", "modern"),
+        "cover_letter_reference": (profile.get("cover_letter_text") or "")[:6000],
     }
     job_payload = {
         "title": job.get("title"),
@@ -3775,6 +3777,7 @@ async def download_original_cv(user: User = Depends(get_current_user)):
 
 MAX_PROFILE_DOCUMENT_BYTES = 10 * 1024 * 1024
 PROFILE_DOCUMENT_EXTENSIONS = {".pdf", ".docx", ".txt", ".png", ".jpg", ".jpeg", ".webp"}
+COVER_LETTER_EXTENSIONS = {".pdf", ".docx", ".txt"}
 
 
 def _mime_from_profile_document_filename(filename: str) -> str:
@@ -3890,11 +3893,93 @@ async def delete_profile_document(document_id: str, user: User = Depends(get_cur
     return {"ok": True}
 
 
+@api_router.post("/profile/cover-letter")
+async def upload_cover_letter(file: UploadFile = File(...), user: User = Depends(get_current_user)):
+    import base64
+
+    content = await file.read()
+    if len(content) > MAX_PROFILE_DOCUMENT_BYTES:
+        raise HTTPException(status_code=400, detail="File must be 10MB or smaller")
+    filename = file.filename or "cover_letter"
+    ext = filename.lower()[filename.rfind(".") :] if "." in filename else ""
+    if ext not in COVER_LETTER_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Please upload a PDF, DOCX, or TXT cover letter")
+
+    cover_letter_text = extract_text_from_upload(filename, content, file.content_type).strip()
+    mime = _mime_from_profile_document_filename(filename)
+    uploaded_at = datetime.now(timezone.utc).isoformat()
+
+    await db.profiles.update_one(
+        {"user_id": user.user_id},
+        {
+            "$set": {
+                "cover_letter_filename": filename,
+                "cover_letter_mime": mime,
+                "cover_letter_original_b64": base64.b64encode(content).decode("ascii"),
+                "cover_letter_text": cover_letter_text,
+                "cover_letter_uploaded_at": uploaded_at,
+                "updated_at": uploaded_at,
+            }
+        },
+        upsert=True,
+    )
+    return {
+        "ok": True,
+        "cover_letter_filename": filename,
+        "cover_letter_uploaded_at": uploaded_at,
+        "has_cover_letter_text": bool(cover_letter_text),
+    }
+
+
+@api_router.get("/profile/cover-letter/original")
+async def download_cover_letter_original(user: User = Depends(get_current_user)):
+    import base64
+    from fastapi.responses import Response as FastAPIResponse
+
+    profile = await db.profiles.find_one(
+        {"user_id": user.user_id},
+        {"_id": 0, "cover_letter_original_b64": 1, "cover_letter_mime": 1, "cover_letter_filename": 1},
+    )
+    if not profile or not profile.get("cover_letter_original_b64"):
+        raise HTTPException(status_code=404, detail="No cover letter stored")
+    content = base64.b64decode(profile["cover_letter_original_b64"])
+    filename = profile.get("cover_letter_filename") or "cover_letter"
+    return FastAPIResponse(
+        content=content,
+        media_type=profile.get("cover_letter_mime", "application/octet-stream"),
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@api_router.delete("/profile/cover-letter")
+async def delete_cover_letter(user: User = Depends(get_current_user)):
+    profile = await db.profiles.find_one(
+        {"user_id": user.user_id},
+        {"_id": 0, "cover_letter_filename": 1},
+    )
+    if not profile or not profile.get("cover_letter_filename"):
+        raise HTTPException(status_code=404, detail="No cover letter stored")
+    await db.profiles.update_one(
+        {"user_id": user.user_id},
+        {
+            "$unset": {
+                "cover_letter_filename": "",
+                "cover_letter_mime": "",
+                "cover_letter_original_b64": "",
+                "cover_letter_text": "",
+                "cover_letter_uploaded_at": "",
+            },
+            "$set": {"updated_at": datetime.now(timezone.utc).isoformat()},
+        },
+    )
+    return {"ok": True}
+
+
 @api_router.get("/profile")
 async def get_profile(user: User = Depends(get_current_user)):
     profile = await db.profiles.find_one(
         {"user_id": user.user_id},
-        {"_id": 0, "cv_original_b64": 0},
+        {"_id": 0, "cv_original_b64": 0, "cover_letter_original_b64": 0},
     )
     if not profile:
         return None
@@ -8608,6 +8693,21 @@ def _parse_creator_id_filters(
     if creator_id:
         return [creator_id]
     return None
+
+
+@api_router.post("/admin/creator-social/creators")
+async def admin_creator_social_add(
+    admin: User = Depends(require_admin_user),
+    payload: dict = Body(...),
+):
+    platform = str(payload.get("platform") or "").strip()
+    handle = str(payload.get("handle") or "").strip()
+    name = payload.get("name")
+    try:
+        creator = add_tracked_creator(platform=platform, handle=handle, name=name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "creator": creator, "dashboard": build_dashboard()}
 
 
 @api_router.get("/admin/creator-social")

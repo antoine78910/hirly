@@ -11,6 +11,9 @@ const COMPANIES = {
   shopify: { domain: "shopify.com", slug: "shopify" },
   framer: { domain: "framer.com", slug: "framer" },
   greenhouse: { domain: "greenhouse.io", slug: "greenhouse" },
+  google: { domain: "google.com", slug: "google", localLogo: "/demo-logos/google.png" },
+  lvmh: { domain: "lvmh.com", display: "LVMH", localLogo: "/demo-logos/lvmh.png" },
+  airbus: { domain: "airbus.com", slug: "airbus", localLogo: "/demo-logos/airbus.png" },
 
   // Finance demo — Paris banking & asset management
   "credit agricole": { domain: "ca-cib.com", display: "Crédit Agricole CIB" },
@@ -137,6 +140,7 @@ export function getCompanyLogoUrls(company, directLogoUrl = null) {
   const known = key ? COMPANIES[key] : null;
   const domain = known?.domain || guessCompanyDomain(company);
 
+  if (known?.localLogo) pushUnique(urls, seen, known.localLogo);
   if (known?.slug) pushUnique(urls, seen, `https://cdn.simpleicons.org/${known.slug}`);
   if (domain) {
     pushUnique(urls, seen, `https://logo.clearbit.com/${domain}?size=128`);

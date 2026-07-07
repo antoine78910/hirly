@@ -142,6 +142,30 @@ export function getDemoResponse(config) {
     return { ok: true, document: doc };
   }
 
+  if (method === "post" && path === "/profile/cover-letter") {
+    const file = config.data instanceof FormData ? config.data.get("file") : null;
+    const name = file?.name || "cover_letter.pdf";
+    const uploadedAt = new Date().toISOString();
+    DEMO_PROFILE.cover_letter_filename = name;
+    DEMO_PROFILE.cover_letter_mime = "application/pdf";
+    DEMO_PROFILE.cover_letter_uploaded_at = uploadedAt;
+    DEMO_PROFILE.cover_letter_text = "Demo cover letter reference text.";
+    return {
+      ok: true,
+      cover_letter_filename: name,
+      cover_letter_uploaded_at: uploadedAt,
+      has_cover_letter_text: true,
+    };
+  }
+
+  if (method === "delete" && path === "/profile/cover-letter") {
+    delete DEMO_PROFILE.cover_letter_filename;
+    delete DEMO_PROFILE.cover_letter_mime;
+    delete DEMO_PROFILE.cover_letter_uploaded_at;
+    delete DEMO_PROFILE.cover_letter_text;
+    return { ok: true };
+  }
+
   if (method === "delete" && path.startsWith("/profile/documents/")) {
     const id = path.replace("/profile/documents/", "");
     DEMO_PROFILE.additional_documents = (DEMO_PROFILE.additional_documents || []).filter((doc) => doc.id !== id);

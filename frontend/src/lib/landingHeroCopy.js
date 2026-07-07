@@ -43,11 +43,11 @@ export const CONTRACT_SLUG_BY_KEY = {
 
 /** Hero highlight rotation order on the default landing (no /stage, /cdi, etc.). */
 export const LANDING_HERO_ROTATION_KEYS = [
-  "internship",
-  "apprenticeship",
   "default",
   "permanent",
   "fixed_term",
+  "internship",
+  "apprenticeship",
   "summer_job",
   "seasonal_job",
 ];
@@ -118,13 +118,7 @@ export function getLandingHeroJobLabel(lang, contractType) {
 }
 
 export function getLandingHeroRotatingLabels(lang) {
-  return LANDING_HERO_ROTATION_KEYS
-    .map((key, index) => ({
-      label: getLandingHeroJobLabel(lang, key),
-      index,
-    }))
-    .sort((a, b) => a.label.length - b.label.length || a.index - b.index)
-    .map((item) => item.label);
+  return LANDING_HERO_ROTATION_KEYS.map((key) => getLandingHeroJobLabel(lang, key));
 }
 
 /** Fixed slot width so the hero line does not jump between words. */
@@ -171,11 +165,11 @@ export function getLandingHeroBullets(lang) {
   if (lang === "fr") {
     return [
       "Postule jusqu'à 10× plus vite.",
-      "Plus de 100 000 offres d'emploi.",
+      "Plus de 500 000 offres d'emploi.",
     ];
   }
   return [
     "Apply up to 10× faster.",
-    "Over 100,000 job listings.",
+    "Over 500,000 job listings.",
   ];
 }

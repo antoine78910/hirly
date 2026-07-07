@@ -248,90 +248,90 @@ function CardFront({ job, onReport, onShare, actionsEnabled, t, lang }) {
 
   return (
     <div className="backface-hidden absolute inset-0 flex flex-col overflow-hidden rounded-[28px] border border-sprout-border bg-sprout-surface">
-      <div className="flex shrink-0 items-start justify-between p-4 sm:p-5">
-        <div className="pointer-events-auto flex items-center gap-2">
-          <button
-            type="button"
-            onPointerDown={stopCardTap}
-            onClick={(e) => {
-              stopCardTap(e);
-              if (actionsEnabled) onReport?.(job);
-            }}
-            className="grid h-9 w-9 place-items-center rounded-full text-sprout-mint transition-colors hover:bg-sprout-mint-soft"
-            aria-label={t("swipe.reportJob")}
-            data-testid="job-report-btn"
-          >
-            <Flag className="h-5 w-5" strokeWidth={1.8} />
-          </button>
-          <button
-            type="button"
-            onPointerDown={stopCardTap}
-            onClick={(e) => {
-              stopCardTap(e);
-              if (actionsEnabled) onShare?.(job);
-            }}
-            className="grid h-9 w-9 place-items-center rounded-full text-sprout-mint transition-colors hover:bg-sprout-mint-soft"
-            aria-label={t("swipe.shareJob")}
-            data-testid="job-share-btn"
-          >
-            <Share2 className="h-5 w-5" strokeWidth={1.8} />
-          </button>
+      <div className="app-scroll no-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain touch-pan-y">
+        <div className="flex shrink-0 items-start justify-between p-3 sm:p-5">
+          <div className="pointer-events-auto flex items-center gap-2">
+            <button
+              type="button"
+              onPointerDown={stopCardTap}
+              onClick={(e) => {
+                stopCardTap(e);
+                if (actionsEnabled) onReport?.(job);
+              }}
+              className="grid h-9 w-9 place-items-center rounded-full text-sprout-mint transition-colors hover:bg-sprout-mint-soft"
+              aria-label={t("swipe.reportJob")}
+              data-testid="job-report-btn"
+            >
+              <Flag className="h-5 w-5" strokeWidth={1.8} />
+            </button>
+            <button
+              type="button"
+              onPointerDown={stopCardTap}
+              onClick={(e) => {
+                stopCardTap(e);
+                if (actionsEnabled) onShare?.(job);
+              }}
+              className="grid h-9 w-9 place-items-center rounded-full text-sprout-mint transition-colors hover:bg-sprout-mint-soft"
+              aria-label={t("swipe.shareJob")}
+              data-testid="job-share-btn"
+            >
+              <Share2 className="h-5 w-5" strokeWidth={1.8} />
+            </button>
+          </div>
         </div>
-      </div>
 
-      <div className="mt-1 flex justify-center">
-        <CompanyLogo job={job} size="lg" rounded="2xl" />
-      </div>
-
-      <div className="mt-4 px-5 text-center sm:px-7">
-        <p className="font-display text-2xl font-semibold text-white">{job.company}</p>
-        {snippet ? (
-          <p className="mt-3 line-clamp-3 text-[15px] leading-snug text-sprout-muted">{snippet}</p>
-        ) : null}
-      </div>
-
-      <div className="mt-6 px-5 sm:px-7">
-        <h2
-          className="text-center font-display text-[clamp(1.65rem,6vw,2.35rem)] font-black leading-[1.05] tracking-tight text-white"
-          data-testid="job-title"
-        >
-          {title}
-        </h2>
-      </div>
-
-      <div className="mt-5 flex flex-col items-center gap-1.5 text-[15px] text-sprout-muted">
-        <div className="flex items-center gap-2">
-          <MapPin className="h-4 w-4 text-sprout-mint" strokeWidth={1.9} />
-          <span>{location}</span>
+        <div className="mt-0.5 flex justify-center sm:mt-1">
+          <CompanyLogo job={job} size="lg" rounded="2xl" />
         </div>
-        {salaryLabel ? (
+
+        <div className="mt-3 px-4 text-center sm:mt-4 sm:px-7">
+          <p className="font-display text-xl font-semibold text-white sm:text-2xl">{job.company}</p>
+          {snippet ? (
+            <p className="mt-2 line-clamp-3 text-sm leading-snug text-sprout-muted sm:mt-3 sm:text-[15px]">{snippet}</p>
+          ) : null}
+        </div>
+
+        <div className="mt-4 px-4 sm:mt-6 sm:px-7">
+          <h2
+            className="text-center font-display text-[clamp(1.35rem,5.5vw,2.35rem)] font-black leading-[1.08] tracking-tight text-white"
+            data-testid="job-title"
+          >
+            {title}
+          </h2>
+        </div>
+
+        <div className="mt-3 flex flex-col items-center gap-1.5 text-sm text-sprout-muted sm:mt-5 sm:text-[15px]">
           <div className="flex items-center gap-2">
-            <DollarSign className="h-4 w-4 text-sprout-mint" strokeWidth={1.9} />
-            <span className="text-center">{salaryLabel}</span>
+            <MapPin className="h-4 w-4 text-sprout-mint" strokeWidth={1.9} />
+            <span>{location}</span>
+          </div>
+          {salaryLabel ? (
+            <div className="flex items-center gap-2">
+              <DollarSign className="h-4 w-4 text-sprout-mint" strokeWidth={1.9} />
+              <span className="text-center">{salaryLabel}</span>
+            </div>
+          ) : null}
+          <div className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-sprout-mint" strokeWidth={1.9} />
+            <span>{formatPostedDate(t, job.posted_at) || t("swipe.postedRecently")}</span>
+          </div>
+        </div>
+
+        {badges.length > 0 ? (
+          <div className="mt-3 flex flex-wrap justify-center gap-2 px-4 pb-2 sm:mt-5 sm:px-5">
+            {badges.map((badge) => (
+              <span
+                key={badge.label}
+                className="inline-flex items-center rounded-full bg-sprout-surface-2 px-3 py-1.5 text-[13px] font-medium text-zinc-100"
+              >
+                {badge.label}
+              </span>
+            ))}
           </div>
         ) : null}
-        <div className="flex items-center gap-2">
-          <Calendar className="h-4 w-4 text-sprout-mint" strokeWidth={1.9} />
-          <span>{formatPostedDate(t, job.posted_at) || t("swipe.postedRecently")}</span>
-        </div>
       </div>
 
-      {badges.length > 0 ? (
-        <div className="mt-5 flex flex-wrap justify-center gap-2 px-5">
-          {badges.map((badge) => (
-            <span
-              key={badge.label}
-              className="inline-flex items-center rounded-full bg-sprout-surface-2 px-3 py-1.5 text-[13px] font-medium text-zinc-100"
-            >
-              {badge.label}
-            </span>
-          ))}
-        </div>
-      ) : null}
-
-      <div className="flex-1" />
-
-      <div className="flex items-center justify-between px-6 py-5">
+      <div className="flex shrink-0 items-center justify-between border-t border-sprout-border/60 px-4 py-3 sm:px-6 sm:py-5">
         <div className="flex items-center gap-2 font-display text-lg font-bold text-white">
           <Logo size={22} />
           {BRAND.NAME}
@@ -354,7 +354,7 @@ function CardBack({ job, t, lang }) {
 
   return (
     <div className="backface-hidden rotate-y-180 absolute inset-0 flex flex-col overflow-hidden rounded-[28px] border border-sprout-border bg-sprout-surface">
-      <div className="flex h-1/4 min-h-0 shrink-0 items-center border-b border-sprout-border px-5 py-3 sm:px-6">
+      <div className="flex min-h-[5.5rem] max-h-[30%] shrink-0 items-center border-b border-sprout-border px-4 py-3 sm:px-6">
         <CompanyLogo job={job} size="md" rounded="xl" className="mr-3 shrink-0" />
         <div className="min-w-0 flex-1">
           <h2
@@ -367,9 +367,9 @@ function CardBack({ job, t, lang }) {
         </div>
       </div>
 
-      <div className="flex h-3/4 min-h-0 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col">
       <div
-        className="app-scroll no-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-4 pb-2 touch-pan-y sm:px-6"
+        className="app-scroll no-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-3 pb-2 touch-pan-y sm:px-6 sm:py-4"
         data-testid="swipe-card-scroll"
       >
         <div className="space-y-1.5 text-[15px] text-sprout-muted">
@@ -1459,7 +1459,7 @@ export default function Swipe() {
         />
       </div>
 
-      <div className="sprout flex h-dvh max-h-dvh flex-col overflow-hidden bg-sprout-bg text-zinc-900 md:hidden">
+      <div className="sprout flex h-dvh max-h-dvh flex-col overflow-hidden bg-sprout-bg pb-[calc(3.75rem+env(safe-area-inset-bottom,0px))] text-zinc-900 md:hidden">
       <header
         className="mx-auto flex w-full max-w-md shrink-0 items-center gap-1 px-safe pb-2 pt-safe sm:gap-2.5 sm:px-4"
         data-testid="swipe-header"
@@ -1515,28 +1515,28 @@ export default function Swipe() {
         </div>
       </header>
 
-      <div className="relative min-h-0 flex-1 overflow-hidden px-4 pb-[calc(3.75rem+env(safe-area-inset-bottom,0px))]">
-        <div className="relative mx-auto h-full w-full max-w-md overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col px-4 pt-1">
+        <div className="relative mx-auto min-h-0 w-full max-w-md flex-1 overflow-hidden">
           {loading && jobs.length === 0 && <SkeletonCard />}
 
           {!loading && jobs.length === 0 && (
             <motion.div
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              className="absolute inset-0 flex flex-col items-center justify-center text-center px-6"
+              className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center"
               data-testid="feed-empty"
             >
-              <div className="w-16 h-16 rounded-2xl bg-sprout-mint-soft grid place-items-center mb-4">
-                <Zap className="w-7 h-7 text-sprout-mint" />
+              <div className="mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-sprout-mint-soft">
+                <Zap className="h-7 w-7 text-sprout-mint" />
               </div>
-              <h3 className="font-display font-bold text-2xl text-white">
+              <h3 className="font-display text-2xl font-bold text-white">
                 {feedError
                   ? t("swipe.couldNotLoad")
                   : feedMeta?.fallback_reason === "no_auto_apply_jobs_found"
                   ? t("swipe.noJobsFilters")
                   : t("swipe.noJobsFiltered")}
               </h3>
-              <p className="mt-2 text-sprout-muted text-sm max-w-xs">
+              <p className="mt-2 max-w-xs text-sm text-sprout-muted">
                 {feedError
                   ? feedError
                   : feedMeta?.provider_rate_limited
@@ -1545,7 +1545,7 @@ export default function Swipe() {
               </p>
               <button
                 onClick={() => loadFeed(true, filtersRef.current, "empty_refresh")}
-                className="mt-6 rounded-full bg-sprout-mint text-white font-semibold h-11 px-6 hover:opacity-90 transition-opacity"
+                className="mt-6 h-11 rounded-full bg-sprout-mint px-6 font-semibold text-white transition-opacity hover:opacity-90"
                 data-testid="refresh-feed-btn"
               >
                 {t("common.refresh")}
@@ -1571,39 +1571,36 @@ export default function Swipe() {
               );
             })}
           </AnimatePresence>
-
-          {topJob ? (
-            <div
-              className="pointer-events-none absolute inset-x-0 z-20 flex items-center justify-center gap-8 sm:gap-14"
-              style={{ bottom: "calc(4.5rem + env(safe-area-inset-bottom, 0px))" }}
-            >
-              <motion.button
-                whileTap={{ scale: 0.9 }}
-                onClick={() => handleSwipe("skip")}
-                disabled={!topJob || appLoading}
-                className="pointer-events-auto grid h-14 w-14 place-items-center rounded-full border-2 border-rose-500/70 bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)] transition-colors hover:border-rose-500"
-                aria-label={t("swipe.pass")}
-                data-testid="skip-btn"
-              >
-                <X className="h-6 w-6 text-rose-500" strokeWidth={2.5} />
-              </motion.button>
-
-              <motion.button
-                whileTap={{ scale: 0.9 }}
-                onClick={() => handleSwipe("apply")}
-                disabled={!topJob || appLoading}
-                className="pointer-events-auto grid h-16 w-16 place-items-center rounded-full gradient-linkedin shadow-[0_8px_28px_rgba(124,58,237,0.45)] transition-opacity hover:opacity-90"
-                aria-label={t("swipe.apply")}
-                data-testid="apply-btn"
-              >
-                {appLoading
-                  ? <Loader2 className="h-6 w-6 animate-spin text-white" />
-                  : <Heart className="h-6 w-6 fill-white text-white" />
-                }
-              </motion.button>
-            </div>
-          ) : null}
         </div>
+
+        {topJob ? (
+          <div className="mx-auto flex w-full max-w-md shrink-0 items-center justify-center gap-10 py-3 sm:gap-14 sm:py-4">
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={() => handleSwipe("skip")}
+              disabled={!topJob || appLoading}
+              className="grid h-14 w-14 place-items-center rounded-full border-2 border-rose-500/70 bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)] transition-colors hover:border-rose-500"
+              aria-label={t("swipe.pass")}
+              data-testid="skip-btn"
+            >
+              <X className="h-6 w-6 text-rose-500" strokeWidth={2.5} />
+            </motion.button>
+
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={() => handleSwipe("apply")}
+              disabled={!topJob || appLoading}
+              className="grid h-16 w-16 place-items-center rounded-full gradient-linkedin shadow-[0_8px_28px_rgba(124,58,237,0.45)] transition-opacity hover:opacity-90"
+              aria-label={t("swipe.apply")}
+              data-testid="apply-btn"
+            >
+              {appLoading
+                ? <Loader2 className="h-6 w-6 animate-spin text-white" />
+                : <Heart className="h-6 w-6 fill-white text-white" />
+              }
+            </motion.button>
+          </div>
+        ) : null}
       </div>
       </div>
 
