@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timedelta, timezone
 
 import jobs_service
 
@@ -111,6 +112,42 @@ def test_france_travail_fallback_skipped_when_jsearch_finds_jobs(monkeypatch):
 
     assert result["france_travail_fallback_used"] is False
     assert "france_travail" not in calls
+
+
+def test_france_travail_fallback_still_runs_when_jsearch_is_rate_limited_cooldown(monkeypatch):
+    # Regression: if JSearch itself is on a rate-limit cooldown, the function
+    # used to return "attempted: False" immediately, before ever reaching the
+    # France Travail fallback -- meaning the user's "last resort" source never
+    # got a real request even though it exists specifically for this case.
+    _patch_common(monkeypatch)
+    monkeypatch.setattr(jobs_service, "get_job_provider", lambda name, api_key="": _FakeProvider(name))
+    monkeypatch.setattr(jobs_service, "is_job_provider_configured", lambda name=None: True)
+    monkeypatch.setattr(jobs_service, "is_job_provider_enabled", lambda name=None: True)
+    monkeypatch.setattr(
+        jobs_service,
+        "_cooldown_until",
+        lambda name: datetime.now(timezone.utc) + timedelta(minutes=10) if name == "jsearch" else None,
+    )
+
+    async def fake_import(db, provider, query):
+        assert provider.name == "france_travail"
+        job = {
+            "job_id": "ft_1",
+            "title": "Software Engineer",
+            "manual_fulfillment_ready": True,
+        }
+        return {"total_imported": 1, "auto_apply_supported_imported": 0, "unknown_ats_imported": 0, "jobs": [job]}
+
+    monkeypatch.setattr(jobs_service, "_import_provider_jobs", fake_import)
+
+    result = asyncio.run(jobs_service.refresh_jobs_for_profile_if_needed(
+        _FakeDB(), PROFILE, search_radius="worldwide", force_provider_refresh=True,
+    ))
+
+    assert result["attempted"] is True
+    assert result["provider_rate_limited"] is True
+    assert result["france_travail_fallback_used"] is True
+    assert any(job.get("job_id") == "ft_1" for job in result["jobs"])
 
 
 def test_france_travail_fallback_skipped_when_not_configured(monkeypatch):

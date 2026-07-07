@@ -1141,6 +1141,74 @@ async def _import_ats_targeted_jobs(
     return total_imported
 
 
+async def _attempt_france_travail_fallback(
+    db,
+    query: JobSearchQuery,
+    search_radius: str,
+    current_provider_name: str,
+) -> Dict[str, Any]:
+    """Absolute last-resort source: tried whenever the primary provider yields
+    nothing relevant -- including when it couldn't be tried at all because it's
+    rate-limited. A rate-limited primary provider must never silently skip this
+    fallback; the user is owed a real check against France Travail, even if
+    that check itself comes back empty.
+    """
+    result: Dict[str, Any] = {
+        "used": False,
+        "total_imported": 0,
+        "relevant_imported": 0,
+        "manual_ready_imported": 0,
+        "jobs": [],
+    }
+    if is_france_travail_provider(current_provider_name):
+        return result
+    if not (is_job_provider_configured("france_travail") and is_job_provider_enabled("france_travail")):
+        return result
+    try:
+        ft_provider = get_job_provider("france_travail", "")
+        if _cooldown_until(ft_provider.name):
+            return result
+        ft_query = JobSearchQuery(
+            role=query.role,
+            location=query.location,
+            remote_preference=query.remote_preference,
+            country=query.country,
+            language=query.language,
+            limit=query.limit,
+            raw_query=query.raw_query,
+            contract_hint=query.contract_hint,
+            radius_km=query.radius_km,
+        )
+        ft_stats = await _import_provider_jobs(db, ft_provider, ft_query)
+        ft_jobs = ft_stats.get("jobs") or []
+        ft_relevant = sum(
+            1
+            for job in ft_jobs
+            if _job_matches_query_family(job, query)
+            and _job_matches_query_location(job, query, search_radius)
+            and is_manual_fulfillment_ready(job)
+        )
+        result.update({
+            "used": ft_stats["total_imported"] > 0,
+            "total_imported": ft_stats["total_imported"],
+            "relevant_imported": ft_relevant,
+            "manual_ready_imported": sum(1 for job in ft_jobs if is_manual_fulfillment_ready(job)),
+            "jobs": ft_jobs,
+        })
+        logger.info(
+            "France Travail last-resort fallback: role=%s location=%s total_imported=%s relevant_imported=%s",
+            ft_query.role,
+            ft_query.location,
+            ft_stats["total_imported"],
+            ft_relevant,
+        )
+    except Exception as exc:
+        if _is_rate_limit_error(exc):
+            _set_rate_limit_cooldown("france_travail")
+        logger.warning("France Travail fallback attempt failed: %s", exc)
+    return result
+
+
 async def refresh_jobs_for_profile_if_needed(
     db,
     profile: Dict[str, Any],
@@ -1275,9 +1343,17 @@ async def refresh_jobs_for_profile_if_needed(
     cooldown_until = _cooldown_until(provider.name)
     if cooldown_until:
         logger.info("Skipping %s refresh during provider cooldown until %s", provider.name, cooldown_until.isoformat())
+        ft_result = await _attempt_france_travail_fallback(db, query, search_radius, provider.name)
         return {
-            "attempted": False,
-            "reason": "provider_rate_limited",
+            "attempted": ft_result["used"],
+            "ok": ft_result["used"],
+            "reason": "provider_rate_limited_france_travail_fallback" if ft_result["used"] else "provider_rate_limited",
+            "imported": ft_result["total_imported"],
+            "jobs_imported": ft_result["total_imported"],
+            "relevant_imported": ft_result["relevant_imported"],
+            "manual_ready_imported": ft_result["manual_ready_imported"],
+            "jobs": ft_result["jobs"][:200],
+            "france_travail_fallback_used": ft_result["used"],
             **base_metadata,
             "provider_rate_limited": True,
             "provider_cooldown_until": cooldown_until.isoformat(),
@@ -1480,52 +1556,13 @@ async def refresh_jobs_for_profile_if_needed(
                 fallback_used = broad_location
 
         france_travail_fallback_used = False
-        if (
-            relevant_imported == 0
-            and not is_france_travail_provider(provider.name)
-            and is_job_provider_configured("france_travail")
-            and is_job_provider_enabled("france_travail")
-        ):
-            try:
-                ft_provider = get_job_provider("france_travail", "")
-                if not _cooldown_until(ft_provider.name):
-                    ft_query = JobSearchQuery(
-                        role=query.role,
-                        location=query.location,
-                        remote_preference=query.remote_preference,
-                        country=query.country,
-                        language=query.language,
-                        limit=query.limit,
-                        raw_query=query.raw_query,
-                        contract_hint=query.contract_hint,
-                        radius_km=query.radius_km,
-                    )
-                    ft_stats = await _import_provider_jobs(db, ft_provider, ft_query)
-                    ft_imported = ft_stats["total_imported"]
-                    ft_manual_ready = sum(1 for job in (ft_stats.get("jobs") or []) if is_manual_fulfillment_ready(job))
-                    ft_relevant = sum(
-                        1
-                        for job in (ft_stats.get("jobs") or [])
-                        if _job_matches_query_family(job, query)
-                        and _job_matches_query_location(job, query, search_radius)
-                        and is_manual_fulfillment_ready(job)
-                    )
-                    total_imported += ft_imported
-                    relevant_imported += ft_relevant
-                    manual_ready_imported += ft_manual_ready
-                    imported_jobs.extend(ft_stats.get("jobs") or [])
-                    france_travail_fallback_used = ft_imported > 0
-                    logger.info(
-                        "France Travail last-resort fallback: role=%s location=%s total_imported=%s relevant_imported=%s",
-                        ft_query.role,
-                        ft_query.location,
-                        ft_imported,
-                        ft_relevant,
-                    )
-            except Exception as exc:
-                if _is_rate_limit_error(exc):
-                    _set_rate_limit_cooldown("france_travail")
-                logger.warning("France Travail fallback attempt failed: %s", exc)
+        if relevant_imported == 0:
+            ft_result = await _attempt_france_travail_fallback(db, query, search_radius, provider.name)
+            total_imported += ft_result["total_imported"]
+            relevant_imported += ft_result["relevant_imported"]
+            manual_ready_imported += ft_result["manual_ready_imported"]
+            imported_jobs.extend(ft_result["jobs"])
+            france_travail_fallback_used = ft_result["used"]
 
         ats_targeted_imported = 0
     except Exception as exc:

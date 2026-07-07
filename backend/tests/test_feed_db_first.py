@@ -1333,6 +1333,11 @@ def test_slow_sync_jsearch_fallback_times_out_and_sets_cooldown(monkeypatch):
     assert response["jobs"] == []
     assert server._feed_sync_refresh_cooldown_until > 0
 
+    # Regression: a timeout cooldown must never suppress the *only* remaining
+    # chance to find something when the DB has nothing showable -- otherwise
+    # the user gets an incorrect "no jobs found" without a real check ever
+    # having been made. So this second call, still with an empty DB, must
+    # retry despite the active cooldown.
     response, calls = _run_feed(
         monkeypatch,
         [],
@@ -1342,8 +1347,45 @@ def test_slow_sync_jsearch_fallback_times_out_and_sets_cooldown(monkeypatch):
         },
         refresh=lambda: [_job(2)],
     )
+    assert calls["refresh"] == 1
+    assert [job["job_id"] for job in response["jobs"]] == ["job_2"]
+    monkeypatch.setattr(server, "_feed_sync_refresh_cooldown_until", 0.0)
+    monkeypatch.setattr(server, "_feed_sync_refresh_cooldowns", {})
+
+
+def test_cooldown_still_applies_when_db_already_has_showable_cards(monkeypatch):
+    # The cooldown's actual purpose: once we already have something reasonable
+    # cached, don't make every user wait through another slow provider call
+    # just to top up the feed. This must still hold.
+    async def slow_refresh():
+        await asyncio.sleep(1.2)
+        return [_job(i) for i in range(100, 103)]
+
+    monkeypatch.setattr(server, "_feed_sync_refresh_cooldown_until", 0.0)
+    monkeypatch.setattr(server, "_feed_sync_refresh_cooldowns", {})
+    response, calls = _run_feed(
+        monkeypatch,
+        [],
+        env={
+            "JOBS_FEED_SYNC_REFRESH_MAX_SECONDS": "1",
+            "JOBS_FEED_SYNC_REFRESH_COOLDOWN_SECONDS": "30",
+        },
+        refresh=slow_refresh,
+    )
+    assert calls["refresh"] == 1
+    assert server._feed_sync_refresh_cooldown_until > 0
+
+    response, calls = _run_feed(
+        monkeypatch,
+        [_job(i) for i in range(1, 35)],
+        env={
+            "JOBS_FEED_SYNC_REFRESH_MAX_SECONDS": "1",
+            "JOBS_FEED_SYNC_REFRESH_COOLDOWN_SECONDS": "30",
+        },
+        refresh=lambda: [_job(999)],
+    )
     assert calls["refresh"] == 0
-    assert response["jobs"] == []
+    assert response["jobs"]
     monkeypatch.setattr(server, "_feed_sync_refresh_cooldown_until", 0.0)
     monkeypatch.setattr(server, "_feed_sync_refresh_cooldowns", {})
 

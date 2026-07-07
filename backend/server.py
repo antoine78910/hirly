@@ -5694,7 +5694,21 @@ async def get_feed(
             if explicit_local_intent
             else _feed_sync_refresh_cooldown_until
         )
-        cooldown_active = cooldown_enabled and cooldown_now < cooldown_until and not (force_provider_refresh and explicit_local_intent)
+        # Cards we can serve right now without waiting on providers
+        # (role-compatible only, so we never serve irrelevant cards instead of refreshing).
+        has_showable_cards = (
+            local_inventory_count > 0 if explicit_local_intent else db_good_count > 0
+        )
+        # A prior timeout/error cooldown only suppresses *further* refresh attempts
+        # while we already have something reasonable cached to show. It must never
+        # suppress the one attempt that stands between the user and an incorrect
+        # "no jobs found" response -- that check has to run every time.
+        cooldown_active = (
+            cooldown_enabled
+            and cooldown_now < cooldown_until
+            and not (force_provider_refresh and explicit_local_intent)
+            and has_showable_cards
+        )
         request_trace["feed_provider_cooldown_key"] = cooldown_key
         request_trace["feed_provider_cooldown_active"] = bool(cooldown_active)
         request_trace["feed_provider_cooldown_remaining_seconds"] = max(0, int(cooldown_until - cooldown_now))
@@ -5708,11 +5722,6 @@ async def get_feed(
             not db_first_enabled
             or db_good_count == 0
             or (explicit_local_intent and local_inventory_count < requested_limit)
-        )
-        # Cards we can serve right now without waiting on providers
-        # (role-compatible only, so we never serve irrelevant cards instead of refreshing).
-        has_showable_cards = (
-            local_inventory_count > 0 if explicit_local_intent else db_good_count > 0
         )
         explicit_local_empty_inventory = bool(explicit_local_intent and local_inventory_count == 0)
         if explicit_local_empty_inventory and not force_provider_refresh:
