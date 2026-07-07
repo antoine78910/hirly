@@ -3,12 +3,13 @@ import {
   AtSign,
   BarChart3,
   Calendar,
+  Check,
   ChevronDown,
   ExternalLink,
-  Eye,
   Heart,
   Loader2,
   MessageCircle,
+  Play,
   RefreshCw,
   TrendingDown,
   TrendingUp,
@@ -16,10 +17,10 @@ import {
   Video,
 } from "lucide-react";
 import {
+  Area,
   Bar,
   CartesianGrid,
   ComposedChart,
-  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -33,12 +34,10 @@ import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
 
 const ORANGE = "#f97316";
 const BLUE = "#3b82f6";
-const GREEN = "#22c55e";
-const RED = "#ef4444";
 
 const RANGE_OPTIONS = [
   { id: 7, label: "7 days" },
-  { id: 14, label: "14 days UTC" },
+  { id: 14, label: "14 days" },
   { id: 30, label: "30 days" },
 ];
 
@@ -91,6 +90,19 @@ const fmtDateTime = (value) => {
   });
 };
 
+function creatorReachViews(creator, usesLikesProxy = false) {
+  const views = Number(creator?.current?.views || 0);
+  if (views > 0) return views;
+  if (usesLikesProxy) return Number(creator?.current?.likes || 0);
+  return views;
+}
+
+function truncateText(value, max = 72) {
+  const text = String(value || "").trim();
+  if (text.length <= max) return text;
+  return `${text.slice(0, max - 1)}…`;
+}
+
 function DeltaBadge({ value, suffix = "" }) {
   const num = Number(value || 0);
   if (num === 0) {
@@ -99,52 +111,51 @@ function DeltaBadge({ value, suffix = "" }) {
   const positive = num > 0;
   const Icon = positive ? TrendingUp : TrendingDown;
   return (
-    <span className={`inline-flex items-center gap-1 text-xs font-semibold ${positive ? "text-emerald-400" : "text-rose-400"}`}>
+    <span className={`inline-flex items-center gap-1 text-xs font-semibold ${positive ? "text-emerald-600" : "text-rose-600"}`}>
       <Icon className="h-3.5 w-3.5" />
       {fmtSigned(num)}{suffix}
     </span>
   );
 }
 
-function KpiCard({ icon: Icon, label, value, delta, deltaSuffix, accent = "text-zinc-300", href }) {
-  const content = (
-    <div className="group relative overflow-hidden rounded-2xl border border-white/8 bg-[#121214] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition hover:border-white/12 hover:bg-[#151518]">
+function KpiCard({ icon: Icon, label, value, delta, deltaSuffix, accent = "text-zinc-600", href }) {
+  return (
+    <div className="group relative overflow-hidden rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition hover:border-zinc-300 hover:shadow-md">
       <div className="flex items-start justify-between gap-3">
-        <div className={`flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 ${accent}`}>
+        <div className={`flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 ${accent}`}>
           <Icon className="h-4 w-4" />
         </div>
         {href ? (
-          <a href={href} target="_blank" rel="noreferrer" className="text-xs font-medium text-zinc-500 transition hover:text-zinc-300">
+          <a href={href} target="_blank" rel="noreferrer" className="text-xs font-medium text-linkedin transition hover:text-linkedin-dark">
             Open
           </a>
         ) : null}
       </div>
       <p className="mt-4 text-xs font-medium uppercase tracking-wider text-zinc-500">{label}</p>
-      <p className="mt-1 font-display text-3xl font-bold tracking-tight text-white">{fmtCompact(value)}</p>
+      <p className="mt-1 font-display text-3xl font-bold tracking-tight text-zinc-900">{fmtCompact(value)}</p>
       <div className="mt-2">
         <DeltaBadge value={delta} suffix={deltaSuffix} />
       </div>
     </div>
   );
-  return content;
 }
 
 function ChartTooltip({ active, payload, usesLikesProxy }) {
   if (!active || !payload?.length) return null;
   const row = payload[0]?.payload;
   return (
-    <div className="rounded-xl border border-white/10 bg-[#1a1a1d] px-4 py-3 text-xs shadow-2xl">
-      <p className="mb-2 font-semibold text-white">{fmtDateLong(row?.date)}</p>
+    <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3 text-xs shadow-lg">
+      <p className="mb-2 font-semibold text-zinc-900">{fmtDateLong(row?.date)}</p>
       <div className="space-y-1.5">
-        <div className="flex items-center gap-2 text-zinc-300">
+        <div className="flex items-center gap-2 text-zinc-600">
           <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: ORANGE }} />
           Posted videos
-          <span className="ml-auto font-semibold text-white tabular-nums">{row?.posted_videos ?? 0}</span>
+          <span className="ml-auto font-semibold text-zinc-900 tabular-nums">{row?.posted_videos ?? 0}</span>
         </div>
-        <div className="flex items-center gap-2 text-zinc-300">
+        <div className="flex items-center gap-2 text-zinc-600">
           <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: BLUE }} />
           {usesLikesProxy ? "Likes" : "Views"}
-          <span className="ml-auto font-semibold text-white tabular-nums">{fmtCompact(usesLikesProxy ? row?.likes : row?.views)}</span>
+          <span className="ml-auto font-semibold text-zinc-900 tabular-nums">{fmtCompact(usesLikesProxy ? row?.likes : row?.views)}</span>
         </div>
       </div>
     </div>
@@ -152,27 +163,175 @@ function ChartTooltip({ active, payload, usesLikesProxy }) {
 }
 
 function CreatorChip({ creator, selected, onToggle }) {
-  const active = selected;
   return (
     <button
       type="button"
       onClick={() => onToggle(creator.creator_id)}
-      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition ${
-        active
-          ? "border-white/20 bg-white/10 text-white"
-          : "border-white/8 bg-transparent text-zinc-400 hover:border-white/12 hover:text-zinc-200"
+      aria-pressed={selected}
+      className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition ${
+        selected
+          ? "border-linkedin/30 bg-linkedin/10 text-linkedin"
+          : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900"
       }`}
     >
       {creator.avatar_url ? (
         <img src={creator.avatar_url} alt="" className="h-5 w-5 rounded-full object-cover" />
       ) : (
-        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/10 text-[10px] font-bold uppercase">
+        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-200 text-[10px] font-bold uppercase text-zinc-700">
           {(creator.name || "?").slice(0, 1)}
         </span>
       )}
       {creator.name}
       <span className="text-zinc-500">@{creator.handle}</span>
     </button>
+  );
+}
+
+function TopVideoRow({ video, maxViews, usesLikesProxy }) {
+  const views = Number(video.views || 0) || (usesLikesProxy ? Number(video.likes || 0) : 0);
+  const width = maxViews > 0 ? Math.max(8, (views / maxViews) * 100) : 0;
+  const label = truncateText(video.description || "Untitled video");
+
+  return (
+    <a
+      href={video.url || undefined}
+      target="_blank"
+      rel="noreferrer"
+      className="group relative flex min-h-[72px] items-center gap-3 border-t border-zinc-100 px-4 py-3 transition hover:bg-zinc-50 first:border-t-0"
+    >
+      <div className="absolute inset-y-0 left-16 right-0 pointer-events-none">
+        <div
+          className="absolute inset-y-0 right-0 bg-gradient-to-r from-sky-50 via-sky-100/80 to-sky-200/60"
+          style={{ width: `${width}%` }}
+        />
+      </div>
+      <div className="relative flex h-12 w-9 shrink-0 items-center justify-center rounded-md bg-zinc-900 text-white">
+        <Play className="h-4 w-4 fill-current" />
+      </div>
+      <div className="relative min-w-0 flex-1">
+        <p className="line-clamp-2 text-sm font-medium text-zinc-900">{label}</p>
+        <p className="mt-1 text-xs text-zinc-500">
+          {video.creator_name || "Creator"}
+          {video.posted_at ? ` · ${fmtDateShort(video.posted_at.slice(0, 10))}` : ""}
+        </p>
+      </div>
+      <div className="relative ml-auto shrink-0 pr-1 font-mono text-sm font-semibold text-zinc-900">
+        {fmtCompact(views)}
+      </div>
+    </a>
+  );
+}
+
+function TopAccountRow({ creator, maxViews, usesLikesProxy }) {
+  const views = creatorReachViews(creator, usesLikesProxy);
+  const width = maxViews > 0 ? Math.max(8, (views / maxViews) * 100) : 0;
+
+  return (
+    <a
+      href={creator.profile_url || undefined}
+      target="_blank"
+      rel="noreferrer"
+      className="group relative flex min-h-[72px] items-center gap-3 border-t border-zinc-100 px-4 py-3 transition hover:bg-zinc-50 first:border-t-0"
+    >
+      <div className="absolute inset-y-0 left-16 right-0 pointer-events-none">
+        <div
+          className="absolute inset-y-0 right-0 bg-gradient-to-r from-violet-50 via-violet-100/80 to-violet-200/60"
+          style={{ width: `${width}%` }}
+        />
+      </div>
+      {creator.avatar_url ? (
+        <img src={creator.avatar_url} alt="" className="relative h-10 w-10 shrink-0 rounded-full object-cover ring-2 ring-white" />
+      ) : (
+        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-sm font-bold text-zinc-700">
+          {(creator.name || "?").slice(0, 1)}
+        </div>
+      )}
+      <div className="relative min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-zinc-900">{creator.name}</p>
+        <p className="mt-0.5 truncate text-xs text-zinc-500">@{creator.handle}</p>
+      </div>
+      <div className="relative ml-auto shrink-0 pr-1 font-mono text-sm font-semibold text-zinc-900">
+        {fmtCompact(views)}
+      </div>
+    </a>
+  );
+}
+
+function AccountSelector({ creators, selectedIds, onToggle, onSelectAll, onClear }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onPointerDown = (event) => {
+      if (!rootRef.current?.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [open]);
+
+  const selectedCount = selectedIds.length;
+  const totalCount = creators.length;
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50"
+      >
+        <Users className="h-4 w-4 text-zinc-500" />
+        Select accounts
+        <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-600">
+          {selectedCount}/{totalCount}
+        </span>
+        <ChevronDown className={`h-4 w-4 text-zinc-500 transition ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open ? (
+        <div className="absolute left-0 top-[calc(100%+8px)] z-30 w-72 rounded-2xl border border-zinc-200 bg-white p-2 shadow-xl">
+          <div className="flex items-center gap-2 border-b border-zinc-100 px-2 pb-2">
+            <button
+              type="button"
+              onClick={onSelectAll}
+              className="cursor-pointer rounded-lg px-2.5 py-1.5 text-xs font-semibold text-linkedin transition hover:bg-linkedin/10"
+            >
+              Select all
+            </button>
+            <button
+              type="button"
+              onClick={onClear}
+              disabled={selectedCount <= 1}
+              className="cursor-pointer rounded-lg px-2.5 py-1.5 text-xs font-semibold text-zinc-600 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Clear
+            </button>
+          </div>
+          <div className="max-h-64 space-y-1 overflow-y-auto py-2">
+            {creators.map((creator) => {
+              const selected = selectedIds.includes(creator.creator_id);
+              return (
+                <button
+                  key={creator.creator_id}
+                  type="button"
+                  onClick={() => onToggle(creator.creator_id)}
+                  className={`flex w-full cursor-pointer items-center gap-3 rounded-xl px-2.5 py-2 text-left text-sm transition ${
+                    selected ? "bg-linkedin/10 text-linkedin" : "text-zinc-700 hover:bg-zinc-50"
+                  }`}
+                >
+                  <span className={`flex h-5 w-5 items-center justify-center rounded-md border ${selected ? "border-linkedin bg-linkedin text-white" : "border-zinc-300 bg-white"}`}>
+                    {selected ? <Check className="h-3.5 w-3.5" /> : null}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate font-medium">{creator.name}</span>
+                  <span className="truncate text-xs text-zinc-500">@{creator.handle}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -185,17 +344,22 @@ export default function AdminCreators() {
   const [days, setDays] = useState(14);
   const [selectedIds, setSelectedIds] = useState([]);
   const autoRefreshedRef = useRef(false);
+  const skipNextLoadRef = useRef(false);
+  const selectedIdsRef = useRef(selectedIds);
 
-  const load = useCallback(async (rangeDays = days) => {
+  selectedIdsRef.current = selectedIds;
+
+  const load = useCallback(async (rangeDays = days, creatorFilter = selectedIdsRef.current) => {
     setLoading(true);
     setError("");
     setAccessDenied(false);
     try {
       const params = { days: rangeDays };
-      if (selectedIds.length === 1) params.creator_id = selectedIds[0];
+      if (creatorFilter.length) params.creator_ids = creatorFilter.join(",");
       const { data: payload } = await api.get("/admin/creator-social", { params });
       setData(payload);
-      if (!selectedIds.length && payload?.creators?.length) {
+      if (!creatorFilter.length && payload?.creators?.length) {
+        skipNextLoadRef.current = true;
         setSelectedIds(payload.creators.map((item) => item.creator_id));
       }
     } catch (err) {
@@ -209,13 +373,15 @@ export default function AdminCreators() {
     } finally {
       setLoading(false);
     }
-  }, [days, selectedIds]);
+  }, [days]);
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try {
       const params = {};
-      if (selectedIds.length === 1) params.creator_id = selectedIds[0];
+      if (selectedIdsRef.current.length === 1) {
+        params.creator_id = selectedIdsRef.current[0];
+      }
       const { data: payload } = await api.post("/admin/creator-social/refresh", null, { params });
       setData(payload.dashboard || payload);
       const errors = payload.errors || [];
@@ -229,10 +395,14 @@ export default function AdminCreators() {
     } finally {
       setRefreshing(false);
     }
-  }, [selectedIds]);
+  }, []);
 
   useEffect(() => {
-    load(days);
+    if (skipNextLoadRef.current) {
+      skipNextLoadRef.current = false;
+      return;
+    }
+    load(days, selectedIds);
   }, [days, selectedIds, load]);
 
   useEffect(() => {
@@ -273,14 +443,46 @@ export default function AdminCreators() {
     });
   };
 
+  const selectAllCreators = () => {
+    setSelectedIds(creators.map((creator) => creator.creator_id));
+  };
+
+  const clearCreatorSelection = () => {
+    if (creators.length <= 1) return;
+    setSelectedIds([creators[0].creator_id]);
+  };
+
   const filteredCreators = creators.filter((creator) => selectedIds.includes(creator.creator_id));
+
+  const topVideos = useMemo(() => {
+    return [...(data?.videos || [])]
+      .map((video) => ({
+        ...video,
+        reach: Number(video.views || 0) || (usesLikesProxy ? Number(video.likes || 0) : 0),
+      }))
+      .sort((a, b) => b.reach - a.reach)
+      .slice(0, 5);
+  }, [data?.videos, usesLikesProxy]);
+
+  const topAccounts = useMemo(() => {
+    return [...filteredCreators]
+      .map((creator) => ({
+        ...creator,
+        reach: creatorReachViews(creator, usesLikesProxy),
+      }))
+      .sort((a, b) => b.reach - a.reach)
+      .slice(0, 5);
+  }, [filteredCreators, usesLikesProxy]);
+
+  const maxTopVideoViews = topVideos[0]?.reach || 0;
+  const maxTopAccountViews = topAccounts[0]?.reach || 0;
 
   return (
     <AdminShell
       title="Creators"
       subtitle="TikTok performance tracking for Hirly content creators — daily posts, reach, and engagement."
       actions={(
-        <Button variant="outline" onClick={refresh} disabled={loading || refreshing}>
+        <Button variant="outline" onClick={refresh} disabled={loading || refreshing} className="cursor-pointer">
           {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           Refresh TikTok
         </Button>
@@ -289,15 +491,17 @@ export default function AdminCreators() {
       {accessDenied ? <AdminAccessDenied /> : null}
 
       {!accessDenied ? (
-        <div className="overflow-hidden rounded-3xl border border-zinc-800 bg-[#09090b] text-zinc-100 shadow-2xl">
-          <div className="border-b border-white/8 px-5 py-4 sm:px-6">
+        <div className="overflow-hidden rounded-3xl border border-zinc-200 bg-white text-zinc-900 shadow-sm">
+          <div className="border-b border-zinc-200 px-5 py-4 sm:px-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex flex-wrap items-center gap-2">
-                <div className="mr-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-zinc-300">
-                  <Users className="h-4 w-4" />
-                  Select accounts
-                  <ChevronDown className="h-4 w-4 text-zinc-500" />
-                </div>
+                <AccountSelector
+                  creators={creators}
+                  selectedIds={selectedIds}
+                  onToggle={toggleCreator}
+                  onSelectAll={selectAllCreators}
+                  onClear={clearCreatorSelection}
+                />
                 {creators.map((creator) => (
                   <CreatorChip
                     key={creator.creator_id}
@@ -309,18 +513,21 @@ export default function AdminCreators() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-zinc-300">
+                <div className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-700">
                   <TikTokIcon className="h-4 w-4" />
                   TikTok
                 </div>
-                <div className="inline-flex rounded-full border border-white/10 bg-white/5 p-1">
+                <div className="inline-flex rounded-full border border-zinc-200 bg-zinc-50 p-1" role="group" aria-label="Date range">
                   {RANGE_OPTIONS.map((option) => (
                     <button
                       key={option.id}
                       type="button"
                       onClick={() => setDays(option.id)}
-                      className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                        days === option.id ? "bg-white text-black" : "text-zinc-400 hover:text-white"
+                      aria-pressed={days === option.id}
+                      className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                        days === option.id
+                          ? "bg-linkedin text-white shadow-sm"
+                          : "text-zinc-600 hover:bg-white hover:text-zinc-900"
                       }`}
                     >
                       {option.label}
@@ -336,50 +543,100 @@ export default function AdminCreators() {
           </div>
 
           {error ? (
-            <div className="mx-5 mt-5 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200 sm:mx-6">
+            <div className="mx-5 mt-5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 sm:mx-6">
               {error}
             </div>
           ) : null}
 
           {loading && !data ? (
             <div className="grid min-h-80 place-items-center">
-              <Loader2 className="h-7 w-7 animate-spin text-zinc-500" />
+              <Loader2 className="h-7 w-7 animate-spin text-zinc-400" />
             </div>
           ) : (
             <div className="space-y-6 p-5 sm:p-6">
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <KpiCard icon={Video} label="Posted videos" value={summary.posted_videos} delta={summary.posted_videos_delta} accent="text-orange-400" />
-                <KpiCard icon={AtSign} label="Active accounts" value={summary.active_accounts} delta={0} accent="text-violet-400" />
-                <KpiCard icon={Eye} label={viewsLabel} value={summary.views} delta={summary.views_delta} accent="text-sky-400" />
-                <KpiCard icon={Heart} label="Likes" value={summary.likes} delta={summary.likes_delta} accent="text-pink-400" />
-                <KpiCard icon={MessageCircle} label="Comments" value={summary.comments} delta={summary.comments_period} accent="text-emerald-400" />
-                <KpiCard icon={BarChart3} label="Engagement" value={`${summary.engagement_rate ?? 0}%`} delta={0} accent="text-amber-400" />
-                <KpiCard icon={Users} label="Followers" value={summary.followers} delta={summary.followers_delta} accent="text-cyan-400" />
-                <KpiCard icon={Calendar} label={`Posted (${days}d)`} value={summary.posted_videos_period} delta={0} accent="text-orange-300" />
+                <KpiCard icon={Video} label="Posted videos" value={summary.posted_videos} delta={summary.posted_videos_delta} accent="text-orange-500" />
+                <KpiCard icon={AtSign} label="Active accounts" value={summary.active_accounts} delta={0} accent="text-violet-500" />
+                <KpiCard icon={Play} label={viewsLabel} value={summary.views} delta={summary.views_delta} accent="text-sky-500" />
+                <KpiCard icon={Heart} label="Likes" value={summary.likes} delta={summary.likes_delta} accent="text-pink-500" />
+                <KpiCard icon={MessageCircle} label="Comments" value={summary.comments} delta={summary.comments_period} accent="text-emerald-500" />
+                <KpiCard icon={BarChart3} label="Engagement" value={`${summary.engagement_rate ?? 0}%`} delta={0} accent="text-amber-500" />
+                <KpiCard icon={Users} label="Followers" value={summary.followers} delta={summary.followers_delta} accent="text-cyan-600" />
+                <KpiCard icon={Calendar} label={`Posted (${days}d)`} value={summary.posted_videos_period} delta={summary.views_period ?? 0} accent="text-orange-400" />
               </div>
 
-              <section className="rounded-2xl border border-white/8 bg-[#0f0f11] p-4 sm:p-5">
+              <div className="grid gap-4 lg:grid-cols-2">
+                <section className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+                  <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4">
+                    <div>
+                      <h2 className="font-display text-lg font-bold text-zinc-900">Top videos</h2>
+                      <p className="text-sm text-zinc-500">Highest {viewsLabel.toLowerCase()} in the selected period.</p>
+                    </div>
+                    <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-xs font-medium text-zinc-600">By {viewsLabel.toLowerCase()}</span>
+                  </div>
+                  {topVideos.length ? (
+                    <div>
+                      {topVideos.map((video) => (
+                        <TopVideoRow
+                          key={`${video.creator_id}-${video.video_id}`}
+                          video={video}
+                          maxViews={maxTopVideoViews}
+                          usesLikesProxy={usesLikesProxy}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="px-5 py-8 text-sm text-zinc-500">No video stats yet. Refresh TikTok to load views.</p>
+                  )}
+                </section>
+
+                <section className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+                  <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4">
+                    <div>
+                      <h2 className="font-display text-lg font-bold text-zinc-900">Top accounts</h2>
+                      <p className="text-sm text-zinc-500">Accounts ranked by total {viewsLabel.toLowerCase()}.</p>
+                    </div>
+                    <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-xs font-medium text-zinc-600">By {viewsLabel.toLowerCase()}</span>
+                  </div>
+                  {topAccounts.length ? (
+                    <div>
+                      {topAccounts.map((creator) => (
+                        <TopAccountRow
+                          key={creator.creator_id}
+                          creator={creator}
+                          maxViews={maxTopAccountViews}
+                          usesLikesProxy={usesLikesProxy}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="px-5 py-8 text-sm text-zinc-500">No accounts selected.</p>
+                  )}
+                </section>
+              </div>
+
+              <section className="rounded-2xl border border-zinc-200 bg-zinc-50/60 p-4 sm:p-5">
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <h2 className="font-display text-lg font-bold text-white">Metrics</h2>
+                    <h2 className="font-display text-lg font-bold text-zinc-900">Metrics</h2>
                     <p className="text-sm text-zinc-500">Daily posted videos and {viewsLabel.toLowerCase()} over the selected period.</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <span className="inline-flex items-center gap-2 rounded-full border border-orange-500/20 bg-orange-500/10 px-3 py-1 text-xs font-medium text-orange-300">
-                      <span className="h-2 w-2 rounded-sm bg-orange-400" />
+                    <span className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-medium text-orange-700">
+                      <span className="h-2 w-2 rounded-sm bg-orange-500" />
                       Posted videos
                     </span>
-                    <span className="inline-flex items-center gap-2 rounded-full border border-sky-500/20 bg-sky-500/10 px-3 py-1 text-xs font-medium text-sky-300">
-                      <span className="h-2 w-2 rounded-full bg-sky-400" />
+                    <span className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-medium text-sky-700">
+                      <span className="h-2 w-2 rounded-full bg-sky-500" />
                       {viewsLabel}
                     </span>
                   </div>
                 </div>
 
-                <div className="h-[320px] w-full min-w-0">
+                <div className="h-[320px] w-full min-w-0 rounded-xl bg-white p-2">
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                      <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
+                      <CartesianGrid stroke="#e4e4e7" vertical={false} />
                       <XAxis dataKey="label" tick={{ fill: "#71717a", fontSize: 12 }} axisLine={false} tickLine={false} />
                       <YAxis
                         yAxisId="left"
@@ -398,22 +655,32 @@ export default function AdminCreators() {
                         domain={[0, maxVideos + 1]}
                         allowDecimals={false}
                       />
-                      <Tooltip content={<ChartTooltip usesLikesProxy={usesLikesProxy} />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
+                      <Tooltip content={<ChartTooltip usesLikesProxy={usesLikesProxy} />} cursor={{ fill: "rgba(10, 102, 194, 0.06)" }} />
                       <Bar yAxisId="right" dataKey="posted_videos" fill={ORANGE} radius={[6, 6, 0, 0]} maxBarSize={28} />
-                      <Line yAxisId="left" type="monotone" dataKey="metric_line" stroke={BLUE} strokeWidth={2.5} dot={false} activeDot={{ r: 5, fill: BLUE }} />
+                      <Area
+                        yAxisId="left"
+                        type="monotone"
+                        dataKey="metric_line"
+                        stroke={BLUE}
+                        fill={BLUE}
+                        fillOpacity={0.12}
+                        strokeWidth={2.5}
+                        dot={false}
+                        activeDot={{ r: 5, fill: BLUE }}
+                      />
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
               </section>
 
-              <section className="rounded-2xl border border-white/8 bg-[#0f0f11] overflow-hidden">
-                <div className="border-b border-white/8 px-5 py-4">
-                  <h2 className="font-display text-lg font-bold text-white">Daily breakdown</h2>
+              <section className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+                <div className="border-b border-zinc-200 px-5 py-4">
+                  <h2 className="font-display text-lg font-bold text-zinc-900">Daily breakdown</h2>
                   <p className="text-sm text-zinc-500">One row per day — videos posted and engagement deltas.</p>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[760px] text-left text-sm">
-                    <thead className="bg-white/[0.03] text-xs uppercase tracking-wide text-zinc-500">
+                    <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
                       <tr>
                         <th className="px-5 py-3 font-semibold">Date</th>
                         <th className="px-5 py-3 font-semibold">Videos</th>
@@ -423,15 +690,15 @@ export default function AdminCreators() {
                         <th className="px-5 py-3 font-semibold">Followers</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/6">
+                    <tbody className="divide-y divide-zinc-100">
                       {(data?.daily || []).slice().reverse().map((row) => (
-                        <tr key={row.date} className="transition hover:bg-white/[0.02]">
-                          <td className="px-5 py-3 font-medium text-white">{fmtDateLong(row.date)}</td>
-                          <td className="px-5 py-3 tabular-nums text-orange-300">{row.posted_videos || 0}</td>
-                          <td className="px-5 py-3 tabular-nums text-sky-300">{fmtCompact(usesLikesProxy ? row.likes : row.views)}</td>
-                          <td className="px-5 py-3 tabular-nums text-pink-300">{fmtCompact(row.likes)}</td>
-                          <td className="px-5 py-3 tabular-nums text-emerald-300">{fmtCompact(row.comments)}</td>
-                          <td className="px-5 py-3 tabular-nums text-zinc-300">{fmtCompact(row.followers)}</td>
+                        <tr key={row.date} className="transition hover:bg-zinc-50">
+                          <td className="px-5 py-3 font-medium text-zinc-900">{fmtDateLong(row.date)}</td>
+                          <td className="px-5 py-3 tabular-nums text-orange-600">{row.posted_videos || 0}</td>
+                          <td className="px-5 py-3 tabular-nums text-sky-600">{fmtCompact(usesLikesProxy ? row.likes : row.views)}</td>
+                          <td className="px-5 py-3 tabular-nums text-pink-600">{fmtCompact(row.likes)}</td>
+                          <td className="px-5 py-3 tabular-nums text-emerald-600">{fmtCompact(row.comments)}</td>
+                          <td className="px-5 py-3 tabular-nums text-zinc-700">{fmtCompact(row.followers)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -439,41 +706,45 @@ export default function AdminCreators() {
                 </div>
               </section>
 
-              <section className="rounded-2xl border border-white/8 bg-[#0f0f11] overflow-hidden">
-                <div className="border-b border-white/8 px-5 py-4">
-                  <h2 className="font-display text-lg font-bold text-white">Accounts</h2>
+              <section className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+                <div className="border-b border-zinc-200 px-5 py-4">
+                  <h2 className="font-display text-lg font-bold text-zinc-900">Accounts</h2>
                   <p className="text-sm text-zinc-500">Linked TikTok profiles and live totals.</p>
                 </div>
                 <div className="grid gap-4 p-5 lg:grid-cols-2">
                   {filteredCreators.map((creator) => (
-                    <div key={creator.creator_id} className="rounded-2xl border border-white/8 bg-[#121214] p-4">
+                    <div key={creator.creator_id} className="rounded-2xl border border-zinc-200 bg-zinc-50/50 p-4">
                       <div className="flex items-start gap-4">
                         {creator.avatar_url ? (
-                          <img src={creator.avatar_url} alt="" className="h-14 w-14 rounded-2xl object-cover ring-2 ring-white/10" />
+                          <img src={creator.avatar_url} alt="" className="h-14 w-14 rounded-2xl object-cover ring-2 ring-white" />
                         ) : (
-                          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10 text-lg font-bold">
+                          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-200 text-lg font-bold text-zinc-700">
                             {(creator.name || "?").slice(0, 1)}
                           </div>
                         )}
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <h3 className="font-display text-lg font-bold text-white">{creator.name}</h3>
-                            <TikTokIcon className="h-4 w-4 text-zinc-400" />
+                            <h3 className="font-display text-lg font-bold text-zinc-900">{creator.name}</h3>
+                            <TikTokIcon className="h-4 w-4 text-zinc-500" />
                           </div>
                           <a
                             href={creator.profile_url}
                             target="_blank"
                             rel="noreferrer"
-                            className="mt-1 inline-flex items-center gap-1 text-sm text-sky-400 hover:text-sky-300"
+                            className="mt-1 inline-flex items-center gap-1 text-sm text-linkedin hover:text-linkedin-dark"
                           >
                             @{creator.handle}
                             <ExternalLink className="h-3.5 w-3.5" />
                           </a>
-                          <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-                            <div><p className="text-zinc-500">Followers</p><p className="font-semibold text-white">{fmtCompact(creator.current?.followers)}</p></div>
-                            <div><p className="text-zinc-500">Videos</p><p className="font-semibold text-white">{creator.current?.videos ?? 0}</p></div>
-                            <div><p className="text-zinc-500">Likes</p><p className="font-semibold text-white">{fmtCompact(creator.current?.likes)}</p></div>
-                            <div><p className="text-zinc-500">Updated</p><p className="font-semibold text-zinc-300">{fmtDateTime(creator.last_refreshed_at)}</p></div>
+                          <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
+                            <div>
+                              <p className="text-zinc-500">{viewsLabel}</p>
+                              <p className="font-semibold text-sky-700">{fmtCompact(creatorReachViews(creator, usesLikesProxy))}</p>
+                            </div>
+                            <div><p className="text-zinc-500">Followers</p><p className="font-semibold text-zinc-900">{fmtCompact(creator.current?.followers)}</p></div>
+                            <div><p className="text-zinc-500">Videos</p><p className="font-semibold text-zinc-900">{creator.current?.videos ?? 0}</p></div>
+                            <div><p className="text-zinc-500">Likes</p><p className="font-semibold text-zinc-900">{fmtCompact(creator.current?.likes)}</p></div>
+                            <div><p className="text-zinc-500">Updated</p><p className="font-semibold text-zinc-600">{fmtDateTime(creator.last_refreshed_at)}</p></div>
                           </div>
                         </div>
                       </div>

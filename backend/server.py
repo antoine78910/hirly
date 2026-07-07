@@ -8590,14 +8590,26 @@ async def admin_list_creators(admin: User = Depends(require_admin_user)):
     return {"creators": rows}
 
 
+def _parse_creator_id_filters(
+    creator_id: Optional[str] = None,
+    creator_ids: Optional[str] = None,
+) -> Optional[List[str]]:
+    if creator_ids:
+        parsed = [item.strip() for item in creator_ids.split(",") if item.strip()]
+        return parsed or None
+    if creator_id:
+        return [creator_id]
+    return None
+
+
 @api_router.get("/admin/creator-social")
 async def admin_creator_social_dashboard(
     admin: User = Depends(require_admin_user),
     days: int = Query(14, ge=7, le=90),
     creator_id: Optional[str] = Query(None),
+    creator_ids: Optional[str] = Query(None),
 ):
-    creator_ids = [creator_id] if creator_id else None
-    return build_dashboard(days=days, creator_ids=creator_ids)
+    return build_dashboard(days=days, creator_ids=_parse_creator_id_filters(creator_id, creator_ids))
 
 
 @api_router.post("/admin/creator-social/refresh")
