@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from creator_social_config import get_configured_creators, get_creator_by_id
 from creator_social_store import append_snapshot, latest_snapshot_for_creator, load_snapshots
+from instagram_profile_fetcher import fetch_instagram_profile
 from tiktok_profile_fetcher import fetch_tiktok_profile
 
 
@@ -38,7 +39,11 @@ def refresh_creator(creator_id: str) -> Dict[str, Any]:
         raise ValueError(f"Unknown creator: {creator_id}")
 
     handle = creator.get("handle") or ""
-    profile = fetch_tiktok_profile(handle)
+    platform = (creator.get("platform") or "tiktok").lower()
+    if platform == "instagram":
+        profile = fetch_instagram_profile(handle)
+    else:
+        profile = fetch_tiktok_profile(handle)
     snapshot = append_snapshot({
         "creator_id": creator_id,
         "platform": creator.get("platform") or "tiktok",

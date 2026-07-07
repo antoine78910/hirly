@@ -11,6 +11,7 @@ import {
   MessageCircle,
   Play,
   RefreshCw,
+  Instagram,
   TrendingDown,
   TrendingUp,
   Users,
@@ -47,6 +48,18 @@ function TikTokIcon({ className }) {
       <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.69a8.18 8.18 0 0 0 4.78 1.52V6.76a4.85 4.85 0 0 1-1.01-.07z" />
     </svg>
   );
+}
+
+function PlatformIcon({ platform, className = "h-4 w-4" }) {
+  if (platform === "instagram") {
+    return <Instagram className={className} aria-hidden />;
+  }
+  return <TikTokIcon className={className} />;
+}
+
+function platformLabel(platform) {
+  if (platform === "instagram") return "Instagram";
+  return "TikTok";
 }
 
 const fmtCompact = (value) => {
@@ -183,12 +196,20 @@ function CreatorChip({ creator, selected, onToggle }) {
       )}
       {creator.name}
       <span className="text-zinc-500">@{creator.handle}</span>
+      <PlatformIcon platform={creator.platform} className="h-3.5 w-3.5 text-zinc-400" />
     </button>
   );
 }
 
-function TopVideoRow({ video, maxViews, usesLikesProxy }) {
-  const views = Number(video.views || 0) || (usesLikesProxy ? Number(video.likes || 0) : 0);
+function videoReachViews(video, usesLikesProxy = false) {
+  const views = Number(video?.views || 0);
+  if (views > 0) return views;
+  if (usesLikesProxy) return Number(video?.likes || 0);
+  return views;
+}
+
+function TopVideoRow({ video, maxViews, usesLikesProxy, viewsLabel = "Views" }) {
+  const views = videoReachViews(video, usesLikesProxy);
   const width = maxViews > 0 ? Math.max(8, (views / maxViews) * 100) : 0;
   const label = truncateText(video.description || "Untitled video");
 
@@ -205,8 +226,14 @@ function TopVideoRow({ video, maxViews, usesLikesProxy }) {
           style={{ width: `${width}%` }}
         />
       </div>
-      <div className="relative flex h-12 w-9 shrink-0 items-center justify-center rounded-md bg-zinc-900 text-white">
-        <Play className="h-4 w-4 fill-current" />
+      <div className="relative h-12 w-9 shrink-0 overflow-hidden rounded-md bg-zinc-900 text-white">
+        {video.cover_url ? (
+          <img src={video.cover_url} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center">
+            <Play className="h-4 w-4 fill-current" />
+          </div>
+        )}
       </div>
       <div className="relative min-w-0 flex-1">
         <p className="line-clamp-2 text-sm font-medium text-zinc-900">{label}</p>
@@ -215,8 +242,9 @@ function TopVideoRow({ video, maxViews, usesLikesProxy }) {
           {video.posted_at ? ` · ${fmtDateShort(video.posted_at.slice(0, 10))}` : ""}
         </p>
       </div>
-      <div className="relative ml-auto shrink-0 pr-1 font-mono text-sm font-semibold text-zinc-900">
-        {fmtCompact(views)}
+      <div className="relative ml-auto shrink-0 pr-1 text-right">
+        <div className="font-mono text-sm font-semibold text-zinc-900">{fmtCompact(views)}</div>
+        <div className="text-[11px] text-zinc-500">{viewsLabel}</div>
       </div>
     </a>
   );
@@ -391,7 +419,7 @@ export default function AdminCreators() {
         toast.success("Creator stats refreshed");
       }
     } catch (err) {
-      toast.error(adminApiErrorMessage(err, "Could not refresh TikTok stats"));
+      toast.error(adminApiErrorMessage(err, "Could not refresh social stats"));
     } finally {
       setRefreshing(false);
     }
@@ -458,11 +486,19 @@ export default function AdminCreators() {
     return [...(data?.videos || [])]
       .map((video) => ({
         ...video,
-        reach: Number(video.views || 0) || (usesLikesProxy ? Number(video.likes || 0) : 0),
+        reach: videoReachViews(video, usesLikesProxy),
       }))
       .sort((a, b) => b.reach - a.reach)
       .slice(0, 5);
   }, [data?.videos, usesLikesProxy]);
+
+  const recentVideos = useMemo(() => {
+    return [...(data?.videos || [])].sort((a, b) => {
+      const aTime = a.posted_at || "";
+      const bTime = b.posted_at || "";
+      return bTime.localeCompare(aTime);
+    });
+  }, [data?.videos]);
 
   const topAccounts = useMemo(() => {
     return [...filteredCreators]
@@ -480,11 +516,11 @@ export default function AdminCreators() {
   return (
     <AdminShell
       title="Creators"
-      subtitle="TikTok performance tracking for Hirly content creators — daily posts, reach, and engagement."
+      subtitle="TikTok and Instagram performance tracking for Hirly content creators."
       actions={(
         <Button variant="outline" onClick={refresh} disabled={loading || refreshing} className="cursor-pointer">
           {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-          Refresh TikTok
+          Refresh stats
         </Button>
       )}
     >
@@ -513,10 +549,15 @@ export default function AdminCreators() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <div className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-700">
-                  <TikTokIcon className="h-4 w-4" />
-                  TikTok
-                </div>
+                {["tiktok", "instagram"].map((platform) => (
+                  <div
+                    key={platform}
+                    className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-700"
+                  >
+                    <PlatformIcon platform={platform} className="h-4 w-4" />
+                    {platformLabel(platform)}
+                  </div>
+                ))}
                 <div className="inline-flex rounded-full border border-zinc-200 bg-zinc-50 p-1" role="group" aria-label="Date range">
                   {RANGE_OPTIONS.map((option) => (
                     <button
@@ -582,11 +623,12 @@ export default function AdminCreators() {
                           video={video}
                           maxViews={maxTopVideoViews}
                           usesLikesProxy={usesLikesProxy}
+                          viewsLabel={viewsLabel}
                         />
                       ))}
                     </div>
                   ) : (
-                    <p className="px-5 py-8 text-sm text-zinc-500">No video stats yet. Refresh TikTok to load views.</p>
+                    <p className="px-5 py-8 text-sm text-zinc-500">No video stats yet. Refresh stats to load views.</p>
                   )}
                 </section>
 
@@ -614,6 +656,61 @@ export default function AdminCreators() {
                   )}
                 </section>
               </div>
+
+              <section className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+                <div className="border-b border-zinc-200 px-5 py-4">
+                  <h2 className="font-display text-lg font-bold text-zinc-900">Posted videos</h2>
+                  <p className="text-sm text-zinc-500">All tracked posts with {viewsLabel.toLowerCase()}, likes, and comments.</p>
+                </div>
+                {recentVideos.length ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[900px] text-left text-sm">
+                      <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
+                        <tr>
+                          <th className="px-5 py-3 font-semibold">Post</th>
+                          <th className="px-5 py-3 font-semibold">Account</th>
+                          <th className="px-5 py-3 font-semibold">Date</th>
+                          <th className="px-5 py-3 font-semibold">{viewsLabel}</th>
+                          <th className="px-5 py-3 font-semibold">Likes</th>
+                          <th className="px-5 py-3 font-semibold">Comments</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-100">
+                        {recentVideos.map((video) => (
+                          <tr key={`${video.creator_id}-${video.video_id}`} className="transition hover:bg-zinc-50">
+                            <td className="px-5 py-3">
+                              <a
+                                href={video.url || undefined}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex min-w-[280px] items-center gap-3 text-zinc-900 hover:text-linkedin"
+                              >
+                                <div className="h-12 w-9 shrink-0 overflow-hidden rounded-md bg-zinc-900">
+                                  {video.cover_url ? (
+                                    <img src={video.cover_url} alt="" className="h-full w-full object-cover" />
+                                  ) : (
+                                    <div className="flex h-full w-full items-center justify-center text-white">
+                                      <Play className="h-4 w-4 fill-current" />
+                                    </div>
+                                  )}
+                                </div>
+                                <span className="line-clamp-2 font-medium">{truncateText(video.description || "Untitled video", 96)}</span>
+                              </a>
+                            </td>
+                            <td className="px-5 py-3 text-zinc-700">{video.creator_name || "Creator"}</td>
+                            <td className="px-5 py-3 text-zinc-600">{video.posted_at ? fmtDateLong(video.posted_at.slice(0, 10)) : "—"}</td>
+                            <td className="px-5 py-3 font-mono font-semibold text-sky-700">{fmtCompact(videoReachViews(video, usesLikesProxy))}</td>
+                            <td className="px-5 py-3 font-mono text-pink-600">{fmtCompact(video.likes)}</td>
+                            <td className="px-5 py-3 font-mono text-emerald-600">{fmtCompact(video.comments)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="px-5 py-8 text-sm text-zinc-500">No posts loaded yet. Click Refresh stats to fetch per-post metrics.</p>
+                )}
+              </section>
 
               <section className="rounded-2xl border border-zinc-200 bg-zinc-50/60 p-4 sm:p-5">
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -709,7 +806,7 @@ export default function AdminCreators() {
               <section className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
                 <div className="border-b border-zinc-200 px-5 py-4">
                   <h2 className="font-display text-lg font-bold text-zinc-900">Accounts</h2>
-                  <p className="text-sm text-zinc-500">Linked TikTok profiles and live totals.</p>
+                  <p className="text-sm text-zinc-500">Linked TikTok and Instagram profiles with live totals.</p>
                 </div>
                 <div className="grid gap-4 p-5 lg:grid-cols-2">
                   {filteredCreators.map((creator) => (
@@ -725,7 +822,7 @@ export default function AdminCreators() {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
                             <h3 className="font-display text-lg font-bold text-zinc-900">{creator.name}</h3>
-                            <TikTokIcon className="h-4 w-4 text-zinc-500" />
+                            <PlatformIcon platform={creator.platform} className="h-4 w-4 text-zinc-500" />
                           </div>
                           <a
                             href={creator.profile_url}

@@ -22,6 +22,22 @@ DEFAULT_CREATORS: List[Dict[str, Any]] = [
         "profile_url": "https://www.tiktok.com/@hirlyjob",
         "tags": ["france", "hirly"],
     },
+    {
+        "creator_id": "mike_instagram",
+        "name": "Mike",
+        "platform": "instagram",
+        "handle": "mike.jobtips",
+        "profile_url": "https://www.instagram.com/mike.jobtips/",
+        "tags": ["hirly"],
+    },
+    {
+        "creator_id": "mike_tiktok",
+        "name": "Mike",
+        "platform": "tiktok",
+        "handle": "Mike_ways0",
+        "profile_url": "https://www.tiktok.com/@Mike_ways0",
+        "tags": ["hirly"],
+    },
 ]
 
 
@@ -33,6 +49,11 @@ def normalize_handle(value: str) -> str:
         path = urlparse(raw).path.strip("/")
         if path.startswith("@"):
             return path[1:].split("/")[0]
+        return path.split("/")[0]
+    if "instagram.com" in raw:
+        path = urlparse(raw).path.strip("/")
+        if not path:
+            return ""
         return path.split("/")[0]
     return raw.lstrip("@")
 
