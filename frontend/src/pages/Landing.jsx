@@ -137,7 +137,7 @@ export default function Landing() {
       {/* Hero */}
       <section className="relative overflow-x-hidden gradient-linkedin-soft">
         <div className="absolute inset-0 bg-grid mask-radial pointer-events-none" />
-        <div className="relative max-w-6xl mx-auto px-6 pt-16 pb-20 lg:pt-28 lg:pb-28 text-center">
+        <div className="relative max-w-6xl mx-auto px-6 pt-16 pb-10 text-center sm:pb-12 lg:pt-28 lg:pb-14">
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -254,7 +254,7 @@ export default function Landing() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.6, duration: 0.6 }}
-            className="mt-14 flex flex-col items-center gap-2"
+            className="mt-20 flex flex-col items-center gap-2 sm:mt-24"
           >
             <p className="text-xs text-zinc-500">
               {lang === "fr"
@@ -268,7 +268,7 @@ export default function Landing() {
 
       {/* Comparison */}
       <section className="border-y border-zinc-100">
-        <div className="max-w-5xl mx-auto px-6 py-20 grid md:grid-cols-2 gap-6">
+        <div className="max-w-5xl mx-auto grid gap-6 px-6 py-12 md:grid-cols-2 md:py-16">
           <div className="bg-white border border-zinc-200 rounded-2xl p-8">
             <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-3">{lang === "fr" ? "L'ancienne façon" : "The old way"}</p>
             <h3 className="font-display font-bold text-3xl mb-4">{lang === "fr" ? "20 min / candidature" : "20 min / application"}</h3>

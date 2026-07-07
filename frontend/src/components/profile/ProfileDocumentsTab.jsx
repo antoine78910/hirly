@@ -7,6 +7,7 @@ import { useAppLocale } from "../../context/AppLocaleContext";
 import { formatUploadedDate } from "../../lib/appUi";
 import { Button } from "../ui/button";
 import ProfileResumeSection from "./ProfileResumeSection";
+import ProfileCoverLetterSection from "./ProfileCoverLetterSection";
 import ProfileFormSection from "./ProfileFormSection";
 
 const ACCEPTED_DOCUMENTS = ".pdf,.docx,.txt,.png,.jpg,.jpeg,.webp";
@@ -169,6 +170,11 @@ export default function ProfileDocumentsTab({ profile, onUploadResume, onDocumen
       <ProfileResumeSection
         profile={profile}
         onUploadResume={onUploadResume}
+      />
+
+      <ProfileCoverLetterSection
+        profile={profile}
+        onCoverLetterChange={onDocumentsChange}
       />
 
       <ProfileFormSection

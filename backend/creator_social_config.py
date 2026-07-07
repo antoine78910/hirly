@@ -3,7 +3,13 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List
-from urllib.parse import urlparse
+
+from creator_social_registry import (
+    add_creator as register_creator,
+    get_configured_creators,
+    get_creator_by_id,
+    normalize_handle,
+)
 
 DEFAULT_CREATORS: List[Dict[str, Any]] = [
     {
@@ -57,34 +63,14 @@ DEFAULT_CREATORS: List[Dict[str, Any]] = [
 ]
 
 
-def normalize_handle(value: str) -> str:
-    raw = (value or "").strip()
-    if not raw:
-        return ""
-    if "tiktok.com" in raw:
-        path = urlparse(raw).path.strip("/")
-        if path.startswith("@"):
-            return path[1:].split("/")[0]
-        return path.split("/")[0]
-    if "instagram.com" in raw:
-        path = urlparse(raw).path.strip("/")
-        if not path:
-            return ""
-        return path.split("/")[0]
-    return raw.lstrip("@")
+def add_creator(*, platform: str, handle: str, name: str | None = None) -> Dict[str, Any]:
+    return register_creator(platform=platform, handle=handle, name=name)
 
 
-def get_configured_creators() -> List[Dict[str, Any]]:
-    rows = []
-    for item in DEFAULT_CREATORS:
-        row = dict(item)
-        row["handle"] = normalize_handle(row.get("handle") or row.get("profile_url") or "")
-        rows.append(row)
-    return rows
-
-
-def get_creator_by_id(creator_id: str) -> Dict[str, Any] | None:
-    for row in get_configured_creators():
-        if row.get("creator_id") == creator_id:
-            return row
-    return None
+__all__ = [
+    "DEFAULT_CREATORS",
+    "add_creator",
+    "get_configured_creators",
+    "get_creator_by_id",
+    "normalize_handle",
+]

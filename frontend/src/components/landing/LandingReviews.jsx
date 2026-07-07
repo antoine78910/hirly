@@ -1,22 +1,35 @@
 import { Sparkles } from "lucide-react";
 import {
   getLandingReviewColumns,
-  getLandingReviewsAll,
   getLandingReviewsCopy,
 } from "../../lib/landingReviews";
 
 const MARQUEE_COPIES = 4;
 
-function ReviewCard({ name, subline, quote, className = "" }) {
+const MOBILE_CARD_CLASS = "w-[calc((100vw-3.75rem)/2)] max-w-[11.5rem]";
+
+function ReviewCard({ name, subline, quote, className = "", compact = false }) {
   return (
     <article
-      className={`shrink-0 rounded-2xl border border-zinc-200 bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] sm:p-6 ${className}`}
+      className={`shrink-0 rounded-2xl border border-zinc-200 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)] ${
+        compact ? "p-3.5" : "p-5 sm:p-6"
+      } ${className}`}
     >
-      <p className="font-display text-[0.95rem] font-bold leading-snug text-zinc-900 sm:text-base">
+      <p
+        className={`font-display font-bold leading-snug text-zinc-900 ${
+          compact ? "text-[0.85rem]" : "text-[0.95rem] sm:text-base"
+        }`}
+      >
         {name}
       </p>
-      <p className="mt-1 text-sm text-linkedin">{subline}</p>
-      <p className="mt-3 text-sm leading-relaxed text-zinc-700">{quote}</p>
+      <p className={`mt-1 text-linkedin ${compact ? "text-[11px] leading-snug" : "text-sm"}`}>{subline}</p>
+      <p
+        className={`mt-2 leading-relaxed text-zinc-700 ${
+          compact ? "line-clamp-4 text-[11px]" : "mt-3 text-sm"
+        }`}
+      >
+        {quote}
+      </p>
     </article>
   );
 }
@@ -51,15 +64,29 @@ function VerticalReviewMarquee({ reviews, reverse = false, duration = 52 }) {
   );
 }
 
-function MobileHorizontalReviews({ reviews }) {
+function HorizontalReviewTrack({ reviews, suffix, hidden = false }) {
   return (
-    <div className="mt-12 md:hidden">
-      <div className="-mx-6 flex gap-4 overflow-x-auto overscroll-x-contain px-6 pb-1 no-scrollbar snap-x snap-mandatory touch-pan-x">
-        {reviews.map((review) => (
-          <ReviewCard
-            key={review.id}
-            {...review}
-            className="w-[min(84vw,320px)] snap-center"
+    <div className="flex shrink-0 items-stretch gap-3 pr-3" aria-hidden={hidden || undefined}>
+      {reviews.map((review) => (
+        <ReviewCard key={`${review.id}-${suffix}`} {...review} className={MOBILE_CARD_CLASS} compact />
+      ))}
+    </div>
+  );
+}
+
+function MobileHorizontalReviewRow({ reviews, reverse = false, duration = 52 }) {
+  return (
+    <div className="pain-marquee-mask w-full overflow-hidden">
+      <div
+        className={`flex w-max flex-nowrap items-stretch ${reverse ? "pain-marquee-right" : "pain-marquee-left"}`}
+        style={{ animationDuration: `${duration}s` }}
+      >
+        {Array.from({ length: MARQUEE_COPIES }, (_, copy) => (
+          <HorizontalReviewTrack
+            key={copy}
+            reviews={reviews}
+            suffix={`m${copy}`}
+            hidden={copy > 0}
           />
         ))}
       </div>
@@ -67,10 +94,18 @@ function MobileHorizontalReviews({ reviews }) {
   );
 }
 
+function MobileHorizontalReviews({ leftColumn, rightColumn }) {
+  return (
+    <div className="-mx-6 mt-12 flex flex-col gap-4 px-6 md:hidden">
+      <MobileHorizontalReviewRow reviews={leftColumn} duration={54} />
+      <MobileHorizontalReviewRow reviews={rightColumn} reverse duration={48} />
+    </div>
+  );
+}
+
 export default function LandingReviews({ lang }) {
   const copy = getLandingReviewsCopy(lang);
   const [leftColumn, rightColumn] = getLandingReviewColumns(lang);
-  const allReviews = getLandingReviewsAll(lang);
 
   return (
     <section className="relative overflow-hidden border-y border-zinc-100 gradient-linkedin-soft">
@@ -92,7 +127,7 @@ export default function LandingReviews({ lang }) {
           </p>
         </div>
 
-        <MobileHorizontalReviews reviews={allReviews} />
+        <MobileHorizontalReviews leftColumn={leftColumn} rightColumn={rightColumn} />
 
         <div className="mt-12 hidden gap-4 md:grid md:grid-cols-2 md:gap-5">
           <VerticalReviewMarquee reviews={leftColumn} duration={54} />
