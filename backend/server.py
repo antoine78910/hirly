@@ -3500,6 +3500,15 @@ async def _process_application_generation_queue(user_id: str) -> None:
                     job_id,
                     update_doc.get("package_status"),
                 )
+                if update_doc.get("package_status") in {"generated", "generated_text_only"} and _agent_auto_prepare_enabled(job):
+                    try:
+                        await _run_agent_apply(job_id, queued_user, click_submit=False)
+                        logger.info("agent_auto_prepare_complete user_id=%s application_id=%s job_id=%s", user_id, application_id, job_id)
+                    except Exception as exc:
+                        logger.warning(
+                            "agent_auto_prepare_failed user_id=%s application_id=%s job_id=%s error=%s",
+                            user_id, application_id, job_id, str(exc)[:300],
+                        )
             except Exception as exc:
                 logger.exception("queued_application_generation_failed user_id=%s application_id=%s job_id=%s", user_id, application_id, job_id)
                 failed_at = datetime.now(timezone.utc).isoformat()
@@ -7531,6 +7540,30 @@ def _agent_real_submit_allowed_emails() -> set[str]:
 
 def _manual_application_fulfillment_enabled() -> bool:
     return _env_enabled("MANUAL_APPLICATION_FULFILLMENT", "true")
+
+
+def _agent_auto_prepare_enabled(job: Dict[str, Any]) -> bool:
+    """Gate for running the apply agent automatically right after package
+    generation (Phase 1: supervised prepare, never an automatic submit).
+
+    Kill-switch defaults to on; flip AGENT_AUTO_PREPARE_ENABLED=false on
+    Railway if the Nix-chromium launch path turns out broken -- this runs
+    inside the same per-user background queue as CV generation, so a hung
+    Playwright launch would delay every subsequent queued application for
+    that user, not just fail silently.
+
+    Skipped for jobs already known to require login or be otherwise blocked
+    (tier D/E, or job_board_account_required) -- launching a browser for
+    those would just burn time/cost to rediscover something we already know.
+    """
+    if not _env_enabled("AGENT_AUTO_PREPARE_ENABLED", "true"):
+        return False
+    if job.get("job_board_account_required"):
+        return False
+    tier = str(job.get("applyability_tier") or "").upper()
+    if tier in {"D", "E"}:
+        return False
+    return True
 
 
 def _require_job_maintenance_enabled() -> None:
