@@ -84,8 +84,16 @@ def build_candidate_context(profile: Dict[str, Any], app_doc: Dict[str, Any], us
         if value not in (None, ""):
             context[key] = value
 
-    put("profile.contact.first_name", contact.get("first_name") or _first_name(contact.get("name") or user.get("name")))
-    put("profile.contact.last_name", contact.get("last_name") or _last_name(contact.get("name") or user.get("name")))
+    first_name = contact.get("first_name") or _first_name(contact.get("name") or user.get("name"))
+    last_name = contact.get("last_name") or _last_name(contact.get("name") or user.get("name"))
+    put("profile.contact.first_name", first_name)
+    put("profile.contact.last_name", last_name)
+    # A single atomic key for "full name" style fields -- without this the
+    # agent tends to synthesize a compound expression like "first_name + ' '
+    # + last_name" as its `source`, which is still guardrail-safe (it starts
+    # with the approved profile.contact. prefix) but doesn't match any real
+    # candidate_context key, so a recipe can never replay it for free.
+    put("profile.contact.full_name", " ".join(part for part in (first_name, last_name) if part).strip())
     put("profile.contact.email", contact.get("email") or user.get("email"))
     put("profile.contact.phone", contact.get("phone"))
     put("profile.contact.location", contact.get("location") or location_data.get("location_label") or profile.get("target_location"))

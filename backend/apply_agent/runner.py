@@ -22,6 +22,7 @@ from urllib.parse import urlparse
 from . import agent as agent_module
 from . import blockers
 from . import perception
+from . import recipes as recipes_module
 from .browser import launch_page, screenshot_b64, write_cover_letter_file, write_resume_file
 from .guardrails import canonical
 from .models import ApplyAgentError, ApplyRunResult, BrowserFile, blocker, calculate_success_likelihood
@@ -51,11 +52,13 @@ async def run_apply_attempt(
     *,
     click_submit: bool = False,
     headless: bool = True,
+    db: Any = None,
 ) -> ApplyRunResult:
     url = _application_url(job)
     domain = _domain(url)
     provider = str(job.get("ats_provider") or job.get("provider") or "unknown")
     result = ApplyRunResult(provider=provider, application_url=url, domain=domain)
+    recipe_key = recipes_module.recipe_key_for_url(url) if url else ""
 
     if not url:
         result.blockers.append(blocker("missing_apply_url", "No usable apply URL on this job."))
@@ -107,10 +110,18 @@ async def run_apply_attempt(
                 result.screenshot_b64 = await screenshot_b64(page)
                 return result
 
+            candidate_context = agent_module.build_candidate_context(profile, app_doc, user)
             file_fills = agent_module.resolve_file_upload_fields(fields)
-            agent_proposals = await agent_module.plan_fills(fields, job, agent_module.build_candidate_context(profile, app_doc, user))
+
+            recipe = await recipes_module.get_recipe(db, recipe_key) if db is not None and recipe_key else None
+            recipe_proposals = recipes_module.propose_fills_from_recipe(fields, recipe, candidate_context)
+            fields_needing_agent = recipes_module.uncovered_fields(
+                [f for f in fields if f.get("widget_type") != "file_upload"], recipe_proposals,
+            )
+            agent_proposals = await agent_module.plan_fills(fields_needing_agent, job, candidate_context) if fields_needing_agent else []
             result.agent_plan = agent_proposals
-            accepted, rejected = agent_module.validated_plan(fields, file_fills + agent_proposals, profile)
+            result.recipe_used = recipe_key if recipe_proposals else None
+            accepted, rejected = agent_module.validated_plan(fields, file_fills + recipe_proposals + agent_proposals, profile)
             result.rejected_fills = rejected
 
             resume_uploaded = await _apply_fills(page, fields, accepted, resume_path, cover_letter_path, result)
@@ -153,6 +164,10 @@ async def run_apply_attempt(
                 and not unfilled_required
                 and resume_uploaded
             )
+
+            if result.ready_for_final_click and db is not None and recipe_key:
+                await recipes_module.record_successful_fills(db, recipe_key, provider, accepted)
+                result.recipe_recorded = True
 
             if not (click_submit and result.ready_for_final_click):
                 result.failure_reason = None if result.ready_for_final_click else "not_ready_for_final_click"

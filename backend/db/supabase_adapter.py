@@ -143,6 +143,17 @@ TABLE_FILTER_COLUMNS = {
         "created_at",
         "updated_at",
     },
+    "apply_agent_recipes": {
+        "id",
+        "provider",
+        "field_recipes",
+        "success_count",
+        "failure_count",
+        "last_used_at",
+        "last_success_at",
+        "created_at",
+        "updated_at",
+    },
     "geo_places": {
         "id",
         "geoname_id",
@@ -990,6 +1001,7 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
         self.jobs = SupabaseCollectionAdapter("jobs", supabase_url, secret_key)
         self.ats_company_sources = SupabaseCollectionAdapter("ats_company_sources", supabase_url, secret_key)
         self.friendly_company_career_pages = SupabaseCollectionAdapter("friendly_company_career_pages", supabase_url, secret_key)
+        self.apply_agent_recipes = SupabaseCollectionAdapter("apply_agent_recipes", supabase_url, secret_key)
         self.geo_places = SupabaseCollectionAdapter("geo_places", supabase_url, secret_key)
         self.applications = SupabaseCollectionAdapter("applications", supabase_url, secret_key)
         self.gmail_connections = SupabaseCollectionAdapter("gmail_connections", supabase_url, secret_key)

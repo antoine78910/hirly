@@ -9414,6 +9414,7 @@ async def _run_agent_apply(job_id: str, user: User, click_submit: bool = False) 
             user=user.model_dump(mode="json"),
             click_submit=click_submit,
             headless=_browser_engine_headless(),
+            db=db,
         )
     except ApplyAgentError as exc:
         _log_browser_exception(f"Apply agent failed during {exc.phase}", exc)

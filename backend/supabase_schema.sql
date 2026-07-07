@@ -201,6 +201,28 @@ CREATE INDEX IF NOT EXISTS idx_friendly_company_career_pages_country_code ON fri
 CREATE INDEX IF NOT EXISTS idx_friendly_company_career_pages_is_friendly ON friendly_company_career_pages (is_friendly);
 CREATE INDEX IF NOT EXISTS idx_friendly_company_career_pages_last_checked_at ON friendly_company_career_pages (last_checked_at);
 
+CREATE TABLE IF NOT EXISTS apply_agent_recipes (
+  id TEXT PRIMARY KEY,
+  provider TEXT,
+  field_recipes JSONB,
+  success_count INTEGER DEFAULT 0,
+  failure_count INTEGER DEFAULT 0,
+  last_used_at TIMESTAMPTZ,
+  last_success_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  data JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+ALTER TABLE apply_agent_recipes ADD COLUMN IF NOT EXISTS provider TEXT;
+ALTER TABLE apply_agent_recipes ADD COLUMN IF NOT EXISTS field_recipes JSONB;
+ALTER TABLE apply_agent_recipes ADD COLUMN IF NOT EXISTS success_count INTEGER DEFAULT 0;
+ALTER TABLE apply_agent_recipes ADD COLUMN IF NOT EXISTS failure_count INTEGER DEFAULT 0;
+ALTER TABLE apply_agent_recipes ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ;
+ALTER TABLE apply_agent_recipes ADD COLUMN IF NOT EXISTS last_success_at TIMESTAMPTZ;
+ALTER TABLE apply_agent_recipes ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
+ALTER TABLE apply_agent_recipes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+CREATE INDEX IF NOT EXISTS idx_apply_agent_recipes_provider ON apply_agent_recipes (provider);
+
 CREATE TABLE IF NOT EXISTS geo_places (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   geoname_id TEXT UNIQUE,
