@@ -123,9 +123,22 @@ async def run_apply_attempt(
             if not perception.looks_like_real_form(fields):
                 # Landing page, not the form yet (confirmed live on Ashby,
                 # Flatchr, SmartRecruiters, Workday) -- try the generic
-                # "Apply" CTA and re-perceive. If nothing matched, `fields`
-                # is untouched and behavior is identical to before this fix.
-                if await blockers.reveal_apply_form(page):
+                # "Apply" CTA and re-perceive. The fixed phrase list is a
+                # fast, free first try; when it doesn't recognize the CTA's
+                # actual wording (confirmed live: SmartRecruiters and
+                # Workday's real button text never matched anything tried),
+                # fall back to having the LLM read the real button/link text
+                # and judge, the way a human applicant would -- this is what
+                # generalizes to ATS/wording no one has hardcoded a phrase
+                # for yet. If neither path finds anything, `fields` is
+                # untouched and behavior is unchanged from before this fix.
+                revealed = await blockers.reveal_apply_form(page)
+                if not revealed:
+                    clickable = await perception.extract_clickable_candidates(page)
+                    click_index = await agent_module.decide_reveal_action(fields, clickable)
+                    if click_index is not None:
+                        revealed = await perception.click_clickable_candidate(page, click_index)
+                if revealed:
                     try:
                         await page.wait_for_load_state("networkidle", timeout=6000)
                     except Exception:
@@ -378,12 +391,23 @@ async def _fill_combobox(frame: Any, locator: Any, field: Dict[str, Any], value:
     for index in range(min(count, 200)):
         candidate = option_locator.nth(index)
         try:
+            # `count()` matches every option-like node on the whole page,
+            # including closed/hidden menus elsewhere -- confirmed live on
+            # Workable, where a match at a later index pointed at an
+            # invisible leftover from a different dropdown and the click
+            # just timed out. Visibility first, cheaply, before ever
+            # attempting the click.
+            if not await candidate.is_visible():
+                continue
             text = canonical(await candidate.inner_text(timeout=500))
         except Exception:
             continue
         if wanted and (wanted == text or wanted in text or text in wanted):
-            await candidate.click(timeout=2000)
-            return True
+            try:
+                await candidate.click(timeout=2000)
+                return True
+            except Exception:
+                continue
     # Nothing matched -- close the popup we opened rather than leaving a
     # dropdown hanging over the rest of the form.
     try:
@@ -396,10 +420,25 @@ async def _fill_combobox(frame: Any, locator: Any, field: Dict[str, Any], value:
 async def _click_submit_and_verify(page: Any, result: ApplyRunResult) -> None:
     submit_selector = 'button[type="submit"], input[type="submit"], button:has-text("Submit")'
     try:
-        locator = page.locator(submit_selector).first
-        if not await locator.count():
+        candidates = page.locator(submit_selector)
+        candidate_count = await candidates.count()
+        if not candidate_count:
             result.failure_reason = "submit_button_not_found"
             return
+        # Some ATS render more than one element matching this selector (a
+        # duplicate for a different layout/breakpoint, confirmed live on
+        # Recruitee where the DOM-first match was a hidden decoy) -- prefer
+        # the first one actually visible, falling back to the first match
+        # if somehow none report visible.
+        locator = candidates.first
+        for index in range(candidate_count):
+            option = candidates.nth(index)
+            try:
+                if await option.is_visible():
+                    locator = option
+                    break
+            except Exception:
+                continue
         captcha_before = await blockers.detect_captcha(page)
         if blockers.captcha_active(captcha_before):
             result.captcha_required = True
@@ -464,6 +503,23 @@ async def _click_submit_and_verify(page: Any, result: ApplyRunResult) -> None:
         except Exception:
             submit_still_visible = False
         result.success_detected = bool(result.confirmation_text_found) or (not submit_still_visible and not result.post_submit_errors)
+        if not result.success_detected and not result.post_submit_errors:
+            # The fixed SUCCESS_PHRASES list is a fast, free first check;
+            # when it finds nothing and there's no clear error either,
+            # that's genuinely ambiguous, not necessarily a failure --
+            # confirmed live on Taleez and Werecruit, where a real submit
+            # click left the page in a state no phrase list matched either
+            # way. Ask the LLM to read the actual resulting page the way a
+            # human checking "did that go through?" would, instead of
+            # defaulting to "unknown" just because no pre-written phrase
+            # happened to match this ATS's wording.
+            outcome = await agent_module.assess_submission_outcome(text)
+            if outcome.get("status") == "success":
+                result.success_detected = True
+            elif outcome.get("status") == "failed":
+                detail = outcome.get("detail")
+                if detail:
+                    result.post_submit_errors.append(str(detail)[:300])
         result.failure_reason = None if result.success_detected else "submission_status_unknown"
         result.final_url = page.url
         result.screenshot_b64 = await screenshot_b64(page)

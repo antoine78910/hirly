@@ -312,6 +312,72 @@ async def extract_fields(page: Any, *, max_frames: int = 6) -> List[Dict[str, An
     return fields
 
 
+CLICKABLE_EXTRACTOR_SCRIPT = r"""
+() => {
+  function visible(el) {
+    const style = window.getComputedStyle(el);
+    if (!style || style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0) return false;
+    const rect = el.getBoundingClientRect();
+    return Boolean(rect.width > 0 && rect.height > 0);
+  }
+  const nodes = Array.from(document.querySelectorAll("a, button, [role='button']")).filter(visible);
+  return nodes.slice(0, 60).map((el, index) => ({
+    index,
+    tag: el.tagName.toLowerCase(),
+    text: (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 80),
+  })).filter((item) => item.text);
+}
+"""
+
+
+async def extract_clickable_candidates(page: Any, *, frame_index: int = 0) -> List[Dict[str, Any]]:
+    """Every visible button/link with text, for the LLM to pick an "Apply"
+    call-to-action from when the phrase-list fast path in
+    blockers.reveal_apply_form doesn't recognize it. Only the main frame --
+    a same-origin iframe embedding the whole apply flow behind a landing
+    page hasn't been seen in practice, and scanning every frame would blow
+    up the candidate list this has to feed to the LLM.
+    """
+    frames = list(getattr(page, "frames", None) or [page.main_frame])
+    frame = frames[frame_index] if 0 <= frame_index < len(frames) else page.main_frame
+    try:
+        candidates = await frame.evaluate(CLICKABLE_EXTRACTOR_SCRIPT)
+    except Exception:
+        return []
+    return candidates if isinstance(candidates, list) else []
+
+
+_CLICK_CANDIDATE_SCRIPT = r"""
+(index) => {
+  function visible(el) {
+    const style = window.getComputedStyle(el);
+    if (!style || style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0) return false;
+    const rect = el.getBoundingClientRect();
+    return Boolean(rect.width > 0 && rect.height > 0);
+  }
+  const nodes = Array.from(document.querySelectorAll("a, button, [role='button']")).filter(visible).slice(0, 60);
+  const target = nodes[index];
+  if (!target) return false;
+  target.click();
+  return true;
+}
+"""
+
+
+async def click_clickable_candidate(page: Any, index: int, *, frame_index: int = 0) -> bool:
+    """Clicks the element at `index` in the exact same visible-button/link
+    list extract_clickable_candidates built -- same query, same filter,
+    same slice, so the index the LLM picked still points at the right
+    element as long as the DOM hasn't meaningfully changed in between.
+    """
+    frames = list(getattr(page, "frames", None) or [page.main_frame])
+    frame = frames[frame_index] if 0 <= frame_index < len(frames) else page.main_frame
+    try:
+        return bool(await frame.evaluate(_CLICK_CANDIDATE_SCRIPT, index))
+    except Exception:
+        return False
+
+
 def looks_like_real_form(fields: List[Dict[str, Any]]) -> bool:
     """A job-summary landing page (confirmed live on Ashby, Flatchr,
     SmartRecruiters, Workday) may still expose a search box or a couple of

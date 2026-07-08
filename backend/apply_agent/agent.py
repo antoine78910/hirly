@@ -214,6 +214,101 @@ async def plan_fills(
     return [item for item in fills if isinstance(item, dict) and item.get("stable_field_id")]
 
 
+_REVEAL_SYSTEM_PROMPT = """You are looking at a job application webpage that
+has just loaded. You're given the fields perception already detected, and
+every visible clickable button/link on the page.
+
+Decide: is this already the real application form, or is it a job-summary
+landing page that needs a click to reveal the actual form first?
+
+- If "already_detected_fields" includes something like an email address,
+  a resume/CV upload, or a first/last name field, this is already the real
+  form -- respond with click_index: null.
+- Otherwise, if one of "clickable_elements" is clearly the call-to-action
+  to start the application (e.g. "Apply", "Apply now", "Apply for this
+  job", "I'm interested", or the equivalent in any other language), return
+  its index.
+- If nothing looks like an apply call-to-action, respond click_index: null
+  -- do not guess at an unrelated button (login, share, navigation, etc).
+
+Return ONLY JSON: {"click_index": <int or null>}
+"""
+
+
+async def decide_reveal_action(
+    fields: List[Dict[str, Any]],
+    clickable_elements: List[Dict[str, Any]],
+) -> Optional[int]:
+    """LLM fallback for finding the "Apply" call-to-action on a landing-page
+    style ATS, used only when blockers.reveal_apply_form's fast phrase-list
+    match doesn't find anything -- confirmed live that a fixed phrase list
+    alone doesn't generalize (SmartRecruiters/Workday's actual CTA wording
+    never matched any phrase tried). Reading the real button/link text and
+    judging semantically is what a human applicant does, and it works for
+    any ATS or language without needing a new phrase added every time one
+    is found.
+    """
+    if not clickable_elements:
+        return None
+    prompt = {
+        "already_detected_fields": [
+            {"label": f.get("label"), "widget_type": f.get("widget_type"), "type": f.get("type")}
+            for f in fields
+        ][:30],
+        "clickable_elements": clickable_elements[:60],
+    }
+    try:
+        raw = await complete_json_text(_REVEAL_SYSTEM_PROMPT, json.dumps(prompt, ensure_ascii=True))
+        parsed = json.loads(raw)
+    except LLMProviderNotConfigured:
+        return None
+    except Exception as exc:
+        logger.warning("apply_agent_reveal_decision_failed error=%s", f"{exc.__class__.__name__}: {exc}"[:300])
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    click_index = parsed.get("click_index")
+    return click_index if isinstance(click_index, int) else None
+
+
+_OUTCOME_SYSTEM_PROMPT = """You are checking whether a job application form
+was successfully submitted, based on the visible page text right after the
+submit button was clicked.
+
+Classify as one of:
+- "success": a confirmation message, thank-you page, or clear acknowledgment
+  that the application was received.
+- "failed": a validation error, missing-field message, or other error is
+  shown, blocking submission.
+- "unclear": neither of the above is evident -- the page looks unchanged or
+  ambiguous, and it isn't safe to assume either outcome.
+
+Return ONLY JSON: {"status": "success"|"failed"|"unclear", "detail": "<short reason, or an error message if failed>"}
+"""
+
+
+async def assess_submission_outcome(page_text: str) -> Dict[str, Any]:
+    """Fallback used only when the fast deterministic check (blockers'
+    fixed SUCCESS_PHRASES / error-term lists) is inconclusive -- confirmed
+    live on Taleez and Werecruit, where a real submit click produced no
+    phrase-list match either way, leaving success genuinely ambiguous. A
+    phrase list can't cover every ATS's wording for "thanks, we got it";
+    reading the actual resulting page and judging is what a human would do
+    to check whether their application actually went through.
+    """
+    try:
+        raw = await complete_json_text(_OUTCOME_SYSTEM_PROMPT, json.dumps({"page_text": page_text[:4000]}, ensure_ascii=True))
+        parsed = json.loads(raw)
+    except LLMProviderNotConfigured:
+        return {"status": "unclear", "detail": "llm_not_configured"}
+    except Exception as exc:
+        logger.warning("apply_agent_outcome_assessment_failed error=%s", f"{exc.__class__.__name__}: {exc}"[:300])
+        return {"status": "unclear", "detail": "assessment_failed"}
+    if not isinstance(parsed, dict) or parsed.get("status") not in ("success", "failed", "unclear"):
+        return {"status": "unclear", "detail": "unparseable_response"}
+    return parsed
+
+
 _COVER_LETTER_TERMS = ("cover letter", "lettre de motivation", "lettre motivation")
 _RESUME_HINT_TERMS = (
     "resume", "cv", "curriculum vitae", "upload",
