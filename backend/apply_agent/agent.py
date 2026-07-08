@@ -214,19 +214,37 @@ async def plan_fills(
     return [item for item in fills if isinstance(item, dict) and item.get("stable_field_id")]
 
 
+_COVER_LETTER_TERMS = ("cover letter", "lettre de motivation", "lettre motivation")
+_RESUME_HINT_TERMS = (
+    "resume", "cv", "curriculum vitae", "upload",
+    "deposer", "fichier", "joindre", "piece jointe", "choisir un fichier", "drop file",
+)
+
+
 def resolve_file_upload_fields(fields: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """File inputs never go through the LLM -- classified deterministically
     by label, same policy as the old system, just centralized here.
+
+    Deliberately does NOT require `visible` the way other fields do: native
+    `<input type=file>` elements are routinely hidden behind a styled
+    "drop your file here" button/dropzone (confirmed live on a real Taleez
+    form -- `visible=False` but functional), and Playwright's
+    `set_input_files()` works on a hidden-but-attached input regardless of
+    CSS visibility, unlike `.click()`/`.fill()` which need the element
+    interactable. Only `disabled` (genuinely inert) is excluded.
     """
+    file_fields = [f for f in fields if f.get("widget_type") == "file_upload" and not f.get("disabled")]
     resolved = []
-    for field in fields:
-        if field.get("widget_type") != "file_upload" or not field.get("visible") or field.get("disabled"):
-            continue
+    for field in file_fields:
         label = canonical(" ".join(str(field.get(key) or "") for key in ("label", "name", "id", "aria_label")))
-        if "cover" in label and "letter" in label:
+        if any(term in label for term in _COVER_LETTER_TERMS):
             resolved.append({"stable_field_id": field.get("stable_field_id"), "value": "__cover_letter_file__", "source": "application.cover_letter_file", "confidence": 0.9})
-        elif any(term in label for term in ("resume", "cv", "upload")):
-            resolved.append({"stable_field_id": field.get("stable_field_id"), "value": "__resume_file__", "source": "application.tailored_cv_file", "confidence": 1.0})
+        elif any(term in label for term in _RESUME_HINT_TERMS) or len(file_fields) == 1:
+            # A form with exactly one file field and no cover-letter wording
+            # is, in practice, always the resume/CV slot -- most ATS forms
+            # don't bother labeling it more specifically than "upload a file".
+            confidence = 1.0 if any(term in label for term in _RESUME_HINT_TERMS) else 0.8
+            resolved.append({"stable_field_id": field.get("stable_field_id"), "value": "__resume_file__", "source": "application.tailored_cv_file", "confidence": confidence})
     return resolved
 
 

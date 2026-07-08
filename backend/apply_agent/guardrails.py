@@ -10,6 +10,7 @@ to invent an answer to a visa/sponsorship/salary/demographic question.
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Any, Dict, Optional
 
 SENSITIVE_PATTERNS = (
@@ -55,7 +56,12 @@ APPROVED_SOURCE_PREFIXES = (
 
 
 def canonical(value: Any) -> str:
-    text = str(value or "").lower()
+    # Normalize accents to their ASCII base letter *before* stripping
+    # non-alphanumerics -- otherwise "déposer" becomes "d poser" (the
+    # stripped accent leaves a word-splitting gap) instead of "deposer",
+    # which silently breaks substring matching against non-English (e.g.
+    # French) field labels.
+    text = unicodedata.normalize("NFKD", str(value or "")).encode("ascii", "ignore").decode("ascii").lower()
     text = re.sub(r"[^a-z0-9]+", " ", text)
     return re.sub(r"\s+", " ", text).strip()
 

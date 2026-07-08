@@ -144,7 +144,16 @@ async def run_apply_attempt(
 
             unfilled_required = [
                 f for f in fields_after
-                if f.get("required") and f.get("visible") and not f.get("disabled") and not _has_value(f)
+                if f.get("required")
+                and not f.get("disabled")
+                and not _has_value(f)
+                # File uploads are routinely hidden behind a styled button/
+                # dropzone (visible=False but real and fillable -- see
+                # resolve_file_upload_fields), so a required-but-unfilled one
+                # must still be flagged; every other widget type keeps the
+                # visibility requirement since a hidden text/select/checkbox
+                # is usually conditionally-inactive, not a real blocker.
+                and (f.get("widget_type") == "file_upload" or f.get("visible"))
             ]
             for field in unfilled_required:
                 code = "required_sensitive_field_missing" if _is_sensitive(field) else "required_field_unmatched"
