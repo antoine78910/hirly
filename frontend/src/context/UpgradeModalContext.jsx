@@ -3,8 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import DesktopUpgradeModal from "../components/upgrade/DesktopUpgradeModal";
 import { useAppLocale } from "./AppLocaleContext";
-import { notifyBillingUpdated } from "../lib/billingEvents";
-import { api } from "../lib/api";
+import { syncBillingAfterCheckout } from "../lib/billingSync";
 
 const UpgradeModalContext = createContext({
   upgradeOpen: false,
@@ -25,8 +24,11 @@ export function UpgradeModalProvider({ children }) {
     const upgradeStatus = params.get("upgrade") || params.get("checkout");
     if (!upgradeStatus) return;
 
+    const sessionId = params.get("session_id");
+
     params.delete("upgrade");
     params.delete("checkout");
+    params.delete("session_id");
     const nextSearch = params.toString();
     navigate(
       { pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : "" },
@@ -41,11 +43,7 @@ export function UpgradeModalProvider({ children }) {
 
     if (upgradeStatus === "success") {
       toast.success(t("upgrade.checkoutSuccess"));
-      api.get("/billing/status")
-        .then(({ data }) => {
-          if (data) notifyBillingUpdated(data);
-        })
-        .catch(() => {});
+      syncBillingAfterCheckout({ sessionId }).catch(() => {});
     }
   }, [location.pathname, location.search, navigate, t]);
 

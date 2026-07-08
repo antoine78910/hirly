@@ -765,6 +765,10 @@ class BillingCheckoutRequest(BaseModel):
     datafast_session_id: Optional[str] = None
 
 
+class BillingConfirmCheckoutRequest(BaseModel):
+    session_id: str
+
+
 class BillingMasterCodeRequest(BaseModel):
     code: str
     plan: Literal["basic", "pro", "ultra", "monthly", "quarterly"] = "ultra"
@@ -1549,7 +1553,10 @@ def _sanitize_return_path(path: Optional[str], *, default: str = "/swipe") -> st
 
 def _checkout_return_url(frontend_url: str, return_path: str, status: str) -> str:
     separator = "&" if "?" in return_path else "?"
-    return f"{frontend_url}{return_path}{separator}upgrade={status}"
+    url = f"{frontend_url}{return_path}{separator}upgrade={status}"
+    if status == "success":
+        url += "&session_id={CHECKOUT_SESSION_ID}"
+    return url
 
 
 def _canonical_billing_plan(plan: str) -> str:
@@ -1932,7 +1939,7 @@ async def create_billing_checkout_session(
     marketing_url = _marketing_url()
     app_url = _app_url()
     if checkout_source == "onboarding":
-        success_url = f"{marketing_url}/onboarding?step=creatorAccessCode&checkout=success"
+        success_url = f"{marketing_url}/onboarding?step=creatorAccessCode&checkout=success&session_id={{CHECKOUT_SESSION_ID}}"
         cancel_url = f"{marketing_url}/onboarding?step=showcasePricing&checkout=cancelled"
     elif checkout_source == "app":
         return_path = _sanitize_return_path(body.return_path)
@@ -1992,6 +1999,90 @@ async def billing_status(user: User = Depends(get_current_user)):
     if warning:
         payload["warning"] = warning
     return payload
+
+
+def _checkout_session_user_id(session_obj: Dict[str, Any]) -> Optional[str]:
+    metadata = session_obj.get("metadata") or {}
+    return session_obj.get("client_reference_id") or metadata.get("user_id")
+
+
+def _checkout_session_belongs_to_user(session_obj: Dict[str, Any], user_doc: Dict[str, Any]) -> bool:
+    user_id = user_doc.get("user_id")
+    session_user_id = _checkout_session_user_id(session_obj)
+    if session_user_id and session_user_id == user_id:
+        return True
+    customer_id = session_obj.get("customer")
+    user_customer_id = _billing_from_user(user_doc).get("stripe_customer_id")
+    return bool(customer_id and user_customer_id and customer_id == user_customer_id)
+
+
+async def _apply_checkout_session_billing(
+    session_obj: Dict[str, Any],
+    *,
+    event_id: Optional[str] = None,
+    fallback_user_id: Optional[str] = None,
+) -> None:
+    customer_id = session_obj.get("customer")
+    subscription_id = session_obj.get("subscription")
+    if not customer_id:
+        logger.warning("stripe_checkout_completed_missing_customer event_id=%s", event_id)
+    updates = {
+        "stripe_customer_id": customer_id,
+        "stripe_subscription_id": subscription_id,
+        "last_payment_status": session_obj.get("payment_status"),
+    }
+    if subscription_id:
+        try:
+            subscription = stripe.Subscription.retrieve(subscription_id)
+            updates.update(_subscription_billing_updates(subscription, last_payment_status=session_obj.get("payment_status")))
+        except Exception as exc:
+            logger.warning(
+                "stripe_checkout_subscription_retrieve_failed event_id=%s subscription_id=%s error=%s",
+                event_id,
+                subscription_id,
+                str(exc)[:200],
+            )
+    user_id = _checkout_session_user_id(session_obj) or fallback_user_id
+    if user_id:
+        if not await db.users.find_one({"user_id": user_id}, {"_id": 0, "user_id": 1}):
+            logger.warning("stripe_checkout_client_reference_user_not_found event_id=%s user_id=%s", event_id, user_id)
+        await _update_user_billing_by_user_id(user_id, {key: value for key, value in updates.items() if value})
+    elif customer_id:
+        await _update_user_billing_by_customer_id(customer_id, {key: value for key, value in updates.items() if value})
+    else:
+        logger.warning("stripe_checkout_completed_no_user_or_customer event_id=%s", event_id)
+
+
+@api_router.post("/billing/confirm-checkout")
+async def confirm_billing_checkout(
+    body: BillingConfirmCheckoutRequest,
+    user: User = Depends(get_current_user),
+):
+    _stripe_secret_key()
+    session_id = (body.session_id or "").strip()
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id is required")
+    try:
+        session_obj = stripe.checkout.Session.retrieve(session_id)
+    except Exception as exc:
+        logger.warning("stripe_checkout_confirm_retrieve_failed session_id=%s error=%s", session_id, str(exc)[:200])
+        raise HTTPException(status_code=400, detail="Invalid checkout session")
+
+    user_doc = await _get_user_doc(user)
+    if not _checkout_session_belongs_to_user(session_obj, user_doc):
+        raise HTTPException(status_code=403, detail="Checkout session does not belong to this user")
+
+    payment_status = session_obj.get("payment_status")
+    session_status = session_obj.get("status")
+    if payment_status != "paid" and session_status != "complete":
+        payload = _billing_status_payload(user_doc)
+        payload["checkout_pending"] = True
+        return payload
+
+    await _apply_checkout_session_billing(session_obj, fallback_user_id=user.user_id)
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0}) or user_doc
+    user_doc, _warning = await _refresh_billing_from_stripe(user_doc)
+    return _billing_status_payload(user_doc)
 
 
 @api_router.get("/billing/usage")
@@ -2111,26 +2202,7 @@ async def stripe_webhook(request: Request):
 
     obj = event["data"]["object"]
     if event_type == "checkout.session.completed":
-        customer_id = obj.get("customer")
-        subscription_id = obj.get("subscription")
-        if not customer_id:
-            logger.warning("stripe_checkout_completed_missing_customer event_id=%s", event_id)
-        updates = {"stripe_customer_id": customer_id, "stripe_subscription_id": subscription_id, "last_payment_status": obj.get("payment_status")}
-        if subscription_id:
-            try:
-                subscription = stripe.Subscription.retrieve(subscription_id)
-                updates.update(_subscription_billing_updates(subscription, last_payment_status=obj.get("payment_status")))
-            except Exception as exc:
-                logger.warning("stripe_checkout_subscription_retrieve_failed event_id=%s subscription_id=%s error=%s", event_id, subscription_id, str(exc)[:200])
-        user_id = obj.get("client_reference_id") or obj.get("metadata", {}).get("user_id")
-        if user_id:
-            if not await db.users.find_one({"user_id": user_id}, {"_id": 0, "user_id": 1}):
-                logger.warning("stripe_checkout_client_reference_user_not_found event_id=%s user_id=%s", event_id, user_id)
-            await _update_user_billing_by_user_id(user_id, {key: value for key, value in updates.items() if value})
-        elif customer_id:
-            await _update_user_billing_by_customer_id(customer_id, {key: value for key, value in updates.items() if value})
-        else:
-            logger.warning("stripe_checkout_completed_no_user_or_customer event_id=%s", event_id)
+        await _apply_checkout_session_billing(obj, event_id=event_id)
     elif event_type in {"customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted"}:
         await _handle_subscription_event(obj)
     elif event_type in {"invoice.payment_succeeded", "invoice.payment_failed"}:

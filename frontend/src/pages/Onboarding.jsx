@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
+import { syncBillingAfterCheckout } from "../lib/billingSync";
 import { withDatafastAttribution, trackDatafastGoal, trackOnboardingContinue, trackOnboardingSkip } from "../lib/datafast";
 import { shouldMockCvUpload, uploadProfileCv } from "../lib/demoCvUpload";
 import { CV_ACCEPT_ATTR, isAcceptedCvFile } from "../lib/cvUploadFormats";
@@ -244,6 +245,7 @@ export default function Onboarding() {
     const checkoutStatus = searchParams.get("checkout");
 
     if (checkoutStatus) {
+      const checkoutSessionId = searchParams.get("session_id");
       try {
         restoreCheckoutState(JSON.parse(sessionStorage.getItem(ONBOARDING_CHECKOUT_STATE_KEY) || "null"));
       } catch (_) {
@@ -252,6 +254,9 @@ export default function Onboarding() {
       if (checkoutStatus === "success") {
         setSearchParams({}, { replace: true });
         setPendingCheckoutSuccess(true);
+        if (checkoutSessionId) {
+          sessionStorage.setItem("hirly.onboarding.checkoutSessionId", checkoutSessionId);
+        }
       } else {
         setStepIndex(STEP_ORDER.indexOf("showcasePricing"));
         toast("Checkout cancelled");
@@ -300,6 +305,12 @@ export default function Onboarding() {
     if (!user) return; // wait until auth resolves
     setPendingCheckoutSuccess(false);
     setCheckoutLoading(true);
+    const sessionId = sessionStorage.getItem("hirly.onboarding.checkoutSessionId") || undefined;
+    syncBillingAfterCheckout({ sessionId })
+      .catch(() => {})
+      .finally(() => {
+        sessionStorage.removeItem("hirly.onboarding.checkoutSessionId");
+      });
     finishOnboarding().finally(() => setCheckoutLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingCheckoutSuccess, user]);

@@ -109,8 +109,11 @@ function CreditsRedirect() {
   const location = useLocation();
   const params = new URLSearchParams(location.search);
   const checkout = params.get("checkout");
+  const sessionId = params.get("session_id");
   if (checkout === "success" || checkout === "cancelled") {
-    return <Navigate to={`/swipe?upgrade=${checkout}`} replace />;
+    const nextParams = new URLSearchParams({ upgrade: checkout });
+    if (sessionId) nextParams.set("session_id", sessionId);
+    return <Navigate to={`/swipe?${nextParams.toString()}`} replace />;
   }
   return <Navigate to="/swipe" replace state={location.state} />;
 }
