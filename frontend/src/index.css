@@ -588,6 +588,26 @@ body.training-page .App {
   padding-top: 0.25rem;
 }
 
+/* Record tools: same native document scroll as training. */
+html.record-tools-page-active,
+body.record-tools-page {
+  height: auto !important;
+  min-height: 100dvh;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+html.record-tools-page-active #root,
+html.record-tools-page-active .App,
+body.record-tools-page #root,
+body.record-tools-page .App {
+  height: auto !important;
+  min-height: 100dvh;
+  overflow: visible !important;
+}
+
 /* Marketing + training: native document scroll (mouse wheel / trackpad). */
 html.document-scroll,
 body.document-scroll {

@@ -32,6 +32,17 @@ function resolveApiBase() {
 const BACKEND_URL = normalizeBackendUrl(process.env.REACT_APP_BACKEND_URL || "");
 export const API = resolveApiBase();
 
+/** Direct Railway/origin API — bypasses Vercel rewrite for large uploads (avoids 504). */
+export function getDirectApiBase() {
+  if (BACKEND_URL && !isLocalBackendUrl(BACKEND_URL)) {
+    return `${BACKEND_URL}/api`;
+  }
+  if (typeof window !== "undefined" && process.env.NODE_ENV === "production") {
+    return "https://hirly-production.up.railway.app/api";
+  }
+  return API;
+}
+
 /** Resolve API-relative media paths (e.g. uploaded training videos). */
 export function resolveApiAssetUrl(path) {
   if (!path) return "";
@@ -244,6 +255,9 @@ api.interceptors.request.use((config) => {
       path = normalizeApiPath(config.url || "");
     }
     if (path === "/profile/cv" && !config.adapter) {
+      config.timeout = Math.max(config.timeout || 0, 120000);
+    }
+    if (path === "/record-tools/interview-templates" && !config.adapter) {
       config.timeout = Math.max(config.timeout || 0, 120000);
     }
   }

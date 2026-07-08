@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Mic, MicOff, Play, RotateCcw, Save, Square, Upload } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Headphones, Loader2, Mic, MicOff, Play, RotateCcw, Save, Square, Upload, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -139,6 +139,108 @@ function formatTime(sec) {
   return `${m}:${rem.toFixed(1).padStart(4, "0")}`;
 }
 
+function InterviewTurnIndicator({ status, currentIndex, totalSteps, micLevel, previewIndex }) {
+  if (previewIndex != null) {
+    return (
+      <div className="relative overflow-hidden rounded-3xl border border-sky-200 bg-gradient-to-br from-sky-50 via-white to-cyan-50 p-6 shadow-sm">
+        <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-sky-200/40 blur-2xl" />
+        <div className="relative flex flex-col items-center text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-sky-600 text-white shadow-lg shadow-sky-200">
+            <Headphones className="h-8 w-8" />
+          </div>
+          <p className="mt-4 text-lg font-bold text-zinc-900">Previewing step {previewIndex + 1}</p>
+          <p className="mt-1 text-sm text-zinc-600">Listen only — this does not start the dialogue.</p>
+          <div className="mt-5 flex h-10 items-end justify-center gap-1">
+            {Array.from({ length: 7 }).map((_, i) => (
+              <span
+                key={i}
+                className="w-1.5 rounded-full bg-sky-500 animate-pulse"
+                style={{
+                  height: `${12 + ((i * 5 + previewIndex * 3) % 24)}px`,
+                  animationDelay: `${i * 0.08}s`,
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "playing") {
+    return (
+      <div className="relative overflow-hidden rounded-3xl border border-violet-200 bg-gradient-to-br from-violet-100 via-white to-fuchsia-50 p-6 shadow-sm">
+        <div className="absolute -left-10 -top-10 h-36 w-36 rounded-full bg-violet-300/30 blur-2xl" />
+        <div className="relative flex flex-col items-center text-center">
+          <div className="relative flex h-20 w-20 items-center justify-center rounded-full bg-violet-600 text-white shadow-xl shadow-violet-200">
+            <Volume2 className="h-9 w-9" />
+            <span className="absolute inset-0 rounded-full border-2 border-violet-400/60 animate-ping" />
+          </div>
+          <p className="mt-4 text-xl font-bold text-zinc-900">Interviewer is speaking</p>
+          <p className="mt-1 text-sm text-zinc-600">
+            Step {currentIndex + 1} of {totalSteps}
+          </p>
+          <div className="mt-5 flex h-12 items-end justify-center gap-1.5">
+            {Array.from({ length: 9 }).map((_, i) => (
+              <span
+                key={i}
+                className="w-2 animate-bounce rounded-full bg-violet-500"
+                style={{
+                  height: `${16 + (i % 3) * 10}px`,
+                  animationDelay: `${i * 0.07}s`,
+                  animationDuration: "0.55s",
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "waiting") {
+    const levelPct = Math.min(100, Math.round(micLevel * 400));
+    return (
+      <div className="relative overflow-hidden rounded-3xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-teal-50 p-6 shadow-sm">
+        <div className="absolute -right-10 -bottom-10 h-36 w-36 rounded-full bg-emerald-300/30 blur-2xl" />
+        <div className="relative flex flex-col items-center text-center">
+          <div
+            className="relative flex h-20 w-20 items-center justify-center rounded-full bg-emerald-600 text-white shadow-xl shadow-emerald-200 transition-transform"
+            style={{ transform: `scale(${1 + micLevel * 0.8})` }}
+          >
+            <Mic className="h-9 w-9" />
+            <span
+              className="absolute inset-0 rounded-full border-2 border-emerald-400/70"
+              style={{ transform: `scale(${1 + levelPct / 100})`, opacity: 0.35 + micLevel * 2 }}
+            />
+          </div>
+          <p className="mt-4 text-xl font-bold text-zinc-900">Your turn to speak</p>
+          <p className="mt-1 text-sm text-zinc-600">
+            Answer the question — we advance when you stop talking.
+          </p>
+          <div className="mt-5 h-2 w-full max-w-xs overflow-hidden rounded-full bg-emerald-100">
+            <div
+              className="h-full rounded-full bg-emerald-500 transition-all duration-75"
+              style={{ width: `${Math.max(8, levelPct)}%` }}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "done") {
+    return (
+      <div className="rounded-3xl border border-zinc-200 bg-zinc-50 p-6 text-center">
+        <p className="text-lg font-bold text-zinc-900">Session complete</p>
+        <p className="mt-1 text-sm text-zinc-600">Hit Play this template to run it again.</p>
+      </div>
+    );
+  }
+
+  return null;
+}
+
 function splitAudioBufferBySilence(audioBuffer, {
   thresholdDb = -42,
   minSilenceMs = 900,
@@ -249,6 +351,7 @@ export default function Mp3InterviewSimulator() {
 
   const [status, setStatus] = useState("setup"); // setup | playing | waiting | done
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [previewIndex, setPreviewIndex] = useState(null);
   const [micError, setMicError] = useState(null);
 
   const audioRef = useRef(null);
@@ -264,7 +367,7 @@ export default function Mp3InterviewSimulator() {
     } catch (_) {}
   }, []);
 
-  const { start: startMic, stop: stopMic, listening: micListening, error: micDetectError } = useMicrophoneSilenceDetector({
+  const { start: startMic, stop: stopMic, listening: micListening, level: micLevel, error: micDetectError } = useMicrophoneSilenceDetector({
     threshold: 0.02,
     silenceMs: 1200,
     onSilence: () => {
@@ -347,15 +450,13 @@ export default function Mp3InterviewSimulator() {
     };
   }, [stopAudio, stopMic]);
 
-  const playSegment = useCallback((idx) => {
-    const seg = segments[idx];
-    if (!seg || !audioRef.current) return;
+  const playAudioRange = useCallback((start, end, onEnd) => {
+    if (!audioRef.current) return;
 
     stopAudio();
 
-    // Ensure we don't start at a time just before 0 causing issues.
-    const startAt = Math.max(0, seg.start + 0.01);
-    const endAt = Math.max(startAt + 0.05, seg.end);
+    const startAt = Math.max(0, start + 0.01);
+    const endAt = Math.max(startAt + 0.05, end);
 
     audioRef.current.currentTime = startAt;
     audioRef.current.play().catch(() => {});
@@ -365,9 +466,35 @@ export default function Mp3InterviewSimulator() {
       try {
         audioRef.current?.pause();
       } catch (_) {}
-      setStatus("waiting");
+      onEnd?.();
     }, ms);
-  }, [segments, stopAudio]);
+  }, [stopAudio]);
+
+  const previewSegment = useCallback((idx) => {
+    const seg = segments[idx];
+    if (!seg) return;
+
+    stopMic();
+    stopAudio();
+    setStatus("setup");
+    setCurrentIndex(0);
+    setMicError(null);
+    setPreviewIndex(idx);
+
+    playAudioRange(seg.start, seg.end, () => {
+      setPreviewIndex(null);
+    });
+  }, [playAudioRange, segments, stopAudio, stopMic]);
+
+  const playSessionSegment = useCallback((idx) => {
+    const seg = segments[idx];
+    if (!seg) return;
+
+    setPreviewIndex(null);
+    playAudioRange(seg.start, seg.end, () => {
+      setStatus("waiting");
+    });
+  }, [playAudioRange]);
 
   useEffect(() => {
     if (status !== "playing") return;
@@ -378,8 +505,8 @@ export default function Mp3InterviewSimulator() {
       setStatus("done");
       return;
     }
-    playSegment(currentIndex);
-  }, [currentIndex, playSegment, segments.length, status, stopAudio, stopMic]);
+    playSessionSegment(currentIndex);
+  }, [currentIndex, playSessionSegment, segments.length, status, stopAudio, stopMic]);
 
   useEffect(() => {
     if (status !== "waiting") return;
@@ -392,6 +519,7 @@ export default function Mp3InterviewSimulator() {
     if (!segments.length) return;
     stopMic();
     stopAudio();
+    setPreviewIndex(null);
     setCurrentIndex(0);
     setStatus("playing");
     setMicError(null);
@@ -400,6 +528,7 @@ export default function Mp3InterviewSimulator() {
   const stopSession = () => {
     stopMic();
     stopAudio();
+    setPreviewIndex(null);
     setStatus("setup");
     setCurrentIndex(0);
     setMicError(null);
@@ -493,7 +622,12 @@ export default function Mp3InterviewSimulator() {
       await refreshTemplates();
       toast.success("Template saved for all creators");
     } catch (e) {
-      toast.error(e?.response?.data?.detail || e?.message || "Could not save template");
+      const status = e?.response?.status;
+      if (status === 504) {
+        toast.error("Upload timed out. Try a smaller MP3 (under 10 MB) or retry in a moment.");
+      } else {
+        toast.error(e?.response?.data?.detail || e?.message || "Could not save template");
+      }
     } finally {
       setSavingTemplate(false);
     }
@@ -525,7 +659,7 @@ export default function Mp3InterviewSimulator() {
               Record tools — Interview simulator
             </h1>
             <p className="mt-1 text-sm text-zinc-600">
-              Upload un MP3 de questions, découpe-le automatiquement sur les silences, puis joue étape par étape. Quand tu t’arrêtes de parler, on passe à la suivante.
+              Upload an MP3 of interview questions, auto-split on silence, then play step by step. When you stop speaking, we move to the next step.
             </p>
           </div>
 
@@ -589,7 +723,7 @@ export default function Mp3InterviewSimulator() {
           <div className="lg:col-span-2">
             <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
               <p className="text-xs font-bold uppercase tracking-wider text-zinc-600">
-                1) Importer ton MP3
+                1) Upload your MP3
               </p>
 
               <div className="mt-3 flex items-center gap-3">
@@ -606,12 +740,12 @@ export default function Mp3InterviewSimulator() {
                 </label>
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-zinc-900 truncate">
-                    {mp3FileName || "Aucun fichier"}
+                    {mp3FileName || "No file selected"}
                   </p>
                   {analysisLoading ? (
                     <p className="mt-1 text-xs text-zinc-500 flex items-center gap-2">
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      Analyse en cours…
+                      Analyzing…
                     </p>
                   ) : analysisError ? (
                     <p className="mt-1 text-xs text-rose-700 font-semibold">
@@ -624,7 +758,7 @@ export default function Mp3InterviewSimulator() {
               {audioBuffer ? (
                 <div className="mt-4">
                   <p className="text-xs text-zinc-500">
-                    Durée: <span className="font-semibold text-zinc-700">{formatTime(audioBuffer.duration)}</span>
+                    Duration: <span className="font-semibold text-zinc-700">{formatTime(audioBuffer.duration)}</span>
                   </p>
                 </div>
               ) : null}
@@ -660,10 +794,10 @@ export default function Mp3InterviewSimulator() {
             ) : null}
 
             <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4">
-              <p className="text-xs font-bold uppercase tracking-wider text-zinc-600">2) Réglages de découpe</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-zinc-600">2) Split settings</p>
               <div className="mt-3 space-y-3">
                 <label className="block text-sm">
-                  <span className="block text-xs font-semibold text-zinc-600">Seuil silence (dB)</span>
+                  <span className="block text-xs font-semibold text-zinc-600">Silence threshold (dB)</span>
                   <Input
                     type="number"
                     step={1}
@@ -673,7 +807,7 @@ export default function Mp3InterviewSimulator() {
                   />
                 </label>
                 <label className="block text-sm">
-                  <span className="block text-xs font-semibold text-zinc-600">Silence min (ms)</span>
+                  <span className="block text-xs font-semibold text-zinc-600">Min silence (ms)</span>
                   <Input
                     type="number"
                     step={50}
@@ -693,7 +827,7 @@ export default function Mp3InterviewSimulator() {
                   />
                 </label>
                 <label className="block text-sm">
-                  <span className="block text-xs font-semibold text-zinc-600">Segment min (ms)</span>
+                  <span className="block text-xs font-semibold text-zinc-600">Min segment (ms)</span>
                   <Input
                     type="number"
                     step={50}
@@ -741,15 +875,47 @@ export default function Mp3InterviewSimulator() {
 
           <div className="lg:col-span-3">
             <div className="rounded-2xl border border-zinc-200 bg-white p-4">
-              <p className="text-xs font-bold uppercase tracking-wider text-zinc-600">3) Étapes détectées</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-zinc-600">3) Detected steps</p>
               <p className="mt-2 text-sm text-zinc-600">
-                {segments.length ? `${segments.length} étapes prêtes à être jouées.` : "Importe un MP3 pour détecter les étapes."}
+                {segments.length ? `${segments.length} steps ready.` : "Upload an MP3 to detect steps."}
               </p>
+
+              {segments.length > 0 && (status === "setup" || status === "done") && previewIndex == null ? (
+                <Button
+                  type="button"
+                  className="mt-4 h-14 w-full rounded-2xl bg-violet-600 text-base font-bold text-white shadow-lg shadow-violet-200 hover:bg-violet-700"
+                  onClick={startSession}
+                >
+                  <Play className="mr-2 h-5 w-5 fill-current" />
+                  Play this template
+                </Button>
+              ) : null}
+
+              {(status !== "setup" || previewIndex != null) ? (
+                <div className="mt-4">
+                  <InterviewTurnIndicator
+                    status={status}
+                    currentIndex={currentIndex}
+                    totalSteps={segments.length}
+                    micLevel={micLevel}
+                    previewIndex={previewIndex}
+                  />
+                </div>
+              ) : null}
 
               {segments.length ? (
                 <div className="mt-4 space-y-3">
                   {segments.map((seg, idx) => (
-                    <div key={seg.id} className={`rounded-2xl border p-3 ${idx === currentIndex ? "border-violet-200 bg-violet-50" : "border-zinc-200 bg-white"}`}>
+                    <div
+                      key={seg.id}
+                      className={`rounded-2xl border p-3 ${
+                        idx === currentIndex && (status === "playing" || status === "waiting")
+                          ? "border-violet-200 bg-violet-50"
+                          : previewIndex === idx
+                            ? "border-sky-200 bg-sky-50"
+                            : "border-zinc-200 bg-white"
+                      }`}
+                    >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-zinc-900">{seg.label}</p>
@@ -764,15 +930,11 @@ export default function Mp3InterviewSimulator() {
                             size="sm"
                             variant="outline"
                             className="rounded-full"
-                            disabled={analysisLoading}
-                            onClick={() => {
-                              stopSession();
-                              setCurrentIndex(idx);
-                              setStatus("playing");
-                            }}
+                            disabled={analysisLoading || status === "playing" || status === "waiting"}
+                            onClick={() => previewSegment(idx)}
                           >
-                            <Play className="w-4 h-4 mr-1.5" />
-                            Play
+                            <Headphones className="w-4 h-4 mr-1.5" />
+                            Listen
                           </Button>
                         </div>
                       </div>
@@ -805,15 +967,16 @@ export default function Mp3InterviewSimulator() {
               ) : null}
 
               <div className="mt-5 flex flex-col sm:flex-row gap-2">
-                <Button
-                  type="button"
-                  className="rounded-full bg-violet-600 text-white hover:opacity-90"
-                  disabled={!segments.length || status === "playing" || status === "waiting"}
-                  onClick={startSession}
-                >
-                  <Mic className="w-4 h-4 mr-2" />
-                  Start dialogue
-                </Button>
+                {segments.length > 0 && status !== "setup" ? (
+                  <Button
+                    type="button"
+                    className="rounded-full bg-violet-600 text-white hover:opacity-90"
+                    onClick={startSession}
+                  >
+                    <Play className="w-4 h-4 mr-2" />
+                    Restart template
+                  </Button>
+                ) : null}
 
                 <Button
                   type="button"
@@ -823,7 +986,7 @@ export default function Mp3InterviewSimulator() {
                   onClick={manualNext}
                 >
                   <Square className="w-4 h-4 mr-2" />
-                  Stop talking & Next
+                  Stop talking &amp; next
                 </Button>
 
                 <Button
@@ -841,37 +1004,13 @@ export default function Mp3InterviewSimulator() {
                 </Button>
               </div>
 
-              {status === "waiting" ? (
-                <div className="mt-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
-                  <p className="text-sm font-semibold text-zinc-900">Waiting for you…</p>
-                  <p className="mt-1 text-xs text-zinc-600">
-                    On avance quand on détecte que tu t’arrêtes de parler.
-                  </p>
-                  {micError ? (
-                    <p className="mt-2 text-xs text-rose-700 font-semibold">{micError}</p>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {status === "playing" ? (
-                <div className="mt-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
-                  <p className="text-sm font-semibold text-zinc-900">Playing…</p>
-                  <p className="mt-1 text-xs text-zinc-600">
-                    Step {segments[currentIndex]?.label || currentIndex + 1}
-                  </p>
-                </div>
-              ) : null}
-
-              {status === "done" ? (
-                <div className="mt-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
-                  <p className="text-sm font-semibold text-zinc-900">Session finished</p>
-                  <p className="mt-1 text-xs text-zinc-600">Tu peux relancer “Start dialogue”.</p>
-                </div>
+              {status === "waiting" && micError ? (
+                <p className="mt-3 text-xs font-semibold text-rose-700">{micError}</p>
               ) : null}
 
               <audio ref={audioRef} src={audioUrl || undefined} preload="metadata" />
               <div className="mt-3 text-xs text-zinc-400">
-                Tip: si le découpage est mauvais, ajuste “Seuil silence” et “Silence min”, puis fais “Re-analyze”.
+                Tip: if the split is off, adjust silence threshold and min silence, then Re-analyze.
               </div>
             </div>
           </div>

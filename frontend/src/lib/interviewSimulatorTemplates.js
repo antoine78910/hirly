@@ -1,4 +1,4 @@
-import { api } from "./api";
+import { api, getDirectApiBase } from "./api";
 
 export async function fetchInterviewTemplates() {
   const { data } = await api.get("/record-tools/interview-templates");
@@ -26,6 +26,7 @@ export async function saveInterviewTemplate({
   }
   form.append("audio", audioFile);
   const { data } = await api.post("/record-tools/interview-templates", form, {
+    baseURL: getDirectApiBase(),
     headers: { "Content-Type": "multipart/form-data" },
     timeout: 120000,
   });
