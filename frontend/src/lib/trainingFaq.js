@@ -17,7 +17,7 @@ const TRAINING_FAQ_FR = [
     answer: [
       {
         type: "p",
-        text: "Les paiements se font en dollars (1$ pour 1000 vues). Tu peux retirer comme tu préfères : PayPal, virement bancaire, virement international, ou même crypto. Il y a beaucoup d'options de retrait sur Topr — tu peux les voir en cliquant sur ta photo de profil en haut à droite directement sur Topr (c'est plus simple de tout voir sur ordinateur). Tout est expliqué dans la slide 3 du document !",
+        text: "Les paiements se font en dollars (1$ pour 1000 vues). Tu peux retirer comme tu préfères : PayPal, virement bancaire, virement international, ou même crypto. Il y a beaucoup d'options de retrait sur Topr — tu peux les voir en cliquant sur ta photo de profil en haut à droite directement sur Topr (c'est plus simple de tout voir sur ordinateur). Tout est expliqué dans le module Soumettre le contenu !",
       },
     ],
   },
@@ -27,7 +27,7 @@ const TRAINING_FAQ_FR = [
     answer: [
       {
         type: "p",
-        text: "Le système de parrainage, c'est simple : si tu refers quelqu'un et qu'il atteint 100K vues, tu gagnes 100$. Pas de limite au nombre de personnes que tu peux parrainer !",
+        text: "Le système de parrainage, c'est simple : si tu parraines quelqu'un et qu'il atteint 100K vues, tu gagnes 100$. Pas de limite au nombre de personnes que tu peux parrainer !",
       },
       {
         type: "p",
@@ -71,7 +71,7 @@ const TRAINING_FAQ_FR = [
     answer: [
       {
         type: "p",
-        text: "Oui, tu peux commencer à poster les warmup posts (exemple dans le module 2) pour bien indiquer aux algorithmes quel persona tu souhaites cibler.",
+        text: "Oui, tu peux commencer à poster les warmup posts (exemples dans le module 2) pour bien indiquer aux algorithmes quel persona tu souhaites cibler.",
       },
       {
         type: "p",
@@ -94,7 +94,7 @@ const TRAINING_FAQ_FR = [
       },
       {
         type: "p",
-        text: "Ensuite, prends le temps de scroller ton feed et de passer un peu plus de temps sur certaines vidéos (idéalement liées à la création de contenu). Tu peux aussi liker et laisser quelques commentaires ici et là. À mon avis, il n'est pas nécessaire que ton contenu ou ton feed soit directement lié à la viralité ou à une niche précise. Le plus important est de montrer à l'algorithme que tu n'es pas un bot.",
+        text: "Ensuite, prends le temps de scroller ton feed et de passer un peu plus de temps sur certaines vidéos (idéalement liées à la recherche d'emploi). Tu peux aussi liker et laisser quelques commentaires ici et là. À mon avis, il n'est pas nécessaire que ton contenu ou ton feed soit directement lié à la viralité ou à une niche précise. Le plus important est de montrer à l'algorithme que tu n'es pas un bot.",
       },
       {
         type: "p",
@@ -113,7 +113,7 @@ const TRAINING_FAQ_FR = [
     answer: [
       {
         type: "p",
-        text: "Oui, aucun problème ! Je peux les ajouter manuellement. Envoie-moi juste les liens et je vérifierai qu'elles n'ont pas déjà été ajoutées, et si c'est le cas je les ajouterai pour toi sans souci ! (Mais n'en abuse pas non plus, essaie s'il te plaît de le faire toi-même à chaque fois si possible, ça me prend beaucoup de temps de tout vérifier puis d'ajouter manuellement)",
+        text: "Oui, aucun problème ! Je peux les ajouter manuellement. Envoie-moi juste les liens et je vérifierai qu'elles n'ont pas déjà été ajoutées ; sinon, je les ajouterai pour toi sans souci ! (Mais n'en abuse pas non plus — essaie, s'il te plaît, de le faire toi-même à chaque fois si possible : ça me prend beaucoup de temps de tout vérifier puis d'ajouter manuellement.)",
       },
     ],
   },
@@ -143,7 +143,7 @@ const TRAINING_FAQ_FR = [
     answer: [
       {
         type: "p",
-        text: "Directement sur la plateforme Topr, en fonction des vidéos que tu as postées. C'est plus simple à voir sur ordinateur (sur mobile je ne suis pas sûre à 100%) !",
+        text: "Directement sur la plateforme Topr, en fonction des vidéos que tu as postées. C'est plus simple à voir sur ordinateur (sur mobile, je ne suis pas sûre à 100 %) !",
       },
     ],
   },
