@@ -360,6 +360,8 @@ export default function Mp3InterviewSimulator() {
   const currentIndexRef = useRef(0);
   const statusRef = useRef(status);
   const playNextSessionSegmentRef = useRef(null);
+  // Once the user clicked Play at least once, unmuting after auto-advances is allowed.
+  const allowUnmuteRef = useRef(false);
 
   useEffect(() => {
     segmentsRef.current = segments;
@@ -476,19 +478,42 @@ export default function Mp3InterviewSimulator() {
     const startAt = Math.max(0, start + 0.01);
     const endAt = Math.max(startAt + 0.05, end);
 
+    const audio = audioRef.current;
     try {
-      audioRef.current.currentTime = startAt;
+      audio.currentTime = startAt;
     } catch (e) {
       // If currentTime assignment fails, playback will also fail.
       toast.error(e?.message || "Could not seek audio.");
       return;
     }
 
-    audioRef.current.play().catch((e) => {
-      // Autoplay restrictions often throw NotAllowedError if play() isn't triggered by a user gesture.
-      console.error("Audio play() failed:", e);
-      toast.error("Audio couldn't start. Click Play again (browser autoplay policy).");
-    });
+    // Try unmuted first, but if the browser blocks automatic play,
+    // retry muted to satisfy autoplay policy. Then unmute once playing started.
+    const attemptPlay = async () => {
+      try {
+        audio.muted = false;
+        await audio.play();
+      } catch (e) {
+        try {
+          audio.muted = true;
+          await audio.play();
+        } catch (e2) {
+          console.error("Audio play() failed:", e2);
+          toast.error("Audio couldn't start. Click Play again (browser autoplay policy).");
+          return;
+        }
+      }
+
+      if (allowUnmuteRef.current) {
+        // Unmuting is usually allowed after playback has started.
+        setTimeout(() => {
+          try {
+            audio.muted = false;
+          } catch (_) {}
+        }, 0);
+      }
+    };
+    attemptPlay();
 
     const ms = Math.max(0, (endAt - startAt) * 1000);
     stopTimerRef.current = setTimeout(() => {
@@ -509,6 +534,7 @@ export default function Mp3InterviewSimulator() {
     setCurrentIndex(0);
     setMicError(null);
     setPreviewIndex(idx);
+    allowUnmuteRef.current = true;
 
     playAudioRange(seg.start, seg.end, () => {
       setPreviewIndex(null);
@@ -561,6 +587,7 @@ export default function Mp3InterviewSimulator() {
     setStatus("playing");
     setMicError(null);
     // Important: play audio inside the click handler to satisfy browser autoplay rules.
+    allowUnmuteRef.current = true;
     playNextSessionSegment(0);
   };
 
