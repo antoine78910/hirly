@@ -88,7 +88,16 @@ async def detect_login_wall(page: Any) -> bool:
 
 
 async def dismiss_cookie_banner(page: Any) -> None:
-    for text in ("Accept", "Accept all", "I agree", "Got it", "OK"):
+    # French phrases matter as much as English ones here -- confirmed live
+    # on a real Teamtailor posting where the cookie panel (only "Accepter
+    # tous les cookies" / "Refuser les cookies facultatifs", no English
+    # option) was never dismissed, stayed open over the page, and perception
+    # picked up only the cookie panel's own checkboxes instead of the
+    # actual application form.
+    for text in (
+        "Accept", "Accept all", "I agree", "Got it", "OK",
+        "Accepter", "Accepter tous les cookies", "Tout accepter", "J'accepte",
+    ):
         try:
             button = page.get_by_role("button", name=text)
             if await button.count():
@@ -109,6 +118,11 @@ APPLY_CTA_PHRASES = (
     "je postule",
     "candidater",
     "deposer ma candidature",
+    # Accented and unaccented forms both included since Playwright's
+    # accessible-name matching is case-insensitive but not accent-folding --
+    # confirmed live: SmartRecruiters' real CTA is "Je suis intéressé(e)".
+    "je suis interesse",
+    "je suis intéressé",
 )
 
 

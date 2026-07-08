@@ -119,8 +119,20 @@ async def run_apply_attempt(
                     try:
                         await page.wait_for_load_state("networkidle", timeout=6000)
                     except Exception:
-                        await page.wait_for_timeout(1200)
-                    fields = await perception.extract_fields(page)
+                        pass
+                    # A single fixed wait after the click isn't reliable --
+                    # confirmed live on Flatchr, where the real form (an SPA
+                    # route change) hadn't finished rendering by the time a
+                    # one-shot re-perceive ran right after `networkidle`, so
+                    # it silently fell through to the unrelated "new
+                    # conditional fields" top-up pass later instead. Poll
+                    # briefly instead of guessing a fixed delay.
+                    deadline = asyncio.get_running_loop().time() + 5
+                    while asyncio.get_running_loop().time() < deadline:
+                        fields = await perception.extract_fields(page)
+                        if perception.looks_like_real_form(fields):
+                            break
+                        await page.wait_for_timeout(500)
             result.fields_detected = fields
             if not fields:
                 result.blockers.append(blocker("form_not_found", "No fillable fields were found on this page."))
@@ -149,14 +161,31 @@ async def run_apply_attempt(
             # not a fixed-point loop -- keeps runtime and LLM cost bounded.
             await page.wait_for_timeout(500)
             fields_after = await perception.extract_fields(page)
-            new_fields = [f for f in fields_after if f.get("required") and f.get("visible") and not any(
+            new_fields = [f for f in fields_after if f.get("required") and not any(
                 f.get("stable_field_id") == existing.get("stable_field_id") for existing in fields
-            )]
+            ) and (f.get("widget_type") == "file_upload" or f.get("visible"))]
             if new_fields:
-                top_up_proposals = await agent_module.plan_fills(new_fields, job, agent_module.build_candidate_context(profile, app_doc, user))
-                top_up_accepted, top_up_rejected = agent_module.validated_plan(new_fields, top_up_proposals, profile)
+                # Same deterministic file-upload path as the main pass, not
+                # just the LLM -- otherwise a resume/cover-letter field that
+                # only appears in this top-up round (confirmed live on
+                # Flatchr, where the reveal-form click's form took long
+                # enough to render that the file inputs only showed up
+                # here) never gets uploaded, since plan_fills always
+                # excludes file_upload fields on purpose.
+                new_file_fills = agent_module.resolve_file_upload_fields(new_fields)
+                top_up_proposals = await agent_module.plan_fills(
+                    [f for f in new_fields if f.get("widget_type") != "file_upload"],
+                    job,
+                    agent_module.build_candidate_context(profile, app_doc, user),
+                )
+                top_up_accepted, top_up_rejected = agent_module.validated_plan(new_fields, new_file_fills + top_up_proposals, profile)
                 result.rejected_fills.extend(top_up_rejected)
-                await _apply_fills(page, new_fields, top_up_accepted, resume_path, cover_letter_path, result)
+                # OR'd in, not reassigned -- a resume uploaded in the first
+                # pass must not be forgotten just because this second pass
+                # uploaded nothing new.
+                resume_uploaded = resume_uploaded or await _apply_fills(
+                    page, new_fields, top_up_accepted, resume_path, cover_letter_path, result,
+                )
                 await page.wait_for_timeout(300)
                 fields_after = await perception.extract_fields(page)
 
