@@ -114,6 +114,11 @@ from ats_source_service import (
     refresh_known_ats_sources,
     run_ats_direct_maintenance_loop,
 )
+from company_discovery_crawlers import (
+    last_discovery_summary as company_discovery_last_summary,
+    run_company_discovery,
+    run_company_discovery_loop,
+)
 from job_validation import cheap_validate_job_applyability
 from datafast_attribution import datafast_stripe_metadata, merge_stripe_metadata
 from employment_kind import (
@@ -7812,6 +7817,22 @@ async def admin_jobs_france_travail_harvest_status(admin: User = Depends(require
     }
 
 
+@api_router.post("/admin/jobs/company-discovery")
+async def admin_jobs_company_discovery(
+    admin: User = Depends(require_admin_user),
+    dry_run: bool = False,
+):
+    _require_job_maintenance_enabled()
+    logger.info("admin_company_discovery_requested admin=%s dry_run=%s", admin.email, dry_run)
+    return await run_company_discovery(db, dry_run=dry_run)
+
+
+@api_router.get("/admin/jobs/company-discovery/status")
+async def admin_jobs_company_discovery_status(admin: User = Depends(require_admin_user)):
+    _require_job_maintenance_enabled()
+    return {"last_run": company_discovery_last_summary()}
+
+
 @api_router.post("/admin/jobs/feed-diagnostic")
 async def admin_jobs_feed_diagnostic(body: AdminJobsFeedDiagnosticRequest, admin: User = Depends(require_admin_user)):
     _require_job_maintenance_enabled()
@@ -12584,6 +12605,7 @@ async def startup_seed():
     asyncio.create_task(_resume_pending_application_generation())
     asyncio.create_task(run_france_travail_harvest_loop(db))
     asyncio.create_task(run_ats_direct_maintenance_loop(db))
+    asyncio.create_task(run_company_discovery_loop(db))
 
 
 @app.on_event("shutdown")
