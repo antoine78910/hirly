@@ -530,6 +530,10 @@ def _careers_url(provider: str, source_key: str) -> str:
         return f"https://{source_key}.jobs.personio.com/"
     if provider == "teamtailor":
         return f"https://{source_key}.teamtailor.com/jobs"
+    if provider == "recruitee":
+        return f"https://{source_key}.recruitee.com/"
+    if provider == "flatchr":
+        return f"https://careers.flatchr.io/fr/company/{source_key}"
     return source_key
 
 

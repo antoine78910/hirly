@@ -9,8 +9,16 @@ from .base import AtsJobAdapter
 from .greenhouse import GreenhouseAtsAdapter
 from .lever import LeverAtsAdapter
 from .personio import PersonioAtsAdapter
+from .recruitee import RecruiteeAtsAdapter
 from .smartrecruiters import SmartRecruitersAtsAdapter
 from .teamtailor import TeamtailorAtsAdapter
+
+# FlatchrAtsAdapter (flatchr.py) exists but is intentionally NOT registered
+# yet -- its per-job click-through URL discovery is still unreliable in
+# testing (intermittently reads back the listing page URL instead of the
+# real vacancy URL, not yet root-caused), and shipping it would risk
+# writing wrong apply URLs into the database. Needs more work before it's
+# safe to run unattended.
 
 
 def default_ats_adapters() -> Dict[str, AtsJobAdapter]:
@@ -21,6 +29,7 @@ def default_ats_adapters() -> Dict[str, AtsJobAdapter]:
         SmartRecruitersAtsAdapter(),
         PersonioAtsAdapter(),
         TeamtailorAtsAdapter(),
+        RecruiteeAtsAdapter(),
     ]
     return {adapter.provider: adapter for adapter in adapters}
 
