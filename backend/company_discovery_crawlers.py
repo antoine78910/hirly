@@ -249,10 +249,26 @@ async def run_company_discovery(db, *, dry_run: bool = False) -> Dict[str, Any]:
     cert_result = None
     if env_bool("CERT_TRANSPARENCY_DISCOVERY_ENABLED", True):
         cert_result = await discover_via_certificate_transparency(db, dry_run=dry_run)
+    # discover_via_serper_search's `site:` queries are disabled by default --
+    # confirmed live that Serper's free plan rejects that pattern outright
+    # ("Query pattern not allowed for free accounts"), so leaving it on just
+    # burns query quota on guaranteed 400s. Flip SERPER_DISCOVERY_ENABLED=true
+    # once/if the Serper plan is upgraded to one that allows `site:`.
     serper_result = None
-    if env_bool("SERPER_DISCOVERY_ENABLED", True):
+    if env_bool("SERPER_DISCOVERY_ENABLED", False):
         serper_result = await discover_via_serper_search(db, dry_run=dry_run)
-    return {"dry_run": dry_run, "certificate_transparency": cert_result, "serper_search": serper_result}
+    # This is the one that actually works on the free plan: plain-text
+    # per-company search instead of `site:` enumeration.
+    company_list_result = None
+    if env_bool("COMPANY_LIST_DISCOVERY_ENABLED", True):
+        from company_list_discovery import discover_via_company_list
+        company_list_result = await discover_via_company_list(db, dry_run=dry_run)
+    return {
+        "dry_run": dry_run,
+        "certificate_transparency": cert_result,
+        "serper_search": serper_result,
+        "company_list_search": company_list_result,
+    }
 
 
 _discovery_loop_lock = asyncio.Lock()
