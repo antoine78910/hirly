@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import { useTrainingLocale } from "../context/TrainingLocaleContext";
 import TrainingShell, { useTrainingPageMode } from "../components/training/TrainingShell";
 import ModuleGalleryCard from "../components/training/ModuleGalleryCard";
+import TrainingFaq from "../components/training/TrainingFaq";
 import TrainingCompletionFeedbackModal from "../components/training/TrainingCompletionFeedbackModal";
 import TrainingWelcomeModal from "../components/training/TrainingWelcomeModal";
 import { fetchTrainingCatalog, fetchTrainingCourseDetail, syncLocalTrainingProgress, tryEnrollCourse } from "../lib/trainingData";
@@ -183,6 +184,8 @@ export default function Training() {
               ))}
             </div>
           </div>
+
+          <TrainingFaq lang={lang} title={t("faqTitle")} />
         </div>
       ) : (
         <section className="flex flex-1 flex-col items-center justify-center px-4 py-12 text-center sm:px-8">
