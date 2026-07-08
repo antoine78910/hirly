@@ -347,33 +347,44 @@ async def extract_clickable_candidates(page: Any, *, frame_index: int = 0) -> Li
     return candidates if isinstance(candidates, list) else []
 
 
-_CLICK_CANDIDATE_SCRIPT = r"""
-(index) => {
-  function visible(el) {
-    const style = window.getComputedStyle(el);
-    if (!style || style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0) return false;
-    const rect = el.getBoundingClientRect();
-    return Boolean(rect.width > 0 && rect.height > 0);
-  }
-  const nodes = Array.from(document.querySelectorAll("a, button, [role='button']")).filter(visible).slice(0, 60);
-  const target = nodes[index];
-  if (!target) return false;
-  target.click();
-  return true;
-}
-"""
-
-
 async def click_clickable_candidate(page: Any, index: int, *, frame_index: int = 0) -> bool:
     """Clicks the element at `index` in the exact same visible-button/link
-    list extract_clickable_candidates built -- same query, same filter,
-    same slice, so the index the LLM picked still points at the right
-    element as long as the DOM hasn't meaningfully changed in between.
+    list extract_clickable_candidates built -- same query, same visibility
+    filter, so the index the LLM picked still points at the right element
+    as long as the DOM hasn't meaningfully changed in between.
+
+    Uses a real Playwright locator click, not a JS-evaluated `.click()` --
+    confirmed live on SmartRecruiters that a raw DOM `.click()` on its
+    apply link silently did nothing (no navigation, no new tab), while the
+    same element works fine through Playwright's own click, which more
+    faithfully simulates a real pointer event. Some SPA routers listen for
+    actual pointer/mouse events rather than the synthetic event a script-
+    dispatched `.click()` produces.
     """
     frames = list(getattr(page, "frames", None) or [page.main_frame])
     frame = frames[frame_index] if 0 <= frame_index < len(frames) else page.main_frame
+    locator = frame.locator("a:visible, button:visible, [role='button']:visible").nth(index)
     try:
-        return bool(await frame.evaluate(_CLICK_CANDIDATE_SCRIPT, index))
+        if not await locator.count():
+            return False
+    except Exception:
+        return False
+    try:
+        await locator.click(timeout=5000)
+        return True
+    except Exception:
+        pass
+    try:
+        # A cookie-consent overlay (OneTrust's preference-center dark
+        # filter, confirmed live on SmartRecruiters) can re-intercept
+        # pointer events even after being dismissed once, animating back in
+        # moments later. Bypassing the actionability check is reasonable
+        # here specifically because count() already confirmed the element
+        # itself genuinely exists and is visible -- this isn't guessing at
+        # the wrong element, just getting past an unrelated overlay on top
+        # of the right one.
+        await locator.click(timeout=3000, force=True)
+        return True
     except Exception:
         return False
 

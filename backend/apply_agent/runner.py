@@ -503,22 +503,23 @@ async def _click_submit_and_verify(page: Any, result: ApplyRunResult) -> None:
         except Exception:
             submit_still_visible = False
         result.success_detected = bool(result.confirmation_text_found) or (not submit_still_visible and not result.post_submit_errors)
-        if not result.success_detected and not result.post_submit_errors:
-            # The fixed SUCCESS_PHRASES list is a fast, free first check;
-            # when it finds nothing and there's no clear error either,
-            # that's genuinely ambiguous, not necessarily a failure --
-            # confirmed live on Taleez and Werecruit, where a real submit
-            # click left the page in a state no phrase list matched either
-            # way. Ask the LLM to read the actual resulting page the way a
-            # human checking "did that go through?" would, instead of
-            # defaulting to "unknown" just because no pre-written phrase
-            # happened to match this ATS's wording.
+        if not result.success_detected:
+            # Always ask the LLM once the fast phrase-list check didn't
+            # confirm success outright -- confirmed live that the crude
+            # post_submit_errors term-scan is noisy enough to not be
+            # trustworthy as a gate on its own (Workable's static
+            # "* Required fields" legend text got flagged as an error on an
+            # otherwise unremarkable page, which would have silently
+            # skipped the smarter check right when it mattered most; Taleez
+            # and Werecruit separately showed a real submit click can leave
+            # the page in a state no phrase list matches either way).
             outcome = await agent_module.assess_submission_outcome(text)
             if outcome.get("status") == "success":
                 result.success_detected = True
+                result.post_submit_errors = []
             elif outcome.get("status") == "failed":
                 detail = outcome.get("detail")
-                if detail:
+                if detail and detail not in result.post_submit_errors:
                     result.post_submit_errors.append(str(detail)[:300])
         result.failure_reason = None if result.success_detected else "submission_status_unknown"
         result.final_url = page.url

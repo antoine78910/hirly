@@ -87,7 +87,33 @@ async def detect_login_wall(page: Any) -> bool:
     return any(marker in body_text for marker in LOGIN_MARKERS)
 
 
+# OneTrust is one of the most widely used cookie-consent widgets across
+# career sites (confirmed live on SmartRecruiters). Its accept/close
+# controls use the same stable element IDs regardless of the page's
+# language, so trying these first is more reliable than any phrase list --
+# confirmed live that a generic text-based click nearby can accidentally
+# open its "preference center" instead of accepting, leaving a
+# click-intercepting dark overlay over the whole page.
+_ONETRUST_ACCEPT_SELECTORS = ("#onetrust-accept-btn-handler", "#accept-recommended-btn-handler")
+_ONETRUST_CLOSE_SELECTORS = ("#close-pc-btn-handler", ".ot-close-icon")
+
+
+async def _click_first_match(page: Any, selectors: tuple[str, ...]) -> bool:
+    for selector in selectors:
+        try:
+            button = page.locator(selector)
+            if await button.count():
+                await button.first.click(timeout=1500)
+                return True
+        except Exception:
+            continue
+    return False
+
+
 async def dismiss_cookie_banner(page: Any) -> None:
+    if await _click_first_match(page, _ONETRUST_ACCEPT_SELECTORS):
+        return
+
     # French phrases matter as much as English ones here -- confirmed live
     # on a real Teamtailor posting where the cookie panel (only "Accepter
     # tous les cookies" / "Refuser les cookies facultatifs", no English
@@ -102,9 +128,20 @@ async def dismiss_cookie_banner(page: Any) -> None:
             button = page.get_by_role("button", name=text)
             if await button.count():
                 await button.first.click(timeout=1500)
-                return
+                break
         except Exception:
             continue
+
+    # Whatever was just clicked may have opened a OneTrust preference-center
+    # panel instead of accepting outright (confirmed live) -- if its dark
+    # overlay is now covering the page, get out of it via OneTrust's own
+    # controls rather than leaving every subsequent click intercepted.
+    try:
+        overlay_visible = await page.locator(".onetrust-pc-dark-filter").is_visible(timeout=1000)
+    except Exception:
+        overlay_visible = False
+    if overlay_visible:
+        await _click_first_match(page, _ONETRUST_CLOSE_SELECTORS + _ONETRUST_ACCEPT_SELECTORS)
 
 
 APPLY_CTA_PHRASES = (
