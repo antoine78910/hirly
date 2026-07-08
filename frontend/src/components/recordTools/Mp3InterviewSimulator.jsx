@@ -10,7 +10,13 @@ import {
   saveInterviewTemplate,
 } from "../../lib/interviewSimulatorTemplates";
 
-function useMicrophoneSilenceDetector({ onSilence, threshold = 0.02, silenceMs = 1200 } = {}) {
+function useMicrophoneSilenceDetector({
+  onSilence,
+  threshold = 0.02,
+  silenceMs = 1200,
+  graceMs = 1500,
+  minSpeechMs = 500,
+} = {}) {
   const onSilenceRef = useRef(onSilence);
   onSilenceRef.current = onSilence;
 
@@ -26,6 +32,8 @@ function useMicrophoneSilenceDetector({ onSilence, threshold = 0.02, silenceMs =
 
   const speakingRef = useRef(false);
   const lastLoudAtRef = useRef(0);
+  const speechStartedAtRef = useRef(0);
+  const sessionStartedAtRef = useRef(0);
   const silenceTriggeredRef = useRef(false);
 
   const stopAll = () => {
@@ -48,6 +56,8 @@ function useMicrophoneSilenceDetector({ onSilence, threshold = 0.02, silenceMs =
     dataRef.current = null;
     speakingRef.current = false;
     lastLoudAtRef.current = 0;
+    speechStartedAtRef.current = 0;
+    sessionStartedAtRef.current = 0;
     silenceTriggeredRef.current = false;
 
     setListening(false);
@@ -61,17 +71,26 @@ function useMicrophoneSilenceDetector({ onSilence, threshold = 0.02, silenceMs =
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error("Microphone not supported in this browser.");
       }
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
       streamRef.current = stream;
 
       const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
       const audioCtx = new AudioContextCtor();
       audioCtxRef.current = audioCtx;
+      if (audioCtx.state === "suspended") {
+        await audioCtx.resume();
+      }
 
       const source = audioCtx.createMediaStreamSource(stream);
       const analyser = audioCtx.createAnalyser();
       analyser.fftSize = 2048;
-      analyser.smoothingTimeConstant = 0.85;
+      analyser.smoothingTimeConstant = 0.82;
       source.connect(analyser);
 
       const data = new Uint8Array(analyser.fftSize);
@@ -80,6 +99,8 @@ function useMicrophoneSilenceDetector({ onSilence, threshold = 0.02, silenceMs =
 
       speakingRef.current = false;
       lastLoudAtRef.current = 0;
+      speechStartedAtRef.current = 0;
+      sessionStartedAtRef.current = Date.now();
       silenceTriggeredRef.current = false;
 
       setListening(true);
@@ -99,13 +120,22 @@ function useMicrophoneSilenceDetector({ onSilence, threshold = 0.02, silenceMs =
         setLevel(rms);
 
         const now = Date.now();
+        const inGracePeriod = now - sessionStartedAtRef.current < graceMs;
+
         if (rms > threshold) {
+          if (!speakingRef.current) {
+            speechStartedAtRef.current = now;
+          }
           speakingRef.current = true;
           lastLoudAtRef.current = now;
           silenceTriggeredRef.current = false;
         } else {
+          const spokeLongEnough =
+            speechStartedAtRef.current > 0 && now - speechStartedAtRef.current >= minSpeechMs;
           const isSilence =
+            !inGracePeriod &&
             speakingRef.current &&
+            spokeLongEnough &&
             !silenceTriggeredRef.current &&
             now - lastLoudAtRef.current >= silenceMs;
 
@@ -216,7 +246,7 @@ function InterviewTurnIndicator({ status, currentIndex, totalSteps, micLevel, pr
           </div>
           <p className="mt-4 text-xl font-bold text-zinc-900">Your turn to speak</p>
           <p className="mt-1 text-sm text-zinc-600">
-            Answer the question — we advance when you stop talking.
+            Take your time — we listen for at least a couple of seconds, then move on after you pause.
           </p>
           <div className="mt-5 h-2 w-full max-w-xs overflow-hidden rounded-full bg-emerald-100">
             <div
@@ -386,15 +416,14 @@ export default function Mp3InterviewSimulator() {
   }, []);
 
   const { start: startMic, stop: stopMic, listening: micListening, level: micLevel, error: micDetectError } = useMicrophoneSilenceDetector({
-    // Silence detection tuning:
-    // - lower threshold so typical mics trigger "speech"
-    // - shorter silence so the next step advances quicker
-    threshold: 0.012,
-    silenceMs: 900,
+    // Wait ~1.8s before silence can end the turn; require real speech; longer pause to advance.
+    threshold: 0.008,
+    graceMs: 1800,
+    minSpeechMs: 600,
+    silenceMs: 2600,
     onSilence: () => {
       if (statusRef.current !== "waiting") return;
 
-      // User stopped speaking -> next interviewer step.
       stopMic();
       setMicError(null);
 
@@ -474,21 +503,46 @@ export default function Mp3InterviewSimulator() {
     if (!audioRef.current) return;
 
     stopAudio();
+    stopMic();
 
     const startAt = Math.max(0, start + 0.01);
     const endAt = Math.max(startAt + 0.05, end);
-
     const audio = audioRef.current;
+    let finished = false;
+
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      if (stopTimerRef.current) {
+        clearTimeout(stopTimerRef.current);
+        stopTimerRef.current = null;
+      }
+      audio.removeEventListener("timeupdate", onTimeUpdate);
+      audio.removeEventListener("ended", onEnded);
+      try {
+        audio.pause();
+      } catch (_) {}
+      onEnd?.();
+    };
+
+    const onTimeUpdate = () => {
+      if (audio.currentTime >= endAt - 0.08) {
+        finish();
+      }
+    };
+    const onEnded = () => finish();
+
     try {
       audio.currentTime = startAt;
     } catch (e) {
-      // If currentTime assignment fails, playback will also fail.
       toast.error(e?.message || "Could not seek audio.");
+      finish();
       return;
     }
 
-    // Try unmuted first, but if the browser blocks automatic play,
-    // retry muted to satisfy autoplay policy. Then unmute once playing started.
+    audio.addEventListener("timeupdate", onTimeUpdate);
+    audio.addEventListener("ended", onEnded);
+
     const attemptPlay = async () => {
       try {
         audio.muted = false;
@@ -500,12 +554,12 @@ export default function Mp3InterviewSimulator() {
         } catch (e2) {
           console.error("Audio play() failed:", e2);
           toast.error("Audio couldn't start. Click Play again (browser autoplay policy).");
+          finish();
           return;
         }
       }
 
       if (allowUnmuteRef.current) {
-        // Unmuting is usually allowed after playback has started.
         setTimeout(() => {
           try {
             audio.muted = false;
@@ -515,14 +569,9 @@ export default function Mp3InterviewSimulator() {
     };
     attemptPlay();
 
-    const ms = Math.max(0, (endAt - startAt) * 1000);
-    stopTimerRef.current = setTimeout(() => {
-      try {
-        audioRef.current?.pause();
-      } catch (_) {}
-      onEnd?.();
-    }, ms);
-  }, [stopAudio]);
+    const ms = Math.max(0, (endAt - startAt) * 1000) + 300;
+    stopTimerRef.current = setTimeout(finish, ms);
+  }, [stopAudio, stopMic]);
 
   const previewSegment = useCallback((idx) => {
     const seg = segments[idx];
@@ -672,6 +721,10 @@ export default function Mp3InterviewSimulator() {
       toast.error("Upload and trim an MP3 before saving.");
       return;
     }
+    if (mp3File.size > 25 * 1024 * 1024) {
+      toast.error("Audio file is too large (max 25 MB). Try trimming or exporting with a lower bitrate.");
+      return;
+    }
     if (!templateName.trim()) {
       toast.error("Enter a template name.");
       return;
@@ -690,7 +743,8 @@ export default function Mp3InterviewSimulator() {
       toast.success("Template saved for all creators");
     } catch (e) {
       const status = e?.response?.status;
-      if (status === 504) {
+      const isTimeout = e?.code === "ECONNABORTED";
+      if (status === 504 || isTimeout) {
         toast.error("Upload timed out. Retry in a moment (or refresh the page).");
       } else {
         toast.error(e?.response?.data?.detail || e?.message || "Could not save template");
