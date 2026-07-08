@@ -303,7 +303,7 @@ async def run_ats_direct_maintenance_loop(db) -> None:
     if not ats_direct_maintenance_loop_enabled():
         logger.info("ats_direct_maintenance_loop_disabled")
         return
-    interval_minutes = max(5, env_int("JOBS_ATS_DIRECT_MAINTENANCE_INTERVAL_MINUTES", 30))
+    interval_minutes = max(5, env_int("JOBS_ATS_DIRECT_MAINTENANCE_INTERVAL_MINUTES", 5))
     initial_delay = max(0, env_int("JOBS_ATS_DIRECT_MAINTENANCE_INITIAL_DELAY_SECONDS", 90))
     logger.info(
         "ats_direct_maintenance_loop_started interval_minutes=%s initial_delay_seconds=%s",

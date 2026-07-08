@@ -178,7 +178,7 @@ async def run_france_travail_harvest_loop(db) -> None:
     if not harvest_enabled():
         logger.info("ft_harvest_loop_disabled")
         return
-    interval_minutes = max(5, _env_int("FT_HARVEST_INTERVAL_MINUTES", 10))
+    interval_minutes = max(5, _env_int("FT_HARVEST_INTERVAL_MINUTES", 60))
     initial_delay = max(0, _env_int("FT_HARVEST_INITIAL_DELAY_SECONDS", 60))
     logger.info(
         "ft_harvest_loop_started mode=city_only interval_minutes=%s initial_delay_seconds=%s cities=%s",
