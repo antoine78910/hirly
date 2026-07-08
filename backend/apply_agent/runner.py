@@ -319,6 +319,20 @@ async def _apply_fills(
             elif widget_type in ("checkbox", "radio"):
                 if str(value).strip().lower() not in ("", "false", "no", "0"):
                     await locator.check(timeout=3000)
+            elif widget_type == "combobox":
+                # A button/div-triggered custom dropdown (react-select,
+                # country-code picker, "Import resume from" menu...) has no
+                # native value to .fill() -- confirmed live on Workable and
+                # Flatchr, where this previously fell through to the plain
+                # .fill() branch below and always failed since neither is an
+                # <input>/<textarea>. Click to open it, then click a
+                # matching option instead. A combobox that turns out to be
+                # an action trigger (no option ever matches our value) is
+                # silently left alone rather than logged as a blocker --
+                # the separate required-fields pass is the authoritative
+                # check for whether that actually matters.
+                if not await _fill_combobox(frame, locator, field, str(value)):
+                    continue
             else:
                 await locator.fill(str(value), timeout=5000)
 
@@ -355,6 +369,30 @@ async def _fill_select(locator: Any, field: Dict[str, Any], value: str) -> None:
     raise ValueError(f"no matching select option for {value!r}")
 
 
+async def _fill_combobox(frame: Any, locator: Any, field: Dict[str, Any], value: str) -> bool:
+    await locator.click(timeout=3000)
+    await frame.wait_for_timeout(300)
+    wanted = canonical(value)
+    option_locator = frame.locator("[role='option'], li[data-value], [data-value]")
+    count = await option_locator.count()
+    for index in range(min(count, 200)):
+        candidate = option_locator.nth(index)
+        try:
+            text = canonical(await candidate.inner_text(timeout=500))
+        except Exception:
+            continue
+        if wanted and (wanted == text or wanted in text or text in wanted):
+            await candidate.click(timeout=2000)
+            return True
+    # Nothing matched -- close the popup we opened rather than leaving a
+    # dropdown hanging over the rest of the form.
+    try:
+        await locator.click(timeout=1500)
+    except Exception:
+        pass
+    return False
+
+
 async def _click_submit_and_verify(page: Any, result: ApplyRunResult) -> None:
     submit_selector = 'button[type="submit"], input[type="submit"], button:has-text("Submit")'
     try:
@@ -372,10 +410,25 @@ async def _click_submit_and_verify(page: Any, result: ApplyRunResult) -> None:
 
         click_error = ""
         try:
+            await locator.scroll_into_view_if_needed(timeout=3000)
+        except Exception:
+            pass
+        try:
             await locator.click(timeout=8000)
             result.submit_clicked = True
         except Exception as exc:
-            click_error = str(exc)
+            # A sticky header/footer or a still-settling layout can leave the
+            # located button technically present but not "actionable" by
+            # Playwright's stricter click checks (confirmed live: recruitee
+            # and jobaffinity both resolved the real submit button, then
+            # timed out on the click itself). One forced retry -- skips
+            # the actionability checks, not a second guess at which element
+            # to click -- before giving up.
+            try:
+                await locator.click(timeout=5000, force=True)
+                result.submit_clicked = True
+            except Exception as exc2:
+                click_error = str(exc2)
 
         captcha_after = await blockers.detect_captcha(page, click_error=click_error)
         if blockers.captcha_active(captcha_after):
