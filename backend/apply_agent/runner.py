@@ -33,7 +33,14 @@ _TIMEOUT_MS = 45000
 
 
 def _application_url(job: Dict[str, Any]) -> str:
-    for key in ("selected_apply_url", "external_url", "application_url", "apply_url", "hosted_url"):
+    # "apply_url" (only Lever populates this distinctly today) is the ATS's
+    # own direct-to-form link; "selected_apply_url" is often just the
+    # job-description/hosted posting page, which for Lever specifically has
+    # no form in the DOM at all (confirmed live: hostedUrl renders only a
+    # cookie banner, the form lives at hostedUrl + "/apply"). Checked first
+    # so it wins whenever present; every other provider still falls through
+    # to selected_apply_url exactly as before since they don't set apply_url.
+    for key in ("apply_url", "selected_apply_url", "external_url", "application_url", "hosted_url"):
         value = job.get(key)
         if isinstance(value, str) and value.startswith(("http://", "https://")):
             return value
@@ -103,6 +110,17 @@ async def run_apply_attempt(
                 return result
 
             fields = await perception.extract_fields(page)
+            if not perception.looks_like_real_form(fields):
+                # Landing page, not the form yet (confirmed live on Ashby,
+                # Flatchr, SmartRecruiters, Workday) -- try the generic
+                # "Apply" CTA and re-perceive. If nothing matched, `fields`
+                # is untouched and behavior is identical to before this fix.
+                if await blockers.reveal_apply_form(page):
+                    try:
+                        await page.wait_for_load_state("networkidle", timeout=6000)
+                    except Exception:
+                        await page.wait_for_timeout(1200)
+                    fields = await perception.extract_fields(page)
             result.fields_detected = fields
             if not fields:
                 result.blockers.append(blocker("form_not_found", "No fillable fields were found on this page."))

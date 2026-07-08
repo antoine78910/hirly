@@ -212,7 +212,19 @@ FIELD_EXTRACTOR_SCRIPT = r"""
 
   const nodes = Array.from(document.querySelectorAll(
     "input, textarea, select, [role='combobox'], [contenteditable='true'], button[aria-haspopup], [role='button'][aria-haspopup], [aria-haspopup='listbox'], [aria-haspopup='menu'], .select__control"
-  ));
+  )).filter((element) => {
+    // Share-this-job widgets and language switchers are commonly built with
+    // the same aria-haspopup/react-select-style markup as a real dropdown
+    // field (confirmed live on Teamtailor/Workday pages), so the selector
+    // above catches them too. A genuine form control -- including custom-
+    // styled ones -- lives inside the application <form>; page furniture
+    // like share/language menus lives in the header/nav, outside it. Only
+    // applies to the heuristically-matched combobox-like nodes; real
+    // input/textarea/select tags are trusted regardless of container.
+    const tag = element.tagName.toLowerCase();
+    if (tag === "input" || tag === "textarea" || tag === "select") return true;
+    return Boolean(element.closest("form"));
+  });
   return nodes.map((element, index) => {
     const tag = element.tagName.toLowerCase();
     const role = element.getAttribute("role") || "";
@@ -298,3 +310,14 @@ async def extract_fields(page: Any, *, max_frames: int = 6) -> List[Dict[str, An
             item["frame_index"] = frame_index
             fields.append(item)
     return fields
+
+
+def looks_like_real_form(fields: List[Dict[str, Any]]) -> bool:
+    """A job-summary landing page (confirmed live on Ashby, Flatchr,
+    SmartRecruiters, Workday) may still expose a search box or a couple of
+    header widgets that perception dutifully reports as "fields" -- but
+    none of those are an actual application form. An email input or a file
+    upload is a reliable, language-independent signal that the real form is
+    on screen; landing pages never have either.
+    """
+    return any(field.get("type") == "email" or field.get("widget_type") == "file_upload" for field in fields)

@@ -98,6 +98,42 @@ async def dismiss_cookie_banner(page: Any) -> None:
             continue
 
 
+APPLY_CTA_PHRASES = (
+    "apply for this job",
+    "apply for this position",
+    "apply now",
+    "apply to this job",
+    "i'm interested",
+    "im interested",
+    "postuler",
+    "je postule",
+    "candidater",
+    "deposer ma candidature",
+)
+
+
+async def reveal_apply_form(page: Any) -> bool:
+    """Several ATS (confirmed live on Ashby, Flatchr, and Lever's hosted
+    posting page) render only a job-summary landing page until an explicit
+    "Apply" call-to-action is clicked -- the real form doesn't exist in the
+    DOM before that. Generic phrase list, not a per-provider selector, so it
+    applies the same way to any ATS or arbitrary career portal with this
+    pattern. Returns True if something was clicked (caller should re-run
+    perception afterwards); False means no matching CTA was found, so the
+    caller proceeds with whatever it already had.
+    """
+    for phrase in APPLY_CTA_PHRASES:
+        for role in ("button", "link"):
+            try:
+                locator = page.get_by_role(role, name=phrase)
+                if await locator.count():
+                    await locator.first.click(timeout=3000)
+                    return True
+            except Exception:
+                continue
+    return False
+
+
 def confirmation_text_found(page_text_canonical: str) -> Optional[str]:
     for phrase in SUCCESS_PHRASES:
         if phrase in page_text_canonical:
