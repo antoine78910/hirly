@@ -55,6 +55,7 @@ import AdminRoute from "@/components/AdminRoute";
 import BottomNav from "@/components/BottomNav";
 import AppLayout from "@/components/desktop/AppLayout";
 import ScrollManager from "@/components/app/ScrollManager";
+import RecordTools from "@/pages/RecordTools";
 import { devBypassAuth } from "@/lib/dev";
 import { isTrainingRoute } from "@/lib/trainingRoutes";
 import { needsOAuthCallbackRedirect } from "@/lib/oauthCallback";
@@ -92,6 +93,7 @@ function shouldShowBottomNav(pathname) {
   if (pathname === "/terms" || pathname === "/privacy") return false;
   if (pathname === "/billing" || pathname === "/referral") return false;
   if (isTrainingRoutePath(pathname)) return false;
+  if (pathname === "/record-tools") return false;
   return true;
 }
 
@@ -182,6 +184,7 @@ function AppRouter() {
         <Route path="/referral" element={<AppRoute><Referral /></AppRoute>} />
         <Route path="/settings" element={<AppRoute><Settings /></AppRoute>} />
         <Route path="/history" element={<AppRoute requireProfile><History /></AppRoute>} />
+        <Route path="/record-tools" element={<AppRoute requireProfile><RecordTools /></AppRoute>} />
         </Route>
         <Route path="/training" element={<TrainingRoute><Training /></TrainingRoute>} />
         <Route path="/training/creator" element={<TrainingLegacyRedirect />} />
