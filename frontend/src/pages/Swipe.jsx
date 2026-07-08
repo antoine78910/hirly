@@ -170,12 +170,19 @@ const buildLocalFeedGuard = ({ params, response }) => {
   return (job) => {
     const remote = job?.remote === true || normalizeSearchText(job?.location).includes("remote");
     if (remote && remoteExplicit) return true;
+    const data = job?.data && typeof job.data === "object" ? job.data : {};
     const text = normalizeSearchText([
       job?.city,
       job?.region,
       job?.location,
       job?.country,
       job?.country_code,
+      // Some providers store location pieces under `data.*` rather than top-level fields.
+      data?.location,
+      data?.job_city,
+      data?.job_state,
+      data?.job_country,
+      data?.job_location,
     ].filter(Boolean).join(" "));
     const countryCode = String(job?.country_code || "").toLowerCase().trim();
     if (!text && !countryCode) return false;
@@ -810,7 +817,14 @@ export default function Swipe() {
     const controller = new AbortController();
     feedAbortRef.current = controller;
     pendingFiltersRef.current = undefined;
+    // Prefetch backend (faster): ask `/jobs/feed` to query DB first and skip
+    // blocking provider refresh where possible.
+    //
+    // Keep `stackPrefetch` (UI) limited to restoring-from-stack only: it controls
+    // whether we show/clear the loading skeleton.
     const stackPrefetch = !replace && jobsRef.current.length > 0;
+    const backendPrefetch =
+      stackPrefetch || (typeof reason === "string" && reason.startsWith("filters_"));
     // Only restore-from-navigation should skip the loading skeleton. Any explicit
     // target/filter change must clear the stack and show a fresh search.
     const silentRefresh = replace && jobsRef.current.length > 0 && reason === "background_refresh_cache";
@@ -831,7 +845,7 @@ export default function Swipe() {
     }
     setFeedError("");
     let params = buildFeedParams(f);
-    if (stackPrefetch) {
+    if (backendPrefetch) {
       params.set("prefetch", "true");
     }
     let requestUrl = `/jobs/feed?${params.toString()}`;
