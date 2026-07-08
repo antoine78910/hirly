@@ -384,8 +384,11 @@ export default function Mp3InterviewSimulator() {
   }, []);
 
   const { start: startMic, stop: stopMic, listening: micListening, level: micLevel, error: micDetectError } = useMicrophoneSilenceDetector({
-    threshold: 0.02,
-    silenceMs: 1200,
+    // Silence detection tuning:
+    // - lower threshold so typical mics trigger "speech"
+    // - shorter silence so the next step advances quicker
+    threshold: 0.012,
+    silenceMs: 900,
     onSilence: () => {
       if (statusRef.current !== "waiting") return;
 
@@ -523,10 +526,13 @@ export default function Mp3InterviewSimulator() {
       }
 
       setPreviewIndex(null);
+      currentIndexRef.current = idx;
       setCurrentIndex(idx);
+      statusRef.current = "playing";
       setStatus("playing");
       playAudioRange(seg.start, seg.end, () => {
         // After interviewer speaks, wait for the user to stop talking.
+        statusRef.current = "waiting";
         setStatus("waiting");
       });
     },
@@ -549,6 +555,8 @@ export default function Mp3InterviewSimulator() {
     stopMic();
     stopAudio();
     setPreviewIndex(null);
+    currentIndexRef.current = 0;
+    statusRef.current = "playing";
     setCurrentIndex(0);
     setStatus("playing");
     setMicError(null);
@@ -560,6 +568,7 @@ export default function Mp3InterviewSimulator() {
     stopMic();
     stopAudio();
     setPreviewIndex(null);
+    statusRef.current = "setup";
     setStatus("setup");
     setCurrentIndex(0);
     setMicError(null);
