@@ -268,15 +268,17 @@ def company_discovery_loop_enabled() -> bool:
 
 
 async def run_company_discovery_loop(db) -> None:
-    """Deliberately a much slower cadence than the 5-minute ATS-direct
-    maintenance loop -- this hits an external paid API (Serper) and a
-    rate-limit-prone free one (crt.sh), neither of which should be hammered
-    every few minutes the way refreshing already-known sources can be.
+    """Runs as often as env config allows (default 20min, floor 10min) --
+    SERPER_API_KEY is now configured, so there's no reason to sit on the
+    original conservative 4h default. Still not as fast as the 5-minute
+    ATS-direct refresh loop: this hits an external paid API (Serper) and a
+    rate-limit-prone free one (crt.sh), so the floor exists to avoid
+    burning through Serper quota or getting crt.sh to start hard-blocking.
     """
     if not company_discovery_loop_enabled():
         logger.info("company_discovery_loop_disabled")
         return
-    interval_minutes = max(60, env_int("COMPANY_DISCOVERY_INTERVAL_MINUTES", 240))
+    interval_minutes = max(10, env_int("COMPANY_DISCOVERY_INTERVAL_MINUTES", 20))
     initial_delay = max(0, env_int("COMPANY_DISCOVERY_INITIAL_DELAY_SECONDS", 180))
     logger.info("company_discovery_loop_started interval_minutes=%s initial_delay_seconds=%s", interval_minutes, initial_delay)
     await asyncio.sleep(initial_delay)

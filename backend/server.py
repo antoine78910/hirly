@@ -106,6 +106,12 @@ from france_travail_harvest import (
     last_harvest_summary as ft_last_harvest_summary,
     run_france_travail_harvest_loop,
 )
+from jsearch_harvest import (
+    harvest_enabled as jsearch_harvest_enabled,
+    harvest_jsearch,
+    last_harvest_summary as jsearch_last_harvest_summary,
+    run_jsearch_harvest_loop,
+)
 from rome_profile_service import get_rome_profile, normalize_rome_code, rome_profile_enabled
 from ats_source_service import (
     discover_ats_sources_from_cached_jobs,
@@ -7817,6 +7823,31 @@ async def admin_jobs_france_travail_harvest_status(admin: User = Depends(require
     }
 
 
+@api_router.post("/admin/jobs/jsearch/harvest")
+async def admin_jobs_jsearch_harvest(
+    admin: User = Depends(require_admin_user),
+    max_queries: Optional[int] = None,
+    dry_run: bool = False,
+):
+    _require_job_maintenance_enabled()
+    logger.info(
+        "admin_jobs_jsearch_harvest_requested admin=%s max_queries=%s dry_run=%s",
+        admin.email,
+        max_queries,
+        dry_run,
+    )
+    return await harvest_jsearch(db, max_queries=max_queries, dry_run=dry_run)
+
+
+@api_router.get("/admin/jobs/jsearch/harvest-status")
+async def admin_jobs_jsearch_harvest_status(admin: User = Depends(require_admin_user)):
+    _require_job_maintenance_enabled()
+    return {
+        "harvest_enabled": jsearch_harvest_enabled(),
+        "last_run": jsearch_last_harvest_summary(),
+    }
+
+
 @api_router.post("/admin/jobs/company-discovery")
 async def admin_jobs_company_discovery(
     admin: User = Depends(require_admin_user),
@@ -12604,6 +12635,7 @@ async def startup_seed():
     asyncio.create_task(_startup_seed_impl())
     asyncio.create_task(_resume_pending_application_generation())
     asyncio.create_task(run_france_travail_harvest_loop(db))
+    asyncio.create_task(run_jsearch_harvest_loop(db))
     asyncio.create_task(run_ats_direct_maintenance_loop(db))
     asyncio.create_task(run_company_discovery_loop(db))
 
