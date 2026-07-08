@@ -25,11 +25,13 @@ export async function saveInterviewTemplate({
     form.append("duration_seconds", String(durationSeconds));
   }
   form.append("audio", audioFile);
-  const { data } = await api.post("/record-tools/interview-templates", form, {
-    baseURL: getDirectApiBase(),
-    headers: { "Content-Type": "multipart/form-data" },
-    timeout: 120000,
-  });
+
+  // IMPORTANT: do not manually set `Content-Type` for multipart/form-data.
+  // Let the browser/axios add the correct boundary, otherwise the backend/proxy can hang.
+  const base = (getDirectApiBase() || "").replace(/\/+$/, "");
+  const url = `${base}/record-tools/interview-templates`;
+
+  const { data } = await api.post(url, form, { timeout: 180000 });
   return data;
 }
 

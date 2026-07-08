@@ -356,6 +356,22 @@ export default function Mp3InterviewSimulator() {
 
   const audioRef = useRef(null);
   const stopTimerRef = useRef(null);
+  const segmentsRef = useRef([]);
+  const currentIndexRef = useRef(0);
+  const statusRef = useRef(status);
+  const playNextSessionSegmentRef = useRef(null);
+
+  useEffect(() => {
+    segmentsRef.current = segments;
+  }, [segments]);
+
+  useEffect(() => {
+    currentIndexRef.current = currentIndex;
+  }, [currentIndex]);
+
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
 
   const stopAudio = useCallback(() => {
     if (stopTimerRef.current) {
@@ -371,15 +387,14 @@ export default function Mp3InterviewSimulator() {
     threshold: 0.02,
     silenceMs: 1200,
     onSilence: () => {
-      if (status !== "waiting") return;
-      // User stopped speaking -> next step.
+      if (statusRef.current !== "waiting") return;
+
+      // User stopped speaking -> next interviewer step.
       stopMic();
       setMicError(null);
-      setStatus((prev) => {
-        if (prev !== "waiting") return prev;
-        return "playing";
-      });
-      setCurrentIndex((i) => i + 1);
+
+      const nextIdx = currentIndexRef.current + 1;
+      playNextSessionSegmentRef.current?.(nextIdx);
     },
   });
 
@@ -458,8 +473,19 @@ export default function Mp3InterviewSimulator() {
     const startAt = Math.max(0, start + 0.01);
     const endAt = Math.max(startAt + 0.05, end);
 
-    audioRef.current.currentTime = startAt;
-    audioRef.current.play().catch(() => {});
+    try {
+      audioRef.current.currentTime = startAt;
+    } catch (e) {
+      // If currentTime assignment fails, playback will also fail.
+      toast.error(e?.message || "Could not seek audio.");
+      return;
+    }
+
+    audioRef.current.play().catch((e) => {
+      // Autoplay restrictions often throw NotAllowedError if play() isn't triggered by a user gesture.
+      console.error("Audio play() failed:", e);
+      toast.error("Audio couldn't start. Click Play again (browser autoplay policy).");
+    });
 
     const ms = Math.max(0, (endAt - startAt) * 1000);
     stopTimerRef.current = setTimeout(() => {
@@ -486,27 +512,30 @@ export default function Mp3InterviewSimulator() {
     });
   }, [playAudioRange, segments, stopAudio, stopMic]);
 
-  const playSessionSegment = useCallback((idx) => {
-    const seg = segments[idx];
-    if (!seg) return;
+  const playNextSessionSegment = useCallback(
+    (idx) => {
+      const seg = segmentsRef.current[idx];
+      if (!seg) {
+        stopAudio();
+        stopMic();
+        setStatus("done");
+        return;
+      }
 
-    setPreviewIndex(null);
-    playAudioRange(seg.start, seg.end, () => {
-      setStatus("waiting");
-    });
-  }, [playAudioRange]);
+      setPreviewIndex(null);
+      setCurrentIndex(idx);
+      setStatus("playing");
+      playAudioRange(seg.start, seg.end, () => {
+        // After interviewer speaks, wait for the user to stop talking.
+        setStatus("waiting");
+      });
+    },
+    [playAudioRange, stopAudio, stopMic],
+  );
 
   useEffect(() => {
-    if (status !== "playing") return;
-    if (!segments.length) return;
-    if (currentIndex >= segments.length) {
-      stopAudio();
-      stopMic();
-      setStatus("done");
-      return;
-    }
-    playSessionSegment(currentIndex);
-  }, [currentIndex, playSessionSegment, segments.length, status, stopAudio, stopMic]);
+    playNextSessionSegmentRef.current = playNextSessionSegment;
+  }, [playNextSessionSegment]);
 
   useEffect(() => {
     if (status !== "waiting") return;
@@ -523,6 +552,8 @@ export default function Mp3InterviewSimulator() {
     setCurrentIndex(0);
     setStatus("playing");
     setMicError(null);
+    // Important: play audio inside the click handler to satisfy browser autoplay rules.
+    playNextSessionSegment(0);
   };
 
   const stopSession = () => {
@@ -538,8 +569,8 @@ export default function Mp3InterviewSimulator() {
     // User can skip the remaining speaking moment.
     stopMic();
     stopAudio();
-    setStatus("playing");
-    setCurrentIndex((i) => i + 1);
+    const nextIdx = currentIndexRef.current + 1;
+    playNextSessionSegment(nextIdx);
   };
 
   const canEditSegment = segments.length > 0;
@@ -624,7 +655,7 @@ export default function Mp3InterviewSimulator() {
     } catch (e) {
       const status = e?.response?.status;
       if (status === 504) {
-        toast.error("Upload timed out. Try a smaller MP3 (under 10 MB) or retry in a moment.");
+        toast.error("Upload timed out. Retry in a moment (or refresh the page).");
       } else {
         toast.error(e?.response?.data?.detail || e?.message || "Could not save template");
       }
