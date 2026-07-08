@@ -52,6 +52,11 @@ APPROVED_SOURCE_PREFIXES = (
     "application.motivation_summary",
     "prepared_application_payload",
     "safe_default.",
+    # Test-only placeholder fills (agent.invent_placeholder_fills) -- passes
+    # the general approved-source check but is deliberately absent from
+    # `allowed_sensitive_prefixes` below, so a sensitive field still gets
+    # rejected even during an authorized test run with invented answers.
+    "test_invented.",
 )
 
 

@@ -248,6 +248,39 @@ def resolve_file_upload_fields(fields: List[Dict[str, Any]]) -> List[Dict[str, A
     return resolved
 
 
+def invent_placeholder_fills(fields: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """TEST-ONLY. Generates a generic placeholder for any field passed in --
+    never wired into the real prepare/submit endpoints, only reachable via a
+    direct `run_apply_attempt(invent_missing_answers=True)` call, used to
+    verify a submit click goes through end-to-end without waiting on a real
+    user's answers to job-specific custom questions. The source tag
+    deliberately isn't in guardrails' sensitive-field allowlist, so a
+    visa/salary/EEO-style field still gets rejected by validate_agent_fill
+    exactly as it would for any other unapproved guess -- this only ever
+    fills the ordinary "what's your availability" kind of question.
+    """
+    proposals = []
+    for field in fields:
+        widget_type = field.get("widget_type")
+        options = field.get("options") or []
+        if widget_type == "checkbox":
+            value: Any = "true"
+        elif widget_type in ("select", "radio", "combobox") and options:
+            first = options[0]
+            value = (first.get("value") or first.get("label")) if isinstance(first, dict) else first
+        elif widget_type == "textarea":
+            value = "N/A - happy to discuss further at interview."
+        else:
+            value = "N/A"
+        proposals.append({
+            "stable_field_id": field.get("stable_field_id"),
+            "value": str(value),
+            "source": "test_invented.placeholder",
+            "confidence": 0.1,
+        })
+    return proposals
+
+
 def validated_plan(
     fields: List[Dict[str, Any]],
     proposals: List[Dict[str, Any]],

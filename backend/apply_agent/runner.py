@@ -60,7 +60,17 @@ async def run_apply_attempt(
     click_submit: bool = False,
     headless: bool = True,
     db: Any = None,
+    invent_missing_answers: bool = False,
 ) -> ApplyRunResult:
+    """`invent_missing_answers` is test-only and never set by any request
+    model the real API exposes -- it fills remaining required job-specific
+    questions with a generic placeholder instead of leaving them for the
+    user, purely to verify a submit click goes through end-to-end. Sensitive
+    fields (visa, salary, EEO, ...) are still never invented: the
+    placeholder's source isn't in guardrails' sensitive-field allowlist, so
+    validate_agent_fill rejects it there exactly like any other unapproved
+    guess.
+    """
     url = _application_url(job)
     domain = _domain(url)
     provider = str(job.get("ats_provider") or job.get("provider") or "unknown")
@@ -189,19 +199,32 @@ async def run_apply_attempt(
                 await page.wait_for_timeout(300)
                 fields_after = await perception.extract_fields(page)
 
-            unfilled_required = [
-                f for f in fields_after
-                if f.get("required")
-                and not f.get("disabled")
-                and not _has_value(f)
-                # File uploads are routinely hidden behind a styled button/
-                # dropzone (visible=False but real and fillable -- see
-                # resolve_file_upload_fields), so a required-but-unfilled one
-                # must still be flagged; every other widget type keeps the
-                # visibility requirement since a hidden text/select/checkbox
-                # is usually conditionally-inactive, not a real blocker.
-                and (f.get("widget_type") == "file_upload" or f.get("visible"))
-            ]
+            def _compute_unfilled_required() -> List[Dict[str, Any]]:
+                return [
+                    f for f in fields_after
+                    if f.get("required")
+                    and not f.get("disabled")
+                    and not _has_value(f)
+                    # File uploads are routinely hidden behind a styled button/
+                    # dropzone (visible=False but real and fillable -- see
+                    # resolve_file_upload_fields), so a required-but-unfilled one
+                    # must still be flagged; every other widget type keeps the
+                    # visibility requirement since a hidden text/select/checkbox
+                    # is usually conditionally-inactive, not a real blocker.
+                    and (f.get("widget_type") == "file_upload" or f.get("visible"))
+                ]
+
+            unfilled_required = _compute_unfilled_required()
+            if invent_missing_answers and unfilled_required:
+                invented_proposals = agent_module.invent_placeholder_fills(unfilled_required)
+                invented_accepted, invented_rejected = agent_module.validated_plan(unfilled_required, invented_proposals, profile)
+                result.rejected_fills.extend(invented_rejected)
+                resume_uploaded = resume_uploaded or await _apply_fills(
+                    page, unfilled_required, invented_accepted, resume_path, cover_letter_path, result,
+                )
+                await page.wait_for_timeout(300)
+                fields_after = await perception.extract_fields(page)
+                unfilled_required = _compute_unfilled_required()
             for field in unfilled_required:
                 code = "required_sensitive_field_missing" if _is_sensitive(field) else "required_field_unmatched"
                 result.blockers.append(blocker(code, "Required field has no safe automatic answer.", field))

@@ -9435,6 +9435,42 @@ def _sanitize_agent_result_for_application(result_dict: Dict[str, Any]) -> Dict[
     return result_for_storage
 
 
+def _agent_missing_information(result_dict: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Job-specific questions the agent couldn't safely answer on its own --
+    reuses the exact `field_name`/`label`/`options` shape the tracker UI's
+    existing missing-info form already renders (ApplicationDetailPanel.jsx),
+    so no frontend change is needed to surface these to the user.
+    """
+    items: List[Dict[str, Any]] = []
+    for field in result_dict.get("unfilled_required_fields") or []:
+        if not isinstance(field, dict):
+            continue
+        items.append({
+            "field_name": field.get("stable_field_id"),
+            "label": field.get("label") or field.get("name") or "This field",
+            "options": [
+                (opt.get("label") if isinstance(opt, dict) else opt)
+                for opt in (field.get("options") or [])
+            ],
+            "reason": "agent_could_not_answer",
+        })
+    return items
+
+
+def _agent_submission_status(result_dict: Dict[str, Any]) -> str:
+    if result_dict.get("captcha_required"):
+        return "blocked_captcha"
+    if result_dict.get("login_wall_detected"):
+        return "blocked"
+    if result_dict.get("ready_for_final_click"):
+        return "ready"
+    if result_dict.get("unfilled_required_fields"):
+        return "action_required"
+    if result_dict.get("blockers"):
+        return "blocked"
+    return "prepared"
+
+
 async def _run_agent_apply(job_id: str, user: User, click_submit: bool = False) -> Dict[str, Any]:
     try:
         job, profile, app_doc = await _load_or_create_agent_application(job_id, user)
@@ -9485,6 +9521,8 @@ async def _run_agent_apply(job_id: str, user: User, click_submit: bool = False) 
                 "agent_apply_result": result_for_storage,
                 "agent_apply_prepared_at": now,
                 "updated_at": now,
+                "submission_status": _agent_submission_status(result_dict),
+                "prepared_missing_information": _agent_missing_information(result_dict),
             }},
         )
 
@@ -10791,6 +10829,82 @@ async def greenhouse_submit(body: GreenhousePrepareSubmitRequest, user: User = D
     raise HTTPException(status_code=502, detail={"message": error, "response": metadata})
 
 
+async def _resolve_agent_missing_info(
+    application_id: str,
+    app_doc: Dict[str, Any],
+    body: "ResolveMissingInfoRequest",
+    user: User,
+) -> Dict[str, Any]:
+    """Agent-based applications have no `prepared_application_payload` (that
+    structure belongs to the older Greenhouse-specific submit flow) -- the
+    user's answers are stored as label/value pairs instead, in the exact
+    shape `apply_agent.agent.build_candidate_context` already reads from
+    `prepared_application_payload.questions`, so the next prepare/submit
+    run for this job picks them up automatically without any new plumbing
+    on the agent side.
+    """
+    answers = body.answers or {}
+    if not answers:
+        raise HTTPException(status_code=400, detail="No answers provided")
+
+    pending = app_doc.get("prepared_missing_information") or []
+    pending_by_field = {item.get("field_name"): item for item in pending if isinstance(item, dict)}
+    payload = app_doc.get("prepared_application_payload") or {}
+    questions = list(payload.get("questions") or [])
+    answered_field_names = set()
+    for field_name, value in answers.items():
+        if _is_empty_answer(value):
+            continue
+        label = (pending_by_field.get(field_name) or {}).get("label") or field_name
+        questions.append({"label": label, "value": value})
+        answered_field_names.add(field_name)
+    payload["questions"] = questions
+
+    remaining_missing = [item for item in pending if item.get("field_name") not in answered_field_names]
+    submission_status = "action_required" if remaining_missing else "prepared"
+    now = datetime.now(timezone.utc).isoformat()
+    await db.applications.update_one(
+        {"application_id": application_id, "user_id": user.user_id},
+        {"$set": {
+            "prepared_application_payload": payload,
+            "prepared_missing_information": remaining_missing,
+            "submission_status": submission_status,
+            "updated_at": now,
+        }},
+    )
+
+    if body.save_to_profile:
+        profile_updates = {
+            f"application_answers_profile.{_canonical_field_name(label)}": value
+            for label, value in ((q.get("label"), q.get("value")) for q in questions)
+            if label and not _is_empty_answer(value)
+        }
+        if profile_updates:
+            profile_updates["updated_at"] = now
+            await db.profiles.update_one(
+                {"user_id": user.user_id},
+                {"$set": profile_updates},
+                upsert=True,
+            )
+
+    updated = await db.applications.find_one(
+        {"application_id": application_id, "user_id": user.user_id},
+        {"_id": 0},
+    )
+    updated = _normalize_application_status_fields(updated or {})
+    job = await db.jobs.find_one({"job_id": updated.get("job_id")}, {"_id": 0})
+    return {
+        "application_id": application_id,
+        "submission_status": submission_status,
+        "ready_for_submission": submission_status == "prepared",
+        "missing_information": remaining_missing,
+        "blockers": [],
+        "resolved_count": len(answered_field_names),
+        "unresolved_fields": remaining_missing,
+        "application": {**updated, "job": job},
+    }
+
+
 @api_router.post("/applications/{application_id}/resolve-missing-info")
 async def resolve_missing_info(
     application_id: str,
@@ -10803,6 +10917,9 @@ async def resolve_missing_info(
     )
     if not app_doc:
         raise HTTPException(status_code=404, detail="Application not found")
+
+    if app_doc.get("agent_apply_result") and not app_doc.get("prepared_application_payload"):
+        return await _resolve_agent_missing_info(application_id, app_doc, body, user)
 
     payload = app_doc.get("prepared_application_payload")
     if not payload:
