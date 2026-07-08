@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional
 from job_providers import get_job_provider, is_job_provider_configured
 from job_providers.base import JobSearchQuery
 from jobs_service import upsert_imported_jobs
+from location_intelligence import country_to_jsearch_language
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +151,12 @@ async def harvest_jsearch(
                     role=role,
                     location=location_label,
                     country="fr",
+                    # Confirmed live: leaving this at the dataclass default
+                    # ("en") while targeting country="fr" made every single
+                    # query return zero results -- the working feed-fallback
+                    # path (jobs_service.build_profile_job_query) always
+                    # matches language to country for exactly this reason.
+                    language=country_to_jsearch_language("fr"),
                     limit=page_size * max_pages,
                     page_size=page_size,
                     max_pages=max_pages,
