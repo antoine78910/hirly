@@ -12,6 +12,7 @@ function usesDocumentScroll(pathname) {
   if (pathname.startsWith("/compare/")) return true;
   if (pathname.startsWith("/for/")) return true;
   if (isTrainingRoute(pathname)) return true;
+  if (pathname === "/record-tools") return true;
   if (pathname === "/admin" || pathname.startsWith("/admin/")) return true;
   return false;
 }

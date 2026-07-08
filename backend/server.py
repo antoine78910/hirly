@@ -138,6 +138,8 @@ from gmail_sync import (
     sync_gmail_application_emails,
 )
 from training_routes import register_training_routes, register_training_admin_routes
+from record_tools_routes import register_record_tools_routes
+from record_tools_access import require_record_tools_user
 from training_service import (
     SEED_COURSE_ID,
     admin_training_analytics as compute_training_analytics,
@@ -8188,6 +8190,16 @@ async def _require_training_user(user: User = Depends(get_current_user)) -> User
     )
 
 
+async def _require_record_tools_user(user: User = Depends(get_current_user)) -> User:
+    return await require_record_tools_user(
+        db,
+        user,
+        is_admin_email=_is_admin_email,
+        is_training_creator=is_training_creator,
+        tutorial_user_id=TUTORIAL_FILMING_USER_ID,
+    )
+
+
 async def _analytics_events() -> List[Dict[str, Any]]:
     try:
         return await db.analytics_events.find({}, {"_id": 0}).sort("created_at", -1).to_list(10000)
@@ -12314,6 +12326,7 @@ async def dev_clean_job_descriptions():
 
 register_training_routes(api_router, get_current_user, db, _require_training_user, _get_training_access_payload)
 register_training_admin_routes(api_router, require_admin_user, db, _enrich_invite_rows_for_admin)
+register_record_tools_routes(api_router, get_current_user, db, _require_record_tools_user)
 register_feedback_routes(api_router, get_current_user, require_admin_user, db)
 app.include_router(api_router)
 

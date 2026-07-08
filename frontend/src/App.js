@@ -184,8 +184,8 @@ function AppRouter() {
         <Route path="/referral" element={<AppRoute><Referral /></AppRoute>} />
         <Route path="/settings" element={<AppRoute><Settings /></AppRoute>} />
         <Route path="/history" element={<AppRoute requireProfile><History /></AppRoute>} />
-        <Route path="/record-tools" element={<AppRoute requireProfile><RecordTools /></AppRoute>} />
         </Route>
+        <Route path="/record-tools" element={<AppRoute><RecordTools /></AppRoute>} />
         <Route path="/training" element={<TrainingRoute><Training /></TrainingRoute>} />
         <Route path="/training/creator" element={<TrainingLegacyRedirect />} />
         <Route path="/training/:courseId" element={<TrainingRoute><TrainingCourse /></TrainingRoute>} />

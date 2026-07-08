@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Mic, MicOff, Play, RotateCcw, Square, Upload } from "lucide-react";
-import { useAuth } from "../../context/AuthContext";
+import { Loader2, Mic, MicOff, Play, RotateCcw, Save, Square, Upload } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import {
+  fetchInterviewTemplate,
+  fetchInterviewTemplateAudioBlob,
+  fetchInterviewTemplates,
+  saveInterviewTemplate,
+} from "../../lib/interviewSimulatorTemplates";
 
 function useMicrophoneSilenceDetector({ onSilence, threshold = 0.02, silenceMs = 1200 } = {}) {
   const onSilenceRef = useRef(onSilence);
@@ -220,12 +226,18 @@ function splitAudioBufferBySilence(audioBuffer, {
 }
 
 export default function Mp3InterviewSimulator() {
-  const { user } = useAuth();
-
+  const [mp3File, setMp3File] = useState(null);
   const [mp3FileName, setMp3FileName] = useState("");
   const [audioUrl, setAudioUrl] = useState(null);
   const [audioBuffer, setAudioBuffer] = useState(null);
   const [segments, setSegments] = useState([]);
+
+  const [templates, setTemplates] = useState([]);
+  const [templatesLoading, setTemplatesLoading] = useState(true);
+  const [templateName, setTemplateName] = useState("");
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [loadingTemplateId, setLoadingTemplateId] = useState(null);
+  const [activeTemplateId, setActiveTemplateId] = useState(null);
 
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState(null);
@@ -272,10 +284,10 @@ export default function Mp3InterviewSimulator() {
     if (micDetectError) setMicError(micDetectError);
   }, [micDetectError]);
 
-  const analyze = useCallback(async (file) => {
+  const analyze = useCallback(async (file, { applySegments = true } = {}) => {
     setAnalysisLoading(true);
     setAnalysisError(null);
-    setSegments([]);
+    if (applySegments) setSegments([]);
     setAudioBuffer(null);
 
     try {
@@ -285,6 +297,8 @@ export default function Mp3InterviewSimulator() {
       const buffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
       setAudioBuffer(buffer);
       ctx.close?.();
+
+      if (!applySegments) return buffer;
 
       const segs = splitAudioBufferBySilence(buffer, {
         thresholdDb,
@@ -300,12 +314,30 @@ export default function Mp3InterviewSimulator() {
         end: s.end,
       }));
       setSegments(named);
+      return buffer;
     } catch (e) {
       setAnalysisError(e?.message || "Could not analyze audio.");
+      return null;
     } finally {
       setAnalysisLoading(false);
     }
   }, [minSegmentMs, minSilenceMs, paddingMs, thresholdDb]);
+
+  const refreshTemplates = useCallback(async () => {
+    setTemplatesLoading(true);
+    try {
+      const rows = await fetchInterviewTemplates();
+      setTemplates(rows);
+    } catch {
+      setTemplates([]);
+    } finally {
+      setTemplatesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshTemplates();
+  }, [refreshTemplates]);
 
   useEffect(() => {
     // Cleanup on unmount
@@ -383,22 +415,88 @@ export default function Mp3InterviewSimulator() {
 
   const canEditSegment = segments.length > 0;
 
+  const applyAudioSource = async (file, displayName) => {
+    setMp3File(file);
+    setMp3FileName(displayName || file.name);
+    if (audioUrl) {
+      try { URL.revokeObjectURL(audioUrl); } catch (_) {}
+    }
+    const nextUrl = URL.createObjectURL(file);
+    setAudioUrl(nextUrl);
+  };
+
   const onUpload = async (file) => {
     if (!file) return;
     if (!file.type.includes("audio")) {
       setAnalysisError("Please upload an audio file (mp3/wav).");
       return;
     }
-    setMp3FileName(file.name);
-
-    if (audioUrl) {
-      try { URL.revokeObjectURL(audioUrl); } catch (_) {}
-    }
-    const nextUrl = URL.createObjectURL(file);
-    setAudioUrl(nextUrl);
-
+    setActiveTemplateId(null);
+    setTemplateName(file.name.replace(/\.[^.]+$/, ""));
+    await applyAudioSource(file, file.name);
     await analyze(file);
     stopSession();
+  };
+
+  const loadTemplate = async (templateId) => {
+    if (!templateId) return;
+    setLoadingTemplateId(templateId);
+    setAnalysisError(null);
+    stopSession();
+    try {
+      const [detail, blob] = await Promise.all([
+        fetchInterviewTemplate(templateId),
+        fetchInterviewTemplateAudioBlob(templateId),
+      ]);
+      const file = new File(
+        [blob],
+        detail.original_filename || `${detail.name || "template"}.mp3`,
+        { type: blob.type || "audio/mpeg" },
+      );
+      await applyAudioSource(file, detail.name || file.name);
+      setSegments(detail.segments || []);
+      setActiveTemplateId(templateId);
+      setTemplateName(detail.name || "");
+      const settings = detail.split_settings || {};
+      if (settings.thresholdDb != null) setThresholdDb(Number(settings.thresholdDb));
+      if (settings.minSilenceMs != null) setMinSilenceMs(Number(settings.minSilenceMs));
+      if (settings.paddingMs != null) setPaddingMs(Number(settings.paddingMs));
+      if (settings.minSegmentMs != null) setMinSegmentMs(Number(settings.minSegmentMs));
+      await analyze(file, { applySegments: false });
+      toast.success("Template loaded");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e?.message || "Could not load template");
+    } finally {
+      setLoadingTemplateId(null);
+    }
+  };
+
+  const handleSaveTemplate = async () => {
+    if (!mp3File || !segments.length) {
+      toast.error("Upload and trim an MP3 before saving.");
+      return;
+    }
+    if (!templateName.trim()) {
+      toast.error("Enter a template name.");
+      return;
+    }
+    setSavingTemplate(true);
+    try {
+      const saved = await saveInterviewTemplate({
+        name: templateName.trim(),
+        segments,
+        splitSettings: { thresholdDb, minSilenceMs, paddingMs, minSegmentMs },
+        durationSeconds: audioBuffer?.duration,
+        audioFile: mp3File,
+      });
+      setActiveTemplateId(saved.template_id);
+      await refreshTemplates();
+      toast.success("Template saved for all creators");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e?.message || "Could not save template");
+    } finally {
+      setSavingTemplate(false);
+    }
   };
 
   const updateSegment = (idx, patch) => {
@@ -429,17 +527,62 @@ export default function Mp3InterviewSimulator() {
             <p className="mt-1 text-sm text-zinc-600">
               Upload un MP3 de questions, découpe-le automatiquement sur les silences, puis joue étape par étape. Quand tu t’arrêtes de parler, on passe à la suivante.
             </p>
-            {user ? (
-              <p className="mt-2 text-xs text-zinc-400">
-                Access: demo/user {user.user_id}
-              </p>
-            ) : null}
           </div>
 
           <Button type="button" variant="outline" onClick={stopSession} className="rounded-full">
             <Square className="w-4 h-4 mr-2" />
             Stop
           </Button>
+        </div>
+
+        <div className="mt-5 rounded-2xl border border-violet-200 bg-violet-50/60 p-4">
+          <p className="text-xs font-bold uppercase tracking-wider text-violet-800">
+            Shared templates
+          </p>
+          <p className="mt-1 text-sm text-zinc-600">
+            Load a saved interview script that every creator can reuse.
+          </p>
+          {templatesLoading ? (
+            <div className="mt-3 flex items-center gap-2 text-sm text-zinc-500">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading templates…
+            </div>
+          ) : templates.length ? (
+            <div className="mt-3 space-y-2">
+              {templates.map((tpl) => (
+                <div
+                  key={tpl.template_id}
+                  className={`flex items-center justify-between gap-3 rounded-xl border bg-white p-3 ${
+                    activeTemplateId === tpl.template_id ? "border-violet-300" : "border-zinc-200"
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-zinc-900">{tpl.name}</p>
+                    <p className="text-xs text-zinc-500">
+                      {tpl.segment_count} steps · {formatTime(tpl.duration_seconds)}
+                      {tpl.created_by_name ? ` · ${tpl.created_by_name}` : ""}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0 rounded-full"
+                    disabled={loadingTemplateId === tpl.template_id || analysisLoading}
+                    onClick={() => loadTemplate(tpl.template_id)}
+                  >
+                    {loadingTemplateId === tpl.template_id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Load"
+                    )}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-zinc-500">No shared templates yet.</p>
+          )}
         </div>
 
         <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-5">
@@ -486,6 +629,35 @@ export default function Mp3InterviewSimulator() {
                 </div>
               ) : null}
             </div>
+
+            {segments.length > 0 && status === "setup" ? (
+              <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4">
+                <p className="text-xs font-bold uppercase tracking-wider text-zinc-600">
+                  Save as shared template
+                </p>
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <Input
+                    value={templateName}
+                    onChange={(e) => setTemplateName(e.target.value)}
+                    placeholder="Template name"
+                    className="rounded-xl"
+                  />
+                  <Button
+                    type="button"
+                    className="rounded-full bg-zinc-900 text-white hover:opacity-90 sm:shrink-0"
+                    disabled={savingTemplate || !mp3File}
+                    onClick={handleSaveTemplate}
+                  >
+                    {savingTemplate ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4 mr-2" />
+                    )}
+                    Save template
+                  </Button>
+                </div>
+              </div>
+            ) : null}
 
             <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4">
               <p className="text-xs font-bold uppercase tracking-wider text-zinc-600">2) Réglages de découpe</p>
