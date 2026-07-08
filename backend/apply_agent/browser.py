@@ -23,12 +23,16 @@ logger = logging.getLogger(__name__)
 
 
 def _chromium_executable_path() -> Optional[str]:
-    """Nixpacks builds run in a sandboxed Nix environment without apt, so
-    Playwright's own bundled-browser download + `install-deps` doesn't work
-    there. `nixpacks.toml` installs Nix's own self-contained `chromium`
-    package instead; this points Playwright at it directly. Local dev
-    machines where `playwright install chromium` was run normally have no
-    such env var/binary and fall back to Playwright's default resolution.
+    """Railway's builder (Railpack) installs Chromium via a `railpack.json`
+    build step (`playwright install chromium`) into `PLAYWRIGHT_BROWSERS_PATH`
+    -- Playwright finds that on its own via the env var, no explicit path
+    needed here. This function is a fallback for the uncommon case of a
+    system-installed `chromium`/`chromium-browser`/`google-chrome` binary on
+    PATH (e.g. a container image that ships one directly); when nothing
+    matches, `launch_page()` omits `executable_path` entirely and Playwright
+    falls back to its own normal resolution (PLAYWRIGHT_BROWSERS_PATH if set,
+    else its default cache dir -- exactly what local dev machines use after
+    running `playwright install chromium` normally).
     """
     explicit = os.environ.get("PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH")
     if explicit and Path(explicit).exists():

@@ -11245,7 +11245,10 @@ async def health():
 @api_router.get("/version")
 async def version():
     return {
-        "git_sha": os.environ.get("APP_GIT_SHA") or os.environ.get("RAILWAY_GIT_COMMIT_SHA") or os.environ.get("VERCEL_GIT_COMMIT_SHA"),
+        # Railway's own auto-populated var reflects the real current deploy;
+        # checked first so a stale manually-set APP_GIT_SHA (from an earlier
+        # debugging session, never updated since) can't mask it.
+        "git_sha": os.environ.get("RAILWAY_GIT_COMMIT_SHA") or os.environ.get("VERCEL_GIT_COMMIT_SHA") or os.environ.get("APP_GIT_SHA"),
         "app_version": os.environ.get("APP_VERSION"),
         "deployed_at": os.environ.get("DEPLOYED_AT") or os.environ.get("RAILWAY_DEPLOYMENT_CREATED_AT"),
         "flags": {
