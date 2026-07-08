@@ -36,7 +36,7 @@ function useMicrophoneSilenceDetector({
   const sessionStartedAtRef = useRef(0);
   const silenceTriggeredRef = useRef(false);
 
-  const stopAll = () => {
+  const stopAll = useCallback(() => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     rafRef.current = null;
 
@@ -61,9 +61,9 @@ function useMicrophoneSilenceDetector({
     silenceTriggeredRef.current = false;
 
     setListening(false);
-  };
+  }, []);
 
-  const start = async () => {
+  const start = useCallback(async () => {
     setError(null);
     stopAll();
 
@@ -152,9 +152,9 @@ function useMicrophoneSilenceDetector({
     } catch (e) {
       setError(e?.message || "Could not start microphone.");
     }
-  };
+  }, [stopAll, threshold, silenceMs, graceMs, minSpeechMs]);
 
-  const stop = () => stopAll();
+  const stop = useCallback(() => stopAll(), [stopAll]);
 
   useEffect(() => () => stopAll(), []);
 
@@ -416,11 +416,14 @@ export default function Mp3InterviewSimulator() {
   }, []);
 
   const { start: startMic, stop: stopMic, listening: micListening, level: micLevel, error: micDetectError } = useMicrophoneSilenceDetector({
-    // Wait ~1.8s before silence can end the turn; require real speech; longer pause to advance.
-    threshold: 0.008,
-    graceMs: 1800,
-    minSpeechMs: 600,
-    silenceMs: 2600,
+    // Tuning for "stop talking" detection:
+    // - graceMs: give time for the interviewer audio → reduce false triggers
+    // - threshold/minSpeechMs: avoid tiny blips
+    // - silenceMs: require a real pause before advancing
+    threshold: 0.012,
+    graceMs: 1200,
+    minSpeechMs: 300,
+    silenceMs: 2200,
     onSilence: () => {
       if (statusRef.current !== "waiting") return;
 

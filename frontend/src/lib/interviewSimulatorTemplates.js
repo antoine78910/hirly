@@ -31,7 +31,10 @@ export async function saveInterviewTemplate({
   const base = (getDirectApiBase() || "").replace(/\/+$/, "");
   const url = `${base}/record-tools/interview-templates`;
 
-  const { data } = await api.post(url, form, { timeout: 180000 });
+  const { data } = await api.post(url, form, {
+    // Give the backend plenty of time to receive and store the file.
+    timeout: 240000,
+  });
   return data;
 }
 
