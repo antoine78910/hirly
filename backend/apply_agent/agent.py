@@ -266,8 +266,18 @@ def invent_placeholder_fills(fields: List[Dict[str, Any]]) -> List[Dict[str, Any
         if widget_type == "checkbox":
             value: Any = "true"
         elif widget_type in ("select", "radio", "combobox") and options:
-            first = options[0]
-            value = (first.get("value") or first.get("label")) if isinstance(first, dict) else first
+            # Skip a leading blank/placeholder option ("-- select --" is
+            # almost always options[0]) -- picking it back would just
+            # re-select nothing and leave the field exactly as unfilled as
+            # before.
+            def _option_is_real(opt: Any) -> bool:
+                if isinstance(opt, dict):
+                    return bool(opt.get("value") or opt.get("label"))
+                return bool(opt)
+
+            real_options = [opt for opt in options if _option_is_real(opt)]
+            chosen = real_options[0] if real_options else options[0]
+            value = (chosen.get("value") or chosen.get("label")) if isinstance(chosen, dict) else chosen
         elif widget_type == "textarea":
             value = "N/A - happy to discuss further at interview."
         else:
