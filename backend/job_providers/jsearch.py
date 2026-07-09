@@ -1,6 +1,7 @@
 """JSearch job provider integration."""
 
 import hashlib
+import logging
 import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -13,6 +14,8 @@ from .base import JobSearchQuery, ProviderResult
 from .apply_eligibility import classify_apply_link
 from .ats_detection import PRIMARY_AUTO_APPLY_ATS, detect_job_platform
 
+logger = logging.getLogger(__name__)
+
 
 class JSearchProvider:
     name = "jsearch"
@@ -22,18 +25,56 @@ class JSearchProvider:
         self.base_url = (base_url or os.environ.get("JSEARCH_BASE_URL") or "https://api.openwebninja.com/jsearch").rstrip("/")
         if timeout is None:
             try:
-                timeout = float(os.environ.get("JSEARCH_HTTP_TIMEOUT_SECONDS", "10"))
+                # Was 10s. search() now retries once with a substitute
+                # country on timeout (see _country_timeout_fallback) -- a
+                # 10s-per-try budget would let a timeout+retry cycle run to
+                # ~20s, longer than the feed's own per-location sync budget,
+                # so the retry would get killed by the outer caller before
+                # it could ever complete. 6s keeps a full retry cycle inside
+                # that outer budget while still being generous for a normal
+                # single successful call (observed 2-6s in practice).
+                timeout = float(os.environ.get("JSEARCH_HTTP_TIMEOUT_SECONDS", "6"))
             except (TypeError, ValueError):
-                timeout = 10.0
+                timeout = 6.0
         self.timeout = max(1.0, min(float(timeout), 30.0))
 
     async def search(self, query: JobSearchQuery) -> ProviderResult:
+        try:
+            return await self._search_once(query)
+        except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.PoolTimeout) as exc:
+            # Confirmed live: the literal country param value -- not the
+            # location text, not request size -- is what makes OpenWebNinja's
+            # backend hang. A London search with country="gb" timed out 3 of
+            # 4 tries (~10s each); the exact same query with country="us" or
+            # "fr" instead succeeded in 4-6s and still returned the correct
+            # London job, because the location string already does the real
+            # geographic targeting. Rather than hardcode "gb" as the one
+            # broken value (today it is; any country could be tomorrow),
+            # retry once with "us" -- the one value proven reliable across
+            # every market tested -- on any country-specific timeout.
+            fallback_country = self._country_timeout_fallback(query.country)
+            if not fallback_country:
+                raise
+            logger.warning(
+                "jsearch_country_timeout_retry role=%s location=%s original_country=%s fallback_country=%s error=%s",
+                query.role, query.location, query.country, fallback_country, f"{exc.__class__.__name__}: {exc}",
+            )
+            return await self._search_once(query, request_country=fallback_country)
+
+    def _country_timeout_fallback(self, country: Optional[str]) -> Optional[str]:
+        normalized = (country or "").strip().lower()
+        if not normalized or normalized == "us":
+            return None
+        return "us"
+
+    async def _search_once(self, query: JobSearchQuery, *, request_country: Optional[str] = None) -> ProviderResult:
+        effective_country = request_country if request_country is not None else query.country
         base_params: Dict[str, Any] = {
             "query": self._query_string(query),
             "language": query.language,
         }
-        if query.country:
-            base_params["country"] = query.country
+        if effective_country:
+            base_params["country"] = effective_country
         if query.remote_preference == "remote":
             base_params["work_from_home"] = "true"
         date_posted = os.environ.get("JSEARCH_DATE_POSTED")
