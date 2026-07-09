@@ -47,6 +47,7 @@ import {
 import { getJobBadgeItems, getJobDisplayContent, getJobDisplayTitle, formatJobSalaryLabel } from "../lib/jobDisplayUtils";
 import JobRomeProfile from "../components/swipe/JobRomeProfile";
 import JobOfferDetails from "../components/swipe/JobOfferDetails";
+import JobCardHighlights, { JobCardMatchBadge } from "../components/swipe/JobCardHighlights";
 import { translateLocationLabel, translateRoleLabel } from "../lib/localizedDisplay";
 
 import { preloadCompanyLogos } from "../lib/companyLogos";
@@ -319,17 +320,18 @@ function MobileDetailSection({ title, bullets, body, t }) {
 }
 
 function CardFront({ job, onReport, onShare, actionsEnabled, t, lang }) {
-  const { snippet } = getJobDisplayContent(job);
+  const { snippet, about } = getJobDisplayContent(job);
   const badges = getJobBadgeItems(job, { lang });
   const title = getJobDisplayTitle(job, { lang });
   const location = translateLocationLabel(job.location, lang) || t("swipe.locationNotSpecified");
   const salaryLabel = formatJobSalaryLabel(job, { lang });
   const postedLabel = formatPostedDate(t, job.posted_at) || t("swipe.postedRecently");
+  const previewText = snippet || (about ? about.split(/\n+/).find(Boolean) : "");
 
   return (
     <div className="backface-hidden absolute inset-0 flex flex-col overflow-hidden rounded-[28px] border border-sprout-border bg-sprout-surface">
       <div className="flex min-h-0 flex-1 flex-col px-4 pb-2 pt-3 sm:px-6 sm:pb-3 sm:pt-5">
-        <div className="flex shrink-0 items-start justify-between">
+        <div className="flex shrink-0 items-start justify-between gap-2">
           <div className="pointer-events-auto flex items-center gap-2">
             <button
               type="button"
@@ -358,6 +360,7 @@ function CardFront({ job, onReport, onShare, actionsEnabled, t, lang }) {
               <Share2 className="h-5 w-5" strokeWidth={1.8} />
             </button>
           </div>
+          <JobCardMatchBadge job={job} t={t} />
         </div>
 
         <div className="mt-0.5 flex justify-center sm:mt-1">
@@ -367,14 +370,9 @@ function CardFront({ job, onReport, onShare, actionsEnabled, t, lang }) {
 
         <div className="mt-2 text-center sm:mt-4">
           <p className="font-display text-lg font-semibold text-white sm:text-2xl">{job.company}</p>
-          {snippet ? (
-            <p className="mt-2 hidden line-clamp-3 text-sm leading-snug text-sprout-muted sm:mt-3 sm:block sm:text-[15px]">
-              {snippet}
-            </p>
-          ) : null}
         </div>
 
-        <div className="mt-2 px-1 sm:mt-5 sm:px-3">
+        <div className="mt-2 px-1 sm:mt-4 sm:px-3">
           <h2
             className="text-center font-display text-[clamp(1.2rem,5vw,2.35rem)] font-black leading-[1.08] tracking-tight text-white"
             data-testid="job-title"
@@ -383,7 +381,7 @@ function CardFront({ job, onReport, onShare, actionsEnabled, t, lang }) {
           </h2>
         </div>
 
-        <div className="mt-2 sm:mt-5">
+        <div className="mt-2 sm:mt-4">
           <JobCardMeta
             location={location}
             salaryLabel={salaryLabel}
@@ -392,7 +390,17 @@ function CardFront({ job, onReport, onShare, actionsEnabled, t, lang }) {
           />
         </div>
 
-        <div className="mt-auto pt-2 sm:mt-5 sm:pt-0">
+        {previewText ? (
+          <p className="mt-2 line-clamp-2 px-1 text-center text-xs leading-relaxed text-sprout-muted sm:mt-3 sm:line-clamp-3 sm:px-3 sm:text-sm">
+            {previewText}
+          </p>
+        ) : null}
+
+        <div className="mt-2 sm:mt-3">
+          <JobCardHighlights job={job} t={t} lang={lang} max={3} compact />
+        </div>
+
+        <div className="mt-auto pt-2 sm:mt-3 sm:pt-0">
           <JobCardBadges badges={badges} compact />
         </div>
       </div>
@@ -451,6 +459,9 @@ function CardBack({ job, t, lang }) {
 
         <div className="hidden sm:block">
           <JobOfferDetails job={job} t={t} lang={lang} compact />
+        </div>
+        <div className="sm:hidden">
+          <JobCardHighlights job={job} t={t} lang={lang} max={4} compact />
         </div>
 
         <div className="space-y-3">

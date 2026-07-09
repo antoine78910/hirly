@@ -104,6 +104,13 @@ const fmtDateTime = (value) => {
   });
 };
 
+const isRefreshStale = (iso, intervalHours = 6) => {
+  if (!iso) return true;
+  const ts = new Date(iso).getTime();
+  if (Number.isNaN(ts)) return true;
+  return Date.now() - ts >= intervalHours * 60 * 60 * 1000;
+};
+
 function creatorReachViews(creator, usesLikesProxy = false) {
   const views = Number(creator?.current?.views || 0);
   if (views > 0) return views;
@@ -442,10 +449,14 @@ export default function AdminCreators() {
   }, [days, selectedIds, load]);
 
   useEffect(() => {
-    if (loading || accessDenied || data?.last_refreshed_at || autoRefreshedRef.current) return;
+    if (loading || accessDenied || autoRefreshedRef.current) return;
+    const maintenance = data?.maintenance;
+    const intervalHours = maintenance?.interval_hours || 6;
+    const stale = maintenance?.stale ?? isRefreshStale(data?.last_refreshed_at, intervalHours);
+    if (!stale) return;
     autoRefreshedRef.current = true;
     refresh();
-  }, [loading, accessDenied, data?.last_refreshed_at, refresh]);
+  }, [loading, accessDenied, data?.last_refreshed_at, data?.maintenance, refresh]);
 
   const creators = data?.creators || [];
   const summary = data?.summary || {};
@@ -528,6 +539,11 @@ export default function AdminCreators() {
   const maxTopVideoViews = topVideos[0]?.reach || 0;
   const maxTopAccountViews = topAccounts[0]?.reach || 0;
 
+  const maintenance = data?.maintenance;
+  const trackingIntervalHours = maintenance?.interval_hours || 6;
+  const trackingEnabled = maintenance?.loop_enabled !== false;
+  const trackingStale = maintenance?.stale ?? isRefreshStale(data?.last_refreshed_at, trackingIntervalHours);
+
   return (
     <AdminShell
       enableDarkMode
@@ -596,6 +612,11 @@ export default function AdminCreators() {
             </div>
             <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
               Last refreshed {fmtDateTime(data?.last_refreshed_at)}
+              {trackingEnabled
+                ? ` · Auto-tracking every ${trackingIntervalHours}h`
+                : " · Auto-tracking disabled on server"}
+              {maintenance?.next_due_at ? ` · Next scheduled refresh ${fmtDateTime(maintenance.next_due_at)}` : ""}
+              {trackingStale ? " · Data is stale, refresh recommended." : ""}
               {usesLikesProxy ? " · Per-video views unavailable from TikTok — showing likes as reach proxy." : ""}
             </p>
           </div>

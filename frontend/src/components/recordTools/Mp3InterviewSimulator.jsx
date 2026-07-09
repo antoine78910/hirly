@@ -790,6 +790,14 @@ export default function Mp3InterviewSimulator() {
     }, STEP_TRANSITION_MS);
   }, [clearTransitionTimer, stopAudio, stopMic]);
 
+  const skipToPracticeTurn = useCallback(() => {
+    stopAudio();
+    stopMic();
+    clearTransitionTimer();
+    statusRef.current = "ready";
+    setStatus("ready");
+  }, [clearTransitionTimer, stopAudio, stopMic]);
+
   useEffect(() => {
     playNextSessionSegmentRef.current = playNextSessionSegment;
   }, [playNextSessionSegment]);
@@ -1260,7 +1268,7 @@ export default function Mp3InterviewSimulator() {
                 </div>
               ) : null}
 
-              {(status === "ready" || status === "waiting") && advanceMode === "manual" ? (
+              {(status === "ready" && advanceMode === "manual") ? (
                 <Button
                   type="button"
                   className="mt-4 h-14 w-full rounded-2xl bg-amber-500 text-base font-bold text-white shadow-lg shadow-amber-200 hover:bg-amber-600"
@@ -1276,7 +1284,7 @@ export default function Mp3InterviewSimulator() {
                   type="button"
                   variant="outline"
                   className="mt-3 w-full rounded-full"
-                  onClick={goToNextStep}
+                  onClick={skipToPracticeTurn}
                 >
                   <SkipForward className="mr-2 h-4 w-4" />
                   Skip to your turn
@@ -1373,7 +1381,7 @@ export default function Mp3InterviewSimulator() {
                   type="button"
                   variant="outline"
                   className="rounded-full"
-                  disabled={(status !== "ready" && status !== "waiting") || advanceMode !== "manual"}
+                  disabled={status !== "ready" || advanceMode !== "manual"}
                   onClick={goToNextStep}
                 >
                   <SkipForward className="w-4 h-4 mr-2" />

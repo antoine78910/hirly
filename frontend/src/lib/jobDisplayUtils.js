@@ -367,6 +367,42 @@ export function getJobOfferDetailRows(job, { t, lang = "en" } = {}) {
   return rows;
 }
 
+const CARD_HIGHLIGHT_PRIORITY = [
+  "contract_type",
+  "contract_nature",
+  "work_schedule",
+  "experience",
+  "salary",
+  "benefits",
+  "work_context",
+];
+
+/** Compact labeled rows for the swipe card front (before flip). */
+export function getJobCardHighlightRows(job, { t, lang = "en", max = 3 } = {}) {
+  if (!job || typeof t !== "function") return [];
+  const rows = getJobOfferDetailRows(job, { t, lang });
+  if (!rows.length) return [];
+
+  const sorted = [...rows].sort((a, b) => {
+    const ai = CARD_HIGHLIGHT_PRIORITY.indexOf(a.key);
+    const bi = CARD_HIGHLIGHT_PRIORITY.indexOf(b.key);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
+
+  return sorted.slice(0, Math.max(1, max)).map((row) => ({
+    key: row.key,
+    label: row.label,
+    value: row.value || (row.items || []).slice(0, 2).join(" · "),
+  })).filter((row) => row.value);
+}
+
+export function getJobMatchScore(job) {
+  const raw = job?.match_score ?? job?.matchScore ?? job?.feed_score;
+  const score = Number(raw);
+  if (!Number.isFinite(score) || score <= 0) return null;
+  return Math.round(Math.max(0, Math.min(100, score)));
+}
+
 function sectionTitleMatches(title, patterns) {
   const normalized = stripHtml(title).toLowerCase();
   return patterns.some((pattern) => pattern.test(normalized));
