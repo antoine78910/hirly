@@ -39,6 +39,28 @@ CONTRACT_TYPE_QUERY_HINTS: Dict[str, str] = {
     "freelance": "freelance",
 }
 
+# JSearch's query is a natural-language string, and appending a French
+# contract acronym ("CDI") to a search targeting an English-speaking market
+# (e.g. "barista CDI jobs in London") gets parsed as a literal keyword
+# requirement no real UK/US posting contains -- confirmed live this silently
+# zeroed out results for a UK search. This table is picked by the query's
+# resolved language instead of always defaulting to French.
+CONTRACT_TYPE_QUERY_HINTS_EN: Dict[str, str] = {
+    "permanent": "full time",
+    "fixed_term": "fixed term",
+    "internship": "internship",
+    "apprenticeship": "apprenticeship",
+    "summer_job": "summer job",
+    "part_time": "part time",
+    "seasonal": "seasonal",
+    "freelance": "freelance",
+}
+
+CONTRACT_TYPE_QUERY_HINTS_BY_LANGUAGE: Dict[str, Dict[str, str]] = {
+    "fr": CONTRACT_TYPE_QUERY_HINTS,
+    "en": CONTRACT_TYPE_QUERY_HINTS_EN,
+}
+
 JOB_TYPE_ALIASES: Dict[str, List[str]] = {
     "full_time": [
         "full time", "full-time", "permanent", "cdi", "temps plein",
@@ -108,11 +130,16 @@ def contract_type_to_job_types(contract_type: Optional[str]) -> List[str]:
     return list(CONTRACT_TYPE_TO_JOB_TYPES.get(key, []))
 
 
-def contract_type_query_hint(contract_type: Optional[str]) -> Optional[str]:
+def contract_type_query_hint(contract_type: Optional[str], language: Optional[str] = "fr") -> Optional[str]:
     key = str(contract_type or "").strip().lower()
     if not key:
         return None
-    return CONTRACT_TYPE_QUERY_HINTS.get(key)
+    # Default stays "fr" so any caller that doesn't pass a language keeps
+    # today's France-targeted behavior exactly; every other resolved
+    # language (en, es, de, it, pt, nl, ...) falls back to the English
+    # hints, since real non-French job postings don't use French acronyms.
+    table = CONTRACT_TYPE_QUERY_HINTS_BY_LANGUAGE.get((language or "fr").lower(), CONTRACT_TYPE_QUERY_HINTS_EN)
+    return table.get(key)
 
 
 def _job_contract_text(job: Mapping[str, Any]) -> str:

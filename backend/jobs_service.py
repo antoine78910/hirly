@@ -183,7 +183,8 @@ def build_profile_job_query(
     remote_preference = "remote" if str(profile.get("remote_preference") or "").lower().strip() == "remote" else "any"
     if radius_scope in ("remote", "remote/worldwide"):
         remote_preference = "remote"
-    contract_hint = contract_type_query_hint(resolve_profile_contract_type(profile))
+    query_language = _language_for_country(country)
+    contract_hint = contract_type_query_hint(resolve_profile_contract_type(profile), query_language)
     logger.info(
         "JSearch query location normalized: country=%s location=%s radius=%s role=%s contract_hint=%s",
         country, location, search_radius, role, contract_hint,
@@ -193,7 +194,7 @@ def build_profile_job_query(
         location=location,
         remote_preference=remote_preference,
         country=country,
-        language=_language_for_country(country),
+        language=query_language,
         limit=max(20, min(_env_int("JOB_IMPORT_LIMIT", 50), 100)),
         contract_hint=contract_hint,
         radius_km=_radius_km(search_radius),
