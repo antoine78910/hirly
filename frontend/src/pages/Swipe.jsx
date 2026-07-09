@@ -204,7 +204,19 @@ const buildLocalFeedGuard = ({ params, response }) => {
    Swipe card — tap to flip for full job details (mobile).
 ============================================================ */
 
+const CARD_TAP_SUPPRESS_MS = 320;
+let cardTapSuppressUntil = 0;
+
+function suppressCardTap(ms = CARD_TAP_SUPPRESS_MS) {
+  cardTapSuppressUntil = Date.now() + ms;
+}
+
+function isCardTapSuppressed() {
+  return Date.now() < cardTapSuppressUntil;
+}
+
 function stopCardTap(e) {
+  suppressCardTap();
   e.stopPropagation();
 }
 
@@ -419,7 +431,7 @@ function CardFront({ job, onReport, onShare, actionsEnabled, t, lang }) {
   );
 }
 
-function CardBack({ job, t, lang }) {
+function CardBack({ job, t, lang, onScrollIntent }) {
   const { about, detailSections } = getJobDisplayContent(job);
   const badges = getJobBadgeItems(job, { lang });
   const title = getJobDisplayTitle(job, { lang });
@@ -445,6 +457,8 @@ function CardBack({ job, t, lang }) {
       <div
         className="app-scroll no-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-3 pb-2 touch-pan-y sm:px-6 sm:py-4"
         data-testid="swipe-card-scroll"
+        onPointerDown={() => onScrollIntent?.()}
+        onScroll={() => onScrollIntent?.()}
       >
         <JobCardMeta
           location={location}
@@ -503,12 +517,40 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang }) {
   const skipOpacity = useTransform(x, [-160, -80, 0], [1, 0.5, 0]);
   const [flipped, setFlipped] = useState(false);
   const [showBack, setShowBack] = useState(false);
-  const dragRef = useRef({ distance: 0 });
+  const interactionRef = useRef({
+    dragDistance: 0,
+    suppressTap: false,
+    backScrollIntent: false,
+  });
 
   useEffect(() => {
     setFlipped(false);
     setShowBack(false);
+    interactionRef.current.dragDistance = 0;
+    interactionRef.current.suppressTap = false;
+    interactionRef.current.backScrollIntent = false;
   }, [job.job_id, isTop]);
+
+  const markBackScrollIntent = useCallback(() => {
+    interactionRef.current.backScrollIntent = true;
+    suppressCardTap();
+  }, []);
+
+  const resetInteractionState = useCallback(() => {
+    window.setTimeout(() => {
+      interactionRef.current.dragDistance = 0;
+      interactionRef.current.suppressTap = false;
+      interactionRef.current.backScrollIntent = false;
+    }, CARD_TAP_SUPPRESS_MS);
+  }, []);
+
+  const handleFlipTap = useCallback(() => {
+    if (!isTop || isCardTapSuppressed()) return;
+    if (interactionRef.current.suppressTap || interactionRef.current.dragDistance > 8) return;
+    if (flipped && interactionRef.current.backScrollIntent) return;
+    setShowBack(true);
+    setFlipped((current) => !current);
+  }, [flipped, isTop]);
 
   return (
     <motion.div
@@ -529,19 +571,40 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang }) {
       dragElastic={0.6}
       dragSnapToOrigin
       whileDrag={{ cursor: "grabbing" }}
+      onDragStart={() => {
+        interactionRef.current.suppressTap = false;
+      }}
       onDrag={(_, info) => {
-        dragRef.current.distance = Math.abs(info.offset.x);
+        const distance = Math.abs(info.offset.x);
+        interactionRef.current.dragDistance = distance;
+        if (distance > 5) {
+          interactionRef.current.suppressTap = true;
+          suppressCardTap();
+        }
       }}
       onDragEnd={(_, info) => {
-        dragRef.current.distance = 0;
-        if (info.offset.x > 140 || info.velocity.x > 700) onSwipe("apply");
-        else if (info.offset.x < -140 || info.velocity.x < -700) onSwipe("skip");
+        const distance = Math.abs(info.offset.x);
+        interactionRef.current.dragDistance = distance;
+        if (distance > 8) {
+          interactionRef.current.suppressTap = true;
+          suppressCardTap();
+        }
+        if (info.offset.x > 140 || info.velocity.x > 700) {
+          interactionRef.current.suppressTap = true;
+          suppressCardTap();
+          onSwipe("apply");
+        } else if (info.offset.x < -140 || info.velocity.x < -700) {
+          interactionRef.current.suppressTap = true;
+          suppressCardTap();
+          onSwipe("skip");
+        }
+        resetInteractionState();
       }}
-      onTap={() => {
-        if (!isTop || dragRef.current.distance > 8) return;
-        setShowBack(true);
-        setFlipped((current) => !current);
+      onTapCancel={() => {
+        interactionRef.current.suppressTap = true;
+        suppressCardTap();
       }}
+      onTap={handleFlipTap}
       transition={{ type: "spring", stiffness: 280, damping: 28 }}
       data-testid={isTop ? "swipe-card-top" : `swipe-card-${index}`}
     >
@@ -559,7 +622,7 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang }) {
           lang={lang}
         />
         {showBack ? (
-          <CardBack job={job} t={t} lang={lang} />
+          <CardBack job={job} t={t} lang={lang} onScrollIntent={markBackScrollIntent} />
         ) : (
           <div className="backface-hidden rotate-y-180 absolute inset-0 rounded-[28px] border border-sprout-border bg-sprout-surface" aria-hidden="true" />
         )}
@@ -1304,7 +1367,8 @@ export default function Swipe() {
 
   const topJob = jobs[0];
   const creditsRemaining = Number(billing?.credits_remaining ?? 0);
-  const shouldGateApply = billing !== null && (!billing.is_premium || creditsRemaining <= 0) && !isDemoAccountEnabled();
+  const isDemoUser = isDemoSwipeMode() || isDemoAccountEnabled() || Boolean(user?.demo_account);
+  const shouldGateApply = billing !== null && (!billing.is_premium || creditsRemaining <= 0) && !isDemoUser;
 
   const blockApplyForFreePlan = useCallback(() => {
     if (!shouldGateApply) return false;
@@ -1334,8 +1398,6 @@ export default function Swipe() {
     if (intent === "apply" && blockApplyForFreePlan()) return;
     if (!topJob) return;
     const job = topJob;
-    const demoSwipe = isDemoSwipeMode() || isDemoAccountEnabled();
-    const demoApply = intent === "apply" && demoSwipe;
     cacheJobForDemo(job);
     recordSwipedJobId(job.job_id, user?.user_id);
     const remainingAfterSwipe = jobs.length - 1;
@@ -1349,7 +1411,7 @@ export default function Swipe() {
         job_id: job.job_id,
         company: job.company,
         ats_provider: job.ats_provider,
-        demo: demoApply,
+        demo: isDemoUser,
       });
       setAppliedToday((n) => n + 1);
     }
@@ -1368,12 +1430,13 @@ export default function Swipe() {
         ({ data } = await api.post(
           "/swipe",
           { job_id: job.job_id, direction },
-          intent === "apply" ? { timeout: demoApply ? 15000 : 180000 } : undefined,
+          intent === "apply" ? { timeout: isDemoUser ? 15000 : 180000 } : undefined,
         ));
       }
-      if (intent === "apply" && !demoApply) {
-        const applied = Boolean(data?.applied || data?.demo_local || data?.demo_account);
-        if (applied) {
+      if (intent === "apply") {
+        const isDemoOutcome = isDemoUser || Boolean(data?.demo_local || data?.demo_account);
+        const applied = Boolean(data?.applied);
+        if (applied && !isDemoOutcome) {
           if (data?.billing) {
             setBilling((prev) => ({
               ...(prev || {}),
@@ -1396,7 +1459,7 @@ export default function Swipe() {
         if (nextBilling) setBilling(nextBilling);
         openUpgrade();
       }
-      if (!demoSwipe && intent === "apply") {
+      if (!isDemoUser && intent === "apply") {
         toast.error(getSwipeErrorMessage(t, e));
       }
     }
@@ -1653,6 +1716,7 @@ export default function Swipe() {
           <div className="mx-auto flex w-full max-w-md shrink-0 items-center justify-center gap-10 py-3 sm:gap-14 sm:py-4">
             <motion.button
               whileTap={{ scale: 0.9 }}
+              onPointerDown={() => suppressCardTap()}
               onClick={() => handleSwipe("skip")}
               disabled={!topJob || appLoading}
               className="grid h-14 w-14 place-items-center rounded-full border-2 border-rose-500/70 bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)] transition-colors hover:border-rose-500"
@@ -1664,6 +1728,7 @@ export default function Swipe() {
 
             <motion.button
               whileTap={{ scale: 0.9 }}
+              onPointerDown={() => suppressCardTap()}
               onClick={() => handleSwipe("apply")}
               disabled={!topJob || appLoading}
               className="grid h-16 w-16 place-items-center rounded-full gradient-linkedin shadow-[0_8px_28px_rgba(124,58,237,0.45)] transition-opacity hover:opacity-90"
