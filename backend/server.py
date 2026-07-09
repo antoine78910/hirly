@@ -4638,40 +4638,6 @@ async def get_feed(
             if len(token) > 2 and token not in stop
         ]
 
-    def _role_family_tokens(role: str) -> List[str]:
-        tokens = _tokens(role)
-        role_lower = (role or "").lower()
-        family = list(tokens)
-        if any(token in tokens for token in ("developer", "engineer", "javascript", "node", "frontend", "backend")):
-            family.extend(["developer", "developpeur", "ingenieur", "logiciel", "software", "engineer", "frontend", "backend", "fullstack", "full-stack", "javascript", "node"])
-        if "analyst" in tokens:
-            family.extend(["analyst", "analyste", "analytics", "analysis", "insights", "business", "market", "etudes", "charge"])
-        if "manager" in tokens:
-            family.extend(["manager", "management", "responsable", "chef", "lead", "operations", "product", "produit", "projet"])
-        if "full-stack" in role_lower or "full stack" in role_lower:
-            family.extend(["fullstack", "full-stack", "frontend", "backend"])
-        if any(token in tokens for token in ("research", "researcher")):
-            family.extend(["research", "researcher", "recherche", "etudes", "charge", "r&d", "rd"])
-        if any(token in tokens for token in ("sales", "commercial")):
-            family.extend(["sales", "commercial", "vente", "vendeur", "conseiller"])
-        if "marketing" in tokens:
-            family.extend(["marketing", "communication", "community", "seo", "contenu", "content", "digital", "charge", "assistant", "responsable"])
-        if any(token in tokens for token in ("hr", "human", "resources", "recruiter", "talent")):
-            family.extend(["hr", "rh", "ressources", "humaines", "recrutement", "recruteur", "talent", "paie", "formation", "assistant", "charge"])
-        if any(token in tokens for token in ("administrative", "receptionist", "office", "executive")):
-            family.extend(["administrative", "administratif", "assistant", "direction", "reception", "receptionniste", "office"])
-        if any(token in tokens for token in ("finance", "accountant", "bookkeeper", "payroll")):
-            family.extend(["finance", "comptable", "paie", "assistant"])
-        if any(token in tokens for token in ("customer", "support", "success")):
-            family.extend(["customer", "support", "success", "client", "clientele", "charge"])
-        if any(token in tokens for token in ("driver", "delivery")):
-            family.extend(["driver", "delivery", "chauffeur", "livreur"])
-        if any(token in tokens for token in ("warehouse", "logistics")):
-            family.extend(["warehouse", "logistics", "logistique", "magasinier", "preparateur"])
-        if any(token in tokens for token in ("retail", "store", "waiter", "barista", "chef", "kitchen")):
-            family.extend(["retail", "store", "vendeur", "serveur", "barista", "cuisinier", "employe polyvalent"])
-        return list(dict.fromkeys(token for token in family if token))
-
     def _job_text(job: Dict[str, Any]) -> str:
         text = " ".join([
             str(job.get("title") or ""),
@@ -4682,46 +4648,133 @@ async def get_feed(
         ]).lower()
         return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
 
+    # Broad, Indeed/LinkedIn-scale occupational taxonomy (EN + FR keywords) so
+    # the feed recognizes essentially any common job field, not just
+    # office/tech roles. This single dict drives both category compatibility
+    # (_category_compatible) and role-family token expansion for scoring
+    # (_role_family_tokens derives its expansion straight from it, so the two
+    # can't drift out of sync the way two hand-maintained lists would).
+    # "chef" alone is excluded from french-catering keywords: in French it
+    # means "lead" (chef de projet, chef de chantier), not a kitchen chef.
+    # Use "cuisine"/"cuisinier" instead.
     role_category_keywords = {
-        "technology": {"software", "developer", "developpeur", "engineer", "ingenieur", "frontend", "backend", "fullstack", "javascript", "node", "devops", "cloud", "qa"},
-        "marketing": {"marketing", "communication", "community", "seo", "brand", "contenu", "content", "digital", "growth", "social"},
-        "hr": {"hr", "rh", "human", "resources", "ressources", "humaines", "recruiter", "recrutement", "talent", "paie", "formation"},
-        "sales": {"sales", "commercial", "vente", "vendeur", "account", "business", "clientele", "customer", "support", "success"},
-        "admin": {"administrative", "administratif", "assistant", "direction", "reception", "receptionniste", "office"},
-        "finance": {"finance", "accountant", "comptable", "payroll", "paie", "auditor", "controleur"},
-        "logistics": {"warehouse", "logistics", "logistique", "magasinier", "preparateur", "driver", "chauffeur", "livreur"},
-        # "chef" alone is excluded: in French it means "lead" (chef de projet,
-        # chef de chantier), not a kitchen chef. Use "cuisine"/"cuisinier" instead.
-        "service": {"retail", "store", "waiter", "serveur", "serveuse", "barista", "barman", "kitchen", "cuisine", "cuisinier", "cleaner", "security"},
-        "healthcare": {"nurse", "infirmier", "medical", "sante", "care", "soignant", "pharmacy"},
-        "education": {"teacher", "enseignant", "professeur", "trainer", "formateur", "teaching"},
+        "technology": {"software", "developer", "developpeur", "engineer", "ingenieur", "frontend", "backend", "fullstack", "full-stack", "javascript", "python", "java", "devops", "cloud", "qa", "informatique", "programmeur", "programmer", "sysadmin", "reseau", "network", "cybersecurity", "cybersecurite", "it"},
+        "data_analytics": {"analyst", "analyste", "analytics", "analysis", "data", "donnees", "scientist", "scientifique", "statistician", "statisticien", "bi", "insights", "reporting"},
+        "product": {"product", "produit", "product owner", "product manager"},
+        "design_creative": {"design", "designer", "ux", "ui", "graphiste", "graphic", "creative", "createur", "illustrator", "illustrateur", "artiste", "artist", "motion"},
+        "marketing_communications": {"marketing", "communication", "community", "seo", "sem", "brand", "marque", "contenu", "content", "digital", "growth", "social", "attache de presse", "pr", "publicite", "advertising"},
+        "sales": {"sales", "commercial", "commerciale", "vente", "vendeur", "vendeuse", "account executive", "account manager", "business developer", "prospection", "closer"},
+        "customer_service": {"customer", "support", "success", "client", "clientele", "service client", "help desk", "assistance", "relation client"},
+        "hr_recruiting": {"hr", "rh", "human resources", "ressources humaines", "recruiter", "recruteur", "recrutement", "recruiting", "talent", "paie", "payroll", "formation", "headhunter"},
+        "administrative": {"administrative", "administratif", "assistant", "assistante", "direction", "reception", "receptionniste", "receptionist", "office", "secretaire", "secretary", "back office"},
+        "executive_management": {"executive", "director", "directeur", "directrice", "ceo", "coo", "cfo", "cto", "vp", "vice president", "president"},
+        "project_management": {"project", "projet", "program manager", "programme", "scrum", "agile", "chef de projet"},
+        "general_management": {"manager", "management", "responsable", "gerant", "gerante", "supervisor", "superviseur", "lead", "team lead"},
+        "operations": {"operations", "operationnel", "ops"},
+        "finance_accounting": {"finance", "financier", "accountant", "comptable", "comptabilite", "accounting", "auditor", "audit", "controleur de gestion", "controller", "treasury", "tresorerie", "credit"},
+        "banking_insurance": {"bank", "banque", "banking", "bancaire", "insurance", "assurance", "assureur", "actuary", "actuaire", "courtier"},
+        "legal": {"legal", "juridique", "lawyer", "avocat", "avocate", "attorney", "notaire", "notary", "paralegal", "juriste", "compliance", "conformite"},
+        "consulting": {"consultant", "consultante", "consulting", "conseil", "advisory"},
+        "supply_chain_logistics": {"warehouse", "logistics", "logistique", "magasinier", "preparateur", "supply chain", "approvisionnement", "inventory", "stock", "cariste", "forklift"},
+        "transportation_driving": {"driver", "delivery", "chauffeur", "livreur", "livreuse", "trucking", "routier", "taxi", "vtc", "coursier"},
+        "aviation_maritime": {"pilot", "pilote", "aviation", "airline", "flight attendant", "steward", "hotesse", "maritime", "marin", "seafarer"},
+        "manufacturing_production": {"manufacturing", "production", "factory", "usine", "assembly", "assemblage", "machiniste", "machinist", "technicien de production"},
+        "construction_trades": {"construction", "batiment", "chantier", "electricien", "electrician", "plumber", "plombier", "carpenter", "charpentier", "mason", "macon", "welder", "soudeur", "roofer", "couvreur", "peintre", "hvac", "chauffagiste"},
+        "engineering_technical": {"mechanical engineer", "electrical engineer", "civil engineer", "industrial engineer", "ingenieur mecanique", "ingenieur electrique", "ingenieur civil", "technicien", "technician", "maintenance"},
+        "real_estate": {"real estate", "immobilier", "realtor", "property manager", "syndic"},
+        "hospitality_food_service": {"hospitality", "hotellerie", "hotel", "restaurant", "waiter", "serveur", "serveuse", "barista", "barman", "bartender", "kitchen", "cuisine", "cuisinier", "cuisiniere", "commis de cuisine", "plongeur", "concierge"},
+        "retail": {"retail", "store", "magasin", "boutique", "cashier", "caissier", "caissiere", "employe polyvalent", "sales associate", "merchandiser"},
+        "beauty_personal_care": {"barber", "barbier", "hairdresser", "coiffeur", "coiffeuse", "coiffure", "esthetician", "esthetique", "beautician", "manucure", "nail", "spa", "cosmetologist", "maquilleur", "makeup artist"},
+        "cleaning_facilities": {"cleaner", "cleaning", "nettoyage", "menage", "housekeeper", "housekeeping", "femme de menage", "agent d'entretien", "janitor", "facilities"},
+        "security_law_enforcement": {"security", "securite", "guard", "gardien", "police", "policier", "gendarme", "firefighter", "pompier", "surveillance"},
+        "healthcare_medical": {"nurse", "infirmier", "infirmiere", "medical", "medecin", "doctor", "physician", "sante", "care", "soignant", "soignante", "aide-soignant", "pharmacy", "pharmacien", "dentist", "dentiste", "surgeon", "chirurgien", "radiologist", "radiologue", "physiotherapist", "kinesitherapeute", "caregiver"},
+        "mental_health_social_work": {"psychologist", "psychologue", "psychiatrist", "psychiatre", "therapist", "therapeute", "counselor", "social worker", "travailleur social", "assistant social", "assistante sociale", "psychotherapy", "psychotherapie"},
+        "veterinary_animal_care": {"veterinarian", "veterinaire", "vet tech", "toiletteur", "groomer", "kennel", "pet sitter"},
+        "education_training": {"teacher", "enseignant", "enseignante", "professeur", "professor", "trainer", "formateur", "formatrice", "teaching", "tutor", "tuteur", "instructor", "moniteur", "educateur", "school", "ecole", "university", "universite"},
+        "science_research": {"research", "researcher", "recherche", "chercheur", "scientist", "scientifique", "laboratory", "laboratoire", "biologist", "biologiste", "chemist", "chimiste", "physicist", "physicien", "r&d"},
+        "arts_entertainment_media": {"artist", "artiste", "musician", "musicien", "actor", "acteur", "actrice", "journalist", "journaliste", "writer", "ecrivain", "editor", "redacteur", "redactrice", "photographer", "photographe", "videographer", "video", "producer", "producteur", "media", "entertainment", "divertissement"},
+        "sports_fitness": {"coach", "fitness", "personal trainer", "gym", "athlete", "sport instructor", "moniteur sportif"},
+        "childcare_family_services": {"childcare", "nanny", "nounou", "babysitter", "assistante maternelle", "daycare", "creche", "au pair"},
+        "agriculture_farming": {"agriculture", "farming", "agricole", "farmer", "agriculteur", "agricultrice", "viticulture", "vigneron", "elevage", "ouvrier agricole"},
+        "energy_environment": {"energy", "energie", "renewable", "renouvelable", "solar", "solaire", "wind", "eolien", "environment", "environnement", "sustainability", "durabilite", "utilities", "electricite"},
+        "nonprofit_government": {"nonprofit", "non-profit", "association", "ngo", "ong", "humanitarian", "humanitaire", "government", "gouvernement", "public sector", "fonction publique", "fonctionnaire"},
     }
 
-    def _role_category(tokens: List[str]) -> Optional[str]:
-        token_set = set(tokens)
+    def _normalize_ascii(value: str) -> str:
+        return unicodedata.normalize("NFKD", (value or "").lower()).encode("ascii", "ignore").decode("ascii")
+
+    def _keyword_matches(keyword: str, normalized_text: str, word_set: set) -> bool:
+        # Whole-word match, not plain substring: several category keywords
+        # are short ("ui", "it", "hr", "pr", "bi", "vp") and a naive `in`
+        # check matches them inside unrelated words (e.g. "ui" inside
+        # "cuisinier", "it" inside "recruiter"). Multi-word phrases
+        # ("account executive") aren't single tokens, so those still need a
+        # padded substring check.
+        if " " in keyword:
+            return f" {keyword} " in f" {normalized_text} "
+        return keyword in word_set
+
+    def _text_category(normalized_text: str) -> Optional[str]:
+        word_set = set(normalized_text.split())
+        # Multi-word phrases first: a generic single-word keyword shared
+        # across categories (e.g. "developer" in technology, "manager" in
+        # general_management, "trainer" in education_training) would
+        # otherwise win over a much more specific phrase match elsewhere
+        # ("business developer" -> sales, "property manager" -> real_estate,
+        # "personal trainer" -> sports_fitness).
         for category, keywords in role_category_keywords.items():
-            if token_set & keywords:
+            if any(" " in keyword and _keyword_matches(keyword, normalized_text, word_set) for keyword in keywords):
+                return category
+        for category, keywords in role_category_keywords.items():
+            if any(" " not in keyword and _keyword_matches(keyword, normalized_text, word_set) for keyword in keywords):
                 return category
         return None
 
-    # Derive the category from the user's own words first; expanded family tokens
-    # can leak into a sibling category (e.g. "barista" family includes "vendeur",
-    # which would wrongly map the target to "sales" instead of "service").
-    target_role_category = (
-        _role_category(_tokens(feed_target_role))
-        or _role_category(_role_family_tokens(feed_target_role))
-    )
+    def _role_category_from_text(role: str) -> Optional[str]:
+        return _text_category(_normalize_ascii(role))
+
+    def _role_family_tokens(role: str) -> List[str]:
+        tokens = _tokens(role)
+        family = list(tokens)
+        normalized = _normalize_ascii(role)
+        word_set = set(normalized.split())
+        for keywords in role_category_keywords.values():
+            if any(_keyword_matches(keyword, normalized, word_set) for keyword in keywords):
+                family.extend(keywords)
+        return list(dict.fromkeys(token for token in family if token))
+
+    target_role_category = _role_category_from_text(feed_target_role)
 
     def _job_role_category(job: Dict[str, Any]) -> Optional[str]:
-        title_tokens = set(_tokens(str(job.get("title") or "")))
-        text_tokens = set(_tokens(_job_text(job)))
-        for category, keywords in role_category_keywords.items():
-            if title_tokens & keywords:
-                return category
-        for category, keywords in role_category_keywords.items():
-            if text_tokens & keywords:
-                return category
-        return None
+        title_category = _text_category(_normalize_ascii(str(job.get("title") or "")))
+        if title_category:
+            return title_category
+        return _text_category(_job_text(job))
+
+    # Sibling categories close enough that either should satisfy the other
+    # (e.g. a "Sales" search shouldn't hide Marketing-adjacent postings that
+    # often do the same job under a different title).
+    _COMPATIBLE_CATEGORY_PAIRS = {
+        frozenset({"sales", "marketing_communications"}),
+        frozenset({"sales", "administrative"}),
+        frozenset({"sales", "customer_service"}),
+        frozenset({"hr_recruiting", "administrative"}),
+        frozenset({"general_management", "executive_management"}),
+        frozenset({"general_management", "project_management"}),
+        frozenset({"general_management", "operations"}),
+        frozenset({"operations", "supply_chain_logistics"}),
+        frozenset({"finance_accounting", "banking_insurance"}),
+        frozenset({"legal", "consulting"}),
+        frozenset({"engineering_technical", "manufacturing_production"}),
+        frozenset({"engineering_technical", "construction_trades"}),
+        frozenset({"healthcare_medical", "mental_health_social_work"}),
+        frozenset({"beauty_personal_care", "hospitality_food_service"}),
+        frozenset({"cleaning_facilities", "hospitality_food_service"}),
+        frozenset({"education_training", "childcare_family_services"}),
+        frozenset({"science_research", "technology"}),
+        frozenset({"data_analytics", "technology"}),
+        frozenset({"product", "technology"}),
+    }
 
     def _category_compatible(job: Dict[str, Any]) -> bool:
         if not target_role_category:
@@ -4731,13 +4784,7 @@ async def get_feed(
             return True
         if target_role_category == job_category:
             return True
-        if target_role_category == "sales" and job_category in {"marketing", "admin"}:
-            return True
-        if target_role_category == "marketing" and job_category == "sales":
-            return True
-        if target_role_category == "hr" and job_category == "admin":
-            return True
-        return False
+        return frozenset({target_role_category, job_category}) in _COMPATIBLE_CATEGORY_PAIRS
 
     def _role_score(job: Dict[str, Any], strict_tokens: List[str], family_tokens: List[str]) -> int:
         title = unicodedata.normalize("NFKD", (job.get("title") or "").lower()).encode("ascii", "ignore").decode("ascii")
