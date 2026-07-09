@@ -52,6 +52,7 @@ def _parse_media_node(node: Dict[str, Any], handle: str) -> Dict[str, Any]:
         "likes": int((node.get("edge_liked_by") or {}).get("count") or 0),
         "comments": int((node.get("edge_media_to_comment") or {}).get("count") or 0),
         "shares": 0,
+        "favorites": int((node.get("edge_media_to_saved") or {}).get("count") or 0),
         "cover_url": node.get("thumbnail_src") or node.get("display_url") or "",
         "url": _post_url(handle, shortcode, is_reel=is_reel),
     }
@@ -122,4 +123,6 @@ def fetch_instagram_profile(handle: str) -> Dict[str, Any]:
         "videos": videos,
         "views_total": sum(int(video.get("views") or 0) for video in videos),
         "comments_total": sum(int(video.get("comments") or 0) for video in videos),
+        "shares_total": sum(int(video.get("shares") or 0) for video in videos),
+        "favorites_total": sum(int(video.get("favorites") or 0) for video in videos),
     }

@@ -33,6 +33,34 @@ def _date_key(day: date) -> str:
     return day.isoformat()
 
 
+def _sum_video_metric(videos: Sequence[Dict[str, Any]], key: str) -> int:
+    return sum(int(video.get(key) or 0) for video in (videos or []))
+
+
+def _video_metric_totals(videos: Sequence[Dict[str, Any]]) -> Dict[str, int]:
+    return {
+        "views": _sum_video_metric(videos, "views"),
+        "likes": _sum_video_metric(videos, "likes"),
+        "comments": _sum_video_metric(videos, "comments"),
+        "shares": _sum_video_metric(videos, "shares"),
+        "favorites": _sum_video_metric(videos, "favorites"),
+    }
+
+
+def _engagement_rate(
+    views: int,
+    *,
+    likes: int = 0,
+    favorites: int = 0,
+    comments: int = 0,
+    shares: int = 0,
+) -> float:
+    if views <= 0:
+        return 0.0
+    interactions = int(likes) + int(favorites) + int(comments) + int(shares)
+    return round((interactions / views) * 100, 2)
+
+
 def refresh_creator(creator_id: str) -> Dict[str, Any]:
     creator = get_creator_by_id(creator_id)
     if not creator:
@@ -56,6 +84,8 @@ def refresh_creator(creator_id: str) -> Dict[str, Any]:
         "video_count": profile.get("video_count") or 0,
         "views_total": profile.get("views_total") or 0,
         "comments_total": profile.get("comments_total") or 0,
+        "shares_total": profile.get("shares_total") or 0,
+        "favorites_total": profile.get("favorites_total") or 0,
         "videos": profile.get("videos") or [],
     })
     return snapshot
@@ -129,7 +159,15 @@ def _daily_points(
 
     daily_rows: List[Dict[str, Any]] = []
     previous_totals: Dict[str, Dict[str, int]] = {
-        cid: {"followers": 0, "likes_total": 0, "video_count": 0, "views_total": 0, "comments_total": 0}
+        cid: {
+            "followers": 0,
+            "likes_total": 0,
+            "video_count": 0,
+            "views_total": 0,
+            "comments_total": 0,
+            "shares_total": 0,
+            "favorites_total": 0,
+        }
         for cid in creator_ids
     }
 
@@ -139,6 +177,8 @@ def _daily_points(
         views = 0
         likes = 0
         comments = 0
+        shares = 0
+        favorites = 0
         followers = 0
         active_accounts = 0
         video_posts_from_list = 0
@@ -154,11 +194,15 @@ def _daily_points(
             current_likes = int(row.get("likes_total") or 0)
             current_views = int(row.get("views_total") or 0)
             current_comments = int(row.get("comments_total") or 0)
+            current_shares = int(row.get("shares_total") or 0)
+            current_favorites = int(row.get("favorites_total") or 0)
 
             posted_videos += max(0, current_videos - int(prev.get("video_count") or 0))
             likes += max(0, current_likes - int(prev.get("likes_total") or 0))
             views += max(0, current_views - int(prev.get("views_total") or 0))
             comments += max(0, current_comments - int(prev.get("comments_total") or 0))
+            shares += max(0, current_shares - int(prev.get("shares_total") or 0))
+            favorites += max(0, current_favorites - int(prev.get("favorites_total") or 0))
 
             for video in row.get("videos") or []:
                 posted_day = _utc_date(video.get("posted_at"))
@@ -167,6 +211,8 @@ def _daily_points(
                     views += int(video.get("views") or 0)
                     likes += int(video.get("likes") or 0)
                     comments += int(video.get("comments") or 0)
+                    shares += int(video.get("shares") or 0)
+                    favorites += int(video.get("favorites") or 0)
 
             previous_totals[creator_id] = {
                 "followers": int(row.get("followers") or 0),
@@ -174,6 +220,8 @@ def _daily_points(
                 "video_count": current_videos,
                 "views_total": current_views,
                 "comments_total": current_comments,
+                "shares_total": current_shares,
+                "favorites_total": current_favorites,
             }
 
         if video_posts_from_list > 0:
@@ -185,6 +233,15 @@ def _daily_points(
             "views": views,
             "likes": likes,
             "comments": comments,
+            "shares": shares,
+            "favorites": favorites,
+            "engagement_rate": _engagement_rate(
+                views,
+                likes=likes,
+                favorites=favorites,
+                comments=comments,
+                shares=shares,
+            ),
             "followers": followers,
             "active_accounts": active_accounts,
         })
@@ -219,6 +276,9 @@ def build_dashboard(
     summary_likes = 0
     summary_views = 0
     summary_comments = 0
+    summary_shares = 0
+    summary_favorites = 0
+    summary_interaction_likes = 0
     active_accounts = 0
 
     trend_followers = 0
@@ -244,12 +304,26 @@ def build_dashboard(
         current_likes = int((latest or {}).get("likes_total") or 0)
         current_views = int((latest or {}).get("views_total") or 0)
         current_comments = int((latest or {}).get("comments_total") or 0)
+        current_shares = int((latest or {}).get("shares_total") or 0)
+        current_favorites = int((latest or {}).get("favorites_total") or 0)
+        video_totals = _video_metric_totals((latest or {}).get("videos") or [])
+        if video_totals["views"] > 0:
+            current_views = video_totals["views"]
+            current_comments = video_totals["comments"]
+            current_shares = video_totals["shares"]
+            current_favorites = video_totals["favorites"]
+            interaction_likes = video_totals["likes"]
+        else:
+            interaction_likes = current_likes
 
         summary_followers += current_followers
         summary_videos += current_videos
         summary_likes += current_likes
         summary_views += current_views
         summary_comments += current_comments
+        summary_shares += current_shares
+        summary_favorites += current_favorites
+        summary_interaction_likes += interaction_likes
 
         period_start_day = datetime.now(timezone.utc).date() - timedelta(days=max(1, days) - 1)
         start_key = _date_key(period_start_day)
@@ -284,6 +358,15 @@ def build_dashboard(
                 "likes": current_likes,
                 "views": current_views,
                 "comments": current_comments,
+                "shares": current_shares,
+                "favorites": current_favorites,
+                "engagement_rate": _engagement_rate(
+                    current_views,
+                    likes=interaction_likes,
+                    favorites=current_favorites,
+                    comments=current_comments,
+                    shares=current_shares,
+                ),
             },
             "last_refreshed_at": (latest or {}).get("recorded_at"),
             "fetch_error": (latest or {}).get("error"),
@@ -293,11 +376,39 @@ def build_dashboard(
     period_views = _sum_metric(daily, "views")
     period_likes = _sum_metric(daily, "likes")
     period_comments = _sum_metric(daily, "comments")
-    engagement_rate = 0.0
-    if summary_views > 0:
-        engagement_rate = round(((summary_likes + summary_comments) / summary_views) * 100, 2)
-    elif summary_likes > 0:
-        engagement_rate = round((summary_comments / max(summary_likes, 1)) * 100, 2)
+    period_shares = _sum_metric(daily, "shares")
+    period_favorites = _sum_metric(daily, "favorites")
+
+    period_start_day = datetime.now(timezone.utc).date() - timedelta(days=max(1, days) - 1)
+    period_video_views = 0
+    period_video_likes = 0
+    period_video_comments = 0
+    period_video_shares = 0
+    period_video_favorites = 0
+    for video in all_videos:
+        posted_day = _utc_date(video.get("posted_at"))
+        if not posted_day or posted_day < period_start_day:
+            continue
+        period_video_views += int(video.get("views") or 0)
+        period_video_likes += int(video.get("likes") or 0)
+        period_video_comments += int(video.get("comments") or 0)
+        period_video_shares += int(video.get("shares") or 0)
+        period_video_favorites += int(video.get("favorites") or 0)
+
+    engagement_rate = _engagement_rate(
+        summary_views,
+        likes=summary_interaction_likes,
+        favorites=summary_favorites,
+        comments=summary_comments,
+        shares=summary_shares,
+    )
+    period_engagement_rate = _engagement_rate(
+        period_video_views or period_views,
+        likes=period_video_likes or period_likes,
+        favorites=period_video_favorites or period_favorites,
+        comments=period_video_comments or period_comments,
+        shares=period_video_shares or period_shares,
+    )
 
     uses_likes_proxy = summary_views == 0 and summary_likes > 0
     display_views = summary_views if summary_views else summary_likes
@@ -320,7 +431,12 @@ def build_dashboard(
             "likes_delta": trend_likes,
             "comments": summary_comments,
             "comments_period": period_comments,
+            "shares": summary_shares,
+            "shares_period": period_shares,
+            "favorites": summary_favorites,
+            "favorites_period": period_favorites,
             "engagement_rate": engagement_rate,
+            "engagement_rate_period": period_engagement_rate,
             "followers": summary_followers,
             "followers_delta": trend_followers,
         },
