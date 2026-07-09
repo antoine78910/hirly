@@ -1168,11 +1168,18 @@ async def _attempt_france_travail_fallback(
         ft_provider = get_job_provider("france_travail", "")
         if _cooldown_until(ft_provider.name):
             return result
+        # Monaco resolves to country_code "mc" upstream (correctly, for the
+        # primary JSearch provider), but France Travail only searches France
+        # and would skip the query outright. Monaco-based postings do show
+        # up on France Travail (filed under Alpes-Maritimes -- see
+        # france_travail.py's _MEGA_CITY_DEPARTEMENT), so this is the one
+        # provider where Monaco searches need to be treated as French.
+        ft_country = "fr" if "monaco" in (query.location or "").lower() else query.country
         ft_query = JobSearchQuery(
             role=query.role,
             location=query.location,
             remote_preference=query.remote_preference,
-            country=query.country,
+            country=ft_country,
             language=query.language,
             limit=query.limit,
             raw_query=query.raw_query,

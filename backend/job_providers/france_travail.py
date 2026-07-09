@@ -43,6 +43,12 @@ _MEGA_CITY_DEPARTEMENT = {
     "paris": "75",
     "lyon": "69",
     "marseille": "13",
+    # Monaco isn't a French commune, so geo.api.gouv.fr's commune lookup
+    # returns nothing for it (confirmed live). Postings for Monaco-based
+    # employers on France Travail are filed under the surrounding
+    # Alpes-Maritimes department, so route it there directly instead of
+    # going through the (guaranteed-empty) commune geocoding step.
+    "monaco": "06",
 }
 
 _ROLE_KEYWORD_HINTS = {
