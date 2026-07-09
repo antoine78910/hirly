@@ -71,6 +71,17 @@ export function trackOnboardingContinue(stepId, params = {}) {
   trackDatafastGoal(`onboarding_next_${camelToSnake(stepId)}`, params);
 }
 
+/** One goal per intro slide (1-based) so funnel counts are not inflated by 5×. */
+export function trackOnboardingIntroContinue(introIndex, slideCount, params = {}) {
+  const total = Math.max(1, Number(slideCount) || 1);
+  const slideNumber = Math.min(Math.max(0, Number(introIndex) || 0) + 1, total);
+  trackDatafastGoal(`onboarding_next_intro_${slideNumber}`, {
+    intro_slide: String(introIndex),
+    intro_total: String(total),
+    ...params,
+  });
+}
+
 export function trackOnboardingSkip(stepId, params = {}) {
   trackDatafastGoal(`onboarding_skip_${camelToSnake(stepId)}`, params);
 }

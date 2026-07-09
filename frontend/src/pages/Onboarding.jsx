@@ -2,7 +2,13 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { syncBillingAfterCheckout } from "../lib/billingSync";
-import { withDatafastAttribution, trackDatafastGoal, trackOnboardingContinue, trackOnboardingSkip } from "../lib/datafast";
+import {
+  withDatafastAttribution,
+  trackDatafastGoal,
+  trackOnboardingContinue,
+  trackOnboardingIntroContinue,
+  trackOnboardingSkip,
+} from "../lib/datafast";
 import { shouldMockCvUpload, uploadProfileCv } from "../lib/demoCvUpload";
 import { CV_ACCEPT_ATTR, isAcceptedCvFile } from "../lib/cvUploadFormats";
 import { useAuth } from "../context/AuthContext";
@@ -73,6 +79,7 @@ import { goToApp } from "../lib/appDomains";
 
 const STEP_ORDER = ONBOARDING_STEP_ORDER;
 const ONBOARDING_CHECKOUT_STATE_KEY = "hirly.onboarding.checkoutState";
+const ONBOARDING_STARTED_GOAL_KEY = "hirly.onboarding.startedGoal";
 const isSixDigitAccessCode = (value) => /^\d{6}$/.test(String(value || "").trim());
 
 const defaultCategoryOptions = () =>
@@ -178,6 +185,8 @@ export default function Onboarding() {
   }, []);
 
   useEffect(() => {
+    if (sessionStorage.getItem(ONBOARDING_STARTED_GOAL_KEY)) return;
+    sessionStorage.setItem(ONBOARDING_STARTED_GOAL_KEY, "1");
     trackEvent("onboarding_started");
     trackDatafastGoal("onboarding_started");
   }, []);
@@ -429,6 +438,7 @@ export default function Onboarding() {
       if (advanced) return;
       advanced = true;
       setParsing(false);
+      trackOnboardingContinue("upload");
       setStepIndex(STEP_ORDER.indexOf("profileSetup"));
     };
 
@@ -705,21 +715,26 @@ export default function Onboarding() {
   };
 
   const onContinue = () => {
+    if (step === "upload" && !file) {
+      inputRef.current?.click();
+      return;
+    }
+
     trackEvent("onboarding_step_completed", { step, step_index: stepIndex });
     const continueParams = step === "intro"
       ? { intro_slide: String(introIndex), intro_total: String(slides.length) }
       : { step_index: String(stepIndex) };
-    trackOnboardingContinue(step, continueParams);
+    if (step === "intro") {
+      trackOnboardingIntroContinue(introIndex, slides.length, continueParams);
+    } else {
+      trackOnboardingContinue(step, continueParams);
+    }
     if (step === "intro" && introIndex === slides.length - 1) {
       setStepIndex(STEP_ORDER.indexOf("signup"));
       return;
     }
     if (step === "signup") {
       setStepIndex(STEP_ORDER.indexOf("jobSearch"));
-      return;
-    }
-    if (step === "upload" && !file) {
-      inputRef.current?.click();
       return;
     }
     goNext();
@@ -1304,6 +1319,7 @@ export default function Onboarding() {
             <button
               type="button"
               onClick={() => {
+                trackOnboardingSkip("upload");
                 setStepIndex(STEP_ORDER.indexOf("profileSetup"));
                 toast.message(lang === "fr" ? "Vous pouvez importer votre CV plus tard depuis le Profil" : "You can upload your resume later from Profile");
               }}

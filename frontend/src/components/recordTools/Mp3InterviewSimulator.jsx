@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Headphones, Loader2, Mic, MicOff, Play, RotateCcw, Save, Square, Upload, Volume2 } from "lucide-react";
+import { Headphones, Loader2, Mic, MicOff, Play, RotateCcw, Save, SkipForward, Square, Upload, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -186,42 +186,48 @@ function getPlaybackBounds(start, end, duration, {
 
 function createZoomMeetingAudioChain(audioCtx) {
   const input = audioCtx.createGain();
+  const bypass = audioCtx.createGain();
+  const wet = audioCtx.createGain();
 
   const highPass = audioCtx.createBiquadFilter();
   highPass.type = "highpass";
-  highPass.frequency.value = 140;
-  highPass.Q.value = 0.65;
+  highPass.frequency.value = 180;
+  highPass.Q.value = 0.8;
 
   const lowPass = audioCtx.createBiquadFilter();
   lowPass.type = "lowpass";
-  lowPass.frequency.value = 7000;
-  lowPass.Q.value = 0.7;
+  lowPass.frequency.value = 5600;
+  lowPass.Q.value = 0.85;
 
   const presence = audioCtx.createBiquadFilter();
   presence.type = "peaking";
-  presence.frequency.value = 2650;
-  presence.Q.value = 1.1;
-  presence.gain.value = 2.2;
+  presence.frequency.value = 2400;
+  presence.Q.value = 1.3;
+  presence.gain.value = 4;
 
   const compressor = audioCtx.createDynamicsCompressor();
-  compressor.threshold.value = -22;
-  compressor.knee.value = 14;
-  compressor.ratio.value = 3.2;
-  compressor.attack.value = 0.004;
-  compressor.release.value = 0.14;
+  compressor.threshold.value = -28;
+  compressor.knee.value = 18;
+  compressor.ratio.value = 4.5;
+  compressor.attack.value = 0.003;
+  compressor.release.value = 0.16;
 
-  const dryGain = audioCtx.createGain();
-  dryGain.gain.value = 0.9;
+  const makeup = audioCtx.createGain();
+  makeup.gain.value = 1.18;
 
-  const delay = audioCtx.createDelay(0.06);
-  delay.delayTime.value = 0.022;
+  const delay = audioCtx.createDelay(0.08);
+  delay.delayTime.value = 0.028;
 
   const delayGain = audioCtx.createGain();
-  delayGain.gain.value = 0.1;
+  delayGain.gain.value = 0.14;
+
+  const dryGain = audioCtx.createGain();
+  dryGain.gain.value = 0.86;
 
   const output = audioCtx.createGain();
   output.gain.value = 1;
 
+  input.connect(bypass);
   input.connect(highPass);
   highPass.connect(lowPass);
   lowPass.connect(presence);
@@ -229,39 +235,26 @@ function createZoomMeetingAudioChain(audioCtx) {
   compressor.connect(dryGain);
   compressor.connect(delay);
   delay.connect(delayGain);
-  dryGain.connect(output);
-  delayGain.connect(output);
+  dryGain.connect(makeup);
+  delayGain.connect(makeup);
+  makeup.connect(wet);
+  bypass.connect(output);
+  wet.connect(output);
 
   return {
     input,
     output,
-    nodes: { highPass, lowPass, presence, compressor, dryGain, delay, delayGain, output },
+    nodes: { bypass, wet },
   };
 }
 
 function setZoomMeetingEffectEnabled(chain, enabled) {
   if (!chain?.nodes) return;
-  const { highPass, lowPass, presence, compressor, dryGain, delayGain } = chain.nodes;
-  if (enabled) {
-    highPass.frequency.value = 140;
-    lowPass.frequency.value = 7000;
-    presence.gain.value = 2.2;
-    compressor.threshold.value = -22;
-    compressor.ratio.value = 3.2;
-    dryGain.gain.value = 0.9;
-    delayGain.gain.value = 0.1;
-    return;
-  }
-  highPass.frequency.value = 35;
-  lowPass.frequency.value = 18000;
-  presence.gain.value = 0;
-  compressor.threshold.value = 0;
-  compressor.ratio.value = 1;
-  dryGain.gain.value = 1;
-  delayGain.gain.value = 0;
+  chain.nodes.bypass.gain.value = enabled ? 0 : 1;
+  chain.nodes.wet.gain.value = enabled ? 1 : 0;
 }
 
-function InterviewTurnIndicator({ status, currentIndex, totalSteps, micLevel, previewIndex }) {
+function InterviewTurnIndicator({ status, currentIndex, totalSteps, micLevel, previewIndex, advanceMode }) {
   if (previewIndex != null) {
     return (
       <div className="relative overflow-hidden rounded-3xl border border-sky-200 bg-gradient-to-br from-sky-50 via-white to-cyan-50 p-6 shadow-sm">
@@ -320,6 +313,26 @@ function InterviewTurnIndicator({ status, currentIndex, totalSteps, micLevel, pr
     );
   }
 
+  if (status === "ready") {
+    return (
+      <div className="relative overflow-hidden rounded-3xl border border-amber-200 bg-gradient-to-br from-amber-50 via-white to-orange-50 p-6 shadow-sm">
+        <div className="absolute -right-10 -bottom-10 h-36 w-36 rounded-full bg-amber-300/30 blur-2xl" />
+        <div className="relative flex flex-col items-center text-center">
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-amber-500 text-white shadow-xl shadow-amber-200">
+            <SkipForward className="h-9 w-9" />
+          </div>
+          <p className="mt-4 text-xl font-bold text-zinc-900">Your turn to practice</p>
+          <p className="mt-1 text-sm text-zinc-600">
+            Answer out loud, then press <span className="font-semibold">Next step</span> when you want the next question.
+          </p>
+          <p className="mt-2 text-xs text-zinc-500">
+            Step {currentIndex + 1} of {totalSteps} · Manual mode
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (status === "waiting") {
     const levelPct = Math.min(100, Math.round(micLevel * 400));
     return (
@@ -338,7 +351,9 @@ function InterviewTurnIndicator({ status, currentIndex, totalSteps, micLevel, pr
           </div>
           <p className="mt-4 text-xl font-bold text-zinc-900">Your turn to speak</p>
           <p className="mt-1 text-sm text-zinc-600">
-            Take your time — we listen for at least a couple of seconds, then move on after you pause.
+            {advanceMode === "auto"
+              ? "Take your time — we listen for at least a couple of seconds, then move on after you pause."
+              : "Take your time, then press Next step when you are ready."}
           </p>
           <div className="mt-5 h-2 w-full max-w-xs overflow-hidden rounded-full bg-emerald-100">
             <div
@@ -471,8 +486,9 @@ export default function Mp3InterviewSimulator() {
   const [paddingMs, setPaddingMs] = useState(500);
   const [minSegmentMs, setMinSegmentMs] = useState(600);
   const [meetingVoiceEffect, setMeetingVoiceEffect] = useState(true);
+  const [advanceMode, setAdvanceMode] = useState("auto"); // auto | manual
 
-  const [status, setStatus] = useState("setup"); // setup | playing | waiting | done
+  const [status, setStatus] = useState("setup"); // setup | playing | waiting | ready | done
   const [currentIndex, setCurrentIndex] = useState(0);
   const [previewIndex, setPreviewIndex] = useState(null);
   const [micError, setMicError] = useState(null);
@@ -482,14 +498,16 @@ export default function Mp3InterviewSimulator() {
   const transitionTimerRef = useRef(null);
   const playbackAudioCtxRef = useRef(null);
   const playbackChainRef = useRef(null);
-  const mediaSourceRef = useRef(null);
+  const bufferSourceRef = useRef(null);
+  const audioBufferRef = useRef(null);
   const segmentsRef = useRef([]);
   const audioDurationRef = useRef(null);
   const currentIndexRef = useRef(0);
   const statusRef = useRef(status);
+  const advanceModeRef = useRef(advanceMode);
   const playNextSessionSegmentRef = useRef(null);
-  // Once the user clicked Play at least once, unmuting after auto-advances is allowed.
-  const allowUnmuteRef = useRef(false);
+  const goToNextStepRef = useRef(null);
+  const meetingVoiceEffectRef = useRef(meetingVoiceEffect);
 
   useEffect(() => {
     segmentsRef.current = segments;
@@ -502,6 +520,19 @@ export default function Mp3InterviewSimulator() {
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
+
+  useEffect(() => {
+    advanceModeRef.current = advanceMode;
+  }, [advanceMode]);
+
+  useEffect(() => {
+    meetingVoiceEffectRef.current = meetingVoiceEffect;
+    setZoomMeetingEffectEnabled(playbackChainRef.current, meetingVoiceEffect);
+  }, [meetingVoiceEffect]);
+
+  useEffect(() => {
+    audioBufferRef.current = audioBuffer;
+  }, [audioBuffer]);
 
   const clearTransitionTimer = useCallback(() => {
     if (transitionTimerRef.current) {
@@ -517,47 +548,41 @@ export default function Mp3InterviewSimulator() {
     }
     clearTransitionTimer();
     try {
+      bufferSourceRef.current?.stop();
+    } catch (_) {}
+    bufferSourceRef.current = null;
+    try {
       audioRef.current?.pause();
     } catch (_) {}
   }, [clearTransitionTimer]);
 
-  const ensurePlaybackAudioGraph = useCallback(async () => {
-    const audio = audioRef.current;
-    if (!audio) return null;
-
+  const ensurePlaybackAudioContext = useCallback(async () => {
     const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
     if (!playbackAudioCtxRef.current) {
-      playbackAudioCtxRef.current = new AudioContextCtor();
+      const ctx = new AudioContextCtor();
+      const chain = createZoomMeetingAudioChain(ctx);
+      chain.output.connect(ctx.destination);
+      playbackAudioCtxRef.current = ctx;
+      playbackChainRef.current = chain;
     }
     const ctx = playbackAudioCtxRef.current;
     if (ctx.state === "suspended") {
       await ctx.resume();
     }
-
-    if (!mediaSourceRef.current) {
-      const source = ctx.createMediaElementSource(audio);
-      const chain = createZoomMeetingAudioChain(ctx);
-      source.connect(chain.input);
-      chain.output.connect(ctx.destination);
-      mediaSourceRef.current = source;
-      playbackChainRef.current = chain;
-    }
-
-    setZoomMeetingEffectEnabled(playbackChainRef.current, meetingVoiceEffect);
+    setZoomMeetingEffectEnabled(playbackChainRef.current, meetingVoiceEffectRef.current);
     return ctx;
-  }, [meetingVoiceEffect]);
-
-  useEffect(() => {
-    setZoomMeetingEffectEnabled(playbackChainRef.current, meetingVoiceEffect);
-  }, [meetingVoiceEffect]);
+  }, []);
 
   useEffect(() => () => {
+    try {
+      bufferSourceRef.current?.stop();
+    } catch (_) {}
     try {
       playbackAudioCtxRef.current?.close();
     } catch (_) {}
     playbackAudioCtxRef.current = null;
     playbackChainRef.current = null;
-    mediaSourceRef.current = null;
+    bufferSourceRef.current = null;
   }, []);
 
   const { start: startMic, stop: stopMic, listening: micListening, level: micLevel, error: micDetectError } = useMicrophoneSilenceDetector({
@@ -570,17 +595,11 @@ export default function Mp3InterviewSimulator() {
     minSpeechMs: 300,
     silenceMs: 2200,
     onSilence: () => {
-      if (statusRef.current !== "waiting") return;
+      if (statusRef.current !== "waiting" || advanceModeRef.current !== "auto") return;
 
       stopMic();
       setMicError(null);
-
-      const nextIdx = currentIndexRef.current + 1;
-      clearTransitionTimer();
-      transitionTimerRef.current = setTimeout(() => {
-        transitionTimerRef.current = null;
-        playNextSessionSegmentRef.current?.(nextIdx);
-      }, STEP_TRANSITION_MS);
+      goToNextStepRef.current?.();
     },
   });
 
@@ -653,20 +672,29 @@ export default function Mp3InterviewSimulator() {
   }, [stopAudio, stopMic]);
 
   const playAudioRange = useCallback(async (start, end, onEnd) => {
-    if (!audioRef.current) return;
+    const buffer = audioBufferRef.current;
+    if (!buffer) {
+      toast.error("Audio is not ready yet. Wait for analysis to finish.");
+      onEnd?.();
+      return;
+    }
 
     stopAudio();
     stopMic();
 
-    const audio = audioRef.current;
-    const duration = audioDurationRef.current ?? audio.duration;
+    const duration = audioDurationRef.current ?? buffer.duration;
     const { startAt, endAt } = getPlaybackBounds(start, end, duration);
+    const playDuration = Math.max(0.05, endAt - startAt);
     let finished = false;
 
+    let ctx;
     try {
-      await ensurePlaybackAudioGraph();
+      ctx = await ensurePlaybackAudioContext();
     } catch (e) {
-      console.warn("Playback audio graph setup failed:", e);
+      console.warn("Playback audio context setup failed:", e);
+      toast.error("Could not start audio playback.");
+      onEnd?.();
+      return;
     }
 
     const finish = () => {
@@ -676,61 +704,28 @@ export default function Mp3InterviewSimulator() {
         clearTimeout(stopTimerRef.current);
         stopTimerRef.current = null;
       }
-      audio.removeEventListener("timeupdate", onTimeUpdate);
-      audio.removeEventListener("ended", onEnded);
       try {
-        audio.pause();
+        bufferSourceRef.current?.stop();
       } catch (_) {}
+      bufferSourceRef.current = null;
       onEnd?.();
     };
 
-    const onTimeUpdate = () => {
-      if (audio.currentTime >= endAt - 0.02) {
-        finish();
-      }
-    };
-    const onEnded = () => finish();
-
     try {
-      audio.currentTime = startAt;
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(playbackChainRef.current.input);
+      source.onended = finish;
+      bufferSourceRef.current = source;
+      source.start(0, startAt, playDuration);
     } catch (e) {
-      toast.error(e?.message || "Could not seek audio.");
+      toast.error(e?.message || "Could not play audio segment.");
       finish();
       return;
     }
 
-    audio.addEventListener("timeupdate", onTimeUpdate);
-    audio.addEventListener("ended", onEnded);
-
-    const attemptPlay = async () => {
-      try {
-        audio.muted = false;
-        await audio.play();
-      } catch (e) {
-        try {
-          audio.muted = true;
-          await audio.play();
-        } catch (e2) {
-          console.error("Audio play() failed:", e2);
-          toast.error("Audio couldn't start. Click Play again (browser autoplay policy).");
-          finish();
-          return;
-        }
-      }
-
-      if (allowUnmuteRef.current) {
-        setTimeout(() => {
-          try {
-            audio.muted = false;
-          } catch (_) {}
-        }, 0);
-      }
-    };
-    attemptPlay();
-
-    const ms = Math.max(0, (endAt - startAt) * 1000) + 600;
-    stopTimerRef.current = setTimeout(finish, ms);
-  }, [ensurePlaybackAudioGraph, stopAudio, stopMic]);
+    stopTimerRef.current = setTimeout(finish, playDuration * 1000 + 600);
+  }, [ensurePlaybackAudioContext, stopAudio, stopMic]);
 
   const previewSegment = useCallback((idx) => {
     const seg = segments[idx];
@@ -742,12 +737,26 @@ export default function Mp3InterviewSimulator() {
     setCurrentIndex(0);
     setMicError(null);
     setPreviewIndex(idx);
-    allowUnmuteRef.current = true;
+    ensurePlaybackAudioContext().catch(() => {});
 
     playAudioRange(seg.start, seg.end, () => {
       setPreviewIndex(null);
     });
-  }, [playAudioRange, segments, stopAudio, stopMic]);
+  }, [ensurePlaybackAudioContext, playAudioRange, segments, stopAudio, stopMic]);
+
+  const afterSegmentPlayback = useCallback(() => {
+    clearTransitionTimer();
+    transitionTimerRef.current = setTimeout(() => {
+      transitionTimerRef.current = null;
+      if (advanceModeRef.current === "manual") {
+        statusRef.current = "ready";
+        setStatus("ready");
+        return;
+      }
+      statusRef.current = "waiting";
+      setStatus("waiting");
+    }, STEP_TRANSITION_MS);
+  }, [clearTransitionTimer]);
 
   const playNextSessionSegment = useCallback(
     (idx) => {
@@ -755,6 +764,7 @@ export default function Mp3InterviewSimulator() {
       if (!seg) {
         stopAudio();
         stopMic();
+        statusRef.current = "done";
         setStatus("done");
         return;
       }
@@ -764,32 +774,41 @@ export default function Mp3InterviewSimulator() {
       setCurrentIndex(idx);
       statusRef.current = "playing";
       setStatus("playing");
-      playAudioRange(seg.start, seg.end, () => {
-        clearTransitionTimer();
-        transitionTimerRef.current = setTimeout(() => {
-          transitionTimerRef.current = null;
-          // After interviewer speaks, wait for the user to stop talking.
-          statusRef.current = "waiting";
-          setStatus("waiting");
-        }, STEP_TRANSITION_MS);
-      });
+      playAudioRange(seg.start, seg.end, afterSegmentPlayback);
     },
-    [clearTransitionTimer, playAudioRange, stopAudio, stopMic],
+    [afterSegmentPlayback, playAudioRange, stopAudio, stopMic],
   );
+
+  const goToNextStep = useCallback(() => {
+    stopMic();
+    stopAudio();
+    const nextIdx = currentIndexRef.current + 1;
+    clearTransitionTimer();
+    transitionTimerRef.current = setTimeout(() => {
+      transitionTimerRef.current = null;
+      playNextSessionSegmentRef.current?.(nextIdx);
+    }, STEP_TRANSITION_MS);
+  }, [clearTransitionTimer, stopAudio, stopMic]);
 
   useEffect(() => {
     playNextSessionSegmentRef.current = playNextSessionSegment;
   }, [playNextSessionSegment]);
 
   useEffect(() => {
-    if (status !== "waiting") return;
+    goToNextStepRef.current = goToNextStep;
+  }, [goToNextStep]);
+
+  useEffect(() => {
+    if (status !== "waiting" || advanceMode !== "auto") return;
     setMicError(null);
-    // Ask for mic permission and start silence detection.
     startMic();
-  }, [startMic, status]);
+  }, [advanceMode, startMic, status]);
 
   const startSession = () => {
-    if (!segments.length) return;
+    if (!segments.length || !audioBufferRef.current) {
+      if (!audioBufferRef.current) toast.error("Audio is still loading. Try again in a moment.");
+      return;
+    }
     stopMic();
     stopAudio();
     setPreviewIndex(null);
@@ -798,8 +817,7 @@ export default function Mp3InterviewSimulator() {
     setCurrentIndex(0);
     setStatus("playing");
     setMicError(null);
-    // Important: play audio inside the click handler to satisfy browser autoplay rules.
-    allowUnmuteRef.current = true;
+    ensurePlaybackAudioContext().catch(() => {});
     clearTransitionTimer();
     transitionTimerRef.current = setTimeout(() => {
       transitionTimerRef.current = null;
@@ -817,17 +835,7 @@ export default function Mp3InterviewSimulator() {
     setMicError(null);
   };
 
-  const manualNext = () => {
-    // User can skip the remaining speaking moment.
-    stopMic();
-    stopAudio();
-    const nextIdx = currentIndexRef.current + 1;
-    clearTransitionTimer();
-    transitionTimerRef.current = setTimeout(() => {
-      transitionTimerRef.current = null;
-      playNextSessionSegment(nextIdx);
-    }, STEP_TRANSITION_MS);
-  };
+  const manualNext = goToNextStep;
 
   const canEditSegment = segments.length > 0;
 
@@ -951,7 +959,7 @@ export default function Mp3InterviewSimulator() {
               Record tools — Interview simulator
             </h1>
             <p className="mt-1 text-sm text-zinc-600">
-              Upload an MP3 of interview questions, auto-split on silence, then play step by step. When you stop speaking, we move to the next step.
+              Upload an MP3 of interview questions, auto-split on silence, then play step by step. Use auto mode (mic) or manual mode (press Next step).
             </p>
           </div>
 
@@ -1097,10 +1105,49 @@ export default function Mp3InterviewSimulator() {
                 <span>
                   <span className="block text-sm font-semibold text-zinc-900">Zoom meeting voice effect</span>
                   <span className="mt-0.5 block text-xs text-zinc-600">
-                    Band-limiting, light compression, and a short call tail so uploaded meeting audio feels more like a live video call.
+                    Band-limiting, compression, and a short call tail so uploaded meeting audio feels more like a live video call.
                   </span>
                 </span>
               </label>
+
+              <div className="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+                <p className="text-sm font-semibold text-zinc-900">Session advance mode</p>
+                <div className="mt-2 space-y-2">
+                  <label className="flex cursor-pointer items-start gap-2 text-sm text-zinc-700">
+                    <input
+                      type="radio"
+                      name="advanceMode"
+                      className="mt-1"
+                      checked={advanceMode === "auto"}
+                      onChange={() => setAdvanceMode("auto")}
+                      disabled={status !== "setup" && status !== "done"}
+                    />
+                    <span>
+                      <span className="font-semibold text-zinc-900">Auto</span>
+                      <span className="mt-0.5 block text-xs text-zinc-600">
+                        Microphone detects when you stop speaking, then plays the next step.
+                      </span>
+                    </span>
+                  </label>
+                  <label className="flex cursor-pointer items-start gap-2 text-sm text-zinc-700">
+                    <input
+                      type="radio"
+                      name="advanceMode"
+                      className="mt-1"
+                      checked={advanceMode === "manual"}
+                      onChange={() => setAdvanceMode("manual")}
+                      disabled={status !== "setup" && status !== "done"}
+                    />
+                    <span>
+                      <span className="font-semibold text-zinc-900">Manual</span>
+                      <span className="mt-0.5 block text-xs text-zinc-600">
+                        You press Next step yourself to launch each new interviewer line.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              </div>
+
               <div className="mt-3 space-y-3">
                 <label className="block text-sm">
                   <span className="block text-xs font-semibold text-zinc-600">Silence threshold (dB)</span>
@@ -1208,8 +1255,32 @@ export default function Mp3InterviewSimulator() {
                     totalSteps={segments.length}
                     micLevel={micLevel}
                     previewIndex={previewIndex}
+                    advanceMode={advanceMode}
                   />
                 </div>
+              ) : null}
+
+              {(status === "ready" || status === "waiting") && advanceMode === "manual" ? (
+                <Button
+                  type="button"
+                  className="mt-4 h-14 w-full rounded-2xl bg-amber-500 text-base font-bold text-white shadow-lg shadow-amber-200 hover:bg-amber-600"
+                  onClick={goToNextStep}
+                >
+                  <SkipForward className="mr-2 h-5 w-5" />
+                  Next step
+                </Button>
+              ) : null}
+
+              {status === "playing" && advanceMode === "manual" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-3 w-full rounded-full"
+                  onClick={goToNextStep}
+                >
+                  <SkipForward className="mr-2 h-4 w-4" />
+                  Skip to your turn
+                </Button>
               ) : null}
 
               {segments.length ? (
@@ -1218,7 +1289,7 @@ export default function Mp3InterviewSimulator() {
                     <div
                       key={seg.id}
                       className={`rounded-2xl border p-3 ${
-                        idx === currentIndex && (status === "playing" || status === "waiting")
+                        idx === currentIndex && (status === "playing" || status === "waiting" || status === "ready")
                           ? "border-violet-200 bg-violet-50"
                           : previewIndex === idx
                             ? "border-sky-200 bg-sky-50"
@@ -1239,7 +1310,7 @@ export default function Mp3InterviewSimulator() {
                             size="sm"
                             variant="outline"
                             className="rounded-full"
-                            disabled={analysisLoading || status === "playing" || status === "waiting"}
+                            disabled={analysisLoading || status === "playing" || status === "waiting" || status === "ready"}
                             onClick={() => previewSegment(idx)}
                           >
                             <Headphones className="w-4 h-4 mr-1.5" />
@@ -1291,11 +1362,22 @@ export default function Mp3InterviewSimulator() {
                   type="button"
                   variant="outline"
                   className="rounded-full"
-                  disabled={status !== "waiting" || micListening === false}
+                  disabled={status !== "waiting" || advanceMode !== "auto" || micListening === false}
                   onClick={manualNext}
                 >
                   <Square className="w-4 h-4 mr-2" />
                   Stop talking &amp; next
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-full"
+                  disabled={(status !== "ready" && status !== "waiting") || advanceMode !== "manual"}
+                  onClick={goToNextStep}
+                >
+                  <SkipForward className="w-4 h-4 mr-2" />
+                  Next step
                 </Button>
 
                 <Button
