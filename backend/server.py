@@ -4617,7 +4617,12 @@ async def get_feed(
     if _env_bool("JOBS_FEED_LEGACY_JSEARCH_ONLY", False):
         return await _legacy_jsearch_only_feed()
 
-    max_elapsed_seconds = 8.0
+    # Raised alongside sync_refresh_max_seconds/total_seconds below (was 8.0
+    # paired with a 4s sync budget). Left at the old ~2x-sync-budget
+    # headroom so the later widen/backfill stages (which check _timed_out())
+    # keep roughly the same post-refresh runway they had before, instead of
+    # getting starved by the longer synchronous JSearch call.
+    max_elapsed_seconds = 16.0
     ats_supported = ["greenhouse", "lever", "ashby"]
 
     def _elapsed_ms() -> int:
@@ -4900,7 +4905,18 @@ async def get_feed(
         db_weak_results_threshold = max(0, _env_int("JOBS_DB_WEAK_RESULTS_THRESHOLD", 10))
         allow_unknown_tier = _env_bool("JOBS_ALLOW_UNKNOWN_TIER_IN_FEED", False)
         sync_refresh_enabled = _env_bool("JOBS_FEED_SYNC_REFRESH_ENABLED", True)
-        sync_refresh_max_seconds = max(1, min(_env_int("JOBS_FEED_SYNC_REFRESH_MAX_SECONDS", 4), 20))
+        # Was 4s. Confirmed live that JSearch's own response time regularly
+        # exceeds that for non-French markets (Marseille/Lyon: ~4-5s; London/
+        # New York: 10-20s, reliably blowing a 4s budget before any answer
+        # comes back). France barely ever hits this path at all (its DB cache
+        # is deep enough that JOBS_DB_FIRST_ENABLED usually short-circuits
+        # before reaching here), so raising this doesn't change France's
+        # outcome -- it just gives thinner markets enough time to actually
+        # get a response instead of failing before JSearch replies. Set a
+        # bit above JSearchProvider's own httpx client timeout (10s default,
+        # JSEARCH_HTTP_TIMEOUT_SECONDS) so a genuinely slow call fails on its
+        # own terms instead of always hitting this wrapper's cutoff first.
+        sync_refresh_max_seconds = max(1, min(_env_int("JOBS_FEED_SYNC_REFRESH_MAX_SECONDS", 12), 20))
         # page_size default raised 10 -> 50: JSearch's per-call latency is
         # dominated by the network round-trip, not by how many results come
         # back in that one response (its own cap is 100/call), so this is a
@@ -4912,7 +4928,7 @@ async def get_feed(
         sync_refresh_max_pages = max(1, min(_env_int("JSEARCH_FEED_FALLBACK_MAX_PAGES", 1), 3))
         sync_refresh_page_size = max(1, min(_env_int("JSEARCH_FEED_FALLBACK_PAGE_SIZE", 50), 50))
         sync_refresh_cooldown_seconds = max(30, min(_env_int("JOBS_FEED_SYNC_REFRESH_COOLDOWN_SECONDS", 300), 1800))
-        sync_refresh_total_seconds = max(2, min(_env_int("JOBS_FEED_SYNC_REFRESH_TOTAL_SECONDS", 4), 25))
+        sync_refresh_total_seconds = max(2, min(_env_int("JOBS_FEED_SYNC_REFRESH_TOTAL_SECONDS", 12), 25))
         sync_refresh_attempts_per_city = max(1, min(_env_int("JOBS_FEED_PROVIDER_ATTEMPTS_PER_CITY", 2), 4))
         if primary_job_provider_name() == "france_travail":
             sync_refresh_max_pages = max(sync_refresh_max_pages, min(_env_int("FRANCE_TRAVAIL_MAX_PAGES", 2), 4))
@@ -5957,7 +5973,11 @@ async def get_feed(
         )
         explicit_local_empty_inventory = bool(explicit_local_intent and local_inventory_count == 0)
         if explicit_local_empty_inventory and not force_provider_refresh:
-            explicit_local_sync_seconds = max(1, min(_env_int("JOBS_FEED_EXPLICIT_LOCAL_SYNC_SECONDS", 5), 15))
+            # A brand-new location with zero cached jobs relies entirely on
+            # this one live call succeeding -- same JSearch latency reality
+            # as the general sync_refresh budget above, so it gets the same
+            # bump (was 5s, too tight for the same reason).
+            explicit_local_sync_seconds = max(1, min(_env_int("JOBS_FEED_EXPLICIT_LOCAL_SYNC_SECONDS", 12), 15))
             sync_refresh_total_seconds = explicit_local_sync_seconds
             sync_refresh_max_seconds = explicit_local_sync_seconds
             sync_refresh_attempts_per_city = 1
