@@ -6,7 +6,7 @@ import os
 import re
 import time
 import unicodedata
-from typing import Any
+from typing import Any, Optional
 
 import httpx
 
@@ -310,7 +310,7 @@ async def _sleep(seconds: float) -> None:
     await asyncio.sleep(seconds)
 
 
-async def _nominatim_request(query: str, limit: int, country_codes: str = "fr") -> list[dict[str, Any]]:
+async def _nominatim_request(query: str, limit: int, country_codes: Optional[str] = None) -> list[dict[str, Any]]:
     global _LAST_NOMINATIM_AT
 
     elapsed = time.time() - _LAST_NOMINATIM_AT
@@ -359,7 +359,7 @@ def _collect_nominatim_rows(
             collected.append(item)
 
 
-async def _search_nominatim(query: str, limit: int = 10, country_codes: str = "fr") -> list[dict[str, Any]]:
+async def _search_nominatim(query: str, limit: int = 10, country_codes: Optional[str] = None) -> list[dict[str, Any]]:
     cache_key = f"nominatim:{country_codes}:{query.lower()}:{limit}"
     cached = _cache_get(cache_key)
     if cached is not None:
@@ -475,8 +475,12 @@ def _merge_scored(query: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]
     return [{k: v for k, v in row.items() if k != "_score"} for row in rows]
 
 
-async def search_locations(query: str, limit: int = 10, country_codes: str = "fr") -> dict[str, Any]:
-    """Search for locations, restricted to France by default (country_codes='fr')."""
+async def search_locations(query: str, limit: int = 10, country_codes: Optional[str] = None) -> dict[str, Any]:
+    """Worldwide location search by default. Pass country_codes (e.g. "fr") to
+    restrict to specific countries -- nothing in this codebase does that today,
+    but the option stays available for a future explicit "search in France
+    only" toggle.
+    """
     q = (query or "").strip()
     if len(q) < 1:
         return {"results": [], "source": "none"}
