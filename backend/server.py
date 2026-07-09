@@ -9017,7 +9017,11 @@ async def admin_creator_social_refresh(
         dashboard["maintenance"] = get_creator_social_refresh_status()
         return {"ok": True, "snapshot": snapshot, "dashboard": dashboard}
 
-    summary = await asyncio.to_thread(run_creator_social_refresh, "manual")
+    try:
+        summary = await asyncio.to_thread(run_creator_social_refresh, trigger="manual")
+    except Exception as exc:
+        logger.exception("creator_social_refresh_failed")
+        raise HTTPException(status_code=502, detail=f"Could not refresh creator stats: {exc}") from exc
     dashboard = build_dashboard()
     dashboard["maintenance"] = get_creator_social_refresh_status()
     return {

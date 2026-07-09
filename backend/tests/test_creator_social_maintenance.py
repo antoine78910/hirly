@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from creator_social_maintenance import (
     get_creator_social_refresh_status,
     refresh_interval_hours,
+    run_creator_social_refresh,
     should_refresh_creator_social,
 )
 
@@ -49,6 +50,16 @@ def test_should_refresh_when_one_creator_stale(monkeypatch):
 
     monkeypatch.setattr("creator_social_maintenance.latest_snapshot_for_creator", latest)
     assert should_refresh_creator_social(now=now) is True
+
+
+def test_run_creator_social_refresh_accepts_manual_trigger(monkeypatch):
+    monkeypatch.setattr(
+        "creator_social_maintenance.refresh_all_creators",
+        lambda: [{"creator_id": "eva"}],
+    )
+    summary = run_creator_social_refresh(trigger="manual")
+    assert summary["trigger"] == "manual"
+    assert summary["creator_count"] == 1
 
 
 def test_refresh_status_includes_interval(monkeypatch):
