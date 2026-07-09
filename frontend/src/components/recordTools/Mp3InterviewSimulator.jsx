@@ -169,6 +169,98 @@ function formatTime(sec) {
   return `${m}:${rem.toFixed(1).padStart(4, "0")}`;
 }
 
+// Playback buffers so we never clip the start/end of a spoken line.
+const PLAY_LEAD_IN_SEC = 0.5;
+const PLAY_TAIL_SEC = 0.5;
+const STEP_TRANSITION_MS = 500;
+
+function getPlaybackBounds(start, end, duration, {
+  leadIn = PLAY_LEAD_IN_SEC,
+  tail = PLAY_TAIL_SEC,
+} = {}) {
+  const startAt = Math.max(0, start - leadIn);
+  const maxEnd = Number.isFinite(duration) ? duration : end + tail;
+  const endAt = Math.min(maxEnd, end + tail);
+  return { startAt, endAt: Math.max(startAt + 0.05, endAt) };
+}
+
+function createZoomMeetingAudioChain(audioCtx) {
+  const input = audioCtx.createGain();
+
+  const highPass = audioCtx.createBiquadFilter();
+  highPass.type = "highpass";
+  highPass.frequency.value = 140;
+  highPass.Q.value = 0.65;
+
+  const lowPass = audioCtx.createBiquadFilter();
+  lowPass.type = "lowpass";
+  lowPass.frequency.value = 7000;
+  lowPass.Q.value = 0.7;
+
+  const presence = audioCtx.createBiquadFilter();
+  presence.type = "peaking";
+  presence.frequency.value = 2650;
+  presence.Q.value = 1.1;
+  presence.gain.value = 2.2;
+
+  const compressor = audioCtx.createDynamicsCompressor();
+  compressor.threshold.value = -22;
+  compressor.knee.value = 14;
+  compressor.ratio.value = 3.2;
+  compressor.attack.value = 0.004;
+  compressor.release.value = 0.14;
+
+  const dryGain = audioCtx.createGain();
+  dryGain.gain.value = 0.9;
+
+  const delay = audioCtx.createDelay(0.06);
+  delay.delayTime.value = 0.022;
+
+  const delayGain = audioCtx.createGain();
+  delayGain.gain.value = 0.1;
+
+  const output = audioCtx.createGain();
+  output.gain.value = 1;
+
+  input.connect(highPass);
+  highPass.connect(lowPass);
+  lowPass.connect(presence);
+  presence.connect(compressor);
+  compressor.connect(dryGain);
+  compressor.connect(delay);
+  delay.connect(delayGain);
+  dryGain.connect(output);
+  delayGain.connect(output);
+
+  return {
+    input,
+    output,
+    nodes: { highPass, lowPass, presence, compressor, dryGain, delay, delayGain, output },
+  };
+}
+
+function setZoomMeetingEffectEnabled(chain, enabled) {
+  if (!chain?.nodes) return;
+  const { highPass, lowPass, presence, compressor, dryGain, delayGain } = chain.nodes;
+  if (enabled) {
+    highPass.frequency.value = 140;
+    lowPass.frequency.value = 7000;
+    presence.gain.value = 2.2;
+    compressor.threshold.value = -22;
+    compressor.ratio.value = 3.2;
+    dryGain.gain.value = 0.9;
+    delayGain.gain.value = 0.1;
+    return;
+  }
+  highPass.frequency.value = 35;
+  lowPass.frequency.value = 18000;
+  presence.gain.value = 0;
+  compressor.threshold.value = 0;
+  compressor.ratio.value = 1;
+  dryGain.gain.value = 1;
+  delayGain.gain.value = 0;
+}
+
 function InterviewTurnIndicator({ status, currentIndex, totalSteps, micLevel, previewIndex }) {
   if (previewIndex != null) {
     return (
@@ -274,7 +366,7 @@ function InterviewTurnIndicator({ status, currentIndex, totalSteps, micLevel, pr
 function splitAudioBufferBySilence(audioBuffer, {
   thresholdDb = -42,
   minSilenceMs = 900,
-  paddingMs = 180,
+  paddingMs = 500,
   minSegmentMs = 600,
 } = {}) {
   const channel = audioBuffer.getChannelData(0);
@@ -376,8 +468,9 @@ export default function Mp3InterviewSimulator() {
 
   const [thresholdDb, setThresholdDb] = useState(-42);
   const [minSilenceMs, setMinSilenceMs] = useState(900);
-  const [paddingMs, setPaddingMs] = useState(180);
+  const [paddingMs, setPaddingMs] = useState(500);
   const [minSegmentMs, setMinSegmentMs] = useState(600);
+  const [meetingVoiceEffect, setMeetingVoiceEffect] = useState(true);
 
   const [status, setStatus] = useState("setup"); // setup | playing | waiting | done
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -386,7 +479,12 @@ export default function Mp3InterviewSimulator() {
 
   const audioRef = useRef(null);
   const stopTimerRef = useRef(null);
+  const transitionTimerRef = useRef(null);
+  const playbackAudioCtxRef = useRef(null);
+  const playbackChainRef = useRef(null);
+  const mediaSourceRef = useRef(null);
   const segmentsRef = useRef([]);
+  const audioDurationRef = useRef(null);
   const currentIndexRef = useRef(0);
   const statusRef = useRef(status);
   const playNextSessionSegmentRef = useRef(null);
@@ -405,14 +503,61 @@ export default function Mp3InterviewSimulator() {
     statusRef.current = status;
   }, [status]);
 
+  const clearTransitionTimer = useCallback(() => {
+    if (transitionTimerRef.current) {
+      clearTimeout(transitionTimerRef.current);
+      transitionTimerRef.current = null;
+    }
+  }, []);
+
   const stopAudio = useCallback(() => {
     if (stopTimerRef.current) {
       clearTimeout(stopTimerRef.current);
       stopTimerRef.current = null;
     }
+    clearTransitionTimer();
     try {
       audioRef.current?.pause();
     } catch (_) {}
+  }, [clearTransitionTimer]);
+
+  const ensurePlaybackAudioGraph = useCallback(async () => {
+    const audio = audioRef.current;
+    if (!audio) return null;
+
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!playbackAudioCtxRef.current) {
+      playbackAudioCtxRef.current = new AudioContextCtor();
+    }
+    const ctx = playbackAudioCtxRef.current;
+    if (ctx.state === "suspended") {
+      await ctx.resume();
+    }
+
+    if (!mediaSourceRef.current) {
+      const source = ctx.createMediaElementSource(audio);
+      const chain = createZoomMeetingAudioChain(ctx);
+      source.connect(chain.input);
+      chain.output.connect(ctx.destination);
+      mediaSourceRef.current = source;
+      playbackChainRef.current = chain;
+    }
+
+    setZoomMeetingEffectEnabled(playbackChainRef.current, meetingVoiceEffect);
+    return ctx;
+  }, [meetingVoiceEffect]);
+
+  useEffect(() => {
+    setZoomMeetingEffectEnabled(playbackChainRef.current, meetingVoiceEffect);
+  }, [meetingVoiceEffect]);
+
+  useEffect(() => () => {
+    try {
+      playbackAudioCtxRef.current?.close();
+    } catch (_) {}
+    playbackAudioCtxRef.current = null;
+    playbackChainRef.current = null;
+    mediaSourceRef.current = null;
   }, []);
 
   const { start: startMic, stop: stopMic, listening: micListening, level: micLevel, error: micDetectError } = useMicrophoneSilenceDetector({
@@ -421,7 +566,7 @@ export default function Mp3InterviewSimulator() {
     // - threshold/minSpeechMs: avoid tiny blips
     // - silenceMs: require a real pause before advancing
     threshold: 0.012,
-    graceMs: 1200,
+    graceMs: 1800,
     minSpeechMs: 300,
     silenceMs: 2200,
     onSilence: () => {
@@ -431,7 +576,11 @@ export default function Mp3InterviewSimulator() {
       setMicError(null);
 
       const nextIdx = currentIndexRef.current + 1;
-      playNextSessionSegmentRef.current?.(nextIdx);
+      clearTransitionTimer();
+      transitionTimerRef.current = setTimeout(() => {
+        transitionTimerRef.current = null;
+        playNextSessionSegmentRef.current?.(nextIdx);
+      }, STEP_TRANSITION_MS);
     },
   });
 
@@ -451,6 +600,7 @@ export default function Mp3InterviewSimulator() {
       const ctx = new AudioContextCtor();
       const buffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
       setAudioBuffer(buffer);
+      audioDurationRef.current = buffer.duration;
       ctx.close?.();
 
       if (!applySegments) return buffer;
@@ -502,16 +652,22 @@ export default function Mp3InterviewSimulator() {
     };
   }, [stopAudio, stopMic]);
 
-  const playAudioRange = useCallback((start, end, onEnd) => {
+  const playAudioRange = useCallback(async (start, end, onEnd) => {
     if (!audioRef.current) return;
 
     stopAudio();
     stopMic();
 
-    const startAt = Math.max(0, start + 0.01);
-    const endAt = Math.max(startAt + 0.05, end);
     const audio = audioRef.current;
+    const duration = audioDurationRef.current ?? audio.duration;
+    const { startAt, endAt } = getPlaybackBounds(start, end, duration);
     let finished = false;
+
+    try {
+      await ensurePlaybackAudioGraph();
+    } catch (e) {
+      console.warn("Playback audio graph setup failed:", e);
+    }
 
     const finish = () => {
       if (finished) return;
@@ -529,7 +685,7 @@ export default function Mp3InterviewSimulator() {
     };
 
     const onTimeUpdate = () => {
-      if (audio.currentTime >= endAt - 0.08) {
+      if (audio.currentTime >= endAt - 0.02) {
         finish();
       }
     };
@@ -572,9 +728,9 @@ export default function Mp3InterviewSimulator() {
     };
     attemptPlay();
 
-    const ms = Math.max(0, (endAt - startAt) * 1000) + 300;
+    const ms = Math.max(0, (endAt - startAt) * 1000) + 600;
     stopTimerRef.current = setTimeout(finish, ms);
-  }, [stopAudio, stopMic]);
+  }, [ensurePlaybackAudioGraph, stopAudio, stopMic]);
 
   const previewSegment = useCallback((idx) => {
     const seg = segments[idx];
@@ -609,12 +765,16 @@ export default function Mp3InterviewSimulator() {
       statusRef.current = "playing";
       setStatus("playing");
       playAudioRange(seg.start, seg.end, () => {
-        // After interviewer speaks, wait for the user to stop talking.
-        statusRef.current = "waiting";
-        setStatus("waiting");
+        clearTransitionTimer();
+        transitionTimerRef.current = setTimeout(() => {
+          transitionTimerRef.current = null;
+          // After interviewer speaks, wait for the user to stop talking.
+          statusRef.current = "waiting";
+          setStatus("waiting");
+        }, STEP_TRANSITION_MS);
       });
     },
-    [playAudioRange, stopAudio, stopMic],
+    [clearTransitionTimer, playAudioRange, stopAudio, stopMic],
   );
 
   useEffect(() => {
@@ -640,7 +800,11 @@ export default function Mp3InterviewSimulator() {
     setMicError(null);
     // Important: play audio inside the click handler to satisfy browser autoplay rules.
     allowUnmuteRef.current = true;
-    playNextSessionSegment(0);
+    clearTransitionTimer();
+    transitionTimerRef.current = setTimeout(() => {
+      transitionTimerRef.current = null;
+      playNextSessionSegment(0);
+    }, STEP_TRANSITION_MS);
   };
 
   const stopSession = () => {
@@ -658,7 +822,11 @@ export default function Mp3InterviewSimulator() {
     stopMic();
     stopAudio();
     const nextIdx = currentIndexRef.current + 1;
-    playNextSessionSegment(nextIdx);
+    clearTransitionTimer();
+    transitionTimerRef.current = setTimeout(() => {
+      transitionTimerRef.current = null;
+      playNextSessionSegment(nextIdx);
+    }, STEP_TRANSITION_MS);
   };
 
   const canEditSegment = segments.length > 0;
@@ -919,6 +1087,20 @@ export default function Mp3InterviewSimulator() {
 
             <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4">
               <p className="text-xs font-bold uppercase tracking-wider text-zinc-600">2) Split settings</p>
+              <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={meetingVoiceEffect}
+                  onChange={(e) => setMeetingVoiceEffect(e.target.checked)}
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-zinc-900">Zoom meeting voice effect</span>
+                  <span className="mt-0.5 block text-xs text-zinc-600">
+                    Band-limiting, light compression, and a short call tail so uploaded meeting audio feels more like a live video call.
+                  </span>
+                </span>
+              </label>
               <div className="mt-3 space-y-3">
                 <label className="block text-sm">
                   <span className="block text-xs font-semibold text-zinc-600">Silence threshold (dB)</span>
@@ -944,11 +1126,14 @@ export default function Mp3InterviewSimulator() {
                   <span className="block text-xs font-semibold text-zinc-600">Padding (ms)</span>
                   <Input
                     type="number"
-                    step={10}
+                    step={50}
                     value={paddingMs}
                     onChange={(e) => setPaddingMs(Number(e.target.value))}
                     className="mt-1"
                   />
+                  <span className="mt-1 block text-xs text-zinc-500">
+                    Extra time kept before/after each detected cut (default 500 ms).
+                  </span>
                 </label>
                 <label className="block text-sm">
                   <span className="block text-xs font-semibold text-zinc-600">Min segment (ms)</span>

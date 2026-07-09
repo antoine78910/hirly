@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import httpx
 
 from employment_kind import contract_type_query_hint, enrich_job_employment_kind, resolve_profile_contract_type
+from job_normalization import sanitize_display_title
 from job_providers import (
     get_board_provider,
     get_job_provider,
@@ -308,6 +309,9 @@ async def _upsert_job_batch(db, jobs: List[Dict[str, Any]], progress: Optional[D
     }
     for job in jobs:
         job = enrich_job_employment_kind(dict(job))
+        sanitized_title = sanitize_display_title(job.get("title"), fallback=job.get("rome_label"))
+        if sanitized_title:
+            job["title"] = sanitized_title
         job = _with_cheap_validation(job)
         await db.jobs.update_one(
             {"provider": job["provider"], "external_id": job["external_id"]},

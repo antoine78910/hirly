@@ -44,15 +44,16 @@ import {
   getSwipeSuccessCopy,
   getSwipeErrorMessage,
 } from "../lib/appUi";
-import { getJobBadgeItems, getJobDisplayContent, formatJobSalaryLabel } from "../lib/jobDisplayUtils";
+import { getJobBadgeItems, getJobDisplayContent, getJobDisplayTitle, formatJobSalaryLabel } from "../lib/jobDisplayUtils";
 import JobRomeProfile from "../components/swipe/JobRomeProfile";
 import JobOfferDetails from "../components/swipe/JobOfferDetails";
-import { translateJobTitle, translateLocationLabel, translateRoleLabel } from "../lib/localizedDisplay";
+import { translateLocationLabel, translateRoleLabel } from "../lib/localizedDisplay";
 
 import { preloadCompanyLogos } from "../lib/companyLogos";
 import {
   buildSwipeFeedCacheKey,
   clearSwipeFeedCache,
+  clearSwipedJobIdsByPrefix,
   filterOutSwipedJobs,
   getSwipeFeedCacheSnapshot,
   isSwipeFeedCacheFresh,
@@ -67,6 +68,10 @@ const DEFAULT_SEARCH_RADIUS = "50km";
 const FEED_BATCH_SIZE = 12;
 const FEED_PREFETCH_THRESHOLD = 7;
 const FILTERS_STORAGE_KEY = "swiipr.jobs.filters.v2";
+
+const isFinanceDemoFeedResponse = (data) => (
+  Boolean(data?.finance_demo || data?.feed_mode === "finance_demo")
+);
 
 const readPersistedFilters = () => {
   if (typeof window === "undefined") return null;
@@ -216,6 +221,73 @@ function mobileSectionMeta(title) {
   return { Icon: FileText, iconClass: "text-sprout-mint" };
 }
 
+function JobCardMeta({ location, salaryLabel, postedLabel, compact = false }) {
+  if (compact) {
+    return (
+      <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs text-sprout-muted sm:gap-x-4 sm:text-sm">
+        <span className="inline-flex min-w-0 max-w-full items-center gap-1">
+          <MapPin className="h-3.5 w-3.5 shrink-0 text-sprout-mint" strokeWidth={1.9} />
+          <span className="truncate">{location}</span>
+        </span>
+        {salaryLabel ? (
+          <span className="inline-flex min-w-0 max-w-full items-center gap-1">
+            <DollarSign className="h-3.5 w-3.5 shrink-0 text-sprout-mint" strokeWidth={1.9} />
+            <span className="truncate">{salaryLabel}</span>
+          </span>
+        ) : null}
+        <span className="inline-flex items-center gap-1">
+          <Calendar className="h-3.5 w-3.5 shrink-0 text-sprout-mint" strokeWidth={1.9} />
+          <span className="whitespace-nowrap">{postedLabel}</span>
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-1.5 text-sm text-sprout-muted sm:text-[15px]">
+      <div className="flex items-center gap-2">
+        <MapPin className="h-4 w-4 text-sprout-mint" strokeWidth={1.9} />
+        <span>{location}</span>
+      </div>
+      {salaryLabel ? (
+        <div className="flex items-center gap-2">
+          <DollarSign className="h-4 w-4 text-sprout-mint" strokeWidth={1.9} />
+          <span className="text-center">{salaryLabel}</span>
+        </div>
+      ) : null}
+      <div className="flex items-center gap-2">
+        <Calendar className="h-4 w-4 text-sprout-mint" strokeWidth={1.9} />
+        <span>{postedLabel}</span>
+      </div>
+    </div>
+  );
+}
+
+function JobCardBadges({ badges, compact = false }) {
+  if (!badges.length) return null;
+
+  return (
+    <div
+      className={
+        compact
+          ? "no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 sm:mx-0 sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-0"
+          : "flex flex-wrap justify-center gap-2"
+      }
+    >
+      {badges.map((badge) => (
+        <span
+          key={badge.label}
+          className={`inline-flex shrink-0 items-center rounded-full bg-sprout-surface-2 font-medium text-zinc-100 ${
+            compact ? "px-2.5 py-1 text-[11px] sm:px-3 sm:py-1.5 sm:text-[13px]" : "px-3 py-1.5 text-[13px]"
+          }`}
+        >
+          {badge.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function MobileDetailSection({ title, bullets, body, t }) {
   const isAbout = /about/i.test(title || "");
   const { Icon, iconClass } = mobileSectionMeta(title);
@@ -249,14 +321,15 @@ function MobileDetailSection({ title, bullets, body, t }) {
 function CardFront({ job, onReport, onShare, actionsEnabled, t, lang }) {
   const { snippet } = getJobDisplayContent(job);
   const badges = getJobBadgeItems(job, { lang });
-  const title = translateJobTitle(job.title, lang);
+  const title = getJobDisplayTitle(job, { lang });
   const location = translateLocationLabel(job.location, lang) || t("swipe.locationNotSpecified");
   const salaryLabel = formatJobSalaryLabel(job, { lang });
+  const postedLabel = formatPostedDate(t, job.posted_at) || t("swipe.postedRecently");
 
   return (
     <div className="backface-hidden absolute inset-0 flex flex-col overflow-hidden rounded-[28px] border border-sprout-border bg-sprout-surface">
-      <div className="app-scroll no-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain touch-pan-y">
-        <div className="flex shrink-0 items-start justify-between p-3 sm:p-5">
+      <div className="flex min-h-0 flex-1 flex-col px-4 pb-2 pt-3 sm:px-6 sm:pb-3 sm:pt-5">
+        <div className="flex shrink-0 items-start justify-between">
           <div className="pointer-events-auto flex items-center gap-2">
             <button
               type="button"
@@ -288,64 +361,50 @@ function CardFront({ job, onReport, onShare, actionsEnabled, t, lang }) {
         </div>
 
         <div className="mt-0.5 flex justify-center sm:mt-1">
-          <CompanyLogo job={job} size="lg" rounded="2xl" />
+          <CompanyLogo job={job} size="md" rounded="2xl" className="sm:hidden" />
+          <CompanyLogo job={job} size="lg" rounded="2xl" className="hidden sm:block" />
         </div>
 
-        <div className="mt-3 px-4 text-center sm:mt-4 sm:px-7">
-          <p className="font-display text-xl font-semibold text-white sm:text-2xl">{job.company}</p>
+        <div className="mt-2 text-center sm:mt-4">
+          <p className="font-display text-lg font-semibold text-white sm:text-2xl">{job.company}</p>
           {snippet ? (
-            <p className="mt-2 line-clamp-3 text-sm leading-snug text-sprout-muted sm:mt-3 sm:text-[15px]">{snippet}</p>
+            <p className="mt-2 hidden line-clamp-3 text-sm leading-snug text-sprout-muted sm:mt-3 sm:block sm:text-[15px]">
+              {snippet}
+            </p>
           ) : null}
         </div>
 
-        <div className="mt-4 px-4 sm:mt-6 sm:px-7">
+        <div className="mt-2 px-1 sm:mt-5 sm:px-3">
           <h2
-            className="text-center font-display text-[clamp(1.35rem,5.5vw,2.35rem)] font-black leading-[1.08] tracking-tight text-white"
+            className="text-center font-display text-[clamp(1.2rem,5vw,2.35rem)] font-black leading-[1.08] tracking-tight text-white"
             data-testid="job-title"
           >
             {title}
           </h2>
         </div>
 
-        <div className="mt-3 flex flex-col items-center gap-1.5 text-sm text-sprout-muted sm:mt-5 sm:text-[15px]">
-          <div className="flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-sprout-mint" strokeWidth={1.9} />
-            <span>{location}</span>
-          </div>
-          {salaryLabel ? (
-            <div className="flex items-center gap-2">
-              <DollarSign className="h-4 w-4 text-sprout-mint" strokeWidth={1.9} />
-              <span className="text-center">{salaryLabel}</span>
-            </div>
-          ) : null}
-          <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-sprout-mint" strokeWidth={1.9} />
-            <span>{formatPostedDate(t, job.posted_at) || t("swipe.postedRecently")}</span>
-          </div>
+        <div className="mt-2 sm:mt-5">
+          <JobCardMeta
+            location={location}
+            salaryLabel={salaryLabel}
+            postedLabel={postedLabel}
+            compact
+          />
         </div>
 
-        {badges.length > 0 ? (
-          <div className="mt-3 flex flex-wrap justify-center gap-2 px-4 pb-2 sm:mt-5 sm:px-5">
-            {badges.map((badge) => (
-              <span
-                key={badge.label}
-                className="inline-flex items-center rounded-full bg-sprout-surface-2 px-3 py-1.5 text-[13px] font-medium text-zinc-100"
-              >
-                {badge.label}
-              </span>
-            ))}
-          </div>
-        ) : null}
+        <div className="mt-auto pt-2 sm:mt-5 sm:pt-0">
+          <JobCardBadges badges={badges} compact />
+        </div>
       </div>
 
-      <div className="flex shrink-0 items-center justify-between border-t border-sprout-border/60 px-4 py-3 sm:px-6 sm:py-5">
-        <div className="flex items-center gap-2 font-display text-lg font-bold text-white">
-          <Logo size={22} />
+      <div className="flex shrink-0 items-center justify-between border-t border-sprout-border/60 px-4 py-2.5 sm:px-6 sm:py-5">
+        <div className="flex items-center gap-2 font-display text-base font-bold text-white sm:text-lg">
+          <Logo size={20} className="sm:h-[22px] sm:w-[22px]" />
           {BRAND.NAME}
         </div>
-        <div className="flex items-center gap-1.5 text-[13px] text-sprout-muted">
+        <div className="flex items-center gap-1.5 text-[12px] text-sprout-muted sm:text-[13px]">
           {t("swipe.tapForDetails")}
-          <Info className="h-4 w-4" />
+          <Info className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
         </div>
       </div>
     </div>
@@ -355,7 +414,7 @@ function CardFront({ job, onReport, onShare, actionsEnabled, t, lang }) {
 function CardBack({ job, t, lang }) {
   const { about, detailSections } = getJobDisplayContent(job);
   const badges = getJobBadgeItems(job, { lang });
-  const title = translateJobTitle(job.title, lang);
+  const title = getJobDisplayTitle(job, { lang });
   const location = translateLocationLabel(job.location, lang) || t("swipe.locationNotSpecified");
   const salaryLabel = formatJobSalaryLabel(job, { lang });
 
@@ -379,39 +438,20 @@ function CardBack({ job, t, lang }) {
         className="app-scroll no-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-3 pb-2 touch-pan-y sm:px-6 sm:py-4"
         data-testid="swipe-card-scroll"
       >
-        <div className="space-y-1.5 text-[15px] text-sprout-muted">
-          <div className="flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-sprout-mint" />
-            <span>{location}</span>
-          </div>
-          {salaryLabel ? (
-            <div className="flex items-center gap-2">
-              <DollarSign className="h-4 w-4 text-sprout-mint" />
-              <span>{salaryLabel}</span>
-            </div>
-          ) : null}
-          <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-sprout-mint" />
-            <span>{formatPostedDate(t, job.posted_at) || t("swipe.postedRecently")}</span>
-          </div>
-        </div>
+        <JobCardMeta
+          location={location}
+          salaryLabel={salaryLabel}
+          postedLabel={formatPostedDate(t, job.posted_at) || t("swipe.postedRecently")}
+          compact
+        />
 
-        {badges.length > 0 ? (
-          <div className="flex flex-wrap gap-2">
-            {badges.map((badge) => (
-              <span
-                key={badge.label}
-                className="inline-flex items-center rounded-full bg-sprout-surface-2 px-3 py-1.5 text-[13px] font-medium text-zinc-100"
-              >
-                {badge.label}
-              </span>
-            ))}
-          </div>
-        ) : null}
+        <JobCardBadges badges={badges} compact />
 
         <div className="border-t border-sprout-border" />
 
-        <JobOfferDetails job={job} t={t} lang={lang} compact />
+        <div className="hidden sm:block">
+          <JobOfferDetails job={job} t={t} lang={lang} compact />
+        </div>
 
         <div className="space-y-3">
           {about ? (
@@ -703,7 +743,7 @@ export default function Swipe() {
   }, []);
 
   const loadProfile = useCallback(async () => {
-    if (isFinanceDemoEnabled() && isDemoAccountEnabled()) {
+    if (isFinanceDemoEnabled()) {
       applyFinanceDemoTarget();
       return null;
     }
@@ -833,6 +873,8 @@ export default function Swipe() {
       || reason.startsWith("filters_")
       || reason === "empty_refresh"
       || reason === "desktop_refresh"
+      || reason === "demo_settings_changed"
+      || reason === "initial_finance_demo"
     );
     fetchingRef.current = true;
     if (isUserSearchChange && replace) {
@@ -888,10 +930,11 @@ export default function Swipe() {
         }
       }
       if (requestId !== feedRequestIdRef.current) return;
-      let localFeedGuard = buildLocalFeedGuard({ params, response: data });
+      const financeFeed = isFinanceDemoFeedResponse(data);
+      let localFeedGuard = financeFeed ? null : buildLocalFeedGuard({ params, response: data });
       let responseJobs = Array.isArray(data?.jobs) ? data.jobs : [];
       let safeJobs = localFeedGuard ? responseJobs.filter(localFeedGuard) : responseJobs;
-      safeJobs = filterOutSwipedJobs(safeJobs);
+      if (!financeFeed) safeJobs = filterOutSwipedJobs(safeJobs);
       let outsideLocationHiddenCount = responseJobs.length - safeJobs.length;
       if (outsideLocationHiddenCount > 0) {
         data = {
@@ -940,11 +983,11 @@ export default function Swipe() {
         seedTutorialShowcaseIfEmpty(safeJobs);
       }
       setJobs((prev) => {
-        const base = replace ? [] : filterOutSwipedJobs(localFeedGuard ? prev.filter(localFeedGuard) : prev);
+        const base = replace ? [] : (financeFeed ? prev : filterOutSwipedJobs(localFeedGuard ? prev.filter(localFeedGuard) : prev));
         const seen = new Set(base.map((j) => j.job_id));
         const merged = [...base];
         safeJobs.forEach((j) => { if (!seen.has(j.job_id)) merged.push(j); });
-        const visible = filterOutSwipedJobs(merged);
+        const visible = financeFeed ? merged : filterOutSwipedJobs(merged);
         preloadCompanyLogos(visible.slice(0, 6));
         writeSwipeFeedCache({
           jobs: visible,
@@ -986,10 +1029,11 @@ export default function Swipe() {
         try {
           const retryData = await requestFeed(retryUrl);
           if (requestId !== feedRequestIdRef.current) return;
-          const localFeedGuard = buildLocalFeedGuard({ params: retryParams, response: retryData });
+          const financeFeed = isFinanceDemoFeedResponse(retryData);
+          const localFeedGuard = financeFeed ? null : buildLocalFeedGuard({ params: retryParams, response: retryData });
           const responseJobs = Array.isArray(retryData?.jobs) ? retryData.jobs : [];
           let safeJobs = localFeedGuard ? responseJobs.filter(localFeedGuard) : responseJobs;
-          safeJobs = filterOutSwipedJobs(safeJobs);
+          if (!financeFeed) safeJobs = filterOutSwipedJobs(safeJobs);
           setLastFeedDebug({
             reason: `${reason}_timeout_retry`,
             forceRefresh: replace,
@@ -1059,14 +1103,21 @@ export default function Swipe() {
 
   useEffect(() => {
     const onDemoSettings = (event) => {
-      if (!isDemoAccountEnabled()) return;
       const financeOn = Boolean(event?.detail?.financeJobFeed ?? isFinanceDemoEnabled());
-      const nextFilters = financeOn
-        ? applyFinanceDemoTarget()
-        : reconcileFiltersForUser(readPersistedFilters(), profileRef.current);
-      if (!financeOn) {
-        loadProfile();
+      clearSwipeFeedCache();
+      jobsRef.current = [];
+      setJobs([]);
+      setTotalCount(null);
+      setFeedMeta(null);
+      setFeedError("");
+      if (financeOn) {
+        clearSwipedJobIdsByPrefix("finance_demo_");
+        const nextFilters = applyFinanceDemoTarget();
+        loadFeed(true, nextFilters, "demo_settings_changed");
+        return;
       }
+      const nextFilters = reconcileFiltersForUser(readPersistedFilters(), profileRef.current);
+      loadProfile();
       loadFeed(true, nextFilters, "demo_settings_changed");
     };
     window.addEventListener(DEMO_SETTINGS_CHANGED, onDemoSettings);
@@ -1118,7 +1169,7 @@ export default function Swipe() {
     ensureDemoAccountDefaults();
     const bootstrap = async () => {
       const isDemo = isDemoAccountEnabled();
-      const isFinanceDemo = isFinanceDemoEnabled() && isDemo;
+      const isFinanceDemo = isFinanceDemoEnabled();
 
       api.get("/billing/status")
         .then(({ data }) => setBilling(data))

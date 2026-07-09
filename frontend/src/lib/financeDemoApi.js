@@ -9,7 +9,8 @@ import { mergeDemoCvIntoProfile } from "./demoCvUpload";
 import { consumeDemoCredit, getCachedDemoJob } from "./demoAccount";
 import { parseApiPath } from "./apiPath";
 import { applyJobFilters, feedQueryToFilters } from "./applyJobFilters";
-import { mergeFilters } from "./jobFilters";
+import { clearMenuFilters, mergeFilters } from "./jobFilters";
+import { clearSwipeFeedCache, clearSwipedJobIdsByPrefix } from "./swipeFeedCache";
 
 export const FINANCE_DEMO_CHANGED = "hirly:finance-demo-changed";
 
@@ -115,7 +116,7 @@ function replenishFeedJobs() {
 export function getFinanceDemoFeedData({ filters = null, searchRole = "", limit = 5 } = {}) {
   if (!isFinanceDemoEnabled()) return null;
   replenishFeedJobs();
-  const mergedFilters = mergeFilters(filters);
+  const mergedFilters = clearMenuFilters(mergeFilters(filters));
   const filtered = applyJobFilters(state.feedJobs, mergedFilters, {
     // Full finance catalog — target role is display-only so filming gets company diversity.
     searchRole: "",
@@ -132,7 +133,7 @@ export function getFinanceDemoFeedData({ filters = null, searchRole = "", limit 
     demo_mode: true,
     finance_demo: true,
     matched_location: ["Paris, France"],
-    filters_applied: mergedFilters,
+    filters_applied: { ...mergedFilters, explicit_local_intent: true },
   };
 }
 
@@ -143,6 +144,8 @@ export function resetFinanceDemoFeed() {
   state.historyLeft = [];
   state.undoStack = [];
   clearFinancePersistence();
+  clearSwipedJobIdsByPrefix("finance_demo_");
+  clearSwipeFeedCache();
 }
 
 export function getFinanceDemoApplications() {

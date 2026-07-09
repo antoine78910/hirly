@@ -16,11 +16,12 @@ import { BRAND } from "../../lib/brand";
 import {
   getJobBadgeItems,
   getJobDisplayContent,
+  getJobDisplayTitle,
   formatJobSalaryLabel,
 } from "../../lib/jobDisplayUtils";
 import JobRomeProfile from "./JobRomeProfile";
 import JobOfferDetails from "./JobOfferDetails";
-import { translateJobTitle, translateLocationLabel } from "../../lib/localizedDisplay";
+import { translateLocationLabel } from "../../lib/localizedDisplay";
 
 function formatPosted(iso, t) {
   if (!iso) return t("swipe.postedRecently");
@@ -100,7 +101,7 @@ function DetailSection({ title, bullets, body, theme, expanded = false, t }) {
 export default function DesktopJobCard({ job, theme, t, lang }) {
   const { about, detailSections } = getJobDisplayContent(job);
   const badges = getJobBadgeItems(job, { lang });
-  const title = translateJobTitle(job.title, lang);
+  const title = getJobDisplayTitle(job, { lang });
   const location = translateLocationLabel(job.location, lang) || t("swipe.locationNotSpecified");
   const salaryLabel = formatJobSalaryLabel(job, { lang });
 

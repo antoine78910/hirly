@@ -12,16 +12,6 @@ let demoAccountEligible = false;
 /** Called from demoAccount when auth resolves demo vs normal user. */
 export function setFinanceDemoEligibility(isDemoAccount) {
   demoAccountEligible = Boolean(isDemoAccount);
-  if (!demoAccountEligible && typeof window !== "undefined") {
-    try {
-      const current = readDemoSettings();
-      if (current.financeJobFeed) {
-        saveDemoSettings({ ...current, financeJobFeed: false });
-      }
-    } catch {
-      /* ignore */
-    }
-  }
 }
 
 export function readDemoSettings() {
@@ -51,7 +41,6 @@ export function saveDemoSettings(settings) {
 }
 
 export function isFinanceDemoEnabled() {
-  if (!demoAccountEligible) return false;
   return Boolean(readDemoSettings().financeJobFeed);
 }
 
