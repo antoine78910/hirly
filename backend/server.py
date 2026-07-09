@@ -134,7 +134,7 @@ from employment_kind import (
     job_matches_job_types,
     resolve_profile_contract_type,
 )
-from location_intelligence import COUNTRY_NAME_TO_CODE, expand_location_radius, normalize_place_name
+from location_intelligence import COUNTRY_NAME_TO_CODE, country_to_jsearch_language, expand_location_radius, normalize_place_name
 from location_search import search_locations
 from llm_client import LLMProviderNotConfigured, complete_json_text, extract_text_from_image_bytes
 from onboarding_suggestions import suggest_categories, suggest_roles
@@ -11595,7 +11595,15 @@ async def root():
 
 
 @api_router.get("/dev/jsearch-test")
-async def dev_jsearch_test(q: str = "software engineer", location: str = "New York", limit: int = 5):
+async def dev_jsearch_test(
+    q: str = "software engineer",
+    location: str = "New York",
+    limit: int = 5,
+    country: Optional[str] = None,
+    language: Optional[str] = None,
+    max_pages: Optional[int] = None,
+    page_size: Optional[int] = None,
+):
     dev_enabled = (
         os.environ.get("ENVIRONMENT", "").lower() == "development"
         or os.environ.get("DEV_TOOLS_ENABLED", "false").lower() in ("1", "true", "yes", "on")
@@ -11607,23 +11615,41 @@ async def dev_jsearch_test(q: str = "software engineer", location: str = "New Yo
         raise HTTPException(status_code=500, detail="Primary job provider credentials are not configured")
 
     provider = get_configured_job_provider()
+    # Was hardcoded to JSEARCH_COUNTRY/JSEARCH_LANGUAGE regardless of the
+    # `location` argument -- e.g. passing location="London, United Kingdom"
+    # while JSEARCH_COUNTRY=fr silently sent country=fr, contradicting the
+    # location text. Now resolves from the location text the same way the
+    # real feed path does, with explicit overrides available for isolating
+    # variables during diagnosis.
+    resolved_country, resolved_location = jobs_service_module._country_and_location(location)
+    effective_country = country or resolved_country
     query = JobSearchQuery(
         role=q,
-        location=location,
+        location=resolved_location,
         remote_preference="any",
-        country=os.environ.get("JSEARCH_COUNTRY", "us"),
-        language=os.environ.get("JSEARCH_LANGUAGE", "en"),
+        country=effective_country,
+        language=language or country_to_jsearch_language(effective_country),
         limit=max(1, min(limit, 20)),
+        max_pages=max_pages,
+        page_size=page_size,
     )
+    started = time.perf_counter()
     try:
         result = await provider.search(query)
-    except ValueError as exc:
-        logger.warning("Dev job provider response parse failed: %s", exc)
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
     except Exception as exc:
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
         logger.warning("Dev job provider test failed: %s", exc)
-        raise HTTPException(status_code=502, detail="Job provider request failed") from exc
-    return {"provider": provider.name, "jobs": result.jobs, "count": len(result.jobs)}
+        raise HTTPException(
+            status_code=502,
+            detail=f"{exc.__class__.__name__}: {str(exc)[:300]} (elapsed_ms={elapsed_ms}, country={effective_country}, location={resolved_location})",
+        ) from exc
+    return {
+        "provider": provider.name,
+        "query": {"role": q, "location": resolved_location, "country": effective_country, "language": query.language},
+        "elapsed_ms": int((time.perf_counter() - started) * 1000),
+        "jobs": result.jobs,
+        "count": len(result.jobs),
+    }
 
 
 @api_router.get("/dev/france-travail-test")
