@@ -77,7 +77,12 @@ class JSearchProvider:
             base_params["country"] = effective_country
         if query.remote_preference == "remote":
             base_params["work_from_home"] = "true"
-        date_posted = os.environ.get("JSEARCH_DATE_POSTED")
+        # Per-query date_posted (set explicitly by callers like the harvest
+        # loop that want fresh-only results) takes priority over the blanket
+        # env var, which stays as a global fallback for anything that doesn't
+        # care (e.g. the live feed's on-demand fallback, which wants any
+        # matching job regardless of posting age and must not be narrowed).
+        date_posted = query.date_posted or os.environ.get("JSEARCH_DATE_POSTED")
         if date_posted:
             base_params["date_posted"] = date_posted
 

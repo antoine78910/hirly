@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional
 from job_providers import get_job_provider, is_job_provider_configured
 from job_providers.base import JobSearchQuery
 from jobs_service import upsert_imported_jobs
+from jobs_service import _cooldown_until, _is_rate_limit_error, _set_rate_limit_cooldown
 from location_intelligence import country_to_jsearch_language
 
 logger = logging.getLogger(__name__)
@@ -62,8 +63,20 @@ DEFAULT_HARVEST_ROLES = [
 ]
 
 _harvest_cursor = 0
+_harvest_cycle = 0
 _harvest_lock = asyncio.Lock()
 _last_run_summary: Optional[Dict[str, Any]] = None
+
+# Adaptive per-combo scheduling: a combo (role x city) that comes back empty
+# gets pushed back an exponentially growing number of cycles instead of
+# being retried on the very next rotation. This redirects request budget
+# toward combos that are actually yielding jobs right now instead of
+# spending it re-polling markets that were just confirmed thin/exhausted.
+# Capped at 8 cycles (~2h at the default 15-min interval) so a combo is
+# never skipped so long that a real new posting there goes unnoticed.
+_combo_backoff_level: Dict[int, int] = {}
+_combo_next_eligible_cycle: Dict[int, int] = {}
+_COMBO_BACKOFF_MAX_CYCLES = 8
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -111,10 +124,34 @@ async def harvest_jsearch(
     dry_run: bool = False,
     start_offset: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Run one harvest slice: rotate through role x city combinations."""
-    global _harvest_cursor
+    """Run one harvest slice: rotate through role x city combinations.
+
+    Combo selection is adaptive rather than strict round-robin: combos that
+    just came back empty are pushed to the back of the queue for a growing
+    number of cycles (see _combo_next_eligible_cycle), so a fixed request
+    budget spends more of its time on combos that are actually producing
+    jobs right now. `cursor` still advances every run and breaks ties, so
+    coverage stays fair over the long run and a backed-off combo is never
+    skipped forever.
+    """
+    global _harvest_cursor, _harvest_cycle
     if not is_job_provider_configured("jsearch"):
         return {"enabled": False, "reason": "jsearch_not_configured", "runs": []}
+
+    # A confirmed 429 anywhere (this loop or the live feed's fallback --
+    # they share the same cooldown key) means every query below is going to
+    # fail the same way. Bail out before spending any of the 6 planned
+    # requests instead of burning them against a provider we already know
+    # is rejecting us.
+    cooldown = _cooldown_until("jsearch")
+    if cooldown is not None:
+        logger.info("jsearch_harvest_skipped_cooldown_active until=%s", cooldown.isoformat())
+        return {
+            "enabled": True,
+            "reason": "provider_cooldown_active",
+            "cooldown_until": cooldown.isoformat(),
+            "runs": [],
+        }
 
     cities = _harvest_cities()
     roles = _harvest_roles()
@@ -126,9 +163,17 @@ async def harvest_jsearch(
     page_size = max(10, min(_env_int("JSEARCH_HARVEST_PAGE_SIZE", 100), 100))
     max_pages = max(1, min(_env_int("JSEARCH_HARVEST_MAX_PAGES", 2), 5))
     pause_seconds = max(0.2, _env_float("JSEARCH_HARVEST_QUERY_PAUSE_SECONDS", 0.5))
+    # Restrict harvest queries to recently-posted jobs so repeat visits to the
+    # same combo mostly surface genuinely new postings instead of re-fetching
+    # (and then deduping away) the same listings every ~5h rotation. Only
+    # applied here -- the live feed's on-demand fallback leaves this unset so
+    # it keeps matching against jobs of any age, unchanged.
+    freshness_window = (os.environ.get("JSEARCH_HARVEST_DATE_POSTED") or "3days").strip() or None
 
     async with _harvest_lock:
         cursor = start_offset % len(combos) if start_offset is not None else _harvest_cursor % len(combos)
+        _harvest_cycle += 1
+        current_cycle = _harvest_cycle
         provider = get_job_provider("jsearch", "")
         started = time.perf_counter()
         summary: Dict[str, Any] = {
@@ -137,13 +182,28 @@ async def harvest_jsearch(
             "cursor_start": cursor,
             "combos_total": len(combos),
             "queries_planned": queries,
+            "freshness_window": freshness_window,
             "jobs_fetched": 0,
             "jobs_upserted": 0,
             "errors": [],
             "runs": [],
         }
-        for index in range(queries):
-            role, city = combos[(cursor + index) % len(combos)]
+
+        if start_offset is not None:
+            # Explicit offset (admin-triggered manual run) bypasses adaptive
+            # skipping -- the caller asked for these specific combos.
+            selected_indices = [(cursor + i) % len(combos) for i in range(queries)]
+        else:
+            def _sort_key(i: int) -> Any:
+                backoff_gap = max(0, _combo_next_eligible_cycle.get(i, 0) - current_cycle)
+                distance = (i - cursor) % len(combos)
+                return (backoff_gap, distance)
+
+            selected_indices = sorted(range(len(combos)), key=_sort_key)[:queries]
+
+        consecutive_errors = 0
+        for position, combo_index in enumerate(selected_indices):
+            role, city = combos[combo_index]
             location_label = f"{city}, France"
             run: Dict[str, Any] = {"role": role, "location": location_label}
             try:
@@ -160,26 +220,49 @@ async def harvest_jsearch(
                     limit=page_size * max_pages,
                     page_size=page_size,
                     max_pages=max_pages,
+                    date_posted=freshness_window,
                 ))
                 jobs = result.jobs or []
-                run["fetched"] = len(jobs)
-                summary["jobs_fetched"] += len(jobs)
+                fetched = len(jobs)
+                run["fetched"] = fetched
+                summary["jobs_fetched"] += fetched
                 if jobs and not dry_run:
                     stats = await upsert_imported_jobs(db, jobs)
                     run["upserted"] = stats.get("total_imported", 0)
                     summary["jobs_upserted"] += run["upserted"]
+                consecutive_errors = 0
+                if fetched == 0:
+                    level = _combo_backoff_level.get(combo_index, 0) + 1
+                    _combo_backoff_level[combo_index] = level
+                    _combo_next_eligible_cycle[combo_index] = current_cycle + min(2 ** level, _COMBO_BACKOFF_MAX_CYCLES)
+                else:
+                    _combo_backoff_level.pop(combo_index, None)
+                    _combo_next_eligible_cycle.pop(combo_index, None)
             except Exception as exc:
                 message = f"{exc.__class__.__name__}: {str(exc)[:200]}"
                 run["error"] = message
                 summary["errors"].append({"role": role, "location": location_label, "error": message})
                 logger.warning("jsearch_harvest_query_failed role=%s location=%s error=%s", role, location_label, message)
+                summary["runs"].append(run)
+                consecutive_errors += 1
+                if _is_rate_limit_error(exc):
+                    _set_rate_limit_cooldown("jsearch")
+                    summary["aborted_reason"] = "rate_limited"
+                    logger.warning("jsearch_harvest_aborted_rate_limited after=%s/%s", position + 1, len(selected_indices))
+                    break
+                if consecutive_errors >= 2:
+                    summary["aborted_reason"] = "repeated_errors"
+                    logger.warning("jsearch_harvest_aborted_repeated_errors after=%s/%s", position + 1, len(selected_indices))
+                    break
                 await asyncio.sleep(pause_seconds * 4)
+                continue
             summary["runs"].append(run)
-            if index < queries - 1:
+            if position < len(selected_indices) - 1:
                 await asyncio.sleep(pause_seconds)
         if start_offset is None:
             _harvest_cursor = (cursor + queries) % len(combos)
         summary["cursor_next"] = (cursor + queries) % len(combos)
+        summary["combos_in_backoff"] = len(_combo_next_eligible_cycle)
         summary["elapsed_ms"] = int((time.perf_counter() - started) * 1000)
 
     global _last_run_summary
