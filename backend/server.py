@@ -4624,12 +4624,13 @@ async def get_feed(
     if _env_bool("JOBS_FEED_LEGACY_JSEARCH_ONLY", False):
         return await _legacy_jsearch_only_feed()
 
-    # Raised alongside sync_refresh_max_seconds/total_seconds below (was 8.0
-    # paired with a 4s sync budget). Left at the old ~2x-sync-budget
-    # headroom so the later widen/backfill stages (which check _timed_out())
-    # keep roughly the same post-refresh runway they had before, instead of
-    # getting starved by the longer synchronous JSearch call.
-    max_elapsed_seconds = 16.0
+    # Raised alongside sync_refresh_max_seconds/total_seconds below (was 16.0
+    # paired with a 12s sync budget, itself raised from an 8.0/4s pairing).
+    # Kept a few seconds above the new 30s sync/refresh budget so the later
+    # widen/backfill stages (which check _timed_out()) still get some
+    # post-refresh runway instead of being starved the instant the
+    # synchronous JSearch+France Travail refresh finishes.
+    max_elapsed_seconds = 34.0
     ats_supported = ["greenhouse", "lever", "ashby"]
 
     def _elapsed_ms() -> int:
@@ -4931,7 +4932,11 @@ async def get_feed(
         # bit above JSearchProvider's own httpx client timeout (10s default,
         # JSEARCH_HTTP_TIMEOUT_SECONDS) so a genuinely slow call fails on its
         # own terms instead of always hitting this wrapper's cutoff first.
-        sync_refresh_max_seconds = max(1, min(_env_int("JOBS_FEED_SYNC_REFRESH_MAX_SECONDS", 12), 20))
+        # Raised 12 -> 30: 12s was cutting off calls that would otherwise have
+        # confirmed a real error or a clean zero-results response given more
+        # room -- a call should only be treated as a timeout once it's
+        # genuinely still pending at 30s, not chopped off pre-emptively.
+        sync_refresh_max_seconds = max(1, min(_env_int("JOBS_FEED_SYNC_REFRESH_MAX_SECONDS", 30), 30))
         # page_size default raised 10 -> 50: JSearch's per-call latency is
         # dominated by the network round-trip, not by how many results come
         # back in that one response (its own cap is 100/call), so this is a
@@ -4943,7 +4948,7 @@ async def get_feed(
         sync_refresh_max_pages = max(1, min(_env_int("JSEARCH_FEED_FALLBACK_MAX_PAGES", 1), 3))
         sync_refresh_page_size = max(1, min(_env_int("JSEARCH_FEED_FALLBACK_PAGE_SIZE", 50), 50))
         sync_refresh_cooldown_seconds = max(30, min(_env_int("JOBS_FEED_SYNC_REFRESH_COOLDOWN_SECONDS", 300), 1800))
-        sync_refresh_total_seconds = max(2, min(_env_int("JOBS_FEED_SYNC_REFRESH_TOTAL_SECONDS", 12), 25))
+        sync_refresh_total_seconds = max(2, min(_env_int("JOBS_FEED_SYNC_REFRESH_TOTAL_SECONDS", 30), 30))
         sync_refresh_attempts_per_city = max(1, min(_env_int("JOBS_FEED_PROVIDER_ATTEMPTS_PER_CITY", 2), 4))
         if primary_job_provider_name() == "france_travail":
             sync_refresh_max_pages = max(sync_refresh_max_pages, min(_env_int("FRANCE_TRAVAIL_MAX_PAGES", 2), 4))
@@ -5992,7 +5997,7 @@ async def get_feed(
             # this one live call succeeding -- same JSearch latency reality
             # as the general sync_refresh budget above, so it gets the same
             # bump (was 5s, too tight for the same reason).
-            explicit_local_sync_seconds = max(1, min(_env_int("JOBS_FEED_EXPLICIT_LOCAL_SYNC_SECONDS", 12), 15))
+            explicit_local_sync_seconds = max(1, min(_env_int("JOBS_FEED_EXPLICIT_LOCAL_SYNC_SECONDS", 30), 30))
             sync_refresh_total_seconds = explicit_local_sync_seconds
             sync_refresh_max_seconds = explicit_local_sync_seconds
             sync_refresh_attempts_per_city = 1
@@ -6003,7 +6008,12 @@ async def get_feed(
             and ((force_provider_refresh and explicit_local_intent) or inventory_is_weak)
         )
         # Blocking (sync) refresh when worldwide DB is empty, client forced refresh,
-        # or explicit local search has zero local inventory (quick API lookup, ~5s cap).
+        # explicit local search has zero local inventory (quick API lookup, ~5s cap),
+        # or (per product decision) local A/B-tier inventory is merely thin -- the
+        # user should see a real live-refresh attempt in this same response instead
+        # of a "check back later" background task, since that background task's
+        # own results were getting silently discarded by the same tier filter
+        # anyway (confirmed live: it was importing relevant jobs, just all tier C).
         should_refresh = (
             not prefetch
             and needs_provider_refresh
@@ -6012,6 +6022,7 @@ async def get_feed(
                 (force_provider_refresh and explicit_local_intent)
                 or (not has_showable_cards and not explicit_local_intent)
                 or explicit_local_empty_inventory
+                or (explicit_local_intent and inventory_is_weak)
             )
         )
         background_refresh_wanted = (
@@ -6147,6 +6158,30 @@ async def get_feed(
                 sync_refresh_attempts_per_city,
             )
             provider_refresh_deadline = time.perf_counter() + sync_refresh_total_seconds
+
+            # Fire France Travail concurrently with the JSearch loop below instead
+            # of only as JSearch's own internal last-resort (which only tries FT
+            # once a given location's JSearch attempt found zero relevant jobs).
+            # Product decision: both providers should be tried at once whenever
+            # local A/B inventory is thin, not FT gated behind JSearch failing
+            # first. Skipped entirely when France Travail is already the primary
+            # provider (its main loop iteration below already hits it directly).
+            france_travail_parallel_task = None
+            if primary_job_provider_name() != "france_travail":
+                primary_refresh_loc = refresh_locations[0] if refresh_locations and isinstance(refresh_locations[0], dict) else None
+                ft_query = build_profile_job_query(
+                    profile_for_refresh,
+                    location_override=primary_refresh_loc.get("location_label") if primary_refresh_loc else None,
+                    location_data_override=primary_refresh_loc,
+                    search_radius=search_radius,
+                    role_override=target_role,
+                )
+                france_travail_parallel_task = asyncio.create_task(
+                    jobs_service_module._attempt_france_travail_fallback(
+                        db, ft_query, search_radius, primary_job_provider_name(),
+                    )
+                )
+
             for loc_data in refresh_locations:
                 remaining_seconds = provider_refresh_deadline - time.perf_counter()
                 if remaining_seconds <= 0.5:
@@ -6282,6 +6317,34 @@ async def get_feed(
                         sync_imported_total,
                     )
 
+            if france_travail_parallel_task is not None:
+                ft_remaining = max(0.1, provider_refresh_deadline - time.perf_counter())
+                try:
+                    ft_result = await asyncio.wait_for(france_travail_parallel_task, timeout=ft_remaining)
+                    refresh_results.append({
+                        "attempted": True,
+                        "ok": bool(ft_result.get("used")),
+                        "reason": "france_travail_parallel_fallback",
+                        "jobs_imported": ft_result.get("total_imported", 0),
+                        "relevant_imported": ft_result.get("relevant_imported", 0),
+                        "manual_ready_imported": ft_result.get("manual_ready_imported", 0),
+                        "jobs": ft_result.get("jobs") or [],
+                        "search_key": None,
+                        "search_keys": [],
+                    })
+                    logger.info(
+                        "jobs/feed france_travail_parallel_complete: user_id=%s used=%s total_imported=%s relevant_imported=%s",
+                        user.user_id,
+                        ft_result.get("used"),
+                        ft_result.get("total_imported"),
+                        ft_result.get("relevant_imported"),
+                    )
+                except asyncio.TimeoutError:
+                    france_travail_parallel_task.cancel()
+                    logger.warning("jobs/feed france_travail_parallel_timeout: user_id=%s", user.user_id)
+                except Exception as exc:
+                    logger.warning("jobs/feed france_travail_parallel_error: user_id=%s error=%s", user.user_id, exc)
+
             for refresh_result in refresh_results:
                 direct_refresh_jobs.extend(job for job in (refresh_result.get("jobs") or []) if isinstance(job, dict))
                 for key in refresh_result.get("search_keys") or []:
@@ -6329,7 +6392,13 @@ async def get_feed(
             if not skip_candidate_reload:
                 _clear_feed_job_pool_cache()
                 candidates, base_query, unfiltered_count, applyable_count, db_rejected_count = await _load_db_candidates(include_unknown=False)
-                if allow_unknown_tier and len(candidates) < requested_limit:
+                # Post-refresh tier-C fallback: only after the live JSearch +
+                # France Travail attempt above has had its chance to find more
+                # A/B-tier jobs. Tier A/B is still always preferred (both by
+                # append order here and by _quality_sort_key's own tier_rank
+                # sort downstream) -- this only fills remaining slots once A/B
+                # is confirmed too thin, it never displaces an A/B result.
+                if len(candidates) < requested_limit:
                     c_candidates, c_query, c_unfiltered, c_applyable, c_rejected = await _load_db_candidates(include_unknown=True)
                     seen_ids = {job.get("job_id") for job in candidates}
                     candidates.extend(job for job in c_candidates if job.get("job_id") not in seen_ids)

@@ -1459,9 +1459,12 @@ def test_d_and_e_jobs_are_excluded(monkeypatch):
     assert [job["job_id"] for job in response["jobs"]] == ["job_3"]
 
 
-def test_c_tier_excluded_by_default(monkeypatch):
+def test_c_tier_shown_as_fallback_when_ab_thin(monkeypatch):
+    # Product decision: tier C is never preferred over A/B, but once A/B is
+    # confirmed thin (even after a live refresh attempt), tier C fills the
+    # remaining slots rather than leaving the feed empty.
     response, _calls = _run_feed(monkeypatch, [_job(1, tier="C", status="unknown")], env={"JOBS_DB_WEAK_RESULTS_THRESHOLD": "0"})
-    assert response["jobs"] == []
+    assert [job["job_id"] for job in response["jobs"]] == ["job_1"]
 
 
 def test_c_tier_can_be_included_by_config(monkeypatch):
