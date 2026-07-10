@@ -148,13 +148,32 @@ const TITLE_REPLACEMENTS = [
   [/\bEntry[-\s]?Level\b/gi, "Junior"],
 ];
 
+// Reverse lookup (canonical English key AND its French label -> canonical
+// key) so a value already stored/displayed in either language can be
+// re-translated correctly after the user switches UI language -- without
+// this, a role saved as "Cuisinier" while browsing in French would have no
+// way back to "Chef" when the UI is switched to English, since
+// FRENCH_ROLE_LABELS only maps one direction.
+const CANONICAL_ROLE_BY_LABEL = new Map();
+for (const [canonicalKey, frenchLabel] of Object.entries(FRENCH_ROLE_LABELS)) {
+  CANONICAL_ROLE_BY_LABEL.set(canonicalKey.toLowerCase(), canonicalKey);
+  CANONICAL_ROLE_BY_LABEL.set(frenchLabel.toLowerCase(), canonicalKey);
+}
+
+function resolveCanonicalRole(value) {
+  return CANONICAL_ROLE_BY_LABEL.get(String(value || "").toLowerCase()) || null;
+}
+
 export function isFrench(lang) {
   return String(lang || "").toLowerCase().startsWith("fr");
 }
 
 export function translateRoleLabel(value, lang) {
-  if (!value || !isFrench(lang)) return value || "";
-  return FRENCH_ROLE_LABELS[value] || translateJobTitle(value, lang);
+  if (!value) return "";
+  const canonical = resolveCanonicalRole(value);
+  if (!isFrench(lang)) return canonical || value;
+  if (canonical) return FRENCH_ROLE_LABELS[canonical] || value;
+  return translateJobTitle(value, lang);
 }
 
 export function translateRoleGroupLabel(value, lang) {

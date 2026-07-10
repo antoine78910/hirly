@@ -89,8 +89,13 @@ export default function RoleAutocomplete({
   };
 
   const pickRole = (role) => {
-    onInputChange(role);
-    onPick?.(role);
+    // Store/display the label in the language the user is currently
+    // searching in, not the raw internal (English) taxonomy key -- picking
+    // "Cuisinier" from a French-language dropdown must not silently flip
+    // the visible text (and the value saved as target_role) to "Chef".
+    const localizedRole = translateRoleLabel(role, lang) || role;
+    onInputChange(localizedRole);
+    onPick?.(localizedRole);
     setFocused(false);
   };
 

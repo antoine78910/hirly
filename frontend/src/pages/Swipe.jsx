@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import {
   Zap, Undo2, History, SlidersHorizontal, Flag, Share2, MapPin, Calendar,
-  Heart, X, Loader2, Info, DollarSign, Briefcase, FileText, Star,
+  Heart, X, Loader2, Info, DollarSign, Briefcase, FileText, Star, Globe,
 } from "lucide-react";
 import { toast } from "sonner";
 import Logo from "../components/Logo";
@@ -578,7 +578,7 @@ function SkeletonCard() {
 
 export default function Swipe() {
   const navigate = useNavigate();
-  const { t, lang } = useAppLocale();
+  const { t, lang, setLang } = useAppLocale();
   const { loading: authLoading, user } = useAuth();
   const [demoWelcomeOpen, setDemoWelcomeOpen] = useState(false);
   const [jobs, setJobs] = useState(() => getSwipeFeedCacheSnapshot().jobs);
@@ -1507,6 +1507,24 @@ export default function Swipe() {
         </button>
 
         <div className="flex shrink-0 items-center gap-0.5">
+          <button
+            onClick={() => {
+              const next = lang === "fr" ? "en" : "fr";
+              setLang(next);
+              toast.success(next === "fr" ? "Langue definie sur Francais" : "Language set to English", { duration: 1600 });
+            }}
+            className="grid h-8 w-8 place-items-center rounded-full hover:bg-sprout-surface sm:h-9 sm:w-9"
+            data-testid="swipe-language-toggle"
+            aria-label={t("common.language")}
+            title={t("common.language")}
+          >
+            <span className="relative">
+              <Globe className="h-4 w-4 text-sprout-mint sm:h-5 sm:w-5" />
+              <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 rounded-sm bg-sprout-mint px-0.5 text-[8px] font-bold uppercase leading-none text-sprout-bg">
+                {lang}
+              </span>
+            </span>
+          </button>
           <button
             onClick={() => navigate("/history")}
             className="grid h-8 w-8 place-items-center rounded-full hover:bg-sprout-surface sm:h-9 sm:w-9"

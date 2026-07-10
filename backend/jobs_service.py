@@ -27,6 +27,7 @@ from job_providers.apply_eligibility import is_manual_fulfillment_ready
 from job_providers.base import BoardQuery, JobSearchQuery
 from job_validation import cheap_validate_job_applyability
 from location_intelligence import country_to_jsearch_language
+from role_query_terms import resolve_role_query_term
 
 logger = logging.getLogger(__name__)
 _PROVIDER_COOLDOWN_UNTIL: Dict[str, datetime] = {}
@@ -185,6 +186,16 @@ def build_profile_job_query(
         remote_preference = "remote"
     query_language = _language_for_country(country)
     contract_hint = contract_type_query_hint(resolve_profile_contract_type(profile), query_language)
+    # A handful of role labels are ambiguous or homonymous across languages
+    # (e.g. "Chef" / "Cuisinier" -- bare "chef" in French means "lead", not
+    # specifically a cook, and collides with unrelated titles like "chef de
+    # mission"). Resolve to the search term that's safe for the TARGET
+    # MARKET's language, not the profile's UI language; unknown roles pass
+    # through unchanged.
+    resolved_role = resolve_role_query_term(role, query_language)
+    if resolved_role != role:
+        logger.info("Role search term disambiguated: original=%s resolved=%s language=%s", role, resolved_role, query_language)
+    role = resolved_role
     logger.info(
         "JSearch query location normalized: country=%s location=%s radius=%s role=%s contract_hint=%s",
         country, location, search_radius, role, contract_hint,
@@ -806,7 +817,13 @@ def _localized_role_variants(role: str, country: Optional[str]) -> List[str]:
         elif any(term in lower for term in ("warehouse", "logistics")):
             variants = ["preparateur commande", "magasinier", "logistique", normalized]
         elif any(term in lower for term in ("retail", "store", "waiter", "barista", "chef", "kitchen")):
-            variants = ["vendeur", "serveur", "cuisinier", "employe polyvalent", normalized]
+            variants = ["vendeur", "serveur", "cuisinier", "employe polyvalent"]
+            # Don't add the raw text back in when it's just the bare
+            # ambiguous word itself ("chef" means "lead" in French outside
+            # a kitchen context -- see role_query_terms.py) -- the safe
+            # variants above already cover it.
+            if lower not in ("chef", "cuisinier", "cuisiniere", "cook"):
+                variants.append(normalized)
         elif "customer" in lower and "success" in lower:
             variants = ["customer success", "charge de clientele", "support client", normalized]
 

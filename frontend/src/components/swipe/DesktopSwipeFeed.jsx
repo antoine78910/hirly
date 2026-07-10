@@ -20,6 +20,7 @@ import DesktopSidebarSupport from "../desktop/DesktopSidebarSupport";
 import DesktopCreditsPill from "../desktop/DesktopCreditsPill";
 import DesktopAccountMenu from "../desktop/DesktopAccountMenu";
 import DesktopFiltersMenu from "../desktop/DesktopFiltersMenu";
+import LanguageSwitcher from "../settings/LanguageSwitcher";
 import DesktopJobCard from "./DesktopJobCard";
 import PlacesAutocomplete from "../PlacesAutocomplete";
 import RoleAutocomplete from "../RoleAutocomplete";
@@ -278,6 +279,7 @@ export default function DesktopSwipeFeed({
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className={`flex items-center justify-end gap-4 border-b px-4 py-2.5 lg:px-6 ${theme.header}`}>
+          <LanguageSwitcher variant={isDark ? "dark" : "light"} />
           <DesktopCreditsPill isDark={isDark} />
           <button
             type="button"

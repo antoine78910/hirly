@@ -135,6 +135,7 @@ from employment_kind import (
     resolve_profile_contract_type,
 )
 from location_intelligence import COUNTRY_NAME_TO_CODE, country_to_jsearch_language, expand_location_radius, normalize_place_name
+from role_query_terms import resolve_role_match_tokens
 from location_search import search_locations
 from llm_client import LLMProviderNotConfigured, complete_json_text, extract_text_from_image_bytes
 from onboarding_suggestions import suggest_categories, suggest_roles
@@ -4736,12 +4737,20 @@ async def get_feed(
         return None
 
     def _role_category_from_text(role: str) -> Optional[str]:
-        return _text_category(_normalize_ascii(role))
+        # A few role labels are ambiguous/homonymous across languages (e.g.
+        # "Chef"/"Cuisinier"); resolve to their safe token list first so
+        # category detection isn't neutralized by the raw ambiguous word
+        # (bare "chef" is deliberately absent from every category's keyword
+        # set -- see role_category_keywords comment above).
+        override_tokens = resolve_role_match_tokens(role)
+        text_for_category = " ".join(override_tokens) if override_tokens else role
+        return _text_category(_normalize_ascii(text_for_category))
 
     def _role_family_tokens(role: str) -> List[str]:
-        tokens = _tokens(role)
+        override_tokens = resolve_role_match_tokens(role)
+        tokens = override_tokens if override_tokens is not None else _tokens(role)
         family = list(tokens)
-        normalized = _normalize_ascii(role)
+        normalized = _normalize_ascii(" ".join(tokens) if override_tokens else role)
         word_set = set(normalized.split())
         for keywords in role_category_keywords.values():
             if any(_keyword_matches(keyword, normalized, word_set) for keyword in keywords):
@@ -4943,7 +4952,7 @@ async def get_feed(
         profile_for_refresh = dict(profile or {})
         if profile_contract_type and not profile_for_refresh.get("contract_type"):
             profile_for_refresh["contract_type"] = profile_contract_type
-        strict_tokens = _tokens(target_role)
+        strict_tokens = resolve_role_match_tokens(target_role) or _tokens(target_role)
         family_tokens = _role_family_tokens(target_role)
         terms = _location_terms()
         radius_scope = (search_radius or "50km").lower().strip()
@@ -6945,7 +6954,13 @@ async def get_feed(
         stop = {"and", "or", "the", "a", "an", "of", "for", "to", "in", "with", "remote", "jobs", "job"}
         return [token for token in re.findall(r"[a-z0-9]+", (value or "").lower()) if len(token) > 2 and token not in stop]
 
-    role_tokens = _tokens(target_role)
+    # Some role labels are ambiguous/homonymous across languages (e.g.
+    # "Chef"/"Cuisinier": bare "chef" in French means "lead", colliding
+    # with unrelated titles like "chef de mission"). When target_role is a
+    # known case, score against its safe token list instead of naively
+    # tokenizing the raw (possibly ambiguous) text -- see role_query_terms.py.
+    _role_match_override = resolve_role_match_tokens(target_role)
+    role_tokens = _role_match_override if _role_match_override is not None else _tokens(target_role)
     broader_role_tokens = []
     if role_tokens:
         broader_role_tokens = role_tokens[-1:]
@@ -6989,7 +7004,10 @@ async def get_feed(
         ]).lower()
         title_hits = sum(1 for token in tokens if token in title)
         body_hits = sum(1 for token in tokens if token in body)
-        exact_bonus = 25 if target_role and target_role.lower() in title else 0
+        # Skip the raw-phrase bonus for roles with a safe-token override --
+        # the override's own tokens above already provide accurate matching
+        # without re-introducing the ambiguous full phrase (e.g. "chef").
+        exact_bonus = 25 if not _role_match_override and target_role and target_role.lower() in title else 0
         return exact_bonus + title_hits * 20 + min(body_hits, len(tokens)) * 5
 
     def _location_score(job: Dict[str, Any]) -> int:
@@ -12278,7 +12296,8 @@ async def dev_jobs_query_debug(
         stop = {"and", "or", "the", "a", "an", "of", "for", "to", "in", "with", "remote", "jobs", "job"}
         return [token for token in re.findall(r"[a-z0-9]+", (value or "").lower()) if len(token) > 2 and token not in stop]
 
-    role_tokens = _tokens(target_role)
+    _role_match_override = resolve_role_match_tokens(target_role)
+    role_tokens = _role_match_override if _role_match_override is not None else _tokens(target_role)
     broader_role_tokens = role_tokens[-1:] if role_tokens else []
     if "analyst" in role_tokens:
         broader_role_tokens = list(dict.fromkeys([*role_tokens, "analytics", "analysis", "insights", "scientist"]))
@@ -12296,7 +12315,7 @@ async def dev_jobs_query_debug(
         ]).lower()
         title_hits = sum(1 for token in tokens if token in title)
         body_hits = sum(1 for token in tokens if token in body)
-        exact_bonus = 25 if target_role and target_role.lower() in title else 0
+        exact_bonus = 25 if not _role_match_override and target_role and target_role.lower() in title else 0
         return exact_bonus + title_hits * 20 + min(body_hits, len(tokens)) * 5
 
     def _role_matches(job: Dict[str, Any]) -> bool:

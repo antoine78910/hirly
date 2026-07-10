@@ -49,7 +49,9 @@ export default function RolePicker({ value, onChange, testId = "role-picker", va
 
   const selectRole = (role) => {
     setManual(false);
-    onChange(role);
+    // Same reasoning as RoleAutocomplete.pickRole: save the label in the
+    // language the picker is currently shown in, not the raw taxonomy key.
+    onChange(translateRoleLabel(role, lang) || role);
     setOpen(false);
   };
 
