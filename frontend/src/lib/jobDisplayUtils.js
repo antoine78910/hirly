@@ -474,17 +474,18 @@ const ABOUT_PATTERNS = [
 export function getJobDisplayContent(job) {
   const sections = job?.job_description_sections || [];
   const aboutSection = findSection(sections, ABOUT_PATTERNS);
+  const fullDescription = stripHtml(job?.clean_description || job?.description || "");
 
   const snippetSource = stripHtml(job?.summary || job?.tagline || "");
   const snippet = snippetSource
     || cleanBullets(aboutSection?.bullets).slice(0, 1).join(" ")
-    || stripHtml(job?.clean_description || job?.description || "").split(/\n\n/)[0]?.slice(0, 280);
+    || fullDescription.split(/\n\n/)[0]?.slice(0, 280);
 
   let about = "";
   if (aboutSection?.bullets?.length) {
     about = cleanBullets(aboutSection.bullets).join("\n\n");
   } else {
-    about = stripHtml(job?.clean_description || job?.description || "");
+    about = fullDescription;
   }
 
   const detailSections = [];
@@ -515,7 +516,7 @@ export function getJobDisplayContent(job) {
     });
   }
 
-  return { snippet, about, detailSections };
+  return { snippet, about, fullDescription, detailSections };
 }
 
 export function jobExternalUrl(job) {

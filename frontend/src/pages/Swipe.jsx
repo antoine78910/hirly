@@ -48,6 +48,7 @@ import { getJobBadgeItems, getJobDisplayContent, getJobDisplayTitle, formatJobSa
 import JobRomeProfile from "../components/swipe/JobRomeProfile";
 import JobOfferDetails from "../components/swipe/JobOfferDetails";
 import JobCardHighlights, { JobCardMatchBadge } from "../components/swipe/JobCardHighlights";
+import JobDescriptionDialog from "../components/swipe/JobDescriptionDialog";
 import { translateLocationLabel, translateRoleLabel } from "../lib/localizedDisplay";
 
 import { preloadCompanyLogos } from "../lib/companyLogos";
@@ -477,6 +478,7 @@ function CardBack({ job, t, lang, onScrollIntent }) {
         <div className="sm:hidden">
           <JobCardHighlights job={job} t={t} lang={lang} max={4} compact />
         </div>
+        <JobDescriptionDialog job={job} t={t} lang={lang} className="w-full" />
 
         <div className="space-y-3">
           {about ? (

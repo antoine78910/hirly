@@ -22,6 +22,7 @@ import {
 import JobRomeProfile from "./JobRomeProfile";
 import JobOfferDetails from "./JobOfferDetails";
 import JobCardHighlights, { JobCardMatchBadge } from "./JobCardHighlights";
+import JobDescriptionDialog from "./JobDescriptionDialog";
 import { translateLocationLabel } from "../../lib/localizedDisplay";
 
 function formatPosted(iso, t) {
@@ -155,6 +156,8 @@ export default function DesktopJobCard({ job, theme, t, lang }) {
             {previewText}
           </p>
         ) : null}
+
+        <JobDescriptionDialog job={job} t={t} lang={lang} className="w-fit" />
 
         {badges.length > 0 ? (
           <div className="flex flex-wrap gap-2">
