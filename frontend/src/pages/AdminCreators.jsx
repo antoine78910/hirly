@@ -104,6 +104,13 @@ const fmtDateTime = (value) => {
   });
 };
 
+const isRefreshStale = (iso, intervalHours = 6) => {
+  if (!iso) return true;
+  const ts = new Date(iso).getTime();
+  if (Number.isNaN(ts)) return true;
+  return Date.now() - ts >= intervalHours * 60 * 60 * 1000;
+};
+
 function creatorReachViews(creator, usesLikesProxy = false) {
   const views = Number(creator?.current?.views || 0);
   if (views > 0) return views;
@@ -132,7 +139,7 @@ function DeltaBadge({ value, suffix = "" }) {
   );
 }
 
-function KpiCard({ icon: Icon, label, value, delta, deltaSuffix, accent = "text-zinc-600", href }) {
+function KpiCard({ icon: Icon, label, value, delta, deltaSuffix, accent = "text-zinc-600", href, hint }) {
   return (
     <div className="group relative overflow-hidden rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition hover:border-zinc-300 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700">
       <div className="flex items-start justify-between gap-3">
@@ -150,6 +157,7 @@ function KpiCard({ icon: Icon, label, value, delta, deltaSuffix, accent = "text-
       <div className="mt-2">
         <DeltaBadge value={delta} suffix={deltaSuffix} />
       </div>
+      {hint ? <p className="mt-2 text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">{hint}</p> : null}
     </div>
   );
 }
@@ -442,10 +450,14 @@ export default function AdminCreators() {
   }, [days, selectedIds, load]);
 
   useEffect(() => {
-    if (loading || accessDenied || data?.last_refreshed_at || autoRefreshedRef.current) return;
+    if (loading || accessDenied || autoRefreshedRef.current) return;
+    const maintenance = data?.maintenance;
+    const intervalHours = maintenance?.interval_hours || 6;
+    const stale = maintenance?.stale ?? isRefreshStale(data?.last_refreshed_at, intervalHours);
+    if (!stale) return;
     autoRefreshedRef.current = true;
     refresh();
-  }, [loading, accessDenied, data?.last_refreshed_at, refresh]);
+  }, [loading, accessDenied, data?.last_refreshed_at, data?.maintenance, refresh]);
 
   const creators = data?.creators || [];
   const summary = data?.summary || {};
@@ -528,6 +540,11 @@ export default function AdminCreators() {
   const maxTopVideoViews = topVideos[0]?.reach || 0;
   const maxTopAccountViews = topAccounts[0]?.reach || 0;
 
+  const maintenance = data?.maintenance;
+  const trackingIntervalHours = maintenance?.interval_hours || 6;
+  const trackingEnabled = maintenance?.loop_enabled !== false;
+  const trackingStale = maintenance?.stale ?? isRefreshStale(data?.last_refreshed_at, trackingIntervalHours);
+
   return (
     <AdminShell
       enableDarkMode
@@ -596,6 +613,11 @@ export default function AdminCreators() {
             </div>
             <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
               Last refreshed {fmtDateTime(data?.last_refreshed_at)}
+              {trackingEnabled
+                ? ` · Auto-tracking every ${trackingIntervalHours}h`
+                : " · Auto-tracking disabled on server"}
+              {maintenance?.next_due_at ? ` · Next scheduled refresh ${fmtDateTime(maintenance.next_due_at)}` : ""}
+              {trackingStale ? " · Data is stale, refresh recommended." : ""}
               {usesLikesProxy ? " · Per-video views unavailable from TikTok — showing likes as reach proxy." : ""}
             </p>
           </div>
@@ -618,7 +640,14 @@ export default function AdminCreators() {
                 <KpiCard icon={Play} label={viewsLabel} value={summary.views} delta={summary.views_delta} accent="text-sky-500" />
                 <KpiCard icon={Heart} label="Likes" value={summary.likes} delta={summary.likes_delta} accent="text-pink-500" />
                 <KpiCard icon={MessageCircle} label="Comments" value={summary.comments} delta={summary.comments_period} accent="text-emerald-500" />
-                <KpiCard icon={BarChart3} label="Engagement" value={`${summary.engagement_rate ?? 0}%`} delta={0} accent="text-amber-500" />
+                <KpiCard
+                  icon={BarChart3}
+                  label="Engagement"
+                  value={`${summary.engagement_rate ?? 0}%`}
+                  delta={summary.engagement_rate_period ?? 0}
+                  accent="text-amber-500"
+                  hint="(likes + favorites + comments + shares) / views"
+                />
                 <KpiCard icon={Users} label="Followers" value={summary.followers} delta={summary.followers_delta} accent="text-cyan-600" />
                 <KpiCard icon={Calendar} label={`Posted (${days}d)`} value={summary.posted_videos_period} delta={summary.views_period ?? 0} accent="text-orange-400" />
               </div>

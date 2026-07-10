@@ -122,6 +122,21 @@ export function unrecordSwipedJobId(jobId) {
   writeSwipedIdsPayload();
 }
 
+export function clearSwipedJobIdsByPrefix(prefix) {
+  const needle = String(prefix || "");
+  if (!needle) return;
+  hydrateSwipedIdsFromSession();
+  if (!memory.swipedJobIds?.size) return;
+  let changed = false;
+  for (const id of [...memory.swipedJobIds]) {
+    if (String(id).startsWith(needle)) {
+      memory.swipedJobIds.delete(id);
+      changed = true;
+    }
+  }
+  if (changed) writeSwipedIdsPayload();
+}
+
 export function seedSwipedJobIds(jobIds, userId) {
   if (!Array.isArray(jobIds) || !jobIds.length) return;
   hydrateSwipedIdsFromSession();

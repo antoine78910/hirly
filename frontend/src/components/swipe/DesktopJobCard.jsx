@@ -16,11 +16,13 @@ import { BRAND } from "../../lib/brand";
 import {
   getJobBadgeItems,
   getJobDisplayContent,
+  getJobDisplayTitle,
   formatJobSalaryLabel,
 } from "../../lib/jobDisplayUtils";
 import JobRomeProfile from "./JobRomeProfile";
 import JobOfferDetails from "./JobOfferDetails";
-import { translateJobTitle, translateLocationLabel } from "../../lib/localizedDisplay";
+import JobCardHighlights, { JobCardMatchBadge } from "./JobCardHighlights";
+import { translateLocationLabel } from "../../lib/localizedDisplay";
 
 function formatPosted(iso, t) {
   if (!iso) return t("swipe.postedRecently");
@@ -98,11 +100,12 @@ function DetailSection({ title, bullets, body, theme, expanded = false, t }) {
 }
 
 export default function DesktopJobCard({ job, theme, t, lang }) {
-  const { about, detailSections } = getJobDisplayContent(job);
+  const { about, detailSections, snippet } = getJobDisplayContent(job);
   const badges = getJobBadgeItems(job, { lang });
-  const title = translateJobTitle(job.title, lang);
+  const title = getJobDisplayTitle(job, { lang });
   const location = translateLocationLabel(job.location, lang) || t("swipe.locationNotSpecified");
   const salaryLabel = formatJobSalaryLabel(job, { lang });
+  const previewText = snippet || (about ? about.split(/\n+/).find(Boolean) : "");
 
   return (
     <div className="flex min-h-0 h-full flex-1 flex-col">
@@ -110,12 +113,19 @@ export default function DesktopJobCard({ job, theme, t, lang }) {
         <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-4">
           <CompanyLogo job={job} size="lg" rounded="2xl" className="shrink-0" />
           <div className="min-w-0 flex-1">
-            <h1
-              className={`line-clamp-2 font-display text-lg font-bold leading-snug sm:text-xl lg:text-2xl ${theme.cardTitle}`}
-              data-testid="job-title"
-            >
-              {title}
-            </h1>
+            <div className="flex items-start gap-2">
+              <h1
+                className={`line-clamp-2 min-w-0 flex-1 font-display text-lg font-bold leading-snug sm:text-xl lg:text-2xl ${theme.cardTitle}`}
+                data-testid="job-title"
+              >
+                {title}
+              </h1>
+              <JobCardMatchBadge
+                job={job}
+                t={t}
+                className={`!bg-violet-100 !text-violet-700 dark:!bg-violet-500/15 dark:!text-violet-300 ${theme.cardBadge || ""}`}
+              />
+            </div>
             <p className={`mt-0.5 truncate text-sm font-medium sm:text-base ${theme.cardCompany}`}>{job.company}</p>
           </div>
         </div>
@@ -140,6 +150,12 @@ export default function DesktopJobCard({ job, theme, t, lang }) {
           </span>
         </div>
 
+        {previewText ? (
+          <p className={`line-clamp-2 text-sm leading-relaxed ${theme.cardAboutBody || theme.cardMeta}`}>
+            {previewText}
+          </p>
+        ) : null}
+
         {badges.length > 0 ? (
           <div className="flex flex-wrap gap-2">
             {badges.map((badge) => (
@@ -147,6 +163,8 @@ export default function DesktopJobCard({ job, theme, t, lang }) {
             ))}
           </div>
         ) : null}
+
+        <JobCardHighlights job={job} t={t} lang={lang} theme={theme} max={3} />
 
         <JobOfferDetails job={job} t={t} lang={lang} theme={theme} />
 

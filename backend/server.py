@@ -51,6 +51,12 @@ from db.supabase_adapter import count_supabase_table, test_supabase_connection
 from influencer_store import create_influencer, get_influencer, list_influencers, update_influencer
 from creator_social_service import build_dashboard, refresh_all_creators, refresh_creator
 from creator_social_config import add_creator as add_tracked_creator
+from creator_social_maintenance import (
+    get_creator_social_refresh_status,
+    record_refresh_summary,
+    run_creator_social_refresh,
+    run_creator_social_refresh_loop,
+)
 from creator_invite_store import (
     INVITE_TYPE_CREATOR,
     INVITE_TYPE_DEMO,
@@ -8968,7 +8974,27 @@ async def admin_creator_social_add(
         creator = add_tracked_creator(platform=platform, handle=handle, name=name)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"ok": True, "creator": creator, "dashboard": build_dashboard()}
+    try:
+        await asyncio.to_thread(refresh_creator, creator["creator_id"])
+        record_refresh_summary({
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "finished_at": datetime.now(timezone.utc).isoformat(),
+            "creator_count": 1,
+            "success_count": 1,
+            "error_count": 0,
+            "errors": [],
+            "ok": True,
+            "trigger": "manual_add",
+        })
+    except Exception as exc:
+        logger.warning(
+            "creator_social_initial_refresh_failed creator_id=%s error=%s",
+            creator.get("creator_id"),
+            str(exc)[:200],
+        )
+    dashboard = build_dashboard()
+    dashboard["maintenance"] = get_creator_social_refresh_status()
+    return {"ok": True, "creator": creator, "dashboard": dashboard}
 
 
 @api_router.get("/admin/creator-social")
@@ -8978,7 +9004,9 @@ async def admin_creator_social_dashboard(
     creator_id: Optional[str] = Query(None),
     creator_ids: Optional[str] = Query(None),
 ):
-    return build_dashboard(days=days, creator_ids=_parse_creator_id_filters(creator_id, creator_ids))
+    dashboard = build_dashboard(days=days, creator_ids=_parse_creator_id_filters(creator_id, creator_ids))
+    dashboard["maintenance"] = get_creator_social_refresh_status()
+    return dashboard
 
 
 @api_router.post("/admin/creator-social/refresh")
@@ -8988,20 +9016,37 @@ async def admin_creator_social_refresh(
 ):
     if creator_id:
         try:
-            snapshot = refresh_creator(creator_id)
+            snapshot = await asyncio.to_thread(refresh_creator, creator_id)
+            record_refresh_summary({
+                "started_at": datetime.now(timezone.utc).isoformat(),
+                "finished_at": datetime.now(timezone.utc).isoformat(),
+                "creator_count": 1,
+                "success_count": 0 if snapshot.get("error") else 1,
+                "error_count": 1 if snapshot.get("error") else 0,
+                "errors": [snapshot] if snapshot.get("error") else [],
+                "ok": not snapshot.get("error"),
+                "trigger": "manual",
+            })
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"Could not refresh creator: {exc}") from exc
-        return {"ok": True, "snapshot": snapshot, "dashboard": build_dashboard(creator_ids=[creator_id])}
+        dashboard = build_dashboard(creator_ids=[creator_id])
+        dashboard["maintenance"] = get_creator_social_refresh_status()
+        return {"ok": True, "snapshot": snapshot, "dashboard": dashboard}
 
-    snapshots = refresh_all_creators()
-    errors = [row for row in snapshots if row.get("error")]
+    try:
+        summary = await asyncio.to_thread(run_creator_social_refresh, trigger="manual")
+    except Exception as exc:
+        logger.exception("creator_social_refresh_failed")
+        raise HTTPException(status_code=502, detail=f"Could not refresh creator stats: {exc}") from exc
+    dashboard = build_dashboard()
+    dashboard["maintenance"] = get_creator_social_refresh_status()
     return {
-        "ok": not errors or len(errors) < len(snapshots),
-        "snapshots": snapshots,
-        "dashboard": build_dashboard(),
-        "errors": errors,
+        "ok": summary.get("ok", True),
+        "snapshots": summary,
+        "dashboard": dashboard,
+        "errors": summary.get("errors") or [],
     }
 
 
@@ -12750,6 +12795,7 @@ async def startup_seed():
     asyncio.create_task(run_jsearch_harvest_loop(db))
     asyncio.create_task(run_ats_direct_maintenance_loop(db))
     asyncio.create_task(run_company_discovery_loop(db))
+    asyncio.create_task(run_creator_social_refresh_loop())
 
 
 @app.on_event("shutdown")

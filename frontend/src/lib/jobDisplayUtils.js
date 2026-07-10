@@ -1,5 +1,60 @@
-import { isFrench } from "./localizedDisplay";
+import { isFrench, translateJobTitle } from "./localizedDisplay";
 import { formatMoney } from "./currency";
+
+const DESCRIPTION_TITLE_START_RE = /^(nous |vous |votre |le candidat|missions?\s*:|profil\s*:|description\s*:|contexte\s*:|ce poste )/i;
+
+function cleanDisplayTitleText(value) {
+  const text = stripHtml(String(value || "")).replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  if (text.includes("\n")) {
+    const firstLine = text.split(/\n+/).map((line) => line.trim()).find(Boolean);
+    return firstLine || text;
+  }
+  return text;
+}
+
+function titleLooksLikeDescription(text, { maxLen = 90, maxWords = 14 } = {}) {
+  if (!text) return false;
+  if (text.length > maxLen) return true;
+  if (text.split(/\s+/).length > maxWords) return true;
+  if (text.length > 70 && /[.!?]\s+\S/.test(text)) return true;
+  return DESCRIPTION_TITLE_START_RE.test(text);
+}
+
+function shortenDisplayTitle(text, { maxLen = 90, maxWords = 14 } = {}) {
+  if (text.length <= maxLen && text.split(/\s+/).length <= maxWords) return text;
+  if (/[.!?]\s+/.test(text) && text.length > 50) {
+    const first = text.split(/[.!?]\s+/)[0]?.trim();
+    if (first && first.length >= 8 && first.length <= maxLen) return first;
+  }
+  const words = text.split(/\s+/);
+  if (words.length > maxWords) return words.slice(0, maxWords).join(" ");
+  if (text.length > maxLen) {
+    const clipped = text.slice(0, maxLen);
+    return (clipped.includes(" ") ? clipped.replace(/\s+\S*$/, "") : clipped).trim().replace(/[.,;:-]+$/, "");
+  }
+  return text;
+}
+
+export function sanitizeDisplayTitle(value, { fallback = "", maxLen = 90, maxWords = 14 } = {}) {
+  const primary = cleanDisplayTitleText(value);
+  const backup = cleanDisplayTitleText(fallback);
+  const opts = { maxLen, maxWords };
+
+  if (primary && !titleLooksLikeDescription(primary, opts)) {
+    return shortenDisplayTitle(primary, opts);
+  }
+  if (backup && !titleLooksLikeDescription(backup, opts)) {
+    return shortenDisplayTitle(backup, opts);
+  }
+  if (primary) return shortenDisplayTitle(primary, opts);
+  return backup;
+}
+
+export function getJobDisplayTitle(job, { lang = "en" } = {}) {
+  const title = sanitizeDisplayTitle(job?.title, { fallback: job?.rome_label });
+  return translateJobTitle(title, lang);
+}
 
 export function stripHtml(value = "") {
   const withBreaks = String(value)
@@ -310,6 +365,42 @@ export function getJobOfferDetailRows(job, { t, lang = "en" } = {}) {
   }
 
   return rows;
+}
+
+const CARD_HIGHLIGHT_PRIORITY = [
+  "contract_type",
+  "contract_nature",
+  "work_schedule",
+  "experience",
+  "salary",
+  "benefits",
+  "work_context",
+];
+
+/** Compact labeled rows for the swipe card front (before flip). */
+export function getJobCardHighlightRows(job, { t, lang = "en", max = 3 } = {}) {
+  if (!job || typeof t !== "function") return [];
+  const rows = getJobOfferDetailRows(job, { t, lang });
+  if (!rows.length) return [];
+
+  const sorted = [...rows].sort((a, b) => {
+    const ai = CARD_HIGHLIGHT_PRIORITY.indexOf(a.key);
+    const bi = CARD_HIGHLIGHT_PRIORITY.indexOf(b.key);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
+
+  return sorted.slice(0, Math.max(1, max)).map((row) => ({
+    key: row.key,
+    label: row.label,
+    value: row.value || (row.items || []).slice(0, 2).join(" · "),
+  })).filter((row) => row.value);
+}
+
+export function getJobMatchScore(job) {
+  const raw = job?.match_score ?? job?.matchScore ?? job?.feed_score;
+  const score = Number(raw);
+  if (!Number.isFinite(score) || score <= 0) return null;
+  return Math.round(Math.max(0, Math.min(100, score)));
 }
 
 function sectionTitleMatches(title, patterns) {

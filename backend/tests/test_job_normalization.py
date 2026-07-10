@@ -4,6 +4,7 @@ from job_normalization import (
     normalize_company_name,
     normalize_text,
     normalize_title,
+    sanitize_display_title,
 )
 
 
@@ -82,3 +83,23 @@ def test_extract_normalized_job_columns_missing_optional_fields():
     assert columns["normalized_company"] == "people ops"
     assert columns["city"] is None
     assert columns["fingerprint"]
+
+
+def test_sanitize_display_title_prefers_short_intitule():
+    assert sanitize_display_title("Développeur web") == "Développeur web"
+
+
+def test_sanitize_display_title_uses_rome_fallback_for_description_like_intitule():
+    long_description = (
+        "Nous recherchons un profil motivé pour rejoindre notre équipe. "
+        "Vous serez en charge de la relation client et du suivi des dossiers."
+    )
+    assert sanitize_display_title(long_description, fallback="Commercial B2B") == "Commercial B2B"
+
+
+def test_sanitize_display_title_shortens_overlong_title():
+    title = "Responsable adjoint du service accueil et orientation du public en bibliothèque municipale"
+    sanitized = sanitize_display_title(title)
+    assert sanitized is not None
+    assert len(sanitized.split()) <= 14
+    assert len(sanitized) <= 90

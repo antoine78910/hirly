@@ -84,13 +84,13 @@ export default function Landing() {
     : "/onboarding";
 
   const onStartSwiping = (ctaLocation = "hero") => {
-    if (loading) return;
-    trackEvent("cta_start_swiping_clicked", { authenticated: Boolean(user) });
+    trackEvent("cta_start_swiping_clicked", { authenticated: Boolean(user), location: ctaLocation });
     trackDatafastGoal("lp_cta_start", {
       location: ctaLocation,
       authenticated: user ? "true" : "false",
       contract: landingContractSlug || "",
     });
+    if (loading) return;
     if (user) {
       if (hasProfile && hasPreferences) {
         if (redirectParam?.startsWith("http")) {
@@ -191,7 +191,7 @@ export default function Landing() {
           >
             <Button
               data-testid="hero-cta-btn"
-              onClick={onStartSwiping}
+              onClick={() => onStartSwiping("hero")}
               disabled={loading}
               size="lg"
               className="rounded-full gradient-linkedin hover:opacity-90 text-white font-semibold h-12 px-7 text-base pulse-ring"

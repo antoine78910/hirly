@@ -21,6 +21,7 @@ function financeJob({
     title,
     company,
     location,
+    country_code: "fr",
     remote,
     seniority,
     salary_min: salary,

@@ -5,7 +5,6 @@ import {
   Calendar,
   Check,
   DollarSign,
-  GraduationCap,
   Heart,
   Loader2,
   MapPin,
@@ -68,14 +67,13 @@ function SwipeActionStamp({ kind, label, variant = "desktop" }) {
 }
 
 function DemoJobCard({ job, lang, matchLabel, variant = "desktop" }) {
-  const locationLine = job.workModel ? `${job.location} • ${job.workModel}` : job.location;
   const isMobile = variant === "mobile";
   const matchTitle = lang === "fr" ? "Pourquoi ce poste vous correspond" : "Why you're a match";
 
   return (
     <div
       className={`flex h-full flex-col overflow-hidden rounded-2xl border text-left ${CARD_THEME.card} ${
-        isMobile ? "min-h-[500px]" : "min-h-[440px]"
+        isMobile ? "min-h-[420px]" : "min-h-[440px]"
       }`}
     >
       <div
@@ -117,17 +115,13 @@ function DemoJobCard({ job, lang, matchLabel, variant = "desktop" }) {
             isMobile ? "text-xs" : "text-sm"
           }`}
         >
-          <span className="inline-flex items-center gap-1">
+          <span className="inline-flex min-w-0 items-center gap-1">
             <MapPin className={`shrink-0 text-violet-600 ${isMobile ? "h-3.5 w-3.5" : "h-4 w-4"}`} aria-hidden />
-            {locationLine}
+            <span className="truncate">{job.location}</span>
           </span>
-          <span className="inline-flex items-center gap-1">
+          <span className="inline-flex min-w-0 items-center gap-1">
             <DollarSign className={`shrink-0 text-violet-600 ${isMobile ? "h-3.5 w-3.5" : "h-4 w-4"}`} aria-hidden />
-            {job.salary}
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <GraduationCap className={`shrink-0 text-violet-600 ${isMobile ? "h-3.5 w-3.5" : "h-4 w-4"}`} aria-hidden />
-            {job.contract}
+            <span className="truncate">{job.salary}</span>
           </span>
           {job.postedLabel ? (
             <span className="inline-flex items-center gap-1">
@@ -137,20 +131,20 @@ function DemoJobCard({ job, lang, matchLabel, variant = "desktop" }) {
           ) : null}
         </div>
 
-        {(job.department || job.experience) && (
+        {(job.department || job.experience) && !isMobile ? (
           <div className={`mt-2.5 space-y-0.5 text-left ${isMobile ? "text-[11px]" : "text-xs"} ${CARD_THEME.cardMeta}`}>
             {job.department ? <p className="font-medium text-zinc-600">{job.department}</p> : null}
             {job.experience ? <p>{job.experience}</p> : null}
           </div>
-        )}
+        ) : null}
 
-        {job.summary ? (
+        {job.summary && !isMobile ? (
           <p className={`mt-2.5 text-left leading-snug text-zinc-600 ${isMobile ? "text-[11px]" : "text-xs"}`}>
             {job.summary}
           </p>
         ) : null}
 
-        {job.skills?.length ? (
+        {job.skills?.length && !isMobile ? (
           <div className="mt-2.5 flex flex-wrap justify-start gap-1.5">
             {job.skills.map((skill) => (
               <span
@@ -165,7 +159,7 @@ function DemoJobCard({ job, lang, matchLabel, variant = "desktop" }) {
           </div>
         ) : null}
 
-        <div className={`mt-3.5 rounded-xl border text-left ${isMobile ? "px-3.5 py-3" : "px-4 py-3"} ${CARD_THEME.cardSection}`}>
+        <div className={`hidden rounded-xl border text-left sm:block ${isMobile ? "px-3.5 py-3" : "px-4 py-3"} ${CARD_THEME.cardSection}`}>
           <p className={`mb-2.5 text-left font-semibold text-zinc-800 ${isMobile ? "text-[11px]" : "text-xs"}`}>
             {matchTitle}
           </p>
@@ -186,16 +180,31 @@ function DemoJobCard({ job, lang, matchLabel, variant = "desktop" }) {
           </ul>
         </div>
 
-        <div className={`mt-auto flex items-center justify-between border-t border-zinc-100 ${isMobile ? "pt-3.5" : "pt-4"}`}>
-          <span
-            className={`inline-flex items-center gap-1 rounded-full font-medium ${CARD_THEME.cardBadge} ${
-              isMobile ? "px-2.5 py-1 text-[11px]" : "px-2.5 py-1 text-xs"
+        <div className={`mt-auto flex items-center justify-between border-t border-zinc-100 ${isMobile ? "pt-3" : "pt-4"}`}>
+          <div
+            className={`no-scrollbar flex min-w-0 flex-1 gap-1.5 overflow-x-auto pr-2 sm:flex-wrap sm:overflow-visible ${
+              isMobile ? "" : ""
             }`}
           >
-            <Briefcase className={isMobile ? "h-3 w-3" : "h-3 w-3"} aria-hidden />
-            {job.contract}
-          </span>
-          <span className={`flex items-center gap-1 font-semibold text-zinc-500 ${isMobile ? "text-[11px]" : "text-xs"}`}>
+            <span
+              className={`inline-flex shrink-0 items-center gap-1 rounded-full font-medium ${CARD_THEME.cardBadge} ${
+                isMobile ? "px-2 py-0.5 text-[10px]" : "px-2.5 py-1 text-xs"
+              }`}
+            >
+              <Briefcase className={isMobile ? "h-3 w-3" : "h-3 w-3"} aria-hidden />
+              {job.contract}
+            </span>
+            {job.workModel ? (
+              <span
+                className={`inline-flex shrink-0 items-center rounded-full font-medium ${CARD_THEME.cardBadge} ${
+                  isMobile ? "px-2 py-0.5 text-[10px]" : "px-2.5 py-1 text-xs"
+                }`}
+              >
+                {job.workModel}
+              </span>
+            ) : null}
+          </div>
+          <span className={`flex shrink-0 items-center gap-1 font-semibold text-zinc-500 ${isMobile ? "text-[11px]" : "text-xs"}`}>
             <Logo size={isMobile ? 15 : 16} />
             {BRAND.NAME}
           </span>
@@ -265,7 +274,7 @@ function SwipeCardStack({
   variant = "desktop",
 }) {
   const isMobile = variant === "mobile";
-  const cardHeight = isMobile ? 500 : 440;
+  const cardHeight = isMobile ? 420 : 440;
   const exitVariants = isMobile ? EXIT_VARIANTS_COMPACT : EXIT_VARIANTS;
   const showApplyStamp = showStamp && job.swipe === "apply";
   const showPassStamp = showStamp && job.swipe === "skip";

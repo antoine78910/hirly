@@ -8,6 +8,79 @@ import unicodedata
 from typing import Any, Dict, Optional
 
 
+_TITLE_HTML_RE = re.compile(r"<[^>]+>")
+_TITLE_SENTENCE_SPLIT_RE = re.compile(r"[.!?]\s+")
+_DESCRIPTION_START_RE = re.compile(
+    r"^(nous |vous |votre |le candidat|missions?\s*:|profil\s*:|description\s*:|contexte\s*:|ce poste )",
+    re.IGNORECASE,
+)
+
+
+def _clean_display_title_text(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    text = _TITLE_HTML_RE.sub(" ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    if "\n" in text:
+        for line in text.splitlines():
+            candidate = line.strip()
+            if candidate:
+                text = candidate
+                break
+    return text or None
+
+
+def _title_looks_like_description(text: str, *, max_len: int, max_words: int) -> bool:
+    if len(text) > max_len:
+        return True
+    if len(text.split()) > max_words:
+        return True
+    if len(text) > 70 and _TITLE_SENTENCE_SPLIT_RE.search(text):
+        return True
+    return bool(_DESCRIPTION_START_RE.match(text))
+
+
+def _shorten_display_title(text: str, *, max_len: int, max_words: int) -> str:
+    if len(text) <= max_len and len(text.split()) <= max_words:
+        return text
+    if _TITLE_SENTENCE_SPLIT_RE.search(text) and len(text) > 50:
+        first = _TITLE_SENTENCE_SPLIT_RE.split(text, maxsplit=1)[0].strip()
+        if 8 <= len(first) <= max_len:
+            return first
+    words = text.split()
+    if len(words) > max_words:
+        return " ".join(words[:max_words])
+    if len(text) > max_len:
+        clipped = text[:max_len]
+        if " " in clipped:
+            return clipped.rsplit(" ", 1)[0].strip(" .,;:-")
+        return clipped.strip(" .,;:-")
+    return text
+
+
+def sanitize_display_title(
+    value: Any,
+    *,
+    fallback: Any = None,
+    max_len: int = 90,
+    max_words: int = 14,
+) -> Optional[str]:
+    """Keep card titles short; fall back to ROME label when intitule looks like a description."""
+    primary = _clean_display_title_text(value)
+    backup = _clean_display_title_text(fallback)
+
+    if primary and not _title_looks_like_description(primary, max_len=max_len, max_words=max_words):
+        return _shorten_display_title(primary, max_len=max_len, max_words=max_words)
+    if backup and not _title_looks_like_description(backup, max_len=max_len, max_words=max_words):
+        return _shorten_display_title(backup, max_len=max_len, max_words=max_words)
+    if primary:
+        return _shorten_display_title(primary, max_len=max_len, max_words=max_words)
+    return backup
+
+
 def normalize_text(value: Any) -> Optional[str]:
     """Return a stable lowercase ASCII-ish token string for search/dedupe."""
     if value is None:
@@ -161,7 +234,8 @@ def normalize_company_logo_url(value: Any) -> Optional[str]:
 
 def extract_normalized_job_columns(job_dict: Dict[str, Any]) -> Dict[str, Any]:
     location_parts = _parse_location_parts(job_dict)
-    title = _first_present(job_dict, "title", "job_title")
+    raw_title = _first_present(job_dict, "title", "job_title")
+    title = sanitize_display_title(raw_title, fallback=job_dict.get("rome_label"))
     company = _first_present(job_dict, "company", "employer_name")
     selected_apply_url = _first_present(job_dict, "selected_apply_url", "external_url", "job_apply_link")
     return {

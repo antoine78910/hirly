@@ -16,7 +16,7 @@ from urllib.parse import quote
 import httpx
 
 from employment_kind import enrich_job_employment_kind
-from job_normalization import normalize_company_logo_url
+from job_normalization import normalize_company_logo_url, sanitize_display_title
 from .apply_eligibility import classify_apply_link
 from .ats_detection import PRIMARY_AUTO_APPLY_ATS, detect_job_platform
 from .base import JobSearchQuery, ProviderResult
@@ -489,7 +489,7 @@ class FranceTravailProvider:
         imported_at: str,
     ) -> Optional[Dict[str, Any]]:
         external_id = row.get("id")
-        title = row.get("intitule")
+        title = sanitize_display_title(row.get("intitule"), fallback=row.get("romeLibelle"))
         entreprise = row.get("entreprise") if isinstance(row.get("entreprise"), dict) else {}
         company = entreprise.get("nom") or entreprise.get("enseigne") or entreprise.get("description")
         if not external_id or not title or not company:

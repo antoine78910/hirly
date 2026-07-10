@@ -7,6 +7,7 @@ import {
   saveDemoSettings,
 } from "../lib/demoSettings";
 import { resetFinanceDemoFeed } from "../lib/financeDemoApi";
+import { clearSwipeFeedCache } from "../lib/swipeFeedCache";
 
 export function useDemoSettings() {
   const [settings, setSettings] = useState(DEFAULT_DEMO_SETTINGS);
@@ -22,7 +23,10 @@ export function useDemoSettings() {
     setSettings((prev) => {
       const next = { ...prev, [key]: value };
       saveDemoSettings(next);
-      if (key === "financeJobFeed" && value) resetFinanceDemoFeed();
+      if (key === "financeJobFeed") {
+        if (value) resetFinanceDemoFeed();
+        else clearSwipeFeedCache();
+      }
       return next;
     });
     const msg = value ? messageOn : messageOff;
