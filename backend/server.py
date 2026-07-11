@@ -1877,6 +1877,141 @@ async def _resolve_user_id_from_checkout_session(
     return None
 
 
+async def _ensure_app_user_for_billing_email(email: str) -> Optional[Dict[str, Any]]:
+    """Ensure a MongoDB app user exists for a Stripe billing email (create from Supabase if needed)."""
+    normalized = (email or "").strip().lower()
+    if not normalized:
+        return None
+    user_doc = await _find_user_by_email(normalized)
+    if user_doc:
+        return user_doc
+    supabase_user = await _supabase_admin_find_user_by_email(normalized)
+    if not supabase_user:
+        return None
+    metadata = supabase_user.get("user_metadata") or {}
+    name = metadata.get("full_name") or metadata.get("name") or normalized.split("@")[0]
+    picture = metadata.get("avatar_url") or metadata.get("picture")
+    logger.info("stripe_reconcile_creating_app_user email=%s", normalized)
+    return await _upsert_auth_user(
+        email=normalized,
+        name=name,
+        picture=picture,
+        extra={
+            "auth_provider": "supabase",
+            "supabase_user_id": supabase_user.get("id"),
+        },
+    )
+
+
+def _stripe_object_id(value: Any) -> Optional[str]:
+    if isinstance(value, str):
+        return value.strip() or None
+    if isinstance(value, dict):
+        object_id = value.get("id")
+        return str(object_id).strip() if object_id else None
+    object_id = getattr(value, "id", None)
+    return str(object_id).strip() if object_id else None
+
+
+def _resolve_stripe_checkout_session_context(session_id: str) -> Dict[str, Any]:
+    _stripe_secret_key()
+    try:
+        session_obj = stripe.checkout.Session.retrieve(
+            session_id,
+            expand=["customer", "subscription", "payment_intent"],
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid checkout session: {str(exc)[:200]}")
+    session_dict = dict(session_obj) if not isinstance(session_obj, dict) else session_obj
+    customer_details = session_dict.get("customer_details") or {}
+    customer_obj = session_dict.get("customer")
+    email = (customer_details.get("email") or "").strip().lower() or None
+    if not email and isinstance(customer_obj, dict):
+        email = (customer_obj.get("email") or "").strip().lower() or None
+    return {
+        "customer_id": _stripe_object_id(session_dict.get("customer")),
+        "email": email,
+        "subscription_id": _stripe_object_id(session_dict.get("subscription")),
+        "user_id_hint": _checkout_session_user_id(session_dict),
+    }
+
+
+def _resolve_stripe_payment_intent_context(payment_intent_id: str) -> Dict[str, Any]:
+    _stripe_secret_key()
+    try:
+        payment_intent = stripe.PaymentIntent.retrieve(
+            payment_intent_id,
+            expand=["customer", "invoice.subscription", "latest_charge"],
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid payment intent: {str(exc)[:200]}")
+
+    context: Dict[str, Any] = {
+        "customer_id": _stripe_object_id(payment_intent.get("customer")),
+        "email": None,
+        "subscription_id": None,
+        "user_id_hint": None,
+    }
+
+    customer_obj = payment_intent.get("customer")
+    if isinstance(customer_obj, dict):
+        context["email"] = (customer_obj.get("email") or "").strip().lower() or None
+
+    if not context["email"]:
+        context["email"] = (payment_intent.get("receipt_email") or "").strip().lower() or None
+
+    charge = payment_intent.get("latest_charge")
+    if isinstance(charge, dict) and not context["email"]:
+        billing = charge.get("billing_details") or {}
+        context["email"] = (billing.get("email") or "").strip().lower() or None
+
+    invoice = payment_intent.get("invoice")
+    if isinstance(invoice, dict):
+        context["subscription_id"] = _stripe_object_id(invoice.get("subscription"))
+    elif isinstance(invoice, str) and invoice:
+        try:
+            invoice_obj = stripe.Invoice.retrieve(invoice)
+            context["subscription_id"] = _stripe_object_id(invoice_obj.get("subscription"))
+        except Exception:
+            pass
+
+    try:
+        sessions = stripe.checkout.Session.list(payment_intent=payment_intent_id, limit=1)
+        data = sessions.get("data") if isinstance(sessions, dict) else getattr(sessions, "data", [])
+        if data:
+            session_dict = dict(data[0]) if not isinstance(data[0], dict) else data[0]
+            context["user_id_hint"] = _checkout_session_user_id(session_dict)
+            context["customer_id"] = context["customer_id"] or _stripe_object_id(session_dict.get("customer"))
+            if not context["email"]:
+                details = session_dict.get("customer_details") or {}
+                context["email"] = (details.get("email") or "").strip().lower() or None
+            context["subscription_id"] = context["subscription_id"] or _stripe_object_id(session_dict.get("subscription"))
+    except Exception as exc:
+        logger.warning(
+            "stripe_checkout_session_lookup_failed payment_intent=%s error=%s",
+            payment_intent_id,
+            str(exc)[:160],
+        )
+
+    return context
+
+
+def _resolve_stripe_customer_context(customer_id: str) -> Dict[str, Any]:
+    _stripe_secret_key()
+    try:
+        customer = stripe.Customer.retrieve(customer_id)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid Stripe customer: {str(exc)[:200]}")
+    customer_dict = dict(customer) if not isinstance(customer, dict) else customer
+    metadata = customer_dict.get("metadata") or {}
+    return {
+        "customer_id": customer_id,
+        "email": (customer_dict.get("email") or "").strip().lower() or None,
+        "subscription_id": None,
+        "user_id_hint": metadata.get("user_id") if isinstance(metadata, dict) else None,
+    }
+
+
 async def _update_user_billing_by_customer_id(customer_id: str, updates: Dict[str, Any]) -> None:
     if not customer_id:
         logger.warning("stripe_billing_customer_update_missing_customer keys=%s", sorted(updates.keys()))
@@ -9659,30 +9794,28 @@ async def admin_stripe_reconcile(
 ):
     """Link an orphan Stripe payment/customer to an app user by email and sync billing."""
     _stripe_secret_key()
-    payment_intent_id = (body.payment_intent_id or "").strip() or None
+    stripe_reference = (body.payment_intent_id or "").strip() or None
     customer_id = (body.customer_id or "").strip() or None
     email = (body.email or "").strip().lower() or None
     subscription_id = None
+    user_id_hint = None
 
-    if payment_intent_id:
-        try:
-            payment_intent = stripe.PaymentIntent.retrieve(payment_intent_id, expand=["customer"])
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail=f"Invalid payment intent: {str(exc)[:160]}")
-        if not customer_id:
-            customer_ref = payment_intent.get("customer")
-            customer_id = customer_ref.get("id") if isinstance(customer_ref, dict) else customer_ref
-        if not email:
-            customer_ref = payment_intent.get("customer")
-            if isinstance(customer_ref, dict):
-                email = (customer_ref.get("email") or "").strip().lower() or None
-        invoice_id = payment_intent.get("invoice")
-        if invoice_id:
-            try:
-                invoice = stripe.Invoice.retrieve(invoice_id)
-                subscription_id = invoice.get("subscription")
-            except Exception:
-                pass
+    if stripe_reference:
+        if stripe_reference.startswith("cs_"):
+            context = _resolve_stripe_checkout_session_context(stripe_reference)
+        elif stripe_reference.startswith("cus_"):
+            context = _resolve_stripe_customer_context(stripe_reference)
+        elif stripe_reference.startswith("pi_"):
+            context = _resolve_stripe_payment_intent_context(stripe_reference)
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Enter a Stripe payment intent (pi_…), checkout session (cs_…), or customer (cus_…) ID.",
+            )
+        customer_id = customer_id or context.get("customer_id")
+        email = email or context.get("email")
+        subscription_id = context.get("subscription_id")
+        user_id_hint = context.get("user_id_hint")
 
     if not customer_id and email:
         try:
@@ -9695,16 +9828,38 @@ async def admin_stripe_reconcile(
             raise HTTPException(status_code=400, detail=f"Could not look up Stripe customer: {str(exc)[:160]}")
 
     if not customer_id:
-        raise HTTPException(status_code=400, detail="Could not resolve Stripe customer from payment")
+        raise HTTPException(
+            status_code=400,
+            detail="Could not resolve Stripe customer from payment. Check the ID or add the payer email.",
+        )
 
-    user_id = await _resolve_user_id_for_stripe_customer(customer_id)
+    user_id = None
+    created_user = False
+    if user_id_hint:
+        found = await db.users.find_one({"user_id": user_id_hint}, {"_id": 0, "user_id": 1})
+        if found:
+            user_id = user_id_hint
+
+    if not user_id:
+        user_id = await _resolve_user_id_for_stripe_customer(customer_id)
+
     if not user_id and email:
-        user_doc = await _find_user_by_email(email)
-        user_id = user_doc.get("user_id") if user_doc else None
+        existing = await _find_user_by_email(email)
+        if existing:
+            user_id = existing.get("user_id")
+        else:
+            user_doc = await _ensure_app_user_for_billing_email(email)
+            if user_doc:
+                user_id = user_doc.get("user_id")
+                created_user = True
+
     if not user_id:
         raise HTTPException(
             status_code=404,
-            detail="No app user found for this Stripe payment. Sign up with the same email first, then retry.",
+            detail=(
+                f"No Hirly account found for Stripe email {email or '(unknown)'}. "
+                "Sign up with the same email first, then retry."
+            ),
         )
 
     updates: Dict[str, Any] = {"stripe_customer_id": customer_id}
@@ -9717,16 +9872,14 @@ async def admin_stripe_reconcile(
             updates.update(_subscription_billing_updates(discovered, last_payment_status="paid"))
 
     await _update_user_billing_by_user_id(user_id, {key: value for key, value in updates.items() if value})
-    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0}) or {}
-    user_doc, warning = await _refresh_billing_from_stripe(user_doc)
-    user_doc = await _repair_premium_credits_if_needed(user_id, user_doc)
+    user_doc = await _finalize_user_billing(user_id) or {}
     billing = _billing_status_payload(user_doc)
     return {
         "ok": True,
         "user_id": user_id,
         "email": user_doc.get("email"),
         "billing": billing,
-        "warning": warning,
+        "created_user": created_user,
     }
 
 

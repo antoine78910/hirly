@@ -40,6 +40,7 @@ export default function AdminUsers() {
   const [payingOnly, setPayingOnly] = useState(false);
   const [search, setSearch] = useState("");
   const [paymentIntentId, setPaymentIntentId] = useState("");
+  const [reconcileEmail, setReconcileEmail] = useState("");
   const [reconciling, setReconciling] = useState(false);
 
   const load = useCallback(async () => {
@@ -87,16 +88,20 @@ export default function AdminUsers() {
     }
     setReconciling(true);
     try {
-      const { data } = await api.post("/admin/stripe/reconcile", { payment_intent_id: paymentIntent });
+      const payload = { payment_intent_id: paymentIntent };
+      const email = reconcileEmail.trim();
+      if (email) payload.email = email;
+      const { data } = await api.post("/admin/stripe/reconcile", payload);
       toast.success(
         data?.billing?.is_premium
           ? `Linked to ${data.email || data.user_id} — ${data.billing.credits_remaining}/${data.billing.credits_total} credits`
           : `Linked to ${data.email || data.user_id}, but no active subscription found`,
       );
       setPaymentIntentId("");
+      setReconcileEmail("");
       await load();
     } catch (err) {
-      toast.error(err?.response?.data?.detail || "Could not reconcile Stripe payment");
+      toast.error(adminApiErrorMessage(err, "Could not reconcile Stripe payment"));
     } finally {
       setReconciling(false);
     }
@@ -143,25 +148,34 @@ export default function AdminUsers() {
           <div className="rounded-lg border border-violet-200 bg-violet-50 p-4 shadow-sm">
             <p className="text-sm font-semibold text-violet-900">Link orphan Stripe payment</p>
             <p className="mt-1 text-xs text-violet-700">
-              Paste a payment intent ID (e.g. pi_…) to attach billing to the matching app account by email.
+              Paste a Stripe ID (pi_…, cs_…, or cus_…). Billing is linked by email; add the payer email if lookup fails.
             </p>
-            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <input
-                type="text"
-                value={paymentIntentId}
-                onChange={(event) => setPaymentIntentId(event.target.value)}
-                placeholder="pi_3Ts71UAuHOfQweWC0Q6GRjFp"
-                className="w-full rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm outline-none ring-violet-200 focus:ring-2"
-              />
-              <button
-                type="button"
-                onClick={reconcileStripePayment}
-                disabled={reconciling}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:opacity-50"
-              >
-                {reconciling ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                {reconciling ? "Linking…" : "Link payment"}
-              </button>
+            <div className="mt-3 flex flex-col gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  type="text"
+                  value={paymentIntentId}
+                  onChange={(event) => setPaymentIntentId(event.target.value)}
+                  placeholder="pi_3Ts71UAuHOfQweWC0Q6GRjFp"
+                  className="w-full rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm outline-none ring-violet-200 focus:ring-2"
+                />
+                <input
+                  type="email"
+                  value={reconcileEmail}
+                  onChange={(event) => setReconcileEmail(event.target.value)}
+                  placeholder="Payer email (optional)"
+                  className="w-full rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm outline-none ring-violet-200 focus:ring-2 sm:max-w-xs"
+                />
+                <button
+                  type="button"
+                  onClick={reconcileStripePayment}
+                  disabled={reconciling}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:opacity-50 sm:shrink-0"
+                >
+                  {reconciling ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  {reconciling ? "Linking…" : "Link payment"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

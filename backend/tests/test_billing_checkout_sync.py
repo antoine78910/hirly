@@ -262,3 +262,43 @@ def test_checkout_session_belongs_to_user_by_customer_details_email():
     session_obj = {"customer": "cus_orphan", "customer_details": {"email": "paid@example.com"}}
     user_doc = {"user_id": "user_1", "email": "paid@example.com", "billing": {}}
     assert asyncio.run(server._checkout_session_belongs_to_user(session_obj, user_doc)) is True
+
+
+def test_stripe_object_id_handles_dict_and_string():
+    assert server._stripe_object_id("pi_123") == "pi_123"
+    assert server._stripe_object_id({"id": "cus_456"}) == "cus_456"
+    assert server._stripe_object_id(None) is None
+
+
+def test_resolve_stripe_payment_intent_context_uses_checkout_session(monkeypatch):
+    monkeypatch.setattr(server, "_stripe_secret_key", lambda: "sk_test")
+    monkeypatch.setattr(
+        server.stripe.PaymentIntent,
+        "retrieve",
+        lambda payment_intent_id, expand=None: {
+            "id": payment_intent_id,
+            "customer": {"id": "cus_123", "email": "paid@example.com"},
+            "invoice": {"subscription": {"id": "sub_123"}},
+            "latest_charge": None,
+        },
+    )
+    monkeypatch.setattr(
+        server.stripe.checkout.Session,
+        "list",
+        lambda payment_intent, limit=1: {
+            "data": [
+                {
+                    "client_reference_id": "user_1",
+                    "customer": "cus_123",
+                    "customer_details": {"email": "paid@example.com"},
+                    "subscription": "sub_123",
+                }
+            ]
+        },
+    )
+
+    context = server._resolve_stripe_payment_intent_context("pi_123")
+    assert context["customer_id"] == "cus_123"
+    assert context["email"] == "paid@example.com"
+    assert context["subscription_id"] == "sub_123"
+    assert context["user_id_hint"] == "user_1"
