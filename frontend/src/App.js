@@ -106,6 +106,13 @@ function AdminPage({ children }) {
   );
 }
 
+function AdminToaster() {
+  const location = useLocation();
+  const isAdmin = location.pathname === "/admin" || location.pathname.startsWith("/admin/");
+  if (!isAdmin) return null;
+  return <Toaster position="top-center" richColors theme="dark" />;
+}
+
 function CreditsRedirect() {
   const location = useLocation();
   const params = new URLSearchParams(location.search);
@@ -214,7 +221,7 @@ function App() {
               <AppRouter />
             </UpgradeModalProvider>
           </AppLocaleProvider>
-          <Toaster position="top-center" richColors theme="dark" />
+          <AdminToaster />
         </BrowserRouter>
       </AuthProvider>
     </div>

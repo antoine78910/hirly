@@ -1,6 +1,6 @@
 ﻿// REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
 import { Button } from "../components/ui/button";
-import { ArrowRight, Check, Sparkles, Zap, FileCheck2, Inbox } from "lucide-react";
+import { ArrowRight, Check, Sparkles, Zap, FileCheck2, Inbox, ChevronDown, ExternalLink, LogOut, RefreshCw } from "lucide-react";
 import { motion } from "framer-motion";
 import { useEffect } from "react";
 import Logo from "../components/Logo";
@@ -17,6 +17,14 @@ import LandingHeroRotatingWord from "../components/landing/LandingHeroRotatingWo
 import LandingHeroSwipeDemo from "../components/landing/LandingHeroSwipeDemo";
 import LandingTrustLogos from "../components/landing/LandingTrustLogos";
 import { goToApp } from "../lib/appDomains";
+import { startGoogleLogin } from "../lib/auth";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu";
 import { PRIVACY_PATH, TERMS_PATH } from "../lib/legalPaths";
 import {
   getLandingHeroBullets,
@@ -29,7 +37,7 @@ import {
 
 export default function Landing() {
   const navigate = useNavigate();
-  const { user, hasProfile, hasPreferences, loading } = useAuth();
+  const { user, hasProfile, hasPreferences, loading, logout } = useAuth();
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const redirectParam = searchParams.get("redirect");
@@ -83,6 +91,18 @@ export default function Landing() {
     ? `/onboarding?contract=${landingContractSlug}`
     : "/onboarding";
 
+  const onSignOut = async () => {
+    trackEvent("landing_account_logout");
+    await logout();
+    navigate("/", { replace: true });
+  };
+
+  const onSwitchAccount = async () => {
+    trackEvent("landing_account_switch");
+    await logout();
+    await startGoogleLogin(postLoginPath, { prompt: "select_account" });
+  };
+
   const onStartSwiping = (ctaLocation = "hero") => {
     trackEvent("cta_start_swiping_clicked", { authenticated: Boolean(user), location: ctaLocation });
     trackDatafastGoal("lp_cta_start", {
@@ -123,13 +143,78 @@ export default function Landing() {
             >
               {lang === "fr" ? "EN" : "FR"}
             </button>
-            <Button
-              data-testid="header-signin-btn"
-              onClick={onSignIn}
-              className="rounded-full bg-linkedin hover:bg-linkedin-dark text-white font-semibold px-5"
-            >
-              {lang === "fr" ? "Se connecter" : "Sign in"}
-            </Button>
+            {loading ? (
+              <div className="h-9 w-28 animate-pulse rounded-full bg-zinc-100" aria-hidden />
+            ) : user ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    data-testid="landing-account-menu-trigger"
+                    className="flex h-10 max-w-[210px] items-center gap-2 rounded-full border border-zinc-200 bg-white py-1 pl-1 pr-3 text-left shadow-sm transition hover:border-linkedin/40 hover:bg-zinc-50"
+                  >
+                    {user.picture ? (
+                      <img src={user.picture} alt="" className="size-8 shrink-0 rounded-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-linkedin/10 text-sm font-bold text-linkedin">
+                        {(user.name || user.email || "H").charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                    <span className="hidden min-w-0 flex-1 truncate text-sm font-semibold text-zinc-800 sm:block">
+                      {user.name || user.email}
+                    </span>
+                    <ChevronDown className="size-4 shrink-0 text-zinc-400" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  sideOffset={8}
+                  className="w-72 overflow-hidden rounded-xl border border-zinc-200 bg-white p-0 shadow-xl"
+                >
+                  <div className="px-4 py-3">
+                    <p className="text-xs font-medium uppercase text-zinc-400">
+                      {lang === "fr" ? "Connecté en tant que" : "Signed in as"}
+                    </p>
+                    <p className="mt-1 truncate text-sm font-semibold text-zinc-900">{user.email}</p>
+                  </div>
+                  <DropdownMenuSeparator className="my-0 bg-zinc-200" />
+                  <div className="p-1">
+                    <DropdownMenuItem
+                      className="cursor-pointer rounded-lg px-3 py-2.5 text-sm font-medium text-zinc-900 focus:bg-zinc-100"
+                      onClick={() => onStartSwiping("header_account_menu")}
+                    >
+                      <ExternalLink className="size-4 text-zinc-600" />
+                      {lang === "fr" ? "Ouvrir mon espace" : "Open my account"}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="cursor-pointer rounded-lg px-3 py-2.5 text-sm font-medium text-zinc-900 focus:bg-zinc-100"
+                      onClick={onSwitchAccount}
+                    >
+                      <RefreshCw className="size-4 text-zinc-600" />
+                      {lang === "fr" ? "Changer de compte" : "Switch account"}
+                    </DropdownMenuItem>
+                  </div>
+                  <DropdownMenuSeparator className="my-0 bg-zinc-200" />
+                  <div className="p-1">
+                    <DropdownMenuItem
+                      className="cursor-pointer rounded-lg px-3 py-2.5 text-sm font-medium text-red-600 focus:bg-red-50 focus:text-red-700"
+                      onClick={onSignOut}
+                    >
+                      <LogOut className="size-4" />
+                      {lang === "fr" ? "Se déconnecter" : "Sign out"}
+                    </DropdownMenuItem>
+                  </div>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Button
+                data-testid="header-signin-btn"
+                onClick={onSignIn}
+                className="rounded-full bg-linkedin hover:bg-linkedin-dark text-white font-semibold px-5"
+              >
+                {lang === "fr" ? "Se connecter" : "Sign in"}
+              </Button>
+            )}
           </div>
         </div>
       </header>

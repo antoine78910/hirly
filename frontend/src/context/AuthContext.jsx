@@ -4,6 +4,7 @@ import { devBypassAuth, TUTORIAL_BYPASS_AUTH } from "../lib/dev";
 import { setDemoAccountFromUser } from "../lib/demoAccount";
 import { isOAuthCallbackInProgress } from "../lib/oauthCallback";
 import { bootstrapTutorialSession } from "../lib/tutorialSession";
+import { supabase } from "../lib/supabase";
 
 const AuthContext = createContext(null);
 
@@ -123,6 +124,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try { await api.post("/auth/logout"); } catch (_) {}
+    try { await supabase?.auth.signOut(); } catch (_) {}
     setSessionToken(null);
     setUser(null);
     setDemoAccountFromUser(null, false);
