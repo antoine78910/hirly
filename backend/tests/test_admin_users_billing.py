@@ -8,6 +8,12 @@ class _Cursor:
         self.rows = [dict(row) for row in rows]
 
     def sort(self, field, direction=-1):
+        # Support both a plain field name (`sort("field", -1)`) and the
+        # Mongo-style multi-field spec used elsewhere (`sort([("field", -1)])`).
+        if isinstance(field, (list, tuple)) and field and isinstance(field[0], (list, tuple)):
+            for key, dir_ in reversed(field):
+                self.rows.sort(key=lambda row: row.get(key) or "", reverse=dir_ < 0)
+            return self
         self.rows.sort(key=lambda row: row.get(field) or "", reverse=direction < 0)
         return self
 

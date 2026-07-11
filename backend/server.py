@@ -8854,6 +8854,106 @@ def _rate(numerator: int, denominator: int) -> float:
     return round((numerator / denominator) * 100, 1)
 
 
+# Mirrors ONBOARDING_STEP_ORDER in frontend/src/components/onboarding/onboardingData.js.
+# Used to figure out where a user dropped off in the onboarding flow.
+ONBOARDING_STEP_ORDER: List[tuple[str, str]] = [
+    ("intro", "Intro slides"),
+    ("signup", "Sign up"),
+    ("jobSearch", "Job search status"),
+    ("location", "Location"),
+    ("contractType", "Contract type"),
+    ("otherApps", "Other apps used"),
+    ("longTerm", "Long-term goals"),
+    ("categories", "Job categories"),
+    ("experience", "Experience level"),
+    ("salary", "Salary expectations"),
+    ("interviews", "Interviews per week"),
+    ("interviewsConfirm", "Interviews confirmation"),
+    ("potentialChart", "Potential chart"),
+    ("compare2x", "Comparison screen"),
+    ("attribution", "Acquisition source"),
+    ("referralCode", "Referral code"),
+    ("upload", "CV upload"),
+    ("profileSetup", "Profile setup"),
+    ("profileWelcome", "Profile welcome"),
+    ("showcaseLanding", "Showcase — landing"),
+    ("showcaseAllInOne", "Showcase — all-in-one"),
+    ("showcasePricing", "Pricing / checkout"),
+]
+ONBOARDING_STEP_LABELS: Dict[str, str] = dict(ONBOARDING_STEP_ORDER)
+ONBOARDING_STEP_KEYS: List[str] = [key for key, _label in ONBOARDING_STEP_ORDER]
+
+
+def _group_events_by_user(events: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+    grouped: Dict[str, List[Dict[str, Any]]] = {}
+    for event in events:
+        uid = event.get("user_id")
+        if not uid:
+            continue
+        grouped.setdefault(uid, []).append(event)
+    return grouped
+
+
+def _estimate_time_spent(timestamps: List[Any], gap_minutes: float = 20.0) -> Dict[str, Any]:
+    """Rough 'time on app' estimate: cluster event timestamps into sessions (new session
+    when the gap between two consecutive events exceeds `gap_minutes`), then sum each
+    session's span. Isolated events count as a minimum 0.5 minute session."""
+    parsed = sorted(dt for dt in (_parse_dt(ts) for ts in timestamps) if dt)
+    if not parsed:
+        return {"minutes": 0.0, "sessions": 0}
+    total_minutes = 0.0
+    sessions = 0
+    session_start = parsed[0]
+    last_ts = parsed[0]
+    for ts in parsed[1:]:
+        delta_minutes = (ts - last_ts).total_seconds() / 60
+        if delta_minutes > gap_minutes:
+            total_minutes += max(0.5, (last_ts - session_start).total_seconds() / 60)
+            sessions += 1
+            session_start = ts
+        last_ts = ts
+    total_minutes += max(0.5, (last_ts - session_start).total_seconds() / 60)
+    sessions += 1
+    return {"minutes": round(total_minutes, 1), "sessions": sessions}
+
+
+def _onboarding_progress_for_events(user_events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    started_event = next((e for e in user_events if e.get("event") == "onboarding_started"), None)
+    completed_event = next((e for e in user_events if e.get("event") == "onboarding_completed"), None)
+    step_events = [e for e in user_events if e.get("event") == "onboarding_step_completed"]
+
+    furthest_index = -1
+    furthest_step = None
+    for event in step_events:
+        props = event.get("properties") or {}
+        try:
+            idx = int(props.get("step_index"))
+        except (TypeError, ValueError):
+            continue
+        if idx > furthest_index:
+            furthest_index = idx
+            furthest_step = props.get("step")
+
+    completed = bool(completed_event)
+    drop_off_step = None
+    if not completed:
+        if furthest_index >= 0 and furthest_index + 1 < len(ONBOARDING_STEP_KEYS):
+            drop_off_step = ONBOARDING_STEP_KEYS[furthest_index + 1]
+        elif furthest_index < 0 and started_event:
+            drop_off_step = ONBOARDING_STEP_KEYS[0]
+
+    return {
+        "started_at": started_event.get("created_at") if started_event else None,
+        "completed_at": completed_event.get("created_at") if completed_event else None,
+        "completed": completed,
+        "furthest_step": furthest_step,
+        "furthest_step_label": ONBOARDING_STEP_LABELS.get(furthest_step, furthest_step) if furthest_step else None,
+        "furthest_step_index": furthest_index if furthest_index >= 0 else None,
+        "drop_off_step": drop_off_step,
+        "drop_off_step_label": ONBOARDING_STEP_LABELS.get(drop_off_step, drop_off_step) if drop_off_step else None,
+    }
+
+
 @api_router.get("/admin/overview")
 async def admin_overview(admin: User = Depends(require_admin_user)):
     users, profiles, _swipes, applications, jobs = await _admin_base_data(include_swipes=False)
@@ -8909,6 +9009,8 @@ async def admin_overview(admin: User = Depends(require_admin_user)):
 @api_router.get("/admin/users")
 async def admin_list_users(admin: User = Depends(require_admin_user)):
     users, profiles, swipes, applications, _jobs = await _admin_base_data(include_swipes=True)
+    events = await _analytics_events()
+    events_by_user = _group_events_by_user(events)
     profile_map = {item.get("user_id"): item for item in profiles}
     app_counts: Dict[str, int] = {}
     last_app_at: Dict[str, Any] = {}
@@ -8943,9 +9045,19 @@ async def admin_list_users(admin: User = Depends(require_admin_user)):
         uid = user_doc.get("user_id")
         profile = profile_map.get(uid)
         billing = _billing_status_payload(user_doc)
+        user_events = events_by_user.get(uid, [])
+        activity_stats = _estimate_time_spent([event.get("created_at") for event in user_events])
+        last_event_at = max(
+            (event.get("created_at") for event in user_events if event.get("created_at")),
+            key=lambda value: _parse_dt(value) or datetime.min.replace(tzinfo=timezone.utc),
+            default=None,
+        )
+        onboarding_progress = _onboarding_progress_for_events(user_events)
         activity_candidates = [
             last_app_at.get(uid),
             last_swipe_at.get(uid),
+            last_event_at,
+            user_doc.get("last_login_at"),
             (profile or {}).get("updated_at"),
             user_doc.get("updated_at"),
             user_doc.get("created_at"),
@@ -8968,6 +9080,11 @@ async def admin_list_users(admin: User = Depends(require_admin_user)):
             "left_swipes": left_swipe_counts.get(uid, 0),
             "last_swipe_at": last_swipe_at.get(uid),
             "last_active_at": last_active_at,
+            "last_login_at": user_doc.get("last_login_at"),
+            "time_spent_minutes": activity_stats["minutes"],
+            "sessions_count": activity_stats["sessions"],
+            "onboarding_completed": onboarding_progress["completed"],
+            "onboarding_drop_off_step_label": onboarding_progress["drop_off_step_label"],
             "created_at": user_doc.get("created_at"),
             "plan": billing.get("plan"),
             "is_premium": billing.get("is_premium"),
@@ -8992,6 +9109,19 @@ async def admin_get_user(user_id: str, admin: User = Depends(require_admin_user)
 
     billing_payload = _billing_status_payload(user_doc)
     billing_raw = _billing_from_user(user_doc)
+
+    all_events = await _analytics_events()
+    user_events = [event for event in all_events if event.get("user_id") == user_id]
+    onboarding_progress = _onboarding_progress_for_events(user_events)
+    activity_stats = _estimate_time_spent([event.get("created_at") for event in user_events])
+    last_event_at = max(
+        (event.get("created_at") for event in user_events if event.get("created_at")),
+        key=lambda value: _parse_dt(value) or datetime.min.replace(tzinfo=timezone.utc),
+        default=None,
+    )
+    login_sessions = await _admin_safe_find(
+        getattr(db, "user_sessions", None), {"user_id": user_id}, sort=[("created_at", -1)],
+    )
 
     swipe_rows = await db.swipes.find(
         {"user_id": user_id},
@@ -9064,6 +9194,18 @@ async def admin_get_user(user_id: str, admin: User = Depends(require_admin_user)
             _admin_application_row(app_doc, user_doc, job_map.get(app_doc.get("job_id")))
             for app_doc in apps
         ],
+        "onboarding": {
+            "answers": ((profile or {}).get("extras") or {}).get("onboarding") or {},
+            "progress": onboarding_progress,
+        },
+        "activity": {
+            "last_login_at": user_doc.get("last_login_at"),
+            "last_active_at": last_event_at or (swipe_rows[0].get("created_at") if swipe_rows else None) or user_doc.get("created_at"),
+            "time_spent_minutes": activity_stats["minutes"],
+            "sessions_count": activity_stats["sessions"],
+            "login_count": len(login_sessions),
+            "total_events": len(user_events),
+        },
         "internal_notes": [],
     }
 
@@ -9590,6 +9732,32 @@ async def admin_analytics(admin: User = Depends(require_admin_user)):
     first_swipe_actors = {swipe.get("user_id") for swipe in swipes if swipe.get("user_id")}
     right_swipe_count = sum(1 for swipe in swipes if swipe.get("direction") == "right")
 
+    events_by_user = _group_events_by_user(events)
+    onboarding_dropoff_counts: Dict[str, int] = {}
+    onboarding_never_started = 0
+    onboarding_in_progress = 0
+    for user_doc in users:
+        uid = user_doc.get("user_id")
+        if not uid:
+            continue
+        progress = _onboarding_progress_for_events(events_by_user.get(uid, []))
+        if progress["completed"]:
+            continue
+        if progress["drop_off_step"]:
+            onboarding_dropoff_counts[progress["drop_off_step"]] = onboarding_dropoff_counts.get(progress["drop_off_step"], 0) + 1
+            onboarding_in_progress += 1
+        else:
+            onboarding_never_started += 1
+
+    onboarding_dropoff_by_step = sorted(
+        (
+            {"step": key, "label": ONBOARDING_STEP_LABELS.get(key, key), "count": count}
+            for key, count in onboarding_dropoff_counts.items()
+        ),
+        key=lambda row: row["count"],
+        reverse=True,
+    )
+
     cta_names = {
         "cta_start_swiping_clicked": "Start swiping",
         "cta_signup_clicked": "Signup",
@@ -9650,6 +9818,12 @@ async def admin_analytics(admin: User = Depends(require_admin_user)):
             "blocked_or_failed": blocked_failed_count,
         },
         "conversion_funnel": funnel_steps,
+        "onboarding_dropoff": {
+            "by_step": onboarding_dropoff_by_step,
+            "never_started": onboarding_never_started,
+            "in_progress": onboarding_in_progress,
+            "completed": len(onboarding_completed_actors),
+        },
         "cta_analytics": cta_analytics,
         "application_funnel": {
             "generated": generated_count,

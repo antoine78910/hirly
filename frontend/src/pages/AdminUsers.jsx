@@ -13,6 +13,15 @@ const fmtDate = (value) => {
   return date.toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 };
 
+const fmtDuration = (minutes) => {
+  const total = Math.round(Number(minutes) || 0);
+  if (total <= 0) return "—";
+  if (total < 60) return `${total}m`;
+  const hours = Math.floor(total / 60);
+  const rest = total % 60;
+  return rest ? `${hours}h ${rest}m` : `${hours}h`;
+};
+
 const PLAN_LABELS = {
   basic: "Basic",
   pro: "Pro",
@@ -95,7 +104,7 @@ export default function AdminUsers() {
 
       {!accessDenied ? (
         <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
-          <table className="w-full min-w-[1080px] text-left text-sm">
+          <table className="w-full min-w-[1360px] text-left text-sm">
             <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
               <tr>
                 <th className="px-4 py-3">Email</th>
@@ -104,15 +113,18 @@ export default function AdminUsers() {
                 <th className="px-4 py-3">Credits</th>
                 <th className="px-4 py-3">Profile</th>
                 <th className="px-4 py-3">CV</th>
+                <th className="px-4 py-3">Onboarding</th>
                 <th className="px-4 py-3">Applications</th>
                 <th className="px-4 py-3">Swipes</th>
+                <th className="px-4 py-3">Time on app</th>
                 <th className="px-4 py-3">Demo</th>
+                <th className="px-4 py-3">Last login</th>
                 <th className="px-4 py-3">Last active</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
               {loading ? (
-                <tr><td className="px-4 py-8 text-center text-zinc-500" colSpan={10}><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>
+                <tr><td className="px-4 py-8 text-center text-zinc-500" colSpan={13}><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>
               ) : visibleUsers.length ? visibleUsers.map((user) => (
                 <tr key={user.user_id} className="hover:bg-zinc-50">
                   <td className="px-4 py-3">
@@ -126,16 +138,32 @@ export default function AdminUsers() {
                   </td>
                   <td className="px-4 py-3">{user.profile_completion || 0}%</td>
                   <td className="px-4 py-3">{user.cv_uploaded ? "Yes" : "No"}</td>
+                  <td className="px-4 py-3">
+                    {user.onboarding_completed ? (
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">Completed</span>
+                    ) : user.onboarding_drop_off_step_label ? (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                        Stuck: {user.onboarding_drop_off_step_label}
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-500">Not started</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3">{user.total_applications || 0}</td>
                   <td className="px-4 py-3">
                     <span className="font-semibold text-zinc-800">{user.total_swipes || 0}</span>
                     <p className="mt-0.5 text-xs text-zinc-400">{user.right_swipes || 0} right · {user.left_swipes || 0} left</p>
                   </td>
+                  <td className="px-4 py-3 text-zinc-600">
+                    {fmtDuration(user.time_spent_minutes)}
+                    <p className="mt-0.5 text-xs text-zinc-400">{user.sessions_count || 0} sessions</p>
+                  </td>
                   <td className="px-4 py-3">{user.demo_account ? "Yes" : "—"}</td>
+                  <td className="px-4 py-3 text-zinc-600">{fmtDate(user.last_login_at) || "—"}</td>
                   <td className="px-4 py-3">{fmtDate(user.last_active_at || user.created_at)}</td>
                 </tr>
               )) : (
-                <tr><td className="px-4 py-8 text-center text-zinc-500" colSpan={10}>No users found.</td></tr>
+                <tr><td className="px-4 py-8 text-center text-zinc-500" colSpan={13}>No users found.</td></tr>
               )}
             </tbody>
           </table>

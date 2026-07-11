@@ -106,6 +106,9 @@ export default function AdminAnalytics() {
 
   const metrics = data?.metrics || {};
   const funnel = data?.conversion_funnel || [];
+  const onboardingDropoff = data?.onboarding_dropoff || {};
+  const dropoffSteps = onboardingDropoff.by_step || [];
+  const dropoffTotal = (onboardingDropoff.in_progress || 0) + (onboardingDropoff.never_started || 0) + (onboardingDropoff.completed || 0);
   const ctas = data?.cta_analytics || [];
   const applicationFunnel = data?.application_funnel || {};
   const atsPerformance = data?.ats_performance || data?.by_ats || {};
@@ -152,6 +155,36 @@ export default function AdminAnalytics() {
                 )) : <EmptyRow colSpan={3} />}
               </tbody>
             </table>
+          </Section>
+
+          <Section title="Onboarding drop-off" subtitle="Where users currently in progress or stuck are stalling — the biggest blocking points, ranked.">
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
+                <tr>
+                  <th className="px-4 py-3">Step</th>
+                  <th className="px-4 py-3">Users stuck here</th>
+                  <th className="px-4 py-3">Share of incomplete users</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100">
+                {dropoffSteps.length ? dropoffSteps.map((row) => (
+                  <tr key={row.step}>
+                    <td className="px-4 py-3 font-semibold">{row.label}</td>
+                    <td className="px-4 py-3">{fmt(row.count)}</td>
+                    <td className="px-4 py-3">{pct((row.count / (onboardingDropoff.in_progress || 1)) * 100)}</td>
+                  </tr>
+                )) : <EmptyRow colSpan={3} />}
+              </tbody>
+            </table>
+            <div className="flex flex-wrap gap-3 border-t border-zinc-100 px-4 py-3 text-xs text-zinc-500">
+              <span>{fmt(onboardingDropoff.completed)} completed onboarding</span>
+              <span>·</span>
+              <span>{fmt(onboardingDropoff.in_progress)} stuck mid-flow</span>
+              <span>·</span>
+              <span>{fmt(onboardingDropoff.never_started)} never started</span>
+              <span>·</span>
+              <span>{fmt(dropoffTotal)} total signups tracked</span>
+            </div>
           </Section>
 
           <Section title="CTA Performance" subtitle="Click counts and downstream conversion from clicked CTA users.">

@@ -100,6 +100,64 @@ function DailyUsageChart({ data }) {
   );
 }
 
+const fmtDuration = (minutes) => {
+  const total = Math.round(Number(minutes) || 0);
+  if (total <= 0) return "—";
+  if (total < 60) return `${total}m`;
+  const hours = Math.floor(total / 60);
+  const rest = total % 60;
+  return rest ? `${hours}h ${rest}m` : `${hours}h`;
+};
+
+const ONBOARDING_ANSWER_LABELS = {
+  job_search_status: "Job search status",
+  onboarding_location: "Location",
+  contract_type: "Contract type",
+  tried_other_apps: "Tried other apps",
+  categories: "Job categories",
+  suggested_categories: "Suggested categories",
+  selected_roles: "Selected roles",
+  interviews_per_week: "Target interviews / week",
+  acquisition_source: "Acquisition source",
+  referral_code: "Referral code",
+  salary_min: "Salary min",
+  salary_max: "Salary max",
+};
+
+function formatOnboardingAnswerValue(key, value) {
+  if (value == null || value === "") return "—";
+  if (Array.isArray(value)) {
+    if (!value.length) return "—";
+    return value
+      .map((item) => (typeof item === "object" ? item?.label || item?.id || JSON.stringify(item) : String(item)))
+      .join(", ");
+  }
+  if (typeof value === "object") return JSON.stringify(value);
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if ((key === "salary_min" || key === "salary_max") && typeof value === "number") {
+    return `$${value.toLocaleString("en-US")}`;
+  }
+  return String(value);
+}
+
+function OnboardingFunnelBadge({ progress }) {
+  if (!progress) return null;
+  if (progress.completed) {
+    return <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">Onboarding completed</span>;
+  }
+  if (progress.drop_off_step_label) {
+    return (
+      <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+        Stuck at: {progress.drop_off_step_label}
+      </span>
+    );
+  }
+  if (progress.started_at) {
+    return <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">Started, no step recorded</span>;
+  }
+  return <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-semibold text-zinc-500">Never started onboarding</span>;
+}
+
 function statusBadgeClass(status) {
   const key = String(status || "").toLowerCase();
   if (key.includes("submit")) return "bg-emerald-100 text-emerald-700";
@@ -150,6 +208,10 @@ export default function AdminUserDetail() {
   const documents = useMemo(() => data?.documents || {}, [data]);
   const statusCounts = useMemo(() => data?.application_status_counts || {}, [data]);
   const outcomeCounts = useMemo(() => data?.outcome_counts || {}, [data]);
+  const onboarding = useMemo(() => data?.onboarding || {}, [data]);
+  const onboardingAnswers = useMemo(() => onboarding.answers || {}, [onboarding]);
+  const onboardingProgress = useMemo(() => onboarding.progress || {}, [onboarding]);
+  const activity = useMemo(() => data?.activity || {}, [data]);
 
   const summary = useMemo(() => {
     return [
@@ -244,8 +306,49 @@ export default function AdminUserDetail() {
               </div>
 
               {swipeSummary.last_swipe_at ? (
-                <p className="mt-3 text-xs text-zinc-500">Last swipe {fmtDate(swipeSummary.last_swipe_at)} · {swipeSummary.total ?? 0} swipes total ({swipeSummary.left ?? 0} left / {swipeSummary.right ?? 0} right)</p>
+                <p className="mt-3 text-xs text-zinc-500">Last swipe {fmtDate(swipeSummary.last_swipe_at)} · {swipeSummary.total ?? 0} swipes total ({swipeSummary.left ?? 0} passed / {swipeSummary.right ?? 0} liked)</p>
               ) : null}
+            </Section>
+
+            <Section
+              title="Engagement & activity"
+              description="Login history and estimated time spent, to spot inactive or at-risk users."
+            >
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <Stat label="Last login" value={fmtDate(activity.last_login_at) || "Never"} />
+                <Stat label="Last active" value={fmtDate(activity.last_active_at) || "—"} />
+                <Stat label="Time on app" value={fmtDuration(activity.time_spent_minutes)} accent="text-linkedin" />
+                <Stat label="Sessions" value={activity.sessions_count ?? 0} />
+              </div>
+            </Section>
+
+            <Section
+              title="Onboarding answers"
+              description="What this user told us during onboarding — useful to spot blocking points."
+            >
+              <div className="mb-4">
+                <OnboardingFunnelBadge progress={onboardingProgress} />
+                {(onboardingProgress.started_at || onboardingProgress.completed_at) ? (
+                  <p className="mt-2 text-xs text-zinc-500">
+                    {onboardingProgress.started_at ? `Started ${fmtDate(onboardingProgress.started_at)}` : ""}
+                    {onboardingProgress.completed_at ? ` · Completed ${fmtDate(onboardingProgress.completed_at)}` : ""}
+                  </p>
+                ) : null}
+              </div>
+              {Object.keys(onboardingAnswers).length ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {Object.entries(ONBOARDING_ANSWER_LABELS).map(([key, label]) => (
+                    onboardingAnswers[key] !== undefined ? (
+                      <div key={key} className="rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2.5">
+                        <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">{label}</p>
+                        <p className="mt-0.5 text-sm font-medium text-zinc-800">{formatOnboardingAnswerValue(key, onboardingAnswers[key])}</p>
+                      </div>
+                    ) : null
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-zinc-500">No onboarding answers captured for this user yet.</p>
+              )}
             </Section>
 
             <Section title="Profile Summary">
