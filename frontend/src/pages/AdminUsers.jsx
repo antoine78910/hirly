@@ -103,7 +103,7 @@ export default function AdminUsers() {
       ) : null}
 
       {!accessDenied ? (
-        <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
+        <div className="max-w-full overflow-x-auto rounded-lg border border-zinc-200 bg-white shadow-sm">
           <table className="w-full min-w-[1360px] text-left text-sm">
             <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
               <tr>
