@@ -4332,14 +4332,83 @@ def _profile_completion(profile: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+async def _cancel_stripe_subscription_for_user(user_doc: Dict[str, Any]) -> None:
+    billing = user_doc.get("billing") or {}
+    sub_id = billing.get("stripe_subscription_id")
+    if not sub_id or str(sub_id).startswith("master_code_"):
+        return
+    try:
+        _stripe_secret_key()
+        stripe.Subscription.cancel(str(sub_id))
+    except HTTPException:
+        pass
+    except Exception as exc:
+        logger.warning(
+            "account_delete_stripe_cancel_failed user_id=%s subscription_id=%s error=%s",
+            user_doc.get("user_id"),
+            sub_id,
+            str(exc)[:200],
+        )
+
+
+async def _delete_supabase_auth_user(user_doc: Dict[str, Any]) -> None:
+    supabase_user_id = user_doc.get("supabase_user_id")
+    if not supabase_user_id:
+        return
+    try:
+        response = await _supabase_admin_request("DELETE", f"/auth/v1/admin/users/{supabase_user_id}")
+        if response.status_code not in (200, 204):
+            logger.warning(
+                "account_delete_supabase_auth_failed user_id=%s supabase_user_id=%s status=%s",
+                user_doc.get("user_id"),
+                supabase_user_id,
+                response.status_code,
+            )
+    except HTTPException:
+        pass
+    except Exception as exc:
+        logger.warning(
+            "account_delete_supabase_auth_failed user_id=%s supabase_user_id=%s error=%s",
+            user_doc.get("user_id"),
+            supabase_user_id,
+            str(exc)[:200],
+        )
+
+
+async def _delete_all_user_data(user_id: str) -> None:
+    """Remove every app row tied to this user."""
+    await db.application_emails.delete_many({"user_id": user_id})
+    await db.browser_submission_runs.delete_many({"user_id": user_id})
+    await db.applications.delete_many({"user_id": user_id})
+    await db.swipes.delete_many({"user_id": user_id})
+    await db.profiles.delete_many({"user_id": user_id})
+    await db.gmail_connections.delete_many({"user_id": user_id})
+    await db.analytics_events.delete_many({"user_id": user_id})
+    await db.training_enrollments.delete_many({"user_id": user_id})
+    await db.training_creators.delete_many({"user_id": user_id})
+    await db.user_feedback.delete_many({"user_id": user_id})
+    await db.user_sessions.delete_many({"user_id": user_id})
+
+    templates_col = getattr(db, "interview_simulator_templates", None)
+    if templates_col is not None:
+        await templates_col.delete_many({"created_by_user_id": user_id})
+
+    await db.creator_invites.update_many(
+        {"redeemed_by_user_id": user_id},
+        {"$set": {"redeemed_by_user_id": None}},
+    )
+    await db.users.delete_one({"user_id": user_id})
+
+
 @api_router.delete("/profile")
 async def delete_account(user: User = Depends(get_current_user)):
     """Wipe everything the user created. Sessions are revoked too."""
-    await db.profiles.delete_many({"user_id": user.user_id})
-    await db.swipes.delete_many({"user_id": user.user_id})
-    await db.applications.delete_many({"user_id": user.user_id})
-    await db.user_sessions.delete_many({"user_id": user.user_id})
-    await db.users.delete_one({"user_id": user.user_id})
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0}) or {}
+    logger.info("account_delete_start user_id=%s", user.user_id)
+    await _cancel_stripe_subscription_for_user(user_doc)
+    await _delete_all_user_data(user.user_id)
+    await _delete_supabase_auth_user(user_doc)
+    logger.info("account_delete_complete user_id=%s", user.user_id)
     return {"ok": True}
 
 

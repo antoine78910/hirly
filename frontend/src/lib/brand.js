@@ -9,6 +9,10 @@ export const BRAND = {
   CTA_PRIMARY: "Start Swiping Jobs",
   CTA_SECONDARY: "Get Hired Today",
   SUPPORT_EMAIL: "app@tryhirly.com",
+  NOTIFICATIONS_EMAIL: "app@tryhirly.com",
+  SOCIAL_HANDLE: "tryhirly",
+  INSTAGRAM_URL: "https://instagram.com/tryhirly",
+  TIKTOK_URL: "https://tiktok.com/@tryhirly",
 };
 
 export const supportMailto = (subject = "") => {

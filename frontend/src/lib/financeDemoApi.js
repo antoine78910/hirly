@@ -11,6 +11,7 @@ import { parseApiPath } from "./apiPath";
 import { applyJobFilters, feedQueryToFilters } from "./applyJobFilters";
 import { clearMenuFilters, mergeFilters } from "./jobFilters";
 import { clearSwipeFeedCache, clearSwipedJobIdsByPrefix } from "./swipeFeedCache";
+import { buildDemoApplicationFromSwipe } from "./demoApplicationFactory";
 
 export const FINANCE_DEMO_CHANGED = "hirly:finance-demo-changed";
 
@@ -194,27 +195,10 @@ function handleSwipe(body = {}) {
     consumeDemoCredit();
     state.historyRight.unshift(row);
     const application = {
+      ...buildDemoApplicationFromSwipe(job),
       application_id: `finance_demo_app_${Date.now()}_${jobId}`,
-      job_id: jobId,
-      job: { ...job },
-      status: "applied",
-      submission_status: "ready",
-      user_facing_submission_status: "prepared",
-      package_status: "ready",
       demo_local: true,
       finance_demo: true,
-      match_score: job.match_score,
-      match_reasons: job.match_reasons,
-      created_at: new Date().toISOString(),
-      tailored_resume: {
-        summary: "CV adapté pour une candidature en banque (démo).",
-        highlights: ["Expérience finance", "Modélisation financière", "Anglais courant"],
-      },
-      cover_letter: {
-        greeting: `Madame, Monsieur,`,
-        body: `Je souhaite vous proposer ma candidature pour le poste de ${job.title} chez ${job.company}.`,
-        closing: "Cordialement,\nAlex Martin",
-      },
     };
     state.applications.unshift(application);
     persistFinanceDemoState();

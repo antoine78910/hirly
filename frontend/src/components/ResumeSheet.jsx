@@ -48,7 +48,7 @@ export default function ResumeSheet({ open, profile, onClose, onUploaded }) {
     try {
       await uploadProfileCv(file, api);
       if (!shouldMockCvUpload()) {
-        toast.success("Resume updated. AI re-parsed your profile.");
+        toast.success(t("resumeSheet.uploadSuccess"));
       }
       trackEvent("cv_upload_completed", { source: "profile" });
       onUploaded?.();
@@ -59,12 +59,12 @@ export default function ResumeSheet({ open, profile, onClose, onUploaded }) {
         message: e?.response?.data?.detail || e?.message,
       });
       if (!shouldMockCvUpload()) {
-        toast.error(e?.response?.data?.detail || "Upload failed");
+        toast.error(e?.response?.data?.detail || t("resumeSheet.uploadError"));
       }
     } finally {
       setUploading(false);
     }
-  }, [onClose, onUploaded]);
+  }, [onClose, onUploaded, t]);
 
   const openPicker = () => {
     if (!uploading) inputRef.current?.click();

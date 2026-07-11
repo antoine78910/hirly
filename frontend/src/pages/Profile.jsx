@@ -260,28 +260,28 @@ function ApplicationDefaultsSheet({ open, profile, onClose, onSaved }) {
           testId="app-defaults-work-authorized-countries"
         />
         <div className="space-y-1.5">
-          <Label className="text-sm font-semibold text-zinc-200">Requires visa sponsorship</Label>
+          <Label className="text-sm font-semibold text-zinc-200">{t("profileSections.requiresSponsorship")}</Label>
           <Select value={boolSelectValue(defaults.requires_sponsorship)} onValueChange={(v) => update("requires_sponsorship", boolSelectToValue(v))}>
             <SelectTrigger className="h-11 rounded-xl bg-sprout-surface-2 border-sprout-border text-white" data-testid="app-defaults-sponsorship">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-sprout-surface border-sprout-border text-white">
-              <SelectItem value="unset">Not set</SelectItem>
-              <SelectItem value="yes">Yes</SelectItem>
-              <SelectItem value="no">No</SelectItem>
+              <SelectItem value="unset">{t("common.notSet")}</SelectItem>
+              <SelectItem value="yes">{t("common.yes")}</SelectItem>
+              <SelectItem value="no">{t("common.no")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-sm font-semibold text-zinc-200">Willing to relocate</Label>
+          <Label className="text-sm font-semibold text-zinc-200">{t("profileSections.willingToRelocate")}</Label>
           <Select value={boolSelectValue(defaults.willing_to_relocate)} onValueChange={(v) => update("willing_to_relocate", boolSelectToValue(v))}>
             <SelectTrigger className="h-11 rounded-xl bg-sprout-surface-2 border-sprout-border text-white" data-testid="app-defaults-relocate">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-sprout-surface border-sprout-border text-white">
-              <SelectItem value="unset">Not set</SelectItem>
-              <SelectItem value="yes">Yes</SelectItem>
-              <SelectItem value="no">No</SelectItem>
+              <SelectItem value="unset">{t("common.notSet")}</SelectItem>
+              <SelectItem value="yes">{t("common.yes")}</SelectItem>
+              <SelectItem value="no">{t("common.no")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -293,22 +293,22 @@ function ApplicationDefaultsSheet({ open, profile, onClose, onSaved }) {
           testId="app-defaults-referral-source"
         />
         <div className="space-y-1.5">
-          <Label className="text-sm font-semibold text-zinc-200">Privacy consent default</Label>
+          <Label className="text-sm font-semibold text-zinc-200">{t("profileSections.privacyConsentDefault")}</Label>
           <Select value={boolSelectValue(defaults.privacy_consent)} onValueChange={(v) => update("privacy_consent", boolSelectToValue(v))}>
             <SelectTrigger className="h-11 rounded-xl bg-sprout-surface-2 border-sprout-border text-white" data-testid="app-defaults-privacy-consent">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-sprout-surface border-sprout-border text-white">
-              <SelectItem value="unset">Not set</SelectItem>
-              <SelectItem value="yes">I agree</SelectItem>
-              <SelectItem value="no">I do not agree</SelectItem>
+              <SelectItem value="unset">{t("common.notSet")}</SelectItem>
+              <SelectItem value="yes">{t("profileSections.iAgree")}</SelectItem>
+              <SelectItem value="no">{t("profileSections.iDoNotAgree")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <label className="flex items-center justify-between gap-4 rounded-xl border border-sprout-border bg-sprout-surface-2 p-4">
           <span>
-            <span className="block text-sm font-semibold text-zinc-200">Prefer not to say for demographics</span>
-            <span className="mt-1 block text-xs text-sprout-muted">Use decline/prefer-not-to-say options when forms provide them.</span>
+            <span className="block text-sm font-semibold text-zinc-200">{t("profileSections.preferNotToSayDemographics")}</span>
+            <span className="mt-1 block text-xs text-sprout-muted">{t("profileSections.preferNotToSayDemographicsHint")}</span>
           </span>
           <Switch
             checked={Boolean(defaults.prefer_not_to_say_demographics)}
@@ -317,7 +317,7 @@ function ApplicationDefaultsSheet({ open, profile, onClose, onSaved }) {
           />
         </label>
         <div className="space-y-1.5">
-          <Label className="text-sm font-semibold text-zinc-200">Former employer or non-compete restriction</Label>
+          <Label className="text-sm font-semibold text-zinc-200">{t("profileSections.formerEmployerRestriction")}</Label>
           <Select
             value={boolSelectValue(defaults.former_employer_restriction_or_noncompete)}
             onValueChange={(v) => update("former_employer_restriction_or_noncompete", boolSelectToValue(v))}
@@ -326,9 +326,9 @@ function ApplicationDefaultsSheet({ open, profile, onClose, onSaved }) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-sprout-surface border-sprout-border text-white">
-              <SelectItem value="unset">Not set</SelectItem>
-              <SelectItem value="yes">Yes</SelectItem>
-              <SelectItem value="no">No</SelectItem>
+              <SelectItem value="unset">{t("common.notSet")}</SelectItem>
+              <SelectItem value="yes">{t("common.yes")}</SelectItem>
+              <SelectItem value="no">{t("common.no")}</SelectItem>
             </SelectContent>
           </Select>
         </div>

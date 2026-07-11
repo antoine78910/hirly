@@ -1,9 +1,8 @@
 import { useState, useMemo, useEffect } from "react";
-import { motion } from "framer-motion";
 import {
-  ArrowLeft, ChevronRight, Plus, Palette, Briefcase, Heart, Folder,
+  ChevronRight, Plus, Palette, Briefcase, Heart, Folder,
   GraduationCap, Code2, Award, Trophy, Newspaper, Star, Languages as LangIcon,
-  Users2, Lightbulb, Settings as Cog, X, Loader2,
+  Users2, Lightbulb, Settings as Cog, Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
@@ -11,176 +10,29 @@ import Sheet from "./Sheet";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
+import { getFieldSchema, getProfessionalProfileSections } from "../lib/professionalProfileUi";
+import { useAppLocale } from "../context/AppLocaleContext";
 
-/* ============================================================
-   Professional Profile (replaces the old read-only ProfessionalSheet).
-   - Listing screen — three grouped sections, each row with icon, label, count badge or "Add".
-   - Per-section editor — for "extra" sections (volunteer, projects, certifications, awards,
-     publications, recognition, languages, interests, references, key highlights, custom fields)
-     we persist arrays inside `profile.extras[<section_key>]` via `PATCH /api/profile/extras`.
-   - For sections already populated by AI (experience, education, skills) we show the parsed
-     items read-only with the same list UI.
-============================================================ */
-
-const FIELD_SCHEMAS = {
-  // Each section has a `singular` label + a `fields[]` schema for the Edit Entry form.
-  overview: {
-    singular: "Professional Overview",
-    fields: [
-      { key: "role",    label: "Role",    placeholder: "Student, Designer, Engineer…" },
-      { key: "summary", label: "Summary", placeholder: "1-2 sentences about you", textarea: true },
-    ],
-  },
-  experience: {
-    singular: "Experience",
-    aiBacked: true,
-    fields: [
-      { key: "role",     label: "Role" },
-      { key: "company",  label: "Company" },
-      { key: "duration", label: "Duration", placeholder: "Jan 2023 — Present" },
-      { key: "location", label: "Location" },
-      { key: "highlights", label: "Highlights", textarea: true, placeholder: "One bullet per line" },
-    ],
-  },
-  volunteer: {
-    singular: "Volunteer Experience",
-    fields: [
-      { key: "role", label: "Role" },
-      { key: "organization", label: "Organization" },
-      { key: "duration", label: "Duration" },
-      { key: "details", label: "Details", textarea: true },
-    ],
-  },
-  projects: {
-    singular: "Project",
-    fields: [
-      { key: "name", label: "Project name" },
-      { key: "url", label: "URL", placeholder: "https://…" },
-      { key: "stack", label: "Stack", placeholder: "Comma-separated" },
-      { key: "description", label: "Description", textarea: true },
-    ],
-  },
-  education: {
-    singular: "Education",
-    aiBacked: true,
-    fields: [
-      { key: "degree", label: "Degree" },
-      { key: "school", label: "School" },
-      { key: "year",   label: "Year" },
-    ],
-  },
-  skills: {
-    singular: "Skill",
-    aiBacked: true,
-    simple: true, // list of strings
-    fields: [{ key: "name", label: "Skill", placeholder: "e.g. React" }],
-  },
-  certifications: {
-    singular: "Certification",
-    fields: [
-      { key: "name", label: "Certification" },
-      { key: "issuer", label: "Issuer" },
-      { key: "year", label: "Year" },
-      { key: "credential_url", label: "Credential URL", placeholder: "https://…" },
-    ],
-  },
-  awards: {
-    singular: "Award",
-    fields: [
-      { key: "title", label: "Award" },
-      { key: "issuer", label: "Issuer" },
-      { key: "year", label: "Year" },
-      { key: "details", label: "Details", textarea: true },
-    ],
-  },
-  publications: {
-    singular: "Publication",
-    fields: [
-      { key: "title", label: "Title" },
-      { key: "venue", label: "Venue / Journal" },
-      { key: "year", label: "Year" },
-      { key: "url", label: "URL", placeholder: "https://…" },
-    ],
-  },
-  recognition: {
-    singular: "Recognition",
-    fields: [
-      { key: "title", label: "Recognition" },
-      { key: "issuer", label: "Issuer" },
-      { key: "year", label: "Year" },
-    ],
-  },
-  languages: {
-    singular: "Language",
-    fields: [
-      { key: "name", label: "Language" },
-      { key: "proficiency", label: "Proficiency", placeholder: "Native / Fluent / Conversational" },
-    ],
-  },
-  interests: {
-    singular: "Interest",
-    simple: true,
-    fields: [{ key: "name", label: "Interest" }],
-  },
-  references: {
-    singular: "References",
-    fields: [
-      { key: "name",    label: "Title & Company" },
-      { key: "title",   label: "Title" },
-      { key: "email",   label: "Email" },
-      { key: "phone",   label: "Phone" },
-    ],
-  },
-  key_highlights: {
-    singular: "Key Highlight",
-    simple: true,
-    fields: [{ key: "text", label: "Highlight" }],
-  },
-  custom: {
-    singular: "Custom Field",
-    fields: [
-      { key: "label", label: "Label" },
-      { key: "value", label: "Value", textarea: true },
-    ],
-  },
+const PROFILE_ICONS = {
+  Briefcase,
+  Heart,
+  Folder,
+  GraduationCap,
+  Code2,
+  Award,
+  Trophy,
+  Newspaper,
+  Star,
+  LangIcon,
+  Users2,
+  Lightbulb,
+  Cog,
 };
-
-const SECTIONS = [
-  {
-    group: "WORK & PROJECTS",
-    rows: [
-      { key: "experience", icon: Briefcase, label: "Experience" },
-      { key: "volunteer",  icon: Heart,     label: "Volunteering" },
-      { key: "projects",   icon: Folder,    label: "Projects" },
-    ],
-  },
-  {
-    group: "STUDIES & EXPERTISE",
-    rows: [
-      { key: "education",      icon: GraduationCap, label: "Education" },
-      { key: "skills",         icon: Code2,         label: "Skills" },
-      { key: "certifications", icon: Award,         label: "Certifications" },
-    ],
-  },
-  {
-    group: "EXTRAS & PERSONAL",
-    rows: [
-      { key: "awards",         icon: Trophy,    label: "Awards" },
-      { key: "publications",   icon: Newspaper, label: "Publications" },
-      { key: "recognition",    icon: Star,      label: "Recognition" },
-      { key: "languages",      icon: LangIcon,  label: "Languages" },
-      { key: "interests",      icon: Heart,     label: "Hobbies" },
-      { key: "references",     icon: Users2,    label: "References" },
-      { key: "key_highlights", icon: Lightbulb, label: "Highlights" },
-      { key: "custom",         icon: Cog,       label: "Custom sections" },
-    ],
-  },
-];
 
 /* ----------------------- Editor (Add / Edit a single entry) ----------------------- */
 
-function EntryEditor({ open, sectionKey, entry, onClose, onSave }) {
-  const schema = FIELD_SCHEMAS[sectionKey];
+function EntryEditor({ open, sectionKey, entry, onClose, onSave, t }) {
+  const schema = getFieldSchema(sectionKey, t);
   const [tab, setTab] = useState("basic");
   const [draft, setDraft] = useState({});
 
@@ -202,40 +54,50 @@ function EntryEditor({ open, sectionKey, entry, onClose, onSave }) {
   const handleSave = () => {
     if (schema.simple) {
       const value = draft[fields[0].key];
-      if (!value || !String(value).trim()) return toast.error("Please fill the field");
+      if (!value || !String(value).trim()) return toast.error(t("professionalProfile.fillField"));
       onSave(String(value).trim());
     } else {
-      // require at least the first field
       const first = fields[0].key;
-      if (!draft[first] || !String(draft[first]).trim()) return toast.error(`Please fill ${fields[0].label}`);
+      if (!draft[first] || !String(draft[first]).trim()) {
+        return toast.error(t("professionalProfile.fillFieldNamed", { field: fields[0].label }));
+      }
       onSave({ ...draft, _id: entry?._id });
     }
     onClose();
   };
 
+  const isReferences = sectionKey === "references";
+
   return (
     <Sheet
       open={open}
-      title="Edit Entry"
+      title={t("professionalProfile.editEntry")}
       onClose={onClose}
       testId="entry-editor-sheet"
     >
       <div className="-mt-2">
-        <h2 className="font-display font-black text-3xl tracking-tight">{isNew ? `Add ${schema.singular}` : `Edit ${schema.singular}`}</h2>
-        <p className="text-sprout-muted text-sm mt-1">{schema.singular === "References" ? "Professional references" : "Fill the details below"}</p>
+        <h2 className="font-display font-black text-3xl tracking-tight">
+          {isNew ? t("professionalProfile.addSingular", { singular: schema.singular }) : `${t("professionalProfile.editEntry")} — ${schema.singular}`}
+        </h2>
+        <p className="text-sprout-muted text-sm mt-1">
+          {isReferences ? t("professionalProfile.professionalReferences") : t("professionalProfile.fillDetailsBelow")}
+        </p>
 
         {!schema.simple && (
           <div className="mt-5 p-1 rounded-full bg-sprout-surface border border-sprout-border flex" data-testid="entry-tabs">
-            {["basic", "details"].map((t) => (
+            {[
+              { id: "basic", label: t("professionalProfile.tabBasic") },
+              { id: "details", label: t("professionalProfile.tabDetails") },
+            ].map((tabItem) => (
               <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`flex-1 h-10 rounded-full text-sm font-semibold capitalize transition-colors ${
-                  tab === t ? "selection-tab-on text-violet-800" : "text-zinc-500"
+                key={tabItem.id}
+                onClick={() => setTab(tabItem.id)}
+                className={`flex-1 h-10 rounded-full text-sm font-semibold transition-colors ${
+                  tab === tabItem.id ? "selection-tab-on text-violet-800" : "text-zinc-500"
                 }`}
-                data-testid={`entry-tab-${t}`}
+                data-testid={`entry-tab-${tabItem.id}`}
               >
-                {t}
+                {tabItem.label}
               </button>
             ))}
           </div>
@@ -281,7 +143,7 @@ function EntryEditor({ open, sectionKey, entry, onClose, onSave }) {
           className="mt-8 w-full h-12 rounded-full bg-sprout-mint text-white font-semibold hover:opacity-90"
           data-testid="entry-save-btn"
         >
-          Save
+          {t("professionalProfile.save")}
         </button>
       </div>
     </Sheet>
@@ -290,8 +152,8 @@ function EntryEditor({ open, sectionKey, entry, onClose, onSave }) {
 
 /* ----------------------- Section detail (list of entries) ----------------------- */
 
-function SectionDetail({ open, sectionKey, items, label, onClose, onChange }) {
-  const schema = FIELD_SCHEMAS[sectionKey];
+function SectionDetail({ open, sectionKey, items, label, onClose, onChange, t }) {
+  const schema = getFieldSchema(sectionKey, t);
   const [editing, setEditing] = useState(null); // null = none, "new" = new, item = edit
   const isAiBacked = schema?.aiBacked;
 
@@ -317,7 +179,7 @@ function SectionDetail({ open, sectionKey, items, label, onClose, onChange }) {
       return (
         <div key={i} className="flex items-center justify-between p-4 rounded-2xl border border-sprout-border bg-sprout-surface" data-testid={`section-item-${i}`}>
           <span className="text-white font-medium">{item}</span>
-          <button onClick={() => handleDelete(item)} className="text-rose-400 text-sm" data-testid={`section-delete-${i}`}>Remove</button>
+          <button onClick={() => handleDelete(item)} className="text-rose-400 text-sm" data-testid={`section-delete-${i}`}>{t("professionalProfile.remove")}</button>
         </div>
       );
     }
@@ -358,7 +220,7 @@ function SectionDetail({ open, sectionKey, items, label, onClose, onChange }) {
               onClick={() => setEditing("new")}
               className="w-9 h-9 rounded-full grid place-items-center text-sprout-mint hover:bg-sprout-mint-soft"
               data-testid={`section-add-${sectionKey}`}
-              aria-label="Add"
+              aria-label={t("common.add")}
             >
               <Plus className="w-5 h-5" />
             </button>
@@ -370,9 +232,9 @@ function SectionDetail({ open, sectionKey, items, label, onClose, onChange }) {
             <div className="mx-auto w-14 h-14 rounded-2xl bg-sprout-mint-soft-2 grid place-items-center mb-3">
               <Plus className="w-6 h-6 text-sprout-mint" />
             </div>
-            <h3 className="font-display font-bold text-lg">No {label.toLowerCase()} yet</h3>
+            <h3 className="font-display font-bold text-lg">{t("professionalProfile.noItemsYet", { label })}</h3>
             <p className="mt-1 text-sprout-muted text-sm max-w-xs mx-auto">
-              {isAiBacked ? "Upload your CV to populate this automatically." : `Tap “Add ${schema.singular}” to get started.`}
+              {isAiBacked ? t("professionalProfile.uploadCvHint") : t("professionalProfile.tapAddToStart", { singular: schema.singular })}
             </p>
             {!isAiBacked && (
               <button
@@ -380,7 +242,7 @@ function SectionDetail({ open, sectionKey, items, label, onClose, onChange }) {
                 className="mt-6 inline-flex items-center gap-1.5 h-12 px-6 rounded-full bg-sprout-mint text-white font-semibold"
                 data-testid={`section-empty-add-${sectionKey}`}
               >
-                <Plus className="w-4 h-4" /> Add {schema.singular}
+                <Plus className="w-4 h-4" /> {t("professionalProfile.addSingular", { singular: schema.singular })}
               </button>
             )}
           </div>
@@ -393,7 +255,7 @@ function SectionDetail({ open, sectionKey, items, label, onClose, onChange }) {
                 className="w-full h-12 rounded-full bg-sprout-mint-soft border border-sprout-mint/40 text-sprout-mint font-semibold flex items-center justify-center gap-1.5"
                 data-testid={`section-add-more-${sectionKey}`}
               >
-                <Plus className="w-4 h-4" /> Add another
+                <Plus className="w-4 h-4" /> {t("professionalProfile.addAnother")}
               </button>
             )}
           </div>
@@ -406,6 +268,7 @@ function SectionDetail({ open, sectionKey, items, label, onClose, onChange }) {
         entry={editing === "new" ? null : editing}
         onClose={() => setEditing(null)}
         onSave={handleSave}
+        t={t}
       />
     </>
   );
@@ -414,6 +277,8 @@ function SectionDetail({ open, sectionKey, items, label, onClose, onChange }) {
 /* ----------------------- Top-level Professional Profile sheet ----------------------- */
 
 export default function ProfessionalProfileSheet({ open, profile, onClose, onChange }) {
+  const { t } = useAppLocale();
+  const sections = useMemo(() => getProfessionalProfileSections(t, PROFILE_ICONS), [t]);
   const [active, setActive] = useState(null);
   const [overviewOpen, setOverviewOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -451,7 +316,7 @@ export default function ProfessionalProfileSheet({ open, profile, onClose, onCha
       await api.patch("/profile/extras", next);
       onChange?.();
     } catch (e) {
-      toast.error("Couldn't save");
+      toast.error(t("professionalProfile.saveError"));
     } finally {
       setSaving(false);
     }
@@ -466,7 +331,7 @@ export default function ProfessionalProfileSheet({ open, profile, onClose, onCha
   };
 
   return (
-    <Sheet open={open} title="Professional Profile" onClose={onClose} testId="prof-profile-sheet">
+    <Sheet open={open} title={t("professionalProfile.title")} onClose={onClose} testId="prof-profile-sheet">
       <div className="space-y-7">
         {/* Professional Overview top card */}
         <button
@@ -478,16 +343,16 @@ export default function ProfessionalProfileSheet({ open, profile, onClose, onCha
             <Palette className="w-6 h-6 text-sprout-mint" strokeWidth={1.9} />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="font-display font-bold text-white text-xl leading-tight">Your story</h3>
+            <h3 className="font-display font-bold text-white text-xl leading-tight">{t("professionalProfile.yourStory")}</h3>
             {overview.role && <p className="mt-1 text-sm text-sprout-muted">{overview.role}</p>}
             {overview.summary && <p className="mt-1.5 text-sm text-sprout-muted line-clamp-2">{overview.summary}</p>}
-            {!overview.role && !overview.summary && <p className="mt-1.5 text-sm text-sprout-muted">Add a short bio we'll weave into your cover letters.</p>}
+            {!overview.role && !overview.summary && <p className="mt-1.5 text-sm text-sprout-muted">{t("professionalProfile.yourStoryEmpty")}</p>}
           </div>
           <ChevronRight className="w-5 h-5 text-sprout-muted mt-2 shrink-0" />
         </button>
 
-        {SECTIONS.map((sec) => (
-          <section key={sec.group} data-testid={`prof-group-${sec.group}`}>
+        {sections.map((sec) => (
+          <section key={sec.groupKey} data-testid={`prof-group-${sec.groupKey}`}>
             <h3 className="text-xs uppercase tracking-[0.18em] text-sprout-muted px-1 mb-3">{sec.group}</h3>
             <div className="space-y-3">
               {sec.rows.map(({ key, icon: Icon, label }) => {
@@ -507,7 +372,7 @@ export default function ProfessionalProfileSheet({ open, profile, onClose, onCha
                     {count > 0 ? (
                       <span className="inline-flex items-center justify-center min-w-8 h-7 px-2 rounded-full bg-sprout-mint-soft text-sprout-mint text-sm font-bold" data-testid={`prof-count-${key}`}>{count}</span>
                     ) : (
-                      <span className="text-sprout-muted text-sm font-medium">Add</span>
+                      <span className="text-sprout-muted text-sm font-medium">{t("professionalProfile.add")}</span>
                     )}
                     <ChevronRight className="w-4 h-4 text-sprout-muted" />
                   </button>
@@ -519,13 +384,13 @@ export default function ProfessionalProfileSheet({ open, profile, onClose, onCha
 
         {saving && (
           <div className="fixed top-20 right-5 z-[80] bg-sprout-surface border border-sprout-border rounded-full px-3 py-1.5 flex items-center gap-2 text-xs text-sprout-muted">
-            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving…
+            <Loader2 className="w-3.5 h-3.5 animate-spin" /> {t("professionalProfile.saving")}
           </div>
         )}
       </div>
 
       {/* Per-section detail sheets */}
-      {SECTIONS.flatMap((s) => s.rows).map(({ key, label }) => (
+      {sections.flatMap((s) => s.rows).map(({ key, label }) => (
         <SectionDetail
           key={key}
           open={active === key}
@@ -534,6 +399,7 @@ export default function ProfessionalProfileSheet({ open, profile, onClose, onCha
           label={label}
           onClose={() => setActive(null)}
           onChange={(next) => updateSection(key, next)}
+          t={t}
         />
       ))}
 
@@ -543,6 +409,7 @@ export default function ProfessionalProfileSheet({ open, profile, onClose, onCha
         entry={overview.role || overview.summary ? overview : null}
         onClose={() => setOverviewOpen(false)}
         onSave={saveOverview}
+        t={t}
       />
     </Sheet>
   );

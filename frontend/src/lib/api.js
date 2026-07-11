@@ -261,6 +261,7 @@ api.interceptors.request.use((config) => {
         "/profile/cover-letter",
         "/record-tools/interview-templates",
         "/record-tools/transcribe",
+        "/feedback/contact",
       ].includes(path)
       && !config.adapter
     ) {

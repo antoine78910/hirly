@@ -31,9 +31,8 @@ export default function DesktopAccountMenu({ triggerClassName = "" }) {
   const { t } = useAppLocale();
   const email = user?.email || t("common.account");
 
-  const signOut = async () => {
-    await logout();
-    navigate("/");
+  const signOut = () => {
+    logout();
   };
 
   return (

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  Download, FileText, Info, Loader2, Mail,
+  FileText, Info, Loader2, Mail, ArrowLeft,
   MapPin, MessageSquare, Sparkles, UserRoundCheck, Wallet,
+  Bell, ShieldCheck, Clock3, AlertCircle,
 } from "lucide-react";
 import { api } from "../../lib/api";
 import { formatCompactMoney } from "../../lib/currency";
@@ -12,11 +13,11 @@ import {
   formatTimelineDateTime,
 } from "../../lib/applicationTimeline";
 import CompanyLogo from "../CompanyLogo";
-import CVPreview from "../CVPreview";
-import CoverLetterPreview from "../CoverLetterPreview";
+import ApplicationDocumentsView from "./ApplicationDocumentsView";
 import { DialogHeader, DialogTitle } from "../ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Button } from "../ui/button";
+import { hasApplicationDocuments } from "../../lib/applicationDocuments";
 
 const TIMELINE_ICONS = {
   interview: MessageSquare,
@@ -25,6 +26,13 @@ const TIMELINE_ICONS = {
   email: Mail,
   package: FileText,
   created: Sparkles,
+  review: ShieldCheck,
+  notification: Bell,
+  pending: Clock3,
+  prepared: Sparkles,
+  security: ShieldCheck,
+  action_required: AlertCircle,
+  failed: AlertCircle,
 };
 
 function jobSalaryLabel(job, lang) {
@@ -124,11 +132,25 @@ export default function ApplicationDetailPanel({
   missingFieldsForForm,
   optionValue,
   optionLabel,
+  onBack,
+  activeTab = "application",
+  onTabChange,
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [emails, setEmails] = useState([]);
   const [loadingEmails, setLoadingEmails] = useState(false);
   const [viewingEmail, setViewingEmail] = useState(null);
+  const [timelineRevision, setTimelineRevision] = useState(0);
+
+  useEffect(() => {
+    const bumpTimeline = () => setTimelineRevision((value) => value + 1);
+    window.addEventListener("hirly:ai-settings-changed", bumpTimeline);
+    window.addEventListener("hirly:notification-settings-changed", bumpTimeline);
+    return () => {
+      window.removeEventListener("hirly:ai-settings-changed", bumpTimeline);
+      window.removeEventListener("hirly:notification-settings-changed", bumpTimeline);
+    };
+  }, []);
 
   useEffect(() => {
     if (!application?.application_id) return undefined;
@@ -149,7 +171,7 @@ export default function ApplicationDetailPanel({
 
   const timeline = useMemo(
     () => buildApplicationTimeline(application, emails, t, lang),
-    [application, emails, t, lang],
+    [application, emails, t, lang, timelineRevision],
   );
   const appEmails = useMemo(
     () => filterApplicationEmails(emails, application),
@@ -193,8 +215,17 @@ export default function ApplicationDetailPanel({
   }
 
   return (
-    <>
-      <DialogHeader className="sticky top-0 z-10 border-b border-zinc-200 bg-white px-4 pb-3 pt-4 sm:px-6 sm:pt-5">
+    <div className="flex h-full min-h-0 flex-col">
+      <DialogHeader className="sticky top-0 z-10 shrink-0 border-b border-zinc-200 bg-white px-4 pb-3 pt-4 sm:px-6 sm:pt-5">
+        <button
+          type="button"
+          onClick={onBack}
+          className="mb-3 inline-flex items-center gap-1.5 text-sm font-semibold text-zinc-700 hover:text-zinc-900"
+          data-testid="application-detail-back"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          {t("common.back")}
+        </button>
         <div className="flex items-start gap-3">
           <CompanyLogo company={application.job?.company} size="sm" rounded="xl" />
           <div className="min-w-0 flex-1">
@@ -243,7 +274,7 @@ export default function ApplicationDetailPanel({
         </div>
       </DialogHeader>
 
-      <Tabs defaultValue="application" className="flex min-h-0 flex-1 flex-col">
+      <Tabs value={activeTab} onValueChange={onTabChange} className="flex min-h-0 flex-1 flex-col">
         <TabsList
           className="sticky top-0 z-[1] mx-4 mt-3 grid h-auto grid-cols-4 gap-1 rounded-full bg-zinc-100 p-1 sm:mx-6"
           data-testid="application-detail-tabs"
@@ -437,52 +468,40 @@ export default function ApplicationDetailPanel({
                 </ul>
               </div>
             ) : null}
+
+            {hasApplicationDocuments(application) ? (
+              <div className="rounded-2xl border border-zinc-200 bg-white p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-zinc-900">{t("tracker.documentsSection")}</p>
+                  <button
+                    type="button"
+                    onClick={() => onTabChange?.("documents")}
+                    className="text-xs font-semibold text-linkedin"
+                    data-testid="application-open-documents-tab"
+                  >
+                    {t("tracker.viewAllDocuments")}
+                  </button>
+                </div>
+                <ApplicationDocumentsView
+                  application={application}
+                  profile={profile}
+                  t={t}
+                  onDownloadCV={onDownloadCV}
+                  onDownloadCoverLetter={onDownloadCoverLetter}
+                  compact
+                />
+              </div>
+            ) : null}
           </TabsContent>
 
-          <TabsContent value="documents" className="mt-0 space-y-6">
-            <section>
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <h3 className="text-sm font-bold text-zinc-900">{t("review.cv")}</h3>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={onDownloadCV}
-                  className="rounded-full"
-                  data-testid="download-cv-pdf-btn"
-                >
-                  <Download className="mr-1.5 h-3.5 w-3.5" />
-                  PDF
-                </Button>
-              </div>
-              <CVPreview
-                contact={profile?.contact || {}}
-                resume={application.tailored_resume || {}}
-                job={application.job}
-                template={profile?.template_style || "modern"}
-              />
-            </section>
-            <section>
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <h3 className="text-sm font-bold text-zinc-900">{t("review.coverLetter")}</h3>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={onDownloadCoverLetter}
-                  className="rounded-full"
-                  data-testid="download-cover-pdf-btn"
-                >
-                  <Download className="mr-1.5 h-3.5 w-3.5" />
-                  PDF
-                </Button>
-              </div>
-              <CoverLetterPreview
-                contact={profile?.contact || {}}
-                letter={application.cover_letter || {}}
-                job={application.job}
-              />
-            </section>
+          <TabsContent value="documents" className="mt-0">
+            <ApplicationDocumentsView
+              application={application}
+              profile={profile}
+              t={t}
+              onDownloadCV={onDownloadCV}
+              onDownloadCoverLetter={onDownloadCoverLetter}
+            />
           </TabsContent>
 
           <TabsContent value="timeline" className="mt-0">
@@ -529,6 +548,6 @@ export default function ApplicationDetailPanel({
           </TabsContent>
         </div>
       </Tabs>
-    </>
+    </div>
   );
 }

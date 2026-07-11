@@ -109,6 +109,7 @@ h1, h2, h3, h4, .font-display {
   body { @apply bg-background text-foreground; }
   html, body { overscroll-behavior-y: auto; }
   html:has(.sprout), body:has(.sprout) { background-color: #ffffff; }
+  html.sprout-dark:has(.sprout), html.sprout-dark body:has(.sprout) { background-color: #09090b; }
 }
 
 @layer components {
@@ -160,6 +161,15 @@ h1, h2, h3, h4, .font-display {
   }
   .shell-tab-inactive {
     @apply text-zinc-400 dark:text-zinc-500;
+  }
+
+  html.sprout-dark .selection-chip-off {
+    @apply bg-zinc-900 border-zinc-700 hover:border-violet-400/40 hover:bg-zinc-800 hover:text-violet-200 transition-all duration-200 ease-out;
+    color: #d4d4d8;
+  }
+  html.sprout-dark .selection-option-off {
+    @apply border-zinc-700 bg-zinc-900 hover:border-violet-400/35 hover:bg-zinc-800 transition-all duration-200 ease-out;
+    color: #e4e4e7;
   }
 }
 
@@ -241,6 +251,15 @@ h1, h2, h3, h4, .font-display {
   .sprout .gradient-linkedin,
   .sprout .gradient-linkedin .text-white { color: #ffffff; }
 
+  html.sprout-dark .bg-sprout-bg { background-color: #09090b; }
+  html.sprout-dark .bg-sprout-surface { background-color: #18181b; }
+  html.sprout-dark .bg-sprout-surface-2 { background-color: #27272a; }
+  html.sprout-dark .text-sprout-text { color: #fafafa; }
+  html.sprout-dark .text-sprout-muted { color: #a1a1aa; }
+  html.sprout-dark .text-sprout-dim { color: #71717a; }
+  html.sprout-dark .border-sprout-border { border-color: #27272a; }
+  html.sprout-dark .border-sprout-border-2 { border-color: #3f3f46; }
+
   .selection-chip-on {
     @apply border border-violet-400/70 bg-gradient-to-br from-violet-50 via-fuchsia-50/75 to-violet-50 text-violet-800 shadow-[0_1px_2px_rgba(124,58,237,0.08)] ring-1 ring-violet-300/50 transition-all duration-200 ease-out;
   }
@@ -270,6 +289,13 @@ h1, h2, h3, h4, .font-display {
   .backface-hidden { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
   .rotate-y-180 { transform: rotateY(180deg); }
 }
+
+/* Sprout dark text remaps — outside @layer to avoid Tailwind @apply circular deps */
+html.sprout-dark .sprout .text-white { color: #ffffff; }
+html.sprout-dark .sprout .text-zinc-100 { color: #f4f4f5; }
+html.sprout-dark .sprout .text-zinc-200 { color: #e4e4e7; }
+html.sprout-dark .sprout .text-zinc-300 { color: #d4d4d8; }
+html.sprout-dark .sprout .text-zinc-700 { color: #d4d4d8; }
 
 @keyframes slide-up {
   from { transform: translateY(20px); opacity: 0; }

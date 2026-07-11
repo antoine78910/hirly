@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/context/AuthContext";
 import { UpgradeModalProvider } from "@/context/UpgradeModalContext";
 import { AppLocaleProvider } from "@/context/AppLocaleContext";
+import { MobileThemeProvider } from "@/context/MobileThemeContext";
 import Terms from "@/pages/legal/Terms";
 import Privacy from "@/pages/legal/Privacy";
 import Landing from "@/pages/Landing";
@@ -217,9 +218,11 @@ function App() {
       <AuthProvider>
         <BrowserRouter>
           <AppLocaleProvider>
+            <MobileThemeProvider>
             <UpgradeModalProvider>
               <AppRouter />
             </UpgradeModalProvider>
+            </MobileThemeProvider>
           </AppLocaleProvider>
           <AdminToaster />
         </BrowserRouter>

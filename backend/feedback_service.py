@@ -19,7 +19,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-FEEDBACK_TO_EMAIL = (os.environ.get("FEEDBACK_TO_EMAIL") or "anto.delbos@gmail.com").strip()
+FEEDBACK_TO_EMAIL = (os.environ.get("FEEDBACK_TO_EMAIL") or "app@tryhirly.com").strip()
 FEEDBACK_FROM_EMAIL = (os.environ.get("FEEDBACK_FROM_EMAIL") or "Hirly <feedback@tryhirly.com>").strip()
 RESEND_API_KEY = (os.environ.get("RESEND_API_KEY") or "").strip()
 SMTP_HOST = (os.environ.get("FEEDBACK_SMTP_HOST") or os.environ.get("SMTP_HOST") or "").strip()
@@ -37,6 +37,13 @@ ALLOWED_MIME = {
     "image/gif",
 }
 
+CONTACT_ALLOWED_MIME = ALLOWED_MIME | {
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "text/plain",
+}
+
 import feedback_store as store
 from feedback_store import (
     FEEDBACK_FEATURE_CREATOR,
@@ -50,6 +57,7 @@ def _category_label(category: str) -> str:
         "feature": "Feature idea",
         "problem": "Problem / bug",
         "other": "Other",
+        "contact": "Contact",
     }
     return mapping.get(category, category or "Suggestion")
 
@@ -94,6 +102,7 @@ async def _send_via_resend(
     plain: str,
     html: str,
     attachments: List[Tuple[str, bytes, str]],
+    reply_to: str | None = None,
 ) -> bool:
     if not RESEND_API_KEY:
         return False
@@ -105,6 +114,8 @@ async def _send_via_resend(
         "text": plain,
         "html": html,
     }
+    if reply_to:
+        payload["reply_to"] = reply_to
     if attachments:
         payload["attachments"] = [
             {"filename": name, "content": base64.b64encode(content).decode("ascii")}
@@ -336,6 +347,96 @@ async def send_feature_suggestion(
         attachments=cleaned,
         transport=transport,
     )
+    return {"ok": True, "transport": transport, "submission_id": submission_id}
+
+
+def _valid_reply_email(value: str) -> str:
+    email = (value or "").strip().lower()
+    if not email or "@" not in email or len(email) > 254:
+        raise ValueError("A valid reply email is required")
+    return email
+
+
+async def send_contact_message(
+    db,
+    *,
+    reply_email: str,
+    message: str,
+    user_email: str,
+    user_name: str,
+    user_id: str,
+    attachments: List[Tuple[str, bytes, str]],
+) -> dict:
+    text = (message or "").strip()
+    if not text:
+        raise ValueError("Message is required")
+
+    reply_to = _valid_reply_email(reply_email)
+
+    if len(attachments) > MAX_ATTACHMENTS:
+        raise ValueError(f"At most {MAX_ATTACHMENTS} attachments allowed")
+
+    cleaned: List[Tuple[str, bytes, str]] = []
+    for name, content, mime in attachments:
+        mime_type = (mime or "application/octet-stream").lower().split(";")[0].strip()
+        if mime_type not in CONTACT_ALLOWED_MIME:
+            raise ValueError("Unsupported attachment type")
+        if len(content) > MAX_ATTACHMENT_BYTES:
+            raise ValueError("Each attachment must be 5 MB or smaller")
+        cleaned.append((Path(name).name or "attachment", content, mime_type))
+
+    subject = f"[Hirly] Contact — {reply_to}"
+    plain = "\n".join([
+        "Contact message",
+        f"Reply to: {reply_to}",
+        f"Account: {user_name or '—'} <{user_email or '—'}>",
+        f"User ID: {user_id or '—'}",
+        "",
+        text,
+        "",
+        f"Attachments: {', '.join(name for name, _, _ in cleaned) if cleaned else 'none'}",
+    ])
+    html = f"""
+    <div style="font-family:system-ui,sans-serif;line-height:1.5;color:#18181b">
+      <p><strong>Contact message</strong></p>
+      <p><strong>Reply to:</strong> {reply_to}</p>
+      <p><strong>Account:</strong> {user_name or "—"} &lt;{user_email or "—"}&gt;</p>
+      <p><strong>User ID:</strong> {user_id or "—"}</p>
+      <hr style="border:none;border-top:1px solid #e4e4e7;margin:16px 0" />
+      <p style="white-space:pre-wrap">{text}</p>
+      <hr style="border:none;border-top:1px solid #e4e4e7;margin:16px 0" />
+      <p style="font-size:12px;color:#71717a">
+        Attachments: {", ".join(name for name, _, _ in cleaned) if cleaned else "none"}
+      </p>
+    </div>
+    """
+
+    sent = await _send_via_resend(subject, plain, html, cleaned, reply_to=reply_to)
+    transport = "resend"
+    if not sent:
+        try:
+            sent = _send_via_smtp(subject, plain, html, cleaned)
+            transport = "smtp"
+        except Exception as exc:
+            logger.exception("SMTP contact message failed: %s", exc)
+            sent = False
+            transport = "archive"
+
+    submission_id = await _persist_feature_submission_async(
+        db,
+        user_email=reply_to,
+        user_name=user_name,
+        user_id=user_id,
+        category="contact",
+        message=text,
+        audience="user",
+        attachments=cleaned,
+        transport=transport if sent else "archive",
+    )
+    if not sent:
+        logger.warning("Contact message archived locally (email transport not configured): %s", submission_id)
+        return {"ok": True, "transport": "archive", "submission_id": submission_id}
+
     return {"ok": True, "transport": transport, "submission_id": submission_id}
 
 

@@ -1,12 +1,13 @@
-import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Zap, Loader2 } from "lucide-react";
+import { ArrowLeft, Zap, Loader2 } from "lucide-react";
 import { api } from "../lib/api";
 import { applyFromPassedJob } from "../lib/applyFromPassed";
 import CompanyLogo from "../components/CompanyLogo";
 import { toast } from "sonner";
 import { AppPage, AppPageScroll, SHELL_PAGE_CLASS } from "../components/app/AppPageShell";
+import { TitleHeader } from "../components/app/AppScreenHeader";
 import DesktopPageHeader from "../components/desktop/DesktopPageHeader";
 import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
 import { useAppLocale } from "../context/AppLocaleContext";
@@ -58,7 +59,7 @@ export default function History() {
   const { openUpgrade } = useUpgradeModal();
   const tabs = getHistoryTabs(t);
   const [searchParams, setSearchParams] = useSearchParams();
-  const [tab, setTab] = useState("right");
+  const [tab, setTab] = useState(() => (searchParams.get("tab") === "left" ? "left" : "right"));
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -75,19 +76,10 @@ export default function History() {
   }, [t]);
 
   useEffect(() => {
-    if (searchParams.get("tab") === "left") return;
-    load(tab);
-  }, [tab, load, searchParams]);
-
-  if (searchParams.get("tab") === "left") {
-    return <Navigate to="/tracker?tab=passed" replace />;
-  }
+    load(tab === "left" ? "left" : "right");
+  }, [tab, load]);
 
   const switchTab = (key) => {
-    if (key === "left") {
-      navigate("/tracker?tab=passed");
-      return;
-    }
     setTab(key);
     setSearchParams({ tab: key });
   };
@@ -103,11 +95,37 @@ export default function History() {
     }
   };
 
-  const title = t("history.generatedTitle");
+  const title = tab === "left" ? t("history.passedTitle") : t("history.generatedTitle");
+  const emptyMessage = tab === "left" ? t("history.noPassed") : t("history.noGenerated");
 
   return (
     <AppPage className={SHELL_PAGE_CLASS}>
+      <TitleHeader
+        title={title}
+        leftAction={(
+          <button
+            type="button"
+            onClick={() => navigate("/swipe")}
+            className="grid h-9 w-9 place-items-center rounded-full text-zinc-600 hover:bg-zinc-100"
+            aria-label={t("common.back")}
+            data-testid="history-back-mobile"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+        )}
+      />
+
       <AppPageScroll className={APP_CONTENT_WIDTH}>
+        <button
+          type="button"
+          onClick={() => navigate("/swipe")}
+          className="mb-4 hidden items-center gap-2 text-sm font-medium text-zinc-500 hover:text-zinc-900 md:inline-flex"
+          data-testid="history-back-desktop"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          {t("tracker.backToSwipe")}
+        </button>
+
         <DesktopPageHeader title={title} subtitle={t("history.subtitle")} />
         <div className="mt-6 flex gap-2 rounded-full border border-zinc-200 bg-zinc-100 p-1" data-testid="history-tabs">
           {tabs.map((tabItem) => (
@@ -140,7 +158,7 @@ export default function History() {
           ) : null}
           {!loading && rows.length === 0 ? (
             <div className="py-20 text-center" data-testid="history-empty">
-              <p className="text-zinc-500">{t("history.noGenerated")}</p>
+              <p className="text-zinc-500">{emptyMessage}</p>
             </div>
           ) : null}
           {!loading && rows.map((r) => (

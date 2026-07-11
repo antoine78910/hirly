@@ -3,19 +3,27 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import {
-  ArrowLeft, Palette, Bell, Compass, ShieldCheck, FileText,
-  CreditCard, RotateCw, MessageSquare, Users, Instagram, LogOut, Trash2,
+  ArrowLeft, Palette, Bell,
+  CreditCard, MessageSquare, Users, Instagram, LogOut, Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import Logo from "../components/Logo";
-import { BRAND, supportMailto } from "../lib/brand";
+import { BRAND } from "../lib/brand";
 import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
 import DesktopAppShell from "../components/desktop/DesktopAppShell";
 import AISettingsPanel from "../components/desktop/AISettingsPanel";
 import MobileAISettings from "../components/settings/MobileAISettings";
-import { useUpgradeModal } from "../context/UpgradeModalContext";
+import ContactSupportDialog from "../components/settings/ContactSupportDialog";
+import DeleteAccountDialog from "../components/settings/DeleteAccountDialog";
+import ThemeSettingsSheet from "../components/settings/ThemeSettingsSheet";
+import NotificationSettingsSheet from "../components/settings/NotificationSettingsSheet";
+import { useMobileTheme } from "../context/MobileThemeContext";
+import { mobileThemeLabel } from "../lib/mobileTheme";
+import {
+  countEnabledNotifications,
+  readNotificationSettings,
+} from "../lib/notificationSettings";
 import { useAppLocale } from "../context/AppLocaleContext";
-import { privacyHref, termsHref } from "../lib/legalPaths";
 
 const Section = ({ label, children, testId }) => (
   <section className="mt-7" data-testid={testId}>
@@ -49,18 +57,29 @@ const TikTok = (props) => (
 export default function Settings() {
   const navigate = useNavigate();
   const { logout, user } = useAuth();
-  const { openUpgrade } = useUpgradeModal();
   const { t } = useAppLocale();
-  const [theme, setTheme] = useState("System");
+  const { theme } = useMobileTheme();
   const [billing, setBilling] = useState(null);
+  const [contactOpen, setContactOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [themeOpen, setThemeOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() =>
+    countEnabledNotifications(readNotificationSettings()),
+  );
 
   useEffect(() => {
-    // Theme is informational for now; we keep the dark theme app-wide.
-    setTheme(localStorage.getItem("swiipr_theme") || "System");
     api.get("/billing/status").then(({ data }) => setBilling(data)).catch(() => setBilling(null));
   }, []);
 
-  const todo = (what) => toast(t("settings.comingSoon", { feature: what }));
+  useEffect(() => {
+    const syncNotifications = () => {
+      setNotificationsEnabled(countEnabledNotifications(readNotificationSettings()));
+    };
+    syncNotifications();
+    window.addEventListener("hirly:notification-settings-changed", syncNotifications);
+    return () => window.removeEventListener("hirly:notification-settings-changed", syncNotifications);
+  }, []);
 
   const inviteFriends = async () => {
     const url = `${window.location.origin}/?ref=${encodeURIComponent(user?.email || "")}`;
@@ -73,27 +92,7 @@ export default function Settings() {
 
   const openExternal = (href) => window.open(href, "_blank", "noopener");
 
-  const openPlan = async () => {
-    if (!billing?.is_premium) {
-      openUpgrade();
-      return;
-    }
-    try {
-      const { data } = await api.post("/billing/create-portal-session");
-      if (data?.url) window.location.href = data.url;
-      else toast.error(t("settings.billingPortalError"));
-    } catch (error) {
-      toast.error(error?.response?.data?.detail || t("settings.billingPortalError"));
-    }
-  };
-
-  const deleteAccount = () => {
-    if (!window.confirm(t("settings.deleteConfirm"))) return;
-    api.delete("/profile").then(() => {
-      toast.success(t("settings.accountDeleted"));
-      logout();
-    }).catch(() => toast.error(t("settings.deleteError")));
-  };
+  const openBilling = () => navigate("/billing");
 
   return (
     <>
@@ -118,39 +117,35 @@ export default function Settings() {
 
       <AppPageScroll className="mx-auto max-w-md px-5 pb-32" withBottomNavPad={false}>
       <Section label={t("settings.lookAndFeel")} testId="settings-appearance">
-        <Row icon={Palette} label={t("settings.theme")} value={theme} onClick={() => todo(t("settings.theme"))} testId="settings-theme" />
+        <Row icon={Palette} label={t("settings.theme")} value={mobileThemeLabel(theme, t)} onClick={() => setThemeOpen(true)} testId="settings-theme" />
       </Section>
 
-      <Section label={t("settings.alerts")} testId="settings-notifications">
-        <Row icon={Bell} label={t("settings.notificationPrefs")} onClick={() => todo(t("settings.notificationPrefs"))} testId="settings-notif-prefs" />
+      <Section label={t("settings.notifications")} testId="settings-notifications">
+        <Row
+          icon={Bell}
+          label={t("settings.notifications")}
+          value={t("settings.notificationsEnabled", { n: notificationsEnabled })}
+          onClick={() => setNotificationsOpen(true)}
+          testId="settings-notif-prefs"
+        />
       </Section>
 
       <MobileAISettings />
 
-      <Section label={t("settings.walkthrough")} testId="settings-tour">
-        <Row icon={Compass} label={t("settings.replayWalkthrough")} onClick={() => todo(t("settings.replayWalkthrough"))} testId="settings-restart-tour" />
-      </Section>
-
-      <Section label={t("settings.privacyData")} testId="settings-security">
-        <Row icon={ShieldCheck} label={t("settings.privacyPolicy")} onClick={() => openExternal(privacyHref())} testId="settings-privacy" />
-        <Row icon={FileText} label={t("settings.termsOfUse")} onClick={() => openExternal(termsHref())} testId="settings-terms" />
-      </Section>
-
       <Section label={t("settings.planHelp")} testId="settings-support">
-        <Row icon={CreditCard}    label={billing?.is_premium ? t("settings.manageBilling") : t("settings.upgradePlan")} onClick={openPlan} testId="settings-subscribe" />
-        <Row icon={RotateCw}      label={t("settings.restorePurchase")}  onClick={() => todo(t("settings.restorePurchase"))}       testId="settings-restore" />
-        <Row icon={MessageSquare} label={t("settings.talkToUs")}        onClick={() => openExternal(supportMailto())} testId="settings-chat" />
+        <Row icon={CreditCard}    label={billing?.is_premium ? t("settings.manageBilling") : t("settings.upgradePlan")} onClick={openBilling} testId="settings-subscribe" />
+        <Row icon={MessageSquare} label={t("settings.talkToUs")}        onClick={() => setContactOpen(true)} testId="settings-chat" />
       </Section>
 
       <Section label={t("settings.shareBrand", { brand: BRAND.NAME })} testId="settings-social">
         <Row icon={Users}     label={t("settings.inviteFriend")} onClick={inviteFriends}                                 testId="settings-invite" />
-        <Row icon={Instagram} label={t("settings.onInstagram")} onClick={() => openExternal("https://instagram.com")} testId="settings-instagram" />
-        <Row icon={TikTok}    label={t("settings.onTikTok")}    onClick={() => openExternal("https://tiktok.com")}    testId="settings-tiktok" />
+        <Row icon={Instagram} label={t("settings.onInstagram")} value={t("settings.socialHandle")} onClick={() => openExternal(BRAND.INSTAGRAM_URL)} testId="settings-instagram" />
+        <Row icon={TikTok}    label={t("settings.onTikTok")}    value={t("settings.socialHandle")} onClick={() => openExternal(BRAND.TIKTOK_URL)}    testId="settings-tiktok" />
       </Section>
 
       <Section label={t("settings.yourAccount")} testId="settings-account">
-        <Row icon={LogOut} label={t("settings.signOut")}        onClick={logout}        testId="settings-logout" danger />
-        <Row icon={Trash2} label={t("settings.deleteAccount")}  onClick={deleteAccount} testId="settings-delete" danger />
+        <Row icon={LogOut} label={t("settings.signOut")} onClick={() => logout()} testId="settings-logout" danger />
+        <Row icon={Trash2} label={t("settings.deleteAccount")}  onClick={() => setDeleteOpen(true)} testId="settings-delete" danger />
       </Section>
 
       <footer className="mt-10 mb-4 flex flex-col items-center gap-2 text-center" data-testid="settings-footer">
@@ -160,6 +155,10 @@ export default function Settings() {
         <code className="text-[11px] text-sprout-dim break-all px-3" data-testid="settings-user-id">{user?.user_id || "—"}</code>
       </footer>
       </AppPageScroll>
+      <ContactSupportDialog open={contactOpen} onClose={() => setContactOpen(false)} />
+      <DeleteAccountDialog open={deleteOpen} onClose={() => setDeleteOpen(false)} />
+      <ThemeSettingsSheet open={themeOpen} onClose={() => setThemeOpen(false)} />
+      <NotificationSettingsSheet open={notificationsOpen} onClose={() => setNotificationsOpen(false)} />
     </AppPage>
     </>
   );

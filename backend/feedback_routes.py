@@ -67,6 +67,43 @@ def register_feedback_routes(api_router: APIRouter, get_current_user, require_ad
 
         return {"ok": True, **result}
 
+    @api_router.post("/feedback/contact")
+    async def contact_support(
+        reply_email: str = Form(...),
+        message: str = Form(...),
+        files: List[UploadFile] = File(default=[]),
+        user=Depends(get_current_user),
+    ):
+        attachments = []
+        for upload in files[: feedback.MAX_ATTACHMENTS]:
+            if not upload.filename:
+                continue
+            content = await upload.read()
+            if not content:
+                continue
+            attachments.append((
+                upload.filename,
+                content,
+                upload.content_type or "application/octet-stream",
+            ))
+
+        try:
+            result = await feedback.send_contact_message(
+                db,
+                reply_email=reply_email,
+                message=message,
+                user_email=getattr(user, "email", "") or "",
+                user_name=getattr(user, "name", "") or "",
+                user_id=getattr(user, "user_id", "") or "",
+                attachments=attachments,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail="Could not send message") from exc
+
+        return {"ok": True, **result}
+
     @api_router.post("/feedback/training-completion")
     async def training_completion_feedback(
         body: TrainingCompletionFeedbackBody,

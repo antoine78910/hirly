@@ -24,6 +24,7 @@ import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
 import CompanyLogo from "../components/CompanyLogo";
 import CVPreview from "../components/CVPreview";
 import CoverLetterPreview from "../components/CoverLetterPreview";
+import { getApplicationCoverLetter, getApplicationResume } from "../lib/applicationDocuments";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Button } from "../components/ui/button";
@@ -232,16 +233,18 @@ export default function Review() {
                   <TabsContent value="cv" className="mt-4">
                     <CVPreview
                       contact={profile?.contact || {}}
-                      resume={selected.tailored_resume || {}}
+                      resume={getApplicationResume(selected)}
                       job={selected.job}
                       template={profile?.template_style || "modern"}
+                      theme="light"
                     />
                   </TabsContent>
                   <TabsContent value="cover" className="mt-4">
                     <CoverLetterPreview
                       contact={profile?.contact || {}}
-                      letter={selected.cover_letter || {}}
+                      letter={getApplicationCoverLetter(selected)}
                       job={selected.job}
+                      theme="light"
                     />
                   </TabsContent>
                 </Tabs>

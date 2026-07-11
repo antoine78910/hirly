@@ -94,11 +94,16 @@ function TierCard({ tier, selected, onSelect, isMonthly, t, lang }) {
 }
 
 function PricingGrid({ tiers, isMonthly, selectedTier, onSelectTier, t, lang }) {
+  const tierCount = tiers.length;
+  const gridClass =
+    tierCount === 1
+      ? "grid grid-cols-1 gap-2 sm:gap-4"
+      : tierCount === 2
+        ? "grid grid-cols-2 gap-2 sm:gap-4"
+        : "grid grid-cols-3 gap-2 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 lg:gap-6";
+
   return (
-    <div
-      role="radiogroup"
-      className="grid grid-cols-3 gap-2 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 lg:gap-6"
-    >
+    <div role="radiogroup" className={gridClass}>
       {tiers.map((tier) => (
         <TierCard
           key={tier.id}

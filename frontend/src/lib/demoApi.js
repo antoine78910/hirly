@@ -14,6 +14,7 @@ import { getDemoTrainingCatalog, getDemoTrainingCourseDetail } from "./demoTrain
 import { getInviteDevResponse } from "./inviteDevMocks";
 import { isDemoAccountEnabled, consumeDemoCredit } from "./demoAccount";
 import { mergeDemoCvIntoProfile } from "./demoCvUpload";
+import { buildDemoApplicationFromSwipe } from "./demoApplicationFactory";
 import axios from "axios";
 import { parseApiPath } from "./apiPath";
 import { applyJobFilters, feedQueryToFilters } from "./applyJobFilters";
@@ -55,25 +56,8 @@ function handleSwipe(body = {}) {
   if (direction === "right") {
     if (isDemoAccountEnabled()) consumeDemoCredit();
     state.historyRight.unshift(row);
-    const application = {
-      application_id: `demo_app_${Date.now()}`,
-      job_id: jobId,
-      job: { ...job },
-      status: "applied",
-      submission_status: "not_submitted",
-      match_score: job.match_score,
-      match_reasons: job.match_reasons,
-      created_at: new Date().toISOString(),
-      tailored_resume: {
-        summary: "Tailored CV generated for demo.",
-        highlights: ["Relevant stack match", "Product shipping experience"],
-      },
-      cover_letter: {
-        greeting: `Hi ${job.company} team,`,
-        body: `I'm excited about the ${job.title} role.`,
-        closing: "Best,\nAlex Martin",
-      },
-    };
+    const application = buildDemoApplicationFromSwipe(job);
+    application.application_id = `demo_app_${Date.now()}`;
     state.applications.unshift(application);
     return { ok: true, applied: true, application_id: application.application_id };
   }
@@ -209,6 +193,10 @@ export function getDemoResponse(config) {
     const direction = params.direction === "left" ? "left" : "right";
     const rows = direction === "left" ? state.historyLeft : state.historyRight;
     return { swipes: clone(rows) };
+  }
+
+  if (method === "delete" && path === "/profile") {
+    return { ok: true };
   }
 
   if (method === "delete" && path.startsWith("/swipes/")) {
@@ -412,6 +400,10 @@ export function getDemoResponse(config) {
 
   if (method === "post" && path === "/feedback/suggest-feature") {
     return { ok: true, submission_id: "demo_feature", transport: "archive" };
+  }
+
+  if (method === "post" && path === "/feedback/contact") {
+    return { ok: true, submission_id: "demo_contact", transport: "archive" };
   }
 
   if (method === "get" && path === "/admin/influencers") {

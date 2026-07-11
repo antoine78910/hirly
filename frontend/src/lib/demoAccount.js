@@ -6,6 +6,10 @@ import { isFinanceDemoEnabled, readDemoSettings, saveDemoSettings, DEMO_SETTINGS
 import { mergeDemoCvIntoProfile, hasDemoCvStored, shouldMockCvUpload } from "./demoCvUpload";
 import axios from "axios";
 import { normalizeApiPath } from "./apiPath";
+import {
+  buildDemoApplicationFromSwipe,
+  buildDemoShowcaseApplication,
+} from "./demoApplicationFactory";
 
 let cachedDemoAccount = false;
 
@@ -148,57 +152,7 @@ function resolveJob(jobId) {
 }
 
 export function buildDemoApplication(job, variantIndex = 0) {
-  const variants = [
-    {
-      status: "interview",
-      submission_status: "submitted",
-      user_facing_submission_status: "submitted",
-      interview_prep: [
-        "Walk me through a recent product feature you shipped end-to-end.",
-        "How do you balance speed and code quality on a small team?",
-        "Tell me about a time you improved application performance.",
-      ],
-    },
-    {
-      status: "viewed",
-      submission_status: "submitted",
-      user_facing_submission_status: "submitted",
-    },
-    {
-      status: "applied",
-      submission_status: "ready",
-      user_facing_submission_status: "ready",
-    },
-    {
-      status: "applied",
-      submission_status: "not_submitted",
-      user_facing_submission_status: "pending",
-    },
-  ];
-  const variant = variants[variantIndex % variants.length];
-
-  return {
-    application_id: `demo_local_${Date.now()}_${job.job_id}`,
-    job_id: job.job_id,
-    job: { ...job },
-    status: variant.status,
-    submission_status: variant.submission_status,
-    user_facing_submission_status: variant.user_facing_submission_status,
-    demo_local: true,
-    match_score: job.match_score,
-    match_reasons: job.match_reasons || [],
-    created_at: new Date().toISOString(),
-    interview_prep: variant.interview_prep || [],
-    tailored_resume: {
-      summary: "Tailored CV generated in demo mode (not submitted to employers).",
-      highlights: ["Relevant experience highlighted", "Keywords matched to the job description"],
-    },
-    cover_letter: {
-      greeting: `Hi ${job.company} team,`,
-      body: `I'm excited about the ${job.title} role at ${job.company}. My background in ${(job.tech_stack || ["React", "TypeScript"]).slice(0, 2).join(" and ")} aligns well with what you're building.`,
-      closing: "Best regards,\nAlex Martin",
-    },
-  };
+  return buildDemoShowcaseApplication(job, variantIndex);
 }
 
 function daysAgoIso(days) {
@@ -276,7 +230,7 @@ export function handleDemoAccountSwipe(body = {}) {
 
   if (direction === "right") {
     consumeDemoCredit();
-    const application = buildDemoApplication(job, getDemoApplications().length);
+    const application = buildDemoApplicationFromSwipe(job);
     writeJson(APPS_KEY, [application, ...getDemoApplications()]);
 
     const row = buildSwipeRow(job, "right");

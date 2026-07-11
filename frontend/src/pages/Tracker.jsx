@@ -25,6 +25,7 @@ import { trackEvent } from "../lib/analytics";
 import { useAuth } from "../context/AuthContext";
 import { useAppLocale } from "../context/AppLocaleContext";
 import { resolveDisplayStatus } from "../lib/applicationReview";
+import { getApplicationCoverLetter, getApplicationResume, hasApplicationDocuments } from "../lib/applicationDocuments";
 import {
   getApplicationDisplayStatuses,
   getTrackerEmptyCopy,
@@ -286,6 +287,7 @@ export default function Tracker() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [open, setOpen] = useState(false);
+  const [detailTab, setDetailTab] = useState("application");
   const [missingAnswers, setMissingAnswers] = useState({});
   const [saveMissingToProfile, setSaveMissingToProfile] = useState(false);
   const [savingMissing, setSavingMissing] = useState(false);
@@ -379,7 +381,7 @@ export default function Tracker() {
     if (!selected) return;
     downloadTailoredCV({
       contact: profile?.contact || {},
-      resume: selected.tailored_resume || {},
+      resume: getApplicationResume(selected),
       job: selected.job,
       template: profile?.template_style || "modern",
     });
@@ -390,7 +392,7 @@ export default function Tracker() {
     if (!selected) return;
     downloadCoverLetter({
       contact: profile?.contact || {},
-      letter: selected.cover_letter || {},
+      letter: getApplicationCoverLetter(selected),
       job: selected.job,
       template: profile?.template_style || "modern",
     });
@@ -399,10 +401,12 @@ export default function Tracker() {
 
   const openApplication = async (app) => {
     setSelected(app);
+    setDetailTab(hasApplicationDocuments(app) ? "documents" : "application");
     setOpen(true);
     try {
       const { data } = await api.get(`/applications/${app.application_id}`);
       setSelected(data);
+      setDetailTab(hasApplicationDocuments(data) ? "documents" : "application");
       setApps((prev) => prev.map((a) => a.application_id === data.application_id ? data : a));
     } catch {
       // Keep the list record visible if refresh fails.
@@ -859,6 +863,7 @@ export default function Tracker() {
           data-testid="application-detail"
         >
           {selected && (
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <ApplicationDetailPanel
               application={selected}
               profile={profile}
@@ -884,7 +889,11 @@ export default function Tracker() {
               missingFieldsForForm={missingFieldsForForm}
               optionValue={optionValue}
               optionLabel={optionLabel}
+              onBack={() => setOpen(false)}
+              activeTab={detailTab}
+              onTabChange={setDetailTab}
             />
+            </div>
           )}
         </DialogContent>
       </Dialog>

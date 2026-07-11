@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowRight, Loader2, Lock, Mail } from "lucide-react";
+import { Loader2, Lock, Mail } from "lucide-react";
 import Logo from "../components/Logo";
 import GoogleSignInButton from "../components/auth/GoogleSignInButton";
 import { Button } from "../components/ui/button";
@@ -110,36 +110,20 @@ export default function SignIn() {
   }
 
   return (
-    <div className="min-h-dvh bg-white text-zinc-900">
-      <header className="border-b border-zinc-100 bg-white/80 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3.5">
-          <Link to="/" className="flex items-center gap-2 font-display text-lg font-black tracking-tight">
-            <Logo size={28} />
-            <span>{BRAND.NAME}</span>
-          </Link>
-        </div>
-      </header>
+    <div className="min-h-dvh bg-white px-6 py-10 text-zinc-900 sm:py-16">
+      <div className="mx-auto flex w-full max-w-sm flex-col items-center">
+        <Link to="/" className="flex items-center gap-2 font-display text-lg font-black tracking-tight">
+          <Logo size={30} />
+          <span>{BRAND.NAME}</span>
+        </Link>
 
-      <main className="gradient-linkedin-soft min-h-[calc(100dvh-57px)] px-6 py-12">
-        <div className="mx-auto grid max-w-5xl items-center gap-10 lg:grid-cols-[1fr_420px]">
-          <section>
-            <p className="text-sm font-semibold text-linkedin">Welcome back</p>
-            <h1 className="mt-3 font-display text-5xl font-black leading-tight tracking-tight sm:text-6xl">
-              Sign in to {BRAND.NAME}.
-            </h1>
-            <p className="mt-5 max-w-xl text-lg leading-relaxed text-zinc-600">
-              Pick up where you left off — your swipes, profile, and applications stay synced.
-            </p>
-          </section>
+        <div className="mt-10 w-full">
+          <h1 className="text-center font-display text-3xl font-bold tracking-tight">Welcome back</h1>
+          <p className="mt-2 text-center text-sm text-zinc-500">
+            Continue with Google or your email.
+          </p>
 
-          <section className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-[0_24px_80px_-28px_rgba(124,58,237,0.28)]">
-            <div className="mb-5">
-              <h2 className="font-display text-2xl font-bold">Sign in</h2>
-              <p className="mt-1 text-sm text-zinc-500">
-                Continue with Google or use your email and password.
-              </p>
-            </div>
-
+          <div className="mt-8 space-y-4">
             <GoogleSignInButton
               onClick={onGoogleClick}
               disabled={submitting}
@@ -147,7 +131,7 @@ export default function SignIn() {
               testId="signin-google-btn"
             />
 
-            <div className="my-5 flex items-center gap-3">
+            <div className="flex items-center gap-3">
               <div className="h-px flex-1 bg-zinc-200" />
               <span className="text-xs font-medium text-zinc-400">or</span>
               <div className="h-px flex-1 bg-zinc-200" />
@@ -155,13 +139,14 @@ export default function SignIn() {
 
             <form className="space-y-3" onSubmit={onEmailSubmit}>
               <label className="block">
-                <span className="mb-1.5 block text-sm font-semibold text-zinc-700">Email</span>
+                <span className="sr-only">Email</span>
                 <div className="relative">
                   <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
                   <Input
                     type="email"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
+                    placeholder="Email"
                     className="h-12 rounded-2xl pl-10"
                     autoComplete="email"
                     data-testid="signin-email-input"
@@ -170,13 +155,14 @@ export default function SignIn() {
               </label>
 
               <label className="block">
-                <span className="mb-1.5 block text-sm font-semibold text-zinc-700">Password</span>
+                <span className="sr-only">Password</span>
                 <div className="relative">
                   <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
                   <Input
                     type="password"
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
+                    placeholder="Password"
                     className="h-12 rounded-2xl pl-10"
                     autoComplete="current-password"
                     data-testid="signin-password-input"
@@ -193,20 +179,19 @@ export default function SignIn() {
                 data-testid="signin-email-submit"
               >
                 {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Sign in
-                {!submitting ? <ArrowRight className="ml-1.5 h-4 w-4" /> : null}
+                Continue
               </Button>
             </form>
+          </div>
 
-            <p className="mt-5 text-center text-sm text-zinc-500">
-              New to {BRAND.NAME}?{" "}
-              <Link to="/onboarding" className="font-semibold text-linkedin hover:text-linkedin-dark">
-                Get started
-              </Link>
-            </p>
-          </section>
+          <p className="mt-6 text-center text-sm text-zinc-500">
+            New to {BRAND.NAME}?{" "}
+            <Link to="/onboarding" className="font-semibold text-linkedin hover:text-linkedin-dark">
+              Get started
+            </Link>
+          </p>
         </div>
-      </main>
+      </div>
     </div>
   );
 }

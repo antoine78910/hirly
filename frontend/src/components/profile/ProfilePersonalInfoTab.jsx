@@ -14,12 +14,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Slider } from "../ui/slider";
 import {
   buildPersonalInfoState,
-  CITIZENSHIP_STATUS_OPTIONS,
-  DISABILITY_OPTIONS,
-  ETHNICITY_OPTIONS,
-  GENDER_OPTIONS,
-  SEXUAL_ORIENTATION_OPTIONS,
-  VETERAN_OPTIONS,
+  getGenderOptions,
+  getEthnicityOptions,
+  getDisabilityOptions,
+  getSexualOrientationOptions,
+  getVeteranOptions,
+  getCitizenshipStatusOptions,
+  labelForStoredOption,
 } from "../../lib/personalInfoOptions";
 
 const SALARY_MAX = 500_000;
@@ -230,6 +231,13 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
     max: formatSalary(salary.salaryMax, lang),
   });
 
+  const genderOptions = useMemo(() => getGenderOptions(t), [t]);
+  const ethnicityOptions = useMemo(() => getEthnicityOptions(t), [t]);
+  const disabilityOptions = useMemo(() => getDisabilityOptions(t), [t]);
+  const sexualOrientationOptions = useMemo(() => getSexualOrientationOptions(t), [t]);
+  const veteranOptions = useMemo(() => getVeteranOptions(t), [t]);
+  const citizenshipStatusOptions = useMemo(() => getCitizenshipStatusOptions(t), [t]);
+
   return (
     <div className="space-y-8 pb-6" data-testid="profile-personal-info">
       <ProfileFormSection
@@ -252,7 +260,7 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
                 name="firstName"
                 value={contact.firstName}
                 onChange={(e) => setContact((s) => ({ ...s, firstName: e.target.value }))}
-                placeholder="Jacob"
+                placeholder={t("profile.personalInfo.firstNamePlaceholder")}
                 data-testid="personal-info-first-name"
               />
             </FieldBlock>
@@ -262,7 +270,7 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
                 name="lastName"
                 value={contact.lastName}
                 onChange={(e) => setContact((s) => ({ ...s, lastName: e.target.value }))}
-                placeholder="Paul"
+                placeholder={t("profile.personalInfo.lastNamePlaceholder")}
                 data-testid="personal-info-last-name"
               />
             </FieldBlock>
@@ -424,8 +432,8 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
                 <SelectValue placeholder={t("profile.personalInfo.selectGender")} />
               </SelectTrigger>
               <SelectContent>
-                {GENDER_OPTIONS.map((option) => (
-                  <SelectItem key={option} value={option}>{option}</SelectItem>
+                {genderOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -433,21 +441,21 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
 
           <FieldBlock label={t("profile.personalInfo.ethnicity")} htmlFor="ethnicity">
             <div className="flex flex-wrap gap-2">
-              {ETHNICITY_OPTIONS.map((option) => {
-                const active = demographics.ethnicity.includes(option);
+              {ethnicityOptions.map((option) => {
+                const active = demographics.ethnicity.includes(option.value);
                 return (
                   <button
-                    key={option}
+                    key={option.value}
                     type="button"
-                    onClick={() => toggleEthnicity(option)}
+                    onClick={() => toggleEthnicity(option.value)}
                     className={`rounded-md border px-3 py-2 text-left text-sm transition-colors ${
                       active
                         ? "border-transparent gradient-linkedin text-white shadow-sm"
                         : "shell-chip-idle"
                     }`}
-                    data-testid={`personal-info-ethnicity-${option.slice(0, 12)}`}
+                    data-testid={`personal-info-ethnicity-${option.value.slice(0, 12)}`}
                   >
-                    {option}
+                    {option.label}
                   </button>
                 );
               })}
@@ -463,8 +471,8 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
                 <SelectValue placeholder={t("profile.personalInfo.selectStatus")} />
               </SelectTrigger>
               <SelectContent>
-                {DISABILITY_OPTIONS.map((option) => (
-                  <SelectItem key={option} value={option}>{option}</SelectItem>
+                {disabilityOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -479,8 +487,8 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
                 <SelectValue placeholder={t("profile.personalInfo.selectOrientation")} />
               </SelectTrigger>
               <SelectContent>
-                {SEXUAL_ORIENTATION_OPTIONS.map((option) => (
-                  <SelectItem key={option} value={option}>{option}</SelectItem>
+                {sexualOrientationOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -495,8 +503,8 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
                 <SelectValue placeholder={t("profile.personalInfo.selectStatus")} />
               </SelectTrigger>
               <SelectContent>
-                {VETERAN_OPTIONS.map((option) => (
-                  <SelectItem key={option} value={option}>{option}</SelectItem>
+                {veteranOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -533,8 +541,8 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
                   <SelectValue placeholder={t("profile.personalInfo.citizenshipType")} />
                 </SelectTrigger>
                 <SelectContent>
-                  {CITIZENSHIP_STATUS_OPTIONS.map((option) => (
-                    <SelectItem key={option} value={option}>{option}</SelectItem>
+                  {citizenshipStatusOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -549,7 +557,7 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
                   >
                     <span className="shell-title font-medium">{entry.country}</span>
                     <div className="flex items-center gap-2">
-                      <span className="text-zinc-600 dark:text-zinc-400">{entry.status}</span>
+                      <span className="text-zinc-600 dark:text-zinc-400">{labelForStoredOption(entry.status, citizenshipStatusOptions)}</span>
                       <Button
                         type="button"
                         variant="outline"

@@ -4,12 +4,14 @@ import { X, Loader2 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+import { useAppLocale } from "../context/AppLocaleContext";
 
 /**
  * Generic mobile slide-in sheet (right→left). Use for Profile sub-pages.
  * Renders nothing when `open` is false.
  */
 export default function Sheet({ open, title, onClose, children, footer, testId }) {
+  const { t } = useAppLocale();
   // Lock body scroll while open
   useEffect(() => {
     if (!open) return;
@@ -34,7 +36,7 @@ export default function Sheet({ open, title, onClose, children, footer, testId }
               onClick={onClose}
               className="w-10 h-10 grid place-items-center rounded-full hover:bg-sprout-surface"
               data-testid={`${testId}-close`}
-              aria-label="Close"
+              aria-label={t("common.cancel")}
             >
               <X className="w-5 h-5 text-white" />
             </button>
@@ -72,7 +74,9 @@ export function Field({ label, value, onChange, placeholder, testId, type = "tex
   );
 }
 
-export function SaveButton({ saving, onClick, label = "Save", testId = "sheet-save-btn" }) {
+export function SaveButton({ saving, onClick, label, testId = "sheet-save-btn" }) {
+  const { t } = useAppLocale();
+  const text = label ?? t("common.save");
   return (
     <Button
       onClick={onClick}
@@ -80,7 +84,7 @@ export function SaveButton({ saving, onClick, label = "Save", testId = "sheet-sa
       className="h-12 w-full rounded-full gradient-linkedin font-semibold text-white shadow-[0_8px_24px_rgba(124,58,237,0.28)] hover:opacity-90"
       data-testid={testId}
     >
-      {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : label}
+      {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : text}
     </Button>
   );
 }

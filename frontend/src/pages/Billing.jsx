@@ -25,7 +25,6 @@ import {
   CardTitle,
 } from "../components/ui/card";
 import { Progress } from "../components/ui/progress";
-import { Separator } from "../components/ui/separator";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 
 const BRAND_VIOLET = "#7C3AED";
@@ -117,19 +116,20 @@ function UsageChart({ data, label, lang }) {
 
   return (
     <div
-      className="h-[280px] w-full min-w-0"
+      className="h-[240px] w-full min-w-0 overflow-hidden sm:h-[280px]"
       data-chart="billing-daily-usage"
       style={{ "--color-applications": BRAND_VIOLET }}
     >
       <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-        <BarChart data={data} margin={{ top: 16, right: 8, left: 0, bottom: 4 }} barCategoryGap="28%">
+        <BarChart data={data} margin={{ top: 12, right: 4, left: -8, bottom: 0 }} barCategoryGap="18%">
           <CartesianGrid vertical={false} stroke="#e4e4e7" strokeDasharray="3 3" />
           <XAxis
             dataKey="label"
             tickLine={false}
             axisLine={false}
-            tick={{ fontSize: 11, fontWeight: 500, fill: "#71717a" }}
+            tick={{ fontSize: 10, fontWeight: 500, fill: "#71717a" }}
             interval="preserveStartEnd"
+            minTickGap={8}
           />
           <YAxis
             allowDecimals={false}
@@ -137,14 +137,14 @@ function UsageChart({ data, label, lang }) {
             axisLine={false}
             domain={[0, top]}
             ticks={ticks}
-            tick={{ fontSize: 11, fontWeight: 500, fill: "#71717a" }}
-            width={36}
+            tick={{ fontSize: 10, fontWeight: 500, fill: "#71717a" }}
+            width={28}
           />
           <Tooltip
             cursor={{ fill: BRAND_VIOLET_SOFT }}
             content={<UsageChartTooltip lang={lang} label={label} />}
           />
-          <Bar dataKey="applications" radius={[4, 4, 0, 0]} maxBarSize={40}>
+          <Bar dataKey="applications" radius={[4, 4, 0, 0]} maxBarSize={32}>
             {data.map((entry) => (
               <Cell
                 key={entry.date}
@@ -230,8 +230,8 @@ export default function Billing() {
   }
 
   return (
-    <div className="min-h-dvh bg-white text-zinc-900 md:min-h-0">
-      <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 md:py-12">
+    <div className="min-h-dvh overflow-x-hidden bg-white text-zinc-900 md:min-h-0">
+      <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 md:py-12">
         <button
           type="button"
           onClick={() => navigate(-1)}
@@ -250,8 +250,8 @@ export default function Billing() {
             title={t("billingPage.currentSubscription")}
             description={t("billingPage.currentSubscriptionDesc")}
           >
-            <Card className="w-full border-zinc-200 shadow-sm">
-              <CardContent className="space-y-6 px-6">
+            <Card className="w-full min-w-0 overflow-hidden border-zinc-200 shadow-sm">
+              <CardContent className="space-y-6 px-4 sm:px-6">
                 {isPremium ? (
                   <div className="py-8 text-center">
                     <Crown className="mx-auto mb-4 h-12 w-12 text-linkedin" aria-hidden />
@@ -290,25 +290,6 @@ export default function Billing() {
                   </div>
                 )}
 
-                <Separator />
-
-                <div className="rounded-lg border border-violet-200/80 bg-violet-50/80 p-4">
-                  <h4 className="mb-2 text-sm font-medium text-violet-950">
-                    {t("billingPage.mobileSubscriptionTitle")}
-                  </h4>
-                  <p className="mb-3 text-sm text-violet-900/80">
-                    {t("billingPage.mobileSubscriptionDesc")}
-                  </p>
-                  <Button
-                    variant="outline"
-                    className="border-violet-300 text-violet-900 hover:bg-violet-100"
-                    onClick={() =>
-                      toast(t("settings.comingSoon", { feature: t("billingPage.linkMobilePurchase") }))
-                    }
-                  >
-                    {t("billingPage.linkMobilePurchase")}
-                  </Button>
-                </div>
               </CardContent>
             </Card>
           </BillingSection>
@@ -317,19 +298,19 @@ export default function Billing() {
             title={t("billingPage.usageCredits")}
             description={t("billingPage.usageCreditsDesc")}
           >
-            <div className="space-y-8">
-              <Card className="border-zinc-200 shadow-sm">
-                <CardHeader className="grid auto-rows-min grid-rows-[auto_auto] items-start gap-2 px-6">
+            <div className="min-w-0 space-y-8">
+              <Card className="min-w-0 overflow-hidden border-zinc-200 shadow-sm">
+                <CardHeader className="grid auto-rows-min grid-rows-[auto_auto] items-start gap-2 px-4 sm:px-6">
                   <CardTitle className="text-zinc-900">{t("billingPage.currentCreditPeriod")}</CardTitle>
-                  <div className="text-sm text-zinc-500">{periodLabel}</div>
+                  <div className="break-words text-sm text-zinc-500">{periodLabel}</div>
                 </CardHeader>
-                <CardContent className="space-y-6 px-6">
-                  <div className="flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
+                <CardContent className="space-y-6 px-4 sm:px-6">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 items-center gap-3 sm:gap-4">
                       <div className="shrink-0 rounded-lg bg-violet-100 p-2">
                         <CreditCard className="h-5 w-5 text-linkedin" aria-hidden />
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <h4 className="text-base font-semibold text-zinc-900">
                           {t("billingPage.creditsUsed")}
                         </h4>
@@ -338,7 +319,7 @@ export default function Billing() {
                         </p>
                       </div>
                     </div>
-                    <div className="text-right">
+                    <div className="text-left sm:text-right">
                       <span className="text-2xl font-bold tabular-nums text-zinc-900">
                         {usagePercent}%
                       </span>
@@ -365,8 +346,8 @@ export default function Billing() {
                 </CardContent>
 
                 {!isPremium ? (
-                  <CardFooter className="mx-6 mb-6 rounded-lg border border-violet-200/70 bg-gradient-to-r from-violet-50 to-indigo-50/80 p-4">
-                    <div className="flex w-full flex-wrap items-center justify-between gap-3">
+                  <CardFooter className="mx-4 mb-4 rounded-lg border border-violet-200/70 bg-gradient-to-r from-violet-50 to-indigo-50/80 p-4 sm:mx-6 sm:mb-6">
+                    <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                       <div className="flex items-center gap-3">
                         <div className="shrink-0 rounded-lg bg-violet-200/60 p-2">
                           <TrendingUp className="h-4 w-4 text-linkedin" aria-hidden />
@@ -392,32 +373,32 @@ export default function Billing() {
                 ) : null}
               </Card>
 
-              <Card className="border-zinc-200 shadow-sm">
-                <CardHeader className="px-6 pb-2">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
+              <Card className="min-w-0 overflow-hidden border-zinc-200 shadow-sm">
+                <CardHeader className="px-4 pb-2 sm:px-6">
+                  <div className="flex flex-col gap-4">
+                    <div className="min-w-0">
                       <CardTitle className="text-zinc-900">{t("billingPage.dailyUsage")}</CardTitle>
                       <CardDescription className="mt-1 text-zinc-500">
                         {t("billingPage.daysShown", { n: chartDays })}
                       </CardDescription>
                     </div>
-                    <Tabs value={chartRange} onValueChange={setChartRange}>
-                      <TabsList className="bg-zinc-100">
+                    <Tabs value={chartRange} onValueChange={setChartRange} className="w-full">
+                      <TabsList className="grid h-auto w-full grid-cols-3 bg-zinc-100 sm:inline-flex sm:w-auto">
                         <TabsTrigger
                           value="7d"
-                          className="data-[state=active]:bg-white data-[state=active]:text-zinc-900"
+                          className="px-2 text-xs data-[state=active]:bg-white data-[state=active]:text-zinc-900 sm:px-3 sm:text-sm"
                         >
                           {t("billingPage.past7Days")}
                         </TabsTrigger>
                         <TabsTrigger
                           value="14d"
-                          className="data-[state=active]:bg-white data-[state=active]:text-zinc-900"
+                          className="px-2 text-xs data-[state=active]:bg-white data-[state=active]:text-zinc-900 sm:px-3 sm:text-sm"
                         >
                           {t("billingPage.past14Days")}
                         </TabsTrigger>
                         <TabsTrigger
                           value="30d"
-                          className="data-[state=active]:bg-white data-[state=active]:text-zinc-900"
+                          className="px-2 text-xs data-[state=active]:bg-white data-[state=active]:text-zinc-900 sm:px-3 sm:text-sm"
                         >
                           {t("billingPage.past30Days")}
                         </TabsTrigger>
@@ -425,7 +406,7 @@ export default function Billing() {
                     </Tabs>
                   </div>
                 </CardHeader>
-                <CardContent className="p-6 pt-2">
+                <CardContent className="p-4 pt-2 sm:p-6">
                   <UsageChart
                     data={chartData}
                     label={t("billingPage.applications")}

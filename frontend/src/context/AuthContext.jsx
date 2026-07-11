@@ -4,7 +4,8 @@ import { devBypassAuth, TUTORIAL_BYPASS_AUTH } from "../lib/dev";
 import { setDemoAccountFromUser } from "../lib/demoAccount";
 import { isOAuthCallbackInProgress } from "../lib/oauthCallback";
 import { bootstrapTutorialSession } from "../lib/tutorialSession";
-import { supabase } from "../lib/supabase";
+import { goToMarketing } from "../lib/appDomains";
+import { supabase, supabaseConfigured } from "../lib/supabase";
 
 const AuthContext = createContext(null);
 
@@ -123,8 +124,17 @@ export const AuthProvider = ({ children }) => {
   }, [checkAuth]);
 
   const logout = async () => {
-    try { await api.post("/auth/logout"); } catch (_) {}
-    try { await supabase?.auth.signOut(); } catch (_) {}
+    const token = getSessionToken();
+    try {
+      if (token) await api.post("/auth/logout");
+    } catch (_) {}
+
+    try {
+      if (supabaseConfigured && supabase) {
+        await supabase.auth.signOut({ scope: "local" });
+      }
+    } catch (_) {}
+
     setSessionToken(null);
     setUser(null);
     setDemoAccountFromUser(null, false);
@@ -133,6 +143,8 @@ export const AuthProvider = ({ children }) => {
     setIsTrainingCreator(false);
     setHasTrainingAccess(false);
     setIsAdmin(false);
+
+    goToMarketing("/signin");
   };
 
   return (
