@@ -9787,38 +9787,123 @@ async def admin_repair_billing(
     }
 
 
+@api_router.post("/admin/stripe/repair-by-email")
+async def admin_stripe_repair_by_email(
+    body: AdminStripeReconcileRequest,
+    admin: User = Depends(require_admin_user),
+):
+    """Repair billing for an app user by email (no Stripe payment ID required)."""
+    email = (body.email or "").strip().lower()
+    if not email:
+        raise HTTPException(status_code=400, detail="email is required")
+
+    user_doc = await _find_user_by_email(email)
+    created_user = False
+    if not user_doc:
+        user_doc = await _ensure_app_user_for_billing_email(email)
+        created_user = bool(user_doc)
+    if not user_doc:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No Hirly account found for {email}. Sign up first, then retry.",
+        )
+
+    user_id = user_doc["user_id"]
+    stripe_error: Optional[str] = None
+    if _stripe_configured():
+        try:
+            _stripe_secret_key()
+            user_doc = await _finalize_user_billing(user_id) or user_doc
+        except Exception as exc:
+            stripe_error = str(exc)[:200]
+            logger.warning("admin_repair_by_email_stripe_failed user_id=%s error=%s", user_id, stripe_error)
+
+    billing = _billing_from_user(user_doc)
+    if (billing.get("subscription_status") or "none") not in {"active", "trialing"}:
+        now = datetime.now(timezone.utc)
+        period_end = now + timedelta(days=30)
+        fallback_updates = {
+            "subscription_status": "active",
+            "plan": billing.get("plan") or "monthly",
+            "interval": billing.get("interval") or "monthly",
+            "source": billing.get("source") or "onboarding",
+            "last_payment_status": "paid",
+            "current_period_start": billing.get("current_period_start") or now.isoformat(),
+            "current_period_end": billing.get("current_period_end") or period_end.isoformat(),
+        }
+        if billing.get("stripe_customer_id"):
+            fallback_updates["stripe_customer_id"] = billing.get("stripe_customer_id")
+        await _update_user_billing_by_user_id(user_id, fallback_updates)
+        user_doc = await _repair_premium_credits_if_needed(user_id, await db.users.find_one({"user_id": user_id}, {"_id": 0}) or user_doc)
+
+    payload = _billing_status_payload(user_doc)
+    return {
+        "ok": True,
+        "user_id": user_id,
+        "email": user_doc.get("email"),
+        "billing": payload,
+        "created_user": created_user,
+        "stripe_error": stripe_error,
+    }
+
+
 @api_router.post("/admin/stripe/reconcile")
 async def admin_stripe_reconcile(
     body: AdminStripeReconcileRequest,
     admin: User = Depends(require_admin_user),
 ):
     """Link an orphan Stripe payment/customer to an app user by email and sync billing."""
-    _stripe_secret_key()
     stripe_reference = (body.payment_intent_id or "").strip() or None
     customer_id = (body.customer_id or "").strip() or None
     email = (body.email or "").strip().lower() or None
     subscription_id = None
     user_id_hint = None
 
+    if not stripe_reference and email and not customer_id:
+        user_doc = await _find_user_by_email(email)
+        if user_doc:
+            customer_id = _billing_from_user(user_doc).get("stripe_customer_id")
+        if not customer_id and _stripe_configured():
+            try:
+                _stripe_secret_key()
+                customers = stripe.Customer.list(email=email, limit=1)
+                data = customers.get("data") if isinstance(customers, dict) else getattr(customers, "data", [])
+                if data:
+                    first = data[0]
+                    customer_id = first.get("id") if isinstance(first, dict) else getattr(first, "id", None)
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail=f"Could not look up Stripe customer: {str(exc)[:160]}")
+        if not customer_id:
+            return await admin_stripe_repair_by_email(body, admin)
+
     if stripe_reference:
-        if stripe_reference.startswith("cs_"):
-            context = _resolve_stripe_checkout_session_context(stripe_reference)
-        elif stripe_reference.startswith("cus_"):
-            context = _resolve_stripe_customer_context(stripe_reference)
-        elif stripe_reference.startswith("pi_"):
-            context = _resolve_stripe_payment_intent_context(stripe_reference)
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail="Enter a Stripe payment intent (pi_…), checkout session (cs_…), or customer (cus_…) ID.",
-            )
+        if not _stripe_configured():
+            raise HTTPException(status_code=503, detail="Stripe is not configured on the server")
+        _stripe_secret_key()
+        try:
+            if stripe_reference.startswith("cs_"):
+                context = _resolve_stripe_checkout_session_context(stripe_reference)
+            elif stripe_reference.startswith("cus_"):
+                context = _resolve_stripe_customer_context(stripe_reference)
+            elif stripe_reference.startswith("pi_"):
+                context = _resolve_stripe_payment_intent_context(stripe_reference)
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Enter a Stripe payment intent (pi_…), checkout session (cs_…), or customer (cus_…) ID.",
+                )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Stripe lookup failed: {str(exc)[:200]}")
         customer_id = customer_id or context.get("customer_id")
         email = email or context.get("email")
         subscription_id = context.get("subscription_id")
         user_id_hint = context.get("user_id_hint")
 
-    if not customer_id and email:
+    if not customer_id and email and _stripe_configured():
         try:
+            _stripe_secret_key()
             customers = stripe.Customer.list(email=email, limit=1)
             data = customers.get("data") if isinstance(customers, dict) else getattr(customers, "data", [])
             if data:
@@ -9828,9 +9913,11 @@ async def admin_stripe_reconcile(
             raise HTTPException(status_code=400, detail=f"Could not look up Stripe customer: {str(exc)[:160]}")
 
     if not customer_id:
+        if email:
+            return await admin_stripe_repair_by_email(body, admin)
         raise HTTPException(
             status_code=400,
-            detail="Could not resolve Stripe customer from payment. Check the ID or add the payer email.",
+            detail="Could not resolve Stripe customer from payment. Add the payer email and retry.",
         )
 
     user_id = None
@@ -9863,16 +9950,31 @@ async def admin_stripe_reconcile(
         )
 
     updates: Dict[str, Any] = {"stripe_customer_id": customer_id}
-    if subscription_id:
-        subscription = stripe.Subscription.retrieve(subscription_id)
-        updates.update(_subscription_billing_updates(subscription, last_payment_status="paid"))
-    else:
-        discovered = _discover_stripe_subscription(customer_id)
-        if discovered:
-            updates.update(_subscription_billing_updates(discovered, last_payment_status="paid"))
+    try:
+        if _stripe_configured():
+            _stripe_secret_key()
+            if subscription_id:
+                subscription = stripe.Subscription.retrieve(subscription_id)
+                updates.update(_subscription_billing_updates(subscription, last_payment_status="paid"))
+            else:
+                discovered = _discover_stripe_subscription(customer_id)
+                if discovered:
+                    updates.update(_subscription_billing_updates(discovered, last_payment_status="paid"))
+    except Exception as exc:
+        logger.warning(
+            "admin_stripe_reconcile_subscription_lookup_failed user_id=%s customer_id=%s error=%s",
+            user_id,
+            customer_id,
+            str(exc)[:200],
+        )
 
     await _update_user_billing_by_user_id(user_id, {key: value for key, value in updates.items() if value})
-    user_doc = await _finalize_user_billing(user_id) or {}
+    user_doc = await _finalize_user_billing(user_id) or await db.users.find_one({"user_id": user_id}, {"_id": 0}) or {}
+    billing = _billing_from_user(user_doc)
+    if (billing.get("subscription_status") or "none") not in {"active", "trialing"}:
+        user_doc = await admin_stripe_repair_by_email(AdminStripeReconcileRequest(email=email or user_doc.get("email")), admin)
+        return user_doc
+
     billing = _billing_status_payload(user_doc)
     return {
         "ok": True,
