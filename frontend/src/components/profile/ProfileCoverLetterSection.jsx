@@ -1,15 +1,16 @@
 import { useRef, useState } from "react";
 import { Download, Eye, FileText, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
-import { api, API, getSessionToken } from "../../lib/api";
+import { api, API, getDirectApiBase, getSessionToken } from "../../lib/api";
 import { shouldMockCvUpload } from "../../lib/demoCvUpload";
 import { useAppLocale } from "../../context/AppLocaleContext";
 import { formatUploadedDate } from "../../lib/appUi";
+import { CV_MAX_BYTES } from "../../lib/cvUploadFormats";
 import { Button } from "../ui/button";
 import ProfileFormSection from "./ProfileFormSection";
 
-const ACCEPTED_COVER_LETTER = ".pdf,.docx,.txt";
-const MAX_BYTES = 10 * 1024 * 1024;
+const ACCEPTED_COVER_LETTER = ".pdf,.docx,.txt,.rtf";
+const MAX_BYTES = CV_MAX_BYTES;
 
 function CoverLetterEmptyState({ onUpload, uploading, t }) {
   return (
@@ -68,7 +69,10 @@ export default function ProfileCoverLetterSection({ profile, onCoverLetterChange
     try {
       const form = new FormData();
       form.append("file", file);
-      await api.post("/profile/cover-letter", form, { headers: { "Content-Type": "multipart/form-data" } });
+      // Bypass the Vercel /api rewrite for large uploads (avoids proxy timeouts).
+      const base = (getDirectApiBase() || "").replace(/\/+$/, "");
+      const url = base ? `${base}/profile/cover-letter` : "/profile/cover-letter";
+      await api.post(url, form, { timeout: 120000, headers: { "Content-Type": "multipart/form-data" } });
       toast.success(t("profile.documents.coverLetterUploadSuccess"));
       await onCoverLetterChange?.();
     } catch (error) {

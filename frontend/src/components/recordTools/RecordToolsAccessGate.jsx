@@ -1,22 +1,26 @@
-import { useEffect, useMemo, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { devBypassAuth } from "../../lib/dev";
 
+/** Keep in sync with TrainingAccessGate and backend TRAINING_OPEN_ACCESS. */
+const TRAINING_OPEN_ACCESS = (process.env.REACT_APP_TRAINING_OPEN_ACCESS ?? "true").toLowerCase() !== "false";
+
+function hasRecordToolsAccess({ user, hasTrainingAccess, isAdmin, isTrainingCreator }) {
+  if (!user) return false;
+  if (user.demo_account) return true;
+  if (hasTrainingAccess) return true;
+  if (isAdmin) return true;
+  if (isTrainingCreator) return true;
+  if (TRAINING_OPEN_ACCESS) return true;
+  return false;
+}
+
 export default function RecordToolsAccessGate({ children }) {
-  const { user, hasTrainingAccess, loading } = useAuth();
-  const [allowed, setAllowed] = useState(devBypassAuth);
+  const { user, hasTrainingAccess, isAdmin, isTrainingCreator, loading } = useAuth();
+  const location = useLocation();
 
-  const isCreator = useMemo(() => Boolean(user?.demo_account) || Boolean(hasTrainingAccess), [user, hasTrainingAccess]);
-
-  useEffect(() => {
-    if (devBypassAuth) {
-      setAllowed(true);
-      return;
-    }
-    setAllowed(isCreator);
-  }, [isCreator]);
+  if (devBypassAuth) return children;
 
   if (loading) {
     return (
@@ -26,10 +30,14 @@ export default function RecordToolsAccessGate({ children }) {
     );
   }
 
-  if (!allowed) {
+  if (!user) {
+    const returnPath = `${location.pathname}${location.search}${location.hash}` || "/record-tools";
+    return <Navigate to={`/signin?next=${encodeURIComponent(returnPath)}`} replace />;
+  }
+
+  if (!hasRecordToolsAccess({ user, hasTrainingAccess, isAdmin, isTrainingCreator })) {
     return <Navigate to="/training" replace />;
   }
 
   return children;
 }
-

@@ -1,17 +1,18 @@
 import { useCallback, useRef, useState } from "react";
 import { Eye, File, FileStack, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
-import { api, API, getSessionToken } from "../../lib/api";
+import { api, API, getDirectApiBase, getSessionToken } from "../../lib/api";
 import { shouldMockCvUpload } from "../../lib/demoCvUpload";
 import { useAppLocale } from "../../context/AppLocaleContext";
 import { formatUploadedDate } from "../../lib/appUi";
+import { CV_MAX_BYTES, isLegacyDocFile } from "../../lib/cvUploadFormats";
 import { Button } from "../ui/button";
 import ProfileResumeSection from "./ProfileResumeSection";
 import ProfileCoverLetterSection from "./ProfileCoverLetterSection";
 import ProfileFormSection from "./ProfileFormSection";
 
-const ACCEPTED_DOCUMENTS = ".pdf,.docx,.txt,.png,.jpg,.jpeg,.webp";
-const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
+const ACCEPTED_DOCUMENTS = ".pdf,.docx,.txt,.rtf,.png,.jpg,.jpeg,.heic,.webp";
+const MAX_DOCUMENT_BYTES = CV_MAX_BYTES;
 
 function DocumentEmptyState({ icon: Icon, title, description, actionLabel, onAction, testId, disabled }) {
   return (
@@ -92,6 +93,10 @@ export default function ProfileDocumentsTab({ profile, onUploadResume, onDocumen
 
   const uploadDocument = useCallback(async (file) => {
     if (!file) return;
+    if (isLegacyDocFile(file)) {
+      toast.error(t("resumeSheet.legacyDocError"));
+      return;
+    }
     if (file.size > MAX_DOCUMENT_BYTES) {
       toast.error(t("profile.documents.fileTooLarge"));
       return;
@@ -104,7 +109,10 @@ export default function ProfileDocumentsTab({ profile, onUploadResume, onDocumen
       }
       const form = new FormData();
       form.append("file", file);
-      await api.post("/profile/documents", form, { headers: { "Content-Type": "multipart/form-data" } });
+      // Bypass the Vercel /api rewrite for large uploads (avoids proxy timeouts).
+      const base = (getDirectApiBase() || "").replace(/\/+$/, "");
+      const url = base ? `${base}/profile/documents` : "/profile/documents";
+      await api.post(url, form, { timeout: 120000, headers: { "Content-Type": "multipart/form-data" } });
       toast.success(t("profile.documents.uploadSuccess"));
       await onDocumentsChange?.();
     } catch (error) {

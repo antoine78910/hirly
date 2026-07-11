@@ -1,7 +1,8 @@
 import pytest
 import asyncio
 
-from record_tools_service import create_interview_template, list_interview_templates
+import record_tools_service
+from record_tools_service import create_interview_template, list_interview_templates, transcribe_segments
 
 
 class FakeCollection:
@@ -63,5 +64,47 @@ def test_create_and_list_interview_template(tmp_path, monkeypatch):
         audio_file = tmp_path / f"{payload['template_id']}.mp3"
         assert audio_file.exists()
         return payload
+
+    asyncio.run(run())
+
+
+def test_transcribe_segments_aligns_whisper_output_to_steps(monkeypatch):
+    async def fake_transcribe_audio_bytes(_content, filename="audio.mp3"):
+        return {
+            "text": "Tell me about yourself. What is your biggest weakness?",
+            "segments": [
+                {"start": 0.0, "end": 2.4, "text": "Tell me about yourself."},
+                {"start": 5.0, "end": 7.5, "text": "What is your biggest weakness?"},
+            ],
+        }
+
+    monkeypatch.setattr(
+        "record_tools_service.llm_client.transcribe_audio_bytes",
+        fake_transcribe_audio_bytes,
+    )
+
+    segments = [
+        {"id": "seg-1", "label": "Step 1", "start": 0.0, "end": 3.0},
+        {"id": "seg-2", "label": "Step 2", "start": 4.8, "end": 8.0},
+    ]
+
+    async def run():
+        return await transcribe_segments(
+            audio_bytes=b"fake-bytes",
+            original_filename="questions.mp3",
+            segments=segments,
+        )
+
+    transcripts = asyncio.run(run())
+    assert transcripts == {
+        "seg-1": "Tell me about yourself.",
+        "seg-2": "What is your biggest weakness?",
+    }
+
+
+def test_transcribe_segments_requires_audio():
+    async def run():
+        with pytest.raises(ValueError):
+            await transcribe_segments(audio_bytes=b"", original_filename="a.mp3", segments=[{"id": "seg-1"}])
 
     asyncio.run(run())

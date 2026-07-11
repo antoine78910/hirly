@@ -48,6 +48,7 @@ const MARKETING_ROUTE_PREFIXES = [
   "/onboarding",
   "/invite",
   "/training",
+  "/record-tools",
   "/terms",
   "/privacy",
 ];

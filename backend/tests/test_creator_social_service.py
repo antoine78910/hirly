@@ -168,6 +168,78 @@ def test_build_dashboard_uses_loaded_videos_when_profile_video_count_is_zero(mon
     assert dashboard["creators"][0]["current"]["videos"] == 2
 
 
+def test_daily_posted_videos_use_posted_at_not_snapshot_delta(monkeypatch):
+    now = datetime(2026, 7, 11, 12, 0, tzinfo=timezone.utc)
+    _freeze_utc_now(monkeypatch, now)
+    snapshots = [
+        {
+            "creator_id": "eva",
+            "recorded_at": now.isoformat(),
+            "followers": 100,
+            "likes_total": 500,
+            "video_count": 4,
+            "views_total": 10000,
+            "comments_total": 12,
+            "shares_total": 3,
+            "favorites_total": 8,
+            "videos": [
+                {
+                    "video_id": "v1",
+                    "posted_at": "2026-07-11T10:00:00+00:00",
+                    "views": 22000,
+                    "likes": 900,
+                    "comments": 12,
+                    "shares": 3,
+                    "favorites": 8,
+                },
+                {
+                    "video_id": "v2",
+                    "posted_at": "2026-07-08T10:00:00+00:00",
+                    "views": 15000,
+                    "likes": 600,
+                    "comments": 4,
+                    "shares": 1,
+                    "favorites": 2,
+                },
+                {
+                    "video_id": "v3",
+                    "posted_at": "2026-07-05T10:00:00+00:00",
+                    "views": 12000,
+                    "likes": 500,
+                    "comments": 3,
+                    "shares": 1,
+                    "favorites": 1,
+                },
+                {
+                    "video_id": "v4",
+                    "posted_at": "2026-07-03T10:00:00+00:00",
+                    "views": 9000,
+                    "likes": 400,
+                    "comments": 2,
+                    "shares": 0,
+                    "favorites": 1,
+                },
+            ],
+        }
+    ]
+
+    def fake_configured():
+        return [{"creator_id": "eva", "name": "Eva", "platform": "tiktok", "handle": "hirlyjob"}]
+
+    def fake_get_creator(cid):
+        return fake_configured()[0] if cid == "eva" else None
+
+    monkeypatch.setattr(creator_social_service, "load_snapshots", lambda: snapshots)
+    monkeypatch.setattr(creator_social_service, "latest_snapshot_for_creator", lambda cid: snapshots[-1] if cid == "eva" else None)
+    monkeypatch.setattr(creator_social_service, "get_configured_creators", fake_configured)
+    monkeypatch.setattr(creator_social_service, "get_creator_by_id", fake_get_creator)
+
+    dashboard = build_dashboard(days=14, creator_ids=["eva"])
+    today_row = next(row for row in dashboard["daily"] if row["date"] == "2026-07-11")
+    assert today_row["posted_videos"] == 1
+    assert dashboard["summary"]["posted_videos_period"] == 4
+
+
 def test_refresh_creator_stores_snapshot(monkeypatch, tmp_path):
     monkeypatch.setattr("creator_social_store.STORE_PATH", tmp_path / "snapshots.json")
 

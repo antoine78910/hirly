@@ -1,6 +1,17 @@
 /** Shared CV upload formats — mobile cameras often send JPEG/HEIC without a clear extension. */
 
-export const CV_ACCEPTED_EXTENSIONS = [".pdf", ".png", ".jpg", ".jpeg", ".heic", ".heif", ".webp", ".docx", ".txt"];
+export const CV_ACCEPTED_EXTENSIONS = [
+  ".pdf",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".heic",
+  ".heif",
+  ".webp",
+  ".docx",
+  ".rtf",
+  ".txt",
+];
 
 export const CV_ACCEPTED_MIME_TYPES = [
   "application/pdf",
@@ -11,10 +22,16 @@ export const CV_ACCEPTED_MIME_TYPES = [
   "image/heif",
   "image/webp",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/rtf",
+  "text/rtf",
   "text/plain",
 ];
 
-export const CV_ACCEPT_ATTR = ".pdf,.png,.jpg,.jpeg,.heic,.webp,.docx,.txt,image/*,application/pdf";
+export const CV_ACCEPT_ATTR = ".pdf,.png,.jpg,.jpeg,.heic,.webp,.docx,.rtf,.txt,image/*,application/pdf";
+
+/** Max upload size shared by the CV, additional documents, and cover-letter uploads (matches backend). */
+export const CV_MAX_BYTES = 20 * 1024 * 1024;
+export const CV_MAX_MB = 20;
 
 const MIME_TO_EXT = {
   "application/pdf": ".pdf",
@@ -25,8 +42,18 @@ const MIME_TO_EXT = {
   "image/heif": ".heic",
   "image/webp": ".webp",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+  "application/rtf": ".rtf",
+  "text/rtf": ".rtf",
   "text/plain": ".txt",
 };
+
+/** Legacy Word 97-2003 binary format — detected so we can show a clear, actionable error
+ * instead of a generic "unsupported file" message. */
+export function isLegacyDocFile(file) {
+  if (!file) return false;
+  const name = (file.name || "").toLowerCase();
+  return name.endsWith(".doc") || (file.type || "").toLowerCase() === "application/msword";
+}
 
 export function isAcceptedCvFile(file) {
   if (!file) return false;

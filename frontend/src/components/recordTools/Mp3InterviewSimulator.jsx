@@ -1,5 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Headphones, Loader2, Mic, MicOff, Play, RotateCcw, Save, SkipForward, Square, Upload, Volume2 } from "lucide-react";
+import {
+  FileText,
+  Headphones,
+  Loader2,
+  Mic,
+  MicOff,
+  Pause,
+  Play,
+  RotateCcw,
+  Save,
+  ScrollText,
+  SkipForward,
+  Square,
+  Upload,
+  Volume2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -8,6 +23,7 @@ import {
   fetchInterviewTemplateAudioBlob,
   fetchInterviewTemplates,
   saveInterviewTemplate,
+  transcribeInterviewAudio,
 } from "../../lib/interviewSimulatorTemplates";
 
 function useMicrophoneSilenceDetector({
@@ -464,6 +480,89 @@ function splitAudioBufferBySilence(audioBuffer, {
   return merged;
 }
 
+/** Auto-scrolling script panel so the speaker can read their answer without looking down. */
+function TeleprompterPanel({ text }) {
+  const [scrolling, setScrolling] = useState(true);
+  const [speed, setSpeed] = useState(36); // px/sec
+  const containerRef = useRef(null);
+  const rafRef = useRef(null);
+  const lastTsRef = useRef(0);
+
+  useEffect(() => {
+    if (containerRef.current) containerRef.current.scrollTop = 0;
+    setScrolling(true);
+  }, [text]);
+
+  useEffect(() => {
+    if (!scrolling || !text) {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+      return undefined;
+    }
+    lastTsRef.current = performance.now();
+    const tick = (ts) => {
+      const dt = (ts - lastTsRef.current) / 1000;
+      lastTsRef.current = ts;
+      const el = containerRef.current;
+      if (el) {
+        el.scrollTop += speed * dt;
+        if (el.scrollTop >= el.scrollHeight - el.clientHeight - 1) {
+          setScrolling(false);
+          return;
+        }
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    };
+  }, [scrolling, speed, text]);
+
+  if (!text) return null;
+
+  return (
+    <div className="mt-4 rounded-3xl border border-zinc-800 bg-zinc-950 p-4 shadow-xl">
+      <div className="flex items-center justify-between gap-3">
+        <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-zinc-400">
+          <ScrollText className="h-3.5 w-3.5" />
+          Teleprompter
+        </p>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1.5 text-xs text-zinc-400">
+            Speed
+            <input
+              type="range"
+              min={10}
+              max={90}
+              value={speed}
+              onChange={(e) => setSpeed(Number(e.target.value))}
+              className="w-16 accent-violet-500"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => setScrolling((s) => !s)}
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
+          >
+            {scrolling ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+          </button>
+        </div>
+      </div>
+      <div
+        ref={containerRef}
+        className="mt-3 h-44 overflow-y-auto rounded-2xl bg-black/70 px-5 py-8 text-center [scrollbar-width:none]"
+      >
+        <p className="whitespace-pre-wrap text-2xl font-semibold leading-relaxed text-white">
+          {text}
+        </p>
+        <div className="h-32" />
+      </div>
+    </div>
+  );
+}
+
 export default function Mp3InterviewSimulator() {
   const [mp3File, setMp3File] = useState(null);
   const [mp3FileName, setMp3FileName] = useState("");
@@ -480,6 +579,7 @@ export default function Mp3InterviewSimulator() {
 
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState(null);
+  const [transcribing, setTranscribing] = useState(false);
 
   const [thresholdDb, setThresholdDb] = useState(-42);
   const [minSilenceMs, setMinSilenceMs] = useState(900);
@@ -941,6 +1041,25 @@ export default function Mp3InterviewSimulator() {
     }
   };
 
+  const handleTranscribeAudio = async () => {
+    if (!mp3File || !segments.length) {
+      toast.error("Upload an MP3 and detect steps before transcribing.");
+      return;
+    }
+    setTranscribing(true);
+    try {
+      const transcripts = await transcribeInterviewAudio({ segments, audioFile: mp3File });
+      setSegments((prev) => prev.map((seg) => (
+        transcripts[seg.id] != null ? { ...seg, transcript: transcripts[seg.id] } : seg
+      )));
+      toast.success("Transcript ready");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e?.message || "Could not transcribe audio");
+    } finally {
+      setTranscribing(false);
+    }
+  };
+
   const updateSegment = (idx, patch) => {
     setSegments((prev) => {
       const seg = prev[idx];
@@ -1239,10 +1358,31 @@ export default function Mp3InterviewSimulator() {
 
           <div className="lg:col-span-3">
             <div className="rounded-2xl border border-zinc-200 bg-white p-4">
-              <p className="text-xs font-bold uppercase tracking-wider text-zinc-600">3) Detected steps</p>
-              <p className="mt-2 text-sm text-zinc-600">
-                {segments.length ? `${segments.length} steps ready.` : "Upload an MP3 to detect steps."}
-              </p>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-zinc-600">3) Detected steps</p>
+                  <p className="mt-2 text-sm text-zinc-600">
+                    {segments.length ? `${segments.length} steps ready.` : "Upload an MP3 to detect steps."}
+                  </p>
+                </div>
+                {segments.length > 0 && status === "setup" ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0 rounded-full"
+                    disabled={transcribing || !mp3File}
+                    onClick={handleTranscribeAudio}
+                  >
+                    {transcribing ? (
+                      <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                    ) : (
+                      <FileText className="h-4 w-4 mr-1.5" />
+                    )}
+                    Transcribe audio
+                  </Button>
+                ) : null}
+              </div>
 
               {segments.length > 0 && (status === "setup" || status === "done") && previewIndex == null ? (
                 <Button
@@ -1265,6 +1405,9 @@ export default function Mp3InterviewSimulator() {
                     previewIndex={previewIndex}
                     advanceMode={advanceMode}
                   />
+                  {(status === "waiting" || status === "ready") ? (
+                    <TeleprompterPanel text={segments[currentIndex]?.script || ""} />
+                  ) : null}
                 </div>
               ) : null}
 
@@ -1349,6 +1492,31 @@ export default function Mp3InterviewSimulator() {
                           />
                         </label>
                       </div>
+
+                      {seg.transcript ? (
+                        <div className="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 p-2.5">
+                          <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-zinc-500">
+                            <FileText className="h-3 w-3" />
+                            Transcript
+                          </p>
+                          <p className="mt-1 text-sm text-zinc-700">{seg.transcript}</p>
+                        </div>
+                      ) : null}
+
+                      <label className="mt-3 block text-xs">
+                        <span className="flex items-center gap-1.5 font-semibold text-zinc-600">
+                          <ScrollText className="h-3.5 w-3.5" />
+                          Your answer (teleprompter script)
+                        </span>
+                        <textarea
+                          value={seg.script || ""}
+                          onChange={(e) => updateSegment(idx, { script: e.target.value })}
+                          placeholder="Write what you want to say for this step, and it will scroll on screen while you speak."
+                          rows={2}
+                          disabled={status !== "setup"}
+                          className="mt-1 w-full rounded-xl border border-zinc-200 p-2 text-sm text-zinc-800 focus:border-violet-400 focus:outline-none disabled:bg-zinc-50 disabled:text-zinc-500"
+                        />
+                      </label>
                     </div>
                   ))}
                 </div>

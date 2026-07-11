@@ -42,6 +42,7 @@ MIGRATED_TABLES = {
     "creator_invites",
     "user_feedback",
     "rome_profiles",
+    "interview_simulator_templates",
 }
 TABLE_PRIMARY_KEYS = {
     "users": "user_id",
@@ -66,6 +67,7 @@ TABLE_PRIMARY_KEYS = {
     "creator_invites": "invite_id",
     "user_feedback": "submission_id",
     "rome_profiles": "rome_code",
+    "interview_simulator_templates": "template_id",
 }
 TABLE_FILTER_COLUMNS = {
     "users": {"user_id", "email", "name", "created_at"},
@@ -193,6 +195,7 @@ TABLE_FILTER_COLUMNS = {
     "creator_invites": {"invite_id", "code", "influencer_id", "invite_type", "course_id", "redeemed_by_user_id", "created_at", "updated_at"},
     "user_feedback": {"submission_id", "feedback_type", "user_id", "user_email", "created_at", "updated_at"},
     "rome_profiles": {"rome_code", "fetched_at"},
+    "interview_simulator_templates": {"template_id", "created_by_user_id", "created_at", "updated_at"},
 }
 MAX_READ_ROWS = 10000
 READ_PAGE_SIZE = 1000
@@ -496,6 +499,14 @@ def _supabase_row(table: str, document: Document) -> Dict[str, Any]:
         return {
             "rome_code": _document_key(table, doc),
             "fetched_at": doc.get("fetched_at"),
+            "data": doc,
+        }
+    if table == "interview_simulator_templates":
+        return {
+            "template_id": _document_key(table, doc),
+            "created_by_user_id": doc.get("created_by_user_id"),
+            "created_at": doc.get("created_at"),
+            "updated_at": doc.get("updated_at"),
             "data": doc,
         }
     raise ValueError(f"Unsupported Supabase table: {table}")

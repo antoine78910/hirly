@@ -149,6 +149,24 @@ function extractUploadFile(data) {
   return null;
 }
 
+/**
+ * Direct Railway/origin API base, bypassing the Vercel /api rewrite for uploads.
+ * Duplicated from api.js (rather than imported) to avoid a circular import —
+ * api.js itself imports helpers from this module.
+ */
+function directCvUploadBase() {
+  if (typeof window === "undefined") return "";
+  const envUrl = (process.env.REACT_APP_BACKEND_URL || "").trim();
+  if (envUrl && !/localhost|127\.0\.0\.1/i.test(envUrl)) {
+    const withProtocol = /^https?:\/\//i.test(envUrl) ? envUrl : `https://${envUrl}`;
+    return `${withProtocol.replace(/\/+$/, "").replace(/\/api$/i, "")}/api`;
+  }
+  if (process.env.NODE_ENV === "production") {
+    return "https://hirly-production.up.railway.app/api";
+  }
+  return "";
+}
+
 /** Upload CV — local mock in demo/tutorial, real API otherwise. */
 export async function uploadProfileCv(file, apiClient) {
   if (!file) {
@@ -160,7 +178,11 @@ export async function uploadProfileCv(file, apiClient) {
   }
   const form = new FormData();
   form.append("file", normalizeCvUploadFile(file));
-  return apiClient.post("/profile/cv", form, { timeout: 120000 });
+  // Large files (up to 20MB) can hit the Vercel proxy's own timeout/body-size
+  // limits and surface as a generic network error — go straight to the origin.
+  const base = directCvUploadBase();
+  const url = base ? `${base}/profile/cv` : "/profile/cv";
+  return apiClient.post(url, form, { timeout: 120000 });
 }
 
 export { extractUploadFile };

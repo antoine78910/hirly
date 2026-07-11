@@ -1,6 +1,8 @@
 """Internal OpenAI LLM adapter for structured JSON responses."""
 
+import io
 import os
+from typing import Any, Dict
 
 from openai import AsyncOpenAI
 
@@ -58,3 +60,27 @@ async def extract_text_from_image_bytes(content: bytes, mime: str = "image/png")
         max_tokens=4096,
     )
     return (response.choices[0].message.content or "").strip()
+
+
+async def transcribe_audio_bytes(content: bytes, filename: str = "audio.mp3") -> Dict[str, Any]:
+    """Speech-to-text transcription with segment-level timestamps (for step alignment)."""
+    client = _client()
+    buffer = io.BytesIO(content)
+    buffer.name = filename or "audio.mp3"
+    response = await client.audio.transcriptions.create(
+        model=os.environ.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1"),
+        file=buffer,
+        response_format="verbose_json",
+    )
+    dump = response.model_dump() if hasattr(response, "model_dump") else dict(response)
+    return {
+        "text": dump.get("text") or "",
+        "segments": [
+            {
+                "start": seg.get("start"),
+                "end": seg.get("end"),
+                "text": (seg.get("text") or "").strip(),
+            }
+            for seg in (dump.get("segments") or [])
+        ],
+    }

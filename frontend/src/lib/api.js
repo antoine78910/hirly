@@ -254,10 +254,16 @@ api.interceptors.request.use((config) => {
     } catch {
       path = normalizeApiPath(config.url || "");
     }
-    if (path === "/profile/cv" && !config.adapter) {
-      config.timeout = Math.max(config.timeout || 0, 120000);
-    }
-    if (path === "/record-tools/interview-templates" && !config.adapter) {
+    if (
+      [
+        "/profile/cv",
+        "/profile/documents",
+        "/profile/cover-letter",
+        "/record-tools/interview-templates",
+        "/record-tools/transcribe",
+      ].includes(path)
+      && !config.adapter
+    ) {
       config.timeout = Math.max(config.timeout || 0, 120000);
     }
   }

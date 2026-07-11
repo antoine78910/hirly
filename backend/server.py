@@ -787,6 +787,12 @@ class BillingConfirmCheckoutRequest(BaseModel):
     session_id: str
 
 
+class BillingUpgradeSessionRequest(BaseModel):
+    plan: Literal["basic", "pro", "ultra"]
+    interval: Optional[Literal["weekly", "monthly"]] = None
+    return_path: Optional[str] = None
+
+
 class BillingMasterCodeRequest(BaseModel):
     code: str
     plan: Literal["basic", "pro", "ultra", "monthly", "quarterly"] = "ultra"
@@ -1668,9 +1674,9 @@ def _billing_credit_limit(
         return 0
     normalized_plan = (plan or "").strip().lower()
     normalized_interval = (interval or "").strip().lower()
-    normalized_source = (source or "").strip().lower()
-    if normalized_source == "onboarding":
-        return {"monthly": 80, "quarterly": 200}.get(normalized_plan, 80)
+    # Onboarding plan ids ("monthly"/"quarterly") intentionally match the same
+    # credit allowance as their app-side price equivalent (pro=29.99€=200,
+    # ultra=69.99€=600) via the shared _PLAN_CREDIT_LIMITS lookup below.
     if normalized_interval == "weekly":
         monthly_limit = _PLAN_CREDIT_LIMITS.get(normalized_plan, 200)
         return max(1, monthly_limit // 4)
@@ -1713,18 +1719,42 @@ def _merge_billing_credit_state(existing_billing: Dict[str, Any], updates: Dict[
         source=merged.get("source"),
     )
     period_key = _billing_credit_period_key(merged)
+
+    # Nothing changed since the last sync — just clamp remaining to the allowance.
     if (
-        existing_billing.get("credits_period_key") != period_key
-        or not isinstance(existing_billing.get("credits_remaining"), int)
-        or int(existing_billing.get("credits_total") or 0) != allowance
+        existing_billing.get("credits_period_key") == period_key
+        and isinstance(existing_billing.get("credits_remaining"), int)
+        and int(existing_billing.get("credits_total") or 0) == allowance
     ):
-        merged["credits_total"] = allowance
-        merged["credits_remaining"] = allowance
-        merged["credits_period_key"] = period_key
-    else:
         merged["credits_total"] = allowance
         merged["credits_remaining"] = max(0, min(int(existing_billing.get("credits_remaining") or 0), allowance))
         merged["credits_period_key"] = period_key
+        return merged
+
+    # Same Stripe subscription and same billing-period boundaries as before, but the
+    # plan changed (a prorated mid-cycle upgrade/downgrade) — grant only the
+    # difference in allowance instead of resetting to the full new-tier amount.
+    # e.g. Pro (200) -> Ultra (600) at 0 remaining grants +400, landing at 400/600.
+    same_billing_cycle = (
+        bool(existing_billing.get("stripe_subscription_id"))
+        and existing_billing.get("stripe_subscription_id") == merged.get("stripe_subscription_id")
+        and existing_billing.get("current_period_start") == merged.get("current_period_start")
+        and existing_billing.get("current_period_end") == merged.get("current_period_end")
+        and isinstance(existing_billing.get("credits_total"), int)
+    )
+    if same_billing_cycle:
+        old_allowance = int(existing_billing.get("credits_total") or 0)
+        old_remaining = int(existing_billing.get("credits_remaining") or 0)
+        delta = allowance - old_allowance
+        merged["credits_total"] = allowance
+        merged["credits_remaining"] = max(0, min(allowance, old_remaining + delta))
+        merged["credits_period_key"] = period_key
+        return merged
+
+    # New billing period (renewal) or a brand-new subscription — full reset.
+    merged["credits_total"] = allowance
+    merged["credits_remaining"] = allowance
+    merged["credits_period_key"] = period_key
     return merged
 
 
@@ -1953,6 +1983,17 @@ async def create_billing_checkout_session(
     billing_plan = body.plan if checkout_source == "onboarding" else _canonical_billing_plan(body.plan)
     billing_interval = body.interval or ("quarterly" if checkout_source == "onboarding" and billing_plan == "quarterly" else "monthly")
     user_doc = await _get_user_doc(user)
+    existing_billing = _billing_from_user(user_doc)
+    existing_subscription_id = existing_billing.get("stripe_subscription_id")
+    if (
+        (existing_billing.get("subscription_status") or "none") in {"active", "trialing"}
+        and existing_subscription_id
+        and not str(existing_subscription_id).startswith("master_code_")
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="You already have an active subscription. Use the upgrade option to change plans.",
+        )
     customer_id = await _stripe_customer_for_user(user_doc)
     marketing_url = _marketing_url()
     app_url = _app_url()
@@ -2160,6 +2201,128 @@ async def create_billing_portal_session(user: User = Depends(get_current_user)):
     return {"url": session["url"]}
 
 
+_STRIPE_UPGRADE_PORTAL_CONFIG_CACHE: Dict[str, str] = {}
+
+
+async def _stripe_upgrade_portal_configuration_id() -> str:
+    """Lazily create (and cache) a Stripe Billing Portal configuration that allows
+    subscription plan changes with proration, scoped to basic/pro/ultra prices only."""
+    cached = _STRIPE_UPGRADE_PORTAL_CONFIG_CACHE.get("id")
+    if cached:
+        return cached
+
+    settings_doc = await db.app_settings.find_one({"_id": "stripe_upgrade_portal_configuration"})
+    if settings_doc and settings_doc.get("configuration_id"):
+        _STRIPE_UPGRADE_PORTAL_CONFIG_CACHE["id"] = settings_doc["configuration_id"]
+        return settings_doc["configuration_id"]
+
+    price_ids: List[str] = []
+    for plan in ("basic", "pro", "ultra"):
+        for env_name in (f"STRIPE_PRICE_{plan.upper()}", f"STRIPE_PRICE_{plan.upper()}_WEEKLY"):
+            price_id = os.environ.get(env_name, "").strip()
+            if price_id:
+                price_ids.append(price_id)
+    if not price_ids:
+        raise HTTPException(status_code=503, detail="Stripe plan prices are not configured")
+
+    products_by_id: Dict[str, List[str]] = {}
+    for price_id in price_ids:
+        price = stripe.Price.retrieve(price_id)
+        product = price["product"]
+        product_id = product if isinstance(product, str) else product["id"]
+        products_by_id.setdefault(product_id, []).append(price_id)
+
+    configuration = stripe.billing_portal.Configuration.create(
+        business_profile={"headline": "Manage your Hirly subscription"},
+        features={
+            "subscription_update": {
+                "enabled": True,
+                "default_allowed_updates": ["price"],
+                "proration_behavior": "create_prorations",
+                "products": [
+                    {"product": product_id, "prices": prices}
+                    for product_id, prices in products_by_id.items()
+                ],
+            },
+            "subscription_cancel": {"enabled": True},
+            "payment_method_update": {"enabled": True},
+            "invoice_history": {"enabled": True},
+        },
+    )
+    configuration_id = configuration["id"]
+    await db.app_settings.update_one(
+        {"_id": "stripe_upgrade_portal_configuration"},
+        {"$set": {"configuration_id": configuration_id}},
+        upsert=True,
+    )
+    _STRIPE_UPGRADE_PORTAL_CONFIG_CACHE["id"] = configuration_id
+    return configuration_id
+
+
+@api_router.post("/billing/create-upgrade-session")
+async def create_billing_upgrade_session(
+    body: BillingUpgradeSessionRequest,
+    user: User = Depends(get_current_user),
+):
+    """Upgrade an existing active subscription to a higher tier with Stripe-managed
+    proration. The user only pays the prorated difference immediately, and — once the
+    webhook confirms the change — is granted the *difference* in application credits
+    rather than a full reset (see _merge_billing_credit_state)."""
+    _stripe_secret_key()
+    user_doc = await _get_user_doc(user)
+    billing = _billing_from_user(user_doc)
+    subscription_id = billing.get("stripe_subscription_id")
+    is_premium = (billing.get("subscription_status") or "none") in {"active", "trialing"}
+    if not is_premium or not subscription_id or str(subscription_id).startswith("master_code_"):
+        raise HTTPException(status_code=400, detail="No active subscription to upgrade")
+
+    target_plan = _canonical_billing_plan(body.plan)
+    if target_plan not in {"basic", "pro", "ultra"}:
+        raise HTTPException(status_code=400, detail="Unsupported billing plan")
+    target_interval = body.interval or billing.get("interval") or "monthly"
+
+    current_allowance = _billing_credit_limit(
+        billing.get("plan"), True, interval=billing.get("interval"), source=billing.get("source"),
+    )
+    target_allowance = _billing_credit_limit(target_plan, True, interval=target_interval, source="app")
+    if target_allowance <= current_allowance:
+        raise HTTPException(status_code=400, detail="Select a higher tier to upgrade")
+
+    try:
+        subscription = stripe.Subscription.retrieve(subscription_id)
+    except Exception as exc:
+        logger.warning("stripe_upgrade_subscription_retrieve_failed user_id=%s error=%s", user.user_id, str(exc)[:200])
+        raise HTTPException(status_code=400, detail="Could not load your current subscription")
+    items = subscription["items"]["data"]
+    if not items:
+        raise HTTPException(status_code=400, detail="Subscription has no line items")
+    item_id = items[0]["id"]
+    new_price_id = _stripe_price_for_plan(target_plan, interval=target_interval, source="app")
+
+    customer_id = await _stripe_customer_for_user(user_doc)
+    configuration_id = await _stripe_upgrade_portal_configuration_id()
+    return_path = _sanitize_return_path(body.return_path)
+    return_url = _checkout_return_url(_app_url(), return_path, "success")
+
+    session = stripe.billing_portal.Session.create(
+        customer=customer_id,
+        configuration=configuration_id,
+        return_url=return_url,
+        flow_data={
+            "type": "subscription_update_confirm",
+            "subscription_update_confirm": {
+                "subscription": subscription_id,
+                "items": [{"id": item_id, "price": new_price_id, "quantity": 1}],
+            },
+            "after_completion": {
+                "type": "redirect",
+                "redirect": {"return_url": return_url},
+            },
+        },
+    )
+    return {"url": session["url"]}
+
+
 async def _handle_subscription_event(subscription: Any, *, last_payment_status: Optional[str] = None) -> None:
     customer_id = str(subscription.get("customer") or "")
     if not customer_id:
@@ -2249,8 +2412,11 @@ async def stripe_webhook(request: Request):
 
 # ===================== CV parsing =====================
 
-CV_UPLOAD_EXTENSIONS = {".pdf", ".png", ".docx", ".txt", ".jpg", ".jpeg", ".heic", ".heif", ".webp"}
+CV_UPLOAD_EXTENSIONS = {".pdf", ".png", ".docx", ".txt", ".rtf", ".jpg", ".jpeg", ".heic", ".heif", ".webp"}
 CV_IMAGE_FORMATS = {"png", "jpeg", "webp", "heic"}
+# Legacy formats we can detect but cannot reliably parse — surfaced as a clear,
+# actionable error instead of silently falling through to a garbled "txt" read.
+CV_UNSUPPORTED_FORMATS = {"doc"}
 
 
 def _detect_cv_format(filename: str, content: bytes, content_type: Optional[str] = None) -> str:
@@ -2273,6 +2439,11 @@ def _detect_cv_format(filename: str, content: bytes, content_type: Optional[str]
         return "webp"
     if name.endswith(".docx") or content[:2] == b"PK":
         return "docx"
+    # Legacy Word 97-2003 binary format (OLE2 Compound File magic bytes).
+    if name.endswith(".doc") or content[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1":
+        return "doc"
+    if name.endswith(".rtf") or content[:5] == b"{\\rtf":
+        return "rtf"
     if name.endswith(".txt"):
         return "txt"
     ct = (content_type or "").lower().split(";")[0].strip()
@@ -2288,6 +2459,10 @@ def _detect_cv_format(filename: str, content: bytes, content_type: Optional[str]
         return "webp"
     if ct == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
         return "docx"
+    if ct in {"application/msword"}:
+        return "doc"
+    if ct in {"application/rtf", "text/rtf"}:
+        return "rtf"
     if ct == "text/plain":
         return "txt"
     return "txt"
@@ -2431,6 +2606,23 @@ def _extract_docx_text(content: bytes) -> str:
     return "\n".join(parts)
 
 
+def _extract_rtf_text(content: bytes) -> str:
+    """Lightweight RTF-to-text conversion (no extra dependency) — strips control
+    words/groups. Not pixel-perfect but sufficient for downstream AI parsing."""
+    try:
+        text = content.decode("latin-1", errors="ignore")
+    except Exception:
+        return ""
+    text = re.sub(r"\\par[d]?\b", "\n", text)
+    text = re.sub(r"\\tab\b", "\t", text)
+    text = re.sub(r"\\'[0-9a-fA-F]{2}", "", text)
+    text = re.sub(r"\\[a-zA-Z]+-?\d*\s?", " ", text)
+    text = re.sub(r"[{}]", "", text)
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n\s+", "\n", text)
+    return text.strip()
+
+
 def _cv_image_mime(fmt: str, filename: str, content_type: Optional[str]) -> str:
     ct = (content_type or "").lower().split(";")[0].strip()
     if ct.startswith("image/"):
@@ -2468,7 +2660,9 @@ def extract_text_from_upload(filename: str, content: bytes, content_type: Option
         return _extract_pdf_text(content)
     if fmt == "docx":
         return _extract_docx_text(content)
-    if fmt in CV_IMAGE_FORMATS:
+    if fmt == "rtf":
+        return _extract_rtf_text(content)
+    if fmt in CV_IMAGE_FORMATS or fmt in CV_UNSUPPORTED_FORMATS:
         return ""
     try:
         return content.decode("utf-8", errors="ignore")
@@ -3760,16 +3954,30 @@ async def coach_streak(user: User = Depends(get_current_user)):
 
 
 
+CV_UPLOAD_ACCEPTED_FORMATS = {"pdf", "png", "docx", "txt", "rtf", "jpeg", "webp", "heic"}
+
+
 @api_router.post("/profile/cv")
 async def upload_cv(file: UploadFile = File(...), user: User = Depends(get_current_user)):
     import base64
     content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="The file appears to be empty. Please choose a different file.")
     if len(content) > MAX_PROFILE_DOCUMENT_BYTES:
-        raise HTTPException(status_code=400, detail="File must be 10MB or smaller")
+        limit_mb = MAX_PROFILE_DOCUMENT_BYTES // (1024 * 1024)
+        raise HTTPException(status_code=400, detail=f"File must be {limit_mb}MB or smaller")
     filename = file.filename or "cv"
     fmt = _detect_cv_format(filename, content, file.content_type)
-    if fmt not in {"pdf", "png", "docx", "txt", "jpeg", "webp", "heic"}:
-        raise HTTPException(status_code=400, detail="Please upload a PDF, PNG, JPG, or DOCX resume")
+    if fmt == "doc":
+        raise HTTPException(
+            status_code=400,
+            detail="Legacy .doc files aren't supported. Please re-save your resume as PDF or DOCX and try again.",
+        )
+    if fmt not in CV_UPLOAD_ACCEPTED_FORMATS:
+        raise HTTPException(
+            status_code=400,
+            detail="Please upload a PDF, DOCX, RTF, TXT, or image (PNG/JPG/HEIC/WEBP) resume.",
+        )
     try:
         cv_text = await extract_cv_text_from_upload(filename, content, file.content_type)
     except LLMProviderNotConfigured:
@@ -3876,9 +4084,9 @@ async def download_original_cv(user: User = Depends(get_current_user)):
     )
 
 
-MAX_PROFILE_DOCUMENT_BYTES = 10 * 1024 * 1024
-PROFILE_DOCUMENT_EXTENSIONS = {".pdf", ".docx", ".txt", ".png", ".jpg", ".jpeg", ".webp"}
-COVER_LETTER_EXTENSIONS = {".pdf", ".docx", ".txt"}
+MAX_PROFILE_DOCUMENT_BYTES = 20 * 1024 * 1024
+PROFILE_DOCUMENT_EXTENSIONS = {".pdf", ".docx", ".txt", ".rtf", ".png", ".jpg", ".jpeg", ".heic", ".heif", ".webp"}
+COVER_LETTER_EXTENSIONS = {".pdf", ".docx", ".txt", ".rtf"}
 
 
 def _mime_from_profile_document_filename(filename: str) -> str:
@@ -3922,8 +4130,11 @@ async def upload_profile_document(file: UploadFile = File(...), user: User = Dep
     import base64
 
     content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="The file appears to be empty. Please choose a different file.")
     if len(content) > MAX_PROFILE_DOCUMENT_BYTES:
-        raise HTTPException(status_code=400, detail="File must be 10MB or smaller")
+        limit_mb = MAX_PROFILE_DOCUMENT_BYTES // (1024 * 1024)
+        raise HTTPException(status_code=400, detail=f"File must be {limit_mb}MB or smaller")
     filename = file.filename or "document"
     ext = filename.lower()[filename.rfind("."):] if "." in filename else ""
     if ext not in PROFILE_DOCUMENT_EXTENSIONS:
@@ -3999,12 +4210,15 @@ async def upload_cover_letter(file: UploadFile = File(...), user: User = Depends
     import base64
 
     content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="The file appears to be empty. Please choose a different file.")
     if len(content) > MAX_PROFILE_DOCUMENT_BYTES:
-        raise HTTPException(status_code=400, detail="File must be 10MB or smaller")
+        limit_mb = MAX_PROFILE_DOCUMENT_BYTES // (1024 * 1024)
+        raise HTTPException(status_code=400, detail=f"File must be {limit_mb}MB or smaller")
     filename = file.filename or "cover_letter"
     ext = filename.lower()[filename.rfind(".") :] if "." in filename else ""
     if ext not in COVER_LETTER_EXTENSIONS:
-        raise HTTPException(status_code=400, detail="Please upload a PDF, DOCX, or TXT cover letter")
+        raise HTTPException(status_code=400, detail="Please upload a PDF, DOCX, RTF, or TXT cover letter")
 
     cover_letter_text = extract_text_from_upload(filename, content, file.content_type).strip()
     mime = _mime_from_profile_document_filename(filename)
@@ -8267,6 +8481,8 @@ def _admin_doc_metadata(app_doc: Dict[str, Any]) -> Dict[str, Any]:
 
 def _admin_application_row(app_doc: Dict[str, Any], user_doc: Optional[Dict[str, Any]], job_doc: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     app_doc = _normalize_application_status_fields(app_doc)
+    tailored_resume = app_doc.get("tailored_resume_structured") or app_doc.get("tailored_resume") or {}
+    cover_letter = app_doc.get("tailored_cover_letter") or app_doc.get("cover_letter") or {}
     return {
         "application_id": app_doc.get("application_id"),
         "user_id": app_doc.get("user_id"),
@@ -8283,6 +8499,9 @@ def _admin_application_row(app_doc: Dict[str, Any], user_doc: Optional[Dict[str,
         "assigned_at": app_doc.get("assigned_at"),
         "created_at": app_doc.get("created_at"),
         "updated_at": app_doc.get("updated_at") or app_doc.get("created_at"),
+        "has_tailored_resume": bool(tailored_resume),
+        "has_cover_letter": bool(cover_letter),
+        "email_confirmed_outcome": app_doc.get("email_confirmed_outcome"),
     }
 
 
@@ -8603,6 +8822,7 @@ async def admin_list_users(admin: User = Depends(require_admin_user)):
     for user_doc in users:
         uid = user_doc.get("user_id")
         profile = profile_map.get(uid)
+        billing = _billing_status_payload(user_doc)
         rows.append({
             "user_id": uid,
             "email": user_doc.get("email"),
@@ -8613,7 +8833,11 @@ async def admin_list_users(admin: User = Depends(require_admin_user)):
             "total_applications": app_counts.get(uid, 0),
             "last_active_at": last_app_at.get(uid) or (profile or {}).get("updated_at") or user_doc.get("created_at"),
             "created_at": user_doc.get("created_at"),
-            "plan": "Not connected",
+            "plan": billing.get("plan"),
+            "is_premium": billing.get("is_premium"),
+            "subscription_status": billing.get("subscription_status"),
+            "credits_total": billing.get("credits_total"),
+            "credits_remaining": billing.get("credits_remaining"),
         })
     rows.sort(key=lambda item: _parse_dt(item.get("last_active_at")) or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
     return {"users": rows}
@@ -8629,13 +8853,67 @@ async def admin_get_user(user_id: str, admin: User = Depends(require_admin_user)
     job_ids = list({app.get("job_id") for app in apps if app.get("job_id")})
     jobs = await db.jobs.find({"job_id": {"$in": job_ids}}, {"_id": 0}).to_list(500) if job_ids else []
     job_map = {item.get("job_id"): item for item in jobs}
+
+    billing_payload = _billing_status_payload(user_doc)
+    billing_raw = _billing_from_user(user_doc)
+
+    swipe_rows = await db.swipes.find(
+        {"user_id": user_id},
+        {"_id": 0, "direction": 1, "created_at": 1, "job_id": 1},
+    ).sort("created_at", -1).to_list(5000)
+    right_swipes = [row for row in swipe_rows if row.get("direction") == "right"]
+    left_swipes = [row for row in swipe_rows if row.get("direction") == "left"]
+
+    app_status_counts: Dict[str, int] = {}
+    outcome_counts: Dict[str, int] = {}
+    for app_doc in apps:
+        normalized = _normalize_application_status_fields(app_doc)
+        status_key = normalized.get("submission_status") or "unknown"
+        app_status_counts[status_key] = app_status_counts.get(status_key, 0) + 1
+        outcome = app_doc.get("email_confirmed_outcome")
+        if outcome:
+            outcome_counts[outcome] = outcome_counts.get(outcome, 0) + 1
+
+    documents = {
+        "cv_filename": (profile or {}).get("cv_filename"),
+        "has_cv": bool((profile or {}).get("cv_text")),
+        "cv_text_length": len((profile or {}).get("cv_text") or ""),
+        "cv_preview": ((profile or {}).get("cv_text") or "")[:2000],
+        "has_cover_letter": bool((profile or {}).get("cover_letter_text")),
+        "cover_letter_text_length": len((profile or {}).get("cover_letter_text") or ""),
+        "cover_letter_preview": ((profile or {}).get("cover_letter_text") or "")[:2000],
+        "linkedin_url": (profile or {}).get("linkedin_url"),
+        "portfolio_url": (profile or {}).get("portfolio_url"),
+    }
+
     return {
         "user": {
             **user_doc,
             "profile_completion": _profile_completion(profile),
             "cv_uploaded": bool((profile or {}).get("cv_text")),
-            "plan": "Not connected",
+            "plan": billing_payload.get("plan"),
         },
+        "billing": {
+            **billing_payload,
+            "stripe_subscription_id_exists": bool(billing_raw.get("stripe_subscription_id")),
+            "current_period_start": billing_raw.get("current_period_start"),
+            "cancel_at_period_end": bool(billing_raw.get("cancel_at_period_end")),
+        },
+        "swipe_summary": {
+            "total": len(swipe_rows),
+            "right": len(right_swipes),
+            "left": len(left_swipes),
+            "right_rate": _rate(len(right_swipes), len(swipe_rows)),
+            "last_swipe_at": swipe_rows[0].get("created_at") if swipe_rows else None,
+            "daily_usage": {
+                "7d": _series_counts(right_swipes, 7, lambda item: item.get("created_at")),
+                "14d": _series_counts(right_swipes, 14, lambda item: item.get("created_at")),
+                "30d": _series_counts(right_swipes, 30, lambda item: item.get("created_at")),
+            },
+        },
+        "application_status_counts": app_status_counts,
+        "outcome_counts": outcome_counts,
+        "documents": documents,
         "profile": profile,
         "contact": (profile or {}).get("contact") or {},
         "preferences": {

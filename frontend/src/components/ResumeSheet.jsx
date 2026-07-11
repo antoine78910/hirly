@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import { shouldMockCvUpload, uploadProfileCv } from "../lib/demoCvUpload";
-import { CV_ACCEPT_ATTR, isAcceptedCvFile } from "../lib/cvUploadFormats";
+import { CV_ACCEPT_ATTR, CV_MAX_BYTES, CV_MAX_MB, isAcceptedCvFile, isLegacyDocFile } from "../lib/cvUploadFormats";
 import { FileText, Loader2, Upload } from "lucide-react";
 import {
   Dialog,
@@ -17,8 +17,6 @@ import ResumeCurrentPreview from "./profile/ResumeCurrentPreview";
 import { useAppLocale } from "../context/AppLocaleContext";
 import { trackEvent } from "../lib/analytics";
 
-const MAX_CV_BYTES = 10 * 1024 * 1024;
-
 /** Centered resume upload modal — drag & drop + file picker. */
 export default function ResumeSheet({ open, profile, onClose, onUploaded }) {
   const { t } = useAppLocale();
@@ -31,12 +29,16 @@ export default function ResumeSheet({ open, profile, onClose, onUploaded }) {
 
   const handleFile = useCallback(async (file) => {
     if (!file) return;
+    if (isLegacyDocFile(file)) {
+      toast.error(t("resumeSheet.legacyDocError"));
+      return;
+    }
     if (!isAcceptedCvFile(file)) {
       toast.error(t("resumeSheet.fileTypeError"));
       return;
     }
-    if (file.size > MAX_CV_BYTES) {
-      toast.error("File must be 10MB or smaller.");
+    if (file.size > CV_MAX_BYTES) {
+      toast.error(t("resumeSheet.fileSizeError", { maxMb: CV_MAX_MB }));
       return;
     }
 

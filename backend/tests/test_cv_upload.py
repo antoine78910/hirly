@@ -1,7 +1,10 @@
 from server import (
+    CV_UPLOAD_ACCEPTED_FORMATS,
+    MAX_PROFILE_DOCUMENT_BYTES,
     _cv_text_looks_usable,
     _dedupe_image_candidates,
     _detect_cv_format,
+    _extract_rtf_text,
     _guess_image_mime,
     _pdf_ocr_image_candidates,
     extract_text_from_upload,
@@ -66,3 +69,43 @@ def test_extract_text_from_upload_png_returns_empty_without_ocr():
 def test_extract_text_from_upload_jpeg_returns_empty_without_ocr():
     jpeg_header = b"\xff\xd8\xff" + b"0" * 32
     assert extract_text_from_upload("cv.jpg", jpeg_header) == ""
+
+
+def test_detect_cv_format_rtf_and_legacy_doc():
+    rtf_bytes = b"{\\rtf1\\ansi Hello World}"
+    assert _detect_cv_format("resume.rtf", rtf_bytes) == "rtf"
+    assert _detect_cv_format("resume", rtf_bytes) == "rtf"
+    ole2_header = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"0" * 32
+    assert _detect_cv_format("resume.doc", ole2_header) == "doc"
+    assert _detect_cv_format("resume", ole2_header) == "doc"
+    assert _detect_cv_format("resume", b"anything", "application/msword") == "doc"
+    assert _detect_cv_format("resume", b"anything", "application/rtf") == "rtf"
+
+
+def test_extract_rtf_text_strips_control_words():
+    rtf_bytes = b"{\\rtf1\\ansi\\deff0 {\\fonttbl}\\f0\\fs24 John Doe\\par Software Engineer}"
+    text = _extract_rtf_text(rtf_bytes)
+    assert "John Doe" in text
+    assert "Software Engineer" in text
+    assert "\\rtf1" not in text
+
+
+def test_extract_text_from_upload_rtf_uses_rtf_extractor():
+    rtf_bytes = b"{\\rtf1\\ansi Jane Smith\\par Product Manager}"
+    text = extract_text_from_upload("cover_letter.rtf", rtf_bytes)
+    assert "Jane Smith" in text
+    assert "Product Manager" in text
+
+
+def test_extract_text_from_upload_legacy_doc_returns_empty():
+    ole2_header = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"0" * 32
+    assert extract_text_from_upload("resume.doc", ole2_header) == ""
+
+
+def test_cv_upload_accepted_formats_include_rtf_but_not_legacy_doc():
+    assert "rtf" in CV_UPLOAD_ACCEPTED_FORMATS
+    assert "doc" not in CV_UPLOAD_ACCEPTED_FORMATS
+
+
+def test_max_profile_document_bytes_is_20mb():
+    assert MAX_PROFILE_DOCUMENT_BYTES == 20 * 1024 * 1024

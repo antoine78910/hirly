@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import llm_client
+
 TEMPLATES_DIR = Path(__file__).resolve().parent / "data" / "interview_simulator_templates"
 COLLECTION = "interview_simulator_templates"
 MAX_AUDIO_BYTES = 25 * 1024 * 1024
@@ -110,3 +112,40 @@ async def create_interview_template(
 
 async def get_template_doc(db, template_id: str) -> Optional[Dict[str, Any]]:
     return await db[COLLECTION].find_one({"template_id": template_id}, {"_id": 0})
+
+
+def _overlap_seconds(a_start: float, a_end: float, b_start: float, b_end: float) -> float:
+    return max(0.0, min(a_end, b_end) - max(a_start, b_start))
+
+
+async def transcribe_segments(
+    *,
+    audio_bytes: bytes,
+    original_filename: str,
+    segments: List[Dict[str, Any]],
+) -> Dict[str, str]:
+    """Transcribe the audio once, then align Whisper's timed segments onto our step boundaries."""
+    if not audio_bytes:
+        raise ValueError("Audio file is required")
+    if not segments:
+        return {}
+
+    result = await llm_client.transcribe_audio_bytes(audio_bytes, filename=original_filename or "audio.mp3")
+    whisper_segments = result.get("segments") or []
+
+    transcripts: Dict[str, str] = {}
+    for step in segments:
+        step_id = step.get("id")
+        if not step_id:
+            continue
+        start = float(step.get("start") or 0)
+        end = float(step.get("end") or 0)
+        matches = [
+            w for w in whisper_segments
+            if _overlap_seconds(start, end, float(w.get("start") or 0), float(w.get("end") or 0)) > 0
+        ]
+        matches.sort(key=lambda w: float(w.get("start") or 0))
+        text = " ".join(w.get("text", "") for w in matches).strip()
+        transcripts[step_id] = text
+
+    return transcripts

@@ -85,12 +85,27 @@ def _count_videos_posted_in_range(
     start_day: date,
     end_day: date,
 ) -> int:
-    count = 0
+    return sum(
+        count
+        for count in _posts_per_day(videos, start_day=start_day, end_day=end_day).values()
+    )
+
+
+def _posts_per_day(
+    videos: Sequence[Dict[str, Any]],
+    *,
+    start_day: date,
+    end_day: date,
+) -> Dict[str, int]:
+    """Count posts per UTC calendar day from each video's posted_at timestamp."""
+    counts: Dict[str, int] = {}
     for video in videos or []:
         posted_day = _utc_date(video.get("posted_at"))
-        if posted_day and start_day <= posted_day <= end_day:
-            count += 1
-    return count
+        if not posted_day or posted_day < start_day or posted_day > end_day:
+            continue
+        day_key = _date_key(posted_day)
+        counts[day_key] = counts.get(day_key, 0) + 1
+    return counts
 
 
 def _engagement_rate(
@@ -193,6 +208,7 @@ def _daily_points(
   *,
   creator_ids: Sequence[str],
   days: int,
+  posts_per_day: Optional[Dict[str, int]] = None,
 ) -> List[Dict[str, Any]]:
     end_day = datetime.now(timezone.utc).date()
     start_day = end_day - timedelta(days=max(1, days) - 1)
@@ -217,9 +233,11 @@ def _daily_points(
         for cid in creator_ids
     }
 
+    posts_by_day = posts_per_day or {}
+
     for day in day_list:
         day_key = _date_key(day)
-        posted_videos = 0
+        posted_videos = int(posts_by_day.get(day_key) or 0)
         views = 0
         likes = 0
         comments = 0
@@ -227,7 +245,6 @@ def _daily_points(
         favorites = 0
         followers = 0
         active_accounts = 0
-        video_posts_from_list = 0
 
         for creator_id in creator_ids:
             row = per_creator_day[creator_id].get(day_key)
@@ -236,42 +253,27 @@ def _daily_points(
             active_accounts += 1
             followers += int(row.get("followers") or 0)
             prev = previous_totals[creator_id]
-            current_videos = _tracked_video_count(row)
             current_likes = int(row.get("likes_total") or 0)
             current_views = int(row.get("views_total") or 0)
             current_comments = int(row.get("comments_total") or 0)
             current_shares = int(row.get("shares_total") or 0)
             current_favorites = int(row.get("favorites_total") or 0)
 
-            posted_videos += max(0, current_videos - int(prev.get("video_count") or 0))
             likes += max(0, current_likes - int(prev.get("likes_total") or 0))
             views += max(0, current_views - int(prev.get("views_total") or 0))
             comments += max(0, current_comments - int(prev.get("comments_total") or 0))
             shares += max(0, current_shares - int(prev.get("shares_total") or 0))
             favorites += max(0, current_favorites - int(prev.get("favorites_total") or 0))
 
-            for video in row.get("videos") or []:
-                posted_day = _utc_date(video.get("posted_at"))
-                if posted_day == day:
-                    video_posts_from_list += 1
-                    views += int(video.get("views") or 0)
-                    likes += int(video.get("likes") or 0)
-                    comments += int(video.get("comments") or 0)
-                    shares += int(video.get("shares") or 0)
-                    favorites += int(video.get("favorites") or 0)
-
             previous_totals[creator_id] = {
                 "followers": int(row.get("followers") or 0),
                 "likes_total": current_likes,
-                "video_count": current_videos,
+                "video_count": _tracked_video_count(row),
                 "views_total": current_views,
                 "comments_total": current_comments,
                 "shares_total": current_shares,
                 "favorites_total": current_favorites,
             }
-
-        if video_posts_from_list > 0:
-            posted_videos = video_posts_from_list
 
         daily_rows.append({
             "date": day_key,
@@ -314,7 +316,8 @@ def build_dashboard(
 
     snapshots = _filter_snapshots(load_snapshots(), creator_ids=selected_ids, days=days + 1)
     grouped = _latest_by_creator_day(snapshots)
-    daily = _daily_points(grouped, creator_ids=selected_ids, days=days)
+    end_day = datetime.now(timezone.utc).date()
+    period_start_day = end_day - timedelta(days=max(1, days) - 1)
 
     creators_payload = []
     summary_followers = 0
@@ -371,7 +374,6 @@ def build_dashboard(
         summary_favorites += current_favorites
         summary_interaction_likes += interaction_likes
 
-        period_start_day = datetime.now(timezone.utc).date() - timedelta(days=max(1, days) - 1)
         start_key = _date_key(period_start_day)
         start_row = grouped.get((creator_id, start_key))
         if start_row:
@@ -421,11 +423,17 @@ def build_dashboard(
             "fetch_error": (latest or {}).get("error"),
         })
 
-    end_day = datetime.now(timezone.utc).date()
-    period_start_day = end_day - timedelta(days=max(1, days) - 1)
-    period_posted = max(
-        _sum_metric(daily, "posted_videos"),
-        _count_videos_posted_in_range(all_videos, start_day=period_start_day, end_day=end_day),
+    posts_per_day = _posts_per_day(all_videos, start_day=period_start_day, end_day=end_day)
+    daily = _daily_points(
+        grouped,
+        creator_ids=selected_ids,
+        days=days,
+        posts_per_day=posts_per_day,
+    )
+    period_posted = _count_videos_posted_in_range(
+        all_videos,
+        start_day=period_start_day,
+        end_day=end_day,
     )
     period_views = _sum_metric(daily, "views")
     period_likes = _sum_metric(daily, "likes")

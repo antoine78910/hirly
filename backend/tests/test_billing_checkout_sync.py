@@ -87,3 +87,89 @@ def test_apply_checkout_session_billing_grants_credits(monkeypatch):
     assert billing["subscription_status"] == "active"
     assert billing["credits_total"] == 200
     assert billing["credits_remaining"] == 200
+
+
+def test_merge_billing_credit_state_prorated_upgrade_grants_delta():
+    """Pro (200 credits) at 0 remaining upgrades mid-cycle to Ultra (600 credits) —
+    same Stripe subscription and same billing-period bounds — should grant only the
+    +400 difference, landing at 400/600, not a full reset to 600/600."""
+    existing_billing = {
+        "subscription_status": "active",
+        "plan": "pro",
+        "interval": "monthly",
+        "source": "app",
+        "stripe_subscription_id": "sub_123",
+        "current_period_start": "2026-01-01T00:00:00+00:00",
+        "current_period_end": "2026-02-01T00:00:00+00:00",
+        "credits_total": 200,
+        "credits_remaining": 0,
+    }
+    existing_billing["credits_period_key"] = server._billing_credit_period_key(existing_billing)
+
+    updates = {
+        "subscription_status": "active",
+        "plan": "ultra",
+        "interval": "monthly",
+        "source": "app",
+        "stripe_subscription_id": "sub_123",
+        "current_period_start": "2026-01-01T00:00:00+00:00",
+        "current_period_end": "2026-02-01T00:00:00+00:00",
+    }
+
+    merged = server._merge_billing_credit_state(existing_billing, updates)
+    assert merged["credits_total"] == 600
+    assert merged["credits_remaining"] == 400
+
+
+def test_merge_billing_credit_state_prorated_upgrade_keeps_leftover_credits():
+    """Same upgrade but with 50 credits left over — the delta is added on top."""
+    existing_billing = {
+        "subscription_status": "active",
+        "plan": "pro",
+        "interval": "monthly",
+        "source": "app",
+        "stripe_subscription_id": "sub_123",
+        "current_period_start": "2026-01-01T00:00:00+00:00",
+        "current_period_end": "2026-02-01T00:00:00+00:00",
+        "credits_total": 200,
+        "credits_remaining": 50,
+    }
+    existing_billing["credits_period_key"] = server._billing_credit_period_key(existing_billing)
+
+    updates = {**existing_billing, "plan": "ultra"}
+    merged = server._merge_billing_credit_state(existing_billing, updates)
+    assert merged["credits_total"] == 600
+    assert merged["credits_remaining"] == 450
+
+
+def test_merge_billing_credit_state_renewal_still_full_resets():
+    """A genuine renewal (new period bounds) still resets to the full allowance,
+    even though the plan is unchanged."""
+    existing_billing = {
+        "subscription_status": "active",
+        "plan": "pro",
+        "interval": "monthly",
+        "source": "app",
+        "stripe_subscription_id": "sub_123",
+        "current_period_start": "2026-01-01T00:00:00+00:00",
+        "current_period_end": "2026-02-01T00:00:00+00:00",
+        "credits_total": 200,
+        "credits_remaining": 30,
+    }
+    existing_billing["credits_period_key"] = server._billing_credit_period_key(existing_billing)
+
+    updates = {
+        **existing_billing,
+        "current_period_start": "2026-02-01T00:00:00+00:00",
+        "current_period_end": "2026-03-01T00:00:00+00:00",
+    }
+    merged = server._merge_billing_credit_state(existing_billing, updates)
+    assert merged["credits_total"] == 200
+    assert merged["credits_remaining"] == 200
+
+
+def test_billing_credit_limit_onboarding_matches_app_tier_pricing():
+    """Onboarding monthly (29.99€) grants the same 200 credits as the app's Pro tier
+    at the same price; onboarding quarterly (59.99€) matches Ultra's 600."""
+    assert server._billing_credit_limit("monthly", True, source="onboarding") == 200
+    assert server._billing_credit_limit("quarterly", True, source="onboarding") == 600

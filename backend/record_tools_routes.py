@@ -79,3 +79,27 @@ def register_record_tools_routes(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return payload
+
+    @router.post("/record-tools/transcribe")
+    async def transcribe_interview_audio(
+        segments: str = Form(...),
+        audio: UploadFile = File(...),
+        user=Depends(require_record_tools_user_dep),
+    ):
+        try:
+            parsed_segments: List[Dict[str, Any]] = json.loads(segments)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=400, detail="Invalid segments JSON") from exc
+
+        audio_bytes = await audio.read()
+        try:
+            transcripts = await service.transcribe_segments(
+                audio_bytes=audio_bytes,
+                original_filename=audio.filename or "audio.mp3",
+                segments=parsed_segments,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001 - surface a clean error to the UI
+            raise HTTPException(status_code=502, detail=f"Transcription failed: {exc}") from exc
+        return {"transcripts": transcripts}

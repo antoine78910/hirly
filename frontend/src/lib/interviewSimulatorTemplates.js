@@ -45,3 +45,17 @@ export async function fetchInterviewTemplateAudioBlob(templateId) {
   });
   return data;
 }
+
+export async function transcribeInterviewAudio({ segments, audioFile }) {
+  const form = new FormData();
+  form.append("segments", JSON.stringify(segments));
+  form.append("audio", audioFile);
+
+  const base = (getDirectApiBase() || "").replace(/\/+$/, "");
+  const url = `${base}/record-tools/transcribe`;
+
+  const { data } = await api.post(url, form, {
+    timeout: 120000,
+  });
+  return data?.transcripts || {};
+}

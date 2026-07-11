@@ -10,7 +10,7 @@ import {
   trackOnboardingSkip,
 } from "../lib/datafast";
 import { shouldMockCvUpload, uploadProfileCv } from "../lib/demoCvUpload";
-import { CV_ACCEPT_ATTR, isAcceptedCvFile } from "../lib/cvUploadFormats";
+import { CV_ACCEPT_ATTR, CV_MAX_BYTES, CV_MAX_MB, isAcceptedCvFile, isLegacyDocFile } from "../lib/cvUploadFormats";
 import { useAuth } from "../context/AuthContext";
 import { useAppLocale } from "../context/AppLocaleContext";
 import { Slider } from "../components/ui/slider";
@@ -418,8 +418,26 @@ export default function Onboarding() {
 
   const handleUpload = async (f) => {
     if (!f) return;
+    if (isLegacyDocFile(f)) {
+      toast.error(
+        lang === "fr"
+          ? "Les fichiers .doc ne sont pas pris en charge. Réenregistrez votre CV en PDF ou DOCX."
+          : "Legacy .doc files aren't supported. Please re-save your resume as PDF or DOCX.",
+      );
+      return;
+    }
     if (!isAcceptedCvFile(f)) {
-      toast.error(lang === "fr" ? "Importez un PDF, PNG, JPG ou DOCX." : "Please upload a PDF, PNG, JPG, or DOCX resume");
+      toast.error(
+        lang === "fr"
+          ? "Importez un PDF, DOCX, RTF, TXT ou une image."
+          : "Please upload a PDF, DOCX, RTF, TXT, or image resume",
+      );
+      return;
+    }
+    if (f.size > CV_MAX_BYTES) {
+      toast.error(
+        lang === "fr" ? `Le fichier doit faire ${CV_MAX_MB} Mo ou moins.` : `File must be ${CV_MAX_MB}MB or smaller.`,
+      );
       return;
     }
     if (!user && !shouldMockCvUpload()) {
@@ -467,6 +485,13 @@ export default function Onboarding() {
         }
         if (!advanced) {
           setParsing(false);
+        } else if (!shouldMockCvUpload()) {
+          // The auto-advance timer already moved the user forward before the
+          // upload actually failed — send them back to retry instead of
+          // silently leaving them on a step with no real profile.
+          setFile(null);
+          setParsing(false);
+          setStepIndex(STEP_ORDER.indexOf("upload"));
         }
       }
     })();
@@ -1291,7 +1316,7 @@ export default function Onboarding() {
                     <FileText className={`w-6 h-6 ${ob.accent}`} />
                   </div>
                   <p className="font-semibold text-sm sm:text-base text-zinc-900">{lang === "fr" ? "Aucun CV sélectionné" : "No resume selected"}</p>
-                  <p className={`text-xs sm:text-sm ${ob.muted} mt-1`}>{lang === "fr" ? "PDF, PNG, JPG ou DOCX" : "PDF, PNG, JPG, or DOCX"}</p>
+                  <p className={`text-xs sm:text-sm ${ob.muted} mt-1`}>{lang === "fr" ? `PDF, DOCX, RTF, TXT ou image • ${CV_MAX_MB} Mo max` : `PDF, DOCX, RTF, TXT, or image • Max ${CV_MAX_MB}MB`}</p>
                 </>
               ) : (
                 <div className="flex items-center justify-center gap-2 text-zinc-700">

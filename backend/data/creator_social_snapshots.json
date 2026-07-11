@@ -224,5 +224,130 @@
     "comments_total": 0,
     "videos": [],
     "recorded_at": "2026-07-07T10:22:09.146335+00:00"
+  },
+  {
+    "creator_id": "elodie",
+    "platform": "tiktok",
+    "handle": "eloworks0",
+    "nickname": "eloworks",
+    "avatar_url": "https://p16-common-sign.tiktokcdn-eu.com/tos-no1a-avt-0068c001-no/35be2da8ea18c62bda4533e7ba6bd69c~tplv-tiktokx-cropcenter:1080:1080.jpeg?dr=10399&refresh_token=d3c34b21&x-expires=1783796400&x-signature=kbsoA83gH8atw1jDxRXZ2Pi%2FC5c%3D&t=4d5b0474&ps=13740610&shp=a5d48078&shcp=81f88b70&idc=no1a",
+    "followers": 9,
+    "following": 4,
+    "likes_total": 118,
+    "video_count": 1,
+    "views_total": 2394,
+    "comments_total": 4,
+    "videos": [
+      {
+        "video_id": "7660252569985387809",
+        "posted_at": "2026-07-08T20:12:19+00:00",
+        "description": "Bien, mieux, le top : \u00e9dition candidature ! #emploi #rechercheemploi #linkedin #indeed #conseilscarriere",
+        "views": 2394,
+        "likes": 118,
+        "comments": 4,
+        "shares": 32,
+        "cover_url": "https://p19-common-sign.tiktokcdn-eu.com/tos-useast2a-p-0037-euttp/oMkXkEocqaDfFiHdB7FEQ6DcETARIyvQQhfsmq~tplv-tiktokx-cropcenter-q:300:400:q70.jpeg?dr=9232&refresh_token=fb72e26c&x-expires=1783710000&x-signature=x3QYpf2mvFBnJMpGw5T6r9BPOVI%3D&t=bacd0480&ps=933b5bde&shp=d05b14bd&shcp=1d1a97fc&idc=useast2b&item=7660252569985387809&biz_tag=tt_video&s=PUBLISH&sc=cover",
+        "url": "https://www.tiktok.com/@eloworks0/video/7660252569985387809"
+      }
+    ],
+    "recorded_at": "2026-07-09T19:38:00.938926+00:00"
+  },
+  {
+    "creator_id": "eva",
+    "platform": "tiktok",
+    "handle": "hirlyjob",
+    "nickname": "Eva",
+    "avatar_url": "https://p16-common-sign.tiktokcdn-eu.com/tos-no1a-avt-0068c001-no/f53e1f1095930895f891ffb0a27fcc45~tplv-tiktokx-cropcenter:1080:1080.jpeg?dr=10399&refresh_token=38acd95a&x-expires=1783796400&x-signature=GSEknTTal9hKaZWWfANsB9VUqL8%3D&t=4d5b0474&ps=13740610&shp=a5d48078&shcp=81f88b70&idc=no1a",
+    "followers": 5,
+    "following": 7,
+    "likes_total": 163,
+    "video_count": 2,
+    "views_total": 3120,
+    "comments_total": 7,
+    "videos": [
+      {
+        "video_id": "7659115983663058209",
+        "posted_at": "2026-07-05T18:41:47+00:00",
+        "description": "Aller dans une grande \u00e9cole avec des crack\u00e9s \u00e7a met vraiment ma sant\u00e9 mentale \u00e0 l'\u00e9preuve\u2026 #aihirlyai #alternance #stage #rechercheemploi #conseilscarriere",
+        "views": 2009,
+        "likes": 50,
+        "comments": 5,
+        "shares": 6,
+        "cover_url": "https://p16-common-sign.tiktokcdn-eu.com/tos-useast2a-p-0037-euttp/oQ1QWxsvNGpKIYZKS2LlAQQIGAe4IwfeRfGp7p~tplv-tiktokx-cropcenter-q:300:400:q70.jpeg?dr=9232&refresh_token=02097a79&x-expires=1783710000&x-signature=NEdPNXOUWNfItm%2ByfilP9qFDoEw%3D&t=bacd0480&ps=933b5bde&shp=d05b14bd&shcp=1d1a97fc&idc=useast2b&biz_tag=tt_video&s=PUBLISH&sc=cover&item=7659115983663058209",
+        "url": "https://www.tiktok.com/@hirlyjob/video/7659115983663058209"
+      },
+      {
+        "video_id": "7658319793723919649",
+        "posted_at": "2026-07-03T15:12:10+00:00",
+        "description": "J'ai utilis\u00e9 LinkedIn, Indeed et Glassdoor pour ma recherche et PERSONNE NE ME R\u00c9POND \ud83d\ude2d Mais j'ai entendu dire que les apps de niche c'est la voie, pour l'instant j'ai test\u00e9 Hirly, Discord et les groupes Instagram d'influenceurs \ud83d\ude02\ud83d\ude02  #aihirlyai #rechercheemploi  #tipsemploi #cv #emploifrance",
+        "views": 1111,
+        "likes": 113,
+        "comments": 2,
+        "shares": 9,
+        "cover_url": "https://p16-common-sign.tiktokcdn-eu.com/tos-useast2a-p-0037-euttp/ogA409nbDIBU2HfFAHFAmhRJCCfXqADEEBQdER~tplv-tiktokx-cropcenter-q:300:400:q70.jpeg?dr=9232&refresh_token=385532ff&x-expires=1783710000&x-signature=29nR%2Bq%2FlgbyiFRO%2B27I3tFxgvfw%3D&t=bacd0480&ps=933b5bde&shp=d05b14bd&shcp=1d1a97fc&idc=useast2b&item=7658319793723919649&biz_tag=tt_video&s=PUBLISH&sc=cover",
+        "url": "https://www.tiktok.com/@hirlyjob/video/7658319793723919649"
+      }
+    ],
+    "recorded_at": "2026-07-09T19:38:03.496723+00:00"
+  },
+  {
+    "creator_id": "mike_instagram",
+    "platform": "instagram",
+    "handle": "mike.jobtips",
+    "nickname": "mike",
+    "avatar_url": "https://scontent-fra3-1.cdninstagram.com/v/t51.82787-19/730376456_18113396959748977_38251388304653432_n.jpg?stp=dst-jpg_s320x320_tt6&efg=eyJ2ZW5jb2RlX3RhZyI6InByb2ZpbGVfcGljLmRqYW5nby43MjAuYzIifQ&_nc_ht=scontent-fra3-1.cdninstagram.com&_nc_cat=101&_nc_oc=Q6cZ2gFjoIU6_bpfyDX_n7t9YAReq4IgegTGd4EKr3vrHT75ZYGmo_GzXZM5NQb50M8_zvRem2b0SjJRd45goemvBSZD&_nc_ohc=8XLMAkLuCWEQ7kNvwGZqCJN&_nc_gid=ggdpHRXINA_1Y-15wNyCUw&edm=AOQ1c0wBAAAA&ccb=7-5&oh=00_AQD0vdZxe4IN7yAUEfngWiuPCTP1KXZdKyTP9-J4If-kBQ&oe=6A55D590&_nc_sid=8b3546",
+    "followers": 0,
+    "following": 2,
+    "likes_total": 0,
+    "video_count": 0,
+    "views_total": 0,
+    "comments_total": 0,
+    "videos": [],
+    "recorded_at": "2026-07-09T19:38:04.474408+00:00"
+  },
+  {
+    "creator_id": "mike_tiktok",
+    "platform": "tiktok",
+    "handle": "mike_ways0",
+    "nickname": "mike.jobtips",
+    "avatar_url": "https://p16-common-sign.tiktokcdn-eu.com/tos-no1a-avt-0068c001-no/ae9ea8d8dde3fc1f87ca0df750b6f062~tplv-tiktokx-cropcenter:1080:1080.jpeg?dr=10399&refresh_token=00297e36&x-expires=1783796400&x-signature=FZJqUbOya4W043zVCB6z227NxMM%3D&t=4d5b0474&ps=13740610&shp=a5d48078&shcp=81f88b70&idc=no1a",
+    "followers": 1,
+    "following": 3,
+    "likes_total": 0,
+    "video_count": 0,
+    "views_total": 0,
+    "comments_total": 0,
+    "videos": [],
+    "recorded_at": "2026-07-09T19:38:07.734707+00:00"
+  },
+  {
+    "creator_id": "gerece_instagram",
+    "platform": "instagram",
+    "handle": "gerece934",
+    "nickname": "gerece934",
+    "avatar_url": "https://scontent-fra3-1.cdninstagram.com/v/t51.82787-19/732199169_18136260772531947_2211173816291761992_n.jpg?stp=dst-jpg_s320x320_tt6&efg=eyJ2ZW5jb2RlX3RhZyI6InByb2ZpbGVfcGljLmRqYW5nby43NzAuYzIifQ&_nc_ht=scontent-fra3-1.cdninstagram.com&_nc_cat=103&_nc_oc=Q6cZ2gHTaXPAk8Chmt5vXY3Wym19Zk0Q_m_5I7Kkgu1E24APZJ8O-ujfrgVYZUaQ2BAlQlb4nLlMLEuaxt21B5HU2WLs&_nc_ohc=EFpP8O9miwwQ7kNvwEnOnEO&_nc_gid=pvjTOLhTGrCgUMuEgG0gWQ&edm=AOQ1c0wBAAAA&ccb=7-5&oh=00_AQDlBrCJZ-NVG2jNVy8JORkgMAtKr03LNzwKAnAFAnXOeA&oe=6A55CC62&_nc_sid=8b3546",
+    "followers": 0,
+    "following": 4,
+    "likes_total": 0,
+    "video_count": 0,
+    "views_total": 0,
+    "comments_total": 0,
+    "videos": [],
+    "recorded_at": "2026-07-09T19:38:08.681895+00:00"
+  },
+  {
+    "creator_id": "gerece_tiktok",
+    "platform": "tiktok",
+    "handle": "gereceverse",
+    "nickname": "Adrien Gerece",
+    "avatar_url": "https://p16-commonlite-sign.tiktokcdn-eu.com/tos-alisg-avt-0068/4067c56ae416ec23f6f2eae370bd1bf2~tplv-tiktokx-cropcenter:1080:1080.jpeg?dr=10511&refresh_token=6cc82bb3&x-expires=1783796400&x-signature=mXoMD9C5257byYcRlhM%2BPOE1GpM%3D&t=4d5b0474&ps=82dc5187&shp=a5d48078&shcp=81f88b70&idc=no1a",
+    "followers": 0,
+    "following": 4,
+    "likes_total": 0,
+    "video_count": 0,
+    "views_total": 0,
+    "comments_total": 0,
+    "videos": [],
+    "recorded_at": "2026-07-09T19:38:11.340006+00:00"
   }
 ]

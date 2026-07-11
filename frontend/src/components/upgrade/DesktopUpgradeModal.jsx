@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import {
   Check,
@@ -93,13 +93,13 @@ function TierCard({ tier, selected, onSelect, isMonthly, t, lang }) {
   );
 }
 
-function PricingGrid({ isMonthly, selectedTier, onSelectTier, t, lang }) {
+function PricingGrid({ tiers, isMonthly, selectedTier, onSelectTier, t, lang }) {
   return (
     <div
       role="radiogroup"
       className="grid grid-cols-3 gap-2 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 lg:gap-6"
     >
-      {SUBSCRIPTION_TIERS.map((tier) => (
+      {tiers.map((tier) => (
         <TierCard
           key={tier.id}
           tier={tier}
@@ -114,6 +114,13 @@ function PricingGrid({ isMonthly, selectedTier, onSelectTier, t, lang }) {
   );
 }
 
+/** Applications count normalized to a monthly-equivalent, for ranking against SUBSCRIPTION_TIERS. */
+function monthlyEquivalentApplications(billing) {
+  if (!billing?.is_premium) return 0;
+  const total = Number(billing.credits_total || 0);
+  return billing.interval === "weekly" ? total * 4 : total;
+}
+
 export default function DesktopUpgradeModal({ open, onClose }) {
   const { t, lang } = useAppLocale();
   const location = useLocation();
@@ -123,8 +130,67 @@ export default function DesktopUpgradeModal({ open, onClose }) {
   const [selectedTier, setSelectedTier] = useState("ultra");
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [accessCode, setAccessCode] = useState("");
+  const [currentBilling, setCurrentBilling] = useState(null);
 
   const isMonthly = billingInterval === "monthly";
+  const isExistingSubscriber = Boolean(currentBilling?.is_premium);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    api
+      .get("/billing/status")
+      .then(({ data }) => {
+        if (!cancelled) setCurrentBilling(data || null);
+      })
+      .catch(() => {
+        if (!cancelled) setCurrentBilling(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  // Existing subscribers can only move to a strictly higher tier (proration handles the
+  // upgrade); lock their billing interval to whatever they're already on.
+  useEffect(() => {
+    if (isExistingSubscriber && currentBilling?.interval) {
+      setBillingInterval(currentBilling.interval === "weekly" ? "weekly" : "monthly");
+    }
+  }, [isExistingSubscriber, currentBilling]);
+
+  const currentMonthlyEquivalent = useMemo(
+    () => monthlyEquivalentApplications(currentBilling),
+    [currentBilling],
+  );
+  const availableTiers = useMemo(() => {
+    if (!isExistingSubscriber) return SUBSCRIPTION_TIERS;
+    return SUBSCRIPTION_TIERS.filter((tier) => tier.applications > currentMonthlyEquivalent);
+  }, [isExistingSubscriber, currentMonthlyEquivalent]);
+  const hasUpgradeOption = availableTiers.length > 0;
+
+  useEffect(() => {
+    if (!availableTiers.some((tier) => tier.id === selectedTier)) {
+      const nearestUpgrade = availableTiers[availableTiers.length - 1];
+      if (nearestUpgrade) setSelectedTier(nearestUpgrade.id);
+    }
+  }, [availableTiers, selectedTier]);
+
+  const handleManageSubscription = async () => {
+    setCheckoutLoading(true);
+    try {
+      const { data } = await api.post("/billing/create-portal-session");
+      if (data?.url) {
+        window.location.href = data.url;
+        return;
+      }
+      toast.error(t("upgrade.checkoutError"));
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || t("upgrade.checkoutFailed"));
+    } finally {
+      setCheckoutLoading(false);
+    }
+  };
 
   const handleCheckout = async () => {
     setCheckoutLoading(true);
@@ -143,6 +209,19 @@ export default function DesktopUpgradeModal({ open, onClose }) {
         toast.success("Test plan activated");
         setAccessCode("");
         onClose?.();
+        return;
+      }
+      if (isExistingSubscriber) {
+        const { data } = await api.post("/billing/create-upgrade-session", {
+          plan: selectedTier,
+          interval: billingInterval,
+          return_path: returnPath,
+        });
+        if (data?.url) {
+          window.location.href = data.url;
+          return;
+        }
+        toast.error(t("upgrade.checkoutError"));
         return;
       }
       const { data } = await api.post("/billing/create-checkout-session", withDatafastAttribution({
@@ -217,42 +296,70 @@ export default function DesktopUpgradeModal({ open, onClose }) {
                   </p>
                 </div>
 
-                <Tabs value={billingInterval} onValueChange={setBillingInterval}>
-                  <div className="flex justify-center">
-                    <div className="relative">
-                      <span className="absolute -top-2.5 left-1/4 z-10 -translate-x-1/2 whitespace-nowrap rounded-full border border-transparent bg-sprout-mint px-1.5 py-0.5 text-[9px] font-medium text-white sm:-top-3 sm:text-[10px]">
-                        {t("upgrade.save25")}
-                      </span>
-                      <TabsList className="grid h-9 w-full min-w-0 max-w-full grid-cols-2 rounded-lg bg-muted p-[3px] sm:min-w-80">
-                        <TabsTrigger value="monthly" className="h-[calc(100%-1px)] min-w-0 flex-1 px-2 text-xs sm:text-sm">
-                          {t("upgrade.monthly")}
-                        </TabsTrigger>
-                        <TabsTrigger value="weekly" className="h-[calc(100%-1px)] min-w-0 flex-1 px-2 text-xs sm:text-sm">
-                          {t("upgrade.weekly")}
-                        </TabsTrigger>
-                      </TabsList>
-                    </div>
+                {!hasUpgradeOption ? (
+                  <div className="rounded-xl border border-border bg-muted px-6 py-8 text-center">
+                    <h2 className="text-lg font-semibold">{t("upgrade.bestPlanTitle")}</h2>
+                    <p className="mt-1.5 text-sm text-muted-foreground">{t("upgrade.bestPlanDesc")}</p>
                   </div>
+                ) : isExistingSubscriber ? (
+                  <>
+                    <div className="flex justify-center">
+                      <span className="inline-flex items-center gap-1.5 rounded-full border bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
+                        {t("upgrade.yourBilling")}: {isMonthly ? t("upgrade.monthly") : t("upgrade.weekly")}
+                      </span>
+                    </div>
+                    <PricingGrid
+                      tiers={availableTiers}
+                      isMonthly={isMonthly}
+                      selectedTier={selectedTier}
+                      onSelectTier={setSelectedTier}
+                      t={t}
+                      lang={lang}
+                    />
+                    <p className="text-center text-xs text-muted-foreground">
+                      {t("upgrade.prorationNote")}
+                    </p>
+                  </>
+                ) : (
+                  <Tabs value={billingInterval} onValueChange={setBillingInterval}>
+                    <div className="flex justify-center">
+                      <div className="relative">
+                        <span className="absolute -top-2.5 left-1/4 z-10 -translate-x-1/2 whitespace-nowrap rounded-full border border-transparent bg-sprout-mint px-1.5 py-0.5 text-[9px] font-medium text-white sm:-top-3 sm:text-[10px]">
+                          {t("upgrade.save25")}
+                        </span>
+                        <TabsList className="grid h-9 w-full min-w-0 max-w-full grid-cols-2 rounded-lg bg-muted p-[3px] sm:min-w-80">
+                          <TabsTrigger value="monthly" className="h-[calc(100%-1px)] min-w-0 flex-1 px-2 text-xs sm:text-sm">
+                            {t("upgrade.monthly")}
+                          </TabsTrigger>
+                          <TabsTrigger value="weekly" className="h-[calc(100%-1px)] min-w-0 flex-1 px-2 text-xs sm:text-sm">
+                            {t("upgrade.weekly")}
+                          </TabsTrigger>
+                        </TabsList>
+                      </div>
+                    </div>
 
-                  <TabsContent value="monthly" className="mt-3 outline-none sm:mt-6">
-                    <PricingGrid
-                      isMonthly
-                      selectedTier={selectedTier}
-                      onSelectTier={setSelectedTier}
-                      t={t}
-                      lang={lang}
-                    />
-                  </TabsContent>
-                  <TabsContent value="weekly" className="mt-3 outline-none sm:mt-6">
-                    <PricingGrid
-                      isMonthly={false}
-                      selectedTier={selectedTier}
-                      onSelectTier={setSelectedTier}
-                      t={t}
-                      lang={lang}
-                    />
-                  </TabsContent>
-                </Tabs>
+                    <TabsContent value="monthly" className="mt-3 outline-none sm:mt-6">
+                      <PricingGrid
+                        tiers={availableTiers}
+                        isMonthly
+                        selectedTier={selectedTier}
+                        onSelectTier={setSelectedTier}
+                        t={t}
+                        lang={lang}
+                      />
+                    </TabsContent>
+                    <TabsContent value="weekly" className="mt-3 outline-none sm:mt-6">
+                      <PricingGrid
+                        tiers={availableTiers}
+                        isMonthly={false}
+                        selectedTier={selectedTier}
+                        onSelectTier={setSelectedTier}
+                        t={t}
+                        lang={lang}
+                      />
+                    </TabsContent>
+                  </Tabs>
+                )}
 
                 <div className="hidden sm:block">
                   <div className="flex flex-col gap-6 rounded-xl border bg-muted py-6 text-card-foreground shadow-sm">
@@ -275,29 +382,43 @@ export default function DesktopUpgradeModal({ open, onClose }) {
 
             <div className="shrink-0 border-t bg-background px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-4">
               <div className="mx-auto max-w-3xl space-y-2.5 sm:space-y-4">
-                <input
-                  className="h-9 w-full rounded-md border border-border bg-background px-3 text-center font-mono text-sm font-semibold tracking-[0.2em] text-foreground outline-none transition-colors placeholder:tracking-normal placeholder:text-muted-foreground focus:border-violet-400 sm:h-10"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={6}
-                  placeholder="Access code"
-                  value={accessCode}
-                  onChange={(e) => setAccessCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                  data-testid="upgrade-access-code-input"
-                />
-                <button
-                  type="button"
-                  onClick={handleCheckout}
-                  disabled={checkoutLoading}
-                  className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md gradient-linkedin px-6 text-sm font-medium whitespace-nowrap text-white shadow-[0_8px_32px_-8px_rgba(124,58,237,0.35)] transition-all hover:opacity-90 disabled:pointer-events-none disabled:opacity-50"
-                >
-                  {checkoutLoading ? (
-                    <Loader2 className="size-4 animate-spin" aria-hidden />
-                  ) : (
-                    <Rocket className="size-4" aria-hidden />
-                  )}
-                  {t("upgrade.cta")}
-                </button>
+                {!hasUpgradeOption ? (
+                  <button
+                    type="button"
+                    onClick={handleManageSubscription}
+                    disabled={checkoutLoading}
+                    className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md gradient-linkedin px-6 text-sm font-medium whitespace-nowrap text-white shadow-[0_8px_32px_-8px_rgba(124,58,237,0.35)] transition-all hover:opacity-90 disabled:pointer-events-none disabled:opacity-50"
+                  >
+                    {checkoutLoading ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+                    {t("upgrade.manageSubscription")}
+                  </button>
+                ) : (
+                  <>
+                    <input
+                      className="h-9 w-full rounded-md border border-border bg-background px-3 text-center font-mono text-sm font-semibold tracking-[0.2em] text-foreground outline-none transition-colors placeholder:tracking-normal placeholder:text-muted-foreground focus:border-violet-400 sm:h-10"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={6}
+                      placeholder="Access code"
+                      value={accessCode}
+                      onChange={(e) => setAccessCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                      data-testid="upgrade-access-code-input"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCheckout}
+                      disabled={checkoutLoading}
+                      className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md gradient-linkedin px-6 text-sm font-medium whitespace-nowrap text-white shadow-[0_8px_32px_-8px_rgba(124,58,237,0.35)] transition-all hover:opacity-90 disabled:pointer-events-none disabled:opacity-50"
+                    >
+                      {checkoutLoading ? (
+                        <Loader2 className="size-4 animate-spin" aria-hidden />
+                      ) : (
+                        <Rocket className="size-4" aria-hidden />
+                      )}
+                      {isExistingSubscriber ? t("upgrade.upgradeCta") : t("upgrade.cta")}
+                    </button>
+                  </>
+                )}
 
                 <div className="flex flex-wrap justify-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground sm:gap-x-4 sm:text-xs">
                   {[t("upgrade.cancelAnytime"), t("upgrade.securePayments"), t("upgrade.instantAccess")].map((label) => (

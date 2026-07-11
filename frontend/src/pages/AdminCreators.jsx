@@ -80,16 +80,30 @@ const fmtSigned = (value) => {
 
 const fmtDateShort = (iso) => {
   if (!iso) return "";
-  const date = new Date(`${iso}T12:00:00`);
-  if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return String(iso);
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 };
 
 const fmtDateLong = (iso) => {
   if (!iso) return "";
-  const date = new Date(`${iso}T12:00:00`);
-  if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return String(iso);
+  return date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
+};
+
+const fmtPostedAt = (value) => {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "UTC",
+  });
 };
 
 const fmtDateTime = (value) => {
@@ -264,7 +278,7 @@ function TopVideoRow({ video, maxViews, usesLikesProxy, viewsLabel = "Views" }) 
         <p className="line-clamp-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">{label}</p>
         <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
           {video.creator_name || "Creator"}
-          {video.posted_at ? ` · ${fmtDateShort(video.posted_at.slice(0, 10))}` : ""}
+          {video.posted_at ? ` · ${fmtDateShort(video.posted_at)}` : ""}
         </p>
       </div>
       <div className="relative ml-auto shrink-0 pr-1 text-right">
@@ -722,7 +736,7 @@ export default function AdminCreators() {
               <section className="overflow-hidden rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
                 <div className="border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
                   <h2 className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">Posted videos</h2>
-                  <p className="text-sm text-zinc-500 dark:text-zinc-400">All tracked posts with {viewsLabel.toLowerCase()}, likes, comments, shares, saves, and engagement.</p>
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400">All tracked posts with publish date (UTC), {viewsLabel.toLowerCase()}, likes, comments, shares, saves, and engagement.</p>
                 </div>
                 {recentVideos.length ? (
                   <div className="overflow-x-auto">
@@ -763,7 +777,7 @@ export default function AdminCreators() {
                               </a>
                             </td>
                             <td className="px-5 py-3 text-zinc-700">{video.creator_name || "Creator"}</td>
-                            <td className="px-5 py-3 text-zinc-600">{video.posted_at ? fmtDateLong(video.posted_at.slice(0, 10)) : "—"}</td>
+                            <td className="px-5 py-3 text-zinc-600">{fmtPostedAt(video.posted_at)}</td>
                             <td className="px-5 py-3 font-mono font-semibold text-sky-700">{fmtCompact(videoReachViews(video, usesLikesProxy))}</td>
                             <td className="px-5 py-3 font-mono text-pink-600">{fmtCompact(video.likes)}</td>
                             <td className="px-5 py-3 font-mono text-emerald-600">{fmtCompact(video.comments)}</td>
@@ -841,7 +855,7 @@ export default function AdminCreators() {
               <section className="overflow-hidden rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
                 <div className="border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
                   <h2 className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">Daily breakdown</h2>
-                  <p className="text-sm text-zinc-500 dark:text-zinc-400">One row per day — videos posted and engagement deltas.</p>
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400">One row per UTC day — posts counted by each video's published date, not refresh time.</p>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[900px] text-left text-sm">
