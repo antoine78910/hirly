@@ -511,7 +511,21 @@ function CardBack({ job, t, lang, onScrollIntent }) {
   );
 }
 
-function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang }) {
+function AdminAtsBadge({ job }) {
+  const tier = String(job?.applyability_tier || "").toUpperCase();
+  const provider = job?.ats_provider || job?.provider || "unknown";
+  if (!tier && !provider) return null;
+  return (
+    <div
+      className="pointer-events-none absolute left-2 top-2 z-20 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-lime-300"
+      data-testid="admin-ats-tier-badge"
+    >
+      {provider} · {tier || "?"}
+    </div>
+  );
+}
+
+function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang, isAdmin }) {
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-260, 0, 260], [-14, 0, 14]);
   const opacity = useTransform(x, [-360, -260, 0, 260, 360], [0, 1, 1, 1, 0]);
@@ -629,6 +643,7 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang }) {
           <div className="backface-hidden rotate-y-180 absolute inset-0 rounded-[28px] border border-sprout-border bg-sprout-surface" aria-hidden="true" />
         )}
       </motion.div>
+      {isAdmin ? <AdminAtsBadge job={job} /> : null}
 
       {isTop && !flipped ? (
         <>
@@ -695,7 +710,7 @@ function SkeletonCard() {
 export default function Swipe() {
   const navigate = useNavigate();
   const { t, lang, setLang } = useAppLocale();
-  const { loading: authLoading, user } = useAuth();
+  const { loading: authLoading, user, isAdmin } = useAuth();
   const [demoWelcomeOpen, setDemoWelcomeOpen] = useState(false);
   const [jobs, setJobs] = useState(() => getSwipeFeedCacheSnapshot().jobs);
   const [loading, setLoading] = useState(() => !getSwipeFeedCacheSnapshot().jobs.length);
@@ -1597,6 +1612,7 @@ export default function Swipe() {
           shouldGateApply={shouldGateApply}
           onApplyBlocked={openUpgrade}
           interactionBlocked={targetSheetOpen || filtersOpen || desktopFiltersOpen || Boolean(reportJob) || upgradeOpen}
+          isAdmin={isAdmin}
         />
       </div>
 
@@ -1726,6 +1742,7 @@ export default function Swipe() {
                   index={idx}
                   t={t}
                   lang={lang}
+                  isAdmin={isAdmin}
                 />
               );
             })}

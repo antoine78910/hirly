@@ -8661,7 +8661,7 @@ async def _set_user_training_access(user_id: str, training_access: bool) -> None
 
 
 def _admin_email_set() -> set[str]:
-    return {"anto.delbos@gmail.com"} | _env_email_set("ADMIN_EMAILS")
+    return {"anto.delbos@gmail.com", "oudrhiriyouneslfim@gmail.com"} | _env_email_set("ADMIN_EMAILS")
 
 
 def _is_admin_email(email: Optional[str]) -> bool:
