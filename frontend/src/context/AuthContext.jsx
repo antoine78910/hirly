@@ -6,6 +6,7 @@ import { isOAuthCallbackInProgress } from "../lib/oauthCallback";
 import { bootstrapTutorialSession } from "../lib/tutorialSession";
 import { goToMarketing } from "../lib/appDomains";
 import { supabase, supabaseConfigured } from "../lib/supabase";
+import { syncBillingStatus } from "../lib/billingSync";
 
 const AuthContext = createContext(null);
 
@@ -42,6 +43,11 @@ export const AuthProvider = ({ children }) => {
       setIsTrainingCreator(Boolean(data.is_training_creator));
       setHasTrainingAccess(Boolean(data.has_training_access));
       setIsAdmin(Boolean(data.is_admin));
+      // Background billing sync for real users — repairs missing credits after Stripe checkout.
+      const isRealUser = data.user && !data.user.demo_account && !Boolean(data.is_admin);
+      if (isRealUser) {
+        syncBillingStatus().catch(() => {});
+      }
     } catch (e) {
       setUser(null);
       setIsTrainingCreator(false);

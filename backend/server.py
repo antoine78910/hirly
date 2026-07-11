@@ -9472,6 +9472,26 @@ async def admin_get_user(user_id: str, admin: User = Depends(require_admin_user)
     }
 
 
+@api_router.post("/admin/users/{user_id}/repair-billing")
+async def admin_repair_billing(
+    user_id: str,
+    admin: User = Depends(require_admin_user),
+):
+    """Force Stripe subscription sync and grant missing credits for a specific user."""
+    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
+    user_doc, warning = await _refresh_billing_from_stripe(user_doc)
+    user_doc = await _repair_premium_credits_if_needed(user_id, user_doc)
+    billing = _billing_status_payload(user_doc)
+    return {
+        "ok": True,
+        "user_id": user_id,
+        "billing": billing,
+        "warning": warning,
+    }
+
+
 @api_router.patch("/admin/users/{user_id}/demo-account")
 async def admin_set_demo_account(
     user_id: str,

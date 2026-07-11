@@ -181,6 +181,24 @@ export default function AdminUserDetail() {
   }, [profile, user.profile_completion]);
 
   const demoAccount = Boolean(user.demo_account);
+  const [repairingSaving, setRepairingSaving] = useState(false);
+
+  const repairBilling = async () => {
+    setRepairingSaving(true);
+    try {
+      const { data } = await api.post(`/admin/users/${userId}/repair-billing`);
+      toast.success(
+        data?.billing?.is_premium
+          ? `Billing repaired — ${data.billing.credits_remaining} / ${data.billing.credits_total} credits`
+          : "Sync complete — no active subscription found",
+      );
+      await load();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Could not repair billing");
+    } finally {
+      setRepairingSaving(false);
+    }
+  };
 
   const toggleDemoAccount = async () => {
     setDemoSaving(true);
@@ -241,6 +259,18 @@ export default function AdminUserDetail() {
                 <Stat label="Credits total" value={`${billing.credits_total ?? 0}`} />
                 <Stat label="Right swipes" value={swipeSummary.right ?? 0} accent="text-emerald-600" />
                 <Stat label="Right swipe rate" value={`${swipeSummary.right_rate ?? 0}%`} />
+              </div>
+
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={repairBilling}
+                  disabled={repairingSaving}
+                  className="inline-flex items-center gap-2 rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 transition hover:bg-violet-100 disabled:opacity-50"
+                >
+                  {repairingSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                  {repairingSaving ? "Syncing…" : "Repair billing (sync Stripe)"}
+                </button>
               </div>
 
               <div className="mt-5">
