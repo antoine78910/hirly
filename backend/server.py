@@ -789,6 +789,12 @@ class BillingConfirmCheckoutRequest(BaseModel):
     session_id: str
 
 
+class AdminStripeReconcileRequest(BaseModel):
+    payment_intent_id: Optional[str] = None
+    customer_id: Optional[str] = None
+    email: Optional[str] = None
+
+
 class BillingUpgradeSessionRequest(BaseModel):
     plan: Literal["basic", "pro", "ultra"]
     interval: Optional[Literal["weekly", "monthly"]] = None
@@ -965,7 +971,8 @@ async def get_current_user(
 # ===================== Auth routes =====================
 
 async def _upsert_auth_user(email: str, name: str, picture: Optional[str], extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    existing = await db.users.find_one({"email": email}, {"_id": 0})
+    normalized_email = (email or "").strip().lower()
+    existing = await _find_user_by_email(normalized_email)
     if existing:
         user_id = existing["user_id"]
         update = {"name": name, "picture": picture}
@@ -979,7 +986,7 @@ async def _upsert_auth_user(email: str, name: str, picture: Optional[str], extra
         user_id = f"user_{uuid.uuid4().hex[:12]}"
         user_doc = {
             "user_id": user_id,
-            "email": email,
+            "email": normalized_email,
             "name": name,
             "picture": picture,
             "created_at": datetime.now(timezone.utc).isoformat(),
@@ -1839,14 +1846,71 @@ async def _update_user_billing_by_customer_id(customer_id: str, updates: Dict[st
     if not customer_id:
         logger.warning("stripe_billing_customer_update_missing_customer keys=%s", sorted(updates.keys()))
         return
-    now = datetime.now(timezone.utc).isoformat()
-    existing_user = await db.users.find_one({"billing.stripe_customer_id": customer_id}, {"_id": 0, "billing": 1}) or {}
-    merged_billing = _merge_billing_credit_state(_billing_from_user(existing_user), updates)
-    update_fields = {f"billing.{key}": value for key, value in merged_billing.items()}
-    update_fields["billing.updated_at"] = now
-    result = await db.users.update_one({"billing.stripe_customer_id": customer_id}, {"$set": update_fields})
-    if getattr(result, "matched_count", 0) == 0:
-        logger.warning("stripe_billing_customer_update_no_match customer_id=%s keys=%s", customer_id, sorted(updates.keys()))
+    user_id = await _resolve_user_id_for_stripe_customer(customer_id)
+    if user_id:
+        await _update_user_billing_by_user_id(user_id, updates)
+        return
+    logger.warning("stripe_billing_customer_update_no_match customer_id=%s keys=%s", customer_id, sorted(updates.keys()))
+
+
+async def _resolve_user_id_for_stripe_customer(customer_id: str) -> Optional[str]:
+    if not customer_id:
+        return None
+    existing = await db.users.find_one({"billing.stripe_customer_id": customer_id}, {"_id": 0, "user_id": 1})
+    if existing:
+        return existing.get("user_id")
+    if not _stripe_configured():
+        return None
+    try:
+        _stripe_secret_key()
+        customer = stripe.Customer.retrieve(customer_id)
+        metadata_user_id = (customer.get("metadata") or {}).get("user_id")
+        if metadata_user_id:
+            found = await db.users.find_one({"user_id": metadata_user_id}, {"_id": 0, "user_id": 1})
+            if found:
+                return metadata_user_id
+        email = (customer.get("email") or "").strip()
+        if email:
+            user_doc = await _find_user_by_email(email)
+            if user_doc:
+                return user_doc.get("user_id")
+    except Exception as exc:
+        logger.warning(
+            "stripe_resolve_user_for_customer_failed customer_id=%s error=%s",
+            customer_id,
+            str(exc)[:200],
+        )
+    return None
+
+
+async def _discover_stripe_customer_for_user(user_doc: Dict[str, Any]) -> Optional[str]:
+    billing = _billing_from_user(user_doc)
+    existing = billing.get("stripe_customer_id")
+    if existing:
+        return existing
+    email = (user_doc.get("email") or "").strip()
+    if not email or not _stripe_configured():
+        return None
+    try:
+        _stripe_secret_key()
+        result = stripe.Customer.list(email=email, limit=10)
+        data = result.get("data") if isinstance(result, dict) else getattr(result, "data", [])
+        user_id = user_doc.get("user_id")
+        for customer in data or []:
+            customer_id = customer.get("id") if isinstance(customer, dict) else getattr(customer, "id", None)
+            metadata = customer.get("metadata") if isinstance(customer, dict) else getattr(customer, "metadata", {}) or {}
+            if isinstance(metadata, dict) and metadata.get("user_id") == user_id and customer_id:
+                return customer_id
+        if data:
+            first = data[0]
+            return first.get("id") if isinstance(first, dict) else getattr(first, "id", None)
+    except Exception as exc:
+        logger.warning(
+            "stripe_discover_customer_for_user_failed user_id=%s error=%s",
+            user_doc.get("user_id"),
+            str(exc)[:200],
+        )
+    return None
 
 
 async def _stripe_customer_for_user(user_doc: Dict[str, Any]) -> str:
@@ -2044,8 +2108,13 @@ async def _refresh_billing_from_stripe(user_doc: Dict[str, Any]) -> tuple[Dict[s
     subscription_id = billing.get("stripe_subscription_id")
     if str(subscription_id or "").startswith("master_code_"):
         return user_doc, None
+    customer_id = billing.get("stripe_customer_id") or await _discover_stripe_customer_for_user(user_doc)
+    if customer_id and customer_id != billing.get("stripe_customer_id"):
+        await _update_user_billing_by_user_id(user_doc["user_id"], {"stripe_customer_id": customer_id})
+        billing = {**billing, "stripe_customer_id": customer_id}
+        user_doc = {**user_doc, "billing": billing}
     if not subscription_id:
-        discovered = _discover_stripe_subscription(billing.get("stripe_customer_id"))
+        discovered = _discover_stripe_subscription(customer_id)
         if discovered:
             subscription_id = discovered.get("id") if isinstance(discovered, dict) else getattr(discovered, "id", None)
     if not subscription_id or not _stripe_configured():
@@ -2191,14 +2260,26 @@ def _checkout_session_user_id(session_obj: Dict[str, Any]) -> Optional[str]:
     return session_obj.get("client_reference_id") or metadata.get("user_id")
 
 
-def _checkout_session_belongs_to_user(session_obj: Dict[str, Any], user_doc: Dict[str, Any]) -> bool:
+async def _checkout_session_belongs_to_user(session_obj: Dict[str, Any], user_doc: Dict[str, Any]) -> bool:
     user_id = user_doc.get("user_id")
     session_user_id = _checkout_session_user_id(session_obj)
     if session_user_id and session_user_id == user_id:
         return True
     customer_id = session_obj.get("customer")
     user_customer_id = _billing_from_user(user_doc).get("stripe_customer_id")
-    return bool(customer_id and user_customer_id and customer_id == user_customer_id)
+    if customer_id and user_customer_id and customer_id == user_customer_id:
+        return True
+    user_email = (user_doc.get("email") or "").strip().lower()
+    if customer_id and user_email and _stripe_configured():
+        try:
+            _stripe_secret_key()
+            customer = stripe.Customer.retrieve(customer_id)
+            stripe_email = (customer.get("email") or "").strip().lower()
+            if stripe_email and stripe_email == user_email:
+                return True
+        except Exception:
+            pass
+    return False
 
 
 async def _apply_checkout_session_billing(
@@ -2228,6 +2309,8 @@ async def _apply_checkout_session_billing(
                 str(exc)[:200],
             )
     user_id = _checkout_session_user_id(session_obj) or fallback_user_id
+    if not user_id and customer_id:
+        user_id = await _resolve_user_id_for_stripe_customer(customer_id)
     if user_id:
         if not await db.users.find_one({"user_id": user_id}, {"_id": 0, "user_id": 1}):
             logger.warning("stripe_checkout_client_reference_user_not_found event_id=%s user_id=%s", event_id, user_id)
@@ -2254,7 +2337,7 @@ async def confirm_billing_checkout(
         raise HTTPException(status_code=400, detail="Invalid checkout session")
 
     user_doc = await _get_user_doc(user)
-    if not _checkout_session_belongs_to_user(session_obj, user_doc):
+    if not await _checkout_session_belongs_to_user(session_obj, user_doc):
         raise HTTPException(status_code=403, detail="Checkout session does not belong to this user")
 
     payment_status = session_obj.get("payment_status")
@@ -9487,6 +9570,84 @@ async def admin_repair_billing(
     return {
         "ok": True,
         "user_id": user_id,
+        "billing": billing,
+        "warning": warning,
+    }
+
+
+@api_router.post("/admin/stripe/reconcile")
+async def admin_stripe_reconcile(
+    body: AdminStripeReconcileRequest,
+    admin: User = Depends(require_admin_user),
+):
+    """Link an orphan Stripe payment/customer to an app user by email and sync billing."""
+    _stripe_secret_key()
+    payment_intent_id = (body.payment_intent_id or "").strip() or None
+    customer_id = (body.customer_id or "").strip() or None
+    email = (body.email or "").strip().lower() or None
+    subscription_id = None
+
+    if payment_intent_id:
+        try:
+            payment_intent = stripe.PaymentIntent.retrieve(payment_intent_id, expand=["customer"])
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid payment intent: {str(exc)[:160]}")
+        if not customer_id:
+            customer_ref = payment_intent.get("customer")
+            customer_id = customer_ref.get("id") if isinstance(customer_ref, dict) else customer_ref
+        if not email:
+            customer_ref = payment_intent.get("customer")
+            if isinstance(customer_ref, dict):
+                email = (customer_ref.get("email") or "").strip().lower() or None
+        invoice_id = payment_intent.get("invoice")
+        if invoice_id:
+            try:
+                invoice = stripe.Invoice.retrieve(invoice_id)
+                subscription_id = invoice.get("subscription")
+            except Exception:
+                pass
+
+    if not customer_id and email:
+        try:
+            customers = stripe.Customer.list(email=email, limit=1)
+            data = customers.get("data") if isinstance(customers, dict) else getattr(customers, "data", [])
+            if data:
+                first = data[0]
+                customer_id = first.get("id") if isinstance(first, dict) else getattr(first, "id", None)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Could not look up Stripe customer: {str(exc)[:160]}")
+
+    if not customer_id:
+        raise HTTPException(status_code=400, detail="Could not resolve Stripe customer from payment")
+
+    user_id = await _resolve_user_id_for_stripe_customer(customer_id)
+    if not user_id and email:
+        user_doc = await _find_user_by_email(email)
+        user_id = user_doc.get("user_id") if user_doc else None
+    if not user_id:
+        raise HTTPException(
+            status_code=404,
+            detail="No app user found for this Stripe payment. Sign up with the same email first, then retry.",
+        )
+
+    updates: Dict[str, Any] = {"stripe_customer_id": customer_id}
+    if subscription_id:
+        subscription = stripe.Subscription.retrieve(subscription_id)
+        updates.update(_subscription_billing_updates(subscription, last_payment_status="paid"))
+    else:
+        discovered = _discover_stripe_subscription(customer_id)
+        if discovered:
+            updates.update(_subscription_billing_updates(discovered, last_payment_status="paid"))
+
+    await _update_user_billing_by_user_id(user_id, {key: value for key, value in updates.items() if value})
+    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0}) or {}
+    user_doc, warning = await _refresh_billing_from_stripe(user_doc)
+    user_doc = await _repair_premium_credits_if_needed(user_id, user_doc)
+    billing = _billing_status_payload(user_doc)
+    return {
+        "ok": True,
+        "user_id": user_id,
+        "email": user_doc.get("email"),
         "billing": billing,
         "warning": warning,
     }

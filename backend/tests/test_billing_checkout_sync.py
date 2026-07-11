@@ -17,19 +17,19 @@ def test_checkout_return_url_includes_stripe_session_placeholder():
 def test_checkout_session_belongs_to_user_by_reference():
     session_obj = {"client_reference_id": "user_1", "customer": "cus_123"}
     user_doc = {"user_id": "user_1", "billing": {"stripe_customer_id": "cus_123"}}
-    assert server._checkout_session_belongs_to_user(session_obj, user_doc) is True
+    assert asyncio.run(server._checkout_session_belongs_to_user(session_obj, user_doc)) is True
 
 
 def test_checkout_session_belongs_to_user_by_customer():
     session_obj = {"customer": "cus_123"}
     user_doc = {"user_id": "user_1", "billing": {"stripe_customer_id": "cus_123"}}
-    assert server._checkout_session_belongs_to_user(session_obj, user_doc) is True
+    assert asyncio.run(server._checkout_session_belongs_to_user(session_obj, user_doc)) is True
 
 
 def test_checkout_session_rejects_foreign_user():
     session_obj = {"client_reference_id": "user_2", "customer": "cus_999"}
     user_doc = {"user_id": "user_1", "billing": {"stripe_customer_id": "cus_123"}}
-    assert server._checkout_session_belongs_to_user(session_obj, user_doc) is False
+    assert asyncio.run(server._checkout_session_belongs_to_user(session_obj, user_doc)) is False
 
 
 class _Collection:
