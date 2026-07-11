@@ -13,6 +13,7 @@ import {
 import { ArrowLeft, CreditCard, Crown, Loader2, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
+import { formatPlanTier } from "../lib/billingPlan";
 import { useUpgradeModal } from "../context/UpgradeModalContext";
 import { useAppLocale } from "../context/AppLocaleContext";
 import { Button } from "../components/ui/button";
@@ -257,7 +258,7 @@ export default function Billing() {
                     <Crown className="mx-auto mb-4 h-12 w-12 text-linkedin" aria-hidden />
                     <h3 className="mb-2 text-lg font-semibold text-zinc-900">
                       {t("billingPage.premiumActive")}
-                      {billing?.plan ? ` (${billing.plan})` : ""}
+                      {formatPlanTier(billing?.plan_tier || billing?.plan) ? ` (${formatPlanTier(billing?.plan_tier || billing?.plan)})` : ""}
                     </h3>
                     <p className="mb-6 text-sm text-zinc-500">
                       {t("billingPage.premiumActiveDesc")}

@@ -471,20 +471,36 @@ export default function Onboarding() {
   }, [user, step]);
 
   // After a successful Stripe checkout Stripe redirects back here with
-  // ?checkout=success. Once the auth state is ready (user resolved) we finish
-  // the onboarding and navigate straight to /swipe.
+  // ?checkout=success. Once the auth state is ready (user resolved) we confirm
+  // billing server-side, then finish onboarding and navigate to the app with
+  // checkout params so the app subdomain can sync credits too if needed.
   useEffect(() => {
     if (!pendingCheckoutSuccess) return;
     if (!user) return; // wait until auth resolves
     setPendingCheckoutSuccess(false);
     setCheckoutLoading(true);
     const sessionId = sessionStorage.getItem("hirly.onboarding.checkoutSessionId") || undefined;
-    syncBillingAfterCheckout({ sessionId })
-      .catch(() => {})
-      .finally(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        await syncBillingAfterCheckout({ sessionId, maxAttempts: 12, delayMs: 1500 });
+      } catch (_) {
+        /* polling fallback already handled in syncBillingAfterCheckout */
+      } finally {
         sessionStorage.removeItem("hirly.onboarding.checkoutSessionId");
-      });
-    finishOnboarding().finally(() => setCheckoutLoading(false));
+      }
+      if (cancelled) return;
+      const checkoutSearch = sessionId
+        ? `?upgrade=success&session_id=${encodeURIComponent(sessionId)}`
+        : "?upgrade=success";
+      await finishOnboarding(checkoutSearch);
+      if (!cancelled) setCheckoutLoading(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingCheckoutSuccess, user]);
 
@@ -730,7 +746,7 @@ export default function Onboarding() {
     }
   };
 
-  const finishOnboarding = async () => {
+  const finishOnboarding = async (checkoutReturnSearch = "") => {
     if (!user) {
       await startGoogleLogin("/onboarding?step=showcasePricing");
       return;
@@ -772,7 +788,7 @@ export default function Onboarding() {
         plan: selectedPlan,
         target_location: onboardingLocationData?.location_label || onboardingLocation || "",
       });
-      goToApp("/swipe");
+      goToApp("/swipe", checkoutReturnSearch);
     } catch {
       toast.error(lang === "fr" ? "Échec de la configuration" : "Failed to finish setup");
     } finally {

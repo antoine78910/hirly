@@ -95,6 +95,15 @@ export function hasDemoCvStored() {
   return Boolean(readStoredCv()?.cv_original_b64);
 }
 
+export function clearStoredDemoCv() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(DEMO_CV_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function fetchDemoCvOriginal() {
   const stored = readStoredCv();
   if (!stored?.cv_original_b64) return null;

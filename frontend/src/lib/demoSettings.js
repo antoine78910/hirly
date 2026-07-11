@@ -41,7 +41,13 @@ export function saveDemoSettings(settings) {
 }
 
 export function isFinanceDemoEnabled() {
+  if (!demoAccountEligible) return false;
   return Boolean(readDemoSettings().financeJobFeed);
+}
+
+/** Clear demo-only feed settings when switching to a normal account. */
+export function resetDemoOnlySettings() {
+  saveDemoSettings({ ...DEFAULT_DEMO_SETTINGS });
 }
 
 /** Local/demo feeds — swipes should simulate apply, never hit real generation. */

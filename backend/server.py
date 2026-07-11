@@ -1643,14 +1643,17 @@ def _billing_from_user(user_doc: Optional[Dict[str, Any]]) -> Dict[str, Any]:
 def _billing_status_payload(user_doc: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     billing = _billing_from_user(user_doc)
     status = billing.get("subscription_status") or "none"
+    is_premium = status in {"active", "trialing"}
+    plan = billing.get("plan")
     return {
         "subscription_status": status,
-        "plan": billing.get("plan"),
+        "plan": plan,
+        "plan_tier": _canonical_billing_plan(plan) if is_premium and plan else None,
         "interval": billing.get("interval"),
         "source": billing.get("source"),
         "current_period_end": billing.get("current_period_end"),
         "stripe_customer_id_exists": bool(billing.get("stripe_customer_id")),
-        "is_premium": status in {"active", "trialing"},
+        "is_premium": is_premium,
         "credits_total": int(billing.get("credits_total") or 0),
         "credits_remaining": int(billing.get("credits_remaining") or 0),
     }

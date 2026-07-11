@@ -47,7 +47,7 @@ export function UpgradeModalProvider({ children }) {
 
     if (upgradeStatus === "success") {
       toast.success(t("upgrade.checkoutSuccess"));
-      syncBillingAfterCheckout({ sessionId }).catch(() => {});
+      void syncBillingAfterCheckout({ sessionId, maxAttempts: 12, delayMs: 1500 });
     }
   }, [location.pathname, location.search, navigate, t]);
 

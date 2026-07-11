@@ -3,6 +3,7 @@ import { Zap } from "lucide-react";
 import { api } from "../../lib/api";
 import { useUpgradeModal } from "../../context/UpgradeModalContext";
 import { useAppLocale } from "../../context/AppLocaleContext";
+import { formatPlanTier } from "../../lib/billingPlan";
 import { BILLING_UPDATED } from "../../lib/billingEvents";
 import {
   DEMO_ACCOUNT_CHANGED,
@@ -16,6 +17,7 @@ export function useSwipeCredits() {
     isDemoAccountEnabled() ? getDemoCreditsRemaining() : 0
   ));
   const [isPremium, setIsPremium] = useState(false);
+  const [planTier, setPlanTier] = useState(null);
   const [loading, setLoading] = useState(true);
   const [demoAccount, setDemoAccount] = useState(() => isDemoAccountEnabled());
 
@@ -28,6 +30,7 @@ export function useSwipeCredits() {
       if (isDemoAccountEnabled()) return;
       setIsPremium(Boolean(event?.detail?.is_premium));
       setCredits(Number(event?.detail?.credits_remaining ?? 0));
+      setPlanTier(event?.detail?.plan_tier || event?.detail?.plan || null);
       setLoading(false);
     };
 
@@ -55,6 +58,7 @@ export function useSwipeCredits() {
       .then(({ data }) => {
         setIsPremium(Boolean(data?.is_premium));
         setCredits(Number(data?.credits_remaining ?? 0));
+        setPlanTier(data?.plan_tier || data?.plan || null);
       })
       .catch(() => {
         setIsPremium(false);
@@ -63,7 +67,7 @@ export function useSwipeCredits() {
       .finally(() => setLoading(false));
   }, [demoAccount]);
 
-  return { credits, isPremium, loading, displayCredits: credits, demoAccount };
+  return { credits, isPremium, planTier, loading, displayCredits: credits, demoAccount };
 }
 
 export default function DesktopCreditsPill({
@@ -74,7 +78,8 @@ export default function DesktopCreditsPill({
 }) {
   const { openUpgrade } = useUpgradeModal();
   const { t } = useAppLocale();
-  const { displayCredits, loading, isPremium, demoAccount } = useSwipeCredits();
+  const { displayCredits, loading, isPremium, planTier, demoAccount } = useSwipeCredits();
+  const tierLabel = isPremium ? formatPlanTier(planTier) : null;
 
   if (demoAccount) return null;
 
@@ -106,6 +111,13 @@ export default function DesktopCreditsPill({
       <span className="tabular-nums">
         {loading ? "-" : displayCredits}
       </span>
+      {tierLabel ? (
+        <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+          isDark ? "bg-violet-500/20 text-violet-200" : "bg-violet-100 text-violet-700"
+        }`}>
+          {tierLabel}
+        </span>
+      ) : null}
       {!compact ? (
         <span className={`text-xs font-medium ${isDark ? "text-violet-300/80" : "text-violet-500/80"}`}>
           {t("common.credits")}

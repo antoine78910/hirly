@@ -9,6 +9,7 @@ import {
 import { toast } from "sonner";
 import Logo from "../components/Logo";
 import { BRAND } from "../lib/brand";
+import { formatPlanTier } from "../lib/billingPlan";
 import { AppPage, AppPageScroll } from "../components/app/AppPageShell";
 import DesktopAppShell from "../components/desktop/DesktopAppShell";
 import AISettingsPanel from "../components/desktop/AISettingsPanel";
@@ -133,7 +134,13 @@ export default function Settings() {
       <MobileAISettings />
 
       <Section label={t("settings.planHelp")} testId="settings-support">
-        <Row icon={CreditCard}    label={billing?.is_premium ? t("settings.manageBilling") : t("settings.upgradePlan")} onClick={openBilling} testId="settings-subscribe" />
+        <Row
+          icon={CreditCard}
+          label={billing?.is_premium ? t("settings.manageBilling") : t("settings.upgradePlan")}
+          value={billing?.is_premium ? formatPlanTier(billing?.plan_tier || billing?.plan) || undefined : undefined}
+          onClick={openBilling}
+          testId="settings-subscribe"
+        />
         <Row icon={MessageSquare} label={t("settings.talkToUs")}        onClick={() => setContactOpen(true)} testId="settings-chat" />
       </Section>
 

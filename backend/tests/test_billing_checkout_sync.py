@@ -168,6 +168,20 @@ def test_merge_billing_credit_state_renewal_still_full_resets():
     assert merged["credits_remaining"] == 200
 
 
+def test_billing_status_payload_includes_plan_tier():
+    user_doc = {
+        "billing": {
+            "subscription_status": "active",
+            "plan": "monthly",
+            "credits_total": 200,
+            "credits_remaining": 200,
+        }
+    }
+    payload = server._billing_status_payload(user_doc)
+    assert payload["plan_tier"] == "pro"
+    assert payload["is_premium"] is True
+
+
 def test_billing_credit_limit_onboarding_matches_app_tier_pricing():
     """Onboarding monthly (29.99€) grants the same 200 credits as the app's Pro tier
     at the same price; onboarding quarterly (59.99€) matches Ultra's 600."""

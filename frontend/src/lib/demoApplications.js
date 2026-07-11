@@ -18,9 +18,13 @@ function mergeApplicationRows(primary, secondary) {
   );
 }
 
-/** Tracker / Review — always include local demo applies. */
+/** Tracker / Review — include local demo applies only in demo modes. */
 export function getMergedTrackerApplications(apiApplications = []) {
-  let apps = isDemoAccountEnabled() ? mergeApplications(apiApplications) : [...(apiApplications || [])];
+  const apiRows = [...(apiApplications || [])];
+  if (!isDemoAccountEnabled() && !isFinanceDemoEnabled()) {
+    return apiRows;
+  }
+  let apps = isDemoAccountEnabled() ? mergeApplications(apiRows) : apiRows;
   if (isFinanceDemoEnabled()) {
     apps = mergeApplicationRows(getFinanceDemoApplications(), apps);
   }

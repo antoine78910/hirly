@@ -2,7 +2,14 @@ export const DEMO_CREDITS_MAX = 600;
 export const DEMO_CREDITS_CHANGED = "hirly:demo-credits-changed";
 export const DEMO_ACCOUNT_CHANGED = "hirly:demo-account-changed";
 
-import { isFinanceDemoEnabled, readDemoSettings, saveDemoSettings, DEMO_SETTINGS_STORAGE_KEY, setFinanceDemoEligibility } from "./demoSettings";
+import {
+  isFinanceDemoEnabled,
+  readDemoSettings,
+  resetDemoOnlySettings,
+  saveDemoSettings,
+  DEMO_SETTINGS_STORAGE_KEY,
+  setFinanceDemoEligibility,
+} from "./demoSettings";
 import { mergeDemoCvIntoProfile, hasDemoCvStored, shouldMockCvUpload } from "./demoCvUpload";
 import axios from "axios";
 import { normalizeApiPath } from "./apiPath";
@@ -26,10 +33,22 @@ export function ensureDemoAccountDefaults() {
 }
 
 export function setDemoAccountFromUser(user, isAdmin = false) {
-  cachedDemoAccount = Boolean(user?.demo_account) && !isAdmin && !Boolean(user?.is_admin);
+  const nextDemoAccount = Boolean(user?.demo_account) && !isAdmin && !Boolean(user?.is_admin);
+  cachedDemoAccount = nextDemoAccount;
   setFinanceDemoEligibility(cachedDemoAccount);
   if (cachedDemoAccount) {
     ensureDemoAccountDefaults();
+  } else {
+    resetDemoOnlySettings();
+    clearDemoAccountLocalData();
+    if (typeof window !== "undefined") {
+      void import("./financeDemoApi").then(({ resetFinanceDemoFeed }) => {
+        resetFinanceDemoFeed();
+      });
+      void import("./demoCvUpload").then(({ clearStoredDemoCv }) => {
+        clearStoredDemoCv();
+      });
+    }
   }
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent(DEMO_ACCOUNT_CHANGED));
@@ -47,6 +66,19 @@ const HISTORY_LEFT_KEY = "hirly.demo.history.left";
 const UNDO_KEY = "hirly.demo.undo";
 const TUTORIAL_PREFS_KEY = "hirly.tutorial.preferences";
 const SESSION_TOKEN_KEY = "session_token";
+
+const DEMO_LOCAL_STORAGE_KEYS = [
+  CREDITS_KEY,
+  APPS_KEY,
+  HISTORY_RIGHT_KEY,
+  HISTORY_LEFT_KEY,
+  UNDO_KEY,
+  TUTORIAL_PREFS_KEY,
+  "hirly.finance.demo.applications.v1",
+  "hirly.finance.demo.history.right.v1",
+  "hirly.finance.demo.history.left.v1",
+  "hirly.demo.cv.v1",
+];
 
 const TUTORIAL_PROFILE_DEFAULT = {
   target_role: "Software Engineer",
@@ -94,6 +126,19 @@ function buildTutorialProfileResponse() {
 }
 
 const jobCache = new Map();
+
+/** Remove cached demo swipes/applications so they never leak into real accounts. */
+export function clearDemoAccountLocalData() {
+  if (typeof window === "undefined") return;
+  for (const key of DEMO_LOCAL_STORAGE_KEYS) {
+    try {
+      window.localStorage.removeItem(key);
+    } catch {
+      /* ignore */
+    }
+  }
+  jobCache.clear();
+}
 
 function readJson(key, fallback) {
   if (typeof window === "undefined") return fallback;
