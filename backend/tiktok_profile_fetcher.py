@@ -209,7 +209,7 @@ def fetch_tiktok_profile(handle: str) -> Dict[str, Any]:
         "followers": int(stats.get("followerCount") or 0),
         "following": int(stats.get("followingCount") or 0),
         "likes_total": int(stats.get("heartCount") or stats.get("heart") or 0),
-        "video_count": int(stats.get("videoCount") or 0),
+        "video_count": max(int(stats.get("videoCount") or 0), len(videos)),
         "videos": videos,
         "views_total": sum(int(video.get("views") or 0) for video in videos),
         "comments_total": sum(int(video.get("comments") or 0) for video in videos),

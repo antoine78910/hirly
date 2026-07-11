@@ -111,6 +111,63 @@ def test_engagement_rate_uses_likes_favorites_comments_shares_over_views(monkeyp
     assert dashboard["summary"]["engagement_rate"] == 7.0
 
 
+def test_build_dashboard_uses_loaded_videos_when_profile_video_count_is_zero(monkeypatch):
+    now = datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc)
+    _freeze_utc_now(monkeypatch, now)
+    snapshots = [
+        {
+            "creator_id": "eva",
+            "recorded_at": now.isoformat(),
+            "followers": 1200,
+            "likes_total": 500,
+            "video_count": 0,
+            "views_total": 0,
+            "comments_total": 12,
+            "shares_total": 3,
+            "favorites_total": 8,
+            "videos": [
+                {
+                    "video_id": "v1",
+                    "posted_at": "2026-07-09T10:00:00+00:00",
+                    "views": 22000,
+                    "likes": 900,
+                    "comments": 12,
+                    "shares": 3,
+                    "favorites": 8,
+                },
+                {
+                    "video_id": "v2",
+                    "posted_at": "2026-07-08T10:00:00+00:00",
+                    "views": 15000,
+                    "likes": 600,
+                    "comments": 4,
+                    "shares": 1,
+                    "favorites": 2,
+                },
+            ],
+        }
+    ]
+
+    def fake_configured():
+        return [{"creator_id": "eva", "name": "Eva", "platform": "tiktok", "handle": "hirlyjob"}]
+
+    def fake_get_creator(cid):
+        return fake_configured()[0] if cid == "eva" else None
+
+    monkeypatch.setattr(creator_social_service, "load_snapshots", lambda: snapshots)
+    monkeypatch.setattr(creator_social_service, "latest_snapshot_for_creator", lambda cid: snapshots[-1] if cid == "eva" else None)
+    monkeypatch.setattr(creator_social_service, "get_configured_creators", fake_configured)
+    monkeypatch.setattr(creator_social_service, "get_creator_by_id", fake_get_creator)
+
+    dashboard = build_dashboard(days=7, creator_ids=["eva"])
+    assert dashboard["summary"]["posted_videos"] == 2
+    assert dashboard["summary"]["views"] == 37000
+    assert dashboard["summary"]["posted_videos_period"] == 2
+    assert len(dashboard["videos"]) == 2
+    assert dashboard["videos"][0]["engagement_rate"] == 4.2
+    assert dashboard["creators"][0]["current"]["videos"] == 2
+
+
 def test_refresh_creator_stores_snapshot(monkeypatch, tmp_path):
     monkeypatch.setattr("creator_social_store.STORE_PATH", tmp_path / "snapshots.json")
 

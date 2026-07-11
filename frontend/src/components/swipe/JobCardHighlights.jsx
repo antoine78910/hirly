@@ -29,9 +29,11 @@ export default function JobCardHighlights({
 
   const labelClass = theme?.cardMeta || "text-sprout-muted";
   const valueClass = theme?.cardAboutBody || "text-zinc-100";
-  const wrapClass = compact
-    ? "rounded-xl border border-sprout-border/70 bg-sprout-surface-2/35 px-3 py-2.5"
-    : "rounded-2xl border border-sprout-border bg-sprout-surface-2/40 px-4 py-3";
+  const wrapClass = theme?.surfaceClass || (
+    compact
+      ? "rounded-xl border border-sprout-border/70 bg-sprout-surface-2/35 px-3 py-2.5"
+      : "rounded-2xl border border-sprout-border bg-sprout-surface-2/40 px-4 py-3"
+  );
 
   return (
     <div className={wrapClass} data-testid="job-card-highlights">

@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  Briefcase,
   Calendar,
   Check,
   DollarSign,
   Heart,
+  Info,
   Loader2,
   MapPin,
-  Sparkles,
   X,
 } from "lucide-react";
 import CompanyLogo from "../CompanyLogo";
@@ -17,17 +16,25 @@ import { BRAND } from "../../lib/brand";
 import { getLandingHeroApplySteps, getLandingHeroDemoJobs } from "../../lib/landingHeroDemoJobs";
 import LandingHeroApplyFlow from "./LandingHeroApplyFlow";
 import LandingMobileApplyStepToasts from "./LandingMobileApplyStepToasts";
+import JobCardHighlights, { JobCardMatchBadge } from "../swipe/JobCardHighlights";
+import {
+  formatJobSalaryLabel,
+  getJobBadgeItems,
+  getJobDisplayContent,
+  getJobDisplayTitle,
+} from "../../lib/jobDisplayUtils";
+import { formatPostedDate } from "../../lib/appUi";
+import { useAppLocale } from "../../context/AppLocaleContext";
 
-const CARD_THEME = {
-  card: "border-zinc-200 bg-white shadow-lg shadow-zinc-200/60",
-  cardHeader: "border-zinc-200",
-  cardTitle: "text-zinc-900",
-  cardCompany: "text-zinc-600",
+const LP_CARD_THEME = {
   cardMeta: "text-zinc-500",
-  cardSection: "border-zinc-200 bg-zinc-50/80",
-  cardBadge: "bg-zinc-100 text-zinc-700",
-  matchBadge: "bg-violet-100 text-violet-700",
+  cardAboutBody: "text-zinc-800",
+  surfaceClass: "rounded-xl border border-zinc-200 bg-zinc-100 px-3 py-2.5",
 };
+
+const STACK_MAX_CARDS = 3;
+/** Extra space so stacked cards, shadows, and rounded corners are not clipped. */
+const STACK_DEPTH_PADDING = (STACK_MAX_CARDS - 1) * 10 + 24;
 
 const HOLD_MS = 1600;
 const STAMP_MS = 380;
@@ -54,7 +61,7 @@ function SwipeActionStamp({ kind, label, variant = "desktop" }) {
       initial={{ opacity: 0, scale: 0.75 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ type: "spring", stiffness: 420, damping: 24 }}
-      className={`pointer-events-none absolute z-30 rounded-xl border-[3px] px-4 py-1.5 font-display font-black tracking-wider backdrop-blur-sm ${
+      className={`pointer-events-none absolute z-30 rounded-xl border-[3px] px-4 py-1.5 font-display font-black tracking-wider ${
         isApply
           ? "left-5 border-violet-500 text-violet-500 sm:left-6"
           : "right-5 border-rose-500 text-rose-500 sm:right-6"
@@ -66,148 +73,130 @@ function SwipeActionStamp({ kind, label, variant = "desktop" }) {
   );
 }
 
-function DemoJobCard({ job, lang, matchLabel, variant = "desktop" }) {
+function LandingJobCardMeta({ location, salaryLabel, postedLabel, compact = false }) {
+  const iconClass = "h-3.5 w-3.5 shrink-0 text-violet-600 sm:h-4 sm:w-4";
+  const textClass = compact
+    ? "flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs text-zinc-500 sm:gap-x-4 sm:text-sm"
+    : "flex flex-col items-center gap-1.5 text-sm text-zinc-500";
+
+  return (
+    <div className={textClass}>
+      <span className="inline-flex min-w-0 max-w-full items-center gap-1">
+        <MapPin className={iconClass} strokeWidth={1.9} aria-hidden="true" />
+        <span className="truncate">{location}</span>
+      </span>
+      {salaryLabel ? (
+        <span className="inline-flex min-w-0 max-w-full items-center gap-1">
+          <DollarSign className={iconClass} strokeWidth={1.9} aria-hidden="true" />
+          <span className="truncate">{salaryLabel}</span>
+        </span>
+      ) : null}
+      <span className="inline-flex items-center gap-1">
+        <Calendar className={iconClass} strokeWidth={1.9} aria-hidden="true" />
+        <span className="whitespace-nowrap">{postedLabel}</span>
+      </span>
+    </div>
+  );
+}
+
+function LandingJobCardBadges({ badges }) {
+  if (!badges.length) return null;
+
+  return (
+    <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 sm:mx-0 sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-0">
+      {badges.map((badge) => (
+        <span
+          key={badge.label}
+          className="inline-flex shrink-0 items-center rounded-full bg-zinc-100 px-2.5 py-1 text-[11px] font-medium text-zinc-700 sm:px-3 sm:py-1.5 sm:text-[13px]"
+        >
+          {badge.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function DemoJobCard({ job, variant = "desktop" }) {
+  const { t, lang } = useAppLocale();
   const isMobile = variant === "mobile";
-  const matchTitle = lang === "fr" ? "Pourquoi ce poste vous correspond" : "Why you're a match";
+  const { snippet } = getJobDisplayContent(job);
+  const badges = getJobBadgeItems(job, { lang });
+  const title = getJobDisplayTitle(job, { lang });
+  const location = job.location || t("swipe.locationNotSpecified");
+  const salaryLabel = formatJobSalaryLabel(job, { lang });
+  const postedLabel = formatPostedDate(t, job.posted_at || job.postedAt) || t("swipe.postedRecently");
+  const previewText = snippet || job.summary || "";
 
   return (
     <div
-      className={`flex h-full flex-col overflow-hidden rounded-2xl border text-left ${CARD_THEME.card} ${
-        isMobile ? "min-h-[420px]" : "min-h-[440px]"
+      className={`flex h-full flex-col overflow-hidden rounded-[28px] border border-zinc-200 bg-white text-left shadow-[0_8px_32px_rgba(0,0,0,0.08)] ${
+        isMobile ? "min-h-[500px]" : "min-h-[520px]"
       }`}
     >
-      <div
-        className={`flex shrink-0 items-start gap-2.5 border-b ${
-          isMobile ? "px-4 py-3.5" : "px-5 py-4 sm:gap-3"
-        } ${CARD_THEME.cardHeader}`}
-      >
-        <CompanyLogo
-          company={job.company}
-          size={isMobile ? "lg" : "lg"}
-          rounded="2xl"
-          className="shrink-0"
-        />
-        <div className="min-w-0 flex-1">
-          <h3
-            className={`line-clamp-2 font-display font-bold leading-snug ${CARD_THEME.cardTitle} ${
-              isMobile ? "text-[1.05rem]" : "text-lg sm:text-xl"
-            }`}
-          >
-            {job.title}
-          </h3>
-          <p className={`mt-0.5 truncate font-medium ${CARD_THEME.cardCompany} ${isMobile ? "text-sm" : "text-sm"}`}>
-            {job.company}
-          </p>
+      <div className="flex min-h-0 flex-1 flex-col px-4 pb-2 pt-3 sm:px-5 sm:pb-3 sm:pt-4">
+        <div className="flex shrink-0 items-start justify-end gap-2">
+          <JobCardMatchBadge
+            job={job}
+            t={t}
+            className="!bg-violet-100 !text-violet-700"
+          />
         </div>
-        <span
-          className={`mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-full font-semibold whitespace-nowrap ${CARD_THEME.matchBadge} ${
-            isMobile ? "px-2 py-0.5 text-[10px]" : "px-2.5 py-1 text-xs"
-          }`}
-        >
-          <Sparkles className="h-3 w-3 shrink-0" aria-hidden />
-          {job.matchScore}% {matchLabel}
-        </span>
+
+        <div className="mt-0.5 flex justify-center sm:mt-1">
+          <CompanyLogo job={job} size={isMobile ? "md" : "lg"} rounded="2xl" />
+        </div>
+
+        <div className="mt-2 text-center sm:mt-3">
+          <p className="font-display text-base font-semibold text-zinc-900 sm:text-xl">{job.company}</p>
+        </div>
+
+        <div className="mt-2 px-1 sm:mt-3 sm:px-2">
+          <h3
+            className="text-center font-display text-[clamp(1.15rem,4.8vw,1.75rem)] font-black leading-[1.08] tracking-tight text-zinc-900 sm:text-[1.65rem]"
+          >
+            {title}
+          </h3>
+        </div>
+
+        <div className="mt-2 sm:mt-3">
+          <LandingJobCardMeta
+            location={location}
+            salaryLabel={salaryLabel}
+            postedLabel={postedLabel}
+            compact
+          />
+        </div>
+
+        {previewText ? (
+          <p className="mt-2 line-clamp-2 px-1 text-center text-xs leading-relaxed text-zinc-500 sm:mt-2.5 sm:line-clamp-3 sm:text-sm">
+            {previewText}
+          </p>
+        ) : null}
+
+        <div className="mt-2 sm:mt-3">
+          <JobCardHighlights
+            job={job}
+            t={t}
+            lang={lang}
+            max={3}
+            compact
+            theme={LP_CARD_THEME}
+          />
+        </div>
+
+        <div className="mt-auto pt-2 sm:pt-3">
+          <LandingJobCardBadges badges={badges} />
+        </div>
       </div>
 
-      <div className={`flex min-h-0 flex-1 flex-col text-left ${isMobile ? "px-4 py-3.5" : "px-5 py-4 sm:px-6"}`}>
-        <div
-          className={`flex flex-wrap items-center justify-start gap-x-3 gap-y-1.5 text-left ${CARD_THEME.cardMeta} ${
-            isMobile ? "text-xs" : "text-sm"
-          }`}
-        >
-          <span className="inline-flex min-w-0 items-center gap-1">
-            <MapPin className={`shrink-0 text-violet-600 ${isMobile ? "h-3.5 w-3.5" : "h-4 w-4"}`} aria-hidden />
-            <span className="truncate">{job.location}</span>
-          </span>
-          <span className="inline-flex min-w-0 items-center gap-1">
-            <DollarSign className={`shrink-0 text-violet-600 ${isMobile ? "h-3.5 w-3.5" : "h-4 w-4"}`} aria-hidden />
-            <span className="truncate">{job.salary}</span>
-          </span>
-          {job.postedLabel ? (
-            <span className="inline-flex items-center gap-1">
-              <Calendar className={`shrink-0 text-violet-600 ${isMobile ? "h-3.5 w-3.5" : "h-4 w-4"}`} aria-hidden />
-              {job.postedLabel}
-            </span>
-          ) : null}
+      <div className="flex shrink-0 items-center justify-between border-t border-zinc-200 px-4 py-2.5 sm:px-5 sm:py-3">
+        <div className="flex items-center gap-2 font-display text-sm font-bold text-zinc-900 sm:text-base">
+          <Logo size={18} className="sm:h-5 sm:w-5" />
+          {BRAND.NAME}
         </div>
-
-        {(job.department || job.experience) && !isMobile ? (
-          <div className={`mt-2.5 space-y-0.5 text-left ${isMobile ? "text-[11px]" : "text-xs"} ${CARD_THEME.cardMeta}`}>
-            {job.department ? <p className="font-medium text-zinc-600">{job.department}</p> : null}
-            {job.experience ? <p>{job.experience}</p> : null}
-          </div>
-        ) : null}
-
-        {job.summary && !isMobile ? (
-          <p className={`mt-2.5 text-left leading-snug text-zinc-600 ${isMobile ? "text-[11px]" : "text-xs"}`}>
-            {job.summary}
-          </p>
-        ) : null}
-
-        {job.skills?.length && !isMobile ? (
-          <div className="mt-2.5 flex flex-wrap justify-start gap-1.5">
-            {job.skills.map((skill) => (
-              <span
-                key={skill}
-                className={`rounded-full border border-violet-200/80 bg-violet-50 font-medium text-violet-700 ${
-                  isMobile ? "px-2 py-0.5 text-[10px]" : "px-2.5 py-0.5 text-[11px]"
-                }`}
-              >
-                {skill}
-              </span>
-            ))}
-          </div>
-        ) : null}
-
-        <div className={`hidden rounded-xl border text-left sm:block ${isMobile ? "px-3.5 py-3" : "px-4 py-3"} ${CARD_THEME.cardSection}`}>
-          <p className={`mb-2.5 text-left font-semibold text-zinc-800 ${isMobile ? "text-[11px]" : "text-xs"}`}>
-            {matchTitle}
-          </p>
-          <ul className="list-none space-y-2 text-left">
-            {job.reasons.map((reason) => (
-              <li
-                key={reason}
-                className={`flex items-start justify-start gap-2 text-left leading-snug text-zinc-700 ${
-                  isMobile ? "text-[11px]" : "text-sm"
-                }`}
-              >
-                <span className="mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
-                  <Check className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden />
-                </span>
-                <span className="min-w-0 flex-1 text-left">{reason}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <div className={`mt-auto flex items-center justify-between border-t border-zinc-100 ${isMobile ? "pt-3" : "pt-4"}`}>
-          <div
-            className={`no-scrollbar flex min-w-0 flex-1 gap-1.5 overflow-x-auto pr-2 sm:flex-wrap sm:overflow-visible ${
-              isMobile ? "" : ""
-            }`}
-          >
-            <span
-              className={`inline-flex shrink-0 items-center gap-1 rounded-full font-medium ${CARD_THEME.cardBadge} ${
-                isMobile ? "px-2 py-0.5 text-[10px]" : "px-2.5 py-1 text-xs"
-              }`}
-            >
-              <Briefcase className={isMobile ? "h-3 w-3" : "h-3 w-3"} aria-hidden />
-              {job.contract}
-            </span>
-            {job.workModel ? (
-              <span
-                className={`inline-flex shrink-0 items-center rounded-full font-medium ${CARD_THEME.cardBadge} ${
-                  isMobile ? "px-2 py-0.5 text-[10px]" : "px-2.5 py-1 text-xs"
-                }`}
-              >
-                {job.workModel}
-              </span>
-            ) : null}
-          </div>
-          <span className={`flex shrink-0 items-center gap-1 font-semibold text-zinc-500 ${isMobile ? "text-[11px]" : "text-xs"}`}>
-            <Logo size={isMobile ? 15 : 16} />
-            {BRAND.NAME}
-          </span>
+        <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 sm:text-xs">
+          {t("swipe.tapForDetails")}
+          <Info className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden="true" />
         </div>
       </div>
     </div>
@@ -267,31 +256,34 @@ function SwipeCardStack({
   job,
   showStamp,
   exiting,
-  lang,
-  matchLabel,
   passStampLabel,
   applyStampLabel,
   variant = "desktop",
 }) {
   const isMobile = variant === "mobile";
-  const cardHeight = isMobile ? 420 : 440;
+  const cardHeight = isMobile ? 500 : 520;
   const exitVariants = isMobile ? EXIT_VARIANTS_COMPACT : EXIT_VARIANTS;
   const showApplyStamp = showStamp && job.swipe === "apply";
   const showPassStamp = showStamp && job.swipe === "skip";
+  const visibleJobs = jobs.slice(0, STACK_MAX_CARDS);
 
   return (
-    <div className="relative z-10" style={{ height: cardHeight + (isMobile ? 28 : 0) }}>
-      {jobs.map((stackJob, stackIndex) => {
-        const offset = (stackIndex - index + jobs.length) % jobs.length;
+    <div
+      className="relative z-10 overflow-visible bg-transparent"
+      style={{ minHeight: cardHeight + STACK_DEPTH_PADDING }}
+    >
+      {visibleJobs.map((stackJob, stackIndex) => {
+        const offset = (stackIndex - index + visibleJobs.length) % visibleJobs.length;
 
         return (
           <div
             key={`stack-${stackJob.id}-${index}`}
             className="absolute inset-x-0 top-0"
             style={{
-              zIndex: 3 - offset,
-              transform: `translateY(${offset * 14}px) scale(${1 - offset * 0.028})`,
-              opacity: offset === 0 ? 1 : offset === 1 ? 0.9 : 0.78,
+              zIndex: 10 - offset,
+              transform: `translateY(${offset * 10}px) scale(${1 - offset * 0.03})`,
+              transformOrigin: "top center",
+              opacity: 1,
               pointerEvents: offset === 0 ? "auto" : "none",
             }}
           >
@@ -308,11 +300,11 @@ function SwipeCardStack({
                   {showApplyStamp ? <SwipeActionStamp kind="apply" label={applyStampLabel} variant={variant} /> : null}
                   {showPassStamp ? <SwipeActionStamp kind="skip" label={passStampLabel} variant={variant} /> : null}
 
-                  <DemoJobCard job={job} lang={lang} matchLabel={matchLabel} variant={variant} />
+                  <DemoJobCard job={job} variant={variant} />
                 </motion.div>
               </AnimatePresence>
             ) : (
-              <DemoJobCard job={stackJob} lang={lang} matchLabel={matchLabel} variant={variant} />
+              <DemoJobCard job={stackJob} variant={variant} />
             )}
           </div>
         );
@@ -324,7 +316,7 @@ function SwipeCardStack({
 function SwipeActionButtons({ variant = "desktop" }) {
   const isMobile = variant === "mobile";
   return (
-    <div className={`relative z-20 flex items-center justify-center ${isMobile ? "mt-6 gap-4" : "mt-8 gap-4 sm:gap-6"}`}>
+    <div className={`relative z-20 flex items-center justify-center ${isMobile ? "mt-2 gap-4" : "mt-8 gap-4 sm:gap-6"}`}>
       <div
         className={`grid place-items-center rounded-full border border-zinc-200 bg-white text-zinc-400 shadow-sm ${
           isMobile ? "h-11 w-11" : "h-12 w-12"
@@ -358,7 +350,6 @@ export default function LandingHeroSwipeDemo({ lang }) {
   const advanceTimerRef = useRef(null);
 
   const job = jobs[index];
-  const matchLabel = lang === "fr" ? "compatibilité" : "match";
   const panelTitle = lang === "fr" ? "Candidature en cours" : "Application in progress";
   const applyingLabel = lang === "fr" ? "Hirly prépare votre dossier…" : "Hirly is preparing your application…";
   const passStampLabel = "PASS";
@@ -433,37 +424,33 @@ export default function LandingHeroSwipeDemo({ lang }) {
   }, [index, isVisible, jobs, steps]);
 
   const swipeDemoMobile = (
-    <div className="relative mx-auto w-full max-w-md">
+    <div className="relative mx-auto w-full max-w-md overflow-visible bg-transparent pb-2">
       <SwipeCardStack
         jobs={jobs}
         index={index}
         job={job}
         showStamp={showStamp}
         exiting={exiting}
-        lang={lang}
-        matchLabel={matchLabel}
         passStampLabel={passStampLabel}
         applyStampLabel={applyStampLabel}
         variant="mobile"
       />
-      <LandingMobileApplyStepToasts steps={steps} activeStep={applyStep} />
-      <div className="relative z-30 mt-6">
+      <LandingMobileApplyStepToasts steps={steps} activeStep={applyStep} bottomClassName="bottom-[5.75rem]" />
+      <div className="relative z-30 -mt-10">
         <SwipeActionButtons variant="mobile" />
       </div>
     </div>
   );
 
   const swipeDemoDesktop = (
-    <div className="relative mx-auto w-full max-w-md lg:max-w-none">
-      <div className="relative z-10 px-1">
+    <div className="relative mx-auto w-full max-w-md overflow-visible bg-transparent pb-2 lg:max-w-none">
+      <div className="relative z-10 overflow-visible bg-transparent px-1">
         <SwipeCardStack
           jobs={jobs}
           index={index}
           job={job}
           showStamp={showStamp}
           exiting={exiting}
-          lang={lang}
-          matchLabel={matchLabel}
           passStampLabel={passStampLabel}
           applyStampLabel={applyStampLabel}
           variant="desktop"
@@ -474,10 +461,10 @@ export default function LandingHeroSwipeDemo({ lang }) {
   );
 
   return (
-    <div ref={rootRef} className="mt-16 text-left lg:mt-20">
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(300px,380px)] lg:gap-8">
-        <div className="w-full lg:hidden">{swipeDemoMobile}</div>
-        <div className="hidden w-full lg:block">{swipeDemoDesktop}</div>
+    <div ref={rootRef} className="mt-16 overflow-visible bg-transparent text-left lg:mt-20">
+      <div className="grid items-start gap-6 overflow-visible bg-transparent lg:grid-cols-[minmax(0,1fr)_minmax(300px,380px)] lg:gap-8">
+        <div className="w-full overflow-visible bg-transparent lg:hidden">{swipeDemoMobile}</div>
+        <div className="hidden w-full overflow-visible bg-transparent lg:block">{swipeDemoDesktop}</div>
 
         <ApplyStepsPanel
           steps={steps}

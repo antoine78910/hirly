@@ -211,10 +211,26 @@ function CreatorChip({ creator, selected, onToggle }) {
 }
 
 function videoReachViews(video, usesLikesProxy = false) {
+  if (video?.reach_views != null && Number(video.reach_views) > 0) {
+    return Number(video.reach_views);
+  }
   const views = Number(video?.views || 0);
   if (views > 0) return views;
   if (usesLikesProxy) return Number(video?.likes || 0);
   return views;
+}
+
+function videoEngagementRate(video, usesLikesProxy = false) {
+  if (video?.engagement_rate != null && Number.isFinite(Number(video.engagement_rate))) {
+    return Number(video.engagement_rate);
+  }
+  const views = videoReachViews(video, usesLikesProxy);
+  if (views <= 0) return 0;
+  const interactions = Number(video?.likes || 0)
+    + Number(video?.favorites || 0)
+    + Number(video?.comments || 0)
+    + Number(video?.shares || 0);
+  return Math.round((interactions / views) * 10000) / 100;
 }
 
 function TopVideoRow({ video, maxViews, usesLikesProxy, viewsLabel = "Views" }) {
@@ -635,7 +651,7 @@ export default function AdminCreators() {
           ) : (
             <div className="space-y-6 p-5 sm:p-6">
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <KpiCard icon={Video} label="Posted videos" value={summary.posted_videos} delta={summary.posted_videos_delta} accent="text-orange-500" />
+                <KpiCard icon={Video} label="Tracked videos" value={summary.posted_videos} delta={summary.posted_videos_delta} accent="text-orange-500" hint="Posts loaded from the latest refresh" />
                 <KpiCard icon={AtSign} label="Active accounts" value={summary.active_accounts} delta={0} accent="text-violet-500" />
                 <KpiCard icon={Play} label={viewsLabel} value={summary.views} delta={summary.views_delta} accent="text-sky-500" />
                 <KpiCard icon={Heart} label="Likes" value={summary.likes} delta={summary.likes_delta} accent="text-pink-500" />
@@ -649,7 +665,7 @@ export default function AdminCreators() {
                   hint="(likes + favorites + comments + shares) / views"
                 />
                 <KpiCard icon={Users} label="Followers" value={summary.followers} delta={summary.followers_delta} accent="text-cyan-600" />
-                <KpiCard icon={Calendar} label={`Posted (${days}d)`} value={summary.posted_videos_period} delta={summary.views_period ?? 0} accent="text-orange-400" />
+                <KpiCard icon={Calendar} label={`Posted (${days}d)`} value={summary.posted_videos_period} delta={0} accent="text-orange-400" hint="New posts published in the selected period" />
               </div>
 
               <div className="grid gap-4 lg:grid-cols-2">
@@ -706,11 +722,11 @@ export default function AdminCreators() {
               <section className="overflow-hidden rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
                 <div className="border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
                   <h2 className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">Posted videos</h2>
-                  <p className="text-sm text-zinc-500 dark:text-zinc-400">All tracked posts with {viewsLabel.toLowerCase()}, likes, and comments.</p>
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400">All tracked posts with {viewsLabel.toLowerCase()}, likes, comments, shares, saves, and engagement.</p>
                 </div>
                 {recentVideos.length ? (
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[900px] text-left text-sm">
+                    <table className="w-full min-w-[1100px] text-left text-sm">
                       <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-950 dark:text-zinc-400">
                         <tr>
                           <th className="px-5 py-3 font-semibold">Post</th>
@@ -719,6 +735,9 @@ export default function AdminCreators() {
                           <th className="px-5 py-3 font-semibold">{viewsLabel}</th>
                           <th className="px-5 py-3 font-semibold">Likes</th>
                           <th className="px-5 py-3 font-semibold">Comments</th>
+                          <th className="px-5 py-3 font-semibold">Shares</th>
+                          <th className="px-5 py-3 font-semibold">Saves</th>
+                          <th className="px-5 py-3 font-semibold">Engagement</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -748,6 +767,9 @@ export default function AdminCreators() {
                             <td className="px-5 py-3 font-mono font-semibold text-sky-700">{fmtCompact(videoReachViews(video, usesLikesProxy))}</td>
                             <td className="px-5 py-3 font-mono text-pink-600">{fmtCompact(video.likes)}</td>
                             <td className="px-5 py-3 font-mono text-emerald-600">{fmtCompact(video.comments)}</td>
+                            <td className="px-5 py-3 font-mono text-violet-600">{fmtCompact(video.shares)}</td>
+                            <td className="px-5 py-3 font-mono text-amber-600">{fmtCompact(video.favorites)}</td>
+                            <td className="px-5 py-3 font-mono font-semibold text-amber-700">{videoEngagementRate(video, usesLikesProxy)}%</td>
                           </tr>
                         ))}
                       </tbody>
@@ -822,7 +844,7 @@ export default function AdminCreators() {
                   <p className="text-sm text-zinc-500 dark:text-zinc-400">One row per day — videos posted and engagement deltas.</p>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[760px] text-left text-sm">
+                  <table className="w-full min-w-[900px] text-left text-sm">
                     <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
                       <tr>
                         <th className="px-5 py-3 font-semibold">Date</th>
@@ -830,6 +852,7 @@ export default function AdminCreators() {
                         <th className="px-5 py-3 font-semibold">{viewsLabel}</th>
                         <th className="px-5 py-3 font-semibold">Likes</th>
                         <th className="px-5 py-3 font-semibold">Comments</th>
+                        <th className="px-5 py-3 font-semibold">Engagement</th>
                         <th className="px-5 py-3 font-semibold">Followers</th>
                       </tr>
                     </thead>
@@ -841,6 +864,7 @@ export default function AdminCreators() {
                           <td className="px-5 py-3 tabular-nums text-sky-600">{fmtCompact(usesLikesProxy ? row.likes : row.views)}</td>
                           <td className="px-5 py-3 tabular-nums text-pink-600">{fmtCompact(row.likes)}</td>
                           <td className="px-5 py-3 tabular-nums text-emerald-600">{fmtCompact(row.comments)}</td>
+                          <td className="px-5 py-3 tabular-nums font-semibold text-amber-700">{row.engagement_rate ?? 0}%</td>
                           <td className="px-5 py-3 tabular-nums text-zinc-700">{fmtCompact(row.followers)}</td>
                         </tr>
                       ))}

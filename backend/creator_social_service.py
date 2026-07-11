@@ -47,6 +47,52 @@ def _video_metric_totals(videos: Sequence[Dict[str, Any]]) -> Dict[str, int]:
     }
 
 
+def _tracked_video_count(snapshot: Optional[Dict[str, Any]]) -> int:
+    """Profile video_count can be 0 while scraped videos still carry views."""
+    if not snapshot:
+        return 0
+    videos = snapshot.get("videos") or []
+    loaded = len(videos)
+    profile_count = int(snapshot.get("video_count") or 0)
+    return max(profile_count, loaded)
+
+
+def _enrich_video_metrics(video: Dict[str, Any], *, uses_likes_proxy: bool = False) -> Dict[str, Any]:
+    views = int(video.get("views") or 0)
+    likes = int(video.get("likes") or 0)
+    comments = int(video.get("comments") or 0)
+    shares = int(video.get("shares") or 0)
+    favorites = int(video.get("favorites") or 0)
+    reach_views = views if views > 0 else (likes if uses_likes_proxy else views)
+    interactions = likes + favorites + comments + shares
+    return {
+        **video,
+        "reach_views": reach_views,
+        "interactions": interactions,
+        "engagement_rate": _engagement_rate(
+            reach_views,
+            likes=likes,
+            favorites=favorites,
+            comments=comments,
+            shares=shares,
+        ),
+    }
+
+
+def _count_videos_posted_in_range(
+    videos: Sequence[Dict[str, Any]],
+    *,
+    start_day: date,
+    end_day: date,
+) -> int:
+    count = 0
+    for video in videos or []:
+        posted_day = _utc_date(video.get("posted_at"))
+        if posted_day and start_day <= posted_day <= end_day:
+            count += 1
+    return count
+
+
 def _engagement_rate(
     views: int,
     *,
@@ -190,7 +236,7 @@ def _daily_points(
             active_accounts += 1
             followers += int(row.get("followers") or 0)
             prev = previous_totals[creator_id]
-            current_videos = int(row.get("video_count") or 0)
+            current_videos = _tracked_video_count(row)
             current_likes = int(row.get("likes_total") or 0)
             current_views = int(row.get("views_total") or 0)
             current_comments = int(row.get("comments_total") or 0)
@@ -300,7 +346,7 @@ def build_dashboard(
                 last_refreshed_at = latest.get("recorded_at")
 
         current_followers = int((latest or {}).get("followers") or 0)
-        current_videos = int((latest or {}).get("video_count") or 0)
+        current_videos = _tracked_video_count(latest)
         current_likes = int((latest or {}).get("likes_total") or 0)
         current_views = int((latest or {}).get("views_total") or 0)
         current_comments = int((latest or {}).get("comments_total") or 0)
@@ -330,7 +376,7 @@ def build_dashboard(
         start_row = grouped.get((creator_id, start_key))
         if start_row:
             trend_followers += _delta(current_followers, int(start_row.get("followers") or 0))
-            trend_videos += _delta(current_videos, int(start_row.get("video_count") or 0))
+            trend_videos += _delta(current_videos, _tracked_video_count(start_row))
             trend_likes += _delta(current_likes, int(start_row.get("likes_total") or 0))
             trend_views += _delta(
                 current_views,
@@ -339,7 +385,10 @@ def build_dashboard(
 
         for video in (latest or {}).get("videos") or []:
             all_videos.append({
-                **video,
+                **_enrich_video_metrics(
+                    video,
+                    uses_likes_proxy=video_totals["views"] <= 0 and interaction_likes > 0,
+                ),
                 "creator_id": creator_id,
                 "creator_name": creator.get("name"),
             })
@@ -372,14 +421,18 @@ def build_dashboard(
             "fetch_error": (latest or {}).get("error"),
         })
 
-    period_posted = _sum_metric(daily, "posted_videos")
+    end_day = datetime.now(timezone.utc).date()
+    period_start_day = end_day - timedelta(days=max(1, days) - 1)
+    period_posted = max(
+        _sum_metric(daily, "posted_videos"),
+        _count_videos_posted_in_range(all_videos, start_day=period_start_day, end_day=end_day),
+    )
     period_views = _sum_metric(daily, "views")
     period_likes = _sum_metric(daily, "likes")
     period_comments = _sum_metric(daily, "comments")
     period_shares = _sum_metric(daily, "shares")
     period_favorites = _sum_metric(daily, "favorites")
 
-    period_start_day = datetime.now(timezone.utc).date() - timedelta(days=max(1, days) - 1)
     period_video_views = 0
     period_video_likes = 0
     period_video_comments = 0

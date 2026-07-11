@@ -135,7 +135,7 @@ export default function Landing() {
       </header>
 
       {/* Hero */}
-      <section className="relative overflow-x-hidden gradient-linkedin-soft">
+      <section className="relative overflow-x-clip gradient-linkedin-soft">
         <div className="absolute inset-0 bg-grid mask-radial pointer-events-none" />
         <div className="relative max-w-6xl mx-auto px-6 pt-16 pb-10 text-center sm:pb-12 lg:pt-28 lg:pb-14">
           <motion.div
@@ -511,8 +511,7 @@ export default function Landing() {
                 {[
                   { label: "Try Hirly", href: "/try-hirly/" },
                   { label: lang === "fr" ? "Hirly emploi" : "Hirly jobs", href: lang === "fr" ? "/emploi/" : "/jobs/" },
-                  { label: lang === "fr" ? "Hirly travail" : "Hirly in English", href: lang === "fr" ? "/travail/" : "/en/" },
-                  { label: lang === "fr" ? "Hirly en anglais" : "Hirly en francais", href: lang === "fr" ? "/en/" : "/fr/" },
+                  { label: lang === "fr" ? "Hirly travail" : "Hirly work", href: "/travail/" },
                   { label: lang === "fr" ? "Job matching, c'est quoi ?" : "What is job matching?", href: "/blog/job-matching-app" },
                   { label: lang === "fr" ? "Tinder pour l'emploi" : "Tinder for jobs", href: "/blog/tinder-emploi-app" },
                 ].map((l) => (

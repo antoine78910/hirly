@@ -15,5 +15,9 @@
       "destination": "https://hirly-production.up.railway.app/api/:path*"
     },
     { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "redirects": [
+    { "source": "/en", "destination": "/", "permanent": true },
+    { "source": "/en/", "destination": "/", "permanent": true }
   ]
 }

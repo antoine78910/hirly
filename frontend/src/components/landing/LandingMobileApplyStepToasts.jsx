@@ -67,7 +67,7 @@ function resolveToastState(index, activeStep, stepsLength) {
   return "hidden";
 }
 
-export default function LandingMobileApplyStepToasts({ steps, activeStep }) {
+export default function LandingMobileApplyStepToasts({ steps, activeStep, bottomClassName = "bottom-14" }) {
   if (activeStep < 0) return null;
 
   const visibleSteps = steps
@@ -80,7 +80,7 @@ export default function LandingMobileApplyStepToasts({ steps, activeStep }) {
     <LayoutGroup>
       <motion.div
         layout
-        className="pointer-events-none absolute inset-x-0 bottom-14 z-20 flex flex-col-reverse items-end gap-3 px-1"
+        className={`pointer-events-none absolute inset-x-0 ${bottomClassName} z-20 flex flex-col-reverse items-end gap-3 px-1`}
         aria-live="polite"
       >
         <AnimatePresence initial={false} mode="popLayout">

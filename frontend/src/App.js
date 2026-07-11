@@ -144,6 +144,7 @@ function AppRouter() {
     <DomainRouter>
       <ScrollManager />
       <Routes>
+        <Route path="/en" element={<Navigate to="/" replace />} />
         <Route path="/" element={<Landing />} />
         {LANDING_CONTRACT_PATH_SLUGS.map((slug) => (
           <Route key={`landing-${slug}`} path={`/${slug}`} element={<Landing />} />

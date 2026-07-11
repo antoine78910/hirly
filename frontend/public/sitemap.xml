@@ -3,29 +3,18 @@
   <url>
     <loc>https://tryhirly.com/</loc>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://tryhirly.com/" />
-    <xhtml:link rel="alternate" hreflang="fr" href="https://tryhirly.com/fr/" />
-    <xhtml:link rel="alternate" hreflang="en" href="https://tryhirly.com/en/" />
-    <lastmod>2026-07-03</lastmod>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://tryhirly.com/" />
+    <lastmod>2026-07-11</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
     <loc>https://tryhirly.com/fr/</loc>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://tryhirly.com/" />
-    <xhtml:link rel="alternate" hreflang="fr" href="https://tryhirly.com/fr/" />
-    <xhtml:link rel="alternate" hreflang="en" href="https://tryhirly.com/en/" />
-    <lastmod>2026-07-03</lastmod>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://tryhirly.com/" />
+    <lastmod>2026-07-11</lastmod>
     <changefreq>weekly</changefreq>
-    <priority>0.95</priority>
-  </url>
-  <url>
-    <loc>https://tryhirly.com/en/</loc>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://tryhirly.com/" />
-    <xhtml:link rel="alternate" hreflang="fr" href="https://tryhirly.com/fr/" />
-    <xhtml:link rel="alternate" hreflang="en" href="https://tryhirly.com/en/" />
-    <lastmod>2026-07-03</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.95</priority>
+    <priority>0.9</priority>
   </url>
   <url>
     <loc>https://tryhirly.com/try-hirly/</loc>
