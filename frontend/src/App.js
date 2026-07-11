@@ -15,6 +15,7 @@ import ForProfile from "@/pages/seo/ForProfile";
 import HowItWorks from "@/pages/seo/HowItWorks";
 import UseCases from "@/pages/seo/UseCases";
 import Signup from "@/pages/Signup";
+import SignIn from "@/pages/SignIn";
 import Onboarding from "@/pages/Onboarding";
 import Swipe from "@/pages/Swipe";
 import Tracker from "@/pages/Tracker";
@@ -84,7 +85,7 @@ function isTrainingRoutePath(pathname) {
 function shouldShowBottomNav(pathname) {
   if (pathname === "/" || pathname === "/auth/callback") return false;
   if (LANDING_CONTRACT_PATH_SLUGS.some((slug) => pathname === `/${slug}`)) return false;
-  if (pathname === "/signup") return false;
+  if (pathname === "/signup" || pathname === "/signin") return false;
   if (pathname.startsWith("/invite/")) return false;
   if (pathname === "/how-it-works" || pathname === "/use-cases") return false;
   if (pathname.startsWith("/blog") || pathname.startsWith("/compare") || pathname.startsWith("/for/")) return false;
@@ -156,6 +157,7 @@ function AppRouter() {
         <Route path="/compare/:slug" element={<Compare />} />
         <Route path="/for/:slug" element={<ForProfile />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/signin" element={<SignIn />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/auth/callback" element={<AuthCallback />} />

@@ -1,6 +1,5 @@
 import { useParams, Navigate, Link } from "react-router-dom";
 import { Check, X, ArrowRight } from "lucide-react";
-import { startGoogleLogin } from "../../lib/auth";
 import MarketingLayout from "../../components/marketing/MarketingLayout";
 import SEOHead from "../../components/seo/SEOHead";
 import MarketingFaq from "../../components/marketing/MarketingFaq";
@@ -133,12 +132,12 @@ export default function Compare() {
             <p className="text-zinc-500 text-sm mb-6">
               Créez votre profil en 2 minutes et commencez à swiper vos prochaines offres.
             </p>
-            <button
-              onClick={() => startGoogleLogin("/swipe")}
+            <Link
+              to="/onboarding"
               className="inline-flex items-center gap-2 rounded-full gradient-linkedin text-white font-semibold px-6 py-2.5 text-sm hover:opacity-90 transition-opacity"
             >
               Commencer avec Hirly <ArrowRight className="w-4 h-4" />
-            </button>
+            </Link>
           </div>
         </div>
 

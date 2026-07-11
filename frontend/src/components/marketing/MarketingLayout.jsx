@@ -1,14 +1,10 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import Logo from "../Logo";
 import { BRAND, supportMailto } from "../../lib/brand";
 import { PRIVACY_PATH, TERMS_PATH } from "../../lib/legalPaths";
-import { startGoogleLogin } from "../../lib/auth";
 
 export default function MarketingLayout({ children }) {
-  const navigate = useNavigate();
-
-  const onCTA = () => startGoogleLogin("/swipe");
 
   return (
     <div className="min-h-dvh bg-white text-zinc-900">
@@ -24,13 +20,13 @@ export default function MarketingLayout({ children }) {
             <Link to="/blog" className="hover:text-zinc-900 transition-colors">Blog</Link>
             <Link to="/compare/hirly-vs-linkedin" className="hover:text-zinc-900 transition-colors">Compare</Link>
           </nav>
-          <button
-            onClick={onCTA}
+          <Link
+            to="/onboarding"
             className="inline-flex items-center gap-2 rounded-full gradient-linkedin text-white font-semibold px-5 py-2 text-sm hover:opacity-90 transition-opacity"
           >
             {BRAND.CTA_PRIMARY}
             <ArrowRight className="w-3.5 h-3.5" />
-          </button>
+          </Link>
         </div>
       </header>
 

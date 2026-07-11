@@ -1,6 +1,5 @@
 import { useParams, Link, Navigate } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Clock } from "lucide-react";
-import { startGoogleLogin } from "../../lib/auth";
 import MarketingLayout from "../../components/marketing/MarketingLayout";
 import SEOHead from "../../components/seo/SEOHead";
 import MarketingFaq from "../../components/marketing/MarketingFaq";
@@ -54,13 +53,12 @@ function Section({ section, index, totalSections, ctaMid }) {
               Hirly génère et envoie vos candidatures automatiquement.
             </p>
           </div>
-          <a
-            href={ctaMid.href}
-            onClick={(e) => { e.preventDefault(); startGoogleLogin("/swipe"); }}
+          <Link
+            to={ctaMid.href}
             className="inline-flex items-center gap-2 rounded-full gradient-linkedin text-white font-semibold px-5 py-2.5 text-sm hover:opacity-90 transition-opacity flex-shrink-0"
           >
             {ctaMid.text} <ArrowRight className="w-3.5 h-3.5" />
-          </a>
+          </Link>
         </div>
       )}
     </>
@@ -156,13 +154,12 @@ export default function BlogPost() {
             <p className="text-zinc-500 text-sm mb-6">
               Hirly génère vos candidatures et les envoie directement à l'ATS.
             </p>
-            <a
-              href={post.ctaEnd.href}
-              onClick={(e) => { e.preventDefault(); startGoogleLogin("/swipe"); }}
+            <Link
+              to={post.ctaEnd.href}
               className="inline-flex items-center gap-2 rounded-full gradient-linkedin text-white font-semibold px-6 py-2.5 text-sm hover:opacity-90 transition-opacity"
             >
               {post.ctaEnd.text} <ArrowRight className="w-4 h-4" />
-            </a>
+            </Link>
           </div>
         </div>
       </article>

@@ -5,7 +5,6 @@ import { motion } from "framer-motion";
 import { useEffect } from "react";
 import Logo from "../components/Logo";
 import { BRAND, supportMailto } from "../lib/brand";
-import { startGoogleLogin } from "../lib/auth";
 import { useNavigate, useSearchParams, useLocation, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { trackEvent } from "../lib/analytics";
@@ -76,7 +75,8 @@ export default function Landing() {
   const onSignIn = () => {
     trackEvent("cta_login_clicked", { location: "header" });
     trackDatafastGoal("lp_cta_sign_in", { location: "header" });
-    startGoogleLogin(postLoginPath);
+    const next = postLoginPath !== "/swipe" ? `?next=${encodeURIComponent(postLoginPath)}` : "";
+    navigate(`/signin${next}`);
   };
 
   const onboardingPath = landingContractSlug

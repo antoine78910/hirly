@@ -1,7 +1,6 @@
-import { useParams, Navigate } from "react-router-dom";
+import { useParams, Navigate, Link } from "react-router-dom";
 import { ArrowRight, CheckCircle } from "lucide-react";
 import { motion } from "framer-motion";
-import { startGoogleLogin } from "../../lib/auth";
 import MarketingLayout from "../../components/marketing/MarketingLayout";
 import SEOHead from "../../components/seo/SEOHead";
 import MarketingFaq from "../../components/marketing/MarketingFaq";
@@ -55,12 +54,12 @@ export default function ForProfile() {
             <p className="text-zinc-600 text-lg sm:text-xl leading-relaxed max-w-xl mb-8">
               {page.subheadline}
             </p>
-            <button
-              onClick={() => startGoogleLogin("/swipe")}
+            <Link
+              to="/onboarding"
               className="inline-flex items-center gap-2 rounded-full gradient-linkedin text-white font-semibold px-6 py-3 text-base hover:opacity-90 transition-opacity pulse-ring"
             >
               Commencer gratuitement <ArrowRight className="w-4 h-4" />
-            </button>
+            </Link>
           </motion.div>
         </div>
       </section>
@@ -123,12 +122,12 @@ export default function ForProfile() {
             <h2 className="font-display font-bold text-xl mb-1">Essayer Hirly gratuitement</h2>
             <p className="text-white/70 text-sm">Créez votre profil en 2 minutes. Commencez à swiper.</p>
           </div>
-          <button
-            onClick={() => startGoogleLogin("/swipe")}
+          <Link
+            to="/onboarding"
             className="flex-shrink-0 inline-flex items-center gap-2 bg-white text-zinc-900 font-semibold rounded-full px-5 py-2.5 text-sm hover:bg-zinc-50 transition-colors"
           >
             Commencer <ArrowRight className="w-3.5 h-3.5" />
-          </button>
+          </Link>
         </div>
       </section>
 

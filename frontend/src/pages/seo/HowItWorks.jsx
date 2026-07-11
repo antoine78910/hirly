@@ -1,6 +1,6 @@
+import { Link } from "react-router-dom";
 import { ArrowRight, Upload, Zap, Inbox, CheckCircle } from "lucide-react";
 import { motion } from "framer-motion";
-import { startGoogleLogin } from "../../lib/auth";
 import MarketingLayout from "../../components/marketing/MarketingLayout";
 import SEOHead from "../../components/seo/SEOHead";
 import MarketingFaq from "../../components/marketing/MarketingFaq";
@@ -118,12 +118,12 @@ export default function HowItWorks() {
             <p className="text-zinc-600 text-lg sm:text-xl leading-relaxed max-w-2xl mx-auto mb-8">
               Hirly combine le matching IA et la candidature automatique pour vous faire postuler à 10 offres pertinentes en 10 minutes — sans remplir un seul formulaire.
             </p>
-            <button
-              onClick={() => startGoogleLogin("/swipe")}
+            <Link
+              to="/onboarding"
               className="inline-flex items-center gap-2 rounded-full gradient-linkedin text-white font-semibold px-6 py-3 text-base hover:opacity-90 transition-opacity"
             >
               Commencer gratuitement <ArrowRight className="w-4 h-4" />
-            </button>
+            </Link>
           </motion.div>
         </div>
       </section>
@@ -208,12 +208,12 @@ export default function HowItWorks() {
               Prêt à postuler en 1 swipe ?
             </h2>
             <p className="text-zinc-500 mb-7">Créez votre profil en 2 minutes. Commencez à swiper.</p>
-            <button
-              onClick={() => startGoogleLogin("/swipe")}
+            <Link
+              to="/onboarding"
               className="inline-flex items-center gap-2 rounded-full gradient-linkedin text-white font-semibold px-7 py-3 text-base hover:opacity-90 transition-opacity"
             >
               Commencer gratuitement <ArrowRight className="w-4 h-4" />
-            </button>
+            </Link>
           </div>
         </div>
       </section>

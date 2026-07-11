@@ -44,6 +44,7 @@ const MARKETING_ROUTE_PREFIXES = [
   "/compare",
   "/for",
   "/signup",
+  "/signin",
   "/onboarding",
   "/invite",
   "/training",

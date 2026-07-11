@@ -1,6 +1,5 @@
 import { Link } from "react-router-dom";
 import { ArrowRight, Users, RefreshCw, Code, Briefcase, Laptop } from "lucide-react";
-import { startGoogleLogin } from "../../lib/auth";
 import MarketingLayout from "../../components/marketing/MarketingLayout";
 import SEOHead from "../../components/seo/SEOHead";
 import MarketingFaq from "../../components/marketing/MarketingFaq";
@@ -198,12 +197,12 @@ export default function UseCases() {
           <div className="gradient-linkedin-soft px-8 py-12">
             <h2 className="font-display font-black text-3xl tracking-tight mb-3">Commencer avec Hirly</h2>
             <p className="text-zinc-500 mb-7">Créez votre profil en 2 minutes. Postulez en 1 swipe.</p>
-            <button
-              onClick={() => startGoogleLogin("/swipe")}
+            <Link
+              to="/onboarding"
               className="inline-flex items-center gap-2 rounded-full gradient-linkedin text-white font-semibold px-7 py-3 text-base hover:opacity-90 transition-opacity"
             >
               Commencer gratuitement <ArrowRight className="w-4 h-4" />
-            </button>
+            </Link>
           </div>
         </div>
       </section>

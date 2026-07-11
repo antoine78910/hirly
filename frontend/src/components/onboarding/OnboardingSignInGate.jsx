@@ -1,6 +1,6 @@
+import { Link } from "react-router-dom";
 import { Button } from "../ui/button";
 import { BRAND } from "../../lib/brand";
-import { startGoogleLogin } from "../../lib/auth";
 import { ob } from "./onboardingTheme";
 
 export default function OnboardingSignInGate() {
@@ -9,15 +9,14 @@ export default function OnboardingSignInGate() {
       <p className="font-display font-bold text-lg text-zinc-900 mb-4">{BRAND.NAME}</p>
       <p className="text-zinc-900 font-semibold text-lg">Sign in to save your progress</p>
       <p className={`text-sm ${ob.muted} mt-2 leading-relaxed`}>
-        You can preview the onboarding flow. To upload your resume and start swiping, connect with Google.
+        You can preview the onboarding flow. To upload your resume and start swiping, sign in with Google or email.
       </p>
       <Button
-        type="button"
+        asChild
         className="mt-6 w-full h-12 rounded-full gradient-linkedin hover:opacity-90 text-white font-semibold"
-        onClick={() => startGoogleLogin("/onboarding")}
         data-testid="onboarding-signin-btn"
       >
-        Continue with Google
+        <Link to="/signin?next=%2Fonboarding">Sign in</Link>
       </Button>
     </div>
   );
