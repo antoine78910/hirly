@@ -564,10 +564,10 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang }) {
         scale: 1 - index * 0.03,
         translateY: index * 10,
         zIndex: 10 - index,
-        touchAction: flipped ? "pan-y" : "none",
+        touchAction: "pan-y",
         pointerEvents: isTop ? "auto" : "none",
       }}
-      drag={isTop && !flipped ? "x" : false}
+      drag={isTop ? "x" : false}
       dragDirectionLock
       dragMomentum={false}
       dragElastic={0.6}

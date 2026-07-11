@@ -8805,7 +8805,7 @@ async def admin_overview(admin: User = Depends(require_admin_user)):
 
 @api_router.get("/admin/users")
 async def admin_list_users(admin: User = Depends(require_admin_user)):
-    users, profiles, _swipes, applications, _jobs = await _admin_base_data(include_swipes=False)
+    users, profiles, swipes, applications, _jobs = await _admin_base_data(include_swipes=True)
     profile_map = {item.get("user_id"): item for item in profiles}
     app_counts: Dict[str, int] = {}
     last_app_at: Dict[str, Any] = {}
@@ -8818,11 +8818,40 @@ async def admin_list_users(admin: User = Depends(require_admin_user)):
         if not last_app_at.get(uid) or (_parse_dt(candidate) or datetime.min.replace(tzinfo=timezone.utc)) > (_parse_dt(last_app_at[uid]) or datetime.min.replace(tzinfo=timezone.utc)):
             last_app_at[uid] = candidate
 
+    swipe_counts: Dict[str, int] = {}
+    right_swipe_counts: Dict[str, int] = {}
+    left_swipe_counts: Dict[str, int] = {}
+    last_swipe_at: Dict[str, Any] = {}
+    for swipe_doc in swipes:
+        uid = swipe_doc.get("user_id")
+        if not uid:
+            continue
+        swipe_counts[uid] = swipe_counts.get(uid, 0) + 1
+        if swipe_doc.get("direction") == "right":
+            right_swipe_counts[uid] = right_swipe_counts.get(uid, 0) + 1
+        elif swipe_doc.get("direction") == "left":
+            left_swipe_counts[uid] = left_swipe_counts.get(uid, 0) + 1
+        candidate = swipe_doc.get("updated_at") or swipe_doc.get("created_at")
+        if not last_swipe_at.get(uid) or (_parse_dt(candidate) or datetime.min.replace(tzinfo=timezone.utc)) > (_parse_dt(last_swipe_at[uid]) or datetime.min.replace(tzinfo=timezone.utc)):
+            last_swipe_at[uid] = candidate
+
     rows = []
     for user_doc in users:
         uid = user_doc.get("user_id")
         profile = profile_map.get(uid)
         billing = _billing_status_payload(user_doc)
+        activity_candidates = [
+            last_app_at.get(uid),
+            last_swipe_at.get(uid),
+            (profile or {}).get("updated_at"),
+            user_doc.get("updated_at"),
+            user_doc.get("created_at"),
+        ]
+        last_active_at = max(
+            (value for value in activity_candidates if value),
+            key=lambda value: _parse_dt(value) or datetime.min.replace(tzinfo=timezone.utc),
+            default=None,
+        )
         rows.append({
             "user_id": uid,
             "email": user_doc.get("email"),
@@ -8831,7 +8860,11 @@ async def admin_list_users(admin: User = Depends(require_admin_user)):
             "profile_completion": _profile_completion(profile),
             "cv_uploaded": bool((profile or {}).get("cv_text")),
             "total_applications": app_counts.get(uid, 0),
-            "last_active_at": last_app_at.get(uid) or (profile or {}).get("updated_at") or user_doc.get("created_at"),
+            "total_swipes": swipe_counts.get(uid, 0),
+            "right_swipes": right_swipe_counts.get(uid, 0),
+            "left_swipes": left_swipe_counts.get(uid, 0),
+            "last_swipe_at": last_swipe_at.get(uid),
+            "last_active_at": last_active_at,
             "created_at": user_doc.get("created_at"),
             "plan": billing.get("plan"),
             "is_premium": billing.get("is_premium"),

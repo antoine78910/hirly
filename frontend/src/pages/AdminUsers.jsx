@@ -95,7 +95,7 @@ export default function AdminUsers() {
 
       {!accessDenied ? (
         <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
-          <table className="w-full min-w-[980px] text-left text-sm">
+          <table className="w-full min-w-[1080px] text-left text-sm">
             <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
               <tr>
                 <th className="px-4 py-3">Email</th>
@@ -105,13 +105,14 @@ export default function AdminUsers() {
                 <th className="px-4 py-3">Profile</th>
                 <th className="px-4 py-3">CV</th>
                 <th className="px-4 py-3">Applications</th>
+                <th className="px-4 py-3">Swipes</th>
                 <th className="px-4 py-3">Demo</th>
                 <th className="px-4 py-3">Last active</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
               {loading ? (
-                <tr><td className="px-4 py-8 text-center text-zinc-500" colSpan={9}><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>
+                <tr><td className="px-4 py-8 text-center text-zinc-500" colSpan={10}><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>
               ) : visibleUsers.length ? visibleUsers.map((user) => (
                 <tr key={user.user_id} className="hover:bg-zinc-50">
                   <td className="px-4 py-3">
@@ -126,11 +127,15 @@ export default function AdminUsers() {
                   <td className="px-4 py-3">{user.profile_completion || 0}%</td>
                   <td className="px-4 py-3">{user.cv_uploaded ? "Yes" : "No"}</td>
                   <td className="px-4 py-3">{user.total_applications || 0}</td>
+                  <td className="px-4 py-3">
+                    <span className="font-semibold text-zinc-800">{user.total_swipes || 0}</span>
+                    <p className="mt-0.5 text-xs text-zinc-400">{user.right_swipes || 0} right · {user.left_swipes || 0} left</p>
+                  </td>
                   <td className="px-4 py-3">{user.demo_account ? "Yes" : "—"}</td>
                   <td className="px-4 py-3">{fmtDate(user.last_active_at || user.created_at)}</td>
                 </tr>
               )) : (
-                <tr><td className="px-4 py-8 text-center text-zinc-500" colSpan={9}>No users found.</td></tr>
+                <tr><td className="px-4 py-8 text-center text-zinc-500" colSpan={10}>No users found.</td></tr>
               )}
             </tbody>
           </table>

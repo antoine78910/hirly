@@ -55,7 +55,7 @@ export default function JobDescriptionDialog({ job, t, lang, className = "" }) {
                 {location}
               </span>
             </div>
-            <DialogTitle className="font-display text-2xl font-black leading-tight text-white">
+            <DialogTitle className="font-display text-2xl font-black leading-tight text-violet-300">
               {title}
             </DialogTitle>
             <DialogDescription className="text-sm text-sprout-muted">
@@ -71,7 +71,7 @@ export default function JobDescriptionDialog({ job, t, lang, className = "" }) {
                 <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-sprout-mint">
                   {t("swipe.fullOfferDescription")}
                 </h3>
-                <p className="whitespace-pre-wrap text-sm leading-7 text-sprout-muted">
+                <p className="whitespace-pre-wrap text-sm leading-7 text-white">
                   {fullDescription}
                 </p>
               </section>
@@ -84,10 +84,10 @@ export default function JobDescriptionDialog({ job, t, lang, className = "" }) {
                     <h3 className="text-sm font-bold uppercase tracking-wide text-white">
                       {section.title}
                     </h3>
-                    <ul className="mt-3 space-y-2 text-sm leading-6 text-sprout-muted">
+                    <ul className="mt-3 space-y-2 text-sm leading-6 text-white">
                       {section.bullets.map((bullet, index) => (
                         <li key={`${section.title}-${index}`} className="flex items-start gap-2">
-                          <span className="mt-2 text-[8px] text-sprout-mint">●</span>
+                          <span className="mt-2 text-[8px] text-sprout-mint">{"\u2022"}</span>
                           <span>{bullet}</span>
                         </li>
                       ))}
