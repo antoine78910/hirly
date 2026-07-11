@@ -245,6 +245,11 @@ otp_length = 8
 otp_expiry = 3600
 
 # Production: Resend SMTP (Dashboard → Authentication → Emails → SMTP Settings)
+# If port 465 fails, try port 587 with the same host/user/password.
+# Also add redirect URLs under Authentication → URL Configuration, e.g.:
+#   http://localhost:3000/**
+#   https://tryhirly.com/**
+#   https://app.tryhirly.com/**
 # [auth.email.smtp]
 # enabled = true
 # host = "smtp.resend.com"

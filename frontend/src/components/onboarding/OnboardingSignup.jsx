@@ -51,7 +51,9 @@ const COPY = {
     google: "Sign up with Google",
     verifyTitle: "Check your email",
     verifyBody: "We sent a verification link to",
+    verifyBodyPending: "We need to verify",
     verifyHint: "Open the link to confirm your account, then you'll continue onboarding automatically.",
+    emailDispatchFailed: "We couldn't send the verification email. Tap \"Resend email\" below, or try signing up with Google.",
     resend: "Resend email",
     resending: "Sending…",
     resendSuccess: "Verification email sent again.",
@@ -80,7 +82,9 @@ const COPY = {
     google: "S'inscrire avec Google",
     verifyTitle: "Vérifiez votre e-mail",
     verifyBody: "Nous avons envoyé un lien de confirmation à",
+    verifyBodyPending: "Nous devons vérifier",
     verifyHint: "Ouvrez le lien pour confirmer votre compte, puis l'onboarding reprendra automatiquement.",
+    emailDispatchFailed: "Impossible d'envoyer l'e-mail de vérification. Appuyez sur « Renvoyer l'e-mail » ci-dessous, ou inscrivez-vous avec Google.",
     resend: "Renvoyer l'e-mail",
     resending: "Envoi…",
     resendSuccess: "E-mail de vérification renvoyé.",
@@ -100,6 +104,10 @@ const COPY = {
 
 const ONBOARDING_RETURN_PATH = "/onboarding?step=jobSearch";
 
+function isConfirmationEmailSendError(message = "") {
+  return /confirmation mail|confirmation email|error sending confirmation/i.test(message);
+}
+
 export default function OnboardingSignup({ onClose, lang = "en" }) {
   const copy = useMemo(() => COPY[lang === "fr" ? "fr" : "en"], [lang]);
   const { setUser, setHasProfile, setHasPreferences } = useAuth();
@@ -110,6 +118,7 @@ export default function OnboardingSignup({ onClose, lang = "en" }) {
   const [resending, setResending] = useState(false);
   const [screen, setScreen] = useState("form");
   const [error, setError] = useState("");
+  const [emailDispatchFailed, setEmailDispatchFailed] = useState(false);
 
   useEffect(() => {
     const prev = document.documentElement.style.overflow;
@@ -188,17 +197,30 @@ export default function OnboardingSignup({ onClose, lang = "en" }) {
           },
         },
       });
-      if (authError) throw authError;
+      if (authError) {
+        if (isConfirmationEmailSendError(authError.message || "")) {
+          setEmailDispatchFailed(true);
+          setScreen("verify");
+          setError(copy.emailDispatchFailed);
+          return;
+        }
+        throw authError;
+      }
 
       if (data?.session) {
         const ok = await finishSession(data.session);
         if (ok) return;
       }
 
+      setEmailDispatchFailed(false);
       setScreen("verify");
     } catch (err) {
       const message = err?.message || "";
-      if (/already registered|already been registered|user already registered/i.test(message)) {
+      if (isConfirmationEmailSendError(message)) {
+        setEmailDispatchFailed(true);
+        setScreen("verify");
+        setError(copy.emailDispatchFailed);
+      } else if (/already registered|already been registered|user already registered/i.test(message)) {
         setError(copy.alreadyRegistered);
       } else {
         setError(message || copy.signupFailed);
@@ -221,6 +243,7 @@ export default function OnboardingSignup({ onClose, lang = "en" }) {
         },
       });
       if (resendError) throw resendError;
+      setEmailDispatchFailed(false);
       toast.success(copy.resendSuccess);
     } catch (err) {
       setError(err?.message || copy.signupFailed);
@@ -252,11 +275,15 @@ export default function OnboardingSignup({ onClose, lang = "en" }) {
             </div>
             <h2 className="font-display text-xl font-bold tracking-tight">{copy.verifyTitle}</h2>
             <p className="mt-3 text-sm leading-relaxed text-zinc-600">
-              {copy.verifyBody}{" "}
+              {emailDispatchFailed ? copy.verifyBodyPending : copy.verifyBody}{" "}
               <span className="font-semibold text-zinc-900">{email.trim()}</span>.
             </p>
             <p className="mt-2 text-sm leading-relaxed text-zinc-500">{copy.verifyHint}</p>
-            {error ? <p className="mt-4 text-sm font-medium text-red-600">{error}</p> : null}
+            {error ? (
+              <p className={`mt-4 rounded-xl px-4 py-3 text-sm font-medium ${emailDispatchFailed ? "bg-amber-50 text-amber-900" : "text-red-600"}`}>
+                {error}
+              </p>
+            ) : null}
             <button
               type="button"
               onClick={handleResendVerification}
@@ -271,6 +298,7 @@ export default function OnboardingSignup({ onClose, lang = "en" }) {
               onClick={() => {
                 setScreen("form");
                 setError("");
+                setEmailDispatchFailed(false);
               }}
               className="mt-3 w-full text-sm font-semibold text-linkedin hover:text-linkedin-dark"
               data-testid="signup-change-email-btn"
@@ -280,6 +308,22 @@ export default function OnboardingSignup({ onClose, lang = "en" }) {
           </div>
         ) : (
           <>
+            <button
+              type="button"
+              onClick={handleGoogleSignup}
+              className="w-full h-12 rounded-full bg-white border border-zinc-200 flex items-center justify-center gap-3 font-semibold text-zinc-900 hover:bg-zinc-50 transition-colors"
+              data-testid="onboarding-signup-btn"
+            >
+              <GoogleIcon />
+              {copy.google}
+            </button>
+
+            <div className="my-5 flex items-center gap-4">
+              <div className="flex-1 h-px bg-zinc-200" />
+              <span className="text-sm text-zinc-500 shrink-0">{copy.or}</span>
+              <div className="flex-1 h-px bg-zinc-200" />
+            </div>
+
             <form onSubmit={handleEmailSignup} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="signup-first-name" className="text-sm font-medium text-zinc-700">
@@ -353,22 +397,6 @@ export default function OnboardingSignup({ onClose, lang = "en" }) {
                 {submitting ? <Loader2 className="mx-auto h-5 w-5 animate-spin" /> : copy.submit}
               </button>
             </form>
-
-            <div className="my-5 flex items-center gap-4">
-              <div className="flex-1 h-px bg-zinc-200" />
-              <span className="text-sm text-zinc-500 shrink-0">{copy.or}</span>
-              <div className="flex-1 h-px bg-zinc-200" />
-            </div>
-
-            <button
-              type="button"
-              onClick={handleGoogleSignup}
-              className="w-full h-12 rounded-full bg-white border border-zinc-200 flex items-center justify-center gap-3 font-semibold text-zinc-900 hover:bg-zinc-50 transition-colors"
-              data-testid="onboarding-signup-btn"
-            >
-              <GoogleIcon />
-              {copy.google}
-            </button>
           </>
         )}
       </div>
