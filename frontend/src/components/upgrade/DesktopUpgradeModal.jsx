@@ -65,7 +65,7 @@ function TierCard({ tier, selected, onSelect, isMonthly, t, lang }) {
       aria-checked={selected}
       data-state={selected ? "on" : "off"}
       onClick={onSelect}
-      className={`relative cursor-pointer rounded-xl border-2 p-2.5 text-center transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/40 sm:p-4 lg:p-6 ${
+      className={`relative cursor-pointer rounded-xl border-2 px-2.5 pb-2.5 pt-5 text-center transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/40 sm:px-4 sm:pb-4 sm:pt-6 lg:px-6 lg:pb-6 lg:pt-7 ${
         selected
           ? "border-sprout-mint bg-card text-card-foreground ring-2 ring-violet-500/20"
           : "border-border bg-card text-card-foreground hover:border-violet-300"
@@ -82,10 +82,10 @@ function TierCard({ tier, selected, onSelect, isMonthly, t, lang }) {
         <div className="text-[10px] font-medium uppercase tracking-wide text-linkedin sm:text-xs">{tier.name}</div>
         <div className="text-base font-bold sm:text-xl lg:text-2xl">{formatMoney(price, lang)}</div>
         <div className="text-[10px] text-muted-foreground sm:text-xs">{period}</div>
-        <div className="hidden text-[11px] font-medium leading-tight [overflow-wrap:anywhere] sm:block sm:text-xs">
+        <div className="text-[9px] font-semibold leading-tight text-foreground [overflow-wrap:anywhere] sm:text-xs">
           {t("upgrade.applications", { n: applicationCount })}
         </div>
-        <div className="hidden text-[10px] leading-tight text-muted-foreground sm:block sm:text-[11px]">
+        <div className="text-[9px] leading-tight text-muted-foreground [overflow-wrap:anywhere] sm:text-[11px]">
           {t("upgrade.pricePerApplication", { price: formatUnitMoney(unitPrice, lang) })}
         </div>
       </div>
@@ -245,7 +245,7 @@ export default function DesktopUpgradeModal({ open, onClose }) {
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose?.()}>
       <DialogContent
-        className="sprout fixed top-[50%] left-[50%] z-50 flex h-dvh w-full max-w-full translate-x-[-50%] translate-y-[-50%] flex-col gap-0 overflow-hidden rounded-lg border bg-background p-0 shadow-lg sm:h-[95vh] sm:max-w-[95vw] lg:max-w-6xl"
+        className="sprout fixed top-[50%] left-[50%] z-50 flex h-auto max-h-dvh w-full max-w-full translate-x-[-50%] translate-y-[-50%] flex-col gap-0 overflow-hidden rounded-lg border bg-background p-0 shadow-lg sm:h-[95vh] sm:max-w-[95vw] lg:max-w-6xl"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <DialogTitle className="sr-only">{t("upgrade.title")}</DialogTitle>
@@ -257,7 +257,7 @@ export default function DesktopUpgradeModal({ open, onClose }) {
           <Logo size={32} className="h-8 w-auto" />
         </div>
 
-        <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div className="flex min-h-0 flex-col lg:flex-1 lg:overflow-hidden">
           <div className="hidden w-1/3 flex-col justify-between border-r bg-secondary/30 p-8 lg:flex">
             <div className="flex flex-1 flex-col justify-center">
               <div className="flex flex-col gap-6">
@@ -278,14 +278,14 @@ export default function DesktopUpgradeModal({ open, onClose }) {
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 lg:p-10">
-              <div className="mb-3 flex justify-center lg:hidden">
+          <div className="flex min-h-0 flex-col overflow-y-auto overscroll-contain lg:min-h-0 lg:flex-1 lg:overflow-hidden">
+            <div className="p-4 sm:p-6 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain lg:p-10">
+              <div className="mb-2 flex justify-center lg:hidden">
                 <Logo size={28} className="h-7 w-auto sm:h-8" />
               </div>
 
               <div className="mx-auto max-w-3xl space-y-3 sm:space-y-6">
-                <div className="pt-1 text-center sm:pt-8">
+                <div className="text-center sm:pt-8">
                   <div className="mb-2 inline-flex items-center rounded-full bg-sprout-mint-soft px-2.5 py-1 text-xs font-medium text-linkedin sm:mb-4 sm:px-3 sm:py-1.5 sm:text-sm">
                     <Star className="mr-1.5 size-3.5 sm:mr-2 sm:size-4" aria-hidden />
                     {t("upgrade.limitedOffer")}
