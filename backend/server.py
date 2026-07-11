@@ -1865,22 +1865,49 @@ async def _stripe_customer_for_user(user_doc: Dict[str, Any]) -> str:
     return customer_id
 
 
+def _subscription_primary_item(subscription: Any) -> Optional[Dict[str, Any]]:
+    try:
+        items = subscription["items"]["data"] if isinstance(subscription, dict) else subscription.items.data
+        if items:
+            item = items[0]
+            return dict(item) if not isinstance(item, dict) else item
+    except Exception:
+        return None
+    return None
+
+
+def _subscription_period_timestamp(subscription: Any, field: str) -> Optional[int]:
+    item = _subscription_primary_item(subscription)
+    if item:
+        value = item.get(field)
+        if value:
+            try:
+                return int(value)
+            except Exception:
+                pass
+    try:
+        value = subscription.get(field) if isinstance(subscription, dict) else getattr(subscription, field, None)
+        return int(value) if value else None
+    except Exception:
+        return None
+
+
 def _period_end_iso(subscription: Any) -> Optional[str]:
-    value = subscription.get("current_period_end") if isinstance(subscription, dict) else getattr(subscription, "current_period_end", None)
+    value = _subscription_period_timestamp(subscription, "current_period_end")
     if not value:
         return None
     try:
-        return datetime.fromtimestamp(int(value), tz=timezone.utc).isoformat()
+        return datetime.fromtimestamp(value, tz=timezone.utc).isoformat()
     except Exception:
         return None
 
 
 def _period_start_iso(subscription: Any) -> Optional[str]:
-    value = subscription.get("current_period_start") if isinstance(subscription, dict) else getattr(subscription, "current_period_start", None)
+    value = _subscription_period_timestamp(subscription, "current_period_start")
     if not value:
         return None
     try:
-        return datetime.fromtimestamp(int(value), tz=timezone.utc).isoformat()
+        return datetime.fromtimestamp(value, tz=timezone.utc).isoformat()
     except Exception:
         return None
 
@@ -1936,11 +1963,91 @@ def _stripe_configured() -> bool:
     return bool(os.environ.get("STRIPE_SECRET_KEY", "").strip())
 
 
+def _discover_stripe_subscription(customer_id: Optional[str]) -> Optional[Any]:
+    """Find an active/trialing subscription when checkout sync did not persist the id yet."""
+    if not customer_id or not _stripe_configured():
+        return None
+    try:
+        _stripe_secret_key()
+        for status in ("active", "trialing", "past_due"):
+            result = stripe.Subscription.list(customer=customer_id, status=status, limit=1)
+            data = result.get("data") if isinstance(result, dict) else getattr(result, "data", None)
+            if data:
+                return data[0]
+    except Exception as exc:
+        logger.warning(
+            "stripe_subscription_discover_failed customer_id=%s error=%s",
+            customer_id,
+            str(exc)[:200],
+        )
+    return None
+
+
+async def _count_right_swipes_in_billing_period(user_id: str, billing: Dict[str, Any]) -> int:
+    period_start, period_end = _billing_period_bounds(billing)
+    rows = await db.swipes.find(
+        {"user_id": user_id, "direction": "right"},
+        {"_id": 0, "created_at": 1},
+    ).to_list(5000)
+    return _count_records_in_period(rows, period_start, period_end)
+
+
+async def _repair_premium_credits_if_needed(user_id: str, user_doc: Dict[str, Any]) -> Dict[str, Any]:
+    """Grant missing credits for paid users when Stripe sync/webhook did not initialize them."""
+    billing = _billing_from_user(user_doc)
+    status = billing.get("subscription_status") or "none"
+    if status not in {"active", "trialing"}:
+        return user_doc
+
+    allowance = _billing_credit_limit(
+        billing.get("plan"),
+        True,
+        interval=billing.get("interval"),
+        source=billing.get("source"),
+    )
+    if allowance <= 0:
+        return user_doc
+
+    remaining = int(billing.get("credits_remaining") or 0)
+    if remaining > 0:
+        return user_doc
+
+    total = int(billing.get("credits_total") or 0)
+    if total > 0:
+        used = await _count_right_swipes_in_billing_period(user_id, billing)
+        if used > 0:
+            return user_doc
+
+    now = datetime.now(timezone.utc).isoformat()
+    period_key = _billing_credit_period_key(billing)
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "billing.credits_total": allowance,
+            "billing.credits_remaining": allowance,
+            "billing.credits_period_key": period_key,
+            "billing.updated_at": now,
+        }},
+    )
+    logger.info(
+        "billing_credits_repaired user_id=%s plan=%s allowance=%s previous_total=%s",
+        user_id,
+        billing.get("plan"),
+        allowance,
+        total,
+    )
+    return await db.users.find_one({"user_id": user_id}, {"_id": 0}) or user_doc
+
+
 async def _refresh_billing_from_stripe(user_doc: Dict[str, Any]) -> tuple[Dict[str, Any], Optional[str]]:
     billing = _billing_from_user(user_doc)
     subscription_id = billing.get("stripe_subscription_id")
     if str(subscription_id or "").startswith("master_code_"):
         return user_doc, None
+    if not subscription_id:
+        discovered = _discover_stripe_subscription(billing.get("stripe_customer_id"))
+        if discovered:
+            subscription_id = discovered.get("id") if isinstance(discovered, dict) else getattr(discovered, "id", None)
     if not subscription_id or not _stripe_configured():
         return user_doc, None
     try:
@@ -2059,9 +2166,23 @@ async def redeem_billing_master_code(body: BillingMasterCodeRequest, user: User 
 async def billing_status(user: User = Depends(get_current_user)):
     user_doc = await _get_user_doc(user)
     user_doc, warning = await _refresh_billing_from_stripe(user_doc)
+    user_doc = await _repair_premium_credits_if_needed(user.user_id, user_doc)
     payload = _billing_status_payload(user_doc)
     if warning:
         payload["warning"] = warning
+    return payload
+
+
+@api_router.post("/billing/sync")
+async def sync_billing(user: User = Depends(get_current_user)):
+    """Force a Stripe refresh and repair missing credit grants after checkout."""
+    user_doc = await _get_user_doc(user)
+    user_doc, warning = await _refresh_billing_from_stripe(user_doc)
+    user_doc = await _repair_premium_credits_if_needed(user.user_id, user_doc)
+    payload = _billing_status_payload(user_doc)
+    if warning:
+        payload["warning"] = warning
+    payload["synced"] = True
     return payload
 
 
@@ -2146,6 +2267,7 @@ async def confirm_billing_checkout(
     await _apply_checkout_session_billing(session_obj, fallback_user_id=user.user_id)
     user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0}) or user_doc
     user_doc, _warning = await _refresh_billing_from_stripe(user_doc)
+    user_doc = await _repair_premium_credits_if_needed(user.user_id, user_doc)
     return _billing_status_payload(user_doc)
 
 

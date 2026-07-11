@@ -28,7 +28,7 @@ export async function syncBillingAfterCheckout({
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
-      const { data } = await api.get("/billing/status");
+      const { data } = await api.post(attempt === 0 ? "/billing/sync" : "/billing/status");
       if (data) {
         notifyBillingUpdated(data);
         if (data.is_premium && Number(data.credits_remaining) > 0) {
@@ -47,4 +47,11 @@ export async function syncBillingAfterCheckout({
   }
 
   return null;
+}
+
+/** Refresh billing from Stripe and repair missing credit grants. */
+export async function syncBillingStatus() {
+  const { data } = await api.post("/billing/sync");
+  if (data) notifyBillingUpdated(data);
+  return data;
 }

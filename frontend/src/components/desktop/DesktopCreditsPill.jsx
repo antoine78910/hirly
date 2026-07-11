@@ -5,6 +5,7 @@ import { useUpgradeModal } from "../../context/UpgradeModalContext";
 import { useAppLocale } from "../../context/AppLocaleContext";
 import { formatPlanTier } from "../../lib/billingPlan";
 import { BILLING_UPDATED } from "../../lib/billingEvents";
+import { syncBillingStatus } from "../../lib/billingSync";
 import {
   DEMO_ACCOUNT_CHANGED,
   DEMO_CREDITS_CHANGED,
@@ -54,17 +55,32 @@ export function useSwipeCredits() {
 
     setCredits(0);
     setLoading(true);
+    let cancelled = false;
     api.get("/billing/status")
-      .then(({ data }) => {
+      .then(async ({ data }) => {
+        if (cancelled) return;
         setIsPremium(Boolean(data?.is_premium));
         setCredits(Number(data?.credits_remaining ?? 0));
         setPlanTier(data?.plan_tier || data?.plan || null);
+        if (Boolean(data?.is_premium) && Number(data?.credits_remaining ?? 0) <= 0) {
+          const synced = await syncBillingStatus().catch(() => null);
+          if (cancelled || !synced) return;
+          setIsPremium(Boolean(synced?.is_premium));
+          setCredits(Number(synced?.credits_remaining ?? 0));
+          setPlanTier(synced?.plan_tier || synced?.plan || null);
+        }
       })
       .catch(() => {
+        if (cancelled) return;
         setIsPremium(false);
         setCredits(0);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [demoAccount]);
 
   return { credits, isPremium, planTier, loading, displayCredits: credits, demoAccount };

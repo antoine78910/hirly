@@ -187,3 +187,55 @@ def test_billing_credit_limit_onboarding_matches_app_tier_pricing():
     at the same price; onboarding quarterly (59.99€) matches Ultra's 600."""
     assert server._billing_credit_limit("monthly", True, source="onboarding") == 200
     assert server._billing_credit_limit("quarterly", True, source="onboarding") == 600
+
+
+def test_period_iso_reads_subscription_item_fields():
+    subscription = {
+        "items": {
+            "data": [
+                {
+                    "current_period_start": 1_700_000_000,
+                    "current_period_end": 1_700_259_200,
+                }
+            ]
+        }
+    }
+    assert server._period_start_iso(subscription) == "2023-11-14T22:13:20+00:00"
+    assert server._period_end_iso(subscription) == "2023-11-17T22:13:20+00:00"
+
+
+def test_repair_premium_credits_grants_missing_allowance(monkeypatch):
+    user_rows = _Collection([
+        {
+            "user_id": "user_1",
+            "billing": {
+                "subscription_status": "active",
+                "plan": "monthly",
+                "interval": "monthly",
+                "source": "onboarding",
+                "stripe_subscription_id": "sub_123",
+                "credits_total": 0,
+                "credits_remaining": 0,
+            },
+        }
+    ])
+    swipe_rows = _Collection([])
+
+    class _DB:
+        users = user_rows
+        swipes = swipe_rows
+
+    async def _find(query, projection=None):
+        rows = []
+        for row in swipe_rows.rows:
+            if all(row.get(key) == value for key, value in query.items()):
+                rows.append(row)
+        return rows
+
+    swipe_rows.find = _find
+    monkeypatch.setattr(server, "db", _DB())
+
+    repaired = asyncio.run(server._repair_premium_credits_if_needed("user_1", user_rows.rows[0]))
+    billing = repaired["billing"]
+    assert billing["credits_total"] == 200
+    assert billing["credits_remaining"] == 200
