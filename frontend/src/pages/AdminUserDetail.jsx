@@ -15,15 +15,14 @@ import { toast } from "sonner";
 import { api } from "../lib/api";
 import { adminApiErrorMessage } from "../lib/adminApi";
 import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
+import {
+  ONBOARDING_ANSWER_LABELS,
+  fmtDate,
+  fmtDuration,
+  formatOnboardingAnswerValue,
+} from "../lib/adminUserAnalytics";
 
 const BRAND_VIOLET = "#7C3AED";
-
-const fmtDate = (value) => {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
-  return date.toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-};
 
 const fmtDay = (iso) => {
   if (!iso) return "";
@@ -98,46 +97,6 @@ function DailyUsageChart({ data }) {
       </ResponsiveContainer>
     </div>
   );
-}
-
-const fmtDuration = (minutes) => {
-  const total = Math.round(Number(minutes) || 0);
-  if (total <= 0) return "—";
-  if (total < 60) return `${total}m`;
-  const hours = Math.floor(total / 60);
-  const rest = total % 60;
-  return rest ? `${hours}h ${rest}m` : `${hours}h`;
-};
-
-const ONBOARDING_ANSWER_LABELS = {
-  job_search_status: "Job search status",
-  onboarding_location: "Location",
-  contract_type: "Contract type",
-  tried_other_apps: "Tried other apps",
-  categories: "Job categories",
-  suggested_categories: "Suggested categories",
-  selected_roles: "Selected roles",
-  interviews_per_week: "Target interviews / week",
-  acquisition_source: "Acquisition source",
-  referral_code: "Referral code",
-  salary_min: "Salary min",
-  salary_max: "Salary max",
-};
-
-function formatOnboardingAnswerValue(key, value) {
-  if (value == null || value === "") return "—";
-  if (Array.isArray(value)) {
-    if (!value.length) return "—";
-    return value
-      .map((item) => (typeof item === "object" ? item?.label || item?.id || JSON.stringify(item) : String(item)))
-      .join(", ");
-  }
-  if (typeof value === "object") return JSON.stringify(value);
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  if ((key === "salary_min" || key === "salary_max") && typeof value === "number") {
-    return `$${value.toLocaleString("en-US")}`;
-  }
-  return String(value);
 }
 
 function OnboardingFunnelBadge({ progress }) {

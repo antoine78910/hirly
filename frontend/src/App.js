@@ -36,6 +36,7 @@ import AdminApplications from "@/pages/AdminApplications";
 import AdminApplicationDetail from "@/pages/AdminApplicationDetail";
 import AdminOverview from "@/pages/AdminOverview";
 import AdminUsers from "@/pages/AdminUsers";
+import AdminUserAnalytics from "@/pages/AdminUserAnalytics";
 import AdminUserDetail from "@/pages/AdminUserDetail";
 import AdminAnalytics from "@/pages/AdminAnalytics";
 import AdminInfluencers from "@/pages/AdminInfluencers";
@@ -175,6 +176,7 @@ function AppRouter() {
         <Route path="/admin/applications" element={<AdminPage><AdminApplications /></AdminPage>} />
         <Route path="/admin/applications/:id" element={<AdminPage><AdminApplicationDetail /></AdminPage>} />
         <Route path="/admin/users" element={<AdminPage><AdminUsers /></AdminPage>} />
+        <Route path="/admin/user-analytics" element={<AdminPage><AdminUserAnalytics /></AdminPage>} />
         <Route path="/admin/users/:userId" element={<AdminPage><AdminUserDetail /></AdminPage>} />
         <Route path="/admin/influencers" element={<AdminPage><AdminInfluencers /></AdminPage>} />
         <Route path="/admin/creators" element={<AdminPage><AdminCreators /></AdminPage>} />

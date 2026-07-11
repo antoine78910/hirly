@@ -8954,6 +8954,155 @@ def _onboarding_progress_for_events(user_events: List[Dict[str, Any]]) -> Dict[s
     }
 
 
+def _profile_onboarding_answers(profile: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Merge stored onboarding extras with profile preferences (fallback when checkout interrupted)."""
+    if not profile:
+        return {}
+    extras = ((profile.get("extras") or {}).get("onboarding") or {})
+    answers: Dict[str, Any] = dict(extras)
+    if not answers.get("onboarding_location") and profile.get("target_location"):
+        answers["onboarding_location"] = profile.get("target_location")
+    if not answers.get("selected_roles") and profile.get("target_roles"):
+        answers["selected_roles"] = profile.get("target_roles")
+    elif not answers.get("selected_roles") and profile.get("target_role"):
+        answers["selected_roles"] = [profile.get("target_role")]
+    if not answers.get("contract_type") and profile.get("contract_type"):
+        answers["contract_type"] = profile.get("contract_type")
+    if not answers.get("seniority") and profile.get("seniority"):
+        answers["seniority"] = profile.get("seniority")
+    return answers
+
+
+async def _admin_user_analytics_payload() -> Dict[str, Any]:
+    users, profiles, swipes, applications, _jobs = await _admin_base_data(include_swipes=True)
+    events = await _analytics_events()
+    events_by_user = _group_events_by_user(events)
+    profile_map = {item.get("user_id"): item for item in profiles}
+
+    app_counts: Dict[str, int] = {}
+    last_app_at: Dict[str, Any] = {}
+    for app_doc in applications:
+        uid = app_doc.get("user_id")
+        if not uid:
+            continue
+        app_counts[uid] = app_counts.get(uid, 0) + 1
+        candidate = app_doc.get("updated_at") or app_doc.get("created_at")
+        if not last_app_at.get(uid) or (_parse_dt(candidate) or datetime.min.replace(tzinfo=timezone.utc)) > (_parse_dt(last_app_at[uid]) or datetime.min.replace(tzinfo=timezone.utc)):
+            last_app_at[uid] = candidate
+
+    swipe_counts: Dict[str, int] = {}
+    right_swipe_counts: Dict[str, int] = {}
+    left_swipe_counts: Dict[str, int] = {}
+    last_swipe_at: Dict[str, Any] = {}
+    for swipe_doc in swipes:
+        uid = swipe_doc.get("user_id")
+        if not uid:
+            continue
+        swipe_counts[uid] = swipe_counts.get(uid, 0) + 1
+        if swipe_doc.get("direction") == "right":
+            right_swipe_counts[uid] = right_swipe_counts.get(uid, 0) + 1
+        elif swipe_doc.get("direction") == "left":
+            left_swipe_counts[uid] = left_swipe_counts.get(uid, 0) + 1
+        candidate = swipe_doc.get("updated_at") or swipe_doc.get("created_at")
+        if not last_swipe_at.get(uid) or (_parse_dt(candidate) or datetime.min.replace(tzinfo=timezone.utc)) > (_parse_dt(last_swipe_at[uid]) or datetime.min.replace(tzinfo=timezone.utc)):
+            last_swipe_at[uid] = candidate
+
+    onboarding_dropoff_counts: Dict[str, int] = {}
+    onboarding_never_started = 0
+    onboarding_in_progress = 0
+    onboarding_completed_count = 0
+    total_time_minutes = 0.0
+
+    rows = []
+    for user_doc in users:
+        uid = user_doc.get("user_id")
+        profile = profile_map.get(uid)
+        billing = _billing_status_payload(user_doc)
+        user_events = events_by_user.get(uid, [])
+        activity_stats = _estimate_time_spent([event.get("created_at") for event in user_events])
+        total_time_minutes += activity_stats["minutes"]
+        last_event_at = max(
+            (event.get("created_at") for event in user_events if event.get("created_at")),
+            key=lambda value: _parse_dt(value) or datetime.min.replace(tzinfo=timezone.utc),
+            default=None,
+        )
+        onboarding_progress = _onboarding_progress_for_events(user_events)
+        onboarding_answers = _profile_onboarding_answers(profile)
+
+        if onboarding_progress["completed"]:
+            onboarding_completed_count += 1
+        elif onboarding_progress["drop_off_step"]:
+            onboarding_dropoff_counts[onboarding_progress["drop_off_step"]] = onboarding_dropoff_counts.get(onboarding_progress["drop_off_step"], 0) + 1
+            onboarding_in_progress += 1
+        else:
+            onboarding_never_started += 1
+
+        activity_candidates = [
+            last_app_at.get(uid),
+            last_swipe_at.get(uid),
+            last_event_at,
+            user_doc.get("last_login_at"),
+            (profile or {}).get("updated_at"),
+            user_doc.get("updated_at"),
+            user_doc.get("created_at"),
+        ]
+        last_active_at = max(
+            (value for value in activity_candidates if value),
+            key=lambda value: _parse_dt(value) or datetime.min.replace(tzinfo=timezone.utc),
+            default=None,
+        )
+        rows.append({
+            "user_id": uid,
+            "email": user_doc.get("email"),
+            "name": user_doc.get("name"),
+            "demo_account": bool(user_doc.get("demo_account")),
+            "cv_uploaded": bool((profile or {}).get("cv_text")),
+            "profile_completion": _profile_completion(profile),
+            "total_applications": app_counts.get(uid, 0),
+            "total_swipes": swipe_counts.get(uid, 0),
+            "right_swipes": right_swipe_counts.get(uid, 0),
+            "left_swipes": left_swipe_counts.get(uid, 0),
+            "last_swipe_at": last_swipe_at.get(uid),
+            "last_active_at": last_active_at,
+            "last_login_at": user_doc.get("last_login_at"),
+            "time_spent_minutes": activity_stats["minutes"],
+            "sessions_count": activity_stats["sessions"],
+            "onboarding_progress": onboarding_progress,
+            "onboarding_answers": onboarding_answers,
+            "created_at": user_doc.get("created_at"),
+            "plan": billing.get("plan"),
+            "is_premium": billing.get("is_premium"),
+        })
+
+    rows.sort(key=lambda item: _parse_dt(item.get("last_active_at")) or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+    dropoff_by_step = sorted(
+        (
+            {"step": key, "label": ONBOARDING_STEP_LABELS.get(key, key), "count": count}
+            for key, count in onboarding_dropoff_counts.items()
+        ),
+        key=lambda row: row["count"],
+        reverse=True,
+    )
+    return {
+        "summary": {
+            "total_users": len(rows),
+            "onboarding_completed": onboarding_completed_count,
+            "onboarding_in_progress": onboarding_in_progress,
+            "onboarding_never_started": onboarding_never_started,
+            "avg_time_spent_minutes": round(total_time_minutes / len(rows), 1) if rows else 0,
+            "total_swipes": sum(row["total_swipes"] for row in rows),
+            "total_applications": sum(row["total_applications"] for row in rows),
+        },
+        "onboarding_dropoff": {
+            "by_step": dropoff_by_step,
+            "never_started": onboarding_never_started,
+            "in_progress": onboarding_in_progress,
+            "completed": onboarding_completed_count,
+        },
+        "users": rows,
+    }
+
+
 @api_router.get("/admin/overview")
 async def admin_overview(admin: User = Depends(require_admin_user)):
     users, profiles, _swipes, applications, jobs = await _admin_base_data(include_swipes=False)
@@ -9006,11 +9155,14 @@ async def admin_overview(admin: User = Depends(require_admin_user)):
     }
 
 
+@api_router.get("/admin/user-analytics")
+async def admin_user_analytics(admin: User = Depends(require_admin_user)):
+    return await _admin_user_analytics_payload()
+
+
 @api_router.get("/admin/users")
 async def admin_list_users(admin: User = Depends(require_admin_user)):
     users, profiles, swipes, applications, _jobs = await _admin_base_data(include_swipes=True)
-    events = await _analytics_events()
-    events_by_user = _group_events_by_user(events)
     profile_map = {item.get("user_id"): item for item in profiles}
     app_counts: Dict[str, int] = {}
     last_app_at: Dict[str, Any] = {}
@@ -9045,19 +9197,9 @@ async def admin_list_users(admin: User = Depends(require_admin_user)):
         uid = user_doc.get("user_id")
         profile = profile_map.get(uid)
         billing = _billing_status_payload(user_doc)
-        user_events = events_by_user.get(uid, [])
-        activity_stats = _estimate_time_spent([event.get("created_at") for event in user_events])
-        last_event_at = max(
-            (event.get("created_at") for event in user_events if event.get("created_at")),
-            key=lambda value: _parse_dt(value) or datetime.min.replace(tzinfo=timezone.utc),
-            default=None,
-        )
-        onboarding_progress = _onboarding_progress_for_events(user_events)
         activity_candidates = [
             last_app_at.get(uid),
             last_swipe_at.get(uid),
-            last_event_at,
-            user_doc.get("last_login_at"),
             (profile or {}).get("updated_at"),
             user_doc.get("updated_at"),
             user_doc.get("created_at"),
@@ -9080,11 +9222,6 @@ async def admin_list_users(admin: User = Depends(require_admin_user)):
             "left_swipes": left_swipe_counts.get(uid, 0),
             "last_swipe_at": last_swipe_at.get(uid),
             "last_active_at": last_active_at,
-            "last_login_at": user_doc.get("last_login_at"),
-            "time_spent_minutes": activity_stats["minutes"],
-            "sessions_count": activity_stats["sessions"],
-            "onboarding_completed": onboarding_progress["completed"],
-            "onboarding_drop_off_step_label": onboarding_progress["drop_off_step_label"],
             "created_at": user_doc.get("created_at"),
             "plan": billing.get("plan"),
             "is_premium": billing.get("is_premium"),
@@ -9195,7 +9332,7 @@ async def admin_get_user(user_id: str, admin: User = Depends(require_admin_user)
             for app_doc in apps
         ],
         "onboarding": {
-            "answers": ((profile or {}).get("extras") or {}).get("onboarding") or {},
+            "answers": _profile_onboarding_answers(profile),
             "progress": onboarding_progress,
         },
         "activity": {

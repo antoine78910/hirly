@@ -10,6 +10,7 @@ import {
   MessageSquare,
   Moon,
   Sun,
+  UserSearch,
   Users,
 } from "lucide-react";
 import { BRAND } from "../../lib/brand";
@@ -20,6 +21,7 @@ const navItems = [
   { to: "/admin/overview", label: "Overview", icon: LayoutDashboard },
   { to: "/admin/applications", label: "Applications", icon: ClipboardList },
   { to: "/admin/users", label: "Users", icon: Users },
+  { to: "/admin/user-analytics", label: "User Analytics", icon: UserSearch },
   { to: "/admin/influencers", label: "Influencers", icon: Megaphone },
   { to: "/admin/creators", label: "Creators", icon: GraduationCap },
   { to: "/admin/training", label: "Training", icon: BookOpen },

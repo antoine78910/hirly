@@ -85,16 +85,32 @@ def test_estimate_time_spent_splits_sessions_on_large_gaps():
     assert stats["minutes"] >= 5.5
 
 
-def test_admin_list_users_exposes_activity_fields(monkeypatch):
+def test_admin_user_analytics_exposes_onboarding_and_activity(monkeypatch):
+    fake_db = _fake_db_with_activity()
+    monkeypatch.setattr(server, "db", fake_db)
+
+    async def fake_events():
+        return fake_db.analytics_events.rows
+
+    monkeypatch.setattr(server, "_analytics_events", fake_events)
+
+    response = asyncio.run(server.admin_user_analytics(admin=object()))
+
+    assert response["summary"]["total_users"] == 1
+    user = response["users"][0]
+    assert user["onboarding_answers"]["job_search_status"] == "actively_looking"
+    assert user["onboarding_progress"]["drop_off_step"] == "contractType"
+    assert user["time_spent_minutes"] > 0
+    assert response["onboarding_dropoff"]["in_progress"] == 1
+
+
+def test_admin_list_users_no_longer_includes_analytics_fields(monkeypatch):
     monkeypatch.setattr(server, "db", _fake_db_with_activity())
 
     response = asyncio.run(server.admin_list_users(admin=object()))
     user = response["users"][0]
-
-    assert user["last_login_at"] == "2026-07-11T09:00:00+00:00"
-    assert user["onboarding_completed"] is False
-    assert user["onboarding_drop_off_step_label"] is not None
-    assert user["time_spent_minutes"] > 0
+    assert "time_spent_minutes" not in user
+    assert "onboarding_completed" not in user
 
 
 def test_admin_get_user_exposes_onboarding_and_activity(monkeypatch):
