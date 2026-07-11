@@ -267,8 +267,10 @@ export default function Onboarding() {
           sessionStorage.setItem("hirly.onboarding.checkoutSessionId", checkoutSessionId);
         }
       } else {
-        setStepIndex(STEP_ORDER.indexOf("showcasePricing"));
-        toast("Checkout cancelled");
+        const stepFromUrl = stepParam && STEP_ORDER.includes(stepParam) ? stepParam : "showcasePricing";
+        setStepIndex(STEP_ORDER.indexOf(stepFromUrl));
+        setSearchParams({}, { replace: true });
+        toast(lang === "fr" ? "Paiement annulé" : "Checkout cancelled");
       }
       return;
     }
@@ -299,7 +301,7 @@ export default function Onboarding() {
     if (!devBypassAuth && stepParam && stepParam !== "intro") {
       setSearchParams({}, { replace: true });
     }
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, setSearchParams, lang]);
 
   useEffect(() => {
     if (!user || step !== "signup") return;

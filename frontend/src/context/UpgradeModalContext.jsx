@@ -25,6 +25,10 @@ export function UpgradeModalProvider({ children }) {
     if (!upgradeStatus) return;
 
     const sessionId = params.get("session_id");
+    const isOnboardingRoute = location.pathname === "/onboarding";
+
+    // Onboarding owns Stripe return UX (full-screen paywall, not the in-app upgrade modal).
+    if (isOnboardingRoute) return;
 
     params.delete("upgrade");
     params.delete("checkout");
