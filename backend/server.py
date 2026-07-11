@@ -1842,6 +1842,41 @@ async def _update_user_billing_by_user_id(user_id: str, updates: Dict[str, Any])
         logger.warning("stripe_billing_user_update_no_match user_id=%s keys=%s", user_id, sorted(updates.keys()))
 
 
+async def _finalize_user_billing(user_id: str) -> Optional[Dict[str, Any]]:
+    """Refresh subscription state from Stripe and grant any missing credits."""
+    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not user_doc:
+        return None
+    user_doc, _warning = await _refresh_billing_from_stripe(user_doc)
+    return await _repair_premium_credits_if_needed(user_id, user_doc)
+
+
+async def _resolve_user_id_from_checkout_session(
+    session_obj: Dict[str, Any],
+    *,
+    fallback_user_id: Optional[str] = None,
+) -> Optional[str]:
+    session_user_id = _checkout_session_user_id(session_obj) or fallback_user_id
+    if session_user_id:
+        found = await db.users.find_one({"user_id": session_user_id}, {"_id": 0, "user_id": 1})
+        if found:
+            return session_user_id
+
+    customer_id = session_obj.get("customer")
+    if customer_id:
+        resolved = await _resolve_user_id_for_stripe_customer(customer_id)
+        if resolved:
+            return resolved
+
+    customer_details = session_obj.get("customer_details") or {}
+    checkout_email = (customer_details.get("email") or "").strip().lower()
+    if checkout_email:
+        user_doc = await _find_user_by_email(checkout_email)
+        if user_doc:
+            return user_doc.get("user_id")
+    return None
+
+
 async def _update_user_billing_by_customer_id(customer_id: str, updates: Dict[str, Any]) -> None:
     if not customer_id:
         logger.warning("stripe_billing_customer_update_missing_customer keys=%s", sorted(updates.keys()))
@@ -1849,6 +1884,7 @@ async def _update_user_billing_by_customer_id(customer_id: str, updates: Dict[st
     user_id = await _resolve_user_id_for_stripe_customer(customer_id)
     if user_id:
         await _update_user_billing_by_user_id(user_id, updates)
+        await _finalize_user_billing(user_id)
         return
     logger.warning("stripe_billing_customer_update_no_match customer_id=%s keys=%s", customer_id, sorted(updates.keys()))
 
@@ -1917,12 +1953,27 @@ async def _stripe_customer_for_user(user_doc: Dict[str, Any]) -> str:
     _stripe_secret_key()
     billing = _billing_from_user(user_doc)
     existing_customer_id = billing.get("stripe_customer_id")
+    user_id = user_doc.get("user_id", "")
+    user_email = (user_doc.get("email") or "").strip()
     if existing_customer_id:
+        try:
+            stripe.Customer.modify(
+                existing_customer_id,
+                email=user_email or None,
+                metadata={"user_id": user_id},
+            )
+        except Exception as exc:
+            logger.warning(
+                "stripe_customer_sync_failed customer_id=%s user_id=%s error=%s",
+                existing_customer_id,
+                user_id,
+                str(exc)[:200],
+            )
         return existing_customer_id
     customer = stripe.Customer.create(
-        email=user_doc.get("email"),
-        name=user_doc.get("name") or user_doc.get("email"),
-        metadata={"user_id": user_doc.get("user_id", "")},
+        email=user_email,
+        name=user_doc.get("name") or user_email,
+        metadata={"user_id": user_id},
     )
     customer_id = customer["id"]
     await _update_user_billing_by_user_id(user_doc["user_id"], {"stripe_customer_id": customer_id})
@@ -2270,6 +2321,10 @@ async def _checkout_session_belongs_to_user(session_obj: Dict[str, Any], user_do
     if customer_id and user_customer_id and customer_id == user_customer_id:
         return True
     user_email = (user_doc.get("email") or "").strip().lower()
+    customer_details = session_obj.get("customer_details") or {}
+    checkout_email = (customer_details.get("email") or "").strip().lower()
+    if checkout_email and user_email and checkout_email == user_email:
+        return True
     if customer_id and user_email and _stripe_configured():
         try:
             _stripe_secret_key()
@@ -2287,7 +2342,7 @@ async def _apply_checkout_session_billing(
     *,
     event_id: Optional[str] = None,
     fallback_user_id: Optional[str] = None,
-) -> None:
+) -> Optional[str]:
     customer_id = session_obj.get("customer")
     subscription_id = session_obj.get("subscription")
     if not customer_id:
@@ -2308,17 +2363,23 @@ async def _apply_checkout_session_billing(
                 subscription_id,
                 str(exc)[:200],
             )
-    user_id = _checkout_session_user_id(session_obj) or fallback_user_id
-    if not user_id and customer_id:
-        user_id = await _resolve_user_id_for_stripe_customer(customer_id)
+    user_id = await _resolve_user_id_from_checkout_session(session_obj, fallback_user_id=fallback_user_id)
     if user_id:
-        if not await db.users.find_one({"user_id": user_id}, {"_id": 0, "user_id": 1}):
-            logger.warning("stripe_checkout_client_reference_user_not_found event_id=%s user_id=%s", event_id, user_id)
         await _update_user_billing_by_user_id(user_id, {key: value for key, value in updates.items() if value})
-    elif customer_id:
+        await _finalize_user_billing(user_id)
+        logger.info(
+            "stripe_checkout_billing_applied event_id=%s user_id=%s customer_id=%s subscription_id=%s",
+            event_id,
+            user_id,
+            customer_id,
+            subscription_id,
+        )
+        return user_id
+    if customer_id:
         await _update_user_billing_by_customer_id(customer_id, {key: value for key, value in updates.items() if value})
     else:
         logger.warning("stripe_checkout_completed_no_user_or_customer event_id=%s", event_id)
+    return None
 
 
 @api_router.post("/billing/confirm-checkout")
@@ -2538,7 +2599,23 @@ async def _handle_subscription_event(subscription: Any, *, last_payment_status: 
     if not customer_id:
         logger.warning("stripe_subscription_event_missing_customer subscription_id=%s", subscription.get("id"))
         return
-    await _update_user_billing_by_customer_id(customer_id, _subscription_billing_updates(subscription, last_payment_status=last_payment_status))
+    updates = _subscription_billing_updates(subscription, last_payment_status=last_payment_status)
+    user_id = await _resolve_user_id_for_stripe_customer(customer_id)
+    if not user_id:
+        metadata_user_id = _subscription_metadata(subscription).get("user_id")
+        if metadata_user_id:
+            found = await db.users.find_one({"user_id": metadata_user_id}, {"_id": 0, "user_id": 1})
+            if found:
+                user_id = metadata_user_id
+    if user_id:
+        await _update_user_billing_by_user_id(user_id, updates)
+        await _finalize_user_billing(user_id)
+        return
+    logger.error(
+        "stripe_subscription_event_no_app_user customer_id=%s subscription_id=%s",
+        customer_id,
+        subscription.get("id"),
+    )
 
 
 async def _stripe_event_already_processed(event_id: str) -> bool:
@@ -2592,7 +2669,7 @@ async def stripe_webhook(request: Request):
         return {"received": True, "duplicate": True}
 
     obj = event["data"]["object"]
-    if event_type == "checkout.session.completed":
+    if event_type in {"checkout.session.completed", "checkout.session.async_payment_succeeded"}:
         await _apply_checkout_session_billing(obj, event_id=event_id)
     elif event_type in {"customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted"}:
         await _handle_subscription_event(obj)
@@ -12729,7 +12806,25 @@ async def seed_jobs():
 
 @api_router.get("/health")
 async def health():
-    return {"status": "ok"}
+    stripe_secret = bool(os.environ.get("STRIPE_SECRET_KEY", "").strip())
+    stripe_webhook = bool(os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip())
+    return {
+        "status": "ok",
+        "stripe": {
+            "secret_key_configured": stripe_secret,
+            "webhook_secret_configured": stripe_webhook,
+            "webhook_url": "/api/stripe/webhook",
+            "required_events": [
+                "checkout.session.completed",
+                "checkout.session.async_payment_succeeded",
+                "customer.subscription.created",
+                "customer.subscription.updated",
+                "customer.subscription.deleted",
+                "invoice.payment_succeeded",
+                "invoice.payment_failed",
+            ],
+        },
+    }
 
 
 @api_router.get("/version")
@@ -13884,11 +13979,18 @@ async def startup_seed():
     logger.info("DB health route registered at /api/dev/db-health")
     logger.info("DB counts route registered at /api/dev/db-counts")
     logger.info(
-        "Startup env debug: DEV_TOOLS_ENABLED=%r ENVIRONMENT=%r PORT=%r",
+        "Startup env debug: DEV_TOOLS_ENABLED=%r ENVIRONMENT=%r PORT=%r STRIPE_SECRET=%s STRIPE_WEBHOOK=%s",
         os.environ.get("DEV_TOOLS_ENABLED"),
         os.environ.get("ENVIRONMENT"),
         os.environ.get("PORT"),
+        "set" if os.environ.get("STRIPE_SECRET_KEY", "").strip() else "MISSING",
+        "set" if os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip() else "MISSING",
     )
+    if not os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip():
+        logger.warning(
+            "STRIPE_WEBHOOK_SECRET is not configured — Stripe webhooks will fail with 503. "
+            "Register https://<your-backend>/api/stripe/webhook in the Stripe Dashboard."
+        )
     asyncio.create_task(_startup_seed_impl())
     asyncio.create_task(_resume_pending_application_generation())
     asyncio.create_task(run_france_travail_harvest_loop(db))

@@ -239,3 +239,26 @@ def test_repair_premium_credits_grants_missing_allowance(monkeypatch):
     billing = repaired["billing"]
     assert billing["credits_total"] == 200
     assert billing["credits_remaining"] == 200
+
+
+def test_resolve_user_id_from_checkout_session_by_email(monkeypatch):
+    users = _Collection([{"user_id": "user_1", "email": "paid@example.com", "billing": {}}])
+    monkeypatch.setattr(server, "db", type("DB", (), {"users": users})())
+
+    async def _no_customer_match(customer_id):
+        return None
+
+    monkeypatch.setattr(server, "_resolve_user_id_for_stripe_customer", _no_customer_match)
+
+    session_obj = {
+        "customer": "cus_orphan",
+        "customer_details": {"email": "paid@example.com"},
+    }
+    resolved = asyncio.run(server._resolve_user_id_from_checkout_session(session_obj))
+    assert resolved == "user_1"
+
+
+def test_checkout_session_belongs_to_user_by_customer_details_email():
+    session_obj = {"customer": "cus_orphan", "customer_details": {"email": "paid@example.com"}}
+    user_doc = {"user_id": "user_1", "email": "paid@example.com", "billing": {}}
+    assert asyncio.run(server._checkout_session_belongs_to_user(session_obj, user_doc)) is True
