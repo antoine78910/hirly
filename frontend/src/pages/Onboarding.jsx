@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { syncBillingAfterCheckout } from "../lib/billingSync";
@@ -76,6 +76,12 @@ import { getPendingInviteCode, redeemCreatorInvite, storePendingInviteCode } fro
 import { setDemoAccountFromUser } from "../lib/demoAccount";
 import { queueDemoWelcome } from "../lib/demoWelcome";
 import { goToApp } from "../lib/appDomains";
+import {
+  applyOnboardingSnapshot,
+  buildOnboardingExtrasPayload,
+  ONBOARDING_TRANSIENT_STEPS,
+  resolveOnboardingResumeStep,
+} from "../lib/onboardingResume";
 
 const STEP_ORDER = ONBOARDING_STEP_ORDER;
 const ONBOARDING_CHECKOUT_STATE_KEY = "hirly.onboarding.checkoutState";
@@ -130,7 +136,7 @@ const introSlideMotion = {
 export default function Onboarding() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { user, setHasProfile, setHasPreferences, checkAuth, setHasTrainingAccess } = useAuth();
+  const { user, hasProfile, hasPreferences, setHasProfile, setHasPreferences, checkAuth, setHasTrainingAccess, loading: authLoading } = useAuth();
   const { lang, setLang } = useAppLocale();
   const introNavDirection = useRef(1);
 
@@ -206,6 +212,8 @@ export default function Onboarding() {
   const [redeemingAccessCode, setRedeemingAccessCode] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [pendingCheckoutSuccess, setPendingCheckoutSuccess] = useState(false);
+  const [bootstrapping, setBootstrapping] = useState(true);
+  const resumeAppliedRef = useRef(false);
   const inputRef = useRef();
 
   const step = STEP_ORDER[stepIndex];
@@ -248,6 +256,59 @@ export default function Onboarding() {
     if (isSixDigitAccessCode(payload.creatorAccessCode)) setCreatorAccessCode(payload.creatorAccessCode);
   };
 
+  const persistOnboardingProgress = useCallback(async (nextStep, nextStepIndex) => {
+    if (!user || ONBOARDING_TRANSIENT_STEPS.has(nextStep)) return;
+    try {
+      await api.patch("/profile/extras", {
+        onboarding: buildOnboardingExtrasPayload({
+          jobSearchStatus,
+          onboardingLocation,
+          onboardingLocationData,
+          contractType,
+          triedOtherApps,
+          categories,
+          suggestedCategories,
+          selectedRoles,
+          experience,
+          interviewsPerWeek,
+          attribution,
+          referralCode,
+          salaryMin,
+          salaryMax,
+          selectedPlan,
+          lastStep: nextStep,
+          lastStepIndex: nextStepIndex,
+        }),
+      });
+    } catch (e) {
+      console.warn("onboarding progress save skipped", e);
+    }
+  }, [
+    user,
+    jobSearchStatus,
+    onboardingLocation,
+    onboardingLocationData,
+    contractType,
+    triedOtherApps,
+    categories,
+    suggestedCategories,
+    selectedRoles,
+    experience,
+    interviewsPerWeek,
+    attribution,
+    referralCode,
+    salaryMin,
+    salaryMax,
+    selectedPlan,
+  ]);
+
+  const goToStepIndex = useCallback((nextIndex) => {
+    if (nextIndex < 0 || nextIndex >= STEP_ORDER.length) return;
+    const nextStep = STEP_ORDER[nextIndex];
+    void persistOnboardingProgress(nextStep, nextIndex);
+    setStepIndex(nextIndex);
+  }, [persistOnboardingProgress]);
+
   useEffect(() => {
     const preview = searchParams.get("preview");
     const stepParam = searchParams.get("step");
@@ -266,42 +327,143 @@ export default function Onboarding() {
         if (checkoutSessionId) {
           sessionStorage.setItem("hirly.onboarding.checkoutSessionId", checkoutSessionId);
         }
+        resumeAppliedRef.current = true;
+        setBootstrapping(false);
       } else {
         const stepFromUrl = stepParam && STEP_ORDER.includes(stepParam) ? stepParam : "showcasePricing";
         setStepIndex(STEP_ORDER.indexOf(stepFromUrl));
         setSearchParams({}, { replace: true });
         toast(lang === "fr" ? "Paiement annulé" : "Checkout cancelled");
       }
+      resumeAppliedRef.current = true;
+      setBootstrapping(false);
       return;
     }
 
-    if (!preview && !stepParam) return;
-
-    const boot = readOnboardingPreviewBoot(STEP_ORDER);
-    if (!boot) return;
-
-    setStepIndex(boot.stepIndex);
-    if (boot.state) {
-      setCategories(boot.state.categories);
-      setSelectedRoles(boot.state.selectedRoles);
-      setExperience(boot.state.experience);
-      setSalaryMin(boot.state.salaryMin);
-      setSalaryMax(boot.state.salaryMax);
-      setInterviewsPerWeek(boot.state.interviewsPerWeek);
-      setJobSearchStatus(boot.state.jobSearchStatus);
-      setOnboardingLocation(boot.state.onboardingLocation);
-      setOnboardingLocationData(boot.state.onboardingLocationData);
-      setContractType(boot.state.contractType);
-      setTriedOtherApps(boot.state.triedOtherApps);
-      setAttribution(boot.state.attribution);
-      setSuggestedCategories(boot.state.suggestedCategories);
-      if (boot.state.selectedPlan) setSelectedPlan(boot.state.selectedPlan);
-    }
-
-    if (!devBypassAuth && stepParam && stepParam !== "intro") {
-      setSearchParams({}, { replace: true });
+    if (preview) {
+      const boot = readOnboardingPreviewBoot(STEP_ORDER);
+      if (boot) {
+        setStepIndex(boot.stepIndex);
+        if (boot.state) {
+          setCategories(boot.state.categories);
+          setSelectedRoles(boot.state.selectedRoles);
+          setExperience(boot.state.experience);
+          setSalaryMin(boot.state.salaryMin);
+          setSalaryMax(boot.state.salaryMax);
+          setInterviewsPerWeek(boot.state.interviewsPerWeek);
+          setJobSearchStatus(boot.state.jobSearchStatus);
+          setOnboardingLocation(boot.state.onboardingLocation);
+          setOnboardingLocationData(boot.state.onboardingLocationData);
+          setContractType(boot.state.contractType);
+          setTriedOtherApps(boot.state.triedOtherApps);
+          setAttribution(boot.state.attribution);
+          setSuggestedCategories(boot.state.suggestedCategories);
+          if (boot.state.selectedPlan) setSelectedPlan(boot.state.selectedPlan);
+        }
+      }
+      resumeAppliedRef.current = true;
+      setBootstrapping(false);
+      if (!devBypassAuth && stepParam && stepParam !== "intro") {
+        setSearchParams({}, { replace: true });
+      }
+      return;
     }
   }, [searchParams, setSearchParams, lang]);
+
+  useEffect(() => {
+    if (authLoading || resumeAppliedRef.current) return;
+    if (searchParams.get("checkout") || searchParams.get("preview")) return;
+
+    const stepParam = searchParams.get("step");
+    let cancelled = false;
+
+    const bootstrapOnboarding = async () => {
+      if (devBypassAuth && stepParam && STEP_ORDER.includes(stepParam)) {
+        const boot = readOnboardingPreviewBoot(STEP_ORDER);
+        if (boot) {
+          setStepIndex(boot.stepIndex);
+          if (boot.state) {
+            restoreCheckoutState(boot.state);
+          }
+          resumeAppliedRef.current = true;
+          setBootstrapping(false);
+          return;
+        }
+      }
+
+      if (user && hasProfile && hasPreferences) {
+        goToApp("/swipe");
+        resumeAppliedRef.current = true;
+        setBootstrapping(false);
+        return;
+      }
+
+      if (!user) {
+        resumeAppliedRef.current = true;
+        setBootstrapping(false);
+        return;
+      }
+
+      try {
+        const { data: profileData } = await api.get("/profile");
+        if (cancelled) return;
+
+        applyOnboardingSnapshot(profileData?.extras?.onboarding, profileData, {
+          setCategories,
+          setSelectedRoles,
+          setExperience,
+          setSalaryMin,
+          setSalaryMax,
+          setInterviewsPerWeek,
+          setJobSearchStatus,
+          setOnboardingLocation,
+          setOnboardingLocationData,
+          setContractType,
+          setTriedOtherApps,
+          setAttribution,
+          setSuggestedCategories,
+          setSelectedPlan,
+          setReferralCode,
+          setProfile,
+        });
+
+        const resumeStep = resolveOnboardingResumeStep({
+          stepParam,
+          onboarding: profileData?.extras?.onboarding,
+          profile: profileData,
+          user,
+        });
+        setStepIndex(STEP_ORDER.indexOf(resumeStep));
+
+        if (stepParam) {
+          setSearchParams({}, { replace: true });
+        }
+      } catch {
+        if (!cancelled && user) {
+          const fallbackStep = stepParam && STEP_ORDER.includes(stepParam) ? stepParam : "jobSearch";
+          setStepIndex(STEP_ORDER.indexOf(fallbackStep));
+        }
+      } finally {
+        if (!cancelled) {
+          resumeAppliedRef.current = true;
+          setBootstrapping(false);
+        }
+      }
+    };
+
+    void bootstrapOnboarding();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    authLoading,
+    user,
+    hasProfile,
+    hasPreferences,
+    searchParams,
+    setSearchParams,
+    setProfile,
+  ]);
 
   useEffect(() => {
     if (!user || step !== "signup") return;
@@ -357,7 +519,7 @@ export default function Onboarding() {
         });
       }
     }
-    if (stepIndex < STEP_ORDER.length - 1) setStepIndex((i) => i + 1);
+    if (stepIndex < STEP_ORDER.length - 1) goToStepIndex(stepIndex + 1);
   };
 
   const goBack = () => {
@@ -508,22 +670,25 @@ export default function Onboarding() {
   const persistOnboardingMeta = async () => {
     try {
       await api.patch("/profile/extras", {
-        onboarding: {
-          job_search_status: jobSearchStatus,
-          onboarding_location: onboardingLocationData?.location_label || onboardingLocation,
-          onboarding_location_data: onboardingLocationData,
-          contract_type: contractType,
-          job_priorities: [],
-          tried_other_apps: triedOtherApps,
+        onboarding: buildOnboardingExtrasPayload({
+          jobSearchStatus,
+          onboardingLocation,
+          onboardingLocationData,
+          contractType,
+          triedOtherApps,
           categories,
-          suggested_categories: suggestedCategories,
-          selected_roles: selectedRoles,
-          interviews_per_week: interviewsPerWeek,
-          acquisition_source: attribution,
-          referral_code: referralCode.trim().toUpperCase() || null,
-          salary_min: salaryMin,
-          salary_max: salaryMax,
-        },
+          suggestedCategories,
+          selectedRoles,
+          experience,
+          interviewsPerWeek,
+          attribution,
+          referralCode,
+          salaryMin,
+          salaryMax,
+          selectedPlan,
+          lastStep: step,
+          lastStepIndex: stepIndex,
+        }),
       });
     } catch (e) {
       console.warn("extras save skipped", e);
@@ -632,6 +797,7 @@ export default function Onboarding() {
     }
     setCheckoutLoading(true);
     try {
+      await persistOnboardingProgress("showcasePricing", STEP_ORDER.indexOf("showcasePricing"));
       sessionStorage.setItem(ONBOARDING_CHECKOUT_STATE_KEY, JSON.stringify({
         categories,
         selectedRoles,
@@ -757,11 +923,11 @@ export default function Onboarding() {
       trackOnboardingContinue(step, continueParams);
     }
     if (step === "intro" && introIndex === slides.length - 1) {
-      setStepIndex(STEP_ORDER.indexOf("signup"));
+      goToStepIndex(STEP_ORDER.indexOf("signup"));
       return;
     }
     if (step === "signup") {
-      setStepIndex(STEP_ORDER.indexOf("jobSearch"));
+      goToStepIndex(STEP_ORDER.indexOf("jobSearch"));
       return;
     }
     goNext();
@@ -835,6 +1001,14 @@ export default function Onboarding() {
       </ContinueButton>
     )
   ) : null;
+
+  if (bootstrapping) {
+    return (
+      <div className="grid min-h-dvh place-items-center bg-white">
+        <Loader2 className="h-6 w-6 animate-spin text-zinc-400" data-testid="onboarding-bootstrap-loading" />
+      </div>
+    );
+  }
 
   return (
     <>
@@ -1387,7 +1561,7 @@ export default function Onboarding() {
           <ProfileSetupStep
             onComplete={() => {
               trackOnboardingContinue("profileSetup");
-              setStepIndex(STEP_ORDER.indexOf("profileWelcome"));
+              goToStepIndex(STEP_ORDER.indexOf("profileWelcome"));
             }}
           />
         )}
