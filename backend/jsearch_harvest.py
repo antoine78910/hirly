@@ -62,6 +62,35 @@ DEFAULT_HARVEST_ROLES = [
     "administrative assistant",
 ]
 
+# Wider France-wide pool for deliberate, admin-triggered manual harvest
+# bursts (see harvest_jsearch's `cities`/`roles` overrides and
+# admin_jobs_jsearch_harvest's `mode="aggressive"`) -- not used by the
+# routine 15-min loop, which keeps the smaller top-10-city / 12-role
+# default above. Sized so a handful of 200-request rounds (one per quota
+# reset) sweep through the whole pool with little repeat, rather than the
+# routine loop's small combo set getting hit 200 times in a row.
+AGGRESSIVE_HARVEST_CITIES = [
+    "Paris", "Marseille", "Lyon", "Toulouse", "Nice", "Nantes", "Montpellier",
+    "Strasbourg", "Bordeaux", "Lille", "Rennes", "Reims", "Toulon",
+    "Saint-Etienne", "Le Havre", "Grenoble", "Dijon", "Angers", "Nimes",
+    "Villeurbanne", "Clermont-Ferrand", "Le Mans", "Aix-en-Provence",
+    "Brest", "Tours", "Limoges", "Amiens", "Annecy", "Perpignan", "Metz",
+    "Besancon", "Orleans", "Rouen", "Mulhouse", "Caen", "Nancy",
+    "Argenteuil", "Saint-Denis", "Montreuil", "Roubaix",
+]
+
+AGGRESSIVE_HARVEST_ROLES = [
+    "software engineer", "product manager", "data analyst",
+    "sales representative", "marketing manager", "customer success",
+    "operations manager", "human resources", "finance analyst", "designer",
+    "logistics coordinator", "administrative assistant", "nurse", "teacher",
+    "chef cuisinier", "retail sales associate", "warehouse worker",
+    "truck driver", "electrician", "plumber", "accountant",
+    "project manager", "business analyst", "IT support technician",
+    "mechanical engineer", "civil engineer", "lawyer", "receptionist",
+    "security guard", "construction worker",
+]
+
 _harvest_cursor = 0
 _harvest_cycle = 0
 _harvest_lock = asyncio.Lock()
@@ -123,6 +152,11 @@ async def harvest_jsearch(
     max_queries: Optional[int] = None,
     dry_run: bool = False,
     start_offset: Optional[int] = None,
+    cities: Optional[List[str]] = None,
+    roles: Optional[List[str]] = None,
+    date_posted: Optional[str] = None,
+    page_size: Optional[int] = None,
+    max_pages: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Run one harvest slice: rotate through role x city combinations.
 
@@ -153,22 +187,24 @@ async def harvest_jsearch(
             "runs": [],
         }
 
-    cities = _harvest_cities()
-    roles = _harvest_roles()
+    using_custom_pool = cities is not None or roles is not None
+    cities = cities if cities is not None else _harvest_cities()
+    roles = roles if roles is not None else _harvest_roles()
     combos = [(role, city) for city in cities for role in roles]
     if not combos:
         return {"enabled": True, "reason": "no_queries_configured", "runs": []}
 
     queries = max(1, min(int(max_queries or _env_int("JSEARCH_HARVEST_QUERIES_PER_RUN", 6)), len(combos)))
-    page_size = max(10, min(_env_int("JSEARCH_HARVEST_PAGE_SIZE", 100), 100))
-    max_pages = max(1, min(_env_int("JSEARCH_HARVEST_MAX_PAGES", 2), 5))
+    page_size = max(10, min(int(page_size if page_size is not None else _env_int("JSEARCH_HARVEST_PAGE_SIZE", 100)), 100))
+    max_pages = max(1, min(int(max_pages if max_pages is not None else _env_int("JSEARCH_HARVEST_MAX_PAGES", 2)), 5))
     pause_seconds = max(0.2, _env_float("JSEARCH_HARVEST_QUERY_PAUSE_SECONDS", 0.5))
     # Restrict harvest queries to recently-posted jobs so repeat visits to the
     # same combo mostly surface genuinely new postings instead of re-fetching
     # (and then deduping away) the same listings every ~5h rotation. Only
     # applied here -- the live feed's on-demand fallback leaves this unset so
-    # it keeps matching against jobs of any age, unchanged.
-    freshness_window = (os.environ.get("JSEARCH_HARVEST_DATE_POSTED") or "3days").strip() or None
+    # it keeps matching against jobs of any age, unchanged. An explicit
+    # `date_posted` override (manual aggressive-fill runs) always wins.
+    freshness_window = (date_posted or os.environ.get("JSEARCH_HARVEST_DATE_POSTED") or "3days").strip() or None
 
     async with _harvest_lock:
         cursor = start_offset % len(combos) if start_offset is not None else _harvest_cursor % len(combos)
@@ -231,13 +267,18 @@ async def harvest_jsearch(
                     run["upserted"] = stats.get("total_imported", 0)
                     summary["jobs_upserted"] += run["upserted"]
                 consecutive_errors = 0
-                if fetched == 0:
-                    level = _combo_backoff_level.get(combo_index, 0) + 1
-                    _combo_backoff_level[combo_index] = level
-                    _combo_next_eligible_cycle[combo_index] = current_cycle + min(2 ** level, _COMBO_BACKOFF_MAX_CYCLES)
-                else:
-                    _combo_backoff_level.pop(combo_index, None)
-                    _combo_next_eligible_cycle.pop(combo_index, None)
+                # Backoff state is indexed by position in the *default* combo
+                # list -- skip touching it when running against a custom
+                # cities/roles pool (aggressive manual runs), since those
+                # indices would collide with unrelated default-list combos.
+                if not using_custom_pool:
+                    if fetched == 0:
+                        level = _combo_backoff_level.get(combo_index, 0) + 1
+                        _combo_backoff_level[combo_index] = level
+                        _combo_next_eligible_cycle[combo_index] = current_cycle + min(2 ** level, _COMBO_BACKOFF_MAX_CYCLES)
+                    else:
+                        _combo_backoff_level.pop(combo_index, None)
+                        _combo_next_eligible_cycle.pop(combo_index, None)
             except Exception as exc:
                 message = f"{exc.__class__.__name__}: {str(exc)[:200]}"
                 run["error"] = message

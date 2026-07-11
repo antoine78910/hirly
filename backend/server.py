@@ -113,6 +113,8 @@ from france_travail_harvest import (
     run_france_travail_harvest_loop,
 )
 from jsearch_harvest import (
+    AGGRESSIVE_HARVEST_CITIES,
+    AGGRESSIVE_HARVEST_ROLES,
     harvest_enabled as jsearch_harvest_enabled,
     harvest_jsearch,
     last_harvest_summary as jsearch_last_harvest_summary,
@@ -8202,15 +8204,47 @@ async def admin_jobs_jsearch_harvest(
     admin: User = Depends(require_admin_user),
     max_queries: Optional[int] = None,
     dry_run: bool = False,
+    start_offset: Optional[int] = None,
+    mode: Optional[str] = None,
+    cities: Optional[str] = None,
+    roles: Optional[str] = None,
+    date_posted: Optional[str] = None,
+    page_size: Optional[int] = None,
+    max_pages: Optional[int] = None,
 ):
     _require_job_maintenance_enabled()
+    cities_list = [c.strip() for c in cities.split(",") if c.strip()] if cities else None
+    roles_list = [r.strip() for r in roles.split(",") if r.strip()] if roles else None
+    if mode == "aggressive":
+        cities_list = cities_list or list(AGGRESSIVE_HARVEST_CITIES)
+        roles_list = roles_list or list(AGGRESSIVE_HARVEST_ROLES)
+        date_posted = date_posted or "month"
+        page_size = page_size if page_size is not None else 100
+        max_pages = max_pages if max_pages is not None else 5
     logger.info(
-        "admin_jobs_jsearch_harvest_requested admin=%s max_queries=%s dry_run=%s",
+        "admin_jobs_jsearch_harvest_requested admin=%s max_queries=%s dry_run=%s start_offset=%s mode=%s cities=%s roles=%s date_posted=%s page_size=%s max_pages=%s",
         admin.email,
         max_queries,
         dry_run,
+        start_offset,
+        mode,
+        len(cities_list) if cities_list else None,
+        len(roles_list) if roles_list else None,
+        date_posted,
+        page_size,
+        max_pages,
     )
-    return await harvest_jsearch(db, max_queries=max_queries, dry_run=dry_run)
+    return await harvest_jsearch(
+        db,
+        max_queries=max_queries,
+        dry_run=dry_run,
+        start_offset=start_offset,
+        cities=cities_list,
+        roles=roles_list,
+        date_posted=date_posted,
+        page_size=page_size,
+        max_pages=max_pages,
+    )
 
 
 @api_router.get("/admin/jobs/jsearch/harvest-status")
