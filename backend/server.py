@@ -2421,6 +2421,7 @@ async def redeem_billing_master_code(body: BillingMasterCodeRequest, user: User 
 async def billing_status(user: User = Depends(get_current_user)):
     user_doc = await _get_user_doc(user)
     user_doc, warning = await _refresh_billing_from_stripe(user_doc)
+    user_doc = await _recover_stalled_checkout_billing(user_doc)
     user_doc = await _repair_premium_credits_if_needed(user.user_id, user_doc)
     payload = _billing_status_payload(user_doc)
     if warning:
@@ -2433,6 +2434,7 @@ async def sync_billing(user: User = Depends(get_current_user)):
     """Force a Stripe refresh and repair missing credit grants after checkout."""
     user_doc = await _get_user_doc(user)
     user_doc, warning = await _refresh_billing_from_stripe(user_doc)
+    user_doc = await _recover_stalled_checkout_billing(user_doc)
     user_doc = await _repair_premium_credits_if_needed(user.user_id, user_doc)
     payload = _billing_status_payload(user_doc)
     if warning:
@@ -2451,7 +2453,10 @@ async def _checkout_session_belongs_to_user(session_obj: Dict[str, Any], user_do
     session_user_id = _checkout_session_user_id(session_obj)
     if session_user_id and session_user_id == user_id:
         return True
-    customer_id = session_obj.get("customer")
+    metadata_user_id = (session_obj.get("metadata") or {}).get("user_id")
+    if metadata_user_id and metadata_user_id == user_id:
+        return True
+    customer_id = _stripe_object_id(session_obj.get("customer"))
     user_customer_id = _billing_from_user(user_doc).get("stripe_customer_id")
     if customer_id and user_customer_id and customer_id == user_customer_id:
         return True
@@ -2472,14 +2477,105 @@ async def _checkout_session_belongs_to_user(session_obj: Dict[str, Any], user_do
     return False
 
 
+async def _ensure_checkout_entitlements_from_session(user_id: str, session_obj: Dict[str, Any]) -> None:
+    """Grant plan/credits from checkout metadata when Stripe subscription sync is incomplete."""
+    payment_status = session_obj.get("payment_status")
+    session_status = session_obj.get("status")
+    if payment_status != "paid" and session_status != "complete":
+        return
+    if session_obj.get("mode") != "subscription":
+        return
+
+    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0}) or {}
+    billing = _billing_from_user(user_doc)
+    if (billing.get("subscription_status") or "none") in {"active", "trialing"} and int(billing.get("credits_remaining") or 0) > 0:
+        return
+
+    metadata = session_obj.get("metadata") or {}
+    now = datetime.now(timezone.utc)
+    period_end = now + timedelta(days=30)
+    updates: Dict[str, Any] = {
+        "subscription_status": "active",
+        "plan": metadata.get("plan") or billing.get("plan") or "monthly",
+        "interval": metadata.get("interval") or billing.get("interval") or "monthly",
+        "source": metadata.get("source") or billing.get("source") or "app",
+        "last_payment_status": payment_status or "paid",
+        "current_period_start": billing.get("current_period_start") or now.isoformat(),
+        "current_period_end": billing.get("current_period_end") or period_end.isoformat(),
+    }
+    customer_id = _stripe_object_id(session_obj.get("customer")) or billing.get("stripe_customer_id")
+    subscription_id = _stripe_object_id(session_obj.get("subscription")) or billing.get("stripe_subscription_id")
+    if customer_id:
+        updates["stripe_customer_id"] = customer_id
+    if subscription_id:
+        updates["stripe_subscription_id"] = subscription_id
+
+    await _update_user_billing_by_user_id(user_id, updates)
+    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0}) or user_doc
+    await _repair_premium_credits_if_needed(user_id, user_doc)
+    logger.info(
+        "checkout_entitlements_fallback_applied user_id=%s plan=%s source=%s",
+        user_id,
+        updates.get("plan"),
+        updates.get("source"),
+    )
+
+
+async def _recover_stalled_checkout_billing(user_doc: Dict[str, Any]) -> Dict[str, Any]:
+    """Repair billing for paid customers whose subscription state never persisted after checkout."""
+    user_id = user_doc.get("user_id")
+    if not user_id:
+        return user_doc
+
+    billing = _billing_from_user(user_doc)
+    if (billing.get("subscription_status") or "none") in {"active", "trialing"}:
+        return await _repair_premium_credits_if_needed(user_id, user_doc)
+
+    customer_id = billing.get("stripe_customer_id") or await _discover_stripe_customer_for_user(user_doc)
+    if not customer_id or not _stripe_configured():
+        return user_doc
+
+    try:
+        _stripe_secret_key()
+        discovered = _discover_stripe_subscription(customer_id)
+        if discovered:
+            updates = _subscription_billing_updates(discovered, last_payment_status="paid")
+            await _update_user_billing_by_user_id(user_id, {key: value for key, value in updates.items() if value})
+            user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0}) or user_doc
+            return await _repair_premium_credits_if_needed(user_id, user_doc)
+
+        sessions = stripe.checkout.Session.list(customer=customer_id, limit=5, status="complete")
+        data = sessions.get("data") if isinstance(sessions, dict) else getattr(sessions, "data", [])
+        for session in data or []:
+            session_dict = dict(session) if not isinstance(session, dict) else session
+            if session_dict.get("payment_status") != "paid":
+                continue
+            if not await _checkout_session_belongs_to_user(session_dict, user_doc):
+                continue
+            await _apply_checkout_session_billing(session_dict, fallback_user_id=user_id)
+            await _ensure_checkout_entitlements_from_session(user_id, session_dict)
+            user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0}) or user_doc
+            billing = _billing_from_user(user_doc)
+            if (billing.get("subscription_status") or "none") in {"active", "trialing"}:
+                return await _repair_premium_credits_if_needed(user_id, user_doc)
+    except Exception as exc:
+        logger.warning(
+            "recover_stalled_checkout_billing_failed user_id=%s error=%s",
+            user_id,
+            str(exc)[:200],
+        )
+    return user_doc
+
+
 async def _apply_checkout_session_billing(
     session_obj: Dict[str, Any],
     *,
     event_id: Optional[str] = None,
     fallback_user_id: Optional[str] = None,
 ) -> Optional[str]:
-    customer_id = session_obj.get("customer")
-    subscription_id = session_obj.get("subscription")
+    customer_id = _stripe_object_id(session_obj.get("customer"))
+    subscription_ref = session_obj.get("subscription")
+    subscription_id = _stripe_object_id(subscription_ref)
     if not customer_id:
         logger.warning("stripe_checkout_completed_missing_customer event_id=%s", event_id)
     updates = {
@@ -2489,7 +2585,10 @@ async def _apply_checkout_session_billing(
     }
     if subscription_id:
         try:
-            subscription = stripe.Subscription.retrieve(subscription_id)
+            if isinstance(subscription_ref, dict):
+                subscription = subscription_ref
+            else:
+                subscription = stripe.Subscription.retrieve(subscription_id)
             updates.update(_subscription_billing_updates(subscription, last_payment_status=session_obj.get("payment_status")))
         except Exception as exc:
             logger.warning(
@@ -2502,6 +2601,7 @@ async def _apply_checkout_session_billing(
     if user_id:
         await _update_user_billing_by_user_id(user_id, {key: value for key, value in updates.items() if value})
         await _finalize_user_billing(user_id)
+        await _ensure_checkout_entitlements_from_session(user_id, session_obj)
         logger.info(
             "stripe_checkout_billing_applied event_id=%s user_id=%s customer_id=%s subscription_id=%s",
             event_id,
@@ -2527,27 +2627,33 @@ async def confirm_billing_checkout(
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id is required")
     try:
-        session_obj = stripe.checkout.Session.retrieve(session_id)
+        session_obj = stripe.checkout.Session.retrieve(
+            session_id,
+            expand=["subscription", "customer", "line_items"],
+        )
     except Exception as exc:
         logger.warning("stripe_checkout_confirm_retrieve_failed session_id=%s error=%s", session_id, str(exc)[:200])
         raise HTTPException(status_code=400, detail="Invalid checkout session")
 
+    session_dict = dict(session_obj) if not isinstance(session_obj, dict) else session_obj
     user_doc = await _get_user_doc(user)
-    if not await _checkout_session_belongs_to_user(session_obj, user_doc):
+    if not await _checkout_session_belongs_to_user(session_dict, user_doc):
         raise HTTPException(status_code=403, detail="Checkout session does not belong to this user")
 
-    payment_status = session_obj.get("payment_status")
-    session_status = session_obj.get("status")
+    payment_status = session_dict.get("payment_status")
+    session_status = session_dict.get("status")
     if payment_status != "paid" and session_status != "complete":
         payload = _billing_status_payload(user_doc)
         payload["checkout_pending"] = True
         return payload
 
-    await _apply_checkout_session_billing(session_obj, fallback_user_id=user.user_id)
+    await _apply_checkout_session_billing(session_dict, fallback_user_id=user.user_id)
+    user_doc = await _finalize_user_billing(user.user_id) or user_doc
+    await _ensure_checkout_entitlements_from_session(user.user_id, session_dict)
     user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0}) or user_doc
-    user_doc, _warning = await _refresh_billing_from_stripe(user_doc)
-    user_doc = await _repair_premium_credits_if_needed(user.user_id, user_doc)
-    return _billing_status_payload(user_doc)
+    payload = _billing_status_payload(user_doc)
+    payload["confirmed"] = True
+    return payload
 
 
 @api_router.get("/billing/usage")

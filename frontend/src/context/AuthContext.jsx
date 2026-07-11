@@ -6,7 +6,8 @@ import { isOAuthCallbackInProgress } from "../lib/oauthCallback";
 import { bootstrapTutorialSession } from "../lib/tutorialSession";
 import { goToMarketing } from "../lib/appDomains";
 import { supabase, supabaseConfigured } from "../lib/supabase";
-import { syncBillingStatus } from "../lib/billingSync";
+import { syncBillingStatus, resumePendingCheckoutSync } from "../lib/billingSync";
+import { captureCheckoutSessionFromSearch, peekCheckoutSessionId } from "../lib/pendingCheckout";
 
 const AuthContext = createContext(null);
 
@@ -46,7 +47,12 @@ export const AuthProvider = ({ children }) => {
       // Background billing sync for real users — repairs missing credits after Stripe checkout.
       const isRealUser = data.user && !data.user.demo_account && !Boolean(data.is_admin);
       if (isRealUser) {
-        syncBillingStatus().catch(() => {});
+        if (peekCheckoutSessionId()) {
+          resumePendingCheckoutSync({ maxAttempts: 15, delayMs: 1500 })
+            .catch(() => syncBillingStatus().catch(() => {}));
+        } else {
+          syncBillingStatus().catch(() => {});
+        }
       }
     } catch (e) {
       setUser(null);
@@ -128,6 +134,11 @@ export const AuthProvider = ({ children }) => {
     }
     checkAuth();
   }, [checkAuth]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    captureCheckoutSessionFromSearch(window.location.search);
+  }, []);
 
   const logout = async () => {
     const token = getSessionToken();

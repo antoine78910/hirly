@@ -302,3 +302,43 @@ def test_resolve_stripe_payment_intent_context_uses_checkout_session(monkeypatch
     assert context["email"] == "paid@example.com"
     assert context["subscription_id"] == "sub_123"
     assert context["user_id_hint"] == "user_1"
+
+
+def test_ensure_checkout_entitlements_grants_credits_from_metadata(monkeypatch):
+    user_rows = _Collection([
+        {
+            "user_id": "user_1",
+            "billing": {"stripe_customer_id": "cus_123", "credits_total": 0, "credits_remaining": 0},
+        }
+    ])
+    swipe_rows = _Collection([])
+
+    class _DB:
+        users = user_rows
+        swipes = swipe_rows
+
+    async def _find(query, projection=None):
+        rows = []
+        for row in swipe_rows.rows:
+            if all(row.get(key) == value for key, value in query.items()):
+                rows.append(row)
+        return rows
+
+    swipe_rows.find = _find
+    monkeypatch.setattr(server, "db", _DB())
+
+    session_obj = {
+        "mode": "subscription",
+        "payment_status": "paid",
+        "status": "complete",
+        "customer": "cus_123",
+        "subscription": "sub_123",
+        "metadata": {"plan": "monthly", "interval": "monthly", "source": "onboarding", "user_id": "user_1"},
+    }
+    asyncio.run(server._ensure_checkout_entitlements_from_session("user_1", session_obj))
+
+    updated = asyncio.run(user_rows.find_one({"user_id": "user_1"}))
+    billing = updated["billing"]
+    assert billing["subscription_status"] == "active"
+    assert billing["credits_total"] == 200
+    assert billing["credits_remaining"] == 200

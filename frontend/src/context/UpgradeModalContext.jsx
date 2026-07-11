@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import DesktopUpgradeModal from "../components/upgrade/DesktopUpgradeModal";
 import { useAppLocale } from "./AppLocaleContext";
 import { syncBillingAfterCheckout } from "../lib/billingSync";
+import { captureCheckoutSessionFromSearch } from "../lib/pendingCheckout";
 
 const UpgradeModalContext = createContext({
   upgradeOpen: false,
@@ -20,6 +21,7 @@ export function UpgradeModalProvider({ children }) {
   const closeUpgrade = useCallback(() => setUpgradeOpen(false), []);
 
   useEffect(() => {
+    captureCheckoutSessionFromSearch(location.search);
     const params = new URLSearchParams(location.search);
     const upgradeStatus = params.get("upgrade") || params.get("checkout");
     if (!upgradeStatus) return;
@@ -47,7 +49,7 @@ export function UpgradeModalProvider({ children }) {
 
     if (upgradeStatus === "success") {
       toast.success(t("upgrade.checkoutSuccess"));
-      void syncBillingAfterCheckout({ sessionId, maxAttempts: 12, delayMs: 1500 });
+      void syncBillingAfterCheckout({ sessionId, maxAttempts: 15, delayMs: 1500 });
     }
   }, [location.pathname, location.search, navigate, t]);
 

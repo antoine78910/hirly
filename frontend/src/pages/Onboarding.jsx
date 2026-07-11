@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { syncBillingAfterCheckout } from "../lib/billingSync";
+import { stashCheckoutSessionId } from "../lib/pendingCheckout";
 import {
   withDatafastAttribution,
   trackDatafastGoal,
@@ -326,6 +327,7 @@ export default function Onboarding() {
         setPendingCheckoutSuccess(true);
         if (checkoutSessionId) {
           sessionStorage.setItem("hirly.onboarding.checkoutSessionId", checkoutSessionId);
+          stashCheckoutSessionId(checkoutSessionId);
         }
         resumeAppliedRef.current = true;
         setBootstrapping(false);
@@ -484,7 +486,7 @@ export default function Onboarding() {
 
     (async () => {
       try {
-        await syncBillingAfterCheckout({ sessionId, maxAttempts: 12, delayMs: 1500 });
+        await syncBillingAfterCheckout({ sessionId, maxAttempts: 15, delayMs: 1500 });
       } catch (_) {
         /* polling fallback already handled in syncBillingAfterCheckout */
       } finally {

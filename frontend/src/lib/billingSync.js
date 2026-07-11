@@ -1,7 +1,16 @@
 import { api } from "./api";
 import { notifyBillingUpdated } from "./billingEvents";
+import {
+  consumeCheckoutSessionId,
+  peekCheckoutSessionId,
+  stashCheckoutSessionId,
+} from "./pendingCheckout";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function hasGrantedCredits(data) {
+  return Boolean(data?.is_premium) && Number(data?.credits_remaining) > 0;
+}
 
 /**
  * After Stripe checkout, confirm the session server-side (fast path) then poll
@@ -9,16 +18,25 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  */
 export async function syncBillingAfterCheckout({
   sessionId,
-  maxAttempts = 8,
+  maxAttempts = 12,
   delayMs = 1500,
 } = {}) {
-  if (sessionId) {
+  const resolvedSessionId = (sessionId || peekCheckoutSessionId() || "").trim();
+  if (resolvedSessionId) {
+    stashCheckoutSessionId(resolvedSessionId);
+  }
+
+  if (resolvedSessionId) {
     try {
-      const { data } = await api.post("/billing/confirm-checkout", { session_id: sessionId });
+      const { data } = await api.post("/billing/confirm-checkout", { session_id: resolvedSessionId });
       if (data) {
         notifyBillingUpdated(data);
-        if (data.is_premium && Number(data.credits_remaining) > 0) {
+        if (hasGrantedCredits(data)) {
+          consumeCheckoutSessionId();
           return data;
+        }
+        if (data.checkout_pending) {
+          /* Stripe may still be finalizing — fall through to polling. */
         }
       }
     } catch (_) {
@@ -31,10 +49,12 @@ export async function syncBillingAfterCheckout({
       const { data } = await api.post(attempt === 0 ? "/billing/sync" : "/billing/status");
       if (data) {
         notifyBillingUpdated(data);
-        if (data.is_premium && Number(data.credits_remaining) > 0) {
+        if (hasGrantedCredits(data)) {
+          consumeCheckoutSessionId();
           return data;
         }
         if (data.is_premium && attempt === maxAttempts - 1) {
+          consumeCheckoutSessionId();
           return data;
         }
       }
@@ -54,4 +74,11 @@ export async function syncBillingStatus() {
   const { data } = await api.post("/billing/sync");
   if (data) notifyBillingUpdated(data);
   return data;
+}
+
+/** Run checkout sync when auth is ready (survives cross-domain redirects). */
+export async function resumePendingCheckoutSync(options = {}) {
+  const sessionId = peekCheckoutSessionId();
+  if (!sessionId) return null;
+  return syncBillingAfterCheckout({ sessionId, ...options });
 }
