@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional
 
 from job_providers import get_job_provider, is_job_provider_configured
 from job_providers.base import JobSearchQuery
+from job_providers.jsearch import JSearchProvider
 from jobs_service import upsert_imported_jobs
 from jobs_service import _cooldown_until, _is_rate_limit_error, _set_rate_limit_cooldown
 from location_intelligence import country_to_jsearch_language
@@ -210,7 +211,15 @@ async def harvest_jsearch(
         cursor = start_offset % len(combos) if start_offset is not None else _harvest_cursor % len(combos)
         _harvest_cycle += 1
         current_cycle = _harvest_cycle
-        provider = get_job_provider("jsearch", "")
+        # Build our own provider instance (rather than get_job_provider's
+        # default) with a much longer HTTP timeout: that default (6s) is
+        # tuned for the live feed's user-facing latency budget, but a
+        # background harvest call has no such constraint, and a bundled
+        # num_pages request asking for more pages/larger page_size (as the
+        # aggressive mode does) genuinely takes longer to respond than a
+        # normal single-page live-feed query.
+        api_key = os.environ.get("JSEARCH_API_KEY") or ""
+        provider = JSearchProvider(api_key=api_key, timeout=_env_float("JSEARCH_HARVEST_HTTP_TIMEOUT_SECONDS", 25.0))
         started = time.perf_counter()
         summary: Dict[str, Any] = {
             "enabled": True,
