@@ -837,7 +837,7 @@ export default function Onboarding() {
   return (
     <>
     {step === "signup" && !user ? (
-      <OnboardingSignup onClose={goBack} />
+      <OnboardingSignup onClose={goBack} lang={lang} />
     ) : (
     <OnboardingShell
       progress={progress}

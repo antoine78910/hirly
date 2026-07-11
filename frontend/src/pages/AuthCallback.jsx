@@ -65,8 +65,11 @@ export default function AuthCallback() {
         } catch (inviteErr) {
           console.warn("Invite redeem skipped", inviteErr?.response?.data?.detail || inviteErr?.message);
         }
+        const authProvider = session?.user?.app_metadata?.provider
+          || session?.user?.identities?.[0]?.provider
+          || "email";
         trackEvent("auth_success", {
-          method: "google",
+          method: authProvider === "google" ? "google" : "email",
           has_profile: Boolean(data.has_profile),
           has_preferences: Boolean(data.has_preferences),
         });

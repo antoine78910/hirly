@@ -57,3 +57,17 @@ export async function startGoogleLogin(returnPath = "/swipe", opts = {}) {
   }
   return true;
 }
+
+export function authCallbackRedirectUrl(returnPath = "/swipe") {
+  const path = returnPath && returnPath.startsWith("/") ? returnPath : "/swipe";
+  return `${window.location.origin}/auth/callback?next=${encodeURIComponent(path)}`;
+}
+
+/** Exchange a Supabase session for an app session. Returns null when email confirmation is still pending. */
+export async function establishAppSessionFromSupabase(session) {
+  const accessToken = session?.access_token;
+  if (!accessToken) return null;
+  const { data } = await api.post("/auth/supabase-session", supabaseSessionPayload(session));
+  if (data?.session_token) setSessionToken(data.session_token);
+  return data;
+}

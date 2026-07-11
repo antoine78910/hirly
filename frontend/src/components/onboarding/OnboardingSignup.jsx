@@ -1,9 +1,17 @@
-import { useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { Loader2, Mail, X } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
-import { startGoogleLogin } from "../../lib/auth";
+import {
+  authCallbackRedirectUrl,
+  establishAppSessionFromSupabase,
+  startGoogleLogin,
+} from "../../lib/auth";
+import { supabase, supabaseConfigured } from "../../lib/supabase";
+import { useAuth } from "../../context/AuthContext";
+import { trackEvent } from "../../lib/analytics";
 import { trackDatafastGoal } from "../../lib/datafast";
 
 function GoogleIcon({ className = "w-5 h-5" }) {
@@ -29,8 +37,79 @@ function GoogleIcon({ className = "w-5 h-5" }) {
   );
 }
 
-export default function OnboardingSignup({ onClose }) {
+const COPY = {
+  en: {
+    title: "Sign up",
+    firstName: "First name",
+    firstNamePlaceholder: "Alex",
+    email: "Email",
+    emailPlaceholder: "you@example.com",
+    password: "Password",
+    passwordHint: "At least 6 characters",
+    submit: "Sign up",
+    or: "or",
+    google: "Sign up with Google",
+    verifyTitle: "Check your email",
+    verifyBody: "We sent a verification link to",
+    verifyHint: "Open the link to confirm your account, then you'll continue onboarding automatically.",
+    resend: "Resend email",
+    resending: "Sending…",
+    resendSuccess: "Verification email sent again.",
+    useDifferentEmail: "Use a different email",
+    firstNameRequired: "Please enter your first name",
+    emailRequired: "Please enter your email",
+    emailInvalid: "Please enter a valid email address",
+    passwordRequired: "Password must be at least 6 characters",
+    authNotConfigured: "Email sign-up is not configured",
+    authNotConfiguredDesc: "Set REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY in frontend/.env",
+    googleNotConfigured: "Google sign-up is not configured",
+    signupFailed: "Sign up failed. Please try again.",
+    alreadyRegistered: "An account already exists with this email. Sign in instead.",
+    signInInstead: "Sign in",
+  },
+  fr: {
+    title: "Inscription",
+    firstName: "Prénom",
+    firstNamePlaceholder: "Alex",
+    email: "E-mail",
+    emailPlaceholder: "vous@exemple.com",
+    password: "Mot de passe",
+    passwordHint: "Au moins 6 caractères",
+    submit: "S'inscrire",
+    or: "ou",
+    google: "S'inscrire avec Google",
+    verifyTitle: "Vérifiez votre e-mail",
+    verifyBody: "Nous avons envoyé un lien de confirmation à",
+    verifyHint: "Ouvrez le lien pour confirmer votre compte, puis l'onboarding reprendra automatiquement.",
+    resend: "Renvoyer l'e-mail",
+    resending: "Envoi…",
+    resendSuccess: "E-mail de vérification renvoyé.",
+    useDifferentEmail: "Utiliser un autre e-mail",
+    firstNameRequired: "Veuillez entrer votre prénom",
+    emailRequired: "Veuillez entrer votre e-mail",
+    emailInvalid: "Veuillez entrer une adresse e-mail valide",
+    passwordRequired: "Le mot de passe doit contenir au moins 6 caractères",
+    authNotConfigured: "L'inscription par e-mail n'est pas configurée",
+    authNotConfiguredDesc: "Configurez REACT_APP_SUPABASE_URL et REACT_APP_SUPABASE_ANON_KEY",
+    googleNotConfigured: "L'inscription Google n'est pas configurée",
+    signupFailed: "Inscription impossible. Réessayez.",
+    alreadyRegistered: "Un compte existe déjà avec cet e-mail. Connectez-vous plutôt.",
+    signInInstead: "Se connecter",
+  },
+};
+
+const ONBOARDING_RETURN_PATH = "/onboarding?step=jobSearch";
+
+export default function OnboardingSignup({ onClose, lang = "en" }) {
+  const copy = useMemo(() => COPY[lang === "fr" ? "fr" : "en"], [lang]);
+  const { setUser, setHasProfile, setHasPreferences } = useAuth();
+  const [firstName, setFirstName] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [screen, setScreen] = useState("form");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     const prev = document.documentElement.style.overflow;
@@ -40,29 +119,114 @@ export default function OnboardingSignup({ onClose }) {
     };
   }, []);
 
+  const finishSession = async (session) => {
+    const data = await establishAppSessionFromSupabase(session);
+    if (!data) return false;
+    setUser(data.user);
+    setHasProfile(Boolean(data.has_profile));
+    setHasPreferences(Boolean(data.has_preferences));
+    trackEvent("auth_success", {
+      method: "email",
+      mode: "signup",
+      has_profile: Boolean(data.has_profile),
+      has_preferences: Boolean(data.has_preferences),
+    });
+    trackDatafastGoal("onboarding_signup_email");
+    return true;
+  };
+
   const handleGoogleSignup = async () => {
     trackDatafastGoal("onboarding_signup_google");
-    const ok = await startGoogleLogin("/onboarding?step=jobSearch");
+    sessionStorage.setItem("swiipr_onboarding_return", ONBOARDING_RETURN_PATH);
+    const ok = await startGoogleLogin(ONBOARDING_RETURN_PATH);
     if (!ok) {
-      toast.error("Google sign-up is not configured", {
-        description: "Set REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY in frontend/.env",
+      toast.error(copy.googleNotConfigured, {
+        description: copy.authNotConfiguredDesc,
       });
     }
   };
 
-  const handleEmailSignup = (e) => {
-    e.preventDefault();
-    const trimmed = email.trim();
-    if (!trimmed) {
-      toast.error("Please enter your email");
+  const handleEmailSignup = async (event) => {
+    event.preventDefault();
+    setError("");
+
+    const trimmedFirst = firstName.trim();
+    const trimmedEmail = email.trim();
+
+    if (!trimmedFirst) {
+      setError(copy.firstNameRequired);
       return;
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
-      toast.error("Please enter a valid email address");
+    if (!trimmedEmail) {
+      setError(copy.emailRequired);
       return;
     }
-    sessionStorage.setItem("swiipr_signup_email", trimmed);
-    handleGoogleSignup();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setError(copy.emailInvalid);
+      return;
+    }
+    if (password.length < 6) {
+      setError(copy.passwordRequired);
+      return;
+    }
+    if (!supabaseConfigured || !supabase) {
+      setError(copy.authNotConfigured);
+      return;
+    }
+
+    setSubmitting(true);
+    sessionStorage.setItem("swiipr_onboarding_return", ONBOARDING_RETURN_PATH);
+    try {
+      const { data, error: authError } = await supabase.auth.signUp({
+        email: trimmedEmail,
+        password,
+        options: {
+          emailRedirectTo: authCallbackRedirectUrl(ONBOARDING_RETURN_PATH),
+          data: {
+            full_name: trimmedFirst,
+            name: trimmedFirst,
+          },
+        },
+      });
+      if (authError) throw authError;
+
+      if (data?.session) {
+        const ok = await finishSession(data.session);
+        if (ok) return;
+      }
+
+      setScreen("verify");
+    } catch (err) {
+      const message = err?.message || "";
+      if (/already registered|already been registered|user already registered/i.test(message)) {
+        setError(copy.alreadyRegistered);
+      } else {
+        setError(message || copy.signupFailed);
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (!supabaseConfigured || !supabase || !email.trim()) return;
+    setResending(true);
+    setError("");
+    try {
+      const { error: resendError } = await supabase.auth.resend({
+        type: "signup",
+        email: email.trim(),
+        options: {
+          emailRedirectTo: authCallbackRedirectUrl(ONBOARDING_RETURN_PATH),
+        },
+      });
+      if (resendError) throw resendError;
+      toast.success(copy.resendSuccess);
+    } catch (err) {
+      setError(err?.message || copy.signupFailed);
+    } finally {
+      setResending(false);
+    }
   };
 
   return (
@@ -77,51 +241,136 @@ export default function OnboardingSignup({ onClose }) {
         >
           <X className="w-5 h-5" strokeWidth={2} />
         </button>
-        <h1 className="font-display font-semibold text-lg tracking-tight">Sign up</h1>
+        <h1 className="font-display font-semibold text-lg tracking-tight">{copy.title}</h1>
       </div>
 
-      <div className="mx-auto flex w-full max-w-md flex-1 min-h-0 flex-col justify-center px-5 pb-6">
-        <form onSubmit={handleEmailSignup} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="signup-email" className="text-sm font-medium text-zinc-700">
-              Email
-            </Label>
-            <Input
-              id="signup-email"
-              type="email"
-              autoComplete="email"
-              placeholder="johndoe@gmail.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="h-12 rounded-full border-zinc-200 bg-white text-zinc-900 placeholder:text-zinc-400 px-5 text-base focus-visible:ring-linkedin"
-              data-testid="signup-email-input"
-            />
+      <div className="mx-auto flex w-full max-w-md flex-1 min-h-0 flex-col justify-center px-5 pb-6 overflow-y-auto">
+        {screen === "verify" ? (
+          <div className="text-center" data-testid="signup-verify-screen">
+            <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-violet-50 text-violet-600">
+              <Mail className="h-6 w-6" />
+            </div>
+            <h2 className="font-display text-xl font-bold tracking-tight">{copy.verifyTitle}</h2>
+            <p className="mt-3 text-sm leading-relaxed text-zinc-600">
+              {copy.verifyBody}{" "}
+              <span className="font-semibold text-zinc-900">{email.trim()}</span>.
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-zinc-500">{copy.verifyHint}</p>
+            {error ? <p className="mt-4 text-sm font-medium text-red-600">{error}</p> : null}
+            <button
+              type="button"
+              onClick={handleResendVerification}
+              disabled={resending}
+              className="mt-6 w-full h-12 rounded-full gradient-linkedin text-white font-semibold text-base hover:opacity-90 transition-opacity disabled:opacity-60"
+              data-testid="signup-resend-btn"
+            >
+              {resending ? copy.resending : copy.resend}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setScreen("form");
+                setError("");
+              }}
+              className="mt-3 w-full text-sm font-semibold text-linkedin hover:text-linkedin-dark"
+              data-testid="signup-change-email-btn"
+            >
+              {copy.useDifferentEmail}
+            </button>
           </div>
+        ) : (
+          <>
+            <form onSubmit={handleEmailSignup} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="signup-first-name" className="text-sm font-medium text-zinc-700">
+                  {copy.firstName}
+                </Label>
+                <Input
+                  id="signup-first-name"
+                  type="text"
+                  autoComplete="given-name"
+                  placeholder={copy.firstNamePlaceholder}
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  className="h-12 rounded-full border-zinc-200 bg-white text-zinc-900 placeholder:text-zinc-400 px-5 text-base focus-visible:ring-linkedin"
+                  data-testid="signup-first-name-input"
+                />
+              </div>
 
-          <button
-            type="submit"
-            className="w-full h-12 rounded-full gradient-linkedin text-white font-semibold text-base hover:opacity-90 transition-opacity shadow-[0_8px_32px_-8px_rgba(124,58,237,0.5)]"
-            data-testid="signup-email-btn"
-          >
-            Sign up
-          </button>
-        </form>
+              <div className="space-y-2">
+                <Label htmlFor="signup-email" className="text-sm font-medium text-zinc-700">
+                  {copy.email}
+                </Label>
+                <Input
+                  id="signup-email"
+                  type="email"
+                  autoComplete="email"
+                  placeholder={copy.emailPlaceholder}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="h-12 rounded-full border-zinc-200 bg-white text-zinc-900 placeholder:text-zinc-400 px-5 text-base focus-visible:ring-linkedin"
+                  data-testid="signup-email-input"
+                />
+              </div>
 
-        <div className="my-5 flex items-center gap-4">
-          <div className="flex-1 h-px bg-zinc-200" />
-          <span className="text-sm text-zinc-500 shrink-0">or</span>
-          <div className="flex-1 h-px bg-zinc-200" />
-        </div>
+              <div className="space-y-2">
+                <Label htmlFor="signup-password" className="text-sm font-medium text-zinc-700">
+                  {copy.password}
+                </Label>
+                <Input
+                  id="signup-password"
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder={copy.passwordHint}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  minLength={6}
+                  className="h-12 rounded-full border-zinc-200 bg-white text-zinc-900 placeholder:text-zinc-400 px-5 text-base focus-visible:ring-linkedin"
+                  data-testid="signup-password-input"
+                />
+              </div>
 
-        <button
-          type="button"
-          onClick={handleGoogleSignup}
-          className="w-full h-12 rounded-full bg-white border border-zinc-200 flex items-center justify-center gap-3 font-semibold text-zinc-900 hover:bg-zinc-50 transition-colors"
-          data-testid="onboarding-signup-btn"
-        >
-          <GoogleIcon />
-          Sign up with Google
-        </button>
+              {error ? (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-red-600">{error}</p>
+                  {error === copy.alreadyRegistered ? (
+                    <Link
+                      to="/signin"
+                      className="inline-block text-sm font-semibold text-linkedin hover:text-linkedin-dark"
+                    >
+                      {copy.signInInstead}
+                    </Link>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full h-12 rounded-full gradient-linkedin text-white font-semibold text-base hover:opacity-90 transition-opacity shadow-[0_8px_32px_-8px_rgba(124,58,237,0.5)] disabled:opacity-60"
+                data-testid="signup-email-btn"
+              >
+                {submitting ? <Loader2 className="mx-auto h-5 w-5 animate-spin" /> : copy.submit}
+              </button>
+            </form>
+
+            <div className="my-5 flex items-center gap-4">
+              <div className="flex-1 h-px bg-zinc-200" />
+              <span className="text-sm text-zinc-500 shrink-0">{copy.or}</span>
+              <div className="flex-1 h-px bg-zinc-200" />
+            </div>
+
+            <button
+              type="button"
+              onClick={handleGoogleSignup}
+              className="w-full h-12 rounded-full bg-white border border-zinc-200 flex items-center justify-center gap-3 font-semibold text-zinc-900 hover:bg-zinc-50 transition-colors"
+              data-testid="onboarding-signup-btn"
+            >
+              <GoogleIcon />
+              {copy.google}
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
