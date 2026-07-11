@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Confirm your Hirly account</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#18181b;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f4f4f5;padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border:1px solid #e4e4e7;border-radius:20px;overflow:hidden;box-shadow:0 12px 40px -24px rgba(124,58,237,0.45);">
+          <tr>
+            <td style="padding:28px 32px 20px;background:linear-gradient(135deg,#A78BFA 0%,#7C3AED 35%,#6366F1 70%,#3B82F6 100%);">
+              <p style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em;color:#ffffff;">Hirly</p>
+              <p style="margin:8px 0 0;font-size:13px;line-height:1.5;color:rgba(255,255,255,0.92);">Swipe jobs. Match careers. Get hired.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px 32px 8px;">
+              <h1 style="margin:0 0 12px;font-size:24px;line-height:1.25;font-weight:800;letter-spacing:-0.02em;color:#18181b;">
+                Confirm your email address
+              </h1>
+              <p style="margin:0 0 16px;font-size:15px;line-height:1.65;color:#52525b;">
+                Welcome to Hirly{{ if .Email }} <strong style="color:#18181b;">{{ .Email }}</strong>{{ end }} —
+                you're one step away from finishing sign-up and continuing onboarding.
+              </p>
+              <p style="margin:0 0 24px;font-size:15px;line-height:1.65;color:#52525b;">
+                Tap the button below to verify this email address. After that, you'll pick up right where you left off.
+              </p>
+              <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 0 24px;">
+                <tr>
+                  <td style="border-radius:999px;background:linear-gradient(135deg,#A78BFA 0%,#7C3AED 35%,#6366F1 100%);">
+                    <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:14px 28px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:999px;">
+                      Confirm email address
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:0 0 8px;font-size:13px;line-height:1.6;color:#71717a;">
+                If the button doesn't work, copy and paste this link into your browser:
+              </p>
+              <p style="margin:0 0 24px;font-size:12px;line-height:1.6;word-break:break-all;">
+                <a href="{{ .ConfirmationURL }}" style="color:#7C3AED;text-decoration:underline;">{{ .ConfirmationURL }}</a>
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 32px 28px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-top:1px solid #e4e4e7;">
+                <tr>
+                  <td style="padding-top:20px;">
+                    <p style="margin:0 0 8px;font-size:12px;line-height:1.6;color:#71717a;">
+                      Didn't create a Hirly account? You can safely ignore this email.
+                    </p>
+                    <p style="margin:0;font-size:12px;line-height:1.6;color:#71717a;">
+                      Questions? Contact us at
+                      <a href="mailto:app@tryhirly.com" style="color:#7C3AED;text-decoration:none;font-weight:600;">app@tryhirly.com</a>
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+        <p style="margin:16px 0 0;font-size:11px;line-height:1.5;color:#a1a1aa;">
+          © Hirly · tryhirly.com
+        </p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

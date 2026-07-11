@@ -26,11 +26,9 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 
-logger = logging.getLogger(__name__)
+from email_addresses import APPLICATION_EMAIL_FROM
 
-APPLICATION_EMAIL_FROM = (
-    os.environ.get("APPLICATION_EMAIL_FROM") or "Hirly Applications <apply@tryhirly.com>"
-).strip()
+logger = logging.getLogger(__name__)
 RESEND_API_KEY = (os.environ.get("RESEND_API_KEY") or "").strip()
 SMTP_HOST = (os.environ.get("APPLICATION_SMTP_HOST") or os.environ.get("SMTP_HOST") or "").strip()
 SMTP_PORT = int(os.environ.get("APPLICATION_SMTP_PORT") or os.environ.get("SMTP_PORT") or "587")

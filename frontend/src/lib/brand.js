@@ -8,8 +8,12 @@ export const BRAND = {
   CTA: "Continue with Google",
   CTA_PRIMARY: "Start Swiping Jobs",
   CTA_SECONDARY: "Get Hired Today",
+  /** Primary support inbox — receive only, never used as a sender. */
   SUPPORT_EMAIL: "app@tryhirly.com",
-  NOTIFICATIONS_EMAIL: "app@tryhirly.com",
+  /** Outbound product alerts (application updates, interview invites, etc.). */
+  NOTIFICATIONS_EMAIL: "notifications@tryhirly.com",
+  /** Auth and other automated no-reply mail (Supabase SMTP). */
+  NOREPLY_EMAIL: "noreply@tryhirly.com",
   SOCIAL_HANDLE: "tryhirly",
   INSTAGRAM_URL: "https://instagram.com/tryhirly",
   TIKTOK_URL: "https://tiktok.com/@tryhirly",
