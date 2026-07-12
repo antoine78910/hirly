@@ -10,6 +10,7 @@ export default function OnboardingShell({
   ambientClassName,
   children,
   footer,
+  flushBottom = false,
 }) {
   useEffect(() => {
     const prev = document.documentElement.style.overflow;
@@ -27,7 +28,11 @@ export default function OnboardingShell({
           <div className={`pointer-events-none absolute inset-0 ${ambientClassName}`} aria-hidden />
         ) : null}
 
-        <div className="relative w-full max-w-[430px] sm:max-w-lg lg:max-w-xl flex-1 flex flex-col px-4 sm:px-8 lg:px-10 pt-2 sm:pt-4 pb-2 sm:pb-4 min-h-0">
+        <div
+          className={`relative w-full max-w-[430px] sm:max-w-lg lg:max-w-xl flex-1 flex flex-col px-4 sm:px-8 lg:px-10 pt-2 sm:pt-4 min-h-0 ${
+            flushBottom ? "pb-0" : "pb-2 sm:pb-4"
+          }`}
+        >
           {showProgress ? (
             <div className="flex items-center gap-2.5 mb-2 sm:mb-3 shrink-0">
               {showBack ? (

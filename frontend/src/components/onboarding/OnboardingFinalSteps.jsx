@@ -342,37 +342,47 @@ export function ShowcaseAllInOneStep() {
   );
 }
 
-export function ShowcasePricingStep({ selectedPlan, onSelectPlan }) {
+export function ShowcasePricingStep({
+  selectedPlan,
+  onSelectPlan,
+  onContinueCheckout,
+  onInviteFriends,
+  checkoutLoading = false,
+  friendReferralEnrolling = false,
+  redeemingAccessCode = false,
+  saving = false,
+}) {
   const { lang } = useAppLocale();
   const plans = getOnboardingPricingPlans(lang);
   const plan = plans.find((p) => p.id === selectedPlan) || plans[0];
+  const actionsDisabled = checkoutLoading || redeemingAccessCode || saving || friendReferralEnrolling;
 
   return (
-    <div className={`${ob.step} min-h-0 overflow-hidden`}>
+    <div className="grid h-full min-h-0 w-full min-w-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
       <div className="shrink-0 text-center">
-        <div className="mb-1 flex items-center justify-center gap-2">
+        <div className="mb-0.5 flex items-center justify-center gap-2">
           <Logo size={22} />
           <span className="font-display text-sm font-bold text-swiipr-gradient sm:text-base">{BRAND.NAME}</span>
         </div>
-        <OnboardingValueTagline prominent className="mt-1 px-2" />
-        <p className={`mt-1 text-xs font-medium ${ob.muted}`}>
+        <OnboardingValueTagline prominent className="mt-0.5 px-2" />
+        <p className={`mt-0.5 text-xs font-medium ${ob.muted}`}>
           {lang === "fr" ? "Recherche d\u2019emploi tout-en-un." : "All-in-one job search."}
         </p>
       </div>
 
-      <div className="mt-1 flex min-h-0 flex-1 flex-col gap-1.5 overflow-hidden sm:mt-1.5 sm:gap-2">
-        <div className="relative left-1/2 flex min-h-0 flex-1 -translate-x-1/2 w-screen max-w-none items-end justify-center overflow-hidden">
-          <div className="showcase-pricing-glow pointer-events-none absolute inset-0" aria-hidden />
-          <div className="relative z-10 flex h-full w-full max-w-md items-end justify-center">
-            <ShowcaseImage
-              src={ONBOARDING_SHOWCASE_SCREENS.pricing}
-              alt="Hirly inbox, swipe feed, and applications"
-              className="mx-0 h-full max-h-full w-full max-w-none"
-            />
-          </div>
+      <div className="relative -mx-4 flex min-h-0 w-[calc(100%+2rem)] items-end justify-center overflow-hidden sm:-mx-8 sm:w-[calc(100%+4rem)]">
+        <div className="showcase-pricing-glow pointer-events-none absolute inset-0" aria-hidden />
+        <div className="relative z-10 flex h-full w-full max-w-md items-end justify-center px-4 sm:px-8">
+          <ShowcaseImage
+            src={ONBOARDING_SHOWCASE_SCREENS.pricing}
+            alt="Hirly inbox, swipe feed, and applications"
+            className="mx-0 h-full max-h-full w-full object-contain object-bottom"
+          />
         </div>
+      </div>
 
-        <div className="shrink-0 space-y-1.5">
+      <div className="min-h-0 w-full min-w-0 shrink-0 pt-1">
+        <div className="space-y-1.5">
           {plans.map((item) => {
             const on = selectedPlan === item.id;
             return (
@@ -414,7 +424,34 @@ export function ShowcasePricingStep({ selectedPlan, onSelectPlan }) {
           })}
         </div>
 
-        <p className={`shrink-0 text-center text-[10px] ${ob.dim}`}>{plan.footnote}</p>
+        <p className={`mt-1 text-center text-[10px] ${ob.dim}`}>{plan.footnote}</p>
+
+        <div className="mt-1.5 space-y-2 pb-0.5 sm:pb-1">
+          <button
+            type="button"
+            onClick={onContinueCheckout}
+            disabled={actionsDisabled}
+            data-testid="showcase-pricing-continue"
+            className="w-full h-11 sm:h-12 rounded-full gradient-linkedin text-white font-bold text-sm sm:text-base disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity shadow-[0_12px_40px_-12px_rgba(124,58,237,0.45)]"
+          >
+            {checkoutLoading
+              ? (lang === "fr" ? "Ouverture du paiement..." : "Opening checkout...")
+              : redeemingAccessCode || saving
+                ? (lang === "fr" ? "Activation..." : "Activating...")
+                : (lang === "fr" ? "Continuer" : "Continue")}
+          </button>
+          <button
+            type="button"
+            onClick={onInviteFriends}
+            disabled={actionsDisabled}
+            className="w-full h-11 sm:h-12 rounded-full border-2 border-violet-500 bg-white text-sm sm:text-base font-bold text-linkedin hover:bg-violet-50 transition-colors disabled:opacity-50"
+            data-testid="showcase-pricing-friend-referral"
+          >
+            {friendReferralEnrolling
+              ? (lang === "fr" ? "Préparation..." : "Preparing...")
+              : (lang === "fr" ? "Inviter 3 amis" : "Invite 3 friends")}
+          </button>
+        </div>
       </div>
     </div>
   );

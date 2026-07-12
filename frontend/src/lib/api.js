@@ -7,6 +7,7 @@ import { isFinanceDemoEnabled } from "./demoSettings";
 import { handleDemoCvUpload, shouldMockCvUpload, extractUploadFile } from "./demoCvUpload";
 import { normalizeApiPath } from "./apiPath";
 import { getInviteDevResponse } from "./inviteDevMocks";
+import { getFriendReferralDevResponse } from "./friendReferralDevMocks";
 
 const normalizeBackendUrl = (value) => {
   const raw = (value || "").trim();
@@ -151,6 +152,18 @@ api.interceptors.request.use((config) => {
 
   // Known dev invite codes (123456 / 654321) — works even when the backend store is empty.
   if (!config.adapter && process.env.NODE_ENV === "development") {
+    const friendReferralMock = getFriendReferralDevResponse(config);
+    if (friendReferralMock !== undefined) {
+      config.adapter = () => Promise.resolve({
+        data: friendReferralMock,
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config,
+      });
+      return config;
+    }
+
     const inviteMock = getInviteDevResponse(config);
     if (inviteMock !== undefined) {
       config.adapter = () => Promise.resolve({

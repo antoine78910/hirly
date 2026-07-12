@@ -5,19 +5,23 @@ import {
 } from "./onboardingContactPhone";
 
 describe("onboardingContactPhone", () => {
-  it("validates local phone length", () => {
-    expect(isValidContactPhone("612345678")).toBe(true);
-    expect(isValidContactPhone("1234567")).toBe(false);
+  it("validates local phone length per country", () => {
+    expect(isValidContactPhone("612345678", "FR", "+33")).toBe(true);
+    expect(isValidContactPhone("61234567", "FR", "+33")).toBe(false);
+    expect(isValidContactPhone("5551234567", "US", "+1")).toBe(true);
+    expect(isValidContactPhone("555123456", "US", "+1")).toBe(false);
   });
 
-  it("formats phone with prefix", () => {
-    expect(formatContactPhone("+33", "612345678")).toBe("+33 61 23 45 67 8");
+  it("formats phone with country-specific spacing", () => {
+    expect(formatContactPhone("+33", "612345678", "FR")).toBe("+33 6 12 34 56 78");
+    expect(formatContactPhone("+1", "5551234567", "US")).toBe("+1 555 123 4567");
   });
 
   it("parses stored phone numbers", () => {
     expect(parseStoredContactPhone("+33 6 12 34 56 78", "fr")).toEqual({
       prefix: "+33",
-      local: "61 23 45 67 8",
+      iso2: "FR",
+      local: "6 12 34 56 78",
     });
   });
 });

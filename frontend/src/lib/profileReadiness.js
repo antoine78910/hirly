@@ -8,7 +8,7 @@ export function profileHasPhone(profile) {
   const raw = profile?.contact?.phone;
   if (!raw || !String(raw).trim()) return false;
   const parsed = parseStoredContactPhone(raw);
-  return isValidContactPhone(parsed.local || raw);
+  return isValidContactPhone(parsed.local || raw, parsed.iso2, parsed.prefix);
 }
 
 export function isMissingResumeFeedError(message) {

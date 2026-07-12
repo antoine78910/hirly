@@ -42,12 +42,19 @@ export default function InviteLanding() {
   const [authNotice, setAuthNotice] = useState("");
   const autoRedeemStarted = useRef(false);
   const [redeemFailed, setRedeemFailed] = useState(false);
+  const [autoRedeemSettled, setAutoRedeemSettled] = useState(false);
 
   const normalized = String(code || "").trim();
   const invalid = !/^\d{6}$/.test(normalized);
   const trainingInvite = isTrainingInvite(inviteMeta);
   const demoInvite = isDemoInvite(inviteMeta);
   const isValid = !invalid && inviteMeta?.valid === true;
+
+  useEffect(() => {
+    setAutoRedeemSettled(false);
+    setRedeemFailed(false);
+    autoRedeemStarted.current = false;
+  }, [normalized]);
 
   useEffect(() => {
     if (invalid) {
@@ -90,6 +97,8 @@ export default function InviteLanding() {
     if (!user?.demo_account) return;
     autoRedeemStarted.current = true;
     goToInviteDestination(null, inviteMeta);
+    const timer = window.setTimeout(() => setAutoRedeemSettled(true), 2000);
+    return () => window.clearTimeout(timer);
   }, [authLoading, checking, invalid, isValid, demoInvite, user, inviteMeta]);
 
   useEffect(() => {
@@ -114,6 +123,7 @@ export default function InviteLanding() {
         }
       } finally {
         setRedeeming(false);
+        setAutoRedeemSettled(true);
       }
     })();
   }, [authLoading, checking, user, normalized, invalid, isValid, redeeming, redeemFailed, inviteMeta]);
@@ -174,7 +184,7 @@ export default function InviteLanding() {
     setAuthNotice("");
   };
 
-  if (checking || redeeming || (user && isValid && !redeemFailed)) {
+  if (checking || redeeming || (user && isValid && !redeemFailed && !autoRedeemSettled)) {
     return (
       <div className="min-h-dvh flex items-center justify-center bg-white">
         <div className="flex flex-col items-center gap-3 text-zinc-500">

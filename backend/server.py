@@ -182,6 +182,17 @@ from training_service import (
     sync_training_locale_content,
 )
 from training_access import require_training_access, training_access_payload
+from friend_referral_service import (
+    claim_friend_referral_reward,
+    enroll_friend_referral,
+    friend_referral_status_payload,
+    redeem_friend_referral_code,
+    FRIEND_REFERRAL_REWARD_CREDITS,
+)
+from referral_email_service import (
+    send_friend_referral_reward_email,
+    send_friend_referral_used_email,
+)
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -1557,6 +1568,31 @@ async def track_analytics_event(
     return {"ok": True, "stored": True, "event_id": event_doc["event_id"]}
 
 
+async def _store_friend_referral_analytics(
+    event: str,
+    *,
+    user_id: Optional[str] = None,
+    properties: Optional[Dict[str, Any]] = None,
+) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        await db.analytics_events.insert_one({
+            "event_id": f"evt_{uuid.uuid4().hex}",
+            "user_id": user_id,
+            "event": event,
+            "properties": properties or {},
+            "page": "friend_referral",
+            "source": "backend",
+            "created_at": now,
+        })
+    except Exception as exc:
+        logger.warning(
+            "friend_referral_analytics_failed event=%s error=%s",
+            event,
+            str(exc)[:200],
+        )
+
+
 @api_router.post("/auth/logout")
 async def auth_logout(
     response: Response,
@@ -1686,6 +1722,7 @@ def _billing_status_payload(user_doc: Optional[Dict[str, Any]]) -> Dict[str, Any
         "is_premium": is_premium,
         "credits_total": int(billing.get("credits_total") or 0),
         "credits_remaining": int(billing.get("credits_remaining") or 0),
+        "friend_referral": friend_referral_status_payload(user_doc),
     }
 
 
@@ -1695,6 +1732,7 @@ _PLAN_CREDIT_LIMITS = {
     "ultra": 600,
     "pro": 200,
     "basic": 80,
+    "friend_referral": FRIEND_REFERRAL_REWARD_CREDITS,
 }
 
 
@@ -1863,6 +1901,30 @@ async def _update_user_billing_by_user_id(user_id: str, updates: Dict[str, Any])
     result = await db.users.update_one({"user_id": user_id}, {"$set": update_fields})
     if getattr(result, "matched_count", 0) == 0:
         logger.warning("stripe_billing_user_update_no_match user_id=%s keys=%s", user_id, sorted(updates.keys()))
+
+
+async def _grant_friend_referral_billing(user_id: str) -> None:
+    now = datetime.now(timezone.utc)
+    updates = {
+        "subscription_status": "active",
+        "plan": "friend_referral",
+        "interval": "monthly",
+        "source": "friend_referral",
+        "stripe_subscription_id": f"friend_referral_{user_id}_{uuid.uuid4().hex[:12]}",
+        "last_payment_status": "friend_referral_reward",
+        "current_period_start": now.isoformat(),
+        "current_period_end": (now + timedelta(days=30)).isoformat(),
+    }
+    await _update_user_billing_by_user_id(user_id, updates)
+    await db.users.update_one(
+        {"user_id": user_id},
+        {
+            "$set": {
+                "billing.credits_total": FRIEND_REFERRAL_REWARD_CREDITS,
+                "billing.credits_remaining": FRIEND_REFERRAL_REWARD_CREDITS,
+            }
+        },
+    )
 
 
 async def _finalize_user_billing(user_id: str) -> Optional[Dict[str, Any]]:
@@ -2734,6 +2796,92 @@ async def create_billing_portal_session(user: User = Depends(get_current_user)):
         return_url=f"{_app_url()}/billing",
     )
     return {"url": session["url"]}
+
+
+@api_router.post("/referrals/friends/enroll")
+async def enroll_friend_referral_route(user: User = Depends(get_current_user)):
+    status = await enroll_friend_referral(db, user.user_id)
+    await _store_friend_referral_analytics(
+        "friend_referral_code_generated",
+        user_id=user.user_id,
+        properties={
+            "code": status.get("code"),
+            "uses_count": status.get("uses_count"),
+        },
+    )
+    return status
+
+
+@api_router.get("/referrals/friends/status")
+async def friend_referral_status_route(user: User = Depends(get_current_user)):
+    user_doc = await _get_user_doc(user)
+    return friend_referral_status_payload(user_doc)
+
+
+@api_router.post("/referrals/friends/redeem")
+async def redeem_friend_referral_route(payload: Dict[str, Any], user: User = Depends(get_current_user)):
+    code = (payload.get("code") or "").strip()
+    try:
+        result = await redeem_friend_referral_code(
+            db,
+            code=code,
+            redeemer_user_id=user.user_id,
+            redeemer_email=user.email,
+            send_use_email=send_friend_referral_used_email,
+            send_reward_email=send_friend_referral_reward_email,
+            grant_reward=_grant_friend_referral_billing,
+            app_url=_app_url(),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await _store_friend_referral_analytics(
+        "friend_referral_code_redeemed",
+        user_id=user.user_id,
+        properties={
+            "code": code.upper(),
+            "referrer_uses_count": result.get("uses_count"),
+            "reward_unlocked": result.get("reward_unlocked"),
+        },
+    )
+    referrer_id = result.get("referrer_user_id")
+    if referrer_id:
+        await _store_friend_referral_analytics(
+            "friend_referral_invite_received",
+            user_id=referrer_id,
+            properties={
+                "code": code.upper(),
+                "uses_count": result.get("uses_count"),
+                "reward_unlocked": result.get("reward_unlocked"),
+            },
+        )
+        if result.get("reward_unlocked"):
+            await _store_friend_referral_analytics(
+                "friend_referral_reward_unlocked",
+                user_id=referrer_id,
+                properties={"uses_count": result.get("uses_count")},
+            )
+    return result
+
+
+@api_router.post("/referrals/friends/claim")
+async def claim_friend_referral_route(payload: Dict[str, Any], user: User = Depends(get_current_user)):
+    token = (payload.get("token") or "").strip() or None
+    try:
+        status = await claim_friend_referral_reward(db, user.user_id, token)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await _store_friend_referral_analytics(
+        "friend_referral_reward_claimed",
+        user_id=user.user_id,
+        properties={
+            "uses_count": status.get("uses_count"),
+            "reward_granted": status.get("reward_granted"),
+            "reward_credits": status.get("reward_credits"),
+        },
+    )
+    user_doc = await _get_user_doc(user)
+    return {**status, "billing": _billing_status_payload(user_doc)}
 
 
 _STRIPE_UPGRADE_PORTAL_CONFIG_CACHE: Dict[str, str] = {}
@@ -9565,17 +9713,22 @@ ONBOARDING_STEP_ORDER: List[tuple[str, str]] = [
     ("intro", "Intro slides"),
     ("signup", "Sign up"),
     ("jobSearch", "Job search status"),
-    ("location", "Location"),
+    ("jobGoal", "Job goal"),
+    ("compare2x", "2× interviews comparison"),
     ("contractType", "Contract type"),
     ("otherApps", "Other apps used"),
-    ("longTerm", "Long-term goals"),
+    ("longTerm", "Long-term results"),
     ("categories", "Job categories"),
     ("experience", "Experience level"),
+    ("location", "Target location"),
+    ("contactPhone", "Phone number"),
     ("salary", "Salary expectations"),
     ("interviews", "Interviews per week"),
+    ("jobTimeline", "Job search timeline"),
     ("interviewsConfirm", "Interviews confirmation"),
-    ("potentialChart", "Potential chart"),
-    ("compare2x", "Comparison screen"),
+    ("jobBlocker", "Job search blocker"),
+    ("jobAccomplish", "Job search goal"),
+    ("potentialChart", "Interview potential"),
     ("attribution", "Acquisition source"),
     ("referralCode", "Referral code"),
     ("upload", "CV upload"),

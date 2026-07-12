@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { motion, useMotionValue, useTransform, AnimatePresence } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { api } from "../lib/api";
 import {
   Zap, Undo2, History, SlidersHorizontal, Flag, Share2, MapPin, Calendar,
@@ -40,7 +40,10 @@ import { hasActiveFilters, mergeFilters, clearMenuFilters } from "../lib/jobFilt
 import { reconcileFiltersForUser } from "../lib/contractTypeMapping";
 import { useAppLocale } from "../context/AppLocaleContext";
 import DesktopCreditsPill from "../components/desktop/DesktopCreditsPill";
+import FriendReferralPendingBanner from "../components/swipe/FriendReferralPendingBanner";
+import FriendReferralCodeDialog from "../components/onboarding/FriendReferralCodeDialog";
 import { BILLING_UPDATED, notifyBillingPatch } from "../lib/billingEvents";
+import { claimFriendReferralReward } from "../lib/friendReferral";
 import {
   formatPostedDate,
   getSwipeSuccessCopy,
@@ -755,6 +758,7 @@ function SkeletonCard() {
 
 export default function Swipe() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { t, lang } = useAppLocale();
   const { loading: authLoading, user, isAdmin } = useAuth();
   const [demoWelcomeOpen, setDemoWelcomeOpen] = useState(false);
@@ -782,6 +786,7 @@ export default function Swipe() {
   const [profile, setProfile] = useState(null);
   const [resumeSheetOpen, setResumeSheetOpen] = useState(false);
   const [phoneSheetOpen, setPhoneSheetOpen] = useState(false);
+  const [friendReferralDialogOpen, setFriendReferralDialogOpen] = useState(false);
   const { upgradeOpen, openUpgrade } = useUpgradeModal();
   const fetchingRef = useRef(false);
   const filtersRef = useRef(filters);
@@ -1400,6 +1405,59 @@ export default function Swipe() {
     return () => window.removeEventListener(BILLING_UPDATED, onBillingUpdated);
   }, []);
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("friendReferral") !== "unlocked") return;
+    const token = params.get("token");
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await claimFriendReferralReward(token);
+        if (cancelled) return;
+        if (data?.billing) {
+          setBilling(data.billing);
+          notifyBillingPatch(data.billing);
+        }
+        toast.success(
+          lang === "fr"
+            ? "Votre mois gratuit est actif — 40 candidatures disponibles."
+            : "Your free month is active — 40 applications available.",
+        );
+      } catch (err) {
+        if (!cancelled) {
+          toast.error(err?.response?.data?.detail || (lang === "fr" ? "Lien de récompense invalide" : "Invalid reward link"));
+        }
+      } finally {
+        if (!cancelled) {
+          params.delete("friendReferral");
+          params.delete("token");
+          const nextSearch = params.toString();
+          navigate({ pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : "" }, { replace: true });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [location.search, location.pathname, navigate, lang]);
+
+  useEffect(() => {
+    if (!billing?.friend_referral?.pending_access) return undefined;
+    const timer = window.setInterval(() => {
+      api.get("/billing/status")
+        .then(({ data }) => setBilling(data))
+        .catch(() => {});
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, [billing?.friend_referral?.pending_access]);
+
+  useEffect(() => {
+    if (!friendReferralDialogOpen) return;
+    api.get("/billing/status")
+      .then(({ data }) => setBilling(data))
+      .catch(() => {});
+  }, [friendReferralDialogOpen]);
+
   const applyFilters = (f) => {
     trackEvent("filters_applied", {
       locations: f?.locations,
@@ -1441,11 +1499,16 @@ export default function Swipe() {
   const topJob = jobs[0];
   const creditsRemaining = Number(billing?.credits_remaining ?? 0);
   const isDemoUser = isDemoSwipeMode() || isDemoAccountEnabled() || Boolean(user?.demo_account);
+  const friendReferral = billing?.friend_referral;
+  const friendReferralPending = Boolean(friendReferral?.pending_access);
   const shouldGateApply = billing !== null && (!billing.is_premium || creditsRemaining <= 0) && !isDemoUser;
   const requiresProfileForApply = !isDemoUser && !isFinanceDemoEnabled();
 
   const resolveApplyGate = useCallback(() => {
     if (shouldGateApply) {
+      if (friendReferralPending) {
+        return { blocked: true, action: () => setFriendReferralDialogOpen(true) };
+      }
       return { blocked: true, action: () => openUpgrade() };
     }
     if (!requiresProfileForApply) {
@@ -1459,7 +1522,7 @@ export default function Swipe() {
       return { blocked: true, action: () => setPhoneSheetOpen(true) };
     }
     return { blocked: false };
-  }, [openUpgrade, requiresProfileForApply, shouldGateApply]);
+  }, [openUpgrade, requiresProfileForApply, shouldGateApply, friendReferralPending]);
 
   const shouldBlockApply = useCallback(() => resolveApplyGate().blocked, [resolveApplyGate]);
 
@@ -1701,6 +1764,17 @@ export default function Swipe() {
   return (
     <>
       <div className="hidden md:block">
+        {friendReferralPending ? (
+          <div className="px-6 pt-4">
+            <FriendReferralPendingBanner
+              code={friendReferral?.code}
+              usesCount={friendReferral?.uses_count}
+              goal={friendReferral?.goal}
+              lang={lang}
+              onViewCode={() => setFriendReferralDialogOpen(true)}
+            />
+          </div>
+        ) : null}
         <DesktopSwipeFeed
           job={topJob}
           loading={loading}
@@ -1785,6 +1859,18 @@ export default function Swipe() {
           </button>
         </div>
       </header>
+
+      {friendReferralPending ? (
+        <div className="shrink-0 px-4">
+          <FriendReferralPendingBanner
+            code={friendReferral?.code}
+            usesCount={friendReferral?.uses_count}
+            goal={friendReferral?.goal}
+            lang={lang}
+            onViewCode={() => setFriendReferralDialogOpen(true)}
+          />
+        </div>
+      ) : null}
 
       <div className="flex min-h-0 flex-1 flex-col px-4 pt-1">
         <div className="relative mx-auto min-h-0 w-full max-w-md flex-1 overflow-hidden">
@@ -1937,6 +2023,27 @@ export default function Swipe() {
         profile={profile}
         onClose={() => setPhoneSheetOpen(false)}
         onSaved={handleProfileReadinessUpdated}
+      />
+
+      <FriendReferralCodeDialog
+        open={friendReferralDialogOpen}
+        onOpenChange={setFriendReferralDialogOpen}
+        code={friendReferral?.code}
+        usesCount={friendReferral?.uses_count}
+        goal={friendReferral?.goal}
+        lang={lang}
+        onUsesCountChange={(count) => {
+          setBilling((prev) => {
+            if (!prev?.friend_referral) return prev;
+            return {
+              ...prev,
+              friend_referral: {
+                ...prev.friend_referral,
+                uses_count: count,
+              },
+            };
+          });
+        }}
       />
 
       {feedDebugEnabled && (

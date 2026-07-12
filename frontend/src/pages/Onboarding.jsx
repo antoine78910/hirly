@@ -46,11 +46,24 @@ import {
   InterviewTargetDashes,
 } from "../components/onboarding/OnboardingVisuals";
 import OnboardingContactPhoneStep, { getContactPhoneCopy } from "../components/onboarding/OnboardingContactPhoneStep";
+import FriendReferralCodeDialog from "../components/onboarding/FriendReferralCodeDialog";
 import {
   formatContactPhone,
   isValidContactPhone,
   parseStoredContactPhone,
 } from "../lib/onboardingContactPhone";
+import { getDefaultPhonePrefix, getDefaultPhoneCountryIso2 } from "../lib/phoneCountryCodes";
+import { formatLocalPhoneDisplay } from "../lib/phoneLocalFormats";
+import {
+  enrollFriendReferral,
+  fetchFriendReferralStatus,
+  friendReferralCodeForUser,
+  getPendingFriendReferralCode,
+  isFriendReferralCode,
+  redeemFriendReferralCode,
+  storePendingFriendReferralCode,
+  clearPendingFriendReferralCode,
+} from "../lib/friendReferral";
 import { resolveLandingContractType } from "../lib/landingHeroCopy";
 import {
   INTRO_SLIDES,
@@ -211,9 +224,14 @@ export default function Onboarding() {
     () => readOnboardingPreviewBoot(STEP_ORDER)?.state?.attribution ?? null,
   );
   const [referralCode, setReferralCode] = useState("");
-  const [contactPhonePrefix, setContactPhonePrefix] = useState(() => (lang === "fr" ? "+33" : "+1"));
+  const [contactPhonePrefix, setContactPhonePrefix] = useState(() => getDefaultPhonePrefix(lang));
+  const [contactPhoneCountryIso2, setContactPhoneCountryIso2] = useState(() => getDefaultPhoneCountryIso2(lang));
   const [contactPhoneLocal, setContactPhoneLocal] = useState("");
   const [savingPhone, setSavingPhone] = useState(false);
+  const [friendReferralDialogOpen, setFriendReferralDialogOpen] = useState(false);
+  const [friendReferralUserCode, setFriendReferralUserCode] = useState("");
+  const [friendReferralUsesCount, setFriendReferralUsesCount] = useState(0);
+  const [friendReferralEnrolling, setFriendReferralEnrolling] = useState(false);
 
   useEffect(() => {
     preloadOnboardingIntroImages();
@@ -226,6 +244,27 @@ export default function Onboarding() {
     trackEvent("onboarding_started");
     trackDatafastGoal("onboarding_started");
   }, []);
+
+  useEffect(() => {
+    const fromUrl = searchParams.get("referral");
+    if (!fromUrl || !isFriendReferralCode(fromUrl)) return;
+    const normalized = fromUrl.trim().toUpperCase();
+    setReferralCode(normalized);
+    storePendingFriendReferralCode(normalized);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("referral");
+      return next;
+    }, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    const pending = getPendingFriendReferralCode();
+    if (pending && isFriendReferralCode(pending)) {
+      setReferralCode((current) => current || pending);
+    }
+  }, []);
+
   const [suggestedCategories, setSuggestedCategories] = useState(
     () => readOnboardingPreviewBoot(STEP_ORDER)?.state?.suggestedCategories ?? [],
   );
@@ -246,10 +285,17 @@ export default function Onboarding() {
   const resumeAppliedRef = useRef(false);
   const inputRef = useRef();
 
+  const handleContactPhoneCountryChange = ({ dial, iso2 }) => {
+    setContactPhonePrefix(dial);
+    setContactPhoneCountryIso2(iso2);
+    setContactPhoneLocal((current) => formatLocalPhoneDisplay(current, iso2, dial));
+  };
+
   useEffect(() => {
     const parsed = parseStoredContactPhone(profile?.contact?.phone, lang);
     if (!parsed.local) return;
     setContactPhonePrefix(parsed.prefix);
+    setContactPhoneCountryIso2(parsed.iso2);
     setContactPhoneLocal(parsed.local);
   }, [profile?.contact?.phone, lang]);
 
@@ -758,7 +804,7 @@ export default function Onboarding() {
   };
 
   const saveContactPhone = async () => {
-    const formatted = formatContactPhone(contactPhonePrefix, contactPhoneLocal);
+    const formatted = formatContactPhone(contactPhonePrefix, contactPhoneLocal, contactPhoneCountryIso2);
     if (!formatted) return true;
     setSavingPhone(true);
     try {
@@ -846,6 +892,22 @@ export default function Onboarding() {
     }
   };
 
+  const redeemFriendReferralIfPresent = async () => {
+    const code = referralCode.trim().toUpperCase();
+    if (!code || isSixDigitAccessCode(code) || !isFriendReferralCode(code)) return true;
+    try {
+      await redeemFriendReferralCode(code);
+      clearPendingFriendReferralCode();
+      return true;
+    } catch (err) {
+      toast.error(
+        err?.response?.data?.detail
+          || (lang === "fr" ? "Code de parrainage invalide" : "Invalid referral code"),
+      );
+      return false;
+    }
+  };
+
   const finishOnboarding = async (checkoutReturnSearch = "") => {
     if (!user) {
       await startGoogleLogin("/onboarding?step=showcasePricing");
@@ -854,6 +916,10 @@ export default function Onboarding() {
     setSaving(true);
     try {
       if (!(await redeemAccessCodeIfPresent())) {
+        setSaving(false);
+        return;
+      }
+      if (!(await redeemFriendReferralIfPresent())) {
         setSaving(false);
         return;
       }
@@ -870,7 +936,7 @@ export default function Onboarding() {
         contract_type: contractType || undefined,
       });
       const nameParts = splitFullName(user?.name || profile?.contact?.name || "");
-      const formattedPhone = formatContactPhone(contactPhonePrefix, contactPhoneLocal)
+      const formattedPhone = formatContactPhone(contactPhonePrefix, contactPhoneLocal, contactPhoneCountryIso2)
         || profile?.contact?.phone
         || undefined;
       await api.put("/profile/contact", {
@@ -897,6 +963,37 @@ export default function Onboarding() {
       toast.error(lang === "fr" ? "Échec de la configuration" : "Failed to finish setup");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const startFriendReferralEnroll = async () => {
+    trackOnboardingContinue("showcasePricing", { plan: "friend_referral" });
+
+    if (!user) {
+      await startGoogleLogin("/onboarding?step=showcasePricing");
+      return;
+    }
+
+    const fallbackCode = friendReferralCodeForUser(user);
+    setFriendReferralUserCode(fallbackCode);
+    setFriendReferralDialogOpen(true);
+    setFriendReferralEnrolling(true);
+
+    try {
+      void persistOnboardingProgress("showcasePricing", STEP_ORDER.indexOf("showcasePricing"));
+      const data = await enrollFriendReferral();
+      setFriendReferralUserCode(data?.code || fallbackCode);
+      setFriendReferralUsesCount(Number(data?.uses_count) || 0);
+    } catch {
+      try {
+        const status = await fetchFriendReferralStatus();
+        setFriendReferralUserCode(status?.code || fallbackCode);
+        setFriendReferralUsesCount(Number(status?.uses_count) || 0);
+      } catch {
+        setFriendReferralUserCode(fallbackCode);
+      }
+    } finally {
+      setFriendReferralEnrolling(false);
     }
   };
 
@@ -997,7 +1094,7 @@ export default function Onboarding() {
       case "referralCode":
         return true;
       case "contactPhone":
-        return isValidContactPhone(contactPhoneLocal);
+        return isValidContactPhone(contactPhoneLocal, contactPhoneCountryIso2, contactPhonePrefix);
       case "upload":
         return !parsing;
       case "profileSetup":
@@ -1042,7 +1139,7 @@ export default function Onboarding() {
   };
 
   const submitContactPhone = async () => {
-    if (!isValidContactPhone(contactPhoneLocal)) {
+    if (!isValidContactPhone(contactPhoneLocal, contactPhoneCountryIso2, contactPhonePrefix)) {
       toast.error(lang === "fr" ? "Entrez un numéro valide" : "Enter a valid phone number");
       return;
     }
@@ -1083,22 +1180,10 @@ export default function Onboarding() {
   };
 
   const isLastIntroSlide = step === "intro" && introIndex === slides.length - 1;
-  const hideFooter = parsing || step === "profileSetup" || (step === "signup" && !user);
+  const hideFooter = parsing || step === "profileSetup" || (step === "signup" && !user) || step === "showcasePricing";
 
   const footer = !hideFooter ? (
-    step === "showcasePricing" ? (
-      <ContinueButton
-        onClick={startOnboardingCheckout}
-        disabled={checkoutLoading || redeemingAccessCode || saving}
-        testId="showcase-pricing-continue"
-      >
-        {checkoutLoading
-          ? (lang === "fr" ? "Ouverture du paiement..." : "Opening checkout...")
-          : redeemingAccessCode || saving
-            ? (lang === "fr" ? "Activation..." : "Activating...")
-            : (lang === "fr" ? "Continuer" : "Continue")}
-      </ContinueButton>
-    ) : step === "profileWelcome" ? (
+    step === "profileWelcome" ? (
       <ContinueButton onClick={onContinue} testId="profile-welcome-continue">
         {lang === "fr" ? "Continuer" : "Continue"}
       </ContinueButton>
@@ -1882,13 +1967,16 @@ export default function Onboarding() {
             <p className={stepSubtitleClass}>
               {phoneCopy.subtitle}
             </p>
-            <OnboardingContactPhoneStep
-              lang={lang}
-              phonePrefix={contactPhonePrefix}
-              phoneLocal={contactPhoneLocal}
-              onPrefixChange={setContactPhonePrefix}
-              onPhoneChange={setContactPhoneLocal}
-            />
+            <div className={ob.stepBody}>
+              <OnboardingContactPhoneStep
+                lang={lang}
+                phonePrefix={contactPhonePrefix}
+                phoneCountryIso2={contactPhoneCountryIso2}
+                phoneLocal={contactPhoneLocal}
+                onCountryChange={handleContactPhoneCountryChange}
+                onPhoneChange={setContactPhoneLocal}
+              />
+            </div>
           </motion.div>
           );
         })()}
@@ -1910,7 +1998,12 @@ export default function Onboarding() {
             <ShowcasePricingStep
               selectedPlan={selectedPlan}
               onSelectPlan={setSelectedPlan}
-              locationLabel={onboardingLocationData?.location_label || onboardingLocation || "Your city"}
+              onContinueCheckout={startOnboardingCheckout}
+              onInviteFriends={startFriendReferralEnroll}
+              checkoutLoading={checkoutLoading}
+              friendReferralEnrolling={friendReferralEnrolling}
+              redeemingAccessCode={redeemingAccessCode}
+              saving={saving}
             />
           </motion.div>
         )}
@@ -1919,6 +2012,15 @@ export default function Onboarding() {
       </AnimatePresence>
     </OnboardingShell>
     )}
+    <FriendReferralCodeDialog
+      open={friendReferralDialogOpen}
+      onOpenChange={setFriendReferralDialogOpen}
+      code={friendReferralUserCode}
+      usesCount={friendReferralUsesCount}
+      loading={friendReferralEnrolling}
+      lang={lang}
+      onUsesCountChange={setFriendReferralUsesCount}
+    />
     </>
   );
 }
