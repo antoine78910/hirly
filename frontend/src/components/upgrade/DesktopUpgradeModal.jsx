@@ -21,6 +21,7 @@ import { api } from "@/lib/api";
 import { withDatafastAttribution } from "@/lib/datafast";
 import Logo from "@/components/Logo";
 import { useAppLocale } from "@/context/AppLocaleContext";
+import { useAuth } from "@/context/AuthContext";
 import { getUpgradeContent } from "@/lib/appUi";
 import { formatMoney, formatUnitMoney } from "@/lib/currency";
 import { notifyBillingUpdated } from "@/lib/billingEvents";
@@ -127,6 +128,7 @@ function monthlyEquivalentApplications(billing) {
 }
 
 export default function DesktopUpgradeModal({ open, onClose }) {
+  const { checkAuth } = useAuth();
   const { t, lang } = useAppLocale();
   const location = useLocation();
   const returnPath = `${location.pathname}${location.search}`;
@@ -210,6 +212,9 @@ export default function DesktopUpgradeModal({ open, onClose }) {
         });
         if (data?.billing) {
           notifyBillingUpdated(data.billing);
+        }
+        if (data?.demo_account) {
+          await checkAuth();
         }
         toast.success("Test plan activated");
         setAccessCode("");

@@ -141,3 +141,17 @@ def test_admin_original_cv_download_is_unavailable_when_not_stored(monkeypatch):
         asyncio.run(server.admin_download_original_cv("app_1", admin=object()))
 
     assert exc.value.status_code == 404
+
+
+def test_admin_tailored_cv_download_availability_requires_stored_file():
+    structured_only = server._admin_doc_metadata({
+        "tailored_resume_structured": {"summary": "Tailored summary"},
+    })
+    stored_file = server._admin_doc_metadata({
+        "tailored_cv_file_b64": base64.b64encode(b"docx").decode(),
+        "tailored_resume_structured": {"summary": "Tailored summary"},
+    })
+
+    assert structured_only["tailored_cv_available"] is False
+    assert structured_only["tailored_cv_text_available"] is True
+    assert stored_file["tailored_cv_available"] is True

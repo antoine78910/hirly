@@ -44,6 +44,19 @@ const stringifyForCopy = (value) => {
   return JSON.stringify(value, null, 2);
 };
 
+const downloadErrorMessage = async (err) => {
+  const payload = err?.response?.data;
+  if (payload instanceof Blob) {
+    try {
+      const parsed = JSON.parse(await payload.text());
+      return parsed?.detail || "Download failed";
+    } catch {
+      return "Download failed";
+    }
+  }
+  return payload?.detail || "Download failed";
+};
+
 function Section({ title, children }) {
   return (
     <section className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
@@ -200,7 +213,7 @@ export default function AdminApplicationDetail() {
       link.click();
       URL.revokeObjectURL(url);
     } catch (err) {
-      toast.error(err?.response?.data?.detail || "Download failed");
+      toast.error(await downloadErrorMessage(err));
     }
   };
 
