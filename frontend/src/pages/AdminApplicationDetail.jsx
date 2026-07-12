@@ -194,7 +194,9 @@ export default function AdminApplicationDetail() {
       const url = URL.createObjectURL(response.data);
       const link = document.createElement("a");
       link.href = url;
-      link.download = kind === "tailored-cv" ? "tailored_cv.docx" : "cover_letter.txt";
+      link.download = kind === "original-cv"
+        ? (docs.original_cv_filename || "original_cv")
+        : kind === "tailored-cv" ? "tailored_cv.docx" : "cover_letter.txt";
       link.click();
       URL.revokeObjectURL(url);
     } catch (err) {
@@ -285,6 +287,9 @@ export default function AdminApplicationDetail() {
                 Open job application URL
               </Button>
               <Button variant="outline" onClick={() => copyText("user info", contact)}>Copy user info</Button>
+              <Button variant="outline" onClick={() => downloadAdminFile("original-cv")} disabled={!docs.original_cv_available}>
+                Download original CV
+              </Button>
               <Button variant="outline" onClick={() => downloadAdminFile("tailored-cv")} disabled={!docs.tailored_cv_available}>
                 Download tailored CV
               </Button>

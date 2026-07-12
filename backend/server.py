@@ -11008,9 +11008,12 @@ async def admin_get_application(application_id: str, admin: User = Depends(requi
         "user_facing_submission_status": _user_facing_submission_status(app_doc),
     }
     application_url = _job_application_url(job)
+    public_profile = dict(profile or {})
+    public_profile.pop("cv_original_b64", None)
+    original_cv_available = bool((profile or {}).get("cv_original_b64"))
     return {
         "application": app_with_admin,
-        "profile": profile,
+        "profile": public_profile,
         "job": {
             **(job or {}),
             "application_url": application_url,
@@ -11024,12 +11027,18 @@ async def admin_get_application(application_id: str, admin: User = Depends(requi
         "resolved_answers": app_doc.get("resolved_answers") or app_doc.get("prepared_generated_answers") or [],
         "required_questions": required_questions,
         "browser_submission_runs": runs,
-        "generated_documents_metadata": _admin_doc_metadata(app_doc),
+        "generated_documents_metadata": {
+            **_admin_doc_metadata(app_doc),
+            "original_cv_available": original_cv_available,
+            "original_cv_filename": (profile or {}).get("cv_filename"),
+            "original_cv_mime": (profile or {}).get("cv_mime"),
+        },
         "tailored_resume": tailored_resume,
         "tailored_resume_text": json.dumps(tailored_resume, indent=2, default=str) if tailored_resume else "",
         "cover_letter": cover_letter,
         "cover_letter_text": cover_letter_to_text(cover_letter) if cover_letter else "",
         "download_urls": {
+            "original_cv": f"/api/admin/applications/{application_id}/original-cv",
             "tailored_cv": f"/api/admin/applications/{application_id}/tailored-cv",
             "cover_letter": f"/api/admin/applications/{application_id}/cover-letter",
         },
@@ -11187,6 +11196,34 @@ async def admin_update_application_manual_status(
     )
     updated = await db.applications.find_one({"application_id": application_id}, {"_id": 0})
     return {"ok": True, "application": _normalize_application_status_fields(updated or {})}
+
+
+@api_router.get("/admin/applications/{application_id}/original-cv")
+async def admin_download_original_cv(application_id: str, admin: User = Depends(require_admin_user)):
+    from fastapi.responses import Response as FastAPIResponse
+
+    app_doc = await db.applications.find_one(
+        {"application_id": application_id},
+        {"_id": 0, "user_id": 1},
+    )
+    if not app_doc:
+        raise HTTPException(status_code=404, detail="Application not found")
+    profile = await db.profiles.find_one(
+        {"user_id": app_doc.get("user_id")},
+        {"_id": 0, "cv_original_b64": 1, "cv_mime": 1, "cv_filename": 1},
+    )
+    if not profile or not profile.get("cv_original_b64"):
+        raise HTTPException(status_code=404, detail="Original CV not stored")
+    try:
+        content = base64.b64decode(profile["cv_original_b64"], validate=True)
+    except (ValueError, TypeError, base64.binascii.Error) as exc:
+        raise HTTPException(status_code=500, detail="Stored original CV is invalid") from exc
+    filename = profile.get("cv_filename") or "original_cv"
+    return FastAPIResponse(
+        content=content,
+        media_type=profile.get("cv_mime") or "application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @api_router.get("/admin/applications/{application_id}/tailored-cv")

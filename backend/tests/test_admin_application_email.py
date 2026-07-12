@@ -117,3 +117,27 @@ def test_admin_send_application_email_surfaces_transport_failure(monkeypatch):
             )
         )
     assert exc.value.status_code == 502
+
+
+def test_admin_can_download_stored_original_cv(monkeypatch):
+    fake_db, _ = _setup(monkeypatch)
+    fake_db.profiles._rows["profile"].update({
+        "cv_original_b64": base64.b64encode(b"original pdf bytes").decode(),
+        "cv_filename": "candidate-original.pdf",
+        "cv_mime": "application/pdf",
+    })
+
+    response = asyncio.run(server.admin_download_original_cv("app_1", admin=object()))
+
+    assert response.body == b"original pdf bytes"
+    assert response.media_type == "application/pdf"
+    assert "candidate-original.pdf" in response.headers["content-disposition"]
+
+
+def test_admin_original_cv_download_is_unavailable_when_not_stored(monkeypatch):
+    _setup(monkeypatch)
+
+    with pytest.raises(server.HTTPException) as exc:
+        asyncio.run(server.admin_download_original_cv("app_1", admin=object()))
+
+    assert exc.value.status_code == 404
