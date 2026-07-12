@@ -442,21 +442,46 @@ function CardFront({ job, onReport, onShare, actionsEnabled, t, lang, pointerEve
   );
 }
 
-function CardBack({ job, t, lang, onScrollIntent, onFlipBack, onSurfaceTap }) {
+function CardBack({ job, t, lang, onFlipBack }) {
   const { about, detailSections } = getJobDisplayContent(job);
   const badges = getJobBadgeItems(job, { lang });
   const title = getJobDisplayTitle(job, { lang });
   const location = translateLocationLabel(job.location, lang) || t("swipe.locationNotSpecified");
   const salaryLabel = formatJobSalaryLabel(job, { lang });
+  const scrollRef = useRef(null);
+  const pointerRef = useRef({ startY: 0, startScrollTop: 0, moved: false });
+
+  const handlePointerDown = (event) => {
+    pointerRef.current = {
+      startY: event.clientY,
+      startScrollTop: scrollRef.current?.scrollTop ?? 0,
+      moved: false,
+    };
+  };
+
+  const handlePointerMove = (event) => {
+    if (Math.abs(event.clientY - pointerRef.current.startY) > 8) {
+      pointerRef.current.moved = true;
+    }
+  };
+
+  const requestFlipBack = (event) => {
+    if (event?.target?.closest?.("button, a, input, textarea, select, [role='button']")) return;
+    const scrollDelta = Math.abs(
+      (scrollRef.current?.scrollTop ?? 0) - (pointerRef.current.startScrollTop ?? 0),
+    );
+    if (pointerRef.current.moved || scrollDelta > 2) return;
+    onFlipBack?.();
+  };
 
   return (
-    <div className="backface-hidden rotate-y-180 absolute inset-0 flex flex-col overflow-hidden rounded-[28px] border border-sprout-border bg-sprout-surface">
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onFlipBack?.();
-        }}
+    <div
+      className="backface-hidden rotate-y-180 absolute inset-0 flex flex-col overflow-hidden rounded-[28px] border border-sprout-border bg-sprout-surface"
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={requestFlipBack}
+    >
+      <div
         className="flex min-h-[5.5rem] max-h-[30%] shrink-0 items-center border-b border-sprout-border px-4 py-3 text-left sm:px-6"
         aria-label={t("swipe.tapToFlipBack")}
       >
@@ -470,14 +495,13 @@ function CardBack({ job, t, lang, onScrollIntent, onFlipBack, onSurfaceTap }) {
           </h2>
           <p className="mt-0.5 truncate text-sm font-semibold text-white sm:text-base">{job.company}</p>
         </div>
-      </button>
+      </div>
 
       <div className="flex min-h-0 flex-1 flex-col">
       <div
+        ref={scrollRef}
         className="app-scroll no-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-3 pb-2 touch-pan-y sm:px-6 sm:py-4"
         data-testid="swipe-card-scroll"
-        onScroll={(event) => onScrollIntent?.(event.currentTarget.scrollTop)}
-        onClick={onSurfaceTap}
       >
         <JobCardMeta
           location={location}
@@ -513,14 +537,9 @@ function CardBack({ job, t, lang, onScrollIntent, onFlipBack, onSurfaceTap }) {
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onFlipBack?.();
-        }}
+      <div
         className="flex w-full shrink-0 items-center justify-between border-t border-sprout-border px-6 py-3 text-[13px] text-sprout-muted"
-        aria-label={t("swipe.tapToFlipBack")}
+        aria-hidden="true"
       >
         <span className="flex items-center gap-1.5 font-display font-bold text-white">
           <Logo size={18} />
@@ -530,7 +549,7 @@ function CardBack({ job, t, lang, onScrollIntent, onFlipBack, onSurfaceTap }) {
           {t("swipe.tapToFlipBack")}
           <Info className="h-4 w-4" />
         </span>
-      </button>
+      </div>
       </div>
     </div>
   );
@@ -544,27 +563,19 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang }) {
   const skipOpacity = useTransform(x, [-160, -80, 0], [1, 0.5, 0]);
   const [flipped, setFlipped] = useState(false);
   const [showBack, setShowBack] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const interactionRef = useRef({
     dragDistance: 0,
     suppressTap: false,
-    backScrollTop: 0,
   });
 
   useEffect(() => {
     setFlipped(false);
     setShowBack(false);
+    setIsDragging(false);
     interactionRef.current.dragDistance = 0;
     interactionRef.current.suppressTap = false;
-    interactionRef.current.backScrollTop = 0;
   }, [job.job_id, isTop]);
-
-  const markBackScrollIntent = useCallback((scrollTop) => {
-    const previousTop = interactionRef.current.backScrollTop ?? 0;
-    if (Math.abs(scrollTop - previousTop) > 1) {
-      interactionRef.current.backScrollTop = scrollTop;
-      suppressCardTap(400);
-    }
-  }, []);
 
   const resetInteractionState = useCallback(() => {
     window.setTimeout(() => {
@@ -575,25 +586,19 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang }) {
 
   const flipToFront = useCallback(() => {
     setFlipped(false);
-    interactionRef.current.backScrollTop = 0;
   }, []);
 
-  const handleBackSurfaceTap = useCallback((event) => {
-    if (event?.target?.closest?.("button, a, input, textarea, select, [role='button']")) return;
-    if (isCardTapSuppressed()) return;
-    flipToFront();
-  }, [flipToFront]);
-
   const handleFlipTap = useCallback(() => {
-    if (!isTop || isCardTapSuppressed()) return;
+    if (!isTop) return;
+    if (flipped) {
+      flipToFront();
+      return;
+    }
+    if (isCardTapSuppressed()) return;
     if (interactionRef.current.suppressTap || interactionRef.current.dragDistance > 8) return;
     setShowBack(true);
-    setFlipped((current) => {
-      const next = !current;
-      if (!next) interactionRef.current.backScrollTop = 0;
-      return next;
-    });
-  }, [isTop]);
+    setFlipped(true);
+  }, [isTop, flipped, flipToFront]);
 
   return (
     <motion.div
@@ -615,6 +620,10 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang }) {
       dragSnapToOrigin
       whileDrag={{ cursor: "grabbing" }}
       onDragStart={() => {
+        setIsDragging(true);
+        if (flipped) {
+          setFlipped(false);
+        }
         interactionRef.current.suppressTap = false;
       }}
       onDrag={(_, info) => {
@@ -626,6 +635,7 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang }) {
         }
       }}
       onDragEnd={(_, info) => {
+        setIsDragging(false);
         const distance = Math.abs(info.offset.x);
         interactionRef.current.dragDistance = distance;
         if (distance > 8) {
@@ -670,15 +680,13 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang }) {
             job={job}
             t={t}
             lang={lang}
-            onScrollIntent={markBackScrollIntent}
             onFlipBack={flipToFront}
-            onSurfaceTap={handleBackSurfaceTap}
           />
         ) : (
           <div className="backface-hidden rotate-y-180 absolute inset-0 rounded-[28px] border border-sprout-border bg-sprout-surface" aria-hidden="true" />
         )}
       </motion.div>
-      {isTop && !flipped ? (
+      {isTop && (!flipped || isDragging) ? (
         <>
           <motion.div
             style={{ opacity: applyOpacity }}

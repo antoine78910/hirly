@@ -22,6 +22,9 @@ export function useDemoSettings() {
   const updateSetting = useCallback((key, value, { messageOn, messageOff } = {}) => {
     setSettings((prev) => {
       const next = { ...prev, [key]: value };
+      if (key === "financeJobFeed") {
+        next.financeJobFeedConfigured = true;
+      }
       saveDemoSettings(next);
       if (key === "financeJobFeed") {
         if (value) resetFinanceDemoFeed();

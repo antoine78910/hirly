@@ -3,11 +3,8 @@ export const DEMO_CREDITS_CHANGED = "hirly:demo-credits-changed";
 export const DEMO_ACCOUNT_CHANGED = "hirly:demo-account-changed";
 
 import {
-  isFinanceDemoEnabled,
-  readDemoSettings,
   resetDemoOnlySettings,
-  saveDemoSettings,
-  DEMO_SETTINGS_STORAGE_KEY,
+  ensureDemoFinanceFeedDefault,
   setFinanceDemoEligibility,
 } from "./demoSettings";
 import { mergeDemoCvIntoProfile, hasDemoCvStored, shouldMockCvUpload } from "./demoCvUpload";
@@ -20,16 +17,9 @@ import {
 
 let cachedDemoAccount = false;
 
-/** Turn on the Paris finance swipe preview by default for new creator demo accounts. */
+/** Turn on the Paris finance swipe preview by default for demo accounts. */
 export function ensureDemoAccountDefaults() {
-  if (!cachedDemoAccount || typeof window === "undefined") return;
-  try {
-    const hasSavedSettings = window.localStorage.getItem(DEMO_SETTINGS_STORAGE_KEY) != null;
-    if (hasSavedSettings) return;
-  } catch {
-    return;
-  }
-  saveDemoSettings({ ...readDemoSettings(), financeJobFeed: true });
+  ensureDemoFinanceFeedDefault();
 }
 
 export function setDemoAccountFromUser(user, isAdmin = false) {
