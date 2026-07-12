@@ -187,7 +187,7 @@ from friend_referral_service import (
     enroll_friend_referral,
     friend_referral_status_payload,
     redeem_friend_referral_code,
-    FRIEND_REFERRAL_REWARD_CREDITS,
+    FRIEND_REFERRAL_REWARD_DAYS,
 )
 from referral_email_service import (
     send_friend_referral_reward_email,
@@ -1711,6 +1711,14 @@ def _billing_status_payload(user_doc: Optional[Dict[str, Any]]) -> Dict[str, Any
     status = billing.get("subscription_status") or "none"
     is_premium = status in {"active", "trialing"}
     plan = billing.get("plan")
+    # Friend-referral bonus credits live in their own fields (referral_bonus_
+    # credits_total/_remaining) so they survive Stripe/billing-period syncs
+    # untouched -- _merge_billing_credit_state recomputes credits_total/
+    # credits_remaining from the plan allowance on every sync and would
+    # otherwise silently claw back anything added directly to those two
+    # fields (confirmed by tracing through its "same billing cycle" branch).
+    bonus_total = int(billing.get("referral_bonus_credits_total") or 0)
+    bonus_remaining = int(billing.get("referral_bonus_credits_remaining") or 0)
     return {
         "subscription_status": status,
         "plan": plan,
@@ -1720,9 +1728,9 @@ def _billing_status_payload(user_doc: Optional[Dict[str, Any]]) -> Dict[str, Any
         "current_period_end": billing.get("current_period_end"),
         "stripe_customer_id_exists": bool(billing.get("stripe_customer_id")),
         "is_premium": is_premium,
-        "credits_total": int(billing.get("credits_total") or 0),
-        "credits_remaining": int(billing.get("credits_remaining") or 0),
-        "friend_referral": friend_referral_status_payload(user_doc),
+        "credits_total": int(billing.get("credits_total") or 0) + bonus_total,
+        "credits_remaining": int(billing.get("credits_remaining") or 0) + bonus_remaining,
+        "friend_referral": friend_referral_status_payload(user_doc, is_premium=is_premium),
     }
 
 
@@ -1732,7 +1740,12 @@ _PLAN_CREDIT_LIMITS = {
     "ultra": 600,
     "pro": 200,
     "basic": 80,
-    "friend_referral": FRIEND_REFERRAL_REWARD_CREDITS,
+    # The friend-referral comp plan only exists to bypass the paywall
+    # (is_premium=true) -- the actual credits for that period come entirely
+    # from the separate referral_bonus_credits pool (_grant_friend_referral_
+    # billing) so repeating rewards stay additive instead of being capped at
+    # one flat plan allowance.
+    "friend_referral": 0,
 }
 
 
@@ -1903,27 +1916,53 @@ async def _update_user_billing_by_user_id(user_id: str, updates: Dict[str, Any])
         logger.warning("stripe_billing_user_update_no_match user_id=%s keys=%s", user_id, sorted(updates.keys()))
 
 
-async def _grant_friend_referral_billing(user_id: str) -> None:
-    now = datetime.now(timezone.utc)
-    updates = {
-        "subscription_status": "active",
-        "plan": "friend_referral",
-        "interval": "monthly",
-        "source": "friend_referral",
-        "stripe_subscription_id": f"friend_referral_{user_id}_{uuid.uuid4().hex[:12]}",
-        "last_payment_status": "friend_referral_reward",
-        "current_period_start": now.isoformat(),
-        "current_period_end": (now + timedelta(days=30)).isoformat(),
-    }
-    await _update_user_billing_by_user_id(user_id, updates)
+async def _grant_friend_referral_billing(user_id: str, credits: int) -> None:
+    """Grant a friend-referral reward batch: `credits` bonus credits, plus a
+    free month of paywall access if the referrer isn't already a genuine
+    paying subscriber. Called once per newly-earned batch (every 3
+    referrals), so this must be safe to call repeatedly for the same user.
+    """
+    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0, "billing": 1})
+    billing = _billing_from_user(user_doc)
+    is_real_paid_plan = (
+        (billing.get("subscription_status") or "none") in {"active", "trialing"}
+        and billing.get("source") != "friend_referral"
+    )
+    if not is_real_paid_plan:
+        # Never touches a real Stripe-synced subscription -- only applies
+        # when the referrer has no genuine paid plan, or is already on a
+        # prior friend_referral comp grant (safe to refresh).
+        now = datetime.now(timezone.utc)
+        updates = {
+            "subscription_status": "active",
+            "plan": "friend_referral",
+            "interval": "monthly",
+            "source": "friend_referral",
+            "stripe_subscription_id": f"friend_referral_{user_id}_{uuid.uuid4().hex[:12]}",
+            "last_payment_status": "friend_referral_reward",
+            "current_period_start": now.isoformat(),
+            "current_period_end": (now + timedelta(days=FRIEND_REFERRAL_REWARD_DAYS)).isoformat(),
+        }
+        # _update_user_billing_by_user_id merges through _merge_billing_credit_state,
+        # which resets billing.credits_total/credits_remaining to the
+        # friend_referral plan's own allowance (0 -- see _PLAN_CREDIT_LIMITS)
+        # since this always looks like a brand-new subscription. The real
+        # reward amount lives entirely in the bonus pool below, so this
+        # zeroing is exactly what we want, not a bug.
+        await _update_user_billing_by_user_id(user_id, updates)
+        billing = _billing_from_user(await db.users.find_one({"user_id": user_id}, {"_id": 0, "billing": 1}))
+
+    # Bonus credits live in their own fields, decoupled from the plan-reset
+    # machinery above, so repeating rewards accumulate instead of being
+    # capped at one flat allowance -- see _billing_status_payload and
+    # _consume_application_credit for how they're read/spent.
     await db.users.update_one(
         {"user_id": user_id},
-        {
-            "$set": {
-                "billing.credits_total": FRIEND_REFERRAL_REWARD_CREDITS,
-                "billing.credits_remaining": FRIEND_REFERRAL_REWARD_CREDITS,
-            }
-        },
+        {"$set": {
+            "billing.referral_bonus_credits_total": int(billing.get("referral_bonus_credits_total") or 0) + credits,
+            "billing.referral_bonus_credits_remaining": int(billing.get("referral_bonus_credits_remaining") or 0) + credits,
+            "billing.updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
     )
 
 
@@ -2412,16 +2451,25 @@ async def _billing_apply_credit_status(user: User) -> Dict[str, Any]:
 async def _consume_application_credit(user_id: str) -> Dict[str, int]:
     user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0, "billing": 1})
     billing = _billing_from_user(user_doc)
-    remaining = max(0, int(billing.get("credits_remaining") or 0) - 1)
-    total = int(billing.get("credits_total") or 0)
-    await db.users.update_one(
-        {"user_id": user_id},
-        {"$set": {
-            "billing.credits_remaining": remaining,
-            "billing.updated_at": datetime.now(timezone.utc).isoformat(),
-        }},
-    )
-    return {"credits_remaining": remaining, "credits_total": total}
+    plan_total = int(billing.get("credits_total") or 0)
+    plan_remaining = int(billing.get("credits_remaining") or 0)
+    bonus_total = int(billing.get("referral_bonus_credits_total") or 0)
+    bonus_remaining = int(billing.get("referral_bonus_credits_remaining") or 0)
+    updates: Dict[str, Any] = {"billing.updated_at": datetime.now(timezone.utc).isoformat()}
+    # Spend plan credits first, then referral bonus credits -- order doesn't
+    # affect durability (bonus credits never expire/reset) but draining plan
+    # credits first keeps the bonus pool as a visible buffer for longer.
+    if plan_remaining > 0:
+        plan_remaining -= 1
+        updates["billing.credits_remaining"] = plan_remaining
+    elif bonus_remaining > 0:
+        bonus_remaining -= 1
+        updates["billing.referral_bonus_credits_remaining"] = bonus_remaining
+    await db.users.update_one({"user_id": user_id}, {"$set": updates})
+    return {
+        "credits_remaining": plan_remaining + bonus_remaining,
+        "credits_total": plan_total + bonus_total,
+    }
 
 
 @api_router.post("/billing/create-checkout-session")
@@ -2495,9 +2543,12 @@ async def redeem_billing_master_code(body: BillingMasterCodeRequest, user: User 
         interval=body.interval,
         source=body.source,
     )
+    await _set_user_demo_account(user.user_id, True)
+    await _ensure_demo_feed_profile(user.user_id)
     return {
         "ok": True,
         "master_code": True,
+        "demo_account": True,
         "billing": billing,
     }
 
@@ -2876,8 +2927,8 @@ async def claim_friend_referral_route(payload: Dict[str, Any], user: User = Depe
         user_id=user.user_id,
         properties={
             "uses_count": status.get("uses_count"),
-            "reward_granted": status.get("reward_granted"),
-            "reward_credits": status.get("reward_credits"),
+            "reward_batches_granted": status.get("reward_batches_granted"),
+            "credits_earned_total": status.get("credits_earned_total"),
         },
     )
     user_doc = await _get_user_doc(user)
@@ -9426,7 +9477,8 @@ def _append_admin_timeline(app_doc: Dict[str, Any], event: Dict[str, Any]) -> Li
 
 def _admin_doc_metadata(app_doc: Dict[str, Any]) -> Dict[str, Any]:
     return {
-        "tailored_cv_available": bool(app_doc.get("tailored_cv_file_b64") or app_doc.get("tailored_resume_structured") or app_doc.get("tailored_resume")),
+        "tailored_cv_available": bool(app_doc.get("tailored_cv_file_b64")),
+        "tailored_cv_text_available": bool(app_doc.get("tailored_resume_structured") or app_doc.get("tailored_resume")),
         "tailored_cv_filename": app_doc.get("tailored_cv_filename"),
         "tailored_cv_mime": app_doc.get("tailored_cv_mime"),
         "cover_letter_available": bool(app_doc.get("tailored_cover_letter") or app_doc.get("cover_letter")),
@@ -10589,10 +10641,13 @@ async def redeem_creator_invite(payload: Dict[str, Any], user: User = Depends(ge
             interval=interval,
             source=source,
         )
+        await _set_user_demo_account(user.user_id, True)
+        await _ensure_demo_feed_profile(user.user_id)
         return {
             "ok": True,
             "code": code,
             "master_code": True,
+            "demo_account": True,
             "billing": billing,
         }
     return await _redeem_creator_invite(code, user.user_id, user.email)

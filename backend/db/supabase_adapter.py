@@ -43,6 +43,8 @@ MIGRATED_TABLES = {
     "user_feedback",
     "rome_profiles",
     "interview_simulator_templates",
+    "friend_referral_codes",
+    "friend_referral_redemptions",
 }
 TABLE_PRIMARY_KEYS = {
     "users": "user_id",
@@ -68,6 +70,8 @@ TABLE_PRIMARY_KEYS = {
     "user_feedback": "submission_id",
     "rome_profiles": "rome_code",
     "interview_simulator_templates": "template_id",
+    "friend_referral_codes": "code",
+    "friend_referral_redemptions": "redemption_id",
 }
 TABLE_FILTER_COLUMNS = {
     "users": {"user_id", "email", "name", "created_at"},
@@ -196,6 +200,8 @@ TABLE_FILTER_COLUMNS = {
     "user_feedback": {"submission_id", "feedback_type", "user_id", "user_email", "created_at", "updated_at"},
     "rome_profiles": {"rome_code", "fetched_at"},
     "interview_simulator_templates": {"template_id", "created_by_user_id", "created_at", "updated_at"},
+    "friend_referral_codes": {"code", "user_id", "created_at", "updated_at"},
+    "friend_referral_redemptions": {"redemption_id", "code", "referrer_user_id", "redeemer_user_id", "redeemer_email", "created_at"},
 }
 MAX_READ_ROWS = 10000
 READ_PAGE_SIZE = 1000
@@ -507,6 +513,28 @@ def _supabase_row(table: str, document: Document) -> Dict[str, Any]:
             "created_by_user_id": doc.get("created_by_user_id"),
             "created_at": doc.get("created_at"),
             "updated_at": doc.get("updated_at"),
+            "data": doc,
+        }
+    if table == "friend_referral_codes":
+        now = datetime.now(timezone.utc).isoformat()
+        doc.setdefault("created_at", now)
+        doc["updated_at"] = doc.get("updated_at") or now
+        return {
+            "code": _document_key(table, doc),
+            "user_id": doc.get("user_id"),
+            "created_at": doc.get("created_at"),
+            "updated_at": doc.get("updated_at"),
+            "data": doc,
+        }
+    if table == "friend_referral_redemptions":
+        doc.setdefault("created_at", datetime.now(timezone.utc).isoformat())
+        return {
+            "redemption_id": _document_key(table, doc),
+            "code": doc.get("code"),
+            "referrer_user_id": doc.get("referrer_user_id"),
+            "redeemer_user_id": doc.get("redeemer_user_id"),
+            "redeemer_email": doc.get("redeemer_email"),
+            "created_at": doc.get("created_at"),
             "data": doc,
         }
     raise ValueError(f"Unsupported Supabase table: {table}")
@@ -1032,6 +1060,8 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
         self.creator_invites = SupabaseCollectionAdapter("creator_invites", supabase_url, secret_key)
         self.user_feedback = SupabaseCollectionAdapter("user_feedback", supabase_url, secret_key)
         self.rome_profiles = SupabaseCollectionAdapter("rome_profiles", supabase_url, secret_key)
+        self.friend_referral_codes = SupabaseCollectionAdapter("friend_referral_codes", supabase_url, secret_key)
+        self.friend_referral_redemptions = SupabaseCollectionAdapter("friend_referral_redemptions", supabase_url, secret_key)
 
     async def close(self) -> None:
         return None

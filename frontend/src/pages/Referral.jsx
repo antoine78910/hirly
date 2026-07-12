@@ -1,10 +1,15 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { X, Copy, Coins } from "lucide-react";
+import { X, Copy, Share2, Coins } from "lucide-react";
 import { toast } from "sonner";
-import { useAuth } from "../context/AuthContext";
-import { referralCodeFromUserId, getFollowedSocials, markSocialFollowed } from "../lib/referral";
-import { BRAND } from "../lib/brand";
+import { getFollowedSocials, markSocialFollowed } from "../lib/referral";
+import {
+  enrollFriendReferral,
+  fetchFriendReferralStatus,
+  redeemFriendReferralCode,
+  shareFriendReferralCode,
+  buildFriendReferralShareUrl,
+} from "../lib/friendReferral";
 import DesktopPageHeader from "../components/desktop/DesktopPageHeader";
 import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
 
@@ -55,20 +60,68 @@ function SocialIcon({ id }) {
 
 export default function Referral() {
   const navigate = useNavigate();
-  const { user } = useAuth();
   const [followed, setFollowed] = useState(() => getFollowedSocials());
+  const [status, setStatus] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [redeemCode, setRedeemCode] = useState("");
+  const [redeeming, setRedeeming] = useState(false);
 
-  const code = useMemo(
-    () => referralCodeFromUserId(user?.user_id || user?.email),
-    [user?.user_id, user?.email],
-  );
+  useEffect(() => {
+    (async () => {
+      try {
+        let data = await fetchFriendReferralStatus();
+        if (!data?.code) {
+          data = await enrollFriendReferral();
+        }
+        setStatus(data);
+      } catch {
+        toast.error("Could not load your referral code");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const code = status?.code || "";
+  const usesCount = status?.uses_count || 0;
+  const goal = status?.goal || 3;
+  const progressInCycle = status?.progress_in_cycle ?? usesCount % goal;
+  const remainingToNextReward = goal - progressInCycle;
+  const creditsEarnedTotal = status?.credits_earned_total || 0;
 
   const copyCode = async () => {
     try {
-      await navigator.clipboard.writeText(code);
-      toast.success("Referral code copied");
+      await navigator.clipboard.writeText(buildFriendReferralShareUrl(code));
+      toast.success("Referral link copied");
     } catch {
-      toast.error("Could not copy code");
+      toast.error("Could not copy link");
+    }
+  };
+
+  const shareCode = async () => {
+    const result = await shareFriendReferralCode(code);
+    if (result.ok && result.method === "clipboard") {
+      toast.success("Referral link copied");
+    } else if (!result.ok && result.reason !== "aborted") {
+      toast.error("Could not share your code");
+    }
+  };
+
+  const submitRedeemCode = async (e) => {
+    e.preventDefault();
+    const value = redeemCode.trim();
+    if (!value) return;
+    setRedeeming(true);
+    try {
+      const result = await redeemFriendReferralCode(value);
+      if (result?.ok) {
+        toast.success("Referral code applied!");
+        setRedeemCode("");
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Invalid referral code");
+    } finally {
+      setRedeeming(false);
     }
   };
 
@@ -108,30 +161,84 @@ export default function Referral() {
             <span className="absolute -right-1 -top-1 text-lg">✨</span>
           </div>
 
-          <h1 className="font-display text-2xl font-bold">Give Premium, Get Premium!</h1>
+          <h1 className="font-display text-2xl font-bold">Invite friends, earn rewards!</h1>
           <p className="mt-2 max-w-xs text-sm text-zinc-600">
-            You <span className="font-semibold text-linkedin">both</span> get{" "}
-            <span className="font-semibold text-linkedin">free Premium</span> when your friend signs up on {BRAND.NAME}!
+            For every <span className="font-semibold text-linkedin">{goal} friends</span> who sign up with your code,
+            you unlock <span className="font-semibold text-linkedin">1 free month</span> and{" "}
+            <span className="font-semibold text-linkedin">40 credits</span> for right swipes — every time.
           </p>
         </div>
 
-        <div className="mt-8 flex items-center gap-3 rounded-2xl border border-zinc-200 bg-zinc-50 px-5 py-4">
-          <span
-            className="flex-1 font-mono text-2xl font-bold tracking-[0.2em] text-zinc-900"
-            data-testid="referral-code"
-          >
-            {code}
-          </span>
-          <button
-            type="button"
-            onClick={copyCode}
-            className="grid h-10 w-10 place-items-center rounded-xl text-zinc-500 hover:bg-white hover:text-linkedin"
-            aria-label="Copy referral code"
-            data-testid="referral-copy"
-          >
-            <Copy className="h-5 w-5" />
-          </button>
-        </div>
+        {loading ? (
+          <div className="mt-8 h-16 animate-pulse rounded-2xl bg-zinc-100" />
+        ) : (
+          <>
+            <div className="mt-8 flex items-center gap-3 rounded-2xl border border-zinc-200 bg-zinc-50 px-5 py-4">
+              <span
+                className="flex-1 font-mono text-2xl font-bold tracking-[0.2em] text-zinc-900"
+                data-testid="referral-code"
+              >
+                {code || "——"}
+              </span>
+              <button
+                type="button"
+                onClick={shareCode}
+                className="grid h-10 w-10 place-items-center rounded-xl text-zinc-500 hover:bg-white hover:text-linkedin"
+                aria-label="Share referral link"
+                data-testid="referral-share"
+              >
+                <Share2 className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                onClick={copyCode}
+                className="grid h-10 w-10 place-items-center rounded-xl text-zinc-500 hover:bg-white hover:text-linkedin"
+                aria-label="Copy referral link"
+                data-testid="referral-copy"
+              >
+                <Copy className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-4">
+              <div className="flex items-center justify-between text-xs text-zinc-500">
+                <span data-testid="referral-progress-label">{progressInCycle}/{goal} friends referred</span>
+                <span>{remainingToNextReward} more to unlock the next reward</span>
+              </div>
+              <div className="mt-1.5 h-2 rounded-full bg-zinc-100">
+                <div
+                  className="h-2 rounded-full gradient-linkedin transition-all"
+                  style={{ width: `${(progressInCycle / goal) * 100}%` }}
+                />
+              </div>
+              {usesCount > 0 && (
+                <p className="mt-2 text-xs text-zinc-500">
+                  {usesCount} friend{usesCount === 1 ? "" : "s"} referred in total
+                  {creditsEarnedTotal > 0 ? ` — ${creditsEarnedTotal} credits earned so far` : ""}
+                </p>
+              )}
+            </div>
+
+            <form onSubmit={submitRedeemCode} className="mt-6 flex items-center gap-2">
+              <input
+                type="text"
+                value={redeemCode}
+                onChange={(e) => setRedeemCode(e.target.value)}
+                placeholder="Have a friend's code?"
+                className="h-11 flex-1 rounded-xl border border-zinc-200 px-4 text-sm focus:border-linkedin focus:outline-none"
+                data-testid="referral-redeem-input"
+              />
+              <button
+                type="submit"
+                disabled={!redeemCode.trim() || redeeming}
+                className="h-11 rounded-xl gradient-linkedin px-4 text-sm font-semibold text-white disabled:opacity-50"
+                data-testid="referral-redeem-submit"
+              >
+                {redeeming ? "..." : "Apply"}
+              </button>
+            </form>
+          </>
+        )}
 
         <p className="mt-10 text-center text-sm text-zinc-500">Follow us on socials</p>
 

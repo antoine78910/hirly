@@ -150,10 +150,10 @@ export async function claimFriendReferralReward(token) {
   const { data } = await api.post("/referrals/friends/claim", {
     token: token || undefined,
   });
-  if (data?.reward_granted) {
+  if (data?.reward_batches_granted) {
     trackFriendReferralRewardClaimed({
       uses_count: String(data.uses_count ?? ""),
-      reward_credits: String(data.reward_credits ?? ""),
+      reward_credits: String(data.credits_earned_total ?? ""),
     });
   }
   return data;
