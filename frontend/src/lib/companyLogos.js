@@ -143,7 +143,10 @@ export function getCompanyLogoUrls(company, directLogoUrl = null) {
   if (known?.localLogo) pushUnique(urls, seen, known.localLogo);
   if (known?.slug) pushUnique(urls, seen, `https://cdn.simpleicons.org/${known.slug}`);
   if (domain) {
-    pushUnique(urls, seen, `https://logo.clearbit.com/${domain}?size=128`);
+    // logo.clearbit.com's free logo API is dead (confirmed live: connection
+    // fails outright rather than 404ing, which can hang the <img> load
+    // instead of erroring fast into the next fallback) -- go straight to
+    // the two sources that still work.
     pushUnique(urls, seen, `https://icons.duckduckgo.com/ip3/${domain}.ico`);
     pushUnique(urls, seen, `https://www.google.com/s2/favicons?domain=${domain}&sz=128`);
   }
