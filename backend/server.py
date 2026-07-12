@@ -14627,10 +14627,17 @@ async def startup_seed():
         )
     asyncio.create_task(_startup_seed_impl())
     asyncio.create_task(_resume_pending_application_generation())
-    asyncio.create_task(run_france_travail_harvest_loop(db))
-    asyncio.create_task(run_jsearch_harvest_loop(db))
-    asyncio.create_task(run_ats_direct_maintenance_loop(db))
-    asyncio.create_task(run_company_discovery_loop(db))
+    # Temporarily paused (default True): DB was reported under load from the
+    # combined harvest/discovery crons plus manual bulk-harvest testing.
+    # Resume via PAUSE_JOB_MAINTENANCE_CRONS=false in Railway once load has
+    # settled -- no redeploy needed, this is read fresh on every restart.
+    if _env_bool("PAUSE_JOB_MAINTENANCE_CRONS", True):
+        logger.warning("job_maintenance_crons_paused reason=db_load_protection")
+    else:
+        asyncio.create_task(run_france_travail_harvest_loop(db))
+        asyncio.create_task(run_jsearch_harvest_loop(db))
+        asyncio.create_task(run_ats_direct_maintenance_loop(db))
+        asyncio.create_task(run_company_discovery_loop(db))
     asyncio.create_task(run_creator_social_refresh_loop())
 
 

@@ -256,14 +256,23 @@ async def discover_via_company_list(
             link = result["link"]
             summary["career_pages_found"] += 1
 
-            provider_name = detect_ats_from_url(link)
-            adapter = adapters.get(provider_name) if provider_name else None
-            if adapter:
-                handled = await _try_ats_match(db, adapter=adapter, link=link, company=company, dry_run=dry_run, summary=summary)
-                if handled:
-                    continue
+            # Whole rest of this company's processing wrapped in one guard --
+            # confirmed live that an exception anywhere in here (URL parsing,
+            # adapter lookup, the probe, etc.) propagated uncaught all the
+            # way up through the admin endpoint into a raw 500, abandoning
+            # every not-yet-processed company in the run. Same per-item
+            # isolation jsearch_harvest.py already uses for its combos.
+            try:
+                provider_name = detect_ats_from_url(link)
+                adapter = adapters.get(provider_name) if provider_name else None
+                if adapter:
+                    handled = await _try_ats_match(db, adapter=adapter, link=link, company=company, dry_run=dry_run, summary=summary)
+                    if handled:
+                        continue
 
-            await _try_generic_friendly(db, client=client, link=link, company=company, dry_run=dry_run, summary=summary)
+                await _try_generic_friendly(db, client=client, link=link, company=company, dry_run=dry_run, summary=summary)
+            except Exception as exc:
+                summary["errors"].append({"company": company, "error": f"{exc.__class__.__name__}: {str(exc)[:150]}"})
 
     summary["cursor_next"] = (cursor + max_companies) % len(companies)
     logger.info("company_list_discovery_complete summary=%s", {k: v for k, v in summary.items() if k != "errors"})
@@ -284,25 +293,33 @@ async def _try_ats_match(db, *, adapter: Any, link: str, company: str, dry_run: 
     summary["ats_matches"] += 1
     if not dry_run:
         now = datetime.now(timezone.utc).isoformat()
-        await db.ats_company_sources.update_one(
-            {"id": f"{adapter.provider}:{source_key}"},
-            {"$set": {
-                "id": f"{adapter.provider}:{source_key}",
-                "ats_provider": adapter.provider,
-                "source_key": source_key,
-                "company_name": company,
-                "careers_url": _careers_url(adapter.provider, source_key),
-                "country_code": "fr",
-                "discovered_from_url": link,
-                "discovered_from_job_id": None,
-                "is_active": True,
-                "failure_count": 0,
-                "raw_metadata": {"source": "company_list_search"},
-                "created_at": now,
-                "updated_at": now,
-            }},
-            upsert=True,
-        )
+        try:
+            await db.ats_company_sources.update_one(
+                {"id": f"{adapter.provider}:{source_key}"},
+                {"$set": {
+                    "id": f"{adapter.provider}:{source_key}",
+                    "ats_provider": adapter.provider,
+                    "source_key": source_key,
+                    "company_name": company,
+                    "careers_url": _careers_url(adapter.provider, source_key),
+                    "country_code": "fr",
+                    "discovered_from_url": link,
+                    "discovered_from_job_id": None,
+                    "is_active": True,
+                    "failure_count": 0,
+                    "raw_metadata": {"source": "company_list_search"},
+                    "created_at": now,
+                    "updated_at": now,
+                }},
+                upsert=True,
+            )
+        except Exception as exc:
+            # One company's write failing (e.g. a transient Supabase upsert
+            # timeout) must not abort the rest of the batch -- confirmed live
+            # that an unhandled exception here propagates all the way up
+            # through the admin endpoint into a raw 500, killing every
+            # not-yet-processed company in the run.
+            summary["errors"].append({"company": company, "error": f"{exc.__class__.__name__}: {str(exc)[:150]}"})
     return True
 
 
@@ -322,22 +339,25 @@ async def _try_generic_friendly(db, *, client: httpx.AsyncClient, link: str, com
     if not domain:
         return
     now = datetime.now(timezone.utc).isoformat()
-    await db.friendly_company_career_pages.update_one(
-        {"id": domain},
-        {"$set": {
-            "id": domain,
-            "company_name": company,
-            "career_page_url": link,
-            "domain": domain,
-            "country_code": "fr",
-            "discovered_from_url": link,
-            "discovered_from_job_id": None,
-            "is_friendly": True,
-            "requires_login": probe.get("requires_login"),
-            "captcha_detected": probe.get("captcha_detected"),
-            "has_file_upload": probe.get("has_file_upload"),
-            "last_checked_at": now,
-            "updated_at": now,
-        }},
-        upsert=True,
-    )
+    try:
+        await db.friendly_company_career_pages.update_one(
+            {"id": domain},
+            {"$set": {
+                "id": domain,
+                "company_name": company,
+                "career_page_url": link,
+                "domain": domain,
+                "country_code": "fr",
+                "discovered_from_url": link,
+                "discovered_from_job_id": None,
+                "is_friendly": True,
+                "requires_login": probe.get("requires_login"),
+                "captcha_detected": probe.get("captcha_detected"),
+                "has_file_upload": probe.get("has_file_upload"),
+                "last_checked_at": now,
+                "updated_at": now,
+            }},
+            upsert=True,
+        )
+    except Exception as exc:
+        summary["errors"].append({"company": company, "error": f"{exc.__class__.__name__}: {str(exc)[:150]}"})
