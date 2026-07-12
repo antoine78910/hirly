@@ -11,10 +11,12 @@ import {
   Settings as SettingsIcon,
   Pencil,
   Plus,
+  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 import ProfilePersonalInfoTab from "../components/profile/ProfilePersonalInfoTab";
 import ProfileDocumentsTab from "../components/profile/ProfileDocumentsTab";
+import ReferralPanel from "../components/profile/ReferralPanel";
 import ProfileResumeSection from "../components/profile/ProfileResumeSection";
 import ResumeSheet from "../components/ResumeSheet";
 import ProfessionalProfileSheet from "../components/ProfessionalProfileSheet";
@@ -39,6 +41,7 @@ const PROFILE_TAB_ICONS = {
   resume: FileText,
   personal: UserIcon,
   documents: FolderOpen,
+  referral: Users,
 };
 
 function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
@@ -377,6 +380,7 @@ export default function Profile() {
     { key: "resume", label: t("profile.resume"), icon: PROFILE_TAB_ICONS.resume },
     { key: "personal", label: t("profile.personal"), icon: PROFILE_TAB_ICONS.personal },
     { key: "documents", label: t("profile.documentsTab"), icon: PROFILE_TAB_ICONS.documents },
+    { key: "referral", label: t("profile.referral"), icon: PROFILE_TAB_ICONS.referral },
   ]), [t]);
 
   const resumeSections = useMemo(() => getResumeSections(t), [t]);
@@ -559,6 +563,8 @@ export default function Profile() {
             onDocumentsChange={reload}
           />
         )}
+
+        {tab === "referral" && <ReferralPanel />}
         </div>
       </AppPageScroll>
 

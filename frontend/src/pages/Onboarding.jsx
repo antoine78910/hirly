@@ -894,15 +894,30 @@ export default function Onboarding() {
 
   const redeemFriendReferralIfPresent = async () => {
     const code = referralCode.trim().toUpperCase();
-    if (!code || isSixDigitAccessCode(code) || !isFriendReferralCode(code)) return true;
+    // Friend-referral codes are also 6 digits now, the same shape as
+    // creator/demo access codes -- try friend-referral first since that's
+    // the common case for regular users, not just when the shape looks
+    // like the old 4-8-char free text codes.
+    if (!code || !isFriendReferralCode(code)) return true;
     try {
       await redeemFriendReferralCode(code);
       clearPendingFriendReferralCode();
+      // It redeemed as a real referral code -- don't also let
+      // redeemAccessCodeIfPresent try the same value as a creator/demo
+      // invite code afterwards.
+      setCreatorAccessCode("");
       return true;
     } catch (err) {
+      const detail = err?.response?.data?.detail;
+      // Not a recognized referral code -- if it's also shaped like a
+      // 6-digit creator/demo invite code, let redeemAccessCodeIfPresent
+      // try that instead rather than blocking onboarding on this specific
+      // rejection.
+      if (detail === "Referral code not found" && isSixDigitAccessCode(code)) {
+        return true;
+      }
       toast.error(
-        err?.response?.data?.detail
-          || (lang === "fr" ? "Code de parrainage invalide" : "Invalid referral code"),
+        detail || (lang === "fr" ? "Code de parrainage invalide" : "Invalid referral code"),
       );
       return false;
     }
@@ -915,11 +930,11 @@ export default function Onboarding() {
     }
     setSaving(true);
     try {
-      if (!(await redeemAccessCodeIfPresent())) {
+      if (!(await redeemFriendReferralIfPresent())) {
         setSaving(false);
         return;
       }
-      if (!(await redeemFriendReferralIfPresent())) {
+      if (!(await redeemAccessCodeIfPresent())) {
         setSaving(false);
         return;
       }
@@ -1120,10 +1135,13 @@ export default function Onboarding() {
       return;
     }
     if (isSixDigitAccessCode(code)) {
+      // Could be a friend-referral code or a creator/demo access code --
+      // both are 6 digits now. Actual redemption (tried in that order) is
+      // deferred to finishOnboarding, so keep this message neutral.
       setReferralCode(code);
       setCreatorAccessCode(code);
       storePendingInviteCode(code);
-      toast.success(lang === "fr" ? "Code d'accès appliqué" : "Access code applied");
+      toast.success(lang === "fr" ? "Code appliqué" : "Code applied");
       trackOnboardingContinue("referralCode");
       goNext();
       return;
