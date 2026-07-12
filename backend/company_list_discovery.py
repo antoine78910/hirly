@@ -149,6 +149,14 @@ def _normalized_company_key(company: str) -> str:
 _discovery_cursor = 0
 _discovery_lock = asyncio.Lock()
 
+# In-memory recheck dedup (module-level, same pattern as jsearch_harvest.py's
+# _combo_backoff_level -- not DB-backed since company_discovery_checked isn't
+# one of the tables the Supabase adapter has migrated/whitelisted, and adding
+# a brand-new Postgres table isn't something this process can self-serve).
+# Resets on a deploy/restart, which just means a handful of already-known
+# companies get redundantly re-searched once rather than a correctness bug.
+_checked_companies: Dict[str, datetime] = {}
+
 
 async def _search_career_page(client: httpx.AsyncClient, api_key: str, company: str) -> Optional[Dict[str, Any]]:
     response = await client.post(
@@ -206,19 +214,10 @@ async def discover_via_company_list(
     # without spending a Serper query -- otherwise every run re-burns budget
     # re-confirming companies we already resolved instead of reaching new
     # ones, which was the whole reason discovery never grew past ~15 names.
-    checked_keys = {_normalized_company_key(c) for c in selected}
-    existing_rows = await db.company_discovery_checked.find(
-        {"id": {"$in": list(checked_keys)}}, {"_id": 0, "id": 1, "last_checked_at": 1},
-    ).to_list(len(checked_keys))
-    recently_checked: set = set()
-    for row in existing_rows:
-        checked_at = row.get("last_checked_at")
-        try:
-            checked_dt = datetime.fromisoformat(str(checked_at).replace("Z", "+00:00")) if checked_at else None
-        except ValueError:
-            checked_dt = None
-        if checked_dt is not None and checked_dt > recheck_cutoff:
-            recently_checked.add(row["id"])
+    recently_checked = {
+        key for key in (_normalized_company_key(c) for c in selected)
+        if _checked_companies.get(key, recheck_cutoff) > recheck_cutoff
+    }
 
     summary: Dict[str, Any] = {
         "dry_run": dry_run,
@@ -251,7 +250,7 @@ async def discover_via_company_list(
                     break
                 continue
             if not dry_run:
-                await _mark_company_checked(db, key, company)
+                _checked_companies[key] = datetime.now(timezone.utc)
             if not result:
                 continue
             link = result["link"]
@@ -269,15 +268,6 @@ async def discover_via_company_list(
     summary["cursor_next"] = (cursor + max_companies) % len(companies)
     logger.info("company_list_discovery_complete summary=%s", {k: v for k, v in summary.items() if k != "errors"})
     return summary
-
-
-async def _mark_company_checked(db, key: str, company: str) -> None:
-    now = datetime.now(timezone.utc).isoformat()
-    await db.company_discovery_checked.update_one(
-        {"id": key},
-        {"$set": {"id": key, "company_name": company, "last_checked_at": now}},
-        upsert=True,
-    )
 
 
 async def _try_ats_match(db, *, adapter: Any, link: str, company: str, dry_run: bool, summary: Dict[str, Any]) -> bool:
