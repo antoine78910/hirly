@@ -6,6 +6,7 @@ import RolePicker from "./RolePicker";
 import PlacesAutocomplete from "./PlacesAutocomplete";
 import { useAppLocale } from "../context/AppLocaleContext";
 import { normalizeLocationData } from "../lib/targetPreferences";
+import { isResolvedLocation } from "../lib/locationSearch";
 
 export default function TargetSearchSheet({
   open,
@@ -38,6 +39,10 @@ export default function TargetSearchSheet({
     try {
       const trimmedLocation = (targetLocation || "").trim();
       const normalizedData = normalizeLocationData(trimmedLocation, targetLocationData);
+      if (trimmedLocation && !isResolvedLocation(normalizedData, trimmedLocation)) {
+        toast.error(lang === "fr" ? "Choisissez une ville dans les suggestions" : "Select a location from the suggestions");
+        return;
+      }
       const locationLabel = normalizedData?.location_label || trimmedLocation || "Anywhere";
       const ok = await onSave?.({
         role: trimmedRole,
@@ -98,6 +103,7 @@ export default function TargetSearchSheet({
                 <PlacesAutocomplete
                   label={lang === "fr" ? "Où cherchez-vous ?" : "Where are you searching?"}
                   optional
+                  requireSelection
                   light
                   variant="light"
                   value={targetLocation}

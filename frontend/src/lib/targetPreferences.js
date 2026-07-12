@@ -3,7 +3,7 @@ import { api } from "./api";
 import { isDemoAccountEnabled } from "./demoAccount";
 import { TUTORIAL_BYPASS_AUTH } from "./dev";
 
-import { enrichLocationData } from "./locationSearch";
+import { enrichLocationData, isResolvedLocation } from "./locationSearch";
 
 const COUNTRY_CODE_BY_NAME = {
   france: "fr",
@@ -55,6 +55,10 @@ export async function saveTargetPreferences({ role, location, locationData }) {
 
   const trimmedLocation = (location || "").trim();
   const normalizedLocationData = normalizeLocationData(trimmedLocation, locationData);
+  if (trimmedLocation && !isResolvedLocation(normalizedLocationData, trimmedLocation)) {
+    toast.error("Select a location from the suggestions");
+    return null;
+  }
   const locationLabel = normalizedLocationData?.location_label || trimmedLocation;
 
   const payload = {

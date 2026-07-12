@@ -186,9 +186,16 @@ export function buildApplicationTimeline(application, emails = [], t, lang = "en
   }
 
   if (
-    (submission === "prepared" || submission === "ready")
+    hasApplicationDocuments(application)
     && aiSettings.reviewDocuments
     && !submitted
+    && application.document_review_status !== "approved"
+    && (
+      application.document_review_status === "awaiting_user"
+      || submission === "prepared"
+      || submission === "ready"
+      || application.generation_status === "generated"
+    )
   ) {
     events.push({
       key: "awaiting-review",

@@ -223,6 +223,25 @@ def _nominatim_kind(item: dict[str, Any]) -> str:
     return "place"
 
 
+def _primary_city_name(label: str) -> str:
+    return _normalize_text((label or "").split(",")[0])
+
+
+def _city_name_match_score(q: str, name: str) -> float:
+    """Score how well a place name matches the query (exact city, not substring)."""
+    city = _normalize_text(name)
+    if not q or not city:
+        return 0.0
+    if city == q:
+        return 200.0
+    if city.startswith(q):
+        return 120.0
+    # Avoid matching "pau" inside "saint-paul" or similar embedded substrings.
+    if len(q) >= 3 and q in city and not city.startswith(q):
+        return -120.0
+    return 0.0
+
+
 def _score_item(query: str, item: dict[str, Any], raw: dict[str, Any] | None = None) -> float:
     q = _normalize_text(query)
     label = _normalize_text(item.get("label") or "")
@@ -233,10 +252,11 @@ def _score_item(query: str, item: dict[str, Any], raw: dict[str, Any] | None = N
     if not q or not label:
         return score
 
-    if label.startswith(q) or q in label:
-        score += 120
-    if any(part == q or part.startswith(q) for part in label.split(",")):
-        score += 90
+    score += _city_name_match_score(q, _primary_city_name(item.get("label") or ""))
+    for part in label.split(","):
+        part_score = _city_name_match_score(q, part.strip())
+        if part_score > 0:
+            score += part_score * 0.35
 
     if kind in {"region", "state", "county"}:
         score += 45
@@ -246,10 +266,10 @@ def _score_item(query: str, item: dict[str, Any], raw: dict[str, Any] | None = N
         score += 18
 
     addr = (raw or {}).get("address") or {}
-    for field in ("state", "region", "county", "state_district", "city", "town"):
-        val = _normalize_text(str(addr.get(field) or ""))
-        if val and (val == q or q in val or val in q):
-            score += 70
+    for field in ("city", "town", "village", "municipality", "state", "region", "county", "state_district"):
+        val = str(addr.get(field) or "")
+        if val:
+            score += _city_name_match_score(q, val) * 0.75
 
     if _is_too_generic(item.get("label") or "", query):
         score -= 200

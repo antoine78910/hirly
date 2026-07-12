@@ -43,6 +43,7 @@ export function buildDemoApplicationFromSwipe(job) {
       status: "applied",
       submission_status: "prepared",
       user_facing_submission_status: "prepared",
+      document_review_status: "awaiting_user",
       awaiting_review_at: minutesAfter(createdAt, 3),
     };
   }

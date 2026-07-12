@@ -4195,6 +4195,11 @@ def _build_generated_application_doc(
         package_status = "generated_text_only"
 
     now = datetime.now(timezone.utc).isoformat()
+    has_reviewable_documents = bool(
+        tailored_resume
+        and cover_letter
+        and generation_status == "generated"
+    )
     return {
         "application_id": f"app_{uuid.uuid4().hex[:12]}",
         "user_id": user.user_id,
@@ -4233,6 +4238,9 @@ def _build_generated_application_doc(
         "resume_preservation_report": preservation_report,
         "cover_letter_quality_report": cover_letter_quality,
         "generation_pipeline": APPLICATION_GENERATION_PIPELINE,
+        "awaiting_review_at": now if has_reviewable_documents else None,
+        "document_review_status": "awaiting_user" if has_reviewable_documents else None,
+        "document_review_approved_at": None,
         "created_at": now,
         "updated_at": now,
     }
@@ -5184,12 +5192,17 @@ async def patch_profile_extras(payload: Dict[str, Any], user: User = Depends(get
 
 
 @api_router.get("/locations/search")
-async def locations_search(q: str = Query("", min_length=0), limit: int = Query(10, ge=1, le=15)):
+async def locations_search(
+    q: str = Query("", min_length=0),
+    limit: int = Query(10, ge=1, le=15),
+    country_codes: Optional[str] = Query(None, max_length=8),
+):
     """Worldwide city/region search via OpenStreetMap + optional Google Places."""
     query = (q or "").strip()
     if len(query) < 1:
         raise HTTPException(status_code=400, detail="Query parameter q is required")
-    return await search_locations(query, limit=limit)
+    codes = (country_codes or "").strip().lower() or None
+    return await search_locations(query, limit=limit, country_codes=codes)
 
 
 @api_router.post("/onboarding/suggest-categories")
@@ -8665,6 +8678,33 @@ async def list_applications(user: User = Depends(get_current_user)):
         a = _normalize_application_status_fields(a)
         result.append(_public_application_doc(a, job_map.get(a["job_id"])))
     return {"applications": result}
+
+
+@api_router.post("/applications/{application_id}/approve-documents")
+async def approve_application_documents(application_id: str, user: User = Depends(get_current_user)):
+    """Mark CV and cover letter as reviewed by the candidate."""
+    app_doc = await db.applications.find_one(
+        {"application_id": application_id, "user_id": user.user_id},
+        {"_id": 0},
+    )
+    if not app_doc:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    now = datetime.now(timezone.utc).isoformat()
+    await db.applications.update_one(
+        {"application_id": application_id, "user_id": user.user_id},
+        {"$set": {
+            "document_review_status": "approved",
+            "document_review_approved_at": now,
+            "updated_at": now,
+        }},
+    )
+    updated = await db.applications.find_one(
+        {"application_id": application_id, "user_id": user.user_id},
+        {"_id": 0},
+    ) or app_doc
+    job = await db.jobs.find_one({"job_id": updated.get("job_id")}, {"_id": 0})
+    return _public_application_doc(_normalize_application_status_fields(updated), job)
 
 
 async def require_admin_user(user: User = Depends(get_current_user)) -> User:

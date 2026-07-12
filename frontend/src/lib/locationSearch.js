@@ -62,17 +62,66 @@ function photonFeatureToResult(feature, index) {
   };
 }
 
-function scorePhotonResult(query, result) {
+function primaryCityName(label) {
+  return normalizeLabel((label || "").split(",")[0]);
+}
+
+export function cityNameMatchScore(query, name) {
   const q = normalizeLabel(query);
-  const label = normalizeLabel(result.label);
-  let score = 0;
+  const city = normalizeLabel(name);
+  if (!q || !city) return 0;
+  if (city === q) return 200;
+  if (city.startsWith(q)) return 120;
+  if (q.length >= 3 && city.includes(q) && !city.startsWith(q)) return -120;
+  return 0;
+}
 
-  if (label.startsWith(q)) score += 100;
-  if (label.includes(q)) score += 60;
-  if (RELEVANT_KINDS.has(result.kind)) score += 20;
-  if (result.country_code) score += 5;
+export function locationMatchesQuery(query, label) {
+  const q = normalizeLabel(query);
+  if (!q) return false;
+  const city = primaryCityName(label);
+  if (city === q || city.startsWith(q)) return true;
+  return cityNameMatchScore(q, city) > 0;
+}
 
+export function scoreLocationResult(query, result) {
+  const q = normalizeLabel(query);
+  const label = result?.label || "";
+  let score = cityNameMatchScore(q, primaryCityName(label));
+  if (RELEVANT_KINDS.has(result?.kind)) score += 20;
+  if (result?.country_code) score += 5;
+  if (result?.lat != null && result?.lng != null) score += 8;
+  if (result?.place_id) score += 6;
+  if (["nominatim", "google", "photon"].includes(result?.source)) score += 10;
   return score;
+}
+
+export function sortLocationResults(query, results) {
+  return [...(results || [])]
+    .sort((a, b) => scoreLocationResult(query, b) - scoreLocationResult(query, a));
+}
+
+export function preferFranceLocationSearch(query) {
+  return looksLikeFranceLocation(query);
+}
+
+export function isResolvedLocation(locationData, typedValue = "") {
+  if (!locationData?.location_label) return false;
+  const label = String(locationData.location_label).trim();
+  const typed = String(typedValue || "").trim();
+  if (typed && label !== typed) return false;
+  if (locationData.source === "typed" && !locationData.place_id && locationData.lat == null) {
+    return false;
+  }
+  return Boolean(
+    locationData.place_id
+    || (locationData.lat != null && locationData.lng != null)
+    || ["nominatim", "google", "photon"].includes(locationData.source),
+  );
+}
+
+function scorePhotonResult(query, result) {
+  return scoreLocationResult(query, result);
 }
 
 const FRENCH_CITY_MARKERS = new Set([

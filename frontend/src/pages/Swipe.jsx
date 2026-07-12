@@ -1678,14 +1678,14 @@ export default function Swipe() {
           data-testid="target-pill"
           aria-label={t("swipe.editTarget")}
         >
-          <p className="truncate text-xs font-semibold leading-tight text-sprout-text sm:hidden">
-            {[translateRoleLabel(target.role, lang) || t("swipe.setTargetRole"), translateLocationLabel(target.location, lang) || t("swipe.anywhere")].join(" · ")}
-          </p>
-          <p className="hidden truncate text-sm font-semibold leading-tight text-sprout-text sm:block">
+          <p className="truncate text-xs font-semibold leading-tight text-sprout-text sm:text-sm">
             {translateRoleLabel(target.role, lang) || t("swipe.setTargetRole")}
           </p>
-          <p className="mt-0.5 hidden truncate text-[11px] leading-tight text-sprout-muted sm:block">
-            {translateLocationLabel(target.location, lang) || t("swipe.anywhere")} · {t("swipe.tapToEdit")}
+          <p className="truncate text-[9px] leading-tight text-sprout-muted sm:text-[11px]">
+            <span className="sm:hidden">{translateLocationLabel(target.location, lang) || t("swipe.anywhere")}</span>
+            <span className="hidden sm:inline">
+              {translateLocationLabel(target.location, lang) || t("swipe.anywhere")} · {t("swipe.tapToEdit")}
+            </span>
           </p>
         </button>
 

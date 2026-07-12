@@ -4,7 +4,7 @@ import { Loader2, MapPin } from "lucide-react";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { api } from "../lib/api";
-import { buildTypedLocationResult, searchLocationsClient } from "../lib/locationSearch";
+import { buildTypedLocationResult, isResolvedLocation, locationMatchesQuery, preferFranceLocationSearch, searchLocationsClient, sortLocationResults } from "../lib/locationSearch";
 import { isFrench, translateLocationLabel } from "../lib/localizedDisplay";
 
 const EMPTY_SUGGESTIONS = [];
@@ -40,15 +40,11 @@ function resultToLocation(result) {
 }
 
 function localSuggestionResults(query, suggestionLabels, limit = 10) {
-  const q = query.trim().toLowerCase();
+  const q = query.trim();
   if (!q) return [];
 
   return suggestionLabels
-    .filter((label) => {
-      const lower = label.toLowerCase();
-      const city = lower.split(",")[0].trim();
-      return lower.includes(q) || city.startsWith(q);
-    })
+    .filter((label) => locationMatchesQuery(q, label))
     .slice(0, limit)
     .map((label) => ({
       id: `local:${label}`,
@@ -81,6 +77,7 @@ export default function PlacesAutocomplete({
   onFieldFocus,
   onFieldBlur,
   lang = "en",
+  requireSelection = false,
 }) {
   const light = variant === "light";
   const [loading, setLoading] = useState(false);
@@ -98,7 +95,8 @@ export default function PlacesAutocomplete({
   const selectedLabel = (selectedLocation?.location_label || "").trim();
   // Only treat as "picked" when the input still matches the saved label.
   // If the user edits the text, search again even if the parent hasn't cleared yet.
-  const hasSelection = Boolean(selectedLabel && selectedLabel === trimmedValue);
+  const hasSelection = isResolvedLocation(selectedLocation, trimmedValue)
+    || (!requireSelection && Boolean(selectedLabel && selectedLabel === trimmedValue));
 
   const showSearchDropdown = focused
     && trimmedValue.length >= 2
@@ -184,9 +182,8 @@ export default function PlacesAutocomplete({
 
     const requestId = ++requestIdRef.current;
     const localMatches = localSuggestionResults(trimmedValue, suggestions, 10);
-    const typedNow = buildTypedLocationResult(trimmedValue);
-    // Show local matches + typed entry immediately so there's always something visible
-    const immediate = dedupeResults([...localMatches, ...typedNow]);
+    const typedNow = requireSelection ? [] : buildTypedLocationResult(trimmedValue);
+    const immediate = dedupeResults(sortLocationResults(trimmedValue, [...localMatches, ...typedNow]));
     setResults(immediate);
     setSearching(true);
 
@@ -196,10 +193,15 @@ export default function PlacesAutocomplete({
       abortRef.current = controller;
 
       try {
+        const searchParams = { q: trimmedValue, limit: 12 };
+        if (preferFranceLocationSearch(trimmedValue)) {
+          searchParams.country_codes = "fr";
+        }
+
         // Run backend and Photon client-side in parallel
         const safeBackend = api
           .get("/locations/search", {
-            params: { q: trimmedValue, limit: 12 },
+            params: searchParams,
             timeout: 8000,
             signal: controller.signal,
           })
@@ -220,9 +222,13 @@ export default function PlacesAutocomplete({
 
         if (requestId !== requestIdRef.current) return;
 
-        // Merge: backend first (higher quality), then Photon, then typed entry as anchor
-        const typed = buildTypedLocationResult(trimmedValue);
-        const merged = dedupeResults([...backendResults, ...photonResults, ...typed]);
+        // Merge: backend first (higher quality), then Photon; typed fallback only when allowed
+        const typed = requireSelection ? [] : buildTypedLocationResult(trimmedValue);
+        const merged = dedupeResults(sortLocationResults(trimmedValue, [
+          ...backendResults,
+          ...photonResults,
+          ...typed,
+        ]));
         setResults(merged.length > 0 ? merged.slice(0, 12) : immediate);
       } catch (error) {
         if (requestId !== requestIdRef.current || isAbort(error)) return;
@@ -237,10 +243,13 @@ export default function PlacesAutocomplete({
       clearTimeout(handle);
       abortRef.current?.abort();
     };
-  }, [trimmedValue, hasSelection, suggestions]);
+  }, [trimmedValue, hasSelection, suggestions, requireSelection]);
 
   const helperText = useMemo(() => {
     if (isFrench(lang)) {
+      if (requireSelection && trimmedValue && !hasSelection) {
+        return "Choisissez une ville dans la liste de suggestions.";
+      }
       if (trimmedValue && !hasSelection) {
         return optional
           ? "Appuyez sur une suggestion ou gardez votre saisie telle quelle."
@@ -248,13 +257,16 @@ export default function PlacesAutocomplete({
       }
       return optional ? "Facultatif — toute ville ou région acceptée" : "Tapez 2 lettres pour voir des suggestions";
     }
+    if (requireSelection && trimmedValue && !hasSelection) {
+      return "Pick a city from the suggestions list.";
+    }
     if (trimmedValue && !hasSelection) {
       return optional
         ? "Pick a suggestion or keep what you typed."
         : "Pick a suggestion or keep what you typed.";
     }
     return optional ? "Optional — any city or region works" : "Type 2+ letters to see suggestions";
-  }, [lang, optional, trimmedValue, hasSelection]);
+  }, [lang, optional, trimmedValue, hasSelection, requireSelection]);
 
   const handleChange = (next) => {
     setFocused(true);
@@ -269,9 +281,13 @@ export default function PlacesAutocomplete({
   const selectSuggestion = async (suggestionLabel) => {
     setLoading(true);
     try {
+      const searchParams = { q: suggestionLabel, limit: 3 };
+      if (preferFranceLocationSearch(suggestionLabel)) {
+        searchParams.country_codes = "fr";
+      }
       try {
         const { data } = await api.get("/locations/search", {
-          params: { q: suggestionLabel, limit: 3 },
+          params: searchParams,
         });
         const match = data?.results?.[0];
         if (match) {
@@ -315,21 +331,33 @@ export default function PlacesAutocomplete({
     blurTimerRef.current = setTimeout(() => {
       setFocused(false);
       onFieldBlur?.();
-      if (trimmedValue && !hasSelection) {
-        const typed = buildTypedLocationResult(trimmedValue);
-        if (typed[0]) {
-          applyLocation(resultToLocation(typed[0]));
+      if (!trimmedValue || hasSelection) return;
+
+      if (requireSelection) {
+        if (selectedLocation?.location_label) {
+          onInputChange(selectedLocation.location_label);
+          onSelect?.(selectedLocation);
         } else {
-          applyLocation({
-            location_label: trimmedValue,
-            place_id: "",
-            country: "",
-            country_code: "",
-            lat: null,
-            lng: null,
-            source: "typed",
-          });
+          onInputChange("");
+          onSelect?.(null);
         }
+        setResults([]);
+        return;
+      }
+
+      const typed = buildTypedLocationResult(trimmedValue);
+      if (typed[0]) {
+        applyLocation(resultToLocation(typed[0]));
+      } else {
+        applyLocation({
+          location_label: trimmedValue,
+          place_id: "",
+          country: "",
+          country_code: "",
+          lat: null,
+          lng: null,
+          source: "typed",
+        });
       }
     }, 150);
   };
@@ -417,7 +445,7 @@ export default function PlacesAutocomplete({
                   </>
                 ) : (
                   <>
-                    {trimmedValue && !hasSelection ? (
+                    {!requireSelection && trimmedValue && !hasSelection ? (
                       <button
                         type="button"
                         onMouseDown={(e) => e.preventDefault()}

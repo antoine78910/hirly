@@ -21,6 +21,7 @@ import ProfessionalProfileSheet from "../components/ProfessionalProfileSheet";
 import Sheet, { Field, SaveButton } from "../components/Sheet";
 import PlacesAutocomplete from "../components/PlacesAutocomplete";
 import { normalizeLocationData } from "../lib/targetPreferences";
+import { isResolvedLocation } from "../lib/locationSearch";
 import { Label } from "../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Switch } from "../components/ui/switch";
@@ -68,6 +69,10 @@ function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
     try {
       const trimmedLocation = (targetLocation || "").trim();
       const normalizedLocationData = normalizeLocationData(trimmedLocation, targetLocationData);
+      if (trimmedLocation && !isResolvedLocation(normalizedLocationData, trimmedLocation)) {
+        toast.error(lang === "fr" ? "Choisissez une ville dans les suggestions" : "Select a location from the suggestions");
+        return;
+      }
       await api.put("/profile/preferences", {
         target_role: trimmedRole,
         target_roles: [trimmedRole],
@@ -100,6 +105,7 @@ function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
         <PlacesAutocomplete
           label={t("profile.targetLocation")}
           optional
+          requireSelection
           lang={lang}
           value={targetLocation}
           selectedLocation={targetLocationData}

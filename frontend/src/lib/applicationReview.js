@@ -1,5 +1,10 @@
 /** Display status helpers shared by Tracker and Review. */
 
+import {
+  hasApplicationDocuments,
+  isApplicationGenerating,
+} from "./applicationDocuments";
+
 export function resolveDisplayStatus({
   status,
   submission_status,
@@ -26,19 +31,46 @@ export function resolveDisplayStatus({
   return "pending";
 }
 
-export function isPreparedForDocumentReview(application) {
-  if (!application) return false;
+function isApplicationSubmitted(application) {
   const displayStatus = resolveDisplayStatus(application);
-  if (displayStatus !== "prepared") return false;
-  return Boolean(
-    application.tailored_resume
-    || application.cover_letter
-    || application.package_status
-    || ["ready", "prepared"].includes(application.submission_status),
-  );
+  return displayStatus === "submitted"
+    || application?.submission_status === "submitted"
+    || application?.submission_status === "manually_submitted";
+}
+
+export function isAwaitingUserDocumentReview(application) {
+  if (!application) return false;
+  if (application.document_review_status === "approved") return false;
+  if (isApplicationSubmitted(application)) return false;
+  if (isApplicationGenerating(application)) return false;
+  if (!hasApplicationDocuments(application)) return false;
+
+  if (application.document_review_status === "awaiting_user") return true;
+
+  const displayStatus = resolveDisplayStatus(application);
+  if (displayStatus === "prepared") return true;
+  if (application.user_facing_submission_status === "prepared") return true;
+  if (["prepared", "ready"].includes(application.submission_status)) return true;
+
+  const packageReady = application.generation_status === "generated"
+    || (
+      application.package_status
+      && !["not_generated", "pending_generation", "failed"].includes(application.package_status)
+    );
+  return Boolean(packageReady && application.submission_status === "not_submitted");
+}
+
+export function isPreparedForDocumentReview(application) {
+  return isAwaitingUserDocumentReview(application);
 }
 
 export function filterApplicationsForReview(applications, reviewDocumentsEnabled) {
   if (!reviewDocumentsEnabled) return [];
-  return (applications || []).filter(isPreparedForDocumentReview);
+  return (applications || [])
+    .filter(isAwaitingUserDocumentReview)
+    .sort((a, b) => {
+      const aTime = Date.parse(a.awaiting_review_at || a.updated_at || a.created_at || 0);
+      const bTime = Date.parse(b.awaiting_review_at || b.updated_at || b.created_at || 0);
+      return bTime - aTime;
+    });
 }

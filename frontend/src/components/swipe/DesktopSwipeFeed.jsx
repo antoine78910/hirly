@@ -25,7 +25,7 @@ import PlacesAutocomplete from "../PlacesAutocomplete";
 import RoleAutocomplete from "../RoleAutocomplete";
 import { SUGGESTED_ONBOARDING_LOCATIONS } from "../onboarding/onboardingData";
 import { rankLocationSuggestions } from "../../lib/locationSearch";
-import { jobExternalUrl } from "../../lib/jobDisplayUtils";
+import { isResolvedLocation } from "../../lib/locationSearch";
 import { useAppLocale } from "../../context/AppLocaleContext";
 import { getDesktopNavItems } from "../desktop/desktopNav";
 import SearchRadiusSlider from "./SearchRadiusSlider";
@@ -131,8 +131,13 @@ export default function DesktopSwipeFeed({
   const commitLocation = useCallback(async () => {
     const trimmed = locationDraft.trim();
     const hasSameLabel = trimmed === displayLocation;
-    const hasValidSelection = !trimmed || locationDataDraft?.location_label === trimmed;
+    const hasValidSelection = !trimmed || isResolvedLocation(locationDataDraft, trimmed);
     if (hasSameLabel && hasValidSelection) return;
+    if (trimmed && !isResolvedLocation(locationDataDraft, trimmed)) {
+      setLocationDraft(displayLocation);
+      setLocationDataDraft(targetLocationData);
+      return;
+    }
     const ok = await onTargetSave?.({
       role: target.role || roleDraft.trim(),
       location: trimmed,
@@ -367,6 +372,8 @@ export default function DesktopSwipeFeed({
                 <PlacesAutocomplete
                   inline
                   hideLabel
+                  requireSelection
+                  optional
                   variant={isDark ? "dark" : "light"}
                   value={locationDraft}
                   selectedLocation={locationDataDraft}

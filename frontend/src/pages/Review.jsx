@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { api } from "../lib/api";
 import { filterApplicationsForReview } from "../lib/applicationReview";
 import { fetchTrackerPageData } from "../lib/demoApplications";
+import { isApplicationGenerating } from "../lib/applicationDocuments";
 import { useAiSettings } from "../hooks/useAiSettings";
 import { useAppLocale } from "../context/AppLocaleContext";
 import { BrandHeader } from "../components/app/AppScreenHeader";
@@ -64,6 +65,16 @@ export default function Review() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    if (!reviewEnabled) return undefined;
+    const generating = apps.some(isApplicationGenerating);
+    if (!generating) return undefined;
+    const timer = window.setInterval(() => {
+      load();
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [apps, reviewEnabled, load]);
+
   const reviewQueue = useMemo(
     () => filterApplicationsForReview(apps, reviewEnabled),
     [apps, reviewEnabled],
@@ -80,16 +91,24 @@ export default function Review() {
   };
 
   const approveAndSubmit = async () => {
-    if (!selected?.job_id) return;
+    if (!selected?.application_id) return;
     setSubmitting(true);
     try {
-      const { data } = await api.post("/applications/greenhouse/browser-submit", {
-        job_id: selected.job_id,
-      });
-      const status = data?.submission_status;
-      if (status === "submitted") {
+      await api.post(`/applications/${selected.application_id}/approve-documents`);
+      let submitStatus = null;
+      if (selected?.job_id) {
+        try {
+          const { data } = await api.post("/applications/greenhouse/submit", {
+            job_id: selected.job_id,
+          });
+          submitStatus = data?.submission_status;
+        } catch {
+          // Manual fulfillment or unsupported ATS — document approval is enough.
+        }
+      }
+      if (submitStatus === "submitted") {
         toast.success(t("review.submitted"));
-      } else if (status === "action_required") {
+      } else if (submitStatus === "action_required") {
         toast(t("review.actionRequired"), { description: t("review.actionRequiredDesc") });
       } else {
         toast.success(t("review.approved"), { description: t("review.approvedDesc") });
