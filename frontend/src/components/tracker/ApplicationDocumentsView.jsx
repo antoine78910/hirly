@@ -10,6 +10,7 @@ import {
   hasApplicationCoverLetter,
   hasApplicationResume,
 } from "../../lib/applicationDocuments";
+import { resolveCvDisplayTemplate } from "../../lib/cvTemplate";
 
 export default function ApplicationDocumentsView({
   application,
@@ -27,7 +28,7 @@ export default function ApplicationDocumentsView({
   const coverLetter = getApplicationCoverLetter(application);
   const hasCv = hasApplicationResume(application);
   const hasCover = hasApplicationCoverLetter(application);
-  const template = profile?.template_style || "modern";
+  const template = resolveCvDisplayTemplate(resume?.template_recommendation || profile?.template_style);
   const contact = profile?.contact || {};
   const job = application?.job;
 

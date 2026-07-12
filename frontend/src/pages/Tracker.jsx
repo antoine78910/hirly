@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { motion } from "framer-motion";
 import ApplicationDetailPanel from "../components/tracker/ApplicationDetailPanel";
 import { downloadTailoredCV, downloadCoverLetter } from "../lib/pdf";
+import { resolveCvDisplayTemplate } from "../lib/cvTemplate";
 import { trackEvent } from "../lib/analytics";
 import { useAuth } from "../context/AuthContext";
 import { useAppLocale } from "../context/AppLocaleContext";
@@ -383,7 +384,9 @@ export default function Tracker() {
       contact: profile?.contact || {},
       resume: getApplicationResume(selected),
       job: selected.job,
-      template: profile?.template_style || "modern",
+      template: resolveCvDisplayTemplate(
+        getApplicationResume(selected)?.template_recommendation || profile?.template_style,
+      ),
     });
     toast.success(t("tracker.cvDownloaded"));
   };

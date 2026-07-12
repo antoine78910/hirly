@@ -25,6 +25,7 @@ import CompanyLogo from "../components/CompanyLogo";
 import CVPreview from "../components/CVPreview";
 import CoverLetterPreview from "../components/CoverLetterPreview";
 import { getApplicationCoverLetter, getApplicationResume } from "../lib/applicationDocuments";
+import { resolveCvDisplayTemplate } from "../lib/cvTemplate";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Button } from "../components/ui/button";
@@ -235,7 +236,9 @@ export default function Review() {
                       contact={profile?.contact || {}}
                       resume={getApplicationResume(selected)}
                       job={selected.job}
-                      template={profile?.template_style || "modern"}
+                      template={resolveCvDisplayTemplate(
+                        getApplicationResume(selected)?.template_recommendation || profile?.template_style,
+                      )}
                       theme="light"
                     />
                   </TabsContent>

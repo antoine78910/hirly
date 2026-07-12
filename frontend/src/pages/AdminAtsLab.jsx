@@ -12,6 +12,7 @@ import CVPreview from "../components/CVPreview";
 import CoverLetterPreview from "../components/CoverLetterPreview";
 import { downloadCoverLetter, downloadTailoredCV } from "../lib/pdf";
 import { normalizeCoverLetter } from "../lib/applicationDocuments";
+import { resolveCvDisplayTemplate } from "../lib/cvTemplate";
 
 function Section({ title, children, className = "" }) {
   return (
@@ -136,7 +137,9 @@ export default function AdminAtsLab() {
     location: selectedApp?.location,
     ats_provider: selectedApp?.ats_provider,
   };
-  const templateStyle = result?.profile_snapshot?.template_style || "modern";
+  const templateStyle = resolveCvDisplayTemplate(
+    tailoredResume?.template_recommendation || result?.profile_snapshot?.template_style,
+  );
 
   const handleDownloadCv = () => {
     downloadTailoredCV({
