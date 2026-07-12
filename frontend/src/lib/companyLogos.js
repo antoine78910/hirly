@@ -17,12 +17,12 @@ const COMPANIES = {
 
   // Finance demo — Paris banking & asset management
   "credit agricole": { domain: "ca-cib.com", display: "Crédit Agricole CIB" },
-  bnp: { domain: "group.bnpparibas.com", display: "BNP Paribas" },
-  generale: { domain: "societegenerale.com", display: "Société Générale" },
-  natixis: { domain: "www.natixis.com", display: "Natixis" },
+  bnp: { domain: "group.bnpparibas.com", display: "BNP Paribas", localLogo: "/trust-logos/bnp-paribas.png" },
+  generale: { domain: "societegenerale.com", display: "Société Générale", localLogo: "/trust-logos/societe-generale.png" },
+  natixis: { domain: "www.natixis.com", display: "Natixis", localLogo: "/trust-logos/natixis.png" },
   hsbc: { domain: "hsbc.fr", slug: "hsbc", display: "HSBC France" },
   boursorama: { domain: "boursorama.com", display: "Boursorama" },
-  lazard: { domain: "lazard.com", display: "Lazard" },
+  lazard: { domain: "lazard.com", display: "Lazard", localLogo: "/trust-logos/lazard.png" },
   amundi: { domain: "amundi.com", display: "Amundi" },
   rothschild: { domain: "rothschildandco.com", display: "Rothschild & Co" },
   deutsche: { domain: "db.com", slug: "deutschebank", display: "Deutsche Bank" },
