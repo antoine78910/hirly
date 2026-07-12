@@ -35,10 +35,10 @@ export function ensureDemoAccountDefaults() {
 export function setDemoAccountFromUser(user, isAdmin = false) {
   const nextDemoAccount = Boolean(user?.demo_account) && !isAdmin && !Boolean(user?.is_admin);
   cachedDemoAccount = nextDemoAccount;
-  setFinanceDemoEligibility(cachedDemoAccount);
+  setFinanceDemoEligibility(cachedDemoAccount, isAdmin);
   if (cachedDemoAccount) {
     ensureDemoAccountDefaults();
-  } else {
+  } else if (!isAdmin) {
     resetDemoOnlySettings();
     clearDemoAccountLocalData();
     if (typeof window !== "undefined") {

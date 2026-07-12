@@ -77,7 +77,6 @@ export default function DesktopSwipeFeed({
   shouldGateApply = false,
   onApplyBlocked,
   interactionBlocked = false,
-  isAdmin = false,
 }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -481,15 +480,6 @@ export default function DesktopSwipeFeed({
                       </a>
                     ) : null}
                   </div>
-
-                  {isAdmin ? (
-                    <div
-                      className="pointer-events-none absolute left-5 top-5 z-20 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-lime-300"
-                      data-testid="admin-ats-tier-badge"
-                    >
-                      {(displayJob?.ats_provider || displayJob?.provider || "unknown")} · {(displayJob?.applyability_tier || "?").toString().toUpperCase()}
-                    </div>
-                  ) : null}
 
                   <DesktopJobCard job={displayJob} theme={theme} t={t} lang={lang} />
 

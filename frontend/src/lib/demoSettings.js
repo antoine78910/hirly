@@ -7,11 +7,11 @@ export const DEFAULT_DEMO_SETTINGS = {
   financeJobFeed: false,
 };
 
-let demoAccountEligible = false;
+let demoSettingsEligible = false;
 
-/** Called from demoAccount when auth resolves demo vs normal user. */
-export function setFinanceDemoEligibility(isDemoAccount) {
-  demoAccountEligible = Boolean(isDemoAccount);
+/** Demo feed toggles (Paris finance) — available on demo accounts and admin accounts. */
+export function setFinanceDemoEligibility(isDemoAccount, isAdmin = false) {
+  demoSettingsEligible = Boolean(isDemoAccount) || Boolean(isAdmin);
 }
 
 export function readDemoSettings() {
@@ -21,7 +21,7 @@ export function readDemoSettings() {
     const merged = raw
       ? { ...DEFAULT_DEMO_SETTINGS, ...JSON.parse(raw) }
       : { ...DEFAULT_DEMO_SETTINGS };
-    if (TUTORIAL_BYPASS_AUTH && demoAccountEligible) {
+    if (TUTORIAL_BYPASS_AUTH && demoSettingsEligible) {
       merged.financeJobFeed = true;
     }
     return merged;
@@ -41,7 +41,7 @@ export function saveDemoSettings(settings) {
 }
 
 export function isFinanceDemoEnabled() {
-  if (!demoAccountEligible) return false;
+  if (!demoSettingsEligible) return false;
   return Boolean(readDemoSettings().financeJobFeed);
 }
 
