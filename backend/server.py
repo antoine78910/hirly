@@ -951,6 +951,7 @@ class OnboardingSuggestRolesRequest(BaseModel):
 
 async def get_current_user(
     request: Request,
+    response: Response,
     session_token: Optional[str] = Cookie(default=None),
     authorization: Optional[str] = Header(default=None),
 ) -> User:
@@ -993,6 +994,12 @@ async def get_current_user(
             logger.info("auth_me invalid_token reason=user_not_found source=%s user_id=%s", token_source, session.get("user_id"))
             last_failure = "User not found"
             continue
+        # Re-issue the cookie on every authenticated request (not just at
+        # login) so a session that only ever reached us via the old
+        # host-only cookie or a bearer token self-heals onto the shared
+        # .tryhirly.com-domain cookie the very next time it's used
+        # successfully, without requiring an explicit re-login.
+        _set_app_session_cookie(response, token)
         return User(**user_doc)
 
     raise HTTPException(status_code=401, detail=last_failure)
@@ -1043,6 +1050,17 @@ async def _create_app_session(user_id: str, source: str, session_token: Optional
 
 def _set_app_session_cookie(response: Response, session_token: str) -> None:
     is_dev = os.environ.get("ENVIRONMENT", "").strip().lower() == "development"
+    # Shared across app.tryhirly.com / tryhirly.com / www.tryhirly.com so the
+    # session is valid at the cookie layer itself on every subdomain, not
+    # just the one that issued it. Without this, the cookie defaults to
+    # host-only (scoped to whichever domain's Vercel /api rewrite proxied
+    # the login), and the frontend's client-side localStorage/bearer-token
+    # mirror (api.js) only ever refreshes at the moment of an active login
+    # -- never during the routine /auth/me check -- so a session that was
+    # only ever validated via this cookie on one domain was invisible on
+    # the other, causing an app.tryhirly.com <-> signin redirect loop that
+    # made the app unusable (confirmed live 2026-07-12).
+    cookie_domain = os.environ.get("SESSION_COOKIE_DOMAIN", "").strip() or (None if is_dev else ".tryhirly.com")
     response.set_cookie(
         key="session_token",
         value=session_token,
@@ -1050,6 +1068,7 @@ def _set_app_session_cookie(response: Response, session_token: str) -> None:
         httponly=True,
         secure=not is_dev,
         samesite="lax" if is_dev else "none",
+        domain=cookie_domain,
         path="/",
     )
 
@@ -1518,11 +1537,12 @@ async def auth_me(user: User = Depends(get_current_user)):
 
 async def _optional_current_user(
     request: Request,
+    response: Response,
     session_token: Optional[str] = Cookie(default=None),
     authorization: Optional[str] = Header(default=None),
 ) -> Optional[User]:
     try:
-        return await get_current_user(request, session_token=session_token, authorization=authorization)
+        return await get_current_user(request, response, session_token=session_token, authorization=authorization)
     except HTTPException:
         return None
 
