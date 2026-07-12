@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import {
   Zap, Undo2, History, SlidersHorizontal, Flag, Share2, MapPin, Calendar,
-  Heart, X, Loader2, Info, DollarSign, Briefcase, FileText, Star, Globe,
+  Heart, X, Loader2, Info, DollarSign, Briefcase, FileText, Star,
 } from "lucide-react";
 import { toast } from "sonner";
 import Logo from "../components/Logo";
@@ -48,7 +48,6 @@ import { getJobBadgeItems, getJobDisplayContent, getJobDisplayTitle, formatJobSa
 import JobRomeProfile from "../components/swipe/JobRomeProfile";
 import JobOfferDetails from "../components/swipe/JobOfferDetails";
 import JobCardHighlights, { JobCardMatchBadge } from "../components/swipe/JobCardHighlights";
-import JobDescriptionDialog from "../components/swipe/JobDescriptionDialog";
 import { translateLocationLabel, translateRoleLabel } from "../lib/localizedDisplay";
 
 import { preloadCompanyLogos } from "../lib/companyLogos";
@@ -486,7 +485,6 @@ function CardBack({ job, t, lang, onScrollIntent, onFlipBack, onSurfaceTap }) {
         <div className="sm:hidden">
           <JobCardHighlights job={job} t={t} lang={lang} max={4} compact />
         </div>
-        <JobDescriptionDialog job={job} t={t} lang={lang} className="w-full" />
 
         <div className="space-y-3">
           {about ? (
@@ -749,7 +747,7 @@ function SkeletonCard() {
 
 export default function Swipe() {
   const navigate = useNavigate();
-  const { t, lang, setLang } = useAppLocale();
+  const { t, lang } = useAppLocale();
   const { loading: authLoading, user, isAdmin } = useAuth();
   const [demoWelcomeOpen, setDemoWelcomeOpen] = useState(false);
   const [jobs, setJobs] = useState(() => getSwipeFeedCacheSnapshot().jobs);
@@ -1658,11 +1656,11 @@ export default function Swipe() {
 
       <div className="sprout flex h-dvh max-h-dvh flex-col overflow-hidden bg-sprout-bg pb-[calc(3.75rem+env(safe-area-inset-bottom,0px))] text-sprout-text md:hidden">
       <header
-        className="mx-auto flex w-full max-w-md shrink-0 items-center gap-1 px-safe pb-2 pt-safe sm:gap-2.5 sm:px-4"
+        className="mx-auto flex w-full max-w-md shrink-0 items-center gap-1 px-safe pb-2 pt-safe sm:gap-2 sm:px-4"
         data-testid="swipe-header"
       >
-        <div className="flex shrink-0 items-center gap-0.5">
-          <DesktopCreditsPill compact forceOpenUpgrade className="mr-0.5" />
+        <div className="flex shrink-0 items-center">
+          <DesktopCreditsPill compact forceOpenUpgrade />
           <button
             onClick={handleUndo}
             className="grid h-8 w-8 place-items-center rounded-full hover:bg-sprout-surface sm:h-9 sm:w-9"
@@ -1676,38 +1674,22 @@ export default function Swipe() {
         <button
           type="button"
           onClick={() => setTargetSheetOpen(true)}
-          className="min-w-0 flex-1 rounded-full border border-sprout-border bg-sprout-surface px-2 py-1 text-center shadow-sm transition-colors hover:border-violet-400/40 hover:bg-sprout-surface-2 sm:px-4 sm:py-1.5"
+          className="min-w-0 flex-1 rounded-full border border-sprout-border bg-sprout-surface px-3 py-1.5 text-center shadow-sm transition-colors hover:border-violet-400/40 hover:bg-sprout-surface-2 sm:px-4 sm:py-2"
           data-testid="target-pill"
           aria-label={t("swipe.editTarget")}
         >
-          <p className="truncate text-xs font-semibold leading-tight text-sprout-text sm:text-sm">
+          <p className="truncate text-xs font-semibold leading-tight text-sprout-text sm:hidden">
+            {[translateRoleLabel(target.role, lang) || t("swipe.setTargetRole"), translateLocationLabel(target.location, lang) || t("swipe.anywhere")].join(" · ")}
+          </p>
+          <p className="hidden truncate text-sm font-semibold leading-tight text-sprout-text sm:block">
             {translateRoleLabel(target.role, lang) || t("swipe.setTargetRole")}
           </p>
-          <p className="truncate text-[9px] leading-tight text-sprout-muted sm:text-[11px]">
-            <span className="sm:hidden">{translateLocationLabel(target.location, lang) || t("swipe.anywhere")}</span>
-            <span className="hidden sm:inline">{translateLocationLabel(target.location, lang) || t("swipe.anywhere")} · {t("swipe.tapToEdit")}</span>
+          <p className="mt-0.5 hidden truncate text-[11px] leading-tight text-sprout-muted sm:block">
+            {translateLocationLabel(target.location, lang) || t("swipe.anywhere")} · {t("swipe.tapToEdit")}
           </p>
         </button>
 
-        <div className="flex shrink-0 items-center gap-0.5">
-          <button
-            onClick={() => {
-              const next = lang === "fr" ? "en" : "fr";
-              setLang(next);
-              toast.success(next === "fr" ? "Langue definie sur Francais" : "Language set to English", { duration: 1600 });
-            }}
-            className="grid h-8 w-8 place-items-center rounded-full hover:bg-sprout-surface sm:h-9 sm:w-9"
-            data-testid="swipe-language-toggle"
-            aria-label={t("common.language")}
-            title={t("common.language")}
-          >
-            <span className="relative">
-              <Globe className="h-4 w-4 text-sprout-mint sm:h-5 sm:w-5" />
-              <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 rounded-sm bg-sprout-mint px-0.5 text-[8px] font-bold uppercase leading-none text-sprout-bg">
-                {lang}
-              </span>
-            </span>
-          </button>
+        <div className="flex shrink-0 items-center">
           <button
             onClick={() => navigate("/history")}
             className="grid h-8 w-8 place-items-center rounded-full hover:bg-sprout-surface sm:h-9 sm:w-9"

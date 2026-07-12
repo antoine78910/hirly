@@ -13,7 +13,7 @@ import {
 import { ArrowLeft, CreditCard, Crown, Loader2, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
-import { formatPlanTier } from "../lib/billingPlan";
+import { PlanTierBadge } from "../components/desktop/DesktopCreditsPill";
 import { useUpgradeModal } from "../context/UpgradeModalContext";
 import { useAppLocale } from "../context/AppLocaleContext";
 import { Button } from "../components/ui/button";
@@ -256,10 +256,12 @@ export default function Billing() {
                 {isPremium ? (
                   <div className="py-8 text-center">
                     <Crown className="mx-auto mb-4 h-12 w-12 text-linkedin" aria-hidden />
-                    <h3 className="mb-2 text-lg font-semibold text-zinc-900">
-                      {t("billingPage.premiumActive")}
-                      {formatPlanTier(billing?.plan_tier || billing?.plan) ? ` (${formatPlanTier(billing?.plan_tier || billing?.plan)})` : ""}
-                    </h3>
+                    <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
+                      <h3 className="text-lg font-semibold text-zinc-900">
+                        {t("billingPage.premiumActive")}
+                      </h3>
+                      <PlanTierBadge planTier={billing?.plan_tier || billing?.plan} />
+                    </div>
                     <p className="mb-6 text-sm text-zinc-500">
                       {t("billingPage.premiumActiveDesc")}
                     </p>

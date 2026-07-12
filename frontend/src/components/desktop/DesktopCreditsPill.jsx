@@ -90,16 +90,31 @@ export function useSwipeCredits() {
   return { credits, isPremium, planTier, loading, displayCredits: credits, demoAccount };
 }
 
+export function PlanTierBadge({ planTier, className = "", isDark = false }) {
+  const label = formatPlanTier(planTier);
+  if (!label) return null;
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+        isDark ? "bg-violet-500/20 text-violet-200" : "bg-violet-100 text-violet-700"
+      } ${className}`}
+    >
+      {label}
+    </span>
+  );
+}
+
 export default function DesktopCreditsPill({
   isDark = false,
   className = "",
   forceOpenUpgrade = false,
   compact = false,
+  showPlanBadge = false,
 }) {
   const { openUpgrade } = useUpgradeModal();
   const { t } = useAppLocale();
   const { displayCredits, loading, isPremium, planTier, demoAccount } = useSwipeCredits();
-  const tierLabel = isPremium ? formatPlanTier(planTier) : null;
+  const tierLabel = showPlanBadge && isPremium ? formatPlanTier(planTier) : null;
 
   if (demoAccount) return null;
 
