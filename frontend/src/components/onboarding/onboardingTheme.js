@@ -4,6 +4,8 @@ import { sel } from "../../lib/selectionTheme";
 export const ob = {
   step: "flex flex-1 flex-col min-h-0 overflow-hidden",
   stepBody: "mt-2 sm:mt-3 flex-1 min-h-0 flex flex-col justify-center overflow-hidden",
+  /** Scroll area for single-column QCM option lists below the step title. */
+  stepBodyOptions: "mt-2 sm:mt-3 flex-1 min-h-0 overflow-y-auto",
   title: "font-display font-black text-[1.35rem] sm:text-2xl lg:text-[1.75rem] tracking-tight leading-tight text-zinc-900",
   introTitle:
     "font-display font-black text-[1.65rem] sm:text-3xl lg:text-[2.25rem] tracking-tight leading-[1.12] text-zinc-900 text-center max-w-md",
@@ -19,7 +21,7 @@ export const ob = {
     "flex h-[9.25rem] w-full max-w-md flex-col items-center justify-start gap-3 sm:h-[10.25rem] sm:gap-4",
   introDots: "flex shrink-0 items-center justify-center gap-2 pt-3 sm:pt-4",
   subtitle: "mt-1 sm:mt-1.5 text-zinc-600 text-sm sm:text-[15px] leading-snug",
-  optionList: "space-y-1.5 sm:space-y-2",
+  optionList: "w-full space-y-2.5 sm:space-y-2",
   optionGrid: "grid grid-cols-2 gap-1.5 sm:gap-2",
   chip:
     "inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-full text-xs sm:text-sm font-medium border transition-colors duration-200 ease-out active:scale-[0.97]",

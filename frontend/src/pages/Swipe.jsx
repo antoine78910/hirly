@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { motion, useMotionValue, useTransform, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
@@ -32,6 +32,8 @@ import { getFinanceDemoSearchTarget } from "../lib/financeDemoJobs";
 import { ensureTutorialSession } from "../lib/tutorialSession";
 import { useUpgradeModal } from "../context/UpgradeModalContext";
 import DesktopSwipeFeed from "../components/swipe/DesktopSwipeFeed";
+import ResumeSheet from "../components/ResumeSheet";
+import PhoneSheet from "../components/PhoneSheet";
 import { saveTargetPreferences, normalizeLocationData } from "../lib/targetPreferences";
 import { enrichLocationData } from "../lib/locationSearch";
 import { hasActiveFilters, mergeFilters, clearMenuFilters } from "../lib/jobFilters";
@@ -44,6 +46,12 @@ import {
   getSwipeSuccessCopy,
   getSwipeErrorMessage,
 } from "../lib/appUi";
+import {
+  isMissingPhoneFeedError,
+  isMissingResumeFeedError,
+  profileHasPhone,
+  profileHasResume,
+} from "../lib/profileReadiness";
 import { getJobBadgeItems, getJobDisplayContent, getJobDisplayTitle, formatJobSalaryLabel } from "../lib/jobDisplayUtils";
 import JobRomeProfile from "../components/swipe/JobRomeProfile";
 import JobOfferDetails from "../components/swipe/JobOfferDetails";
@@ -771,6 +779,9 @@ export default function Swipe() {
   const [lastFeedDebug, setLastFeedDebug] = useState(null);
   const [reportJob, setReportJob] = useState(null);
   const [billing, setBilling] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [resumeSheetOpen, setResumeSheetOpen] = useState(false);
+  const [phoneSheetOpen, setPhoneSheetOpen] = useState(false);
   const { upgradeOpen, openUpgrade } = useUpgradeModal();
   const fetchingRef = useRef(false);
   const filtersRef = useRef(filters);
@@ -880,6 +891,7 @@ export default function Swipe() {
       try {
         const { data } = await api.get("/profile");
         profileRef.current = data || null;
+        setProfile(data || null);
         if (data?.target_role || data?.cv_text) {
           const nextTarget = {
             role: data.target_role || "",
@@ -898,6 +910,7 @@ export default function Swipe() {
     try {
       const { data } = await api.get("/profile");
       profileRef.current = data || null;
+      setProfile(data || null);
       if (data) {
         const nextTarget = {
           role: data.target_role || "",
@@ -1429,12 +1442,60 @@ export default function Swipe() {
   const creditsRemaining = Number(billing?.credits_remaining ?? 0);
   const isDemoUser = isDemoSwipeMode() || isDemoAccountEnabled() || Boolean(user?.demo_account);
   const shouldGateApply = billing !== null && (!billing.is_premium || creditsRemaining <= 0) && !isDemoUser;
+  const requiresProfileForApply = !isDemoUser && !isFinanceDemoEnabled();
 
-  const blockApplyForFreePlan = useCallback(() => {
-    if (!shouldGateApply) return false;
-    openUpgrade();
-    return true;
-  }, [shouldGateApply, openUpgrade]);
+  const resolveApplyGate = useCallback(() => {
+    if (shouldGateApply) {
+      return { blocked: true, action: () => openUpgrade() };
+    }
+    if (!requiresProfileForApply) {
+      return { blocked: false };
+    }
+    const currentProfile = profileRef.current;
+    if (!profileHasResume(currentProfile)) {
+      return { blocked: true, action: () => setResumeSheetOpen(true) };
+    }
+    if (!profileHasPhone(currentProfile)) {
+      return { blocked: true, action: () => setPhoneSheetOpen(true) };
+    }
+    return { blocked: false };
+  }, [openUpgrade, requiresProfileForApply, shouldGateApply]);
+
+  const shouldBlockApply = useCallback(() => resolveApplyGate().blocked, [resolveApplyGate]);
+
+  const handleApplyBlocked = useCallback(() => {
+    resolveApplyGate().action?.();
+  }, [resolveApplyGate]);
+
+    profileRef.current = nextProfile;
+    setProfile(nextProfile);
+    setFeedError("");
+    await loadFeed(true, filtersRef.current, "profile_readiness_updated");
+  }, [loadFeed]);
+
+  const feedSetupGate = useMemo(() => {
+    if (isMissingResumeFeedError(feedError)) {
+      return {
+        body: t("swipe.missingResumeBody"),
+        label: t("swipe.uploadResumeToSwipe"),
+        action: () => setResumeSheetOpen(true),
+      };
+    }
+    if (isMissingPhoneFeedError(feedError)) {
+      return {
+        body: t("swipe.missingPhoneBody"),
+        label: t("swipe.addPhoneToApply"),
+        action: () => setPhoneSheetOpen(true),
+      };
+    }
+    return null;
+  }, [feedError, t]);
+
+  useEffect(() => {
+    if (!feedError || loading) return;
+    if (isMissingResumeFeedError(feedError)) setResumeSheetOpen(true);
+    else if (isMissingPhoneFeedError(feedError)) setPhoneSheetOpen(true);
+  }, [feedError, loading]);
 
   useEffect(() => {
     trackEvent("swipe_page_view");
@@ -1455,7 +1516,13 @@ export default function Swipe() {
 
   // intent: "apply" | "skip"
   const handleSwipe = async (intent) => {
-    if (intent === "apply" && blockApplyForFreePlan()) return;
+    if (intent === "apply") {
+      const gate = resolveApplyGate();
+      if (gate.blocked) {
+        gate.action?.();
+        return;
+      }
+    }
     if (!topJob) return;
     const job = topJob;
     cacheJobForDemo(job);
@@ -1515,6 +1582,13 @@ export default function Swipe() {
         openUpgrade();
       }
       if (!isDemoUser && intent === "apply") {
+        const detail = e?.response?.data?.detail;
+        const message = typeof detail === "string" ? detail : detail?.message;
+        if (isMissingPhoneFeedError(message)) {
+          setPhoneSheetOpen(true);
+        } else if (isMissingResumeFeedError(message)) {
+          setResumeSheetOpen(true);
+        }
         toast.error(getSwipeErrorMessage(t, e));
       }
     }
@@ -1583,9 +1657,9 @@ export default function Swipe() {
       if (target?.isContentEditable) return;
       if (targetSheetOpen || filtersOpen || desktopFiltersOpen || reportJob || upgradeOpen) return;
       if (appLoading || loading || !topJob) return;
-      if (event.key === "ArrowRight" && shouldGateApply) {
+      if (event.key === "ArrowRight" && shouldBlockApply()) {
         event.preventDefault();
-        openUpgrade();
+        handleApplyBlocked();
         return;
       }
       event.preventDefault();
@@ -1602,9 +1676,8 @@ export default function Swipe() {
     reportJob,
     targetSheetOpen,
     topJob,
-    shouldGateApply,
-    navigate,
-    upgradeOpen,
+    shouldBlockApply,
+    handleApplyBlocked,
   ]);
 
   const feedDebugEnabled = typeof window !== "undefined" && window.localStorage.getItem("feed_debug") === "true";
@@ -1647,9 +1720,9 @@ export default function Swipe() {
           onShare={handleShareJob}
           onRefresh={() => loadFeed(true, filtersRef.current, "desktop_refresh")}
           onRadiusChange={handleRadiusChange}
-          shouldGateApply={shouldGateApply}
-          onApplyBlocked={openUpgrade}
-          interactionBlocked={targetSheetOpen || filtersOpen || desktopFiltersOpen || Boolean(reportJob) || upgradeOpen}
+          shouldGateApply={shouldBlockApply()}
+          onApplyBlocked={handleApplyBlocked}
+          interactionBlocked={targetSheetOpen || filtersOpen || desktopFiltersOpen || Boolean(reportJob) || upgradeOpen || resumeSheetOpen || phoneSheetOpen}
           isAdmin={isAdmin}
         />
       </div>
@@ -1734,18 +1807,25 @@ export default function Swipe() {
                   : t("swipe.noJobsFiltered")}
               </h3>
               <p className="mt-2 max-w-xs text-sm text-sprout-muted">
-                {feedError
-                  ? feedError
-                  : feedMeta?.provider_rate_limited
-                  ? t("swipe.providerRateLimited")
-                  : feedFallbackMessage(t, feedMeta)}
+                {feedSetupGate?.body
+                  || (feedError
+                    ? feedError
+                    : feedMeta?.provider_rate_limited
+                    ? t("swipe.providerRateLimited")
+                    : feedFallbackMessage(t, feedMeta))}
               </p>
               <button
-                onClick={() => loadFeed(true, filtersRef.current, "empty_refresh")}
+                onClick={() => {
+                  if (feedSetupGate?.action) {
+                    feedSetupGate.action();
+                    return;
+                  }
+                  loadFeed(true, filtersRef.current, "empty_refresh");
+                }}
                 className="mt-6 h-11 rounded-full bg-sprout-mint px-6 font-semibold text-white transition-opacity hover:opacity-90"
                 data-testid="refresh-feed-btn"
               >
-                {t("common.refresh")}
+                {feedSetupGate?.label || t("common.refresh")}
               </button>
             </motion.div>
           )}
@@ -1839,6 +1919,23 @@ export default function Swipe() {
           if (next) setDemoWelcomeOpen(true);
         }}
         onDismiss={handleDismissDemoWelcome}
+      />
+
+      <ResumeSheet
+        open={resumeSheetOpen}
+        profile={profile}
+        onClose={() => setResumeSheetOpen(false)}
+        onUploaded={async () => {
+          const data = await loadProfile();
+          if (data) await handleProfileReadinessUpdated(data);
+        }}
+      />
+
+      <PhoneSheet
+        open={phoneSheetOpen}
+        profile={profile}
+        onClose={() => setPhoneSheetOpen(false)}
+        onSaved={handleProfileReadinessUpdated}
       />
 
       {feedDebugEnabled && (

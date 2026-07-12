@@ -1393,6 +1393,10 @@ def _demo_profile_for_feed(user_id: str, profile: Optional[Dict[str, Any]] = Non
         merged["target_location"] = TUTORIAL_FILMING_PROFILE["target_location"]
     if not merged.get("target_location_data"):
         merged["target_location_data"] = TUTORIAL_FILMING_PROFILE["target_location_data"]
+    if not _profile_has_usable_phone(merged):
+        contact = dict(merged.get("contact") or {})
+        contact["phone"] = "+33 6 12 34 56 78"
+        merged["contact"] = contact
     return merged
 
 
@@ -3053,6 +3057,15 @@ def _cv_text_looks_usable(text: str, min_chars: int = 40) -> bool:
     if len(cleaned) >= min_chars:
         return True
     return len(cleaned.split()) >= 8
+
+
+def _profile_has_usable_phone(profile: Optional[Dict[str, Any]]) -> bool:
+    if not profile:
+        return False
+    contact = profile.get("contact") or {}
+    phone = str(contact.get("phone") or "").strip()
+    digits = re.sub(r"\D", "", phone)
+    return len(digits) >= 8
 
 
 def _guess_image_mime(image_bytes: bytes) -> str:
@@ -5359,6 +5372,14 @@ async def get_feed(
             sorted(list((profile or {}).keys()))[:30],
         )
         raise HTTPException(status_code=400, detail="Upload CV first")
+
+    if not _profile_has_usable_phone(profile):
+        logger.info(
+            "jobs/feed phone_readiness_failed user_id=%s has_phone=%s",
+            user.user_id,
+            bool((profile.get("contact") or {}).get("phone")),
+        )
+        raise HTTPException(status_code=400, detail="Add your phone number to apply")
 
     if search_role is not None:
         feed_target_role = search_role.strip()
@@ -8408,6 +8429,10 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
         profile = await db.profiles.find_one({"user_id": user.user_id}, {"_id": 0})
         if not profile:
             raise HTTPException(status_code=400, detail="Profile required")
+        if not profile.get("cv_text"):
+            raise HTTPException(status_code=400, detail="Upload CV first")
+        if not _profile_has_usable_phone(profile):
+            raise HTTPException(status_code=400, detail="Add your phone number before applying")
 
         existing_app = await db.applications.find_one({"user_id": user.user_id, "job_id": req.job_id}, {"_id": 0})
         if existing_app:

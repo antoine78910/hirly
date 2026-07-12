@@ -28,6 +28,7 @@ import Interviews from "@/pages/Interviews";
 import Improve from "@/pages/Improve";
 import History from "@/pages/History";
 import Review from "@/pages/Review";
+import ReviewApplicationDetail from "@/pages/ReviewApplicationDetail";
 import Feedback from "@/pages/Feedback";
 import Billing from "@/pages/Billing";
 import Referral from "@/pages/Referral";
@@ -97,6 +98,7 @@ function shouldShowBottomNav(pathname) {
   if (pathname === "/onboarding" || pathname.startsWith("/onboarding/")) return false;
   if (pathname === "/terms" || pathname === "/privacy") return false;
   if (pathname === "/billing" || pathname === "/referral") return false;
+  if (pathname.startsWith("/review/")) return false;
   if (isTrainingRoutePath(pathname)) return false;
   if (pathname === "/record-tools") return false;
   return true;
@@ -192,6 +194,8 @@ function AppRouter() {
         <Route path="/app" element={<AppRoute requireProfile><Swipe /></AppRoute>} />
         <Route path="/swipe" element={<AppRoute requireProfile><Swipe /></AppRoute>} />
         <Route path="/review" element={<AppRoute requireProfile><Review /></AppRoute>} />
+        <Route path="/review/:applicationId/:docType" element={<AppRoute requireProfile><ReviewApplicationDetail /></AppRoute>} />
+        <Route path="/review/:applicationId" element={<AppRoute requireProfile><ReviewApplicationDetail /></AppRoute>} />
         <Route path="/feedback" element={<AppRoute><Feedback /></AppRoute>} />
         <Route path="/interviews" element={<AppRoute requireProfile><Interviews /></AppRoute>} />
         <Route path="/improve" element={<AppRoute requireProfile><Improve /></AppRoute>} />

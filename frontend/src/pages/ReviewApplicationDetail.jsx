@@ -1,0 +1,290 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { motion } from "framer-motion";
+import {
+  ArrowLeft,
+  ChevronRight,
+  FileText,
+  Loader2,
+  Mail,
+  MapPin,
+} from "lucide-react";
+import { toast } from "sonner";
+import { api } from "../lib/api";
+import { useAiSettings } from "../hooks/useAiSettings";
+import { useAppLocale } from "../context/AppLocaleContext";
+import { useAuth } from "../context/AuthContext";
+import { BrandHeader } from "../components/app/AppScreenHeader";
+import { AppPage, AppPageScroll, SHELL_PAGE_CLASS } from "../components/app/AppPageShell";
+import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
+import CompanyLogo from "../components/CompanyLogo";
+import CVPreview from "../components/CVPreview";
+import CoverLetterPreview from "../components/CoverLetterPreview";
+import {
+  getApplicationCoverLetter,
+  getApplicationResume,
+  hasApplicationCoverLetter,
+  hasApplicationResume,
+} from "../lib/applicationDocuments";
+import { resolveCvDisplayTemplate, withContactPhoto } from "../lib/cvTemplate";
+import { Button } from "../components/ui/button";
+
+const DOC_TYPES = new Set(["cv", "cover"]);
+
+function DocumentPreviewCard({ title, description, icon: Icon, children, onOpen, testId }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="shell-surface group flex w-full flex-col overflow-hidden rounded-3xl text-left transition-transform hover:border-violet-200 hover:shadow-md active:scale-[0.99] dark:hover:border-violet-500/40"
+      data-testid={testId}
+    >
+      <div className="relative h-52 overflow-hidden bg-zinc-50 sm:h-60">
+        <div className="pointer-events-none absolute inset-0 origin-top scale-[0.72] sm:scale-[0.78]">
+          {children}
+        </div>
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/10 via-white/30 to-white dark:from-zinc-950/10 dark:via-zinc-950/30 dark:to-zinc-950" />
+      </div>
+      <div className="flex items-center gap-3 border-t shell-border px-4 py-4">
+        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-violet-500/15 text-violet-400">
+          <Icon className="h-5 w-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-display text-base font-bold shell-title">{title}</p>
+          <p className="mt-0.5 text-sm shell-body">{description}</p>
+        </div>
+        <ChevronRight className="h-5 w-5 shrink-0 text-sprout-dim transition-transform group-hover:translate-x-0.5" />
+      </div>
+    </button>
+  );
+}
+
+export default function ReviewApplicationDetail() {
+  const { applicationId, docType } = useParams();
+  const navigate = useNavigate();
+  const { t } = useAppLocale();
+  const { settings } = useAiSettings();
+  const { user } = useAuth();
+  const reviewEnabled = settings.reviewDocuments;
+
+  const [application, setApplication] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
+  const isReader = DOC_TYPES.has(docType);
+  const hasCv = hasApplicationResume(application);
+  const hasCover = hasApplicationCoverLetter(application);
+
+  const load = useCallback(async () => {
+    if (!applicationId) return;
+    setLoading(true);
+    try {
+      const [{ data: appData }, profileRes] = await Promise.all([
+        api.get(`/applications/${applicationId}`),
+        api.get("/profile").catch(() => ({ data: null })),
+      ]);
+      setApplication(appData);
+      setProfile(profileRes?.data || null);
+    } catch (_) {
+      toast.error(t("review.openError"));
+      navigate("/review", { replace: true });
+    } finally {
+      setLoading(false);
+    }
+  }, [applicationId, navigate, t]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    if (!reviewEnabled) return;
+    if (docType && !DOC_TYPES.has(docType)) {
+      navigate(`/review/${applicationId}`, { replace: true });
+    }
+  }, [applicationId, docType, navigate, reviewEnabled]);
+
+  const contact = useMemo(
+    () => withContactPhoto(profile?.contact || {}, user?.picture),
+    [profile?.contact, user?.picture],
+  );
+
+  const resume = getApplicationResume(application);
+  const coverLetter = getApplicationCoverLetter(application);
+  const template = resolveCvDisplayTemplate(
+    resume?.template_recommendation || profile?.template_style,
+  );
+  const job = application?.job;
+
+  const approveAndSubmit = async () => {
+    if (!application?.application_id) return;
+    setSubmitting(true);
+    try {
+      await api.post(`/applications/${application.application_id}/approve-documents`);
+      let submitStatus = null;
+      if (application?.job_id) {
+        try {
+          const { data } = await api.post("/applications/greenhouse/submit", {
+            job_id: application.job_id,
+          });
+          submitStatus = data?.submission_status;
+        } catch {
+          // Manual fulfillment or unsupported ATS — document approval is enough.
+        }
+      }
+      if (submitStatus === "submitted") {
+        toast.success(t("review.submitted"));
+      } else if (submitStatus === "action_required") {
+        toast(t("review.actionRequired"), { description: t("review.actionRequiredDesc") });
+      } else {
+        toast.success(t("review.approved"), { description: t("review.approvedDesc") });
+      }
+      navigate("/review", { replace: true });
+    } catch (e) {
+      const detail = e?.response?.data?.detail;
+      toast.error(detail?.message || (typeof detail === "string" ? detail : t("review.submitError")));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const readerTitle = docType === "cv" ? t("review.cv") : t("review.coverLetter");
+
+  return (
+    <AppPage className={SHELL_PAGE_CLASS}>
+      <BrandHeader />
+
+      <AppPageScroll withBottomNavPad={!isReader}>
+        <div className={isReader ? "mx-auto w-full max-w-4xl px-4 py-4 md:px-8 md:py-6" : APP_CONTENT_WIDTH}>
+          <div className="mb-4 flex items-center gap-2">
+            <Link
+              to={isReader ? `/review/${applicationId}` : "/review"}
+              className="inline-flex items-center gap-1.5 rounded-full px-2 py-1.5 text-sm font-semibold shell-body transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              data-testid="review-detail-back"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              {isReader ? t("review.backToDocuments") : t("review.backToQueue")}
+            </Link>
+          </div>
+
+          {loading ? (
+            <div className="mt-16 flex justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-zinc-500" />
+            </div>
+          ) : !application ? null : isReader ? (
+            <div data-testid="review-document-reader">
+              <div className="mb-5">
+                <p className="text-xs font-semibold uppercase tracking-wide text-violet-400">
+                  {application.job?.company}
+                </p>
+                <h1 className="font-display text-2xl font-bold tracking-tight shell-title">
+                  {readerTitle}
+                </h1>
+                <p className="mt-1 text-sm shell-body">{application.job?.title}</p>
+              </div>
+
+              {docType === "cv" ? (
+                hasCv ? (
+                  <CVPreview
+                    contact={contact}
+                    resume={resume}
+                    job={job}
+                    template={template}
+                    theme="light"
+                  />
+                ) : (
+                  <p className="py-10 text-center text-sm shell-body">{t("tracker.cvUnavailable")}</p>
+                )
+              ) : hasCover ? (
+                <CoverLetterPreview
+                  contact={contact}
+                  letter={coverLetter}
+                  job={job}
+                  theme="light"
+                />
+              ) : (
+                <p className="py-10 text-center text-sm shell-body">{t("tracker.coverUnavailable")}</p>
+              )}
+            </div>
+          ) : (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              data-testid="review-application-detail"
+            >
+              <div className="flex items-start gap-4">
+                <CompanyLogo company={job?.company} size="md" rounded="xl" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-violet-400">{job?.company}</p>
+                  <h1 className="font-display text-2xl font-bold tracking-tight shell-title">
+                    {job?.title}
+                  </h1>
+                  {job?.location ? (
+                    <p className="mt-2 inline-flex items-center gap-1 text-sm shell-body">
+                      <MapPin className="h-3.5 w-3.5" />
+                      {job.location}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+
+              <p className="mt-5 text-sm leading-relaxed shell-body">
+                {t("review.pageHint")}
+              </p>
+
+              <div className="mt-6 space-y-4">
+                {hasCv ? (
+                  <DocumentPreviewCard
+                    title={t("review.cv")}
+                    description={t("review.tapToRead")}
+                    icon={FileText}
+                    onOpen={() => navigate(`/review/${applicationId}/cv`)}
+                    testId="review-open-cv"
+                  >
+                    <CVPreview
+                      contact={contact}
+                      resume={resume}
+                      job={job}
+                      template={template}
+                      theme="light"
+                    />
+                  </DocumentPreviewCard>
+                ) : null}
+
+                {hasCover ? (
+                  <DocumentPreviewCard
+                    title={t("review.coverLetter")}
+                    description={t("review.tapToRead")}
+                    icon={Mail}
+                    onOpen={() => navigate(`/review/${applicationId}/cover`)}
+                    testId="review-open-cover"
+                  >
+                    <CoverLetterPreview
+                      contact={contact}
+                      letter={coverLetter}
+                      job={job}
+                      theme="light"
+                    />
+                  </DocumentPreviewCard>
+                ) : null}
+              </div>
+
+              <div className="sticky bottom-0 z-10 -mx-4 mt-8 border-t shell-border bg-sprout-bg/95 px-4 py-4 backdrop-blur md:static md:mx-0 md:border-0 md:bg-transparent md:px-0 md:py-0 md:backdrop-blur-none">
+                <Button
+                  onClick={approveAndSubmit}
+                  disabled={submitting}
+                  className="w-full rounded-full gradient-linkedin text-white hover:opacity-90"
+                  data-testid="review-approve-submit-btn"
+                >
+                  {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {t("review.approveSubmit")}
+                </Button>
+              </div>
+            </motion.div>
+          )}
+        </div>
+      </AppPageScroll>
+    </AppPage>
+  );
+}

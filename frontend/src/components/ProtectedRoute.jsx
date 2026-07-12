@@ -2,7 +2,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useEffect, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { Loader2 } from "lucide-react";
-import { devBypassAuth } from "../lib/dev";
+import { isDemoAccountEnabled } from "../lib/demoAccount";
 import {
   domainSplitEnabled,
   isAppHost,
@@ -51,7 +51,7 @@ export default function ProtectedRoute({ children, requireProfile = false }) {
     );
   }
   // Demo and training creators bypass the job-seeker profile requirement.
-  const isCreator = Boolean(user?.demo_account) || Boolean(hasTrainingAccess);
+  const isCreator = Boolean(user?.demo_account) || Boolean(hasTrainingAccess) || isDemoAccountEnabled();
   if (requireProfile && !isCreator && (!hasProfile || !hasPreferences)) {
     if (domainSplitEnabled() && isAppHost()) {
       window.location.replace(marketingUrl("/onboarding"));

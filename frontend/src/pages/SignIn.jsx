@@ -12,6 +12,8 @@ import { api, setSessionToken } from "../lib/api";
 import { supabase, supabaseConfigured } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { trackEvent } from "../lib/analytics";
+import { isDemoAccountEnabled } from "../lib/demoAccount";
+import { goToApp } from "../lib/appDomains";
 
 export default function SignIn() {
   const navigate = useNavigate();
@@ -37,6 +39,10 @@ export default function SignIn() {
 
   useEffect(() => {
     if (authLoading || !user) return;
+    if (user.demo_account || isDemoAccountEnabled()) {
+      goToApp("/swipe");
+      return;
+    }
     navigate(
       hasProfile && hasPreferences ? returnPath : "/onboarding?step=jobSearch",
       { replace: true },
@@ -61,6 +67,10 @@ export default function SignIn() {
       has_profile: Boolean(data.has_profile),
       has_preferences: Boolean(data.has_preferences),
     });
+    if (data?.user?.demo_account) {
+      goToApp("/swipe");
+      return;
+    }
     navigate(
       data.has_profile && data.has_preferences ? returnPath : "/onboarding?step=jobSearch",
       { replace: true },

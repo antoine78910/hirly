@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { GraduationCap, Loader2, MonitorPlay, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import Logo from "../components/Logo";
@@ -10,7 +10,7 @@ import { setDemoAccountFromUser } from "../lib/demoAccount";
 import {
   applyRedeemToAuth,
   clearPendingInviteCode,
-  inviteDestination,
+  goToInviteDestination,
   redeemCreatorInvite,
   storePendingInviteCode,
 } from "../lib/creatorInvite";
@@ -30,8 +30,7 @@ function isDemoInvite(meta) {
 
 export default function InviteLanding() {
   const { code } = useParams();
-  const navigate = useNavigate();
-  const { user, loading: authLoading, setUser, setHasProfile, setHasPreferences, setHasTrainingAccess } = useAuth();
+  const { user, loading: authLoading, setUser, setHasProfile, setHasPreferences, setHasTrainingAccess, checkAuth } = useAuth();
   const [checking, setChecking] = useState(true);
   const [inviteMeta, setInviteMeta] = useState(null);
   const [redeeming, setRedeeming] = useState(false);
@@ -74,9 +73,24 @@ export default function InviteLanding() {
       setUser,
       setHasTrainingAccess,
       setDemoAccountFromUser,
+      setHasProfile,
+      setHasPreferences,
     });
-    navigate(inviteDestination(redeemData, inviteMeta), { replace: true });
+    try {
+      await checkAuth?.();
+    } catch {
+      /* local auth state already updated */
+    }
+    goToInviteDestination(redeemData, inviteMeta);
   };
+
+  // Demo invite + existing demo account → go straight to the app (skip onboarding resume).
+  useEffect(() => {
+    if (authLoading || checking || invalid || !isValid || !demoInvite) return;
+    if (!user?.demo_account) return;
+    autoRedeemStarted.current = true;
+    goToInviteDestination(null, inviteMeta);
+  }, [authLoading, checking, invalid, isValid, demoInvite, user, inviteMeta]);
 
   useEffect(() => {
     if (authLoading || checking || !user || redeeming || autoRedeemStarted.current || redeemFailed) return;
@@ -90,7 +104,11 @@ export default function InviteLanding() {
       } catch (err) {
         setRedeemFailed(true);
         if (err?.response?.status === 409) {
-          navigate(inviteDestination(null, inviteMeta), { replace: true });
+          if (user?.demo_account) {
+            goToInviteDestination(null, inviteMeta);
+          } else {
+            toast.error("This invitation was already used by another account.");
+          }
         } else {
           toast.error(err?.response?.data?.detail || "Could not activate this invitation");
         }
@@ -98,7 +116,7 @@ export default function InviteLanding() {
         setRedeeming(false);
       }
     })();
-  }, [authLoading, checking, user, normalized, invalid, isValid, navigate, redeeming, redeemFailed, inviteMeta]);
+  }, [authLoading, checking, user, normalized, invalid, isValid, redeeming, redeemFailed, inviteMeta]);
 
   const onEmailSubmit = async (event) => {
     event.preventDefault();
@@ -125,6 +143,10 @@ export default function InviteLanding() {
       setHasPreferences(Boolean(data.has_preferences));
       if (data?.user?.demo_account) setDemoAccountFromUser(data.user);
       if (data?.has_training_access) setHasTrainingAccess(true);
+      if (data?.user?.demo_account) {
+        setHasProfile(true);
+        setHasPreferences(true);
+      }
       const redeemData = await redeemCreatorInvite(api, normalized);
       await finishRedeemAndNavigate(data.user, redeemData);
     } catch (err) {

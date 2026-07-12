@@ -29,7 +29,6 @@ describe("onboardingResume", () => {
     const step = inferOnboardingStepFromProgress({
       onboarding: {
         job_search_status: "active",
-        onboarding_location: "Paris",
         contract_type: "permanent",
         tried_other_apps: false,
         categories: ["tech"],
@@ -42,6 +41,15 @@ describe("onboardingResume", () => {
 
   it("skips transient steps for logged-in users", () => {
     expect(normalizeResumeStep("signup", { user: { user_id: "u1" }, profile: null })).toBe("jobSearch");
-    expect(normalizeResumeStep("upload", { user: { user_id: "u1" }, profile: { cv_text: "resume" } })).toBe("profileWelcome");
+    expect(normalizeResumeStep("upload", { user: { user_id: "u1" }, profile: { cv_text: "resume" } })).toBe("contactPhone");
+  });
+
+  it("skips contact phone when already saved", () => {
+    expect(
+      normalizeResumeStep("contactPhone", {
+        user: { user_id: "u1" },
+        profile: { contact: { phone: "+33 6 12 34 56 78" } },
+      }),
+    ).toBe("profileSetup");
   });
 });

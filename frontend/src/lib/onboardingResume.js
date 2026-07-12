@@ -18,10 +18,16 @@ export function normalizeResumeStep(step, { user, profile } = {}) {
     return "jobSearch";
   }
   if (step === "profileSetup") {
-    return profile?.cv_text || profile?.cv_filename ? "profileWelcome" : "upload";
+    if (!(profile?.cv_text || profile?.cv_filename)) return "upload";
+    if (!profile?.contact?.phone?.trim()) return "contactPhone";
+    return "profileWelcome";
   }
   if (step === "upload" && (profile?.cv_text || profile?.cv_filename)) {
-    return "profileWelcome";
+    if (!profile?.contact?.phone?.trim()) return "contactPhone";
+    return "profileSetup";
+  }
+  if (step === "contactPhone" && profile?.contact?.phone?.trim()) {
+    return "profileSetup";
   }
   return step;
 }
@@ -31,13 +37,15 @@ export function inferOnboardingStepFromProgress({ onboarding = {}, profile = nul
 
   const data = onboarding || {};
   if (!data.job_search_status) return "jobSearch";
-  if (!data.onboarding_location && !profile?.target_location) return "location";
   if (!data.contract_type && !profile?.contract_type) return "contractType";
   if (data.tried_other_apps == null) return "otherApps";
   if (!Array.isArray(data.categories) || !data.categories.length) return "categories";
   if (!data.experience && !profile?.seniority) return "experience";
+  if (!data.onboarding_location && !profile?.target_location) return "location";
+  if (!data.job_goal) return "jobGoal";
   if (!data.acquisition_source) return "attribution";
   if (!(profile?.cv_text || profile?.cv_filename)) return "upload";
+  if (!profile?.contact?.phone?.trim()) return "contactPhone";
   if (profile?.target_role && profile?.cv_text) return "showcasePricing";
   return "showcasePricing";
 }
@@ -80,6 +88,10 @@ export function buildOnboardingExtrasPayload(state) {
     selectedRoles,
     experience,
     interviewsPerWeek,
+    jobTimeline,
+    jobBlocker,
+    jobAccomplish,
+    jobGoal,
     attribution,
     referralCode,
     salaryMin,
@@ -101,6 +113,10 @@ export function buildOnboardingExtrasPayload(state) {
     selected_roles: selectedRoles,
     experience,
     interviews_per_week: interviewsPerWeek,
+    job_timeline: jobTimeline,
+    job_blocker: jobBlocker,
+    job_accomplish: jobAccomplish,
+    job_goal: jobGoal,
     acquisition_source: attribution,
     referral_code: referralCode?.trim()?.toUpperCase() || null,
     salary_min: salaryMin,
@@ -120,6 +136,10 @@ export function applyOnboardingSnapshot(snapshot, profile, setters) {
     setSalaryMin,
     setSalaryMax,
     setInterviewsPerWeek,
+    setJobTimeline,
+    setJobBlocker,
+    setJobAccomplish,
+    setJobGoal,
     setJobSearchStatus,
     setOnboardingLocation,
     setOnboardingLocationData,
@@ -143,6 +163,10 @@ export function applyOnboardingSnapshot(snapshot, profile, setters) {
   if (typeof onboarding.salary_min === "number") setSalaryMin(onboarding.salary_min);
   if (typeof onboarding.salary_max === "number") setSalaryMax(onboarding.salary_max);
   if (typeof onboarding.interviews_per_week === "number") setInterviewsPerWeek(onboarding.interviews_per_week);
+  if (onboarding.job_timeline) setJobTimeline(onboarding.job_timeline);
+  if (onboarding.job_blocker) setJobBlocker(onboarding.job_blocker);
+  if (onboarding.job_accomplish) setJobAccomplish(onboarding.job_accomplish);
+  if (onboarding.job_goal) setJobGoal(onboarding.job_goal);
   if (onboarding.job_search_status) setJobSearchStatus(onboarding.job_search_status);
   if (onboarding.onboarding_location) setOnboardingLocation(onboarding.onboarding_location);
   if (onboarding.onboarding_location_data) {

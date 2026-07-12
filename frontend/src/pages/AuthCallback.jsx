@@ -52,13 +52,16 @@ export default function AuthCallback() {
           setDemoAccountFromUser(data.user, Boolean(data.is_admin));
         }
         let inviteRedirect = null;
+        let redeemed = null;
         try {
-          const redeemed = await tryRedeemPendingInvite(api);
+          redeemed = await tryRedeemPendingInvite(api);
           if (redeemed) {
             applyRedeemToAuth(redeemed, data?.user, {
               setUser,
               setHasTrainingAccess,
               setDemoAccountFromUser,
+              setHasProfile,
+              setHasPreferences,
             });
             inviteRedirect = inviteDestination(redeemed);
           }
@@ -77,9 +80,10 @@ export default function AuthCallback() {
 
         window.history.replaceState({}, "", window.location.pathname);
         const onboardingIncomplete = !data.has_profile || !data.has_preferences;
+        const isDemoOrTrainingInvite = Boolean(redeemed?.demo_account || redeemed?.training_access);
         let destination = inviteRedirect || (nextPath.startsWith("/") ? nextPath : "/swipe");
         // Creators who redeemed an invite go directly to their destination — no onboarding.
-        if (!inviteRedirect && onboardingIncomplete) {
+        if (!inviteRedirect && onboardingIncomplete && !isDemoOrTrainingInvite && !data?.user?.demo_account) {
           destination = destination.startsWith("/onboarding")
             ? destination
             : "/onboarding?step=jobSearch";

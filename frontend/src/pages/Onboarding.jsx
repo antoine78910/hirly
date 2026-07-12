@@ -45,6 +45,12 @@ import {
   LongTermResultsChart,
   InterviewTargetDashes,
 } from "../components/onboarding/OnboardingVisuals";
+import OnboardingContactPhoneStep, { getContactPhoneCopy } from "../components/onboarding/OnboardingContactPhoneStep";
+import {
+  formatContactPhone,
+  isValidContactPhone,
+  parseStoredContactPhone,
+} from "../lib/onboardingContactPhone";
 import { resolveLandingContractType } from "../lib/landingHeroCopy";
 import {
   INTRO_SLIDES,
@@ -56,6 +62,14 @@ import {
   EMPLOYMENT_TYPE_OPTIONS_FR,
   OTHER_APPS_OPTIONS,
   OTHER_APPS_OPTIONS_FR,
+  JOB_GOAL_OPTIONS,
+  JOB_GOAL_OPTIONS_FR,
+  JOB_TIMELINE_OPTIONS,
+  JOB_TIMELINE_OPTIONS_FR,
+  JOB_BLOCKER_OPTIONS,
+  JOB_BLOCKER_OPTIONS_FR,
+  JOB_ACCOMPLISH_OPTIONS,
+  JOB_ACCOMPLISH_OPTIONS_FR,
   JOB_CATEGORIES,
   EXPERIENCE_LEVELS,
   EXPERIENCE_LEVELS_FR,
@@ -74,7 +88,7 @@ import { ob } from "../components/onboarding/onboardingTheme";
 import { trackEvent } from "../lib/analytics";
 import { preloadOnboardingIntroImages, preloadOnboardingShowcaseImages } from "../lib/onboardingImagePreload";
 import { getPendingInviteCode, redeemCreatorInvite, storePendingInviteCode } from "../lib/creatorInvite";
-import { setDemoAccountFromUser } from "../lib/demoAccount";
+import { isDemoAccountEnabled, setDemoAccountFromUser } from "../lib/demoAccount";
 import { queueDemoWelcome } from "../lib/demoWelcome";
 import { goToApp } from "../lib/appDomains";
 import {
@@ -163,6 +177,18 @@ export default function Onboarding() {
   const [interviewsPerWeek, setInterviewsPerWeek] = useState(
     () => readOnboardingPreviewBoot(STEP_ORDER)?.state?.interviewsPerWeek ?? 4,
   );
+  const [jobTimeline, setJobTimeline] = useState(
+    () => readOnboardingPreviewBoot(STEP_ORDER)?.state?.jobTimeline ?? null,
+  );
+  const [jobBlocker, setJobBlocker] = useState(
+    () => readOnboardingPreviewBoot(STEP_ORDER)?.state?.jobBlocker ?? null,
+  );
+  const [jobAccomplish, setJobAccomplish] = useState(
+    () => readOnboardingPreviewBoot(STEP_ORDER)?.state?.jobAccomplish ?? null,
+  );
+  const [jobGoal, setJobGoal] = useState(
+    () => readOnboardingPreviewBoot(STEP_ORDER)?.state?.jobGoal ?? null,
+  );
   const [jobSearchStatus, setJobSearchStatus] = useState(
     () => readOnboardingPreviewBoot(STEP_ORDER)?.state?.jobSearchStatus ?? null,
   );
@@ -185,6 +211,9 @@ export default function Onboarding() {
     () => readOnboardingPreviewBoot(STEP_ORDER)?.state?.attribution ?? null,
   );
   const [referralCode, setReferralCode] = useState("");
+  const [contactPhonePrefix, setContactPhonePrefix] = useState(() => (lang === "fr" ? "+33" : "+1"));
+  const [contactPhoneLocal, setContactPhoneLocal] = useState("");
+  const [savingPhone, setSavingPhone] = useState(false);
 
   useEffect(() => {
     preloadOnboardingIntroImages();
@@ -217,6 +246,13 @@ export default function Onboarding() {
   const resumeAppliedRef = useRef(false);
   const inputRef = useRef();
 
+  useEffect(() => {
+    const parsed = parseStoredContactPhone(profile?.contact?.phone, lang);
+    if (!parsed.local) return;
+    setContactPhonePrefix(parsed.prefix);
+    setContactPhoneLocal(parsed.local);
+  }, [profile?.contact?.phone, lang]);
+
   const step = STEP_ORDER[stepIndex];
   const slides = lang === "fr" ? INTRO_SLIDES_FR : INTRO_SLIDES;
   const progress = ((stepIndex + (step === "intro" ? (introIndex + 1) / slides.length : 1)) / STEP_ORDER.length) * 100;
@@ -246,6 +282,10 @@ export default function Onboarding() {
     if (typeof payload.salaryMin === "number") setSalaryMin(payload.salaryMin);
     if (typeof payload.salaryMax === "number") setSalaryMax(payload.salaryMax);
     if (typeof payload.interviewsPerWeek === "number") setInterviewsPerWeek(payload.interviewsPerWeek);
+    if (payload.jobTimeline) setJobTimeline(payload.jobTimeline);
+    if (payload.jobBlocker) setJobBlocker(payload.jobBlocker);
+    if (payload.jobAccomplish) setJobAccomplish(payload.jobAccomplish);
+    if (payload.jobGoal) setJobGoal(payload.jobGoal);
     if (payload.jobSearchStatus) setJobSearchStatus(payload.jobSearchStatus);
     if (typeof payload.onboardingLocation === "string") setOnboardingLocation(payload.onboardingLocation);
     if (payload.onboardingLocationData) setOnboardingLocationData(payload.onboardingLocationData);
@@ -272,6 +312,10 @@ export default function Onboarding() {
           selectedRoles,
           experience,
           interviewsPerWeek,
+          jobTimeline,
+          jobBlocker,
+          jobAccomplish,
+          jobGoal,
           attribution,
           referralCode,
           salaryMin,
@@ -296,6 +340,10 @@ export default function Onboarding() {
     selectedRoles,
     experience,
     interviewsPerWeek,
+    jobTimeline,
+    jobBlocker,
+    jobAccomplish,
+    jobGoal,
     attribution,
     referralCode,
     salaryMin,
@@ -353,6 +401,10 @@ export default function Onboarding() {
           setSalaryMin(boot.state.salaryMin);
           setSalaryMax(boot.state.salaryMax);
           setInterviewsPerWeek(boot.state.interviewsPerWeek);
+          setJobTimeline(boot.state.jobTimeline);
+          setJobBlocker(boot.state.jobBlocker);
+          setJobAccomplish(boot.state.jobAccomplish);
+          setJobGoal(boot.state.jobGoal);
           setJobSearchStatus(boot.state.jobSearchStatus);
           setOnboardingLocation(boot.state.onboardingLocation);
           setOnboardingLocationData(boot.state.onboardingLocationData);
@@ -393,6 +445,21 @@ export default function Onboarding() {
         }
       }
 
+      if (user && (user.demo_account || isDemoAccountEnabled())) {
+        goToApp("/swipe");
+        resumeAppliedRef.current = true;
+        setBootstrapping(false);
+        return;
+      }
+
+      const pendingInvite = getPendingInviteCode();
+      if (user && pendingInvite) {
+        navigate(`/invite/${pendingInvite}`, { replace: true });
+        resumeAppliedRef.current = true;
+        setBootstrapping(false);
+        return;
+      }
+
       if (user && hasProfile && hasPreferences) {
         goToApp("/swipe");
         resumeAppliedRef.current = true;
@@ -417,6 +484,10 @@ export default function Onboarding() {
           setSalaryMin,
           setSalaryMax,
           setInterviewsPerWeek,
+          setJobTimeline,
+          setJobBlocker,
+          setJobAccomplish,
+          setJobGoal,
           setJobSearchStatus,
           setOnboardingLocation,
           setOnboardingLocationData,
@@ -465,6 +536,7 @@ export default function Onboarding() {
     searchParams,
     setSearchParams,
     setProfile,
+    navigate,
   ]);
 
   useEffect(() => {
@@ -507,11 +579,11 @@ export default function Onboarding() {
   }, [pendingCheckoutSuccess, user]);
 
   useEffect(() => {
-    if (step !== "categories" || !onboardingLocation.trim() || !contractType) return;
+    if (step !== "categories" || !contractType) return;
     const items = defaultCategoryOptions();
     setSuggestedCategories(items);
     setCategories((prev) => prev.filter((id) => items.some((c) => c.id === id)));
-  }, [step, onboardingLocation, contractType]);
+  }, [step, contractType]);
 
   const goNext = () => {
     if (step === "intro") {
@@ -634,12 +706,12 @@ export default function Onboarding() {
     const CV_PARSE_UI_MAX_MS = 3000;
     let advanced = false;
 
-    const advanceToProfileSetup = () => {
+    const advanceAfterUpload = () => {
       if (advanced) return;
       advanced = true;
       setParsing(false);
       trackOnboardingContinue("upload");
-      setStepIndex(STEP_ORDER.indexOf("profileSetup"));
+      setStepIndex(STEP_ORDER.indexOf("contactPhone"));
     };
 
     const uploadTask = (async () => {
@@ -657,7 +729,7 @@ export default function Onboarding() {
         }
         if (!advanced) {
           await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-          advanceToProfileSetup();
+          advanceAfterUpload();
         }
       } catch (e) {
         console.error(e);
@@ -679,10 +751,32 @@ export default function Onboarding() {
     })();
 
     setTimeout(() => {
-      advanceToProfileSetup();
+      advanceAfterUpload();
     }, CV_PARSE_UI_MAX_MS);
 
     await uploadTask;
+  };
+
+  const saveContactPhone = async () => {
+    const formatted = formatContactPhone(contactPhonePrefix, contactPhoneLocal);
+    if (!formatted) return true;
+    setSavingPhone(true);
+    try {
+      await api.put("/profile/contact", { phone: formatted });
+      setProfile((prev) => ({
+        ...(prev || {}),
+        contact: { ...(prev?.contact || {}), phone: formatted },
+      }));
+      return true;
+    } catch (e) {
+      toast.error(
+        e?.response?.data?.detail
+          || (lang === "fr" ? "Impossible d'enregistrer le numéro" : "Could not save phone number"),
+      );
+      return false;
+    } finally {
+      setSavingPhone(false);
+    }
   };
 
   const persistOnboardingMeta = async () => {
@@ -699,6 +793,10 @@ export default function Onboarding() {
           selectedRoles,
           experience,
           interviewsPerWeek,
+          jobTimeline,
+          jobBlocker,
+          jobAccomplish,
+          jobGoal,
           attribution,
           referralCode,
           salaryMin,
@@ -772,11 +870,15 @@ export default function Onboarding() {
         contract_type: contractType || undefined,
       });
       const nameParts = splitFullName(user?.name || profile?.contact?.name || "");
+      const formattedPhone = formatContactPhone(contactPhonePrefix, contactPhoneLocal)
+        || profile?.contact?.phone
+        || undefined;
       await api.put("/profile/contact", {
         first_name: nameParts.first_name || undefined,
         last_name: nameParts.last_name || undefined,
         location: onboardingLocationData?.location_label || onboardingLocation || undefined,
         location_data: onboardingLocationData || undefined,
+        phone: formattedPhone,
       });
       if (checkAuth) await checkAuth();
       sessionStorage.removeItem(ONBOARDING_CHECKOUT_STATE_KEY);
@@ -823,6 +925,10 @@ export default function Onboarding() {
         salaryMin,
         salaryMax,
         interviewsPerWeek,
+        jobTimeline,
+        jobBlocker,
+        jobAccomplish,
+        jobGoal,
         jobSearchStatus,
         onboardingLocation,
         onboardingLocationData,
@@ -873,15 +979,25 @@ export default function Onboarding() {
         return salaryMin <= salaryMax;
       case "interviews":
         return interviewsPerWeek >= 1;
+      case "jobTimeline":
+        return !!jobTimeline;
       case "interviewsConfirm":
       case "potentialChart":
       case "compare2x":
       case "longTerm":
         return true;
+      case "jobBlocker":
+        return !!jobBlocker;
+      case "jobAccomplish":
+        return !!jobAccomplish;
+      case "jobGoal":
+        return !!jobGoal;
       case "attribution":
         return !!attribution;
       case "referralCode":
         return true;
+      case "contactPhone":
+        return isValidContactPhone(contactPhoneLocal);
       case "upload":
         return !parsing;
       case "profileSetup":
@@ -925,7 +1041,22 @@ export default function Onboarding() {
     goNext();
   };
 
+  const submitContactPhone = async () => {
+    if (!isValidContactPhone(contactPhoneLocal)) {
+      toast.error(lang === "fr" ? "Entrez un numéro valide" : "Enter a valid phone number");
+      return;
+    }
+    if (!(await saveContactPhone())) return;
+    trackEvent("onboarding_step_completed", { step: "contactPhone", step_index: stepIndex });
+    trackOnboardingContinue("contactPhone");
+    goNext();
+  };
+
   const onContinue = () => {
+    if (step === "contactPhone") {
+      void submitContactPhone();
+      return;
+    }
     if (step === "upload" && !file) {
       inputRef.current?.click();
       return;
@@ -975,6 +1106,26 @@ export default function Onboarding() {
       <ContinueButton onClick={onContinue} disabled={!canContinue() || parsing}>
         {lang === "fr" ? "Continuer" : "Continue"}
       </ContinueButton>
+    ) : step === "contactPhone" ? (
+      <div className="space-y-2.5">
+        <ContinueButton
+          onClick={submitContactPhone}
+          disabled={!canContinue() || savingPhone}
+          testId="contact-phone-continue"
+        >
+          {savingPhone
+            ? (lang === "fr" ? "Enregistrement..." : "Saving...")
+            : (lang === "fr" ? "Continuer" : "Continue")}
+        </ContinueButton>
+        <button
+          type="button"
+          onClick={skipStep}
+          className="w-full h-11 sm:h-12 rounded-full border border-zinc-200 bg-white text-sm sm:text-base font-semibold text-linkedin hover:bg-violet-50 transition-colors"
+          data-testid="contact-phone-skip"
+        >
+          {lang === "fr" ? "Passer pour l'instant" : "Skip for now"}
+        </button>
+      </div>
     ) : step === "referralCode" ? (
       <div className="space-y-2.5">
         <ContinueButton onClick={submitReferralCode} disabled={!referralCode.trim()} testId="referral-submit">
@@ -1106,18 +1257,21 @@ export default function Onboarding() {
         {step === "jobSearch" && (
           <motion.div key="jobSearch" {...stepMotion}>
             <h1 className={stepTitleClass}>{lang === "fr" ? "Êtes-vous à la recherche d'un emploi ?" : "Are you looking for a new job?"}</h1>
-            <div className={`${ob.stepBody} ${ob.optionList}`} data-testid="job-search-options">
-              {(lang === "fr" ? JOB_SEARCH_OPTIONS_FR : JOB_SEARCH_OPTIONS).map(({ id, label, hint, Icon }) => (
-                <SelectionCard
-                  key={id}
-                  selected={jobSearchStatus === id}
-                  onClick={() => setJobSearchStatus(id)}
-                  icon={Icon}
-                  title={label}
-                  hint={hint}
-                  testId={`job-search-${id}`}
-                />
-              ))}
+            <div className={ob.stepBodyOptions}>
+              <div className={ob.optionList} data-testid="job-search-options">
+                {(lang === "fr" ? JOB_SEARCH_OPTIONS_FR : JOB_SEARCH_OPTIONS).map(({ id, label, hint, Icon }) => (
+                  <SelectionCard
+                    key={id}
+                    selected={jobSearchStatus === id}
+                    onClick={() => setJobSearchStatus(id)}
+                    icon={Icon}
+                    title={label}
+                    hint={hint}
+                    variant="qcm"
+                    testId={`job-search-${id}`}
+                  />
+                ))}
+              </div>
             </div>
           </motion.div>
         )}
@@ -1174,17 +1328,20 @@ export default function Onboarding() {
           <motion.div key="otherApps" {...stepMotion}>
             <h1 className={stepTitleClass}>{lang === "fr" ? "Avez-vous déjà essayé d'autres apps de recherche d'emploi ?" : "Have you tried other job search apps?"}</h1>
             <p className={stepSubtitleClass}>{lang === "fr" ? "Sélectionnez une option ci-dessous." : "Please select one of the options below."}</p>
-            <div className={`${ob.stepBody} ${ob.optionList}`} data-testid="other-apps-options">
-              {(lang === "fr" ? OTHER_APPS_OPTIONS_FR : OTHER_APPS_OPTIONS).map(({ id, label, Icon }) => (
-                <SelectionCard
-                  key={id}
-                  selected={triedOtherApps === id}
-                  onClick={() => setTriedOtherApps(id)}
-                  icon={Icon}
-                  title={label}
-                  testId={`other-apps-${id}`}
-                />
-              ))}
+            <div className={ob.stepBodyOptions}>
+              <div className={ob.optionList} data-testid="other-apps-options">
+                {(lang === "fr" ? OTHER_APPS_OPTIONS_FR : OTHER_APPS_OPTIONS).map(({ id, label, Icon }) => (
+                  <SelectionCard
+                    key={id}
+                    selected={triedOtherApps === id}
+                    onClick={() => setTriedOtherApps(id)}
+                    icon={Icon}
+                    title={label}
+                    variant="qcm"
+                    testId={`other-apps-${id}`}
+                  />
+                ))}
+              </div>
             </div>
           </motion.div>
         )}
@@ -1383,6 +1540,36 @@ export default function Onboarding() {
           </motion.div>
         )}
 
+        {step === "jobTimeline" && (
+          <motion.div key="jobTimeline" {...stepMotion}>
+            <h1 className={stepTitleClass}>
+              {lang === "fr" ? "Quand avez-vous besoin d'un nouvel emploi ?" : "When do you need a new job?"}
+            </h1>
+            <p className={stepSubtitleClass}>
+              {lang === "fr"
+                ? "Ceci servira à calibrer votre plan personnalisé."
+                : "This will be used to calibrate your custom plan."}
+            </p>
+            <div className={ob.stepBodyOptions}>
+              <div className={ob.optionList} data-testid="job-timeline-options">
+                {(lang === "fr" ? JOB_TIMELINE_OPTIONS_FR : JOB_TIMELINE_OPTIONS).map(({ id, label, hint, Icon }) => (
+                  <SelectionCard
+                    key={id}
+                    selected={jobTimeline === id}
+                    onClick={() => setJobTimeline(id)}
+                    icon={Icon}
+                    title={label}
+                    hint={hint}
+                    showCheck
+                    variant="qcm-timeline"
+                    testId={`job-timeline-${id}`}
+                  />
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+
         {step === "interviewsConfirm" && (
           <motion.div key="interviewsConfirm" {...stepMotion}>
             <h1 className={stepTitleClass}>
@@ -1400,6 +1587,95 @@ export default function Onboarding() {
                   : `${interviewsPerWeek} interviews per week is what 75% of our successful users aim for.`}
               </p>
             </div>
+            </div>
+          </motion.div>
+        )}
+
+        {step === "jobBlocker" && (
+          <motion.div key="jobBlocker" {...stepMotion}>
+            <h1 className={stepTitleClass}>
+              {lang === "fr"
+                ? "Qu'est-ce qui vous empêche d'atteindre vos objectifs ?"
+                : "What's stopping you from reaching your goals?"}
+            </h1>
+            <p className={stepSubtitleClass}>
+              {lang === "fr"
+                ? "Sélectionnez le principal obstacle dans votre recherche d'emploi."
+                : "Select the main blocker in your job search."}
+            </p>
+            <div className={ob.stepBodyOptions}>
+              <div className={ob.optionList} data-testid="job-blocker-options">
+                {(lang === "fr" ? JOB_BLOCKER_OPTIONS_FR : JOB_BLOCKER_OPTIONS).map(({ id, label, Icon }) => (
+                  <SelectionCard
+                    key={id}
+                    selected={jobBlocker === id}
+                    onClick={() => setJobBlocker(id)}
+                    icon={Icon}
+                    title={label}
+                    showCheck
+                    variant="qcm"
+                    testId={`job-blocker-${id}`}
+                  />
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {step === "jobAccomplish" && (
+          <motion.div key="jobAccomplish" {...stepMotion}>
+            <h1 className={stepTitleClass}>
+              {lang === "fr" ? "Que souhaitez-vous accomplir ?" : "What do you want to accomplish?"}
+            </h1>
+            <p className={stepSubtitleClass}>
+              {lang === "fr"
+                ? "Sélectionnez votre objectif principal dans votre recherche d'emploi."
+                : "Select your primary goal in your job search journey."}
+            </p>
+            <div className={ob.stepBodyOptions}>
+              <div className={ob.optionList} data-testid="job-accomplish-options">
+                {(lang === "fr" ? JOB_ACCOMPLISH_OPTIONS_FR : JOB_ACCOMPLISH_OPTIONS).map(({ id, label, Icon }) => (
+                  <SelectionCard
+                    key={id}
+                    selected={jobAccomplish === id}
+                    onClick={() => setJobAccomplish(id)}
+                    icon={Icon}
+                    title={label}
+                    showCheck
+                    variant="qcm"
+                    testId={`job-accomplish-${id}`}
+                  />
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {step === "jobGoal" && (
+          <motion.div key="jobGoal" {...stepMotion}>
+            <h1 className={stepTitleClass}>
+              {lang === "fr" ? "Quel est votre objectif ?" : "What's your goal?"}
+            </h1>
+            <p className={stepSubtitleClass}>
+              {lang === "fr"
+                ? "Ceci servira à personnaliser vos offres d'emploi."
+                : "This will be used to personalize your job matches."}
+            </p>
+            <div className={ob.stepBodyOptions}>
+              <div className={ob.optionList} data-testid="job-goal-options">
+                {(lang === "fr" ? JOB_GOAL_OPTIONS_FR : JOB_GOAL_OPTIONS).map(({ id, label, Icon }) => (
+                  <SelectionCard
+                    key={id}
+                    selected={jobGoal === id}
+                    onClick={() => setJobGoal(id)}
+                    icon={Icon}
+                    title={label}
+                    showCheck
+                    variant="qcm"
+                    testId={`job-goal-${id}`}
+                  />
+                ))}
+              </div>
             </div>
           </motion.div>
         )}
@@ -1539,7 +1815,7 @@ export default function Onboarding() {
               type="button"
               onClick={() => {
                 trackOnboardingSkip("upload");
-                setStepIndex(STEP_ORDER.indexOf("profileSetup"));
+                setStepIndex(STEP_ORDER.indexOf("contactPhone"));
                 toast.message(lang === "fr" ? "Vous pouvez importer votre CV plus tard depuis le Profil" : "You can upload your resume later from Profile");
               }}
               className={`mt-3 w-full text-center text-sm ${ob.muted} hover:text-zinc-900 underline-offset-2 hover:underline`}
@@ -1595,6 +1871,27 @@ export default function Onboarding() {
             />
           </motion.div>
         )}
+
+        {step === "contactPhone" && !parsing && (() => {
+          const phoneCopy = getContactPhoneCopy(lang);
+          return (
+          <motion.div key="contactPhone" {...stepMotion}>
+            <h1 className={stepTitleClass}>
+              {phoneCopy.title}
+            </h1>
+            <p className={stepSubtitleClass}>
+              {phoneCopy.subtitle}
+            </p>
+            <OnboardingContactPhoneStep
+              lang={lang}
+              phonePrefix={contactPhonePrefix}
+              phoneLocal={contactPhoneLocal}
+              onPrefixChange={setContactPhonePrefix}
+              onPhoneChange={setContactPhoneLocal}
+            />
+          </motion.div>
+          );
+        })()}
 
         {step === "showcaseLanding" && !parsing && (
           <motion.div key="showcaseLanding" {...stepMotion}>

@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   ArrowRight,
   CheckCircle2,
-  FileText,
   Loader2,
-  Mail,
   MapPin,
   Settings,
   ShieldCheck,
@@ -23,13 +21,6 @@ import { AppPage, AppPageScroll, SHELL_PAGE_CLASS } from "../components/app/AppP
 import DesktopPageHeader from "../components/desktop/DesktopPageHeader";
 import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
 import CompanyLogo from "../components/CompanyLogo";
-import CVPreview from "../components/CVPreview";
-import CoverLetterPreview from "../components/CoverLetterPreview";
-import { getApplicationCoverLetter, getApplicationResume } from "../lib/applicationDocuments";
-import { resolveCvDisplayTemplate } from "../lib/cvTemplate";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
-import { Button } from "../components/ui/button";
 
 const fmtDate = (iso) => {
   if (!iso) return "";
@@ -39,21 +30,17 @@ const fmtDate = (iso) => {
 
 export default function Review() {
   const { t } = useAppLocale();
+  const navigate = useNavigate();
   const { settings } = useAiSettings();
   const reviewEnabled = settings.reviewDocuments;
   const [apps, setApps] = useState([]);
-  const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState(null);
-  const [open, setOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { applications, profile } = await fetchTrackerPageData(api);
+      const { applications } = await fetchTrackerPageData(api);
       setApps(applications);
-      setProfile(profile);
     } catch (_) {
       toast.error(t("review.loadError"));
     } finally {
@@ -80,47 +67,8 @@ export default function Review() {
     [apps, reviewEnabled],
   );
 
-  const openApplication = async (application) => {
-    try {
-      const { data } = await api.get(`/applications/${application.application_id}`);
-      setSelected(data);
-      setOpen(true);
-    } catch (_) {
-      toast.error(t("review.openError"));
-    }
-  };
-
-  const approveAndSubmit = async () => {
-    if (!selected?.application_id) return;
-    setSubmitting(true);
-    try {
-      await api.post(`/applications/${selected.application_id}/approve-documents`);
-      let submitStatus = null;
-      if (selected?.job_id) {
-        try {
-          const { data } = await api.post("/applications/greenhouse/submit", {
-            job_id: selected.job_id,
-          });
-          submitStatus = data?.submission_status;
-        } catch {
-          // Manual fulfillment or unsupported ATS — document approval is enough.
-        }
-      }
-      if (submitStatus === "submitted") {
-        toast.success(t("review.submitted"));
-      } else if (submitStatus === "action_required") {
-        toast(t("review.actionRequired"), { description: t("review.actionRequiredDesc") });
-      } else {
-        toast.success(t("review.approved"), { description: t("review.approvedDesc") });
-      }
-      setOpen(false);
-      await load();
-    } catch (e) {
-      const detail = e?.response?.data?.detail;
-      toast.error(detail?.message || (typeof detail === "string" ? detail : t("review.submitError")));
-    } finally {
-      setSubmitting(false);
-    }
+  const openApplication = (application) => {
+    navigate(`/review/${application.application_id}`);
   };
 
   return (
@@ -217,74 +165,6 @@ export default function Review() {
           )}
         </div>
       </AppPageScroll>
-
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90dvh] max-w-2xl overflow-y-auto p-0" data-testid="review-application-dialog">
-          {selected ? (
-            <>
-              <DialogHeader className="sticky top-0 z-10 shell-border-b shell-surface px-6 pb-4 pt-6">
-                <div className="flex items-start gap-3">
-                  <CompanyLogo company={selected.job?.company} size="sm" rounded="xl" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold text-violet-400">{selected.job?.company}</p>
-                    <DialogTitle className="font-display text-2xl tracking-tight shell-title">
-                      {selected.job?.title}
-                    </DialogTitle>
-                  </div>
-                </div>
-              </DialogHeader>
-
-              <div className="space-y-5 px-6 py-5">
-                <p className="text-sm shell-body">
-                  {t("review.dialogHint")}
-                </p>
-
-                <Tabs defaultValue="cv">
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="cv">
-                      <FileText className="mr-1.5 h-3.5 w-3.5" />
-                      {t("review.cv")}
-                    </TabsTrigger>
-                    <TabsTrigger value="cover">
-                      <Mail className="mr-1.5 h-3.5 w-3.5" />
-                      {t("review.coverLetter")}
-                    </TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="cv" className="mt-4">
-                    <CVPreview
-                      contact={profile?.contact || {}}
-                      resume={getApplicationResume(selected)}
-                      job={selected.job}
-                      template={resolveCvDisplayTemplate(
-                        getApplicationResume(selected)?.template_recommendation || profile?.template_style,
-                      )}
-                      theme="light"
-                    />
-                  </TabsContent>
-                  <TabsContent value="cover" className="mt-4">
-                    <CoverLetterPreview
-                      contact={profile?.contact || {}}
-                      letter={getApplicationCoverLetter(selected)}
-                      job={selected.job}
-                      theme="light"
-                    />
-                  </TabsContent>
-                </Tabs>
-
-                <Button
-                  onClick={approveAndSubmit}
-                  disabled={submitting}
-                  className="w-full rounded-full gradient-linkedin text-white hover:opacity-90"
-                  data-testid="review-approve-submit-btn"
-                >
-                  {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  {t("review.approveSubmit")}
-                </Button>
-              </div>
-            </>
-          ) : null}
-        </DialogContent>
-      </Dialog>
     </AppPage>
   );
 }

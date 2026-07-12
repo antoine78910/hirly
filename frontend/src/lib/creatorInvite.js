@@ -1,5 +1,6 @@
 import { queueDemoWelcome } from "./demoWelcome";
 import { queueTrainingWelcome } from "./trainingWelcome";
+import { resolvePostAuthDestination } from "./appDomains";
 
 const PENDING_INVITE_KEY = "hirly.creator_invite.pending";
 
@@ -55,6 +56,8 @@ export function applyRedeemToAuth(redeemData, user, handlers) {
   if (redeemData.demo_account) {
     next.demo_account = true;
     handlers.setDemoAccountFromUser?.(next);
+    handlers.setHasProfile?.(true);
+    handlers.setHasPreferences?.(true);
     queueDemoWelcome();
   }
   if (redeemData.training_access) {
@@ -64,6 +67,17 @@ export function applyRedeemToAuth(redeemData, user, handlers) {
   }
   handlers.setUser?.(next);
   return next;
+}
+
+/** Navigate after invite activation — handles marketing ↔ app subdomain split. */
+export function goToInviteDestination(redeemData, inviteMeta) {
+  const dest = inviteDestination(redeemData, inviteMeta);
+  const resolved = resolvePostAuthDestination(dest);
+  if (resolved.type === "external") {
+    window.location.replace(resolved.url);
+    return;
+  }
+  window.location.assign(resolved.path);
 }
 
 export async function redeemCreatorInvite(api, code, options = {}) {

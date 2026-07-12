@@ -69,29 +69,39 @@ import {
   Package,
   Truck,
   Hammer,
+  Scan,
+  Umbrella,
+  Home,
+  ThumbsDown,
+  Ban,
 } from "lucide-react";
 
-/** Hirly onboarding step order */
+/** Hirly onboarding step order (aligned with Sprout flow + Hirly extras). */
 export const ONBOARDING_STEP_ORDER = [
   "intro",           // 5 illustrated intro slides
   "signup",
   "jobSearch",
-  "location",
-  "contractType",
-  "otherApps",
-  "longTerm",
-  "categories",
-  "experience",
-  "salary",
-  "interviews",
-  "interviewsConfirm",
-  "potentialChart",
-  "compare2x",
-  "attribution",
-  "referralCode",
-  "upload",
-  "profileSetup",
-  "profileWelcome",
+  "contractType",    // Hirly: CDI/CDD/etc.
+  "otherApps",       // Have you tried other job apps?
+  "longTerm",        // Long-term results chart
+  "categories",      // Job categories + roles
+  "experience",      // Experience level
+  "location",        // Where do you want to work?
+  "salary",          // Expected salary range
+  "jobGoal",         // What's your goal?
+  "compare2x",       // 2× interviews vs on your own
+  "interviews",      // Interviews per week
+  "jobTimeline",     // When do you need a new job?
+  "interviewsConfirm", // Achievable interviews/week
+  "jobBlocker",      // What's stopping you?
+  "jobAccomplish",   // What do you want to accomplish?
+  "potentialChart",  // Interview rate potential
+  "attribution",     // How did you hear about us?
+  "referralCode",    // Referral / access code
+  "upload",          // Upload CV
+  "contactPhone",    // Phone — required by many employers to apply
+  "profileSetup",    // Setup loader
+  "profileWelcome",  // Personalized welcome cards
   "showcaseLanding",
   "showcaseAllInOne",
   "showcasePricing",
@@ -200,6 +210,10 @@ export function createOnboardingPreviewState() {
     salaryMin: 75000,
     salaryMax: 120000,
     interviewsPerWeek: 4,
+    jobTimeline: "3m",
+    jobBlocker: "not_applying",
+    jobAccomplish: "more_money",
+    jobGoal: "asap",
     jobSearchStatus: "yes",
     onboardingLocation: "Paris, France",
     onboardingLocationData: { location_label: "Paris, France" },
@@ -417,6 +431,60 @@ export const OTHER_APPS_OPTIONS = [
 export const OTHER_APPS_OPTIONS_FR = [
   { id: "yes", label: "Oui", Icon: Check },
   { id: "no", label: "Non", Icon: X },
+];
+
+export const JOB_GOAL_OPTIONS = [
+  { id: "asap", label: "Land a job ASAP", Icon: Clock },
+  { id: "money", label: "Make more money", Icon: DollarSign },
+  { id: "dream", label: "Land my dream job", Icon: Star },
+];
+
+export const JOB_GOAL_OPTIONS_FR = [
+  { id: "asap", label: "Trouver un job au plus vite", Icon: Clock },
+  { id: "money", label: "Gagner plus d'argent", Icon: DollarSign },
+  { id: "dream", label: "Décrocher le job de mes rêves", Icon: Star },
+];
+
+export const JOB_TIMELINE_OPTIONS = [
+  { id: "1m", label: "1 month", hint: "Get me a job now!", Icon: Zap },
+  { id: "3m", label: "3 months", hint: "I have some time", Icon: Calendar },
+  { id: "6m", label: "6 months", hint: "Maximize my options", Icon: Scan },
+  { id: "12m", label: "12 months+", hint: "Seeing what's out there", Icon: Umbrella },
+];
+
+export const JOB_TIMELINE_OPTIONS_FR = [
+  { id: "1m", label: "1 mois", hint: "Trouvez-moi un job maintenant !", Icon: Zap },
+  { id: "3m", label: "3 mois", hint: "J'ai un peu de temps", Icon: Calendar },
+  { id: "6m", label: "6 mois", hint: "Maximiser mes options", Icon: Scan },
+  { id: "12m", label: "12 mois+", hint: "Je vois ce qui existe", Icon: Umbrella },
+];
+
+export const JOB_BLOCKER_OPTIONS = [
+  { id: "not_applying", label: "Not applying enough", Icon: BatteryLow },
+  { id: "no_interviews", label: "Can't land interviews", Icon: Ban },
+  { id: "not_ready", label: "Not ready yet", Icon: ListChecks },
+  { id: "bad_offers", label: "Lack of great job offers", Icon: ThumbsDown },
+];
+
+export const JOB_BLOCKER_OPTIONS_FR = [
+  { id: "not_applying", label: "Pas assez de candidatures", Icon: BatteryLow },
+  { id: "no_interviews", label: "Pas d'entretiens", Icon: Ban },
+  { id: "not_ready", label: "Pas encore prêt(e)", Icon: ListChecks },
+  { id: "bad_offers", label: "Manque d'offres intéressantes", Icon: ThumbsDown },
+];
+
+export const JOB_ACCOMPLISH_OPTIONS = [
+  { id: "more_money", label: "Make a lot more money", Icon: CircleDollarSign },
+  { id: "family", label: "Support my family", Icon: Home },
+  { id: "exciting", label: "Find a job that excites me", Icon: Sparkles },
+  { id: "time_back", label: "Get time back", Icon: Clock },
+];
+
+export const JOB_ACCOMPLISH_OPTIONS_FR = [
+  { id: "more_money", label: "Gagner beaucoup plus d'argent", Icon: CircleDollarSign },
+  { id: "family", label: "Soutenir ma famille", Icon: Home },
+  { id: "exciting", label: "Trouver un job qui me passionne", Icon: Sparkles },
+  { id: "time_back", label: "Gagner du temps", Icon: Clock },
 ];
 
 export const INTRO_SLIDES = [
