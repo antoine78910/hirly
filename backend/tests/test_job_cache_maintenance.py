@@ -51,6 +51,8 @@ def _matches(row, filter):
         if isinstance(expected, dict):
             if "$in" in expected and value not in expected["$in"]:
                 return False
+            if "$gte" in expected and str(value or "") < str(expected["$gte"] or ""):
+                return False
         elif value != expected:
             return False
     return True
@@ -423,6 +425,27 @@ def test_admin_refresh_endpoint_uses_maintenance_service(monkeypatch):
     result = asyncio.run(server.admin_jobs_refresh(body, admin=admin))
     assert calls["count"] == 1
     assert result["jsearch_called"] is True
+
+
+def test_job_inventory_analytics_builds_source_breakdown_and_daily_series():
+    now = datetime.now(timezone.utc)
+    yesterday = (now - timedelta(days=1)).isoformat()
+    week_ago = (now - timedelta(days=8)).isoformat()
+    jobs = [
+        _job(1, provider="jsearch", imported_at=yesterday),
+        _job(2, provider="jsearch", imported_at=yesterday),
+        _job(3, provider="france_travail", imported_at=yesterday),
+        _job(4, provider="greenhouse", imported_at=week_ago),
+    ]
+    db = _FakeDB(jobs)
+    result = asyncio.run(maintenance.job_inventory_analytics(db, days=14))
+
+    assert result["total_jobs"] == 4
+    assert result["imports_last_24h"] == 3
+    assert result["imports_last_7d"] == 3
+    assert any(row["source"] == "jsearch" and row["count"] == 2 for row in result["by_source"])
+    assert result["daily"]
+    assert "jsearch" in result["chart_sources"]
 
 
 def test_admin_maintenance_disabled_blocks_endpoint(monkeypatch):

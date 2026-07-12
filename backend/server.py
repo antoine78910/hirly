@@ -113,6 +113,7 @@ from job_cache_maintenance import (
     env_bool as job_cache_env_bool,
     expire_stale_jobs,
     job_cache_status,
+    job_inventory_analytics,
     refresh_jobs_for_query_or_filters,
     revalidate_cached_jobs,
     run_job_cache_maintenance,
@@ -8897,6 +8898,16 @@ async def admin_jobs_cache_status(admin: User = Depends(require_admin_user)):
     _require_job_maintenance_enabled()
     logger.info("admin_jobs_cache_status_requested admin=%s", admin.email)
     return await job_cache_status(db)
+
+
+@api_router.get("/admin/jobs/inventory")
+async def admin_jobs_inventory(
+    admin: User = Depends(require_admin_user),
+    days: int = Query(30, ge=7, le=90),
+):
+    _require_job_maintenance_enabled()
+    logger.info("admin_jobs_inventory_requested admin=%s days=%s", admin.email, days)
+    return await job_inventory_analytics(db, days=days)
 
 
 @api_router.post("/admin/jobs/france-travail/harvest")

@@ -3,6 +3,7 @@ import { NavLink, useLocation } from "react-router-dom";
 import {
   BarChart3,
   BookOpen,
+  Briefcase,
   ClipboardList,
   GraduationCap,
   LayoutDashboard,
@@ -20,6 +21,7 @@ import { Button } from "../ui/button";
 
 const navItems = [
   { to: "/admin/overview", label: "Overview", icon: LayoutDashboard },
+  { to: "/admin/jobs", label: "Jobs", icon: Briefcase },
   { to: "/admin/applications", label: "Applications", icon: ClipboardList },
   { to: "/admin/users", label: "Users", icon: Users },
   { to: "/admin/user-analytics", label: "User Analytics", icon: UserSearch },

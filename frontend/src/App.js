@@ -35,6 +35,7 @@ import AuthCallback from "@/pages/AuthCallback";
 import AdminApplications from "@/pages/AdminApplications";
 import AdminApplicationDetail from "@/pages/AdminApplicationDetail";
 import AdminOverview from "@/pages/AdminOverview";
+import AdminJobs from "@/pages/AdminJobs";
 import AdminUsers from "@/pages/AdminUsers";
 import AdminUserAnalytics from "@/pages/AdminUserAnalytics";
 import AdminUserDetail from "@/pages/AdminUserDetail";
@@ -174,6 +175,7 @@ function AppRouter() {
         <Route path="/invite/:code" element={<InviteLanding />} />
         <Route path="/admin" element={<AdminPage><Navigate to="/admin/overview" replace /></AdminPage>} />
         <Route path="/admin/overview" element={<AdminPage><AdminOverview /></AdminPage>} />
+        <Route path="/admin/jobs" element={<AdminPage><AdminJobs /></AdminPage>} />
         <Route path="/admin/applications" element={<AdminPage><AdminApplications /></AdminPage>} />
         <Route path="/admin/applications/:id" element={<AdminPage><AdminApplicationDetail /></AdminPage>} />
         <Route path="/admin/users" element={<AdminPage><AdminUsers /></AdminPage>} />

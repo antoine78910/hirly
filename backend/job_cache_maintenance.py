@@ -515,6 +515,168 @@ async def job_cache_status(db, *, stale_after_days: Optional[int] = None) -> Dic
     }
 
 
+KNOWN_JOB_PROVIDERS = [
+    "jsearch",
+    "france_travail",
+    "greenhouse",
+    "lever",
+    "ashby",
+    "smartrecruiters",
+    "recruitee",
+    "personio",
+    "teamtailor",
+    "workday",
+    "flatchr",
+]
+
+SOURCE_DISPLAY_NAMES = {
+    "jsearch": "JSearch",
+    "france_travail": "France Travail",
+    "greenhouse": "Greenhouse",
+    "lever": "Lever",
+    "ashby": "Ashby",
+    "smartrecruiters": "SmartRecruiters",
+    "recruitee": "Recruitee",
+    "personio": "Personio",
+    "teamtailor": "Teamtailor",
+    "workday": "Workday",
+    "flatchr": "Flatchr",
+    "other": "Other",
+    "unknown": "Unknown",
+}
+
+
+def _normalize_job_source(provider: Any) -> str:
+    text = str(provider or "unknown").strip().lower()
+    return text or "unknown"
+
+
+def _source_display_name(source: str) -> str:
+    return SOURCE_DISPLAY_NAMES.get(source, source.replace("_", " ").title())
+
+
+async def _fetch_import_activity_rows(db, cutoff_iso: str, *, limit: int = 15000) -> List[Dict[str, Any]]:
+    filter_query = {"imported_at": {"$gte": cutoff_iso}}
+    if hasattr(db.jobs, "read_with_select"):
+        return await db.jobs.read_with_select(
+            filter_query,
+            limit=limit,
+            select="provider,imported_at",
+        )
+    cursor = db.jobs.find(filter_query, {"provider": 1, "imported_at": 1, "_id": 0})
+    if hasattr(cursor, "limit"):
+        cursor = cursor.limit(limit)
+    return await cursor.to_list(limit)
+
+
+async def job_inventory_analytics(db, *, days: int = 30) -> Dict[str, Any]:
+    """Admin inventory snapshot: totals by ingestion source and daily import activity."""
+    period_days = max(7, min(int(days), 90))
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=period_days)
+    cutoff_iso = cutoff.isoformat()
+
+    total_jobs = await db.jobs.count_documents({})
+    valid_ab_jobs = await db.jobs.count_documents(
+        {"validation_status": "valid", "applyability_tier": {"$in": ["A", "B"]}},
+    )
+
+    by_source: Dict[str, int] = {}
+    counted = 0
+    for provider in KNOWN_JOB_PROVIDERS:
+        count = await db.jobs.count_documents({"provider": provider})
+        if count:
+            by_source[provider] = count
+            counted += count
+    other_total = max(0, total_jobs - counted)
+    if other_total:
+        by_source["other"] = other_total
+
+    rows = await _fetch_import_activity_rows(db, cutoff_iso)
+    daily_counts: Dict[str, Dict[str, int]] = {}
+    for row in rows:
+        imported_at = _parse_dt(row.get("imported_at"))
+        if imported_at is None:
+            continue
+        day_key = imported_at.date().isoformat()
+        source = _normalize_job_source(row.get("provider"))
+        bucket = daily_counts.setdefault(day_key, {})
+        bucket[source] = bucket.get(source, 0) + 1
+
+    daily_series: List[Dict[str, Any]] = []
+    day_cursor = cutoff.date()
+    end_day = now.date()
+    while day_cursor <= end_day:
+        day_key = day_cursor.isoformat()
+        sources = daily_counts.get(day_key, {})
+        daily_series.append({
+            "date": day_key,
+            "sources": sources,
+            "total": sum(sources.values()),
+        })
+        day_cursor += timedelta(days=1)
+
+    period_source_totals: Dict[str, int] = {}
+    for day in daily_series:
+        for source, count in (day.get("sources") or {}).items():
+            period_source_totals[source] = period_source_totals.get(source, 0) + count
+
+    top_sources = sorted(
+        period_source_totals.keys(),
+        key=lambda source: period_source_totals[source],
+        reverse=True,
+    )[:8]
+
+    chart_daily: List[Dict[str, Any]] = []
+    for day in daily_series:
+        entry: Dict[str, Any] = {"date": day["date"], "total": day["total"]}
+        tracked = 0
+        for source in top_sources:
+            value = int((day.get("sources") or {}).get(source, 0))
+            entry[source] = value
+            tracked += value
+        remainder = max(0, int(day["total"]) - tracked)
+        if remainder:
+            entry["other"] = remainder
+        chart_daily.append(entry)
+
+    chart_sources = list(top_sources)
+    if any(int(day.get("other") or 0) > 0 for day in chart_daily):
+        chart_sources.append("other")
+
+    cutoff_24h = (now - timedelta(days=1)).date().isoformat()
+    cutoff_7d = (now - timedelta(days=7)).date().isoformat()
+    imports_last_24h = sum(day["total"] for day in daily_series if day["date"] >= cutoff_24h)
+    imports_last_7d = sum(day["total"] for day in daily_series if day["date"] >= cutoff_7d)
+
+    by_source_list = sorted(
+        [
+            {
+                "source": source,
+                "label": _source_display_name(source),
+                "count": count,
+                "share_pct": round((count / total_jobs) * 100, 1) if total_jobs else 0.0,
+            }
+            for source, count in by_source.items()
+        ],
+        key=lambda row: row["count"],
+        reverse=True,
+    )
+
+    return {
+        "total_jobs": total_jobs,
+        "valid_ab_jobs": valid_ab_jobs,
+        "imports_last_24h": imports_last_24h,
+        "imports_last_7d": imports_last_7d,
+        "by_source": by_source_list,
+        "daily": chart_daily,
+        "chart_sources": chart_sources,
+        "period_days": period_days,
+        "activity_rows": len(rows),
+        "activity_capped": len(rows) >= 15000,
+    }
+
+
 def _synthetic_profile(role: str, location: str, country_code: str, remote: Optional[bool]) -> Dict[str, Any]:
     return {
         "user_id": "admin_job_cache_maintenance",
