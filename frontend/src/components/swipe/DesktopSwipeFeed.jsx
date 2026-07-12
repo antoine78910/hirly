@@ -38,6 +38,7 @@ import {
   readDesktopTheme,
   saveDesktopTheme,
 } from "./desktopFeedTheme";
+import { jobExternalUrl } from "../../lib/jobDisplayUtils";
 
 const SWIPE_EXIT = {
   skip: { x: -720, rotate: -10, opacity: 0, scale: 0.92 },
