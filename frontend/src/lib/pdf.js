@@ -102,7 +102,7 @@ export const downloadTailoredCV = async ({
     doc.rect(0, 0, PRO_CV_PAGE.widthPt, PRO_CV_PAGE.heightPt, "F");
     await renderProfessionalCV(
       doc,
-      { contact: mergedContact, resume, job },
+      { contact: mergedContact, resume },
       { setFill, setText, setDraw, writeWrapped: writeWrappedSinglePage },
     );
     doc.save(`CV - ${safeFilePart(name)} - ${safeFilePart(job?.company, "tailored")}.pdf`);
@@ -175,15 +175,6 @@ export const downloadTailoredCV = async ({
     y += 14;
     setText(doc, palette.text);
   };
-
-  // Tailored for line
-  if (job?.title) {
-    doc.setFont("helvetica", "italic");
-    doc.setFontSize(9);
-    setText(doc, palette.muted);
-    doc.text(`Tailored for ${job.title} @ ${job.company}`, MARGIN_X, y);
-    y += 14;
-  }
 
   // Summary
   if (resume.summary) {

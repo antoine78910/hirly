@@ -1,4 +1,4 @@
-/** Professional CV layout constants and helpers (reference template). */
+/** Professional CV layout constants and helpers. */
 
 export const PROFESSIONAL_CV_TEMPLATE = "professional";
 
@@ -7,15 +7,24 @@ export const PRO_CV_PAGE = {
   heightPt: 841.89,
 };
 
-export const PRO_CV_COLORS = {
-  accent: "#1B4F8A",
-  accentDark: "#16467A",
-  text: "#111111",
+/** Muted palette — no bright colors. */
+export const PRO_CV_COLORS_PHOTO = {
+  accent: "#5C6B7A",
+  text: "#1F2937",
   muted: "#6B7280",
   line: "#D1D5DB",
-  photoBg: "#D1D5DB",
   photoRing: "#FFFFFF",
 };
+
+export const PRO_CV_COLORS_PLAIN = {
+  accent: "#374151",
+  text: "#111827",
+  muted: "#6B7280",
+  line: "#E5E7EB",
+};
+
+/** @deprecated use resolveProfessionalVariant */
+export const PRO_CV_COLORS = PRO_CV_COLORS_PHOTO;
 
 const LEGACY_PROFESSIONAL_ALIASES = new Set([
   "modern",
@@ -61,9 +70,18 @@ export function getContactPhotoUrl(contact = {}) {
   return contact.picture || contact.photoUrl || contact.photo || contact.avatar || null;
 }
 
+export function hasContactPhoto(contact = {}) {
+  return Boolean(getContactPhotoUrl(contact));
+}
+
 export function withContactPhoto(contact = {}, picture) {
   if (!picture || getContactPhotoUrl(contact)) return contact;
   return { ...contact, picture };
+}
+
+/** Photo collar template when a profile image exists; otherwise plain two-column. */
+export function resolveProfessionalVariant(contact = {}) {
+  return hasContactPhoto(contact) ? "photo" : "plain";
 }
 
 export function socialLinksFromContact(contact = {}) {
@@ -74,71 +92,83 @@ export function socialLinksFromContact(contact = {}) {
   return links;
 }
 
-export function estimateProfessionalContentHeight({ contact = {}, resume = {} }) {
+export function estimateProfessionalContentHeight({ contact = {}, resume = {} }, { contentStartPt } = {}) {
   const socialLinks = socialLinksFromContact(contact);
   const contactBlocks = [contact.location, contact.phone, contact.email].filter(Boolean).length;
   let height = 0;
 
-  height += 22; // section header
-  height += contactBlocks * 30;
-  if (socialLinks.length) height += 22 + socialLinks.length * 16;
-  if (resume.skills?.length) height += 22 + resume.skills.length * 15;
-  if (resume.languages?.length) height += 22 + resume.languages.length * 14;
+  height += 28;
+  height += contactBlocks * 34;
+  if (socialLinks.length) height += 28 + socialLinks.length * 18;
+  if (resume.skills?.length) height += 28 + resume.skills.length * 17;
+  if (resume.languages?.length) height += 28 + resume.languages.length * 16;
 
   if (resume.summary) {
-    const chars = String(resume.summary).length;
-    height += 22 + Math.ceil(chars / 90) * 14;
+    height += 28 + Math.ceil(String(resume.summary).length / 85) * 15;
   }
   if (resume.education?.length) {
-    height += 22 + resume.education.length * 36;
+    height += 28 + resume.education.length * 38;
   }
   if (resume.experience?.length) {
-    height += 22;
+    height += 28;
     resume.experience.forEach((entry) => {
-      height += 34;
-      height += (entry.highlights?.length || 0) * 15;
+      height += 38;
+      height += (entry.highlights?.length || 0) * 16;
     });
   }
   if (resume.highlights?.length) {
-    height += 22 + resume.highlights.length * 15;
+    height += 28 + resume.highlights.length * 16;
+  }
+
+  if (contentStartPt) {
+    height += contentStartPt;
   }
 
   return height;
 }
 
-/** Scale vertical spacing so short CVs still fill one A4 page. */
 export function computeVerticalFillScale(contentHeight, {
-  contentStart = 150,
+  contentStart = PRO_CV_LAYOUT_PHOTO.contentStartPt,
   pageHeight = PRO_CV_PAGE.heightPt,
-  bottomMargin = 28,
+  bottomMargin = 36,
 } = {}) {
   const available = pageHeight - contentStart - bottomMargin;
   if (!contentHeight || contentHeight >= available) return 1;
-  return Math.min(2.35, Math.max(1.12, available / contentHeight));
+  return Math.min(1.35, Math.max(1, available / contentHeight));
 }
 
-/** SVG path for the blue collar header (viewBox 794 x 130). */
+/** Centered collar for photo variant (viewBox 794 × 120). */
+export const PRO_CV_HEADER_VIEWBOX = "0 0 794 120";
 export const PRO_CV_HEADER_PATH = [
-  "M0,0 H794 V24 H548",
-  "C680,24 620,108 397,108",
-  "C174,108 114,24 246,24 H0 Z",
+  "M262,0 H532 V16",
+  "C532,16 498,96 397,96",
+  "C296,96 262,16 262,16 Z",
 ].join(" ");
 
-export const PRO_CV_LAYOUT = {
-  marginX: 44,
-  leftColWidth: 168,
-  columnGap: 18,
-  headerHeightPx: 130,
-  contentStartPt: 138,
-  photoRadiusPt: 34,
-  photoCenterY: 80,
+export const PRO_CV_LAYOUT_PHOTO = {
+  marginX: 48,
+  leftColWidth: 164,
+  columnGap: 20,
+  headerHeightPt: 96,
+  nameRowY: 128,
+  contentStartPt: 188,
+  photoRadiusPt: 30,
+  /** Center of collar dip on page (page midpoint). */
+  photoCenterY: 58,
 };
 
-export function getColumnPositions(pageWidth = PRO_CV_PAGE.widthPt) {
-  const leftX = PRO_CV_LAYOUT.marginX;
-  const leftW = PRO_CV_LAYOUT.leftColWidth;
-  const rightX = leftX + leftW + PRO_CV_LAYOUT.columnGap;
-  const rightW = pageWidth - rightX - PRO_CV_LAYOUT.marginX;
-  const dividerX = leftX + leftW + PRO_CV_LAYOUT.columnGap / 2;
+export const PRO_CV_LAYOUT_PLAIN = {
+  marginX: 48,
+  leftColWidth: 164,
+  columnGap: 20,
+  contentStartPt: 118,
+};
+
+export function getColumnPositions(pageWidth = PRO_CV_PAGE.widthPt, layout = PRO_CV_LAYOUT_PHOTO) {
+  const leftX = layout.marginX;
+  const leftW = layout.leftColWidth;
+  const rightX = leftX + leftW + layout.columnGap;
+  const rightW = pageWidth - rightX - layout.marginX;
+  const dividerX = leftX + leftW + layout.columnGap / 2;
   return { leftX, leftW, rightX, rightW, dividerX };
 }
