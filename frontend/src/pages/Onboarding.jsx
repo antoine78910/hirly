@@ -1645,7 +1645,6 @@ export default function Onboarding() {
                     icon={Icon}
                     title={label}
                     hint={hint}
-                    showCheck
                     variant="qcm-timeline"
                     testId={`job-timeline-${id}`}
                   />
@@ -1697,7 +1696,6 @@ export default function Onboarding() {
                     onClick={() => setJobBlocker(id)}
                     icon={Icon}
                     title={label}
-                    showCheck
                     variant="qcm"
                     testId={`job-blocker-${id}`}
                   />
@@ -1726,7 +1724,6 @@ export default function Onboarding() {
                     onClick={() => setJobAccomplish(id)}
                     icon={Icon}
                     title={label}
-                    showCheck
                     variant="qcm"
                     testId={`job-accomplish-${id}`}
                   />
@@ -1755,7 +1752,6 @@ export default function Onboarding() {
                     onClick={() => setJobGoal(id)}
                     icon={Icon}
                     title={label}
-                    showCheck
                     variant="qcm"
                     testId={`job-goal-${id}`}
                   />

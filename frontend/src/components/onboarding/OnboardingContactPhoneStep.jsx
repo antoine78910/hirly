@@ -21,7 +21,6 @@ export function getContactPhoneCopy(lang = "fr") {
         "Certaines offres exigent un numéro de téléphone pour accepter votre candidature et pour être recontacté ensuite.",
       label: "Numéro mobile",
       searchPlaceholder: "Rechercher un pays",
-      hint: "Saisissez votre numéro sans l\u2019indicatif pays.",
     };
   }
 
@@ -31,7 +30,6 @@ export function getContactPhoneCopy(lang = "fr") {
       "Some job listings require a phone number to accept your application and to reach you afterwards.",
     label: "Mobile number",
     searchPlaceholder: "Search country",
-    hint: "Enter your number without the country code.",
   };
 }
 
@@ -128,7 +126,6 @@ export default function OnboardingContactPhoneStep({
   const copy = getContactPhoneCopy(lang);
   const placeholder = getPhonePlaceholder(phoneCountryIso2, phonePrefix);
   const format = getPhoneLocalFormat(phoneCountryIso2, phonePrefix);
-  const digitCount = String(phoneLocal || "").replace(/\D/g, "").length;
 
   const handlePhoneInput = (rawValue) => {
     onPhoneChange(formatLocalPhoneDisplay(rawValue, phoneCountryIso2, phonePrefix));
@@ -159,25 +156,8 @@ export default function OnboardingContactPhoneStep({
           maxLength={format.maxDigits + Math.max(0, format.groups.length - 1)}
           className="min-w-0 flex-1 px-3 py-3 text-base text-zinc-900 placeholder:text-zinc-400 focus:outline-none"
           data-testid="onboarding-phone-input"
-          aria-describedby="onboarding-phone-hint"
         />
       </div>
-      <p id="onboarding-phone-hint" className="mt-2 text-xs leading-relaxed text-zinc-500">
-        {copy.hint}
-        {" "}
-        <span className="tabular-nums text-zinc-600">
-          {lang === "fr" ? "Ex." : "e.g."}
-          {" "}
-          {placeholder}
-          {" "}
-          (
-          {format.minDigits === format.maxDigits
-            ? `${format.maxDigits} ${lang === "fr" ? "chiffres" : "digits"}`
-            : `${format.minDigits}–${format.maxDigits} ${lang === "fr" ? "chiffres" : "digits"}`}
-          {digitCount > 0 ? ` · ${digitCount}/${format.maxDigits}` : ""}
-          )
-        </span>
-      </p>
     </div>
   );
 }

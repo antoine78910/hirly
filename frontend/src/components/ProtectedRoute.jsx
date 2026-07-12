@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { Loader2 } from "lucide-react";
 import { isDemoAccountEnabled } from "../lib/demoAccount";
+import { devBypassAuth } from "../lib/dev";
 import {
   domainSplitEnabled,
   isAppHost,

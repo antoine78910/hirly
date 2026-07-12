@@ -61,6 +61,7 @@ import AdminRoute from "@/components/AdminRoute";
 import BottomNav from "@/components/BottomNav";
 import AppLayout from "@/components/desktop/AppLayout";
 import ScrollManager from "@/components/app/ScrollManager";
+import AppErrorBoundary from "@/components/app/AppErrorBoundary";
 import RecordTools from "@/pages/RecordTools";
 import { devBypassAuth } from "@/lib/dev";
 import { isTrainingRoute } from "@/lib/trainingRoutes";
@@ -230,7 +231,9 @@ function App() {
           <AppLocaleProvider>
             <MobileThemeProvider>
             <UpgradeModalProvider>
-              <AppRouter />
+              <AppErrorBoundary>
+                <AppRouter />
+              </AppErrorBoundary>
             </UpgradeModalProvider>
             </MobileThemeProvider>
           </AppLocaleProvider>
