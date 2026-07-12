@@ -384,6 +384,7 @@ export default function Tracker() {
       contact: profile?.contact || {},
       resume: getApplicationResume(selected),
       job: selected.job,
+      userPicture: user?.picture,
       template: resolveCvDisplayTemplate(
         getApplicationResume(selected)?.template_recommendation || profile?.template_style,
       ),
@@ -871,6 +872,7 @@ export default function Tracker() {
             <ApplicationDetailPanel
               application={selected}
               profile={profile}
+              userPicture={user?.picture}
               displayStatuses={displayStatuses}
               statusMeta={statusMeta}
               applicationStatusMessage={applicationStatusMessage}

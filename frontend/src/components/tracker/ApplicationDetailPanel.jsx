@@ -110,6 +110,7 @@ function ApplicationEmailRow({ message, onOpen, t, lang }) {
 export default function ApplicationDetailPanel({
   application,
   profile,
+  userPicture,
   displayStatuses,
   statusMeta,
   applicationStatusMessage,
@@ -485,6 +486,7 @@ export default function ApplicationDetailPanel({
                 <ApplicationDocumentsView
                   application={application}
                   profile={profile}
+                  userPicture={userPicture}
                   t={t}
                   onDownloadCV={onDownloadCV}
                   onDownloadCoverLetter={onDownloadCoverLetter}
@@ -498,6 +500,7 @@ export default function ApplicationDetailPanel({
             <ApplicationDocumentsView
               application={application}
               profile={profile}
+              userPicture={userPicture}
               t={t}
               onDownloadCV={onDownloadCV}
               onDownloadCoverLetter={onDownloadCoverLetter}

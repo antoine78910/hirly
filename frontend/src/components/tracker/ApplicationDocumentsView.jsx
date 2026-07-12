@@ -10,11 +10,12 @@ import {
   hasApplicationCoverLetter,
   hasApplicationResume,
 } from "../../lib/applicationDocuments";
-import { resolveCvDisplayTemplate } from "../../lib/cvTemplate";
+import { resolveCvDisplayTemplate, withContactPhoto } from "../../lib/cvTemplate";
 
 export default function ApplicationDocumentsView({
   application,
   profile,
+  userPicture,
   t,
   onDownloadCV,
   onDownloadCoverLetter,
@@ -29,7 +30,7 @@ export default function ApplicationDocumentsView({
   const hasCv = hasApplicationResume(application);
   const hasCover = hasApplicationCoverLetter(application);
   const template = resolveCvDisplayTemplate(resume?.template_recommendation || profile?.template_style);
-  const contact = profile?.contact || {};
+  const contact = withContactPhoto(profile?.contact || {}, userPicture);
   const job = application?.job;
 
   if (!hasCv && !hasCover) {

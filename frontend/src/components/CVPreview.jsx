@@ -1,7 +1,11 @@
 import { motion } from "framer-motion";
 import {
   PRO_CV_COLORS,
+  PRO_CV_HEADER_PATH,
   contactInitials,
+  computeVerticalFillScale,
+  estimateProfessionalContentHeight,
+  getContactPhotoUrl,
   parseLanguageEntry,
   resolveCvDisplayTemplate,
   socialLinksFromContact,
@@ -37,11 +41,11 @@ const PREVIEW_THEMES = {
   },
 };
 
-const Section = ({ label, children, theme, accent = false }) => (
-  <section className="mt-4 first:mt-0">
+const Section = ({ label, children, theme, accent = false, style }) => (
+  <section className="mt-4 first:mt-0" style={style}>
     <h3
       className={`pb-1 text-[10px] font-bold uppercase tracking-[0.14em] border-b mb-2.5 ${
-        accent ? "text-[#16467A] border-[#16467A]" : theme.sectionLabel
+        accent ? "text-[#1B4F8A] border-[#1B4F8A]" : theme.sectionLabel
       }`}
     >
       {label}
@@ -50,28 +54,44 @@ const Section = ({ label, children, theme, accent = false }) => (
   </section>
 );
 
-function ProfessionalCVPreview({ contact, resume, job, theme }) {
+function ProfessionalCVPreview({ contact, resume, job }) {
   const name = (contact.name || "Your Name").trim();
   const initials = contactInitials(name);
+  const photoUrl = getContactPhotoUrl(contact);
   const socialLinks = socialLinksFromContact(contact);
   const languages = (resume.languages || []).map(parseLanguageEntry);
+  const vScale = computeVerticalFillScale(estimateProfessionalContentHeight({ contact, resume }));
+  const sectionGap = `${Math.round(16 * vScale)}px`;
+  const entryGap = `${Math.round(12 * vScale)}px`;
 
   return (
-    <div className="overflow-hidden bg-white text-zinc-900" data-testid="cv-preview">
-      <div className="relative bg-[#16467A] pb-10 pt-0">
-        <div className="h-5 w-full bg-[#16467A]" />
-        <div
-          className="mx-auto h-0 w-0 border-x-[140px] border-x-transparent border-t-[52px] border-t-[#16467A]"
-          aria-hidden="true"
-        />
-        <div className="absolute left-1/2 top-5 flex h-[72px] w-[72px] -translate-x-1/2 items-center justify-center rounded-full border-4 border-white bg-zinc-200 text-lg font-bold text-zinc-600 shadow-sm">
-          {initials}
+    <div
+      className="relative flex aspect-[210/297] w-full min-h-[680px] flex-col overflow-hidden bg-white text-zinc-900"
+      data-testid="cv-preview"
+    >
+      <div className="relative shrink-0">
+        <svg viewBox="0 0 794 130" className="block h-auto w-full" aria-hidden="true">
+          <path d={PRO_CV_HEADER_PATH} fill={PRO_CV_COLORS.accent} />
+        </svg>
+        <div className="absolute left-1/2 top-[52%] -translate-x-1/2 -translate-y-1/2">
+          <div className="flex h-[88px] w-[88px] items-center justify-center overflow-hidden rounded-full border-[5px] border-white bg-zinc-200 shadow-sm">
+            {photoUrl ? (
+              <img
+                src={photoUrl}
+                alt=""
+                className="h-full w-full object-cover"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <span className="text-xl font-bold text-zinc-600">{initials}</span>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="relative px-6 pb-6">
-        <div className="flex items-start justify-between gap-4 -mt-1">
-          <h2 className="font-display text-[1.65rem] font-black leading-tight tracking-tight text-zinc-900">
+      <div className="flex min-h-0 flex-1 flex-col px-6 pb-5 pt-1">
+        <div className="flex items-start justify-between gap-4">
+          <h2 className="font-display text-[1.75rem] font-black leading-tight tracking-tight text-zinc-900">
             {name}
           </h2>
           <div className="max-w-[45%] shrink-0 text-right text-[11px] leading-relaxed text-zinc-500">
@@ -81,41 +101,35 @@ function ProfessionalCVPreview({ contact, resume, job, theme }) {
           </div>
         </div>
 
-        {job?.title ? (
-          <p className="mt-2 text-xs italic text-zinc-500">
-            Tailored for {job.title} @ {job.company}
-          </p>
-        ) : null}
-
-        <div className="mt-5 grid grid-cols-[32%_1fr] gap-6">
-          <aside className="space-y-1 text-[13px] leading-relaxed text-zinc-700">
-            <Section label="Contact" accent>
+        <div className="mt-4 grid min-h-0 flex-1 grid-cols-[32%_1fr] gap-6 border-t border-zinc-100 pt-4">
+          <aside className="space-y-1 border-r border-zinc-100 pr-4 text-[13px] leading-relaxed text-zinc-700">
+            <Section label="Contact" accent style={{ marginTop: 0 }}>
               {contact.location ? (
-                <div className="mb-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-[#16467A]">Address</p>
+                <div className="mb-2" style={{ marginBottom: entryGap }}>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-[#1B4F8A]">Address</p>
                   <p>{contact.location}</p>
                 </div>
               ) : null}
               {contact.phone ? (
-                <div className="mb-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-[#16467A]">Phone</p>
+                <div className="mb-2" style={{ marginBottom: entryGap }}>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-[#1B4F8A]">Phone number</p>
                   <p>{contact.phone}</p>
                 </div>
               ) : null}
               {contact.email ? (
-                <div className="mb-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-[#16467A]">Email</p>
+                <div className="mb-2" style={{ marginBottom: entryGap }}>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-[#1B4F8A]">Email address</p>
                   <p className="break-all">{contact.email}</p>
                 </div>
               ) : null}
             </Section>
 
             {socialLinks.length ? (
-              <Section label="Social links" accent>
-                <ul className="space-y-1.5">
+              <Section label="Social links" accent style={{ marginTop: sectionGap }}>
+                <ul className="space-y-1.5" style={{ gap: entryGap }}>
                   {socialLinks.map((link) => (
                     <li key={link.label} className="flex items-start gap-2">
-                      <span className="mt-1.5 inline-block h-2 w-2 shrink-0 bg-[#16467A]" />
+                      <span className="mt-1.5 inline-block h-2 w-2 shrink-0 bg-[#1B4F8A]" />
                       <span className="break-all">{link.value}</span>
                     </li>
                   ))}
@@ -124,11 +138,11 @@ function ProfessionalCVPreview({ contact, resume, job, theme }) {
             ) : null}
 
             {resume.skills?.length ? (
-              <Section label="Skills" accent>
+              <Section label="Skills" accent style={{ marginTop: sectionGap }}>
                 <ul className="space-y-1.5">
                   {resume.skills.map((skill) => (
                     <li key={skill} className="flex items-start gap-2">
-                      <span className="mt-1.5 inline-block h-2 w-2 shrink-0 bg-[#16467A]" />
+                      <span className="mt-1.5 inline-block h-2 w-2 shrink-0 bg-[#1B4F8A]" />
                       <span>{skill}</span>
                     </li>
                   ))}
@@ -137,7 +151,7 @@ function ProfessionalCVPreview({ contact, resume, job, theme }) {
             ) : null}
 
             {languages.length ? (
-              <Section label="Languages" accent>
+              <Section label="Languages" accent style={{ marginTop: sectionGap }}>
                 <ul className="space-y-1">
                   {languages.map((lang) => (
                     <li key={`${lang.name}-${lang.level}`} className="flex justify-between gap-2">
@@ -150,16 +164,16 @@ function ProfessionalCVPreview({ contact, resume, job, theme }) {
             ) : null}
           </aside>
 
-          <div className="text-[13px] leading-relaxed text-zinc-700">
+          <div className="flex flex-col text-[13px] leading-relaxed text-zinc-700">
             {resume.summary ? (
-              <Section label="Profile" accent>
+              <Section label="Profile" accent style={{ marginTop: 0 }}>
                 <p>{resume.summary}</p>
               </Section>
             ) : null}
 
             {resume.education?.length ? (
-              <Section label="Education" accent>
-                <ul className="space-y-3">
+              <Section label="Education" accent style={{ marginTop: resume.summary ? sectionGap : 0 }}>
+                <ul className="space-y-3" style={{ gap: entryGap }}>
                   {resume.education.map((entry, index) => (
                     <li key={`${entry.degree}-${index}`}>
                       <div className="flex items-baseline justify-between gap-3">
@@ -174,8 +188,12 @@ function ProfessionalCVPreview({ contact, resume, job, theme }) {
             ) : null}
 
             {resume.experience?.length ? (
-              <Section label="Employment history" accent>
-                <ul className="space-y-4">
+              <Section
+                label="Employment history"
+                accent
+                style={{ marginTop: resume.summary || resume.education?.length ? sectionGap : 0 }}
+              >
+                <ul className="space-y-4" style={{ gap: entryGap }}>
                   {resume.experience.map((entry, index) => (
                     <li key={`${entry.role}-${index}`}>
                       <div className="flex items-baseline justify-between gap-3">
@@ -202,7 +220,16 @@ function ProfessionalCVPreview({ contact, resume, job, theme }) {
             ) : null}
 
             {resume.highlights?.length ? (
-              <Section label="Extracurricular" accent>
+              <Section
+                label="Extracurricular"
+                accent
+                style={{
+                  marginTop:
+                    resume.summary || resume.education?.length || resume.experience?.length
+                      ? sectionGap
+                      : 0,
+                }}
+              >
                 <ul className="space-y-1">
                   {resume.highlights.map((item, index) => (
                     <li key={index} className="flex gap-2">
@@ -215,6 +242,12 @@ function ProfessionalCVPreview({ contact, resume, job, theme }) {
             ) : null}
           </div>
         </div>
+
+        {job?.title ? (
+          <p className="mt-auto pt-3 text-center text-[10px] italic text-zinc-400">
+            Tailored for {job.title} @ {job.company}
+          </p>
+        ) : null}
       </div>
     </div>
   );
@@ -235,7 +268,7 @@ export default function CVPreview({ contact = {}, resume = {}, job, template = "
         transition={{ duration: 0.3 }}
         className={`overflow-hidden rounded-2xl border ${palette.container}`}
       >
-        <ProfessionalCVPreview contact={contact} resume={resume} job={job} theme={palette} />
+        <ProfessionalCVPreview contact={contact} resume={resume} job={job} />
       </motion.div>
     );
   }
