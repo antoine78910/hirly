@@ -42,7 +42,13 @@ import stripe
 from pypdf import PdfReader
 import docx as docx_lib
 from application_documents import DOCX_MIME, build_application_package, cover_letter_to_text, sanitize_docx_text
-from cv_quality import normalize_application_generation, validate_resume_quality
+from cover_letter_quality import build_cover_letter_prompt_section, validate_cover_letter_quality
+from cv_tailoring import (
+    apply_minimal_resume_tailoring,
+    build_cv_tailoring_prompt_section,
+    validate_minimal_tailoring_preserved,
+)
+from cv_quality import attach_cover_letter_quality_report, normalize_application_generation, validate_resume_quality
 from application_email_service import send_application_email
 from apply_agent.models import ApplyAgentError
 from apply_agent.runner import run_apply_attempt
@@ -3836,10 +3842,11 @@ def _ats_hint_for_job(job: Dict[str, Any]) -> str:
 
 async def claude_generate_application(profile: Dict[str, Any], job: Dict[str, Any]) -> Dict[str, Any]:
     system_message = (
-        "Tu es un moteur d'analyse ATS strict. Tu analyses les CV uniquement via des regles "
-        "automatiques: parsing, mots-cles, structure, correspondance avec l'offre et scoring. "
-        "Tu ne dois faire aucune interpretation humaine, aucun conseil RH subjectif, et aucune "
-        "recommandation hors objectif ATS. Retourne UNIQUEMENT du JSON valide. "
+        "Tu es un moteur d'optimisation candidature. Pour le CV, applique des regles ATS strictes : "
+        "parsing, mots-cles, structure, correspondance factuelle avec l'offre et scoring. "
+        "Pour la lettre de motivation, redige un texte convaincant pour un recruteur humain en restant "
+        "100% factuel sur le parcours du candidat. "
+        "Retourne UNIQUEMENT du JSON valide. "
         "N'invente jamais d'entreprise, poste, diplome, date, certification, outil, chiffre ou resultat."
     )
 
@@ -3848,6 +3855,9 @@ async def claude_generate_application(profile: Dict[str, Any], job: Dict[str, An
     ats_hint = _ats_hint_for_job(job)
     ats_provider_label = (job.get("ats_provider") or "unknown").upper()
     company_name = job.get("company") or "cette entreprise"
+    job_title = job.get("title") or "ce poste"
+    cover_letter_rules = build_cover_letter_prompt_section(company_name, job_title, job)
+    cv_tailoring_rules = build_cv_tailoring_prompt_section(job_title)
     candidate_payload = {
         "contact": profile.get("contact", {}),
         "cv_text": profile.get("cv_text", "")[:12000],
@@ -3898,18 +3908,14 @@ OBJECTIF
 4. Detecter les competences, outils, experiences, intitules, verbes d'action et mots-cles metiers manquants.
 5. Detecter les problemes de structure ou de parsing qui pourraient bloquer ou reduire le score ATS.
 6. Identifier les sections faibles ou mal optimisees.
-7. Reecrire uniquement les parties necessaires du CV pour integrer les mots-cles manquants.
-8. Ameliorer la section experience sans inventer d'informations.
-9. Proposer les optimisations necessaires pour atteindre un score ATS superieur a 80 %, si cela est realiste.
-10. Si un score superieur a 80 % n'est pas atteignable sans inventer d'experience, explique clairement pourquoi.
-11. Generer une lettre de motivation personnalisee pour {company_name} et le poste "{job.get("title") or "ce poste"}".
+7. Proposer les optimisations necessaires pour atteindre un score ATS superieur a 80 %, si cela est realiste.
+8. Si un score superieur a 80 % n'est pas atteignable sans inventer d'experience, explique clairement pourquoi.
+9. Generer une lettre de motivation personnalisee pour {company_name} et le poste "{job_title}".
+10. Produire resume_tailoring (modifications MINIMALES du CV — voir regles ci-dessous).
 
-LETTRE DE MOTIVATION
-- Si cover_letter_reference est fourni dans le profil candidat, adapte le ton et la structure sans copier mot pour mot.
-- Sinon, utilise le template french_formal (format lettre professionnelle francaise).
-- Mentionne explicitement {company_name} dans au moins un paragraphe du corps.
-- L'objet doit inclure le titre du poste et le nom de l'entreprise.
-- Reste factuel : n'invente aucune experience, diplome ou competence absente du CV.
+{cv_tailoring_rules}
+
+{cover_letter_rules}
 
 SORTIE ATTENDUE
 
@@ -3952,24 +3958,17 @@ Donne une liste classee par priorite :
 - priorite 2 : changements fortement recommandes
 - priorite 3 : ameliorations secondaires
 
-5. Version optimisee de la section Experience
+5. Analyse de la section Experience (SANS reecriture)
 
-Reecris la section experience de mon CV pour l'adapter a l'offre.
+Analyse l'alignement des experiences du profil candidat avec l'offre.
+Ne reecris PAS les experiences dans la sortie JSON : le code conserve le texte original.
+Tu peux uniquement proposer experience_order dans resume_tailoring pour remonter l'experience la plus pertinente.
 
-Contraintes :
-- ne pas inventer d'entreprise
-- ne pas inventer de poste
-- ne pas inventer de diplome
-- ne pas inventer de chiffres ou resultats
-- conserver uniquement les informations credibles issues de mon CV
-- integrer les mots-cles de l'offre naturellement
-- utiliser un style factuel, professionnel, synthetique
-- privilegier les verbes d'action
-- optimiser pour un ATS, pas pour impressionner subjectivement un recruteur
+6. Resume professionnel (summary uniquement)
 
-6. Version optimisee du resume professionnel
-
-Propose un resume professionnel ATS-friendly de 3 a 5 lignes, adapte a l'offre.
+Propose un resume professionnel de 4-5 lignes MAX dans resume_tailoring.summary.
+Conserve les faits marquants (Big Four, duree, contexte, filiales, equipes).
+Ton humain et factuel — jamais de consigne interne dans le texte final.
 
 7. Liste finale des modifications a appliquer
 
@@ -3977,36 +3976,34 @@ Donne-moi une checklist claire des changements a faire dans mon CV avant de post
 
 8. Lettre de motivation optimisee pour {company_name}
 
-Redige une lettre de motivation en francais (sauf si l'offre est clairement en anglais), personnalisee pour {company_name} et le poste cible.
+Redige une lettre de motivation en francais (sauf si l'offre est clairement en anglais), personnalisee pour {company_name} et le poste "{job_title}".
+Applique strictement toutes les regles LETTRE DE MOTIVATION ci-dessus, en particulier :
+- expliquer pourquoi le parcours du candidat est coherent avec le poste (regle #1) ;
+- citer des competences/outils de l'offre avec preuves transferables du CV (regle #2) ;
+- inclure une phrase specifique a {company_name} (regle #3).
 
 CONTRAINTES GENERALES
 - Reste factuel.
+- Ne reecris pas le CV complet : resume_tailoring uniquement (headline, summary, skills_order, experience_order).
+- Ne supprime jamais d'informations importantes du parcours candidat.
+- Ne raccourcis pas le CV.
 - Ne donne pas de conseils RH generiques.
-- Ne fais pas de reformulation creative inutile.
-- Ne modifie pas le sens reel de mon parcours.
+- Ne modifie pas le sens reel du parcours.
 - Ne mens pas.
-- Ne gonfle pas artificiellement mon experience.
-- Optimise uniquement pour la lecture automatique ATS.
-- Si une information manque dans le CV, propose une formulation uniquement si elle peut etre deduite raisonnablement.
-- Si une information ne peut pas etre deduite, indique qu'elle doit etre ajoutee manuellement par moi si elle est vraie.
+- Ne gonfle pas artificiellement l'experience.
+- Les analyses ATS vont dans ats_analysis ; les consignes internes restent dans ats_analysis et ne doivent JAMAIS apparaitre dans resume_tailoring.summary ou headline.
 
 FORMAT TECHNIQUE OBLIGATOIRE
 
 Retourne uniquement du JSON valide. Mappe la sortie attendue ci-dessus dans ce schema exact :
 {{
-  "tailored_resume_structured": {{
+  "resume_tailoring": {{
+    "headline": "Intitule adapte au poste, segments separes par | (max 4), ex: Auditeur Financier | Data Analysis | Controle Interne | Excel Avance",
+    "summary": "Resume professionnel 4-5 lignes MAX, factuel, humain, conserve Big Four/Deloitte/durees/contexte — AUCUNE consigne interne",
+    "skills_order": [0, 3, 1, 2],
+    "experience_order": [0, 1, 2],
     "template_recommendation": "ats_classic, modern_pro, executive_compact, luxe_minimal, studio_slate, or blue_split",
-    "contact": {{"name": "...", "email": "...", "phone": "...", "location": "...", "linkedin": "...", "website": "..."}},
-    "headline": "Intitule cible uniquement si coherent avec le CV",
-    "summary": "Resume professionnel ATS-friendly de 3 a 5 lignes, adapte a l'offre et factuel",
-    "role_keywords": ["mot-cle supporte 1", "mot-cle supporte 2", "max 10, terminologie exacte de l'offre uniquement si prouvee"],
-    "skills": ["competence 1", "competence 2", "max 14, pas de langues, competences les plus pertinentes d'abord"],
-    "languages": ["French - Native", "English - Full professional"],
-    "experience": [{{"role": "...", "company": "...", "duration": "...", "location": "...", "highlights": ["puce ATS factuelle optimisee", "puce ATS factuelle optimisee"], "source_evidence": "preuve courte issue du CV/profil"}}],
-    "education": [{{"degree": "...", "school": "...", "year": "..."}}],
-    "content_plan": ["modification concrete a appliquer au CV"],
-    "evidence_notes": ["mot-cle de l'offre -> preuve utilisee dans le CV"],
-    "unsupported_requirements": ["exigence importante non supportee par les donnees candidat"]
+    "role_keywords": ["mot-cle deja present ou prouve dans le CV, max 10"]
   }},
   "match_score": 0-100,
   "match_reasons": ["raison ATS courte 1", "raison ATS courte 2", "raison ATS courte 3"],
@@ -4028,8 +4025,8 @@ Retourne uniquement du JSON valide. Mappe la sortie attendue ci-dessus dans ce s
       "priority_2": ["changements fortement recommandes"],
       "priority_3": ["ameliorations secondaires"]
     }},
-    "optimized_experience_notes": ["ce qui a ete modifie dans la section experience"],
-    "optimized_summary_notes": ["ce qui a ete modifie dans le resume professionnel"],
+    "optimized_experience_notes": ["analyse d'alignement uniquement — le texte des experiences n'est pas reecrit par l'IA"],
+    "optimized_summary_notes": ["resume de ce qui change dans resume_tailoring.summary"],
     "score_over_80_realistic": true,
     "score_over_80_explanation": "Explique clairement si 80+ est realiste sans inventer d'experience.",
     "final_checklist": ["modification claire a appliquer avant de postuler"]
@@ -4058,18 +4055,35 @@ Retourne uniquement du JSON valide. Mappe la sortie attendue ci-dessus dans ce s
     "date_line": "A [ville candidat], le [date du jour en francais]",
     "subject": "Candidature pour le poste de [titre du poste] - {company_name}",
     "greeting": "Madame, Monsieur,",
-    "paragraphs": ["Paragraphe 1 personnalise mentionnant {company_name}", "Paragraphe 2 competences alignees sur l'offre", "Paragraphe 3 disponibilite et motivation"],
+    "paragraphs": [
+      "Paragraphe 1 : accroche + motivation pour le poste + phrase specifique a {company_name}",
+      "Paragraphe 2 : pont parcours candidat → poste (experiences CV reliees aux exigences, ex. volumes de donnees, qualite, rigueur)",
+      "Paragraphe 3 : competences/outils de l'offre + preuves transferables du CV (Python, SQL, PySpark, ETL… selon l'offre)",
+      "Paragraphe 4 (optionnel) : disponibilite + contribution concrete — sans phrase de faiblesse"
+    ],
     "sign_off": "Je vous prie de recevoir, Madame, Monsieur, l'expression de mes sinceres salutations.",
     "signature_name": "Nom complet du candidat"
   }}
 }}"""
     response = await complete_json_text(system_message, prompt)
     parsed = _parse_json_from_llm(response)
-    if "tailored_resume_structured" in parsed and "tailored_resume" not in parsed:
-        parsed["tailored_resume"] = parsed["tailored_resume_structured"]
+    parsed = _merge_generated_resume_with_profile(parsed, profile, job)
     if "tailored_cover_letter" in parsed and "cover_letter" not in parsed:
         parsed["cover_letter"] = parsed["tailored_cover_letter"]
     return normalize_application_generation(parsed)
+
+
+def _merge_generated_resume_with_profile(
+    parsed: Dict[str, Any],
+    profile: Dict[str, Any],
+    job: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Apply minimal tailoring deltas on top of the stored profile resume."""
+    tailored = apply_minimal_resume_tailoring(profile, parsed, job)
+    parsed["tailored_resume_structured"] = tailored
+    parsed["tailored_resume"] = tailored
+    parsed["resume_preservation_report"] = validate_minimal_tailoring_preserved(profile, tailored)
+    return parsed
 
 
 async def _generate_application_doc(user: User, profile: Dict[str, Any], job: Dict[str, Any]) -> Dict[str, Any]:
@@ -4090,17 +4104,20 @@ def _build_generated_application_doc(
     package_builder: Any = build_application_package,
 ) -> Dict[str, Any]:
     gen = sanitize_docx_text(normalize_application_generation(gen))
+    gen = attach_cover_letter_quality_report(gen, job)
     profile = sanitize_docx_text(profile)
     cv_text = str(profile.get("cv_text") or "")
     job_description = str(job.get("clean_description") or job.get("description") or "")
     tailored_resume = gen.get("tailored_resume_structured") or gen.get("tailored_resume") or {}
     cover_letter = gen.get("tailored_cover_letter") or gen.get("cover_letter") or {}
     resume_quality_report = gen.get("resume_quality_report") or validate_resume_quality(tailored_resume)
+    preservation_report = gen.get("resume_preservation_report") or {}
     tailored_resume_length = len(json.dumps(tailored_resume, default=str))
     cover_letter_length = len(cover_letter_to_text(cover_letter))
+    cover_letter_quality = gen.get("cover_letter_quality_report") or {}
     generation_mode = "ai" if gen else "fallback"
     logger.info(
-        "application_generation_quality user_id=%s job_id=%s has_cv_text=%s cv_text_length=%s job_description_length=%s tailored_resume_length=%s cover_letter_length=%s match_score=%s generation_mode=%s",
+        "application_generation_quality user_id=%s job_id=%s has_cv_text=%s cv_text_length=%s job_description_length=%s tailored_resume_length=%s cover_letter_length=%s cover_letter_quality=%s resume_preservation=%s match_score=%s generation_mode=%s",
         user.user_id,
         job.get("job_id"),
         bool(cv_text),
@@ -4108,6 +4125,8 @@ def _build_generated_application_doc(
         len(job_description),
         tailored_resume_length,
         cover_letter_length,
+        cover_letter_quality.get("status"),
+        preservation_report.get("status"),
         gen.get("match_score"),
         generation_mode,
     )

@@ -227,6 +227,20 @@ def normalize_application_generation(generated: Dict[str, Any] | None) -> Dict[s
     return out
 
 
+def attach_cover_letter_quality_report(
+    generated: Dict[str, Any],
+    job: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    """Add cover letter quality report when job context is available."""
+    from cover_letter_quality import validate_cover_letter_quality
+
+    out = deepcopy(generated or {})
+    cover = out.get("tailored_cover_letter") or out.get("cover_letter")
+    if isinstance(cover, dict):
+        out["cover_letter_quality_report"] = validate_cover_letter_quality(cover, job)
+    return out
+
+
 def _unique_clean_list(items: Iterable[Any], limit: int) -> List[str]:
     seen = set()
     out: List[str] = []
