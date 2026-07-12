@@ -191,6 +191,28 @@ def cover_letter_to_text(cover_letter: Dict[str, Any]) -> str:
     if isinstance(cover_letter, str):
         return cover_letter
     parts = []
+    if cover_letter.get("template") == "french_formal" or cover_letter.get("subject"):
+        sender_lines = [
+            cover_letter.get("sender_name"),
+            cover_letter.get("sender_address"),
+            cover_letter.get("sender_phone"),
+            cover_letter.get("sender_email"),
+        ]
+        sender_block = "\n".join(str(line) for line in sender_lines if line)
+        if sender_block:
+            parts.append(sender_block)
+        recipient_lines = [
+            cover_letter.get("recipient_attention"),
+            cover_letter.get("recipient_company"),
+            cover_letter.get("recipient_address"),
+        ]
+        recipient_block = "\n".join(str(line) for line in recipient_lines if line)
+        if recipient_block:
+            parts.append(recipient_block)
+        if cover_letter.get("date_line"):
+            parts.append(str(cover_letter.get("date_line")))
+        if cover_letter.get("subject"):
+            parts.append(f"Objet : {cover_letter.get('subject')}")
     greeting = cover_letter.get("greeting")
     if greeting:
         parts.append(str(greeting))
@@ -199,6 +221,9 @@ def cover_letter_to_text(cover_letter: Dict[str, Any]) -> str:
     sign_off = cover_letter.get("sign_off")
     if sign_off:
         parts.append(str(sign_off))
+    signature = cover_letter.get("signature_name")
+    if signature:
+        parts.append(str(signature))
     return "\n\n".join(parts).strip()
 
 

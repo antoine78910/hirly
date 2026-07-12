@@ -390,11 +390,12 @@ export default function Tracker() {
 
   const handleDownloadCoverLetter = () => {
     if (!selected) return;
+    const letter = getApplicationCoverLetter(selected);
     downloadCoverLetter({
       contact: profile?.contact || {},
-      letter: getApplicationCoverLetter(selected),
+      letter,
       job: selected.job,
-      template: profile?.template_style || "modern",
+      template: letter.template || (letter.subject ? "french_formal" : (profile?.template_style || "modern")),
     });
     toast.success(t("tracker.coverDownloaded"));
   };

@@ -205,9 +205,20 @@ def normalize_application_generation(generated: Dict[str, Any] | None) -> Dict[s
     cover = out.get("tailored_cover_letter") or out.get("cover_letter")
     if isinstance(cover, dict):
         cleaned_cover = {
+            "template": clean_cv_text(cover.get("template")) or "french_formal",
+            "sender_name": clean_cv_text(cover.get("sender_name")),
+            "sender_address": clean_cv_text(cover.get("sender_address")),
+            "sender_phone": clean_cv_text(cover.get("sender_phone")),
+            "sender_email": clean_cv_text(cover.get("sender_email")),
+            "recipient_attention": clean_cv_text(cover.get("recipient_attention")),
+            "recipient_company": clean_cv_text(cover.get("recipient_company")),
+            "recipient_address": clean_cv_text(cover.get("recipient_address")),
+            "date_line": clean_cv_text(cover.get("date_line")),
+            "subject": clean_cv_text(cover.get("subject")),
             "greeting": clean_cv_text(cover.get("greeting")),
             "paragraphs": [clean_cv_text(item) for item in cover.get("paragraphs") or [] if clean_cv_text(item)],
             "sign_off": clean_cv_text(cover.get("sign_off")),
+            "signature_name": clean_cv_text(cover.get("signature_name")),
         }
         out["tailored_cover_letter"] = cleaned_cover
         out["cover_letter"] = cleaned_cover

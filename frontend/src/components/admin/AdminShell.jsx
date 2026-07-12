@@ -12,6 +12,7 @@ import {
   Sun,
   UserSearch,
   Users,
+  FlaskConical,
 } from "lucide-react";
 import { BRAND } from "../../lib/brand";
 import { trackEvent } from "../../lib/analytics";
@@ -26,6 +27,7 @@ const navItems = [
   { to: "/admin/creators", label: "Creators", icon: GraduationCap },
   { to: "/admin/training", label: "Training", icon: BookOpen },
   { to: "/admin/features", label: "Features", icon: MessageSquare },
+  { to: "/admin/ats-lab", label: "ATS Lab", icon: FlaskConical },
   { to: "/admin/analytics", label: "Analytics", icon: BarChart3 },
 ];
 

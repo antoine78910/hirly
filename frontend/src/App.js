@@ -43,6 +43,7 @@ import AdminInfluencers from "@/pages/AdminInfluencers";
 import AdminCreators from "@/pages/AdminCreators";
 import AdminTraining from "@/pages/AdminTraining";
 import AdminFeatures from "@/pages/AdminFeatures";
+import AdminAtsLab from "@/pages/AdminAtsLab";
 import InviteLanding from "@/pages/InviteLanding";
 import Training from "@/pages/Training";
 import TrainingCourse from "@/pages/TrainingCourse";
@@ -182,6 +183,7 @@ function AppRouter() {
         <Route path="/admin/creators" element={<AdminPage><AdminCreators /></AdminPage>} />
         <Route path="/admin/training" element={<AdminPage><AdminTraining /></AdminPage>} />
         <Route path="/admin/features" element={<AdminPage><AdminFeatures /></AdminPage>} />
+        <Route path="/admin/ats-lab" element={<AdminPage><AdminAtsLab /></AdminPage>} />
         <Route path="/admin/analytics" element={<AdminPage><AdminAnalytics /></AdminPage>} />
         <Route path="/onboarding" element={<Onboarding />} />
         <Route element={<AppLayout />}>

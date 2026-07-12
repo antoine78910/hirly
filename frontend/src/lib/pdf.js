@@ -62,6 +62,11 @@ const writeWrapped = (doc, text, x, y, maxW, lineH) => {
   return y;
 };
 
+const safeFilePart = (value, fallback = "document") => {
+  const cleaned = String(value || fallback).replace(/[<>:"/\\|?*]+/g, " ").replace(/\s+/g, " ").trim();
+  return cleaned || fallback;
+};
+
 /* ====== Tailored CV ====== */
 export const downloadTailoredCV = ({ contact = {}, resume = {}, job, template = "modern" }) => {
   const doc = newDoc();
@@ -209,17 +214,91 @@ export const downloadTailoredCV = ({ contact = {}, resume = {}, job, template = 
     });
   }
 
-  const filename = `CV - ${name} - ${job?.company || "tailored"}.pdf`;
+  const filename = `CV - ${safeFilePart(name)} - ${safeFilePart(job?.company, "tailored")}.pdf`;
   doc.save(filename);
 };
 
 /* ====== Cover Letter ====== */
 export const downloadCoverLetter = ({ contact = {}, letter = {}, job, template = "modern" }) => {
   const doc = newDoc();
-  const palette = COLORS[template] || COLORS.modern;
-  let y = MARGIN_X + 6;
+  const palette = COLORS.modern;
+  const company = safeFilePart(letter.recipient_company || job?.company, "Company");
+  const name = safeFilePart(contact.name || letter.sender_name || letter.signature_name, "Candidate");
+  const useFrench = template === "french_formal" || letter.template === "french_formal" || Boolean(letter.subject);
+  let y = MARGIN_X;
 
-  const name = (contact.name || "Your Name").trim();
+  if (useFrench) {
+    const senderLines = [
+      letter.sender_name || contact.name,
+      letter.sender_address || contact.location,
+      letter.sender_phone || contact.phone,
+      letter.sender_email || contact.email,
+    ].filter(Boolean);
+    const recipientLines = [
+      letter.recipient_attention || "À l'attention du Service des Ressources Humaines",
+      letter.recipient_company || job?.company,
+      letter.recipient_address || job?.location,
+    ].filter(Boolean);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    setText(doc, palette.text);
+    senderLines.forEach((line) => {
+      doc.text(String(line), MARGIN_X, y);
+      y += 14;
+    });
+
+    let recipientY = MARGIN_X;
+    doc.setFontSize(10);
+    recipientLines.forEach((line) => {
+      doc.text(String(line), PAGE_W - MARGIN_X, recipientY, { align: "right" });
+      recipientY += 14;
+    });
+    y = Math.max(y, recipientY) + 18;
+
+    const dateLine = letter.date_line || new Date().toLocaleDateString("fr-FR", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }).replace(/^/, "À ").replace(/(\d+) ([^ ]+) (\d+)/, "À $2, le $1 $3");
+    doc.text(dateLine.startsWith("À") ? dateLine : `À ${contact.location || "France"}, le ${dateLine}`, MARGIN_X, y);
+    y += 22;
+
+    const subject = letter.subject || `Candidature pour le poste de ${job?.title || "ce poste"} - ${company}`;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    y = writeWrapped(doc, `Objet : ${subject}`, MARGIN_X, y, PAGE_W - MARGIN_X * 2, 16);
+    y += 16;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10.5);
+    setText(doc, palette.text);
+    doc.text(letter.greeting || "Madame, Monsieur,", MARGIN_X, y);
+    y += 18;
+
+    (letter.paragraphs || []).forEach((paragraph) => {
+      y = writeWrapped(doc, paragraph, MARGIN_X, y, PAGE_W - MARGIN_X * 2, 15);
+      y += 12;
+    });
+
+    y += 4;
+    y = writeWrapped(
+      doc,
+      letter.sign_off || "Je vous prie de recevoir, Madame, Monsieur, l'expression de mes sincères salutations.",
+      MARGIN_X,
+      y,
+      PAGE_W - MARGIN_X * 2,
+      15,
+    );
+    y += 24;
+    doc.setFont("helvetica", "bold");
+    doc.text(letter.signature_name || contact.name || name, MARGIN_X, y);
+
+    doc.save(`Lettre de motivation - ${name} - ${company}.pdf`);
+    return;
+  }
+
+  y = MARGIN_X + 6;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(18);
   setText(doc, palette.name);
@@ -238,7 +317,6 @@ export const downloadCoverLetter = ({ contact = {}, letter = {}, job, template =
   doc.line(MARGIN_X, y, PAGE_W - MARGIN_X, y);
   y += 22;
 
-  // Date
   const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   doc.setFontSize(10);
   setText(doc, palette.muted);
@@ -255,14 +333,12 @@ export const downloadCoverLetter = ({ contact = {}, letter = {}, job, template =
   }
   y += 8;
 
-  // Greeting
   doc.setFont("helvetica", "normal");
   doc.setFontSize(11);
   setText(doc, palette.text);
   doc.text(letter.greeting || `Dear ${job?.company || "Hiring"} team,`, MARGIN_X, y);
   y += 20;
 
-  // Paragraphs
   doc.setFontSize(10.5);
   (letter.paragraphs || []).forEach((p) => {
     y = writeWrapped(doc, p, MARGIN_X, y, PAGE_W - MARGIN_X * 2, 15);
@@ -275,6 +351,5 @@ export const downloadCoverLetter = ({ contact = {}, letter = {}, job, template =
   doc.setFont("helvetica", "bold");
   doc.text(name, MARGIN_X, y);
 
-  const filename = `Cover Letter - ${name} - ${job?.company || "letter"}.pdf`;
-  doc.save(filename);
+  doc.save(`Cover Letter - ${name} - ${company}.pdf`);
 };

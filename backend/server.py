@@ -664,6 +664,13 @@ class SwipeRequest(BaseModel):
     direction: Literal["left", "right"]
 
 
+class AdminAtsLabGenerateRequest(BaseModel):
+    application_id: Optional[str] = None
+    user_id: Optional[str] = None
+    job_id: Optional[str] = None
+    persist: bool = False
+
+
 class AdminJobsRefreshRequest(BaseModel):
     search_role: Optional[str] = None
     location: Optional[str] = None
@@ -3870,6 +3877,9 @@ async def claude_generate_application(profile: Dict[str, Any], job: Dict[str, An
 
     prompt = f"""Agis comme l'ATS utilise par {company_name}, c'est-a-dire {ats_provider_label}.
 
+REGLES SPECIFIQUES A CET ATS
+{ats_hint}
+
 Tu analyses les CV uniquement via des regles automatiques : parsing, mots-cles, structure, correspondance avec l'offre et scoring.
 Tu ne dois faire aucune interpretation humaine, aucun conseil subjectif de recruteur, et aucune recommandation hors objectif ATS.
 
@@ -3892,6 +3902,14 @@ OBJECTIF
 8. Ameliorer la section experience sans inventer d'informations.
 9. Proposer les optimisations necessaires pour atteindre un score ATS superieur a 80 %, si cela est realiste.
 10. Si un score superieur a 80 % n'est pas atteignable sans inventer d'experience, explique clairement pourquoi.
+11. Generer une lettre de motivation personnalisee pour {company_name} et le poste "{job.get("title") or "ce poste"}".
+
+LETTRE DE MOTIVATION
+- Si cover_letter_reference est fourni dans le profil candidat, adapte le ton et la structure sans copier mot pour mot.
+- Sinon, utilise le template french_formal (format lettre professionnelle francaise).
+- Mentionne explicitement {company_name} dans au moins un paragraphe du corps.
+- L'objet doit inclure le titre du poste et le nom de l'entreprise.
+- Reste factuel : n'invente aucune experience, diplome ou competence absente du CV.
 
 SORTIE ATTENDUE
 
@@ -3956,6 +3974,10 @@ Propose un resume professionnel ATS-friendly de 3 a 5 lignes, adapte a l'offre.
 7. Liste finale des modifications a appliquer
 
 Donne-moi une checklist claire des changements a faire dans mon CV avant de postuler.
+
+8. Lettre de motivation optimisee pour {company_name}
+
+Redige une lettre de motivation en francais (sauf si l'offre est clairement en anglais), personnalisee pour {company_name} et le poste cible.
 
 CONTRAINTES GENERALES
 - Reste factuel.
@@ -4023,6 +4045,22 @@ Retourne uniquement du JSON valide. Mappe la sortie attendue ci-dessus dans ce s
     "no_keyword_stuffing": true/false,
     "ats_readable": true/false,
     "notes": ["specific remaining issue, if any"]
+  }},
+  "tailored_cover_letter": {{
+    "template": "french_formal",
+    "sender_name": "Nom complet du candidat",
+    "sender_address": "Adresse du candidat",
+    "sender_phone": "Telephone",
+    "sender_email": "Email",
+    "recipient_attention": "A l'attention du Service des Ressources Humaines",
+    "recipient_company": "{company_name}",
+    "recipient_address": "Adresse ou ville de l'entreprise si connue, sinon ville du poste",
+    "date_line": "A [ville candidat], le [date du jour en francais]",
+    "subject": "Candidature pour le poste de [titre du poste] - {company_name}",
+    "greeting": "Madame, Monsieur,",
+    "paragraphs": ["Paragraphe 1 personnalise mentionnant {company_name}", "Paragraphe 2 competences alignees sur l'offre", "Paragraphe 3 disponibilite et motivation"],
+    "sign_off": "Je vous prie de recevoir, Madame, Monsieur, l'expression de mes sinceres salutations.",
+    "signature_name": "Nom complet du candidat"
   }}
 }}"""
     response = await complete_json_text(system_message, prompt)
@@ -10789,6 +10827,99 @@ async def admin_list_applications(
             for app_doc in apps
         ],
         "filter": status_filter or "all",
+    }
+
+
+@api_router.post("/admin/ats-lab/generate")
+async def admin_ats_lab_generate(
+    body: AdminAtsLabGenerateRequest,
+    admin: User = Depends(require_admin_user),
+):
+    """Run ATS-tailored CV + cover letter generation for admin experimentation (no credit charge)."""
+    user_id = (body.user_id or "").strip()
+    job_id = (body.job_id or "").strip()
+    application_id = (body.application_id or "").strip()
+
+    if application_id:
+        app_doc = await db.applications.find_one({"application_id": application_id}, {"_id": 0})
+        if not app_doc:
+            raise HTTPException(status_code=404, detail="Application not found")
+        user_id = app_doc.get("user_id") or user_id
+        job_id = app_doc.get("job_id") or job_id
+    if not user_id or not job_id:
+        raise HTTPException(status_code=400, detail="application_id or both user_id and job_id are required")
+
+    profile = await db.profiles.find_one({"user_id": user_id}, {"_id": 0})
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    job = await db.jobs.find_one({"job_id": job_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+
+    started = datetime.now(timezone.utc)
+    try:
+        gen = await claude_generate_application(profile, job)
+    except LLMProviderNotConfigured as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("admin_ats_lab_generate_failed user_id=%s job_id=%s", user_id, job_id)
+        raise HTTPException(status_code=500, detail=str(exc) or "Generation failed") from exc
+
+    gen = sanitize_docx_text(normalize_application_generation(gen))
+    tailored_resume = gen.get("tailored_resume_structured") or gen.get("tailored_resume") or {}
+    cover_letter = gen.get("tailored_cover_letter") or gen.get("cover_letter") or {}
+    elapsed_ms = int((datetime.now(timezone.utc) - started).total_seconds() * 1000)
+
+    persisted = False
+    if body.persist and application_id:
+        update_fields = {
+            "tailored_resume_structured": tailored_resume,
+            "tailored_resume": tailored_resume,
+            "tailored_cover_letter": cover_letter,
+            "cover_letter": cover_letter,
+            "match_score": gen.get("match_score"),
+            "match_reasons": gen.get("match_reasons") or [],
+            "ats_score_before": gen.get("ats_score_before"),
+            "ats_score_after": gen.get("ats_score_after"),
+            "ats_provider": gen.get("ats_provider"),
+            "ats_analysis": gen.get("ats_analysis") or {},
+            "keywords_gap": gen.get("keywords_gap") or [],
+            "resume_quality_checks": gen.get("resume_quality_checks") or {},
+            "resume_quality_report": gen.get("resume_quality_report") or {},
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.applications.update_one(
+            {"application_id": application_id},
+            {"$set": update_fields},
+        )
+        persisted = True
+
+    return {
+        "ok": True,
+        "elapsed_ms": elapsed_ms,
+        "persisted": persisted,
+        "application_id": application_id or None,
+        "user_id": user_id,
+        "job_id": job_id,
+        "user_email": (user_doc or {}).get("email"),
+        "profile_snapshot": {
+            "cv_text": (profile.get("cv_text") or "")[:8000],
+            "contact": profile.get("contact") or {},
+            "cover_letter_reference": (profile.get("cover_letter_text") or "")[:2000],
+            "template_style": profile.get("template_style"),
+        },
+        "job": {
+            "job_id": job.get("job_id"),
+            "title": job.get("title"),
+            "company": job.get("company"),
+            "location": job.get("location"),
+            "ats_provider": job.get("ats_provider"),
+        },
+        "generation": gen,
+        "tailored_resume": tailored_resume,
+        "tailored_cover_letter": cover_letter,
+        "cover_letter_text": cover_letter_to_text(cover_letter),
     }
 
 

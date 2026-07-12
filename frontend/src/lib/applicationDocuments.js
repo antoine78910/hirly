@@ -22,12 +22,23 @@ export function normalizeCoverLetter(letter = {}) {
     signatureName = signatureName || parts[1] || null;
   }
 
+  const template = letter.template || (letter.subject ? "french_formal" : "standard");
+
   return {
     ...letter,
+    template,
     paragraphs,
-    sign_off: signOff || "Warm regards,",
+    sign_off: signOff || (template === "french_formal"
+      ? "Je vous prie de recevoir, Madame, Monsieur, l'expression de mes sincères salutations."
+      : "Warm regards,"),
     signature_name: signatureName,
+    greeting: letter.greeting || (template === "french_formal" ? "Madame, Monsieur," : ""),
   };
+}
+
+export function isFrenchFormalCoverLetter(letter = {}) {
+  const normalized = normalizeCoverLetter(letter);
+  return normalized.template === "french_formal" || Boolean(normalized.subject);
 }
 
 export function getApplicationCoverLetter(application) {
@@ -48,7 +59,12 @@ export function hasApplicationResume(application) {
 
 export function hasApplicationCoverLetter(application) {
   const letter = getApplicationCoverLetter(application);
-  return Boolean(letter.greeting || letter.paragraphs?.length || letter.sign_off);
+  return Boolean(
+    letter.greeting
+    || letter.paragraphs?.length
+    || letter.sign_off
+    || letter.subject,
+  );
 }
 
 export function hasApplicationDocuments(application) {
