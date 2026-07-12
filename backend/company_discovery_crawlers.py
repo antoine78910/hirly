@@ -245,7 +245,13 @@ async def discover_via_serper_search(
     return summary
 
 
-async def run_company_discovery(db, *, dry_run: bool = False) -> Dict[str, Any]:
+async def run_company_discovery(
+    db,
+    *,
+    dry_run: bool = False,
+    company_list_start_offset: Optional[int] = None,
+    company_list_max_companies: Optional[int] = None,
+) -> Dict[str, Any]:
     cert_result = None
     if env_bool("CERT_TRANSPARENCY_DISCOVERY_ENABLED", True):
         cert_result = await discover_via_certificate_transparency(db, dry_run=dry_run)
@@ -262,7 +268,12 @@ async def run_company_discovery(db, *, dry_run: bool = False) -> Dict[str, Any]:
     company_list_result = None
     if env_bool("COMPANY_LIST_DISCOVERY_ENABLED", True):
         from company_list_discovery import discover_via_company_list
-        company_list_result = await discover_via_company_list(db, dry_run=dry_run)
+        company_list_result = await discover_via_company_list(
+            db,
+            dry_run=dry_run,
+            start_offset=company_list_start_offset,
+            max_companies_per_run=company_list_max_companies,
+        )
     return {
         "dry_run": dry_run,
         "certificate_transparency": cert_result,
@@ -284,17 +295,21 @@ def company_discovery_loop_enabled() -> bool:
 
 
 async def run_company_discovery_loop(db) -> None:
-    """Runs as often as env config allows (default 20min, floor 10min) --
-    SERPER_API_KEY is now configured, so there's no reason to sit on the
-    original conservative 4h default. Still not as fast as the 5-minute
-    ATS-direct refresh loop: this hits an external paid API (Serper) and a
-    rate-limit-prone free one (crt.sh), so the floor exists to avoid
-    burning through Serper quota or getting crt.sh to start hard-blocking.
+    """Runs as often as env config allows (default/floor now both 10min) --
+    SERPER_API_KEY is now configured, and discover_via_company_list's own
+    rotating cursor + per-company recheck dedup (company_list_discovery.py)
+    means a faster cadence spends its budget reaching new companies instead
+    of re-confirming ones already known, so there's no reason to sit on a
+    slower default anymore. Still bounded by a 10-min floor: this hits an
+    external paid API (Serper) and a rate-limit-prone free one (crt.sh), and
+    a real 429 from Serper now sets a cooldown (see company_list_discovery's
+    _cooldown_until("serper") check) so a too-fast cadence self-throttles
+    instead of erroring unbounded.
     """
     if not company_discovery_loop_enabled():
         logger.info("company_discovery_loop_disabled")
         return
-    interval_minutes = max(10, env_int("COMPANY_DISCOVERY_INTERVAL_MINUTES", 20))
+    interval_minutes = max(10, env_int("COMPANY_DISCOVERY_INTERVAL_MINUTES", 10))
     initial_delay = max(0, env_int("COMPANY_DISCOVERY_INITIAL_DELAY_SECONDS", 180))
     logger.info("company_discovery_loop_started interval_minutes=%s initial_delay_seconds=%s", interval_minutes, initial_delay)
     await asyncio.sleep(initial_delay)

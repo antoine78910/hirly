@@ -8945,10 +8945,23 @@ async def admin_jobs_jsearch_harvest_status(admin: User = Depends(require_admin_
 async def admin_jobs_company_discovery(
     admin: User = Depends(require_admin_user),
     dry_run: bool = False,
+    start_offset: Optional[int] = None,
+    max_companies: Optional[int] = None,
 ):
     _require_job_maintenance_enabled()
-    logger.info("admin_company_discovery_requested admin=%s dry_run=%s", admin.email, dry_run)
-    return await run_company_discovery(db, dry_run=dry_run)
+    logger.info(
+        "admin_company_discovery_requested admin=%s dry_run=%s start_offset=%s max_companies=%s",
+        admin.email,
+        dry_run,
+        start_offset,
+        max_companies,
+    )
+    return await run_company_discovery(
+        db,
+        dry_run=dry_run,
+        company_list_start_offset=start_offset,
+        company_list_max_companies=max_companies,
+    )
 
 
 @api_router.get("/admin/jobs/company-discovery/status")
