@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Search } from "lucide-react";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
@@ -6,7 +6,14 @@ import { sel } from "../lib/selectionTheme";
 import { ROLE_GROUPS, searchRoleSuggestions } from "../lib/roleSuggestions";
 import { isFrench, translateRoleGroupLabel, translateRoleLabel } from "../lib/localizedDisplay";
 
-export default function RolePicker({ value, onChange, testId = "role-picker", variant = "dark", lang = "en" }) {
+export default function RolePicker({
+  value,
+  onChange,
+  testId = "role-picker",
+  variant = "dark",
+  lang = "en",
+  inline = false,
+}) {
   const light = variant === "light";
   const labelClass = light ? "text-sm font-semibold text-zinc-700" : "text-sm font-semibold text-zinc-200";
   const triggerClass = light
@@ -29,9 +36,15 @@ export default function RolePicker({ value, onChange, testId = "role-picker", va
   const roleOnClass = sel.listOn;
   const roleOffClass = light ? sel.listOff : `${sel.listOff} text-zinc-700`;
   const searchIconClass = light ? "w-4 h-4 text-zinc-400 absolute left-3 top-3.5" : "w-4 h-4 text-sprout-muted absolute left-3 top-3.5";
+
   const [query, setQuery] = useState("");
-  const [manual, setManual] = useState(false);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(inline);
+  const blurTimerRef = useRef(null);
+
+  useEffect(() => {
+    if (!open && !inline) return;
+    setQuery((value || "").trim());
+  }, [open, inline, value]);
 
   const filteredGroups = useMemo(() => {
     const q = query.trim();
@@ -47,26 +60,136 @@ export default function RolePicker({ value, onChange, testId = "role-picker", va
       .filter((group) => group.roles.length > 0);
   }, [lang, query]);
 
-  const selectRole = (role) => {
-    setManual(false);
-    // Same reasoning as RoleAutocomplete.pickRole: save the label in the
-    // language the picker is currently shown in, not the raw taxonomy key.
-    onChange(translateRoleLabel(role, lang) || role);
-    setOpen(false);
+  const trimmedQuery = query.trim();
+  const displayValue = (value || "").trim();
+  const showCustomAction = trimmedQuery.length >= 1;
+  const customActionLabel = isFrench(lang)
+    ? `Rechercher « ${trimmedQuery} »`
+    : `Search for "${trimmedQuery}"`;
+
+  const commitRole = (roleText, { closePanel = true } = {}) => {
+    const next = (roleText || "").trim();
+    if (!next) return;
+    setQuery(next);
+    onChange(next);
+    if (closePanel && !inline) setOpen(false);
   };
+
+  const selectRole = (role) => {
+    const label = translateRoleLabel(role, lang) || role;
+    commitRole(label);
+  };
+
+  const handleSearchChange = (event) => {
+    const next = event.target.value;
+    setQuery(next);
+    onChange(next.trim());
+  };
+
+  const handleBlur = () => {
+    blurTimerRef.current = setTimeout(() => {
+      if (!inline) setOpen(false);
+      if (trimmedQuery) commitRole(trimmedQuery, { closePanel: false });
+    }, 150);
+  };
+
+  const handleFocus = () => {
+    if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
+    if (!inline) setOpen(true);
+  };
+
+  const roleLabel = isFrench(lang) ? "Métier ciblé" : "Target role";
+  const searchLabel = isFrench(lang) ? "Rechercher ou saisir un métier" : "Search or enter a role";
+  const placeholder = isFrench(lang) ? "Ex. Coiffeur, Analyste crédit…" : "e.g. Hair stylist, Credit analyst…";
+  const choosePlaceholder = isFrench(lang) ? "Choisir ou saisir un métier" : "Choose or enter a role";
+
+  const suggestionsList = (
+    <div className={listClass}>
+      {showCustomAction ? (
+        <button
+          type="button"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => commitRole(trimmedQuery)}
+          className={`w-full px-4 py-3 text-left text-sm font-semibold ${roleOnClass}`}
+          data-testid={`${testId}-use-custom`}
+        >
+          {customActionLabel}
+        </button>
+      ) : null}
+
+      {filteredGroups.length === 0 ? (
+        showCustomAction ? null : (
+          <div className={emptyClass}>
+            {isFrench(lang)
+              ? "Saisissez un métier — votre mot-clé sera utilisé pour la recherche."
+              : "Type a job title — your keyword will be used for search."}
+          </div>
+        )
+      ) : (
+        filteredGroups.map((group) => (
+          <section key={group.group} className="py-3">
+            <h3 className={groupTitleClass}>{translateRoleGroupLabel(group.group, lang)}</h3>
+            <div className="space-y-1">
+              {group.roles.map((role) => (
+                <button
+                  key={role}
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => selectRole(role)}
+                  className={`w-full px-4 py-2.5 text-left text-sm font-medium transition-colors ${
+                    displayValue === (translateRoleLabel(role, lang) || role) ? roleOnClass : roleOffClass
+                  }`}
+                  data-testid={`${testId}-role`}
+                >
+                  {translateRoleLabel(role, lang)}
+                </button>
+              ))}
+            </div>
+          </section>
+        ))
+      )}
+    </div>
+  );
+
+  if (inline) {
+    return (
+      <div className="space-y-2" data-testid={testId}>
+        <Label className={labelClass}>{roleLabel}</Label>
+        <div className="relative">
+          <Search className={searchIconClass} />
+          <Input
+            value={query}
+            onChange={handleSearchChange}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+            placeholder={placeholder}
+            className={inputClass}
+            data-testid={`${testId}-search`}
+            autoComplete="off"
+          />
+        </div>
+        <p className={`text-xs ${light ? "text-zinc-500" : "text-sprout-muted"}`}>
+          {isFrench(lang)
+            ? "Toute saisie fonctionne, même si le métier n'est pas dans la liste."
+            : "Any entry works, even if the role is not in the list."}
+        </p>
+        {(trimmedQuery.length >= 1) ? suggestionsList : null}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3" data-testid={testId}>
       <div className="space-y-1.5">
-        <Label className={labelClass}>{isFrench(lang) ? "Métier ciblé" : "Target role"}</Label>
+        <Label className={labelClass}>{roleLabel}</Label>
         <button
           type="button"
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => setOpen((current) => !current)}
           className={triggerClass}
           data-testid={`${testId}-toggle`}
         >
           <span className={valueClass}>
-            {translateRoleLabel(value, lang) || (isFrench(lang) ? "Choisir un métier" : "Choose a role")}
+            {displayValue || choosePlaceholder}
           </span>
           <ChevronDown className={`${chevronClass} transition-transform ${open ? "rotate-180" : ""}`} />
         </button>
@@ -75,71 +198,27 @@ export default function RolePicker({ value, onChange, testId = "role-picker", va
       {open && (
         <>
           <div className="space-y-1.5">
-            <Label className={labelClass}>{isFrench(lang) ? "Rechercher un métier" : "Search roles"}</Label>
-        <div className="relative">
-          <Search className={searchIconClass} />
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={isFrench(lang) ? "Rechercher des métiers courants" : "Search common roles"}
-            className={inputClass}
-            data-testid={`${testId}-search`}
-          />
-        </div>
-      </div>
-
-      <div className={listClass}>
-        {filteredGroups.length === 0 ? (
-          <div className={emptyClass}>{isFrench(lang) ? "Aucun métier correspondant. Choisissez Autre ci-dessous." : "No matching roles. Choose Other below."}</div>
-        ) : (
-          filteredGroups.map((group) => (
-            <section key={group.group} className="py-3">
-              <h3 className={groupTitleClass}>{translateRoleGroupLabel(group.group, lang)}</h3>
-              <div className="space-y-1">
-                {group.roles.map((role) => (
-                  <button
-                    key={role}
-                    type="button"
-                    onClick={() => selectRole(role)}
-                    className={`w-full px-4 py-2.5 text-left text-sm font-medium transition-colors ${
-                      !manual && value === role ? roleOnClass : roleOffClass
-                    }`}
-                    data-testid={`${testId}-role`}
-                  >
-                    {translateRoleLabel(role, lang)}
-                  </button>
-                ))}
-              </div>
-            </section>
-          ))
-        )}
-        <button
-          type="button"
-          onClick={() => {
-            setManual(true);
-            onChange("");
-          }}
-          className={`w-full px-4 py-3 text-left text-sm font-semibold ${
-            manual ? roleOnClass : roleOffClass
-          }`}
-          data-testid={`${testId}-other`}
-        >
-          {isFrench(lang) ? "Autre" : "Other"}
-        </button>
-      </div>
-
-      {manual && (
-        <div className="space-y-1.5">
-          <Label className={labelClass}>{isFrench(lang) ? "Métier personnalisé" : "Custom role"}</Label>
-          <Input
-            value={value || ""}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder={isFrench(lang) ? "Saisissez votre métier cible" : "Enter your target role"}
-            className={inputClass}
-            data-testid={`${testId}-manual`}
-          />
-        </div>
-      )}
+            <Label className={labelClass}>{searchLabel}</Label>
+            <div className="relative">
+              <Search className={searchIconClass} />
+              <Input
+                value={query}
+                onChange={handleSearchChange}
+                onFocus={handleFocus}
+                onBlur={handleBlur}
+                placeholder={placeholder}
+                className={inputClass}
+                data-testid={`${testId}-search`}
+                autoComplete="off"
+              />
+            </div>
+          </div>
+          <p className={`text-xs ${light ? "text-zinc-500" : "text-sprout-muted"}`}>
+            {isFrench(lang)
+              ? "Toute saisie fonctionne, même si le métier n'est pas dans la liste."
+              : "Any entry works, even if the role is not in the list."}
+          </p>
+          {suggestionsList}
         </>
       )}
     </div>

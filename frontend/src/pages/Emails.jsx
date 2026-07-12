@@ -1006,24 +1006,24 @@ export default function Emails() {
         <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
           <button
             type="button"
-            className="grid h-9 w-9 shrink-0 place-items-center text-zinc-500 sm:h-10 sm:w-10"
+            className="grid h-9 w-9 shrink-0 place-items-center text-sprout-muted sm:h-10 sm:w-10"
             aria-label="Menu"
           >
             <Menu className="h-5 w-5" />
           </button>
-          <div className="flex h-10 min-w-0 flex-1 items-center rounded-full bg-zinc-100 px-3 sm:h-11 sm:px-4">
+          <div className="flex h-10 min-w-0 flex-1 items-center rounded-full border border-sprout-border bg-sprout-surface-2 px-3 sm:h-11 sm:px-4">
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={t("emails.searchMail")}
-              className="w-full min-w-0 bg-transparent text-sm text-zinc-900 placeholder:text-zinc-400 outline-none"
+              className="w-full min-w-0 bg-transparent text-sm text-sprout-text placeholder:text-sprout-dim outline-none"
               data-testid="inbox-search"
             />
           </div>
           <button
             type="button"
             onClick={() => navigate("/settings")}
-            className="grid h-9 w-9 shrink-0 place-items-center text-zinc-500 sm:h-10 sm:w-10"
+            className="grid h-9 w-9 shrink-0 place-items-center text-sprout-muted sm:h-10 sm:w-10"
             aria-label="Settings"
           >
             <Settings className="h-5 w-5" />

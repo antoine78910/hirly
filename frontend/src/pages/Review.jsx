@@ -115,12 +115,12 @@ export default function Review() {
           />
 
           {!reviewEnabled ? (
-            <section className="mt-6 rounded-3xl border border-dashed border-zinc-200 bg-zinc-50 px-6 py-10 text-center">
-              <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-violet-50 text-violet-600">
+            <section className="mt-6 rounded-3xl border border-dashed shell-dashed shell-inset px-6 py-10 text-center">
+              <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-violet-500/15 text-violet-400">
                 <ShieldCheck className="h-7 w-7" />
               </div>
-              <h2 className="mt-5 font-display text-xl font-bold text-zinc-900">{t("review.disabledTitle")}</h2>
-              <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-zinc-600">
+              <h2 className="mt-5 font-display text-xl font-bold shell-title">{t("review.disabledTitle")}</h2>
+              <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed shell-body">
                 {t("review.disabledBody")}
               </p>
               <Link
@@ -136,12 +136,12 @@ export default function Review() {
               <Loader2 className="h-6 w-6 animate-spin text-zinc-500" />
             </div>
           ) : reviewQueue.length === 0 ? (
-            <section className="mt-6 rounded-3xl border border-dashed border-zinc-200 bg-zinc-50 px-6 py-10 text-center">
-              <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-white text-zinc-500 shadow-sm">
+            <section className="mt-6 rounded-3xl border border-dashed shell-dashed shell-inset px-6 py-10 text-center">
+              <div className="shell-surface mx-auto grid h-14 w-14 place-items-center rounded-2xl text-sprout-muted shadow-sm">
                 <CheckCircle2 className="h-7 w-7" />
               </div>
-              <h2 className="mt-5 font-display text-xl font-bold text-zinc-900">{t("review.allCaughtUp")}</h2>
-              <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-zinc-600">
+              <h2 className="mt-5 font-display text-xl font-bold shell-title">{t("review.allCaughtUp")}</h2>
+              <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed shell-body">
                 {t("review.emptyBody")}
               </p>
               <Link
@@ -168,28 +168,28 @@ export default function Review() {
                   >
                     <CompanyLogo company={app.job?.company} size="md" rounded="xl" />
                     <div className="min-w-0 flex-1">
-                      <p className="font-display text-lg font-bold leading-tight text-zinc-900">
+                      <p className="font-display text-lg font-bold leading-tight shell-title">
                         {app.job?.title}
                       </p>
-                      <p className="mt-0.5 text-sm text-zinc-600">{app.job?.company}</p>
+                      <p className="mt-0.5 text-sm shell-body">{app.job?.company}</p>
                       {app.job?.location ? (
-                        <p className="mt-2 inline-flex items-center gap-1 text-xs text-zinc-500">
+                        <p className="mt-2 inline-flex items-center gap-1 text-xs shell-body">
                           <MapPin className="h-3.5 w-3.5" />
                           {app.job.location}
                         </p>
                       ) : null}
                       <div className="mt-3 flex flex-wrap gap-2">
-                        <span className="rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-semibold text-violet-700">
+                        <span className="rounded-full bg-violet-500/15 px-2.5 py-1 text-[11px] font-semibold text-violet-400">
                           {t("review.readyToReview")}
                         </span>
-                        <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-[11px] font-semibold text-zinc-600">
+                        <span className="rounded-full shell-chip-count px-2.5 py-1 text-[11px] font-semibold shell-body">
                           {fmtDate(app.created_at)
                             ? t("review.generatedOn", { date: fmtDate(app.created_at) })
                             : t("review.generatedRecently")}
                         </span>
                       </div>
                     </div>
-                    <ArrowRight className="mt-2 h-5 w-5 shrink-0 text-zinc-400" />
+                    <ArrowRight className="mt-2 h-5 w-5 shrink-0 text-sprout-dim" />
                   </button>
                 </motion.li>
               ))}
@@ -202,12 +202,12 @@ export default function Review() {
         <DialogContent className="max-h-[90dvh] max-w-2xl overflow-y-auto p-0" data-testid="review-application-dialog">
           {selected ? (
             <>
-              <DialogHeader className="sticky top-0 z-10 border-b border-zinc-200 bg-white px-6 pb-4 pt-6">
+              <DialogHeader className="sticky top-0 z-10 shell-border-b shell-surface px-6 pb-4 pt-6">
                 <div className="flex items-start gap-3">
                   <CompanyLogo company={selected.job?.company} size="sm" rounded="xl" />
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold text-violet-600">{selected.job?.company}</p>
-                    <DialogTitle className="font-display text-2xl tracking-tight text-zinc-900">
+                    <p className="text-xs font-semibold text-violet-400">{selected.job?.company}</p>
+                    <DialogTitle className="font-display text-2xl tracking-tight shell-title">
                       {selected.job?.title}
                     </DialogTitle>
                   </div>
@@ -215,7 +215,7 @@ export default function Review() {
               </DialogHeader>
 
               <div className="space-y-5 px-6 py-5">
-                <p className="text-sm text-zinc-600">
+                <p className="text-sm shell-body">
                   {t("review.dialogHint")}
                 </p>
 

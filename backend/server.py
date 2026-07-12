@@ -5576,6 +5576,7 @@ async def get_feed(
         return list(dict.fromkeys(token for token in family if token))
 
     target_role_category = _role_category_from_text(feed_target_role)
+    feed_strict_tokens = resolve_role_match_tokens(feed_target_role) or _tokens(feed_target_role)
 
     def _job_role_category(job: Dict[str, Any]) -> Optional[str]:
         title_category = _text_category(_normalize_ascii(str(job.get("title") or "")))
@@ -5616,7 +5617,17 @@ async def get_feed(
             return True
         if target_role_category == job_category:
             return True
-        return frozenset({target_role_category, job_category}) in _COMPATIBLE_CATEGORY_PAIRS
+        if frozenset({target_role_category, job_category}) in _COMPATIBLE_CATEGORY_PAIRS:
+            return True
+        # Free-text roles (not in the suggestion list): keep jobs whose title or
+        # description contains the user's search tokens even across categories.
+        if feed_strict_tokens:
+            title = _normalize_ascii(str(job.get("title") or ""))
+            if any(token in title for token in feed_strict_tokens):
+                return True
+            if any(token in _job_text(job) for token in feed_strict_tokens):
+                return True
+        return False
 
     def _role_score(job: Dict[str, Any], strict_tokens: List[str], family_tokens: List[str]) -> int:
         title = unicodedata.normalize("NFKD", (job.get("title") or "").lower()).encode("ascii", "ignore").decode("ascii")
@@ -5774,7 +5785,7 @@ async def get_feed(
         profile_for_refresh = dict(profile or {})
         if profile_contract_type and not profile_for_refresh.get("contract_type"):
             profile_for_refresh["contract_type"] = profile_contract_type
-        strict_tokens = resolve_role_match_tokens(target_role) or _tokens(target_role)
+        strict_tokens = feed_strict_tokens
         family_tokens = _role_family_tokens(target_role)
         terms = _location_terms()
         radius_scope = (search_radius or "50km").lower().strip()

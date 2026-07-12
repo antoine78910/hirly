@@ -241,11 +241,19 @@ export default function PlacesAutocomplete({
 
   const helperText = useMemo(() => {
     if (isFrench(lang)) {
-      if (trimmedValue && !hasSelection) return "Choisissez une ville dans la liste ci-dessous.";
-      return optional ? "Facultatif" : "Tapez 2 lettres pour voir des suggestions";
+      if (trimmedValue && !hasSelection) {
+        return optional
+          ? "Appuyez sur une suggestion ou gardez votre saisie telle quelle."
+          : "Choisissez une suggestion ou gardez votre saisie telle quelle.";
+      }
+      return optional ? "Facultatif — toute ville ou région acceptée" : "Tapez 2 lettres pour voir des suggestions";
     }
-    if (trimmedValue && !hasSelection) return "Pick a city from the list below.";
-    return optional ? "Optional" : "Type 2+ letters to see suggestions";
+    if (trimmedValue && !hasSelection) {
+      return optional
+        ? "Pick a suggestion or keep what you typed."
+        : "Pick a suggestion or keep what you typed.";
+    }
+    return optional ? "Optional — any city or region works" : "Type 2+ letters to see suggestions";
   }, [lang, optional, trimmedValue, hasSelection]);
 
   const handleChange = (next) => {
@@ -307,6 +315,22 @@ export default function PlacesAutocomplete({
     blurTimerRef.current = setTimeout(() => {
       setFocused(false);
       onFieldBlur?.();
+      if (trimmedValue && !hasSelection) {
+        const typed = buildTypedLocationResult(trimmedValue);
+        if (typed[0]) {
+          applyLocation(resultToLocation(typed[0]));
+        } else {
+          applyLocation({
+            location_label: trimmedValue,
+            place_id: "",
+            country: "",
+            country_code: "",
+            lat: null,
+            lng: null,
+            source: "typed",
+          });
+        }
+      }
     }, 150);
   };
 
@@ -393,6 +417,36 @@ export default function PlacesAutocomplete({
                   </>
                 ) : (
                   <>
+                    {trimmedValue && !hasSelection ? (
+                      <button
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          const typed = buildTypedLocationResult(trimmedValue);
+                          if (typed[0]) {
+                            applyLocation(resultToLocation(typed[0]));
+                          } else {
+                            applyLocation({
+                              location_label: trimmedValue,
+                              place_id: "",
+                              country: "",
+                              country_code: "",
+                              lat: null,
+                              lng: null,
+                              source: "typed",
+                            });
+                          }
+                        }}
+                        className={`${optionClass} font-semibold`}
+                        data-testid={`${testId}-use-custom`}
+                        role="option"
+                      >
+                        <MapPin className={`w-4 h-4 shrink-0 mt-0.5 ${light ? "text-linkedin" : "text-sprout-mint"}`} />
+                        <span className="block">
+                          {isFrench(lang) ? `Utiliser « ${trimmedValue} »` : `Use "${trimmedValue}"`}
+                        </span>
+                      </button>
+                    ) : null}
                     {searching && results.length === 0 && (
                       <div className={`px-4 py-3 text-sm ${light ? "text-zinc-500" : "text-zinc-500"}`}>
                         {isFrench(lang) ? "Recherche..." : "Searching..."}

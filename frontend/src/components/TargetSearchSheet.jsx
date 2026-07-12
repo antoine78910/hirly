@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import RolePicker from "./RolePicker";
 import PlacesAutocomplete from "./PlacesAutocomplete";
 import { useAppLocale } from "../context/AppLocaleContext";
@@ -28,9 +29,13 @@ export default function TargetSearchSheet({
   }, [open, initialRole, initialLocation, initialLocationData]);
 
   const save = async () => {
+    const trimmedRole = (targetRole || "").trim();
+    if (!trimmedRole) {
+      toast.error(lang === "fr" ? "Saisissez un métier" : "Enter a job title");
+      return;
+    }
     setSaving(true);
     try {
-      const trimmedRole = (targetRole || "").trim();
       const trimmedLocation = (targetLocation || "").trim();
       const normalizedData = normalizeLocationData(trimmedLocation, targetLocationData);
       const locationLabel = normalizedData?.location_label || trimmedLocation || "Anywhere";
@@ -87,6 +92,7 @@ export default function TargetSearchSheet({
                   onChange={setTargetRole}
                   variant="light"
                   lang={lang}
+                  inline
                   testId="target-search-role"
                 />
                 <PlacesAutocomplete

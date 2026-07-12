@@ -23,7 +23,7 @@ export default function BottomNav() {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-50 border-t border-zinc-200 bg-white/95 pb-safe pt-1.5 backdrop-blur-xl md:hidden"
+      className="bottom-nav fixed inset-x-0 bottom-0 z-50 border-t border-sprout-border bg-sprout-surface/95 pb-safe pt-1.5 backdrop-blur-xl md:hidden"
       data-testid="bottom-nav"
     >
       <div className="mx-auto grid w-full max-w-md grid-cols-5 items-end px-safe">
@@ -38,7 +38,7 @@ export default function BottomNav() {
               to={tab.to}
               data-testid={tab.testid}
               className={`flex min-w-0 flex-col items-center justify-center gap-0.5 px-0 py-1.5 ${
-                isActive ? "text-zinc-900" : "text-zinc-400"
+                isActive ? "text-sprout-text" : "text-sprout-dim"
               }`}
             >
               <span className="relative inline-flex">

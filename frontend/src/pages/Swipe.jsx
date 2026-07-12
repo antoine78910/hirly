@@ -38,7 +38,7 @@ import { hasActiveFilters, mergeFilters, clearMenuFilters } from "../lib/jobFilt
 import { reconcileFiltersForUser } from "../lib/contractTypeMapping";
 import { useAppLocale } from "../context/AppLocaleContext";
 import DesktopCreditsPill from "../components/desktop/DesktopCreditsPill";
-import { BILLING_UPDATED } from "../lib/billingEvents";
+import { BILLING_UPDATED, notifyBillingPatch } from "../lib/billingEvents";
 import {
   formatPostedDate,
   getSwipeSuccessCopy,
@@ -332,7 +332,7 @@ function MobileDetailSection({ title, bullets, body, t }) {
   );
 }
 
-function CardFront({ job, onReport, onShare, actionsEnabled, t, lang }) {
+function CardFront({ job, onReport, onShare, actionsEnabled, t, lang, pointerEventsDisabled = false }) {
   const { snippet, about } = getJobDisplayContent(job);
   const badges = getJobBadgeItems(job, { lang });
   const title = getJobDisplayTitle(job, { lang });
@@ -342,7 +342,7 @@ function CardFront({ job, onReport, onShare, actionsEnabled, t, lang }) {
   const previewText = snippet || (about ? about.split(/\n+/).find(Boolean) : "");
 
   return (
-    <div className="backface-hidden absolute inset-0 flex flex-col overflow-hidden rounded-[28px] border border-sprout-border bg-sprout-surface">
+    <div className={`backface-hidden absolute inset-0 flex flex-col overflow-hidden rounded-[28px] border border-sprout-border bg-sprout-surface ${pointerEventsDisabled ? "pointer-events-none" : ""}`}>
       <div className="flex min-h-0 flex-1 flex-col px-4 pb-2 pt-3 sm:px-6 sm:pb-3 sm:pt-5">
         <div className="flex shrink-0 items-start justify-between gap-2">
           <div className="pointer-events-auto flex items-center gap-2">
@@ -432,7 +432,7 @@ function CardFront({ job, onReport, onShare, actionsEnabled, t, lang }) {
   );
 }
 
-function CardBack({ job, t, lang, onScrollIntent }) {
+function CardBack({ job, t, lang, onScrollIntent, onFlipBack, onSurfaceTap }) {
   const { about, detailSections } = getJobDisplayContent(job);
   const badges = getJobBadgeItems(job, { lang });
   const title = getJobDisplayTitle(job, { lang });
@@ -441,7 +441,15 @@ function CardBack({ job, t, lang, onScrollIntent }) {
 
   return (
     <div className="backface-hidden rotate-y-180 absolute inset-0 flex flex-col overflow-hidden rounded-[28px] border border-sprout-border bg-sprout-surface">
-      <div className="flex min-h-[5.5rem] max-h-[30%] shrink-0 items-center border-b border-sprout-border px-4 py-3 sm:px-6">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onFlipBack?.();
+        }}
+        className="flex min-h-[5.5rem] max-h-[30%] shrink-0 items-center border-b border-sprout-border px-4 py-3 text-left sm:px-6"
+        aria-label={t("swipe.tapToFlipBack")}
+      >
         <CompanyLogo job={job} size="md" rounded="xl" className="mr-3 shrink-0" />
         <div className="min-w-0 flex-1">
           <h2
@@ -452,14 +460,14 @@ function CardBack({ job, t, lang, onScrollIntent }) {
           </h2>
           <p className="mt-0.5 truncate text-sm font-semibold text-white sm:text-base">{job.company}</p>
         </div>
-      </div>
+      </button>
 
       <div className="flex min-h-0 flex-1 flex-col">
       <div
         className="app-scroll no-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-3 pb-2 touch-pan-y sm:px-6 sm:py-4"
         data-testid="swipe-card-scroll"
-        onPointerDown={() => onScrollIntent?.()}
-        onScroll={() => onScrollIntent?.()}
+        onScroll={(event) => onScrollIntent?.(event.currentTarget.scrollTop)}
+        onClick={onSurfaceTap}
       >
         <JobCardMeta
           location={location}
@@ -496,7 +504,15 @@ function CardBack({ job, t, lang, onScrollIntent }) {
         </div>
       </div>
 
-      <div className="flex shrink-0 items-center justify-between border-t border-sprout-border px-6 py-3 text-[13px] text-sprout-muted">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onFlipBack?.();
+        }}
+        className="flex w-full shrink-0 items-center justify-between border-t border-sprout-border px-6 py-3 text-[13px] text-sprout-muted"
+        aria-label={t("swipe.tapToFlipBack")}
+      >
         <span className="flex items-center gap-1.5 font-display font-bold text-white">
           <Logo size={18} />
           {BRAND.NAME}
@@ -505,7 +521,7 @@ function CardBack({ job, t, lang, onScrollIntent }) {
           {t("swipe.tapToFlipBack")}
           <Info className="h-4 w-4" />
         </span>
-      </div>
+      </button>
       </div>
     </div>
   );
@@ -536,7 +552,7 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang, isAdmin 
   const interactionRef = useRef({
     dragDistance: 0,
     suppressTap: false,
-    backScrollIntent: false,
+    backScrollTop: 0,
   });
 
   useEffect(() => {
@@ -544,29 +560,45 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang, isAdmin 
     setShowBack(false);
     interactionRef.current.dragDistance = 0;
     interactionRef.current.suppressTap = false;
-    interactionRef.current.backScrollIntent = false;
+    interactionRef.current.backScrollTop = 0;
   }, [job.job_id, isTop]);
 
-  const markBackScrollIntent = useCallback(() => {
-    interactionRef.current.backScrollIntent = true;
-    suppressCardTap();
+  const markBackScrollIntent = useCallback((scrollTop) => {
+    const previousTop = interactionRef.current.backScrollTop ?? 0;
+    if (Math.abs(scrollTop - previousTop) > 1) {
+      interactionRef.current.backScrollTop = scrollTop;
+      suppressCardTap(400);
+    }
   }, []);
 
   const resetInteractionState = useCallback(() => {
     window.setTimeout(() => {
       interactionRef.current.dragDistance = 0;
       interactionRef.current.suppressTap = false;
-      interactionRef.current.backScrollIntent = false;
     }, CARD_TAP_SUPPRESS_MS);
   }, []);
+
+  const flipToFront = useCallback(() => {
+    setFlipped(false);
+    interactionRef.current.backScrollTop = 0;
+  }, []);
+
+  const handleBackSurfaceTap = useCallback((event) => {
+    if (event?.target?.closest?.("button, a, input, textarea, select, [role='button']")) return;
+    if (isCardTapSuppressed()) return;
+    flipToFront();
+  }, [flipToFront]);
 
   const handleFlipTap = useCallback(() => {
     if (!isTop || isCardTapSuppressed()) return;
     if (interactionRef.current.suppressTap || interactionRef.current.dragDistance > 8) return;
-    if (flipped && interactionRef.current.backScrollIntent) return;
     setShowBack(true);
-    setFlipped((current) => !current);
-  }, [flipped, isTop]);
+    setFlipped((current) => {
+      const next = !current;
+      if (!next) interactionRef.current.backScrollTop = 0;
+      return next;
+    });
+  }, [isTop]);
 
   return (
     <motion.div
@@ -636,9 +668,17 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang, isAdmin 
           actionsEnabled={isTop}
           t={t}
           lang={lang}
+          pointerEventsDisabled={flipped}
         />
         {showBack ? (
-          <CardBack job={job} t={t} lang={lang} onScrollIntent={markBackScrollIntent} />
+          <CardBack
+            job={job}
+            t={t}
+            lang={lang}
+            onScrollIntent={markBackScrollIntent}
+            onFlipBack={flipToFront}
+            onSurfaceTap={handleBackSurfaceTap}
+          />
         ) : (
           <div className="backface-hidden rotate-y-180 absolute inset-0 rounded-[28px] border border-sprout-border bg-sprout-surface" aria-hidden="true" />
         )}
@@ -1217,11 +1257,21 @@ export default function Swipe() {
 
   const saveTargetSearch = useCallback(async ({ role, location, locationData }) => {
     const trimmedRole = (role || "").trim();
+    if (!trimmedRole) {
+      toast.error(t("toasts.enterJobTitle") || (lang === "fr" ? "Saisissez un métier" : "Enter a job title"));
+      return false;
+    }
     setTargetSaving(true);
     try {
       const trimmedLocation = (location || "").trim();
       const normalizedLocationData = normalizeLocationData(trimmedLocation, locationData);
       const locationLabel = normalizedLocationData?.location_label || trimmedLocation || "Anywhere";
+
+      await saveTargetPreferences({
+        role: trimmedRole,
+        location: locationLabel,
+        locationData: normalizedLocationData,
+      });
 
       const nextTarget = { role: trimmedRole, location: locationLabel };
       setTarget(nextTarget);
@@ -1241,11 +1291,6 @@ export default function Swipe() {
       jobsRef.current = [];
       await loadFeed(true, nextFilters, "target_search_save");
       toast.success(t("toasts.searchUpdated"));
-
-      if (trimmedRole) {
-        saveTargetPreferences({ role: trimmedRole, location: locationLabel, locationData: normalizedLocationData })
-          .catch((error) => console.warn("Preferences save failed (feed already refreshed).", error));
-      }
       return true;
     } catch (_) {
       toast.error(t("toasts.searchSaveError"));
@@ -1253,7 +1298,7 @@ export default function Swipe() {
     } finally {
       setTargetSaving(false);
     }
-  }, [loadFeed, t]);
+  }, [lang, loadFeed, t]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -1455,12 +1500,7 @@ export default function Swipe() {
         const applied = Boolean(data?.applied);
         if (applied && !isDemoOutcome) {
           if (data?.billing) {
-            setBilling((prev) => ({
-              ...(prev || {}),
-              is_premium: true,
-              credits_total: data.billing.credits_total ?? prev?.credits_total,
-              credits_remaining: data.billing.credits_remaining ?? prev?.credits_remaining,
-            }));
+            setBilling((prev) => notifyBillingPatch(prev, data.billing));
           }
           trackApplicationOutcome(data, job);
           const copy = getSwipeSuccessCopy(t, data, job);
@@ -1473,7 +1513,7 @@ export default function Swipe() {
     } catch (e) {
       if (e?.response?.status === 402) {
         const nextBilling = e?.response?.data?.detail?.billing;
-        if (nextBilling) setBilling(nextBilling);
+        if (nextBilling) setBilling((prev) => notifyBillingPatch(prev, nextBilling));
         openUpgrade();
       }
       if (!isDemoUser && intent === "apply") {
@@ -1616,7 +1656,7 @@ export default function Swipe() {
         />
       </div>
 
-      <div className="sprout flex h-dvh max-h-dvh flex-col overflow-hidden bg-sprout-bg pb-[calc(3.75rem+env(safe-area-inset-bottom,0px))] text-zinc-900 md:hidden">
+      <div className="sprout flex h-dvh max-h-dvh flex-col overflow-hidden bg-sprout-bg pb-[calc(3.75rem+env(safe-area-inset-bottom,0px))] text-sprout-text md:hidden">
       <header
         className="mx-auto flex w-full max-w-md shrink-0 items-center gap-1 px-safe pb-2 pt-safe sm:gap-2.5 sm:px-4"
         data-testid="swipe-header"
@@ -1636,14 +1676,14 @@ export default function Swipe() {
         <button
           type="button"
           onClick={() => setTargetSheetOpen(true)}
-          className="min-w-0 flex-1 rounded-full border border-transparent bg-white px-2 py-1 text-center shadow-sm ring-1 ring-zinc-200/80 transition-colors hover:border-violet-200 hover:bg-violet-50/50 sm:px-4 sm:py-1.5"
+          className="min-w-0 flex-1 rounded-full border border-sprout-border bg-sprout-surface px-2 py-1 text-center shadow-sm transition-colors hover:border-violet-400/40 hover:bg-sprout-surface-2 sm:px-4 sm:py-1.5"
           data-testid="target-pill"
           aria-label={t("swipe.editTarget")}
         >
-          <p className="truncate text-xs font-semibold leading-tight text-zinc-900 sm:text-sm">
+          <p className="truncate text-xs font-semibold leading-tight text-sprout-text sm:text-sm">
             {translateRoleLabel(target.role, lang) || t("swipe.setTargetRole")}
           </p>
-          <p className="truncate text-[9px] leading-tight text-zinc-500 sm:text-[11px]">
+          <p className="truncate text-[9px] leading-tight text-sprout-muted sm:text-[11px]">
             <span className="sm:hidden">{translateLocationLabel(target.location, lang) || t("swipe.anywhere")}</span>
             <span className="hidden sm:inline">{translateLocationLabel(target.location, lang) || t("swipe.anywhere")} · {t("swipe.tapToEdit")}</span>
           </p>

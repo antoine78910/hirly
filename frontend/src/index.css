@@ -296,6 +296,52 @@ html.sprout-dark .sprout .text-zinc-100 { color: #f4f4f5; }
 html.sprout-dark .sprout .text-zinc-200 { color: #e4e4e7; }
 html.sprout-dark .sprout .text-zinc-300 { color: #d4d4d8; }
 html.sprout-dark .sprout .text-zinc-700 { color: #d4d4d8; }
+html.sprout-dark .sprout .text-zinc-800 { color: #e4e4e7; }
+html.sprout-dark .sprout .text-zinc-900 { color: #fafafa; }
+html.sprout-dark .sprout .text-zinc-600 { color: #a1a1aa; }
+html.sprout-dark .sprout .text-zinc-500 { color: #a1a1aa; }
+html.sprout-dark .sprout .text-zinc-400 { color: #71717a; }
+html.sprout-dark .sprout .bg-white { background-color: #18181b; }
+html.sprout-dark .sprout .bg-zinc-50 { background-color: #27272a; }
+html.sprout-dark .sprout .bg-zinc-100 { background-color: #27272a; }
+html.sprout-dark .sprout .border-zinc-100 { border-color: #27272a; }
+html.sprout-dark .sprout .border-zinc-200 { border-color: #3f3f46; }
+html.sprout-dark .sprout .border-dashed.border-zinc-200 { border-color: #52525b; }
+html.sprout-dark .sprout .ring-zinc-200\/80 { --tw-ring-color: rgb(63 63 70 / 0.8); }
+html.sprout-dark .sprout .active\:bg-zinc-100:active { background-color: #3f3f46; }
+html.sprout-dark .shell-page { background-color: #09090b; color: #fafafa; }
+@media (min-width: 768px) {
+  html.sprout-dark .shell-page { background-color: transparent; color: rgb(244 244 245); }
+}
+html.sprout-dark .shell-surface,
+html.sprout-dark .shell-surface-sm,
+html.sprout-dark .shell-search,
+html.sprout-dark .shell-btn-outline,
+html.sprout-dark .shell-chip-idle {
+  border-color: #27272a;
+  background-color: #18181b;
+  color: #f4f4f5;
+}
+html.sprout-dark .shell-inset {
+  border-color: #3f3f46;
+  background-color: rgb(39 39 42 / 0.4);
+}
+html.sprout-dark .shell-icon-box,
+html.sprout-dark .shell-chip-count {
+  background-color: #27272a;
+  color: #d4d4d8;
+}
+html.sprout-dark .shell-title { color: #fafafa; }
+html.sprout-dark .shell-body,
+html.sprout-dark .shell-tab-inactive { color: #a1a1aa; }
+html.sprout-dark .shell-border,
+html.sprout-dark .shell-border-b { border-color: #27272a; }
+html.sprout-dark .shell-dashed { border-color: #52525b; }
+html.sprout-dark .shell-hover:hover { background-color: rgb(39 39 42 / 0.5); }
+html.sprout-dark .bottom-nav {
+  border-color: #27272a;
+  background-color: rgb(24 24 27 / 0.95);
+}
 
 @keyframes slide-up {
   from { transform: translateY(20px); opacity: 0; }

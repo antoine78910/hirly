@@ -740,6 +740,7 @@ export const APP_UI = {
     contactSupport: {
       title: "Contact us",
       subtitle: "Send a message to {email}. We'll reply to the email you provide below.",
+      subtitleShort: "We'll reply to {email}",
       emailLabel: "Your email",
       emailPlaceholder: "you@example.com",
       emailHint: "We'll send our reply to this address.",
@@ -922,6 +923,7 @@ export const APP_UI = {
       demoApplying: "Saving application…",
       searchUpdated: "Search updated",
       searchSaveError: "Could not save search preferences",
+      enterJobTitle: "Enter a job title",
       undone: "Undone",
       nothingToUndo: "Nothing to undo",
       linkCopied: "Link copied to clipboard",
@@ -1664,6 +1666,7 @@ export const APP_UI = {
     contactSupport: {
       title: "Nous contacter",
       subtitle: "Envoyez un message à {email}. Nous répondrons à l'adresse indiquée ci-dessous.",
+      subtitleShort: "Réponse envoyée à {email}",
       emailLabel: "Votre e-mail",
       emailPlaceholder: "vous@exemple.com",
       emailHint: "C'est à cette adresse que nous vous répondrons.",
@@ -1846,6 +1849,7 @@ export const APP_UI = {
       demoApplying: "Enregistrement de la candidature…",
       searchUpdated: "Recherche mise à jour",
       searchSaveError: "Impossible d'enregistrer la recherche",
+      enterJobTitle: "Saisissez un métier",
       undone: "Annulé",
       nothingToUndo: "Rien à annuler",
       linkCopied: "Lien copié",

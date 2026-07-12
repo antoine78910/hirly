@@ -19,7 +19,8 @@ import ProfileResumeSection from "../components/profile/ProfileResumeSection";
 import ResumeSheet from "../components/ResumeSheet";
 import ProfessionalProfileSheet from "../components/ProfessionalProfileSheet";
 import Sheet, { Field, SaveButton } from "../components/Sheet";
-import PlacesAutocomplete, { hasGooglePlacesKey } from "../components/PlacesAutocomplete";
+import PlacesAutocomplete from "../components/PlacesAutocomplete";
+import { normalizeLocationData } from "../lib/targetPreferences";
 import { Label } from "../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Switch } from "../components/ui/switch";
@@ -58,16 +59,20 @@ function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
   }, [open, profile]);
 
   const save = async () => {
-    if (hasGooglePlacesKey() && targetLocation && !targetLocationData) {
-      toast.error(t("profile.selectLocation"));
+    const trimmedRole = (targetRole || "").trim();
+    if (!trimmedRole) {
+      toast.error(t("toasts.enterJobTitle") || (lang === "fr" ? "Saisissez un métier" : "Enter a job title"));
       return;
     }
     setSaving(true);
     try {
+      const trimmedLocation = (targetLocation || "").trim();
+      const normalizedLocationData = normalizeLocationData(trimmedLocation, targetLocationData);
       await api.put("/profile/preferences", {
-        target_role: targetRole,
-        target_location: targetLocationData?.location_label || targetLocation,
-        target_location_data: targetLocationData,
+        target_role: trimmedRole,
+        target_roles: [trimmedRole],
+        target_location: normalizedLocationData?.location_label || trimmedLocation,
+        target_location_data: normalizedLocationData,
         remote_preference: remote,
         seniority: seniority === "any" ? null : seniority,
       });

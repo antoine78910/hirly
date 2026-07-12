@@ -597,7 +597,7 @@ export default function Tracker() {
               <FileSearch className="h-10 w-10 text-linkedin" strokeWidth={1.5} />
             </div>
             <h2 className="mt-6 font-display text-2xl font-bold tracking-tight">{t("tracker.addResume")}</h2>
-            <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-zinc-600">
+            <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed shell-body">
               {t("tracker.addResumeBody")}
             </p>
             <button
@@ -611,7 +611,7 @@ export default function Tracker() {
           </section>
         ) : null}
 
-        <section className={activeTab === "applications" && showResumeBanner ? "mt-6 border-t border-zinc-100 pt-6 pb-8 md:mt-10 md:pt-8" : "pb-8 pt-3 md:pt-4"}>
+        <section className={activeTab === "applications" && showResumeBanner ? "mt-6 border-t shell-border-b pt-6 pb-8 md:mt-10 md:pt-8" : "pb-8 pt-3 md:pt-4"}>
           {activeTab === "applications" ? (
           <>
           {/* Status filter chips — horizontal scroll with counts */}
@@ -742,12 +742,12 @@ export default function Tracker() {
               <Loader2 className="h-5 w-5 animate-spin text-zinc-600" />
             </div>
           ) : filteredApps.length === 0 ? (
-            <div className="mt-6 rounded-3xl border border-dashed border-zinc-200 bg-zinc-50 px-5 py-8 text-center">
-              <div className="shell-surface mx-auto grid h-12 w-12 place-items-center rounded-2xl text-zinc-600 dark:text-zinc-400">
+            <div className="mt-6 rounded-3xl border border-dashed shell-dashed shell-inset px-5 py-8 text-center">
+              <div className="shell-surface mx-auto grid h-12 w-12 place-items-center rounded-2xl text-sprout-muted">
                 <BriefcaseBusiness className="h-5 w-5" />
               </div>
               <p className="shell-title font-display text-lg font-bold">{t("tracker.nothingYet")}</p>
-              <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-zinc-600">
+              <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed shell-body">
                 {searchQuery.trim() ? t("tracker.noSearchMatch") : getTrackerEmptyCopy(t, statusFilter)}
               </p>
               <button
@@ -808,12 +808,12 @@ export default function Tracker() {
               <Loader2 className="h-5 w-5 animate-spin text-zinc-600" />
             </div>
           ) : filteredPassed.length === 0 ? (
-            <div className="mt-6 rounded-3xl border border-dashed border-zinc-200 bg-zinc-50 px-5 py-8 text-center" data-testid="passed-empty">
-              <div className="shell-surface mx-auto grid h-12 w-12 place-items-center rounded-2xl text-zinc-600 dark:text-zinc-400">
+            <div className="mt-6 rounded-3xl border border-dashed shell-dashed shell-inset px-5 py-8 text-center" data-testid="passed-empty">
+              <div className="shell-surface mx-auto grid h-12 w-12 place-items-center rounded-2xl text-sprout-muted">
                 <BriefcaseBusiness className="h-5 w-5" />
               </div>
               <p className="shell-title font-display text-lg font-bold">{t("tracker.nothingYet")}</p>
-              <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-zinc-600">
+              <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed shell-body">
                 {searchQuery.trim() ? t("tracker.noSearchMatch") : t("history.noPassed")}
               </p>
               <button

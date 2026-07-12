@@ -14,6 +14,8 @@ export function applyMobileTheme(theme) {
   if (typeof document === "undefined") return;
   const isDark = theme === "dark";
   document.documentElement.classList.toggle("sprout-dark", isDark);
+  // Tailwind `dark:` variants (shell-page, desktop) follow the same preference.
+  document.documentElement.classList.toggle("dark", isDark);
   document.documentElement.style.colorScheme = isDark ? "dark" : "light";
 }
 

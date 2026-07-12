@@ -1,5 +1,6 @@
 /** Full-height shell for bottom-nav pages — scroll lives in AppPageScroll, not the document. */
-export const SHELL_PAGE_CLASS = "shell-page";
+export const SHELL_PAGE_CLASS =
+  "sprout shell-page bg-sprout-bg text-sprout-text md:bg-white md:text-zinc-900 md:py-8 dark:md:bg-transparent dark:md:text-zinc-100";
 
 export function AppPage({ children, className = "" }) {
   return (

@@ -29,9 +29,13 @@ export function useSwipeCredits() {
     };
     const onBillingUpdated = (event) => {
       if (isDemoAccountEnabled()) return;
-      setIsPremium(Boolean(event?.detail?.is_premium));
-      setCredits(Number(event?.detail?.credits_remaining ?? 0));
-      setPlanTier(event?.detail?.plan_tier || event?.detail?.plan || null);
+      setIsPremium((current) => Boolean(event?.detail?.is_premium ?? current));
+      if (event?.detail?.credits_remaining != null) {
+        setCredits(Number(event.detail.credits_remaining));
+      }
+      if (event?.detail?.plan_tier || event?.detail?.plan) {
+        setPlanTier(event.detail.plan_tier || event.detail.plan);
+      }
       setLoading(false);
     };
 

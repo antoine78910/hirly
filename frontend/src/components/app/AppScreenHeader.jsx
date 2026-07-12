@@ -31,7 +31,7 @@ export function TitleHeader({ title, rightAction, leftAction, className = "" }) 
         <div className="flex justify-start">
           {leftAction || null}
         </div>
-        <h1 className="truncate text-center font-display text-base font-bold tracking-tight text-zinc-900 sm:text-lg">
+        <h1 className="truncate text-center font-display text-base font-bold tracking-tight text-sprout-text sm:text-lg">
           {title}
         </h1>
         <div className="flex justify-end">
