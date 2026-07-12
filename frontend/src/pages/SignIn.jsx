@@ -43,10 +43,16 @@ export default function SignIn() {
       goToApp("/swipe");
       return;
     }
-    navigate(
-      hasProfile && hasPreferences ? returnPath : "/onboarding?step=jobSearch",
-      { replace: true },
-    );
+    if (hasProfile && hasPreferences) {
+      // returnPath is always an app-only path (defaults to /swipe, or
+      // whatever ProtectedRoute sent as `next`) -- must be a full
+      // cross-domain navigation to app.tryhirly.com, not an in-SPA
+      // navigate(), which would leave the URL on this (marketing) host
+      // for a tick and force DomainRouter to bounce it again.
+      goToApp(returnPath);
+      return;
+    }
+    navigate("/onboarding?step=jobSearch", { replace: true });
   }, [authLoading, user, hasProfile, hasPreferences, navigate, returnPath]);
 
   const finishWithSupabaseSession = async (session) => {
@@ -71,10 +77,11 @@ export default function SignIn() {
       goToApp("/swipe");
       return;
     }
-    navigate(
-      data.has_profile && data.has_preferences ? returnPath : "/onboarding?step=jobSearch",
-      { replace: true },
-    );
+    if (data.has_profile && data.has_preferences) {
+      goToApp(returnPath);
+      return;
+    }
+    navigate("/onboarding?step=jobSearch", { replace: true });
   };
 
   const onEmailSubmit = async (event) => {
