@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Download, FileText, Mail } from "lucide-react";
+import { Download, FileText, Loader2, Mail } from "lucide-react";
 import CVPreview from "../CVPreview";
 import CoverLetterPreview from "../CoverLetterPreview";
 import { Button } from "../ui/button";
@@ -9,6 +9,7 @@ import {
   getApplicationResume,
   hasApplicationCoverLetter,
   hasApplicationResume,
+  isApplicationGenerating,
 } from "../../lib/applicationDocuments";
 import { resolveCvDisplayTemplate, withContactPhoto } from "../../lib/cvTemplate";
 
@@ -29,9 +30,20 @@ export default function ApplicationDocumentsView({
   const coverLetter = getApplicationCoverLetter(application);
   const hasCv = hasApplicationResume(application);
   const hasCover = hasApplicationCoverLetter(application);
+  const generating = isApplicationGenerating(application);
   const template = resolveCvDisplayTemplate(resume?.template_recommendation || profile?.template_style);
   const contact = withContactPhoto(profile?.contact || {}, userPicture);
   const job = application?.job;
+
+  if (generating && !hasCv && !hasCover) {
+    return (
+      <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-8 text-center">
+        <Loader2 className="mx-auto mb-2 h-8 w-8 animate-spin text-linkedin" />
+        <p className="text-sm font-medium text-zinc-700">{t("toasts.generatingApp")}</p>
+        <p className="mt-1 text-xs text-zinc-500">{t("toasts.generatingAppDesc")}</p>
+      </div>
+    );
+  }
 
   if (!hasCv && !hasCover) {
     return (

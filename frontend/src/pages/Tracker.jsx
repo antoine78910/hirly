@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { api } from "../lib/api";
 import { fetchTrackerPageData, fetchDemoSwipeHistory } from "../lib/demoApplications";
@@ -26,7 +26,7 @@ import { trackEvent } from "../lib/analytics";
 import { useAuth } from "../context/AuthContext";
 import { useAppLocale } from "../context/AppLocaleContext";
 import { resolveDisplayStatus } from "../lib/applicationReview";
-import { getApplicationCoverLetter, getApplicationResume, hasApplicationDocuments } from "../lib/applicationDocuments";
+import { getApplicationCoverLetter, getApplicationResume, hasApplicationDocuments, isApplicationGenerating } from "../lib/applicationDocuments";
 import {
   getApplicationDisplayStatuses,
   getTrackerEmptyCopy,
@@ -336,19 +336,36 @@ export default function Tracker() {
     }
   };
 
-  const load = async () => {
-    setLoading(true);
+  const load = async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const { applications, profile } = await fetchTrackerPageData(api);
       setApps(applications);
       setProfile(profile);
+      return applications;
     } catch {
-      setApps([]);
-      setProfile(null);
+      if (!silent) {
+        setApps([]);
+        setProfile(null);
+      }
+      return [];
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
+
+  const refreshApplications = useCallback(async () => {
+    try {
+      const applications = await load({ silent: true });
+      if (!applications.length) return;
+      setSelected((current) => {
+        if (!current?.application_id) return current;
+        return applications.find((app) => app.application_id === current.application_id) || current;
+      });
+    } catch {
+      // Ignore background refresh errors.
+    }
+  }, []);
   useEffect(() => {
     trackEvent("tracker_view");
     load();
@@ -377,6 +394,16 @@ export default function Tracker() {
     setMissingAnswers(initial);
     setSaveMissingToProfile(false);
   }, [selected]);
+
+  useEffect(() => {
+    const generating = apps.some(isApplicationGenerating)
+      || (selected && isApplicationGenerating(selected));
+    if (!generating) return undefined;
+    const timer = window.setInterval(() => {
+      refreshApplications();
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [apps, selected, refreshApplications]);
 
   const handleDownloadCV = () => {
     if (!selected) return;

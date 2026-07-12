@@ -46,8 +46,13 @@ from cover_letter_quality import build_cover_letter_prompt_section, validate_cov
 from cv_tailoring import (
     apply_minimal_resume_tailoring,
     build_cv_tailoring_prompt_section,
+    enrich_cover_letter_from_profile,
+    enrich_tailored_resume_contact,
+    prepare_profile_for_application_generation,
     validate_minimal_tailoring_preserved,
 )
+
+APPLICATION_GENERATION_PIPELINE = "minimal_cv_v1"
 from cv_quality import attach_cover_letter_quality_report, normalize_application_generation, validate_resume_quality
 from application_email_service import send_application_email
 from apply_agent.models import ApplyAgentError
@@ -4087,6 +4092,7 @@ def _merge_generated_resume_with_profile(
 
 
 async def _generate_application_doc(user: User, profile: Dict[str, Any], job: Dict[str, Any]) -> Dict[str, Any]:
+    profile = prepare_profile_for_application_generation(profile, user)
     try:
         gen = await claude_generate_application(profile, job)
     except Exception as exc:
@@ -4103,13 +4109,25 @@ def _build_generated_application_doc(
     gen: Dict[str, Any],
     package_builder: Any = build_application_package,
 ) -> Dict[str, Any]:
+    profile = prepare_profile_for_application_generation(sanitize_docx_text(profile), user)
     gen = sanitize_docx_text(normalize_application_generation(gen))
+    gen = _merge_generated_resume_with_profile(gen, profile, job)
     gen = attach_cover_letter_quality_report(gen, job)
-    profile = sanitize_docx_text(profile)
     cv_text = str(profile.get("cv_text") or "")
     job_description = str(job.get("clean_description") or job.get("description") or "")
-    tailored_resume = gen.get("tailored_resume_structured") or gen.get("tailored_resume") or {}
-    cover_letter = gen.get("tailored_cover_letter") or gen.get("cover_letter") or {}
+    tailored_resume = enrich_tailored_resume_contact(
+        gen.get("tailored_resume_structured") or gen.get("tailored_resume") or {},
+        profile,
+    )
+    gen["tailored_resume_structured"] = tailored_resume
+    gen["tailored_resume"] = tailored_resume
+    cover_letter = enrich_cover_letter_from_profile(
+        gen.get("tailored_cover_letter") or gen.get("cover_letter") or {},
+        profile,
+        user,
+    )
+    gen["tailored_cover_letter"] = cover_letter
+    gen["cover_letter"] = cover_letter
     resume_quality_report = gen.get("resume_quality_report") or validate_resume_quality(tailored_resume)
     preservation_report = gen.get("resume_preservation_report") or {}
     tailored_resume_length = len(json.dumps(tailored_resume, default=str))
@@ -4212,6 +4230,9 @@ def _build_generated_application_doc(
         "ats_score_after": gen.get("ats_score_after"),
         "keywords_gap": gen.get("keywords_gap") or [],
         "resume_quality_report": resume_quality_report,
+        "resume_preservation_report": preservation_report,
+        "cover_letter_quality_report": cover_letter_quality,
+        "generation_pipeline": APPLICATION_GENERATION_PIPELINE,
         "created_at": now,
         "updated_at": now,
     }
@@ -4357,6 +4378,7 @@ async def _process_application_generation_queue(user_id: str) -> None:
                     demo_account=bool(user_doc.get("demo_account")),
                     training_access=bool(user_doc.get("training_access")),
                 )
+                profile = prepare_profile_for_application_generation(profile, queued_user)
                 generated_doc = await _generate_application_doc(queued_user, profile, job)
                 latest_app = await db.applications.find_one({"application_id": application_id, "user_id": user_id}, {"_id": 0}) or app_doc
                 update_doc = _application_generation_update(generated_doc, latest_app)

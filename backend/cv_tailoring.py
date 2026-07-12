@@ -116,6 +116,87 @@ def _normalize_education_item(item: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+CONTACT_MERGE_KEYS = (
+    "name",
+    "email",
+    "phone",
+    "location",
+    "city",
+    "country",
+    "linkedin",
+    "website",
+    "portfolio",
+    "picture",
+    "photo",
+    "photoUrl",
+    "avatar",
+)
+
+
+def prepare_profile_for_application_generation(
+    profile: Dict[str, Any],
+    user: Any | None = None,
+) -> Dict[str, Any]:
+    """Normalize profile before swipe-right application generation."""
+    out = deepcopy(profile or {})
+    contact = dict(out.get("contact") or {})
+
+    if user is not None:
+        user_name = clean_cv_text(getattr(user, "name", "") or "")
+        user_email = clean_cv_text(getattr(user, "email", "") or "")
+        user_picture = clean_cv_text(getattr(user, "picture", "") or "")
+        if user_name and not contact.get("name"):
+            contact["name"] = user_name
+        if user_email and not contact.get("email"):
+            contact["email"] = user_email
+        if user_picture and not any(contact.get(key) for key in ("picture", "photo", "photoUrl", "avatar")):
+            contact["picture"] = user_picture
+
+    out["contact"] = contact
+    return out
+
+
+def enrich_tailored_resume_contact(
+    tailored: Dict[str, Any],
+    profile: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Fill missing tailored CV contact fields from the stored profile."""
+    out = deepcopy(tailored or {})
+    profile_contact = profile.get("contact") if isinstance(profile.get("contact"), dict) else {}
+    contact = dict(out.get("contact") or {})
+    for key in CONTACT_MERGE_KEYS:
+        if not clean_cv_text(contact.get(key)) and clean_cv_text(profile_contact.get(key)):
+            contact[key] = clean_cv_text(profile_contact.get(key))
+    out["contact"] = contact
+    return out
+
+
+def enrich_cover_letter_from_profile(
+    cover_letter: Dict[str, Any],
+    profile: Dict[str, Any],
+    user: Any | None = None,
+) -> Dict[str, Any]:
+    """Fill sender fields on generated cover letters from profile/user contact."""
+    if not isinstance(cover_letter, dict):
+        return {}
+    out = deepcopy(cover_letter)
+    contact = profile.get("contact") if isinstance(profile.get("contact"), dict) else {}
+    user_name = clean_cv_text(getattr(user, "name", "") or "") if user is not None else ""
+    user_email = clean_cv_text(getattr(user, "email", "") or "") if user is not None else ""
+
+    if not clean_cv_text(out.get("sender_name")):
+        out["sender_name"] = clean_cv_text(contact.get("name")) or user_name
+    if not clean_cv_text(out.get("sender_email")):
+        out["sender_email"] = clean_cv_text(contact.get("email")) or user_email
+    if not clean_cv_text(out.get("sender_phone")):
+        out["sender_phone"] = clean_cv_text(contact.get("phone"))
+    if not clean_cv_text(out.get("sender_address")):
+        out["sender_address"] = clean_cv_text(contact.get("location"))
+    if not clean_cv_text(out.get("signature_name")):
+        out["signature_name"] = out.get("sender_name") or user_name
+    return out
+
+
 def build_base_resume_from_profile(profile: Dict[str, Any]) -> Dict[str, Any]:
     """Source-of-truth resume from stored profile — experiences are never invented here."""
     contact = profile.get("contact") if isinstance(profile.get("contact"), dict) else {}

@@ -70,3 +70,11 @@ export function hasApplicationCoverLetter(application) {
 export function hasApplicationDocuments(application) {
   return hasApplicationResume(application) || hasApplicationCoverLetter(application);
 }
+
+export function isApplicationGenerating(application) {
+  const generationStatus = application?.generation_status;
+  const packageStatus = application?.package_status;
+  return generationStatus === "pending_generation"
+    || generationStatus === "generating"
+    || packageStatus === "pending_generation";
+}

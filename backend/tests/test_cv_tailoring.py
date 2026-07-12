@@ -1,6 +1,9 @@
 from cv_tailoring import (
     apply_minimal_resume_tailoring,
     build_base_resume_from_profile,
+    enrich_cover_letter_from_profile,
+    enrich_tailored_resume_contact,
+    prepare_profile_for_application_generation,
     strip_internal_cv_instructions,
     validate_minimal_tailoring_preserved,
 )
@@ -86,3 +89,32 @@ def test_build_base_resume_from_profile():
     base = build_base_resume_from_profile(PROFILE)
     assert len(base["experience"]) == 2
     assert base["skills"][0] == "Audit"
+
+
+def test_prepare_profile_for_application_generation_merges_user_contact():
+    profile = {"contact": {"name": "Aboubacar DIALLO"}, "skills": ["Audit"]}
+    user = type("User", (), {"name": "Fallback Name", "email": "user@example.com", "picture": "https://cdn.example/photo.jpg"})()
+    prepared = prepare_profile_for_application_generation(profile, user)
+    assert prepared["contact"]["email"] == "user@example.com"
+    assert prepared["contact"]["picture"] == "https://cdn.example/photo.jpg"
+
+
+def test_enrich_tailored_resume_and_cover_letter_contact():
+    tailored = {"contact": {"name": "Aboubacar DIALLO"}, "summary": "Auditeur"}
+    profile = {
+        "contact": {
+            "name": "Aboubacar DIALLO",
+            "email": "a@example.com",
+            "phone": "+33 1 23 45 67 89",
+            "location": "Melun, France",
+            "picture": "https://cdn.example/photo.jpg",
+        }
+    }
+    enriched = enrich_tailored_resume_contact(tailored, profile)
+    assert enriched["contact"]["email"] == "a@example.com"
+    assert enriched["contact"]["picture"] == "https://cdn.example/photo.jpg"
+
+    letter = enrich_cover_letter_from_profile({"paragraphs": ["Bonjour"]}, profile)
+    assert letter["sender_name"] == "Aboubacar DIALLO"
+    assert letter["sender_email"] == "a@example.com"
+    assert letter["signature_name"] == "Aboubacar DIALLO"
