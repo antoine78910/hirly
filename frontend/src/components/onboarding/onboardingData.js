@@ -81,15 +81,16 @@ export const ONBOARDING_STEP_ORDER = [
   "intro",           // 5 illustrated intro slides
   "signup",
   "jobSearch",
+  "jobGoal",         // What's your goal? (early — before other goal-style questions)
+  "compare2x",       // 2× interviews vs on your own
   "contractType",    // Hirly: CDI/CDD/etc.
   "otherApps",       // Have you tried other job apps?
   "longTerm",        // Long-term results chart
   "categories",      // Job categories + roles
   "experience",      // Experience level
   "location",        // Where do you want to work?
+  "contactPhone",    // Phone — required by many employers to apply
   "salary",          // Expected salary range
-  "jobGoal",         // What's your goal?
-  "compare2x",       // 2× interviews vs on your own
   "interviews",      // Interviews per week
   "jobTimeline",     // When do you need a new job?
   "interviewsConfirm", // Achievable interviews/week
@@ -99,7 +100,6 @@ export const ONBOARDING_STEP_ORDER = [
   "attribution",     // How did you hear about us?
   "referralCode",    // Referral / access code
   "upload",          // Upload CV
-  "contactPhone",    // Phone — required by many employers to apply
   "profileSetup",    // Setup loader
   "profileWelcome",  // Personalized welcome cards
   "showcaseLanding",

@@ -1467,6 +1467,7 @@ export default function Swipe() {
     resolveApplyGate().action?.();
   }, [resolveApplyGate]);
 
+  const handleProfileReadinessUpdated = useCallback(async (nextProfile) => {
     profileRef.current = nextProfile;
     setProfile(nextProfile);
     setFeedError("");

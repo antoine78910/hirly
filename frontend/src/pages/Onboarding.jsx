@@ -711,7 +711,7 @@ export default function Onboarding() {
       advanced = true;
       setParsing(false);
       trackOnboardingContinue("upload");
-      setStepIndex(STEP_ORDER.indexOf("contactPhone"));
+      setStepIndex(STEP_ORDER.indexOf("profileSetup"));
     };
 
     const uploadTask = (async () => {
@@ -1815,7 +1815,7 @@ export default function Onboarding() {
               type="button"
               onClick={() => {
                 trackOnboardingSkip("upload");
-                setStepIndex(STEP_ORDER.indexOf("contactPhone"));
+                setStepIndex(STEP_ORDER.indexOf("profileSetup"));
                 toast.message(lang === "fr" ? "Vous pouvez importer votre CV plus tard depuis le Profil" : "You can upload your resume later from Profile");
               }}
               className={`mt-3 w-full text-center text-sm ${ob.muted} hover:text-zinc-900 underline-offset-2 hover:underline`}

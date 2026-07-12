@@ -19,15 +19,22 @@ export function normalizeResumeStep(step, { user, profile } = {}) {
   }
   if (step === "profileSetup") {
     if (!(profile?.cv_text || profile?.cv_filename)) return "upload";
-    if (!profile?.contact?.phone?.trim()) return "contactPhone";
     return "profileWelcome";
   }
   if (step === "upload" && (profile?.cv_text || profile?.cv_filename)) {
-    if (!profile?.contact?.phone?.trim()) return "contactPhone";
     return "profileSetup";
   }
+  const contactPhoneIndex = ONBOARDING_STEP_ORDER.indexOf("contactPhone");
+  const stepIndex = ONBOARDING_STEP_ORDER.indexOf(step);
   if (step === "contactPhone" && profile?.contact?.phone?.trim()) {
-    return "profileSetup";
+    return ONBOARDING_STEP_ORDER[contactPhoneIndex + 1] || "salary";
+  }
+  if (
+    user
+    && stepIndex > contactPhoneIndex
+    && !(profile?.contact?.phone?.trim())
+  ) {
+    return "contactPhone";
   }
   return step;
 }
@@ -37,15 +44,15 @@ export function inferOnboardingStepFromProgress({ onboarding = {}, profile = nul
 
   const data = onboarding || {};
   if (!data.job_search_status) return "jobSearch";
+  if (!data.job_goal) return "jobGoal";
   if (!data.contract_type && !profile?.contract_type) return "contractType";
   if (data.tried_other_apps == null) return "otherApps";
   if (!Array.isArray(data.categories) || !data.categories.length) return "categories";
   if (!data.experience && !profile?.seniority) return "experience";
   if (!data.onboarding_location && !profile?.target_location) return "location";
-  if (!data.job_goal) return "jobGoal";
+  if (!profile?.contact?.phone?.trim()) return "contactPhone";
   if (!data.acquisition_source) return "attribution";
   if (!(profile?.cv_text || profile?.cv_filename)) return "upload";
-  if (!profile?.contact?.phone?.trim()) return "contactPhone";
   if (profile?.target_role && profile?.cv_text) return "showcasePricing";
   return "showcasePricing";
 }
