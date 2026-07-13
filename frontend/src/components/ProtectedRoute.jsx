@@ -9,6 +9,9 @@ import {
   isAppHost,
   marketingUrl,
 } from "../lib/appDomains";
+import { canAccessJobSeekerApp, fetchJobSeekerEntryState } from "../lib/jobSeekerEntry";
+
+const PAYWALL_PATH = "/onboarding?step=showcasePricing";
 
 // Guards against a cross-domain auth redirect loop (app.tryhirly.com <->
 // tryhirly.com/signin): if we land back here within this window of our own
@@ -23,6 +26,36 @@ export default function ProtectedRoute({ children, requireProfile = false }) {
   const location = useLocation();
   const loginRedirectStartedRef = useRef(false);
   const [redirectLoopDetected, setRedirectLoopDetected] = useState(false);
+  const [billingAccess, setBillingAccess] = useState(null);
+
+  const isCreator = Boolean(user?.demo_account) || Boolean(hasTrainingAccess) || isDemoAccountEnabled();
+
+  useEffect(() => {
+    if (devBypassAuth || loading || !user || !requireProfile || isCreator) {
+      setBillingAccess(null);
+      return;
+    }
+    if (!hasProfile || !hasPreferences) {
+      setBillingAccess(null);
+      return;
+    }
+
+    let cancelled = false;
+    setBillingAccess(null);
+    (async () => {
+      try {
+        const { profile, billing } = await fetchJobSeekerEntryState();
+        if (cancelled) return;
+        setBillingAccess(canAccessJobSeekerApp({ user, billing, profile }));
+      } catch {
+        if (!cancelled) setBillingAccess(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loading, user, requireProfile, isCreator, hasProfile, hasPreferences]);
 
   useEffect(() => {
     if (devBypassAuth || loading || user) return;
@@ -91,7 +124,6 @@ export default function ProtectedRoute({ children, requireProfile = false }) {
     );
   }
   // Demo and training creators bypass the job-seeker profile requirement.
-  const isCreator = Boolean(user?.demo_account) || Boolean(hasTrainingAccess) || isDemoAccountEnabled();
   if (requireProfile && !isCreator && (!hasProfile || !hasPreferences)) {
     if (domainSplitEnabled() && isAppHost()) {
       window.location.replace(marketingUrl("/onboarding"));
@@ -99,5 +131,23 @@ export default function ProtectedRoute({ children, requireProfile = false }) {
     }
     return <Navigate to="/onboarding" replace />;
   }
+
+  if (requireProfile && !isCreator && hasProfile && hasPreferences) {
+    if (billingAccess === null) {
+      return (
+        <div className="min-h-dvh flex items-center justify-center" data-testid="protected-billing-loading">
+          <Loader2 className="w-5 h-5 animate-spin text-zinc-400" />
+        </div>
+      );
+    }
+    if (billingAccess === false) {
+      if (domainSplitEnabled() && isAppHost()) {
+        window.location.replace(marketingUrl(PAYWALL_PATH));
+        return null;
+      }
+      return <Navigate to={PAYWALL_PATH} replace />;
+    }
+  }
+
   return children;
 }

@@ -13,6 +13,8 @@ import {
   buildFriendReferralShareMessage,
   fetchFriendReferralStatus,
   shareFriendReferralCode,
+  FRIEND_REFERRAL_GOAL,
+  FRIEND_REFERRAL_REWARD_CREDITS,
 } from "../../lib/friendReferral";
 import {
   trackFriendReferralCodeCopied,
@@ -178,8 +180,8 @@ export default function FriendReferralCodeDialog({
           </SheetTitle>
           <SheetDescription className="text-sm leading-relaxed text-zinc-500">
             {lang === "fr"
-              ? "Invitez 3 amis pour débloquer l\u2019accès gratuit."
-              : "Invite 3 friends to unlock free access."}
+              ? `Invitez ${FRIEND_REFERRAL_GOAL} amis pour débloquer l\u2019accès gratuit et recevoir ${FRIEND_REFERRAL_REWARD_CREDITS} candidatures.`
+              : `Invite ${FRIEND_REFERRAL_GOAL} friends to unlock free access and get ${FRIEND_REFERRAL_REWARD_CREDITS} applications.`}
           </SheetDescription>
         </SheetHeader>
 

@@ -10,6 +10,9 @@ import {
 
 const PENDING_FRIEND_REFERRAL_KEY = "hirly.friend_referral.pending";
 
+export const FRIEND_REFERRAL_GOAL = 3;
+export const FRIEND_REFERRAL_REWARD_CREDITS = 40;
+
 function friendReferralSiteHost() {
   try {
     const base = INVITE_BASE_URL || "https://tryhirly.com";

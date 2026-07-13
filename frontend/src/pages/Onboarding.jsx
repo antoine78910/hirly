@@ -526,13 +526,6 @@ export default function Onboarding() {
       // inherit a link visited earlier in the same browser.
       clearPendingInviteCode();
 
-      if (user && hasProfile && hasPreferences) {
-        goToApp("/swipe");
-        resumeAppliedRef.current = true;
-        setBootstrapping(false);
-        return;
-      }
-
       if (!user) {
         resumeAppliedRef.current = true;
         setBootstrapping(false);

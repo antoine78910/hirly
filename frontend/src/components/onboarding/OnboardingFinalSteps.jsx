@@ -19,6 +19,7 @@ import {
   buildProfileWelcomeItems,
   getOnboardingValueTagline,
 } from "./onboardingData";
+import { FRIEND_REFERRAL_GOAL, FRIEND_REFERRAL_REWARD_CREDITS } from "../../lib/friendReferral";
 
 function OnboardingValueTagline({ className = "", prominent = false }) {
   const { lang } = useAppLocale();
@@ -449,8 +450,13 @@ export function ShowcasePricingStep({
           >
             {friendReferralEnrolling
               ? (lang === "fr" ? "Préparation..." : "Preparing...")
-              : (lang === "fr" ? "Inviter 3 amis" : "Invite 3 friends")}
+              : (lang === "fr" ? `Inviter ${FRIEND_REFERRAL_GOAL} amis` : `Invite ${FRIEND_REFERRAL_GOAL} friends`)}
           </button>
+          <p className={`text-center text-[10px] ${ob.dim}`}>
+            {lang === "fr"
+              ? `${FRIEND_REFERRAL_REWARD_CREDITS} candidatures offertes`
+              : `${FRIEND_REFERRAL_REWARD_CREDITS} applications included`}
+          </p>
         </div>
       </div>
     </div>

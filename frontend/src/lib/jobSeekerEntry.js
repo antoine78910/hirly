@@ -13,13 +13,6 @@ export function canAccessJobSeekerApp({ user, billing, profile } = {}) {
   const b = billing || {};
   if (b.is_premium) return true;
   if (Number(b.credits_remaining ?? 0) > 0) return true;
-  if (b.stripe_customer_id_exists) return true;
-
-  const status = String(b.subscription_status || "none").toLowerCase();
-  if (status && status !== "none") return true;
-
-  const plan = String(b.plan || "").trim().toLowerCase();
-  if (plan && plan !== "none") return true;
 
   return false;
 }

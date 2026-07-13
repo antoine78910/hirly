@@ -20,11 +20,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
 import { withDatafastAttribution } from "@/lib/datafast";
 import Logo from "@/components/Logo";
+import FriendReferralCodeDialog from "@/components/onboarding/FriendReferralCodeDialog";
 import { useAppLocale } from "@/context/AppLocaleContext";
 import { useAuth } from "@/context/AuthContext";
 import { getUpgradeContent } from "@/lib/appUi";
 import { formatMoney, formatUnitMoney } from "@/lib/currency";
-import { notifyBillingUpdated } from "@/lib/billingEvents";
+import {
+  enrollFriendReferral,
+  fetchFriendReferralStatus,
+  friendReferralCodeForUser,
+  FRIEND_REFERRAL_GOAL,
+  FRIEND_REFERRAL_REWARD_CREDITS,
+} from "@/lib/friendReferral";
 import {
   SUBSCRIPTION_TIERS,
   tierApplicationsForInterval,
@@ -128,7 +135,7 @@ function monthlyEquivalentApplications(billing) {
 }
 
 export default function DesktopUpgradeModal({ open, onClose }) {
-  const { checkAuth } = useAuth();
+  const { user } = useAuth();
   const { t, lang } = useAppLocale();
   const location = useLocation();
   const returnPath = `${location.pathname}${location.search}`;
@@ -136,8 +143,11 @@ export default function DesktopUpgradeModal({ open, onClose }) {
   const [billingInterval, setBillingInterval] = useState("monthly");
   const [selectedTier, setSelectedTier] = useState("ultra");
   const [checkoutLoading, setCheckoutLoading] = useState(false);
-  const [accessCode, setAccessCode] = useState("");
   const [currentBilling, setCurrentBilling] = useState(null);
+  const [friendReferralDialogOpen, setFriendReferralDialogOpen] = useState(false);
+  const [friendReferralUserCode, setFriendReferralUserCode] = useState("");
+  const [friendReferralUsesCount, setFriendReferralUsesCount] = useState(0);
+  const [friendReferralEnrolling, setFriendReferralEnrolling] = useState(false);
 
   const isMonthly = billingInterval === "monthly";
   const isExistingSubscriber = Boolean(currentBilling?.is_premium);
@@ -202,25 +212,6 @@ export default function DesktopUpgradeModal({ open, onClose }) {
   const handleCheckout = async () => {
     setCheckoutLoading(true);
     try {
-      const normalizedCode = accessCode.trim();
-      if (normalizedCode) {
-        const { data } = await api.post("/billing/redeem-master-code", {
-          code: normalizedCode,
-          plan: selectedTier,
-          interval: billingInterval,
-          source: "app",
-        });
-        if (data?.billing) {
-          notifyBillingUpdated(data.billing);
-        }
-        if (data?.demo_account) {
-          await checkAuth();
-        }
-        toast.success("Test plan activated");
-        setAccessCode("");
-        onClose?.();
-        return;
-      }
       if (isExistingSubscriber) {
         const { data } = await api.post("/billing/create-upgrade-session", {
           plan: selectedTier,
@@ -252,7 +243,40 @@ export default function DesktopUpgradeModal({ open, onClose }) {
     }
   };
 
+  const startFriendReferralEnroll = async () => {
+    if (!user) return;
+
+    const fallbackCode = friendReferralCodeForUser(user);
+    setFriendReferralUserCode(fallbackCode);
+    setFriendReferralDialogOpen(true);
+    setFriendReferralEnrolling(true);
+
+    try {
+      const data = await enrollFriendReferral();
+      setFriendReferralUserCode(data?.code || fallbackCode);
+      setFriendReferralUsesCount(Number(data?.uses_count) || 0);
+    } catch {
+      try {
+        const status = await fetchFriendReferralStatus();
+        setFriendReferralUserCode(status?.code || fallbackCode);
+        setFriendReferralUsesCount(Number(status?.uses_count) || 0);
+      } catch {
+        setFriendReferralUserCode(fallbackCode);
+      }
+    } finally {
+      setFriendReferralEnrolling(false);
+    }
+  };
+
+  const inviteFriendsLabel = lang === "fr"
+    ? `Inviter ${FRIEND_REFERRAL_GOAL} amis`
+    : `Invite ${FRIEND_REFERRAL_GOAL} friends`;
+  const inviteFriendsHint = lang === "fr"
+    ? `${FRIEND_REFERRAL_REWARD_CREDITS} candidatures offertes`
+    : `${FRIEND_REFERRAL_REWARD_CREDITS} applications included`;
+
   return (
+    <>
     <Dialog open={open} onOpenChange={(next) => !next && onClose?.()}>
       <DialogContent
         className="sprout fixed top-[50%] left-[50%] z-50 flex h-auto max-h-dvh w-full max-w-full translate-x-[-50%] translate-y-[-50%] flex-col gap-0 overflow-hidden rounded-lg border bg-background p-0 shadow-lg sm:h-[95vh] sm:max-w-[95vw] lg:max-w-6xl"
@@ -404,16 +428,6 @@ export default function DesktopUpgradeModal({ open, onClose }) {
                   </button>
                 ) : (
                   <>
-                    <input
-                      className="h-9 w-full rounded-md border border-border bg-background px-3 text-center font-mono text-sm font-semibold tracking-[0.2em] text-foreground outline-none transition-colors placeholder:tracking-normal placeholder:text-muted-foreground focus:border-violet-400 sm:h-10"
-                      inputMode="numeric"
-                      autoComplete="one-time-code"
-                      maxLength={6}
-                      placeholder="Access code"
-                      value={accessCode}
-                      onChange={(e) => setAccessCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                      data-testid="upgrade-access-code-input"
-                    />
                     <button
                       type="button"
                       onClick={handleCheckout}
@@ -427,6 +441,24 @@ export default function DesktopUpgradeModal({ open, onClose }) {
                       )}
                       {isExistingSubscriber ? t("upgrade.upgradeCta") : t("upgrade.cta")}
                     </button>
+                    {!isExistingSubscriber ? (
+                      <div className="space-y-1">
+                        <button
+                          type="button"
+                          onClick={startFriendReferralEnroll}
+                          disabled={checkoutLoading || friendReferralEnrolling}
+                          className="inline-flex h-10 w-full items-center justify-center rounded-full border-2 border-violet-500 bg-white px-6 text-sm font-semibold text-linkedin transition-colors hover:bg-violet-50 disabled:pointer-events-none disabled:opacity-50"
+                          data-testid="upgrade-friend-referral-btn"
+                        >
+                          {friendReferralEnrolling
+                            ? (lang === "fr" ? "Préparation..." : "Preparing...")
+                            : inviteFriendsLabel}
+                        </button>
+                        <p className="text-center text-[10px] text-muted-foreground sm:text-xs">
+                          {inviteFriendsHint}
+                        </p>
+                      </div>
+                    ) : null}
                   </>
                 )}
 
@@ -453,5 +485,16 @@ export default function DesktopUpgradeModal({ open, onClose }) {
         </div>
       </DialogContent>
     </Dialog>
+
+    <FriendReferralCodeDialog
+      open={friendReferralDialogOpen}
+      onOpenChange={setFriendReferralDialogOpen}
+      code={friendReferralUserCode}
+      usesCount={friendReferralUsesCount}
+      loading={friendReferralEnrolling}
+      lang={lang}
+      onUsesCountChange={setFriendReferralUsesCount}
+    />
+    </>
   );
 }
