@@ -230,6 +230,7 @@ export default function Onboarding() {
     () => readOnboardingPreviewBoot(STEP_ORDER)?.state?.attribution ?? null,
   );
   const [referralCode, setReferralCode] = useState("");
+  const [friendReferralRedeemed, setFriendReferralRedeemed] = useState(false);
   const [contactPhonePrefix, setContactPhonePrefix] = useState(() => getDefaultPhonePrefix(lang));
   const [contactPhoneCountryIso2, setContactPhoneCountryIso2] = useState(() => getDefaultPhoneCountryIso2(lang));
   const [contactPhoneLocal, setContactPhoneLocal] = useState("");
@@ -946,6 +947,9 @@ export default function Onboarding() {
   };
 
   const redeemFriendReferralIfPresent = async () => {
+    // Already redeemed right when the code was submitted on the
+    // referralCode step -- nothing left to do here.
+    if (friendReferralRedeemed) return true;
     const code = referralCode.trim().toUpperCase();
     // Friend-referral codes are also 6 digits now, the same shape as
     // creator/demo access codes -- try friend-referral first since that's
@@ -959,9 +963,17 @@ export default function Onboarding() {
       // redeemAccessCodeIfPresent try the same value as a creator/demo
       // invite code afterwards.
       setCreatorAccessCode("");
+      setFriendReferralRedeemed(true);
       return true;
     } catch (err) {
       const detail = err?.response?.data?.detail;
+      // Already redeemed earlier this session (e.g. a reload re-ran this
+      // fallback) -- treat as success rather than blocking onboarding.
+      if (detail === "You have already used a friend referral code") {
+        clearPendingFriendReferralCode();
+        setFriendReferralRedeemed(true);
+        return true;
+      }
       // Not a recognized referral code -- if it's also shaped like a
       // 6-digit creator/demo invite code, let redeemAccessCodeIfPresent
       // try that instead rather than blocking onboarding on this specific
@@ -1167,11 +1179,24 @@ export default function Onboarding() {
       }
 
       if (result.kind === "friend") {
+        // Redeem right away -- the reward is earned the moment a friend
+        // signs up, not only once they finish the whole onboarding flow
+        // (which can be minutes later, or never, if they abandon before
+        // paying).
+        try {
+          await redeemFriendReferralCode(code);
+          setFriendReferralRedeemed(true);
+          clearPendingFriendReferralCode();
+        } catch (err) {
+          toast.error(
+            err?.response?.data?.detail || friendReferralValidationMessage("not_found", lang),
+          );
+          return;
+        }
         setReferralCode(code);
         setCreatorAccessCode("");
-        storePendingFriendReferralCode(code);
         clearPendingInviteCode();
-        toast.success(lang === "fr" ? "Code de parrainage valide" : "Referral code accepted");
+        toast.success(lang === "fr" ? "Code de parrainage appliqué" : "Referral code applied");
       } else {
         setReferralCode("");
         setCreatorAccessCode(code);
