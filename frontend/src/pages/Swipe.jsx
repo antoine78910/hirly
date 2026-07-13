@@ -465,6 +465,7 @@ function CardBack({ job, t, lang, onFlipBack }) {
 
   const requestFlipBack = (event) => {
     if (event?.target?.closest?.("button, a, input, textarea, select, [role='button']")) return;
+    if (event?.target?.closest?.("[data-testid='swipe-card-scroll']")) return;
     const scrollDelta = Math.abs(
       (scrollRef.current?.scrollTop ?? 0) - (pointerRef.current.startScrollTop ?? 0),
     );
@@ -606,15 +607,12 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang, isAdmin,
 
   const handleFlipTap = useCallback(() => {
     if (!isTop) return;
-    if (flipped) {
-      flipToFront();
-      return;
-    }
+    if (flipped) return;
     if (isCardTapSuppressed()) return;
     if (interactionRef.current.suppressTap || interactionRef.current.dragDistance > 8) return;
     setShowBack(true);
     setFlipped(true);
-  }, [isTop, flipped, flipToFront]);
+  }, [isTop, flipped]);
 
   useEffect(() => {
     if (!isTop || !pendingSwipe) return undefined;
