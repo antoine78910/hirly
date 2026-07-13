@@ -11,6 +11,7 @@ import {
   authCallbackRedirectUrl,
   establishAppSessionFromSupabase,
   startGoogleLogin,
+  storeOnboardingReturnPath,
 } from "../../lib/auth";
 import { supabase, supabaseConfigured } from "../../lib/supabase";
 import { useAuth } from "../../context/AuthContext";
@@ -117,7 +118,7 @@ export default function OnboardingSignup({ onClose, lang = "en" }) {
   };
 
   const handleGoogleSignup = async () => {
-    sessionStorage.setItem("swiipr_onboarding_return", ONBOARDING_RETURN_PATH);
+    storeOnboardingReturnPath(ONBOARDING_RETURN_PATH);
     const ok = await startGoogleLogin(ONBOARDING_RETURN_PATH);
     if (!ok) {
       toast.error(copy.googleNotConfigured, {
@@ -155,7 +156,7 @@ export default function OnboardingSignup({ onClose, lang = "en" }) {
     }
 
     setSubmitting(true);
-    sessionStorage.setItem("swiipr_onboarding_return", ONBOARDING_RETURN_PATH);
+    storeOnboardingReturnPath(ONBOARDING_RETURN_PATH);
     try {
       const { data, error: authError } = await supabase.auth.signUp({
         email: trimmedEmail,
@@ -180,7 +181,10 @@ export default function OnboardingSignup({ onClose, lang = "en" }) {
 
       if (data?.session) {
         const ok = await finishSession(data.session);
-        if (ok) return;
+        if (ok) {
+          onClose?.();
+          return;
+        }
       }
 
       setEmailDispatchFailed(false);

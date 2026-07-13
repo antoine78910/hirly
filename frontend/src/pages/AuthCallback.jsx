@@ -17,10 +17,23 @@ import {
 } from "../lib/creatorInvite";
 import { setDemoAccountFromUser } from "../lib/demoAccount";
 import { resolvePostAuthDestination } from "../lib/appDomains";
+import {
+  clearOnboardingReturnPath,
+  readOnboardingReturnPath,
+  splitAppPath,
+} from "../lib/auth";
+import { hasJobSeekerOnboardingComplete } from "../lib/jobSeekerEntry";
 
 export default function AuthCallback() {
   const navigate = useNavigate();
-  const { setUser, setHasProfile, setHasPreferences, setIsTrainingCreator, setHasTrainingAccess } = useAuth();
+  const {
+    setUser,
+    setHasProfile,
+    setHasPreferences,
+    setIsTrainingCreator,
+    setHasTrainingAccess,
+    checkAuth,
+  } = useAuth();
   const hasProcessed = useRef(false);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -29,7 +42,7 @@ export default function AuthCallback() {
     hasProcessed.current = true;
 
     const params = new URLSearchParams(window.location.search);
-    const storedReturn = sessionStorage.getItem("swiipr_onboarding_return");
+    const storedReturn = readOnboardingReturnPath();
     const nextPath = params.get("next") || storedReturn || "/swipe";
 
     (async () => {
@@ -86,24 +99,51 @@ export default function AuthCallback() {
           has_profile: Boolean(data.has_profile),
           has_preferences: Boolean(data.has_preferences),
         });
-        if (storedReturn?.includes("/onboarding") && authProvider === "google") {
+        const onboardingSignupReturn = Boolean(
+          storedReturn?.includes("/onboarding") || nextPath.includes("/onboarding"),
+        );
+        if (onboardingSignupReturn && authProvider === "google") {
           trackOnboardingSignup("google");
         }
-        sessionStorage.removeItem("swiipr_onboarding_return");
+        if (onboardingSignupReturn && authProvider === "email") {
+          trackOnboardingSignup("email");
+        }
+        clearOnboardingReturnPath();
 
         window.history.replaceState({}, "", window.location.pathname);
         const onboardingIncomplete = !data.has_profile || !data.has_preferences;
         const isDemoOrTrainingInvite = Boolean(redeemed?.demo_account || redeemed?.training_access);
         let destination = inviteRedirect || (nextPath.startsWith("/") ? nextPath : "/swipe");
-        // Creators who redeemed an invite go directly to their destination — no onboarding.
-        if (!inviteRedirect && onboardingIncomplete && !isDemoOrTrainingInvite && !data?.user?.demo_account) {
+        // Google/email signup from onboarding must continue onboarding — never skip via billing.
+        if (
+          !inviteRedirect
+          && (onboardingIncomplete || onboardingSignupReturn)
+          && !isDemoOrTrainingInvite
+          && !data?.user?.demo_account
+        ) {
           destination = destination.startsWith("/onboarding")
             ? destination
             : "/onboarding?step=jobSearch";
-        } else if (!inviteRedirect && destination.startsWith("/onboarding")) {
-          destination = "/swipe";
+        } else if (
+          !inviteRedirect
+          && destination.startsWith("/onboarding")
+          && !isDemoOrTrainingInvite
+          && !data?.user?.demo_account
+        ) {
+          try {
+            const { data: profileData } = await api.get("/profile");
+            if (hasJobSeekerOnboardingComplete(profileData)) {
+              destination = "/swipe";
+            }
+          } catch {
+            /* keep onboarding destination */
+          }
         }
-        const resolved = resolvePostAuthDestination(destination);
+        if (checkAuth) {
+          await checkAuth();
+        }
+        const { pathname, search } = splitAppPath(destination);
+        const resolved = resolvePostAuthDestination(pathname, search);
         if (resolved.type === "external") {
           window.location.replace(resolved.url);
           return;
@@ -116,7 +156,7 @@ export default function AuthCallback() {
         setErrorMessage(`${step}: ${message}`);
       }
     })();
-  }, [navigate, setUser, setHasProfile, setHasPreferences, setIsTrainingCreator, setHasTrainingAccess]);
+  }, [navigate, setUser, setHasProfile, setHasPreferences, setIsTrainingCreator, setHasTrainingAccess, checkAuth]);
 
   return (
     <div className="min-h-dvh flex items-center justify-center bg-white" data-testid="auth-callback">

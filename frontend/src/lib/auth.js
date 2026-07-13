@@ -3,6 +3,43 @@ import { supabase, supabaseConfigured } from "./supabase";
 
 export const GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 
+/** Persists across tabs — required for email-verification links opened in a fresh tab. */
+export const ONBOARDING_RETURN_STORAGE_KEY = "hirly.onboarding_return";
+
+export function storeOnboardingReturnPath(path) {
+  const normalized = path && path.startsWith("/") ? path : "/onboarding?step=jobSearch";
+  try {
+    sessionStorage.setItem("swiipr_onboarding_return", normalized);
+    localStorage.setItem(ONBOARDING_RETURN_STORAGE_KEY, normalized);
+  } catch (_) {}
+}
+
+export function readOnboardingReturnPath() {
+  try {
+    return (
+      sessionStorage.getItem("swiipr_onboarding_return")
+      || localStorage.getItem(ONBOARDING_RETURN_STORAGE_KEY)
+      || ""
+    );
+  } catch {
+    return "";
+  }
+}
+
+export function clearOnboardingReturnPath() {
+  try {
+    sessionStorage.removeItem("swiipr_onboarding_return");
+    localStorage.removeItem(ONBOARDING_RETURN_STORAGE_KEY);
+  } catch (_) {}
+}
+
+export function splitAppPath(rawPath) {
+  const raw = rawPath && rawPath.startsWith("/") ? rawPath : `/${rawPath || ""}`;
+  const qIndex = raw.indexOf("?");
+  if (qIndex === -1) return { pathname: raw, search: "" };
+  return { pathname: raw.slice(0, qIndex) || "/", search: raw.slice(qIndex) };
+}
+
 export function supabaseSessionPayload(session) {
   const identityData = session?.user?.identities?.[0]?.identity_data || {};
   return {
@@ -19,7 +56,7 @@ export function supabaseSessionPayload(session) {
  */
 export async function startGoogleLogin(returnPath = "/swipe", opts = {}) {
   const path = returnPath && returnPath.startsWith("/") ? returnPath : "/swipe";
-  sessionStorage.setItem("swiipr_onboarding_return", path);
+  storeOnboardingReturnPath(path);
   setSessionToken(null);
 
   const devLoginEnabled = process.env.REACT_APP_DEV_LOGIN_ENABLED === "true";

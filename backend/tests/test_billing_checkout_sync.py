@@ -258,10 +258,36 @@ def test_resolve_user_id_from_checkout_session_by_email(monkeypatch):
     assert resolved == "user_1"
 
 
-def test_checkout_session_belongs_to_user_by_customer_details_email():
+def test_checkout_session_rejects_email_only_match():
     session_obj = {"customer": "cus_orphan", "customer_details": {"email": "paid@example.com"}}
     user_doc = {"user_id": "user_1", "email": "paid@example.com", "billing": {}}
-    assert asyncio.run(server._checkout_session_belongs_to_user(session_obj, user_doc)) is True
+    assert asyncio.run(server._checkout_session_belongs_to_user(session_obj, user_doc)) is False
+
+
+def test_checkout_session_rejects_foreign_user_id_in_metadata():
+    session_obj = {
+        "client_reference_id": "user_old",
+        "customer": "cus_123",
+        "customer_details": {"email": "paid@example.com"},
+    }
+    user_doc = {"user_id": "user_new", "email": "paid@example.com", "billing": {}}
+    assert asyncio.run(server._checkout_session_belongs_to_user(session_obj, user_doc)) is False
+
+
+def test_discover_stripe_customer_requires_metadata_user_id(monkeypatch):
+    monkeypatch.setattr(server, "_stripe_configured", lambda: True)
+    monkeypatch.setattr(server, "_stripe_secret_key", lambda: "sk_test")
+    monkeypatch.setattr(
+        server.stripe.Customer,
+        "list",
+        lambda email, limit=10: {
+            "data": [
+                {"id": "cus_other", "metadata": {"user_id": "user_old"}},
+            ]
+        },
+    )
+    user_doc = {"user_id": "user_new", "email": "paid@example.com", "billing": {}}
+    assert asyncio.run(server._discover_stripe_customer_for_user(user_doc)) is None
 
 
 def test_stripe_object_id_handles_dict_and_string():

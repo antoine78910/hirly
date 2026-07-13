@@ -2217,9 +2217,7 @@ async def _discover_stripe_customer_for_user(user_doc: Dict[str, Any]) -> Option
             metadata = customer.get("metadata") if isinstance(customer, dict) else getattr(customer, "metadata", {}) or {}
             if isinstance(metadata, dict) and metadata.get("user_id") == user_id and customer_id:
                 return customer_id
-        if data:
-            first = data[0]
-            return first.get("id") if isinstance(first, dict) else getattr(first, "id", None)
+        # Never attach another user's Stripe customer that merely shares this email.
     except Exception as exc:
         logger.warning(
             "stripe_discover_customer_for_user_failed user_id=%s error=%s",
@@ -2434,17 +2432,23 @@ async def _repair_premium_credits_if_needed(user_id: str, user_doc: Dict[str, An
     return await db.users.find_one({"user_id": user_id}, {"_id": 0}) or user_doc
 
 
-async def _refresh_billing_from_stripe(user_doc: Dict[str, Any]) -> tuple[Dict[str, Any], Optional[str]]:
+async def _refresh_billing_from_stripe(
+    user_doc: Dict[str, Any],
+    *,
+    discover: bool = True,
+) -> tuple[Dict[str, Any], Optional[str]]:
     billing = _billing_from_user(user_doc)
     subscription_id = billing.get("stripe_subscription_id")
     if str(subscription_id or "").startswith("master_code_"):
         return user_doc, None
-    customer_id = billing.get("stripe_customer_id") or await _discover_stripe_customer_for_user(user_doc)
-    if customer_id and customer_id != billing.get("stripe_customer_id"):
+    customer_id = billing.get("stripe_customer_id")
+    if discover and not customer_id:
+        customer_id = await _discover_stripe_customer_for_user(user_doc)
+    if discover and customer_id and customer_id != billing.get("stripe_customer_id"):
         await _update_user_billing_by_user_id(user_doc["user_id"], {"stripe_customer_id": customer_id})
         billing = {**billing, "stripe_customer_id": customer_id}
         user_doc = {**user_doc, "billing": billing}
-    if not subscription_id:
+    if discover and not subscription_id and customer_id:
         discovered = _discover_stripe_subscription(customer_id)
         if discovered:
             subscription_id = discovered.get("id") if isinstance(discovered, dict) else getattr(discovered, "id", None)
@@ -2576,10 +2580,12 @@ async def redeem_billing_master_code(body: BillingMasterCodeRequest, user: User 
 
 @api_router.get("/billing/status")
 async def billing_status(user: User = Depends(get_current_user)):
+    """Read billing from the user record. Does not recover foreign Stripe checkouts."""
     user_doc = await _get_user_doc(user)
-    user_doc, warning = await _refresh_billing_from_stripe(user_doc)
-    user_doc = await _recover_stalled_checkout_billing(user_doc)
-    user_doc = await _repair_premium_credits_if_needed(user.user_id, user_doc)
+    billing = _billing_from_user(user_doc)
+    warning = None
+    if billing.get("stripe_subscription_id") and _stripe_configured():
+        user_doc, warning = await _refresh_billing_from_stripe(user_doc, discover=False)
     payload = _billing_status_payload(user_doc)
     if warning:
         payload["warning"] = warning
@@ -2608,29 +2614,18 @@ def _checkout_session_user_id(session_obj: Dict[str, Any]) -> Optional[str]:
 async def _checkout_session_belongs_to_user(session_obj: Dict[str, Any], user_doc: Dict[str, Any]) -> bool:
     user_id = user_doc.get("user_id")
     session_user_id = _checkout_session_user_id(session_obj)
+    metadata_user_id = (session_obj.get("metadata") or {}).get("user_id")
+    for bound_user_id in (session_user_id, metadata_user_id):
+        if bound_user_id and bound_user_id != user_id:
+            return False
     if session_user_id and session_user_id == user_id:
         return True
-    metadata_user_id = (session_obj.get("metadata") or {}).get("user_id")
     if metadata_user_id and metadata_user_id == user_id:
         return True
     customer_id = _stripe_object_id(session_obj.get("customer"))
     user_customer_id = _billing_from_user(user_doc).get("stripe_customer_id")
     if customer_id and user_customer_id and customer_id == user_customer_id:
         return True
-    user_email = (user_doc.get("email") or "").strip().lower()
-    customer_details = session_obj.get("customer_details") or {}
-    checkout_email = (customer_details.get("email") or "").strip().lower()
-    if checkout_email and user_email and checkout_email == user_email:
-        return True
-    if customer_id and user_email and _stripe_configured():
-        try:
-            _stripe_secret_key()
-            customer = stripe.Customer.retrieve(customer_id)
-            stripe_email = (customer.get("email") or "").strip().lower()
-            if stripe_email and stripe_email == user_email:
-                return True
-        except Exception:
-            pass
     return False
 
 

@@ -9,7 +9,7 @@ import {
   isAppHost,
   marketingUrl,
 } from "../lib/appDomains";
-import { fetchJobSeekerEntryState, hasJobSeekerOnboardingComplete } from "../lib/jobSeekerEntry";
+import { fetchJobSeekerProfile, hasJobSeekerOnboardingComplete } from "../lib/jobSeekerEntry";
 
 // Guards against a cross-domain auth redirect loop (app.tryhirly.com <->
 // tryhirly.com/signin): if we land back here within this window of our own
@@ -43,7 +43,7 @@ export default function ProtectedRoute({ children, requireProfile = false }) {
     setOnboardingComplete(null);
     (async () => {
       try {
-        const { profile } = await fetchJobSeekerEntryState();
+        const profile = await fetchJobSeekerProfile();
         if (!cancelled) setOnboardingComplete(hasJobSeekerOnboardingComplete(profile));
       } catch {
         if (!cancelled) setOnboardingComplete(false);
