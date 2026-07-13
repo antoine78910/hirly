@@ -290,8 +290,7 @@ export default function OnboardingSignup({ onClose, lang = "en" }) {
                 onClick={handleGoogleSignup}
                 disabled={submitting}
                 label={copy.google}
-                highlighted
-                className="h-12"
+                className="h-12 rounded-full"
                 testId="onboarding-signup-btn"
               />
 

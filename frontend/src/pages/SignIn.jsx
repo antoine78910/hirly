@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Loader2, Lock, Mail } from "lucide-react";
 import Logo from "../components/Logo";
@@ -18,6 +18,40 @@ import {
   openJobSeekerDestination,
   resolveJobSeekerEntryDestination,
 } from "../lib/jobSeekerEntry";
+import { useAppLocale } from "../context/AppLocaleContext";
+
+const COPY = {
+  en: {
+    title: "Welcome back",
+    subtitle: "Continue with Google or your email.",
+    or: "or",
+    email: "Email",
+    password: "Password",
+    continue: "Continue",
+    google: "Continue with Google",
+    newUser: "New to {brand}?",
+    getStarted: "Get started",
+    confirmEmail: "Check your email to confirm your account, then come back to sign in.",
+    authNotConfigured: "Email authentication is not configured.",
+    credentialsRequired: "Enter your email and password (at least 6 characters).",
+    signInFailed: "Sign in failed. Please try again.",
+  },
+  fr: {
+    title: "Bon retour",
+    subtitle: "Continuez avec Google ou votre e-mail.",
+    or: "ou",
+    email: "Adresse e-mail",
+    password: "Mot de passe",
+    continue: "Continuer",
+    google: "Continuer avec Google",
+    newUser: "Nouveau sur {brand} ?",
+    getStarted: "Commencer",
+    confirmEmail: "Vérifiez votre e-mail pour confirmer votre compte, puis reconnectez-vous.",
+    authNotConfigured: "L'authentification par e-mail n'est pas configurée.",
+    credentialsRequired: "Saisissez votre e-mail et votre mot de passe (6 caractères minimum).",
+    signInFailed: "Connexion impossible. Réessayez.",
+  },
+};
 
 export default function SignIn() {
   const navigate = useNavigate();
@@ -34,6 +68,8 @@ export default function SignIn() {
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const { lang } = useAppLocale();
+  const copy = useMemo(() => COPY[lang === "fr" ? "fr" : "en"], [lang]);
 
   useEffect(() => {
     trackEvent("signin_page_view");
@@ -66,7 +102,7 @@ export default function SignIn() {
   const finishWithSupabaseSession = async (session) => {
     const accessToken = session?.access_token;
     if (!accessToken) {
-      setError("Check your email to confirm your account, then come back to sign in.");
+      setError(copy.confirmEmail);
       return;
     }
 
@@ -106,11 +142,11 @@ export default function SignIn() {
     setError("");
 
     if (!supabaseConfigured || !supabase) {
-      setError("Email authentication is not configured.");
+      setError(copy.authNotConfigured);
       return;
     }
     if (!email.trim() || password.length < 6) {
-      setError("Enter your email and password (at least 6 characters).");
+      setError(copy.credentialsRequired);
       return;
     }
 
@@ -124,7 +160,7 @@ export default function SignIn() {
       if (authError) throw authError;
       await finishWithSupabaseSession(data?.session);
     } catch (err) {
-      setError(err?.message || "Sign in failed. Please try again.");
+      setError(err?.message || copy.signInFailed);
     } finally {
       setSubmitting(false);
     }
@@ -152,35 +188,36 @@ export default function SignIn() {
         </Link>
 
         <div className="mt-10 w-full">
-          <h1 className="text-center font-display text-3xl font-bold tracking-tight">Welcome back</h1>
+          <h1 className="text-center font-display text-3xl font-bold tracking-tight">{copy.title}</h1>
           <p className="mt-2 text-center text-sm text-zinc-500">
-            Continue with Google or your email.
+            {copy.subtitle}
           </p>
 
           <div className="mt-8 space-y-4">
             <GoogleSignInButton
               onClick={onGoogleClick}
               disabled={submitting}
+              label={copy.google}
               className="h-12 rounded-full"
               testId="signin-google-btn"
             />
 
             <div className="flex items-center gap-3">
               <div className="h-px flex-1 bg-zinc-200" />
-              <span className="text-xs font-medium text-zinc-400">or</span>
+              <span className="text-xs font-medium text-zinc-400">{copy.or}</span>
               <div className="h-px flex-1 bg-zinc-200" />
             </div>
 
             <form className="space-y-3" onSubmit={onEmailSubmit}>
               <label className="block">
-                <span className="sr-only">Email</span>
+                <span className="sr-only">{copy.email}</span>
                 <div className="relative">
                   <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
                   <Input
                     type="email"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
-                    placeholder="Email"
+                    placeholder={copy.email}
                     className="h-12 rounded-2xl pl-10"
                     autoComplete="email"
                     data-testid="signin-email-input"
@@ -189,14 +226,14 @@ export default function SignIn() {
               </label>
 
               <label className="block">
-                <span className="sr-only">Password</span>
+                <span className="sr-only">{copy.password}</span>
                 <div className="relative">
                   <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
                   <Input
                     type="password"
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
-                    placeholder="Password"
+                    placeholder={copy.password}
                     className="h-12 rounded-2xl pl-10"
                     autoComplete="current-password"
                     data-testid="signin-password-input"
@@ -213,15 +250,15 @@ export default function SignIn() {
                 data-testid="signin-email-submit"
               >
                 {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Continue
+                {copy.continue}
               </Button>
             </form>
           </div>
 
           <p className="mt-6 text-center text-sm text-zinc-500">
-            New to {BRAND.NAME}?{" "}
+            {copy.newUser.replace("{brand}", BRAND.NAME)}{" "}
             <Link to="/onboarding" className="font-semibold text-linkedin hover:text-linkedin-dark">
-              Get started
+              {copy.getStarted}
             </Link>
           </p>
         </div>
