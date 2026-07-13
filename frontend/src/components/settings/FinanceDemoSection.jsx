@@ -3,12 +3,16 @@ import { useDemoSettings } from "../../hooks/useDemoSettings";
 import { useAppLocale } from "../../context/AppLocaleContext";
 import { useDesktopTheme } from "../desktop/DesktopAppShell";
 import ViralToggle from "./ViralToggle";
+import { useIsDemoAccount } from "./DemoAccountBadge";
 
 export default function FinanceDemoSection({ variant = "desktop" }) {
+  const isDemo = useIsDemoAccount();
   const { settings, updateSetting } = useDemoSettings();
   const { t } = useAppLocale();
   const { isDark } = useDesktopTheme();
   const dark = variant === "desktop" ? isDark : true;
+
+  if (!isDemo) return null;
 
   const onToggle = (value) => {
     updateSetting("financeJobFeed", value, {
