@@ -9,9 +9,30 @@ import {
 } from "./friendReferralAnalytics";
 
 const PENDING_FRIEND_REFERRAL_KEY = "hirly.friend_referral.pending";
+const LAST_SEEN_REWARD_BATCHES_KEY = "hirly.friend_referral.last_seen_batches";
 
 export const FRIEND_REFERRAL_GOAL = 3;
 export const FRIEND_REFERRAL_REWARD_CREDITS = 40;
+
+/** How many reward batches (every {goal} referrals) the user has already
+ * seen the "congrats" banner for -- so it only shows once per new batch. */
+export function getLastSeenFriendReferralBatches() {
+  if (typeof window === "undefined") return 0;
+  try {
+    return Number(localStorage.getItem(LAST_SEEN_REWARD_BATCHES_KEY) || 0);
+  } catch {
+    return 0;
+  }
+}
+
+export function setLastSeenFriendReferralBatches(value) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(LAST_SEEN_REWARD_BATCHES_KEY, String(value));
+  } catch {
+    /* ignore */
+  }
+}
 
 function friendReferralSiteHost() {
   try {

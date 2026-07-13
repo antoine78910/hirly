@@ -674,6 +674,8 @@ export const APP_UI = {
       loadError: "Could not load your referral code",
       shareCodeLabel: "Share referral link",
       copyCodeLabel: "Copy referral link",
+      completedTitle: "{goal}/{goal} friends referred",
+      completedBody: "Congrats! You earned {credits} credits.",
     },
     resumeSheet: {
       uploadTitle: "Upload resume",
@@ -1642,6 +1644,8 @@ export const APP_UI = {
       loadError: "Impossible de charger votre code de parrainage",
       shareCodeLabel: "Partager le lien de parrainage",
       copyCodeLabel: "Copier le lien de parrainage",
+      completedTitle: "{goal}/{goal} amis parrainés",
+      completedBody: "Félicitations ! Tu as gagné {credits} crédits.",
     },
     resumeSheet: {
       uploadTitle: "Importer un CV",

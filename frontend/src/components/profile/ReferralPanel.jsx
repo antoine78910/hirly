@@ -6,8 +6,10 @@ import { getFollowedSocials, markSocialFollowed } from "../../lib/referral";
 import {
   enrollFriendReferral,
   fetchFriendReferralStatus,
+  getLastSeenFriendReferralBatches,
   normalizeReferralCodeInput,
   redeemFriendReferralCode,
+  setLastSeenFriendReferralBatches,
   shareFriendReferralCode,
   buildFriendReferralShareUrl,
 } from "../../lib/friendReferral";
@@ -70,6 +72,7 @@ export default function ReferralPanel() {
   const [loading, setLoading] = useState(true);
   const [redeemCode, setRedeemCode] = useState("");
   const [redeeming, setRedeeming] = useState(false);
+  const [justCompletedCredits, setJustCompletedCredits] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -79,6 +82,15 @@ export default function ReferralPanel() {
           data = await enrollFriendReferral();
         }
         setStatus(data);
+        const batchesGranted = data?.reward_batches_granted || 0;
+        const lastSeen = getLastSeenFriendReferralBatches();
+        if (batchesGranted > lastSeen) {
+          const perBatchCredits = data?.credits_earned_total && batchesGranted
+            ? data.credits_earned_total / batchesGranted
+            : 40;
+          setJustCompletedCredits((batchesGranted - lastSeen) * perBatchCredits);
+          setLastSeenFriendReferralBatches(batchesGranted);
+        }
       } catch {
         toast.error(t("referralPanel.loadError"));
       } finally {
@@ -187,6 +199,20 @@ export default function ReferralPanel() {
               <Copy className="h-5 w-5" />
             </button>
           </div>
+
+          {justCompletedCredits > 0 && (
+            <div
+              className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-center"
+              data-testid="referral-completed-banner"
+            >
+              <p className="font-display text-lg font-bold text-emerald-700">
+                🎉 {t("referralPanel.completedTitle", { goal })}
+              </p>
+              <p className="mt-1 text-sm text-emerald-700">
+                {t("referralPanel.completedBody", { credits: justCompletedCredits })}
+              </p>
+            </div>
+          )}
 
           <div className="mt-4">
             <div className="flex items-center justify-between text-xs text-zinc-500">
