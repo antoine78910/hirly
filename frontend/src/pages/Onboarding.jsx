@@ -343,39 +343,34 @@ export default function Onboarding() {
     if (isSixDigitAccessCode(payload.creatorAccessCode)) setCreatorAccessCode(payload.creatorAccessCode);
   };
 
-  const persistOnboardingProgress = useCallback(async (nextStep, nextStepIndex) => {
-    if (!user || ONBOARDING_TRANSIENT_STEPS.has(nextStep)) return;
-    try {
-      await api.patch("/profile/extras", {
-        onboarding: buildOnboardingExtrasPayload({
-          jobSearchStatus,
-          onboardingLocation,
-          onboardingLocationData,
-          contractType,
-          triedOtherApps,
-          categories,
-          suggestedCategories,
-          selectedRoles,
-          experience,
-          interviewsPerWeek,
-          jobTimeline,
-          jobBlocker,
-          jobAccomplish,
-          jobGoal,
-          attribution,
-          referralCode,
-          salaryMin,
-          salaryMax,
-          selectedPlan,
-          lastStep: nextStep,
-          lastStepIndex: nextStepIndex,
-        }),
-      });
-    } catch (e) {
-      console.warn("onboarding progress save skipped", e);
-    }
-  }, [
-    user,
+  const getOnboardingExtrasPayload = useCallback((lastStep, lastStepIndex) => (
+    buildOnboardingExtrasPayload({
+      jobSearchStatus,
+      onboardingLocation,
+      onboardingLocationData,
+      contractType,
+      triedOtherApps,
+      categories,
+      suggestedCategories,
+      selectedRoles,
+      experience,
+      interviewsPerWeek,
+      jobTimeline,
+      jobBlocker,
+      jobAccomplish,
+      jobGoal,
+      attribution,
+      referralCode,
+      salaryMin,
+      salaryMax,
+      selectedPlan,
+      phone: formatContactPhone(contactPhonePrefix, contactPhoneLocal, contactPhoneCountryIso2)
+        || profile?.contact?.phone
+        || null,
+      lastStep,
+      lastStepIndex,
+    })
+  ), [
     jobSearchStatus,
     onboardingLocation,
     onboardingLocationData,
@@ -395,7 +390,22 @@ export default function Onboarding() {
     salaryMin,
     salaryMax,
     selectedPlan,
+    contactPhonePrefix,
+    contactPhoneLocal,
+    contactPhoneCountryIso2,
+    profile?.contact?.phone,
   ]);
+
+  const persistOnboardingProgress = useCallback(async (nextStep, nextStepIndex) => {
+    if (!user || ONBOARDING_TRANSIENT_STEPS.has(nextStep)) return;
+    try {
+      await api.patch("/profile/extras", {
+        onboarding: getOnboardingExtrasPayload(nextStep, nextStepIndex),
+      });
+    } catch (e) {
+      console.warn("onboarding progress save skipped", e);
+    }
+  }, [user, getOnboardingExtrasPayload]);
 
   const goToStepIndex = useCallback((nextIndex) => {
     if (nextIndex < 0 || nextIndex >= STEP_ORDER.length) return;
@@ -809,6 +819,9 @@ export default function Onboarding() {
     setSavingPhone(true);
     try {
       await api.put("/profile/contact", { phone: formatted });
+      await api.patch("/profile/extras", {
+        onboarding: getOnboardingExtrasPayload(step, stepIndex),
+      });
       setProfile((prev) => ({
         ...(prev || {}),
         contact: { ...(prev?.contact || {}), phone: formatted },
@@ -828,29 +841,7 @@ export default function Onboarding() {
   const persistOnboardingMeta = async () => {
     try {
       await api.patch("/profile/extras", {
-        onboarding: buildOnboardingExtrasPayload({
-          jobSearchStatus,
-          onboardingLocation,
-          onboardingLocationData,
-          contractType,
-          triedOtherApps,
-          categories,
-          suggestedCategories,
-          selectedRoles,
-          experience,
-          interviewsPerWeek,
-          jobTimeline,
-          jobBlocker,
-          jobAccomplish,
-          jobGoal,
-          attribution,
-          referralCode,
-          salaryMin,
-          salaryMax,
-          selectedPlan,
-          lastStep: step,
-          lastStepIndex: stepIndex,
-        }),
+        onboarding: getOnboardingExtrasPayload(step, stepIndex),
       });
     } catch (e) {
       console.warn("extras save skipped", e);

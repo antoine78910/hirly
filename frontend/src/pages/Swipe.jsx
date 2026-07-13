@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
-import { motion, useMotionValue, useTransform, AnimatePresence } from "framer-motion";
+import { motion, useMotionValue, useTransform, AnimatePresence, animate } from "framer-motion";
 import { useNavigate, useLocation } from "react-router-dom";
 import { api } from "../lib/api";
 import {
@@ -569,7 +569,9 @@ function AdminAtsBadge({ job }) {
   );
 }
 
-function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang, isAdmin }) {
+const CARD_BUTTON_SWIPE_X = 520;
+
+function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang, isAdmin, pendingSwipe, onSwipeRequestComplete }) {
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-260, 0, 260], [-14, 0, 14]);
   const opacity = useTransform(x, [-360, -260, 0, 260, 360], [0, 1, 1, 1, 0]);
@@ -578,6 +580,7 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang, isAdmin 
   const [flipped, setFlipped] = useState(false);
   const [showBack, setShowBack] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [isAnimatingOut, setIsAnimatingOut] = useState(false);
   const interactionRef = useRef({
     dragDistance: 0,
     suppressTap: false,
@@ -587,6 +590,7 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang, isAdmin 
     setFlipped(false);
     setShowBack(false);
     setIsDragging(false);
+    setIsAnimatingOut(false);
     interactionRef.current.dragDistance = 0;
     interactionRef.current.suppressTap = false;
   }, [job.job_id, isTop]);
@@ -614,6 +618,36 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang, isAdmin 
     setFlipped(true);
   }, [isTop, flipped, flipToFront]);
 
+  useEffect(() => {
+    if (!isTop || !pendingSwipe) return undefined;
+    let cancelled = false;
+    setIsAnimatingOut(true);
+    setIsDragging(true);
+    setFlipped(false);
+    interactionRef.current.suppressTap = true;
+    suppressCardTap(400);
+
+    const targetX = pendingSwipe === "apply" ? CARD_BUTTON_SWIPE_X : -CARD_BUTTON_SWIPE_X;
+    const controls = animate(x, targetX, {
+      type: "spring",
+      stiffness: 280,
+      damping: 32,
+      onComplete: () => {
+        if (cancelled) return;
+        setIsDragging(false);
+        setIsAnimatingOut(false);
+        x.set(0);
+        onSwipe(pendingSwipe);
+        onSwipeRequestComplete?.();
+      },
+    });
+
+    return () => {
+      cancelled = true;
+      controls.stop();
+    };
+  }, [pendingSwipe, isTop, job.job_id, onSwipe, onSwipeRequestComplete, x]);
+
   return (
     <motion.div
       className="absolute inset-0 h-full select-none"
@@ -625,9 +659,9 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang, isAdmin 
         translateY: index * 10,
         zIndex: 10 - index,
         touchAction: "pan-y",
-        pointerEvents: isTop ? "auto" : "none",
+        pointerEvents: isTop && !isAnimatingOut ? "auto" : "none",
       }}
-      drag={isTop ? "x" : false}
+      drag={isTop && !isAnimatingOut ? "x" : false}
       dragDirectionLock
       dragMomentum={false}
       dragElastic={0.6}
@@ -794,6 +828,7 @@ export default function Swipe() {
   const [resumeSheetOpen, setResumeSheetOpen] = useState(false);
   const [phoneSheetOpen, setPhoneSheetOpen] = useState(false);
   const [friendReferralDialogOpen, setFriendReferralDialogOpen] = useState(false);
+  const [pendingCardSwipe, setPendingCardSwipe] = useState(null);
   const { upgradeOpen, openUpgrade } = useUpgradeModal();
   const fetchingRef = useRef(false);
   const filtersRef = useRef(filters);
@@ -806,6 +841,7 @@ export default function Swipe() {
   const jobsRef = useRef(getSwipeFeedCacheSnapshot().jobs);
   const viewedJobIdsRef = useRef(new Set());
   const handleSwipeRef = useRef(null);
+  const requestSwipeRef = useRef(null);
   const backgroundPollTimerRef = useRef(null);
   const backgroundPollCountRef = useRef(0);
   const loadFeedRef = useRef(null);
@@ -1665,6 +1701,19 @@ export default function Swipe() {
     }
   };
 
+  const requestSwipe = useCallback((intent) => {
+    if (intent === "apply") {
+      const gate = resolveApplyGate();
+      if (gate.blocked) {
+        gate.action?.();
+        return;
+      }
+    }
+    if (!topJob || appLoading || loading || pendingCardSwipe) return;
+    suppressCardTap(400);
+    setPendingCardSwipe(intent);
+  }, [topJob, appLoading, loading, pendingCardSwipe, resolveApplyGate]);
+
   const handleUndo = async () => {
     try {
       const data = isFinanceDemoEnabled()
@@ -1716,6 +1765,7 @@ export default function Swipe() {
   };
 
   handleSwipeRef.current = handleSwipe;
+  requestSwipeRef.current = requestSwipe;
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -1734,7 +1784,7 @@ export default function Swipe() {
         return;
       }
       event.preventDefault();
-      handleSwipeRef.current?.(event.key === "ArrowRight" ? "apply" : "skip");
+      requestSwipeRef.current?.(event.key === "ArrowRight" ? "apply" : "skip");
     };
 
     window.addEventListener("keydown", onKeyDown);
@@ -1939,6 +1989,8 @@ export default function Swipe() {
                   t={t}
                   lang={lang}
                   isAdmin={isAdmin}
+                  pendingSwipe={idx === 0 ? pendingCardSwipe : null}
+                  onSwipeRequestComplete={() => setPendingCardSwipe(null)}
                 />
               );
             })}
@@ -1950,8 +2002,8 @@ export default function Swipe() {
             <motion.button
               whileTap={{ scale: 0.9 }}
               onPointerDown={() => suppressCardTap()}
-              onClick={() => handleSwipe("skip")}
-              disabled={!topJob || appLoading}
+              onClick={() => requestSwipe("skip")}
+              disabled={!topJob || appLoading || Boolean(pendingCardSwipe)}
               className="grid h-14 w-14 place-items-center rounded-full border-2 border-rose-500/70 bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)] transition-colors hover:border-rose-500"
               aria-label={t("swipe.pass")}
               data-testid="skip-btn"
@@ -1962,8 +2014,8 @@ export default function Swipe() {
             <motion.button
               whileTap={{ scale: 0.9 }}
               onPointerDown={() => suppressCardTap()}
-              onClick={() => handleSwipe("apply")}
-              disabled={!topJob || appLoading}
+              onClick={() => requestSwipe("apply")}
+              disabled={!topJob || appLoading || Boolean(pendingCardSwipe)}
               className="grid h-16 w-16 place-items-center rounded-full gradient-linkedin shadow-[0_8px_28px_rgba(124,58,237,0.45)] transition-opacity hover:opacity-90"
               aria-label={t("swipe.apply")}
               data-testid="apply-btn"

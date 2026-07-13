@@ -104,6 +104,7 @@ export function buildOnboardingExtrasPayload(state) {
     salaryMin,
     salaryMax,
     selectedPlan,
+    phone,
     lastStep,
     lastStepIndex,
   } = state;
@@ -129,6 +130,7 @@ export function buildOnboardingExtrasPayload(state) {
     salary_min: salaryMin,
     salary_max: salaryMax,
     selected_plan: selectedPlan,
+    phone: phone || null,
     last_step: lastStep,
     last_step_index: lastStepIndex,
   };

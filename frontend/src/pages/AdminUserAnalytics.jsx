@@ -180,12 +180,14 @@ export default function AdminUserAnalytics() {
               />
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1600px] text-left text-sm">
+              <table className="w-full min-w-[1800px] text-left text-sm">
                 <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
                   <tr>
                     <th className="px-4 py-3 w-8" />
                     <th className="px-4 py-3">Email</th>
                     <th className="px-4 py-3">Job search</th>
+                    <th className="px-4 py-3">Goal</th>
+                    <th className="px-4 py-3">Phone</th>
                     <th className="px-4 py-3">Location</th>
                     <th className="px-4 py-3">Contract</th>
                     <th className="px-4 py-3">Roles</th>
@@ -202,7 +204,7 @@ export default function AdminUserAnalytics() {
                 </thead>
                 <tbody className="divide-y divide-zinc-100">
                   {loading ? (
-                    <tr><td className="px-4 py-8 text-center text-zinc-500" colSpan={15}><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>
+                    <tr><td className="px-4 py-8 text-center text-zinc-500" colSpan={17}><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>
                   ) : users.length ? users.map((user) => {
                     const answers = user.onboarding_answers || {};
                     const progress = user.onboarding_progress || {};
@@ -224,6 +226,8 @@ export default function AdminUserAnalytics() {
                             <p className="mt-0.5 text-xs text-zinc-400">{user.name || "Unknown"}</p>
                           </td>
                           <td className="px-4 py-3 text-zinc-700">{formatOnboardingAnswerValue("job_search_status", answers.job_search_status)}</td>
+                          <td className="px-4 py-3 text-zinc-700">{formatOnboardingAnswerValue("job_goal", answers.job_goal)}</td>
+                          <td className="px-4 py-3 text-zinc-700">{formatOnboardingAnswerValue("phone", answers.phone)}</td>
                           <td className="px-4 py-3 text-zinc-700">{formatOnboardingAnswerValue("onboarding_location", answers.onboarding_location)}</td>
                           <td className="px-4 py-3 text-zinc-700">{formatOnboardingAnswerValue("contract_type", answers.contract_type)}</td>
                           <td className="max-w-[180px] truncate px-4 py-3 text-zinc-700" title={formatOnboardingAnswerValue("selected_roles", answers.selected_roles)}>
@@ -258,7 +262,7 @@ export default function AdminUserAnalytics() {
                         </tr>
                         {expanded ? (
                           <tr className="bg-zinc-50/80">
-                            <td colSpan={15} className="px-6 py-5">
+                            <td colSpan={17} className="px-6 py-5">
                               <div className="space-y-4">
                                 <div>
                                   <h3 className="text-sm font-semibold text-zinc-900">Onboarding answers</h3>
@@ -281,7 +285,7 @@ export default function AdminUserAnalytics() {
                       </Fragment>
                     );
                   }) : (
-                    <tr><td className="px-4 py-8 text-center text-zinc-500" colSpan={15}>No users found.</td></tr>
+                    <tr><td className="px-4 py-8 text-center text-zinc-500" colSpan={17}>No users found.</td></tr>
                   )}
                 </tbody>
               </table>

@@ -9900,6 +9900,11 @@ def _profile_onboarding_answers(profile: Optional[Dict[str, Any]]) -> Dict[str, 
         answers["contract_type"] = profile.get("contract_type")
     if not answers.get("seniority") and profile.get("seniority"):
         answers["seniority"] = profile.get("seniority")
+    if not answers.get("experience") and answers.get("seniority"):
+        answers["experience"] = answers.get("seniority")
+    contact = profile.get("contact") or {}
+    if not answers.get("phone") and contact.get("phone"):
+        answers["phone"] = contact.get("phone")
     return answers
 
 
@@ -10253,8 +10258,10 @@ async def admin_get_user(user_id: str, admin: User = Depends(require_admin_user)
             "target_role": (profile or {}).get("target_role"),
             "target_roles": (profile or {}).get("target_roles") or [],
             "target_location": (profile or {}).get("target_location"),
+            "target_location_data": (profile or {}).get("target_location_data"),
             "remote_preference": (profile or {}).get("remote_preference"),
             "seniority": (profile or {}).get("seniority"),
+            "contract_type": (profile or {}).get("contract_type"),
         },
         "application_defaults": (profile or {}).get("application_defaults") or {},
         "applications": [
@@ -10492,6 +10499,46 @@ async def admin_stripe_reconcile(
         "email": user_doc.get("email"),
         "billing": billing,
         "created_user": created_user,
+    }
+
+
+@api_router.post("/admin/users/{user_id}/impersonate")
+async def admin_impersonate_user(
+    user_id: str,
+    admin: User = Depends(require_admin_user),
+):
+    """Create a short-lived session token so the admin can view the app as this user."""
+    if user_id == admin.user_id:
+        raise HTTPException(status_code=400, detail="Cannot impersonate yourself")
+
+    target_user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    token = f"imp_{uuid.uuid4().hex}"
+    ttl_hours = 4
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=ttl_hours)
+    await db.user_sessions.insert_one({
+        "user_id": user_id,
+        "session_token": token,
+        "expires_at": expires_at.isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "source": "admin_impersonation",
+        "impersonated_by": admin.user_id,
+        "impersonated_by_email": admin.email,
+    })
+    logger.info(
+        "admin_impersonate admin=%s admin_email=%s target_user=%s target_email=%s",
+        admin.user_id,
+        admin.email,
+        user_id,
+        target_user.get("email"),
+    )
+    return {
+        "ok": True,
+        "session_token": token,
+        "user": target_user,
+        "expires_at": expires_at.isoformat(),
     }
 
 

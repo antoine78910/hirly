@@ -1,6 +1,7 @@
 import "@/App.css";
 import { BrowserRouter, Navigate, Routes, Route, useLocation } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
+import ImpersonationBanner from "@/components/ImpersonationBanner";
 import { AuthProvider } from "@/context/AuthContext";
 import { UpgradeModalProvider } from "@/context/UpgradeModalContext";
 import { AppLocaleProvider } from "@/context/AppLocaleContext";
@@ -238,6 +239,7 @@ function App() {
             </MobileThemeProvider>
           </AppLocaleProvider>
           <AdminToaster />
+          <ImpersonationBanner />
         </BrowserRouter>
       </AuthProvider>
     </div>

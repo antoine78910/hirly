@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   Bar,
   BarChart,
@@ -10,10 +10,11 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ArrowLeft, Crown, FileText, Heart, Loader2, X } from "lucide-react";
+import { ArrowLeft, Crown, FileText, Heart, Loader2, UserCheck, X } from "lucide-react";
 import { toast } from "sonner";
-import { api } from "../lib/api";
+import { api, startImpersonation } from "../lib/api";
 import { adminApiErrorMessage } from "../lib/adminApi";
+import { useAuth } from "../context/AuthContext";
 import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
 import {
   ONBOARDING_ANSWER_LABELS,
@@ -127,11 +128,14 @@ function statusBadgeClass(status) {
 
 export default function AdminUserDetail() {
   const { userId } = useParams();
+  const navigate = useNavigate();
+  const { checkAuth } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [accessDenied, setAccessDenied] = useState(false);
   const [demoSaving, setDemoSaving] = useState(false);
+  const [impersonating, setImpersonating] = useState(false);
   const [usageRange, setUsageRange] = useState("14d");
   const [docModal, setDocModal] = useState(null);
 
@@ -200,6 +204,19 @@ export default function AdminUserDetail() {
     }
   };
 
+  const handleImpersonate = async () => {
+    setImpersonating(true);
+    try {
+      const { data: res } = await api.post(`/admin/users/${userId}/impersonate`);
+      startImpersonation(res.session_token);
+      await checkAuth();
+      navigate("/swipe", { replace: true });
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Could not start impersonation");
+      setImpersonating(false);
+    }
+  };
+
   const toggleDemoAccount = async () => {
     setDemoSaving(true);
     try {
@@ -223,9 +240,22 @@ export default function AdminUserDetail() {
 
   return (
     <AdminShell title={user.email || "User Detail"} subtitle={user.name || user.user_id}>
-      <Link className="inline-flex items-center gap-2 text-sm font-semibold text-linkedin" to="/admin/users">
-        <ArrowLeft className="h-4 w-4" /> Back to users
-      </Link>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link className="inline-flex items-center gap-2 text-sm font-semibold text-linkedin" to="/admin/users">
+          <ArrowLeft className="h-4 w-4" /> Back to users
+        </Link>
+        {!error && !accessDenied && !loading ? (
+          <button
+            type="button"
+            onClick={handleImpersonate}
+            disabled={impersonating}
+            className="inline-flex items-center gap-2 rounded-full bg-amber-500 px-4 py-2 text-sm font-semibold text-white shadow transition-colors hover:bg-amber-600 disabled:opacity-60"
+          >
+            {impersonating ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserCheck className="h-4 w-4" />}
+            {impersonating ? "Starting…" : "View as this user"}
+          </button>
+        ) : null}
+      </div>
 
       {accessDenied ? <div className="mt-6"><AdminAccessDenied /></div> : error ? (
         <div className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</div>

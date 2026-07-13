@@ -69,6 +69,26 @@ export const api = axios.create({
 const TOKEN_KEY = "session_token";
 const TOKEN_COOKIE = "hirly_session_token";
 
+// Key used to park the original admin token while an impersonation session is active.
+const ADMIN_TOKEN_KEY = "admin_session_token";
+
+export const getAdminToken = () => localStorage.getItem(ADMIN_TOKEN_KEY);
+
+export const startImpersonation = (impToken) => {
+  const current = localStorage.getItem(TOKEN_KEY);
+  if (current) localStorage.setItem(ADMIN_TOKEN_KEY, current);
+  setSessionToken(impToken);
+};
+
+export const exitImpersonation = () => {
+  const adminToken = localStorage.getItem(ADMIN_TOKEN_KEY);
+  localStorage.removeItem(ADMIN_TOKEN_KEY);
+  setSessionToken(adminToken || null);
+  return adminToken;
+};
+
+export const isImpersonating = () => Boolean(localStorage.getItem(ADMIN_TOKEN_KEY));
+
 function sharedCookieDomain() {
   if (typeof window === "undefined") return null;
   const host = window.location.hostname.toLowerCase();
