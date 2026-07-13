@@ -7,7 +7,14 @@ import { Loader2 } from "lucide-react";
 import { supabase, supabaseConfigured } from "../lib/supabase";
 import { supabaseSessionPayload } from "../lib/auth";
 import { trackEvent } from "../lib/analytics";
-import { applyRedeemToAuth, inviteDestination, tryRedeemPendingInvite } from "../lib/creatorInvite";
+import { trackOnboardingSignup } from "../lib/datafast";
+import {
+  applyRedeemToAuth,
+  clearPendingInviteCode,
+  inviteDestination,
+  shouldAutoRedeemPendingInvite,
+  tryRedeemPendingInvite,
+} from "../lib/creatorInvite";
 import { setDemoAccountFromUser } from "../lib/demoAccount";
 import { resolvePostAuthDestination } from "../lib/appDomains";
 
@@ -48,25 +55,28 @@ export default function AuthCallback() {
         setHasPreferences(Boolean(data.has_preferences));
         setIsTrainingCreator(Boolean(data.is_training_creator));
         setHasTrainingAccess(Boolean(data.has_training_access));
-        if (data?.user?.demo_account) {
-          setDemoAccountFromUser(data.user, Boolean(data.is_admin));
-        }
+        setDemoAccountFromUser(data.user, Boolean(data.is_admin));
         let inviteRedirect = null;
         let redeemed = null;
-        try {
-          redeemed = await tryRedeemPendingInvite(api);
-          if (redeemed) {
-            applyRedeemToAuth(redeemed, data?.user, {
-              setUser,
-              setHasTrainingAccess,
-              setDemoAccountFromUser,
-              setHasProfile,
-              setHasPreferences,
-            });
-            inviteRedirect = inviteDestination(redeemed);
+        const autoRedeemInvite = shouldAutoRedeemPendingInvite(nextPath, storedReturn);
+        if (autoRedeemInvite) {
+          try {
+            redeemed = await tryRedeemPendingInvite(api);
+            if (redeemed) {
+              applyRedeemToAuth(redeemed, data?.user, {
+                setUser,
+                setHasTrainingAccess,
+                setDemoAccountFromUser,
+                setHasProfile,
+                setHasPreferences,
+              });
+              inviteRedirect = inviteDestination(redeemed);
+            }
+          } catch (inviteErr) {
+            console.warn("Invite redeem skipped", inviteErr?.response?.data?.detail || inviteErr?.message);
           }
-        } catch (inviteErr) {
-          console.warn("Invite redeem skipped", inviteErr?.response?.data?.detail || inviteErr?.message);
+        } else {
+          clearPendingInviteCode();
         }
         const authProvider = session?.user?.app_metadata?.provider
           || session?.user?.identities?.[0]?.provider
@@ -76,6 +86,9 @@ export default function AuthCallback() {
           has_profile: Boolean(data.has_profile),
           has_preferences: Boolean(data.has_preferences),
         });
+        if (storedReturn?.includes("/onboarding") && authProvider === "google") {
+          trackOnboardingSignup("google");
+        }
         sessionStorage.removeItem("swiipr_onboarding_return");
 
         window.history.replaceState({}, "", window.location.pathname);

@@ -5,6 +5,7 @@ import { getFollowedSocials, markSocialFollowed } from "../../lib/referral";
 import {
   enrollFriendReferral,
   fetchFriendReferralStatus,
+  normalizeReferralCodeInput,
   redeemFriendReferralCode,
   shareFriendReferralCode,
   buildFriendReferralShareUrl,
@@ -107,7 +108,7 @@ export default function ReferralPanel() {
 
   const submitRedeemCode = async (e) => {
     e.preventDefault();
-    const value = redeemCode.trim();
+    const value = normalizeReferralCodeInput(redeemCode);
     if (!value) return;
     setRedeeming(true);
     try {
@@ -206,11 +207,18 @@ export default function ReferralPanel() {
 
           <form onSubmit={submitRedeemCode} className="mt-6 flex items-center gap-2">
             <input
-              type="text"
+              type="tel"
               value={redeemCode}
-              onChange={(e) => setRedeemCode(e.target.value)}
+              onChange={(e) => setRedeemCode(normalizeReferralCodeInput(e.target.value))}
+              onPaste={(e) => {
+                e.preventDefault();
+                setRedeemCode(normalizeReferralCodeInput(e.clipboardData.getData("text")));
+              }}
               placeholder="Have a friend's code?"
-              className="h-11 flex-1 rounded-xl border border-zinc-200 px-4 text-sm focus:border-linkedin focus:outline-none"
+              inputMode="numeric"
+              maxLength={6}
+              autoComplete="one-time-code"
+              className="h-11 flex-1 rounded-xl border border-zinc-200 px-4 text-sm font-mono tracking-widest focus:border-linkedin focus:outline-none"
               data-testid="referral-redeem-input"
             />
             <button

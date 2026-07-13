@@ -4,6 +4,7 @@ import { ONBOARDING_STEP_ORDER } from "../components/onboarding/onboardingData";
 
 const GOAL_NAME_RE = /^[a-z0-9_:-]{1,64}$/;
 const INTRO_SLIDE_COUNT = 5;
+const ONBOARDING_SIGNUP_GOAL = "onboarding_signup";
 
 const ONBOARDING_STEP_LABELS = {
   intro: "Intro slides",
@@ -155,8 +156,7 @@ export function buildOnboardingDatafastFunnel(introSlideCount = INTRO_SLIDE_COUN
         step_id: stepId,
         step_number: stepNumber,
       });
-      funnel.push({ order: order++, goal: "onboarding_signup_google", label: "Sign up with Google", step_id: stepId, step_number: stepNumber });
-      funnel.push({ order: order++, goal: "onboarding_signup_email", label: "Sign up with email", step_id: stepId, step_number: stepNumber });
+      funnel.push({ order: order++, goal: ONBOARDING_SIGNUP_GOAL, label: "Sign up (Google or email)", step_id: stepId, step_number: stepNumber });
       return;
     }
 
@@ -210,4 +210,9 @@ export function trackOnboardingIntroContinue(introIndex, slideCount, params = {}
 
 export function trackOnboardingSkip(stepId, params = {}) {
   trackDatafastGoal(onboardingSkipGoalName(stepId), withStepMeta(stepId, params));
+}
+
+/** Track a successful onboarding signup (Google or email). */
+export function trackOnboardingSignup(method, params = {}) {
+  trackDatafastGoal(ONBOARDING_SIGNUP_GOAL, { method, ...params });
 }

@@ -60,9 +60,12 @@ import {
   friendReferralCodeForUser,
   getPendingFriendReferralCode,
   isFriendReferralCode,
+  normalizeReferralCodeInput,
   redeemFriendReferralCode,
   storePendingFriendReferralCode,
   clearPendingFriendReferralCode,
+  friendReferralValidationMessage,
+  validateOnboardingReferralCode,
 } from "../lib/friendReferral";
 import { resolveLandingContractType } from "../lib/landingHeroCopy";
 import {
@@ -100,8 +103,10 @@ import { splitFullName } from "../lib/personalInfoOptions";
 import { ob } from "../components/onboarding/onboardingTheme";
 import { trackEvent } from "../lib/analytics";
 import { preloadOnboardingIntroImages, preloadOnboardingShowcaseImages } from "../lib/onboardingImagePreload";
-import { getPendingInviteCode, redeemCreatorInvite, storePendingInviteCode } from "../lib/creatorInvite";
-import { isDemoAccountEnabled, setDemoAccountFromUser } from "../lib/demoAccount";
+import { translateOnboardingCategoryLabel } from "../lib/onboardingJobLabelsFr";
+import { translateRoleLabel } from "../lib/localizedDisplay";
+import { redeemCreatorInvite, storePendingInviteCode, clearPendingInviteCode } from "../lib/creatorInvite";
+import { setDemoAccountFromUser } from "../lib/demoAccount";
 import { queueDemoWelcome } from "../lib/demoWelcome";
 import { goToApp } from "../lib/appDomains";
 import {
@@ -232,6 +237,7 @@ export default function Onboarding() {
   const [friendReferralUserCode, setFriendReferralUserCode] = useState("");
   const [friendReferralUsesCount, setFriendReferralUsesCount] = useState(0);
   const [friendReferralEnrolling, setFriendReferralEnrolling] = useState(false);
+  const [referralValidating, setReferralValidating] = useState(false);
 
   useEffect(() => {
     preloadOnboardingIntroImages();
@@ -247,8 +253,9 @@ export default function Onboarding() {
 
   useEffect(() => {
     const fromUrl = searchParams.get("referral");
-    if (!fromUrl || !isFriendReferralCode(fromUrl)) return;
-    const normalized = fromUrl.trim().toUpperCase();
+    if (!fromUrl) return;
+    const normalized = normalizeReferralCodeInput(fromUrl);
+    if (!isFriendReferralCode(normalized)) return;
     setReferralCode(normalized);
     storePendingFriendReferralCode(normalized);
     setSearchParams((prev) => {
@@ -261,7 +268,7 @@ export default function Onboarding() {
   useEffect(() => {
     const pending = getPendingFriendReferralCode();
     if (pending && isFriendReferralCode(pending)) {
-      setReferralCode((current) => current || pending);
+      setReferralCode((current) => current || normalizeReferralCodeInput(pending));
     }
   }, []);
 
@@ -277,7 +284,7 @@ export default function Onboarding() {
   const [selectedPlan, setSelectedPlan] = useState("quarterly");
   const [saving, setSaving] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
-  const [creatorAccessCode, setCreatorAccessCode] = useState(() => getPendingInviteCode());
+  const [creatorAccessCode, setCreatorAccessCode] = useState("");
   const [redeemingAccessCode, setRedeemingAccessCode] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [pendingCheckoutSuccess, setPendingCheckoutSuccess] = useState(false);
@@ -303,9 +310,16 @@ export default function Onboarding() {
   const slides = lang === "fr" ? INTRO_SLIDES_FR : INTRO_SLIDES;
   const progress = ((stepIndex + (step === "intro" ? (introIndex + 1) / slides.length : 1)) / STEP_ORDER.length) * 100;
 
-  const categoryOptions = suggestedCategories.length
-    ? suggestedCategories
-    : JOB_CATEGORIES.map(({ id, label }) => ({ id, label }));
+  const categoryOptions = useMemo(() => {
+    const base = suggestedCategories.length
+      ? suggestedCategories
+      : JOB_CATEGORIES.map(({ id, label }) => ({ id, label }));
+    if (lang !== "fr") return base;
+    return base.map(({ id, label }) => ({
+      id,
+      label: translateOnboardingCategoryLabel(id, label, lang),
+    }));
+  }, [suggestedCategories, lang]);
   const roleSuggestions = useMemo(() => {
     const fromCategories = rolesForCategories(categories, 200, categoryOptions);
     const extras = customRoles.filter((role) => !fromCategories.includes(role));
@@ -501,20 +515,16 @@ export default function Onboarding() {
         }
       }
 
-      if (user && (user.demo_account || isDemoAccountEnabled())) {
+      if (user?.demo_account) {
         goToApp("/swipe");
         resumeAppliedRef.current = true;
         setBootstrapping(false);
         return;
       }
 
-      const pendingInvite = getPendingInviteCode();
-      if (user && pendingInvite) {
-        navigate(`/invite/${pendingInvite}`, { replace: true });
-        resumeAppliedRef.current = true;
-        setBootstrapping(false);
-        return;
-      }
+      // Drop stale demo/creator invite codes — normal onboarding must not
+      // inherit a link visited earlier in the same browser.
+      clearPendingInviteCode();
 
       if (user && hasProfile && hasPreferences) {
         goToApp("/swipe");
@@ -953,6 +963,7 @@ export default function Onboarding() {
         phone: formattedPhone,
       });
       if (checkAuth) await checkAuth();
+      clearPendingInviteCode();
       sessionStorage.removeItem(ONBOARDING_CHECKOUT_STATE_KEY);
       setHasProfile(true);
       setHasPreferences(true);
@@ -1119,32 +1130,48 @@ export default function Onboarding() {
     goNext();
   };
 
-  const submitReferralCode = () => {
-    const code = referralCode.trim().toUpperCase();
+  const submitReferralCode = async () => {
+    const code = referralCode.trim();
     if (!code) {
       toast.error(lang === "fr" ? "Entrez un code de parrainage ou appuyez sur Passer" : "Enter a referral code or tap Skip");
       return;
     }
-    if (isSixDigitAccessCode(code)) {
-      // Could be a friend-referral code or a creator/demo access code --
-      // both are 6 digits now. Actual redemption (tried in that order) is
-      // deferred to finishOnboarding, so keep this message neutral.
-      setReferralCode(code);
-      setCreatorAccessCode(code);
-      storePendingInviteCode(code);
-      toast.success(lang === "fr" ? "Code appliqué" : "Code applied");
+    if (!/^\d{6}$/.test(code)) {
+      toast.error(friendReferralValidationMessage("invalid_format", lang));
+      return;
+    }
+
+    setReferralValidating(true);
+    try {
+      const result = await validateOnboardingReferralCode(code);
+      if (!result.valid) {
+        toast.error(friendReferralValidationMessage(result.reason, lang));
+        return;
+      }
+
+      if (result.kind === "friend") {
+        setReferralCode(code);
+        setCreatorAccessCode("");
+        storePendingFriendReferralCode(code);
+        clearPendingInviteCode();
+        toast.success(lang === "fr" ? "Code de parrainage valide" : "Referral code accepted");
+      } else {
+        setReferralCode("");
+        setCreatorAccessCode(code);
+        storePendingInviteCode(code);
+        clearPendingFriendReferralCode();
+        toast.success(lang === "fr" ? "Code d'accès valide" : "Access code accepted");
+      }
       trackOnboardingContinue("referralCode");
       goNext();
-      return;
+    } catch (err) {
+      toast.error(
+        err?.response?.data?.detail
+          || friendReferralValidationMessage("not_found", lang),
+      );
+    } finally {
+      setReferralValidating(false);
     }
-    if (!/^[A-Z0-9]{4,8}$/.test(code)) {
-      toast.error(lang === "fr" ? "Entrez un code valide (4–8 lettres ou chiffres)" : "Enter a valid referral code (4–8 letters or numbers)");
-      return;
-    }
-    setReferralCode(code);
-    toast.success(lang === "fr" ? "Code de parrainage appliqué" : "Referral code applied");
-    trackOnboardingContinue("referralCode");
-    goNext();
   };
 
   const submitContactPhone = async () => {
@@ -1222,8 +1249,14 @@ export default function Onboarding() {
       </div>
     ) : step === "referralCode" ? (
       <div className="space-y-2.5">
-        <ContinueButton onClick={submitReferralCode} disabled={!referralCode.trim()} testId="referral-submit">
-          {lang === "fr" ? "Valider" : "Submit"}
+        <ContinueButton
+          onClick={() => { void submitReferralCode(); }}
+          disabled={!referralCode.trim() || referralValidating}
+          testId="referral-submit"
+        >
+          {referralValidating
+            ? (lang === "fr" ? "Vérification..." : "Checking...")
+            : (lang === "fr" ? "Valider" : "Submit")}
         </ContinueButton>
         <button
           type="button"
@@ -1446,14 +1479,14 @@ export default function Onboarding() {
             {...stepMotion}
             className="flex flex-1 flex-col min-h-0 overflow-y-auto overflow-x-hidden"
           >
-            <h1 className={stepTitleClass}>{lang === "fr" ? "Quel type de poste recherchez-vous ?" : "What kind of job are you looking for?"}</h1>
+            <h1 className={stepTitleClass}>{lang === "fr" ? "Quels types de postes recherchez-vous ?" : "What kind of job are you looking for?"}</h1>
             <p className={stepSubtitleClass}>
               {onboardingLocation
                 ? lang === "fr"
-                  ? `Suggéré pour ${onboardingLocationData?.location_label || onboardingLocation}. Choisissez jusqu'à 3.`
+                  ? `Populaires autour de ${onboardingLocationData?.location_label || onboardingLocation}. Choisissez jusqu'à 3 domaines.`
                   : `Suggested for ${onboardingLocationData?.location_label || onboardingLocation}. Pick up to 3.`
                 : lang === "fr"
-                  ? "Sélectionnez jusqu'à 3 catégories de postes."
+                  ? "Choisissez jusqu'à 3 domaines, puis précisez les métiers qui vous intéressent."
                   : "Select up to 3 job categories that interest you most."}
             </p>
             <div className="mt-2 sm:mt-3 flex flex-col gap-4 pb-2">
@@ -1487,7 +1520,7 @@ export default function Onboarding() {
               {categories.length > 0 && (
                 <div className="space-y-3">
                   <p className="text-sm sm:text-[15px] font-medium text-zinc-900 leading-snug">
-                    {lang === "fr" ? "Sélectionnez les postes les plus pertinents" : "Select the most relevant roles for your job search"}
+                    {lang === "fr" ? "Précisez les métiers qui vous correspondent le mieux" : "Select the most relevant roles for your job search"}
                   </p>
                   <motion.div
                     key={`roles-${categories.join(",")}`}
@@ -1508,7 +1541,7 @@ export default function Onboarding() {
                           onClick={() => toggleRole(role)}
                           className={`${ob.chip} ${on ? ob.chipOn : ob.chipOff}`}
                         >
-                          <span>{role}</span>
+                          <span>{translateRoleLabel(role, lang)}</span>
                         </motion.button>
                       );
                     })}
@@ -1835,11 +1868,18 @@ export default function Onboarding() {
                 <input
                   id="referral-code-input"
                   data-testid="referral-code-input"
-                  type="text"
+                  type="tel"
                   value={referralCode}
-                  onChange={(e) => setReferralCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8))}
-                  placeholder="GR7E34"
-                  autoCapitalize="characters"
+                  onChange={(e) => setReferralCode(normalizeReferralCodeInput(e.target.value))}
+                  onPaste={(e) => {
+                    e.preventDefault();
+                    const pasted = e.clipboardData.getData("text");
+                    setReferralCode(normalizeReferralCodeInput(pasted));
+                  }}
+                  placeholder="123456"
+                  inputMode="numeric"
+                  maxLength={6}
+                  autoComplete="one-time-code"
                   autoCorrect="off"
                   spellCheck={false}
                   className="w-full h-12 sm:h-14 rounded-2xl border border-zinc-200 bg-white px-4 text-center font-mono text-lg tracking-[0.2em] text-zinc-900 placeholder:text-zinc-300 focus:border-linkedin focus:outline-none focus:ring-2 focus:ring-linkedin/20"

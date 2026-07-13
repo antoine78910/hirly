@@ -1,4 +1,5 @@
 import { EXPERIENCE_LEVELS, ONBOARDING_STEP_ORDER } from "../components/onboarding/onboardingData";
+import { normalizeReferralCodeInput } from "./friendReferral";
 
 export const ONBOARDING_TRANSIENT_STEPS = new Set(["intro", "signup", "profileSetup"]);
 
@@ -195,6 +196,6 @@ export function applyOnboardingSnapshot(snapshot, profile, setters) {
   if (onboarding.acquisition_source) setAttribution(onboarding.acquisition_source);
   if (Array.isArray(onboarding.suggested_categories)) setSuggestedCategories(onboarding.suggested_categories);
   if (onboarding.selected_plan) setSelectedPlan(onboarding.selected_plan);
-  if (onboarding.referral_code) setReferralCode(onboarding.referral_code);
+  if (onboarding.referral_code) setReferralCode(normalizeReferralCodeInput(onboarding.referral_code));
   if (profile && (profile.cv_text || profile.target_role)) setProfile(profile);
 }

@@ -43,6 +43,11 @@ export function clearPendingInviteCode() {
   localStorage.removeItem(PENDING_INVITE_KEY);
 }
 
+/** True when auth should auto-redeem a stored creator/demo invite code. */
+export function shouldAutoRedeemPendingInvite(...paths) {
+  return paths.some((path) => String(path || "").includes("/invite/"));
+}
+
 export function inviteDestination(redeemData, inviteMeta) {
   const type = redeemData?.invite_type || inviteMeta?.invite_type;
   if (type === "demo") return "/swipe";

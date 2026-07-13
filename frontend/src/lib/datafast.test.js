@@ -29,6 +29,7 @@ describe("datafast onboarding funnel", () => {
     expect(stepGoals[0]).toBe("onboarding_step_01_intro_1");
     expect(stepGoals[4]).toBe("onboarding_step_01_intro_5");
     expect(stepGoals[5]).toBe("onboarding_step_02_signup");
+    expect(funnel.some((row) => row.goal === "onboarding_signup")).toBe(true);
     expect(stepGoals[6]).toBe("onboarding_step_03_job_search");
     expect(stepGoals[7]).toBe("onboarding_step_04_job_goal");
     expect(stepGoals[8]).toBe("onboarding_step_05_compare2x");
@@ -45,7 +46,7 @@ describe("datafast onboarding funnel", () => {
       ONBOARDING_STEP_ORDER.flatMap((stepId) => (stepId === "intro"
         ? Array.from({ length: 5 }, () => "intro")
         : stepId === "signup"
-          ? ["signup", "signup", "signup"]
+          ? ["signup", "signup"]
           : [stepId])),
     );
   });

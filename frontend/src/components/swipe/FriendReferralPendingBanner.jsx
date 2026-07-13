@@ -47,24 +47,27 @@ export default function FriendReferralPendingBanner({
             <button
               type="button"
               onClick={copyCode}
-              className={`inline-flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-semibold transition-all duration-200 ${
+              className={`relative grid h-8 w-8 place-items-center rounded-full border transition-colors duration-300 ${
                 copied
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  ? "border-emerald-200 bg-emerald-50"
                   : "border-violet-200 bg-white text-zinc-700 hover:bg-violet-100"
               }`}
+              aria-label={copied ? (lang === "fr" ? "Copié" : "Copied") : (lang === "fr" ? "Copier" : "Copy")}
               data-testid="friend-referral-banner-copy"
             >
-              {copied ? (
-                <>
-                  <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
-                  {lang === "fr" ? "Copié !" : "Copied!"}
-                </>
-              ) : (
-                <>
-                  <Copy className="h-3.5 w-3.5" />
-                  {lang === "fr" ? "Copier" : "Copy"}
-                </>
-              )}
+              <Copy
+                className={`absolute h-3.5 w-3.5 transition-all duration-300 ease-out ${
+                  copied ? "scale-50 opacity-0 rotate-90" : "scale-100 opacity-100 rotate-0"
+                }`}
+                aria-hidden
+              />
+              <Check
+                className={`absolute h-3.5 w-3.5 text-emerald-600 transition-all duration-300 ease-out ${
+                  copied ? "scale-100 opacity-100 rotate-0" : "scale-50 opacity-0 -rotate-90"
+                }`}
+                strokeWidth={2.5}
+                aria-hidden
+              />
             </button>
             {onViewCode ? (
               <button

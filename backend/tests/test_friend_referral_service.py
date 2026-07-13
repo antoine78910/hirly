@@ -9,6 +9,7 @@ from friend_referral_service import (
     enroll_friend_referral,
     friend_referral_status_payload,
     redeem_friend_referral_code,
+    validate_friend_referral_code,
 )
 
 
@@ -227,6 +228,30 @@ def test_reward_repeats_every_goal_multiple(db, monkeypatch):
     status = friend_referral_status_payload(referrer)
     assert status["reward_batches_granted"] == 2
     assert status["credits_earned_total"] == FRIEND_REFERRAL_REWARD_CREDITS * 2
+
+
+def test_validate_friend_referral_code(db):
+    referrer_id = "user_referrer"
+    redeemer_id = "user_redeemer"
+    code = "123456"
+    asyncio.run(enroll_friend_referral(db, referrer_id))
+
+    assert asyncio.run(validate_friend_referral_code(db, code=code, user_id=redeemer_id)) == {
+        "valid": True,
+        "reason": None,
+    }
+    assert asyncio.run(validate_friend_referral_code(db, code=code, user_id=referrer_id)) == {
+        "valid": False,
+        "reason": "self_referral",
+    }
+    assert asyncio.run(validate_friend_referral_code(db, code="999999", user_id=redeemer_id)) == {
+        "valid": False,
+        "reason": "not_found",
+    }
+    assert asyncio.run(validate_friend_referral_code(db, code="ABC123", user_id=redeemer_id)) == {
+        "valid": False,
+        "reason": "invalid_format",
+    }
 
 
 def test_redeem_rejects_self_referral(db):

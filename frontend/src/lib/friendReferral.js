@@ -52,7 +52,7 @@ export function buildFriendReferralShareMessage(code, lang = "en") {
 }
 
 export function storePendingFriendReferralCode(code) {
-  const normalized = String(code || "").trim().toUpperCase();
+  const normalized = normalizeReferralCodeInput(code);
   if (!isFriendReferralCode(normalized)) return false;
   if (typeof window === "undefined") return false;
   try {
@@ -133,6 +133,58 @@ export async function fetchFriendReferralStatus() {
   return data;
 }
 
+export async function validateFriendReferralCode(code) {
+  const normalized = String(code || "").trim();
+  const { data } = await api.get(`/referrals/friends/validate/${encodeURIComponent(normalized)}`);
+  return data;
+}
+
+export function friendReferralValidationMessage(reason, lang = "en") {
+  const messages = {
+    en: {
+      invalid_format: "Enter a valid 6-digit referral code",
+      not_found: "Referral code not found",
+      self_referral: "You cannot use your own referral code",
+      already_redeemed: "You have already used a friend referral code",
+    },
+    fr: {
+      invalid_format: "Entrez un code à 6 chiffres",
+      not_found: "Code de parrainage introuvable",
+      self_referral: "Vous ne pouvez pas utiliser votre propre code de parrainage",
+      already_redeemed: "Vous avez déjà utilisé un code de parrainage",
+    },
+  };
+  const table = lang === "fr" ? messages.fr : messages.en;
+  return table[reason] || table.not_found;
+}
+
+/** Validate a code entered during onboarding (friend referral or creator invite). */
+export async function validateOnboardingReferralCode(code) {
+  const normalized = String(code || "").trim();
+  if (!/^\d{6}$/.test(normalized)) {
+    return { valid: false, reason: "invalid_format" };
+  }
+
+  const friend = await validateFriendReferralCode(normalized);
+  if (friend?.valid) {
+    return { valid: true, kind: "friend" };
+  }
+  if (friend?.reason && friend.reason !== "not_found") {
+    return { valid: false, reason: friend.reason };
+  }
+
+  try {
+    const { data } = await api.get(`/invites/${encodeURIComponent(normalized)}/validate`);
+    if (data?.valid) {
+      return { valid: true, kind: "creator", invite: data };
+    }
+  } catch {
+    /* fall through */
+  }
+
+  return { valid: false, reason: "not_found" };
+}
+
 export async function redeemFriendReferralCode(code) {
   const normalized = String(code || "").trim().toUpperCase();
   const { data } = await api.post("/referrals/friends/redeem", { code: normalized });
@@ -160,6 +212,11 @@ export async function claimFriendReferralReward(token) {
 }
 
 export function isFriendReferralCode(value) {
-  const code = String(value || "").trim().toUpperCase();
-  return /^[A-Z0-9]{4,8}$/.test(code);
+  const code = String(value || "").trim();
+  return /^\d{6}$/.test(code);
+}
+
+/** Keep referral input to digits only, max 6 characters. */
+export function normalizeReferralCodeInput(value) {
+  return String(value || "").replace(/\D/g, "").slice(0, 6);
 }

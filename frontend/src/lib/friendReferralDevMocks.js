@@ -74,6 +74,19 @@ export function getFriendReferralDevResponse(config) {
     return devStatusPayload("dev_onboarding_user");
   }
 
+  const validateMatch = path.match(/^\/referrals\/friends\/validate\/(\d{6})$/);
+  if (method === "get" && validateMatch) {
+    const code = validateMatch[1];
+    const ownCode = devStatusPayload("dev_onboarding_user").code;
+    if (code === ownCode) {
+      return { valid: false, reason: "self_referral" };
+    }
+    if (code === "000000") {
+      return { valid: false, reason: "not_found" };
+    }
+    return { valid: true, reason: null };
+  }
+
   if (method === "post" && path === "/referrals/friends/redeem") {
     const uses = incrementDevUses();
     return { ok: true, uses_count: uses, goal: 3, reward_unlocked: uses % 3 === 0 };

@@ -129,6 +129,35 @@ async def enroll_friend_referral(db, user_id: str) -> Dict[str, Any]:
     return friend_referral_status_payload(user_doc)
 
 
+async def validate_friend_referral_code(
+    db,
+    *,
+    code: str,
+    user_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Check whether a friend-referral code can be used (no side effects)."""
+    normalized = _normalize_code(code)
+    if not normalized or len(normalized) != 6 or not normalized.isdigit():
+        return {"valid": False, "reason": "invalid_format"}
+
+    referrer_id = await _lookup_referrer_id(db, normalized)
+    if not referrer_id:
+        return {"valid": False, "reason": "not_found"}
+
+    if user_id and referrer_id == user_id:
+        return {"valid": False, "reason": "self_referral"}
+
+    if user_id:
+        existing = await db.friend_referral_redemptions.find_one(
+            {"redeemer_user_id": user_id},
+            {"_id": 0},
+        )
+        if existing:
+            return {"valid": False, "reason": "already_redeemed"}
+
+    return {"valid": True, "reason": None}
+
+
 async def redeem_friend_referral_code(
     db,
     *,

@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Loader2, Mail, X } from "lucide-react";
+import { Eye, EyeOff, Loader2, Lock, Mail, User, X } from "lucide-react";
 import { toast } from "sonner";
+import Logo from "../Logo";
+import { BRAND } from "../../lib/brand";
 import { Input } from "../ui/input";
-import { Label } from "../ui/label";
+import { Button } from "../ui/button";
+import GoogleSignInButton from "../auth/GoogleSignInButton";
 import {
   authCallbackRedirectUrl,
   establishAppSessionFromSupabase,
@@ -12,43 +15,18 @@ import {
 import { supabase, supabaseConfigured } from "../../lib/supabase";
 import { useAuth } from "../../context/AuthContext";
 import { trackEvent } from "../../lib/analytics";
-import { trackDatafastGoal } from "../../lib/datafast";
-
-function GoogleIcon({ className = "w-5 h-5" }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" aria-hidden>
-      <path
-        fill="#4285F4"
-        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-      />
-      <path
-        fill="#34A853"
-        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-      />
-      <path
-        fill="#FBBC05"
-        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-      />
-      <path
-        fill="#EA4335"
-        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-      />
-    </svg>
-  );
-}
+import { trackOnboardingSignup } from "../../lib/datafast";
 
 const COPY = {
   en: {
-    title: "Sign up",
-    firstName: "First name",
-    firstNamePlaceholder: "Alex",
-    email: "Email",
-    emailPlaceholder: "you@example.com",
-    password: "Password",
-    passwordHint: "At least 6 characters",
-    submit: "Sign up",
-    or: "or",
-    google: "Sign up with Google",
+    title: "Create your account",
+    subtitle: "Start applying to jobs in minutes",
+    firstNamePlaceholder: "First name",
+    emailPlaceholder: "Email address",
+    passwordPlaceholder: "Password (6+ characters)",
+    submit: "Create account",
+    orEmail: "or",
+    google: "Continue with Google",
     verifyTitle: "Check your email",
     verifyBody: "We sent a verification link to",
     verifyBodyPending: "We need to verify",
@@ -68,18 +46,18 @@ const COPY = {
     signupFailed: "Sign up failed. Please try again.",
     alreadyRegistered: "An account already exists with this email. Sign in instead.",
     signInInstead: "Sign in",
+    hasAccount: "Already have an account?",
+    signIn: "Sign in",
   },
   fr: {
-    title: "Inscription",
-    firstName: "Prénom",
-    firstNamePlaceholder: "Alex",
-    email: "E-mail",
-    emailPlaceholder: "vous@exemple.com",
-    password: "Mot de passe",
-    passwordHint: "Au moins 6 caractères",
-    submit: "S'inscrire",
-    or: "ou",
-    google: "S'inscrire avec Google",
+    title: "Créez votre compte",
+    subtitle: "Commencez à postuler en quelques minutes",
+    firstNamePlaceholder: "Prénom",
+    emailPlaceholder: "Adresse e-mail",
+    passwordPlaceholder: "Mot de passe (6 car. min.)",
+    submit: "Créer mon compte",
+    orEmail: "ou",
+    google: "Continuer avec Google",
     verifyTitle: "Vérifiez votre e-mail",
     verifyBody: "Nous avons envoyé un lien de confirmation à",
     verifyBodyPending: "Nous devons vérifier",
@@ -99,6 +77,8 @@ const COPY = {
     signupFailed: "Inscription impossible. Réessayez.",
     alreadyRegistered: "Un compte existe déjà avec cet e-mail. Connectez-vous plutôt.",
     signInInstead: "Se connecter",
+    hasAccount: "Vous avez déjà un compte ?",
+    signIn: "Se connecter",
   },
 };
 
@@ -114,22 +94,14 @@ export default function OnboardingSignup({ onClose, lang = "en" }) {
   const [firstName, setFirstName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [resending, setResending] = useState(false);
   const [screen, setScreen] = useState("form");
   const [error, setError] = useState("");
   const [emailDispatchFailed, setEmailDispatchFailed] = useState(false);
 
-  useEffect(() => {
-    const prev = document.documentElement.style.overflow;
-    document.documentElement.style.overflow = "hidden";
-    return () => {
-      document.documentElement.style.overflow = prev;
-    };
-  }, []);
-
-  const finishSession = async (session) => {
-    const data = await establishAppSessionFromSupabase(session);
+  const finishSession = async (session) => {    const data = await establishAppSessionFromSupabase(session);
     if (!data) return false;
     setUser(data.user);
     setHasProfile(Boolean(data.has_profile));
@@ -140,12 +112,11 @@ export default function OnboardingSignup({ onClose, lang = "en" }) {
       has_profile: Boolean(data.has_profile),
       has_preferences: Boolean(data.has_preferences),
     });
-    trackDatafastGoal("onboarding_signup_email");
+    trackOnboardingSignup("email");
     return true;
   };
 
   const handleGoogleSignup = async () => {
-    trackDatafastGoal("onboarding_signup_google");
     sessionStorage.setItem("swiipr_onboarding_return", ONBOARDING_RETURN_PATH);
     const ok = await startGoogleLogin(ONBOARDING_RETURN_PATH);
     if (!ok) {
@@ -253,24 +224,27 @@ export default function OnboardingSignup({ onClose, lang = "en" }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex h-dvh max-h-dvh flex-col overflow-hidden bg-white text-zinc-900">
-      <div className="relative flex shrink-0 items-center justify-center border-b border-zinc-100 px-5 pb-3 pt-4">
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute left-5 top-5 w-10 h-10 rounded-full flex items-center justify-center text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 transition-colors"
-          aria-label="Close"
-          data-testid="signup-close-btn"
-        >
-          <X className="w-5 h-5" strokeWidth={2} />
-        </button>
-        <h1 className="font-display font-semibold text-lg tracking-tight">{copy.title}</h1>
-      </div>
+    <div className="fixed inset-0 z-50 min-h-dvh overflow-y-auto bg-white px-6 py-10 text-zinc-900 sm:py-16">
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute left-4 top-4 flex h-10 w-10 items-center justify-center rounded-full text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 sm:left-6 sm:top-6"
+        aria-label="Close"
+        data-testid="signup-close-btn"
+      >
+        <X className="h-5 w-5" strokeWidth={2} />
+      </button>
 
-      <div className="mx-auto flex w-full max-w-md flex-1 min-h-0 flex-col justify-center px-5 pb-6 overflow-y-auto">
+      <div className="mx-auto flex w-full max-w-sm flex-col items-center">
+        <Link to="/" className="flex items-center gap-2 font-display text-lg font-black tracking-tight">
+          <Logo size={30} />
+          <span>{BRAND.NAME}</span>
+        </Link>
+
+        <div className="mt-10 w-full">
         {screen === "verify" ? (
           <div className="text-center" data-testid="signup-verify-screen">
-            <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-violet-50 text-violet-600">
+            <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-zinc-100 text-linkedin">
               <Mail className="h-6 w-6" />
             </div>
             <h2 className="font-display text-xl font-bold tracking-tight">{copy.verifyTitle}</h2>
@@ -288,7 +262,7 @@ export default function OnboardingSignup({ onClose, lang = "en" }) {
               type="button"
               onClick={handleResendVerification}
               disabled={resending}
-              className="mt-6 w-full h-12 rounded-full gradient-linkedin text-white font-semibold text-base hover:opacity-90 transition-opacity disabled:opacity-60"
+              className="mt-6 h-12 w-full rounded-full gradient-linkedin text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
               data-testid="signup-resend-btn"
             >
               {resending ? copy.resending : copy.resend}
@@ -308,97 +282,121 @@ export default function OnboardingSignup({ onClose, lang = "en" }) {
           </div>
         ) : (
           <>
-            <button
-              type="button"
-              onClick={handleGoogleSignup}
-              className="w-full h-12 rounded-full bg-white border border-zinc-200 flex items-center justify-center gap-3 font-semibold text-zinc-900 hover:bg-zinc-50 transition-colors"
-              data-testid="onboarding-signup-btn"
-            >
-              <GoogleIcon />
-              {copy.google}
-            </button>
+            <h1 className="text-center font-display text-3xl font-bold tracking-tight">{copy.title}</h1>
+            <p className="mt-2 text-center text-sm text-zinc-500">{copy.subtitle}</p>
 
-            <div className="my-5 flex items-center gap-4">
-              <div className="flex-1 h-px bg-zinc-200" />
-              <span className="text-sm text-zinc-500 shrink-0">{copy.or}</span>
-              <div className="flex-1 h-px bg-zinc-200" />
+            <div className="mt-8 space-y-4">
+              <GoogleSignInButton
+                onClick={handleGoogleSignup}
+                disabled={submitting}
+                label={copy.google}
+                className="h-12 rounded-full"
+                testId="onboarding-signup-btn"
+              />
+
+              <div className="flex items-center gap-3">
+                <div className="h-px flex-1 bg-zinc-200" />
+                <span className="text-xs font-medium text-zinc-400">{copy.orEmail}</span>
+                <div className="h-px flex-1 bg-zinc-200" />
+              </div>
+
+              <form onSubmit={handleEmailSignup} className="space-y-3">
+                <label className="block">
+                  <span className="sr-only">{copy.firstNamePlaceholder}</span>
+                  <div className="relative">
+                    <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+                    <Input
+                      id="signup-first-name"
+                      type="text"
+                      autoComplete="given-name"
+                      placeholder={copy.firstNamePlaceholder}
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      className="h-12 rounded-2xl pl-10"
+                      data-testid="signup-first-name-input"
+                    />
+                  </div>
+                </label>
+
+                <label className="block">
+                  <span className="sr-only">{copy.emailPlaceholder}</span>
+                  <div className="relative">
+                    <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+                    <Input
+                      id="signup-email"
+                      type="email"
+                      autoComplete="email"
+                      placeholder={copy.emailPlaceholder}
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="h-12 rounded-2xl pl-10"
+                      data-testid="signup-email-input"
+                    />
+                  </div>
+                </label>
+
+                <label className="block">
+                  <span className="sr-only">{copy.passwordPlaceholder}</span>
+                  <div className="relative">
+                    <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+                    <Input
+                      id="signup-password"
+                      type={showPassword ? "text" : "password"}
+                      autoComplete="new-password"
+                      placeholder={copy.passwordPlaceholder}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      minLength={6}
+                      className="h-12 rounded-2xl pl-10 pr-10"
+                      data-testid="signup-password-input"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      tabIndex={-1}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </label>
+
+                {error ? (
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-red-600">{error}</p>
+                    {error === copy.alreadyRegistered ? (
+                      <Link
+                        to="/signin"
+                        className="inline-block text-sm font-semibold text-linkedin hover:text-linkedin-dark"
+                      >
+                        {copy.signInInstead}
+                      </Link>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <Button
+                  type="submit"
+                  disabled={submitting}
+                  className="h-12 w-full rounded-full gradient-linkedin font-semibold text-white hover:opacity-90"
+                  data-testid="signup-email-btn"
+                >
+                  {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {copy.submit}
+                </Button>
+              </form>
             </div>
 
-            <form onSubmit={handleEmailSignup} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="signup-first-name" className="text-sm font-medium text-zinc-700">
-                  {copy.firstName}
-                </Label>
-                <Input
-                  id="signup-first-name"
-                  type="text"
-                  autoComplete="given-name"
-                  placeholder={copy.firstNamePlaceholder}
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                  className="h-12 rounded-full border-zinc-200 bg-white text-zinc-900 placeholder:text-zinc-400 px-5 text-base focus-visible:ring-linkedin"
-                  data-testid="signup-first-name-input"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="signup-email" className="text-sm font-medium text-zinc-700">
-                  {copy.email}
-                </Label>
-                <Input
-                  id="signup-email"
-                  type="email"
-                  autoComplete="email"
-                  placeholder={copy.emailPlaceholder}
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="h-12 rounded-full border-zinc-200 bg-white text-zinc-900 placeholder:text-zinc-400 px-5 text-base focus-visible:ring-linkedin"
-                  data-testid="signup-email-input"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="signup-password" className="text-sm font-medium text-zinc-700">
-                  {copy.password}
-                </Label>
-                <Input
-                  id="signup-password"
-                  type="password"
-                  autoComplete="new-password"
-                  placeholder={copy.passwordHint}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  minLength={6}
-                  className="h-12 rounded-full border-zinc-200 bg-white text-zinc-900 placeholder:text-zinc-400 px-5 text-base focus-visible:ring-linkedin"
-                  data-testid="signup-password-input"
-                />
-              </div>
-
-              {error ? (
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-red-600">{error}</p>
-                  {error === copy.alreadyRegistered ? (
-                    <Link
-                      to="/signin"
-                      className="inline-block text-sm font-semibold text-linkedin hover:text-linkedin-dark"
-                    >
-                      {copy.signInInstead}
-                    </Link>
-                  ) : null}
-                </div>
-              ) : null}
-
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full h-12 rounded-full gradient-linkedin text-white font-semibold text-base hover:opacity-90 transition-opacity shadow-[0_8px_32px_-8px_rgba(124,58,237,0.5)] disabled:opacity-60"
-                data-testid="signup-email-btn"
-              >
-                {submitting ? <Loader2 className="mx-auto h-5 w-5 animate-spin" /> : copy.submit}
-              </button>
-            </form>
+            <p className="mt-6 text-center text-sm text-zinc-500">
+              {copy.hasAccount}{" "}
+              <Link to="/signin" className="font-semibold text-linkedin hover:text-linkedin-dark">
+                {copy.signIn}
+              </Link>
+            </p>
           </>
         )}
+        </div>
       </div>
     </div>
   );

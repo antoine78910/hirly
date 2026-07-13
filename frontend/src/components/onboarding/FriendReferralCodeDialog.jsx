@@ -21,6 +21,61 @@ import {
 } from "../../lib/friendReferralAnalytics";
 
 const STATUS_POLL_MS = 8000;
+const REFERRAL_CODE_LENGTH = 6;
+
+function referralCodeChars(code) {
+  const normalized = (code || "").trim().toUpperCase();
+  if (!normalized) {
+    return Array.from({ length: REFERRAL_CODE_LENGTH }, () => "—");
+  }
+  return normalized.padEnd(REFERRAL_CODE_LENGTH, " ").slice(0, REFERRAL_CODE_LENGTH).split("");
+}
+
+function SpacedReferralCode({ code, testId }) {
+  return (
+    <div className="grid w-full grid-cols-6 gap-1 sm:gap-2" data-testid={testId}>
+      {referralCodeChars(code).map((char, index) => (
+        <span
+          key={`${char}-${index}`}
+          className="text-center font-display text-xl font-black tabular-nums text-zinc-900 sm:text-2xl"
+        >
+          {char.trim() || "—"}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function AnimatedCopyButton({ copied, onClick, disabled, testId, copiedLabel, defaultLabel }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`relative grid h-10 w-10 shrink-0 place-items-center rounded-full border transition-colors duration-300 disabled:opacity-40 ${
+        copied
+          ? "border-emerald-200 bg-emerald-50"
+          : "border-violet-200 bg-white text-zinc-600 hover:bg-violet-100"
+      }`}
+      aria-label={copied ? copiedLabel : defaultLabel}
+      data-testid={testId}
+    >
+      <Copy
+        className={`absolute h-4 w-4 transition-all duration-300 ease-out ${
+          copied ? "scale-50 opacity-0 rotate-90" : "scale-100 opacity-100 rotate-0"
+        }`}
+        aria-hidden
+      />
+      <Check
+        className={`absolute h-4 w-4 text-emerald-600 transition-all duration-300 ease-out ${
+          copied ? "scale-100 opacity-100 rotate-0" : "scale-50 opacity-0 -rotate-90"
+        }`}
+        strokeWidth={2.5}
+        aria-hidden
+      />
+    </button>
+  );
+}
 
 export default function FriendReferralCodeDialog({
   open,
@@ -127,40 +182,24 @@ export default function FriendReferralCodeDialog({
           </SheetDescription>
         </SheetHeader>
 
-        <div className="mt-5 flex items-center gap-3 rounded-full border border-violet-200 bg-violet-50 px-4 py-3.5">
+        <div className="mt-5 flex items-center gap-3 rounded-full border border-violet-200 bg-violet-50 px-3 py-3.5 sm:px-4">
           {loading ? (
             <div className="flex flex-1 items-center justify-center py-1">
               <Loader2 className="h-5 w-5 animate-spin text-linkedin" />
             </div>
           ) : (
-            <p
-              className="min-w-0 flex-1 text-center font-display text-2xl font-black tracking-[0.18em] text-zinc-900"
-              data-testid="friend-referral-code"
-            >
-              {code || "——"}
-            </p>
+            <div className="min-w-0 flex-1">
+              <SpacedReferralCode code={code} testId="friend-referral-code" />
+            </div>
           )}
-          <button
-            type="button"
+          <AnimatedCopyButton
+            copied={copied}
             onClick={copyInviteMessage}
             disabled={!code}
-            className={`inline-flex h-10 shrink-0 items-center justify-center rounded-full border transition-all duration-200 disabled:opacity-40 ${
-              copied
-                ? "gap-1.5 border-emerald-200 bg-emerald-50 px-3 text-emerald-700"
-                : "w-10 border-violet-200 bg-white text-zinc-600 hover:bg-violet-100"
-            }`}
-            aria-label={copied ? (lang === "fr" ? "Copié" : "Copied") : (lang === "fr" ? "Copier le message" : "Copy invite message")}
-            data-testid="friend-referral-copy"
-          >
-            {copied ? (
-              <>
-                <Check className="h-4 w-4" strokeWidth={2.5} />
-                <span className="text-xs font-bold">{lang === "fr" ? "Copié !" : "Copied!"}</span>
-              </>
-            ) : (
-              <Copy className="h-4 w-4" />
-            )}
-          </button>
+            testId="friend-referral-copy"
+            copiedLabel={lang === "fr" ? "Copié" : "Copied"}
+            defaultLabel={lang === "fr" ? "Copier le message" : "Copy invite message"}
+          />
         </div>
 
         <Button

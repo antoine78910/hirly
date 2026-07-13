@@ -151,7 +151,7 @@ export default function InviteLanding() {
       setUser(data.user);
       setHasProfile(Boolean(data.has_profile));
       setHasPreferences(Boolean(data.has_preferences));
-      if (data?.user?.demo_account) setDemoAccountFromUser(data.user);
+      if (data?.user) setDemoAccountFromUser(data.user, Boolean(data.is_admin));
       if (data?.has_training_access) setHasTrainingAccess(true);
       if (data?.user?.demo_account) {
         setHasProfile(true);

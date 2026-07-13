@@ -12,7 +12,7 @@ import { api, setSessionToken } from "../lib/api";
 import { supabase, supabaseConfigured } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { trackEvent } from "../lib/analytics";
-import { isDemoAccountEnabled } from "../lib/demoAccount";
+import { setDemoAccountFromUser } from "../lib/demoAccount";
 import { goToApp } from "../lib/appDomains";
 
 export default function SignIn() {
@@ -39,7 +39,7 @@ export default function SignIn() {
 
   useEffect(() => {
     if (authLoading || !user) return;
-    if (user.demo_account || isDemoAccountEnabled()) {
+    if (user.demo_account) {
       goToApp("/swipe");
       return;
     }
@@ -67,6 +67,7 @@ export default function SignIn() {
     setUser(data.user);
     setHasProfile(Boolean(data.has_profile));
     setHasPreferences(Boolean(data.has_preferences));
+    setDemoAccountFromUser(data.user, Boolean(data.is_admin));
     trackEvent("auth_success", {
       method: "email",
       mode: "login",

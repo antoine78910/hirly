@@ -187,6 +187,7 @@ from friend_referral_service import (
     enroll_friend_referral,
     friend_referral_status_payload,
     redeem_friend_referral_code,
+    validate_friend_referral_code,
     FRIEND_REFERRAL_REWARD_DAYS,
 )
 from referral_email_service import (
@@ -2887,6 +2888,11 @@ async def enroll_friend_referral_route(user: User = Depends(get_current_user)):
 async def friend_referral_status_route(user: User = Depends(get_current_user)):
     user_doc = await _get_user_doc(user)
     return friend_referral_status_payload(user_doc)
+
+
+@api_router.get("/referrals/friends/validate/{code}")
+async def validate_friend_referral_route(code: str, user: User = Depends(get_current_user)):
+    return await validate_friend_referral_code(db, code=code, user_id=user.user_id)
 
 
 @api_router.post("/referrals/friends/redeem")

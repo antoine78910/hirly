@@ -1,3 +1,5 @@
+import { ONBOARDING_ROLE_LABELS_FR } from "./onboardingJobLabelsFr";
+
 const FRENCH_ROLE_LABELS = {
   "Software Engineer": "Ingénieur logiciel",
   "Frontend Developer": "Développeur front-end",
@@ -84,6 +86,7 @@ const FRENCH_ROLE_LABELS = {
   "Logistics Assistant": "Assistant logistique",
   "Logistics Coordinator": "Coordinateur logistique",
   "Supply Chain Assistant": "Assistant supply chain",
+  ...ONBOARDING_ROLE_LABELS_FR,
 };
 
 const FRENCH_GROUP_LABELS = {
