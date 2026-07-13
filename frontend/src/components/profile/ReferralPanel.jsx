@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Copy, Share2, Coins } from "lucide-react";
 import { toast } from "sonner";
+import { useAppLocale } from "../../context/AppLocaleContext";
 import { getFollowedSocials, markSocialFollowed } from "../../lib/referral";
 import {
   enrollFriendReferral,
@@ -10,6 +11,10 @@ import {
   shareFriendReferralCode,
   buildFriendReferralShareUrl,
 } from "../../lib/friendReferral";
+
+// No official social accounts yet -- keep the "follow us" task design/data
+// ready to re-enable later, just don't render it for now.
+const SHOW_SOCIAL_TASKS = false;
 
 const SOCIAL_TASKS = [
   { id: "instagram", label: "Instagram", credits: 2, url: "https://instagram.com" },
@@ -59,6 +64,7 @@ function SocialIcon({ id }) {
 /** Referral code, progress, redeem form, and social-follow tasks -- shared
  * between the standalone /referral page and the Profile "Referral" tab. */
 export default function ReferralPanel() {
+  const { t } = useAppLocale();
   const [followed, setFollowed] = useState(() => getFollowedSocials());
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -74,12 +80,12 @@ export default function ReferralPanel() {
         }
         setStatus(data);
       } catch {
-        toast.error("Could not load your referral code");
+        toast.error(t("referralPanel.loadError"));
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [t]);
 
   const code = status?.code || "";
   const usesCount = status?.uses_count || 0;
@@ -91,18 +97,18 @@ export default function ReferralPanel() {
   const copyCode = async () => {
     try {
       await navigator.clipboard.writeText(buildFriendReferralShareUrl(code));
-      toast.success("Referral link copied");
+      toast.success(t("referralPanel.linkCopied"));
     } catch {
-      toast.error("Could not copy link");
+      toast.error(t("referralPanel.copyError"));
     }
   };
 
   const shareCode = async () => {
     const result = await shareFriendReferralCode(code);
     if (result.ok && result.method === "clipboard") {
-      toast.success("Referral link copied");
+      toast.success(t("referralPanel.linkCopied"));
     } else if (!result.ok && result.reason !== "aborted") {
-      toast.error("Could not share your code");
+      toast.error(t("referralPanel.shareError"));
     }
   };
 
@@ -114,11 +120,11 @@ export default function ReferralPanel() {
     try {
       const result = await redeemFriendReferralCode(value);
       if (result?.ok) {
-        toast.success("Referral code applied!");
+        toast.success(t("referralPanel.redeemSuccess"));
         setRedeemCode("");
       }
     } catch (err) {
-      toast.error(err?.response?.data?.detail || "Invalid referral code");
+      toast.error(err?.response?.data?.detail || t("referralPanel.redeemError"));
     } finally {
       setRedeeming(false);
     }
@@ -147,12 +153,8 @@ export default function ReferralPanel() {
           <span className="absolute -right-1 -top-1 text-lg">✨</span>
         </div>
 
-        <h1 className="font-display text-2xl font-bold">Invite friends, earn rewards!</h1>
-        <p className="mt-2 max-w-xs text-sm text-zinc-600">
-          For every <span className="font-semibold text-linkedin">{goal} friends</span> who sign up with your code,
-          you unlock <span className="font-semibold text-linkedin">1 free month</span> and{" "}
-          <span className="font-semibold text-linkedin">40 credits</span> for right swipes — every time.
-        </p>
+        <h1 className="font-display text-2xl font-bold">{t("referralPanel.heading")}</h1>
+        <p className="mt-2 max-w-xs text-sm text-zinc-600">{t("referralPanel.body", { goal })}</p>
       </div>
 
       {loading ? (
@@ -170,7 +172,7 @@ export default function ReferralPanel() {
               type="button"
               onClick={shareCode}
               className="grid h-10 w-10 place-items-center rounded-xl text-zinc-500 hover:bg-white hover:text-linkedin"
-              aria-label="Share referral link"
+              aria-label={t("referralPanel.shareCodeLabel")}
               data-testid="referral-share"
             >
               <Share2 className="h-5 w-5" />
@@ -179,7 +181,7 @@ export default function ReferralPanel() {
               type="button"
               onClick={copyCode}
               className="grid h-10 w-10 place-items-center rounded-xl text-zinc-500 hover:bg-white hover:text-linkedin"
-              aria-label="Copy referral link"
+              aria-label={t("referralPanel.copyCodeLabel")}
               data-testid="referral-copy"
             >
               <Copy className="h-5 w-5" />
@@ -188,8 +190,10 @@ export default function ReferralPanel() {
 
           <div className="mt-4">
             <div className="flex items-center justify-between text-xs text-zinc-500">
-              <span data-testid="referral-progress-label">{progressInCycle}/{goal} friends referred</span>
-              <span>{remainingToNextReward} more to unlock the next reward</span>
+              <span data-testid="referral-progress-label">
+                {t("referralPanel.progressLabel", { count: progressInCycle, goal })}
+              </span>
+              <span>{t("referralPanel.remainingToNext", { count: remainingToNextReward })}</span>
             </div>
             <div className="mt-1.5 h-2 rounded-full bg-zinc-100">
               <div
@@ -199,8 +203,8 @@ export default function ReferralPanel() {
             </div>
             {usesCount > 0 && (
               <p className="mt-2 text-xs text-zinc-500">
-                {usesCount} friend{usesCount === 1 ? "" : "s"} referred in total
-                {creditsEarnedTotal > 0 ? ` — ${creditsEarnedTotal} credits earned so far` : ""}
+                {t("referralPanel.totalReferred", { count: usesCount, plural: usesCount === 1 ? "" : "s" })}
+                {creditsEarnedTotal > 0 ? t("referralPanel.creditsEarned", { count: creditsEarnedTotal }) : ""}
               </p>
             )}
           </div>
@@ -214,7 +218,7 @@ export default function ReferralPanel() {
                 e.preventDefault();
                 setRedeemCode(normalizeReferralCodeInput(e.clipboardData.getData("text")));
               }}
-              placeholder="Have a friend's code?"
+              placeholder={t("referralPanel.redeemPlaceholder")}
               inputMode="numeric"
               maxLength={6}
               autoComplete="one-time-code"
@@ -227,42 +231,46 @@ export default function ReferralPanel() {
               className="h-11 rounded-xl gradient-linkedin px-4 text-sm font-semibold text-white disabled:opacity-50"
               data-testid="referral-redeem-submit"
             >
-              {redeeming ? "..." : "Apply"}
+              {redeeming ? t("referralPanel.redeemApplying") : t("referralPanel.redeemApply")}
             </button>
           </form>
         </>
       )}
 
-      <p className="mt-10 text-center text-sm text-zinc-500">Follow us on socials</p>
+      {SHOW_SOCIAL_TASKS && (
+        <>
+          <p className="mt-10 text-center text-sm text-zinc-500">Follow us on socials</p>
 
-      <ul className="mt-4 divide-y divide-dashed divide-zinc-200">
-        {SOCIAL_TASKS.map((task) => {
-          const done = followed.includes(task.id);
-          return (
-            <li key={task.id} className="flex items-center gap-3 py-4">
-              <div className="grid h-10 w-10 place-items-center rounded-full bg-zinc-100 text-zinc-700">
-                <SocialIcon id={task.id} />
-              </div>
-              <span className="flex-1 text-sm font-medium text-zinc-800">
-                +{task.credits} Credits
-              </span>
-              <button
-                type="button"
-                disabled={done}
-                onClick={() => handleFollow(task)}
-                className={`min-w-[88px] rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
-                  done
-                    ? "bg-zinc-100 text-zinc-400"
-                    : "gradient-linkedin text-white hover:opacity-90"
-                }`}
-                data-testid={`referral-follow-${task.id}`}
-              >
-                {done ? "Followed" : "Follow"}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+          <ul className="mt-4 divide-y divide-dashed divide-zinc-200">
+            {SOCIAL_TASKS.map((task) => {
+              const done = followed.includes(task.id);
+              return (
+                <li key={task.id} className="flex items-center gap-3 py-4">
+                  <div className="grid h-10 w-10 place-items-center rounded-full bg-zinc-100 text-zinc-700">
+                    <SocialIcon id={task.id} />
+                  </div>
+                  <span className="flex-1 text-sm font-medium text-zinc-800">
+                    +{task.credits} Credits
+                  </span>
+                  <button
+                    type="button"
+                    disabled={done}
+                    onClick={() => handleFollow(task)}
+                    className={`min-w-[88px] rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
+                      done
+                        ? "bg-zinc-100 text-zinc-400"
+                        : "gradient-linkedin text-white hover:opacity-90"
+                    }`}
+                    data-testid={`referral-follow-${task.id}`}
+                  >
+                    {done ? "Followed" : "Follow"}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
     </div>
   );
 }
