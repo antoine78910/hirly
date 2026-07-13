@@ -368,3 +368,97 @@ def test_ensure_checkout_entitlements_grants_credits_from_metadata(monkeypatch):
     assert billing["subscription_status"] == "active"
     assert billing["credits_total"] == 200
     assert billing["credits_remaining"] == 200
+
+
+def test_stripe_reconcile_repairs_webhook_miss_without_rewriting_synced_users(monkeypatch):
+    users = _Collection([
+        {"user_id": "user_missing", "billing": {}},
+        {
+            "user_id": "user_synced",
+            "billing": {
+                "stripe_customer_id": "cus_synced",
+                "stripe_subscription_id": "sub_synced",
+                "subscription_status": "active",
+                "plan": "monthly",
+                "interval": "monthly",
+                "source": "onboarding",
+                "current_period_start": "2023-11-14T22:13:20+00:00",
+                "current_period_end": "2023-11-17T22:13:20+00:00",
+                "cancel_at_period_end": False,
+            },
+        },
+    ])
+    monkeypatch.setattr(server, "db", type("DB", (), {"users": users})())
+    monkeypatch.setattr(server, "_stripe_configured", lambda: True)
+
+    def _subscription(customer_id, subscription_id, user_id):
+        return {
+            "id": subscription_id,
+            "customer": {"id": customer_id, "email": f"{user_id}@example.com"},
+            "status": "active",
+            "created": 1_700_000_000,
+            "metadata": {
+                "user_id": user_id,
+                "plan": "monthly",
+                "interval": "monthly",
+                "source": "onboarding",
+            },
+            "items": {
+                "data": [{
+                    "price": {"id": "price_monthly", "recurring": {"interval": "month"}},
+                    "current_period_start": 1_700_000_000,
+                    "current_period_end": 1_700_259_200,
+                }]
+            },
+            "cancel_at_period_end": False,
+        }
+
+    subscriptions = [
+        _subscription("cus_missing", "sub_missing", "user_missing"),
+        _subscription("cus_synced", "sub_synced", "user_synced"),
+    ]
+    monkeypatch.setattr(server, "_list_stripe_subscriptions_for_reconcile", lambda: subscriptions)
+
+    async def _resolve(customer_id):
+        return "user_missing" if customer_id == "cus_missing" else "user_synced"
+
+    updates = []
+
+    async def _update(user_id, values):
+        updates.append((user_id, values))
+        row = next(row for row in users.rows if row["user_id"] == user_id)
+        row.setdefault("billing", {}).update(values)
+
+    async def _repair(user_id, user_doc):
+        return user_doc
+
+    monkeypatch.setattr(server, "_resolve_user_id_for_stripe_customer", _resolve)
+    monkeypatch.setattr(server, "_update_user_billing_by_user_id", _update)
+    monkeypatch.setattr(server, "_repair_premium_credits_if_needed", _repair)
+
+    result = asyncio.run(server._reconcile_stripe_subscriptions_once())
+
+    assert result == {"scanned": 2, "updated": 1, "unmatched": 0}
+    assert [user_id for user_id, _values in updates] == ["user_missing"]
+    assert updates[0][1]["stripe_subscription_id"] == "sub_missing"
+    assert updates[0][1]["subscription_status"] == "active"
+
+def test_subscription_metadata_plan_wins_when_price_id_is_unmapped(monkeypatch):
+    monkeypatch.setattr(server, "_plan_from_price", lambda _price_id: "unknown")
+    subscription = {
+        "id": "sub_123",
+        "customer": "cus_123",
+        "status": "active",
+        "metadata": {"plan": "monthly", "interval": "monthly", "source": "onboarding"},
+        "items": {
+            "data": [{
+                "price": {"id": "price_new", "recurring": {"interval": "month"}},
+                "current_period_start": 1_700_000_000,
+                "current_period_end": 1_700_259_200,
+            }]
+        },
+    }
+
+    updates = server._subscription_billing_updates(subscription)
+
+    assert updates["plan"] == "monthly"

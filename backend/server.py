@@ -2342,11 +2342,14 @@ def _subscription_source(subscription: Any) -> Optional[str]:
 
 def _subscription_billing_updates(subscription: Any, *, last_payment_status: Optional[str] = None) -> Dict[str, Any]:
     metadata = _subscription_metadata(subscription)
+    detected_plan = _subscription_plan(subscription)
+    metadata_plan = str(metadata.get("plan") or "").strip() or None
+    resolved_plan = detected_plan if detected_plan and detected_plan != "unknown" else metadata_plan or detected_plan or "unknown"
     updates = {
         "stripe_customer_id": subscription.get("customer"),
         "stripe_subscription_id": subscription.get("id"),
         "subscription_status": subscription.get("status"),
-        "plan": _subscription_plan(subscription) or metadata.get("plan") or "unknown",
+        "plan": resolved_plan,
         "interval": _subscription_interval(subscription),
         "source": _subscription_source(subscription),
         "current_period_start": _period_start_iso(subscription),
@@ -3106,6 +3109,82 @@ async def _handle_subscription_event(subscription: Any, *, last_payment_status: 
         subscription.get("id"),
     )
 
+def _list_stripe_subscriptions_for_reconcile() -> List[Any]:
+    _stripe_secret_key()
+    result = stripe.Subscription.list(status="all", limit=100, expand=["data.customer"])
+    return list(result.auto_paging_iter())
+
+
+def _stripe_subscription_reconcile_priority(subscription: Any) -> tuple[int, int]:
+    status = str(subscription.get("status") or "").lower()
+    return (2 if status in {"active", "trialing"} else 1), int(subscription.get("created") or 0)
+
+
+async def _reconcile_stripe_subscriptions_once() -> Dict[str, int]:
+    """Repair webhook misses without rewriting already-synced billing records."""
+    if not _stripe_configured():
+        return {"scanned": 0, "updated": 0, "unmatched": 0}
+
+    subscriptions = await asyncio.to_thread(_list_stripe_subscriptions_for_reconcile)
+    current_by_customer: Dict[str, Any] = {}
+    for subscription in subscriptions:
+        customer_id = _stripe_object_id(subscription.get("customer"))
+        if not customer_id:
+            continue
+        current = current_by_customer.get(customer_id)
+        if current is None or _stripe_subscription_reconcile_priority(subscription) > _stripe_subscription_reconcile_priority(current):
+            current_by_customer[customer_id] = subscription
+
+    updated = 0
+    unmatched = 0
+    for customer_id, subscription in current_by_customer.items():
+        user_id = await _resolve_user_id_for_stripe_customer(customer_id)
+        if not user_id:
+            customer = subscription.get("customer")
+            if isinstance(customer, dict):
+                customer_email = str(customer.get("email") or "").strip().lower()
+            else:
+                customer_email = str(getattr(customer, "email", "") or "").strip().lower()
+            if customer_email:
+                user_doc = await _ensure_app_user_for_billing_email(customer_email)
+                user_id = (user_doc or {}).get("user_id")
+        if not user_id:
+            unmatched += 1
+            continue
+
+        user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+        if not user_doc:
+            unmatched += 1
+            continue
+        existing_billing = _billing_from_user(user_doc)
+        updates = _subscription_billing_updates(subscription)
+        updates["stripe_customer_id"] = customer_id
+        comparable_updates = {key: value for key, value in updates.items() if key != "last_payment_status"}
+        if all(existing_billing.get(key) == value for key, value in comparable_updates.items()):
+            continue
+
+        await _update_user_billing_by_user_id(user_id, updates)
+        refreshed = await db.users.find_one({"user_id": user_id}, {"_id": 0}) or user_doc
+        await _repair_premium_credits_if_needed(user_id, refreshed)
+        updated += 1
+
+    logger.info(
+        "stripe_subscription_reconcile_complete scanned=%s updated=%s unmatched=%s",
+        len(current_by_customer), updated, unmatched,
+    )
+    return {"scanned": len(current_by_customer), "updated": updated, "unmatched": unmatched}
+
+
+async def _run_stripe_subscription_reconcile_loop() -> None:
+    interval_seconds = max(60, int(os.environ.get("STRIPE_RECONCILE_INTERVAL_SECONDS", "300") or 300))
+    while True:
+        try:
+            await _reconcile_stripe_subscriptions_once()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning("stripe_subscription_reconcile_failed error=%s", str(exc)[:200])
+        await asyncio.sleep(interval_seconds)
 
 async def _stripe_event_already_processed(event_id: str) -> bool:
     if not event_id:
@@ -10101,6 +10180,10 @@ async def admin_user_analytics(admin: User = Depends(require_admin_user)):
 
 @api_router.get("/admin/users")
 async def admin_list_users(admin: User = Depends(require_admin_user)):
+    try:
+        await _reconcile_stripe_subscriptions_once()
+    except Exception as exc:
+        logger.warning("admin_users_stripe_reconcile_failed error=%s", str(exc)[:200])
     users, profiles, swipes, applications, _jobs = await _admin_base_data(include_swipes=True)
     profile_map = {item.get("user_id"): item for item in profiles}
     app_counts: Dict[str, int] = {}
@@ -14940,6 +15023,8 @@ async def startup_seed():
             "STRIPE_WEBHOOK_SECRET is not configured — Stripe webhooks will fail with 503. "
             "Register https://<your-backend>/api/stripe/webhook in the Stripe Dashboard."
         )
+    if _env_bool("STRIPE_RECONCILIATION_ENABLED", True) and _stripe_configured():
+        asyncio.create_task(_run_stripe_subscription_reconcile_loop())
     asyncio.create_task(_startup_seed_impl())
     asyncio.create_task(_resume_pending_application_generation())
     # Temporarily paused (default True): DB was reported under load from the

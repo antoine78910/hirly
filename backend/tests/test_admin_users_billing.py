@@ -1,7 +1,16 @@
 import asyncio
 
+import pytest
+
 import server
 
+
+@pytest.fixture(autouse=True)
+def _disable_live_stripe_reconcile(monkeypatch):
+    async def _noop():
+        return {"scanned": 0, "updated": 0, "unmatched": 0}
+
+    monkeypatch.setattr(server, "_reconcile_stripe_subscriptions_once", _noop)
 
 class _Cursor:
     def __init__(self, rows):
