@@ -582,12 +582,15 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang, isAdmin,
 
   const handleFlipTap = useCallback(() => {
     if (!isTop) return;
-    if (flipped) return;
     if (isCardTapSuppressed()) return;
     if (interactionRef.current.suppressTap || interactionRef.current.dragDistance > 8) return;
+    if (flipped) {
+      flipToFront();
+      return;
+    }
     setShowBack(true);
     setFlipped(true);
-  }, [isTop, flipped]);
+  }, [isTop, flipped, flipToFront]);
 
   useEffect(() => {
     if (!isTop || !pendingSwipe) return undefined;
@@ -640,9 +643,6 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang, isAdmin,
       whileDrag={{ cursor: "grabbing" }}
       onDragStart={() => {
         setIsDragging(true);
-        if (flipped) {
-          setFlipped(false);
-        }
         interactionRef.current.suppressTap = false;
       }}
       onDrag={(_, info) => {
@@ -651,6 +651,13 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang, isAdmin,
         if (distance > 5) {
           interactionRef.current.suppressTap = true;
           suppressCardTap();
+          // Only flip back to front once a real horizontal swipe is
+          // confirmed (not just at drag-start, which also fires for
+          // vertical scroll attempts inside the flipped card's
+          // description and would otherwise flip it back mid-scroll).
+          if (flipped) {
+            setFlipped(false);
+          }
         }
       }}
       onDragEnd={(_, info) => {
