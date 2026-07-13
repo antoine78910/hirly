@@ -3,6 +3,23 @@ import { normalizeReferralCodeInput } from "./friendReferral";
 
 export const ONBOARDING_TRANSIENT_STEPS = new Set(["intro", "signup", "profileSetup"]);
 
+const PAYWALL_RESUME_STEPS = new Set([
+  "profileWelcome",
+  "showcaseLanding",
+  "showcaseAllInOne",
+  "showcasePricing",
+]);
+
+function hasOnboardingPhone(profile, onboarding = {}) {
+  return Boolean(profile?.contact?.phone?.trim() || onboarding?.phone?.trim());
+}
+
+function hasPassedContactPhoneStep(onboarding = {}) {
+  const lastStep = onboarding?.last_step;
+  if (!lastStep || !ONBOARDING_STEP_ORDER.includes(lastStep)) return false;
+  return ONBOARDING_STEP_ORDER.indexOf(lastStep) > ONBOARDING_STEP_ORDER.indexOf("contactPhone");
+}
+
 export function experienceIdFromSeniority(seniority) {
   if (!seniority) return null;
   const match = EXPERIENCE_LEVELS.find(
@@ -11,7 +28,7 @@ export function experienceIdFromSeniority(seniority) {
   return match?.id ?? null;
 }
 
-export function normalizeResumeStep(step, { user, profile } = {}) {
+export function normalizeResumeStep(step, { user, profile, onboarding } = {}) {
   if (!step || !ONBOARDING_STEP_ORDER.includes(step)) {
     return user ? "jobSearch" : "intro";
   }
@@ -33,7 +50,9 @@ export function normalizeResumeStep(step, { user, profile } = {}) {
   if (
     user
     && stepIndex > contactPhoneIndex
-    && !(profile?.contact?.phone?.trim())
+    && !hasOnboardingPhone(profile, onboarding)
+    && !PAYWALL_RESUME_STEPS.has(step)
+    && !hasPassedContactPhoneStep(onboarding)
   ) {
     return "contactPhone";
   }
@@ -51,11 +70,18 @@ export function inferOnboardingStepFromProgress({ onboarding = {}, profile = nul
   if (!Array.isArray(data.categories) || !data.categories.length) return "categories";
   if (!data.experience && !profile?.seniority) return "experience";
   if (!data.onboarding_location && !profile?.target_location) return "location";
-  if (!profile?.contact?.phone?.trim()) return "contactPhone";
+  const hasCv = Boolean(profile?.cv_text || profile?.cv_filename);
+  if (
+    !hasOnboardingPhone(profile, data)
+    && !hasPassedContactPhoneStep(data)
+    && !hasCv
+  ) {
+    return "contactPhone";
+  }
   if (!data.acquisition_source) return "attribution";
-  if (!(profile?.cv_text || profile?.cv_filename)) return "upload";
+  if (!(profile?.cv_text || profile?.cv_filename)) return "referralCode";
   if (profile?.target_role && profile?.cv_text) return "showcasePricing";
-  return "showcasePricing";
+  return "upload";
 }
 
 export function resolveOnboardingResumeStep({
@@ -81,7 +107,7 @@ export function resolveOnboardingResumeStep({
     targetStep = inferOnboardingStepFromProgress({ onboarding, profile, user });
   }
 
-  return normalizeResumeStep(targetStep, { user, profile });
+  return normalizeResumeStep(targetStep, { user, profile, onboarding });
 }
 
 export function buildOnboardingExtrasPayload(state) {

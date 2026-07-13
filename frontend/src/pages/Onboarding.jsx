@@ -429,6 +429,30 @@ export default function Onboarding() {
     setStepIndex(nextIndex);
   }, [persistOnboardingProgress]);
 
+  // Persist the visible step after bootstrap so reload keeps the same screen.
+  useEffect(() => {
+    if (!user || authLoading || bootstrapping) return;
+    if (!resumeAppliedRef.current) return;
+    const currentStep = STEP_ORDER[stepIndex];
+    if (!currentStep || ONBOARDING_TRANSIENT_STEPS.has(currentStep)) return;
+    void persistOnboardingProgress(currentStep, stepIndex);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (next.get("step") === currentStep) return prev;
+      next.set("step", currentStep);
+      return next;
+    }, { replace: true });
+  }, [user, stepIndex, authLoading, bootstrapping, persistOnboardingProgress, setSearchParams]);
+
+  // Save referral code draft while the user types (reload should not lose it).
+  useEffect(() => {
+    if (step !== "referralCode" || !user || bootstrapping || !resumeAppliedRef.current) return;
+    const timer = window.setTimeout(() => {
+      void persistOnboardingProgress("referralCode", STEP_ORDER.indexOf("referralCode"));
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [referralCode, step, user, bootstrapping, persistOnboardingProgress]);
+
   useEffect(() => {
     const preview = searchParams.get("preview");
     const stepParam = searchParams.get("step");
@@ -586,9 +610,11 @@ export default function Onboarding() {
 
         setStepIndex(STEP_ORDER.indexOf(resumeStep));
 
-        if (stepParam) {
-          setSearchParams({}, { replace: true });
-        }
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          next.set("step", resumeStep);
+          return next;
+        }, { replace: true });
       } catch {
         if (!cancelled && user) {
           const fallbackStep = stepParam && STEP_ORDER.includes(stepParam) ? stepParam : "jobSearch";
