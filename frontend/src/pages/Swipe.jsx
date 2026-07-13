@@ -446,40 +446,9 @@ function CardBack({ job, t, lang, onFlipBack }) {
   const title = getJobDisplayTitle(job, { lang });
   const location = translateLocationLabel(job.location, lang) || t("swipe.locationNotSpecified");
   const salaryLabel = formatJobSalaryLabel(job, { lang });
-  const scrollRef = useRef(null);
-  const pointerRef = useRef({ startY: 0, startScrollTop: 0, moved: false });
-
-  const handlePointerDown = (event) => {
-    pointerRef.current = {
-      startY: event.clientY,
-      startScrollTop: scrollRef.current?.scrollTop ?? 0,
-      moved: false,
-    };
-  };
-
-  const handlePointerMove = (event) => {
-    if (Math.abs(event.clientY - pointerRef.current.startY) > 8) {
-      pointerRef.current.moved = true;
-    }
-  };
-
-  const requestFlipBack = (event) => {
-    if (event?.target?.closest?.("button, a, input, textarea, select, [role='button']")) return;
-    if (event?.target?.closest?.("[data-testid='swipe-card-scroll']")) return;
-    const scrollDelta = Math.abs(
-      (scrollRef.current?.scrollTop ?? 0) - (pointerRef.current.startScrollTop ?? 0),
-    );
-    if (pointerRef.current.moved || scrollDelta > 2) return;
-    onFlipBack?.();
-  };
 
   return (
-    <div
-      className="backface-hidden rotate-y-180 absolute inset-0 flex flex-col overflow-hidden rounded-[28px] border border-sprout-border bg-sprout-surface"
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={requestFlipBack}
-    >
+    <div className="backface-hidden rotate-y-180 absolute inset-0 flex flex-col overflow-hidden rounded-[28px] border border-sprout-border bg-sprout-surface">
       <div
         className="flex min-h-[5.5rem] max-h-[30%] shrink-0 items-center border-b border-sprout-border px-4 py-3 text-left sm:px-6"
         aria-label={t("swipe.tapToFlipBack")}
@@ -498,7 +467,6 @@ function CardBack({ job, t, lang, onFlipBack }) {
 
       <div className="flex min-h-0 flex-1 flex-col">
       <div
-        ref={scrollRef}
         className="app-scroll no-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-3 pb-2 touch-pan-y sm:px-6 sm:py-4"
         data-testid="swipe-card-scroll"
       >
@@ -536,9 +504,16 @@ function CardBack({ job, t, lang, onFlipBack }) {
         </div>
       </div>
 
-      <div
+      <button
+        type="button"
         className="flex w-full shrink-0 items-center justify-between border-t border-sprout-border px-6 py-3 text-[13px] text-sprout-muted"
-        aria-hidden="true"
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          suppressCardTap();
+          onFlipBack?.();
+        }}
+        aria-label={t("swipe.tapToFlipBack")}
       >
         <span className="flex items-center gap-1.5 font-display font-bold text-white">
           <Logo size={18} />
@@ -548,7 +523,7 @@ function CardBack({ job, t, lang, onFlipBack }) {
           {t("swipe.tapToFlipBack")}
           <Info className="h-4 w-4" />
         </span>
-      </div>
+      </button>
       </div>
     </div>
   );
