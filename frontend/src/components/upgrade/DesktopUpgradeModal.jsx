@@ -20,17 +20,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
 import { withDatafastAttribution } from "@/lib/datafast";
 import Logo from "@/components/Logo";
-import FriendReferralCodeDialog from "@/components/onboarding/FriendReferralCodeDialog";
 import { useAppLocale } from "@/context/AppLocaleContext";
-import { useAuth } from "@/context/AuthContext";
 import { getUpgradeContent } from "@/lib/appUi";
 import { formatMoney, formatUnitMoney } from "@/lib/currency";
-import {
-  enrollFriendReferral,
-  fetchFriendReferralStatus,
-  friendReferralCodeForUser,
-  FRIEND_REFERRAL_GOAL,
-} from "@/lib/friendReferral";
 import {
   SUBSCRIPTION_TIERS,
   tierApplicationsForInterval,
@@ -134,7 +126,6 @@ function monthlyEquivalentApplications(billing) {
 }
 
 export default function DesktopUpgradeModal({ open, onClose }) {
-  const { user } = useAuth();
   const { t, lang } = useAppLocale();
   const location = useLocation();
   const returnPath = `${location.pathname}${location.search}`;
@@ -143,10 +134,6 @@ export default function DesktopUpgradeModal({ open, onClose }) {
   const [selectedTier, setSelectedTier] = useState("ultra");
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [currentBilling, setCurrentBilling] = useState(null);
-  const [friendReferralDialogOpen, setFriendReferralDialogOpen] = useState(false);
-  const [friendReferralUserCode, setFriendReferralUserCode] = useState("");
-  const [friendReferralUsesCount, setFriendReferralUsesCount] = useState(0);
-  const [friendReferralEnrolling, setFriendReferralEnrolling] = useState(false);
 
   const isMonthly = billingInterval === "monthly";
   const isExistingSubscriber = Boolean(currentBilling?.is_premium);
@@ -242,37 +229,7 @@ export default function DesktopUpgradeModal({ open, onClose }) {
     }
   };
 
-  const startFriendReferralEnroll = async () => {
-    if (!user) return;
-
-    const fallbackCode = friendReferralCodeForUser(user);
-    setFriendReferralUserCode(fallbackCode);
-    setFriendReferralDialogOpen(true);
-    setFriendReferralEnrolling(true);
-
-    try {
-      const data = await enrollFriendReferral();
-      setFriendReferralUserCode(data?.code || fallbackCode);
-      setFriendReferralUsesCount(Number(data?.uses_count) || 0);
-    } catch {
-      try {
-        const status = await fetchFriendReferralStatus();
-        setFriendReferralUserCode(status?.code || fallbackCode);
-        setFriendReferralUsesCount(Number(status?.uses_count) || 0);
-      } catch {
-        setFriendReferralUserCode(fallbackCode);
-      }
-    } finally {
-      setFriendReferralEnrolling(false);
-    }
-  };
-
-  const inviteFriendsLabel = lang === "fr"
-    ? `Inviter ${FRIEND_REFERRAL_GOAL} amis`
-    : `Invite ${FRIEND_REFERRAL_GOAL} friends`;
-
   return (
-    <>
     <Dialog open={open} onOpenChange={(next) => !next && onClose?.()}>
       <DialogContent
         className="sprout fixed top-[50%] left-[50%] z-50 flex h-auto max-h-dvh w-full max-w-full translate-x-[-50%] translate-y-[-50%] flex-col gap-0 overflow-hidden rounded-lg border bg-background p-0 shadow-lg sm:h-[95vh] sm:max-w-[95vw] lg:max-w-6xl"
@@ -423,34 +380,19 @@ export default function DesktopUpgradeModal({ open, onClose }) {
                     {t("upgrade.manageSubscription")}
                   </button>
                 ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={handleCheckout}
-                      disabled={checkoutLoading}
-                      className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md gradient-linkedin px-6 text-sm font-medium whitespace-nowrap text-white shadow-[0_8px_32px_-8px_rgba(124,58,237,0.35)] transition-all hover:opacity-90 disabled:pointer-events-none disabled:opacity-50"
-                    >
-                      {checkoutLoading ? (
-                        <Loader2 className="size-4 animate-spin" aria-hidden />
-                      ) : (
-                        <Rocket className="size-4" aria-hidden />
-                      )}
-                      {isExistingSubscriber ? t("upgrade.upgradeCta") : t("upgrade.cta")}
-                    </button>
-                    {!isExistingSubscriber ? (
-                      <button
-                        type="button"
-                        onClick={startFriendReferralEnroll}
-                        disabled={checkoutLoading || friendReferralEnrolling}
-                        className="inline-flex h-10 w-full items-center justify-center rounded-full border-2 border-violet-500 bg-white px-6 text-sm font-semibold text-linkedin transition-colors hover:bg-violet-50 disabled:pointer-events-none disabled:opacity-50"
-                        data-testid="upgrade-friend-referral-btn"
-                      >
-                        {friendReferralEnrolling
-                          ? (lang === "fr" ? "Préparation..." : "Preparing...")
-                          : inviteFriendsLabel}
-                      </button>
-                    ) : null}
-                  </>
+                  <button
+                    type="button"
+                    onClick={handleCheckout}
+                    disabled={checkoutLoading}
+                    className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md gradient-linkedin px-6 text-sm font-medium whitespace-nowrap text-white shadow-[0_8px_32px_-8px_rgba(124,58,237,0.35)] transition-all hover:opacity-90 disabled:pointer-events-none disabled:opacity-50"
+                  >
+                    {checkoutLoading ? (
+                      <Loader2 className="size-4 animate-spin" aria-hidden />
+                    ) : (
+                      <Rocket className="size-4" aria-hidden />
+                    )}
+                    {isExistingSubscriber ? t("upgrade.upgradeCta") : t("upgrade.cta")}
+                  </button>
                 )}
 
                 <div className="flex flex-wrap justify-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground sm:gap-x-4 sm:text-xs">
@@ -476,16 +418,5 @@ export default function DesktopUpgradeModal({ open, onClose }) {
         </div>
       </DialogContent>
     </Dialog>
-
-    <FriendReferralCodeDialog
-      open={friendReferralDialogOpen}
-      onOpenChange={setFriendReferralDialogOpen}
-      code={friendReferralUserCode}
-      usesCount={friendReferralUsesCount}
-      loading={friendReferralEnrolling}
-      lang={lang}
-      onUsesCountChange={setFriendReferralUsesCount}
-    />
-    </>
   );
 }

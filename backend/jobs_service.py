@@ -15,6 +15,11 @@ from typing import Any, Dict, List, Optional, Tuple
 import httpx
 
 from employment_kind import contract_type_query_hint, enrich_job_employment_kind, resolve_profile_contract_type
+from profile_search_preferences import (
+    resolve_profile_target_location_data,
+    resolve_profile_target_location_label,
+    resolve_profile_target_role,
+)
 from job_normalization import sanitize_display_title
 from job_providers import (
     get_board_provider,
@@ -170,11 +175,9 @@ def build_profile_job_query(
     if role_override is not None:
         role = role_override.strip()
     else:
-        role = (
-            (profile.get("target_role") or ((profile.get("target_roles") or [None])[0]) or "")
-        ).strip()
-    requested_location = location_override or profile.get("target_location")
-    location_data = location_data_override or profile.get("target_location_data")
+        role = resolve_profile_target_role(profile)
+    requested_location = location_override or resolve_profile_target_location_label(profile) or None
+    location_data = location_data_override or resolve_profile_target_location_data(profile) or None
     country, location = _country_and_location_from_data(location_data, requested_location)
     if radius_scope in ("country", "country-wide"):
         location = _country_name(country) or location

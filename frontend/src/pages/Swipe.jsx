@@ -34,6 +34,7 @@ import DesktopSwipeFeed from "../components/swipe/DesktopSwipeFeed";
 import ResumeSheet from "../components/ResumeSheet";
 import PhoneSheet from "../components/PhoneSheet";
 import { saveTargetPreferences, normalizeLocationData } from "../lib/targetPreferences";
+import { resolveProfileSearchPreferences } from "../lib/profileSearchPreferences";
 import { enrichLocationData } from "../lib/locationSearch";
 import { hasActiveFilters, mergeFilters, clearMenuFilters } from "../lib/jobFilters";
 import { reconcileFiltersForUser } from "../lib/contractTypeMapping";
@@ -939,14 +940,15 @@ export default function Swipe() {
         profileRef.current = data || null;
         setProfile(data || null);
         if (data?.target_role || data?.cv_text) {
+          const prefs = resolveProfileSearchPreferences(data);
           const nextTarget = {
-            role: data.target_role || "",
-            location: data.target_location || "",
+            role: prefs.role,
+            location: prefs.location,
           };
           setTarget(nextTarget);
           targetRef.current = nextTarget;
-          setTargetLocationData(data.target_location_data || null);
-          targetLocationDataRef.current = data.target_location_data || null;
+          setTargetLocationData(prefs.locationData);
+          targetLocationDataRef.current = prefs.locationData;
           return data;
         }
       } catch (_) {}
@@ -958,14 +960,15 @@ export default function Swipe() {
       profileRef.current = data || null;
       setProfile(data || null);
       if (data) {
+        const prefs = resolveProfileSearchPreferences(data);
         const nextTarget = {
-          role: data.target_role || "",
-          location: data.target_location || "",
+          role: prefs.role,
+          location: prefs.location,
         };
         setTarget(nextTarget);
         targetRef.current = nextTarget;
-        setTargetLocationData(data.target_location_data || null);
-        targetLocationDataRef.current = data.target_location_data || null;
+        setTargetLocationData(prefs.locationData);
+        targetLocationDataRef.current = prefs.locationData;
       }
       return data || null;
     } catch (_) {
@@ -994,7 +997,8 @@ export default function Swipe() {
     const params = new URLSearchParams({ limit: String(FEED_BATCH_SIZE), search_radius: DEFAULT_SEARCH_RADIUS });
     const activeTarget = targetRef.current;
     if (activeTarget) {
-      params.set("search_role", (activeTarget.role || "").trim());
+      const role = (activeTarget.role || "").trim();
+      if (role) params.set("search_role", role);
     }
     if (f == null) return params;
     const merged = mergeFilters(f);

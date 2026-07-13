@@ -46,7 +46,6 @@ import {
   InterviewTargetDashes,
 } from "../components/onboarding/OnboardingVisuals";
 import OnboardingContactPhoneStep, { getContactPhoneCopy } from "../components/onboarding/OnboardingContactPhoneStep";
-import FriendReferralCodeDialog from "../components/onboarding/FriendReferralCodeDialog";
 import {
   formatContactPhone,
   isValidContactPhone,
@@ -55,9 +54,6 @@ import {
 import { getDefaultPhonePrefix, getDefaultPhoneCountryIso2 } from "../lib/phoneCountryCodes";
 import { formatLocalPhoneDisplay } from "../lib/phoneLocalFormats";
 import {
-  enrollFriendReferral,
-  fetchFriendReferralStatus,
-  friendReferralCodeForUser,
   getPendingFriendReferralCode,
   isFriendReferralCode,
   normalizeReferralCodeInput,
@@ -102,6 +98,10 @@ import { devBypassAuth } from "../lib/dev";
 import { splitFullName } from "../lib/personalInfoOptions";
 import { ob } from "../components/onboarding/onboardingTheme";
 import { trackEvent } from "../lib/analytics";
+import {
+  onboardingSnapshotToSearchSync,
+  syncOnboardingSearchPreferences,
+} from "../lib/profileSearchPreferences";
 import { preloadOnboardingIntroImages, preloadOnboardingShowcaseImages } from "../lib/onboardingImagePreload";
 import { translateOnboardingCategoryLabel } from "../lib/onboardingJobLabelsFr";
 import { translateRoleLabel } from "../lib/localizedDisplay";
@@ -234,10 +234,6 @@ export default function Onboarding() {
   const [contactPhoneCountryIso2, setContactPhoneCountryIso2] = useState(() => getDefaultPhoneCountryIso2(lang));
   const [contactPhoneLocal, setContactPhoneLocal] = useState("");
   const [savingPhone, setSavingPhone] = useState(false);
-  const [friendReferralDialogOpen, setFriendReferralDialogOpen] = useState(false);
-  const [friendReferralUserCode, setFriendReferralUserCode] = useState("");
-  const [friendReferralUsesCount, setFriendReferralUsesCount] = useState(0);
-  const [friendReferralEnrolling, setFriendReferralEnrolling] = useState(false);
   const [referralValidating, setReferralValidating] = useState(false);
 
   useEffect(() => {
@@ -417,10 +413,25 @@ export default function Onboarding() {
       await api.patch("/profile/extras", {
         onboarding: getOnboardingExtrasPayload(nextStep, nextStepIndex),
       });
+      await syncOnboardingSearchPreferences({
+        selectedRoles,
+        onboardingLocation,
+        onboardingLocationData,
+        contractType,
+        experienceId: experience,
+      });
     } catch (e) {
       console.warn("onboarding progress save skipped", e);
     }
-  }, [user, getOnboardingExtrasPayload]);
+  }, [
+    user,
+    getOnboardingExtrasPayload,
+    selectedRoles,
+    onboardingLocation,
+    onboardingLocationData,
+    contractType,
+    experience,
+  ]);
 
   const goToStepIndex = useCallback((nextIndex) => {
     if (nextIndex < 0 || nextIndex >= STEP_ORDER.length) return;
@@ -602,6 +613,9 @@ export default function Onboarding() {
           resumeStep === "showcasePricing"
           && canAccessJobSeekerApp({ user, profile: profileData })
         ) {
+          await syncOnboardingSearchPreferences(
+            onboardingSnapshotToSearchSync(profileData?.extras?.onboarding),
+          );
           goToApp("/swipe");
           resumeAppliedRef.current = true;
           setBootstrapping(false);
@@ -978,16 +992,12 @@ export default function Onboarding() {
         return;
       }
       await persistOnboardingMeta();
-      const exp = EXPERIENCE_LEVELS.find((e) => e.id === experience);
-      const primaryRole = selectedRoles[0] || profile?.target_roles?.[0] || "Software Engineer";
-      await api.put("/profile/preferences", {
-        target_role: primaryRole,
-        target_roles: selectedRoles.length ? selectedRoles : profile?.target_roles?.length ? profile.target_roles : [primaryRole],
-        target_location: onboardingLocationData?.location_label || onboardingLocation || "",
-        target_location_data: onboardingLocationData,
-        remote_preference: "any",
-        seniority: exp?.backend,
-        contract_type: contractType || undefined,
+      await syncOnboardingSearchPreferences({
+        selectedRoles,
+        onboardingLocation,
+        onboardingLocationData,
+        contractType,
+        experienceId: experience,
       });
       const nameParts = splitFullName(user?.name || profile?.contact?.name || "");
       const formattedPhone = formatContactPhone(contactPhonePrefix, contactPhoneLocal, contactPhoneCountryIso2)
@@ -1018,37 +1028,6 @@ export default function Onboarding() {
       toast.error(lang === "fr" ? "Échec de la configuration" : "Failed to finish setup");
     } finally {
       setSaving(false);
-    }
-  };
-
-  const startFriendReferralEnroll = async () => {
-    trackOnboardingContinue("showcasePricing", { plan: "friend_referral" });
-
-    if (!user) {
-      await startGoogleLogin("/onboarding?step=showcasePricing");
-      return;
-    }
-
-    const fallbackCode = friendReferralCodeForUser(user);
-    setFriendReferralUserCode(fallbackCode);
-    setFriendReferralDialogOpen(true);
-    setFriendReferralEnrolling(true);
-
-    try {
-      void persistOnboardingProgress("showcasePricing", STEP_ORDER.indexOf("showcasePricing"));
-      const data = await enrollFriendReferral();
-      setFriendReferralUserCode(data?.code || fallbackCode);
-      setFriendReferralUsesCount(Number(data?.uses_count) || 0);
-    } catch {
-      try {
-        const status = await fetchFriendReferralStatus();
-        setFriendReferralUserCode(status?.code || fallbackCode);
-        setFriendReferralUsesCount(Number(status?.uses_count) || 0);
-      } catch {
-        setFriendReferralUserCode(fallbackCode);
-      }
-    } finally {
-      setFriendReferralEnrolling(false);
     }
   };
 
@@ -2093,15 +2072,6 @@ export default function Onboarding() {
       </AnimatePresence>
     </OnboardingShell>
     )}
-    <FriendReferralCodeDialog
-      open={friendReferralDialogOpen}
-      onOpenChange={setFriendReferralDialogOpen}
-      code={friendReferralUserCode}
-      usesCount={friendReferralUsesCount}
-      loading={friendReferralEnrolling}
-      lang={lang}
-      onUsesCountChange={setFriendReferralUsesCount}
-    />
     </>
   );
 }

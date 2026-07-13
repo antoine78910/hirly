@@ -159,6 +159,11 @@ from role_query_terms import resolve_role_match_tokens
 from location_search import search_locations
 from llm_client import LLMProviderNotConfigured, complete_json_text, extract_text_from_image_bytes
 from onboarding_suggestions import suggest_categories, suggest_roles
+from profile_search_preferences import (
+    resolve_profile_target_location_data,
+    resolve_profile_target_location_label,
+    resolve_profile_target_role,
+)
 from feedback_routes import register_feedback_routes
 from feedback_store import migrate_file_feedback_to_db
 from feedback_resend_backfill import backfill_feedback_from_resend
@@ -5601,12 +5606,12 @@ async def get_feed(
         )
         raise HTTPException(status_code=400, detail="Add your phone number to apply")
 
+    if search_role is not None and not str(search_role).strip():
+        search_role = None
     if search_role is not None:
         feed_target_role = search_role.strip()
     else:
-        feed_target_role = (
-            (profile.get("target_role") or ((profile.get("target_roles") or [None])[0]) or "")
-        ).strip()
+        feed_target_role = resolve_profile_target_role(profile)
 
     async def _legacy_jsearch_only_feed() -> Dict[str, Any]:
         legacy_started = time.perf_counter()
@@ -5977,12 +5982,10 @@ async def get_feed(
         return strict_title_hits * 30 + min(strict_text_hits, 4) * 8 + family_title_hits * 14 + min(family_text_hits, 6) * 3
 
     def _profile_feed_location_data() -> Dict[str, Any]:
-        contact = profile.get("contact") or {}
-        return profile.get("target_location_data") or contact.get("location_data") or {}
+        return resolve_profile_target_location_data(profile)
 
     def _profile_feed_location_label() -> str:
-        contact = profile.get("contact") or {}
-        return str(profile.get("target_location") or contact.get("location") or "")
+        return resolve_profile_target_location_label(profile)
 
     def _location_terms() -> Dict[str, List[str]]:
         raw_locations: List[str] = []
