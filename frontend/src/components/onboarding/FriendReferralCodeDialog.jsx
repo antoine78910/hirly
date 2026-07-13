@@ -33,11 +33,11 @@ function referralCodeChars(code) {
 
 function SpacedReferralCode({ code, testId }) {
   return (
-    <div className="grid w-full grid-cols-6 gap-1 sm:gap-2" data-testid={testId}>
+    <div className="flex items-center justify-center gap-1.5 sm:gap-2" data-testid={testId}>
       {referralCodeChars(code).map((char, index) => (
         <span
           key={`${char}-${index}`}
-          className="text-center font-display text-xl font-black tabular-nums text-zinc-900 sm:text-2xl"
+          className="min-w-[1ch] text-center font-display text-xl font-black tabular-nums tracking-wide text-swiipr-gradient sm:text-2xl"
         >
           {char.trim() || "—"}
         </span>
@@ -166,9 +166,10 @@ export default function FriendReferralCodeDialog({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="bottom"
-        className="rounded-t-[1.75rem] border-zinc-200 px-6 pb-8 pt-3 [&>button.absolute]:hidden"
+        className="rounded-t-[1.75rem] border-zinc-200 px-6 pb-8 pt-3 md:left-1/2 md:right-auto md:bottom-6 md:w-full md:max-w-md md:-translate-x-1/2 md:rounded-[1.75rem] [&>button.absolute]:hidden"
         data-testid="friend-referral-dialog"
       >
+        <div className="mx-auto w-full max-w-sm">
         <div className="mx-auto mb-5 h-1 w-10 rounded-full bg-zinc-300" aria-hidden />
 
         <SheetHeader className="space-y-2 text-center">
@@ -182,24 +183,22 @@ export default function FriendReferralCodeDialog({
           </SheetDescription>
         </SheetHeader>
 
-        <div className="mt-5 flex items-center gap-3 rounded-full border border-violet-200 bg-violet-50 px-3 py-3.5 sm:px-4">
+        <div className="relative mt-5 flex w-full items-center justify-center rounded-full border border-violet-200 bg-violet-50 px-14 py-3.5">
           {loading ? (
-            <div className="flex flex-1 items-center justify-center py-1">
-              <Loader2 className="h-5 w-5 animate-spin text-linkedin" />
-            </div>
+            <Loader2 className="h-5 w-5 animate-spin text-linkedin" />
           ) : (
-            <div className="min-w-0 flex-1">
-              <SpacedReferralCode code={code} testId="friend-referral-code" />
-            </div>
+            <SpacedReferralCode code={code} testId="friend-referral-code" />
           )}
-          <AnimatedCopyButton
-            copied={copied}
-            onClick={copyInviteMessage}
-            disabled={!code}
-            testId="friend-referral-copy"
-            copiedLabel={lang === "fr" ? "Copié" : "Copied"}
-            defaultLabel={lang === "fr" ? "Copier le message" : "Copy invite message"}
-          />
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 sm:right-3">
+            <AnimatedCopyButton
+              copied={copied}
+              onClick={copyInviteMessage}
+              disabled={!code}
+              testId="friend-referral-copy"
+              copiedLabel={lang === "fr" ? "Copié" : "Copied"}
+              defaultLabel={lang === "fr" ? "Copier le message" : "Copy invite message"}
+            />
+          </div>
         </div>
 
         <Button
@@ -220,6 +219,7 @@ export default function FriendReferralCodeDialog({
           <span className="font-bold text-zinc-900">{usesCount}</span>
           {goal ? ` / ${goal}` : ""}
         </p>
+        </div>
       </SheetContent>
     </Sheet>
   );

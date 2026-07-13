@@ -1,6 +1,6 @@
 ﻿// REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
 import { Button } from "../components/ui/button";
-import { ArrowRight, Check, Sparkles, Zap, FileCheck2, Inbox, ChevronDown, ExternalLink, LogOut, RefreshCw } from "lucide-react";
+import { ArrowRight, Check, Sparkles, Zap, FileCheck2, Inbox, ChevronDown, ExternalLink, LogOut } from "lucide-react";
 import { motion } from "framer-motion";
 import { useEffect } from "react";
 import Logo from "../components/Logo";
@@ -17,7 +17,6 @@ import LandingHeroRotatingWord from "../components/landing/LandingHeroRotatingWo
 import LandingHeroSwipeDemo from "../components/landing/LandingHeroSwipeDemo";
 import LandingTrustLogos from "../components/landing/LandingTrustLogos";
 import { goToApp } from "../lib/appDomains";
-import { startGoogleLogin } from "../lib/auth";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -95,12 +94,6 @@ export default function Landing() {
     trackEvent("landing_account_logout");
     await logout();
     navigate("/", { replace: true });
-  };
-
-  const onSwitchAccount = async () => {
-    trackEvent("landing_account_switch");
-    await logout();
-    await startGoogleLogin(postLoginPath, { prompt: "select_account" });
   };
 
   const onStartSwiping = (ctaLocation = "hero") => {
@@ -185,13 +178,6 @@ export default function Landing() {
                     >
                       <ExternalLink className="size-4 text-zinc-600" />
                       {lang === "fr" ? "Ouvrir mon espace" : "Open my account"}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className="cursor-pointer rounded-lg px-3 py-2.5 text-sm font-medium text-zinc-900 focus:bg-zinc-100"
-                      onClick={onSwitchAccount}
-                    >
-                      <RefreshCw className="size-4 text-zinc-600" />
-                      {lang === "fr" ? "Changer de compte" : "Switch account"}
                     </DropdownMenuItem>
                   </div>
                   <DropdownMenuSeparator className="my-0 bg-zinc-200" />
