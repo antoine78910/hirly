@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { BadgeCheck, ChevronDown, CreditCard, LogOut, User } from "lucide-react";
+import { BadgeCheck, ChevronDown, CreditCard, Gift, LogOut, User } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useAppLocale } from "../../context/AppLocaleContext";
 import {
@@ -78,6 +78,14 @@ export default function DesktopAccountMenu({ triggerClassName = "" }) {
           >
             <CreditCard className="size-4 text-zinc-700" />
             {t("accountMenu.billing")}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="cursor-pointer rounded-lg px-3 py-2.5 text-sm font-medium text-zinc-900 focus:bg-zinc-100"
+            onClick={() => navigate("/referral")}
+            data-testid="desktop-account-menu-referral"
+          >
+            <Gift className="size-4 text-zinc-700" />
+            {t("accountMenu.referral")}
           </DropdownMenuItem>
         </div>
 

@@ -29,6 +29,7 @@ export const APP_UI = {
     accountMenu: {
       account: "Account",
       billing: "Billing",
+      referral: "Refer a friend",
       logOut: "Log out",
     },
     billingPage: {
@@ -249,6 +250,7 @@ export const APP_UI = {
       talkToUs: "Talk to us",
       shareBrand: "Share {brand}",
       inviteFriend: "Invite a friend",
+      inviteFriendHint: "Get 40 free credits",
       onInstagram: "Follow on Instagram",
       onTikTok: "Follow on TikTok",
       socialHandle: "@tryhirly",
@@ -975,6 +977,7 @@ export const APP_UI = {
     accountMenu: {
       account: "Compte",
       billing: "Facturation",
+      referral: "Parrainer un ami",
       logOut: "Se déconnecter",
     },
     billingPage: {
@@ -1193,6 +1196,7 @@ export const APP_UI = {
       talkToUs: "Nous contacter",
       shareBrand: "Partager {brand}",
       inviteFriend: "Inviter un ami",
+      inviteFriendHint: "Obtenez 40 crédits gratuits",
       onInstagram: "Suivre sur Instagram",
       onTikTok: "Suivre sur TikTok",
       socialHandle: "@tryhirly",

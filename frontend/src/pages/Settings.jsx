@@ -6,7 +6,6 @@ import {
   ArrowLeft, Palette, Bell,
   CreditCard, MessageSquare, Users, Instagram, LogOut, Trash2,
 } from "lucide-react";
-import { toast } from "sonner";
 import Logo from "../components/Logo";
 import { BRAND } from "../lib/brand";
 import { formatPlanTier } from "../lib/billingPlan";
@@ -82,15 +81,6 @@ export default function Settings() {
     return () => window.removeEventListener("hirly:notification-settings-changed", syncNotifications);
   }, []);
 
-  const inviteFriends = async () => {
-    const url = `${window.location.origin}/?ref=${encodeURIComponent(user?.email || "")}`;
-    if (navigator.share) {
-      try { await navigator.share({ title: BRAND.NAME, text: `Apply to jobs in 1 second with ${BRAND.NAME}.`, url }); return; } catch (_) {}
-    }
-    try { await navigator.clipboard.writeText(url); toast.success(t("settings.inviteCopied")); }
-    catch (_) { toast("Share: " + url); }
-  };
-
   const openExternal = (href) => window.open(href, "_blank", "noopener");
 
   const openBilling = () => navigate("/billing");
@@ -145,7 +135,7 @@ export default function Settings() {
       </Section>
 
       <Section label={t("settings.shareBrand", { brand: BRAND.NAME })} testId="settings-social">
-        <Row icon={Users}     label={t("settings.inviteFriend")} onClick={inviteFriends}                                 testId="settings-invite" />
+        <Row icon={Users}     label={t("settings.inviteFriend")} value={t("settings.inviteFriendHint")} onClick={() => navigate("/referral")} testId="settings-invite" />
         <Row icon={Instagram} label={t("settings.onInstagram")} value={t("settings.socialHandle")} onClick={() => openExternal(BRAND.INSTAGRAM_URL)} testId="settings-instagram" />
         <Row icon={TikTok}    label={t("settings.onTikTok")}    value={t("settings.socialHandle")} onClick={() => openExternal(BRAND.TIKTOK_URL)}    testId="settings-tiktok" />
       </Section>
