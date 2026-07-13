@@ -5,6 +5,10 @@ import pytest
 import server
 
 
+async def _async_return(value):
+    return value
+
+
 def test_checkout_return_url_includes_stripe_session_placeholder():
     url = server._checkout_return_url("https://app.tryhirly.com", "/swipe", "success")
     assert url == "https://app.tryhirly.com/swipe?upgrade=success&session_id={CHECKOUT_SESSION_ID}"
@@ -462,3 +466,60 @@ def test_subscription_metadata_plan_wins_when_price_id_is_unmapped(monkeypatch):
     updates = server._subscription_billing_updates(subscription)
 
     assert updates["plan"] == "monthly"
+
+class _FakeRequest:
+    cookies = {}
+
+
+def _make_checkout_test_user():
+    return server.User(user_id="user_redeemed", email="redeemed@example.com", name="Redeemed User")
+
+
+def test_checkout_session_applies_signup_discount_for_referred_user(monkeypatch):
+    captured = {}
+
+    monkeypatch.setattr(server, "_stripe_secret_key", lambda: "sk_test_fake")
+    monkeypatch.setattr(server, "_get_user_doc", lambda user: _async_return({"user_id": user.user_id, "billing": {}}))
+    monkeypatch.setattr(server, "_stripe_customer_for_user", lambda user_doc: _async_return("cus_123"))
+    monkeypatch.setattr(server, "_stripe_price_for_plan", lambda plan, interval=None, source=None: "price_123")
+    monkeypatch.setattr(server, "has_redeemed_friend_referral_code", lambda db, user_id: _async_return(True))
+    monkeypatch.setattr(server, "_ensure_friend_referral_signup_discount_coupon", lambda: "friend_referral_signup_25off")
+
+    def fake_session_create(**kwargs):
+        captured.update(kwargs)
+        return {"url": "https://checkout.stripe.com/fake"}
+
+    monkeypatch.setattr(server.stripe.checkout.Session, "create", fake_session_create)
+
+    body = server.BillingCheckoutRequest(plan="monthly", source="onboarding")
+    result = asyncio.run(
+        server.create_billing_checkout_session(body, _FakeRequest(), _make_checkout_test_user())
+    )
+
+    assert result == {"url": "https://checkout.stripe.com/fake"}
+    assert captured.get("discounts") == [{"coupon": "friend_referral_signup_25off"}]
+    assert "allow_promotion_codes" not in captured
+
+
+def test_checkout_session_offers_promo_box_for_non_referred_user(monkeypatch):
+    captured = {}
+
+    monkeypatch.setattr(server, "_stripe_secret_key", lambda: "sk_test_fake")
+    monkeypatch.setattr(server, "_get_user_doc", lambda user: _async_return({"user_id": user.user_id, "billing": {}}))
+    monkeypatch.setattr(server, "_stripe_customer_for_user", lambda user_doc: _async_return("cus_123"))
+    monkeypatch.setattr(server, "_stripe_price_for_plan", lambda plan, interval=None, source=None: "price_123")
+    monkeypatch.setattr(server, "has_redeemed_friend_referral_code", lambda db, user_id: _async_return(False))
+
+    def fake_session_create(**kwargs):
+        captured.update(kwargs)
+        return {"url": "https://checkout.stripe.com/fake"}
+
+    monkeypatch.setattr(server.stripe.checkout.Session, "create", fake_session_create)
+
+    body = server.BillingCheckoutRequest(plan="monthly", source="onboarding")
+    asyncio.run(
+        server.create_billing_checkout_session(body, _FakeRequest(), _make_checkout_test_user())
+    )
+
+    assert captured.get("allow_promotion_codes") is True
+    assert "discounts" not in captured

@@ -8,6 +8,7 @@ from friend_referral_service import (
     claim_friend_referral_reward,
     enroll_friend_referral,
     friend_referral_status_payload,
+    has_redeemed_friend_referral_code,
     redeem_friend_referral_code,
     validate_friend_referral_code,
 )
@@ -324,3 +325,36 @@ def test_claim_reward_requires_unlock(db):
     asyncio.run(enroll_friend_referral(db, referrer_id))
     with pytest.raises(ValueError, match="No referral reward"):
         asyncio.run(claim_friend_referral_reward(db, referrer_id, token=None))
+
+
+def test_has_redeemed_friend_referral_code_reflects_redemption(db):
+    referrer_id = "user_referrer"
+    redeemer_id = "user_redeemer"
+    code = "123456"
+    asyncio.run(enroll_friend_referral(db, referrer_id))
+
+    assert asyncio.run(has_redeemed_friend_referral_code(db, redeemer_id)) is False
+
+    async def noop_email(**kwargs):
+        return True
+
+    async def grant_reward(user_id, credits):
+        pass
+
+    asyncio.run(
+        redeem_friend_referral_code(
+            db,
+            code=code,
+            redeemer_user_id=redeemer_id,
+            redeemer_email="redeemer@example.com",
+            send_use_email=noop_email,
+            send_reward_email=noop_email,
+            grant_reward=grant_reward,
+            app_url="https://app.example.com",
+        )
+    )
+
+    assert asyncio.run(has_redeemed_friend_referral_code(db, redeemer_id)) is True
+    # A user who never redeemed anything (e.g. the referrer themselves)
+    # should not be flagged as discount-eligible.
+    assert asyncio.run(has_redeemed_friend_referral_code(db, referrer_id)) is False
