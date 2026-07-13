@@ -30,7 +30,6 @@ import {
   fetchFriendReferralStatus,
   friendReferralCodeForUser,
   FRIEND_REFERRAL_GOAL,
-  FRIEND_REFERRAL_REWARD_CREDITS,
 } from "@/lib/friendReferral";
 import {
   SUBSCRIPTION_TIERS,
@@ -271,9 +270,6 @@ export default function DesktopUpgradeModal({ open, onClose }) {
   const inviteFriendsLabel = lang === "fr"
     ? `Inviter ${FRIEND_REFERRAL_GOAL} amis`
     : `Invite ${FRIEND_REFERRAL_GOAL} friends`;
-  const inviteFriendsHint = lang === "fr"
-    ? `${FRIEND_REFERRAL_REWARD_CREDITS} candidatures offertes`
-    : `${FRIEND_REFERRAL_REWARD_CREDITS} applications included`;
 
   return (
     <>
@@ -442,22 +438,17 @@ export default function DesktopUpgradeModal({ open, onClose }) {
                       {isExistingSubscriber ? t("upgrade.upgradeCta") : t("upgrade.cta")}
                     </button>
                     {!isExistingSubscriber ? (
-                      <div className="space-y-1">
-                        <button
-                          type="button"
-                          onClick={startFriendReferralEnroll}
-                          disabled={checkoutLoading || friendReferralEnrolling}
-                          className="inline-flex h-10 w-full items-center justify-center rounded-full border-2 border-violet-500 bg-white px-6 text-sm font-semibold text-linkedin transition-colors hover:bg-violet-50 disabled:pointer-events-none disabled:opacity-50"
-                          data-testid="upgrade-friend-referral-btn"
-                        >
-                          {friendReferralEnrolling
-                            ? (lang === "fr" ? "Préparation..." : "Preparing...")
-                            : inviteFriendsLabel}
-                        </button>
-                        <p className="text-center text-[10px] text-muted-foreground sm:text-xs">
-                          {inviteFriendsHint}
-                        </p>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={startFriendReferralEnroll}
+                        disabled={checkoutLoading || friendReferralEnrolling}
+                        className="inline-flex h-10 w-full items-center justify-center rounded-full border-2 border-violet-500 bg-white px-6 text-sm font-semibold text-linkedin transition-colors hover:bg-violet-50 disabled:pointer-events-none disabled:opacity-50"
+                        data-testid="upgrade-friend-referral-btn"
+                      >
+                        {friendReferralEnrolling
+                          ? (lang === "fr" ? "Préparation..." : "Preparing...")
+                          : inviteFriendsLabel}
+                      </button>
                     ) : null}
                   </>
                 )}

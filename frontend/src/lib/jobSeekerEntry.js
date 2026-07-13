@@ -3,8 +3,20 @@ import { goToApp, goToMarketing, domainSplitEnabled, isMarketingHost } from "./a
 import { resolveOnboardingResumeStep } from "./onboardingResume";
 
 /**
- * True when the user may enter /swipe (paid, demo, returning subscriber, or comp access).
- * CV + target_role alone is not enough — users stopped at the paywall must stay in onboarding.
+ * True when onboarding is far enough that the user may browse the app (feed)
+ * even with zero credits — applying still requires credits or premium.
+ */
+export function hasJobSeekerOnboardingComplete(profile) {
+  if (!profile) return false;
+  const hasCv = Boolean(profile.cv_text || profile.cv_filename);
+  if (!hasCv) return false;
+  if (profile.target_role?.trim() || profile.target_roles?.length) return true;
+  const onboarding = profile.extras?.onboarding || {};
+  return Array.isArray(onboarding.selected_roles) && onboarding.selected_roles.length > 0;
+}
+
+/**
+ * True when the user may enter /swipe (paid, demo, credits, or onboarding complete).
  */
 export function canAccessJobSeekerApp({ user, billing, profile } = {}) {
   if (!user) return false;
@@ -13,6 +25,7 @@ export function canAccessJobSeekerApp({ user, billing, profile } = {}) {
   const b = billing || {};
   if (b.is_premium) return true;
   if (Number(b.credits_remaining ?? 0) > 0) return true;
+  if (hasJobSeekerOnboardingComplete(profile)) return true;
 
   return false;
 }

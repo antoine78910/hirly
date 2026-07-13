@@ -115,6 +115,7 @@ import {
   ONBOARDING_TRANSIENT_STEPS,
   resolveOnboardingResumeStep,
 } from "../lib/onboardingResume";
+import { canAccessJobSeekerApp } from "../lib/jobSeekerEntry";
 
 const STEP_ORDER = ONBOARDING_STEP_ORDER;
 const ONBOARDING_CHECKOUT_STATE_KEY = "hirly.onboarding.checkoutState";
@@ -526,6 +527,13 @@ export default function Onboarding() {
       // inherit a link visited earlier in the same browser.
       clearPendingInviteCode();
 
+      if (user && hasProfile && hasPreferences) {
+        goToApp("/swipe");
+        resumeAppliedRef.current = true;
+        setBootstrapping(false);
+        return;
+      }
+
       if (!user) {
         resumeAppliedRef.current = true;
         setBootstrapping(false);
@@ -565,6 +573,17 @@ export default function Onboarding() {
           profile: profileData,
           user,
         });
+
+        if (
+          resumeStep === "showcasePricing"
+          && canAccessJobSeekerApp({ user, profile: profileData })
+        ) {
+          goToApp("/swipe");
+          resumeAppliedRef.current = true;
+          setBootstrapping(false);
+          return;
+        }
+
         setStepIndex(STEP_ORDER.indexOf(resumeStep));
 
         if (stepParam) {
@@ -2037,9 +2056,7 @@ export default function Onboarding() {
               selectedPlan={selectedPlan}
               onSelectPlan={setSelectedPlan}
               onContinueCheckout={startOnboardingCheckout}
-              onInviteFriends={startFriendReferralEnroll}
               checkoutLoading={checkoutLoading}
-              friendReferralEnrolling={friendReferralEnrolling}
               redeemingAccessCode={redeemingAccessCode}
               saving={saving}
             />

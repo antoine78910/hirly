@@ -19,7 +19,6 @@ import {
   buildProfileWelcomeItems,
   getOnboardingValueTagline,
 } from "./onboardingData";
-import { FRIEND_REFERRAL_GOAL, FRIEND_REFERRAL_REWARD_CREDITS } from "../../lib/friendReferral";
 
 function OnboardingValueTagline({ className = "", prominent = false }) {
   const { lang } = useAppLocale();
@@ -347,16 +346,14 @@ export function ShowcasePricingStep({
   selectedPlan,
   onSelectPlan,
   onContinueCheckout,
-  onInviteFriends,
   checkoutLoading = false,
-  friendReferralEnrolling = false,
   redeemingAccessCode = false,
   saving = false,
 }) {
   const { lang } = useAppLocale();
   const plans = getOnboardingPricingPlans(lang);
   const plan = plans.find((p) => p.id === selectedPlan) || plans[0];
-  const actionsDisabled = checkoutLoading || redeemingAccessCode || saving || friendReferralEnrolling;
+  const actionsDisabled = checkoutLoading || redeemingAccessCode || saving;
 
   return (
     <div className="grid h-full min-h-0 w-full min-w-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
@@ -441,22 +438,6 @@ export function ShowcasePricingStep({
                 ? (lang === "fr" ? "Activation..." : "Activating...")
                 : (lang === "fr" ? "Continuer" : "Continue")}
           </button>
-          <button
-            type="button"
-            onClick={onInviteFriends}
-            disabled={actionsDisabled}
-            className="w-full h-11 sm:h-12 rounded-full border-2 border-violet-500 bg-white text-sm sm:text-base font-bold text-linkedin hover:bg-violet-50 transition-colors disabled:opacity-50"
-            data-testid="showcase-pricing-friend-referral"
-          >
-            {friendReferralEnrolling
-              ? (lang === "fr" ? "Préparation..." : "Preparing...")
-              : (lang === "fr" ? `Inviter ${FRIEND_REFERRAL_GOAL} amis` : `Invite ${FRIEND_REFERRAL_GOAL} friends`)}
-          </button>
-          <p className={`text-center text-[10px] ${ob.dim}`}>
-            {lang === "fr"
-              ? `${FRIEND_REFERRAL_REWARD_CREDITS} candidatures offertes`
-              : `${FRIEND_REFERRAL_REWARD_CREDITS} applications included`}
-          </p>
         </div>
       </div>
     </div>
