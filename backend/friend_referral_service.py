@@ -20,6 +20,10 @@ logger = logging.getLogger(__name__)
 FRIEND_REFERRAL_GOAL = 3
 FRIEND_REFERRAL_REWARD_CREDITS = 40
 FRIEND_REFERRAL_REWARD_DAYS = 30
+# One-time discount for the new signup who redeems someone else's code
+# (separate from the referrer's every-3 reward above).
+FRIEND_REFERRAL_SIGNUP_DISCOUNT_PERCENT = 25
+FRIEND_REFERRAL_SIGNUP_DISCOUNT_COUPON_ID = "friend_referral_signup_25off"
 
 
 def _now_iso() -> str:
@@ -127,6 +131,16 @@ async def enroll_friend_referral(db, user_id: str) -> Dict[str, Any]:
         )
     user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
     return friend_referral_status_payload(user_doc)
+
+
+async def has_redeemed_friend_referral_code(db, user_id: str) -> bool:
+    """Whether this user signed up using someone else's referral code --
+    used to grant the one-time signup discount at checkout."""
+    row = await db.friend_referral_redemptions.find_one(
+        {"redeemer_user_id": user_id},
+        {"_id": 0},
+    )
+    return row is not None
 
 
 async def validate_friend_referral_code(

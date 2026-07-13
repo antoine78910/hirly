@@ -191,9 +191,12 @@ from friend_referral_service import (
     claim_friend_referral_reward,
     enroll_friend_referral,
     friend_referral_status_payload,
+    has_redeemed_friend_referral_code,
     redeem_friend_referral_code,
     validate_friend_referral_code,
     FRIEND_REFERRAL_REWARD_DAYS,
+    FRIEND_REFERRAL_SIGNUP_DISCOUNT_COUPON_ID,
+    FRIEND_REFERRAL_SIGNUP_DISCOUNT_PERCENT,
 )
 from referral_email_service import (
     send_friend_referral_reward_email,
@@ -1708,6 +1711,23 @@ def _stripe_price_for_plan(plan: str, *, interval: Optional[str] = None, source:
     return price_id
 
 
+def _ensure_friend_referral_signup_discount_coupon() -> str:
+    """Create the one-time 25%-off-first-invoice coupon if it doesn't
+    already exist in this Stripe account. Idempotent -- safe to call on
+    every checkout for an eligible user."""
+    try:
+        stripe.Coupon.create(
+            id=FRIEND_REFERRAL_SIGNUP_DISCOUNT_COUPON_ID,
+            percent_off=FRIEND_REFERRAL_SIGNUP_DISCOUNT_PERCENT,
+            duration="once",
+            name="Friend referral signup discount",
+        )
+    except stripe.error.InvalidRequestError as exc:
+        if "already exists" not in str(exc):
+            raise
+    return FRIEND_REFERRAL_SIGNUP_DISCOUNT_COUPON_ID
+
+
 def _master_billing_code() -> str:
     return os.environ.get("MASTER_BILLING_CODE", "424242").strip()
 
@@ -2548,17 +2568,30 @@ async def create_billing_checkout_session(
     }
     datafast_metadata = datafast_stripe_metadata(cookies=request.cookies, body=body.model_dump())
     checkout_metadata = merge_stripe_metadata(base_metadata, datafast_metadata)
-    session = stripe.checkout.Session.create(
-        mode="subscription",
-        customer=customer_id,
-        line_items=[{"price": _stripe_price_for_plan(billing_plan, interval=billing_interval, source=checkout_source), "quantity": 1}],
-        success_url=success_url,
-        cancel_url=cancel_url,
-        client_reference_id=user.user_id,
-        metadata=checkout_metadata,
-        subscription_data={"metadata": checkout_metadata},
-        allow_promotion_codes=True,
+    session_kwargs: Dict[str, Any] = {
+        "mode": "subscription",
+        "customer": customer_id,
+        "line_items": [{"price": _stripe_price_for_plan(billing_plan, interval=billing_interval, source=checkout_source), "quantity": 1}],
+        "success_url": success_url,
+        "cancel_url": cancel_url,
+        "client_reference_id": user.user_id,
+        "metadata": checkout_metadata,
+        "subscription_data": {"metadata": checkout_metadata},
+    }
+    # First-ever checkout for someone who signed up with a friend's referral
+    # code -- honor the 25%-off-first-invoice promise from the referral
+    # campaign. Stripe doesn't allow combining a preset discount with
+    # allow_promotion_codes, so only offer the manual promo box otherwise.
+    signup_discount_eligible = (
+        not existing_subscription_id
+        and await has_redeemed_friend_referral_code(db, user.user_id)
     )
+    if signup_discount_eligible:
+        coupon_id = await asyncio.to_thread(_ensure_friend_referral_signup_discount_coupon)
+        session_kwargs["discounts"] = [{"coupon": coupon_id}]
+    else:
+        session_kwargs["allow_promotion_codes"] = True
+    session = stripe.checkout.Session.create(**session_kwargs)
     return {"url": session["url"]}
 
 
