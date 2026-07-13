@@ -40,6 +40,77 @@ export function splitAppPath(rawPath) {
   return { pathname: raw.slice(0, qIndex) || "/", search: raw.slice(qIndex) };
 }
 
+/** Bare callback URL — must match Supabase redirect allow-list exactly (no query string). */
+export function authCallbackBaseUrl(origin = typeof window !== "undefined" ? window.location.origin : "") {
+  return `${origin}/auth/callback`;
+}
+
+export function readAuthUrlParams(locationSearch = "", locationHash = "") {
+  const search = locationSearch.startsWith("?") ? locationSearch.slice(1) : locationSearch;
+  const searchParams = new URLSearchParams(search);
+  const hashParams = new URLSearchParams((locationHash || "").replace(/^#/, ""));
+  return { searchParams, hashParams };
+}
+
+export function normalizeEmailOtpType(type) {
+  const normalized = (type || "email").toLowerCase();
+  const allowed = new Set(["signup", "invite", "magiclink", "recovery", "email_change", "email"]);
+  return allowed.has(normalized) ? normalized : "email";
+}
+
+/**
+ * Recover a Supabase session from the auth callback URL (PKCE code, email OTP hash,
+ * or implicit tokens). Email verification links often open in a new tab — token_hash
+ * and hash tokens work without the original PKCE verifier.
+ */
+export async function resolveSupabaseAuthSession(
+  client,
+  location = typeof window !== "undefined" ? window.location : { search: "", hash: "" },
+) {
+  if (!client) return null;
+
+  const { searchParams, hashParams } = readAuthUrlParams(location.search, location.hash);
+
+  const authError = searchParams.get("error") || hashParams.get("error");
+  if (authError) {
+    const description = searchParams.get("error_description") || hashParams.get("error_description");
+    throw new Error(description || authError);
+  }
+
+  const tokenHash = searchParams.get("token_hash") || hashParams.get("token_hash");
+  const otpType = searchParams.get("type") || hashParams.get("type");
+  if (tokenHash) {
+    const { data, error } = await client.auth.verifyOtp({
+      token_hash: tokenHash,
+      type: normalizeEmailOtpType(otpType),
+    });
+    if (error) throw error;
+    if (data?.session) return data.session;
+  }
+
+  const accessToken = hashParams.get("access_token");
+  const refreshToken = hashParams.get("refresh_token");
+  if (accessToken && refreshToken) {
+    const { data, error } = await client.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    });
+    if (error) throw error;
+    if (data?.session) return data.session;
+  }
+
+  const code = searchParams.get("code") || hashParams.get("code");
+  if (code) {
+    const { data, error } = await client.auth.exchangeCodeForSession(code);
+    if (!error && data?.session) return data.session;
+    if (error && !/verifier|pkce/i.test(error.message || "")) throw error;
+  }
+
+  const { data, error } = await client.auth.getSession();
+  if (error) throw error;
+  return data?.session || null;
+}
+
 export function supabaseSessionPayload(session) {
   const identityData = session?.user?.identities?.[0]?.identity_data || {};
   return {
@@ -79,7 +150,7 @@ export async function startGoogleLogin(returnPath = "/swipe", opts = {}) {
     return false;
   }
 
-  const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(path)}`;
+  const redirectTo = authCallbackBaseUrl();
   const queryParams = {
     ...(opts.login_hint ? { login_hint: opts.login_hint } : {}),
     ...(opts.prompt ? { prompt: opts.prompt } : {}),
@@ -97,7 +168,8 @@ export async function startGoogleLogin(returnPath = "/swipe", opts = {}) {
 
 export function authCallbackRedirectUrl(returnPath = "/swipe") {
   const path = returnPath && returnPath.startsWith("/") ? returnPath : "/swipe";
-  return `${window.location.origin}/auth/callback?next=${encodeURIComponent(path)}`;
+  storeOnboardingReturnPath(path);
+  return authCallbackBaseUrl();
 }
 
 /** Exchange a Supabase session for an app session. Returns null when email confirmation is still pending. */

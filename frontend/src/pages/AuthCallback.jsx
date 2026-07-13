@@ -5,7 +5,7 @@ import { api, setSessionToken } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { Loader2 } from "lucide-react";
 import { supabase, supabaseConfigured } from "../lib/supabase";
-import { supabaseSessionPayload } from "../lib/auth";
+import { resolveSupabaseAuthSession, supabaseSessionPayload } from "../lib/auth";
 import { trackEvent } from "../lib/analytics";
 import { trackOnboardingSignup } from "../lib/datafast";
 import {
@@ -51,14 +51,13 @@ export default function AuthCallback() {
         step = "supabase_config";
         if (!supabaseConfigured || !supabase) throw new Error("Supabase auth is not configured");
         step = "supabase_exchange";
-        const code = params.get("code");
-        const { data: sessionData, error } = code
-          ? await supabase.auth.exchangeCodeForSession(code)
-          : await supabase.auth.getSession();
-        if (error) throw error;
-        const session = sessionData?.session;
+        const session = await resolveSupabaseAuthSession(supabase);
         const accessToken = session?.access_token;
-        if (!accessToken) throw new Error("Supabase session not found");
+        if (!accessToken) {
+          throw new Error(
+            "Email verification session not found. Open the link in the same browser where you signed up, or request a new verification email.",
+          );
+        }
         step = "backend_session";
         const response = await api.post("/auth/supabase-session", supabaseSessionPayload(session));
         const data = response.data;
