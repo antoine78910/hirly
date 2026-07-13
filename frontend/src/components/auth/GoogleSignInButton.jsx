@@ -1,3 +1,5 @@
+import { cn } from "../../lib/utils";
+
 /** Standard Google sign-in button (brand-compliant colors, no custom styling). */
 export default function GoogleSignInButton({
   onClick,
@@ -5,6 +7,7 @@ export default function GoogleSignInButton({
   label = "Continue with Google",
   className = "",
   testId = "google-sign-in-btn",
+  highlighted = false,
 }) {
   return (
     <button
@@ -12,7 +15,13 @@ export default function GoogleSignInButton({
       onClick={onClick}
       disabled={disabled}
       data-testid={testId}
-      className={`flex h-11 w-full items-center justify-center gap-3 rounded-md border border-[#dadce0] bg-white px-4 text-sm font-medium text-[#3c4043] shadow-sm transition-colors hover:bg-[#f8f9fa] disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+      className={cn(
+        "flex h-11 w-full items-center justify-center gap-3 px-4 text-sm font-medium text-[#3c4043] transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+        highlighted
+          ? "google-signin-highlighted rounded-full bg-white hover:bg-zinc-50"
+          : "rounded-md border border-[#dadce0] bg-white shadow-sm hover:bg-[#f8f9fa]",
+        className,
+      )}
     >
       <svg aria-hidden="true" className="h-5 w-5 shrink-0" viewBox="0 0 24 24">
         <path

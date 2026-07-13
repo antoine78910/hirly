@@ -14,6 +14,10 @@ import { useAuth } from "../context/AuthContext";
 import { trackEvent } from "../lib/analytics";
 import { setDemoAccountFromUser } from "../lib/demoAccount";
 import { goToApp } from "../lib/appDomains";
+import {
+  openJobSeekerDestination,
+  resolveJobSeekerEntryDestination,
+} from "../lib/jobSeekerEntry";
 
 export default function SignIn() {
   const navigate = useNavigate();
@@ -21,8 +25,6 @@ export default function SignIn() {
   const returnPath = resolveAuthReturnPath(searchParams.get("next"));
   const {
     user,
-    hasProfile,
-    hasPreferences,
     loading: authLoading,
     setUser,
     setHasProfile,
@@ -39,21 +41,27 @@ export default function SignIn() {
 
   useEffect(() => {
     if (authLoading || !user) return;
-    if (user.demo_account) {
-      goToApp("/swipe");
-      return;
-    }
-    if (hasProfile && hasPreferences) {
-      // returnPath is always an app-only path (defaults to /swipe, or
-      // whatever ProtectedRoute sent as `next`) -- must be a full
-      // cross-domain navigation to app.tryhirly.com, not an in-SPA
-      // navigate(), which would leave the URL on this (marketing) host
-      // for a tick and force DomainRouter to bounce it again.
-      goToApp(returnPath);
-      return;
-    }
-    navigate("/onboarding?step=jobSearch", { replace: true });
-  }, [authLoading, user, hasProfile, hasPreferences, navigate, returnPath]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const dest = await resolveJobSeekerEntryDestination(user);
+        if (cancelled) return;
+        if (dest.host === "app") {
+          goToApp(returnPath);
+          return;
+        }
+        openJobSeekerDestination(
+          { ...dest, search: dest.search || "?step=jobSearch" },
+          navigate,
+        );
+      } catch {
+        if (!cancelled) navigate("/onboarding?step=jobSearch", { replace: true });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, user, navigate, returnPath]);
 
   const finishWithSupabaseSession = async (session) => {
     const accessToken = session?.access_token;
@@ -78,11 +86,19 @@ export default function SignIn() {
       goToApp("/swipe");
       return;
     }
-    if (data.has_profile && data.has_preferences) {
-      goToApp(returnPath);
-      return;
+    try {
+      const dest = await resolveJobSeekerEntryDestination(data.user);
+      if (dest.host === "app") {
+        goToApp(returnPath);
+        return;
+      }
+      openJobSeekerDestination(
+        { ...dest, search: dest.search || "?step=jobSearch" },
+        navigate,
+      );
+    } catch {
+      navigate("/onboarding?step=jobSearch", { replace: true });
     }
-    navigate("/onboarding?step=jobSearch", { replace: true });
   };
 
   const onEmailSubmit = async (event) => {

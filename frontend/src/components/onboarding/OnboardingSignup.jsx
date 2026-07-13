@@ -286,15 +286,14 @@ export default function OnboardingSignup({ onClose, lang = "en" }) {
             <p className="mt-2 text-center text-sm text-zinc-500">{copy.subtitle}</p>
 
             <div className="mt-8 space-y-4">
-              <div className="rounded-full bg-swiipr-gradient p-[1.5px] shadow-[0_4px_18px_-6px_rgba(124,58,237,0.45)]">
-                <GoogleSignInButton
-                  onClick={handleGoogleSignup}
-                  disabled={submitting}
-                  label={copy.google}
-                  className="h-12 rounded-full border-0 bg-white shadow-none hover:bg-zinc-50"
-                  testId="onboarding-signup-btn"
-                />
-              </div>
+              <GoogleSignInButton
+                onClick={handleGoogleSignup}
+                disabled={submitting}
+                label={copy.google}
+                highlighted
+                className="h-12"
+                testId="onboarding-signup-btn"
+              />
 
               <div className="flex items-center gap-3">
                 <div className="h-px flex-1 bg-zinc-200" />

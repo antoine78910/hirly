@@ -16,7 +16,10 @@ import LandingReviews from "../components/landing/LandingReviews";
 import LandingHeroRotatingWord from "../components/landing/LandingHeroRotatingWord";
 import LandingHeroSwipeDemo from "../components/landing/LandingHeroSwipeDemo";
 import LandingTrustLogos from "../components/landing/LandingTrustLogos";
-import { goToApp } from "../lib/appDomains";
+import {
+  openJobSeekerDestination,
+  resolveJobSeekerEntryDestination,
+} from "../lib/jobSeekerEntry";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,7 +39,7 @@ import {
 
 export default function Landing() {
   const navigate = useNavigate();
-  const { user, hasProfile, hasPreferences, loading, logout } = useAuth();
+  const { user, loading, logout } = useAuth();
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const redirectParam = searchParams.get("redirect");
@@ -66,18 +69,26 @@ export default function Landing() {
 
   useEffect(() => {
     if (loading || !user || !redirectParam?.startsWith("http")) return;
-    try {
-      const target = new URL(redirectParam);
-      if (!target.hostname.endsWith("tryhirly.com")) return;
-      if (hasProfile && hasPreferences) {
-        window.location.replace(redirectParam);
-        return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const target = new URL(redirectParam);
+        if (!target.hostname.endsWith("tryhirly.com")) return;
+        const dest = await resolveJobSeekerEntryDestination(user);
+        if (cancelled) return;
+        if (dest.host === "app") {
+          window.location.replace(redirectParam);
+          return;
+        }
+        openJobSeekerDestination(dest, navigate);
+      } catch {
+        if (!cancelled) navigate("/onboarding");
       }
-      navigate("/onboarding");
-    } catch (_) {
-      /* ignore malformed redirect */
-    }
-  }, [loading, user, hasProfile, hasPreferences, redirectParam, navigate]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loading, user, redirectParam, navigate]);
 
   const onSignIn = () => {
     trackEvent("cta_login_clicked", { location: "header" });
@@ -96,7 +107,7 @@ export default function Landing() {
     navigate("/", { replace: true });
   };
 
-  const onStartSwiping = (ctaLocation = "hero") => {
+  const onStartSwiping = async (ctaLocation = "hero") => {
     trackEvent("cta_start_swiping_clicked", { authenticated: Boolean(user), location: ctaLocation });
     trackDatafastGoal("lp_cta_start", {
       location: ctaLocation,
@@ -104,20 +115,23 @@ export default function Landing() {
       contract: landingContractSlug || "",
     });
     if (loading) return;
-    if (user) {
-      if (hasProfile && hasPreferences) {
-        if (redirectParam?.startsWith("http")) {
-          window.location.assign(redirectParam);
-          return;
-        }
-        goToApp(postLoginPath);
-        return;
-      }
+
+    if (!user) {
+      trackEvent("cta_signup_clicked", { location: "landing_start_swiping" });
       navigate(onboardingPath);
       return;
     }
-    trackEvent("cta_signup_clicked", { location: "landing_start_swiping" });
-    navigate(onboardingPath);
+
+    try {
+      const dest = await resolveJobSeekerEntryDestination(user);
+      if (redirectParam?.startsWith("http") && dest.host === "app") {
+        window.location.assign(redirectParam);
+        return;
+      }
+      openJobSeekerDestination(dest, navigate);
+    } catch {
+      navigate(onboardingPath);
+    }
   };
 
   return (
