@@ -3119,19 +3119,39 @@ async def create_billing_upgrade_session(
     return {"url": session["url"]}
 
 
+async def _resolve_user_id_for_stripe_subscription(subscription: Any) -> Optional[str]:
+    """Resolve a subscription even when its Stripe customer is not linked yet."""
+    metadata_user_id = str(_subscription_metadata(subscription).get("user_id") or "").strip()
+    if metadata_user_id:
+        found = await db.users.find_one({"user_id": metadata_user_id}, {"_id": 0, "user_id": 1})
+        if found:
+            return metadata_user_id
+
+    customer = subscription.get("customer")
+    customer_id = _stripe_object_id(customer)
+    if customer_id:
+        resolved = await _resolve_user_id_for_stripe_customer(customer_id)
+        if resolved:
+            return resolved
+
+    if isinstance(customer, dict):
+        customer_email = str(customer.get("email") or "").strip().lower()
+    else:
+        customer_email = str(getattr(customer, "email", "") or "").strip().lower()
+    if customer_email:
+        user_doc = await _ensure_app_user_for_billing_email(customer_email)
+        if user_doc:
+            return user_doc.get("user_id")
+    return None
+
+
 async def _handle_subscription_event(subscription: Any, *, last_payment_status: Optional[str] = None) -> None:
-    customer_id = str(subscription.get("customer") or "")
+    customer_id = _stripe_object_id(subscription.get("customer"))
     if not customer_id:
         logger.warning("stripe_subscription_event_missing_customer subscription_id=%s", subscription.get("id"))
         return
     updates = _subscription_billing_updates(subscription, last_payment_status=last_payment_status)
-    user_id = await _resolve_user_id_for_stripe_customer(customer_id)
-    if not user_id:
-        metadata_user_id = _subscription_metadata(subscription).get("user_id")
-        if metadata_user_id:
-            found = await db.users.find_one({"user_id": metadata_user_id}, {"_id": 0, "user_id": 1})
-            if found:
-                user_id = metadata_user_id
+    user_id = await _resolve_user_id_for_stripe_subscription(subscription)
     if user_id:
         await _update_user_billing_by_user_id(user_id, updates)
         await _finalize_user_billing(user_id)
@@ -3171,35 +3191,38 @@ async def _reconcile_stripe_subscriptions_once() -> Dict[str, int]:
     updated = 0
     unmatched = 0
     for customer_id, subscription in current_by_customer.items():
-        user_id = await _resolve_user_id_for_stripe_customer(customer_id)
-        if not user_id:
-            customer = subscription.get("customer")
-            if isinstance(customer, dict):
-                customer_email = str(customer.get("email") or "").strip().lower()
-            else:
-                customer_email = str(getattr(customer, "email", "") or "").strip().lower()
-            if customer_email:
-                user_doc = await _ensure_app_user_for_billing_email(customer_email)
-                user_id = (user_doc or {}).get("user_id")
-        if not user_id:
-            unmatched += 1
-            continue
+        # Isolate each customer -- one bad/unresolvable record (Stripe lookup
+        # failure, missing app user, etc.) must not abort the whole scan and
+        # leave every other subscriber behind it un-reconciled until the next
+        # pass. Every customer gets an independent chance to be repaired.
+        try:
+            user_id = await _resolve_user_id_for_stripe_subscription(subscription)
+            if not user_id:
+                unmatched += 1
+                continue
 
-        user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
-        if not user_doc:
-            unmatched += 1
-            continue
-        existing_billing = _billing_from_user(user_doc)
-        updates = _subscription_billing_updates(subscription)
-        updates["stripe_customer_id"] = customer_id
-        comparable_updates = {key: value for key, value in updates.items() if key != "last_payment_status"}
-        if all(existing_billing.get(key) == value for key, value in comparable_updates.items()):
-            continue
+            user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+            if not user_doc:
+                unmatched += 1
+                continue
+            existing_billing = _billing_from_user(user_doc)
+            updates = _subscription_billing_updates(subscription)
+            updates["stripe_customer_id"] = customer_id
+            comparable_updates = {key: value for key, value in updates.items() if key != "last_payment_status"}
+            if all(existing_billing.get(key) == value for key, value in comparable_updates.items()):
+                continue
 
-        await _update_user_billing_by_user_id(user_id, updates)
-        refreshed = await db.users.find_one({"user_id": user_id}, {"_id": 0}) or user_doc
-        await _repair_premium_credits_if_needed(user_id, refreshed)
-        updated += 1
+            await _update_user_billing_by_user_id(user_id, updates)
+            refreshed = await db.users.find_one({"user_id": user_id}, {"_id": 0}) or user_doc
+            await _repair_premium_credits_if_needed(user_id, refreshed)
+            updated += 1
+        except Exception as exc:
+            logger.warning(
+                "stripe_subscription_reconcile_item_failed customer_id=%s subscription_id=%s error=%s",
+                customer_id,
+                subscription.get("id"),
+                str(exc)[:200],
+            )
 
     logger.info(
         "stripe_subscription_reconcile_complete scanned=%s updated=%s unmatched=%s",
