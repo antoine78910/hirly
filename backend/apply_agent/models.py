@@ -81,6 +81,7 @@ class ApplyRunResult:
     action_required: bool = False
     confirmation_text_found: Optional[str] = None
     post_submit_errors: List[str] = field(default_factory=list)
+    submission_email: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -88,6 +89,7 @@ class ApplyRunResult:
             "application_url": self.application_url,
             "domain": self.domain,
             "screenshot_b64": self.screenshot_b64,
+            "submission_email": self.submission_email,
             "fields_detected": self.fields_detected,
             "agent_plan": self.agent_plan,
             "fields_filled": self.fields_filled,

@@ -366,6 +366,7 @@ export default function AdminApplicationDetail() {
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="User" value={app.user_id} />
               <Field label="Email" value={app.user_email} />
+              <Field label="Submission email" value={app.submission_contact_email || "Not submitted yet"} />
               <Field label="Contact name" value={contact.name} />
               <Field label="Phone" value={contact.phone} />
             </div>

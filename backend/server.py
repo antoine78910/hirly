@@ -11540,6 +11540,12 @@ async def admin_get_application(application_id: str, admin: User = Depends(requi
     app_with_admin = {
         **app_doc,
         "user_email": (user_doc or {}).get("email"),
+        # What actually went on the ATS form for this application -- the
+        # user's real email, or the Hirly-managed inbox address
+        # (managed_reply_address) when INBOUND_MANAGED_EMAIL_ENABLED was on
+        # at submission time. Distinct from user_email above, which is
+        # always the account's real login email regardless.
+        "submission_contact_email": (app_doc.get("agent_apply_result") or {}).get("submission_email") or None,
         "manual_status": _effective_manual_status(app_doc),
         "user_facing_submission_status": _user_facing_submission_status(app_doc),
     }

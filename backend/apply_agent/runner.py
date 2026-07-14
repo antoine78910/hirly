@@ -164,6 +164,11 @@ async def run_apply_attempt(
                 return result
 
             candidate_context = agent_module.build_candidate_context(profile, app_doc, user)
+            # Record whichever address actually went on this specific
+            # submission's form (real email, or the managed inbox address
+            # when INBOUND_MANAGED_EMAIL_ENABLED was on) -- surfaced in the
+            # admin application detail view via agent_apply_result.
+            result.submission_email = candidate_context.get("profile.contact.email", "")
             file_fills = agent_module.resolve_file_upload_fields(fields)
 
             recipe = await recipes_module.get_recipe(db, recipe_key) if db is not None and recipe_key else None
