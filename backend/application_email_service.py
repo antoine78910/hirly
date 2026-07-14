@@ -209,9 +209,9 @@ def _build_forward_html(body_text: str, to_email: str, original_from: str) -> st
     color = HIRLY_BRAND_COLOR
     box_bg = _hex_to_rgba(color, 0.08)
     return f"""\
-<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 15px; line-height: 1.6; color: #111827; max-width: 640px;">
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 15px; line-height: 1.6; color: #111827; width: 100%;">
   <div>{safe_body}</div>
-  <div style="margin-top: 28px; padding: 32px 24px; text-align: center; background-color: {box_bg}; border-radius: 16px;">
+  <div style="margin-top: 28px; padding: 32px 24px; text-align: center; background-color: {box_bg}; border-radius: 16px; width: 100%; box-sizing: border-box;">
     <img src="{HIRLY_LOGO_URL}" alt="Hirly" width="40" height="40" style="display: block; margin: 0 auto 16px; border-radius: 8px;" />
     <p style="margin: 0 0 12px; font-weight: 700; color: #111827;">
       This is your Hirly Managed Email.<br>
