@@ -685,8 +685,17 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang, showAdmi
         resetInteractionState();
       }}
       onTapCancel={() => {
+        // Scrolling the flipped description moves the pointer enough that
+        // Framer's own tap-vs-press disambiguation cancels the tap here too
+        // (bubbles up from the nested scroll container regardless of the
+        // `drag` prop). This used to self-clear on the next onDragStart, but
+        // drag is now disabled outright while flipped, so nothing ever reset
+        // suppressTap back to false -- permanently blocking the deliberate
+        // tap-to-flip-back afterwards. Schedule the same timed reset the
+        // drag handlers already use instead.
         interactionRef.current.suppressTap = true;
         suppressCardTap();
+        resetInteractionState();
       }}
       onTap={handleFlipTap}
       transition={{ type: "spring", stiffness: 280, damping: 28 }}
