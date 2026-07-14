@@ -548,6 +548,7 @@ const CARD_BUTTON_SWIPE_X = 520;
 
 function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang, showAdminAtsBadge, pendingSwipe, onSwipeRequestComplete }) {
   const x = useMotionValue(0);
+  const y = useMotionValue(0);
   const rotate = useTransform(x, [-260, 0, 260], [-14, 0, 14]);
   const opacity = useTransform(x, [-360, -260, 0, 260, 360], [0, 1, 1, 1, 0]);
   const applyOpacity = useTransform(x, [0, 80, 160], [0, 0.5, 1]);
@@ -612,6 +613,7 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang, showAdmi
         setIsDragging(false);
         setIsAnimatingOut(false);
         x.set(0);
+        y.set(0);
         onSwipe(pendingSwipe);
         onSwipeRequestComplete?.();
       },
@@ -621,23 +623,32 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang, showAdmi
       cancelled = true;
       controls.stop();
     };
-  }, [pendingSwipe, isTop, job.job_id, onSwipe, onSwipeRequestComplete, x]);
+  }, [pendingSwipe, isTop, job.job_id, onSwipe, onSwipeRequestComplete, x, y]);
 
   return (
     <motion.div
       className="absolute inset-0 h-full select-none"
       style={{
         x: isTop ? x : 0,
+        y: isTop ? y : 0,
         rotate: isTop ? rotate : 0,
         opacity: isTop ? opacity : 1,
         scale: 1 - index * 0.03,
         translateY: index * 10,
         zIndex: 10 - index,
-        touchAction: "pan-y",
+        // Flipped: hand touch fully back to the description's own vertical
+        // scroll container. Not flipped: let Framer own the gesture outright
+        // (it needs both axes now) rather than racing the browser for it.
+        touchAction: flipped ? "pan-y" : "none",
         pointerEvents: isTop && !isAnimatingOut ? "auto" : "none",
       }}
-      drag={isTop && !isAnimatingOut ? "x" : false}
-      dragDirectionLock
+      // Disabled entirely while flipped -- this is what actually fixes
+      // scroll-vs-swipe contention. Card front vs. reading the flipped-back
+      // description are mutually exclusive interactions, so there is no
+      // gesture for Framer to capture (and therefore nothing that can
+      // mis-fire) while the description is open; the only way back to the
+      // front is a tap (handleFlipTap) or the explicit button in CardBack.
+      drag={isTop && !isAnimatingOut && !flipped}
       dragMomentum={false}
       dragElastic={0.6}
       dragSnapToOrigin
@@ -647,23 +658,16 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang, showAdmi
         interactionRef.current.suppressTap = false;
       }}
       onDrag={(_, info) => {
-        const distance = Math.abs(info.offset.x);
+        const distance = Math.hypot(info.offset.x, info.offset.y);
         interactionRef.current.dragDistance = distance;
         if (distance > 5) {
           interactionRef.current.suppressTap = true;
           suppressCardTap();
-          // Only flip back to front once a real horizontal swipe is
-          // confirmed (not just at drag-start, which also fires for
-          // vertical scroll attempts inside the flipped card's
-          // description and would otherwise flip it back mid-scroll).
-          if (flipped) {
-            setFlipped(false);
-          }
         }
       }}
       onDragEnd={(_, info) => {
         setIsDragging(false);
-        const distance = Math.abs(info.offset.x);
+        const distance = Math.hypot(info.offset.x, info.offset.y);
         interactionRef.current.dragDistance = distance;
         if (distance > 8) {
           interactionRef.current.suppressTap = true;
