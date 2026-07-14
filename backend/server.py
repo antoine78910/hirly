@@ -55,6 +55,9 @@ from cv_tailoring import (
 APPLICATION_GENERATION_PIPELINE = "minimal_cv_v1"
 from cv_quality import attach_cover_letter_quality_report, normalize_application_generation, validate_resume_quality
 from application_email_service import send_application_email
+from email_addresses import INBOUND_MANAGED_EMAIL_ENABLED, managed_reply_address
+from inbound_email_service import process_inbound_resend_email
+from svix.webhooks import Webhook, WebhookVerificationError
 from apply_agent.models import ApplyAgentError
 from apply_agent.runner import run_apply_attempt
 from db import create_database_adapter
@@ -11826,6 +11829,12 @@ async def admin_send_application_email(
         raise HTTPException(status_code=400, detail="No recruiter contact email available for this job")
 
     candidate_email = app_doc.get("user_email") or user_doc.get("email") or ""
+    if INBOUND_MANAGED_EMAIL_ENABLED and application_id:
+        # Same managed-inbox routing as the automated ATS submission path --
+        # the recruiter's reply lands on our own infrastructure instead of
+        # the candidate's real mailbox. candidate_name (used in the email
+        # body/subject below) stays real either way.
+        candidate_email = managed_reply_address(application_id)
     candidate_name = (profile.get("contact") or {}).get("name") or user_doc.get("name") or ""
     job_title = job.get("title") or "the role"
     company = job.get("company") or ""
@@ -13734,6 +13743,45 @@ async def list_application_emails(
         "gmail": gmail_connected_payload(connection),
         "sync": sync_result,
     }
+
+
+@api_router.post("/webhooks/resend-inbound")
+async def resend_inbound_webhook(request: Request):
+    """Employer replies to a Hirly-managed application address (see
+    email_addresses.managed_reply_address) arrive here via Resend's inbound
+    email feature, mirroring the /stripe/webhook shape: verify signature,
+    parse, dedupe, process with per-item error isolation so one bad payload
+    can never break the rest of Resend's delivery, ack.
+    """
+    webhook_secret = os.environ.get("RESEND_INBOUND_WEBHOOK_SECRET", "").strip()
+    if not webhook_secret:
+        raise HTTPException(status_code=503, detail="Resend inbound webhook is not configured")
+    payload = await request.body()
+    try:
+        event = Webhook(webhook_secret).verify(payload, dict(request.headers))
+    except WebhookVerificationError:
+        raise HTTPException(status_code=400, detail="Invalid signature")
+
+    if not isinstance(event, dict):
+        raise HTTPException(status_code=400, detail="Invalid payload")
+
+    if event.get("type") != "email.received":
+        return {"received": True, "ignored": event.get("type")}
+
+    data = event.get("data") or {}
+    resend_email_id = data.get("email_id") or data.get("id")
+    if not resend_email_id:
+        return {"received": True, "ignored": "missing_email_id"}
+
+    try:
+        result = await process_inbound_resend_email(db, resend_email_id, data)
+        return {"received": True, **result}
+    except Exception as exc:
+        # Per-item isolation, applying the same lesson learned hardening the
+        # Stripe reconcile loop this session: one bad payload must never 500
+        # the whole delivery or block visibility into what actually failed.
+        logger.warning("resend_inbound_webhook_failed email_id=%s error=%s", resend_email_id, str(exc)[:300])
+        return {"received": True, "ok": False, "error": str(exc)[:200]}
 
 
 # ===================== Seed =====================

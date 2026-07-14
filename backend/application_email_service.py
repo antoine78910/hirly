@@ -26,7 +26,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 
-from email_addresses import APPLICATION_EMAIL_FROM
+from email_addresses import APPLICATION_EMAIL_FROM, INBOX_FORWARD_FROM
 
 logger = logging.getLogger(__name__)
 RESEND_API_KEY = (os.environ.get("RESEND_API_KEY") or "").strip()
@@ -55,11 +55,12 @@ async def _send_via_resend(
     subject: str,
     plain: str,
     attachments: List[Attachment],
+    from_email: str = APPLICATION_EMAIL_FROM,
 ) -> bool:
     if not RESEND_API_KEY:
         return False
     payload: Dict[str, Any] = {
-        "from": APPLICATION_EMAIL_FROM,
+        "from": from_email,
         "to": [to_email],
         "reply_to": [reply_to_email] if reply_to_email else None,
         "subject": subject,
@@ -90,13 +91,14 @@ def _send_via_smtp(
     subject: str,
     plain: str,
     attachments: List[Attachment],
+    from_email: str = APPLICATION_EMAIL_FROM,
 ) -> bool:
     if not SMTP_HOST or not SMTP_USER or not SMTP_PASSWORD:
         return False
 
     msg = MIMEMultipart()
     msg["Subject"] = subject
-    msg["From"] = APPLICATION_EMAIL_FROM
+    msg["From"] = from_email
     msg["To"] = to_email
     if reply_to_email:
         msg["Reply-To"] = reply_to_email
@@ -165,6 +167,67 @@ async def send_application_email(
             return {"ok": True, "transport": "smtp", "error": None}
     except Exception as exc:
         logger.exception("SMTP application email raised: %s", exc)
+        return {"ok": False, "transport": "smtp", "error": str(exc)[:300]}
+
+    return {"ok": False, "transport": None, "error": "No email transport is configured (RESEND_API_KEY or SMTP_* env vars)"}
+
+
+def _build_forward_body(body_text: str, to_email: str) -> str:
+    footer = (
+        f"\n\n--\nThis is your Hirly Managed Email.\nForwarding to: {to_email}\n\n"
+        "Good luck with your application!"
+    )
+    return f"{body_text.strip()}{footer}"
+
+
+async def forward_inbound_reply(
+    *,
+    to_email: str,
+    original_from: str,
+    subject: str,
+    body_text: str,
+    company: Optional[str] = None,
+    job_title: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Forward a copy of an employer's reply (received on our managed inbound
+    address) to the candidate's real email, mirroring Sorce's "Forwarding
+    to: ..." footer. Reply-To stays the employer's own address so a user
+    replying from their real mailbox reaches the employer directly -- sending
+    replies back out from inside the app is a separate, unbuilt feature.
+    """
+    to_email = (to_email or "").strip()
+    original_from = (original_from or "").strip()
+    if not to_email or "@" not in to_email:
+        return {"ok": False, "transport": None, "error": "Missing or invalid recipient email"}
+
+    prefixed_subject = subject if subject.lower().startswith("fwd:") else f"Fwd: {subject}"
+    plain = _build_forward_body(body_text or "", to_email)
+
+    try:
+        if await _send_via_resend(
+            to_email=to_email,
+            reply_to_email=original_from,
+            subject=prefixed_subject,
+            plain=plain,
+            attachments=[],
+            from_email=INBOX_FORWARD_FROM,
+        ):
+            return {"ok": True, "transport": "resend", "error": None}
+    except Exception as exc:
+        logger.exception("Resend inbound-forward raised: %s", exc)
+
+    try:
+        if _send_via_smtp(
+            to_email=to_email,
+            reply_to_email=original_from,
+            subject=prefixed_subject,
+            plain=plain,
+            attachments=[],
+            from_email=INBOX_FORWARD_FROM,
+        ):
+            return {"ok": True, "transport": "smtp", "error": None}
+    except Exception as exc:
+        logger.exception("SMTP inbound-forward raised: %s", exc)
         return {"ok": False, "transport": "smtp", "error": str(exc)[:300]}
 
     return {"ok": False, "transport": None, "error": "No email transport is configured (RESEND_API_KEY or SMTP_* env vars)"}

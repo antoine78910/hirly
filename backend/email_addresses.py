@@ -29,3 +29,19 @@ APPLICATION_FROM = (
 FEEDBACK_TO_EMAIL = (os.environ.get("FEEDBACK_TO_EMAIL") or SUPPORT_INBOX).strip()
 FEEDBACK_FROM_EMAIL = (os.environ.get("FEEDBACK_FROM_EMAIL") or FEEDBACK_FROM).strip()
 APPLICATION_EMAIL_FROM = (os.environ.get("APPLICATION_EMAIL_FROM") or APPLICATION_FROM).strip()
+
+# Hirly-managed reply inbox (Resend inbound) -- applications submitted while
+# this is enabled use a per-application address on INBOUND_DOMAIN instead of
+# the candidate's real email, so employer replies land on our own
+# infrastructure and get mirrored into the in-app inbox, then forwarded on.
+INBOUND_DOMAIN = (os.environ.get("INBOUND_EMAIL_DOMAIN") or "inbox.tryhirly.com").strip()
+INBOUND_MANAGED_EMAIL_ENABLED = (os.environ.get("INBOUND_MANAGED_EMAIL_ENABLED") or "false").strip().lower() in (
+    "1", "true", "yes", "on",
+)
+INBOX_FORWARD_FROM = (
+    os.environ.get("INBOX_FORWARD_FROM") or "Hirly Inbox <inbox-noreply@tryhirly.com>"
+).strip()
+
+
+def managed_reply_address(application_id: str) -> str:
+    return f"{application_id}@{INBOUND_DOMAIN}"

@@ -20,6 +20,7 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
+from email_addresses import INBOUND_MANAGED_EMAIL_ENABLED, managed_reply_address
 from llm_client import LLMProviderNotConfigured, complete_json_text
 
 from .guardrails import canonical, is_sensitive_field, validate_agent_fill
@@ -94,7 +95,14 @@ def build_candidate_context(profile: Dict[str, Any], app_doc: Dict[str, Any], us
     # with the approved profile.contact. prefix) but doesn't match any real
     # candidate_context key, so a recipe can never replay it for free.
     put("profile.contact.full_name", " ".join(part for part in (first_name, last_name) if part).strip())
-    put("profile.contact.email", contact.get("email") or user.get("email"))
+    submission_email = contact.get("email") or user.get("email")
+    if INBOUND_MANAGED_EMAIL_ENABLED and app_doc.get("application_id"):
+        # Route the employer's reply to our own managed inbox instead of the
+        # candidate's real address -- everything else here (name, phone,
+        # location, etc.) stays real so the employer can still identify the
+        # candidate; only the reply channel changes.
+        submission_email = managed_reply_address(app_doc["application_id"])
+    put("profile.contact.email", submission_email)
     put("profile.contact.phone", contact.get("phone"))
     put("profile.contact.location", contact.get("location") or location_data.get("location_label") or profile.get("target_location"))
     put("profile.contact.country", location_data.get("country") or contact.get("country"))

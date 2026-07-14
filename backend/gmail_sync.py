@@ -206,6 +206,12 @@ def _classify_email(subject: str, snippet: str) -> str:
     return "primary"
 
 
+# Public alias -- this classifier has no Gmail-specific state, so the Resend
+# inbound pipeline (inbound_email_service.py) reuses it directly rather than
+# duplicating the keyword lists.
+classify_email = _classify_email
+
+
 def _match_score(app: Dict[str, Any], job: Dict[str, Any], message: Dict[str, Any]) -> int:
     subject = message.get("subject") or ""
     snippet = message.get("snippet") or ""

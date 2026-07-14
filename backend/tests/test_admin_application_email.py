@@ -89,6 +89,26 @@ def test_admin_send_application_email_uses_job_contact_and_marks_submitted(monke
     assert updated_app["application_email_sent_to"] == "recrutement@bistrot.fr"
 
 
+def test_admin_send_application_email_uses_managed_address_when_enabled(monkeypatch):
+    fake_db, sent_calls = _setup(monkeypatch)
+    monkeypatch.setattr(server, "INBOUND_MANAGED_EMAIL_ENABLED", True)
+    admin = server.User(user_id="admin", email="admin@tryhirly.com", name="Admin")
+
+    result = asyncio.run(
+        server.admin_send_application_email(
+            "app_1",
+            server.AdminSendApplicationEmail(),
+            admin=admin,
+        )
+    )
+
+    assert result["ok"] is True
+    assert sent_calls[0]["candidate_email"] == "app_1@inbox.tryhirly.com"
+    # The name shown in the email body/subject must stay real -- only the
+    # reply-to address changes.
+    assert sent_calls[0]["candidate_name"] == "Jane Candidate"
+
+
 def test_admin_send_application_email_requires_contact_email(monkeypatch):
     _setup(monkeypatch, job_contact_email="")
     admin = server.User(user_id="admin", email="admin@tryhirly.com", name="Admin")
