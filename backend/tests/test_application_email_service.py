@@ -3,6 +3,57 @@ import asyncio
 import application_email_service as svc
 
 
+def test_hex_to_rgba_converts_known_brand_color():
+    assert svc._hex_to_rgba("#7C3AED", 0.08) == "rgba(124, 58, 237, 0.08)"
+
+
+def test_hex_to_rgba_falls_back_for_invalid_input():
+    assert svc._hex_to_rgba("not-a-color", 0.5) == "rgba(124, 58, 237, 0.5)"
+
+
+def test_build_forward_html_escapes_and_includes_branding():
+    result = svc._build_forward_html(
+        "Bonjour <b>Younes</b>,\nVotre candidature.",
+        "candidate@example.com",
+        "recruiter@acme-ats.com",
+    )
+    assert "&lt;b&gt;Younes&lt;/b&gt;" in result  # body is escaped, not raw HTML
+    assert svc.HIRLY_LOGO_URL in result
+    assert "candidate@example.com" in result
+    assert "recruiter@acme-ats.com" in result
+    assert "Good luck with your application!" in result
+
+
+def test_forward_inbound_reply_sends_html_via_resend(monkeypatch):
+    monkeypatch.setattr(svc, "RESEND_API_KEY", "test_key")
+    captured = {}
+
+    async def fake_post(self, url, headers=None, json=None):
+        captured.update(json)
+
+        class _Resp:
+            status_code = 200
+            text = ""
+
+        return _Resp()
+
+    monkeypatch.setattr(svc.httpx.AsyncClient, "post", fake_post)
+
+    result = asyncio.run(
+        svc.forward_inbound_reply(
+            to_email="candidate@example.com",
+            original_from="recruiter@acme-ats.com",
+            subject="Interview invitation",
+            body_text="Please schedule your interview.",
+        )
+    )
+
+    assert result == {"ok": True, "transport": "resend", "error": None}
+    assert captured["from"] == svc.INBOX_FORWARD_FROM
+    assert "Good luck with your application!" in captured["html"]
+    assert "Please schedule your interview." in captured["text"]
+
+
 def test_send_application_email_rejects_missing_recipient():
     result = asyncio.run(
         svc.send_application_email(

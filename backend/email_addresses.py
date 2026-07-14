@@ -42,6 +42,10 @@ INBOX_FORWARD_FROM = (
     os.environ.get("INBOX_FORWARD_FROM") or "Hirly Inbox <inbox-noreply@tryhirly.com>"
 ).strip()
 
+# Hirly's brand purple, matching the app UI's sprout-mint token (frontend/src/index.css)
+HIRLY_BRAND_COLOR = (os.environ.get("HIRLY_BRAND_COLOR") or "#7C3AED").strip()
+HIRLY_LOGO_URL = (os.environ.get("HIRLY_LOGO_URL") or "https://app.tryhirly.com/logo.png").strip()
+
 
 def managed_reply_address(application_id: str) -> str:
     return f"{application_id}@{INBOUND_DOMAIN}"

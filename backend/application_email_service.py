@@ -15,6 +15,7 @@ reviews the recipient and content before it goes out.
 from __future__ import annotations
 
 import base64
+import html as html_escape
 import logging
 import os
 import smtplib
@@ -26,7 +27,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 
-from email_addresses import APPLICATION_EMAIL_FROM, INBOX_FORWARD_FROM
+from email_addresses import APPLICATION_EMAIL_FROM, HIRLY_BRAND_COLOR, HIRLY_LOGO_URL, INBOX_FORWARD_FROM
 
 logger = logging.getLogger(__name__)
 RESEND_API_KEY = (os.environ.get("RESEND_API_KEY") or "").strip()
@@ -56,6 +57,7 @@ async def _send_via_resend(
     plain: str,
     attachments: List[Attachment],
     from_email: str = APPLICATION_EMAIL_FROM,
+    html: Optional[str] = None,
 ) -> bool:
     if not RESEND_API_KEY:
         return False
@@ -65,6 +67,7 @@ async def _send_via_resend(
         "reply_to": [reply_to_email] if reply_to_email else None,
         "subject": subject,
         "text": plain,
+        "html": html,
     }
     payload = {key: value for key, value in payload.items() if value is not None}
     if attachments:
@@ -92,6 +95,7 @@ def _send_via_smtp(
     plain: str,
     attachments: List[Attachment],
     from_email: str = APPLICATION_EMAIL_FROM,
+    html: Optional[str] = None,
 ) -> bool:
     if not SMTP_HOST or not SMTP_USER or not SMTP_PASSWORD:
         return False
@@ -102,7 +106,13 @@ def _send_via_smtp(
     msg["To"] = to_email
     if reply_to_email:
         msg["Reply-To"] = reply_to_email
-    msg.attach(MIMEText(plain, "plain", "utf-8"))
+    if html:
+        alt = MIMEMultipart("alternative")
+        alt.attach(MIMEText(plain, "plain", "utf-8"))
+        alt.attach(MIMEText(html, "html", "utf-8"))
+        msg.attach(alt)
+    else:
+        msg.attach(MIMEText(plain, "plain", "utf-8"))
 
     for name, content, mime in attachments:
         maintype, _, subtype = (mime or "application/octet-stream").partition("/")
@@ -172,12 +182,47 @@ async def send_application_email(
     return {"ok": False, "transport": None, "error": "No email transport is configured (RESEND_API_KEY or SMTP_* env vars)"}
 
 
-def _build_forward_body(body_text: str, to_email: str) -> str:
+def _build_forward_body(body_text: str, to_email: str, original_from: str) -> str:
     footer = (
-        f"\n\n--\nThis is your Hirly Managed Email.\nForwarding to: {to_email}\n\n"
+        f"\n\n--\nThis is your Hirly Managed Email.\nForwarding to: {to_email}\n"
+        f"Sent from: {original_from}\n\n"
         "Good luck with your application!"
     )
     return f"{body_text.strip()}{footer}"
+
+
+def _hex_to_rgba(hex_color: str, alpha: float) -> str:
+    value = hex_color.strip().lstrip("#")
+    if len(value) != 6:
+        return f"rgba(124, 58, 237, {alpha})"
+    r, g, b = (int(value[i : i + 2], 16) for i in (0, 2, 4))
+    return f"rgba({r}, {g}, {b}, {alpha})"
+
+
+def _build_forward_html(body_text: str, to_email: str, original_from: str) -> str:
+    """Branded HTML footer mirroring Sorce's "Managed Email" banner (logo,
+    Forwarding to / Sent from lines, closing message) in Hirly's own purple.
+    """
+    safe_body = html_escape.escape(body_text.strip()).replace("\n", "<br>")
+    safe_to = html_escape.escape(to_email)
+    safe_from = html_escape.escape(original_from or "")
+    color = HIRLY_BRAND_COLOR
+    box_bg = _hex_to_rgba(color, 0.08)
+    return f"""\
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 15px; line-height: 1.6; color: #111827; max-width: 640px;">
+  <div>{safe_body}</div>
+  <div style="margin-top: 28px; padding: 32px 24px; text-align: center; background-color: {box_bg}; border-radius: 16px;">
+    <img src="{HIRLY_LOGO_URL}" alt="Hirly" width="40" height="40" style="display: block; margin: 0 auto 16px; border-radius: 8px;" />
+    <p style="margin: 0 0 12px; font-weight: 700; color: #111827;">
+      This is your Hirly Managed Email.<br>
+      Forwarding to: <a href="mailto:{safe_to}" style="color: {color}; text-decoration: underline;">{safe_to}</a>
+    </p>
+    <p style="margin: 0 0 16px; font-weight: 700; color: #111827;">
+      Sent from: <a href="mailto:{safe_from}" style="color: {color}; text-decoration: underline;">{safe_from}</a>
+    </p>
+    <p style="margin: 0; font-weight: 600; color: {color};">Good luck with your application!</p>
+  </div>
+</div>"""
 
 
 async def forward_inbound_reply(
@@ -201,7 +246,8 @@ async def forward_inbound_reply(
         return {"ok": False, "transport": None, "error": "Missing or invalid recipient email"}
 
     prefixed_subject = subject if subject.lower().startswith("fwd:") else f"Fwd: {subject}"
-    plain = _build_forward_body(body_text or "", to_email)
+    plain = _build_forward_body(body_text or "", to_email, original_from)
+    rich_html = _build_forward_html(body_text or "", to_email, original_from)
 
     try:
         if await _send_via_resend(
@@ -211,6 +257,7 @@ async def forward_inbound_reply(
             plain=plain,
             attachments=[],
             from_email=INBOX_FORWARD_FROM,
+            html=rich_html,
         ):
             return {"ok": True, "transport": "resend", "error": None}
     except Exception as exc:
@@ -224,6 +271,7 @@ async def forward_inbound_reply(
             plain=plain,
             attachments=[],
             from_email=INBOX_FORWARD_FROM,
+            html=rich_html,
         ):
             return {"ok": True, "transport": "smtp", "error": None}
     except Exception as exc:
