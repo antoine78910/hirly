@@ -3245,7 +3245,14 @@ async def _run_stripe_subscription_reconcile_loop() -> None:
 async def _stripe_event_already_processed(event_id: str) -> bool:
     if not event_id:
         return False
-    existing = await db.stripe_events.find_one({"event_id": event_id}, {"_id": 0, "event_id": 1})
+    try:
+        existing = await db.stripe_events.find_one({"event_id": event_id}, {"_id": 0, "event_id": 1})
+    except Exception as exc:
+        # A transient DB hiccup here must not crash the whole webhook request
+        # (billing processing is idempotent either way) -- fail open and let
+        # the event through rather than 500ing every delivery Stripe sends.
+        logger.warning("stripe_event_dedupe_check_failed event_id=%s error=%s", event_id, str(exc)[:200])
+        return False
     return bool(existing)
 
 
@@ -3293,29 +3300,37 @@ async def stripe_webhook(request: Request):
         return {"received": True, "duplicate": True}
 
     obj = event["data"]["object"]
-    if event_type in {"checkout.session.completed", "checkout.session.async_payment_succeeded"}:
-        await _apply_checkout_session_billing(obj, event_id=event_id)
-    elif event_type in {"customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted"}:
-        await _handle_subscription_event(obj)
-    elif event_type in {"invoice.payment_succeeded", "invoice.payment_failed"}:
-        subscription_id = obj.get("subscription")
-        customer_id = obj.get("customer")
-        payment_status = "failed" if event_type == "invoice.payment_failed" else "succeeded"
-        if subscription_id:
-            try:
-                subscription = stripe.Subscription.retrieve(subscription_id)
-                await _handle_subscription_event(subscription, last_payment_status=payment_status)
-            except Exception:
-                if customer_id:
-                    await _update_user_billing_by_customer_id(customer_id, {"last_payment_status": payment_status})
-                else:
-                    logger.warning("stripe_invoice_event_missing_customer event_id=%s type=%s", event_id, event_type)
-        elif customer_id:
-            await _update_user_billing_by_customer_id(customer_id, {"last_payment_status": payment_status})
+    try:
+        if event_type in {"checkout.session.completed", "checkout.session.async_payment_succeeded"}:
+            await _apply_checkout_session_billing(obj, event_id=event_id)
+        elif event_type in {"customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted"}:
+            await _handle_subscription_event(obj)
+        elif event_type in {"invoice.payment_succeeded", "invoice.payment_failed"}:
+            subscription_id = obj.get("subscription")
+            customer_id = obj.get("customer")
+            payment_status = "failed" if event_type == "invoice.payment_failed" else "succeeded"
+            if subscription_id:
+                try:
+                    subscription = stripe.Subscription.retrieve(subscription_id)
+                    await _handle_subscription_event(subscription, last_payment_status=payment_status)
+                except Exception:
+                    if customer_id:
+                        await _update_user_billing_by_customer_id(customer_id, {"last_payment_status": payment_status})
+                    else:
+                        logger.warning("stripe_invoice_event_missing_customer event_id=%s type=%s", event_id, event_type)
+            elif customer_id:
+                await _update_user_billing_by_customer_id(customer_id, {"last_payment_status": payment_status})
+            else:
+                logger.warning("stripe_invoice_event_missing_subscription_customer event_id=%s type=%s", event_id, event_type)
         else:
-            logger.warning("stripe_invoice_event_missing_subscription_customer event_id=%s type=%s", event_id, event_type)
-    else:
-        logger.info("stripe_webhook ignored event_type=%s", event_type)
+            logger.info("stripe_webhook ignored event_type=%s", event_type)
+    except Exception:
+        # Anything unexpected here previously crashed the whole request with an
+        # opaque 500 and no logged traceback -- log it fully now so a real bug
+        # is visible in Railway logs, and let Stripe's own retry schedule
+        # reattempt delivery rather than silently losing the event.
+        logger.exception("stripe_webhook_processing_failed event_id=%s type=%s", event_id, event_type)
+        raise HTTPException(status_code=500, detail="Webhook processing failed") from None
 
     await _record_processed_stripe_event(event)
     return {"received": True}
