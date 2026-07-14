@@ -11540,12 +11540,19 @@ async def admin_get_application(application_id: str, admin: User = Depends(requi
     app_with_admin = {
         **app_doc,
         "user_email": (user_doc or {}).get("email"),
-        # What actually went on the ATS form for this application -- the
-        # user's real email, or the Hirly-managed inbox address
-        # (managed_reply_address) when INBOUND_MANAGED_EMAIL_ENABLED was on
-        # at submission time. Distinct from user_email above, which is
-        # always the account's real login email regardless.
-        "submission_contact_email": (app_doc.get("agent_apply_result") or {}).get("submission_email") or None,
+        # The address this application's employer replies actually go to.
+        # If a real submission already recorded one (agent_apply_result,
+        # set by run_apply_attempt), that's the authoritative historical
+        # value; otherwise show what it *would* be right now, computed the
+        # same way the real submission path resolves it -- so this is
+        # visible immediately, not only after a browser run has happened
+        # (which may never occur while automation is paused). Distinct from
+        # user_email above, which is always the account's real login email
+        # regardless of this feature.
+        "submission_contact_email": (
+            (app_doc.get("agent_apply_result") or {}).get("submission_email")
+            or (managed_reply_address(app_doc["application_id"]) if INBOUND_MANAGED_EMAIL_ENABLED else (user_doc or {}).get("email"))
+        ),
         "manual_status": _effective_manual_status(app_doc),
         "user_facing_submission_status": _user_facing_submission_status(app_doc),
     }
