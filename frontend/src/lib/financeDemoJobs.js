@@ -31,13 +31,12 @@ function financeJob({
     match_reasons: matchReasons || [
       "Finance role aligned with your profile",
       "Paris / Île-de-France market",
-      "Supported ATS — auto-apply ready",
+      "Auto-apply ready in demo mode",
     ],
     tech_stack: [],
     posted_at: daysAgoIso(postedDaysAgo),
     auto_apply_supported: true,
     provider: "demo",
-    ats_provider: "greenhouse",
     description,
     clean_description: description,
     job_description_sections: [

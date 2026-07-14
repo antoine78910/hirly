@@ -209,12 +209,49 @@ export function seedTutorialShowcaseIfEmpty(jobs = []) {
   }));
 
   writeJson(APPS_KEY, applications);
+  writeJson(
+    HISTORY_RIGHT_KEY,
+    picks.map((job, index) => ({
+      ...buildSwipeRow(job, "right"),
+      created_at: daysAgoIso(index + 1),
+    })),
+  );
+}
 
-  const rightSwipes = picks.map((job, index) => ({
-    ...buildSwipeRow(job, "right"),
+export function seedDemoShowcaseIfEmpty() {
+  if (!isDemoAccountEnabled()) return;
+  if (getDemoApplications().length > 0) return;
+
+  const TECH_SHOWCASE_JOBS = [
+    { job_id: "demo_showcase_linear", title: "Senior Frontend Engineer", company: "Linear", location: "Paris, France", match_score: 92, provider: "demo" },
+    { job_id: "demo_showcase_stripe", title: "Backend Engineer", company: "Stripe", location: "Paris, France", match_score: 89, provider: "demo" },
+    { job_id: "demo_showcase_vercel", title: "DevRel Engineer", company: "Vercel", location: "Remote, France", match_score: 87, provider: "demo" },
+    { job_id: "demo_showcase_notion", title: "Staff Engineer", company: "Notion", location: "Paris, France", match_score: 94, provider: "demo" },
+    { job_id: "demo_showcase_figma", title: "Product Engineer", company: "Figma", location: "Paris, France", match_score: 90, provider: "demo" },
+  ];
+
+  const jobs = TECH_SHOWCASE_JOBS;
+  jobs.forEach((job) => cacheJobForDemo(job));
+
+  const applications = jobs.map((job, index) => ({
+    ...buildDemoApplication(job, index),
+    application_id: `demo_showcase_${job.job_id}`,
     created_at: daysAgoIso(index + 1),
+    submitted_at: index <= 3 ? daysAgoIso(index + 1) : undefined,
   }));
-  writeJson(HISTORY_RIGHT_KEY, rightSwipes);
+
+  writeJson(APPS_KEY, applications);
+  writeJson(
+    HISTORY_RIGHT_KEY,
+    jobs.map((job, index) => ({
+      swipe_id: `demo_showcase_swipe_${job.job_id}`,
+      job_id: job.job_id,
+      job: { ...job },
+      direction: "right",
+      match_score: job.match_score,
+      created_at: daysAgoIso(index + 1),
+    })),
+  );
 }
 
 function buildSwipeRow(job, direction) {
@@ -397,6 +434,11 @@ export function getDemoAccountResponse(config) {
     return undefined;
   }
 
+  if (method === "get" && path === "/emails") {
+    const { buildDemoInboxPayload } = require("./demoEmails");
+    return buildDemoInboxPayload();
+  }
+
   return undefined;
 }
 
@@ -437,6 +479,11 @@ export function patchDemoAccountResponse(response) {
       const local = buildTutorialProfileResponse();
       response.data = { ...(response.data || {}), ...local };
     }
+  }
+
+  if (method === "get" && path === "/emails") {
+    const { buildDemoInboxPayload } = require("./demoEmails");
+    response.data = buildDemoInboxPayload();
   }
 
   return response;

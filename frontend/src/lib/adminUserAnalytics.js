@@ -4,6 +4,7 @@ import {
   EXPERIENCE_LEVELS,
   JOB_ACCOMPLISH_OPTIONS,
   JOB_BLOCKER_OPTIONS,
+  JOB_CATEGORIES,
   JOB_GOAL_OPTIONS,
   JOB_SEARCH_OPTIONS,
   JOB_TIMELINE_OPTIONS,
@@ -94,6 +95,100 @@ export function formatOnboardingAnswerValue(key, value) {
     return ONBOARDING_OPTION_LABELS[value] || value;
   }
   return String(value);
+}
+
+const CATEGORY_LABELS = Object.fromEntries(JOB_CATEGORIES.map((cat) => [cat.id, cat.label]));
+
+// One entry per single-choice onboarding step we want to chart. `title` mirrors
+// the question shown to the user so admins can map the chart back to the step.
+const SINGLE_CHOICE_STEPS = [
+  { key: "job_search_status", title: "Are you looking for a job?" },
+  { key: "job_goal", title: "What's your main goal?" },
+  { key: "contract_type", title: "Contract type" },
+  { key: "tried_other_apps", title: "Tried other job apps?" },
+  { key: "experience", title: "Experience level" },
+  { key: "job_timeline", title: "Target timeline" },
+  { key: "job_blocker", title: "Main blocker" },
+  { key: "job_accomplish", title: "What they want to accomplish" },
+  { key: "acquisition_source", title: "How they found us" },
+  { key: "selected_plan", title: "Plan picked at checkout" },
+];
+
+function buildStepResult(key, title, counts, total, topN) {
+  const options = Array.from(counts.entries())
+    .map(([label, count]) => ({
+      label,
+      count,
+      pct: total ? Math.round((count / total) * 1000) / 10 : 0,
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, topN);
+  return { key, title, total, options };
+}
+
+/** Aggregates every user's onboarding answers into "most chosen option" per step. */
+export function buildOnboardingAnswerDistribution(users, { topN = 6 } = {}) {
+  const results = [];
+
+  for (const step of SINGLE_CHOICE_STEPS) {
+    const counts = new Map();
+    let total = 0;
+    for (const user of users || []) {
+      const value = user?.onboarding_answers?.[step.key];
+      if (value == null || value === "") continue;
+      total += 1;
+      const label = formatOnboardingAnswerValue(step.key, value);
+      counts.set(label, (counts.get(label) || 0) + 1);
+    }
+    if (total > 0) results.push(buildStepResult(step.key, step.title, counts, total, topN));
+  }
+
+  const categoryCounts = new Map();
+  let categoryTotal = 0;
+  for (const user of users || []) {
+    const items = user?.onboarding_answers?.categories;
+    if (!Array.isArray(items) || !items.length) continue;
+    for (const item of items) {
+      const id = typeof item === "object" ? item?.id : item;
+      const label = CATEGORY_LABELS[id] || (typeof item === "object" ? item?.label : id);
+      if (!label) continue;
+      categoryCounts.set(label, (categoryCounts.get(label) || 0) + 1);
+      categoryTotal += 1;
+    }
+  }
+  if (categoryTotal > 0) {
+    results.push(buildStepResult("categories", "Job categories picked", categoryCounts, categoryTotal, topN));
+  }
+
+  const roleCounts = new Map();
+  let roleTotal = 0;
+  for (const user of users || []) {
+    const items = user?.onboarding_answers?.selected_roles;
+    if (!Array.isArray(items) || !items.length) continue;
+    for (const item of items) {
+      const label = typeof item === "object" ? item?.label || item?.id : item;
+      if (!label) continue;
+      roleCounts.set(label, (roleCounts.get(label) || 0) + 1);
+      roleTotal += 1;
+    }
+  }
+  if (roleTotal > 0) {
+    results.push(buildStepResult("selected_roles", "Roles picked", roleCounts, roleTotal, topN));
+  }
+
+  const locationCounts = new Map();
+  let locationTotal = 0;
+  for (const user of users || []) {
+    const value = String(user?.onboarding_answers?.onboarding_location || "").trim();
+    if (!value) continue;
+    locationTotal += 1;
+    locationCounts.set(value, (locationCounts.get(value) || 0) + 1);
+  }
+  if (locationTotal > 0) {
+    results.push(buildStepResult("onboarding_location", "Where they search", locationCounts, locationTotal, topN));
+  }
+
+  return results;
 }
 
 export function onboardingStatusLabel(progress) {

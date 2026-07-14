@@ -1,8 +1,16 @@
 import { isFinanceDemoEnabled } from "./demoSettings";
-import { isDemoAccountEnabled, mergeApplications } from "./demoAccount";
-import { getFinanceDemoApplications, getFinanceDemoSwipeHistory } from "./financeDemoApi";
+import {
+  isDemoAccountEnabled,
+  mergeApplications,
+} from "./demoAccount";
+import {
+  getFinanceDemoApplications,
+  getFinanceDemoSwipeHistory,
+} from "./financeDemoApi";
 import { mergeDemoCvIntoProfile } from "./demoCvUpload";
 import { FINANCE_DEMO_PROFILE } from "./financeDemoJobs";
+import { ensureDemoScreenshotData } from "./demoScreenshotSeed";
+export { ensureDemoScreenshotData } from "./demoScreenshotSeed";
 
 function mergeApplicationRows(primary, secondary) {
   const seen = new Set();
@@ -42,6 +50,7 @@ export function isDemoTrackerMode() {
 /** Tracker page data — never throw in demo when backend is offline. */
 export async function fetchTrackerPageData(apiClient) {
   if (isDemoTrackerMode()) {
+    ensureDemoScreenshotData();
     try {
       const [appsRes, profileRes] = await Promise.all([
         apiClient.get("/applications"),

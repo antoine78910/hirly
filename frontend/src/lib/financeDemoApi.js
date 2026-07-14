@@ -11,7 +11,9 @@ import { parseApiPath } from "./apiPath";
 import { applyJobFilters, feedQueryToFilters } from "./applyJobFilters";
 import { clearMenuFilters, mergeFilters } from "./jobFilters";
 import { clearSwipeFeedCache, clearSwipedJobIdsByPrefix } from "./swipeFeedCache";
-import { buildDemoApplicationFromSwipe } from "./demoApplicationFactory";
+import { buildDemoApplicationFromSwipe, buildDemoShowcaseApplication } from "./demoApplicationFactory";
+import { buildDemoInboxPayload } from "./demoEmails";
+import { ensureDemoScreenshotData } from "./demoScreenshotSeed";
 
 export const FINANCE_DEMO_CHANGED = "hirly:finance-demo-changed";
 
@@ -136,6 +138,60 @@ export function getFinanceDemoFeedData({ filters = null, searchRole = "", limit 
     matched_location: ["Paris, France"],
     filters_applied: { ...mergedFilters, explicit_local_intent: true },
   };
+}
+
+function daysAgoIso(days) {
+  return new Date(Date.now() - days * 86_400_000).toISOString();
+}
+
+function financeShowcaseJobs() {
+  const pick = (needle) => FINANCE_DEMO_JOBS.find((job) =>
+    job.company.toLowerCase().includes(needle),
+  );
+  return [
+    pick("société générale") || FINANCE_DEMO_JOBS[3],
+    pick("natixis") || FINANCE_DEMO_JOBS[9],
+    pick("crédit agricole") || FINANCE_DEMO_JOBS[6],
+    pick("bnp paribas") || FINANCE_DEMO_JOBS[0],
+    pick("lazard") || FINANCE_DEMO_JOBS[18],
+  ];
+}
+
+function buildFinanceShowcaseApplication(job, variantIndex) {
+  const app = {
+    ...buildDemoShowcaseApplication(job, variantIndex),
+    application_id: `finance_demo_showcase_${job.job_id}`,
+    finance_demo: true,
+    demo_local: true,
+    created_at: daysAgoIso(variantIndex + 1),
+  };
+
+  if (job.company.includes("Crédit Agricole")) {
+    return {
+      ...app,
+      status: "applied",
+      submission_status: "action_required",
+      user_facing_submission_status: "action_required",
+    };
+  }
+
+  return app;
+}
+
+/** Seed tracker + inbox rows for finance demo when the user has not swiped yet. */
+export function seedFinanceDemoShowcaseIfEmpty() {
+  if (!isFinanceDemoEnabled()) return;
+  if (state.applications.length > 0) return;
+
+  const jobs = financeShowcaseJobs();
+  state.applications = jobs.map((job, index) => buildFinanceShowcaseApplication(job, index));
+  state.historyRight = jobs.map((job, index) => ({
+    ...demoFinanceSwipeRow(job, "right"),
+    swipe_id: `finance_demo_showcase_swipe_${job.job_id}`,
+    created_at: daysAgoIso(index + 1),
+  }));
+  persistFinanceDemoState();
+  notifyFinanceDemoChanged();
 }
 
 export function resetFinanceDemoFeed() {
@@ -296,6 +352,7 @@ export function getFinanceDemoResponse(config) {
   }
 
   if (method === "get" && path === "/applications") {
+    ensureDemoScreenshotData();
     return { applications: clone(state.applications) };
   }
 
@@ -304,6 +361,11 @@ export function getFinanceDemoResponse(config) {
     const app = state.applications.find((a) => a.application_id === id);
     if (!app) return undefined;
     return clone(app);
+  }
+
+  if (method === "get" && path === "/emails") {
+    ensureDemoScreenshotData();
+    return buildDemoInboxPayload();
   }
 
   return undefined;
@@ -337,6 +399,7 @@ export function patchFinanceDemoResponse(response) {
   const { path, params } = parseApiPath(requestUrl);
 
   if (method === "get" && path === "/applications") {
+    ensureDemoScreenshotData();
     const apiApps = response.data?.applications || [];
     response.data = {
       ...response.data,
@@ -357,6 +420,11 @@ export function patchFinanceDemoResponse(response) {
       ...response.data,
       swipes: mergeSwipeRows(local, response.data?.swipes || []),
     };
+  }
+
+  if (method === "get" && path === "/emails") {
+    ensureDemoScreenshotData();
+    response.data = buildDemoInboxPayload();
   }
 
   return response;

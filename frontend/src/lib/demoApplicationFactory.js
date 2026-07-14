@@ -90,6 +90,12 @@ export function buildDemoShowcaseApplication(job, variantIndex = 0) {
       user_facing_submission_status: "pending",
       pending_at: minutesAfter(createdAt, 3),
     },
+    {
+      status: "offer",
+      submission_status: "submitted",
+      user_facing_submission_status: "submitted",
+      submitted_at: minutesAfter(createdAt, 10),
+    },
   ];
   const variant = variants[variantIndex % variants.length];
 

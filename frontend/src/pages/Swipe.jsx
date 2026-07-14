@@ -28,6 +28,7 @@ import { TUTORIAL_BYPASS_AUTH } from "../lib/dev";
 import { DEMO_SETTINGS_CHANGED, isFinanceDemoEnabled } from "../lib/demoSettings";
 import { getFinanceDemoFeedData, performFinanceDemoSwipe, performFinanceDemoUndo } from "../lib/financeDemoApi";
 import { getFinanceDemoSearchTarget } from "../lib/financeDemoJobs";
+import { shouldShowSwipeAdminAtsBadge, filterPersonalSwipeFeedJobs } from "../lib/adminSwipeUi";
 import { ensureTutorialSession } from "../lib/tutorialSession";
 import { useUpgradeModal } from "../context/UpgradeModalContext";
 import DesktopSwipeFeed from "../components/swipe/DesktopSwipeFeed";
@@ -545,7 +546,7 @@ function AdminAtsBadge({ job }) {
 
 const CARD_BUTTON_SWIPE_X = 520;
 
-function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang, isAdmin, pendingSwipe, onSwipeRequestComplete }) {
+function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang, showAdminAtsBadge, pendingSwipe, onSwipeRequestComplete }) {
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-260, 0, 260], [-14, 0, 14]);
   const opacity = useTransform(x, [-360, -260, 0, 260, 360], [0, 1, 1, 1, 0]);
@@ -712,7 +713,7 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang, isAdmin,
           <div className="backface-hidden rotate-y-180 absolute inset-0 rounded-[28px] border border-sprout-border bg-sprout-surface" aria-hidden="true" />
         )}
       </motion.div>
-      {isAdmin ? <AdminAtsBadge job={job} /> : null}
+      {showAdminAtsBadge ? <AdminAtsBadge job={job} /> : null}
       {isTop && (!flipped || isDragging) ? (
         <>
           <motion.div
@@ -780,6 +781,7 @@ export default function Swipe() {
   const location = useLocation();
   const { t, lang } = useAppLocale();
   const { loading: authLoading, user, isAdmin } = useAuth();
+  const showAdminAtsBadge = shouldShowSwipeAdminAtsBadge(isAdmin, user?.email);
   const isDemoAccount = Boolean(user?.demo_account);
   const isFinanceDemo = isDemoAccount && isFinanceDemoEnabled();
   const [demoWelcomeOpen, setDemoWelcomeOpen] = useState(false);
@@ -1107,6 +1109,7 @@ export default function Swipe() {
       let responseJobs = Array.isArray(data?.jobs) ? data.jobs : [];
       let safeJobs = localFeedGuard ? responseJobs.filter(localFeedGuard) : responseJobs;
       if (!financeFeed) safeJobs = filterOutSwipedJobs(safeJobs);
+      safeJobs = filterPersonalSwipeFeedJobs(user?.email, safeJobs);
       let outsideLocationHiddenCount = responseJobs.length - safeJobs.length;
       if (outsideLocationHiddenCount > 0) {
         data = {
@@ -1160,9 +1163,10 @@ export default function Swipe() {
         const merged = [...base];
         safeJobs.forEach((j) => { if (!seen.has(j.job_id)) merged.push(j); });
         const visible = financeFeed ? merged : filterOutSwipedJobs(merged);
-        preloadCompanyLogos(visible.slice(0, 6));
+        const filtered = filterPersonalSwipeFeedJobs(user?.email, visible);
+        preloadCompanyLogos(filtered.slice(0, 6));
         writeSwipeFeedCache({
-          jobs: visible,
+          jobs: filtered,
           meta: data,
           target: targetRef.current,
           targetLocationData: targetLocationDataRef.current,
@@ -1175,7 +1179,7 @@ export default function Swipe() {
           }),
           userId: user?.user_id,
         });
-        return visible;
+        return filtered;
       });
       // Backend started a provider refresh in the background: silently poll a
       // couple of times to merge freshly imported jobs into the stack.
@@ -1206,6 +1210,7 @@ export default function Swipe() {
           const responseJobs = Array.isArray(retryData?.jobs) ? retryData.jobs : [];
           let safeJobs = localFeedGuard ? responseJobs.filter(localFeedGuard) : responseJobs;
           if (!financeFeed) safeJobs = filterOutSwipedJobs(safeJobs);
+          safeJobs = filterPersonalSwipeFeedJobs(user?.email, safeJobs);
           setLastFeedDebug({
             reason: `${reason}_timeout_retry`,
             forceRefresh: replace,
@@ -1235,7 +1240,7 @@ export default function Swipe() {
             const seen = new Set(base.map((j) => j.job_id));
             const merged = [...base];
             safeJobs.forEach((j) => { if (!seen.has(j.job_id)) merged.push(j); });
-            return filterOutSwipedJobs(merged);
+            return filterPersonalSwipeFeedJobs(user?.email, filterOutSwipedJobs(merged));
           });
           return;
         } catch (_) {
@@ -1262,7 +1267,7 @@ export default function Swipe() {
         if (feedAbortRef.current === controller) feedAbortRef.current = null;
       }
     }
-  }, [t, user?.user_id]);
+  }, [t, user?.user_id, user?.email]);
 
   loadFeedRef.current = loadFeed;
 
@@ -1381,14 +1386,15 @@ export default function Swipe() {
       const cached = readSwipeFeedCache({ userId: user?.user_id, cacheKey });
 
       if (cached?.jobs?.length) {
-        setJobs(cached.jobs);
-        jobsRef.current = cached.jobs;
+        const cachedJobs = filterPersonalSwipeFeedJobs(user?.email, cached.jobs);
+        setJobs(cachedJobs);
+        jobsRef.current = cachedJobs;
         setFeedMeta(cached.meta);
         setLoading(false);
-        preloadCompanyLogos(cached.jobs.slice(0, 6));
+        preloadCompanyLogos(cachedJobs.slice(0, 6));
         syncSwipedJobsFromServer(user?.user_id).then(() => {
           setJobs((prev) => {
-            const visible = filterOutSwipedJobs(prev);
+            const visible = filterPersonalSwipeFeedJobs(user?.email, filterOutSwipedJobs(prev));
             jobsRef.current = visible;
             if (!visible.length && !fetchingRef.current) {
               loadFeed(true, mergedFilters, "initial_empty_after_swipe_filter");
@@ -1419,7 +1425,7 @@ export default function Swipe() {
       loadFeed(true, mergedFilters, reason);
     };
     bootstrap();
-  }, [authLoading, loadProfile, loadFeed, applyFinanceDemoTarget, syncSwipedJobsFromServer, user?.user_id, isDemoAccount, isFinanceDemo]);
+  }, [authLoading, loadProfile, loadFeed, applyFinanceDemoTarget, syncSwipedJobsFromServer, user?.user_id, user?.email, isDemoAccount, isFinanceDemo]);
 
   useEffect(() => {
     const onBillingUpdated = (event) => {
@@ -1803,7 +1809,7 @@ export default function Swipe() {
           shouldGateApply={shouldBlockApply()}
           onApplyBlocked={handleApplyBlocked}
           interactionBlocked={targetSheetOpen || filtersOpen || desktopFiltersOpen || Boolean(reportJob) || upgradeOpen || resumeSheetOpen || phoneSheetOpen}
-          isAdmin={isAdmin}
+          showAdminAtsBadge={showAdminAtsBadge}
         />
       </div>
 
@@ -1924,7 +1930,7 @@ export default function Swipe() {
                   index={idx}
                   t={t}
                   lang={lang}
-                  isAdmin={isAdmin}
+                  showAdminAtsBadge={showAdminAtsBadge}
                   pendingSwipe={idx === 0 ? pendingCardSwipe : null}
                   onSwipeRequestComplete={() => setPendingCardSwipe(null)}
                 />

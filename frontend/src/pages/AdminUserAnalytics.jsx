@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import { adminApiErrorMessage } from "../lib/adminApi";
 import {
   ONBOARDING_ANSWER_LABELS,
+  buildOnboardingAnswerDistribution,
   fmtDate,
   fmtDuration,
   formatOnboardingAnswerValue,
@@ -18,6 +19,34 @@ function KpiCard({ label, value, hint }) {
       <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">{label}</p>
       <p className="mt-2 font-display text-3xl font-bold text-zinc-900">{value}</p>
       {hint ? <p className="mt-1 text-xs text-zinc-500">{hint}</p> : null}
+    </div>
+  );
+}
+
+function AnswerDistributionCard({ step }) {
+  const max = step.options[0]?.count || 1;
+  return (
+    <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+      <div className="flex items-baseline justify-between gap-2">
+        <h3 className="text-sm font-semibold text-zinc-900">{step.title}</h3>
+        <span className="shrink-0 text-xs text-zinc-400">{step.total} answers</span>
+      </div>
+      <div className="mt-3 space-y-2.5">
+        {step.options.map((option) => (
+          <div key={option.label}>
+            <div className="flex items-center justify-between gap-2 text-xs text-zinc-600">
+              <span className="truncate">{option.label}</span>
+              <span className="shrink-0 font-semibold tabular-nums text-zinc-800">{option.count} · {option.pct}%</span>
+            </div>
+            <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-zinc-100">
+              <div
+                className="h-full rounded-full bg-linkedin"
+                style={{ width: `${Math.max(4, (option.count / max) * 100)}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -76,6 +105,10 @@ export default function AdminUserAnalytics() {
   const summary = data?.summary || {};
   const dropoff = data?.onboarding_dropoff || {};
   const dropoffSteps = dropoff.by_step || [];
+  const answerDistribution = useMemo(
+    () => buildOnboardingAnswerDistribution(data?.users || []),
+    [data],
+  );
 
   const users = useMemo(() => {
     const rows = data?.users || [];
@@ -163,6 +196,22 @@ export default function AdminUserAnalytics() {
                 )}
               </tbody>
             </table>
+          </section>
+
+          <section className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
+            <div className="border-b border-zinc-200 px-5 py-4">
+              <h2 className="font-display text-lg font-bold text-zinc-900">Most chosen answers</h2>
+              <p className="mt-1 text-sm text-zinc-500">For each onboarding step, the answers picked most often across all users.</p>
+            </div>
+            <div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-3">
+              {loading ? (
+                <div className="col-span-full flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-zinc-400" /></div>
+              ) : answerDistribution.length ? answerDistribution.map((step) => (
+                <AnswerDistributionCard key={step.key} step={step} />
+              )) : (
+                <p className="col-span-full text-sm text-zinc-500">No onboarding answers saved yet.</p>
+              )}
+            </div>
           </section>
 
           <section className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
