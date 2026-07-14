@@ -2083,6 +2083,25 @@ def _stripe_object_id(value: Any) -> Optional[str]:
     return str(object_id).strip() if object_id else None
 
 
+def _stripe_to_dict(obj: Any) -> Any:
+    """Recursively convert a raw Stripe SDK object (StripeObject/Event/list results/
+    etc.) into plain dicts/lists. All of our billing code is written against dict
+    .get()/isinstance(dict) semantics, but this stripe-python version's StripeObject
+    no longer subclasses dict and has no .get() method at all -- calling .get() on a
+    live SDK object raises AttributeError. Every object handed to us directly by the
+    SDK (construct_event, .retrieve(), .list(), auto_paging_iter()) must be converted
+    at the boundary before any of our helpers touch it.
+    """
+    if obj is None or isinstance(obj, (dict, str, int, float, bool)):
+        return obj
+    if isinstance(obj, (list, tuple)):
+        return [_stripe_to_dict(item) for item in obj]
+    to_dict = getattr(obj, "to_dict", None)
+    if callable(to_dict):
+        return to_dict()
+    return obj
+
+
 def _resolve_stripe_checkout_session_context(session_id: str) -> Dict[str, Any]:
     _stripe_secret_key()
     try:
@@ -2092,7 +2111,7 @@ def _resolve_stripe_checkout_session_context(session_id: str) -> Dict[str, Any]:
         )
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Invalid checkout session: {str(exc)[:200]}")
-    session_dict = dict(session_obj) if not isinstance(session_obj, dict) else session_obj
+    session_dict = _stripe_to_dict(session_obj)
     customer_details = session_dict.get("customer_details") or {}
     customer_obj = session_dict.get("customer")
     email = (customer_details.get("email") or "").strip().lower() or None
@@ -2109,10 +2128,10 @@ def _resolve_stripe_checkout_session_context(session_id: str) -> Dict[str, Any]:
 def _resolve_stripe_payment_intent_context(payment_intent_id: str) -> Dict[str, Any]:
     _stripe_secret_key()
     try:
-        payment_intent = stripe.PaymentIntent.retrieve(
+        payment_intent = _stripe_to_dict(stripe.PaymentIntent.retrieve(
             payment_intent_id,
             expand=["customer", "invoice.subscription", "latest_charge"],
-        )
+        ))
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Invalid payment intent: {str(exc)[:200]}")
 
@@ -2140,16 +2159,16 @@ def _resolve_stripe_payment_intent_context(payment_intent_id: str) -> Dict[str, 
         context["subscription_id"] = _stripe_object_id(invoice.get("subscription"))
     elif isinstance(invoice, str) and invoice:
         try:
-            invoice_obj = stripe.Invoice.retrieve(invoice)
+            invoice_obj = _stripe_to_dict(stripe.Invoice.retrieve(invoice))
             context["subscription_id"] = _stripe_object_id(invoice_obj.get("subscription"))
         except Exception:
             pass
 
     try:
         sessions = stripe.checkout.Session.list(payment_intent=payment_intent_id, limit=1)
-        data = sessions.get("data") if isinstance(sessions, dict) else getattr(sessions, "data", [])
+        data = _stripe_to_dict(sessions.get("data") if isinstance(sessions, dict) else getattr(sessions, "data", []))
         if data:
-            session_dict = dict(data[0]) if not isinstance(data[0], dict) else data[0]
+            session_dict = data[0]
             context["user_id_hint"] = _checkout_session_user_id(session_dict)
             context["customer_id"] = context["customer_id"] or _stripe_object_id(session_dict.get("customer"))
             if not context["email"]:
@@ -2172,7 +2191,7 @@ def _resolve_stripe_customer_context(customer_id: str) -> Dict[str, Any]:
         customer = stripe.Customer.retrieve(customer_id)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Invalid Stripe customer: {str(exc)[:200]}")
-    customer_dict = dict(customer) if not isinstance(customer, dict) else customer
+    customer_dict = _stripe_to_dict(customer)
     metadata = customer_dict.get("metadata") or {}
     return {
         "customer_id": customer_id,
@@ -2204,7 +2223,7 @@ async def _resolve_user_id_for_stripe_customer(customer_id: str) -> Optional[str
         return None
     try:
         _stripe_secret_key()
-        customer = stripe.Customer.retrieve(customer_id)
+        customer = _stripe_to_dict(stripe.Customer.retrieve(customer_id))
         metadata_user_id = (customer.get("metadata") or {}).get("user_id")
         if metadata_user_id:
             found = await db.users.find_one({"user_id": metadata_user_id}, {"_id": 0, "user_id": 1})
@@ -2394,7 +2413,7 @@ def _discover_stripe_subscription(customer_id: Optional[str]) -> Optional[Any]:
             result = stripe.Subscription.list(customer=customer_id, status=status, limit=1)
             data = result.get("data") if isinstance(result, dict) else getattr(result, "data", None)
             if data:
-                return data[0]
+                return _stripe_to_dict(data[0])
     except Exception as exc:
         logger.warning(
             "stripe_subscription_discover_failed customer_id=%s error=%s",
@@ -2484,7 +2503,7 @@ async def _refresh_billing_from_stripe(
         return user_doc, None
     try:
         _stripe_secret_key()
-        subscription = stripe.Subscription.retrieve(subscription_id)
+        subscription = _stripe_to_dict(stripe.Subscription.retrieve(subscription_id))
         updates = _subscription_billing_updates(subscription)
         await _update_user_billing_by_user_id(user_doc["user_id"], updates)
         refreshed = await db.users.find_one({"user_id": user_doc["user_id"]}, {"_id": 0})
@@ -2740,7 +2759,7 @@ async def _recover_stalled_checkout_billing(user_doc: Dict[str, Any]) -> Dict[st
         sessions = stripe.checkout.Session.list(customer=customer_id, limit=5, status="complete")
         data = sessions.get("data") if isinstance(sessions, dict) else getattr(sessions, "data", [])
         for session in data or []:
-            session_dict = dict(session) if not isinstance(session, dict) else session
+            session_dict = _stripe_to_dict(session)
             if session_dict.get("payment_status") != "paid":
                 continue
             if not await _checkout_session_belongs_to_user(session_dict, user_doc):
@@ -2781,7 +2800,7 @@ async def _apply_checkout_session_billing(
             if isinstance(subscription_ref, dict):
                 subscription = subscription_ref
             else:
-                subscription = stripe.Subscription.retrieve(subscription_id)
+                subscription = _stripe_to_dict(stripe.Subscription.retrieve(subscription_id))
             updates.update(_subscription_billing_updates(subscription, last_payment_status=session_obj.get("payment_status")))
         except Exception as exc:
             logger.warning(
@@ -2828,7 +2847,7 @@ async def confirm_billing_checkout(
         logger.warning("stripe_checkout_confirm_retrieve_failed session_id=%s error=%s", session_id, str(exc)[:200])
         raise HTTPException(status_code=400, detail="Invalid checkout session")
 
-    session_dict = dict(session_obj) if not isinstance(session_obj, dict) else session_obj
+    session_dict = _stripe_to_dict(session_obj)
     user_doc = await _get_user_doc(user)
     if not await _checkout_session_belongs_to_user(session_dict, user_doc):
         raise HTTPException(status_code=403, detail="Checkout session does not belong to this user")
@@ -3165,7 +3184,7 @@ async def _handle_subscription_event(subscription: Any, *, last_payment_status: 
 def _list_stripe_subscriptions_for_reconcile() -> List[Any]:
     _stripe_secret_key()
     result = stripe.Subscription.list(status="all", limit=100, expand=["data.customer"])
-    return list(result.auto_paging_iter())
+    return [_stripe_to_dict(subscription) for subscription in result.auto_paging_iter()]
 
 
 def _stripe_subscription_reconcile_priority(subscription: Any) -> tuple[int, int]:
@@ -3287,12 +3306,17 @@ async def stripe_webhook(request: Request):
     payload = await request.body()
     signature = request.headers.get("Stripe-Signature", "")
     try:
-        event = stripe.Webhook.construct_event(payload, signature, webhook_secret)
+        raw_event = stripe.Webhook.construct_event(payload, signature, webhook_secret)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid payload")
     except stripe.SignatureVerificationError:
         raise HTTPException(status_code=400, detail="Invalid signature")
 
+    # Recent stripe-python releases no longer make StripeObject a dict subclass
+    # (no .get() method at all), while every helper below is written against
+    # plain dict semantics -- convert once, at the boundary, so nothing further
+    # downstream needs to know or care that this came from the Stripe SDK.
+    event = _stripe_to_dict(raw_event)
     event_type = event["type"]
     event_id = event.get("id")
     if await _stripe_event_already_processed(event_id):
@@ -3311,7 +3335,7 @@ async def stripe_webhook(request: Request):
             payment_status = "failed" if event_type == "invoice.payment_failed" else "succeeded"
             if subscription_id:
                 try:
-                    subscription = stripe.Subscription.retrieve(subscription_id)
+                    subscription = _stripe_to_dict(stripe.Subscription.retrieve(subscription_id))
                     await _handle_subscription_event(subscription, last_payment_status=payment_status)
                 except Exception:
                     if customer_id:
@@ -10629,7 +10653,7 @@ async def admin_stripe_reconcile(
         if _stripe_configured():
             _stripe_secret_key()
             if subscription_id:
-                subscription = stripe.Subscription.retrieve(subscription_id)
+                subscription = _stripe_to_dict(stripe.Subscription.retrieve(subscription_id))
                 updates.update(_subscription_billing_updates(subscription, last_payment_status="paid"))
             else:
                 discovered = _discover_stripe_subscription(customer_id)

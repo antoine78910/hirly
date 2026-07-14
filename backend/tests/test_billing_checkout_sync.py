@@ -1,12 +1,39 @@
 import asyncio
 
 import pytest
+import stripe
 
 import server
 
 
 async def _async_return(value):
     return value
+
+
+def test_stripe_to_dict_converts_real_stripe_object():
+    """Recent stripe-python releases no longer make StripeObject a dict subclass --
+    it has no .get() method at all, so calling .get() on a real SDK response
+    (construct_event/.retrieve()/.list()/auto_paging_iter()) raises AttributeError
+    even though our own dict-based test mocks never surface this. This is the
+    exact bug that made every Stripe webhook delivery 500 in production."""
+    real_subscription = stripe._stripe_object.StripeObject.construct_from(
+        {
+            "id": "sub_real",
+            "customer": "cus_real",
+            "status": "active",
+            "metadata": {"plan": "monthly"},
+            "items": {"data": [{"price": {"id": "price_x"}}]},
+        },
+        "sk_test_x",
+    )
+    with pytest.raises(AttributeError):
+        real_subscription.get("status")
+
+    converted = server._stripe_to_dict(real_subscription)
+    assert isinstance(converted, dict)
+    assert converted.get("status") == "active"
+    assert isinstance(converted["items"], dict)
+    assert isinstance(converted["items"]["data"][0], dict)
 
 
 def test_checkout_return_url_includes_stripe_session_placeholder():
