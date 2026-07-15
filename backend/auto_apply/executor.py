@@ -27,7 +27,7 @@ from apply_agent.browser import write_cover_letter_file, write_resume_file
 
 from . import metrics
 from .classifier import classify
-from .debug_report import build_debug_report
+from .debug_report import build_debug_report, data_availability, format_run_error
 from .driver import DRIVER_REGISTRY
 from .models import SubmissionContext
 from .planner import plan as build_plan
@@ -69,7 +69,7 @@ def _report(
     *, started: float, stage: str, status: str, reason: str = "", verdict: Optional[str] = None,
     missing_fields: Optional[List[str]] = None, blueprint_signature: Optional[str] = None,
     driver_version: Optional[str] = None, evidence=None, claim: Optional[Dict[str, Any]] = None,
-    debug: Optional[Dict[str, Any]] = None,
+    debug: Optional[Dict[str, Any]] = None, error: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     now = _now()
     screenshot = getattr(evidence, "screenshot_b64", None)
@@ -84,6 +84,7 @@ def _report(
         "submission_evidence": _full_evidence(evidence),
         "screenshots": [screenshot] if screenshot else [],
         "debug": debug,
+        "error": error,
         "timestamps": {
             "claimed_at": (claim or {}).get("claimed_at"),
             "submitted_at": now if (evidence is not None and evidence.submit_performed) else None,
@@ -116,10 +117,23 @@ async def execute_application(
         return _report(started=started, stage="claim", status=status,
                        reason="active_claim_exists", driver_version=driver_version)
 
+    checkpoint = "driver"
+    blueprint = None
+    signature = None
+    decision = None
+    candidate_context = None
+    answers = None
+    unresolved = None
+    application_plan = None
+    app_url = ""
+    evidence = None
+
     try:
+        checkpoint = "inspect"
         blueprint = await driver.inspect_application(job)
         signature = blueprint.signature
         known = await metrics.known_successful_signatures(db, driver.provider)
+        checkpoint = "classify"
         decision = classify(blueprint, known_successful_signatures=known)
         base = {
             "eligible": decision.eligible, "complexity": blueprint.complexity.value,
@@ -143,6 +157,7 @@ async def execute_application(
             return _report(started=started, stage="classify", status=decision.category,
                            reason=decision.reason, missing_fields=missing, debug=debug, **report_common)
 
+        checkpoint = "resolve"
         candidate_context = build_candidate_context(profile, app_doc, user)
         answers, unresolved = resolve(blueprint, candidate_context, profile)
         if unresolved:
@@ -158,6 +173,7 @@ async def execute_application(
             return _report(started=started, stage="resolve", status="needs_user_input",
                            reason=reason, missing_fields=missing, debug=debug, **report_common)
 
+        checkpoint = "plan"
         application_plan = build_plan(blueprint, answers)
         debug = build_debug_report(
             job=job, profile=profile, app_doc=app_doc, blueprint=blueprint, decision=decision,
@@ -170,6 +186,7 @@ async def execute_application(
             return _report(started=started, stage="plan", status="prepared",
                            reason="ready_not_submitted", debug=debug, **report_common)
 
+        checkpoint = "submit"
         with tempfile.TemporaryDirectory(prefix="auto_apply_") as tmp:
             documents = {
                 "resume_path": write_resume_file(app_doc, tmp),
@@ -206,6 +223,7 @@ async def execute_application(
             return _report(started=started, stage="submit", status="submit_failed",
                            reason="submit_not_performed", evidence=evidence, debug=debug, **report_common)
 
+        checkpoint = "verify"
         verdict = verify(evidence)
         db_status = "submitted_success" if verdict.status == "verified_success" else "verification_failed"
         debug = build_debug_report(
@@ -219,8 +237,58 @@ async def execute_application(
         return _report(started=started, stage="verify", status=db_status, verdict=verdict.status,
                        reason=verdict.reason, evidence=evidence, debug=debug, **report_common)
     except Exception as exc:
-        logger.warning("auto_apply_execute_failed job=%s error=%s", job_id, str(exc)[:300])
-        await metrics.record_terminal(db, claim, status="error", reason=exc.__class__.__name__,
-                                      stage_reached="error")
-        return _report(started=started, stage="error", status="error",
-                       reason=exc.__class__.__name__, driver_version=driver_version, claim=claim)
+        error_detail = format_run_error(exc, checkpoint=checkpoint)
+        stage = checkpoint
+        if error_detail.get("phase") in ("open_browser", "open_page"):
+            stage = "submit"
+        logger.warning(
+            "auto_apply_execute_failed job=%s stage=%s phase=%s error=%s",
+            job_id, stage, error_detail.get("phase"), error_detail.get("message", str(exc))[:300],
+        )
+        debug = None
+        try:
+            debug = build_debug_report(
+                job=job,
+                profile=profile,
+                app_doc=app_doc,
+                blueprint=blueprint,
+                decision=decision,
+                answers=answers,
+                unresolved=unresolved,
+                plan=application_plan,
+                candidate_context=candidate_context,
+                application_url=app_url,
+                evidence=evidence,
+            )
+            debug["error"] = error_detail
+            debug["timeline"] = (debug.get("timeline") or []) + [{
+                "stage": stage,
+                "status": "error",
+                "detail": error_detail.get("message") or exc.__class__.__name__,
+            }]
+        except Exception:
+            debug = {
+                "data_availability": data_availability(profile, app_doc),
+                "error": error_detail,
+                "timeline": [{
+                    "stage": stage,
+                    "status": "error",
+                    "detail": error_detail.get("message") or exc.__class__.__name__,
+                }],
+            }
+        reason = error_detail.get("message") or exc.__class__.__name__
+        await metrics.record_terminal(
+            db, claim, status="error", reason=reason[:500], stage_reached=stage,
+        )
+        return _report(
+            started=started,
+            stage=stage,
+            status="error",
+            reason=reason,
+            error=error_detail,
+            debug=debug,
+            driver_version=driver_version,
+            claim=claim,
+            blueprint_signature=signature,
+            evidence=evidence,
+        )

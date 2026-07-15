@@ -37,6 +37,32 @@ const fmtDate = (value) => {
   return date.toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 };
 
+function syntheticErrorReport(detail, fallbackMessage) {
+  const message = detail?.message || fallbackMessage || "Execution failed";
+  return {
+    stage_reached: detail?.phase === "open_browser" || detail?.phase === "open_page" ? "submit" : "driver",
+    status: "error",
+    reason: message,
+    error: detail && typeof detail === "object" ? detail : { message, phase: "execute" },
+    debug: {
+      error: detail && typeof detail === "object" ? detail : { message, phase: "execute" },
+      timeline: [{
+        stage: detail?.phase === "open_browser" || detail?.phase === "open_page" ? "submit" : "driver",
+        status: "error",
+        detail: message,
+      }],
+    },
+  };
+}
+
+function notifyRunResult(result) {
+  if (result?.status === "error") {
+    toast.error(result.reason || result.error?.message || "Auto-apply failed");
+    return;
+  }
+  toast.success(`${result.status} (stage: ${result.stage_reached}, ${result.duration_ms}ms)`);
+}
+
 export default function AdminAutoApplyLab() {
   const [url, setUrl] = useState("");
   const [resumeFile, setResumeFile] = useState(null);
@@ -96,12 +122,16 @@ export default function AdminAutoApplyLab() {
       );
       const result = data.result || data;
       setReport(result);
-      toast.success(`${result.status} (stage: ${result.stage_reached}, ${result.duration_ms}ms)`);
+      notifyRunResult(result);
       loadSwipes();
     } catch (err) {
       if (err?.response?.status === 403) setAccessDenied(true);
+      const detail = err.response?.data?.detail;
       const message = adminApiErrorMessage(err, "Execution failed");
       setError(message);
+      if (detail && typeof detail === "object") {
+        setReport(syntheticErrorReport(detail, message));
+      }
       toast.error(message);
     } finally {
       setRunningRow(null);
@@ -141,13 +171,18 @@ export default function AdminAutoApplyLab() {
       }
       const { data } = await api.post("/admin/auto-apply-lab/execute", payload, { timeout: 180000 });
       setReport(data);
-      toast.success(`${data.status} (stage: ${data.stage_reached}, ${data.duration_ms}ms)`);
+      notifyRunResult(data);
     } catch (err) {
       if (err?.response?.status === 403) {
         setAccessDenied(true);
       }
-      setError(adminApiErrorMessage(err, "Execution failed"));
-      toast.error(adminApiErrorMessage(err, "Execution failed"));
+      const detail = err.response?.data?.detail;
+      const message = adminApiErrorMessage(err, "Execution failed");
+      setError(message);
+      if (detail && typeof detail === "object") {
+        setReport(syntheticErrorReport(detail, message));
+      }
+      toast.error(message);
     } finally {
       setRunning(false);
     }

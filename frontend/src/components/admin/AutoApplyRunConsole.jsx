@@ -7,6 +7,15 @@ const STATUS_STYLES = {
   optional_skipped: "text-zinc-500",
   not_found: "text-red-400",
   error: "text-red-400",
+  blocked: "text-amber-400",
+  warn: "text-amber-400",
+};
+
+const TIMELINE_DOT = {
+  ok: "bg-emerald-500",
+  error: "bg-red-500",
+  blocked: "bg-amber-500",
+  warn: "bg-amber-400",
 };
 
 function stageIndex(stage) {
@@ -26,16 +35,23 @@ function hintForMissing(fieldKey, dataAvailability) {
   return "No tailored CV on this application. The user must complete Review (tailored CV) before auto-apply can upload a resume.";
 }
 
+function resolveError(report) {
+  return report?.error || report?.debug?.error || null;
+}
+
 export default function AutoApplyRunConsole({ report }) {
   if (!report) return null;
 
   const debug = report.debug || {};
+  const runError = resolveError(report);
+  const isFailed = report.status === "error" || Boolean(runError);
   const reached = stageIndex(report.stage_reached);
   const execution = debug.execution || {};
   const stepLog = execution.step_log || [];
   const planSteps = debug.plan_steps || [];
   const fieldStatus = debug.field_status || [];
   const dataAvailability = debug.data_availability || {};
+  const timeline = debug.timeline || [];
 
   return (
     <div className="mt-6 space-y-4">
@@ -47,21 +63,30 @@ export default function AutoApplyRunConsole({ report }) {
         </p>
       </div>
 
+      {isFailed ? (
+        <ErrorPanel error={runError} reason={report.reason} stage={report.stage_reached} />
+      ) : null}
+
       <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 shadow-lg">
         <div className="border-b border-zinc-800 px-4 py-3">
           <div className="flex flex-wrap gap-2">
             {STAGES.map((stage, index) => {
-              const done = reached >= index;
-              const current = report.stage_reached === stage;
+              const done = !isFailed && reached >= index;
+              const failedHere = isFailed && report.stage_reached === stage;
+              const current = !isFailed && report.stage_reached === stage;
               return (
                 <span
                   key={stage}
                   className={`rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ${
-                    current
-                      ? "bg-violet-500 text-white"
-                      : done
-                        ? "bg-emerald-900/60 text-emerald-300"
-                        : "bg-zinc-800 text-zinc-500"
+                    failedHere
+                      ? "bg-red-600 text-white"
+                      : current
+                        ? "bg-violet-500 text-white"
+                        : done
+                          ? "bg-emerald-900/60 text-emerald-300"
+                          : reached > index
+                            ? "bg-emerald-900/40 text-emerald-400/80"
+                            : "bg-zinc-800 text-zinc-500"
                   }`}
                 >
                   {stage}
@@ -79,6 +104,26 @@ export default function AutoApplyRunConsole({ report }) {
         </div>
 
         <div className="max-h-[70vh] overflow-y-auto p-4 font-mono text-xs text-zinc-100">
+          {timeline.length ? (
+            <Section title="Run timeline">
+              <div className="space-y-2">
+                {timeline.map((entry, index) => (
+                  <div key={`${entry.stage}-${index}`} className="flex items-start gap-3">
+                    <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${TIMELINE_DOT[entry.status] || "bg-zinc-600"}`} />
+                    <div>
+                      <p className="text-zinc-200">
+                        <span className="font-semibold uppercase text-violet-300">{entry.stage}</span>
+                        {" · "}
+                        <span className={STATUS_STYLES[entry.status] || "text-zinc-400"}>{entry.status}</span>
+                      </p>
+                      {entry.detail ? <p className="mt-0.5 text-zinc-400">{entry.detail}</p> : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Section>
+          ) : null}
+
           {debug.application_url ? (
             <LogLine level="info">
               Application URL:
@@ -138,6 +183,10 @@ export default function AutoApplyRunConsole({ report }) {
                 </table>
               </div>
             </Section>
+          ) : isFailed && report.stage_reached === "inspect" ? (
+            <Section title="Fields">
+              <LogLine level="error">Inspection failed before fields could be read.</LogLine>
+            </Section>
           ) : null}
 
           {planSteps.length ? (
@@ -190,6 +239,12 @@ export default function AutoApplyRunConsole({ report }) {
             <Section title="Browser execution log">
               <LogLine level="warn">Stopped at resolve — fix missing fields above before the browser opens.</LogLine>
             </Section>
+          ) : isFailed && report.stage_reached === "submit" ? (
+            <Section title="Browser execution log">
+              <LogLine level="error">
+                Browser failed to start or load the page. See the error panel above for details.
+              </LogLine>
+            </Section>
           ) : null}
 
           {execution.blocked_reason ? (
@@ -218,6 +273,53 @@ export default function AutoApplyRunConsole({ report }) {
               {JSON.stringify(report, null, 2)}
             </pre>
           </details>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ErrorPanel({ error, reason, stage }) {
+  const message = error?.message || reason || "Unknown error";
+  const phase = error?.phase || stage || "execute";
+
+  return (
+    <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-4 shadow-sm">
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-100 text-sm font-bold text-red-700">
+          !
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-display text-base font-bold text-red-900">Run failed at {stage}</p>
+          <p className="mt-1 text-sm font-medium text-red-800">{message}</p>
+          <dl className="mt-3 grid gap-2 text-xs text-red-900/80 sm:grid-cols-2">
+            <div>
+              <dt className="font-semibold uppercase tracking-wide text-red-700/70">Phase</dt>
+              <dd className="font-mono">{phase}</dd>
+            </div>
+            {error?.exception_class ? (
+              <div>
+                <dt className="font-semibold uppercase tracking-wide text-red-700/70">Exception</dt>
+                <dd className="font-mono">{error.exception_class}</dd>
+              </div>
+            ) : null}
+            {error?.target_url ? (
+              <div className="sm:col-span-2">
+                <dt className="font-semibold uppercase tracking-wide text-red-700/70">Target URL</dt>
+                <dd className="break-all font-mono">
+                  <a href={error.target_url} target="_blank" rel="noreferrer" className="underline">
+                    {error.target_url}
+                  </a>
+                </dd>
+              </div>
+            ) : null}
+          </dl>
+          {error?.hint ? (
+            <p className="mt-3 rounded-lg border border-red-200 bg-white/70 px-3 py-2 text-sm text-red-900">
+              <span className="font-semibold">What to try: </span>
+              {error.hint}
+            </p>
+          ) : null}
         </div>
       </div>
     </div>

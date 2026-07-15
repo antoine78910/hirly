@@ -1,11 +1,59 @@
 """Structured debug payload for admin auto-apply runs."""
 from __future__ import annotations
 
+import traceback
 from typing import Any, Dict, List, Optional
 
 from application_blueprint import NormalizedField
 
 from .models import ApplicationPlan, ResolvedAnswer
+
+_ERROR_HINTS = {
+    "open_browser": (
+        "The browser could not start. On local dev run "
+        "`pip install playwright` and `python -m playwright install chromium`. "
+        "On Railway, ensure Chromium is installed in the build. "
+        "If you enabled “Show browser”, the server must have a display (local only)."
+    ),
+    "open_page": "The apply page failed to load. Check that the job URL is still live and reachable from the server.",
+    "inspect": "Form inspection failed before any browser step. The ATS page structure may have changed.",
+}
+
+
+def error_hint(*, phase: str = "", message: str = "") -> Optional[str]:
+    if phase in _ERROR_HINTS:
+        return _ERROR_HINTS[phase]
+    if "Playwright is not installed" in message:
+        return _ERROR_HINTS["open_browser"]
+    return None
+
+
+def format_run_error(exc: BaseException, *, checkpoint: str = "") -> Dict[str, Any]:
+    """Normalize any exception into a console-friendly error payload."""
+    from apply_agent.models import ApplyAgentError
+
+    if isinstance(exc, ApplyAgentError):
+        detail = exc.safe_detail()
+        message = str(detail.get("message") or exc).strip()
+        phase = str(detail.get("phase") or checkpoint or "execute")
+        return {
+            **detail,
+            "message": message or "Apply agent run failed",
+            "phase": phase,
+            "checkpoint": checkpoint or phase,
+            "hint": error_hint(phase=phase, message=message),
+        }
+
+    message = str(exc).strip() or exc.__class__.__name__
+    return {
+        "phase": checkpoint or "execute",
+        "checkpoint": checkpoint or "execute",
+        "exception_class": exc.__class__.__name__,
+        "message": message,
+        "target_url": None,
+        "hint": error_hint(phase=checkpoint, message=message),
+        "traceback": traceback.format_exc()[-1200:],
+    }
 
 
 def _preview(value: Any, *, is_file: bool = False) -> str:
@@ -91,6 +139,17 @@ def build_debug_report(
     raw = getattr(evidence, "raw", None) or {}
     step_log = raw.get("step_log") or []
 
+    timeline = _build_timeline(
+        blueprint=blueprint,
+        decision=decision,
+        answers=answers,
+        unresolved=unresolved,
+        plan=plan,
+        evidence=evidence,
+        field_status=field_status,
+        plan_steps=plan_steps,
+    )
+
     return {
         "application_url": application_url or raw.get("application_url") or "",
         "job_id": job.get("job_id"),
@@ -116,6 +175,7 @@ def build_debug_report(
         "unresolved_count": len(unresolved or []),
         "plan_step_count": len(plan_steps),
         "plan_steps": plan_steps,
+        "timeline": timeline,
         "execution": {
             "submit_performed": getattr(evidence, "submit_performed", None),
             "blocked_reason": getattr(evidence, "blocked_reason", None),
@@ -130,3 +190,114 @@ def build_debug_report(
             "submit_detail": raw.get("submit") or raw.get("submit_error"),
         } if evidence is not None else None,
     }
+
+
+def _timeline_entry(stage: str, *, status: str, detail: str = "") -> Dict[str, Any]:
+    return {"stage": stage, "status": status, "detail": detail}
+
+
+def _build_timeline(
+    *,
+    blueprint=None,
+    decision=None,
+    answers=None,
+    unresolved=None,
+    plan=None,
+    evidence=None,
+    field_status=None,
+    plan_steps=None,
+) -> List[Dict[str, Any]]:
+    entries: List[Dict[str, Any]] = []
+    provider = getattr(blueprint, "provider", None)
+    if provider:
+        entries.append(_timeline_entry(
+            "driver",
+            status="ok",
+            detail=f"Driver {provider} selected",
+        ))
+
+    fields = getattr(blueprint, "fields", None) or []
+    if fields:
+        entries.append(_timeline_entry(
+            "inspect",
+            status="ok",
+            detail=f"{len(fields)} fields detected · signature {getattr(blueprint, 'signature', '—')}",
+        ))
+
+    if decision is not None:
+        eligible = getattr(decision, "eligible", None)
+        score = getattr(decision, "score", None)
+        reason = getattr(decision, "reason", "") or ""
+        entries.append(_timeline_entry(
+            "classify",
+            status="ok" if eligible else "blocked",
+            detail=f"{'Eligible' if eligible else 'Not eligible'}"
+                   + (f" · score {score:.2f}" if isinstance(score, (int, float)) else "")
+                   + (f" · {reason}" if reason else ""),
+        ))
+
+    if answers is not None or unresolved is not None:
+        resolved_n = len(answers or [])
+        missing_n = len(unresolved or [])
+        if missing_n:
+            missing_keys = ", ".join(f.key for f in (unresolved or [])[:5])
+            entries.append(_timeline_entry(
+                "resolve",
+                status="blocked",
+                detail=f"{resolved_n} resolved, {missing_n} missing ({missing_keys})",
+            ))
+        elif field_status:
+            entries.append(_timeline_entry(
+                "resolve",
+                status="ok",
+                detail=f"All {resolved_n} required fields resolved",
+            ))
+
+    if plan_steps:
+        entries.append(_timeline_entry(
+            "plan",
+            status="ok",
+            detail=f"{len(plan_steps)} browser steps planned",
+        ))
+
+    if evidence is not None:
+        raw = getattr(evidence, "raw", None) or {}
+        step_log = raw.get("step_log") or []
+        if step_log:
+            ok_n = sum(1 for s in step_log if s.get("status") == "ok")
+            err_n = sum(1 for s in step_log if s.get("status") == "error")
+            nf_n = sum(1 for s in step_log if s.get("status") == "not_found")
+            entries.append(_timeline_entry(
+                "submit",
+                status="error" if err_n else ("warn" if nf_n else "ok"),
+                detail=f"Browser: {ok_n} ok, {nf_n} not found, {err_n} errors"
+                         + (" · submit clicked" if evidence.submit_performed else ""),
+            ))
+        elif evidence.blocked_reason:
+            entries.append(_timeline_entry(
+                "submit",
+                status="blocked",
+                detail=f"Blocked: {evidence.blocked_reason}",
+            ))
+        elif evidence.submit_performed:
+            entries.append(_timeline_entry(
+                "submit",
+                status="ok",
+                detail="Submit button clicked",
+            ))
+
+        if evidence.submit_performed:
+            if evidence.confirmation_text:
+                entries.append(_timeline_entry(
+                    "verify",
+                    status="ok",
+                    detail=f"Confirmation: {evidence.confirmation_text}",
+                ))
+            elif evidence.validation_errors:
+                entries.append(_timeline_entry(
+                    "verify",
+                    status="error",
+                    detail="; ".join(evidence.validation_errors[:3]),
+                ))
+
+    return entries

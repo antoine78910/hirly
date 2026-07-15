@@ -22,6 +22,7 @@ from apply_agent.blockers import (
 )
 from apply_agent.browser import launch_page, screenshot_b64
 from apply_agent.guardrails import canonical
+from apply_agent.models import ApplyAgentError
 
 from .models import SubmissionContext, SubmissionEvidence
 
@@ -63,35 +64,67 @@ class BrowserApplyDriver(ApplyDriver):
     async def submit(self, ctx: SubmissionContext) -> SubmissionEvidence:
         url = self.application_url(ctx.job)
         evidence = SubmissionEvidence(raw={"application_url": url})
-        async with launch_page(headless=ctx.headless) as page:
-            resp = await page.goto(url, wait_until="domcontentloaded", timeout=_TIMEOUT_MS)
-            evidence.network_ok = None if resp is None else resp.status < 400
-            try:
-                await page.wait_for_load_state("networkidle", timeout=8000)
-            except Exception:
-                pass
-            await dismiss_cookie_banner(page)
+        try:
+            async with launch_page(headless=ctx.headless) as page:
+                await self._log_step(evidence, action="open_browser", locators=["chromium"],
+                                     status="ok", value_preview="headless" if ctx.headless else "visible")
+                try:
+                    resp = await page.goto(url, wait_until="domcontentloaded", timeout=_TIMEOUT_MS)
+                    http_status = None if resp is None else resp.status
+                    evidence.network_ok = None if resp is None else resp.status < 400
+                    if evidence.network_ok is False:
+                        await self._log_step(
+                            evidence, action="navigate", locators=[url], status="error",
+                            value_preview=url[:100], error=f"HTTP {http_status}",
+                        )
+                    else:
+                        await self._log_step(
+                            evidence, action="navigate", locators=[url], status="ok", value_preview=url[:100],
+                        )
+                except Exception as exc:
+                    await self._log_step(
+                        evidence, action="navigate", locators=[url], status="error",
+                        value_preview=url[:100], error=str(exc)[:200],
+                    )
+                    raise ApplyAgentError(
+                        "open_page",
+                        f"Failed to load apply page: {exc.__class__.__name__}: {str(exc)[:300]}",
+                        target_url=url,
+                    ) from exc
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=8000)
+                except Exception:
+                    pass
+                await dismiss_cookie_banner(page)
 
-            if await detect_login_wall(page):
-                evidence.blocked_reason = "login_wall"
+                if await detect_login_wall(page):
+                    evidence.blocked_reason = "login_wall"
+                    evidence.screenshot_b64 = await screenshot_b64(page)
+                    return evidence
+                if captcha_active(await detect_captcha(page)):
+                    evidence.blocked_reason = "captcha"
+                    evidence.screenshot_b64 = await screenshot_b64(page)
+                    return evidence
+
+                await self.reveal_form(page)
+                starting_url = page.url
+
+                for step in ctx.plan.steps:
+                    if step.action == "submit":
+                        await self._click_submit(page, evidence)
+                        continue
+                    await self._apply_step(page, step, ctx.documents, evidence)
+
+                await self._gather_evidence(page, evidence, starting_url)
                 evidence.screenshot_b64 = await screenshot_b64(page)
-                return evidence
-            if captcha_active(await detect_captcha(page)):
-                evidence.blocked_reason = "captcha"
-                evidence.screenshot_b64 = await screenshot_b64(page)
-                return evidence
-
-            await self.reveal_form(page)
-            starting_url = page.url
-
-            for step in ctx.plan.steps:
-                if step.action == "submit":
-                    await self._click_submit(page, evidence)
-                    continue
-                await self._apply_step(page, step, ctx.documents, evidence)
-
-            await self._gather_evidence(page, evidence, starting_url)
-            evidence.screenshot_b64 = await screenshot_b64(page)
+        except ApplyAgentError:
+            raise
+        except Exception as exc:
+            raise ApplyAgentError(
+                "open_browser",
+                f"Browser session failed: {exc.__class__.__name__}: {str(exc)[:300]}",
+                target_url=url,
+            ) from exc
         return evidence
 
     async def _first_locator(self, page: Any, locators: List[str]):
