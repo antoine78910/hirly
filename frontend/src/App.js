@@ -68,6 +68,8 @@ import { devBypassAuth } from "@/lib/dev";
 import { isTrainingRoute } from "@/lib/trainingRoutes";
 import { needsOAuthCallbackRedirect } from "@/lib/oauthCallback";
 
+import PasswordReset from '@/pages/PasswordReset';
+
 function AppRoute({ children, requireProfile = false }) {
   if (devBypassAuth) return children;
   return <ProtectedRoute requireProfile={requireProfile}>{children}</ProtectedRoute>;
@@ -90,6 +92,7 @@ function isTrainingRoutePath(pathname) {
 }
 
 function shouldShowBottomNav(pathname) {
+  if (pathname === '/reset-password') return false;
   if (pathname === "/" || pathname === "/auth/callback") return false;
   if (LANDING_CONTRACT_PATH_SLUGS.some((slug) => pathname === `/${slug}`)) return false;
   if (pathname === "/signup" || pathname === "/signin") return false;
@@ -160,6 +163,7 @@ function AppRouter() {
     <DomainRouter>
       <ScrollManager />
       <Routes>
+        <Route path='/reset-password' element={<PasswordReset />} />
         <Route path="/en" element={<Navigate to="/" replace />} />
         <Route path="/" element={<Landing />} />
         {LANDING_CONTRACT_PATH_SLUGS.map((slug) => (

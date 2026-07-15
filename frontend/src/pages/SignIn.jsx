@@ -243,6 +243,16 @@ export default function SignIn() {
 
               {error ? <p className="text-sm font-medium text-red-600">{error}</p> : null}
 
+              <div className='flex justify-end'>
+                <Link
+                  to='/reset-password'
+                  className='text-sm font-semibold text-linkedin hover:text-linkedin-dark'
+                  data-testid='signin-forgot-password'
+                >
+                  {lang === 'fr' ? 'Mot de passe oublie ?' : 'Forgot password?'}
+                </Link>
+              </div>
+
               <Button
                 type="submit"
                 disabled={submitting}

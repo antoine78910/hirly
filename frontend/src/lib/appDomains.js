@@ -38,6 +38,7 @@ const APP_ROUTE_PREFIXES = [
 ];
 
 const MARKETING_ROUTE_PREFIXES = [
+  '/reset-password',
   "/how-it-works",
   "/use-cases",
   "/blog",

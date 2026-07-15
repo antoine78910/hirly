@@ -1,5 +1,6 @@
 /** Supabase may land OAuth params on Site URL (/) when redirect URL is not whitelisted. */
 export function needsOAuthCallbackRedirect({ pathname, search, hash }) {
+  if (pathname === '/reset-password') return false;
   if (pathname === "/auth/callback") return false;
 
   const params = new URLSearchParams(search);

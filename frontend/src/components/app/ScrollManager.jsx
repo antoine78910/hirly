@@ -4,6 +4,7 @@ import { useLocation } from "react-router-dom";
 import { isTrainingRoute } from "../../lib/trainingRoutes";
 
 function usesDocumentScroll(pathname) {
+  if (pathname === '/reset-password') return true;
   if (pathname === "/" || pathname === "/signup" || pathname === "/signin" || pathname === "/auth/callback") return true;
   if (pathname === "/terms" || pathname === "/privacy") return true;
   if (pathname === "/referral") return true;
