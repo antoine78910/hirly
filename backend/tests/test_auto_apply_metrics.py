@@ -109,6 +109,37 @@ def test_every_record_carries_driver_version_and_reason():
     assert row["status"] == "unsupported"
 
 
+def test_operational_timestamps_are_recorded():
+    db = _FakeDB()
+
+    async def run():
+        claim = await metrics.claim_attempt(db, user_id="u1", job_id="j1", provider="greenhouse", driver="greenhouse")
+        # A real submit + verification -> submitted_at and verified_at set.
+        await metrics.record_terminal(db, claim, status="submitted_success", verdict="verified_success",
+                                      evidence={"submit_performed": True})
+        return db.auto_apply_attempts.rows[0]
+
+    row = asyncio.run(run())
+    assert row["claimed_at"] is not None
+    assert row["submitted_at"] is not None
+    assert row["verified_at"] is not None
+
+
+def test_needs_user_input_has_no_submit_timestamps():
+    db = _FakeDB()
+
+    async def run():
+        claim = await metrics.claim_attempt(db, user_id="u1", job_id="j1", provider="greenhouse", driver="greenhouse")
+        await metrics.record_terminal(db, claim, status="needs_user_input", reason="needs_user_input:visa",
+                                      missing_fields=["visa"])
+        return db.auto_apply_attempts.rows[0]
+
+    row = asyncio.run(run())
+    assert row["claimed_at"] is not None
+    assert row["submitted_at"] is None
+    assert row["verified_at"] is None
+
+
 def test_known_signatures_and_summary():
     db = _FakeDB()
 

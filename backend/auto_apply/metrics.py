@@ -37,6 +37,7 @@ async def claim_attempt(
         "driver_version": driver_version,
         "status": "in_flight",
         "stage_reached": "claim",
+        "claimed_at": _now(),
         "created_at": _now(),
         "updated_at": _now(),
     }
@@ -54,6 +55,12 @@ async def record_terminal(
     compatibility_score: Optional[float] = None, blueprint_signature: Optional[str] = None,
     missing_fields: Optional[List[str]] = None, evidence: Optional[Dict[str, Any]] = None,
 ) -> None:
+    now = _now()
+    # Operational timestamps: submitted_at only when a submit was actually
+    # performed; verified_at only when a verification verdict was produced.
+    # These let us later measure queue time / submission duration / verify latency.
+    submitted_at = now if (evidence or {}).get("submit_performed") else None
+    verified_at = now if verdict is not None else None
     await db.auto_apply_attempts.update_one(
         {"id": claim["id"]},
         {"$set": {
@@ -67,7 +74,9 @@ async def record_terminal(
             "blueprint_signature": blueprint_signature,
             "missing_fields": list(missing_fields or []),
             "evidence": evidence or {},
-            "updated_at": _now(),
+            "submitted_at": submitted_at,
+            "verified_at": verified_at,
+            "updated_at": now,
         }},
     )
 

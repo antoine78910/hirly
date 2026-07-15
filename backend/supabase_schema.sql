@@ -334,3 +334,41 @@ CREATE INDEX IF NOT EXISTS idx_rome_profiles_fetched_at ON rome_profiles (fetche
 
 -- Training platform (separate from core user data): see db/supabase_training_schema.sql
 -- Creator invites (training/demo links): see db/supabase_creator_invites_schema.sql
+
+-- Auto-apply attempt records: one row per attempt at automatically submitting a
+-- job application. Columns are deliberately driver-agnostic -- provider-specific
+-- detail (evidence, missing_fields, blueprint internals) lives in `data` JSONB so
+-- new ApplyDrivers (Email, API, Browser) never require another migration.
+CREATE TABLE IF NOT EXISTS auto_apply_attempts (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  job_id TEXT NOT NULL,
+  provider TEXT,
+  driver TEXT,
+  driver_version TEXT,
+  blueprint_signature TEXT,
+  complexity TEXT,
+  compatibility_score DOUBLE PRECISION,
+  eligible BOOLEAN,
+  stage_reached TEXT,
+  status TEXT NOT NULL,
+  verdict TEXT,
+  reason TEXT,
+  claimed_at TIMESTAMPTZ,
+  submitted_at TIMESTAMPTZ,
+  verified_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ,
+  data JSONB NOT NULL
+);
+-- Idempotency invariant: a given (user_id, job_id) may have at most ONE active
+-- attempt -- one in flight, or one already successfully submitted. This partial
+-- unique index is what enforces "never submit the same application twice" at the
+-- database level (the claim insert fails instead of racing). Terminal non-success
+-- statuses fall outside the predicate, freeing the pair for a later retry.
+CREATE UNIQUE INDEX IF NOT EXISTS auto_apply_attempts_active_unique
+  ON auto_apply_attempts (user_id, job_id)
+  WHERE status IN ('in_flight', 'submitted_success');
+CREATE INDEX IF NOT EXISTS idx_auto_apply_attempts_provider ON auto_apply_attempts (provider);
+CREATE INDEX IF NOT EXISTS idx_auto_apply_attempts_status ON auto_apply_attempts (status);
+CREATE INDEX IF NOT EXISTS idx_auto_apply_attempts_signature ON auto_apply_attempts (blueprint_signature);

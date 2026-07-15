@@ -87,6 +87,7 @@ class DatabaseAdapter(ABC):
     browser_submission_runs: CollectionPort
     analytics_events: CollectionPort
     stripe_events: CollectionPort
+    auto_apply_attempts: CollectionPort
 
     @abstractmethod
     async def close(self) -> None:
