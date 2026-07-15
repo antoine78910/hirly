@@ -111,7 +111,7 @@ def test_right_swipes_endpoint_joins_users_jobs_and_attempts(monkeypatch):
     assert gh["latest_attempt"]["status"] == "prepared"
     sr = by_job["j-sr"]
     assert sr["ats_provider"] == "smartrecruiters"
-    assert sr["driver_supported"] is False
+    assert sr["driver_supported"] is True
     assert sr["latest_attempt"] is None
 
 

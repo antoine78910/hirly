@@ -52,3 +52,24 @@ def test_sensitive_required_field_is_never_resolved_from_generic_context():
     answers, unresolved = resolve(_bp(fields), {"profile.contact.first_name": "Ada"}, profile={})
     assert answers == []
     assert [f.key for f in unresolved] == ["visa"]
+
+
+def test_email_confirm_reuses_primary_email():
+    fields = [
+        NormalizedField("email_confirm", FieldType.EMAIL, required=True, supported=True,
+                        label="Confirmez votre e-mail"),
+    ]
+    answers, unresolved = resolve(_bp(fields), _ctx(), profile={})
+    assert len(answers) == 1
+    assert answers[0].value == "ada@example.com"
+    assert unresolved == []
+
+
+def test_consent_checkbox_auto_resolves():
+    fields = [
+        NormalizedField("consent", FieldType.CONSENT, required=True, supported=True),
+    ]
+    answers, unresolved = resolve(_bp(fields), {}, profile={})
+    assert len(answers) == 1
+    assert answers[0].value == "true"
+    assert unresolved == []

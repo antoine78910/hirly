@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Tuple
 
 from application_blueprint import FieldType, NormalizedField
-from apply_agent.guardrails import validate_agent_fill
+from apply_agent.guardrails import canonical, validate_agent_fill
 
 from .models import ResolvedAnswer
 
@@ -52,6 +52,16 @@ def resolve(blueprint, candidate_context: Dict[str, Any], profile: Dict[str, Any
         # Sensitive fields are handled only via saved-answer sources, which are
         # not in the generic _TYPE_SOURCES map -> they never resolve here.
         source_keys = [] if field.validation.sensitive else _TYPE_SOURCES.get(field.type, [])
+        if field.key == "email_confirm" or (
+            field.type == FieldType.EMAIL and "confirm" in canonical(field.label)
+        ):
+            source_keys = ["profile.contact.email"]
+        if field.type == FieldType.CONSENT:
+            answers.append(ResolvedAnswer(
+                field_key=field.key, field_type=field.type, value="true",
+                source="auto_apply.consent", is_file=False,
+            ))
+            continue
         resolved = None
         for source in source_keys:
             value = candidate_context.get(source)
