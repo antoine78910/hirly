@@ -90,6 +90,19 @@ def test_oneclick_url_and_can_handle():
     assert "oneclick-ui/company/Iliad-Free/publication/2270e9ac" in url
 
 
+def test_navigation_url_uses_posting_page():
+    driver = SmartRecruitersApplyDriver()
+    job = {
+        "board_token": "Accor",
+        "provider_job_id": "744000131912329",
+        "external_url": "https://jobs.smartrecruiters.com/Accor/744000131912329",
+        "publication_uuid": "f5c139fe-a63d-4402-bb16-a98b8d99ab24",
+    }
+    assert "oneclick-ui" not in driver.navigation_url(job)
+    assert "Accor" in driver.navigation_url(job)
+    assert "oneclick-ui" in driver.application_url(job)
+
+
 def test_driver_is_registered():
     from auto_apply.driver import DRIVER_REGISTRY
     import auto_apply.drivers  # noqa: F401

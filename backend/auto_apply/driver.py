@@ -18,10 +18,13 @@ from typing import Any, Dict, List, Optional
 
 from apply_agent.blockers import (
     captcha_active, collect_post_submit_errors, confirmation_text_found,
-    detect_captcha, detect_login_wall, dismiss_cookie_banner,
+    detect_bot_wall, detect_captcha, detect_login_wall, dismiss_cookie_banner,
 )
 from apply_agent.browser import launch_page, screenshot_b64
 from apply_agent.guardrails import canonical
+from apply_agent.human_browser import (
+    human_check, human_click, human_pause, human_scroll, human_select, human_type, human_upload,
+)
 from apply_agent.models import ApplyAgentError
 
 from .models import SubmissionContext, SubmissionEvidence
@@ -56,6 +59,16 @@ class BrowserApplyDriver(ApplyDriver):
     @abstractmethod
     def application_url(self, job: Dict[str, Any]) -> str: ...
 
+    def navigation_url(self, job: Dict[str, Any]) -> str:
+        """First page to open in the browser. Subclasses may use a posting page
+        before the apply form (e.g. SmartRecruiters job page -> Apply CTA)."""
+        return self.application_url(job)
+
+    async def after_navigation(self, page: Any, evidence: SubmissionEvidence) -> None:
+        """Hook after the first page load and cookie dismissal."""
+        await human_pause(page, 1200, 2800)
+        await human_scroll(page)
+
     async def reveal_form(self, page: Any) -> None:
         """Optional fixed-selector click to reveal a form behind an Apply CTA.
         Default: nothing. Subclasses override with a deterministic selector."""
@@ -63,40 +76,48 @@ class BrowserApplyDriver(ApplyDriver):
 
     async def submit(self, ctx: SubmissionContext) -> SubmissionEvidence:
         url = self.application_url(ctx.job)
-        evidence = SubmissionEvidence(raw={"application_url": url})
+        nav_url = self.navigation_url(ctx.job)
+        evidence = SubmissionEvidence(raw={"application_url": url, "navigation_url": nav_url})
         try:
             async with launch_page(headless=ctx.headless) as page:
                 await self._log_step(evidence, action="open_browser", locators=["chromium"],
                                      status="ok", value_preview="headless" if ctx.headless else "visible")
+                http_status = None
                 try:
-                    resp = await page.goto(url, wait_until="domcontentloaded", timeout=_TIMEOUT_MS)
+                    resp = await page.goto(nav_url, wait_until="domcontentloaded", timeout=_TIMEOUT_MS)
                     http_status = None if resp is None else resp.status
                     evidence.network_ok = None if resp is None else resp.status < 400
                     if evidence.network_ok is False:
                         await self._log_step(
-                            evidence, action="navigate", locators=[url], status="error",
-                            value_preview=url[:100], error=f"HTTP {http_status}",
+                            evidence, action="navigate", locators=[nav_url], status="error",
+                            value_preview=nav_url[:100], error=f"HTTP {http_status}",
                         )
                     else:
                         await self._log_step(
-                            evidence, action="navigate", locators=[url], status="ok", value_preview=url[:100],
+                            evidence, action="navigate", locators=[nav_url], status="ok", value_preview=nav_url[:100],
                         )
                 except Exception as exc:
                     await self._log_step(
-                        evidence, action="navigate", locators=[url], status="error",
-                        value_preview=url[:100], error=str(exc)[:200],
+                        evidence, action="navigate", locators=[nav_url], status="error",
+                        value_preview=nav_url[:100], error=str(exc)[:200],
                     )
                     raise ApplyAgentError(
                         "open_page",
                         f"Failed to load apply page: {exc.__class__.__name__}: {str(exc)[:300]}",
-                        target_url=url,
+                        target_url=nav_url,
                     ) from exc
                 try:
-                    await page.wait_for_load_state("networkidle", timeout=8000)
+                    await page.wait_for_load_state("networkidle", timeout=10000)
                 except Exception:
                     pass
                 await dismiss_cookie_banner(page)
 
+                if await detect_bot_wall(page, http_status=http_status):
+                    evidence.blocked_reason = "bot_protection"
+                    evidence.screenshot_b64 = await screenshot_b64(page)
+                    await self._log_step(evidence, action="bot_wall", locators=["body"],
+                                         status="blocked", error=f"HTTP {http_status or 'page'}")
+                    return evidence
                 if await detect_login_wall(page):
                     evidence.blocked_reason = "login_wall"
                     evidence.screenshot_b64 = await screenshot_b64(page)
@@ -106,7 +127,9 @@ class BrowserApplyDriver(ApplyDriver):
                     evidence.screenshot_b64 = await screenshot_b64(page)
                     return evidence
 
+                await self.after_navigation(page, evidence)
                 await self.reveal_form(page)
+                await human_pause(page, 900, 2000)
                 starting_url = page.url
 
                 for step in ctx.plan.steps:
@@ -114,6 +137,7 @@ class BrowserApplyDriver(ApplyDriver):
                         await self._click_submit(page, evidence)
                         continue
                     await self._apply_step(page, step, ctx.documents, evidence)
+                    await human_pause(page, 500, 1400)
 
                 await self._gather_evidence(page, evidence, starting_url)
                 evidence.screenshot_b64 = await screenshot_b64(page)
@@ -162,23 +186,23 @@ class BrowserApplyDriver(ApplyDriver):
             if step.action == "upload":
                 path = documents.get("resume_path") if step.file_role == "resume" else documents.get("cover_letter_path")
                 if path:
-                    await loc.set_input_files(path, timeout=10000)
+                    await human_upload(loc, page, path)
                     await self._log_step(evidence, action="upload", locators=step.locators,
                                          status="ok", value_preview=path.split("/")[-1] if path else "(file)")
                 else:
                     await self._log_step(evidence, action="upload", locators=step.locators,
                                          status="error", value_preview=preview, error="file_path_missing")
             elif step.action == "select":
-                await loc.select_option(label=str(step.value), timeout=3000)
+                await human_select(loc, page, str(step.value))
                 await self._log_step(evidence, action="select", locators=step.locators,
                                      status="ok", value_preview=preview)
             elif step.action == "check":
                 if str(step.value).strip().lower() not in ("", "false", "no", "0"):
-                    await loc.check(timeout=3000)
+                    await human_check(loc, page)
                 await self._log_step(evidence, action="check", locators=step.locators,
                                      status="ok", value_preview=preview)
             else:  # fill
-                await loc.fill(str(step.value), timeout=5000)
+                await human_type(loc, page, str(step.value))
                 await self._log_step(evidence, action="fill", locators=step.locators,
                                      status="ok", value_preview=preview)
         except Exception as exc:
@@ -198,7 +222,7 @@ class BrowserApplyDriver(ApplyDriver):
         except Exception:
             pass
         try:
-            await loc.click(timeout=8000)
+            await human_click(loc, page)
             evidence.submit_performed = True
             await self._log_step(evidence, action="submit", locators=[_SUBMIT_SELECTOR], status="ok")
         except Exception:

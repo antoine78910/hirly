@@ -23,6 +23,8 @@ const FAILURE_HINTS = {
   submit_button_not_found: "No submit button matched on the page. The ATS form layout may have changed.",
   browser_never_reached_form: "The browser opened but no form steps ran — often a page load failure or login wall.",
   browser_step_errors: "One or more fill/upload steps failed. Expand the browser execution log for details.",
+  "blocked:bot_protection": "SmartRecruiters blocked automated access (HTTP 403 / bot wall). Retry later, use a residential proxy, or submit manually.",
+  bot_protection: "SmartRecruiters blocked automated access (HTTP 403 / bot wall). Retry later, use a residential proxy, or submit manually.",
 };
 
 function stageIndex(stage) {
@@ -42,6 +44,12 @@ function hintForMissing(fieldKey, dataAvailability) {
   return "No tailored CV on this application. The user must complete Review (tailored CV) before auto-apply can upload a resume.";
 }
 
+function blockedHint(report) {
+  const reason = report?.reason || report?.debug?.execution?.blocked_reason;
+  if (!reason) return null;
+  return FAILURE_HINTS[reason] || FAILURE_HINTS[String(reason).replace(/^blocked:/, "")] || null;
+}
+
 function resolveError(report) {
   if (report?.error) return report.error;
   if (report?.debug?.error) return report.debug.error;
@@ -52,12 +60,19 @@ function resolveError(report) {
       hint: FAILURE_HINTS[report.reason] || FAILURE_HINTS.submit_not_performed,
     };
   }
+  if (report?.status === "unsupported" && report.reason) {
+    return {
+      phase: "submit",
+      message: report.reason.replaceAll("_", " "),
+      hint: blockedHint(report),
+    };
+  }
   return null;
 }
 
 function isRunFailed(report) {
   const failedStatuses = new Set(["error", "submit_failed", "verification_failed", "unsupported"]);
-  return failedStatuses.has(report?.status) || Boolean(resolveError(report));
+  return failedStatuses.has(report?.status) || Boolean(resolveError(report)) || Boolean(blockedHint(report));
 }
 
 export default function AutoApplyRunConsole({ report, embedded = false }) {

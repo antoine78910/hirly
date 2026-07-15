@@ -9,6 +9,7 @@ directly to the oneclick URL and fills via Playwright role selectors.
 from __future__ import annotations
 
 import logging
+import random
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -23,6 +24,7 @@ from application_blueprint import (
     estimate_compatibility_score,
 )
 from apply_agent.guardrails import canonical
+from apply_agent.human_browser import human_click, human_pause
 from job_providers.ats_adapters.smartrecruiters import SmartRecruitersAtsAdapter
 
 from ..driver import DRIVER_REGISTRY, BrowserApplyDriver
@@ -185,7 +187,7 @@ def _company_slug(job: Dict[str, Any], posting_url: str) -> str:
 
 class SmartRecruitersApplyDriver(BrowserApplyDriver):
     provider = "smartrecruiters"
-    version = "smartrecruiters-1.0.0"
+    version = "smartrecruiters-1.1.0"
 
     def __init__(self):
         self._adapter = SmartRecruitersAtsAdapter()
@@ -241,6 +243,10 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
             return self.oneclick_url(company, pub_uuid)
         return self.posting_url(job)
 
+    def navigation_url(self, job: Dict[str, Any]) -> str:
+        posting = self.posting_url(job)
+        return posting or self.application_url(job)
+
     async def inspect_application(self, job: Dict[str, Any]) -> ApplicationBlueprint:
         publication = await self.resolve_publication(job)
         company = publication["company"]
@@ -288,9 +294,10 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
             try:
                 loc = page.locator(selector)
                 if await loc.count():
-                    await loc.first.click(timeout=5000)
+                    await human_click(loc.first, page)
+                    await human_pause(page, 1200, 2600)
                     try:
-                        await page.wait_for_load_state("networkidle", timeout=8000)
+                        await page.wait_for_load_state("networkidle", timeout=10000)
                     except Exception:
                         pass
                     return
@@ -307,8 +314,9 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
                                      status="not_found", value_preview=preview)
                 return
             try:
-                await loc.click(timeout=3000)
-                await loc.fill(str(step.value), timeout=5000)
+                await human_click(loc, page)
+                await human_pause(page, 180, 420)
+                await loc.press_sequentially(str(step.value), delay=random.randint(48, 95))
                 try:
                     await page.keyboard.press("Enter")
                 except Exception:
@@ -335,7 +343,7 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
         except Exception:
             pass
         try:
-            await loc.click(timeout=8000)
+            await human_click(loc, page)
             evidence.submit_performed = True
             await self._log_step(evidence, action="submit", locators=list(_SUBMIT_SELECTORS), status="ok")
         except Exception:

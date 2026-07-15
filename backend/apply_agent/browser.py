@@ -13,7 +13,7 @@ import os
 import shutil
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, AsyncIterator, Dict, Optional
+from typing import Any, AsyncIterator, Dict, List, Optional
 
 from application_documents import cover_letter_to_text
 
@@ -45,6 +45,7 @@ def _chromium_executable_path() -> Optional[str]:
 
 
 def browser_context_options() -> Dict[str, Any]:
+    locale = os.environ.get("BROWSER_LOCALE", "en-US")
     return {
         "viewport": {"width": 1440, "height": 1200},
         "user_agent": (
@@ -52,9 +53,20 @@ def browser_context_options() -> Dict[str, Any]:
             "AppleWebKit/537.36 (KHTML, like Gecko) "
             "Chrome/125.0.0.0 Safari/537.36"
         ),
-        "locale": os.environ.get("BROWSER_LOCALE", "en-US"),
-        "timezone_id": os.environ.get("BROWSER_TIMEZONE", "Europe/London"),
+        "locale": locale,
+        "timezone_id": os.environ.get("BROWSER_TIMEZONE", "Europe/Paris"),
+        "extra_http_headers": {
+            "Accept-Language": f"{locale},{locale.split('-')[0]};q=0.9,en;q=0.8",
+        },
     }
+
+
+def chromium_launch_args() -> List[str]:
+    return [
+        "--disable-blink-features=AutomationControlled",
+        "--disable-dev-shm-usage",
+        "--no-sandbox",
+    ]
 
 
 def headed_browser_available() -> bool:
@@ -97,11 +109,17 @@ async def launch_page(*, headless: bool = True) -> AsyncIterator[Any]:
         browser = None
         context = None
         try:
-            launch_kwargs: Dict[str, Any] = {"headless": headless}
+            launch_kwargs: Dict[str, Any] = {
+                "headless": headless,
+                "args": chromium_launch_args(),
+            }
             if executable_path:
                 launch_kwargs["executable_path"] = executable_path
             browser_user_data_dir = os.environ.get("BROWSER_USER_DATA_DIR")
             context_options = browser_context_options()
+            init_script = (
+                "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });"
+            )
             if browser_user_data_dir:
                 context = await p.chromium.launch_persistent_context(
                     user_data_dir=browser_user_data_dir,
@@ -111,6 +129,7 @@ async def launch_page(*, headless: bool = True) -> AsyncIterator[Any]:
             else:
                 browser = await p.chromium.launch(**launch_kwargs)
                 context = await browser.new_context(**context_options)
+            await context.add_init_script(init_script)
             page = await context.new_page()
             try:
                 yield page
