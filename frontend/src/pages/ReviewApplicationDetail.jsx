@@ -81,6 +81,11 @@ export default function ReviewApplicationDetail() {
   const [editingCoverLetter, setEditingCoverLetter] = useState(false);
   const [coverLetterDraft, setCoverLetterDraft] = useState("");
   const [savingCoverLetter, setSavingCoverLetter] = useState(false);
+  const [editingCv, setEditingCv] = useState(false);
+  const [cvExperienceDraft, setCvExperienceDraft] = useState([]);
+  const [cvEducationDraft, setCvEducationDraft] = useState([]);
+  const [cvLanguagesDraft, setCvLanguagesDraft] = useState("");
+  const [savingCv, setSavingCv] = useState(false);
 
   const isReader = DOC_TYPES.has(docType);
   const hasCv = hasApplicationResume(application);
@@ -166,6 +171,61 @@ export default function ReviewApplicationDetail() {
     }
   };
 
+  const startEditCv = () => {
+    setCvExperienceDraft(
+      (resume.experience || []).map((entry) => ({
+        role: entry.role || "",
+        company: entry.company || "",
+        location: entry.location || "",
+        duration: entry.duration || "",
+        highlightsText: (entry.highlights || []).join("\n"),
+      })),
+    );
+    setCvEducationDraft(
+      (resume.education || []).map((entry) => ({
+        degree: entry.degree || "",
+        school: entry.school || "",
+        year: entry.year || "",
+      })),
+    );
+    setCvLanguagesDraft((resume.languages || []).join("\n"));
+    setEditingCv(true);
+  };
+
+  const updateExperienceField = (index, field, value) => {
+    setCvExperienceDraft((prev) => prev.map((entry, i) => (i === index ? { ...entry, [field]: value } : entry)));
+  };
+
+  const updateEducationField = (index, field, value) => {
+    setCvEducationDraft((prev) => prev.map((entry, i) => (i === index ? { ...entry, [field]: value } : entry)));
+  };
+
+  const saveCv = async () => {
+    if (!application?.application_id) return;
+    setSavingCv(true);
+    try {
+      const { data } = await api.patch(`/applications/${application.application_id}/resume`, {
+        experience: cvExperienceDraft.map((entry) => ({
+          role: entry.role,
+          company: entry.company,
+          location: entry.location,
+          duration: entry.duration,
+          highlights: entry.highlightsText.split("\n").map((line) => line.trim()).filter(Boolean),
+        })),
+        education: cvEducationDraft,
+        languages: cvLanguagesDraft.split("\n").map((line) => line.trim()).filter(Boolean),
+      });
+      setApplication(data);
+      setEditingCv(false);
+      toast.success(t("review.cvSaved"));
+    } catch (e) {
+      const detail = e?.response?.data?.detail;
+      toast.error(detail?.message || (typeof detail === "string" ? detail : t("review.cvSaveError")));
+    } finally {
+      setSavingCv(false);
+    }
+  };
+
   const approveAndSubmit = async () => {
     if (!application?.application_id) return;
     setSubmitting(true);
@@ -236,29 +296,142 @@ export default function ReviewApplicationDetail() {
               {docType === "cv" ? (
                 hasCv ? (
                   <div>
-                    <div className="mb-4 inline-flex rounded-full border shell-border bg-sprout-surface p-1">
-                      {[
-                        { value: "tailored", label: t("review.cvSourceTailored") },
-                        { value: "original", label: t("review.cvSourceOriginal") },
-                      ].map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => changeCvSource(option.value)}
-                          disabled={cvSourceSaving || (option.value === "original" && !hasOriginalCv)}
-                          data-testid={`cv-source-${option.value}`}
-                          className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-                            cvSource === option.value
-                              ? "gradient-linkedin text-white"
-                              : "shell-body hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                          }`}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                      <div className="inline-flex rounded-full border shell-border bg-sprout-surface p-1">
+                        {[
+                          { value: "tailored", label: t("review.cvSourceTailored") },
+                          { value: "original", label: t("review.cvSourceOriginal") },
+                        ].map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => changeCvSource(option.value)}
+                            disabled={cvSourceSaving || (option.value === "original" && !hasOriginalCv)}
+                            data-testid={`cv-source-${option.value}`}
+                            className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                              cvSource === option.value
+                                ? "gradient-linkedin text-white"
+                                : "shell-body hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                            }`}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                      {cvSource === "tailored" ? (
+                        editingCv ? (
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              onClick={() => setEditingCv(false)}
+                              disabled={savingCv}
+                              data-testid="cv-cancel-edit"
+                            >
+                              {t("review.cancelEdit")}
+                            </Button>
+                            <Button onClick={saveCv} disabled={savingCv} data-testid="cv-save">
+                              {savingCv ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                              {t("review.saveCv")}
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button variant="outline" onClick={startEditCv} data-testid="cv-edit">
+                            {t("review.editCv")}
+                          </Button>
+                        )
+                      ) : null}
                     </div>
+
                     {cvSource === "original" ? (
                       <ResumeCurrentPreview profile={profile} active compact />
+                    ) : editingCv ? (
+                      <div className="space-y-6" data-testid="cv-edit-form">
+                        {cvExperienceDraft.length > 0 ? (
+                          <div>
+                            <h3 className="mb-2 text-xs font-bold uppercase tracking-wide shell-body">{t("review.experience")}</h3>
+                            <div className="space-y-4">
+                              {cvExperienceDraft.map((entry, index) => (
+                                <div key={index} className="shell-surface space-y-2 rounded-2xl border shell-border p-3">
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <input
+                                      className="rounded-lg border shell-border bg-transparent px-3 py-2 text-sm"
+                                      placeholder={t("review.role")}
+                                      value={entry.role}
+                                      onChange={(e) => updateExperienceField(index, "role", e.target.value)}
+                                    />
+                                    <input
+                                      className="rounded-lg border shell-border bg-transparent px-3 py-2 text-sm"
+                                      placeholder={t("review.duration")}
+                                      value={entry.duration}
+                                      onChange={(e) => updateExperienceField(index, "duration", e.target.value)}
+                                    />
+                                    <input
+                                      className="rounded-lg border shell-border bg-transparent px-3 py-2 text-sm"
+                                      placeholder={t("review.company")}
+                                      value={entry.company}
+                                      onChange={(e) => updateExperienceField(index, "company", e.target.value)}
+                                    />
+                                    <input
+                                      className="rounded-lg border shell-border bg-transparent px-3 py-2 text-sm"
+                                      placeholder={t("review.location")}
+                                      value={entry.location}
+                                      onChange={(e) => updateExperienceField(index, "location", e.target.value)}
+                                    />
+                                  </div>
+                                  <Textarea
+                                    value={entry.highlightsText}
+                                    onChange={(e) => updateExperienceField(index, "highlightsText", e.target.value)}
+                                    rows={4}
+                                    placeholder={t("review.highlightsHint")}
+                                    className="text-sm"
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {cvEducationDraft.length > 0 ? (
+                          <div>
+                            <h3 className="mb-2 text-xs font-bold uppercase tracking-wide shell-body">{t("review.education")}</h3>
+                            <div className="space-y-3">
+                              {cvEducationDraft.map((entry, index) => (
+                                <div key={index} className="shell-surface grid grid-cols-3 gap-2 rounded-2xl border shell-border p-3">
+                                  <input
+                                    className="rounded-lg border shell-border bg-transparent px-3 py-2 text-sm"
+                                    placeholder={t("review.degree")}
+                                    value={entry.degree}
+                                    onChange={(e) => updateEducationField(index, "degree", e.target.value)}
+                                  />
+                                  <input
+                                    className="rounded-lg border shell-border bg-transparent px-3 py-2 text-sm"
+                                    placeholder={t("review.school")}
+                                    value={entry.school}
+                                    onChange={(e) => updateEducationField(index, "school", e.target.value)}
+                                  />
+                                  <input
+                                    className="rounded-lg border shell-border bg-transparent px-3 py-2 text-sm"
+                                    placeholder={t("review.year")}
+                                    value={entry.year}
+                                    onChange={(e) => updateEducationField(index, "year", e.target.value)}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        <div>
+                          <h3 className="mb-2 text-xs font-bold uppercase tracking-wide shell-body">{t("review.languages")}</h3>
+                          <Textarea
+                            value={cvLanguagesDraft}
+                            onChange={(e) => setCvLanguagesDraft(e.target.value)}
+                            rows={4}
+                            placeholder={t("review.languagesHint")}
+                            className="text-sm"
+                          />
+                        </div>
+                      </div>
                     ) : (
                       <CVPreview
                         contact={contact}

@@ -950,6 +950,26 @@ class CoverLetterEditRequest(BaseModel):
     body_text: str
 
 
+class ExperienceEntryEdit(BaseModel):
+    role: str = ""
+    company: str = ""
+    location: str = ""
+    duration: str = ""
+    highlights: List[str] = []
+
+
+class EducationEntryEdit(BaseModel):
+    degree: str = ""
+    school: str = ""
+    year: str = ""
+
+
+class ResumeEditRequest(BaseModel):
+    experience: List[ExperienceEntryEdit] = []
+    education: List[EducationEntryEdit] = []
+    languages: List[str] = []
+
+
 class StructuredProfileDataUpdate(BaseModel):
     contact: Dict[str, Any] = Field(default_factory=dict)
     education: List[Dict[str, Any]] = Field(default_factory=list)
@@ -9352,6 +9372,65 @@ async def edit_application_cover_letter(application_id: str, body: CoverLetterEd
     ) or app_doc
     job = await db.jobs.find_one({"job_id": updated.get("job_id")}, {"_id": 0})
     return _public_application_doc(_normalize_application_status_fields(updated), job)
+
+
+@api_router.patch("/applications/{application_id}/resume")
+async def edit_application_resume(application_id: str, body: ResumeEditRequest, user: User = Depends(get_current_user)):
+    """Let the user rewrite the experience/education/languages content of
+    their AI-tailored CV, then regenerate the actual DOCX so what they see
+    matches what would be submitted."""
+    app_doc = await db.applications.find_one(
+        {"application_id": application_id, "user_id": user.user_id},
+        {"_id": 0},
+    )
+    if not app_doc:
+        raise HTTPException(status_code=404, detail="Application not found")
+    profile = await db.profiles.find_one({"user_id": user.user_id}, {"_id": 0})
+    if not profile:
+        raise HTTPException(status_code=400, detail="Profile not found")
+    job = await db.jobs.find_one({"job_id": app_doc.get("job_id")}, {"_id": 0}) or {}
+
+    existing_resume = dict(app_doc.get("tailored_resume_structured") or app_doc.get("tailored_resume") or {})
+    existing_resume["experience"] = [item.model_dump() for item in body.experience]
+    existing_resume["education"] = [item.model_dump() for item in body.education]
+    existing_resume["languages"] = [lang.strip() for lang in body.languages if lang and lang.strip()]
+
+    generated = {
+        "tailored_resume_structured": existing_resume,
+        "tailored_cover_letter": app_doc.get("tailored_cover_letter") or app_doc.get("cover_letter") or {},
+        "job_title": job.get("title") or "",
+    }
+    result = build_application_package(profile, generated)
+
+    now = datetime.now(timezone.utc).isoformat()
+    update_fields: Dict[str, Any] = {
+        "tailored_resume_structured": result["tailored_resume_structured"],
+        "tailored_resume": result["tailored_resume_structured"],
+        "ai_tailored_cv_file_b64": result["tailored_cv_file_b64"],
+        "ai_tailored_cv_filename": result["tailored_cv_filename"],
+        "ai_tailored_cv_mime": result["tailored_cv_mime"],
+        "updated_at": now,
+    }
+    # Only overwrite the active submission file if the user isn't currently
+    # using their own original CV -- editing the AI text shouldn't silently
+    # switch them back to it, but the backup above keeps the edit available
+    # whenever they do switch back.
+    if (app_doc.get("cv_source") or "tailored") != "original":
+        update_fields["tailored_cv_file_b64"] = result["tailored_cv_file_b64"]
+        update_fields["tailored_cv_filename"] = result["tailored_cv_filename"]
+        update_fields["tailored_cv_mime"] = result["tailored_cv_mime"]
+
+    _reset_review_status_if_approved(update_fields, app_doc)
+    await db.applications.update_one(
+        {"application_id": application_id, "user_id": user.user_id},
+        {"$set": update_fields},
+    )
+    updated = await db.applications.find_one(
+        {"application_id": application_id, "user_id": user.user_id},
+        {"_id": 0},
+    ) or app_doc
+    job_doc = await db.jobs.find_one({"job_id": updated.get("job_id")}, {"_id": 0})
+    return _public_application_doc(_normalize_application_status_fields(updated), job_doc)
 
 
 async def require_admin_user(user: User = Depends(get_current_user)) -> User:
