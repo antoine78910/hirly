@@ -112,6 +112,43 @@ def test_cv_source_switch_back_to_tailored_restores_ai_backup(monkeypatch):
     assert result["tailored_cv_filename"] == "ai_resume.docx"
 
 
+def test_cv_source_switch_back_to_tailored_rebuilds_when_no_backup_exists(monkeypatch):
+    """Applications generated before the ai_tailored_cv_file_b64 backup field
+    existed have none saved -- switching back to 'tailored' must rebuild the
+    DOCX from the still-intact structured resume data instead of 400ing."""
+    app = _base_application(
+        cv_source="original",
+        tailored_cv_file_b64="ORIGINAL_B64",
+        tailored_cv_filename="my_cv.pdf",
+    )
+    app.pop("ai_tailored_cv_file_b64")
+    app.pop("ai_tailored_cv_filename")
+    app.pop("ai_tailored_cv_mime")
+    db = _DB(
+        applications=[app],
+        profiles=[{"user_id": "user_1", "cv_original_b64": "ORIGINAL_B64", "cv_filename": "my_cv.pdf", "cv_mime": "application/pdf"}],
+        jobs=[{"job_id": "job_1"}],
+    )
+    monkeypatch.setattr(server, "db", db)
+    monkeypatch.setattr(
+        server,
+        "build_application_package",
+        lambda profile, generated: {
+            "tailored_cv_file_b64": "REBUILT_AI_B64",
+            "tailored_cv_filename": "rebuilt.docx",
+            "tailored_cv_mime": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        },
+    )
+    user = _user()
+
+    result = asyncio.run(server.set_application_cv_source("app_1", server.CvSourceUpdate(source="tailored"), user=user))
+
+    assert result["cv_source"] == "tailored"
+    assert result["tailored_cv_file_b64"] == "REBUILT_AI_B64"
+    # Backup is saved so future switches don't need to rebuild again.
+    assert result["ai_tailored_cv_file_b64"] == "REBUILT_AI_B64"
+
+
 def test_cv_source_switch_resets_approval_status(monkeypatch):
     db = _DB(
         applications=[_base_application(document_review_status="approved", document_review_approved_at="2026-01-01T00:00:00Z")],

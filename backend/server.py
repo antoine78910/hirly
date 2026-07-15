@@ -9205,11 +9205,27 @@ async def set_application_cv_source(application_id: str, body: CvSourceUpdate, u
         update_fields["tailored_cv_filename"] = profile.get("cv_filename")
         update_fields["tailored_cv_mime"] = profile.get("cv_mime")
     else:
-        if not app_doc.get("ai_tailored_cv_file_b64"):
-            raise HTTPException(status_code=400, detail="No AI-tailored CV is available for this application.")
-        update_fields["tailored_cv_file_b64"] = app_doc["ai_tailored_cv_file_b64"]
-        update_fields["tailored_cv_filename"] = app_doc.get("ai_tailored_cv_filename")
-        update_fields["tailored_cv_mime"] = app_doc.get("ai_tailored_cv_mime")
+        ai_file_b64 = app_doc.get("ai_tailored_cv_file_b64")
+        ai_filename = app_doc.get("ai_tailored_cv_filename")
+        ai_mime = app_doc.get("ai_tailored_cv_mime")
+        if not ai_file_b64:
+            # Applications generated before this backup field existed never had
+            # one saved. The structured resume data was never touched by the
+            # source switch, though, so rebuild the DOCX from it instead of
+            # failing -- and save the result as the backup for next time.
+            profile = await db.profiles.find_one({"user_id": user.user_id}, {"_id": 0})
+            rebuilt = build_application_package(profile or {}, app_doc) if profile else {}
+            ai_file_b64 = rebuilt.get("tailored_cv_file_b64")
+            ai_filename = rebuilt.get("tailored_cv_filename")
+            ai_mime = rebuilt.get("tailored_cv_mime")
+            if not ai_file_b64:
+                raise HTTPException(status_code=400, detail="No AI-tailored CV is available for this application.")
+            update_fields["ai_tailored_cv_file_b64"] = ai_file_b64
+            update_fields["ai_tailored_cv_filename"] = ai_filename
+            update_fields["ai_tailored_cv_mime"] = ai_mime
+        update_fields["tailored_cv_file_b64"] = ai_file_b64
+        update_fields["tailored_cv_filename"] = ai_filename
+        update_fields["tailored_cv_mime"] = ai_mime
 
     _reset_review_status_if_approved(update_fields, app_doc)
     await db.applications.update_one(
