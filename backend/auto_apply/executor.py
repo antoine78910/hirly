@@ -213,15 +213,26 @@ async def execute_application(
 
         # The submit control was never actioned -> the submission never happened.
         if not evidence.submit_performed:
+            raw = evidence.raw or {}
+            submit_detail = raw.get("submit") or raw.get("submit_error")
+            step_log = raw.get("step_log") or []
+            if submit_detail == "button_not_found":
+                reason = "submit_button_not_found"
+            elif not step_log:
+                reason = "browser_never_reached_form"
+            elif any(s.get("status") == "error" for s in step_log):
+                reason = "browser_step_errors"
+            else:
+                reason = "submit_not_performed"
             debug = build_debug_report(
                 job=job, profile=profile, app_doc=app_doc, blueprint=blueprint, decision=decision,
                 answers=answers, plan=application_plan, candidate_context=candidate_context,
                 application_url=app_url, evidence=evidence,
             )
-            await metrics.record_terminal(db, claim, status="submit_failed", reason="submit_not_performed",
+            await metrics.record_terminal(db, claim, status="submit_failed", reason=reason,
                                           stage_reached="submit", evidence=safe_evidence, **base)
             return _report(started=started, stage="submit", status="submit_failed",
-                           reason="submit_not_performed", evidence=evidence, debug=debug, **report_common)
+                           reason=reason, evidence=evidence, debug=debug, **report_common)
 
         checkpoint = "verify"
         verdict = verify(evidence)

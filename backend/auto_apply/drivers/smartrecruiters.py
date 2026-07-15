@@ -34,9 +34,12 @@ _ONECLICK_URL = "https://jobs.smartrecruiters.com/oneclick-ui/company/{company}/
 _CONFIG_URL = "https://jobs.smartrecruiters.com/oneclick-ui/api/company/{company}/publication/{uuid}/configuration"
 _SUBMIT_SELECTORS = (
     'role=button[name="Envoyer"]',
+    'role=button[name="Envoyer ma candidature"]',
+    'role=button[name="Soumettre"]',
     'role=button[name="Send"]',
     'role=button[name="Submit"]',
     'role=button[name="Submit application"]',
+    'button:has-text("Envoyer")',
 )
 _SR_FIELD_TYPE_MAP = {
     "INPUT_TEXT": FieldType.TEXT,

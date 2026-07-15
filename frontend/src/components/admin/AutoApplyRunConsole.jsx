@@ -18,6 +18,13 @@ const TIMELINE_DOT = {
   warn: "bg-amber-400",
 };
 
+const FAILURE_HINTS = {
+  submit_not_performed: "The submit button was never clicked. Check the browser log below for missing fields or a changed submit selector.",
+  submit_button_not_found: "No submit button matched on the page. The ATS form layout may have changed.",
+  browser_never_reached_form: "The browser opened but no form steps ran — often a page load failure or login wall.",
+  browser_step_errors: "One or more fill/upload steps failed. Expand the browser execution log for details.",
+};
+
 function stageIndex(stage) {
   const idx = STAGES.indexOf(String(stage || "").toLowerCase());
   return idx >= 0 ? idx : -1;
@@ -36,15 +43,29 @@ function hintForMissing(fieldKey, dataAvailability) {
 }
 
 function resolveError(report) {
-  return report?.error || report?.debug?.error || null;
+  if (report?.error) return report.error;
+  if (report?.debug?.error) return report.debug.error;
+  if (report?.status === "submit_failed" && report.reason) {
+    return {
+      phase: "submit",
+      message: report.reason.replaceAll("_", " "),
+      hint: FAILURE_HINTS[report.reason] || FAILURE_HINTS.submit_not_performed,
+    };
+  }
+  return null;
 }
 
-export default function AutoApplyRunConsole({ report }) {
+function isRunFailed(report) {
+  const failedStatuses = new Set(["error", "submit_failed", "verification_failed", "unsupported"]);
+  return failedStatuses.has(report?.status) || Boolean(resolveError(report));
+}
+
+export default function AutoApplyRunConsole({ report, embedded = false }) {
   if (!report) return null;
 
   const debug = report.debug || {};
   const runError = resolveError(report);
-  const isFailed = report.status === "error" || Boolean(runError);
+  const isFailed = isRunFailed(report);
   const reached = stageIndex(report.stage_reached);
   const execution = debug.execution || {};
   const stepLog = execution.step_log || [];
@@ -53,18 +74,22 @@ export default function AutoApplyRunConsole({ report }) {
   const dataAvailability = debug.data_availability || {};
   const timeline = debug.timeline || [];
 
+  const rootClass = embedded ? "space-y-4" : "mt-6 space-y-4";
+
   return (
-    <div className="mt-6 space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-display text-lg font-bold text-zinc-900">Run console</h2>
-        <p className="text-xs text-zinc-500">
-          {report.duration_ms != null ? `${report.duration_ms} ms` : ""}
-          {report.driver_version ? ` · ${report.driver_version}` : ""}
-        </p>
-      </div>
+    <div className={rootClass}>
+      {!embedded ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-display text-lg font-bold text-zinc-900">Run console</h2>
+          <p className="text-xs text-zinc-500">
+            {report.duration_ms != null ? `${report.duration_ms} ms` : ""}
+            {report.driver_version ? ` · ${report.driver_version}` : ""}
+          </p>
+        </div>
+      ) : null}
 
       {isFailed ? (
-        <ErrorPanel error={runError} reason={report.reason} stage={report.stage_reached} />
+        <ErrorPanel error={runError} reason={report.reason} stage={report.stage_reached} embedded={embedded} />
       ) : null}
 
       <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 shadow-lg">
@@ -103,7 +128,7 @@ export default function AutoApplyRunConsole({ report }) {
           </div>
         </div>
 
-        <div className="max-h-[70vh] overflow-y-auto p-4 font-mono text-xs text-zinc-100">
+        <div className={`overflow-y-auto p-4 font-mono text-xs text-zinc-100 ${embedded ? "max-h-none" : "max-h-[70vh]"}`}>
           {timeline.length ? (
             <Section title="Run timeline">
               <div className="space-y-2">
@@ -233,7 +258,7 @@ export default function AutoApplyRunConsole({ report }) {
             </Section>
           ) : report.status === "prepared" ? (
             <Section title="Browser execution log">
-              <LogLine level="info">Dry run — browser was not opened. Uncheck dry run to watch the form fill.</LogLine>
+              <LogLine level="info">Dry run — browser was not opened. Uncheck dry run to submit for real.</LogLine>
             </Section>
           ) : report.stage_reached === "resolve" ? (
             <Section title="Browser execution log">
@@ -247,6 +272,9 @@ export default function AutoApplyRunConsole({ report }) {
             </Section>
           ) : null}
 
+          {execution.submit_detail ? (
+            <LogLine level="error">Submit detail: {String(execution.submit_detail)}</LogLine>
+          ) : null}
           {execution.blocked_reason ? (
             <LogLine level="error">Blocked: {execution.blocked_reason}</LogLine>
           ) : null}
@@ -279,33 +307,48 @@ export default function AutoApplyRunConsole({ report }) {
   );
 }
 
-function ErrorPanel({ error, reason, stage }) {
+function ErrorPanel({ error, reason, stage, embedded = false }) {
   const message = error?.message || reason || "Unknown error";
   const phase = error?.phase || stage || "execute";
 
+  const panelClass = embedded
+    ? "rounded-xl border border-red-500/40 bg-red-950/40 px-4 py-4"
+    : "rounded-xl border border-red-200 bg-red-50 px-4 py-4 shadow-sm";
+
+  const titleClass = embedded ? "text-red-100" : "text-red-900";
+  const messageClass = embedded ? "text-red-200" : "text-red-800";
+  const labelClass = embedded ? "text-red-300/70" : "text-red-700/70";
+  const valueClass = embedded ? "text-red-100" : "text-red-900/80";
+  const hintClass = embedded
+    ? "mt-3 rounded-lg border border-red-500/30 bg-red-950/60 px-3 py-2 text-sm text-red-100"
+    : "mt-3 rounded-lg border border-red-200 bg-white/70 px-3 py-2 text-sm text-red-900";
+
   return (
-    <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-4 shadow-sm">
+    <div className={panelClass}>
       <div className="flex items-start gap-3">
-        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-100 text-sm font-bold text-red-700">
+        <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+          embedded ? "bg-red-500/20 text-red-200" : "bg-red-100 text-red-700"
+        }`}
+        >
           !
         </div>
         <div className="min-w-0 flex-1">
-          <p className="font-display text-base font-bold text-red-900">Run failed at {stage}</p>
-          <p className="mt-1 text-sm font-medium text-red-800">{message}</p>
-          <dl className="mt-3 grid gap-2 text-xs text-red-900/80 sm:grid-cols-2">
+          <p className={`font-display text-base font-bold ${titleClass}`}>Run failed at {stage}</p>
+          <p className={`mt-1 text-sm font-medium ${messageClass}`}>{message}</p>
+          <dl className={`mt-3 grid gap-2 text-xs sm:grid-cols-2 ${valueClass}`}>
             <div>
-              <dt className="font-semibold uppercase tracking-wide text-red-700/70">Phase</dt>
+              <dt className={`font-semibold uppercase tracking-wide ${labelClass}`}>Phase</dt>
               <dd className="font-mono">{phase}</dd>
             </div>
             {error?.exception_class ? (
               <div>
-                <dt className="font-semibold uppercase tracking-wide text-red-700/70">Exception</dt>
+                <dt className={`font-semibold uppercase tracking-wide ${labelClass}`}>Exception</dt>
                 <dd className="font-mono">{error.exception_class}</dd>
               </div>
             ) : null}
             {error?.target_url ? (
               <div className="sm:col-span-2">
-                <dt className="font-semibold uppercase tracking-wide text-red-700/70">Target URL</dt>
+                <dt className={`font-semibold uppercase tracking-wide ${labelClass}`}>Target URL</dt>
                 <dd className="break-all font-mono">
                   <a href={error.target_url} target="_blank" rel="noreferrer" className="underline">
                     {error.target_url}
@@ -315,7 +358,7 @@ function ErrorPanel({ error, reason, stage }) {
             ) : null}
           </dl>
           {error?.hint ? (
-            <p className="mt-3 rounded-lg border border-red-200 bg-white/70 px-3 py-2 text-sm text-red-900">
+            <p className={hintClass}>
               <span className="font-semibold">What to try: </span>
               {error.hint}
             </p>

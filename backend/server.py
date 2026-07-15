@@ -59,6 +59,7 @@ from email_addresses import INBOUND_MANAGED_EMAIL_ENABLED, managed_reply_address
 from inbound_email_service import process_inbound_resend_email
 from svix.webhooks import Webhook, WebhookVerificationError
 from apply_agent.models import ApplyAgentError
+from apply_agent.browser import effective_headless
 from apply_agent.runner import run_apply_attempt
 from auto_apply.executor import execute_application as auto_apply_execute_application
 from auto_apply.metrics import latest_attempt as auto_apply_latest_attempt
@@ -9623,7 +9624,7 @@ async def admin_auto_apply_execute(body: AdminAutoApplyExecuteRequest, admin: Us
     result = await auto_apply_execute_application(
         db, job, profile, app_doc, target_user.model_dump(mode="json"),
         dry_run=body.dry_run,
-        headless=_browser_engine_headless() if body.headless is None else body.headless,
+        headless=_resolve_auto_apply_headless(body.headless),
     )
     attempt = await auto_apply_latest_attempt(db, target_user.user_id, job.get("job_id"))
     return {"result": result, "attempt": attempt}
@@ -9776,7 +9777,7 @@ async def admin_auto_apply_lab_execute(body: AdminAutoApplyValidateRequest, admi
     return await auto_apply_execute_application(
         db, job, profile, app_doc, admin.model_dump(mode="json"),
         dry_run=body.dry_run,
-        headless=_browser_engine_headless() if body.headless is None else body.headless,
+        headless=_resolve_auto_apply_headless(body.headless),
     )
 
 
@@ -12366,6 +12367,12 @@ async def _load_or_create_agent_application(job_id: str, user: User) -> tuple[Di
 
 def _browser_engine_headless() -> bool:
     return os.environ.get("BROWSER_HEADLESS", "true").lower() not in ("0", "false", "no", "off")
+
+
+def _resolve_auto_apply_headless(requested: Optional[bool]) -> bool:
+    if requested is None:
+        return _browser_engine_headless()
+    return effective_headless(requested)
 
 
 def _dev_tools_enabled() -> bool:

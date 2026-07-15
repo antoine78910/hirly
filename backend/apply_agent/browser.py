@@ -57,11 +57,30 @@ def browser_context_options() -> Dict[str, Any]:
     }
 
 
+def headed_browser_available() -> bool:
+    """True when the host can open a visible Chromium window (local dev)."""
+    if os.name == "nt":
+        return True
+    if os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"):
+        return True
+    return False
+
+
+def effective_headless(requested: bool = True) -> bool:
+    """Servers without a display must stay headless even if the client asks otherwise."""
+    if not requested and headed_browser_available():
+        return False
+    if not requested and not headed_browser_available():
+        logger.warning("headed_browser_unavailable_forcing_headless")
+    return True
+
+
 @asynccontextmanager
 async def launch_page(*, headless: bool = True) -> AsyncIterator[Any]:
     """Yields a ready-to-use Playwright `Page`. Closes browser/context/page on
     exit regardless of outcome.
     """
+    headless = effective_headless(headless)
     try:
         from playwright.async_api import async_playwright
     except ImportError as exc:
