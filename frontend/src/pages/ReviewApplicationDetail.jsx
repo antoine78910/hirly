@@ -13,7 +13,6 @@ import { toast } from "sonner";
 import { api } from "../lib/api";
 import { useAiSettings } from "../hooks/useAiSettings";
 import { useAppLocale } from "../context/AppLocaleContext";
-import { useAuth } from "../context/AuthContext";
 import { BrandHeader } from "../components/app/AppScreenHeader";
 import { AppPage, AppPageScroll, SHELL_PAGE_CLASS } from "../components/app/AppPageShell";
 import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
@@ -27,7 +26,7 @@ import {
   hasApplicationCoverLetter,
   hasApplicationResume,
 } from "../lib/applicationDocuments";
-import { resolveCvDisplayTemplate, withContactPhoto } from "../lib/cvTemplate";
+import { cvPhotoDataUrl, resolveCvDisplayTemplate, withContactPhoto } from "../lib/cvTemplate";
 import { Button } from "../components/ui/button";
 import { Textarea } from "../components/ui/textarea";
 
@@ -72,7 +71,6 @@ export default function ReviewApplicationDetail() {
   const navigate = useNavigate();
   const { t } = useAppLocale();
   const { settings } = useAiSettings();
-  const { user } = useAuth();
   const reviewEnabled = settings.reviewDocuments;
 
   const [application, setApplication] = useState(null);
@@ -118,8 +116,8 @@ export default function ReviewApplicationDetail() {
   }, [applicationId, docType, navigate, reviewEnabled]);
 
   const contact = useMemo(
-    () => withContactPhoto(profile?.contact || {}, user?.picture),
-    [profile?.contact, user?.picture],
+    () => withContactPhoto(profile?.contact || {}, cvPhotoDataUrl(profile)),
+    [profile],
   );
 
   const resume = getApplicationResume(application);

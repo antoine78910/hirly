@@ -115,7 +115,16 @@ def test_normalize_application_generation_preserves_ats_analysis():
     assert normalized["ats_analysis"]["final_checklist"] == ["Use standard headings."]
 
 
-def test_build_application_package_outputs_clean_ats_safe_docx():
+def _docx_text(document):
+    text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+    for table in document.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                text += "\n" + cell.text
+    return text
+
+
+def test_build_application_package_outputs_hirly_default_docx():
     profile = {
         "contact": {
             "name": "Jane Doe",
@@ -129,6 +138,7 @@ def test_build_application_package_outputs_clean_ats_safe_docx():
         "cv_original_b64": base64.b64encode(b"%PDF-1.4 fake").decode("ascii"),
     }
     generated = {
+        "job_title": "Frontend Engineer",
         "tailored_resume_structured": {
             "template_recommendation": "ats_classic",
             "headline": "Frontend Engineer",
@@ -152,21 +162,20 @@ def test_build_application_package_outputs_clean_ats_safe_docx():
     package = build_application_package(profile, generated)
 
     assert package["tailored_cv_mime"].endswith("document")
-    assert package["template_used"] == "ats_classic"
+    # Hard-locked to the single Hirly template regardless of template_recommendation.
+    assert package["template_used"] == "hirly_default"
     assert set(package["available_templates"]) == SUPPORTED_GENERATED_TEMPLATES
     assert package["resume_quality_report"]["status"] == "pass"
     document = docx.Document(io.BytesIO(base64.b64decode(package["tailored_cv_file_b64"])))
-    text = "\n".join(paragraph.text for paragraph in document.paragraphs)
-    assert "Professional Summary" in text
-    assert "Relevant Focus" in text
-    assert "Core Skills" in text
-    assert "Languages" in text
-    assert "Professional Experience" in text
+    text = _docx_text(document)
+    assert "EXPERIENCE" in text
+    assert "EDUCATION" in text
+    assert "LANGUAGES" in text
     assert "Jane Doe" in text
     assert "Frontend Engineer" in text
 
 
-def test_luxe_minimal_template_is_selectable_and_still_text_extractable():
+def test_luxe_minimal_recommendation_is_overridden_to_hirly_default():
     profile = {
         "contact": {
             "name": "Jane Doe",
@@ -198,15 +207,14 @@ def test_luxe_minimal_template_is_selectable_and_still_text_extractable():
 
     package = build_application_package(profile, generated)
     document = docx.Document(io.BytesIO(base64.b64decode(package["tailored_cv_file_b64"])))
-    text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+    text = _docx_text(document)
 
-    assert package["template_used"] == "luxe_minimal"
+    assert package["template_used"] == "hirly_default"
     assert "Business Development Representative" in text
-    assert "Professional Summary" in text
-    assert "Core Skills" in text
+    assert "EXPERIENCE" in text
 
 
-def test_all_generated_templates_are_selectable_and_text_extractable():
+def test_all_template_recommendations_are_overridden_to_hirly_default():
     profile = {
         "contact": {
             "name": "Jane Doe",
@@ -240,10 +248,9 @@ def test_all_generated_templates_are_selectable_and_text_extractable():
 
         package = build_application_package(profile, generated)
         document = docx.Document(io.BytesIO(base64.b64decode(package["tailored_cv_file_b64"])))
-        text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+        text = _docx_text(document)
 
-        assert package["template_used"] == template_name
+        assert package["template_used"] == "hirly_default"
         assert "Jane Doe" in text
-        assert "Professional Summary" in text
-        assert "Core Skills" in text
+        assert "EXPERIENCE" in text
         assert "Account Executive" in text

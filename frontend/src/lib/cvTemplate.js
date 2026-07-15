@@ -26,24 +26,15 @@ export const PRO_CV_COLORS_PLAIN = {
 /** @deprecated use resolveProfessionalVariant */
 export const PRO_CV_COLORS = PRO_CV_COLORS_PHOTO;
 
-const LEGACY_PROFESSIONAL_ALIASES = new Set([
-  "modern",
-  "two_column",
-  "blue_split",
-  "modern_pro",
-  "ats_classic",
-  "executive_compact",
-  "luxe_minimal",
-  "studio_slate",
-]);
+export const HIRLY_DEFAULT_CV_TEMPLATE = "hirly_default";
 
-export function resolveCvDisplayTemplate(template) {
-  const value = (template || "").trim().toLowerCase();
-  if (value === "classic" || value === "minimal") return value;
-  if (value === PROFESSIONAL_CV_TEMPLATE || LEGACY_PROFESSIONAL_ALIASES.has(value)) {
-    return PROFESSIONAL_CV_TEMPLATE;
-  }
-  return PROFESSIONAL_CV_TEMPLATE;
+// Hard-locked to the single Hirly-branded template for every user (see the
+// "New default Hirly CV template" plan) -- ignores whatever template was
+// requested. PROFESSIONAL_CV_TEMPLATE is kept only because
+// ProfessionalCVPreview etc. still exist unused, in case per-user template
+// variety returns later.
+export function resolveCvDisplayTemplate() {
+  return HIRLY_DEFAULT_CV_TEMPLATE;
 }
 
 export function parseLanguageEntry(entry) {
@@ -77,6 +68,14 @@ export function hasContactPhoto(contact = {}) {
 export function withContactPhoto(contact = {}, picture) {
   if (!picture || getContactPhotoUrl(contact)) return contact;
   return { ...contact, picture };
+}
+
+/** The Hirly CV template shows the photo extracted from the user's own
+ * uploaded CV, never their Google/LinkedIn login avatar -- no CV photo means
+ * no photo at all, by design. */
+export function cvPhotoDataUrl(profile) {
+  if (!profile?.cv_photo_b64) return null;
+  return `data:${profile.cv_photo_mime || "image/jpeg"};base64,${profile.cv_photo_b64}`;
 }
 
 /** Photo collar template when a profile image exists; otherwise plain two-column. */

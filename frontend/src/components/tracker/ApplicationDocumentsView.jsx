@@ -11,7 +11,7 @@ import {
   hasApplicationResume,
   isApplicationGenerating,
 } from "../../lib/applicationDocuments";
-import { resolveCvDisplayTemplate, withContactPhoto } from "../../lib/cvTemplate";
+import { cvPhotoDataUrl, resolveCvDisplayTemplate, withContactPhoto } from "../../lib/cvTemplate";
 
 export default function ApplicationDocumentsView({
   application,
@@ -32,7 +32,7 @@ export default function ApplicationDocumentsView({
   const hasCover = hasApplicationCoverLetter(application);
   const generating = isApplicationGenerating(application);
   const template = resolveCvDisplayTemplate(resume?.template_recommendation || profile?.template_style);
-  const contact = withContactPhoto(profile?.contact || {}, userPicture);
+  const contact = withContactPhoto(profile?.contact || {}, cvPhotoDataUrl(profile));
   const job = application?.job;
 
   if (generating && !hasCv && !hasCover) {

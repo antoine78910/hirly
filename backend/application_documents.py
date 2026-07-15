@@ -13,7 +13,9 @@ from copy import deepcopy
 from typing import Any, Dict, List, Tuple
 
 import docx
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 from docx.shared import RGBColor
 from docx.shared import Inches, Pt
 
@@ -28,8 +30,22 @@ SUPPORTED_GENERATED_TEMPLATES = {
     "luxe_minimal",
     "studio_slate",
     "blue_split",
+    "hirly_default",
 }
 TEMPLATE_SPECS = {
+    "hirly_default": {
+        "font": "Arial",
+        "body_size": 10,
+        "name_size": 20,
+        "heading_size": 11,
+        "heading_color": RGBColor(0, 0, 0),
+        "accent_color": RGBColor(107, 114, 128),
+        "top_margin": 0.55,
+        "bottom_margin": 0.55,
+        "left_margin": 0.6,
+        "right_margin": 0.6,
+        "space_after": 3,
+    },
     "ats_classic": {
         "font": "Arial",
         "body_size": 10,
@@ -142,33 +158,19 @@ def _safe_set_run_text(run: Any, text: Any) -> None:
 def build_application_package(profile: Dict[str, Any], generated: Dict[str, Any]) -> Dict[str, Any]:
     profile = sanitize_docx_text(profile)
     generated = sanitize_docx_text(normalize_application_generation(generated))
-    original_b64 = profile.get("cv_original_b64")
-    original_bytes = base64.b64decode(original_b64) if original_b64 else b""
-    original_mime = profile.get("cv_mime") or ""
     original_filename = profile.get("cv_filename") or "cv"
     tailored = normalize_resume_structured(generated.get("tailored_resume_structured") or generated.get("tailored_resume") or {})
     quality_report = generated.get("resume_quality_report") or validate_resume_quality(tailored)
     template_used = _template_name(tailored)
 
-    if original_mime == DOCX_MIME or original_filename.lower().endswith(".docx"):
-        file_bytes, status, notes = _build_preserved_docx(original_bytes, profile, tailored)
-        filename = _tailored_filename(original_filename, ".docx")
-        mime = DOCX_MIME
-    elif original_mime == "application/pdf" or original_filename.lower().endswith(".pdf"):
-        file_bytes = _build_clean_docx(profile, tailored)
-        filename = _tailored_filename(original_filename, ".docx")
-        mime = DOCX_MIME
-        status = "approximate"
-        notes = (
-            "Original PDF was preserved in the profile, but direct PDF template editing "
-            "is not reliable in V1. Generated a clean tailored DOCX from the extracted structure."
-        )
-    else:
-        file_bytes = _build_clean_docx(profile, tailored)
-        filename = _tailored_filename(original_filename, ".docx")
-        mime = DOCX_MIME
-        status = "not_supported" if not original_bytes else "approximate"
-        notes = "Original file is not a DOCX template. Generated a clean tailored DOCX."
+    photo_b64 = profile.get("cv_photo_b64")
+    photo_bytes = base64.b64decode(photo_b64) if photo_b64 else None
+    job_title = generated.get("job_title") or ""
+    file_bytes = _build_hirly_docx(profile, tailored, job_title=job_title, photo_bytes=photo_bytes)
+    filename = _tailored_filename(original_filename, ".docx")
+    mime = DOCX_MIME
+    status = "generated"
+    notes = "Generated using the Hirly CV template."
 
     logger.info("DOCX_BUILD_SUCCESS filename=%s status=%s", filename, status)
     return {
@@ -230,6 +232,236 @@ def cover_letter_to_text(cover_letter: Dict[str, Any]) -> str:
 def _tailored_filename(original_filename: str, suffix: str) -> str:
     stem = original_filename.rsplit(".", 1)[0] if "." in original_filename else original_filename
     return f"{stem}_tailored{suffix}"
+
+
+def _circular_photo_png(photo_bytes: bytes, size_px: int = 300) -> bytes:
+    """Center-crop to square and mask to a circle via alpha channel -- python-docx
+    has no native circular-clip, so the transparency itself is what reads as
+    circular once embedded on the page's white background."""
+    from PIL import Image, ImageDraw
+
+    with Image.open(io.BytesIO(photo_bytes)) as image:
+        image = image.convert("RGB")
+        width, height = image.size
+        side = min(width, height)
+        left = (width - side) // 2
+        top = (height - side) // 2
+        image = image.crop((left, top, left + side, top + side)).resize((size_px, size_px))
+        mask = Image.new("L", (size_px, size_px), 0)
+        ImageDraw.Draw(mask).ellipse((0, 0, size_px, size_px), fill=255)
+        circular = Image.new("RGBA", (size_px, size_px))
+        circular.paste(image, (0, 0), mask)
+        buffer = io.BytesIO()
+        circular.save(buffer, format="PNG")
+        return buffer.getvalue()
+
+
+def _clear_table_borders(table: Any) -> None:
+    tbl_pr = table._tbl.tblPr
+    borders = OxmlElement("w:tblBorders")
+    for edge in ("top", "left", "bottom", "right", "insideH", "insideV"):
+        element = OxmlElement(f"w:{edge}")
+        element.set(qn("w:val"), "nil")
+        borders.append(element)
+    tbl_pr.append(borders)
+
+
+def _set_dotted_bottom_border(paragraph: Any) -> None:
+    p_pr = paragraph._p.get_or_add_pPr()
+    p_bdr = OxmlElement("w:pBdr")
+    bottom = OxmlElement("w:bottom")
+    bottom.set(qn("w:val"), "dotted")
+    bottom.set(qn("w:sz"), "6")
+    bottom.set(qn("w:space"), "4")
+    bottom.set(qn("w:color"), "999999")
+    p_bdr.append(bottom)
+    p_pr.append(p_bdr)
+
+
+def _parse_language_entry(entry: Any) -> Tuple[str, str]:
+    raw = _safe_text(entry).strip()
+    if not raw:
+        return "", ""
+    for sep in (" - ", " – ", " — "):
+        if sep in raw:
+            name, _, level = raw.partition(sep)
+            return name.strip(), level.strip()
+    if ":" in raw:
+        name, _, level = raw.partition(":")
+        return name.strip(), level.strip()
+    return raw, ""
+
+
+def _add_hirly_section_heading(document: Any, text: str, template: Dict[str, Any]) -> Any:
+    paragraph = _safe_add_paragraph(document)
+    paragraph.paragraph_format.space_before = Pt(10)
+    paragraph.paragraph_format.space_after = Pt(2)
+    run = paragraph.add_run(_safe_text(text).upper())
+    run.bold = True
+    run.font.name = template["font"]
+    run.font.size = Pt(template["heading_size"])
+    run.font.color.rgb = template["heading_color"]
+    _set_dotted_bottom_border(paragraph)
+    return paragraph
+
+
+def _add_title_dates_line(document: Any, title: str, dates: Any, template: Dict[str, Any]) -> Any:
+    """Bold title on the left, dates right-aligned on the same line via a
+    right tab stop at the text area's right edge -- python-docx has no
+    side-by-side paragraph layout, but tab stops give the same visual result
+    without needing a table for this part."""
+    paragraph = _safe_add_paragraph(document)
+    section = document.sections[0]
+    text_width = section.page_width - section.left_margin - section.right_margin
+    paragraph.paragraph_format.tab_stops.add_tab_stop(text_width, WD_TAB_ALIGNMENT.RIGHT)
+    run = paragraph.add_run(_safe_text(title))
+    run.bold = True
+    run.font.name = template["font"]
+    run.font.size = Pt(template["body_size"])
+    if dates:
+        date_run = paragraph.add_run(f"\t{_safe_text(dates)}")
+        date_run.font.name = template["font"]
+        date_run.font.size = Pt(template["body_size"])
+        date_run.font.color.rgb = template["accent_color"]
+    return paragraph
+
+
+def _write_hirly_header(
+    document: Any,
+    contact: Dict[str, Any],
+    name: str,
+    job_title: str,
+    photo_bytes: bytes | None,
+    template: Dict[str, Any],
+) -> None:
+    table = document.add_table(rows=1, cols=2)
+    _clear_table_borders(table)
+    left_cell, right_cell = table.rows[0].cells
+    left_cell.width = Inches(2.3)
+    right_cell.width = Inches(3.7)
+
+    left_para = left_cell.paragraphs[0]
+    if photo_bytes:
+        try:
+            circular = _circular_photo_png(photo_bytes)
+            run = left_para.add_run()
+            run.add_picture(io.BytesIO(circular), width=Inches(0.9), height=Inches(0.9))
+        except Exception:
+            logger.warning("hirly_docx_photo_embed_failed", exc_info=True)
+
+    name_para = left_cell.add_paragraph()
+    name_run = name_para.add_run(_safe_text(name))
+    name_run.bold = True
+    name_run.font.name = template["font"]
+    name_run.font.size = Pt(template["name_size"])
+
+    if job_title:
+        title_para = left_cell.add_paragraph()
+        title_run = title_para.add_run(_safe_text(job_title))
+        title_run.italic = True
+        title_run.font.name = template["font"]
+        title_run.font.size = Pt(template["body_size"])
+        title_run.font.color.rgb = template["accent_color"]
+
+    contact_lines = [
+        ("☎", contact.get("phone")),
+        ("✉", contact.get("email")),
+        ("\U0001F517", contact.get("linkedin")),
+        ("\U0001F4CD", contact.get("location")),
+    ]
+    first = True
+    for icon, value in contact_lines:
+        if not value:
+            continue
+        para = right_cell.paragraphs[0] if first else right_cell.add_paragraph()
+        first = False
+        para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        run = para.add_run(f"{icon}  {_safe_text(value)}")
+        run.font.name = template["font"]
+        run.font.size = Pt(template["body_size"])
+
+
+def _write_hirly_languages(document: Any, languages: List[Any], template: Dict[str, Any]) -> None:
+    parsed = [_parse_language_entry(entry) for entry in languages]
+    parsed = [item for item in parsed if item[0]]
+    if not parsed:
+        return
+    half = (len(parsed) + 1) // 2
+    columns = (parsed[:half], parsed[half:])
+    rows = max(len(columns[0]), len(columns[1]))
+    table = document.add_table(rows=rows, cols=2)
+    _clear_table_borders(table)
+    for row_index in range(rows):
+        for col_index, column in enumerate(columns):
+            if row_index >= len(column):
+                continue
+            name, level = column[row_index]
+            paragraph = table.cell(row_index, col_index).paragraphs[0]
+            name_run = paragraph.add_run(_safe_text(name))
+            name_run.bold = True
+            name_run.font.name = template["font"]
+            name_run.font.size = Pt(template["body_size"])
+            if level:
+                level_run = paragraph.add_run(f"   {_safe_text(level)}")
+                level_run.font.name = template["font"]
+                level_run.font.size = Pt(template["body_size"])
+                level_run.font.color.rgb = template["accent_color"]
+
+
+def _build_hirly_docx(
+    profile: Dict[str, Any],
+    tailored: Dict[str, Any],
+    job_title: str = "",
+    photo_bytes: bytes | None = None,
+) -> bytes:
+    document = docx.Document()
+    template = TEMPLATE_SPECS["hirly_default"]
+    _configure_ats_safe_document(document, template)
+
+    contact = sanitize_docx_text(deepcopy(profile.get("contact") or {}))
+    tailored_contact = tailored.get("contact") or {}
+    merged_contact = {**contact, **{key: value for key, value in tailored_contact.items() if value}}
+    name = merged_contact.get("name") or "Candidate"
+
+    _write_hirly_header(document, merged_contact, name, job_title, photo_bytes, template)
+
+    experience = tailored.get("experience") or []
+    if experience:
+        _add_hirly_section_heading(document, "Experience", template)
+        for item in experience:
+            _add_title_dates_line(document, item.get("role") or "", item.get("duration"), template)
+            meta_line = " — ".join(
+                _safe_text(item.get(key)) for key in ("company", "location") if item.get(key)
+            )
+            if meta_line:
+                paragraph = _safe_add_paragraph(document, meta_line)
+                for run in paragraph.runs:
+                    run.font.color.rgb = template["accent_color"]
+                    run.font.name = template["font"]
+                    run.font.size = Pt(template["body_size"])
+            for highlight in item.get("highlights") or []:
+                _safe_add_paragraph(document, highlight, style="List Bullet")
+
+    education = tailored.get("education") or []
+    if education:
+        _add_hirly_section_heading(document, "Education", template)
+        for item in education:
+            _add_title_dates_line(document, item.get("degree") or "", item.get("year"), template)
+            if item.get("school"):
+                paragraph = _safe_add_paragraph(document, item.get("school"))
+                for run in paragraph.runs:
+                    run.font.color.rgb = template["accent_color"]
+                    run.font.name = template["font"]
+                    run.font.size = Pt(template["body_size"])
+
+    languages = tailored.get("languages") or []
+    if languages:
+        _add_hirly_section_heading(document, "Languages", template)
+        _write_hirly_languages(document, languages, template)
+
+    out = io.BytesIO()
+    document.save(out)
+    return out.getvalue()
 
 
 def _build_preserved_docx(original_bytes: bytes, profile: Dict[str, Any], tailored: Dict[str, Any]) -> Tuple[bytes, str, str]:
@@ -367,8 +599,11 @@ def _build_clean_docx(profile: Dict[str, Any], tailored: Dict[str, Any]) -> byte
 
 
 def _template_name(tailored: Dict[str, Any]) -> str:
-    name = str(tailored.get("template_recommendation") or "ats_classic").strip()
-    return name if name in SUPPORTED_GENERATED_TEMPLATES else "ats_classic"
+    # Hard-locked to the single Hirly-branded template for every user --
+    # see the "New default Hirly CV template" plan for context. Ignores
+    # tailored.template_recommendation entirely (kept as a field for now in
+    # case per-user template variety returns later).
+    return "hirly_default"
 
 
 def _template_spec(tailored: Dict[str, Any]) -> Dict[str, Any]:

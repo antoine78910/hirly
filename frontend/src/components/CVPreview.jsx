@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { Linkedin, Mail, MapPin, Phone } from "lucide-react";
 import {
   PRO_CV_COLORS_PHOTO,
   PRO_CV_COLORS_PLAIN,
@@ -9,6 +10,7 @@ import {
   resolveCvDisplayTemplate,
   resolveProfessionalVariant,
   socialLinksFromContact,
+  HIRLY_DEFAULT_CV_TEMPLATE,
   PROFESSIONAL_CV_TEMPLATE,
 } from "../lib/cvTemplate";
 
@@ -275,12 +277,136 @@ function ProfessionalCVPreview({ contact, resume }) {
   return <ProfessionalPlainPreview contact={contact} resume={resume} />;
 }
 
+const HirlySection = ({ label, children }) => (
+  <section className="mt-5 first:mt-0">
+    <h3 className="mb-2.5 border-b border-dashed border-zinc-300 pb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-900">
+      {label}
+    </h3>
+    {children}
+  </section>
+);
+
+function HirlyDefaultCVPreview({ contact, resume, job }) {
+  const name = (contact.name || "Your Name").trim();
+  const photoUrl = getContactPhotoUrl(contact);
+  const languages = (resume.languages || []).map(parseLanguageEntry).filter((lang) => lang.name);
+  const half = Math.ceil(languages.length / 2);
+  const languageColumns = [languages.slice(0, half), languages.slice(half)];
+
+  return (
+    <div className="flex aspect-[210/297] w-full min-h-[680px] flex-col overflow-hidden bg-white px-8 py-8 text-zinc-900" data-testid="cv-preview">
+      <div className="flex items-start justify-between gap-6">
+        <div className="flex items-center gap-4">
+          {photoUrl ? (
+            <img
+              src={photoUrl}
+              alt=""
+              className="h-16 w-16 shrink-0 rounded-full object-cover"
+              referrerPolicy="no-referrer"
+            />
+          ) : null}
+          <div>
+            <h2 className="font-display text-[1.5rem] font-bold leading-tight tracking-tight text-zinc-900">{name}</h2>
+            {job?.title ? <p className="mt-0.5 text-sm italic text-zinc-500">{job.title}</p> : null}
+          </div>
+        </div>
+        <div className="shrink-0 space-y-1 text-right text-[11px] leading-relaxed text-zinc-600">
+          {contact.phone ? (
+            <p className="flex items-center justify-end gap-1.5"><Phone className="h-3 w-3" />{contact.phone}</p>
+          ) : null}
+          {contact.email ? (
+            <p className="flex items-center justify-end gap-1.5 break-all"><Mail className="h-3 w-3 shrink-0" />{contact.email}</p>
+          ) : null}
+          {contact.linkedin ? (
+            <p className="flex items-center justify-end gap-1.5 break-all"><Linkedin className="h-3 w-3 shrink-0" />{contact.linkedin}</p>
+          ) : null}
+          {contact.location ? (
+            <p className="flex items-center justify-end gap-1.5"><MapPin className="h-3 w-3" />{contact.location}</p>
+          ) : null}
+        </div>
+      </div>
+
+      {resume.experience?.length > 0 && (
+        <HirlySection label="Experience">
+          <ul className="space-y-4">
+            {resume.experience.map((entry, index) => (
+              <li key={index}>
+                <div className="flex items-baseline justify-between gap-3">
+                  <p className="font-semibold text-[13px] text-zinc-900">{entry.role}</p>
+                  <p className="shrink-0 text-[11px] text-zinc-500">{entry.duration}</p>
+                </div>
+                <p className="text-[11px] text-zinc-500">{[entry.company, entry.location].filter(Boolean).join(" — ")}</p>
+                {entry.highlights?.length > 0 && (
+                  <ul className="mt-1.5 space-y-1">
+                    {entry.highlights.map((highlight, hi) => (
+                      <li key={hi} className="flex gap-2 text-[12px] leading-relaxed text-zinc-700">
+                        <span className="text-zinc-400">•</span>
+                        <span>{highlight}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            ))}
+          </ul>
+        </HirlySection>
+      )}
+
+      {resume.education?.length > 0 && (
+        <HirlySection label="Education">
+          <ul className="space-y-3">
+            {resume.education.map((entry, index) => (
+              <li key={index}>
+                <div className="flex items-baseline justify-between gap-3">
+                  <p className="font-semibold text-[13px] text-zinc-900">{entry.degree}</p>
+                  <p className="shrink-0 text-[11px] text-zinc-500">{entry.year}</p>
+                </div>
+                <p className="text-[11px] text-zinc-500">{entry.school}</p>
+              </li>
+            ))}
+          </ul>
+        </HirlySection>
+      )}
+
+      {languages.length > 0 && (
+        <HirlySection label="Languages">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[12px]">
+            {languageColumns.map((column, colIndex) => (
+              <div key={colIndex} className="space-y-1.5">
+                {column.map((lang) => (
+                  <p key={lang.name}>
+                    <span className="font-semibold text-zinc-900">{lang.name}</span>
+                    {lang.level ? <span className="ml-2 text-zinc-500">{lang.level}</span> : null}
+                  </p>
+                ))}
+              </div>
+            ))}
+          </div>
+        </HirlySection>
+      )}
+    </div>
+  );
+}
+
 export default function CVPreview({ contact = {}, resume = {}, job, template = "modern", theme = "dark" }) {
   const resolvedTemplate = resolveCvDisplayTemplate(template);
   const palette = PREVIEW_THEMES[theme] || PREVIEW_THEMES.dark;
   const name = (contact.name || "Your Name").trim();
   const contactLine = [contact.email, contact.phone, contact.location, contact.linkedin, contact.website]
     .filter(Boolean).join("  •  ");
+
+  if (resolvedTemplate === HIRLY_DEFAULT_CV_TEMPLATE) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className={`overflow-hidden rounded-2xl border ${palette.container}`}
+      >
+        <HirlyDefaultCVPreview contact={contact} resume={resume} job={job} />
+      </motion.div>
+    );
+  }
 
   if (resolvedTemplate === PROFESSIONAL_CV_TEMPLATE) {
     return (

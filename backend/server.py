@@ -3551,6 +3551,71 @@ def _extract_pdf_image_bytes(content: bytes) -> list[bytes]:
     return images
 
 
+def _looks_like_headshot(image_bytes: bytes) -> bool:
+    """Best-effort filter for "is this embedded image plausibly a candidate
+    photo" vs a logo/banner/decorative graphic -- no face detection, just
+    size + aspect ratio. Deliberately conservative: false negatives (missing
+    a real photo) are far less costly than false positives (grabbing a logo).
+    """
+    try:
+        from PIL import Image
+
+        with Image.open(io.BytesIO(image_bytes)) as image:
+            width, height = image.size
+    except Exception:
+        return False
+    if min(width, height) < 120:
+        return False
+    aspect = width / height if height else 0
+    return 0.7 <= aspect <= 1.3
+
+
+def _extract_docx_inline_images(content: bytes) -> list[bytes]:
+    """Pull embedded picture bytes out of a DOCX via its inline shapes --
+    python-docx has no direct `.image` accessor, so resolve each shape's
+    relationship id to the underlying media part manually."""
+    images: list[bytes] = []
+    try:
+        document = docx_lib.Document(io.BytesIO(content))
+        for shape in document.inline_shapes:
+            try:
+                blip = shape._inline.graphic.graphicData.pic.blipFill.blip
+                rid = blip.embed
+                part = document.part.related_parts[rid]
+                images.append(part.blob)
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return images
+
+
+def _extract_cv_photo(fmt: str, content: bytes) -> tuple[Optional[bytes], Optional[str]]:
+    """Best-effort candidate-photo extraction from an uploaded CV, used to
+    put the user's own photo (not their OAuth login avatar) on the header of
+    their AI-tailored CV. Never raises -- a missed photo just means the
+    generated CV renders with no photo at all."""
+    try:
+        if fmt == "pdf":
+            candidates = _extract_pdf_image_bytes(content)
+        elif fmt == "docx":
+            candidates = _extract_docx_inline_images(content)
+        else:
+            return None, None
+        from PIL import Image
+
+        for candidate in candidates:
+            if not _looks_like_headshot(candidate):
+                continue
+            with Image.open(io.BytesIO(candidate)) as image:
+                buffer = io.BytesIO()
+                image.convert("RGB").save(buffer, format="JPEG", quality=90)
+                return buffer.getvalue(), "image/jpeg"
+    except Exception as exc:
+        logger.warning("cv_photo_extraction_failed error=%s", exc)
+    return None, None
+
+
 def _rasterize_pdf_pages(content: bytes, max_pages: int = 4, dpi: int = 200) -> list[bytes]:
     """Render PDF pages to PNG when no text layer exists (common for mobile scans)."""
     try:
@@ -4607,6 +4672,7 @@ def _build_generated_application_doc(
             package_status = data_quality_status
             generation_error = data_quality_status
         else:
+            gen["job_title"] = job.get("title")
             application_package = package_builder(profile, gen)
     except Exception as exc:
         logger.exception("DOCX_BUILD_FAILED")
@@ -5036,6 +5102,7 @@ async def upload_cv(file: UploadFile = File(...), user: User = Depends(get_curre
             status_code=400,
             detail="Please upload a PDF, DOCX, RTF, TXT, or image (PNG/JPG/HEIC/WEBP) resume.",
         )
+    photo_bytes, photo_mime = _extract_cv_photo(fmt, content)
     try:
         cv_text = await extract_cv_text_from_upload(filename, content, file.content_type)
     except LLMProviderNotConfigured:
@@ -5095,6 +5162,8 @@ async def upload_cv(file: UploadFile = File(...), user: User = Depends(get_curre
         "cv_filename": filename,
         "cv_original_b64": base64.b64encode(content).decode("ascii"),
         "cv_mime": mime,
+        "cv_photo_b64": base64.b64encode(photo_bytes).decode("ascii") if photo_bytes else None,
+        "cv_photo_mime": photo_mime,
         "contact": contact,
         "summary": extracted.get("summary", ""),
         "skills": intelligence.get("skills") or extracted.get("skills", []),
