@@ -181,5 +181,8 @@ class _Registry:
         provider = str(job.get("ats_provider") or job.get("provider") or "").lower()
         return self._by_provider.get(provider)
 
+    def providers(self) -> List[str]:
+        return sorted(self._by_provider.keys())
+
 
 DRIVER_REGISTRY = _Registry()

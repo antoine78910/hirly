@@ -9428,6 +9428,70 @@ async def admin_auto_apply_metrics(provider: str = "greenhouse", admin: User = D
     return await auto_apply_metrics_summary(db, provider)
 
 
+@api_router.get("/admin/auto-apply/right-swipes")
+async def admin_auto_apply_right_swipes(
+    limit: int = Query(default=100, ge=1, le=300),
+    admin: User = Depends(require_admin_user),
+):
+    """Recent right swipes across all users, joined with user + job data, driver
+    support and the latest auto-apply attempt. Powers the admin auto-apply test
+    bench: each row can be replayed through the production pipeline."""
+    from auto_apply.driver import DRIVER_REGISTRY
+
+    swipes = await _admin_safe_find(
+        db.swipes, {"direction": "right"}, limit=limit, sort=[("created_at", -1)],
+    )
+    job_ids = list(dict.fromkeys(s.get("job_id") for s in swipes if s.get("job_id")))
+    user_ids = list(dict.fromkeys(s.get("user_id") for s in swipes if s.get("user_id")))
+
+    jobs = {j.get("job_id"): j for j in await _admin_jobs_for_ids(job_ids)}
+
+    users: Dict[str, Dict[str, Any]] = {}
+    chunk_size = 80
+    for index in range(0, len(user_ids), chunk_size):
+        chunk = user_ids[index:index + chunk_size]
+        for row in await _admin_safe_find(db.users, {"user_id": {"$in": chunk}}, limit=len(chunk)):
+            users[row.get("user_id")] = row
+
+    latest_attempts: Dict[tuple, Dict[str, Any]] = {}
+    for index in range(0, len(job_ids), chunk_size):
+        chunk = job_ids[index:index + chunk_size]
+        rows = await _admin_safe_find(db.auto_apply_attempts, {"job_id": {"$in": chunk}}, limit=2000)
+        for row in rows:
+            key = (row.get("user_id"), row.get("job_id"))
+            previous = latest_attempts.get(key)
+            if previous is None or (row.get("created_at") or "") > (previous.get("created_at") or ""):
+                latest_attempts[key] = row
+
+    items: List[Dict[str, Any]] = []
+    for swipe_row in swipes:
+        job = jobs.get(swipe_row.get("job_id")) or {}
+        user_row = users.get(swipe_row.get("user_id")) or {}
+        attempt = latest_attempts.get((swipe_row.get("user_id"), swipe_row.get("job_id")))
+        items.append({
+            "user_id": swipe_row.get("user_id"),
+            "user_email": user_row.get("email") or "",
+            "user_name": user_row.get("name") or "",
+            "job_id": swipe_row.get("job_id"),
+            "job_found": bool(job),
+            "title": job.get("title") or "",
+            "company": job.get("company") or "",
+            "ats_provider": str(job.get("ats_provider") or job.get("provider") or "").lower() or "unknown",
+            "apply_url": job.get("external_url") or job.get("selected_apply_url") or job.get("apply_url") or "",
+            "driver_supported": bool(job) and DRIVER_REGISTRY.for_job(job) is not None,
+            "swiped_at": swipe_row.get("created_at"),
+            "latest_attempt": {
+                "status": attempt.get("status"),
+                "stage_reached": attempt.get("stage_reached"),
+                "reason": attempt.get("reason"),
+                "verdict": attempt.get("verdict"),
+                "missing_fields": attempt.get("missing_fields") or [],
+                "updated_at": attempt.get("updated_at"),
+            } if attempt else None,
+        })
+    return {"swipes": items, "supported_providers": DRIVER_REGISTRY.providers()}
+
+
 class AdminAutoApplyValidateRequest(BaseModel):
     greenhouse_url: str
     resume_b64: Optional[str] = None

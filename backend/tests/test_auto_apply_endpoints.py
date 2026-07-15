@@ -62,6 +62,59 @@ def test_status_endpoint_returns_latest_attempt(monkeypatch):
     assert result["attempt"]["status"] == "needs_user_input"
 
 
+def test_right_swipes_endpoint_joins_users_jobs_and_attempts(monkeypatch):
+    import auto_apply.drivers  # noqa: F401  (register drivers as startup does)
+
+    swipe_rows = [
+        {"user_id": "u1", "job_id": "j-gh", "direction": "right", "created_at": "2026-07-15T10:00:00+00:00"},
+        {"user_id": "u2", "job_id": "j-sr", "direction": "right", "created_at": "2026-07-15T09:00:00+00:00"},
+    ]
+    user_rows = [
+        {"user_id": "u1", "email": "u1@example.com", "name": "User One"},
+        {"user_id": "u2", "email": "u2@example.com", "name": "User Two"},
+    ]
+    attempt_rows = [
+        {"user_id": "u1", "job_id": "j-gh", "status": "prepared", "stage_reached": "plan",
+         "reason": "ready_not_submitted", "created_at": "2026-07-15T10:05:00+00:00",
+         "updated_at": "2026-07-15T10:05:00+00:00", "missing_fields": []},
+    ]
+    jobs = [
+        {"job_id": "j-gh", "title": "Analyst", "company": "Acme", "ats_provider": "greenhouse",
+         "external_url": "https://boards.greenhouse.io/acme/jobs/1"},
+        {"job_id": "j-sr", "title": "Consultant", "company": "Beta", "ats_provider": "smartrecruiters",
+         "external_url": "https://jobs.smartrecruiters.com/beta/1"},
+    ]
+
+    async def fake_safe_find(collection, filter=None, limit=10000, sort=None):
+        name = getattr(collection, "name", None) or getattr(collection, "table_name", "")
+        if "swipe" in str(name):
+            return swipe_rows
+        if "user" in str(name):
+            return user_rows
+        if "attempt" in str(name):
+            return attempt_rows
+        return []
+
+    async def fake_jobs_for_ids(job_ids):
+        return [j for j in jobs if j["job_id"] in job_ids]
+
+    monkeypatch.setattr(server, "_admin_safe_find", fake_safe_find)
+    monkeypatch.setattr(server, "_admin_jobs_for_ids", fake_jobs_for_ids)
+    admin = server.User(user_id="admin", email="anto.delbos@gmail.com", name="Admin")
+    out = asyncio.run(server.admin_auto_apply_right_swipes(limit=100, admin=admin))
+
+    assert "greenhouse" in out["supported_providers"]
+    by_job = {row["job_id"]: row for row in out["swipes"]}
+    gh = by_job["j-gh"]
+    assert gh["user_email"] == "u1@example.com"
+    assert gh["driver_supported"] is True
+    assert gh["latest_attempt"]["status"] == "prepared"
+    sr = by_job["j-sr"]
+    assert sr["ats_provider"] == "smartrecruiters"
+    assert sr["driver_supported"] is False
+    assert sr["latest_attempt"] is None
+
+
 def test_greenhouse_driver_registered_via_startup_import():
     import auto_apply.drivers  # noqa: F401  (startup performs this registration)
     from auto_apply.driver import DRIVER_REGISTRY

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Loader2, Play } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Loader2, Play, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import { adminApiErrorMessage } from "../lib/adminApi";
@@ -29,6 +29,13 @@ function fileToText(file) {
   });
 }
 
+const fmtDate = (value) => {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+};
+
 export default function AdminAutoApplyLab() {
   const [url, setUrl] = useState("");
   const [resumeFile, setResumeFile] = useState(null);
@@ -39,6 +46,60 @@ export default function AdminAutoApplyLab() {
   const [accessDenied, setAccessDenied] = useState(false);
   const [error, setError] = useState("");
   const [report, setReport] = useState(null);
+
+  const [swipes, setSwipes] = useState([]);
+  const [supportedProviders, setSupportedProviders] = useState([]);
+  const [swipesLoading, setSwipesLoading] = useState(true);
+  const [runningRow, setRunningRow] = useState(null);
+
+  const loadSwipes = useCallback(async () => {
+    setSwipesLoading(true);
+    try {
+      const { data } = await api.get("/admin/auto-apply/right-swipes?limit=150");
+      setSwipes(data.swipes || []);
+      setSupportedProviders(data.supported_providers || []);
+    } catch (err) {
+      if (err?.response?.status === 403) setAccessDenied(true);
+      else toast.error(adminApiErrorMessage(err, "Could not load right swipes"));
+    } finally {
+      setSwipesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadSwipes();
+  }, [loadSwipes]);
+
+  const runForSwipe = async (row, isDryRun) => {
+    if (!isDryRun) {
+      const confirmed = window.confirm(
+        `Submit a REAL application to ${row.company || row.job_id} on behalf of ${row.user_email || row.user_id}?`,
+      );
+      if (!confirmed) return;
+    }
+    const key = `${row.user_id}:${row.job_id}`;
+    setRunningRow(key);
+    setError("");
+    setReport(null);
+    try {
+      const { data } = await api.post(
+        "/admin/auto-apply/execute",
+        { job_id: row.job_id, user_id: row.user_id, dry_run: isDryRun },
+        { timeout: 240000 },
+      );
+      const result = data.result || data;
+      setReport(result);
+      toast.success(`${result.status} (stage: ${result.stage_reached}, ${result.duration_ms}ms)`);
+      loadSwipes();
+    } catch (err) {
+      if (err?.response?.status === 403) setAccessDenied(true);
+      const message = adminApiErrorMessage(err, "Execution failed");
+      setError(message);
+      toast.error(message);
+    } finally {
+      setRunningRow(null);
+    }
+  };
 
   const run = async () => {
     setError("");
@@ -86,14 +147,121 @@ export default function AdminAutoApplyLab() {
 
   return (
     <AdminShell
-      title="Auto-Apply Validation"
-      subtitle="Run one real Greenhouse application through the production pipeline (admin only)."
+      title="Auto-Apply Lab"
+      subtitle="Replay user right swipes through the production auto-apply pipeline, or validate a pasted job URL."
+      actions={(
+        <Button variant="outline" onClick={loadSwipes} disabled={swipesLoading}>
+          {swipesLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          Refresh
+        </Button>
+      )}
     >
       {accessDenied ? <AdminAccessDenied /> : null}
       {error && !accessDenied ? (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       ) : null}
 
+      {!accessDenied ? (
+        <div className="mb-8">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-display text-lg font-bold text-zinc-900">User right swipes</h2>
+            <p className="text-xs text-zinc-500">
+              Supported ATS: {supportedProviders.length ? supportedProviders.join(", ") : "—"}
+            </p>
+          </div>
+          <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1000px] text-left text-sm">
+                <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
+                  <tr>
+                    <th className="px-4 py-3">User</th>
+                    <th className="px-4 py-3">Job</th>
+                    <th className="px-4 py-3">ATS</th>
+                    <th className="px-4 py-3">Last attempt</th>
+                    <th className="px-4 py-3">Swiped</th>
+                    <th className="px-4 py-3 text-right">Auto apply</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100">
+                  {swipesLoading ? (
+                    <tr>
+                      <td className="px-4 py-8 text-center text-zinc-500" colSpan={6}>
+                        <Loader2 className="mx-auto h-5 w-5 animate-spin" />
+                      </td>
+                    </tr>
+                  ) : swipes.length ? swipes.map((row) => {
+                    const key = `${row.user_id}:${row.job_id}`;
+                    const isRunning = runningRow === key;
+                    const attempt = row.latest_attempt;
+                    return (
+                      <tr key={key} className="hover:bg-zinc-50">
+                        <td className="px-4 py-3">
+                          <p className="font-semibold text-zinc-900">{row.user_email || row.user_id}</p>
+                          {row.user_name ? <p className="text-xs text-zinc-400">{row.user_name}</p> : null}
+                        </td>
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-zinc-900">{row.title || row.job_id}</p>
+                          <p className="text-xs text-zinc-400">{row.company || (row.job_found ? "" : "job no longer in DB")}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="capitalize">{row.ats_provider}</span>
+                          <p className={`text-xs font-semibold ${row.driver_supported ? "text-emerald-600" : "text-zinc-400"}`}>
+                            {row.driver_supported ? "driver ready" : "no driver"}
+                          </p>
+                        </td>
+                        <td className="px-4 py-3">
+                          {attempt ? (
+                            <>
+                              <span className="inline-flex rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-semibold capitalize text-zinc-700">
+                                {String(attempt.status || "").replaceAll("_", " ") || "unknown"}
+                              </span>
+                              {attempt.reason ? (
+                                <p className="mt-1 max-w-[220px] truncate text-xs text-zinc-400" title={attempt.reason}>
+                                  {attempt.reason}
+                                </p>
+                              ) : null}
+                            </>
+                          ) : (
+                            <span className="text-xs text-zinc-400">never run</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-zinc-600">{fmtDate(row.swiped_at)}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={!row.job_found || Boolean(runningRow)}
+                              onClick={() => runForSwipe(row, true)}
+                            >
+                              {isRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                              Dry run
+                            </Button>
+                            <Button
+                              size="sm"
+                              disabled={!row.job_found || !row.driver_supported || Boolean(runningRow)}
+                              onClick={() => runForSwipe(row, false)}
+                            >
+                              {isRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                              Apply
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  }) : (
+                    <tr>
+                      <td className="px-4 py-8 text-center text-zinc-500" colSpan={6}>No right swipes found.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <h2 className="mb-3 font-display text-lg font-bold text-zinc-900">URL validation harness</h2>
       <div className="max-w-2xl space-y-4 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
         <div className="space-y-1">
           <label className="text-sm font-medium text-zinc-800">Greenhouse job URL</label>

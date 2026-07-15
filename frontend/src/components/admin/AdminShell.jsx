@@ -14,6 +14,7 @@ import {
   UserSearch,
   Users,
   FlaskConical,
+  Zap,
 } from "lucide-react";
 import { BRAND } from "../../lib/brand";
 import { trackEvent } from "../../lib/analytics";
@@ -30,6 +31,7 @@ const navItems = [
   { to: "/admin/training", label: "Training", icon: BookOpen },
   { to: "/admin/features", label: "Features", icon: MessageSquare },
   { to: "/admin/ats-lab", label: "ATS Lab", icon: FlaskConical },
+  { to: "/admin/auto-apply-lab", label: "Auto-Apply Lab", icon: Zap },
   { to: "/admin/analytics", label: "Analytics", icon: BarChart3 },
 ];
 
