@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Play, RefreshCw } from "lucide-react";
+import { Loader2, Play, RefreshCw, Terminal } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import { adminApiErrorMessage } from "../lib/adminApi";
 import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
+import AutoApplyRunPanel from "../components/admin/AutoApplyRunPanel";
 import { Button } from "../components/ui/button";
 
 // Minimal end-to-end validation harness (admin only). Paste a Greenhouse job
@@ -36,6 +37,33 @@ const fmtDate = (value) => {
   return date.toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 };
 
+function syntheticErrorReport(detail, fallbackMessage) {
+  const message = detail?.message || fallbackMessage || "Execution failed";
+  return {
+    stage_reached: detail?.phase === "open_browser" || detail?.phase === "open_page" ? "submit" : "driver",
+    status: "error",
+    reason: message,
+    error: detail && typeof detail === "object" ? detail : { message, phase: "execute" },
+    debug: {
+      error: detail && typeof detail === "object" ? detail : { message, phase: "execute" },
+      timeline: [{
+        stage: detail?.phase === "open_browser" || detail?.phase === "open_page" ? "submit" : "driver",
+        status: "error",
+        detail: message,
+      }],
+    },
+  };
+}
+
+function notifyRunResult(result) {
+  const failed = new Set(["error", "submit_failed", "verification_failed", "unsupported", "needs_user_input"]);
+  if (failed.has(result?.status)) {
+    toast.error(result.reason?.replaceAll("_", " ") || result.error?.message || "Auto-apply failed");
+    return;
+  }
+  toast.success(`${result.status} (stage: ${result.stage_reached}, ${result.duration_ms}ms)`);
+}
+
 export default function AdminAutoApplyLab() {
   const [url, setUrl] = useState("");
   const [resumeFile, setResumeFile] = useState(null);
@@ -46,6 +74,9 @@ export default function AdminAutoApplyLab() {
   const [accessDenied, setAccessDenied] = useState(false);
   const [error, setError] = useState("");
   const [report, setReport] = useState(null);
+  const [consoleOpen, setConsoleOpen] = useState(false);
+  const [consoleRunning, setConsoleRunning] = useState(false);
+  const [consoleLabel, setConsoleLabel] = useState("");
 
   const [swipes, setSwipes] = useState([]);
   const [supportedProviders, setSupportedProviders] = useState([]);
@@ -70,31 +101,51 @@ export default function AdminAutoApplyLab() {
     loadSwipes();
   }, [loadSwipes]);
 
+  const beginConsole = (label) => {
+    setConsoleOpen(true);
+    setConsoleRunning(true);
+    setConsoleLabel(label);
+    setReport(null);
+    setError("");
+  };
+
+  const finishConsole = (nextReport) => {
+    setReport(nextReport);
+    setConsoleRunning(false);
+  };
+
   const runForSwipe = async (row, isDryRun) => {
-    if (!isDryRun) {
-      const confirmed = window.confirm(
-        `Submit a REAL application to ${row.company || row.job_id} on behalf of ${row.user_email || row.user_id}?`,
-      );
-      if (!confirmed) return;
-    }
     const key = `${row.user_id}:${row.job_id}`;
     setRunningRow(key);
-    setError("");
-    setReport(null);
+    beginConsole(
+      isDryRun
+        ? `Dry run · ${row.company || row.title || row.job_id}`
+        : `Apply · ${row.company || row.title || row.job_id}`,
+    );
     try {
       const { data } = await api.post(
         "/admin/auto-apply/execute",
-        { job_id: row.job_id, user_id: row.user_id, dry_run: isDryRun },
+        {
+          job_id: row.job_id,
+          user_id: row.user_id,
+          dry_run: isDryRun,
+          headless: true,
+        },
         { timeout: 240000 },
       );
       const result = data.result || data;
-      setReport(result);
-      toast.success(`${result.status} (stage: ${result.stage_reached}, ${result.duration_ms}ms)`);
+      finishConsole(result);
+      notifyRunResult(result);
       loadSwipes();
     } catch (err) {
       if (err?.response?.status === 403) setAccessDenied(true);
+      const detail = err.response?.data?.detail;
       const message = adminApiErrorMessage(err, "Execution failed");
       setError(message);
+      const fallback = detail && typeof detail === "object"
+        ? syntheticErrorReport(detail, message)
+        : { stage_reached: "driver", status: "error", reason: message, error: { message, phase: "execute" } };
+      finishConsole(fallback);
       toast.error(message);
     } finally {
       setRunningRow(null);
@@ -102,8 +153,6 @@ export default function AdminAutoApplyLab() {
   };
 
   const run = async () => {
-    setError("");
-    setReport(null);
     if (!url.trim()) {
       toast.error("Paste a Greenhouse job URL first");
       return;
@@ -118,10 +167,12 @@ export default function AdminAutoApplyLab() {
       }
     }
     setRunning(true);
+    beginConsole(dryRun ? "Dry run · URL harness" : "Apply · URL harness");
     try {
       const payload = {
         greenhouse_url: url.trim(),
         dry_run: dryRun,
+        headless: true,
         additional_answers: additionalAnswers,
       };
       if (resumeFile) {
@@ -132,14 +183,21 @@ export default function AdminAutoApplyLab() {
         payload.cover_letter_text = await fileToText(coverFile);
       }
       const { data } = await api.post("/admin/auto-apply-lab/execute", payload, { timeout: 180000 });
-      setReport(data);
-      toast.success(`${data.status} (stage: ${data.stage_reached}, ${data.duration_ms}ms)`);
+      finishConsole(data);
+      notifyRunResult(data);
     } catch (err) {
       if (err?.response?.status === 403) {
         setAccessDenied(true);
       }
-      setError(adminApiErrorMessage(err, "Execution failed"));
-      toast.error(adminApiErrorMessage(err, "Execution failed"));
+      const detail = err.response?.data?.detail;
+      const message = adminApiErrorMessage(err, "Execution failed");
+      setError(message);
+      finishConsole(
+        detail && typeof detail === "object"
+          ? syntheticErrorReport(detail, message)
+          : { stage_reached: "driver", status: "error", reason: message, error: { message, phase: "execute" } },
+      );
+      toast.error(message);
     } finally {
       setRunning(false);
     }
@@ -150,14 +208,22 @@ export default function AdminAutoApplyLab() {
       title="Auto-Apply Lab"
       subtitle="Replay user right swipes through the production auto-apply pipeline, or validate a pasted job URL."
       actions={(
-        <Button variant="outline" onClick={loadSwipes} disabled={swipesLoading}>
-          {swipesLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-          Refresh
-        </Button>
+        <>
+          {report && !consoleOpen ? (
+            <Button variant="outline" onClick={() => setConsoleOpen(true)}>
+              <Terminal className="h-4 w-4" />
+              Open console
+            </Button>
+          ) : null}
+          <Button variant="outline" onClick={loadSwipes} disabled={swipesLoading}>
+            {swipesLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Refresh
+          </Button>
+        </>
       )}
     >
       {accessDenied ? <AdminAccessDenied /> : null}
-      {error && !accessDenied ? (
+      {error && !accessDenied && !consoleOpen ? (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       ) : null}
 
@@ -305,57 +371,27 @@ export default function AdminAutoApplyLab() {
           Dry run (inspect + classify + resolve + plan, but do NOT submit)
         </label>
 
+        <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
+          The log console opens automatically on each run. Browser runs headless on the server — use the step log and screenshot to verify fills.
+          If you see
+          {" "}
+          <code className="rounded bg-zinc-200 px-1">needs_user_input:resume</code>
+          , complete Review first.
+        </div>
+
         <Button type="button" onClick={run} disabled={running}>
           {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
           {running ? "Running…" : dryRun ? "Run dry run" : "Run REAL submission"}
         </Button>
       </div>
 
-      {report ? (
-        <div className="mt-6 max-w-3xl space-y-4">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Stat label="Stage reached" value={report.stage_reached} />
-            <Stat label="Status" value={report.status} />
-            <Stat label="Verdict" value={report.verdict ?? "—"} />
-            <Stat label="Driver version" value={report.driver_version ?? "—"} />
-            <Stat label="Blueprint signature" value={report.blueprint_signature ?? "—"} />
-            <Stat label="Duration" value={report.duration_ms != null ? `${report.duration_ms} ms` : "—"} />
-          </div>
-
-          {Array.isArray(report.missing_fields) && report.missing_fields.length ? (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              <p className="font-semibold">Missing fields (needs user input):</p>
-              <ul className="mt-1 list-disc pl-5">
-                {report.missing_fields.map((f) => <li key={f}>{f}</li>)}
-              </ul>
-            </div>
-          ) : null}
-
-          {Array.isArray(report.screenshots) && report.screenshots.length ? (
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Screenshot</p>
-              <img alt="submission screenshot" src={`data:image/jpeg;base64,${report.screenshots[0]}`}
-                className="rounded-lg border border-zinc-200" />
-            </div>
-          ) : null}
-
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Full ExecutionReport</p>
-            <pre className="max-h-[520px] overflow-auto rounded-lg bg-zinc-950 p-4 text-xs text-zinc-100 whitespace-pre-wrap">
-              {JSON.stringify(report, null, 2)}
-            </pre>
-          </div>
-        </div>
-      ) : null}
+      <AutoApplyRunPanel
+        open={consoleOpen}
+        onClose={() => setConsoleOpen(false)}
+        running={consoleRunning}
+        runLabel={consoleLabel}
+        report={report}
+      />
     </AdminShell>
-  );
-}
-
-function Stat({ label, value }) {
-  return (
-    <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{label}</p>
-      <p className="mt-1 break-all font-display text-sm font-bold text-zinc-900">{value}</p>
-    </div>
   );
 }

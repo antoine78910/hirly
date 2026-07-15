@@ -232,3 +232,23 @@ def test_dry_run_prepares_without_submitting(monkeypatch):
     out = asyncio.run(ex.execute_application(db, JOB, {}, {}, USER, dry_run=True))
     assert out["status"] == "prepared" and driver.submits == 0
     assert db.auto_apply_attempts.rows[0]["status"] == "prepared"
+
+
+def test_executor_surfaces_apply_agent_error_with_debug(monkeypatch):
+    from apply_agent.models import ApplyAgentError
+
+    class _BrokenDriver(_FakeDriver):
+        async def submit(self, ctx):
+            raise ApplyAgentError("open_browser", "Failed to launch browser: TargetClosedError")
+
+    driver = _BrokenDriver(_trivial_blueprint(), SubmissionEvidence())
+    _register(monkeypatch, driver)
+    db = _FakeDB()
+    out = asyncio.run(ex.execute_application(db, JOB, {}, {}, USER))
+    assert out["status"] == "error"
+    assert out["stage_reached"] == "submit"
+    assert "Failed to launch browser" in out["reason"]
+    assert out["error"]["phase"] == "open_browser"
+    assert out["debug"]["error"]["message"]
+    assert out["debug"]["timeline"][-1]["status"] == "error"
+    assert db.auto_apply_attempts.rows[0]["reason"].startswith("Failed to launch browser")

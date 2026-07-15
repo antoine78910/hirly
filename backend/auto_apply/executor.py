@@ -27,6 +27,7 @@ from apply_agent.browser import write_cover_letter_file, write_resume_file
 
 from . import metrics
 from .classifier import classify
+from .debug_report import build_debug_report, data_availability, format_run_error
 from .driver import DRIVER_REGISTRY
 from .models import SubmissionContext
 from .planner import plan as build_plan
@@ -68,6 +69,7 @@ def _report(
     *, started: float, stage: str, status: str, reason: str = "", verdict: Optional[str] = None,
     missing_fields: Optional[List[str]] = None, blueprint_signature: Optional[str] = None,
     driver_version: Optional[str] = None, evidence=None, claim: Optional[Dict[str, Any]] = None,
+    debug: Optional[Dict[str, Any]] = None, error: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     now = _now()
     screenshot = getattr(evidence, "screenshot_b64", None)
@@ -81,6 +83,8 @@ def _report(
         "driver_version": driver_version,
         "submission_evidence": _full_evidence(evidence),
         "screenshots": [screenshot] if screenshot else [],
+        "debug": debug,
+        "error": error,
         "timestamps": {
             "claimed_at": (claim or {}).get("claimed_at"),
             "submitted_at": now if (evidence is not None and evidence.submit_performed) else None,
@@ -113,41 +117,76 @@ async def execute_application(
         return _report(started=started, stage="claim", status=status,
                        reason="active_claim_exists", driver_version=driver_version)
 
+    checkpoint = "driver"
+    blueprint = None
+    signature = None
+    decision = None
+    candidate_context = None
+    answers = None
+    unresolved = None
+    application_plan = None
+    app_url = ""
+    evidence = None
+
     try:
+        checkpoint = "inspect"
         blueprint = await driver.inspect_application(job)
         signature = blueprint.signature
         known = await metrics.known_successful_signatures(db, driver.provider)
+        checkpoint = "classify"
         decision = classify(blueprint, known_successful_signatures=known)
         base = {
             "eligible": decision.eligible, "complexity": blueprint.complexity.value,
             "compatibility_score": decision.score, "blueprint_signature": signature,
         }
         report_common = {"blueprint_signature": signature, "driver_version": driver_version, "claim": claim}
+        app_url = ""
+        try:
+            app_url = driver.application_url(job)
+        except Exception:
+            app_url = ""
 
         if not decision.eligible:
             missing = decision.signals.get("missing_fields", [])
+            debug = build_debug_report(
+                job=job, profile=profile, app_doc=app_doc, blueprint=blueprint, decision=decision,
+                application_url=app_url,
+            )
             await metrics.record_terminal(db, claim, status=decision.category, reason=decision.reason,
                                           stage_reached="classify", missing_fields=missing, **base)
             return _report(started=started, stage="classify", status=decision.category,
-                           reason=decision.reason, missing_fields=missing, **report_common)
+                           reason=decision.reason, missing_fields=missing, debug=debug, **report_common)
 
+        checkpoint = "resolve"
         candidate_context = build_candidate_context(profile, app_doc, user)
         answers, unresolved = resolve(blueprint, candidate_context, profile)
         if unresolved:
             missing = [f.key for f in unresolved]
             reason = "needs_user_input:" + ",".join(missing[:5])
+            debug = build_debug_report(
+                job=job, profile=profile, app_doc=app_doc, blueprint=blueprint, decision=decision,
+                answers=answers, unresolved=unresolved, candidate_context=candidate_context,
+                application_url=app_url,
+            )
             await metrics.record_terminal(db, claim, status="needs_user_input", reason=reason,
                                           stage_reached="resolve", missing_fields=missing, **base)
             return _report(started=started, stage="resolve", status="needs_user_input",
-                           reason=reason, missing_fields=missing, **report_common)
+                           reason=reason, missing_fields=missing, debug=debug, **report_common)
 
+        checkpoint = "plan"
         application_plan = build_plan(blueprint, answers)
+        debug = build_debug_report(
+            job=job, profile=profile, app_doc=app_doc, blueprint=blueprint, decision=decision,
+            answers=answers, plan=application_plan, candidate_context=candidate_context,
+            application_url=app_url,
+        )
 
         if dry_run:
             await metrics.record_terminal(db, claim, status="prepared", stage_reached="plan", **base)
             return _report(started=started, stage="plan", status="prepared",
-                           reason="ready_not_submitted", **report_common)
+                           reason="ready_not_submitted", debug=debug, **report_common)
 
+        checkpoint = "submit"
         with tempfile.TemporaryDirectory(prefix="auto_apply_") as tmp:
             documents = {
                 "resume_path": write_resume_file(app_doc, tmp),
@@ -162,28 +201,105 @@ async def execute_application(
         # A runtime login wall / CAPTCHA means Hirly can't complete it -> unsupported.
         if evidence.blocked_reason:
             reason = f"blocked:{evidence.blocked_reason}"
+            debug = build_debug_report(
+                job=job, profile=profile, app_doc=app_doc, blueprint=blueprint, decision=decision,
+                answers=answers, plan=application_plan, candidate_context=candidate_context,
+                application_url=app_url, evidence=evidence,
+            )
             await metrics.record_terminal(db, claim, status="unsupported", reason=reason,
                                           stage_reached="submit", evidence=safe_evidence, **base)
             return _report(started=started, stage="submit", status="unsupported", reason=reason,
-                           evidence=evidence, **report_common)
+                           evidence=evidence, debug=debug, **report_common)
 
         # The submit control was never actioned -> the submission never happened.
         if not evidence.submit_performed:
-            await metrics.record_terminal(db, claim, status="submit_failed", reason="submit_not_performed",
+            raw = evidence.raw or {}
+            submit_detail = raw.get("submit") or raw.get("submit_error")
+            step_log = raw.get("step_log") or []
+            if submit_detail == "button_not_found":
+                reason = "submit_button_not_found"
+            elif not step_log:
+                reason = "browser_never_reached_form"
+            elif any(s.get("status") == "error" for s in step_log):
+                reason = "browser_step_errors"
+            else:
+                reason = "submit_not_performed"
+            debug = build_debug_report(
+                job=job, profile=profile, app_doc=app_doc, blueprint=blueprint, decision=decision,
+                answers=answers, plan=application_plan, candidate_context=candidate_context,
+                application_url=app_url, evidence=evidence,
+            )
+            await metrics.record_terminal(db, claim, status="submit_failed", reason=reason,
                                           stage_reached="submit", evidence=safe_evidence, **base)
             return _report(started=started, stage="submit", status="submit_failed",
-                           reason="submit_not_performed", evidence=evidence, **report_common)
+                           reason=reason, evidence=evidence, debug=debug, **report_common)
 
+        checkpoint = "verify"
         verdict = verify(evidence)
         db_status = "submitted_success" if verdict.status == "verified_success" else "verification_failed"
+        debug = build_debug_report(
+            job=job, profile=profile, app_doc=app_doc, blueprint=blueprint, decision=decision,
+            answers=answers, plan=application_plan, candidate_context=candidate_context,
+            application_url=app_url, evidence=evidence,
+        )
         await metrics.record_terminal(db, claim, status=db_status, verdict=verdict.status,
                                       reason=verdict.reason, stage_reached="verify",
                                       evidence=safe_evidence, **base)
         return _report(started=started, stage="verify", status=db_status, verdict=verdict.status,
-                       reason=verdict.reason, evidence=evidence, **report_common)
+                       reason=verdict.reason, evidence=evidence, debug=debug, **report_common)
     except Exception as exc:
-        logger.warning("auto_apply_execute_failed job=%s error=%s", job_id, str(exc)[:300])
-        await metrics.record_terminal(db, claim, status="error", reason=exc.__class__.__name__,
-                                      stage_reached="error")
-        return _report(started=started, stage="error", status="error",
-                       reason=exc.__class__.__name__, driver_version=driver_version, claim=claim)
+        error_detail = format_run_error(exc, checkpoint=checkpoint)
+        stage = checkpoint
+        if error_detail.get("phase") in ("open_browser", "open_page"):
+            stage = "submit"
+        logger.warning(
+            "auto_apply_execute_failed job=%s stage=%s phase=%s error=%s",
+            job_id, stage, error_detail.get("phase"), error_detail.get("message", str(exc))[:300],
+        )
+        debug = None
+        try:
+            debug = build_debug_report(
+                job=job,
+                profile=profile,
+                app_doc=app_doc,
+                blueprint=blueprint,
+                decision=decision,
+                answers=answers,
+                unresolved=unresolved,
+                plan=application_plan,
+                candidate_context=candidate_context,
+                application_url=app_url,
+                evidence=evidence,
+            )
+            debug["error"] = error_detail
+            debug["timeline"] = (debug.get("timeline") or []) + [{
+                "stage": stage,
+                "status": "error",
+                "detail": error_detail.get("message") or exc.__class__.__name__,
+            }]
+        except Exception:
+            debug = {
+                "data_availability": data_availability(profile, app_doc),
+                "error": error_detail,
+                "timeline": [{
+                    "stage": stage,
+                    "status": "error",
+                    "detail": error_detail.get("message") or exc.__class__.__name__,
+                }],
+            }
+        reason = error_detail.get("message") or exc.__class__.__name__
+        await metrics.record_terminal(
+            db, claim, status="error", reason=reason[:500], stage_reached=stage,
+        )
+        return _report(
+            started=started,
+            stage=stage,
+            status="error",
+            reason=reason,
+            error=error_detail,
+            debug=debug,
+            driver_version=driver_version,
+            claim=claim,
+            blueprint_signature=signature,
+            evidence=evidence,
+        )

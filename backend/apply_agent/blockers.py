@@ -35,6 +35,16 @@ SUCCESS_PHRASES = (
 
 SUCCESS_URL_TOKENS = ("confirmation", "success", "submitted", "thank-you", "thank_you")
 
+BOT_WALL_MARKERS = (
+    "access is temporarily restricted",
+    "temporarily restricted",
+    "unusual activity from your device",
+    "unusual activity",
+    "automated (bot) activity",
+    "verify you are human",
+    "security challenge",
+)
+
 _POST_SUBMIT_ERROR_TERMS = ("required", "error", "invalid", "please", "missing", "failed", "could not", "must")
 
 
@@ -90,6 +100,16 @@ async def detect_login_wall(page: Any) -> bool:
     except Exception:
         body_text = ""
     return any(marker in body_text for marker in LOGIN_MARKERS)
+
+
+async def detect_bot_wall(page: Any, *, http_status: Optional[int] = None) -> bool:
+    if http_status == 403:
+        return True
+    try:
+        body_text = canonical(await page.locator("body").inner_text(timeout=3000))
+    except Exception:
+        body_text = ""
+    return any(marker in body_text for marker in BOT_WALL_MARKERS)
 
 
 # OneTrust is one of the most widely used cookie-consent widgets across

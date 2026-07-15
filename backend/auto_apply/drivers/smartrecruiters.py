@@ -9,6 +9,7 @@ directly to the oneclick URL and fills via Playwright role selectors.
 from __future__ import annotations
 
 import logging
+import random
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -23,6 +24,7 @@ from application_blueprint import (
     estimate_compatibility_score,
 )
 from apply_agent.guardrails import canonical
+from apply_agent.human_browser import human_click, human_pause
 from job_providers.ats_adapters.smartrecruiters import SmartRecruitersAtsAdapter
 
 from ..driver import DRIVER_REGISTRY, BrowserApplyDriver
@@ -34,9 +36,12 @@ _ONECLICK_URL = "https://jobs.smartrecruiters.com/oneclick-ui/company/{company}/
 _CONFIG_URL = "https://jobs.smartrecruiters.com/oneclick-ui/api/company/{company}/publication/{uuid}/configuration"
 _SUBMIT_SELECTORS = (
     'role=button[name="Envoyer"]',
+    'role=button[name="Envoyer ma candidature"]',
+    'role=button[name="Soumettre"]',
     'role=button[name="Send"]',
     'role=button[name="Submit"]',
     'role=button[name="Submit application"]',
+    'button:has-text("Envoyer")',
 )
 _SR_FIELD_TYPE_MAP = {
     "INPUT_TEXT": FieldType.TEXT,
@@ -182,7 +187,7 @@ def _company_slug(job: Dict[str, Any], posting_url: str) -> str:
 
 class SmartRecruitersApplyDriver(BrowserApplyDriver):
     provider = "smartrecruiters"
-    version = "smartrecruiters-1.0.0"
+    version = "smartrecruiters-1.1.0"
 
     def __init__(self):
         self._adapter = SmartRecruitersAtsAdapter()
@@ -238,6 +243,10 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
             return self.oneclick_url(company, pub_uuid)
         return self.posting_url(job)
 
+    def navigation_url(self, job: Dict[str, Any]) -> str:
+        posting = self.posting_url(job)
+        return posting or self.application_url(job)
+
     async def inspect_application(self, job: Dict[str, Any]) -> ApplicationBlueprint:
         publication = await self.resolve_publication(job)
         company = publication["company"]
@@ -285,9 +294,10 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
             try:
                 loc = page.locator(selector)
                 if await loc.count():
-                    await loc.first.click(timeout=5000)
+                    await human_click(loc.first, page)
+                    await human_pause(page, 1200, 2600)
                     try:
-                        await page.wait_for_load_state("networkidle", timeout=8000)
+                        await page.wait_for_load_state("networkidle", timeout=10000)
                     except Exception:
                         pass
                     return
@@ -296,20 +306,28 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
 
     async def _apply_step(self, page: Any, step, documents: Dict[str, Any], evidence) -> None:
         if step.action == "fill" and any("combobox" in loc for loc in step.locators):
+            preview = str(step.value or "")[:100]
             loc = await self._first_locator(page, step.locators)
             if loc is None:
                 evidence.raw.setdefault("unmatched_steps", []).append(step.locators[:1])
+                await self._log_step(evidence, action="fill", locators=step.locators,
+                                     status="not_found", value_preview=preview)
                 return
             try:
-                await loc.click(timeout=3000)
-                await loc.fill(str(step.value), timeout=5000)
+                await human_click(loc, page)
+                await human_pause(page, 180, 420)
+                await loc.press_sequentially(str(step.value), delay=random.randint(48, 95))
                 try:
                     await page.keyboard.press("Enter")
                 except Exception:
                     pass
+                await self._log_step(evidence, action="fill", locators=step.locators,
+                                     status="ok", value_preview=preview)
                 return
             except Exception as exc:
                 evidence.raw.setdefault("step_errors", []).append(f"{exc.__class__.__name__}:{step.locators[:1]}")
+                await self._log_step(evidence, action="fill", locators=step.locators,
+                                     status="error", value_preview=preview, error=str(exc))
                 return
         await super()._apply_step(page, step, documents, evidence)
 
@@ -317,20 +335,27 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
         loc = await self._first_locator(page, list(_SUBMIT_SELECTORS))
         if loc is None:
             evidence.raw["submit"] = "button_not_found"
+            await self._log_step(evidence, action="submit", locators=list(_SUBMIT_SELECTORS),
+                                 status="not_found")
             return
         try:
             await loc.scroll_into_view_if_needed(timeout=3000)
         except Exception:
             pass
         try:
-            await loc.click(timeout=8000)
+            await human_click(loc, page)
             evidence.submit_performed = True
+            await self._log_step(evidence, action="submit", locators=list(_SUBMIT_SELECTORS), status="ok")
         except Exception:
             try:
                 await loc.click(timeout=5000, force=True)
                 evidence.submit_performed = True
+                await self._log_step(evidence, action="submit", locators=list(_SUBMIT_SELECTORS),
+                                     status="ok", error="forced_click")
             except Exception as exc:
                 evidence.raw["submit_error"] = str(exc)[:200]
+                await self._log_step(evidence, action="submit", locators=list(_SUBMIT_SELECTORS),
+                                     status="error", error=str(exc))
 
 
 DRIVER_REGISTRY.register(SmartRecruitersApplyDriver())

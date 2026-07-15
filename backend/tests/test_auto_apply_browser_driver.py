@@ -19,10 +19,16 @@ class _FakeLocator:
     async def fill(self, value, timeout=0):
         self._page.filled.append((self._selector, value))
 
+    async def press_sequentially(self, value, delay=0):
+        self._page.filled.append((self._selector, value))
+
+    async def bounding_box(self):
+        return {"x": 10, "y": 10, "width": 120, "height": 32}
+
     async def set_input_files(self, path, timeout=0):
         self._page.uploaded.append((self._selector, path))
 
-    async def click(self, timeout=0, force=False):
+    async def click(self, timeout=0, force=False, delay=0):
         self._page.clicked.append(self._selector)
 
     async def is_visible(self, timeout=0):
@@ -41,6 +47,14 @@ class _FakeLocator:
         return "Thank you for applying"
 
 
+class _FakeMouse:
+    async def move(self, x, y, steps=1):
+        pass
+
+    async def wheel(self, x, y):
+        pass
+
+
 class _FakePage:
     def __init__(self, known_selectors):
         self.url = "https://boards.greenhouse.io/acme/jobs/1"
@@ -51,6 +65,7 @@ class _FakePage:
         self.clicked = []
         self.selected = []
         self.checked = []
+        self.mouse = _FakeMouse()
 
     async def goto(self, url, wait_until=None, timeout=0):
         self.url = url
@@ -114,16 +129,28 @@ def _install_fake_page(monkeypatch, page):
     async def no_captcha(p, click_error=""):
         return {}
 
+    async def no_bot_wall(p, http_status=None):
+        return False
+
     async def noop_cookie(p):
         return None
+
+    async def fast_pause(p, min_ms=0, max_ms=0):
+        pass
+
+    async def noop_scroll(p):
+        pass
 
     async def fake_shot(p):
         return ""
 
     monkeypatch.setattr(driver_mod, "detect_login_wall", no_login)
     monkeypatch.setattr(driver_mod, "detect_captcha", no_captcha)
+    monkeypatch.setattr(driver_mod, "detect_bot_wall", no_bot_wall)
     monkeypatch.setattr(driver_mod, "captcha_active", lambda d: False)
     monkeypatch.setattr(driver_mod, "dismiss_cookie_banner", noop_cookie)
+    monkeypatch.setattr(driver_mod, "human_pause", fast_pause)
+    monkeypatch.setattr(driver_mod, "human_scroll", noop_scroll)
     monkeypatch.setattr(driver_mod, "screenshot_b64", fake_shot)
 
 
@@ -141,7 +168,7 @@ def test_submit_executes_each_step_by_binding(monkeypatch):
                             blueprint=None, plan=plan, documents={"resume_path": "/tmp/cv.pdf"})
     ev = asyncio.run(_StubDriver().submit(ctx))
 
-    assert page.filled == [('[name="job_application[email]"]', "a@b.co")]
+    assert page.filled[-1] == ('[name="job_application[email]"]', "a@b.co")
     assert page.uploaded == [('[name="job_application[resume]"]', "/tmp/cv.pdf")]
     assert ev.submit_performed is True
     assert ev.confirmation_text == "thank you for applying"
@@ -159,6 +186,28 @@ def test_login_wall_aborts_with_blocked_reason(monkeypatch):
     ctx = SubmissionContext(job={"external_url": "https://x/y"}, blueprint=None, plan=plan, documents={})
     ev = asyncio.run(_StubDriver().submit(ctx))
     assert ev.blocked_reason == "login_wall" and ev.submit_performed is False
+
+
+def test_bot_wall_aborts_with_blocked_reason(monkeypatch):
+    page = _FakePage(known_selectors=set())
+
+    async def goto_403(url, wait_until=None, timeout=0):
+        page.url = url
+        class _R:
+            status = 403
+        return _R()
+
+    page.goto = goto_403
+    _install_fake_page(monkeypatch, page)
+
+    async def yes_bot(p, http_status=None):
+        return True
+    monkeypatch.setattr(driver_mod, "detect_bot_wall", yes_bot)
+
+    plan = ApplicationPlan(steps=[PlanStep(action="submit", locators=[])])
+    ctx = SubmissionContext(job={"external_url": "https://x/y"}, blueprint=None, plan=plan, documents={})
+    ev = asyncio.run(_StubDriver().submit(ctx))
+    assert ev.blocked_reason == "bot_protection" and ev.submit_performed is False
 
 
 def test_registry_resolves_by_provider_only():
@@ -209,7 +258,7 @@ def test_fallback_locator_only_tried_after_primary_fails(monkeypatch):
     asyncio.run(_StubDriver().submit(ctx))
     assert '#primary' in page.queried
     assert '#fallback' not in page.queried          # primary was authoritative
-    assert page.filled == [('#primary', "v")]
+    assert page.filled[-1] == ('#primary', "v")
 
     # Case 2: primary misses (DOM drift) -> fallback is tried, after the primary.
     page2 = _FakePage(known_selectors={'#fallback', 'button[type="submit"], input[type="submit"], button:has-text("Submit")'})
@@ -217,4 +266,4 @@ def test_fallback_locator_only_tried_after_primary_fails(monkeypatch):
     ctx2 = SubmissionContext(job={"external_url": "https://x/y"}, blueprint=None, plan=plan, documents={})
     asyncio.run(_StubDriver().submit(ctx2))
     assert page2.queried.index('#primary') < page2.queried.index('#fallback')
-    assert page2.filled == [('#fallback', "v")]
+    assert page2.filled[-1] == ('#fallback', "v")
