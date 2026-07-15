@@ -24,6 +24,41 @@ const statusLabel = (value) => {
   return String(value).replaceAll("_", " ");
 };
 
+const COMPLETED_STATUSES = new Set([
+  "completed",
+  "manually_submitted",
+  "sent",
+  "submitted",
+  "success",
+]);
+
+const ACTIONABLE_STATUSES = new Set([
+  "action_required",
+  "blocked",
+  "blocked_captcha",
+  "failed",
+  "manual_blocked",
+  "manual_in_progress",
+  "manual_review_needed",
+  "needs_user_input",
+  "pending",
+  "prepare_failed",
+  "prepared",
+  "queued",
+  "ready",
+]);
+
+const statusBadgeClass = (value) => {
+  const status = String(value || "").toLowerCase();
+  if (COMPLETED_STATUSES.has(status)) {
+    return "border border-emerald-200 bg-emerald-100 text-emerald-700";
+  }
+  if (ACTIONABLE_STATUSES.has(status)) {
+    return "border border-red-200 bg-red-100 text-red-700";
+  }
+  return "border border-zinc-200 bg-zinc-100 text-zinc-700";
+};
+
 const fmtDate = (value) => {
   if (!value) return "";
   const date = new Date(value);
@@ -142,7 +177,10 @@ export default function AdminApplications() {
                     <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                   </td>
                 </tr>
-              ) : applications.length ? applications.map((app) => (
+              ) : applications.length ? applications.map((app) => {
+                const submissionStatus = app.user_facing_submission_status || app.submission_status;
+                const manualStatus = app.manual_status || app.admin_status;
+                return (
                 <tr key={app.application_id} className="hover:bg-zinc-50">
                   <td className="px-4 py-3">
                     <Link className="font-semibold text-linkedin hover:underline" to={`/admin/applications/${app.application_id}`}>
@@ -154,17 +192,22 @@ export default function AdminApplications() {
                   <td className="px-4 py-3">{app.title || "Unknown role"}</td>
                   <td className="px-4 py-3 capitalize">{app.ats_provider || "unknown"}</td>
                   <td className="px-4 py-3">
-                    <span className="inline-flex rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-semibold capitalize text-zinc-700">
-                      {statusLabel(app.user_facing_submission_status || app.submission_status)}
+                    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${statusBadgeClass(submissionStatus)}`}>
+                      {statusLabel(submissionStatus)}
                     </span>
                     <p className="mt-1 text-xs text-zinc-400 capitalize">{statusLabel(app.package_status)}</p>
                   </td>
-                  <td className="px-4 py-3 capitalize">{statusLabel(app.manual_status || app.admin_status)}</td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${statusBadgeClass(manualStatus)}`}>
+                      {statusLabel(manualStatus)}
+                    </span>
+                  </td>
                   <td className="px-4 py-3">{app.assigned_to || "Unassigned"}</td>
                   <td className="px-4 py-3">{ageLabel(app.created_at)}</td>
                   <td className="px-4 py-3 text-zinc-600">{fmtDate(app.updated_at)}</td>
                 </tr>
-              )) : (
+                );
+              }) : (
                 <tr>
                   <td className="px-4 py-8 text-center text-zinc-500" colSpan={9}>No applications found.</td>
                 </tr>
