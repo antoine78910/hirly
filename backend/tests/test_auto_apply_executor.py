@@ -198,6 +198,33 @@ def test_second_call_after_success_is_already_submitted(monkeypatch):
     assert driver.submits == 1
 
 
+def test_report_has_standard_debug_fields_on_success(monkeypatch):
+    driver = _FakeDriver(_trivial_blueprint(), _SUCCESS_EV)
+    _register(monkeypatch, driver)
+    out = asyncio.run(ex.execute_application(_FakeDB(), JOB, {}, {}, USER))
+    for key in ("stage_reached", "status", "reason", "verdict", "missing_fields",
+                "blueprint_signature", "driver_version", "submission_evidence",
+                "screenshots", "timestamps", "duration_ms"):
+        assert key in out, key
+    assert out["stage_reached"] == "verify"
+    assert out["driver_version"] == "greenhouse-test"
+    assert out["blueprint_signature"] == "sigX"
+    assert isinstance(out["duration_ms"], int)
+    assert out["timestamps"]["claimed_at"] and out["timestamps"]["submitted_at"] and out["timestamps"]["verified_at"]
+    assert out["submission_evidence"]["submit_performed"] is True
+
+
+def test_report_exposes_screenshot_when_present(monkeypatch):
+    ev = SubmissionEvidence(submit_performed=True, confirmation_text="thank you for applying",
+                            submit_control_gone=True, url_changed=True, network_ok=True,
+                            screenshot_b64="ZmFrZQ==")
+    driver = _FakeDriver(_trivial_blueprint(), ev)
+    _register(monkeypatch, driver)
+    out = asyncio.run(ex.execute_application(_FakeDB(), JOB, {}, {}, USER))
+    assert out["screenshots"] == ["ZmFrZQ=="]
+    assert out["submission_evidence"]["screenshot_b64"] == "ZmFrZQ=="
+
+
 def test_dry_run_prepares_without_submitting(monkeypatch):
     driver = _FakeDriver(_trivial_blueprint(), SubmissionEvidence())
     _register(monkeypatch, driver)

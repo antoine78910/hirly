@@ -9428,6 +9428,77 @@ async def admin_auto_apply_metrics(provider: str = "greenhouse", admin: User = D
     return await auto_apply_metrics_summary(db, provider)
 
 
+class AdminAutoApplyValidateRequest(BaseModel):
+    greenhouse_url: str
+    resume_b64: Optional[str] = None
+    resume_filename: Optional[str] = None
+    cover_letter_text: Optional[str] = None
+    additional_answers: Dict[str, Any] = Field(default_factory=dict)
+    contact: Dict[str, Any] = Field(default_factory=dict)
+    dry_run: bool = True
+
+
+def _greenhouse_job_from_url(url: str) -> Dict[str, Any]:
+    """Build an ephemeral job doc from a pasted Greenhouse posting URL. Test-only
+    plumbing for the validation flow -- the pipeline itself stays generic."""
+    from urllib.parse import urlparse
+    from job_providers.ats_adapters.greenhouse import GreenhouseAtsAdapter
+
+    token = GreenhouseAtsAdapter().extract_source_key_from_url(url)
+    parts = [p for p in urlparse(url).path.split("/") if p]
+    job_id = None
+    if "jobs" in parts:
+        idx = parts.index("jobs")
+        if idx + 1 < len(parts):
+            job_id = parts[idx + 1]
+    if not job_id:
+        digits = [p for p in parts if p.isdigit()]
+        job_id = digits[-1] if digits else None
+    if not token or not job_id:
+        raise HTTPException(status_code=400, detail="invalid_greenhouse_url")
+    return {
+        "job_id": f"gh:{token}:{job_id}",
+        "ats_provider": "greenhouse",
+        "provider": "greenhouse",
+        "external_url": url,
+        "board_token": token,
+        "provider_job_id": job_id,
+        "company": token,
+        "title": "Greenhouse validation job",
+    }
+
+
+def _admin_contact(admin: User) -> Dict[str, Any]:
+    parts = [p for p in (admin.name or "").split() if p]
+    return {
+        "first_name": parts[0] if parts else "",
+        "last_name": " ".join(parts[1:]) if len(parts) > 1 else "",
+        "email": admin.email or "",
+    }
+
+
+@api_router.post("/admin/auto-apply-lab/execute")
+async def admin_auto_apply_lab_execute(body: AdminAutoApplyValidateRequest, admin: User = Depends(require_admin_user)):
+    """Minimal end-to-end validation: build an ephemeral job + application context
+    from a pasted Greenhouse URL, uploaded resume/cover letter, and typed answers,
+    then run the production execute_application and return its ExecutionReport."""
+    job = _greenhouse_job_from_url(body.greenhouse_url)
+    profile = {
+        "contact": {**_admin_contact(admin), **(body.contact or {})},
+        "application_answers_profile": body.additional_answers or {},
+    }
+    app_doc: Dict[str, Any] = {"application_id": f"validation:{job['job_id']}"}
+    if body.resume_b64:
+        app_doc["tailored_cv_file_b64"] = body.resume_b64
+        app_doc["tailored_cv_filename"] = body.resume_filename or "resume.pdf"
+    if body.cover_letter_text:
+        app_doc["cover_letter"] = {"paragraphs": [body.cover_letter_text]}
+    return await auto_apply_execute_application(
+        db, job, profile, app_doc, admin.model_dump(mode="json"),
+        dry_run=body.dry_run, headless=_browser_engine_headless(),
+    )
+
+
 @api_router.post("/admin/jobs/feed-diagnostic")
 async def admin_jobs_feed_diagnostic(body: AdminJobsFeedDiagnosticRequest, admin: User = Depends(require_admin_user)):
     _require_job_maintenance_enabled()
