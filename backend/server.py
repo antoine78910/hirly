@@ -60,6 +60,9 @@ from inbound_email_service import process_inbound_resend_email
 from svix.webhooks import Webhook, WebhookVerificationError
 from apply_agent.models import ApplyAgentError
 from apply_agent.runner import run_apply_attempt
+from auto_apply.executor import execute_application as auto_apply_execute_application
+from auto_apply.metrics import latest_attempt as auto_apply_latest_attempt
+from auto_apply.metrics import summary as auto_apply_metrics_summary
 from db import create_database_adapter
 from db.supabase_adapter import count_supabase_table, test_supabase_connection
 from influencer_store import create_influencer, get_influencer, list_influencers, update_influencer
@@ -9578,6 +9581,185 @@ async def admin_jobs_company_discovery_status(admin: User = Depends(require_admi
     return {"last_run": company_discovery_last_summary()}
 
 
+class AdminAutoApplyExecuteRequest(BaseModel):
+    job_id: str
+    user_id: Optional[str] = None
+    dry_run: bool = False
+
+
+async def _auto_apply_target_user(user_id: Optional[str], admin: User) -> User:
+    if not user_id or user_id == admin.user_id:
+        return admin
+    loaded = await db.users.find_one({"user_id": user_id})
+    if not loaded:
+        raise HTTPException(status_code=404, detail="user_not_found")
+    return User(user_id=loaded["user_id"], email=loaded.get("email", ""), name=loaded.get("name", ""))
+
+
+@api_router.post("/admin/auto-apply/execute")
+async def admin_auto_apply_execute(body: AdminAutoApplyExecuteRequest, admin: User = Depends(require_admin_user)):
+    """Run the auto-apply pipeline for one job. Thin wrapper: it only loads the
+    application context and delegates to execute_application -- no orchestration
+    is duplicated here. Works for any registered ATS driver without changes."""
+    target_user = await _auto_apply_target_user(body.user_id, admin)
+    job, profile, app_doc = await _load_or_create_agent_application(body.job_id, target_user)
+    result = await auto_apply_execute_application(
+        db, job, profile, app_doc, target_user.model_dump(mode="json"),
+        dry_run=body.dry_run, headless=_browser_engine_headless(),
+    )
+    attempt = await auto_apply_latest_attempt(db, target_user.user_id, job.get("job_id"))
+    return {"result": result, "attempt": attempt}
+
+
+@api_router.get("/admin/auto-apply/status")
+async def admin_auto_apply_status(job_id: str, user_id: Optional[str] = None, admin: User = Depends(require_admin_user)):
+    """Latest attempt record for a job -- exposes stage, status, reason,
+    missing_fields, driver_version, blueprint_signature and lifecycle timestamps
+    for debugging and frontend display."""
+    target = user_id or admin.user_id
+    return {"attempt": await auto_apply_latest_attempt(db, target, job_id)}
+
+
+@api_router.get("/admin/auto-apply/metrics")
+async def admin_auto_apply_metrics(provider: str = "greenhouse", admin: User = Depends(require_admin_user)):
+    return await auto_apply_metrics_summary(db, provider)
+
+
+@api_router.get("/admin/auto-apply/right-swipes")
+async def admin_auto_apply_right_swipes(
+    limit: int = Query(default=100, ge=1, le=300),
+    admin: User = Depends(require_admin_user),
+):
+    """Recent right swipes across all users, joined with user + job data, driver
+    support and the latest auto-apply attempt. Powers the admin auto-apply test
+    bench: each row can be replayed through the production pipeline."""
+    from auto_apply.driver import DRIVER_REGISTRY
+
+    swipes = await _admin_safe_find(
+        db.swipes, {"direction": "right"}, limit=limit, sort=[("created_at", -1)],
+    )
+    job_ids = list(dict.fromkeys(s.get("job_id") for s in swipes if s.get("job_id")))
+    user_ids = list(dict.fromkeys(s.get("user_id") for s in swipes if s.get("user_id")))
+
+    jobs = {j.get("job_id"): j for j in await _admin_jobs_for_ids(job_ids)}
+
+    users: Dict[str, Dict[str, Any]] = {}
+    chunk_size = 80
+    for index in range(0, len(user_ids), chunk_size):
+        chunk = user_ids[index:index + chunk_size]
+        for row in await _admin_safe_find(db.users, {"user_id": {"$in": chunk}}, limit=len(chunk)):
+            users[row.get("user_id")] = row
+
+    latest_attempts: Dict[tuple, Dict[str, Any]] = {}
+    for index in range(0, len(job_ids), chunk_size):
+        chunk = job_ids[index:index + chunk_size]
+        rows = await _admin_safe_find(db.auto_apply_attempts, {"job_id": {"$in": chunk}}, limit=2000)
+        for row in rows:
+            key = (row.get("user_id"), row.get("job_id"))
+            previous = latest_attempts.get(key)
+            if previous is None or (row.get("created_at") or "") > (previous.get("created_at") or ""):
+                latest_attempts[key] = row
+
+    items: List[Dict[str, Any]] = []
+    for swipe_row in swipes:
+        job = jobs.get(swipe_row.get("job_id")) or {}
+        user_row = users.get(swipe_row.get("user_id")) or {}
+        attempt = latest_attempts.get((swipe_row.get("user_id"), swipe_row.get("job_id")))
+        items.append({
+            "user_id": swipe_row.get("user_id"),
+            "user_email": user_row.get("email") or "",
+            "user_name": user_row.get("name") or "",
+            "job_id": swipe_row.get("job_id"),
+            "job_found": bool(job),
+            "title": job.get("title") or "",
+            "company": job.get("company") or "",
+            "ats_provider": str(job.get("ats_provider") or job.get("provider") or "").lower() or "unknown",
+            "apply_url": job.get("external_url") or job.get("selected_apply_url") or job.get("apply_url") or "",
+            "driver_supported": bool(job) and DRIVER_REGISTRY.for_job(job) is not None,
+            "swiped_at": swipe_row.get("created_at"),
+            "latest_attempt": {
+                "status": attempt.get("status"),
+                "stage_reached": attempt.get("stage_reached"),
+                "reason": attempt.get("reason"),
+                "verdict": attempt.get("verdict"),
+                "missing_fields": attempt.get("missing_fields") or [],
+                "updated_at": attempt.get("updated_at"),
+            } if attempt else None,
+        })
+    return {"swipes": items, "supported_providers": DRIVER_REGISTRY.providers()}
+
+
+class AdminAutoApplyValidateRequest(BaseModel):
+    greenhouse_url: str
+    resume_b64: Optional[str] = None
+    resume_filename: Optional[str] = None
+    cover_letter_text: Optional[str] = None
+    additional_answers: Dict[str, Any] = Field(default_factory=dict)
+    contact: Dict[str, Any] = Field(default_factory=dict)
+    dry_run: bool = True
+
+
+def _greenhouse_job_from_url(url: str) -> Dict[str, Any]:
+    """Build an ephemeral job doc from a pasted Greenhouse posting URL. Test-only
+    plumbing for the validation flow -- the pipeline itself stays generic."""
+    from urllib.parse import urlparse
+    from job_providers.ats_adapters.greenhouse import GreenhouseAtsAdapter
+
+    token = GreenhouseAtsAdapter().extract_source_key_from_url(url)
+    parts = [p for p in urlparse(url).path.split("/") if p]
+    job_id = None
+    if "jobs" in parts:
+        idx = parts.index("jobs")
+        if idx + 1 < len(parts):
+            job_id = parts[idx + 1]
+    if not job_id:
+        digits = [p for p in parts if p.isdigit()]
+        job_id = digits[-1] if digits else None
+    if not token or not job_id:
+        raise HTTPException(status_code=400, detail="invalid_greenhouse_url")
+    return {
+        "job_id": f"gh:{token}:{job_id}",
+        "ats_provider": "greenhouse",
+        "provider": "greenhouse",
+        "external_url": url,
+        "board_token": token,
+        "provider_job_id": job_id,
+        "company": token,
+        "title": "Greenhouse validation job",
+    }
+
+
+def _admin_contact(admin: User) -> Dict[str, Any]:
+    parts = [p for p in (admin.name or "").split() if p]
+    return {
+        "first_name": parts[0] if parts else "",
+        "last_name": " ".join(parts[1:]) if len(parts) > 1 else "",
+        "email": admin.email or "",
+    }
+
+
+@api_router.post("/admin/auto-apply-lab/execute")
+async def admin_auto_apply_lab_execute(body: AdminAutoApplyValidateRequest, admin: User = Depends(require_admin_user)):
+    """Minimal end-to-end validation: build an ephemeral job + application context
+    from a pasted Greenhouse URL, uploaded resume/cover letter, and typed answers,
+    then run the production execute_application and return its ExecutionReport."""
+    job = _greenhouse_job_from_url(body.greenhouse_url)
+    profile = {
+        "contact": {**_admin_contact(admin), **(body.contact or {})},
+        "application_answers_profile": body.additional_answers or {},
+    }
+    app_doc: Dict[str, Any] = {"application_id": f"validation:{job['job_id']}"}
+    if body.resume_b64:
+        app_doc["tailored_cv_file_b64"] = body.resume_b64
+        app_doc["tailored_cv_filename"] = body.resume_filename or "resume.pdf"
+    if body.cover_letter_text:
+        app_doc["cover_letter"] = {"paragraphs": [body.cover_letter_text]}
+    return await auto_apply_execute_application(
+        db, job, profile, app_doc, admin.model_dump(mode="json"),
+        dry_run=body.dry_run, headless=_browser_engine_headless(),
+    )
+
+
 @api_router.post("/admin/jobs/feed-diagnostic")
 async def admin_jobs_feed_diagnostic(body: AdminJobsFeedDiagnosticRequest, admin: User = Depends(require_admin_user)):
     _require_job_maintenance_enabled()
@@ -15340,6 +15522,9 @@ async def _startup_seed_impl():
 @app.on_event("startup")
 async def startup_seed():
     """Register routes immediately; run seeding in the background."""
+    # Register concrete ApplyDrivers once at startup. The executor never imports
+    # concrete drivers itself -- this import is the single registration point.
+    import auto_apply.drivers  # noqa: F401
     logger.info("DB health route registered at /api/dev/db-health")
     logger.info("DB counts route registered at /api/dev/db-counts")
     logger.info(
