@@ -18,7 +18,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-_SUBMIT_STATUSES = {"submitted_success", "submit_failed"}
+_SUBMIT_STATUSES = {"submitted_success", "submit_failed", "verification_failed"}
+_ACTIVE_STATUSES = ("in_flight", "submitted_success")
 
 
 def _now() -> str:
@@ -79,6 +80,19 @@ async def record_terminal(
             "updated_at": now,
         }},
     )
+
+
+async def active_attempt_status(db, user_id: str, job_id: str) -> Optional[str]:
+    """Status of the currently-active attempt for a (user_id, job_id) pair, if
+    any -- used to tell a lost claim apart: 'submitted_success' -> already
+    applied, 'in_flight' -> another run is mid-flight."""
+    rows = await db.auto_apply_attempts.find(
+        {"user_id": user_id, "job_id": job_id}, {"status": 1}
+    ).limit(50).to_list(50)
+    for r in rows:
+        if r.get("status") in _ACTIVE_STATUSES:
+            return r.get("status")
+    return None
 
 
 async def known_successful_signatures(db, provider: str) -> frozenset:
