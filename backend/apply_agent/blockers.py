@@ -26,6 +26,11 @@ SUCCESS_PHRASES = (
     "thanks for applying",
     "we ve received your application",
     "we have received your application",
+    "merci pour votre candidature",
+    "votre candidature a ete envoyee",
+    "votre candidature a été envoyée",
+    "candidature envoyee",
+    "candidature envoyée",
 )
 
 SUCCESS_URL_TOKENS = ("confirmation", "success", "submitted", "thank-you", "thank_you")

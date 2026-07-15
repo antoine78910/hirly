@@ -114,6 +114,7 @@ def test_smartrecruiters_normalization():
     assert job["location"] == "Auxerre, France"
     assert job["job_description_sections"]
     assert job["selected_apply_url"].endswith("?oga=true")
+    assert job["auto_apply_supported"] is True
 
 
 def test_build_smartrecruiters_keyword():

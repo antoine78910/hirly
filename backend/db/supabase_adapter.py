@@ -45,6 +45,7 @@ MIGRATED_TABLES = {
     "interview_simulator_templates",
     "friend_referral_codes",
     "friend_referral_redemptions",
+    "auto_apply_attempts",
 }
 TABLE_PRIMARY_KEYS = {
     "users": "user_id",
@@ -72,6 +73,7 @@ TABLE_PRIMARY_KEYS = {
     "interview_simulator_templates": "template_id",
     "friend_referral_codes": "code",
     "friend_referral_redemptions": "redemption_id",
+    "auto_apply_attempts": "id",
 }
 TABLE_FILTER_COLUMNS = {
     "users": {"user_id", "email", "name", "created_at"},
@@ -202,6 +204,15 @@ TABLE_FILTER_COLUMNS = {
     "interview_simulator_templates": {"template_id", "created_by_user_id", "created_at", "updated_at"},
     "friend_referral_codes": {"code", "user_id", "created_at", "updated_at"},
     "friend_referral_redemptions": {"redemption_id", "code", "referrer_user_id", "redeemer_user_id", "redeemer_email", "created_at"},
+    # Generic, driver-agnostic columns only. Provider/driver-specific detail
+    # (evidence, missing_fields, blueprint internals) stays in the JSONB `data`
+    # document so new ApplyDrivers (Email, API, Browser) never need a migration.
+    "auto_apply_attempts": {
+        "id", "user_id", "job_id", "provider", "driver", "driver_version",
+        "blueprint_signature", "complexity", "compatibility_score", "eligible",
+        "stage_reached", "status", "verdict", "reason",
+        "claimed_at", "submitted_at", "verified_at", "created_at", "updated_at",
+    },
 }
 MAX_READ_ROWS = 10000
 READ_PAGE_SIZE = 1000
@@ -535,6 +546,31 @@ def _supabase_row(table: str, document: Document) -> Dict[str, Any]:
             "redeemer_user_id": doc.get("redeemer_user_id"),
             "redeemer_email": doc.get("redeemer_email"),
             "created_at": doc.get("created_at"),
+            "data": doc,
+        }
+    if table == "auto_apply_attempts":
+        # Only generic, driver-agnostic columns are promoted; everything else
+        # (evidence, missing_fields, provider-specific detail) stays in `data`.
+        return {
+            "id": _document_key(table, doc),
+            "user_id": doc.get("user_id"),
+            "job_id": doc.get("job_id"),
+            "provider": doc.get("provider"),
+            "driver": doc.get("driver"),
+            "driver_version": doc.get("driver_version"),
+            "blueprint_signature": doc.get("blueprint_signature"),
+            "complexity": doc.get("complexity"),
+            "compatibility_score": doc.get("compatibility_score"),
+            "eligible": doc.get("eligible"),
+            "stage_reached": doc.get("stage_reached"),
+            "status": doc.get("status"),
+            "verdict": doc.get("verdict"),
+            "reason": doc.get("reason"),
+            "claimed_at": doc.get("claimed_at"),
+            "submitted_at": doc.get("submitted_at"),
+            "verified_at": doc.get("verified_at"),
+            "created_at": doc.get("created_at"),
+            "updated_at": doc.get("updated_at"),
             "data": doc,
         }
     raise ValueError(f"Unsupported Supabase table: {table}")
@@ -1042,6 +1078,7 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
         self.jobs = SupabaseCollectionAdapter("jobs", supabase_url, secret_key)
         self.ats_company_sources = SupabaseCollectionAdapter("ats_company_sources", supabase_url, secret_key)
         self.friendly_company_career_pages = SupabaseCollectionAdapter("friendly_company_career_pages", supabase_url, secret_key)
+        self.auto_apply_attempts = SupabaseCollectionAdapter("auto_apply_attempts", supabase_url, secret_key)
         self.apply_agent_recipes = SupabaseCollectionAdapter("apply_agent_recipes", supabase_url, secret_key)
         self.geo_places = SupabaseCollectionAdapter("geo_places", supabase_url, secret_key)
         self.applications = SupabaseCollectionAdapter("applications", supabase_url, secret_key)
