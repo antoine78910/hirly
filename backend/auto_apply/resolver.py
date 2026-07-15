@@ -4,7 +4,7 @@ Maps a candidate_context (produced by apply_agent.agent.build_candidate_context)
 onto each blueprint NormalizedField BY FieldType. Every candidate value passes
 guardrails.validate_agent_fill before it becomes a ResolvedAnswer. No LLM: a
 required field that can't be resolved deterministically is returned as
-unresolved (-> the executor marks the job needs_data), never guessed.
+unresolved (-> the executor marks the job needs_user_input), never guessed.
 """
 from __future__ import annotations
 

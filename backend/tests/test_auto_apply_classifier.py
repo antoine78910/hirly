@@ -3,6 +3,7 @@ from application_blueprint import (
     derive_complexity, estimate_compatibility_score,
 )
 from auto_apply.classifier import classify
+from auto_apply.models import ELIGIBLE, NEEDS_USER_INPUT, UNSUPPORTED
 
 
 def _bp(fields, blockers=None):
@@ -23,23 +24,28 @@ def _std():
 
 
 def test_trivial_supported_form_is_eligible():
-    assert classify(_bp(_std())).eligible is True
+    d = classify(_bp(_std()))
+    assert d.eligible is True and d.category == ELIGIBLE
 
 
-def test_blocker_is_hard_veto():
+def test_blocker_is_unsupported():
     d = classify(_bp(_std(), blockers=["captcha_detected"]))
-    assert d.eligible is False and "block" in d.reason.lower()
+    assert d.eligible is False and d.category == UNSUPPORTED and "block" in d.reason.lower()
 
 
-def test_unsupported_required_field_is_ineligible():
+def test_unsupported_required_field_type_is_unsupported():
     fields = _std() + [NormalizedField("weird", FieldType.UNKNOWN, required=True, supported=False)]
-    assert classify(_bp(fields)).eligible is False
+    d = classify(_bp(fields))
+    assert d.eligible is False and d.category == UNSUPPORTED
 
 
-def test_sensitive_required_without_answer_is_ineligible():
+def test_sensitive_required_field_is_needs_user_input_not_unsupported():
     fields = _std() + [NormalizedField("visa", FieldType.VISA_STATUS, required=True, supported=True,
                                        validation=FieldValidation(sensitive=True))]
-    assert classify(_bp(fields)).eligible is False
+    d = classify(_bp(fields))
+    assert d.eligible is False
+    assert d.category == NEEDS_USER_INPUT
+    assert d.signals.get("missing_fields") == ["visa"]
 
 
 def test_complex_but_all_supported_is_not_auto_rejected():

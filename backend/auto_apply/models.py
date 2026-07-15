@@ -7,6 +7,18 @@ from typing import Any, Dict, List, Optional
 
 from application_blueprint import FieldType, NormalizedField
 
+# Pipeline outcome categories -- kept as plain string constants (no new
+# abstraction) so both the classifier and the executor branch on the same
+# vocabulary:
+#   ELIGIBLE         -> can be submitted automatically now
+#   NEEDS_USER_INPUT -> waiting on missing user-provided info (recoverable);
+#                       always accompanied by the missing field keys
+#   UNSUPPORTED      -> Hirly itself can't handle it yet (no driver, CAPTCHA,
+#                       login wall, unsupported field type) -> waits for support
+ELIGIBLE = "eligible"
+NEEDS_USER_INPUT = "needs_user_input"
+UNSUPPORTED = "unsupported"
+
 
 @dataclass
 class ResolvedAnswer:
@@ -69,6 +81,7 @@ class EligibilityDecision:
     reason: str = ""
     score: float = 0.0
     signals: Dict[str, Any] = field(default_factory=dict)
+    category: str = ELIGIBLE  # one of ELIGIBLE | NEEDS_USER_INPUT | UNSUPPORTED
 
 
 def compute_blueprint_signature(fields: List[NormalizedField]) -> str:
