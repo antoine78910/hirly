@@ -938,6 +938,14 @@ class AccountSettingsUpdate(BaseModel):
     require_review_before_send: Optional[bool] = None
 
 
+class CvSourceUpdate(BaseModel):
+    source: Literal["tailored", "original"]
+
+
+class CoverLetterEditRequest(BaseModel):
+    body_text: str
+
+
 class StructuredProfileDataUpdate(BaseModel):
     contact: Dict[str, Any] = Field(default_factory=dict)
     education: List[Dict[str, Any]] = Field(default_factory=list)
@@ -4615,6 +4623,13 @@ def _build_generated_application_doc(
         }
         package_status = "generated_text_only"
 
+    # Preserved so the "use original CV instead" toggle (cv-source endpoint)
+    # can restore the AI-tailored file after the active tailored_cv_file_b64
+    # fields get temporarily overwritten with the user's original upload.
+    ai_tailored_cv_file_b64 = application_package.get("tailored_cv_file_b64")
+    ai_tailored_cv_filename = application_package.get("tailored_cv_filename")
+    ai_tailored_cv_mime = application_package.get("tailored_cv_mime")
+
     now = datetime.now(timezone.utc).isoformat()
     has_reviewable_documents = bool(
         tailored_resume
@@ -4647,6 +4662,10 @@ def _build_generated_application_doc(
         "tailored_resume": tailored_resume,
         "cover_letter": cover_letter,
         **application_package,
+        "ai_tailored_cv_file_b64": ai_tailored_cv_file_b64,
+        "ai_tailored_cv_filename": ai_tailored_cv_filename,
+        "ai_tailored_cv_mime": ai_tailored_cv_mime,
+        "cv_source": "tailored",
         "match_score": gen.get("match_score", 75),
         "match_reasons": gen.get("match_reasons", []),
         "interview_prep": gen.get("interview_prep", []),
@@ -9151,6 +9170,101 @@ async def approve_application_documents(application_id: str, user: User = Depend
     return _public_application_doc(_normalize_application_status_fields(updated), job)
 
 
+def _reset_review_status_if_approved(update_fields: Dict[str, Any], app_doc: Dict[str, Any]) -> None:
+    """Editing the CV or cover letter after approval must require the user
+    to re-approve before it can be submitted again -- otherwise a stale
+    approval could wave through content the user never actually reviewed.
+    """
+    if app_doc.get("document_review_status") == "approved":
+        update_fields["document_review_status"] = "awaiting_user"
+        update_fields["document_review_approved_at"] = None
+
+
+@api_router.post("/applications/{application_id}/cv-source")
+async def set_application_cv_source(application_id: str, body: CvSourceUpdate, user: User = Depends(get_current_user)):
+    """Switch which CV file gets submitted for this application: the
+    AI-tailored one (default) or the user's originally-uploaded CV."""
+    app_doc = await db.applications.find_one(
+        {"application_id": application_id, "user_id": user.user_id},
+        {"_id": 0},
+    )
+    if not app_doc:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    now = datetime.now(timezone.utc).isoformat()
+    update_fields: Dict[str, Any] = {"cv_source": body.source, "updated_at": now}
+
+    if body.source == "original":
+        profile = await db.profiles.find_one(
+            {"user_id": user.user_id},
+            {"_id": 0, "cv_original_b64": 1, "cv_filename": 1, "cv_mime": 1},
+        )
+        if not profile or not profile.get("cv_original_b64"):
+            raise HTTPException(status_code=400, detail="Upload a CV to your profile before using it here.")
+        update_fields["tailored_cv_file_b64"] = profile["cv_original_b64"]
+        update_fields["tailored_cv_filename"] = profile.get("cv_filename")
+        update_fields["tailored_cv_mime"] = profile.get("cv_mime")
+    else:
+        if not app_doc.get("ai_tailored_cv_file_b64"):
+            raise HTTPException(status_code=400, detail="No AI-tailored CV is available for this application.")
+        update_fields["tailored_cv_file_b64"] = app_doc["ai_tailored_cv_file_b64"]
+        update_fields["tailored_cv_filename"] = app_doc.get("ai_tailored_cv_filename")
+        update_fields["tailored_cv_mime"] = app_doc.get("ai_tailored_cv_mime")
+
+    _reset_review_status_if_approved(update_fields, app_doc)
+    await db.applications.update_one(
+        {"application_id": application_id, "user_id": user.user_id},
+        {"$set": update_fields},
+    )
+    updated = await db.applications.find_one(
+        {"application_id": application_id, "user_id": user.user_id},
+        {"_id": 0},
+    ) or app_doc
+    job = await db.jobs.find_one({"job_id": updated.get("job_id")}, {"_id": 0})
+    return _public_application_doc(_normalize_application_status_fields(updated), job)
+
+
+@api_router.patch("/applications/{application_id}/cover-letter")
+async def edit_application_cover_letter(application_id: str, body: CoverLetterEditRequest, user: User = Depends(get_current_user)):
+    """Let the user rewrite the AI-generated cover letter body (greeting +
+    paragraphs + sign-off + signature) as free text. Letterhead fields
+    (subject/sender/recipient/date) are left untouched."""
+    app_doc = await db.applications.find_one(
+        {"application_id": application_id, "user_id": user.user_id},
+        {"_id": 0},
+    )
+    if not app_doc:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    text = (body.body_text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Cover letter text cannot be empty.")
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+
+    now = datetime.now(timezone.utc).isoformat()
+    update_fields: Dict[str, Any] = {"updated_at": now}
+    for key in ("cover_letter", "tailored_cover_letter"):
+        letter = dict(app_doc.get(key) or {})
+        letter["paragraphs"] = paragraphs
+        letter["greeting"] = ""
+        letter["sign_off"] = ""
+        letter["signature_name"] = ""
+        letter["cover_letter_edited"] = True
+        update_fields[key] = letter
+
+    _reset_review_status_if_approved(update_fields, app_doc)
+    await db.applications.update_one(
+        {"application_id": application_id, "user_id": user.user_id},
+        {"$set": update_fields},
+    )
+    updated = await db.applications.find_one(
+        {"application_id": application_id, "user_id": user.user_id},
+        {"_id": 0},
+    ) or app_doc
+    job = await db.jobs.find_one({"job_id": updated.get("job_id")}, {"_id": 0})
+    return _public_application_doc(_normalize_application_status_fields(updated), job)
+
+
 async def require_admin_user(user: User = Depends(get_current_user)) -> User:
     if _is_admin_email(user.email) or bool(getattr(user, "is_admin", False)):
         return user
@@ -10430,6 +10544,7 @@ async def admin_get_user(user_id: str, admin: User = Depends(require_admin_user)
         "has_cv": bool((profile or {}).get("cv_text")),
         "cv_text_length": len((profile or {}).get("cv_text") or ""),
         "cv_preview": ((profile or {}).get("cv_text") or "")[:2000],
+        "original_cv_available": bool((profile or {}).get("cv_original_b64")),
         "has_cover_letter": bool((profile or {}).get("cover_letter_text")),
         "cover_letter_text_length": len((profile or {}).get("cover_letter_text") or ""),
         "cover_letter_preview": ((profile or {}).get("cover_letter_text") or "")[:2000],
@@ -10495,6 +10610,28 @@ async def admin_get_user(user_id: str, admin: User = Depends(require_admin_user)
         },
         "internal_notes": [],
     }
+
+
+@api_router.get("/admin/users/{user_id}/original-cv")
+async def admin_download_user_original_cv(user_id: str, admin: User = Depends(require_admin_user)):
+    from fastapi.responses import Response as FastAPIResponse
+
+    profile = await db.profiles.find_one(
+        {"user_id": user_id},
+        {"_id": 0, "cv_original_b64": 1, "cv_mime": 1, "cv_filename": 1},
+    )
+    if not profile or not profile.get("cv_original_b64"):
+        raise HTTPException(status_code=404, detail="Original CV not stored")
+    try:
+        content = base64.b64decode(profile["cv_original_b64"], validate=True)
+    except (ValueError, TypeError, base64.binascii.Error) as exc:
+        raise HTTPException(status_code=500, detail="Stored original CV is invalid") from exc
+    filename = profile.get("cv_filename") or "original_cv"
+    return FastAPIResponse(
+        content=content,
+        media_type=profile.get("cv_mime") or "application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @api_router.post("/admin/users/{user_id}/repair-billing")

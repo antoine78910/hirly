@@ -20,6 +20,7 @@ import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
 import CompanyLogo from "../components/CompanyLogo";
 import CVPreview from "../components/CVPreview";
 import CoverLetterPreview from "../components/CoverLetterPreview";
+import ResumeCurrentPreview from "../components/profile/ResumeCurrentPreview";
 import {
   getApplicationCoverLetter,
   getApplicationResume,
@@ -28,8 +29,15 @@ import {
 } from "../lib/applicationDocuments";
 import { resolveCvDisplayTemplate, withContactPhoto } from "../lib/cvTemplate";
 import { Button } from "../components/ui/button";
+import { Textarea } from "../components/ui/textarea";
 
 const DOC_TYPES = new Set(["cv", "cover"]);
+
+function coverLetterBodyText(letter) {
+  return [letter?.greeting, ...(letter?.paragraphs || []), letter?.sign_off, letter?.signature_name]
+    .filter(Boolean)
+    .join("\n\n");
+}
 
 function DocumentPreviewCard({ title, description, icon: Icon, children, onOpen, testId }) {
   return (
@@ -71,6 +79,10 @@ export default function ReviewApplicationDetail() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [cvSourceSaving, setCvSourceSaving] = useState(false);
+  const [editingCoverLetter, setEditingCoverLetter] = useState(false);
+  const [coverLetterDraft, setCoverLetterDraft] = useState("");
+  const [savingCoverLetter, setSavingCoverLetter] = useState(false);
 
   const isReader = DOC_TYPES.has(docType);
   const hasCv = hasApplicationResume(application);
@@ -116,6 +128,45 @@ export default function ReviewApplicationDetail() {
     resume?.template_recommendation || profile?.template_style,
   );
   const job = application?.job;
+  const cvSource = application?.cv_source || "tailored";
+  const hasOriginalCv = Boolean(profile?.cv_filename);
+
+  const changeCvSource = async (source) => {
+    if (!application?.application_id || source === cvSource || cvSourceSaving) return;
+    setCvSourceSaving(true);
+    try {
+      const { data } = await api.post(`/applications/${application.application_id}/cv-source`, { source });
+      setApplication(data);
+    } catch (e) {
+      const detail = e?.response?.data?.detail;
+      toast.error(detail?.message || (typeof detail === "string" ? detail : t("review.cvSourceUpdateError")));
+    } finally {
+      setCvSourceSaving(false);
+    }
+  };
+
+  const startEditCoverLetter = () => {
+    setCoverLetterDraft(coverLetterBodyText(coverLetter));
+    setEditingCoverLetter(true);
+  };
+
+  const saveCoverLetter = async () => {
+    if (!application?.application_id) return;
+    setSavingCoverLetter(true);
+    try {
+      const { data } = await api.patch(`/applications/${application.application_id}/cover-letter`, {
+        body_text: coverLetterDraft,
+      });
+      setApplication(data);
+      setEditingCoverLetter(false);
+      toast.success(t("review.coverLetterSaved"));
+    } catch (e) {
+      const detail = e?.response?.data?.detail;
+      toast.error(detail?.message || (typeof detail === "string" ? detail : t("review.coverLetterSaveError")));
+    } finally {
+      setSavingCoverLetter(false);
+    }
+  };
 
   const approveAndSubmit = async () => {
     if (!application?.application_id) return;
@@ -186,23 +237,88 @@ export default function ReviewApplicationDetail() {
 
               {docType === "cv" ? (
                 hasCv ? (
-                  <CVPreview
-                    contact={contact}
-                    resume={resume}
-                    job={job}
-                    template={template}
-                    theme="light"
-                  />
+                  <div>
+                    <div className="mb-4 inline-flex rounded-full border shell-border bg-sprout-surface p-1">
+                      {[
+                        { value: "tailored", label: t("review.cvSourceTailored") },
+                        { value: "original", label: t("review.cvSourceOriginal") },
+                      ].map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => changeCvSource(option.value)}
+                          disabled={cvSourceSaving || (option.value === "original" && !hasOriginalCv)}
+                          data-testid={`cv-source-${option.value}`}
+                          className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                            cvSource === option.value
+                              ? "gradient-linkedin text-white"
+                              : "shell-body hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                    {cvSource === "original" ? (
+                      <ResumeCurrentPreview profile={profile} active compact />
+                    ) : (
+                      <CVPreview
+                        contact={contact}
+                        resume={resume}
+                        job={job}
+                        template={template}
+                        theme="light"
+                      />
+                    )}
+                  </div>
                 ) : (
                   <p className="py-10 text-center text-sm shell-body">{t("tracker.cvUnavailable")}</p>
                 )
               ) : hasCover ? (
-                <CoverLetterPreview
-                  contact={contact}
-                  letter={coverLetter}
-                  job={job}
-                  theme="light"
-                />
+                <div>
+                  <div className="mb-4 flex justify-end">
+                    {editingCoverLetter ? (
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => setEditingCoverLetter(false)}
+                          disabled={savingCoverLetter}
+                          data-testid="cover-letter-cancel-edit"
+                        >
+                          {t("review.cancelEdit")}
+                        </Button>
+                        <Button
+                          onClick={saveCoverLetter}
+                          disabled={savingCoverLetter}
+                          data-testid="cover-letter-save"
+                        >
+                          {savingCoverLetter ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                          {t("review.saveCoverLetter")}
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button variant="outline" onClick={startEditCoverLetter} data-testid="cover-letter-edit">
+                        {t("review.editCoverLetter")}
+                      </Button>
+                    )}
+                  </div>
+                  {editingCoverLetter ? (
+                    <Textarea
+                      value={coverLetterDraft}
+                      onChange={(e) => setCoverLetterDraft(e.target.value)}
+                      rows={16}
+                      className="text-sm leading-relaxed"
+                      data-testid="cover-letter-textarea"
+                    />
+                  ) : (
+                    <CoverLetterPreview
+                      contact={contact}
+                      letter={coverLetter}
+                      job={job}
+                      theme="light"
+                    />
+                  )}
+                </div>
               ) : (
                 <p className="py-10 text-center text-sm shell-body">{t("tracker.coverUnavailable")}</p>
               )}

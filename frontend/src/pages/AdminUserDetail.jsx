@@ -10,7 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ArrowLeft, Crown, FileText, Heart, Loader2, UserCheck, X } from "lucide-react";
+import { ArrowLeft, Crown, Download, FileText, Heart, Loader2, UserCheck, X } from "lucide-react";
 import { toast } from "sonner";
 import { api, startImpersonation } from "../lib/api";
 import { adminApiErrorMessage } from "../lib/adminApi";
@@ -204,6 +204,20 @@ export default function AdminUserDetail() {
     }
   };
 
+  const downloadOriginalCv = async () => {
+    try {
+      const response = await api.get(`/admin/users/${userId}/original-cv`, { responseType: "blob" });
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = documents.cv_filename || "original_cv";
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Could not download CV");
+    }
+  };
+
   const handleImpersonate = async () => {
     setImpersonating(true);
     try {
@@ -379,22 +393,35 @@ export default function AdminUserDetail() {
               description="CV, cover letter and links captured for this account."
             >
               <div className="grid gap-3 sm:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={() => documents.has_cv && setDocModal({ title: documents.cv_filename || "CV", text: documents.cv_preview })}
-                  disabled={!documents.has_cv}
-                  className={`flex items-center justify-between rounded-lg border px-3 py-2.5 text-left text-sm transition ${
-                    documents.has_cv ? "border-zinc-200 bg-white hover:bg-zinc-50" : "border-zinc-100 bg-zinc-50 text-zinc-400"
+                <div
+                  className={`flex items-center justify-between rounded-lg border px-3 py-2.5 text-sm transition ${
+                    documents.has_cv ? "border-zinc-200 bg-white" : "border-zinc-100 bg-zinc-50 text-zinc-400"
                   }`}
                 >
-                  <span className="flex items-center gap-2">
-                    <FileText className="h-4 w-4" />
-                    <span>
-                      <span className="block font-medium text-zinc-800">{documents.cv_filename || "CV"}</span>
+                  <button
+                    type="button"
+                    onClick={() => documents.has_cv && setDocModal({ title: documents.cv_filename || "CV", text: documents.cv_preview })}
+                    disabled={!documents.has_cv}
+                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                  >
+                    <FileText className="h-4 w-4 shrink-0" />
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium text-zinc-800">{documents.cv_filename || "CV"}</span>
                       <span className="block text-xs text-zinc-500">{documents.has_cv ? `${documents.cv_text_length} characters` : "Not uploaded"}</span>
                     </span>
-                  </span>
-                </button>
+                  </button>
+                  {documents.original_cv_available ? (
+                    <button
+                      type="button"
+                      onClick={downloadOriginalCv}
+                      className="ml-2 inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-linkedin hover:bg-linkedin/10"
+                      data-testid="admin-download-original-cv"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Download
+                    </button>
+                  ) : null}
+                </div>
                 <button
                   type="button"
                   onClick={() => documents.has_cover_letter && setDocModal({ title: "Cover letter", text: documents.cover_letter_preview })}

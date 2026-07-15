@@ -23,16 +23,19 @@ export function normalizeCoverLetter(letter = {}) {
   }
 
   const template = letter.template || (letter.subject ? "french_formal" : "standard");
+  // A user-edited letter folds greeting/sign-off/signature into `paragraphs`
+  // as free text -- don't inject the placeholder defaults on top of it.
+  const edited = Boolean(letter.cover_letter_edited);
 
   return {
     ...letter,
     template,
     paragraphs,
-    sign_off: signOff || (template === "french_formal"
+    sign_off: signOff || (edited ? "" : template === "french_formal"
       ? "Je vous prie de recevoir, Madame, Monsieur, l'expression de mes sincères salutations."
       : "Warm regards,"),
     signature_name: signatureName,
-    greeting: letter.greeting || (template === "french_formal" ? "Madame, Monsieur," : ""),
+    greeting: letter.greeting || (edited ? "" : template === "french_formal" ? "Madame, Monsieur," : ""),
   };
 }
 

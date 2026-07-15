@@ -73,12 +73,12 @@ export default function CoverLetterPreview({ contact = {}, letter = {}, job, the
           <p className={`mt-4 font-display text-base font-bold ${palette.subject}`}>
             Objet : {normalized.subject || `Candidature pour le poste de ${job?.title || "ce poste"}${company ? ` - ${company}` : ""}`}
           </p>
-          <p className="mt-5">{normalized.greeting || "Madame, Monsieur,"}</p>
+          {normalized.greeting ? <p className="mt-5">{normalized.greeting}</p> : null}
           <div className="mt-3 space-y-3">
             {(normalized.paragraphs || []).map((p, i) => (<p key={i}>{p}</p>))}
           </div>
-          <p className="mt-5">{normalized.sign_off}</p>
-          <p className={`mt-3 font-semibold ${palette.name}`}>{signatureName}</p>
+          {normalized.sign_off ? <p className="mt-5">{normalized.sign_off}</p> : null}
+          {signatureName ? <p className={`mt-3 font-semibold ${palette.name}`}>{signatureName}</p> : null}
         </div>
       </motion.div>
     );
@@ -108,12 +108,14 @@ export default function CoverLetterPreview({ contact = {}, letter = {}, job, the
             <span className={`text-xs ${palette.muted}`}>{job?.location}</span>
           </p>
         ) : null}
-        <p className="mt-5">{normalized.greeting || `Dear ${company || "Hiring"} team,`}</p>
+        {normalized.greeting || !normalized.cover_letter_edited ? (
+          <p className="mt-5">{normalized.greeting || `Dear ${company || "Hiring"} team,`}</p>
+        ) : null}
         <div className="mt-3 space-y-3">
           {(normalized.paragraphs || []).map((p, i) => (<p key={i}>{p}</p>))}
         </div>
-        <p className="mt-5">{normalized.sign_off}</p>
-        <p className={`mt-3 font-semibold ${palette.name}`}>{signatureName}</p>
+        {normalized.sign_off ? <p className="mt-5">{normalized.sign_off}</p> : null}
+        {signatureName ? <p className={`mt-3 font-semibold ${palette.name}`}>{signatureName}</p> : null}
       </div>
     </motion.div>
   );
