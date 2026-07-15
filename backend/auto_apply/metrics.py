@@ -95,6 +95,16 @@ async def active_attempt_status(db, user_id: str, job_id: str) -> Optional[str]:
     return None
 
 
+async def latest_attempt(db, user_id: str, job_id: str) -> Optional[Dict[str, Any]]:
+    """Most recent attempt record for a (user_id, job_id) pair -- exposes the
+    full lifecycle (stage, status, reason, missing_fields, driver_version,
+    blueprint_signature, timestamps) for debugging / frontend display."""
+    rows = await db.auto_apply_attempts.find({"user_id": user_id, "job_id": job_id}).limit(50).to_list(50)
+    if not rows:
+        return None
+    return sorted(rows, key=lambda r: r.get("created_at") or "", reverse=True)[0]
+
+
 async def known_successful_signatures(db, provider: str) -> frozenset:
     rows = await db.auto_apply_attempts.find(
         {"provider": provider, "status": "submitted_success"}, {"blueprint_signature": 1}

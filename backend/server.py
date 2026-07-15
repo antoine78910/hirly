@@ -57,6 +57,9 @@ from cv_quality import attach_cover_letter_quality_report, normalize_application
 from application_email_service import send_application_email
 from apply_agent.models import ApplyAgentError
 from apply_agent.runner import run_apply_attempt
+from auto_apply.executor import execute_application as auto_apply_execute_application
+from auto_apply.metrics import latest_attempt as auto_apply_latest_attempt
+from auto_apply.metrics import summary as auto_apply_metrics_summary
 from db import create_database_adapter
 from db.supabase_adapter import count_supabase_table, test_supabase_connection
 from influencer_store import create_influencer, get_influencer, list_influencers, update_influencer
@@ -9381,6 +9384,50 @@ async def admin_jobs_company_discovery_status(admin: User = Depends(require_admi
     return {"last_run": company_discovery_last_summary()}
 
 
+class AdminAutoApplyExecuteRequest(BaseModel):
+    job_id: str
+    user_id: Optional[str] = None
+    dry_run: bool = False
+
+
+async def _auto_apply_target_user(user_id: Optional[str], admin: User) -> User:
+    if not user_id or user_id == admin.user_id:
+        return admin
+    loaded = await db.users.find_one({"user_id": user_id})
+    if not loaded:
+        raise HTTPException(status_code=404, detail="user_not_found")
+    return User(user_id=loaded["user_id"], email=loaded.get("email", ""), name=loaded.get("name", ""))
+
+
+@api_router.post("/admin/auto-apply/execute")
+async def admin_auto_apply_execute(body: AdminAutoApplyExecuteRequest, admin: User = Depends(require_admin_user)):
+    """Run the auto-apply pipeline for one job. Thin wrapper: it only loads the
+    application context and delegates to execute_application -- no orchestration
+    is duplicated here. Works for any registered ATS driver without changes."""
+    target_user = await _auto_apply_target_user(body.user_id, admin)
+    job, profile, app_doc = await _load_or_create_agent_application(body.job_id, target_user)
+    result = await auto_apply_execute_application(
+        db, job, profile, app_doc, target_user.model_dump(mode="json"),
+        dry_run=body.dry_run, headless=_browser_engine_headless(),
+    )
+    attempt = await auto_apply_latest_attempt(db, target_user.user_id, job.get("job_id"))
+    return {"result": result, "attempt": attempt}
+
+
+@api_router.get("/admin/auto-apply/status")
+async def admin_auto_apply_status(job_id: str, user_id: Optional[str] = None, admin: User = Depends(require_admin_user)):
+    """Latest attempt record for a job -- exposes stage, status, reason,
+    missing_fields, driver_version, blueprint_signature and lifecycle timestamps
+    for debugging and frontend display."""
+    target = user_id or admin.user_id
+    return {"attempt": await auto_apply_latest_attempt(db, target, job_id)}
+
+
+@api_router.get("/admin/auto-apply/metrics")
+async def admin_auto_apply_metrics(provider: str = "greenhouse", admin: User = Depends(require_admin_user)):
+    return await auto_apply_metrics_summary(db, provider)
+
+
 @api_router.post("/admin/jobs/feed-diagnostic")
 async def admin_jobs_feed_diagnostic(body: AdminJobsFeedDiagnosticRequest, admin: User = Depends(require_admin_user)):
     _require_job_maintenance_enabled()
@@ -15041,6 +15088,9 @@ async def _startup_seed_impl():
 @app.on_event("startup")
 async def startup_seed():
     """Register routes immediately; run seeding in the background."""
+    # Register concrete ApplyDrivers once at startup. The executor never imports
+    # concrete drivers itself -- this import is the single registration point.
+    import auto_apply.drivers  # noqa: F401
     logger.info("DB health route registered at /api/dev/db-health")
     logger.info("DB counts route registered at /api/dev/db-counts")
     logger.info(
