@@ -654,6 +654,7 @@ class User(BaseModel):
     demo_account: bool = False
     training_access: bool = False
     is_admin: bool = False
+    require_review_before_send: bool = True
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -931,6 +932,10 @@ class ContactUpdate(BaseModel):
 
 class ApplicationDefaultsUpdate(BaseModel):
     application_defaults: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AccountSettingsUpdate(BaseModel):
+    require_review_before_send: Optional[bool] = None
 
 
 class StructuredProfileDataUpdate(BaseModel):
@@ -5649,6 +5654,19 @@ async def onboarding_suggest_roles(body: OnboardingSuggestRolesRequest):
     )
 
 
+@api_router.put("/account/settings")
+async def update_account_settings(body: AccountSettingsUpdate, user: User = Depends(get_current_user)):
+    if body.require_review_before_send is not None:
+        await _set_user_require_review_before_send(user.user_id, body.require_review_before_send)
+    return {
+        "require_review_before_send": (
+            body.require_review_before_send
+            if body.require_review_before_send is not None
+            else user.require_review_before_send
+        )
+    }
+
+
 @api_router.put("/profile/preferences")
 async def update_preferences(prefs: PreferencesUpdate, user: User = Depends(get_current_user)):
     payload = prefs.model_dump(exclude_unset=True)
@@ -9869,6 +9887,16 @@ async def _set_user_training_access(user_id: str, training_access: bool) -> None
         raise HTTPException(status_code=404, detail="User not found")
 
 
+async def _set_user_require_review_before_send(user_id: str, value: bool) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    result = await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {"require_review_before_send": value, "updated_at": now}},
+    )
+    if getattr(result, "matched_count", 0) == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+
+
 def _admin_email_set() -> set[str]:
     return {"anto.delbos@gmail.com", "oudrhiriyouneslfim@gmail.com"} | _env_email_set("ADMIN_EMAILS")
 
@@ -12074,6 +12102,12 @@ async def _run_agent_apply(job_id: str, user: User, click_submit: bool = False) 
             },
         ) from exc
 
+    if click_submit and user.require_review_before_send and app_doc.get("document_review_status") != "approved":
+        raise HTTPException(
+            status_code=409,
+            detail="Please review and approve your CV and cover letter in the Review tab before this application can be submitted.",
+        )
+
     try:
         result = await run_apply_attempt(
             job=job,
@@ -13234,6 +13268,11 @@ async def greenhouse_validate_submit(body: GreenhousePrepareSubmitRequest, user:
 @api_router.post("/applications/greenhouse/submit")
 async def greenhouse_submit(body: GreenhousePrepareSubmitRequest, user: User = Depends(get_current_user)):
     job, app_doc, payload = await _load_greenhouse_prepared_application(body.job_id, user)
+    if user.require_review_before_send and app_doc.get("document_review_status") != "approved":
+        raise HTTPException(
+            status_code=409,
+            detail="Please review and approve your CV and cover letter in the Review tab before this application can be submitted.",
+        )
     missing_information = app_doc.get("prepared_missing_information") or []
     blockers = app_doc.get("prepared_blockers") or []
     if app_doc.get("package_status") != "generated":

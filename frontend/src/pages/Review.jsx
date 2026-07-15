@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   Loader2,
   MapPin,
-  Settings,
   ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -20,6 +19,8 @@ import { BrandHeader } from "../components/app/AppScreenHeader";
 import { AppPage, AppPageScroll, SHELL_PAGE_CLASS } from "../components/app/AppPageShell";
 import DesktopPageHeader from "../components/desktop/DesktopPageHeader";
 import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
+import { getAiSettingRows } from "../lib/appUi";
+import ViralToggle from "../components/settings/ViralToggle";
 import CompanyLogo from "../components/CompanyLogo";
 
 const fmtDate = (iso) => {
@@ -31,8 +32,9 @@ const fmtDate = (iso) => {
 export default function Review() {
   const { t } = useAppLocale();
   const navigate = useNavigate();
-  const { settings } = useAiSettings();
+  const { settings, updateSetting } = useAiSettings();
   const reviewEnabled = settings.reviewDocuments;
+  const reviewRow = useMemo(() => getAiSettingRows(t).find((row) => row.id === "reviewDocuments"), [t]);
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -82,6 +84,27 @@ export default function Review() {
             subtitle={reviewEnabled ? t("review.subtitleOn") : t("review.subtitleOff")}
           />
 
+          {reviewRow ? (
+            <section
+              className="mt-6 flex items-center gap-3 rounded-2xl border shell-dashed shell-surface px-4 py-4"
+              data-testid="review-tab-review-toggle"
+            >
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border shell-dashed text-violet-400">
+                <ShieldCheck className="h-4 w-4" strokeWidth={1.9} />
+              </div>
+              <div className="min-w-0 flex-1 pr-2">
+                <p className="text-[15px] font-semibold shell-title">{reviewRow.title}</p>
+                <p className="mt-1 text-sm leading-snug shell-body">{reviewRow.description}</p>
+              </div>
+              <ViralToggle
+                checked={reviewEnabled}
+                onChange={(value) => updateSetting("reviewDocuments", value)}
+                testId="review-tab-toggle-reviewDocuments"
+                offClassName="bg-zinc-600"
+              />
+            </section>
+          ) : null}
+
           {!reviewEnabled ? (
             <section className="mt-6 rounded-3xl border border-dashed shell-dashed shell-inset px-6 py-10 text-center">
               <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-violet-500/15 text-violet-400">
@@ -91,13 +114,6 @@ export default function Review() {
               <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed shell-body">
                 {t("review.disabledBody")}
               </p>
-              <Link
-                to="/settings"
-                className="mt-6 inline-flex items-center gap-2 rounded-full gradient-linkedin px-5 py-2.5 text-sm font-semibold text-white"
-              >
-                <Settings className="h-4 w-4" />
-                {t("review.openAiSettings")}
-              </Link>
             </section>
           ) : loading ? (
             <div className="mt-16 flex justify-center">
