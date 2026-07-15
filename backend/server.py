@@ -9601,6 +9601,7 @@ class AdminAutoApplyExecuteRequest(BaseModel):
     job_id: str
     user_id: Optional[str] = None
     dry_run: bool = False
+    headless: Optional[bool] = None
 
 
 async def _auto_apply_target_user(user_id: Optional[str], admin: User) -> User:
@@ -9621,7 +9622,8 @@ async def admin_auto_apply_execute(body: AdminAutoApplyExecuteRequest, admin: Us
     job, profile, app_doc = await _load_or_create_agent_application(body.job_id, target_user)
     result = await auto_apply_execute_application(
         db, job, profile, app_doc, target_user.model_dump(mode="json"),
-        dry_run=body.dry_run, headless=_browser_engine_headless(),
+        dry_run=body.dry_run,
+        headless=_browser_engine_headless() if body.headless is None else body.headless,
     )
     attempt = await auto_apply_latest_attempt(db, target_user.user_id, job.get("job_id"))
     return {"result": result, "attempt": attempt}
@@ -9713,6 +9715,7 @@ class AdminAutoApplyValidateRequest(BaseModel):
     additional_answers: Dict[str, Any] = Field(default_factory=dict)
     contact: Dict[str, Any] = Field(default_factory=dict)
     dry_run: bool = True
+    headless: Optional[bool] = None
 
 
 def _greenhouse_job_from_url(url: str) -> Dict[str, Any]:
@@ -9772,7 +9775,8 @@ async def admin_auto_apply_lab_execute(body: AdminAutoApplyValidateRequest, admi
         app_doc["cover_letter"] = {"paragraphs": [body.cover_letter_text]}
     return await auto_apply_execute_application(
         db, job, profile, app_doc, admin.model_dump(mode="json"),
-        dry_run=body.dry_run, headless=_browser_engine_headless(),
+        dry_run=body.dry_run,
+        headless=_browser_engine_headless() if body.headless is None else body.headless,
     )
 
 

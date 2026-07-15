@@ -296,9 +296,12 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
 
     async def _apply_step(self, page: Any, step, documents: Dict[str, Any], evidence) -> None:
         if step.action == "fill" and any("combobox" in loc for loc in step.locators):
+            preview = str(step.value or "")[:100]
             loc = await self._first_locator(page, step.locators)
             if loc is None:
                 evidence.raw.setdefault("unmatched_steps", []).append(step.locators[:1])
+                await self._log_step(evidence, action="fill", locators=step.locators,
+                                     status="not_found", value_preview=preview)
                 return
             try:
                 await loc.click(timeout=3000)
@@ -307,9 +310,13 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
                     await page.keyboard.press("Enter")
                 except Exception:
                     pass
+                await self._log_step(evidence, action="fill", locators=step.locators,
+                                     status="ok", value_preview=preview)
                 return
             except Exception as exc:
                 evidence.raw.setdefault("step_errors", []).append(f"{exc.__class__.__name__}:{step.locators[:1]}")
+                await self._log_step(evidence, action="fill", locators=step.locators,
+                                     status="error", value_preview=preview, error=str(exc))
                 return
         await super()._apply_step(page, step, documents, evidence)
 
@@ -317,6 +324,8 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
         loc = await self._first_locator(page, list(_SUBMIT_SELECTORS))
         if loc is None:
             evidence.raw["submit"] = "button_not_found"
+            await self._log_step(evidence, action="submit", locators=list(_SUBMIT_SELECTORS),
+                                 status="not_found")
             return
         try:
             await loc.scroll_into_view_if_needed(timeout=3000)
@@ -325,12 +334,17 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
         try:
             await loc.click(timeout=8000)
             evidence.submit_performed = True
+            await self._log_step(evidence, action="submit", locators=list(_SUBMIT_SELECTORS), status="ok")
         except Exception:
             try:
                 await loc.click(timeout=5000, force=True)
                 evidence.submit_performed = True
+                await self._log_step(evidence, action="submit", locators=list(_SUBMIT_SELECTORS),
+                                     status="ok", error="forced_click")
             except Exception as exc:
                 evidence.raw["submit_error"] = str(exc)[:200]
+                await self._log_step(evidence, action="submit", locators=list(_SUBMIT_SELECTORS),
+                                     status="error", error=str(exc))
 
 
 DRIVER_REGISTRY.register(SmartRecruitersApplyDriver())

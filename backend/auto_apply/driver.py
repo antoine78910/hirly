@@ -107,30 +107,58 @@ class BrowserApplyDriver(ApplyDriver):
                 continue
         return None
 
+    async def _log_step(self, evidence: SubmissionEvidence, *, action: str, locators: List[str],
+                        status: str, value_preview: str = "", error: str = "") -> None:
+        evidence.raw.setdefault("step_log", []).append({
+            "action": action,
+            "locator": locators[0] if locators else "",
+            "status": status,
+            "value_preview": value_preview,
+            "error": error[:200] if error else "",
+        })
+
     async def _apply_step(self, page: Any, step, documents: Dict[str, Any], evidence: SubmissionEvidence) -> None:
+        preview = "(file)" if step.action == "upload" else str(step.value or "")[:100]
         loc = await self._first_locator(page, step.locators)
         if loc is None:
             evidence.raw.setdefault("unmatched_steps", []).append(step.locators[:1])
+            await self._log_step(evidence, action=step.action, locators=step.locators,
+                                 status="not_found", value_preview=preview)
             return
         try:
             if step.action == "upload":
                 path = documents.get("resume_path") if step.file_role == "resume" else documents.get("cover_letter_path")
                 if path:
                     await loc.set_input_files(path, timeout=10000)
+                    await self._log_step(evidence, action="upload", locators=step.locators,
+                                         status="ok", value_preview=path.split("/")[-1] if path else "(file)")
+                else:
+                    await self._log_step(evidence, action="upload", locators=step.locators,
+                                         status="error", value_preview=preview, error="file_path_missing")
             elif step.action == "select":
                 await loc.select_option(label=str(step.value), timeout=3000)
+                await self._log_step(evidence, action="select", locators=step.locators,
+                                     status="ok", value_preview=preview)
             elif step.action == "check":
                 if str(step.value).strip().lower() not in ("", "false", "no", "0"):
                     await loc.check(timeout=3000)
+                await self._log_step(evidence, action="check", locators=step.locators,
+                                     status="ok", value_preview=preview)
             else:  # fill
                 await loc.fill(str(step.value), timeout=5000)
+                await self._log_step(evidence, action="fill", locators=step.locators,
+                                     status="ok", value_preview=preview)
         except Exception as exc:
             evidence.raw.setdefault("step_errors", []).append(f"{exc.__class__.__name__}:{step.locators[:1]}")
+            await self._log_step(evidence, action=step.action, locators=step.locators,
+                                 status="error", value_preview=preview, error=str(exc))
 
     async def _click_submit(self, page: Any, evidence: SubmissionEvidence) -> None:
         loc = await self._first_locator(page, [_SUBMIT_SELECTOR])
         if loc is None:
             evidence.raw["submit"] = "button_not_found"
+            await self._log_step(evidence, action="submit", locators=[_SUBMIT_SELECTOR],
+                                 status="not_found")
             return
         try:
             await loc.scroll_into_view_if_needed(timeout=3000)
@@ -139,12 +167,17 @@ class BrowserApplyDriver(ApplyDriver):
         try:
             await loc.click(timeout=8000)
             evidence.submit_performed = True
+            await self._log_step(evidence, action="submit", locators=[_SUBMIT_SELECTOR], status="ok")
         except Exception:
             try:
                 await loc.click(timeout=5000, force=True)
                 evidence.submit_performed = True
+                await self._log_step(evidence, action="submit", locators=[_SUBMIT_SELECTOR],
+                                     status="ok", error="forced_click")
             except Exception as exc:
                 evidence.raw["submit_error"] = str(exc)[:200]
+                await self._log_step(evidence, action="submit", locators=[_SUBMIT_SELECTOR],
+                                     status="error", error=str(exc))
 
     async def _gather_evidence(self, page: Any, evidence: SubmissionEvidence, starting_url: str) -> None:
         try:

@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { api } from "../lib/api";
 import { adminApiErrorMessage } from "../lib/adminApi";
 import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
+import AutoApplyRunConsole from "../components/admin/AutoApplyRunConsole";
 import { Button } from "../components/ui/button";
 
 // Minimal end-to-end validation harness (admin only). Paste a Greenhouse job
@@ -42,6 +43,7 @@ export default function AdminAutoApplyLab() {
   const [coverFile, setCoverFile] = useState(null);
   const [answersText, setAnswersText] = useState("");
   const [dryRun, setDryRun] = useState(true);
+  const [showBrowser, setShowBrowser] = useState(false);
   const [running, setRunning] = useState(false);
   const [accessDenied, setAccessDenied] = useState(false);
   const [error, setError] = useState("");
@@ -84,7 +86,12 @@ export default function AdminAutoApplyLab() {
     try {
       const { data } = await api.post(
         "/admin/auto-apply/execute",
-        { job_id: row.job_id, user_id: row.user_id, dry_run: isDryRun },
+        {
+          job_id: row.job_id,
+          user_id: row.user_id,
+          dry_run: isDryRun,
+          headless: isDryRun ? true : !showBrowser,
+        },
         { timeout: 240000 },
       );
       const result = data.result || data;
@@ -122,6 +129,7 @@ export default function AdminAutoApplyLab() {
       const payload = {
         greenhouse_url: url.trim(),
         dry_run: dryRun,
+        headless: dryRun ? true : !showBrowser,
         additional_answers: additionalAnswers,
       };
       if (resumeFile) {
@@ -165,9 +173,19 @@ export default function AdminAutoApplyLab() {
         <div className="mb-8">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h2 className="font-display text-lg font-bold text-zinc-900">User right swipes</h2>
-            <p className="text-xs text-zinc-500">
-              Supported ATS: {supportedProviders.length ? supportedProviders.join(", ") : "—"}
-            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-xs text-zinc-600">
+                <input
+                  type="checkbox"
+                  checked={showBrowser}
+                  onChange={(e) => setShowBrowser(e.target.checked)}
+                />
+                Show browser on Apply
+              </label>
+              <p className="text-xs text-zinc-500">
+                Supported ATS: {supportedProviders.length ? supportedProviders.join(", ") : "—"}
+              </p>
+            </div>
           </div>
           <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
             <div className="overflow-x-auto">
@@ -305,6 +323,23 @@ export default function AdminAutoApplyLab() {
           Dry run (inspect + classify + resolve + plan, but do NOT submit)
         </label>
 
+        <label className="flex items-center gap-2 text-sm text-zinc-700">
+          <input
+            type="checkbox"
+            checked={showBrowser}
+            disabled={dryRun}
+            onChange={(e) => setShowBrowser(e.target.checked)}
+          />
+          Show browser window while filling (real apply only; works on local backend with a display)
+        </label>
+
+        <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
+          Use the run console below after each attempt. If you see
+          {" "}
+          <code className="rounded bg-zinc-200 px-1">needs_user_input:resume</code>
+          , the user application has no tailored CV yet — complete Review first.
+        </div>
+
         <Button type="button" onClick={run} disabled={running}>
           {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
           {running ? "Running…" : dryRun ? "Run dry run" : "Run REAL submission"}
@@ -312,40 +347,14 @@ export default function AdminAutoApplyLab() {
       </div>
 
       {report ? (
-        <div className="mt-6 max-w-3xl space-y-4">
-          <div className="grid gap-3 sm:grid-cols-3">
+        <>
+          <div className="mt-6 grid max-w-3xl gap-3 sm:grid-cols-3">
             <Stat label="Stage reached" value={report.stage_reached} />
             <Stat label="Status" value={report.status} />
             <Stat label="Verdict" value={report.verdict ?? "—"} />
-            <Stat label="Driver version" value={report.driver_version ?? "—"} />
-            <Stat label="Blueprint signature" value={report.blueprint_signature ?? "—"} />
-            <Stat label="Duration" value={report.duration_ms != null ? `${report.duration_ms} ms` : "—"} />
           </div>
-
-          {Array.isArray(report.missing_fields) && report.missing_fields.length ? (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              <p className="font-semibold">Missing fields (needs user input):</p>
-              <ul className="mt-1 list-disc pl-5">
-                {report.missing_fields.map((f) => <li key={f}>{f}</li>)}
-              </ul>
-            </div>
-          ) : null}
-
-          {Array.isArray(report.screenshots) && report.screenshots.length ? (
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Screenshot</p>
-              <img alt="submission screenshot" src={`data:image/jpeg;base64,${report.screenshots[0]}`}
-                className="rounded-lg border border-zinc-200" />
-            </div>
-          ) : null}
-
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Full ExecutionReport</p>
-            <pre className="max-h-[520px] overflow-auto rounded-lg bg-zinc-950 p-4 text-xs text-zinc-100 whitespace-pre-wrap">
-              {JSON.stringify(report, null, 2)}
-            </pre>
-          </div>
-        </div>
+          <AutoApplyRunConsole report={report} />
+        </>
       ) : null}
     </AdminShell>
   );
