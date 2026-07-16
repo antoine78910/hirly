@@ -210,6 +210,32 @@ def test_bot_wall_aborts_with_blocked_reason(monkeypatch):
     assert ev.blocked_reason == "bot_protection" and ev.submit_performed is False
 
 
+def test_bot_wall_after_reveal_aborts_before_fills(monkeypatch):
+    """SmartRecruiters often shows the bot wall only after Apply/oneclick."""
+    page = _FakePage(known_selectors=set())
+    _install_fake_page(monkeypatch, page)
+    calls = {"n": 0}
+
+    async def bot_after_first(p, http_status=None):
+        calls["n"] += 1
+        return calls["n"] >= 2
+
+    monkeypatch.setattr(driver_mod, "detect_bot_wall", bot_after_first)
+
+    plan = ApplicationPlan(steps=[
+        PlanStep(action="fill", locators=['[name="email"]'], value="a@b.co"),
+        PlanStep(action="submit", locators=[]),
+    ])
+    ctx = SubmissionContext(job={"external_url": "https://x/y"}, blueprint=None, plan=plan, documents={})
+    ev = asyncio.run(_StubDriver().submit(ctx))
+    assert ev.blocked_reason == "bot_protection"
+    assert ev.submit_performed is False
+    assert page.filled == []
+    assert any(
+        step.get("action") == "bot_wall_after_reveal" for step in (ev.raw or {}).get("step_log", [])
+    )
+
+
 def test_registry_resolves_by_provider_only():
     DRIVER_REGISTRY.register(_StubDriver())
     assert DRIVER_REGISTRY.for_job({"ats_provider": "stub"}).provider == "stub"

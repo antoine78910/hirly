@@ -66,13 +66,46 @@ class BrowserApplyDriver(ApplyDriver):
 
     async def after_navigation(self, page: Any, evidence: SubmissionEvidence) -> None:
         """Hook after the first page load and cookie dismissal."""
-        await human_pause(page, 1200, 2800)
+        await human_pause(page, 1600, 3400)
         await human_scroll(page)
+        await human_pause(page, 400, 1100)
 
     async def reveal_form(self, page: Any) -> None:
         """Optional fixed-selector click to reveal a form behind an Apply CTA.
         Default: nothing. Subclasses override with a deterministic selector."""
         return None
+
+    async def _abort_if_blocked(
+        self,
+        page: Any,
+        evidence: SubmissionEvidence,
+        *,
+        http_status: Optional[int] = None,
+        stage: str = "bot_wall",
+    ) -> bool:
+        """Return True when the run should stop (bot wall / login / captcha)."""
+        if await detect_bot_wall(page, http_status=http_status):
+            evidence.blocked_reason = "bot_protection"
+            evidence.screenshot_b64 = await screenshot_b64(page)
+            await self._log_step(
+                evidence,
+                action=stage,
+                locators=["body"],
+                status="blocked",
+                error=f"HTTP {http_status or 'page'}",
+            )
+            return True
+        if await detect_login_wall(page):
+            evidence.blocked_reason = "login_wall"
+            evidence.screenshot_b64 = await screenshot_b64(page)
+            await self._log_step(evidence, action="login_wall", locators=["body"], status="blocked")
+            return True
+        if captcha_active(await detect_captcha(page)):
+            evidence.blocked_reason = "captcha"
+            evidence.screenshot_b64 = await screenshot_b64(page)
+            await self._log_step(evidence, action="captcha", locators=["body"], status="blocked")
+            return True
+        return False
 
     async def submit(self, ctx: SubmissionContext) -> SubmissionEvidence:
         url = self.application_url(ctx.job)
@@ -111,25 +144,25 @@ class BrowserApplyDriver(ApplyDriver):
                 except Exception:
                     pass
                 await dismiss_cookie_banner(page)
+                await human_pause(page, 700, 1600)
 
-                if await detect_bot_wall(page, http_status=http_status):
-                    evidence.blocked_reason = "bot_protection"
-                    evidence.screenshot_b64 = await screenshot_b64(page)
-                    await self._log_step(evidence, action="bot_wall", locators=["body"],
-                                         status="blocked", error=f"HTTP {http_status or 'page'}")
-                    return evidence
-                if await detect_login_wall(page):
-                    evidence.blocked_reason = "login_wall"
-                    evidence.screenshot_b64 = await screenshot_b64(page)
-                    return evidence
-                if captcha_active(await detect_captcha(page)):
-                    evidence.blocked_reason = "captcha"
-                    evidence.screenshot_b64 = await screenshot_b64(page)
+                if await self._abort_if_blocked(page, evidence, http_status=http_status, stage="bot_wall"):
                     return evidence
 
                 await self.after_navigation(page, evidence)
                 await self.reveal_form(page)
-                await human_pause(page, 900, 2000)
+                await human_pause(page, 1400, 2800)
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=10000)
+                except Exception:
+                    pass
+                await dismiss_cookie_banner(page)
+
+                # SmartRecruiters (and similar) often serve the bot wall only
+                # after the Apply CTA navigates to oneclick-ui — re-check here.
+                if await self._abort_if_blocked(page, evidence, stage="bot_wall_after_reveal"):
+                    return evidence
+
                 starting_url = page.url
 
                 for step in ctx.plan.steps:
@@ -137,7 +170,7 @@ class BrowserApplyDriver(ApplyDriver):
                         await self._click_submit(page, evidence)
                         continue
                     await self._apply_step(page, step, ctx.documents, evidence)
-                    await human_pause(page, 500, 1400)
+                    await human_pause(page, 700, 1800)
 
                 await self._gather_evidence(page, evidence, starting_url)
                 evidence.screenshot_b64 = await screenshot_b64(page)

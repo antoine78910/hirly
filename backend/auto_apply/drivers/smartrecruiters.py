@@ -187,7 +187,7 @@ def _company_slug(job: Dict[str, Any], posting_url: str) -> str:
 
 class SmartRecruitersApplyDriver(BrowserApplyDriver):
     provider = "smartrecruiters"
-    version = "smartrecruiters-1.1.0"
+    version = "smartrecruiters-1.1.1"
 
     def __init__(self):
         self._adapter = SmartRecruitersAtsAdapter()
@@ -286,6 +286,20 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
             )
         return await super().submit(ctx)
 
+    async def after_navigation(self, page: Any, evidence) -> None:
+        """Warm the SmartRecruiters origin a bit before interacting with Apply."""
+        await human_pause(page, 1800, 3600)
+        await human_scroll(page)
+        await human_pause(page, 500, 1200)
+        # Light mouse wander so the session is not "land and click Apply" only.
+        try:
+            await page.mouse.move(random.randint(120, 480), random.randint(160, 420), steps=random.randint(8, 18))
+            await human_pause(page, 250, 700)
+            await page.mouse.move(random.randint(520, 980), random.randint(220, 560), steps=random.randint(8, 18))
+        except Exception:
+            pass
+        await human_pause(page, 400, 900)
+
     async def reveal_form(self, page: Any) -> None:
         url = page.url or ""
         if "oneclick-ui" in url:
@@ -294,10 +308,11 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
             try:
                 loc = page.locator(selector)
                 if await loc.count():
+                    await human_pause(page, 800, 1800)
                     await human_click(loc.first, page)
-                    await human_pause(page, 1200, 2600)
+                    await human_pause(page, 1800, 3200)
                     try:
-                        await page.wait_for_load_state("networkidle", timeout=10000)
+                        await page.wait_for_load_state("networkidle", timeout=12000)
                     except Exception:
                         pass
                     return
