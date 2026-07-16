@@ -131,6 +131,16 @@ export function buildApplicationTimeline(application, emails = [], t, lang = "en
     });
   }
 
+  if (submission === "expired" || displayStatus === "expired") {
+    events.push({
+      key: "expired",
+      at: application.updated_at || offsetIso(created, 4),
+      kind: "expired",
+      title: t("tracker.timelineExpired"),
+      description: t("tracker.timelineExpiredDesc"),
+    });
+  }
+
   if (submission === "prepare_failed") {
     events.push({
       key: "prepare-failed",

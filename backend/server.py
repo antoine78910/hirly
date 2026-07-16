@@ -901,7 +901,7 @@ class AdminStatusUpdate(BaseModel):
 
 
 class AdminManualStatusUpdate(BaseModel):
-    manual_status: Literal["manual_review_needed", "manual_in_progress", "manually_submitted", "manual_blocked", "needs_user_input"]
+    manual_status: Literal["manual_review_needed", "manual_in_progress", "manually_submitted", "manual_blocked", "needs_user_input", "offer_expired"]
     note: Optional[str] = None
 
 
@@ -2582,6 +2582,28 @@ async def _consume_application_credit(user_id: str) -> Dict[str, int]:
         "credits_remaining": plan_remaining + bonus_remaining,
         "credits_total": plan_total + bonus_total,
     }
+
+
+async def _refund_application_credit(user_id: str) -> None:
+    """Give back the 1 credit an application consumed (e.g. the job offer
+    expired before the user could actually be considered). We don't track
+    which pool (plan vs. bonus) a given application drained, so refund into
+    the plan pool, clamped to the plan allowance -- mirrors the direct-$set
+    pattern used for bonus-credit grants in _grant_friend_referral_billing
+    rather than routing through _update_user_billing_by_user_id, which would
+    incorrectly reset the whole billing state as if newly subscribed."""
+    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0, "billing": 1})
+    billing = _billing_from_user(user_doc)
+    plan_total = int(billing.get("credits_total") or 0)
+    plan_remaining = int(billing.get("credits_remaining") or 0)
+    new_remaining = min(plan_total, plan_remaining + 1) if plan_total > 0 else plan_remaining + 1
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "billing.credits_remaining": new_remaining,
+            "billing.updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
 
 
 @api_router.post("/billing/create-checkout-session")
@@ -10092,7 +10114,7 @@ def _admin_status_filter(filter_value: Optional[str]) -> Optional[set[str]]:
     return mapping.get(filter_value)
 
 
-MANUAL_STATUSES = {"manual_review_needed", "manual_in_progress", "manually_submitted", "manual_blocked", "needs_user_input"}
+MANUAL_STATUSES = {"manual_review_needed", "manual_in_progress", "manually_submitted", "manual_blocked", "needs_user_input", "offer_expired"}
 
 
 def _has_remaining_user_questions(app_doc: Dict[str, Any]) -> bool:
@@ -12255,6 +12277,13 @@ async def admin_update_application_manual_status(
         update["submitted_at"] = app_doc.get("submitted_at") or now
     elif body.manual_status == "needs_user_input":
         update["submission_status"] = "action_required"
+    elif body.manual_status == "offer_expired":
+        update["submission_status"] = "expired"
+        # Guard against refunding twice if an admin re-applies this status
+        # (e.g. after toggling to something else and back).
+        if not app_doc.get("credit_refunded_at") and app_doc.get("user_id"):
+            await _refund_application_credit(app_doc["user_id"])
+            update["credit_refunded_at"] = now
     await db.applications.update_one(
         {"application_id": application_id},
         {"$set": update},

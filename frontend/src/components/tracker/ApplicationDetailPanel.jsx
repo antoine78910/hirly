@@ -33,6 +33,7 @@ const TIMELINE_ICONS = {
   security: ShieldCheck,
   action_required: AlertCircle,
   failed: AlertCircle,
+  expired: Clock3,
 };
 
 function jobSalaryLabel(job, lang) {

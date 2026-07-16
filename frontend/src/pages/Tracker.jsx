@@ -268,6 +268,7 @@ const applicationStatusMessage = (status, t) => {
   if (status === "blocked_captcha") return t("tracker.statusCaptcha");
   if (status === "prepare_failed") return t("tracker.statusPrepareFailed");
   if (status === "failed") return t("tracker.statusFailed");
+  if (status === "expired") return t("tracker.statusExpired");
   if (status === "unknown") return t("tracker.statusUnknown");
   return t("tracker.statusNotSubmitted");
 };

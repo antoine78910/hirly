@@ -22,6 +22,7 @@ const MANUAL_ACTIONS = [
   { status: "manually_submitted", label: "Mark Manually Submitted" },
   { status: "needs_user_input", label: "Mark Needs User Input" },
   { status: "manual_blocked", label: "Mark Manual Blocked" },
+  { status: "offer_expired", label: "Mark Offer Expired (refunds 1 credit)" },
 ];
 
 const fmtDate = (value) => {
