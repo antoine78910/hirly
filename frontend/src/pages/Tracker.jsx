@@ -73,6 +73,7 @@ function TrackerApplicationRow({ application, onOpen, t, lang }) {
   const company = application.job?.company || t("tracker.unknownCompany");
   const date = fmtListDate(application.created_at, lang);
   const statusLabel = listStatusLabel(application, t);
+  const expired = resolveDisplayStatus(application) === "expired";
 
   return (
     <button
@@ -93,7 +94,9 @@ function TrackerApplicationRow({ application, onOpen, t, lang }) {
             1
           </span>
           <span aria-hidden="true">·</span>
-          <span className="truncate font-medium text-zinc-600">{statusLabel}</span>
+          <span className={`truncate font-medium ${expired ? "text-amber-700" : "text-zinc-600"}`}>
+            {expired ? t("tracker.expiredCreditRefundedCompact") : statusLabel}
+          </span>
         </div>
       </div>
     </button>

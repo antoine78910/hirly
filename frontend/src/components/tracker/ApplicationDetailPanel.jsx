@@ -185,6 +185,9 @@ export default function ApplicationDetailPanel({
     application.submitted_at || application.created_at,
     lang,
   );
+  const isExpired = application.user_facing_submission_status === "expired"
+    || application.submission_status === "expired"
+    || application.manual_status === "offer_expired";
 
   if (!application) return null;
 
@@ -309,6 +312,17 @@ export default function ApplicationDetailPanel({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-4 sm:px-6">
           <TabsContent value="application" className="mt-0 space-y-4">
+            {isExpired ? (
+              <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4" data-testid="expired-credit-refund-notice">
+                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-amber-100 text-amber-800">
+                  <Wallet className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-amber-900">{t("tracker.expiredRefundTitle")}</p>
+                  <p className="mt-0.5 text-sm leading-relaxed text-amber-800">{t("tracker.expiredRefundBody")}</p>
+                </div>
+              </div>
+            ) : null}
             <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>

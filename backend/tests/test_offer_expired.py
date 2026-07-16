@@ -149,6 +149,16 @@ def test_newer_manual_status_is_not_overridden_by_stale_admin_status():
     assert server._effective_manual_status(application) == "manually_submitted"
 
 
+def test_offer_expired_is_always_user_facing_even_with_stale_pending_status():
+    application = _base_application(
+        status="pending",
+        submission_status="expired",
+        manual_status="offer_expired",
+    )
+
+    assert server._user_facing_submission_status(application) == "expired"
+
+
 def test_refund_application_credit_direct(monkeypatch):
     db = _DB(users=[_base_user(billing={"credits_total": 200, "credits_remaining": 0})])
     monkeypatch.setattr(server, "db", db)

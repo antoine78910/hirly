@@ -10139,6 +10139,8 @@ def _effective_manual_status(app_doc: Dict[str, Any]) -> Optional[str]:
 
 def _user_facing_submission_status(app_doc: Dict[str, Any]) -> str:
     manual_status = _effective_manual_status(app_doc)
+    if manual_status == "offer_expired" or app_doc.get("submission_status") == "expired":
+        return "expired"
     if app_doc.get("submission_status") == "submitted" or manual_status == "manually_submitted":
         return "submitted"
     if manual_status == "needs_user_input":
