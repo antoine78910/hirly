@@ -24,13 +24,20 @@ class _Collection:
                         else:
                             row[key] = value
                 return {"matched_count": 1, "modified_count": 1}
+        if upsert:
+            new_row = dict(filter)
+            new_row.update(update.get("$set", {}))
+            self.rows.append(new_row)
+            return {"matched_count": 0, "modified_count": 0, "upserted_id": True}
         return {"matched_count": 0, "modified_count": 0}
 
 
 class _DB:
-    def __init__(self, *, applications=None, users=None):
+    def __init__(self, *, applications=None, users=None, jobs=None):
         self.applications = _Collection(applications or [])
         self.users = _Collection(users or [])
+        self.jobs = _Collection(jobs or [{"job_id": "job_1", "title": "Software Engineer", "company": "Acme"}])
+        self.notifications = _Collection([])
 
 
 def _admin():
@@ -65,6 +72,12 @@ def test_offer_expired_sets_expired_status_and_refunds_credit(monkeypatch):
     assert result["application"]["submission_status"] == "expired"
     assert db.users.rows[0]["billing"]["credits_remaining"] == 151
     assert db.applications.rows[0].get("credit_refunded_at") is not None
+    assert len(db.notifications.rows) == 1
+    notification = db.notifications.rows[0]
+    assert notification["type"] == "offer_expired"
+    assert notification["user_id"] == "user_1"
+    assert "Software Engineer" in notification["body"]
+    assert "Acme" in notification["body"]
 
 
 def test_offer_expired_refund_clamped_to_plan_total(monkeypatch):
@@ -95,6 +108,8 @@ def test_offer_expired_does_not_double_refund(monkeypatch):
         "app_1", server.AdminManualStatusUpdate(manual_status="offer_expired"), admin=_admin(),
     ))
     assert db.users.rows[0]["billing"]["credits_remaining"] == 151
+    # ...nor create a second notification.
+    assert len(db.notifications.rows) == 1
 
 
 def test_other_manual_statuses_still_work_unchanged(monkeypatch):

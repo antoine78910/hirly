@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Bell,
@@ -39,6 +39,7 @@ import {
   saveDesktopTheme,
 } from "./desktopFeedTheme";
 import { jobExternalUrl } from "../../lib/jobDisplayUtils";
+import NotificationsPanel from "../notifications/NotificationsPanel";
 
 const SWIPE_EXIT = {
   skip: { x: -720, rotate: -10, opacity: 0, scale: 0.92 },
@@ -61,7 +62,6 @@ export default function DesktopSwipeFeed({
   feedMeta,
   target,
   filters,
-  appliedToday,
   appLoading,
   onFiltersChange,
   onFiltersOpenChange,
@@ -84,6 +84,8 @@ export default function DesktopSwipeFeed({
   const { t, lang } = useAppLocale();
   const navItems = getDesktopNavItems(t);
   const [themeMode, setThemeMode] = useState(readDesktopTheme);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [exitIntent, setExitIntent] = useState(null);
   const [swipeAnimating, setSwipeAnimating] = useState(false);
   const [renderJob, setRenderJob] = useState(job);
@@ -298,19 +300,28 @@ export default function DesktopSwipeFeed({
           >
             <Sun className="h-4 w-4" />
           </button>
-          <button
-            type="button"
-            onClick={() => navigate("/profile")}
-            className={`relative grid h-9 w-9 place-items-center rounded-lg ${theme.iconBtn}`}
-            aria-label={t("swipe.notifications")}
-          >
-            <Bell className="h-4 w-4" />
-            {appliedToday > 0 ? (
-              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
-                {appliedToday > 99 ? "99+" : appliedToday}
-              </span>
-            ) : null}
-          </button>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setNotificationsOpen((prev) => !prev)}
+              className={`relative grid h-9 w-9 place-items-center rounded-lg ${theme.iconBtn}`}
+              aria-label={t("swipe.notifications")}
+              data-testid="desktop-notifications-bell"
+            >
+              <Bell className="h-4 w-4" />
+              {unreadNotifications > 0 ? (
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
+                  {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                </span>
+              ) : null}
+            </button>
+            <NotificationsPanel
+              variant="dropdown"
+              open={notificationsOpen}
+              onClose={() => setNotificationsOpen(false)}
+              onUnreadCountChange={setUnreadNotifications}
+            />
+          </div>
         </header>
 
         <div className={`border-b px-4 py-3 lg:px-6 ${theme.searchBar}`}>

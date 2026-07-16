@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { api } from "../lib/api";
 import {
   Zap, Undo2, History, SlidersHorizontal, Flag, Share2, MapPin, Calendar,
-  Heart, X, Loader2, Info, DollarSign, Briefcase, FileText, Star,
+  Heart, X, Loader2, Info, DollarSign, Briefcase, FileText, Star, Bell,
 } from "lucide-react";
 import { toast } from "sonner";
 import Logo from "../components/Logo";
@@ -32,6 +32,7 @@ import { shouldShowSwipeAdminAtsBadge, filterPersonalSwipeFeedJobs } from "../li
 import { ensureTutorialSession } from "../lib/tutorialSession";
 import { useUpgradeModal } from "../context/UpgradeModalContext";
 import DesktopSwipeFeed from "../components/swipe/DesktopSwipeFeed";
+import NotificationsPanel from "../components/notifications/NotificationsPanel";
 import ResumeSheet from "../components/ResumeSheet";
 import PhoneSheet from "../components/PhoneSheet";
 import { saveTargetPreferences, normalizeLocationData } from "../lib/targetPreferences";
@@ -802,6 +803,8 @@ export default function Swipe() {
   const [loading, setLoading] = useState(() => !getSwipeFeedCacheSnapshot().jobs.length);
   const [appLoading, setAppLoading] = useState(false);
   const [appliedToday, setAppliedToday] = useState(0);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [target, setTarget] = useState(() => getSwipeFeedCacheSnapshot().target || { role: "", location: "" });
   const [targetLocationData, setTargetLocationData] = useState(() => getSwipeFeedCacheSnapshot().targetLocationData);
   const [targetSaving, setTargetSaving] = useState(false);
@@ -1881,8 +1884,28 @@ export default function Swipe() {
               <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-sprout-bg bg-sprout-mint" />
             )}
           </button>
+          <button
+            onClick={() => setNotificationsOpen(true)}
+            className="relative grid h-8 w-8 place-items-center rounded-full hover:bg-sprout-surface sm:h-9 sm:w-9"
+            data-testid="mobile-notifications-bell"
+            aria-label={t("swipe.notifications")}
+          >
+            <Bell className="h-4 w-4 text-sprout-mint sm:h-5 sm:w-5" />
+            {unreadNotifications > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white">
+                {unreadNotifications > 99 ? "99+" : unreadNotifications}
+              </span>
+            )}
+          </button>
         </div>
       </header>
+
+      <NotificationsPanel
+        variant="sheet"
+        open={notificationsOpen}
+        onClose={() => setNotificationsOpen(false)}
+        onUnreadCountChange={setUnreadNotifications}
+      />
 
       <div className="flex min-h-0 flex-1 flex-col px-4 pt-1">
         <div className="relative mx-auto min-h-0 w-full max-w-md flex-1 overflow-hidden">

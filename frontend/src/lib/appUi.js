@@ -73,6 +73,12 @@ export const APP_UI = {
       profile: "Profile",
       aiSettings: "AI Settings",
     },
+    notifications: {
+      title: "Notifications",
+      subtitle: "Recent updates",
+      markAllRead: "Mark all read",
+      empty: "No notifications yet",
+    },
     swipe: {
       pass: "Pass",
       apply: "Apply",
@@ -1073,6 +1079,12 @@ export const APP_UI = {
       inbox: "Messages",
       profile: "Profil",
       aiSettings: "Réglages IA",
+    },
+    notifications: {
+      title: "Notifications",
+      subtitle: "Mises à jour récentes",
+      markAllRead: "Tout marquer comme lu",
+      empty: "Aucune notification pour le moment",
     },
     swipe: {
       pass: "Passer",

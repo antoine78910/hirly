@@ -57,6 +57,12 @@ from cv_quality import attach_cover_letter_quality_report, normalize_application
 from application_email_service import send_application_email
 from email_addresses import INBOUND_MANAGED_EMAIL_ENABLED, managed_reply_address
 from inbound_email_service import process_inbound_resend_email
+from notifications_service import (
+    create_notification,
+    list_notifications,
+    mark_all_notifications_read,
+    mark_notification_read,
+)
 from svix.webhooks import Webhook, WebhookVerificationError
 from apply_agent.models import ApplyAgentError
 from apply_agent.browser import effective_headless
@@ -840,6 +846,11 @@ class AdminStripeReconcileRequest(BaseModel):
     payment_intent_id: Optional[str] = None
     customer_id: Optional[str] = None
     email: Optional[str] = None
+
+
+class AdminGrantCreditsRequest(BaseModel):
+    credits: int
+    reason: str
 
 
 class BillingUpgradeSessionRequest(BaseModel):
@@ -11039,6 +11050,42 @@ async def admin_repair_billing(
     }
 
 
+@api_router.post("/admin/users/{user_id}/grant-credits")
+async def admin_grant_credits(
+    user_id: str,
+    body: AdminGrantCreditsRequest,
+    admin: User = Depends(require_admin_user),
+):
+    """Grant bonus credits to a user and notify them, in one consistent step."""
+    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0, "billing": 1})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
+    billing = _billing_from_user(user_doc)
+    new_total = int(billing.get("referral_bonus_credits_total") or 0) + body.credits
+    new_remaining = int(billing.get("referral_bonus_credits_remaining") or 0) + body.credits
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "billing.referral_bonus_credits_total": new_total,
+            "billing.referral_bonus_credits_remaining": new_remaining,
+            "billing.updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+    await create_notification(
+        db,
+        user_id=user_id,
+        type="credits_granted",
+        title=f"You received {body.credits} free credits",
+        body=body.reason,
+    )
+    return {
+        "ok": True,
+        "user_id": user_id,
+        "referral_bonus_credits_total": new_total,
+        "referral_bonus_credits_remaining": new_remaining,
+    }
+
+
 @api_router.post("/admin/stripe/repair-by-email")
 async def admin_stripe_repair_by_email(
     body: AdminStripeReconcileRequest,
@@ -12309,6 +12356,18 @@ async def admin_update_application_manual_status(
         if not app_doc.get("credit_refunded_at") and app_doc.get("user_id"):
             await _refund_application_credit(app_doc["user_id"])
             update["credit_refunded_at"] = now
+            job = await db.jobs.find_one({"job_id": app_doc.get("job_id")}, {"_id": 0}) or {}
+            job_label = job.get("title") or "this position"
+            if job.get("company"):
+                job_label += f" at {job['company']}"
+            await create_notification(
+                db,
+                user_id=app_doc["user_id"],
+                type="offer_expired",
+                title="This job offer has expired",
+                body=f"We've refunded the credit used for {job_label}.",
+                application_id=application_id,
+            )
     await db.applications.update_one(
         {"application_id": application_id},
         {"$set": update},
@@ -14343,6 +14402,25 @@ async def list_application_emails(
         "gmail": gmail_connected_payload(connection),
         "sync": sync_result,
     }
+
+
+@api_router.get("/notifications")
+async def get_notifications(user: User = Depends(get_current_user)):
+    rows = await list_notifications(db, user_id=user.user_id)
+    unread_count = sum(1 for row in rows if not row.get("read"))
+    return {"notifications": rows, "unread_count": unread_count}
+
+
+@api_router.post("/notifications/{notification_id}/read")
+async def mark_notification_read_route(notification_id: str, user: User = Depends(get_current_user)):
+    await mark_notification_read(db, user_id=user.user_id, notification_id=notification_id)
+    return {"ok": True}
+
+
+@api_router.post("/notifications/read-all")
+async def mark_all_notifications_read_route(user: User = Depends(get_current_user)):
+    count = await mark_all_notifications_read(db, user_id=user.user_id)
+    return {"ok": True, "marked": count}
 
 
 @api_router.post("/webhooks/resend-inbound")

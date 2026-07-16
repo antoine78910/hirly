@@ -46,6 +46,7 @@ MIGRATED_TABLES = {
     "friend_referral_codes",
     "friend_referral_redemptions",
     "auto_apply_attempts",
+    "notifications",
 }
 TABLE_PRIMARY_KEYS = {
     "users": "user_id",
@@ -74,6 +75,7 @@ TABLE_PRIMARY_KEYS = {
     "friend_referral_codes": "code",
     "friend_referral_redemptions": "redemption_id",
     "auto_apply_attempts": "id",
+    "notifications": "notification_id",
 }
 TABLE_FILTER_COLUMNS = {
     "users": {"user_id", "email", "name", "created_at"},
@@ -213,6 +215,7 @@ TABLE_FILTER_COLUMNS = {
         "stage_reached", "status", "verdict", "reason",
         "claimed_at", "submitted_at", "verified_at", "created_at", "updated_at",
     },
+    "notifications": {"notification_id", "user_id"},
 }
 MAX_READ_ROWS = 10000
 READ_PAGE_SIZE = 1000
@@ -571,6 +574,12 @@ def _supabase_row(table: str, document: Document) -> Dict[str, Any]:
             "verified_at": doc.get("verified_at"),
             "created_at": doc.get("created_at"),
             "updated_at": doc.get("updated_at"),
+            "data": doc,
+        }
+    if table == "notifications":
+        return {
+            "notification_id": _document_key(table, doc),
+            "user_id": doc.get("user_id"),
             "data": doc,
         }
     raise ValueError(f"Unsupported Supabase table: {table}")
