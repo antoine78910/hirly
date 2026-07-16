@@ -36,6 +36,7 @@ from apply_agent.human_browser import (
     human_select, human_type, human_upload,
 )
 from apply_agent.models import ApplyAgentError
+from apply_agent.recovery import recover_stuck_page
 
 from .models import SubmissionContext, SubmissionEvidence
 
@@ -165,8 +166,9 @@ class BrowserApplyDriver(ApplyDriver):
         nav_url = self.navigation_url(ctx.job)
         evidence = SubmissionEvidence(raw={"application_url": url, "navigation_url": nav_url})
         # Residential proxies often hand out dead exits — relaunch with a fresh
-        # sticky sid when the first navigation times out.
-        max_attempts = 3 if proxy_configured() else 1
+        # sticky sid when the first navigation times out. Also retry a couple
+        # times without proxy: DataDome challenges are intermittent.
+        max_attempts = 3
         last_open_page_error: Optional[ApplyAgentError] = None
         last_evidence = evidence
         for attempt in range(1, max_attempts + 1):
@@ -208,24 +210,29 @@ class BrowserApplyDriver(ApplyDriver):
             # mint a new sticky sid and try again before failing the run.
             # Skip when STICKY_SID is fixed (warm cookie sessions must keep one IP).
             fixed_sticky = bool(os.environ.get("BROWSER_PROXY_STICKY_SID", "").strip().isdigit())
+            retry_blockers = {"bot_protection", "captcha"}
             if (
-                last_evidence.blocked_reason == "bot_protection"
+                last_evidence.blocked_reason in retry_blockers
                 and attempt < max_attempts
-                and proxy_configured()
-                and not fixed_sticky
+                and (proxy_configured() or last_evidence.blocked_reason == "captcha")
+                and not (fixed_sticky and last_evidence.blocked_reason == "bot_protection")
             ):
                 await self._log_step(
                     evidence,
                     action="bot_wall_retry",
                     locators=[nav_url],
                     status="retry",
-                    error=f"attempt {attempt}/{max_attempts}: bot_protection",
+                    error=(
+                        f"attempt {attempt}/{max_attempts}: "
+                        f"{last_evidence.blocked_reason}"
+                    ),
                 )
                 logger.warning(
-                    "apply_bot_wall_retry provider=%s attempt=%s/%s",
+                    "apply_bot_wall_retry provider=%s attempt=%s/%s reason=%s",
                     self.provider,
                     attempt,
                     max_attempts,
+                    last_evidence.blocked_reason,
                 )
                 # Clear so the next attempt can set a fresh blocked_reason.
                 evidence.blocked_reason = None
@@ -292,6 +299,16 @@ class BrowserApplyDriver(ApplyDriver):
                 await human_pause(page, 800, 1400)
 
                 if await self._abort_if_blocked(page, evidence, http_status=http_status, stage="bot_wall"):
+                    # Still capture a recovery screenshot for debugging popups / walls.
+                    try:
+                        recovery = await recover_stuck_page(page, reason="bot_wall", use_vision=False)
+                        evidence.raw["recovery_on_abort"] = {
+                            k: recovery.get(k) for k in ("actions", "stuck")
+                        }
+                        if recovery.get("screenshot_b64"):
+                            evidence.screenshot_b64 = recovery["screenshot_b64"]
+                    except Exception:
+                        pass
                     return evidence
 
                 await self.after_navigation(page, evidence)
@@ -314,12 +331,52 @@ class BrowserApplyDriver(ApplyDriver):
                 for step in ctx.plan.steps:
                     if step.action == "submit":
                         # Read the form once more before submitting.
+                        await dismiss_cookie_banner(page)
+                        recovery = await recover_stuck_page(
+                            page, reason="pre_submit", use_vision=True,
+                        )
+                        evidence.raw.setdefault("recovery", []).append(
+                            {k: recovery.get(k) for k in ("reason", "actions", "notes", "stuck")}
+                        )
+                        if recovery.get("screenshot_b64"):
+                            evidence.screenshot_b64 = recovery["screenshot_b64"]
                         await human_scroll(page, direction="up")
                         await human_pause(page, 900, 2000)
                         await human_mouse_wander(page)
+                        await dismiss_cookie_banner(page)
                         await self._click_submit(page, evidence)
                         continue
-                    await self._apply_step(page, step, ctx.documents, evidence)
+                    try:
+                        await self._apply_step(page, step, ctx.documents, evidence)
+                    except Exception as step_exc:
+                        # Click intercepted by modal / overlay — screenshot and recover.
+                        recovery = await recover_stuck_page(
+                            page,
+                            reason="click_intercepted",
+                            use_vision=True,
+                        )
+                        evidence.raw.setdefault("recovery", []).append(
+                            {
+                                "reason": "click_intercepted",
+                                "error": str(step_exc)[:200],
+                                "actions": recovery.get("actions"),
+                                "notes": recovery.get("notes"),
+                                "stuck": recovery.get("stuck"),
+                            }
+                        )
+                        if recovery.get("screenshot_b64"):
+                            evidence.screenshot_b64 = recovery["screenshot_b64"]
+                        try:
+                            await self._apply_step(page, step, ctx.documents, evidence)
+                        except Exception as retry_exc:
+                            await self._log_step(
+                                evidence,
+                                action=step.action,
+                                locators=step.locators,
+                                status="error",
+                                value_preview=str(step.value or "")[:80],
+                                error=str(retry_exc)[:200],
+                            )
                     # Between fields: short read pause + occasional scroll/wander.
                     await human_pause(page, 900, 2200)
                     if random.random() < 0.45:
@@ -328,7 +385,37 @@ class BrowserApplyDriver(ApplyDriver):
                         await human_mouse_wander(page)
 
                 await self._gather_evidence(page, evidence, starting_url)
-                evidence.screenshot_b64 = await screenshot_b64(page)
+                # If submit left validation errors / empty requireds, recover once and retry submit.
+                if evidence.submit_performed and (
+                    evidence.validation_errors
+                    or (evidence.raw.get("recovery") and not evidence.confirmation_text)
+                ):
+                    stuck_check = await recover_stuck_page(
+                        page, reason="submit_validation", use_vision=True,
+                    )
+                    evidence.raw.setdefault("recovery", []).append(
+                        {k: stuck_check.get(k) for k in ("reason", "actions", "notes", "stuck", "stuck_after")}
+                    )
+                    if stuck_check.get("screenshot_b64"):
+                        evidence.screenshot_b64 = stuck_check["screenshot_b64"]
+                    empty = (stuck_check.get("stuck_after") or stuck_check.get("stuck") or {}).get(
+                        "required_empty"
+                    ) or []
+                    if empty:
+                        evidence.raw["required_empty_after_submit"] = empty[:12]
+                        await self._log_step(
+                            evidence,
+                            action="recovery_refill_needed",
+                            locators=empty[:5],
+                            status="blocked",
+                            error="required_fields_empty",
+                        )
+                    elif not evidence.confirmation_text:
+                        # Popup cleared — try submit once more.
+                        await self._click_submit(page, evidence)
+                        await self._gather_evidence(page, evidence, starting_url)
+                if not evidence.screenshot_b64:
+                    evidence.screenshot_b64 = await screenshot_b64(page)
         except ApplyAgentError:
             raise
         except Exception as exc:

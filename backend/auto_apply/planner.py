@@ -6,6 +6,7 @@ fills first, then file uploads, then a single terminal submit step.
 """
 from __future__ import annotations
 
+import re
 from typing import Dict, List
 
 from application_blueprint import FieldType, NormalizedField
@@ -38,6 +39,11 @@ def _locators(field: NormalizedField) -> List[str]:
     if field.key:
         locators.append(f'#{field.key}')
     if field.label:
+        # Exact accessible-name match — substring "Nom" must not hit "Prénom".
+        escaped = re.escape(field.label)
+        role = "combobox" if field.type == FieldType.LOCATION else "textbox"
+        if field.type not in {FieldType.RESUME, FieldType.COVER_LETTER, FieldType.CONSENT, FieldType.CHECKBOX}:
+            locators.append(f'role={role}[name=/^{escaped}$/i]')
         locators.append(f'[aria-label="{field.label}"]')
     return locators
 

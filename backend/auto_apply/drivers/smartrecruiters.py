@@ -26,7 +26,13 @@ from application_blueprint import (
 from application_failure import text_indicates_offer_expired
 from apply_agent.blockers import detect_offer_expired
 from apply_agent.guardrails import canonical
-from apply_agent.human_browser import human_click, human_mouse_wander, human_pause, human_scroll
+from apply_agent.human_browser import (
+    human_click,
+    human_mouse_wander,
+    human_pause,
+    human_scroll,
+    try_pass_datadome_slider,
+)
 from job_providers.ats_adapters.smartrecruiters import SmartRecruitersAtsAdapter
 
 from ..driver import DRIVER_REGISTRY, BrowserApplyDriver
@@ -62,39 +68,46 @@ _SENSITIVE_TOKENS = (
 _SUPPORTED_CONFIG_TYPES = set(_SR_FIELD_TYPE_MAP) - {"INFORMATION"}
 
 
+def _exact_role_locator(role: str, label: str) -> str:
+    # Playwright name= is a substring match by default — "Nom" would hit "Prénom".
+    return f'role={role}[name=/^{re.escape(label)}$/i]'
+
+
 def _role_locators(role: str, labels: List[str]) -> List[str]:
-    return [f'role={role}[name="{label}"]' for label in labels]
+    return [_exact_role_locator(role, label) for label in labels]
 
 
 def _standard_fields() -> List[NormalizedField]:
     """Fields present on virtually every SmartRecruiters oneclick apply form."""
-    specs: List[Tuple[str, FieldType, bool, List[str], Optional[str]]] = [
-        ("first_name", FieldType.FIRST_NAME, True, ["Prénom", "First name"], None),
-        ("last_name", FieldType.LAST_NAME, True, ["Nom", "Last name"], None),
-        ("email", FieldType.EMAIL, True, ["E-mail", "Email"], None),
-        ("email_confirm", FieldType.EMAIL, True, ["Confirmez votre e-mail", "Confirm your email"], None),
-        ("city", FieldType.LOCATION, True, ["Ville", "City"], None),
-        ("phone", FieldType.PHONE, True, ["Numéro de téléphone", "Phone number"], None),
-        ("linkedin", FieldType.LINKEDIN, False, ["LinkedIn"], None),
-        ("website", FieldType.WEBSITE, False, ["Site Web", "Website"], None),
+    # Prefer stable spl-input host ids (shadow-piercing >> input). Role names
+    # use exact regex so "Nom" never matches "Prénom".
+    specs: List[Tuple[str, FieldType, bool, List[str], str]] = [
+        ("first_name", FieldType.FIRST_NAME, True, ["Prénom", "First name"], "#first-name-input >> input"),
+        ("last_name", FieldType.LAST_NAME, True, ["Nom", "Last name"], "#last-name-input >> input"),
+        ("email", FieldType.EMAIL, True, ["E-mail", "Email"], "#email-input >> input"),
+        (
+            "email_confirm",
+            FieldType.EMAIL,
+            True,
+            ["Confirmez votre e-mail", "Confirm your email"],
+            "#confirm-email-input >> input",
+        ),
+        ("city", FieldType.LOCATION, True, ["Ville", "City"], _exact_role_locator("combobox", "Ville")),
+        ("phone", FieldType.PHONE, True, ["Numéro de téléphone", "Phone number"], 'input[type="tel"]'),
+        ("linkedin", FieldType.LINKEDIN, False, ["LinkedIn"], "#linkedin-input >> input"),
+        ("website", FieldType.WEBSITE, False, ["Site Web", "Website"], "#website-input >> input"),
         ("resume", FieldType.RESUME, True, [], 'input[type="file"] >> nth=-1'),
-        ("consent", FieldType.CONSENT, True, [], "role=checkbox >> nth=0"),
+        ("consent", FieldType.CONSENT, True, [], 'spl-checkbox[data-test="consent-box"]'),
     ]
     fields: List[NormalizedField] = []
     for key, ftype, required, labels, binding in specs:
-        if binding:
-            locators = [binding]
-        elif ftype == FieldType.LOCATION:
-            locators = _role_locators("combobox", labels)
-        else:
-            locators = _role_locators("textbox", labels) if labels else []
         fields.append(NormalizedField(
             key=key,
             type=ftype,
             required=required,
             supported=True,
             label=labels[0] if labels else key,
-            binding=locators[0] if locators else None,
+            binding=binding,
         ))
     return fields
 
@@ -298,9 +311,34 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
         await human_mouse_wander(page)
         await human_pause(page, 500, 1200)
 
+    async def _wait_for_oneclick_form(self, page: Any, *, timeout_ms: int = 45000) -> bool:
+        """Oneclick SPA can take a while after Apply; wait for real inputs."""
+        deadline = timeout_ms
+        elapsed = 0
+        slider_attempts = 0
+        while elapsed < deadline:
+            try:
+                if await page.locator(
+                    'input:visible, textarea:visible, [role="textbox"]:visible'
+                ).count() >= 3:
+                    return True
+            except Exception:
+                pass
+            # DataDome device-check often appears only after /config 403.
+            if slider_attempts < 2 and any(
+                "captcha-delivery" in (f.url or "") for f in page.frames
+            ):
+                slider_attempts += 1
+                logger.info("sr_datadome_slider_attempt n=%s", slider_attempts)
+                await try_pass_datadome_slider(page, attempts=3)
+            await human_pause(page, 900, 1300)
+            elapsed += 1100
+        return False
+
     async def reveal_form(self, page: Any) -> None:
         url = page.url or ""
         if "oneclick-ui" in url:
+            await self._wait_for_oneclick_form(page)
             return
         # Expired postings keep a CTA whose label is no longer "Je suis intéressé(e)".
         if await detect_offer_expired(page):
@@ -322,11 +360,49 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
                         await page.wait_for_load_state("networkidle", timeout=12000)
                     except Exception:
                         pass
+                    await self._wait_for_oneclick_form(page)
                     return
             except Exception:
                 continue
 
     async def _apply_step(self, page: Any, step, documents: Dict[str, Any], evidence) -> None:
+        if step.action == "check":
+            preview = str(step.value or "")[:100]
+            loc = await self._first_locator(page, step.locators)
+            if loc is None:
+                evidence.raw.setdefault("unmatched_steps", []).append(step.locators[:1])
+                await self._log_step(evidence, action="check", locators=step.locators,
+                                     status="not_found", value_preview=preview)
+                return
+            try:
+                await page.evaluate(
+                    """() => {
+                      const host = document.querySelector('spl-checkbox[data-test="consent-box"]')
+                        || document.querySelector('spl-checkbox');
+                      if (!host) return false;
+                      host.scrollIntoView({block:'center'});
+                      const inp = host.shadowRoot && host.shadowRoot.querySelector('input[type=checkbox]');
+                      if (inp) {
+                        inp.checked = true;
+                        inp.dispatchEvent(new Event('input', {bubbles:true}));
+                        inp.dispatchEvent(new Event('change', {bubbles:true}));
+                        inp.click();
+                      }
+                      host.setAttribute('value', 'true');
+                      try { host.click(); } catch (e) {}
+                      return true;
+                    }"""
+                )
+                box = await loc.bounding_box()
+                if box and 0 <= box["y"] <= 4000:
+                    await page.mouse.click(box["x"] + 10, box["y"] + box["height"] / 2)
+                await self._log_step(evidence, action="check", locators=step.locators,
+                                     status="ok", value_preview=preview)
+                return
+            except Exception as exc:
+                await self._log_step(evidence, action="check", locators=step.locators,
+                                     status="error", value_preview=preview, error=str(exc))
+                return
         if step.action == "fill" and any("combobox" in loc for loc in step.locators):
             preview = str(step.value or "")[:100]
             loc = await self._first_locator(page, step.locators)
@@ -354,29 +430,64 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
         await super()._apply_step(page, step, documents, evidence)
 
     async def _click_submit(self, page: Any, evidence) -> None:
-        loc = await self._first_locator(page, list(_SUBMIT_SELECTORS))
+        # Prefer visible text "Envoyer" — role name can match empty primary buttons.
+        selectors = ['button:has-text("Envoyer")', *list(_SUBMIT_SELECTORS)]
+        loc = await self._first_locator(page, selectors)
         if loc is None:
+            # Deep shadow click (SAP spl-button).
+            clicked = await page.evaluate(
+                """() => {
+                  function textOf(el) {
+                    return ((el.innerText || el.textContent || '') + ' '
+                      + (el.getAttribute('aria-label') || '')).trim();
+                  }
+                  function deep(root, out=[]) {
+                    root.querySelectorAll('button, [role=button], spl-button, .c-spl-button')
+                      .forEach(el => out.push(el));
+                    root.querySelectorAll('*').forEach(el => {
+                      if (el.shadowRoot) deep(el.shadowRoot, out);
+                    });
+                    return out;
+                  }
+                  const hit = deep(document).find(b => textOf(b) === 'Envoyer'
+                    || textOf(b).includes('Envoyer'));
+                  if (!hit) return false;
+                  hit.scrollIntoView({block:'center'});
+                  hit.click();
+                  const inner = hit.shadowRoot && hit.shadowRoot.querySelector('button');
+                  if (inner) inner.click();
+                  return true;
+                }"""
+            )
+            if clicked:
+                evidence.submit_performed = True
+                await self._log_step(evidence, action="submit", locators=selectors, status="ok",
+                                     error="shadow_js_click")
+                return
             evidence.raw["submit"] = "button_not_found"
-            await self._log_step(evidence, action="submit", locators=list(_SUBMIT_SELECTORS),
-                                 status="not_found")
+            await self._log_step(evidence, action="submit", locators=selectors, status="not_found")
             return
         try:
-            await loc.scroll_into_view_if_needed(timeout=3000)
+            await loc.evaluate("el => el.scrollIntoView({block:'center'})")
         except Exception:
             pass
         try:
-            await human_click(loc, page)
+            box = await loc.bounding_box()
+            if box:
+                await page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+            else:
+                await human_click(loc, page)
             evidence.submit_performed = True
-            await self._log_step(evidence, action="submit", locators=list(_SUBMIT_SELECTORS), status="ok")
+            await self._log_step(evidence, action="submit", locators=selectors, status="ok")
         except Exception:
             try:
                 await loc.click(timeout=5000, force=True)
                 evidence.submit_performed = True
-                await self._log_step(evidence, action="submit", locators=list(_SUBMIT_SELECTORS),
+                await self._log_step(evidence, action="submit", locators=selectors,
                                      status="ok", error="forced_click")
             except Exception as exc:
                 evidence.raw["submit_error"] = str(exc)[:200]
-                await self._log_step(evidence, action="submit", locators=list(_SUBMIT_SELECTORS),
+                await self._log_step(evidence, action="submit", locators=selectors,
                                      status="error", error=str(exc))
 
 

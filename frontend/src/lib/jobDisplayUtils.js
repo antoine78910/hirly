@@ -520,5 +520,43 @@ export function getJobDisplayContent(job) {
 }
 
 export function jobExternalUrl(job) {
-  return job?.url || job?.external_url || null;
+  return (
+    job?.apply_url
+    || job?.application_url
+    || job?.selected_apply_url
+    || job?.url
+    || job?.external_url
+    || null
+  );
+}
+
+/** Open employer apply URL (Safari / system browser on iOS when possible). */
+export function openExternalUrl(url) {
+  const target = String(url || "").trim();
+  if (!target) return false;
+  try {
+    const browser = typeof window !== "undefined"
+      ? window.Capacitor?.Plugins?.Browser
+      : null;
+    if (browser && typeof browser.open === "function") {
+      browser.open({ url: target });
+      return true;
+    }
+  } catch {
+    // Fall through to window.open.
+  }
+  if (typeof window !== "undefined") {
+    window.open(target, "_blank", "noopener,noreferrer");
+    return true;
+  }
+  return false;
+}
+
+/** Best employer apply URL from a public application payload. */
+export function applicationApplyUrl(application) {
+  return (
+    application?.apply_url
+    || jobExternalUrl(application?.job)
+    || null
+  );
 }

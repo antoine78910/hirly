@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   FileText, Info, Loader2, Mail, ArrowLeft,
   MapPin, MessageSquare, Sparkles, UserRoundCheck, Wallet,
-  Bell, ShieldCheck, Clock3, AlertCircle,
+  Bell, ShieldCheck, Clock3, AlertCircle, ExternalLink,
 } from "lucide-react";
 import { api } from "../../lib/api";
 import { formatCompactMoney } from "../../lib/currency";
@@ -19,6 +19,8 @@ import { DialogHeader, DialogTitle } from "../ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Button } from "../ui/button";
 import { hasApplicationDocuments } from "../../lib/applicationDocuments";
+import { applicationApplyUrl, openExternalUrl } from "../../lib/jobDisplayUtils";
+import { resolveDisplayStatus } from "../../lib/applicationReview";
 
 const TIMELINE_ICONS = {
   interview: MessageSquare,
@@ -182,6 +184,21 @@ export default function ApplicationDetailPanel({
   );
 
   const salary = jobSalaryLabel(application.job, lang);
+  const displayStatus = resolveDisplayStatus(application);
+  const applyUrl = applicationApplyUrl(application);
+  const failureMessage = lang === "fr"
+    ? (application.failure_message_fr || application.failure_message_en)
+    : (application.failure_message_en || application.failure_message_fr);
+  const showManualApplyCta = Boolean(
+    applyUrl
+    && (
+      displayStatus === "blocked_captcha"
+      || application.submission_status === "blocked_captcha"
+      || application.submission_status === "blocked"
+      || application.submission_status === "prepare_failed"
+      || displayStatus === "failed"
+    ),
+  );
   const appliedDate = formatTimelineDate(
     application.submitted_at || application.created_at,
     lang,
@@ -370,21 +387,66 @@ export default function ApplicationDetailPanel({
               )}
             </div>
 
-            {application.submission_status === "blocked_captcha" && (
+            {(application.submission_status === "blocked_captcha" || displayStatus === "blocked_captcha") && (
               <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4" data-testid="captcha-required-state">
                 <p className="text-sm font-semibold text-orange-800">{t("tracker.securityCheck")}</p>
                 <p className="mt-1 text-sm text-zinc-700">
-                  The application form needs an additional security check before it can be completed.
+                  {failureMessage || t("tracker.statusCaptcha")}
                 </p>
+                {showManualApplyCta ? (
+                  <Button
+                    type="button"
+                    onClick={() => openExternalUrl(applyUrl)}
+                    className="mt-3 w-full rounded-full"
+                    data-testid="apply-on-company-site-btn"
+                  >
+                    <ExternalLink className="mr-1.5 h-4 w-4" />
+                    {t("tracker.applyOnCompanySite")}
+                  </Button>
+                ) : null}
               </div>
             )}
 
             {application.submission_status === "prepare_failed" && (
               <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4" data-testid="prepare-failed-state">
-                <p className="text-sm font-semibold text-rose-800">Preparation failed</p>
+                <p className="text-sm font-semibold text-rose-800">{t("tracker.preparationFailed")}</p>
                 <p className="mt-1 text-sm text-zinc-700">
-                  The CV and cover letter were generated, but the browser preparation step needs to be retried.
+                  {t("tracker.preparationFailedBody")}
                 </p>
+                {showManualApplyCta ? (
+                  <Button
+                    type="button"
+                    onClick={() => openExternalUrl(applyUrl)}
+                    variant="outline"
+                    className="mt-3 w-full rounded-full"
+                    data-testid="apply-on-company-site-prepare-failed-btn"
+                  >
+                    <ExternalLink className="mr-1.5 h-4 w-4" />
+                    {t("tracker.applyOnCompanySite")}
+                  </Button>
+                ) : null}
+              </div>
+            )}
+
+            {application.submission_status === "blocked"
+              && !(application.prepared_missing_information || []).length
+              && displayStatus !== "blocked_captcha" && (
+              <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4" data-testid="blocked-manual-apply-state">
+                <p className="text-sm font-semibold text-orange-800">{t("tracker.needsAttention")}</p>
+                <p className="mt-1 text-sm text-zinc-700">
+                  {failureMessage || t("tracker.manualApplyBlockedBody")}
+                </p>
+                {showManualApplyCta ? (
+                  <Button
+                    type="button"
+                    onClick={() => openExternalUrl(applyUrl)}
+                    className="mt-3 w-full rounded-full"
+                    data-testid="apply-on-company-site-blocked-btn"
+                  >
+                    <ExternalLink className="mr-1.5 h-4 w-4" />
+                    {t("tracker.applyOnCompanySite")}
+                  </Button>
+                ) : null}
               </div>
             )}
 

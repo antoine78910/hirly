@@ -102,21 +102,44 @@ async def run_apply_attempt(
                 pass
 
             await blockers.dismiss_cookie_banner(page)
+            # Autonomously clear popups / cookie modals / DataDome slider when stuck.
+            try:
+                from .recovery import recover_stuck_page
+                recovery = await recover_stuck_page(page, reason="pre_perceive", use_vision=True)
+                if recovery.get("screenshot_b64"):
+                    result.screenshot_b64 = recovery["screenshot_b64"]
+                notes = recovery.get("notes") or []
+                if notes:
+                    result.blockers.append(
+                        blocker("recovery_notes", "; ".join(str(n)[:120] for n in notes[:3]))
+                    )
+            except Exception:
+                pass
 
             if await blockers.detect_login_wall(page):
                 result.login_wall_detected = True
                 result.blockers.append(blocker("login_wall_detected", "This apply page requires an account/login."))
                 result.failure_reason = "login_wall_detected"
-                result.screenshot_b64 = await screenshot_b64(page)
+                result.screenshot_b64 = result.screenshot_b64 or await screenshot_b64(page)
                 return result
 
             captcha_debug = await blockers.detect_captcha(page)
+            if blockers.captcha_active(captcha_debug):
+                # One more recovery pass (slider / close) before aborting.
+                try:
+                    from .recovery import recover_stuck_page
+                    recovery = await recover_stuck_page(page, reason="captcha", use_vision=False)
+                    if recovery.get("screenshot_b64"):
+                        result.screenshot_b64 = recovery["screenshot_b64"]
+                    captcha_debug = await blockers.detect_captcha(page)
+                except Exception:
+                    pass
             if blockers.captcha_active(captcha_debug):
                 result.captcha_required = True
                 result.action_required = True
                 result.blockers.append(blocker("captcha_detected", "CAPTCHA or bot-wall detected before any fields were touched."))
                 result.failure_reason = "captcha_required"
-                result.screenshot_b64 = await screenshot_b64(page)
+                result.screenshot_b64 = result.screenshot_b64 or await screenshot_b64(page)
                 return result
 
             fields = await perception.extract_fields(page)

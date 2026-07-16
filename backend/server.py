@@ -10149,22 +10149,34 @@ def _effective_manual_status(app_doc: Dict[str, Any]) -> Optional[str]:
     manual_status = manual_status or admin_status
     if manual_status in MANUAL_STATUSES:
         return manual_status
-    if app_doc.get("submission_status") in {"prepare_failed", "blocked", "blocked_captcha", "failed"} and not _has_remaining_user_questions(app_doc):
+    # Captcha / bot / login walls are self-serve: user opens the employer site.
+    # Do not swallow those into "manual_review_needed" (pending / team queue).
+    submission = app_doc.get("submission_status")
+    if submission in {"blocked_captcha", "blocked"} and not _has_remaining_user_questions(app_doc):
+        return None
+    if submission in {"prepare_failed", "failed"} and not _has_remaining_user_questions(app_doc):
         return "manual_review_needed"
     return None
 
 
 def _user_facing_submission_status(app_doc: Dict[str, Any]) -> str:
+    submission = app_doc.get("submission_status") or "not_submitted"
+    # Keep security / employer-site blockers visible so the client can show
+    # "Apply on company site" instead of a generic "pending" state.
+    if submission == "blocked_captcha":
+        return "blocked_captcha"
+    if submission == "blocked" and not _has_remaining_user_questions(app_doc):
+        return "blocked"
     manual_status = _effective_manual_status(app_doc)
-    if manual_status == "offer_expired" or app_doc.get("submission_status") == "expired":
+    if manual_status == "offer_expired" or submission == "expired":
         return "expired"
-    if app_doc.get("submission_status") == "submitted" or manual_status == "manually_submitted":
+    if submission == "submitted" or manual_status == "manually_submitted":
         return "submitted"
     if manual_status == "needs_user_input":
         return "action_required"
     if manual_status in {"manual_review_needed", "manual_in_progress", "manual_blocked"}:
         return "pending"
-    return app_doc.get("submission_status") or "not_submitted"
+    return submission
 
 
 def _public_application_doc(app_doc: Dict[str, Any], job_doc: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -10191,6 +10203,11 @@ def _public_application_doc(app_doc: Dict[str, Any], job_doc: Optional[Dict[str,
         public_doc.pop(key, None)
     if job_doc is not None:
         public_doc["job"] = job_doc
+    apply_url = _job_application_url(job_doc) or _job_application_url(
+        public_doc.get("job") if isinstance(public_doc.get("job"), dict) else None
+    )
+    if apply_url:
+        public_doc["apply_url"] = apply_url
     return public_doc
 
 

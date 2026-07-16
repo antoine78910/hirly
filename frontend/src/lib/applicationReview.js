@@ -24,10 +24,11 @@ export function resolveDisplayStatus({
   if (user_facing_submission_status === "expired" || submission_status === "expired" || manual_status === "offer_expired" || admin_status === "offer_expired") return "expired";
   if (values.some((v) => ["submitted", "manually_submitted"].includes(v))) return "submitted";
   if (values.some((v) => ["action_required", "needs_user_input"].includes(v))) return "action_required";
-  if (values.some((v) => ["pending", "manual_review_needed", "manual_in_progress"].includes(v))) return "pending";
-  if (values.some((v) => ["ready", "prepared"].includes(v))) return "prepared";
+  // Security / bot walls must win over remapped `pending` so users see the CTA.
   if (values.includes("blocked_captcha")) return "blocked_captcha";
   if (values.some((v) => ["prepare_failed", "blocked", "failed"].includes(v))) return "failed";
+  if (values.some((v) => ["pending", "manual_review_needed", "manual_in_progress"].includes(v))) return "pending";
+  if (values.some((v) => ["ready", "prepared"].includes(v))) return "prepared";
   if (user_facing_submission_status === "pending") return "pending";
   return "pending";
 }

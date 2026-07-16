@@ -53,13 +53,25 @@ FAILURE_CATALOG: Dict[str, Dict[str, str]] = {
     },
     "captcha_required": {
         "admin_title": "CAPTCHA required",
-        "user_message_en": "A security check blocked automatic submission.",
-        "user_message_fr": "Un contrôle de sécurité a bloqué l'envoi automatique.",
+        "user_message_en": (
+            "A security check blocked automatic submission. "
+            "Open the company site to finish applying yourself."
+        ),
+        "user_message_fr": (
+            "Un contrôle de sécurité a bloqué l'envoi automatique. "
+            "Ouvrez le site de l'entreprise pour terminer votre candidature."
+        ),
     },
     "login_wall": {
         "admin_title": "Login required",
-        "user_message_en": "The employer site requires a login before applying.",
-        "user_message_fr": "Le site employeur exige une connexion avant de postuler.",
+        "user_message_en": (
+            "The employer site requires a login before applying. "
+            "Open the company site to continue."
+        ),
+        "user_message_fr": (
+            "Le site employeur exige une connexion avant de postuler. "
+            "Ouvrez le site de l'entreprise pour continuer."
+        ),
     },
     "form_not_found": {
         "admin_title": "Application form not found",

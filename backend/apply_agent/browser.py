@@ -112,11 +112,14 @@ def browser_context_options() -> Dict[str, Any]:
         "has_touch": False,
         "is_mobile": False,
         "device_scale_factor": 1,
+        # Do NOT set Upgrade-Insecure-Requests here: Playwright applies
+        # extra_http_headers to every request (including module scripts /
+        # XHR). That forces a CORS preflight SR/DataDome reject, so the
+        # oneclick SPA never loads (infinite spinner, 0 form fields).
         "extra_http_headers": {
             "Accept-Language": (
                 f"{locale},{lang_primary};q=0.9,en-US;q=0.8,en;q=0.7"
             ),
-            "Upgrade-Insecure-Requests": "1",
         },
     }
     # Prefer inline JSON (Railway-friendly secret) over a file path.
@@ -420,19 +423,42 @@ async def launch_page(*, headless: bool = True) -> AsyncIterator[Any]:
     exit regardless of outcome.
     """
     headless = effective_headless(headless)
-    try:
-        from playwright.async_api import async_playwright
-    except ImportError as exc:
-        raise ApplyAgentError(
-            "open_browser",
-            "Playwright is not installed. Run `pip install -r backend/requirements.txt` "
-            "and `python -m playwright install chromium` (local dev only -- Railway uses "
-            "the Nix chromium package instead, see nixpacks.toml).",
-            exception_class=exc.__class__.__name__,
-        ) from exc
+    # Prefer Patchright when available: it patches Playwright CDP leaks that
+    # DataDome (SmartRecruiters) fingerprints. Opt out with BROWSER_ENGINE=playwright.
+    engine = (os.environ.get("BROWSER_ENGINE") or "auto").strip().lower()
+    async_playwright = None
+    engine_name = "playwright"
+    if engine in ("auto", "patchright"):
+        try:
+            from patchright.async_api import async_playwright as async_playwright
+            engine_name = "patchright"
+        except ImportError:
+            if engine == "patchright":
+                raise ApplyAgentError(
+                    "open_browser",
+                    "BROWSER_ENGINE=patchright but patchright is not installed. "
+                    "Run `pip install patchright` and `python -m patchright install chromium`.",
+                )
+    if async_playwright is None:
+        try:
+            from playwright.async_api import async_playwright as async_playwright
+            engine_name = "playwright"
+        except ImportError as exc:
+            raise ApplyAgentError(
+                "open_browser",
+                "Playwright is not installed. Run `pip install -r backend/requirements.txt` "
+                "and `python -m playwright install chromium` (local dev only -- Railway uses "
+                "the Nix chromium package instead, see nixpacks.toml).",
+                exception_class=exc.__class__.__name__,
+            ) from exc
+    logger.info("browser_engine=%s", engine_name)
 
     executable_path = _chromium_executable_path()
     channel = (os.environ.get("BROWSER_CHANNEL") or "").strip() or None
+    # Patchright ships its own Chromium; forcing channel=chrome can reintroduce
+    # stock Chrome automation signals. Only honor BROWSER_CHANNEL for playwright.
+    if engine_name == "patchright" and channel and engine == "auto":
+        channel = None
     async with async_playwright() as p:
         browser = None
         context = None

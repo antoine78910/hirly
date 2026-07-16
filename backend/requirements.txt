@@ -21,6 +21,8 @@ pillow-heif==0.21.0
 
 # Browser automation (auto-apply agent)
 playwright==1.49.1
+# Patched Playwright that reduces CDP leaks DataDome fingerprints on.
+patchright==1.49.1
 
 # Test dependencies used by backend/tests
 requests==2.34.2

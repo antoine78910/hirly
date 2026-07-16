@@ -1,8 +1,12 @@
 """Human-like pointer and keyboard interactions for ATS browser drivers."""
 from __future__ import annotations
 
+import logging
+import math
 import random
 from typing import Any, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 async def human_pause(page: Any, min_ms: int = 600, max_ms: int = 1600) -> None:
@@ -158,3 +162,125 @@ async def human_upload(locator: Any, page: Any, path: str) -> None:
         await human_mouse_wander(page)
     await locator.set_input_files(path, timeout=10000)
     await human_pause(page, 700, 1500)
+
+
+async def try_pass_datadome_slider(page: Any, *, attempts: int = 3) -> bool:
+    """Best-effort DataDome device-check slider (SmartRecruiters oneclick).
+
+    Waits for `#ddv1-captcha-container .slider` inside the captcha-delivery
+    iframe, converts iframe-local coords to page coords, then drags to
+    `.sliderTarget`. Returns True when the iframe disappears.
+    """
+    for attempt in range(max(1, attempts)):
+        frame = next((f for f in page.frames if "captcha-delivery" in (f.url or "")), None)
+        if frame is None:
+            return True
+
+        # Ensure visual puzzle mode (not audio) is selected.
+        try:
+            puzzle_btn = frame.locator("#captcha__puzzle__button")
+            if await puzzle_btn.count():
+                cls = (await puzzle_btn.get_attribute("class")) or ""
+                if "toggled" not in cls:
+                    await puzzle_btn.click(timeout=2000)
+                    await human_pause(page, 400, 700)
+        except Exception:
+            pass
+
+        coords = None
+        for _ in range(30):
+            try:
+                coords = await frame.evaluate(
+                    """() => {
+                      const root = document.querySelector('#ddv1-captcha-container')
+                        || document.querySelector('#captcha__frame')
+                        || document.body;
+                      const s = root.querySelector('.sliderContainer .slider')
+                        || root.querySelector('.slider');
+                      const t = root.querySelector('.sliderContainer .sliderTarget')
+                        || root.querySelector('.sliderTarget');
+                      const container = root.querySelector('.sliderContainer');
+                      if (!s || !t || !container) return null;
+                      const rs = s.getBoundingClientRect();
+                      const rt = t.getBoundingClientRect();
+                      const rc = container.getBoundingClientRect();
+                      // Track must be laid out (canvas height may still be 0).
+                      if (rs.width < 14 || rs.height < 10 || rc.width < 80) return null;
+                      if (rt.x <= rs.x + 20) return null;
+                      return {
+                        sx: rs.x + rs.width / 2,
+                        sy: rs.y + rs.height / 2,
+                        ex: rt.x + rt.width / 2,
+                        ey: rt.y + rt.height / 2,
+                      };
+                    }"""
+                )
+            except Exception:
+                coords = None
+            if coords:
+                break
+            await human_pause(page, 350, 600)
+        if not coords:
+            logger.info("datadome_slider_not_ready attempt=%s", attempt + 1)
+            try:
+                await frame.click("#captcha__reload__button", timeout=2000)
+                await human_pause(page, 1000, 1800)
+            except Exception:
+                pass
+            continue
+
+        # Frame getBoundingClientRect is iframe-local; page.mouse needs page coords.
+        iframe_box = None
+        try:
+            iframe_box = await page.locator('iframe[src*="captcha-delivery"]').first.bounding_box()
+        except Exception:
+            iframe_box = None
+        ox = float(iframe_box["x"]) if iframe_box else 0.0
+        oy = float(iframe_box["y"]) if iframe_box else 0.0
+
+        sx = ox + float(coords["sx"])
+        sy = oy + float(coords["sy"])
+        ex = ox + float(coords["ex"]) + random.uniform(4, 12)
+        ey = oy + float(coords["ey"])
+        logger.info(
+            "datadome_slider_drag attempt=%s from=(%.1f,%.1f) to=(%.1f,%.1f)",
+            attempt + 1,
+            sx,
+            sy,
+            ex,
+            ey,
+        )
+        try:
+            await page.mouse.move(sx - 35, sy + random.uniform(-5, 5), steps=10)
+            await human_pause(page, 180, 400)
+            await page.mouse.move(sx, sy, steps=8)
+            await human_pause(page, 120, 280)
+            await page.mouse.down()
+            await human_pause(page, 40, 90)
+            steps = random.randint(36, 52)
+            for i in range(steps):
+                t = (i + 1) / steps
+                ease = 0.5 - 0.5 * math.cos(math.pi * t)
+                x = sx + (ex - sx) * ease + random.gauss(0, 0.45)
+                y = sy + math.sin(t * math.pi) * random.uniform(0.3, 1.8) + random.gauss(0, 0.3)
+                await page.mouse.move(x, y)
+                await page.wait_for_timeout(int(random.uniform(12, 24) + (12 if t > 0.85 else 0)))
+            await page.mouse.move(ex + random.uniform(0, 6), ey + random.uniform(-1, 1), steps=4)
+            await human_pause(page, 40, 100)
+            await page.mouse.up()
+        except Exception as exc:
+            logger.info("datadome_slider_drag_failed error=%s", str(exc)[:160])
+            continue
+
+        await human_pause(page, 2200, 3800)
+        if not any("captcha-delivery" in (f.url or "") for f in page.frames):
+            logger.info("datadome_slider_passed attempt=%s", attempt + 1)
+            return True
+        try:
+            frame = next((f for f in page.frames if "captcha-delivery" in (f.url or "")), None)
+            if frame:
+                await frame.click("#captcha__reload__button", timeout=2000)
+                await human_pause(page, 1200, 2200)
+        except Exception:
+            pass
+    return not any("captcha-delivery" in (f.url or "") for f in page.frames)

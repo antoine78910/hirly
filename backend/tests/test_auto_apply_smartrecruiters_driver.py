@@ -34,9 +34,22 @@ def test_parse_oneclick_data_from_posting_html():
 def test_standard_fields_include_contact_resume_and_consent():
     fields = {f.key: f for f in _standard_fields()}
     assert fields["first_name"].type == FieldType.FIRST_NAME
-    assert fields["email_confirm"].binding == 'role=textbox[name="Confirmez votre e-mail"]'
+    assert fields["first_name"].binding == "#first-name-input >> input"
+    assert fields["last_name"].binding == "#last-name-input >> input"
+    assert fields["email_confirm"].binding == "#confirm-email-input >> input"
     assert fields["resume"].binding == 'input[type="file"] >> nth=-1'
+    assert fields["consent"].binding == 'spl-checkbox[data-test="consent-box"]'
     assert fields["consent"].type == FieldType.CONSENT
+
+
+def test_role_locators_use_exact_name_so_nom_does_not_match_prenom():
+    from auto_apply.drivers.smartrecruiters import _exact_role_locator
+
+    nom = _exact_role_locator("textbox", "Nom")
+    prenom = _exact_role_locator("textbox", "Prénom")
+    assert nom == r'role=textbox[name=/^Nom$/i]'
+    assert prenom == r'role=textbox[name=/^Prénom$/i]'
+    assert "Nom" not in prenom or prenom.startswith("role=")
 
 
 def test_configuration_maps_screening_questions():

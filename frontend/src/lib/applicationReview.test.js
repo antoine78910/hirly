@@ -16,4 +16,11 @@ describe("resolveDisplayStatus", () => {
       manual_status: "offer_expired",
     })).toBe("expired");
   });
+
+  test("blocked_captcha wins over remapped pending", () => {
+    expect(resolveDisplayStatus({
+      user_facing_submission_status: "pending",
+      submission_status: "blocked_captcha",
+    })).toBe("blocked_captcha");
+  });
 });

@@ -22,7 +22,8 @@
     "build": {
       "commands": [
         "...",
-        "playwright install chromium"
+        "playwright install chromium",
+        "python -m patchright install chromium"
       ],
       "variables": {
         "PLAYWRIGHT_BROWSERS_PATH": "/app/.playwright-browsers"

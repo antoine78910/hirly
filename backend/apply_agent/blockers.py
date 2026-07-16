@@ -76,15 +76,18 @@ _POST_SUBMIT_ERROR_TERMS = ("required", "error", "invalid", "please", "missing",
 async def detect_captcha(page: Any, *, click_error: str = "") -> Dict[str, Any]:
     try:
         iframe_count = await page.locator(
-            'iframe[src*="hcaptcha"], iframe[src*="recaptcha"], iframe[src*="turnstile"]'
+            'iframe[src*="hcaptcha"], iframe[src*="recaptcha"], iframe[src*="turnstile"], '
+            'iframe[src*="captcha-delivery.com"]'
         ).count()
     except Exception:
         iframe_count = 0
     try:
         visible_captcha_count = await page.locator(
             'iframe[src*="hcaptcha"]:visible, iframe[src*="recaptcha"]:visible, iframe[src*="turnstile"]:visible, '
+            'iframe[src*="captcha-delivery.com"]:visible, '
             '[class*="hcaptcha"]:visible, [class*="recaptcha"]:visible, [class*="turnstile"]:visible, '
-            '[id*="hcaptcha"]:visible, [id*="recaptcha"]:visible'
+            '[id*="hcaptcha"]:visible, [id*="recaptcha"]:visible, '
+            '#ddv1-captcha-container:visible, .captcha__ddv1:visible'
         ).count()
     except Exception:
         visible_captcha_count = 0
@@ -93,7 +96,15 @@ async def detect_captcha(page: Any, *, click_error: str = "") -> Dict[str, Any]:
     except Exception:
         body_text = ""
     captcha_text_detected = any(marker in body_text for marker in CAPTCHA_MARKERS) or any(
-        text in body_text for text in ("security challenge", "verify you are human")
+        text in body_text
+        for text in (
+            "security challenge",
+            "verify you are human",
+            # DataDome FR interstitial (SmartRecruiters oneclick).
+            "non pas a un robot",
+            "faites glisser vers la droite",
+            "verification visuelle",
+        )
     )
     click_lower = canonical(click_error)
     click_intercepted = any(text in click_lower for text in ("hcaptcha", "recaptcha", "captcha", "security challenge"))
@@ -168,8 +179,20 @@ async def detect_offer_expired(page: Any) -> bool:
 # confirmed live that a generic text-based click nearby can accidentally
 # open its "preference center" instead of accepting, leaving a
 # click-intercepting dark overlay over the whole page.
-_ONETRUST_ACCEPT_SELECTORS = ("#onetrust-accept-btn-handler", "#accept-recommended-btn-handler")
-_ONETRUST_CLOSE_SELECTORS = ("#close-pc-btn-handler", ".ot-close-icon")
+_ONETRUST_ACCEPT_SELECTORS = (
+    "#onetrust-accept-btn-handler",
+    "#accept-recommended-btn-handler",
+    # Preference-center reject-all (SR often reopens this mid-apply).
+    "#onetrust-reject-all-handler",
+    "button:has-text('Tout refuser')",
+    "button:has-text('Reject all')",
+)
+_ONETRUST_CLOSE_SELECTORS = (
+    "#close-pc-btn-handler",
+    ".ot-close-icon",
+    "button:has-text('Continuer sans accepter')",
+    "a:has-text('Continuer sans accepter')",
+)
 
 
 async def _click_first_match(page: Any, selectors: tuple[str, ...]) -> bool:
@@ -196,7 +219,9 @@ async def dismiss_cookie_banner(page: Any) -> None:
     # actual application form.
     for text in (
         "Accept", "Accept all", "I agree", "Got it", "OK",
+        "Reject all", "Refuse all",
         "Accepter", "Accepter tous les cookies", "Tout accepter", "J'accepte",
+        "Tout refuser", "Refuser", "Continuer sans accepter",
     ):
         try:
             button = page.get_by_role("button", name=text)
