@@ -30,3 +30,11 @@ def test_detect_bot_wall_from_js_adblocker_interstitial():
     page = _FakePage("Please enable JS and disable any ad blocker")
     import asyncio
     assert asyncio.run(detect_bot_wall(page)) is True
+
+
+def test_detect_bot_wall_from_french_datadome_copy():
+    page = _FakePage(
+        "Accès temporairement restreint. Un robot est sur le même réseau (IP 1.2.3.4) que vous."
+    )
+    import asyncio
+    assert asyncio.run(detect_bot_wall(page)) is True

@@ -61,6 +61,13 @@ BOT_WALL_MARKERS = (
     "disable any ad blocker",
     "disable your ad blocker",
     "enable js and disable",
+    # French SmartRecruiters / DataDome copy (canonicalized, accents stripped).
+    "acces temporairement restreint",
+    "temporairement restreint",
+    "comportement du navigateur",
+    "vitesse surhumaine",
+    "un robot est sur le meme reseau",
+    "quelque chose bloque le fonctionnement de javascript",
 )
 
 _POST_SUBMIT_ERROR_TERMS = ("required", "error", "invalid", "please", "missing", "failed", "could not", "must")

@@ -131,7 +131,8 @@ export default function AdminAutoApplyLab() {
           dry_run: isDryRun,
           headless: true,
         },
-        { timeout: 240000 },
+        // Proxy sticky retries + SR warm-up regularly exceed 4 minutes.
+        { timeout: 480000 },
       );
       const result = data.result || data;
       finishConsole(result);
@@ -140,11 +141,25 @@ export default function AdminAutoApplyLab() {
     } catch (err) {
       if (err?.response?.status === 403) setAccessDenied(true);
       const detail = err.response?.data?.detail;
-      const message = adminApiErrorMessage(err, "Execution failed");
+      const status = err?.response?.status;
+      const timedOut = err?.code === "ECONNABORTED" || /timeout/i.test(String(err?.message || ""));
+      const message = timedOut
+        ? "Request timed out waiting for the browser run (proxy retries can take several minutes). Check Railway logs or retry."
+        : adminApiErrorMessage(err, "Execution failed");
       setError(message);
       const fallback = detail && typeof detail === "object"
         ? syntheticErrorReport(detail, message)
-        : { stage_reached: "driver", status: "error", reason: message, error: { message, phase: "execute" } };
+        : {
+            stage_reached: "driver",
+            status: "error",
+            reason: message,
+            error: {
+              message,
+              phase: "execute",
+              http_status: status || null,
+              timed_out: timedOut,
+            },
+          };
       finishConsole(fallback);
       toast.error(message);
     } finally {

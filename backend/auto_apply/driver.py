@@ -56,6 +56,24 @@ async def _goto_apply_page(page: Any, nav_url: str):
     return resp
 
 
+async def _wait_for_meaningful_body(page: Any, *, timeout_ms: int = 12000) -> str:
+    """Wait until the body has real copy (avoids racing empty DataDome shells)."""
+    deadline = timeout_ms
+    elapsed = 0
+    step = 500
+    text = ""
+    while elapsed <= deadline:
+        try:
+            text = await page.locator("body").inner_text(timeout=2000)
+        except Exception:
+            text = ""
+        if text and len(text.strip()) >= 20:
+            return text
+        await page.wait_for_timeout(step)
+        elapsed += step
+    return text
+
+
 class ApplyDriver(ABC):
     """The single, mechanism-agnostic contract every ATS implements."""
 
@@ -266,20 +284,21 @@ class BrowserApplyDriver(ApplyDriver):
                 except Exception:
                     pass
                 await dismiss_cookie_banner(page)
-                # Challenge pages sometimes paint after the first paint — wait a beat.
-                await human_pause(page, 1200, 2200)
+                await _wait_for_meaningful_body(page, timeout_ms=10000)
+                await human_pause(page, 800, 1400)
 
                 if await self._abort_if_blocked(page, evidence, http_status=http_status, stage="bot_wall"):
                     return evidence
 
                 await self.after_navigation(page, evidence)
                 await self.reveal_form(page)
-                await human_pause(page, 1400, 2800)
+                await human_pause(page, 1000, 1800)
                 try:
                     await page.wait_for_load_state("networkidle", timeout=15000)
                 except Exception:
                     pass
                 await dismiss_cookie_banner(page)
+                await _wait_for_meaningful_body(page, timeout_ms=12000)
 
                 # SmartRecruiters (and similar) often serve the bot wall only
                 # after the Apply CTA navigates to oneclick-ui — re-check here.
