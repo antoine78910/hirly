@@ -4,12 +4,15 @@ import pytest
 
 from apply_agent.browser import (
     browser_context_options,
+    browser_navigation_timeout_ms,
     browser_proxy_settings,
     chromium_launch_args,
     effective_headless,
     headed_browser_available,
+    is_transient_navigation_error,
     parse_proxy_credentials,
     privateproxy_sticky_username,
+    proxy_configured,
     stealth_init_script,
     _load_cookies_from_env,
 )
@@ -90,6 +93,10 @@ def test_privateproxy_sticky_username_matches_docs():
     assert privateproxy_sticky_username("jw7ib-fr-sid-9-ttl-10", sid=3, ttl_minutes=30) == (
         "jw7ib-fr-sid-3-ttl-30"
     )
+    # City targeting must survive sticky rebuild.
+    assert privateproxy_sticky_username(
+        "jw7ib-fr-city-montpellier", sid=1, ttl_minutes=17
+    ) == "jw7ib-fr-city-montpellier-sid-1-ttl-17"
 
 
 def test_browser_proxy_sticky_uses_sid_ttl(monkeypatch):
@@ -100,3 +107,22 @@ def test_browser_proxy_sticky_uses_sid_ttl(monkeypatch):
     assert proxy["username"].startswith("jw7ib-fr-sid-")
     assert proxy["username"].endswith("-ttl-45")
     assert proxy["password"] == "secret"
+
+
+def test_proxy_configured_and_nav_timeout(monkeypatch):
+    monkeypatch.delenv("BROWSER_PROXY", raising=False)
+    monkeypatch.delenv("BROWSER_PROXY_URL", raising=False)
+    monkeypatch.delenv("BROWSER_PROXY_SERVER", raising=False)
+    monkeypatch.delenv("BROWSER_NAVIGATION_TIMEOUT_MS", raising=False)
+    assert proxy_configured() is False
+    assert browser_navigation_timeout_ms() == 45000
+    monkeypatch.setenv("BROWSER_PROXY", "jw7ib-fr:secret:edge1-us.privateproxy.me:8888")
+    assert proxy_configured() is True
+    assert browser_navigation_timeout_ms() == 90000
+
+
+def test_transient_navigation_error_detects_timeout():
+    assert is_transient_navigation_error(
+        RuntimeError('Page.goto: net::ERR_TIMED_OUT at https://jobs.smartrecruiters.com/x')
+    )
+    assert not is_transient_navigation_error(RuntimeError("selector not found"))

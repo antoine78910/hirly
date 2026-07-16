@@ -21,7 +21,13 @@ from apply_agent.blockers import (
     captcha_active, collect_post_submit_errors, confirmation_text_found,
     detect_bot_wall, detect_captcha, detect_login_wall, dismiss_cookie_banner,
 )
-from apply_agent.browser import launch_page, screenshot_b64
+from apply_agent.browser import (
+    browser_navigation_timeout_ms,
+    is_transient_navigation_error,
+    launch_page,
+    proxy_configured,
+    screenshot_b64,
+)
 from apply_agent.guardrails import canonical
 from apply_agent.human_browser import (
     human_check, human_click, human_mouse_wander, human_pause, human_scroll,
@@ -35,6 +41,18 @@ logger = logging.getLogger(__name__)
 
 _TIMEOUT_MS = 45000
 _SUBMIT_SELECTOR = 'button[type="submit"], input[type="submit"], button:has-text("Submit")'
+
+
+async def _goto_apply_page(page: Any, nav_url: str):
+    """Navigate with proxy-friendly waits (commit first, then DOM)."""
+    timeout_ms = browser_navigation_timeout_ms()
+    resp = await page.goto(nav_url, wait_until="commit", timeout=timeout_ms)
+    try:
+        await page.wait_for_load_state("domcontentloaded", timeout=min(45000, timeout_ms))
+    except Exception:
+        # Some ATS shells stay busy; commit + partial DOM can still be enough.
+        pass
+    return resp
 
 
 class ApplyDriver(ABC):
@@ -115,13 +133,72 @@ class BrowserApplyDriver(ApplyDriver):
         url = self.application_url(ctx.job)
         nav_url = self.navigation_url(ctx.job)
         evidence = SubmissionEvidence(raw={"application_url": url, "navigation_url": nav_url})
+        # Residential proxies often hand out dead exits — relaunch with a fresh
+        # sticky sid when the first navigation times out.
+        max_attempts = 3 if proxy_configured() else 1
+        last_open_page_error: Optional[ApplyAgentError] = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                return await self._submit_browser_session(
+                    ctx,
+                    evidence,
+                    url=url,
+                    nav_url=nav_url,
+                    attempt=attempt,
+                    max_attempts=max_attempts,
+                )
+            except ApplyAgentError as exc:
+                last_open_page_error = exc
+                retryable = (
+                    exc.phase == "open_page"
+                    and attempt < max_attempts
+                    and is_transient_navigation_error(exc)
+                )
+                if not retryable:
+                    raise
+                await self._log_step(
+                    evidence,
+                    action="navigate_retry",
+                    locators=[nav_url],
+                    status="retry",
+                    error=f"attempt {attempt}/{max_attempts}: {str(exc)[:180]}",
+                )
+                logger.warning(
+                    "apply_nav_retry provider=%s attempt=%s/%s error=%s",
+                    self.provider,
+                    attempt,
+                    max_attempts,
+                    str(exc)[:200],
+                )
+        if last_open_page_error:
+            raise last_open_page_error
+        return evidence
+
+    async def _submit_browser_session(
+        self,
+        ctx: SubmissionContext,
+        evidence: SubmissionEvidence,
+        *,
+        url: str,
+        nav_url: str,
+        attempt: int,
+        max_attempts: int,
+    ) -> SubmissionEvidence:
         try:
             async with launch_page(headless=ctx.headless) as page:
-                await self._log_step(evidence, action="open_browser", locators=["chromium"],
-                                     status="ok", value_preview="headless" if ctx.headless else "visible")
+                await self._log_step(
+                    evidence,
+                    action="open_browser",
+                    locators=["chromium"],
+                    status="ok",
+                    value_preview=(
+                        f"{'headless' if ctx.headless else 'visible'}"
+                        f"{f' · try {attempt}/{max_attempts}' if max_attempts > 1 else ''}"
+                    ),
+                )
                 http_status = None
                 try:
-                    resp = await page.goto(nav_url, wait_until="domcontentloaded", timeout=_TIMEOUT_MS)
+                    resp = await _goto_apply_page(page, nav_url)
                     http_status = None if resp is None else resp.status
                     evidence.network_ok = None if resp is None else resp.status < 400
                     if evidence.network_ok is False:
@@ -131,7 +208,8 @@ class BrowserApplyDriver(ApplyDriver):
                         )
                     else:
                         await self._log_step(
-                            evidence, action="navigate", locators=[nav_url], status="ok", value_preview=nav_url[:100],
+                            evidence, action="navigate", locators=[nav_url], status="ok",
+                            value_preview=nav_url[:100],
                         )
                 except Exception as exc:
                     await self._log_step(
@@ -142,9 +220,10 @@ class BrowserApplyDriver(ApplyDriver):
                         "open_page",
                         f"Failed to load apply page: {exc.__class__.__name__}: {str(exc)[:300]}",
                         target_url=nav_url,
+                        exception_class=exc.__class__.__name__,
                     ) from exc
                 try:
-                    await page.wait_for_load_state("networkidle", timeout=10000)
+                    await page.wait_for_load_state("networkidle", timeout=15000)
                 except Exception:
                     pass
                 await dismiss_cookie_banner(page)
@@ -157,7 +236,7 @@ class BrowserApplyDriver(ApplyDriver):
                 await self.reveal_form(page)
                 await human_pause(page, 1400, 2800)
                 try:
-                    await page.wait_for_load_state("networkidle", timeout=10000)
+                    await page.wait_for_load_state("networkidle", timeout=15000)
                 except Exception:
                     pass
                 await dismiss_cookie_banner(page)
@@ -194,6 +273,7 @@ class BrowserApplyDriver(ApplyDriver):
                 "open_browser",
                 f"Browser session failed: {exc.__class__.__name__}: {str(exc)[:300]}",
                 target_url=url,
+                exception_class=exc.__class__.__name__,
             ) from exc
         return evidence
 

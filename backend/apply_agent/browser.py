@@ -208,14 +208,42 @@ def parse_proxy_credentials(raw: str) -> Optional[Dict[str, str]]:
 
 
 def _strip_privateproxy_session_args(username: str) -> str:
-    """Remove sid/ttl/swap/city suffixes so we can rebuild a clean sticky login."""
+    """Remove sid/ttl/swap suffixes so we can rebuild a clean sticky login.
+
+    Keep country + city targeting (e.g. jw7ib-fr-city-montpellier).
+    """
     cleaned = username or ""
-    # Drop known trailing arg segments: -sid-12, -ttl-60, -swap, -city-paris
     cleaned = re.sub(r"-sid-\d+", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"-ttl-\d+", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"-swap\b", "", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"-city-[a-z0-9]+", "", cleaned, flags=re.IGNORECASE)
     return cleaned.strip("-")
+
+
+def is_transient_navigation_error(exc: BaseException) -> bool:
+    text = f"{exc.__class__.__name__}: {exc}".lower()
+    markers = (
+        "err_timed_out",
+        "err_empty_response",
+        "err_connection_closed",
+        "err_connection_reset",
+        "err_tunnel_connection_failed",
+        "err_proxy_connection_failed",
+        "err_connection_refused",
+        "timeout",
+        "net::err_",
+        "target host communication",
+    )
+    return any(marker in text for marker in markers)
+
+
+def browser_navigation_timeout_ms() -> int:
+    """Longer timeout when traffic goes through a residential proxy."""
+    explicit = os.environ.get("BROWSER_NAVIGATION_TIMEOUT_MS", "").strip()
+    if explicit.isdigit():
+        return max(15000, int(explicit))
+    if proxy_configured():
+        return 90000
+    return 45000
 
 
 def privateproxy_sticky_username(
@@ -236,6 +264,17 @@ def privateproxy_sticky_username(
     return f"{base}-sid-{session_id}-ttl-{ttl}"
 
 
+def proxy_configured() -> bool:
+    """True when any proxy env is set (does not mint a sticky sid)."""
+    if os.environ.get("BROWSER_PROXY", "").strip():
+        return True
+    if os.environ.get("BROWSER_PROXY_URL", "").strip():
+        return True
+    if os.environ.get("BROWSER_PROXY_SERVER", "").strip():
+        return True
+    return False
+
+
 def browser_proxy_settings() -> Optional[Dict[str, str]]:
     """Playwright proxy dict from env, or None when unset.
 
@@ -248,6 +287,8 @@ def browser_proxy_settings() -> Optional[Dict[str, str]]:
       BROWSER_PROXY_STICKY=1
       BROWSER_PROXY_STICKY_TTL=30   # minutes (optional)
       -> username becomes jw7ib-fr-sid-42-ttl-30
+
+    Each call with STICKY=1 mints a fresh sid — call once per browser launch.
     """
     raw = (
         os.environ.get("BROWSER_PROXY", "").strip()
