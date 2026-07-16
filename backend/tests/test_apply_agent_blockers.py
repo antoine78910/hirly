@@ -24,3 +24,9 @@ def test_detect_bot_wall_from_page_copy():
     page = _FakePage("Access is temporarily restricted due to unusual activity")
     import asyncio
     assert asyncio.run(detect_bot_wall(page)) is True
+
+
+def test_detect_bot_wall_from_js_adblocker_interstitial():
+    page = _FakePage("Please enable JS and disable any ad blocker")
+    import asyncio
+    assert asyncio.run(detect_bot_wall(page)) is True

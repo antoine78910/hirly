@@ -55,6 +55,12 @@ BOT_WALL_MARKERS = (
     "automated (bot) activity",
     "verify you are human",
     "security challenge",
+    # DataDome / PerimeterX style interstitials (JS is enabled; this copy is the block).
+    "please enable js",
+    "please enable javascript",
+    "disable any ad blocker",
+    "disable your ad blocker",
+    "enable js and disable",
 )
 
 _POST_SUBMIT_ERROR_TERMS = ("required", "error", "invalid", "please", "missing", "failed", "could not", "must")

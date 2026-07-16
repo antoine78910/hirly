@@ -149,9 +149,10 @@ class BrowserApplyDriver(ApplyDriver):
         # sticky sid when the first navigation times out.
         max_attempts = 3 if proxy_configured() else 1
         last_open_page_error: Optional[ApplyAgentError] = None
+        last_evidence = evidence
         for attempt in range(1, max_attempts + 1):
             try:
-                return await self._submit_browser_session(
+                last_evidence = await self._submit_browser_session(
                     ctx,
                     evidence,
                     url=url,
@@ -182,9 +183,35 @@ class BrowserApplyDriver(ApplyDriver):
                     max_attempts,
                     str(exc)[:200],
                 )
+                continue
+
+            # JS/ad-blocker interstitial is usually a bad residential exit —
+            # mint a new sticky sid and try again before failing the run.
+            if (
+                last_evidence.blocked_reason == "bot_protection"
+                and attempt < max_attempts
+                and proxy_configured()
+            ):
+                await self._log_step(
+                    evidence,
+                    action="bot_wall_retry",
+                    locators=[nav_url],
+                    status="retry",
+                    error=f"attempt {attempt}/{max_attempts}: bot_protection",
+                )
+                logger.warning(
+                    "apply_bot_wall_retry provider=%s attempt=%s/%s",
+                    self.provider,
+                    attempt,
+                    max_attempts,
+                )
+                # Clear so the next attempt can set a fresh blocked_reason.
+                evidence.blocked_reason = None
+                continue
+            return last_evidence
         if last_open_page_error:
             raise last_open_page_error
-        return evidence
+        return last_evidence
 
     async def _submit_browser_session(
         self,
@@ -239,7 +266,8 @@ class BrowserApplyDriver(ApplyDriver):
                 except Exception:
                     pass
                 await dismiss_cookie_banner(page)
-                await human_pause(page, 700, 1600)
+                # Challenge pages sometimes paint after the first paint — wait a beat.
+                await human_pause(page, 1200, 2200)
 
                 if await self._abort_if_blocked(page, evidence, http_status=http_status, stage="bot_wall"):
                     return evidence
