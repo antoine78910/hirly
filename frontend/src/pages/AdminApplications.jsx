@@ -40,7 +40,6 @@ const ACTIONABLE_STATUSES = new Set([
   "manual_blocked",
   "manual_in_progress",
   "manual_review_needed",
-  "needs_user_input",
   "pending",
   "prepare_failed",
   "prepared",
@@ -52,6 +51,9 @@ const statusBadgeClass = (value) => {
   const status = String(value || "").toLowerCase();
   if (COMPLETED_STATUSES.has(status)) {
     return "border border-emerald-200 bg-emerald-100 text-emerald-700";
+  }
+  if (status === "needs_user_input") {
+    return "border border-amber-200 bg-amber-100 text-amber-800";
   }
   if (ACTIONABLE_STATUSES.has(status)) {
     return "border border-red-200 bg-red-100 text-red-700";

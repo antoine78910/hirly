@@ -110,6 +110,45 @@ def test_other_manual_statuses_still_work_unchanged(monkeypatch):
     assert db.users.rows[0]["billing"]["credits_remaining"] == 150
 
 
+def test_legacy_needs_user_input_action_persists_manual_status(monkeypatch):
+    db = _DB(applications=[_base_application(manual_status="manual_review_needed")])
+    monkeypatch.setattr(server, "db", db)
+
+    result = asyncio.run(server.admin_update_application_status(
+        "app_1", server.AdminStatusUpdate(status="needs_user_input"), admin=_admin(),
+    ))
+
+    application = result["application"]
+    assert application["admin_status"] == "needs_user_input"
+    assert application["manual_status"] == "needs_user_input"
+    assert application["submission_status"] == "action_required"
+    assert application["admin_timeline"][-1]["admin_status"] == "needs_user_input"
+
+
+def test_newer_admin_needs_user_input_wins_over_stale_manual_status():
+    application = _base_application(
+        admin_status="needs_user_input",
+        admin_status_updated_at="2026-07-16T12:00:00+00:00",
+        manual_status="manual_review_needed",
+        manual_status_updated_at="2026-07-15T12:00:00+00:00",
+    )
+
+    assert server._effective_manual_status(application) == "needs_user_input"
+    assert server._user_facing_submission_status(application) == "action_required"
+
+
+def test_newer_manual_status_is_not_overridden_by_stale_admin_status():
+    application = _base_application(
+        admin_status="needs_user_input",
+        admin_status_updated_at="2026-07-15T12:00:00+00:00",
+        manual_status="manually_submitted",
+        manual_status_updated_at="2026-07-16T12:00:00+00:00",
+        submission_status="submitted",
+    )
+
+    assert server._effective_manual_status(application) == "manually_submitted"
+
+
 def test_refund_application_credit_direct(monkeypatch):
     db = _DB(users=[_base_user(billing={"credits_total": 200, "credits_remaining": 0})])
     monkeypatch.setattr(server, "db", db)

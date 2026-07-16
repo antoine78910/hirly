@@ -10122,7 +10122,14 @@ def _has_remaining_user_questions(app_doc: Dict[str, Any]) -> bool:
 
 
 def _effective_manual_status(app_doc: Dict[str, Any]) -> Optional[str]:
-    manual_status = app_doc.get("manual_status") or app_doc.get("admin_status")
+    manual_status = app_doc.get("manual_status")
+    admin_status = app_doc.get("admin_status")
+    if admin_status in MANUAL_STATUSES and admin_status != manual_status:
+        admin_updated_at = _parse_dt(app_doc.get("admin_status_updated_at"))
+        manual_updated_at = _parse_dt(app_doc.get("manual_status_updated_at"))
+        if admin_updated_at and (not manual_updated_at or admin_updated_at >= manual_updated_at):
+            return admin_status
+    manual_status = manual_status or admin_status
     if manual_status in MANUAL_STATUSES:
         return manual_status
     if app_doc.get("submission_status") in {"prepare_failed", "blocked", "blocked_captcha", "failed"} and not _has_remaining_user_questions(app_doc):
@@ -10131,9 +10138,12 @@ def _effective_manual_status(app_doc: Dict[str, Any]) -> Optional[str]:
 
 
 def _user_facing_submission_status(app_doc: Dict[str, Any]) -> str:
-    if app_doc.get("submission_status") == "submitted" or _effective_manual_status(app_doc) == "manually_submitted":
+    manual_status = _effective_manual_status(app_doc)
+    if app_doc.get("submission_status") == "submitted" or manual_status == "manually_submitted":
         return "submitted"
-    if _effective_manual_status(app_doc) in {"manual_review_needed", "manual_in_progress", "manual_blocked"}:
+    if manual_status == "needs_user_input":
+        return "action_required"
+    if manual_status in {"manual_review_needed", "manual_in_progress", "manual_blocked"}:
         return "pending"
     return app_doc.get("submission_status") or "not_submitted"
 
@@ -12217,13 +12227,26 @@ async def admin_update_application_status(
         "escalated": "blocked",
     }[body.status]
     now = datetime.now(timezone.utc).isoformat()
+    timeline = _append_admin_timeline(app_doc, {
+        "event_id": f"timeline_{uuid.uuid4().hex[:12]}",
+        "type": "admin_status",
+        "admin_status": body.status,
+        "author_user_id": admin.user_id,
+        "author_email": admin.email,
+        "created_at": now,
+    })
     update = {
         "admin_status": body.status,
         "submission_status": submission_status,
+        "admin_timeline": timeline,
         "updated_at": now,
         "admin_status_updated_by": admin.email,
         "admin_status_updated_at": now,
     }
+    if body.status == "needs_user_input":
+        update["manual_status"] = "needs_user_input"
+        update["manual_status_updated_by"] = admin.email
+        update["manual_status_updated_at"] = now
     if body.status == "submitted":
         update["submitted_at"] = now
     await db.applications.update_one(
