@@ -134,6 +134,41 @@ def test_process_inbound_resend_email_stores_and_forwards(monkeypatch):
     assert forwarded["original_from"] == "recruiter@acme-ats.com"
 
 
+def test_process_inbound_resend_email_stores_and_forwards_html_body(monkeypatch):
+    """Resend's `html` field must survive into storage and be handed to the
+    forward call as body_html -- otherwise both the Inbox tab and the
+    forwarded copy degrade to Resend's flattened plain-text alternative
+    (the "bracketed URL" bug)."""
+    db = _seed_db()
+    monkeypatch.setattr(svc, "RESEND_API_KEY", "re_test_key")
+
+    async def fake_fetch(resend_email_id):
+        return {
+            "subject": "Confirm your email",
+            "text": "Confirm your email <https://example.com/confirm/abc>",
+            "html": '<p>Please <a href="https://example.com/confirm/abc">confirm</a> your email.</p>',
+            "from": "recruiter@acme-ats.com",
+            "created_at": "2026-01-01T00:00:00Z",
+        }
+
+    monkeypatch.setattr(svc, "_fetch_resend_email", fake_fetch)
+
+    forwarded = {}
+
+    async def fake_forward(**kwargs):
+        forwarded.update(kwargs)
+        return {"ok": True}
+
+    monkeypatch.setattr(svc, "forward_inbound_reply", fake_forward)
+
+    webhook_data = {"to": ["app_abc123@inbox.tryhirly.com"], "subject": "Confirm your email"}
+    asyncio.run(svc.process_inbound_resend_email(db, "re_123", webhook_data))
+
+    row = asyncio.run(db.application_emails.find_one({"email_id": "resend_re_123"}))
+    assert row["html"] == '<p>Please <a href="https://example.com/confirm/abc">confirm</a> your email.</p>'
+    assert forwarded["body_html"] == row["html"]
+
+
 def test_process_inbound_resend_email_is_idempotent(monkeypatch):
     db = _seed_db()
     db.application_emails.rows.append({"email_id": "resend_re_123", "application_id": "app_abc123"})

@@ -18,6 +18,7 @@ import base64
 import html as html_escape
 import logging
 import os
+import re
 import smtplib
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
@@ -199,18 +200,34 @@ def _hex_to_rgba(hex_color: str, alpha: float) -> str:
     return f"rgba({r}, {g}, {b}, {alpha})"
 
 
-def _build_forward_html(body_text: str, to_email: str, original_from: str) -> str:
+def _strip_script_tags(html: str) -> str:
+    """Defense-in-depth for outbound mail: strip <script> before re-embedding
+    a third party's HTML in our own forwarded email. Full sanitization isn't
+    needed here the way it is for in-app rendering (mail clients don't
+    execute arbitrary JS the way browsers do), but scripts have no business
+    surviving a forward regardless."""
+    return re.sub(r"<script\b[^>]*>.*?</script>", "", html, flags=re.I | re.S)
+
+
+def _build_forward_html(body_text: str, to_email: str, original_from: str, body_html: Optional[str] = None) -> str:
     """Branded HTML footer mirroring Sorce's "Managed Email" banner (logo,
     Forwarding to / Sent from lines, closing message) in Hirly's own purple.
+    Embeds the original employer/ATS HTML verbatim when available (so
+    buttons/links render as real clickable elements, not escaped text) --
+    falls back to the escaped plain text only when no HTML was captured.
     """
-    safe_body = html_escape.escape(body_text.strip()).replace("\n", "<br>")
+    if body_html and body_html.strip():
+        body_section = f'<div style="max-width: 100%; overflow-wrap: break-word;">{_strip_script_tags(body_html)}</div>'
+    else:
+        safe_body = html_escape.escape(body_text.strip()).replace("\n", "<br>")
+        body_section = f"<div>{safe_body}</div>"
     safe_to = html_escape.escape(to_email)
     safe_from = html_escape.escape(original_from or "")
     color = HIRLY_BRAND_COLOR
     box_bg = _hex_to_rgba(color, 0.08)
     return f"""\
 <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 15px; line-height: 1.6; color: #111827; width: 100%;">
-  <div>{safe_body}</div>
+  {body_section}
   <div style="margin-top: 28px; padding: 32px 24px; text-align: center; background-color: {box_bg}; border-radius: 16px; width: 100%; box-sizing: border-box;">
     <img src="{HIRLY_LOGO_URL}" alt="Hirly" width="40" height="40" style="display: block; margin: 0 auto 16px; border-radius: 8px;" />
     <p style="margin: 0 0 12px; font-weight: 700; color: #111827;">
@@ -231,6 +248,7 @@ async def forward_inbound_reply(
     original_from: str,
     subject: str,
     body_text: str,
+    body_html: Optional[str] = None,
     company: Optional[str] = None,
     job_title: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -247,7 +265,7 @@ async def forward_inbound_reply(
 
     prefixed_subject = subject if subject.lower().startswith("fwd:") else f"Fwd: {subject}"
     plain = _build_forward_body(body_text or "", to_email, original_from)
-    rich_html = _build_forward_html(body_text or "", to_email, original_from)
+    rich_html = _build_forward_html(body_text or "", to_email, original_from, body_html=body_html)
 
     try:
         if await _send_via_resend(

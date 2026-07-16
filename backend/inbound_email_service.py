@@ -128,6 +128,7 @@ async def process_inbound_resend_email(db, resend_email_id: str, webhook_data: D
         "to": ", ".join(to_addresses) if isinstance(to_addresses, list) else str(to_addresses),
         "subject": subject,
         "snippet": snippet,
+        "html": html_body or None,
         "received_at": detail.get("created_at") or now,
         "company": job.get("company"),
         "job_title": job.get("title"),
@@ -150,6 +151,7 @@ async def process_inbound_resend_email(db, resend_email_id: str, webhook_data: D
             original_from=sender,
             subject=subject,
             body_text=text_body or snippet,
+            body_html=html_body or None,
             company=job.get("company"),
             job_title=job.get("title"),
         )

@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
+import DOMPurify from "dompurify";
 import {
   Mail, Sparkles, Copy, Check, ChevronRight, ChevronLeft, ChevronDown, X, Menu, Settings, Star, Pencil,
   CornerUpLeft, Archive, MoreHorizontal, AlertTriangle, Send,
@@ -615,6 +616,64 @@ function MessageActionBar({ onReply, onMarkUnread, onArchive, onMore }) {
   );
 }
 
+// Force every link to open in a new tab rather than navigating the sandboxed
+// iframe (which has no top-navigation capability anyway) or, worse, escaping
+// the sandbox.
+DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+  if (node.tagName === "A") {
+    node.setAttribute("target", "_blank");
+    node.setAttribute("rel", "noopener noreferrer");
+  }
+});
+
+/** Renders a third-party HTML email safely: sanitized, then isolated in a
+ * sandboxed iframe so the email's own styles/markup can't leak into (or
+ * clash with) the app, and scripts never execute regardless of what slips
+ * past sanitization. `allow-same-origin` (without `allow-scripts`) lets us
+ * measure content height for auto-sizing without granting any script
+ * execution capability. */
+function SafeEmailHtml({ html }) {
+  const iframeRef = useRef(null);
+  const [height, setHeight] = useState(0);
+
+  // Default DOMPurify config already strips <script>, event-handler
+  // attributes, javascript: URLs, etc. -- deliberately not forbidding
+  // style/<style>, since most real HTML emails (buttons, layout) depend on
+  // inline styles to render correctly at all.
+  const sanitized = useMemo(() => DOMPurify.sanitize(html), [html]);
+
+  const resize = useCallback(() => {
+    try {
+      const doc = iframeRef.current?.contentWindow?.document;
+      if (doc?.body) setHeight(doc.body.scrollHeight);
+    } catch (_) {
+      // Cross-origin access denied — leave height as-is.
+    }
+  }, []);
+
+  const srcDoc = `<!doctype html><html><head><meta charset="utf-8">
+    <base target="_blank">
+    <style>
+      body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 15px; line-height: 1.55; color: #27272a; word-wrap: break-word; }
+      img { max-width: 100%; height: auto; }
+      a { color: #0a66c2; }
+    </style>
+  </head><body>${sanitized}</body></html>`;
+
+  return (
+    <iframe
+      ref={iframeRef}
+      title="email-content"
+      srcDoc={srcDoc}
+      onLoad={resize}
+      sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+      className="w-full border-0"
+      style={{ height: height ? `${height}px` : "200px" }}
+      data-testid="inbox-message-html"
+    />
+  );
+}
+
 function InboxMessageDetail({
   message,
   starred,
@@ -728,6 +787,8 @@ function InboxMessageDetail({
       <div className="app-scroll no-scrollbar mx-auto min-h-0 w-full max-w-md flex-1 px-5 pb-28 pt-5">
         {message.variant === "welcome" ? (
           <WelcomeMessageBody />
+        ) : message.html ? (
+          <SafeEmailHtml html={message.html} />
         ) : (
           <article className="space-y-4">
             <p className="whitespace-pre-line text-[15px] leading-[1.55] text-zinc-800">

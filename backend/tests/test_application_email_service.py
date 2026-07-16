@@ -24,6 +24,31 @@ def test_build_forward_html_escapes_and_includes_branding():
     assert "Good luck with your application!" in result
 
 
+def test_build_forward_html_embeds_real_html_when_available():
+    result = svc._build_forward_html(
+        "Confirm your email <https://example.com/confirm/abc>",
+        "candidate@example.com",
+        "recruiter@acme-ats.com",
+        body_html='<p>Please <a href="https://example.com/confirm/abc">confirm</a> your email.</p>',
+    )
+    # The real clickable link survives, not the escaped bracketed-URL text.
+    assert '<a href="https://example.com/confirm/abc">confirm</a>' in result
+    assert "&lt;https" not in result
+    assert svc.HIRLY_LOGO_URL in result
+
+
+def test_build_forward_html_strips_script_tags():
+    result = svc._build_forward_html(
+        "plain fallback",
+        "candidate@example.com",
+        "recruiter@acme-ats.com",
+        body_html='<p>hello</p><script>alert(1)</script>',
+    )
+    assert "<script>" not in result
+    assert "alert(1)" not in result
+    assert "<p>hello</p>" in result
+
+
 def test_forward_inbound_reply_sends_html_via_resend(monkeypatch):
     monkeypatch.setattr(svc, "RESEND_API_KEY", "test_key")
     captured = {}

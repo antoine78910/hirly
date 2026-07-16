@@ -502,6 +502,7 @@ def public_email_message(row: Dict[str, Any]) -> Dict[str, Any]:
         "subject": row.get("subject") or "(no subject)",
         "preview": row.get("snippet") or "",
         "body": row.get("snippet") or "",
+        "html": row.get("html") or None,
         "date": row.get("received_at"),
         "received_at": row.get("received_at"),
         "filter": "interview" if classification == "interview" else "offer" if classification == "offer" else "verification" if classification == "verification" else "primary",
