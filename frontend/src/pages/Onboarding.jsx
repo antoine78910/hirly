@@ -286,6 +286,7 @@ export default function Onboarding() {
   const [pendingCheckoutSuccess, setPendingCheckoutSuccess] = useState(false);
   // 'finish' = Stripe cancel (complete setup); 'navigate' = reload after paywall.
   const [pendingEnterAppFromPaywall, setPendingEnterAppFromPaywall] = useState(null);
+  const [enteringAppFromPaywall, setEnteringAppFromPaywall] = useState(false);
   const [bootstrapping, setBootstrapping] = useState(true);
   const resumeAppliedRef = useRef(false);
   const inputRef = useRef();
@@ -698,7 +699,7 @@ export default function Onboarding() {
     if (!user) return;
     const mode = pendingEnterAppFromPaywall;
     setPendingEnterAppFromPaywall(null);
-    setCheckoutLoading(true);
+    setEnteringAppFromPaywall(true);
     let cancelled = false;
     (async () => {
       if (mode === "navigate" && hasProfile && hasPreferences) {
@@ -706,7 +707,7 @@ export default function Onboarding() {
       } else {
         await finishOnboarding();
       }
-      if (!cancelled) setCheckoutLoading(false);
+      if (!cancelled) setEnteringAppFromPaywall(false);
     })();
     return () => {
       cancelled = true;
@@ -1357,7 +1358,10 @@ export default function Onboarding() {
     )
   ) : null;
 
-  if (bootstrapping) {
+  if (bootstrapping || pendingEnterAppFromPaywall || enteringAppFromPaywall) {
+    // Keep the same neutral loading screen through the paywall → app hand-off
+    // (Stripe cancel/back, or reload after reaching pricing) instead of
+    // flashing the onboarding intro step behind it while we navigate.
     return (
       <div className="grid min-h-dvh place-items-center bg-white">
         <Loader2 className="h-6 w-6 animate-spin text-zinc-400" data-testid="onboarding-bootstrap-loading" />
