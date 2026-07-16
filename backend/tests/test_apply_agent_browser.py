@@ -103,10 +103,28 @@ def test_browser_proxy_sticky_uses_sid_ttl(monkeypatch):
     monkeypatch.setenv("BROWSER_PROXY", "jw7ib-fr:secret:edge1-us.privateproxy.me:8888")
     monkeypatch.setenv("BROWSER_PROXY_STICKY", "1")
     monkeypatch.setenv("BROWSER_PROXY_STICKY_TTL", "45")
+    monkeypatch.delenv("BROWSER_PROXY_STICKY_SID", raising=False)
     proxy = browser_proxy_settings()
     assert proxy["username"].startswith("jw7ib-fr-sid-")
     assert proxy["username"].endswith("-ttl-45")
     assert proxy["password"] == "secret"
+
+
+def test_browser_proxy_sticky_fixed_sid(monkeypatch):
+    monkeypatch.setenv("BROWSER_PROXY", "jw7ib-fr:secret:edge1-us.privateproxy.me:8888")
+    monkeypatch.setenv("BROWSER_PROXY_STICKY", "1")
+    monkeypatch.setenv("BROWSER_PROXY_STICKY_SID", "7")
+    monkeypatch.setenv("BROWSER_PROXY_STICKY_TTL", "120")
+    proxy = browser_proxy_settings()
+    assert proxy["username"] == "jw7ib-fr-sid-7-ttl-120"
+
+
+def test_browser_storage_state_json(monkeypatch, tmp_path):
+    monkeypatch.delenv("BROWSER_STORAGE_STATE", raising=False)
+    payload = {"cookies": [{"name": "a", "value": "b", "domain": ".example.com", "path": "/"}], "origins": []}
+    monkeypatch.setenv("BROWSER_STORAGE_STATE_JSON", json.dumps(payload))
+    opts = browser_context_options()
+    assert opts["storage_state"]["cookies"][0]["name"] == "a"
 
 
 def test_proxy_configured_and_nav_timeout(monkeypatch):

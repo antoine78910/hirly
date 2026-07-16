@@ -119,9 +119,19 @@ def browser_context_options() -> Dict[str, Any]:
             "Upgrade-Insecure-Requests": "1",
         },
     }
-    storage_state = os.environ.get("BROWSER_STORAGE_STATE", "").strip()
-    if storage_state and Path(storage_state).exists():
-        options["storage_state"] = storage_state
+    # Prefer inline JSON (Railway-friendly secret) over a file path.
+    storage_json = os.environ.get("BROWSER_STORAGE_STATE_JSON", "").strip()
+    if storage_json:
+        try:
+            options["storage_state"] = json.loads(storage_json)
+            logger.info("browser_storage_state_loaded source=json")
+        except Exception as exc:
+            logger.warning("browser_storage_state_json_invalid error=%s", str(exc)[:200])
+    else:
+        storage_state = os.environ.get("BROWSER_STORAGE_STATE", "").strip()
+        if storage_state and Path(storage_state).exists():
+            options["storage_state"] = storage_state
+            logger.info("browser_storage_state_loaded source=file path=%s", storage_state)
     return options
 
 
@@ -286,9 +296,11 @@ def browser_proxy_settings() -> Optional[Dict[str, str]]:
     Sticky sessions (PrivateProxy):
       BROWSER_PROXY_STICKY=1
       BROWSER_PROXY_STICKY_TTL=30   # minutes (optional)
-      -> username becomes jw7ib-fr-sid-42-ttl-30
+      BROWSER_PROXY_STICKY_SID=7    # optional fixed sid so capture + prod share one IP
+      -> username becomes jw7ib-fr-sid-7-ttl-30
 
-    Each call with STICKY=1 mints a fresh sid — call once per browser launch.
+    Each call with STICKY=1 mints a sid (random unless STICKY_SID is set) —
+    call once per browser launch.
     """
     raw = (
         os.environ.get("BROWSER_PROXY", "").strip()
@@ -316,7 +328,15 @@ def browser_proxy_settings() -> Optional[Dict[str, str]]:
             ttl = int(ttl_raw or "30")
         except ValueError:
             ttl = 30
-        proxy["username"] = privateproxy_sticky_username(proxy["username"], ttl_minutes=ttl)
+        sid_raw = os.environ.get("BROWSER_PROXY_STICKY_SID", "").strip()
+        sid: Optional[int] = None
+        if sid_raw.isdigit():
+            sid = int(sid_raw)
+        proxy["username"] = privateproxy_sticky_username(
+            proxy["username"],
+            sid=sid,
+            ttl_minutes=ttl,
+        )
     return proxy
 
 

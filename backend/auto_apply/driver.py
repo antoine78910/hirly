@@ -13,6 +13,7 @@ matches nothing, i.e. DOM drift).
 from __future__ import annotations
 
 import logging
+import os
 import random
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
@@ -205,10 +206,13 @@ class BrowserApplyDriver(ApplyDriver):
 
             # JS/ad-blocker interstitial is usually a bad residential exit —
             # mint a new sticky sid and try again before failing the run.
+            # Skip when STICKY_SID is fixed (warm cookie sessions must keep one IP).
+            fixed_sticky = bool(os.environ.get("BROWSER_PROXY_STICKY_SID", "").strip().isdigit())
             if (
                 last_evidence.blocked_reason == "bot_protection"
                 and attempt < max_attempts
                 and proxy_configured()
+                and not fixed_sticky
             ):
                 await self._log_step(
                     evidence,
