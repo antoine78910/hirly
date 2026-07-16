@@ -24,7 +24,7 @@ from application_blueprint import (
     estimate_compatibility_score,
 )
 from apply_agent.guardrails import canonical
-from apply_agent.human_browser import human_click, human_pause, human_scroll
+from apply_agent.human_browser import human_click, human_mouse_wander, human_pause, human_scroll
 from job_providers.ats_adapters.smartrecruiters import SmartRecruitersAtsAdapter
 
 from ..driver import DRIVER_REGISTRY, BrowserApplyDriver
@@ -187,7 +187,7 @@ def _company_slug(job: Dict[str, Any], posting_url: str) -> str:
 
 class SmartRecruitersApplyDriver(BrowserApplyDriver):
     provider = "smartrecruiters"
-    version = "smartrecruiters-1.1.1"
+    version = "smartrecruiters-1.2.0"
 
     def __init__(self):
         self._adapter = SmartRecruitersAtsAdapter()
@@ -288,17 +288,13 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
 
     async def after_navigation(self, page: Any, evidence) -> None:
         """Warm the SmartRecruiters origin a bit before interacting with Apply."""
-        await human_pause(page, 1800, 3600)
+        await human_pause(page, 2200, 4200)
+        await human_mouse_wander(page)
         await human_scroll(page)
+        await human_pause(page, 700, 1500)
+        await human_scroll(page)
+        await human_mouse_wander(page)
         await human_pause(page, 500, 1200)
-        # Light mouse wander so the session is not "land and click Apply" only.
-        try:
-            await page.mouse.move(random.randint(120, 480), random.randint(160, 420), steps=random.randint(8, 18))
-            await human_pause(page, 250, 700)
-            await page.mouse.move(random.randint(520, 980), random.randint(220, 560), steps=random.randint(8, 18))
-        except Exception:
-            pass
-        await human_pause(page, 400, 900)
 
     async def reveal_form(self, page: Any) -> None:
         url = page.url or ""

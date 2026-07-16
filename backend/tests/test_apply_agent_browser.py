@@ -84,9 +84,18 @@ def test_browser_proxy_settings_from_env(monkeypatch):
     assert proxy["password"] == "secret"
 
 
-def test_browser_proxy_sticky_appends_session(monkeypatch):
+def test_browser_proxy_sticky_appends_sessionduration(monkeypatch):
     monkeypatch.setenv("BROWSER_PROXY", "jw7ib-fr:secret:edge1-us.privateproxy.me:8888")
     monkeypatch.setenv("BROWSER_PROXY_STICKY", "1")
+    monkeypatch.delenv("BROWSER_PROXY_SESSION_TEMPLATE", raising=False)
+    proxy = browser_proxy_settings()
+    assert proxy["username"] == "jw7ib-fr-sessionduration-15"
+    assert proxy["password"] == "secret"
+
+
+def test_browser_proxy_session_template(monkeypatch):
+    monkeypatch.setenv("BROWSER_PROXY", "jw7ib-fr:secret:edge1-us.privateproxy.me:8888")
+    monkeypatch.setenv("BROWSER_PROXY_SESSION_TEMPLATE", "{username}-session-{session}")
     proxy = browser_proxy_settings()
     assert proxy["username"].startswith("jw7ib-fr-session-")
     assert proxy["password"] == "secret"

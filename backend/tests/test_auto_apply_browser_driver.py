@@ -48,11 +48,40 @@ class _FakeLocator:
 
 
 class _FakeMouse:
+    def __init__(self, page):
+        self._page = page
+
     async def move(self, x, y, steps=1):
         pass
 
     async def wheel(self, x, y):
         pass
+
+    async def click(self, x, y, delay=0):
+        self._page.clicked.append(f"mouse:{x:.0f},{y:.0f}")
+
+
+class _FakeKeyboard:
+    def __init__(self, page):
+        self._page = page
+        self._buffer = ""
+
+    async def press(self, key):
+        if key in ("Control+A", "Meta+A"):
+            self._buffer = ""
+        elif key == "Backspace":
+            self._buffer = self._buffer[:-1]
+
+    async def type(self, text, delay=0):
+        self._buffer += text
+        # Mirror production typing onto the last focused selector when known.
+        if self._page.clicked:
+            sel = self._page.queried[-1] if self._page.queried else "keyboard"
+            # Keep updating a single fill entry for the current field.
+            if self._page.filled and self._page.filled[-1][0] == sel:
+                self._page.filled[-1] = (sel, self._buffer)
+            else:
+                self._page.filled.append((sel, self._buffer))
 
 
 class _FakePage:
@@ -65,7 +94,9 @@ class _FakePage:
         self.clicked = []
         self.selected = []
         self.checked = []
-        self.mouse = _FakeMouse()
+        self.viewport_size = {"width": 1440, "height": 900}
+        self.mouse = _FakeMouse(self)
+        self.keyboard = _FakeKeyboard(self)
 
     async def goto(self, url, wait_until=None, timeout=0):
         self.url = url
@@ -138,7 +169,10 @@ def _install_fake_page(monkeypatch, page):
     async def fast_pause(p, min_ms=0, max_ms=0):
         pass
 
-    async def noop_scroll(p):
+    async def noop_scroll(p, *args, **kwargs):
+        pass
+
+    async def noop_wander(p):
         pass
 
     async def fake_shot(p):
@@ -151,6 +185,7 @@ def _install_fake_page(monkeypatch, page):
     monkeypatch.setattr(driver_mod, "dismiss_cookie_banner", noop_cookie)
     monkeypatch.setattr(driver_mod, "human_pause", fast_pause)
     monkeypatch.setattr(driver_mod, "human_scroll", noop_scroll)
+    monkeypatch.setattr(driver_mod, "human_mouse_wander", noop_wander)
     monkeypatch.setattr(driver_mod, "screenshot_b64", fake_shot)
 
 

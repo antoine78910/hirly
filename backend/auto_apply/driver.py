@@ -13,6 +13,7 @@ matches nothing, i.e. DOM drift).
 from __future__ import annotations
 
 import logging
+import random
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
@@ -23,7 +24,8 @@ from apply_agent.blockers import (
 from apply_agent.browser import launch_page, screenshot_b64
 from apply_agent.guardrails import canonical
 from apply_agent.human_browser import (
-    human_check, human_click, human_pause, human_scroll, human_select, human_type, human_upload,
+    human_check, human_click, human_mouse_wander, human_pause, human_scroll,
+    human_select, human_type, human_upload,
 )
 from apply_agent.models import ApplyAgentError
 
@@ -66,9 +68,11 @@ class BrowserApplyDriver(ApplyDriver):
 
     async def after_navigation(self, page: Any, evidence: SubmissionEvidence) -> None:
         """Hook after the first page load and cookie dismissal."""
-        await human_pause(page, 1600, 3400)
+        await human_pause(page, 1800, 3800)
+        await human_mouse_wander(page)
         await human_scroll(page)
-        await human_pause(page, 400, 1100)
+        await human_pause(page, 600, 1400)
+        await human_mouse_wander(page)
 
     async def reveal_form(self, page: Any) -> None:
         """Optional fixed-selector click to reveal a form behind an Apply CTA.
@@ -167,10 +171,19 @@ class BrowserApplyDriver(ApplyDriver):
 
                 for step in ctx.plan.steps:
                     if step.action == "submit":
+                        # Read the form once more before submitting.
+                        await human_scroll(page, direction="up")
+                        await human_pause(page, 900, 2000)
+                        await human_mouse_wander(page)
                         await self._click_submit(page, evidence)
                         continue
                     await self._apply_step(page, step, ctx.documents, evidence)
-                    await human_pause(page, 700, 1800)
+                    # Between fields: short read pause + occasional scroll/wander.
+                    await human_pause(page, 900, 2200)
+                    if random.random() < 0.45:
+                        await human_scroll(page)
+                    if random.random() < 0.35:
+                        await human_mouse_wander(page)
 
                 await self._gather_evidence(page, evidence, starting_url)
                 evidence.screenshot_b64 = await screenshot_b64(page)

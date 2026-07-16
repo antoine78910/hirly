@@ -236,12 +236,22 @@ def browser_proxy_settings() -> Optional[Dict[str, str]]:
                 proxy["password"] = password
     if not proxy:
         return None
+    # Optional sticky username rewrite. PrivateProxy sticky formats vary — set
+    # BROWSER_PROXY_SESSION_TEMPLATE explicitly, e.g.
+    #   "{username}-session-{session}"  or  "{username}-sessionduration-15"
+    # BROWSER_PROXY_STICKY=1 alone uses a conservative sessionduration suffix.
+    template = os.environ.get("BROWSER_PROXY_SESSION_TEMPLATE", "").strip()
     sticky = os.environ.get("BROWSER_PROXY_STICKY", "").strip().lower() in ("1", "true", "yes")
-    if sticky and proxy.get("username"):
-        # Avoid double-appending if username already carries a session token.
-        if "-session-" not in proxy["username"]:
-            token = f"{random.randint(100000, 999999)}{random.randint(1000, 9999)}"
-            proxy["username"] = f"{proxy['username']}-session-{token}"
+    if proxy.get("username") and (template or sticky):
+        session = f"{random.randint(100000, 999999)}{random.randint(1000, 9999)}"
+        username = proxy["username"]
+        if template:
+            proxy["username"] = (
+                template.replace("{username}", username).replace("{session}", session)
+            )
+        elif "sessionduration" not in username and "-session-" not in username:
+            # Common PrivateProxy sticky pattern (minutes). Override via TEMPLATE if needed.
+            proxy["username"] = f"{username}-sessionduration-15"
     return proxy
 
 
