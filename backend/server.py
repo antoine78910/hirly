@@ -2650,7 +2650,8 @@ async def create_billing_checkout_session(
     app_url = _app_url()
     if checkout_source == "onboarding":
         success_url = f"{marketing_url}/onboarding?step=creatorAccessCode&checkout=success&session_id={{CHECKOUT_SESSION_ID}}"
-        cancel_url = f"{marketing_url}/onboarding?step=showcasePricing&checkout=cancelled"
+        # Back from Stripe should enter the app (frontend finishes onboarding), not re-show paywall.
+        cancel_url = f"{marketing_url}/onboarding?checkout=cancelled"
     elif checkout_source == "app":
         return_path = _sanitize_return_path(body.return_path)
         success_url = _checkout_return_url(app_url, return_path, "success")

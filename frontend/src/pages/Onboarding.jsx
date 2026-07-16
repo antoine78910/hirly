@@ -99,7 +99,6 @@ import { splitFullName } from "../lib/personalInfoOptions";
 import { ob } from "../components/onboarding/onboardingTheme";
 import { trackEvent } from "../lib/analytics";
 import {
-  onboardingSnapshotToSearchSync,
   syncOnboardingSearchPreferences,
 } from "../lib/profileSearchPreferences";
 import { preloadOnboardingIntroImages, preloadOnboardingShowcaseImages } from "../lib/onboardingImagePreload";
@@ -115,7 +114,6 @@ import {
   ONBOARDING_TRANSIENT_STEPS,
   resolveOnboardingResumeStep,
 } from "../lib/onboardingResume";
-import { canAccessJobSeekerApp } from "../lib/jobSeekerEntry";
 
 const STEP_ORDER = ONBOARDING_STEP_ORDER;
 const ONBOARDING_CHECKOUT_STATE_KEY = "hirly.onboarding.checkoutState";
@@ -286,6 +284,8 @@ export default function Onboarding() {
   const [redeemingAccessCode, setRedeemingAccessCode] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [pendingCheckoutSuccess, setPendingCheckoutSuccess] = useState(false);
+  // 'finish' = Stripe cancel (complete setup); 'navigate' = reload after paywall.
+  const [pendingEnterAppFromPaywall, setPendingEnterAppFromPaywall] = useState(null);
   const [bootstrapping, setBootstrapping] = useState(true);
   const resumeAppliedRef = useRef(false);
   const inputRef = useRef();
@@ -487,10 +487,9 @@ export default function Onboarding() {
         resumeAppliedRef.current = true;
         setBootstrapping(false);
       } else {
-        const stepFromUrl = stepParam && STEP_ORDER.includes(stepParam) ? stepParam : "showcasePricing";
-        setStepIndex(STEP_ORDER.indexOf(stepFromUrl));
+        // Stripe back/cancel: skip paywall and enter the app (onboarding already reached pricing).
         setSearchParams({}, { replace: true });
-        toast(lang === "fr" ? "Paiement annulé" : "Checkout cancelled");
+        setPendingEnterAppFromPaywall("finish");
       }
       resumeAppliedRef.current = true;
       setBootstrapping(false);
@@ -610,14 +609,10 @@ export default function Onboarding() {
           user,
         });
 
-        if (
-          resumeStep === "showcasePricing"
-          && canAccessJobSeekerApp({ user, profile: profileData })
-        ) {
-          await syncOnboardingSearchPreferences(
-            onboardingSnapshotToSearchSync(profileData?.extras?.onboarding),
-          );
-          goToApp("/swipe");
+        // Once the user has reached the paywall, reload should enter the app —
+        // not re-show pricing. Mid-funnel users (last_step before pricing) stay put.
+        if (profileData?.extras?.onboarding?.last_step === "showcasePricing") {
+          setPendingEnterAppFromPaywall("navigate");
           resumeAppliedRef.current = true;
           setBootstrapping(false);
           return;
@@ -696,6 +691,28 @@ export default function Onboarding() {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingCheckoutSuccess, user]);
+
+  // Stripe cancel/back or reload after reaching the paywall → enter app.
+  useEffect(() => {
+    if (!pendingEnterAppFromPaywall) return;
+    if (!user) return;
+    const mode = pendingEnterAppFromPaywall;
+    setPendingEnterAppFromPaywall(null);
+    setCheckoutLoading(true);
+    let cancelled = false;
+    (async () => {
+      if (mode === "navigate" && hasProfile && hasPreferences) {
+        goToApp("/swipe");
+      } else {
+        await finishOnboarding();
+      }
+      if (!cancelled) setCheckoutLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingEnterAppFromPaywall, user, hasProfile, hasPreferences]);
 
   useEffect(() => {
     if (step !== "categories" || !contractType) return;
