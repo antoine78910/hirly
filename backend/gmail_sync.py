@@ -191,17 +191,42 @@ def _outcome_rank(classification: str) -> int:
         return -1
 
 
+_CONFIRMATION_TERMS = (
+    "thank you for applying",
+    "application received",
+    "we have received your application",
+    "candidature recue",
+    "candidature bien recue",
+    "merci pour votre candidature",
+    "merci de votre candidature",
+    "accuse de reception",
+    "avons bien recu votre candidature",
+    "bien recu votre candidature",
+)
+
+
 def _classify_email(subject: str, snippet: str) -> str:
+    subject_only = _normalize_text(subject)
     text = _normalize_text(f"{subject} {snippet}")
+
     if any(term in text for term in ("offer", "offre", "proposition d'embauche", "job offer")):
         return "offer"
+    # Standard ATS acknowledgment subject lines ("Merci pour votre
+    # candidature au poste de X", "Accusé de réception...") are a far more
+    # reliable signal than scanning the full body: these emails routinely
+    # contain generic "we'll reach out for an interview if your profile
+    # matches" boilerplate later on, which would otherwise false-positive
+    # into the interview/verification checks below and hide plain
+    # acknowledgment emails from the default inbox tab.
+    if any(term in subject_only for term in _CONFIRMATION_TERMS):
+        return "confirmation"
     if any(term in text for term in ("interview", "entretien", "schedule", "calendly", "meet with", "recruiter")):
         return "interview"
     if any(term in text for term in ("assessment", "test", "complete", "verify", "action required", "a completer", "verification")):
         return "verification"
     if any(term in text for term in ("unfortunately", "regret", "not selected", "not move forward", "rejet", "retenu")):
         return "status"
-    if any(term in text for term in ("thank you for applying", "application received", "candidature recue", "merci pour votre candidature")):
+    if any(term in text for term in _CONFIRMATION_TERMS):
         return "confirmation"
     return "primary"
 
