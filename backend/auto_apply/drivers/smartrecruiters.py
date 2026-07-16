@@ -24,7 +24,7 @@ from application_blueprint import (
     estimate_compatibility_score,
 )
 from apply_agent.guardrails import canonical
-from apply_agent.human_browser import human_click, human_pause
+from apply_agent.human_browser import human_click, human_pause, human_scroll
 from job_providers.ats_adapters.smartrecruiters import SmartRecruitersAtsAdapter
 
 from ..driver import DRIVER_REGISTRY, BrowserApplyDriver
