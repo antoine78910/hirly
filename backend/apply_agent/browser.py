@@ -157,6 +157,94 @@ def stealth_init_script() -> str:
     return _STEALTH_INIT_SCRIPT.replace("%LANGUAGE_JSON%", json.dumps(languages))
 
 
+def parse_proxy_credentials(raw: str) -> Optional[Dict[str, str]]:
+    """Parse PrivateProxy-style `user:pass:host:port` or a full proxy URL.
+
+    Supported:
+      jw7ib-fr:secret:edge1-us.privateproxy.me:8888
+      http://user:pass@host:8888
+      host:8888  (no auth)
+    """
+    value = (raw or "").strip()
+    if not value:
+        return None
+    if "://" in value:
+        # http://user:pass@host:port
+        try:
+            from urllib.parse import urlparse, unquote
+            parsed = urlparse(value if "://" in value else f"http://{value}")
+            if not parsed.hostname or not parsed.port:
+                return None
+            server = f"{parsed.scheme or 'http'}://{parsed.hostname}:{parsed.port}"
+            out: Dict[str, str] = {"server": server}
+            if parsed.username:
+                out["username"] = unquote(parsed.username)
+            if parsed.password:
+                out["password"] = unquote(parsed.password)
+            return out
+        except Exception:
+            return None
+    parts = value.split(":")
+    if len(parts) == 2:
+        host, port = parts
+        if host and port.isdigit():
+            return {"server": f"http://{host}:{port}"}
+        return None
+    if len(parts) >= 4:
+        # user:pass:host:port — password may contain ':' so take last two as host/port
+        port = parts[-1]
+        host = parts[-2]
+        user = parts[0]
+        password = ":".join(parts[1:-2])
+        if not (host and port.isdigit() and user):
+            return None
+        return {
+            "server": f"http://{host}:{port}",
+            "username": user,
+            "password": password,
+        }
+    return None
+
+
+def browser_proxy_settings() -> Optional[Dict[str, str]]:
+    """Playwright proxy dict from env, or None when unset.
+
+    Prefer one of:
+      BROWSER_PROXY=user:pass:host:port
+      BROWSER_PROXY_SERVER=http://host:port + BROWSER_PROXY_USERNAME + BROWSER_PROXY_PASSWORD
+      BROWSER_PROXY_URL=http://user:pass@host:port
+
+    Optional sticky session (PrivateProxy-style): set BROWSER_PROXY_STICKY=1 to append
+    `-session-<random>` to the username so each browser run keeps one IP.
+    """
+    raw = (
+        os.environ.get("BROWSER_PROXY", "").strip()
+        or os.environ.get("BROWSER_PROXY_URL", "").strip()
+    )
+    proxy = parse_proxy_credentials(raw) if raw else None
+    if proxy is None:
+        server = os.environ.get("BROWSER_PROXY_SERVER", "").strip()
+        if server:
+            if "://" not in server:
+                server = f"http://{server}"
+            proxy = {"server": server}
+            user = os.environ.get("BROWSER_PROXY_USERNAME", "").strip()
+            password = os.environ.get("BROWSER_PROXY_PASSWORD", "").strip()
+            if user:
+                proxy["username"] = user
+            if password:
+                proxy["password"] = password
+    if not proxy:
+        return None
+    sticky = os.environ.get("BROWSER_PROXY_STICKY", "").strip().lower() in ("1", "true", "yes")
+    if sticky and proxy.get("username"):
+        # Avoid double-appending if username already carries a session token.
+        if "-session-" not in proxy["username"]:
+            token = f"{random.randint(100000, 999999)}{random.randint(1000, 9999)}"
+            proxy["username"] = f"{proxy['username']}-session-{token}"
+    return proxy
+
+
 def _load_cookies_from_env() -> List[Dict[str, Any]]:
     """Optional cookie injection for warmer ATS sessions.
 
@@ -266,8 +354,19 @@ async def launch_page(*, headless: bool = True) -> AsyncIterator[Any]:
                 launch_kwargs["channel"] = channel
             elif executable_path:
                 launch_kwargs["executable_path"] = executable_path
+            proxy = browser_proxy_settings()
+            if proxy:
+                launch_kwargs["proxy"] = proxy
+                logger.info(
+                    "browser_proxy_enabled server=%s user=%s",
+                    proxy.get("server"),
+                    (proxy.get("username") or "")[:24] or "-",
+                )
             browser_user_data_dir = os.environ.get("BROWSER_USER_DATA_DIR")
             context_options = browser_context_options()
+            if proxy and not browser_user_data_dir:
+                # Non-persistent contexts also need proxy on the context.
+                context_options["proxy"] = proxy
             init_script = stealth_init_script()
             if browser_user_data_dir:
                 # Persistent profile keeps real cookies / localStorage across runs.
