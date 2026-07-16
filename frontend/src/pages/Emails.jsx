@@ -28,6 +28,20 @@ const getInboxFilters = (t) => [
   { key: "offer", label: t("emails.offer"), activeClass: "bg-teal-100 text-teal-700", idleClass: "bg-teal-50 text-teal-600" },
 ];
 
+/** Some ATS senders' plain-text MIME part is itself HTML-entity-encoded
+ * (e.g. literal "&eacute;" instead of "é") rather than real markup -- decode
+ * via the browser's own HTML parser (safe: we only ever read `.textContent`,
+ * never insert the parsed result as markup) so old emails stored before HTML
+ * capture was added still read correctly instead of showing raw entities. */
+function decodeHtmlEntities(text) {
+  if (!text || !text.includes("&")) return text || "";
+  try {
+    return new DOMParser().parseFromString(text, "text/html").documentElement.textContent || text;
+  } catch (_) {
+    return text;
+  }
+}
+
 const sortInboxMessages = (items) =>
   [...items].sort((a, b) => {
     if (a.variant === "welcome") return 1;
@@ -791,9 +805,15 @@ function InboxMessageDetail({
           <SafeEmailHtml html={message.html} />
         ) : (
           <article className="space-y-4">
-            <p className="whitespace-pre-line text-[15px] leading-[1.55] text-zinc-800">
-              {message.body || message.preview}
-            </p>
+            {decodeHtmlEntities(message.body || message.preview)
+              .split(/\n\s*\n/)
+              .map((paragraph) => paragraph.trim())
+              .filter(Boolean)
+              .map((paragraph, index) => (
+                <p key={index} className="whitespace-pre-line text-[15px] leading-[1.55] text-zinc-800">
+                  {paragraph}
+                </p>
+              ))}
           </article>
         )}
       </div>
@@ -1170,7 +1190,7 @@ export default function Emails() {
                           {m.subject}
                         </p>
                         <p className={`mt-0.5 line-clamp-2 text-sm ${read[m.id] ? "text-zinc-500" : "font-medium text-zinc-600"}`}>
-                          {m.preview}
+                          {decodeHtmlEntities(m.preview)}
                         </p>
                       </div>
                     </button>

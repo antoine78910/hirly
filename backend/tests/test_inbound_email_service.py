@@ -101,6 +101,22 @@ def test_extract_application_id_returns_none_for_empty():
     assert svc._extract_application_id(None) is None
 
 
+# ---- _normalize_body ----
+
+def test_normalize_body_decodes_html_entities_in_plain_text():
+    """Some ATS senders' plain-text MIME part is itself HTML-entity-encoded
+    (e.g. Ingerop/SmartRecruiters), not real plain text -- this was showing
+    up as literal "&eacute;"/"&nbsp;"/"&#39;" in the Inbox tab."""
+    raw = "Nous accusons bonne r&eacute;ception de l&#39;int&eacute;r&ecirc;t&nbsp;port&eacute;"
+    result = svc._normalize_body(raw, None)
+    assert result == "Nous accusons bonne réception de l'intérêt\xa0porté"
+
+
+def test_normalize_body_decodes_entities_in_html_fallback():
+    result = svc._normalize_body(None, "<p>Bonjour &amp; bienvenue</p>")
+    assert result == "Bonjour & bienvenue"
+
+
 # ---- process_inbound_resend_email ----
 
 def test_process_inbound_resend_email_stores_and_forwards(monkeypatch):

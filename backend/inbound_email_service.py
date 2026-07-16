@@ -10,6 +10,7 @@ changes) and forwards a copy of the reply to the candidate's real email.
 """
 from __future__ import annotations
 
+import html as html_unescape
 import logging
 import os
 import re
@@ -42,11 +43,15 @@ def _strip_html(value: str) -> str:
 
 
 def _normalize_body(text: Optional[str], html: Optional[str]) -> str:
-    raw = (text or "").strip()
+    # Some ATS senders' plain-text MIME part is itself HTML-entity-encoded
+    # (literal "&eacute;" instead of "é") rather than genuine plain text --
+    # unescape defensively so the stored snippet (used as the fallback
+    # display whenever no HTML body is captured) reads correctly.
+    raw = html_unescape.unescape((text or "").strip())
     if raw:
         return raw
     if html:
-        return _strip_html(html)
+        return html_unescape.unescape(_strip_html(html))
     return ""
 
 
