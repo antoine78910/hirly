@@ -79,8 +79,6 @@ export default function DesktopSwipeFeed({
   interactionBlocked = false,
   showAdminAtsBadge = false,
 }) {
-  // Used for navigation inside the desktop swipe/app flows (apply/review actions).
-  const navigate = useNavigate();
   const { pathname } = useLocation();
   const { t, lang } = useAppLocale();
   const navItems = getDesktopNavItems(t);
