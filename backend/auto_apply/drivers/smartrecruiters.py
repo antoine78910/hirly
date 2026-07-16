@@ -23,6 +23,8 @@ from application_blueprint import (
     derive_complexity,
     estimate_compatibility_score,
 )
+from application_failure import text_indicates_offer_expired
+from apply_agent.blockers import detect_offer_expired
 from apply_agent.guardrails import canonical
 from apply_agent.human_browser import human_click, human_mouse_wander, human_pause, human_scroll
 from job_providers.ats_adapters.smartrecruiters import SmartRecruitersAtsAdapter
@@ -187,7 +189,7 @@ def _company_slug(job: Dict[str, Any], posting_url: str) -> str:
 
 class SmartRecruitersApplyDriver(BrowserApplyDriver):
     provider = "smartrecruiters"
-    version = "smartrecruiters-1.2.0"
+    version = "smartrecruiters-1.2.1"
 
     def __init__(self):
         self._adapter = SmartRecruitersAtsAdapter()
@@ -300,10 +302,19 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
         url = page.url or ""
         if "oneclick-ui" in url:
             return
+        # Expired postings keep a CTA whose label is no longer "Je suis intéressé(e)".
+        if await detect_offer_expired(page):
+            return
         for selector in ("#st-apply", 'a[data-sr-track="apply"]', 'a.js-oneclick[href*="oneclick-ui"]'):
             try:
                 loc = page.locator(selector)
                 if await loc.count():
+                    try:
+                        label = await loc.first.inner_text(timeout=2000)
+                    except Exception:
+                        label = ""
+                    if text_indicates_offer_expired(label):
+                        return
                     await human_pause(page, 800, 1800)
                     await human_click(loc.first, page)
                     await human_pause(page, 1800, 3200)

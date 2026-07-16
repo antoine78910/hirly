@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 
 OFFER_EXPIRED_MARKERS = (
     "offer expired",
+    "offer_expired",
     "offer has expired",
     "job expired",
     "position expired",
@@ -17,13 +18,18 @@ OFFER_EXPIRED_MARKERS = (
     "no longer accepting applications",
     "no longer available",
     "this job is no longer available",
+    "job is no longer available",
+    "position has been filled",
     "offre expir",
+    "l'offre a expir",
+    "l offre a expir",
     "cette offre a expir",
     "offre n'est plus disponible",
     "offre n est plus disponible",
     "poste pourvu",
     "candidatures closes",
     "candidatures clôtur",
+    "blocked:offer_expired",
 )
 
 TERMINAL_SUBMISSION_STATUSES = {"submitted", "expired"}
@@ -193,6 +199,8 @@ def classify_application_failure(
         return _failure_payload("offer_expired", detail=text_blobs[0] if text_blobs else None, source="automation_text")
 
     failure_reason = _normalize_text((latest_run or {}).get("failure_reason") or (app_doc.get("agent_apply_result") or {}).get("failure_reason"))
+    if failure_reason in {"offer_expired", "blocked:offer_expired"} or text_indicates_offer_expired(failure_reason):
+        return _failure_payload("offer_expired", detail=failure_reason or None, source="agent_run")
     if failure_reason == "captcha_required" or submission_status == "blocked_captcha":
         return _failure_payload("captcha_required", detail=failure_reason or None, source="agent_run")
     if failure_reason == "login_wall_detected" or bool((latest_run or {}).get("login_wall_detected")):

@@ -163,6 +163,9 @@ def _install_fake_page(monkeypatch, page):
     async def no_bot_wall(p, http_status=None):
         return False
 
+    async def no_offer_expired(p):
+        return False
+
     async def noop_cookie(p):
         return None
 
@@ -181,6 +184,7 @@ def _install_fake_page(monkeypatch, page):
     monkeypatch.setattr(driver_mod, "detect_login_wall", no_login)
     monkeypatch.setattr(driver_mod, "detect_captcha", no_captcha)
     monkeypatch.setattr(driver_mod, "detect_bot_wall", no_bot_wall)
+    monkeypatch.setattr(driver_mod, "detect_offer_expired", no_offer_expired)
     monkeypatch.setattr(driver_mod, "captcha_active", lambda d: False)
     monkeypatch.setattr(driver_mod, "dismiss_cookie_banner", noop_cookie)
     monkeypatch.setattr(driver_mod, "human_pause", fast_pause)
@@ -269,6 +273,26 @@ def test_bot_wall_after_reveal_aborts_before_fills(monkeypatch):
     assert any(
         step.get("action") == "bot_wall_after_reveal" for step in (ev.raw or {}).get("step_log", [])
     )
+
+
+def test_offer_expired_aborts_before_fills(monkeypatch):
+    page = _FakePage(known_selectors=set())
+    _install_fake_page(monkeypatch, page)
+
+    async def yes_expired(p):
+        return True
+
+    monkeypatch.setattr(driver_mod, "detect_offer_expired", yes_expired)
+
+    plan = ApplicationPlan(steps=[
+        PlanStep(action="fill", locators=['[name="email"]'], value="a@b.co"),
+        PlanStep(action="submit", locators=[]),
+    ])
+    ctx = SubmissionContext(job={"external_url": "https://x/y"}, blueprint=None, plan=plan, documents={})
+    ev = asyncio.run(_StubDriver().submit(ctx))
+    assert ev.blocked_reason == "offer_expired"
+    assert ev.submit_performed is False
+    assert page.filled == []
 
 
 def test_registry_resolves_by_provider_only():

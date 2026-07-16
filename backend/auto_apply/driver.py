@@ -19,7 +19,8 @@ from typing import Any, Dict, List, Optional
 
 from apply_agent.blockers import (
     captcha_active, collect_post_submit_errors, confirmation_text_found,
-    detect_bot_wall, detect_captcha, detect_login_wall, dismiss_cookie_banner,
+    detect_bot_wall, detect_captcha, detect_login_wall, detect_offer_expired,
+    dismiss_cookie_banner,
 )
 from apply_agent.browser import (
     browser_navigation_timeout_ms,
@@ -106,6 +107,17 @@ class BrowserApplyDriver(ApplyDriver):
         stage: str = "bot_wall",
     ) -> bool:
         """Return True when the run should stop (bot wall / login / captcha)."""
+        if await detect_offer_expired(page):
+            evidence.blocked_reason = "offer_expired"
+            evidence.screenshot_b64 = await screenshot_b64(page)
+            await self._log_step(
+                evidence,
+                action="offer_expired",
+                locators=["body"],
+                status="blocked",
+                error="expired_cta_or_copy",
+            )
+            return True
         if await detect_bot_wall(page, http_status=http_status):
             evidence.blocked_reason = "bot_protection"
             evidence.screenshot_b64 = await screenshot_b64(page)

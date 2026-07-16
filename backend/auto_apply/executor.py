@@ -199,16 +199,36 @@ async def execute_application(
         safe_evidence = _safe_evidence(evidence)
 
         # A runtime login wall / CAPTCHA means Hirly can't complete it -> unsupported.
+        # Offer-expired is different: stop immediately and refund via expiry flow.
         if evidence.blocked_reason:
             reason = f"blocked:{evidence.blocked_reason}"
+            status = "unsupported"
+            if evidence.blocked_reason == "offer_expired":
+                reason = "offer_expired"
+                status = "submit_failed"
+                try:
+                    from application_expiry import maybe_auto_expire_application
+                    await maybe_auto_expire_application(
+                        db,
+                        app_doc,
+                        job_doc=job,
+                        latest_run={"failure_reason": "offer_expired"},
+                        source="auto_apply_submit",
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "auto_apply_offer_expire_failed job=%s error=%s",
+                        job.get("job_id"),
+                        str(exc)[:200],
+                    )
             debug = build_debug_report(
                 job=job, profile=profile, app_doc=app_doc, blueprint=blueprint, decision=decision,
                 answers=answers, plan=application_plan, candidate_context=candidate_context,
                 application_url=app_url, evidence=evidence,
             )
-            await metrics.record_terminal(db, claim, status="unsupported", reason=reason,
+            await metrics.record_terminal(db, claim, status=status, reason=reason,
                                           stage_reached="submit", evidence=safe_evidence, **base)
-            return _report(started=started, stage="submit", status="unsupported", reason=reason,
+            return _report(started=started, stage="submit", status=status, reason=reason,
                            evidence=evidence, debug=debug, **report_common)
 
         # The submit control was never actioned -> the submission never happened.

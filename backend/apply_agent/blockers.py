@@ -13,9 +13,21 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+from application_failure import text_indicates_offer_expired
 from company_career_page_prober import CAPTCHA_MARKERS, LOGIN_MARKERS
 
 from .guardrails import canonical
+
+# SmartRecruiters (and similar) replace the Apply CTA with expired copy.
+_APPLY_CTA_SELECTORS = (
+    "#st-apply",
+    'a[data-sr-track="apply"]',
+    'a.js-oneclick[href*="oneclick-ui"]',
+    'button:has-text("expir")',
+    'a:has-text("expir")',
+    'button:has-text("no longer")',
+    'a:has-text("no longer")',
+)
 
 SUCCESS_PHRASES = (
     "application submitted",
@@ -110,6 +122,30 @@ async def detect_bot_wall(page: Any, *, http_status: Optional[int] = None) -> bo
     except Exception:
         body_text = ""
     return any(marker in body_text for marker in BOT_WALL_MARKERS)
+
+
+async def detect_offer_expired(page: Any) -> bool:
+    """True when the posting page shows the role is closed / expired.
+
+    SmartRecruiters typically swaps "Je suis intéressé(e)" for copy like
+    "Cette offre a expiré" on the same apply control — catch that early so we
+    never treat it as a missing submit button.
+    """
+    for selector in _APPLY_CTA_SELECTORS:
+        try:
+            loc = page.locator(selector)
+            if not await loc.count():
+                continue
+            label = await loc.first.inner_text(timeout=2000)
+            if text_indicates_offer_expired(label):
+                return True
+        except Exception:
+            continue
+    try:
+        body_text = await page.locator("body").inner_text(timeout=3000)
+    except Exception:
+        body_text = ""
+    return text_indicates_offer_expired(body_text)
 
 
 # OneTrust is one of the most widely used cookie-consent widgets across
