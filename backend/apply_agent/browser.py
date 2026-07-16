@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import random
+import re
 import shutil
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -206,6 +207,35 @@ def parse_proxy_credentials(raw: str) -> Optional[Dict[str, str]]:
     return None
 
 
+def _strip_privateproxy_session_args(username: str) -> str:
+    """Remove sid/ttl/swap/city suffixes so we can rebuild a clean sticky login."""
+    cleaned = username or ""
+    # Drop known trailing arg segments: -sid-12, -ttl-60, -swap, -city-paris
+    cleaned = re.sub(r"-sid-\d+", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"-ttl-\d+", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"-swap\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"-city-[a-z0-9]+", "", cleaned, flags=re.IGNORECASE)
+    return cleaned.strip("-")
+
+
+def privateproxy_sticky_username(
+    username: str,
+    *,
+    sid: Optional[int] = None,
+    ttl_minutes: int = 30,
+) -> str:
+    """Build PrivateProxy login: `{login}-{country}-sid-{n}-ttl-{minutes}`.
+
+    Docs: parts separated by `-`; sid is 1..1000; ttl is minutes.
+    Example: jw7ib-fr-sid-5-ttl-60
+    """
+    base = _strip_privateproxy_session_args(username)
+    session_id = sid if sid is not None else random.randint(1, 1000)
+    session_id = max(1, min(1000, int(session_id)))
+    ttl = max(1, int(ttl_minutes))
+    return f"{base}-sid-{session_id}-ttl-{ttl}"
+
+
 def browser_proxy_settings() -> Optional[Dict[str, str]]:
     """Playwright proxy dict from env, or None when unset.
 
@@ -214,8 +244,10 @@ def browser_proxy_settings() -> Optional[Dict[str, str]]:
       BROWSER_PROXY_SERVER=http://host:port + BROWSER_PROXY_USERNAME + BROWSER_PROXY_PASSWORD
       BROWSER_PROXY_URL=http://user:pass@host:port
 
-    Optional sticky session (PrivateProxy-style): set BROWSER_PROXY_STICKY=1 to append
-    `-session-<random>` to the username so each browser run keeps one IP.
+    Sticky sessions (PrivateProxy):
+      BROWSER_PROXY_STICKY=1
+      BROWSER_PROXY_STICKY_TTL=30   # minutes (optional)
+      -> username becomes jw7ib-fr-sid-42-ttl-30
     """
     raw = (
         os.environ.get("BROWSER_PROXY", "").strip()
@@ -236,22 +268,14 @@ def browser_proxy_settings() -> Optional[Dict[str, str]]:
                 proxy["password"] = password
     if not proxy:
         return None
-    # Optional sticky username rewrite. PrivateProxy sticky formats vary — set
-    # BROWSER_PROXY_SESSION_TEMPLATE explicitly, e.g.
-    #   "{username}-session-{session}"  or  "{username}-sessionduration-15"
-    # BROWSER_PROXY_STICKY=1 alone uses a conservative sessionduration suffix.
-    template = os.environ.get("BROWSER_PROXY_SESSION_TEMPLATE", "").strip()
     sticky = os.environ.get("BROWSER_PROXY_STICKY", "").strip().lower() in ("1", "true", "yes")
-    if proxy.get("username") and (template or sticky):
-        session = f"{random.randint(100000, 999999)}{random.randint(1000, 9999)}"
-        username = proxy["username"]
-        if template:
-            proxy["username"] = (
-                template.replace("{username}", username).replace("{session}", session)
-            )
-        elif "sessionduration" not in username and "-session-" not in username:
-            # Common PrivateProxy sticky pattern (minutes). Override via TEMPLATE if needed.
-            proxy["username"] = f"{username}-sessionduration-15"
+    if sticky and proxy.get("username"):
+        ttl_raw = os.environ.get("BROWSER_PROXY_STICKY_TTL", "30").strip()
+        try:
+            ttl = int(ttl_raw or "30")
+        except ValueError:
+            ttl = 30
+        proxy["username"] = privateproxy_sticky_username(proxy["username"], ttl_minutes=ttl)
     return proxy
 
 
