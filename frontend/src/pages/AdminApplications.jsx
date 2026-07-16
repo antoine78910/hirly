@@ -17,6 +17,7 @@ const FILTERS = [
   { key: "manual_in_progress", label: "Manual In Progress" },
   { key: "manually_submitted", label: "Manually Submitted" },
   { key: "needs_user_input", label: "Needs User Input" },
+  { key: "offer_expired", label: "Offer Expired" },
 ];
 
 const statusLabel = (value) => {

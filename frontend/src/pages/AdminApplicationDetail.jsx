@@ -331,6 +331,19 @@ export default function AdminApplicationDetail() {
                 <p className="mt-1 text-sm capitalize text-zinc-700">{app.manual_status || app.admin_status || "Not set"}</p>
               </div>
             </div>
+            {data?.failure_classification ? (
+              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4" data-testid="admin-failure-classification">
+                <p className="text-xs font-semibold uppercase tracking-wide text-red-500">Detected issue</p>
+                <p className="mt-1 text-sm font-bold text-red-900">{data.failure_classification.admin_title}</p>
+                <p className="mt-1 text-sm text-red-800">
+                  Code: <span className="font-mono">{data.failure_classification.code}</span>
+                  {data.failure_classification.source ? ` · Source: ${data.failure_classification.source}` : ""}
+                </p>
+                {data.failure_classification.admin_detail ? (
+                  <p className="mt-2 text-sm text-red-800">{data.failure_classification.admin_detail}</p>
+                ) : null}
+              </div>
+            ) : null}
             <div className="mt-4 grid gap-4 sm:grid-cols-3">
               <Field label="Recruiter contact" value={job.contact_name} />
               <Field label="Recruiter email" value={job.contact_email} />

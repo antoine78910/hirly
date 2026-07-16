@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { api } from "../lib/api";
 import { fetchTrackerPageData, fetchDemoSwipeHistory } from "../lib/demoApplications";
@@ -20,6 +20,7 @@ import { Button } from "../components/ui/button";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import ApplicationDetailPanel from "../components/tracker/ApplicationDetailPanel";
+import OfferExpiredNotice from "../components/tracker/OfferExpiredNotice";
 import { downloadTailoredCV, downloadCoverLetter } from "../lib/pdf";
 import { resolveCvDisplayTemplate } from "../lib/cvTemplate";
 import { trackEvent } from "../lib/analytics";
@@ -79,26 +80,33 @@ function TrackerApplicationRow({ application, onOpen, t, lang }) {
     <button
       type="button"
       onClick={() => onOpen(application)}
-      className="shell-border shell-inset flex w-full items-center gap-3 rounded-2xl p-3 text-left transition-colors active:bg-zinc-100 dark:active:bg-zinc-800 md:rounded-xl md:p-3.5"
+      className="shell-border shell-inset flex w-full flex-col gap-2 rounded-2xl p-3 text-left transition-colors active:bg-zinc-100 dark:active:bg-zinc-800 md:rounded-xl md:p-3.5"
       data-testid={`application-${application.application_id}`}
     >
-      <CompanyLogo company={application.job?.company} size="sm" rounded="xl" className="shrink-0" />
-      <div className="min-w-0 flex-1">
-        <p className="shell-title truncate text-[15px] font-semibold leading-snug">{title}</p>
-        <p className="truncate text-sm text-zinc-500">{company}</p>
-        <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[11px] text-zinc-500">
-          <span className="truncate">{date || t("tracker.recently")}</span>
-          <span aria-hidden="true">·</span>
-          <span className="inline-flex shrink-0 items-center gap-0.5 font-semibold text-linkedin">
-            <Zap className="h-3 w-3" fill="currentColor" />
-            1
-          </span>
-          <span aria-hidden="true">·</span>
-          <span className={`truncate font-medium ${expired ? "text-amber-700" : "text-zinc-600"}`}>
-            {expired ? t("tracker.expiredCreditRefundedCompact") : statusLabel}
-          </span>
+      <div className="flex items-center gap-3">
+        <CompanyLogo company={application.job?.company} size="sm" rounded="xl" className="shrink-0" />
+        <div className="min-w-0 flex-1">
+          <p className="shell-title truncate text-[15px] font-semibold leading-snug">{title}</p>
+          <p className="truncate text-sm text-zinc-500">{company}</p>
+          <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[11px] text-zinc-500">
+            <span className="truncate">{date || t("tracker.recently")}</span>
+            <span aria-hidden="true">·</span>
+            <span className="inline-flex shrink-0 items-center gap-0.5 font-semibold text-linkedin">
+              <Zap className="h-3 w-3" fill="currentColor" />
+              1
+            </span>
+            {!expired ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <span className="truncate font-medium text-zinc-600">{statusLabel}</span>
+              </>
+            ) : null}
+          </div>
         </div>
       </div>
+      {expired ? (
+        <OfferExpiredNotice application={application} compact testId={`application-expired-${application.application_id}`} />
+      ) : null}
     </button>
   );
 }
@@ -304,6 +312,7 @@ export default function Tracker() {
   const [passedRows, setPassedRows] = useState([]);
   const [passedLoading, setPassedLoading] = useState(false);
   const [applyingPassedId, setApplyingPassedId] = useState(null);
+  const openedFromUrlRef = useRef(null);
 
   const setActiveTab = (tab) => {
     if (tab === "passed") {
@@ -374,6 +383,19 @@ export default function Tracker() {
     trackEvent("tracker_view");
     load();
   }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    const applicationId = searchParams.get("application_id");
+    if (!applicationId || loading || !apps.length) return;
+    if (openedFromUrlRef.current === applicationId) return;
+    const match = apps.find((app) => app.application_id === applicationId);
+    if (!match) return;
+    openedFromUrlRef.current = applicationId;
+    void openApplication(match);
+    if (resolveDisplayStatus(match) === "expired") {
+      setStatusFilter("expired");
+    }
+  }, [apps, loading, searchParams]);
 
   useEffect(() => {
     const refresh = () => load();

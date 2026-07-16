@@ -63,6 +63,12 @@ from notifications_service import (
     mark_all_notifications_read,
     mark_notification_read,
 )
+from application_failure import classify_application_failure
+from application_expiry import (
+    expire_open_applications_for_job,
+    mark_application_offer_expired,
+    maybe_auto_expire_application,
+)
 from svix.webhooks import Webhook, WebhookVerificationError
 from apply_agent.models import ApplyAgentError
 from apply_agent.browser import effective_headless
@@ -10164,6 +10170,11 @@ def _user_facing_submission_status(app_doc: Dict[str, Any]) -> str:
 def _public_application_doc(app_doc: Dict[str, Any], job_doc: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     public_doc = dict(_normalize_application_status_fields(app_doc))
     public_doc["user_facing_submission_status"] = _user_facing_submission_status(public_doc)
+    failure = classify_application_failure(public_doc, job_doc=job_doc)
+    if failure:
+        public_doc["failure_code"] = failure.get("code")
+        public_doc["failure_message_en"] = failure.get("user_message_en")
+        public_doc["failure_message_fr"] = failure.get("user_message_fr")
     for key in (
         "admin_status",
         "manual_status",
@@ -11994,6 +12005,12 @@ async def admin_list_applications(
             for app_doc in apps
             if _normalize_application_status_fields(app_doc).get("submission_status") in allowed_statuses
         ]
+    elif status_filter == "offer_expired":
+        apps = [
+            app_doc
+            for app_doc in apps
+            if _user_facing_submission_status(_normalize_application_status_fields(app_doc)) == "expired"
+        ]
     elif status_filter in {"manual_review_needed", "manual_in_progress", "manually_submitted", "manual_blocked", "needs_user_input"}:
         apps = [
             app_doc
@@ -12126,6 +12143,8 @@ async def admin_get_application(application_id: str, admin: User = Depends(requi
             "screenshots": 0,
         },
     ).sort("created_at", -1).to_list(20)
+    latest_run = runs[0] if runs else None
+    failure_classification = classify_application_failure(app_doc, job_doc=job, latest_run=latest_run)
     required_questions = (
         app_doc.get("required_questions")
         or app_doc.get("prepared_missing_information")
@@ -12191,6 +12210,7 @@ async def admin_get_application(application_id: str, admin: User = Depends(requi
         "latest_browser_logs": runs[:5],
         "admin_timeline": app_doc.get("admin_timeline") or [],
         "latest_notes": notes[-20:],
+        "failure_classification": failure_classification,
     }
 
 
@@ -12350,24 +12370,19 @@ async def admin_update_application_manual_status(
     elif body.manual_status == "needs_user_input":
         update["submission_status"] = "action_required"
     elif body.manual_status == "offer_expired":
-        update["submission_status"] = "expired"
-        # Guard against refunding twice if an admin re-applies this status
-        # (e.g. after toggling to something else and back).
-        if not app_doc.get("credit_refunded_at") and app_doc.get("user_id"):
-            await _refund_application_credit(app_doc["user_id"])
-            update["credit_refunded_at"] = now
-            job = await db.jobs.find_one({"job_id": app_doc.get("job_id")}, {"_id": 0}) or {}
-            job_label = job.get("title") or "this position"
-            if job.get("company"):
-                job_label += f" at {job['company']}"
-            await create_notification(
-                db,
-                user_id=app_doc["user_id"],
-                type="offer_expired",
-                title="This job offer has expired",
-                body=f"We've refunded the credit used for {job_label}.",
-                application_id=application_id,
-            )
+        await db.applications.update_one(
+            {"application_id": application_id},
+            {"$set": {"admin_notes": notes, "admin_timeline": timeline}},
+        )
+        merged_app = {**app_doc, "admin_notes": notes, "admin_timeline": timeline}
+        updated_doc = await mark_application_offer_expired(
+            db,
+            merged_app,
+            source="admin_manual",
+            actor_email=admin.email,
+            note=note_text or None,
+        )
+        return {"ok": True, "application": _normalize_application_status_fields(updated_doc or {})}
     await db.applications.update_one(
         {"application_id": application_id},
         {"$set": update},
@@ -12840,6 +12855,26 @@ async def agent_submit(body: AgentApplyRequest, user: User = Depends(get_current
             {"application_id": result["application_id"], "user_id": user.user_id},
             {"$set": {"submission_status": "blocked_captcha", "agent_run_id": run_id, "updated_at": now}},
         )
+    else:
+        app_doc = await db.applications.find_one(
+            {"application_id": result["application_id"], "user_id": user.user_id},
+            {"_id": 0},
+        )
+        job_doc = await db.jobs.find_one({"job_id": result.get("job_id")}, {"_id": 0})
+        latest_run = {
+            "failure_reason": result.get("failure_reason"),
+            "post_submit_errors": result.get("post_submit_errors"),
+            "login_wall_detected": result.get("login_wall_detected"),
+            "captcha_required": result.get("captcha_required"),
+        }
+        if app_doc:
+            await maybe_auto_expire_application(
+                db,
+                app_doc,
+                job_doc=job_doc,
+                latest_run=latest_run,
+                source="agent_submit",
+            )
     return {**result, "agent_run_id": run_id}
 
 

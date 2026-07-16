@@ -14,6 +14,7 @@ import {
 } from "../../lib/applicationTimeline";
 import CompanyLogo from "../CompanyLogo";
 import ApplicationDocumentsView from "./ApplicationDocumentsView";
+import OfferExpiredNotice from "./OfferExpiredNotice";
 import { DialogHeader, DialogTitle } from "../ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Button } from "../ui/button";
@@ -277,6 +278,11 @@ export default function ApplicationDetailPanel({
             <span className="text-xs font-semibold text-linkedin">{application.match_score}% match</span>
           ) : null}
         </div>
+        {isExpired ? (
+          <div className="mt-3">
+            <OfferExpiredNotice application={application} compact testId="application-detail-expired-header" />
+          </div>
+        ) : null}
       </DialogHeader>
 
       <Tabs value={activeTab} onValueChange={onTabChange} className="flex min-h-0 flex-1 flex-col">
@@ -313,15 +319,7 @@ export default function ApplicationDetailPanel({
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-4 sm:px-6">
           <TabsContent value="application" className="mt-0 space-y-4">
             {isExpired ? (
-              <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4" data-testid="expired-credit-refund-notice">
-                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-amber-100 text-amber-800">
-                  <Wallet className="h-4 w-4" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-amber-900">{t("tracker.expiredRefundTitle")}</p>
-                  <p className="mt-0.5 text-sm leading-relaxed text-amber-800">{t("tracker.expiredRefundBody")}</p>
-                </div>
-              </div>
+              <OfferExpiredNotice application={application} testId="expired-credit-refund-notice" />
             ) : null}
             <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
               <div className="flex items-start justify-between gap-3">

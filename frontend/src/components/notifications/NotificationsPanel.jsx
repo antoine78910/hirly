@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bell, Gift, Clock3, X, Loader2 } from "lucide-react";
 import { fetchNotifications, markNotificationRead, markAllNotificationsRead } from "../../lib/notifications";
@@ -75,6 +76,7 @@ function NotificationsList({ notifications, loading, lang, t, onItemClick, onMar
  * polling per product scope (fetch-on-load only).
  */
 export default function NotificationsPanel({ open, onClose, variant = "sheet", onUnreadCountChange }) {
+  const navigate = useNavigate();
   const { t, lang } = useAppLocale();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -98,15 +100,20 @@ export default function NotificationsPanel({ open, onClose, variant = "sheet", o
   }, []);
 
   const handleItemClick = async (notification) => {
-    if (notification.read) return;
-    setNotifications((prev) =>
-      prev.map((n) => (n.notification_id === notification.notification_id ? { ...n, read: true } : n)),
-    );
-    onUnreadCountChange?.((count) => Math.max(0, (count || 0) - 1));
-    try {
-      await markNotificationRead(notification.notification_id);
-    } catch {
-      /* best-effort */
+    if (!notification.read) {
+      setNotifications((prev) =>
+        prev.map((n) => (n.notification_id === notification.notification_id ? { ...n, read: true } : n)),
+      );
+      onUnreadCountChange?.((count) => Math.max(0, (count || 0) - 1));
+      try {
+        await markNotificationRead(notification.notification_id);
+      } catch {
+        /* best-effort */
+      }
+    }
+    if (notification.type === "offer_expired" && notification.application_id) {
+      onClose?.();
+      navigate(`/tracker?application_id=${encodeURIComponent(notification.application_id)}`);
     }
   };
 

@@ -421,6 +421,11 @@ async def expire_stale_jobs(
         try:
             if not dry_run and job_id:
                 await db.jobs.update_one({"job_id": job_id}, {"$set": update})
+                try:
+                    from application_expiry import expire_open_applications_for_job
+                    await expire_open_applications_for_job(db, job_id, source="stale_job_maintenance")
+                except Exception as exc:
+                    logger.warning("job_cache_expire_applications_failed job_id=%s error=%s", job_id, exc)
             summary["expired_count"] += 1
         except Exception as exc:
             logger.warning("job_cache_expire_job_failed job_id=%s error=%s", job_id, exc)
