@@ -144,3 +144,32 @@ def test_transient_navigation_error_detects_timeout():
         RuntimeError('Page.goto: net::ERR_TIMED_OUT at https://jobs.smartrecruiters.com/x')
     )
     assert not is_transient_navigation_error(RuntimeError("selector not found"))
+
+
+def test_proxy_connect_failure_helpers():
+    from apply_agent.browser import (
+        is_proxy_connect_failure_status,
+        is_proxy_connect_failure_text,
+    )
+
+    assert is_proxy_connect_failure_status(572) is True
+    assert is_proxy_connect_failure_status(200) is False
+    assert is_proxy_connect_failure_text("Failed to connect to target host") is True
+    assert is_proxy_connect_failure_text("Thank you for applying") is False
+    assert is_transient_navigation_error(
+        RuntimeError("Proxy could not reach target host (HTTP 572).")
+    )
+
+
+def test_force_random_sid_ignores_fixed_sticky(monkeypatch):
+    monkeypatch.setenv("BROWSER_PROXY", "jw7ib-fr:secret:edge1-us.privateproxy.me:8888")
+    monkeypatch.setenv("BROWSER_PROXY_STICKY", "1")
+    monkeypatch.setenv("BROWSER_PROXY_STICKY_SID", "7")
+    monkeypatch.setenv("BROWSER_PROXY_STICKY_TTL", "30")
+    fixed = browser_proxy_settings()
+    assert fixed is not None
+    assert "-sid-7-" in fixed["username"]
+    forced = browser_proxy_settings(force_random_sid=True)
+    assert forced is not None
+    assert "-sid-7-" not in forced["username"]
+    assert "-sid-" in forced["username"]

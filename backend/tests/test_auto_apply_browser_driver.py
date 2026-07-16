@@ -1,6 +1,8 @@
 import asyncio
 from contextlib import asynccontextmanager
 
+import pytest
+
 import auto_apply.driver as driver_mod
 from auto_apply.driver import ApplyDriver, BrowserApplyDriver, DRIVER_REGISTRY
 from auto_apply.models import ApplicationPlan, PlanStep, SubmissionContext, SubmissionEvidence
@@ -150,7 +152,7 @@ class _EmailLikeDriver(ApplyDriver):
 
 def _install_fake_page(monkeypatch, page):
     @asynccontextmanager
-    async def fake_launch(*, headless=True):
+    async def fake_launch(*, headless=True, force_new_proxy_sid=False):
         yield page
     monkeypatch.setattr(driver_mod, "launch_page", fake_launch)
 
@@ -247,6 +249,101 @@ def test_bot_wall_aborts_with_blocked_reason(monkeypatch):
     ctx = SubmissionContext(job={"external_url": "https://x/y"}, blueprint=None, plan=plan, documents={})
     ev = asyncio.run(_StubDriver().submit(ctx))
     assert ev.blocked_reason == "bot_protection" and ev.submit_performed is False
+
+
+def test_proxy_connect_572_retries_with_new_sid(monkeypatch):
+    """PrivateProxy HTTP 572 must abort open_page and retry — not fill the error page."""
+    from apply_agent.models import ApplyAgentError
+
+    pages = []
+    launch_kwargs = []
+
+    class _ProxyFailPage(_FakePage):
+        async def goto(self, url, wait_until=None, timeout=0):
+            self.url = url
+
+            class _R:
+                status = 572
+
+            return _R()
+
+        async def inner_text(self, timeout=0):
+            return "Failed to connect to target host"
+
+        def locator(self, selector):
+            self.queried.append(selector)
+            loc = _FakeLocator(self, selector, exists=False)
+            if selector == "body":
+                async def body_text(timeout=0):
+                    return "Failed to connect to target host"
+                loc.inner_text = body_text
+            return loc
+
+    @asynccontextmanager
+    async def tracking_launch(*, headless=True, force_new_proxy_sid=False):
+        launch_kwargs.append({"force_new_proxy_sid": force_new_proxy_sid})
+        page = _ProxyFailPage(known_selectors=set())
+        pages.append(page)
+        yield page
+
+    monkeypatch.setattr(driver_mod, "launch_page", tracking_launch)
+
+    async def no_login(p):
+        return False
+
+    async def no_captcha(p, click_error=""):
+        return {}
+
+    async def no_bot_wall(p, http_status=None):
+        return False
+
+    async def no_offer_expired(p):
+        return False
+
+    async def noop_cookie(p):
+        return None
+
+    async def fast_pause(p, min_ms=0, max_ms=0):
+        pass
+
+    async def noop_scroll(p, *args, **kwargs):
+        pass
+
+    async def noop_wander(p):
+        pass
+
+    async def noop_recover(p, reason="", use_vision=False):
+        return {"actions": [], "stuck": False}
+
+    async def empty_shot(p):
+        return ""
+
+    monkeypatch.setattr(driver_mod, "detect_login_wall", no_login)
+    monkeypatch.setattr(driver_mod, "detect_captcha", no_captcha)
+    monkeypatch.setattr(driver_mod, "detect_bot_wall", no_bot_wall)
+    monkeypatch.setattr(driver_mod, "detect_offer_expired", no_offer_expired)
+    monkeypatch.setattr(driver_mod, "dismiss_cookie_banner", noop_cookie)
+    monkeypatch.setattr(driver_mod, "human_pause", fast_pause)
+    monkeypatch.setattr(driver_mod, "human_scroll", noop_scroll)
+    monkeypatch.setattr(driver_mod, "human_mouse_wander", noop_wander)
+    monkeypatch.setattr(driver_mod, "recover_stuck_page", noop_recover)
+    monkeypatch.setattr(driver_mod, "screenshot_b64", empty_shot)
+    monkeypatch.setattr(driver_mod, "captcha_active", lambda d: False)
+
+    plan = ApplicationPlan(steps=[
+        PlanStep(action="fill", locators=['[name="email"]'], value="a@b.co"),
+        PlanStep(action="submit", locators=[]),
+    ])
+    ctx = SubmissionContext(job={"external_url": "https://x/y"}, blueprint=None, plan=plan, documents={})
+
+    with pytest.raises(ApplyAgentError) as raised:
+        asyncio.run(_StubDriver().submit(ctx))
+    assert raised.value.phase == "open_page"
+    assert "572" in str(raised.value)
+    assert len(pages) == 3
+    assert launch_kwargs[0]["force_new_proxy_sid"] is False
+    assert launch_kwargs[1]["force_new_proxy_sid"] is True
+    assert launch_kwargs[2]["force_new_proxy_sid"] is True
 
 
 def test_bot_wall_after_reveal_aborts_before_fills(monkeypatch):

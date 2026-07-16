@@ -25,6 +25,8 @@ from apply_agent.blockers import (
 )
 from apply_agent.browser import (
     browser_navigation_timeout_ms,
+    is_proxy_connect_failure_status,
+    is_proxy_connect_failure_text,
     is_transient_navigation_error,
     launch_page,
     proxy_configured,
@@ -171,6 +173,7 @@ class BrowserApplyDriver(ApplyDriver):
         max_attempts = 3
         last_open_page_error: Optional[ApplyAgentError] = None
         last_evidence = evidence
+        force_new_proxy_sid = False
         for attempt in range(1, max_attempts + 1):
             try:
                 last_evidence = await self._submit_browser_session(
@@ -180,6 +183,7 @@ class BrowserApplyDriver(ApplyDriver):
                     nav_url=nav_url,
                     attempt=attempt,
                     max_attempts=max_attempts,
+                    force_new_proxy_sid=force_new_proxy_sid,
                 )
             except ApplyAgentError as exc:
                 last_open_page_error = exc
@@ -190,6 +194,8 @@ class BrowserApplyDriver(ApplyDriver):
                 )
                 if not retryable:
                     raise
+                # Dead residential exit (HTTP 572 etc.) — mint a fresh sticky sid.
+                force_new_proxy_sid = True
                 await self._log_step(
                     evidence,
                     action="navigate_retry",
@@ -217,6 +223,7 @@ class BrowserApplyDriver(ApplyDriver):
                 and (proxy_configured() or last_evidence.blocked_reason == "captcha")
                 and not (fixed_sticky and last_evidence.blocked_reason == "bot_protection")
             ):
+                force_new_proxy_sid = True
                 await self._log_step(
                     evidence,
                     action="bot_wall_retry",
@@ -251,9 +258,13 @@ class BrowserApplyDriver(ApplyDriver):
         nav_url: str,
         attempt: int,
         max_attempts: int,
+        force_new_proxy_sid: bool = False,
     ) -> SubmissionEvidence:
         try:
-            async with launch_page(headless=ctx.headless) as page:
+            async with launch_page(
+                headless=ctx.headless,
+                force_new_proxy_sid=force_new_proxy_sid,
+            ) as page:
                 await self._log_step(
                     evidence,
                     action="open_browser",
@@ -262,6 +273,7 @@ class BrowserApplyDriver(ApplyDriver):
                     value_preview=(
                         f"{'headless' if ctx.headless else 'visible'}"
                         f"{f' · try {attempt}/{max_attempts}' if max_attempts > 1 else ''}"
+                        f"{' · new_proxy_sid' if force_new_proxy_sid else ''}"
                     ),
                 )
                 http_status = None
@@ -290,6 +302,36 @@ class BrowserApplyDriver(ApplyDriver):
                         target_url=nav_url,
                         exception_class=exc.__class__.__name__,
                     ) from exc
+
+                # Proxy gateway failures (PrivateProxy HTTP 572 + "Failed to connect
+                # to target host") still yield a Response — abort+retry instead of
+                # filling fields on the error page.
+                body_preview = ""
+                try:
+                    body_preview = await page.locator("body").inner_text(timeout=3000)
+                except Exception:
+                    body_preview = ""
+                if is_proxy_connect_failure_status(http_status) or is_proxy_connect_failure_text(body_preview):
+                    evidence.screenshot_b64 = await screenshot_b64(page)
+                    detail = (
+                        f"Proxy could not reach target host "
+                        f"(HTTP {http_status or 'page'})."
+                    )
+                    await self._log_step(
+                        evidence,
+                        action="navigate",
+                        locators=[nav_url],
+                        status="error",
+                        value_preview=nav_url[:100],
+                        error=detail[:200],
+                    )
+                    raise ApplyAgentError(
+                        "open_page",
+                        detail,
+                        target_url=nav_url,
+                        exception_class="ProxyConnectFailure",
+                    )
+
                 try:
                     await page.wait_for_load_state("networkidle", timeout=15000)
                 except Exception:

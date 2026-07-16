@@ -232,6 +232,28 @@ def _strip_privateproxy_session_args(username: str) -> str:
     return cleaned.strip("-")
 
 
+# PrivateProxy (and similar) return these when an exit node cannot reach the ATS.
+_PROXY_CONNECT_HTTP_STATUSES = frozenset({560, 561, 562, 563, 564, 565, 566, 567, 568, 569, 570, 571, 572, 573})
+_PROXY_CONNECT_TEXT_MARKERS = (
+    "failed to connect to target host",
+    "target host communication",
+    "could not connect to target",
+    "proxy error",
+)
+
+
+def is_proxy_connect_failure_status(http_status: Optional[int]) -> bool:
+    """True for proxy-gateway statuses (e.g. PrivateProxy HTTP 572)."""
+    if http_status is None:
+        return False
+    return int(http_status) in _PROXY_CONNECT_HTTP_STATUSES
+
+
+def is_proxy_connect_failure_text(text: str) -> bool:
+    lowered = (text or "").lower()
+    return any(marker in lowered for marker in _PROXY_CONNECT_TEXT_MARKERS)
+
+
 def is_transient_navigation_error(exc: BaseException) -> bool:
     text = f"{exc.__class__.__name__}: {exc}".lower()
     markers = (
@@ -245,6 +267,22 @@ def is_transient_navigation_error(exc: BaseException) -> bool:
         "timeout",
         "net::err_",
         "target host communication",
+        "failed to connect to target host",
+        "proxy could not reach",
+        "http 572",
+        "http 560",
+        "http 561",
+        "http 562",
+        "http 563",
+        "http 564",
+        "http 565",
+        "http 566",
+        "http 567",
+        "http 568",
+        "http 569",
+        "http 570",
+        "http 571",
+        "http 573",
     )
     return any(marker in text for marker in markers)
 
@@ -288,7 +326,7 @@ def proxy_configured() -> bool:
     return False
 
 
-def browser_proxy_settings() -> Optional[Dict[str, str]]:
+def browser_proxy_settings(*, force_random_sid: bool = False) -> Optional[Dict[str, str]]:
     """Playwright proxy dict from env, or None when unset.
 
     Prefer one of:
@@ -303,7 +341,8 @@ def browser_proxy_settings() -> Optional[Dict[str, str]]:
       -> username becomes jw7ib-fr-sid-7-ttl-30
 
     Each call with STICKY=1 mints a sid (random unless STICKY_SID is set) —
-    call once per browser launch.
+    call once per browser launch. Pass force_random_sid=True on retries after a
+    dead exit (HTTP 572) so a fixed STICKY_SID does not keep failing the same IP.
     """
     raw = (
         os.environ.get("BROWSER_PROXY", "").strip()
@@ -333,7 +372,7 @@ def browser_proxy_settings() -> Optional[Dict[str, str]]:
             ttl = 30
         sid_raw = os.environ.get("BROWSER_PROXY_STICKY_SID", "").strip()
         sid: Optional[int] = None
-        if sid_raw.isdigit():
+        if not force_random_sid and sid_raw.isdigit():
             sid = int(sid_raw)
         proxy["username"] = privateproxy_sticky_username(
             proxy["username"],
@@ -418,7 +457,11 @@ async def _apply_cookies(context: Any) -> None:
 
 
 @asynccontextmanager
-async def launch_page(*, headless: bool = True) -> AsyncIterator[Any]:
+async def launch_page(
+    *,
+    headless: bool = True,
+    force_new_proxy_sid: bool = False,
+) -> AsyncIterator[Any]:
     """Yields a ready-to-use Playwright `Page`. Closes browser/context/page on
     exit regardless of outcome.
     """
@@ -475,13 +518,14 @@ async def launch_page(*, headless: bool = True) -> AsyncIterator[Any]:
                 launch_kwargs["channel"] = channel
             elif executable_path:
                 launch_kwargs["executable_path"] = executable_path
-            proxy = browser_proxy_settings()
+            proxy = browser_proxy_settings(force_random_sid=force_new_proxy_sid)
             if proxy:
                 launch_kwargs["proxy"] = proxy
                 logger.info(
-                    "browser_proxy_enabled server=%s user=%s",
+                    "browser_proxy_enabled server=%s user=%s force_new_sid=%s",
                     proxy.get("server"),
                     (proxy.get("username") or "")[:24] or "-",
+                    force_new_proxy_sid,
                 )
             browser_user_data_dir = os.environ.get("BROWSER_USER_DATA_DIR")
             context_options = browser_context_options()
