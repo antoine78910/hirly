@@ -15,12 +15,33 @@ _ERROR_HINTS = {
         "On Railway, ensure Chromium is installed in the build. "
         "If you enabled “Show browser”, the server must have a display (local only)."
     ),
-    "open_page": "The apply page failed to load. Check that the job URL is still live and reachable from the server.",
+    "open_page": (
+        "The apply page failed to load. Check that the job URL is still live, "
+        "the residential proxy can reach the ATS, and Railway logs for HTTP 572 / "
+        "proxy connect failures."
+    ),
     "inspect": "Form inspection failed before any browser step. The ATS page structure may have changed.",
+    "claim": "Could not claim this auto-apply attempt (database or lock error). Retry once.",
+    "execute": "The run failed before a pipeline stage was recorded. Expand Raw ExecutionReport JSON or check Railway logs.",
 }
+
+_PROXY_HINT = (
+    "Residential proxy could not reach the ATS (often PrivateProxy HTTP 572). "
+    "Retries mint a new sticky SID automatically — if all attempts fail, check "
+    "BROWSER_PROXY credentials / STICKY_SID on Railway, or try again later."
+)
 
 
 def error_hint(*, phase: str = "", message: str = "") -> Optional[str]:
+    lowered = (message or "").lower()
+    if any(token in lowered for token in (
+        "proxy could not reach",
+        "failed to connect to target host",
+        "http 572",
+        "err_proxy",
+        "err_tunnel_connection",
+    )):
+        return _PROXY_HINT
     if phase in _ERROR_HINTS:
         return _ERROR_HINTS[phase]
     if "Playwright is not installed" in message:
@@ -45,14 +66,57 @@ def format_run_error(exc: BaseException, *, checkpoint: str = "") -> Dict[str, A
         }
 
     message = str(exc).strip() or exc.__class__.__name__
+    phase = checkpoint or "execute"
     return {
-        "phase": checkpoint or "execute",
-        "checkpoint": checkpoint or "execute",
+        "phase": phase,
+        "checkpoint": phase,
         "exception_class": exc.__class__.__name__,
         "message": message,
         "target_url": None,
-        "hint": error_hint(phase=checkpoint, message=message),
+        "hint": error_hint(phase=phase, message=message),
         "traceback": traceback.format_exc()[-1200:],
+    }
+
+
+def transport_error_report(
+    *,
+    message: str,
+    phase: str = "execute",
+    stage: str = "driver",
+    exception_class: str = "",
+    http_status: Optional[int] = None,
+    timed_out: bool = False,
+    extra: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Build a minimal ExecutionReport when the HTTP transport fails before a pipeline result exists."""
+    error: Dict[str, Any] = {
+        "message": message,
+        "phase": phase,
+        "checkpoint": phase,
+        "exception_class": exception_class or None,
+        "http_status": http_status,
+        "timed_out": timed_out,
+        "hint": error_hint(phase=phase, message=message),
+    }
+    if extra:
+        error.update({k: v for k, v in extra.items() if v is not None})
+    return {
+        "stage_reached": stage,
+        "status": "error",
+        "reason": message,
+        "verdict": None,
+        "missing_fields": [],
+        "error": error,
+        "debug": {
+            "error": error,
+            "timeline": [{
+                "stage": stage,
+                "status": "error",
+                "detail": message,
+            }],
+        },
+        "duration_ms": None,
+        "screenshots": [],
     }
 
 

@@ -9806,15 +9806,80 @@ async def _auto_apply_target_user(user_id: Optional[str], admin: User) -> User:
 async def admin_auto_apply_execute(body: AdminAutoApplyExecuteRequest, admin: User = Depends(require_admin_user)):
     """Run the auto-apply pipeline for one job. Thin wrapper: it only loads the
     application context and delegates to execute_application -- no orchestration
-    is duplicated here. Works for any registered ATS driver without changes."""
-    target_user = await _auto_apply_target_user(body.user_id, admin)
-    job, profile, app_doc = await _load_or_create_agent_application(body.job_id, target_user)
-    result = await auto_apply_execute_application(
-        db, job, profile, app_doc, target_user.model_dump(mode="json"),
-        dry_run=body.dry_run,
-        headless=_resolve_auto_apply_headless(body.headless),
-    )
-    attempt = await auto_apply_latest_attempt(db, target_user.user_id, job.get("job_id"))
+    is duplicated here. Works for any registered ATS driver without changes.
+
+    Always returns a JSON body with `result` (ExecutionReport-shaped) so the admin
+    console can show a real error instead of a bare gateway/500 failure.
+    """
+    from auto_apply.debug_report import format_run_error, transport_error_report
+
+    try:
+        target_user = await _auto_apply_target_user(body.user_id, admin)
+        job, profile, app_doc = await _load_or_create_agent_application(body.job_id, target_user)
+    except HTTPException as http_exc:
+        detail = http_exc.detail
+        message = detail if isinstance(detail, str) else (
+            (detail or {}).get("message") if isinstance(detail, dict) else str(detail)
+        )
+        return {
+            "result": transport_error_report(
+                message=str(message or "Request failed"),
+                phase="prepare",
+                stage="driver",
+                http_status=http_exc.status_code,
+                exception_class="HTTPException",
+            ),
+            "attempt": None,
+        }
+    except Exception as exc:
+        error_detail = format_run_error(exc, checkpoint="prepare")
+        logger.warning(
+            "admin_auto_apply_prepare_failed job=%s error=%s",
+            body.job_id,
+            error_detail.get("message", str(exc))[:300],
+        )
+        return {
+            "result": transport_error_report(
+                message=error_detail.get("message") or str(exc),
+                phase="prepare",
+                stage="driver",
+                exception_class=error_detail.get("exception_class") or exc.__class__.__name__,
+                extra={"traceback": error_detail.get("traceback"), "hint": error_detail.get("hint")},
+            ),
+            "attempt": None,
+        }
+
+    try:
+        result = await auto_apply_execute_application(
+            db, job, profile, app_doc, target_user.model_dump(mode="json"),
+            dry_run=body.dry_run,
+            headless=_resolve_auto_apply_headless(body.headless),
+        )
+    except Exception as exc:
+        # execute_application is supposed to catch everything; belt-and-suspenders.
+        error_detail = format_run_error(exc, checkpoint="execute")
+        logger.warning(
+            "admin_auto_apply_execute_unhandled job=%s error=%s",
+            body.job_id,
+            error_detail.get("message", str(exc))[:300],
+        )
+        result = transport_error_report(
+            message=error_detail.get("message") or str(exc),
+            phase=str(error_detail.get("phase") or "execute"),
+            stage="driver",
+            exception_class=error_detail.get("exception_class") or exc.__class__.__name__,
+            extra={"traceback": error_detail.get("traceback"), "hint": error_detail.get("hint")},
+        )
+
+    attempt = None
+    try:
+        attempt = await auto_apply_latest_attempt(db, target_user.user_id, job.get("job_id"))
+    except Exception as exc:
+        logger.warning(
+            "admin_auto_apply_latest_attempt_failed job=%s error=%s",
+            body.job_id,
+            str(exc)[:200],
+        )
     return {"result": result, "attempt": attempt}
 
 

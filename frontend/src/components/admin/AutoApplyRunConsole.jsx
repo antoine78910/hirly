@@ -25,6 +25,7 @@ const FAILURE_HINTS = {
   browser_step_errors: "One or more fill/upload steps failed. Expand the browser execution log for details.",
   "blocked:bot_protection": "SmartRecruiters blocked automated access (HTTP 403 / bot wall). Retry later, use a residential proxy, or submit manually.",
   bot_protection: "SmartRecruiters blocked automated access (HTTP 403 / bot wall). Retry later, use a residential proxy, or submit manually.",
+  proxy_connect: "Residential proxy could not reach the ATS (HTTP 572). Check BROWSER_PROXY on Railway or retry for a fresh exit IP.",
 };
 
 function stageIndex(stage) {
@@ -348,7 +349,7 @@ function ErrorPanel({ error, reason, stage, embedded = false }) {
           !
         </div>
         <div className="min-w-0 flex-1">
-          <p className={`font-display text-base font-bold ${titleClass}`}>Run failed at {stage}</p>
+          <p className={`font-display text-base font-bold ${titleClass}`}>Run failed at {stage || "unknown"}</p>
           <p className={`mt-1 text-sm font-medium ${messageClass}`}>{message}</p>
           <dl className={`mt-3 grid gap-2 text-xs sm:grid-cols-2 ${valueClass}`}>
             <div>
@@ -359,6 +360,18 @@ function ErrorPanel({ error, reason, stage, embedded = false }) {
               <div>
                 <dt className={`font-semibold uppercase tracking-wide ${labelClass}`}>Exception</dt>
                 <dd className="font-mono">{error.exception_class}</dd>
+              </div>
+            ) : null}
+            {error?.http_status ? (
+              <div>
+                <dt className={`font-semibold uppercase tracking-wide ${labelClass}`}>HTTP</dt>
+                <dd className="font-mono">{error.http_status}</dd>
+              </div>
+            ) : null}
+            {error?.timed_out ? (
+              <div>
+                <dt className={`font-semibold uppercase tracking-wide ${labelClass}`}>Timed out</dt>
+                <dd className="font-mono">yes</dd>
               </div>
             ) : null}
             {error?.target_url ? (
@@ -377,6 +390,14 @@ function ErrorPanel({ error, reason, stage, embedded = false }) {
               <span className="font-semibold">What to try: </span>
               {error.hint}
             </p>
+          ) : null}
+          {error?.traceback ? (
+            <details className="mt-3">
+              <summary className={`cursor-pointer text-xs font-semibold ${labelClass}`}>Stack trace</summary>
+              <pre className={`mt-2 max-h-48 overflow-auto whitespace-pre-wrap font-mono text-[11px] ${messageClass}`}>
+                {error.traceback}
+              </pre>
+            </details>
           ) : null}
         </div>
       </div>

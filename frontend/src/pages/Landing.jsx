@@ -92,7 +92,7 @@ export default function Landing() {
 
   const onSignIn = () => {
     trackEvent("cta_login_clicked", { location: "header" });
-    trackDatafastGoal("lp_cta_sign_in", { location: "header" });
+    trackDatafastGoal("lp_cta", { location: "header", action: "sign_in" });
     const next = postLoginPath !== "/swipe" ? `?next=${encodeURIComponent(postLoginPath)}` : "";
     navigate(`/signin${next}`);
   };
@@ -109,8 +109,9 @@ export default function Landing() {
 
   const onStartSwiping = async (ctaLocation = "hero") => {
     trackEvent("cta_start_swiping_clicked", { authenticated: Boolean(user), location: ctaLocation });
-    trackDatafastGoal("lp_cta_start", {
+    trackDatafastGoal("lp_cta", {
       location: ctaLocation,
+      action: "start_swiping",
       authenticated: user ? "true" : "false",
       contract: landingContractSlug || "",
     });

@@ -4,7 +4,16 @@ import { ONBOARDING_STEP_ORDER } from "../components/onboarding/onboardingData";
 
 const GOAL_NAME_RE = /^[a-z0-9_:-]{1,64}$/;
 const INTRO_SLIDE_COUNT = 5;
-const ONBOARDING_SIGNUP_GOAL = "onboarding_signup";
+
+/** Consolidated goal names — keep the catalog small (DataFast custom-goal limits). */
+export const LP_VIEW_GOAL = "lp_view";
+export const LP_CTA_GOAL = "lp_cta";
+export const ONBOARDING_STARTED_GOAL = "onboarding_started";
+export const ONBOARDING_CONTINUE_GOAL = "onboarding_continue";
+export const ONBOARDING_SKIP_GOAL = "onboarding_skip";
+export const ONBOARDING_SIGNUP_GOAL = "onboarding_signup";
+export const ONBOARDING_COMPLETED_GOAL = "onboarding_completed";
+export const ONBOARDING_CHECKOUT_STARTED_GOAL = "onboarding_checkout_started";
 
 const ONBOARDING_STEP_LABELS = {
   intro: "Intro slides",
@@ -94,23 +103,19 @@ export function onboardingStepNumber(stepId) {
   return index >= 0 ? index + 1 : null;
 }
 
-export function onboardingContinueGoalName(stepId) {
-  const stepNumber = onboardingStepNumber(stepId);
-  const slug = camelToSnake(stepId);
-  if (!stepNumber) return `onboarding_next_${slug}`;
-  return `onboarding_step_${paddedStepNumber(stepNumber)}_${slug}`;
+/** @deprecated Per-step goal names are no longer emitted — use {@link ONBOARDING_CONTINUE_GOAL} + step params. */
+export function onboardingContinueGoalName(_stepId) {
+  return ONBOARDING_CONTINUE_GOAL;
 }
 
-export function onboardingSkipGoalName(stepId) {
-  const stepNumber = onboardingStepNumber(stepId);
-  const slug = camelToSnake(stepId);
-  if (!stepNumber) return `onboarding_skip_${slug}`;
-  return `onboarding_skip_${paddedStepNumber(stepNumber)}_${slug}`;
+/** @deprecated Per-step skip goal names are no longer emitted — use {@link ONBOARDING_SKIP_GOAL} + step params. */
+export function onboardingSkipGoalName(_stepId) {
+  return ONBOARDING_SKIP_GOAL;
 }
 
-export function onboardingIntroGoalName(slideNumber) {
-  const stepNumber = onboardingStepNumber("intro") || 1;
-  return `onboarding_step_${paddedStepNumber(stepNumber)}_intro_${slideNumber}`;
+/** @deprecated Intro slides use {@link ONBOARDING_CONTINUE_GOAL} with intro_slide params. */
+export function onboardingIntroGoalName(_slideNumber) {
+  return ONBOARDING_CONTINUE_GOAL;
 }
 
 function withStepMeta(stepId, params = {}) {
@@ -124,54 +129,22 @@ function withStepMeta(stepId, params = {}) {
   };
 }
 
-/** Ordered funnel reference for DataFast — mirrors ONBOARDING_STEP_ORDER. */
+/** Reference funnel for DataFast — one goal per event type; step detail lives in params. */
 export function buildOnboardingDatafastFunnel(introSlideCount = INTRO_SLIDE_COUNT) {
-  const funnel = [
-    { order: 1, goal: "lp_view", label: "Landing page view" },
-    { order: 2, goal: "lp_cta_start", label: "Get Started (LP)" },
-    { order: 3, goal: "onboarding_started", label: "Onboarding started" },
+  return [
+    { order: 1, goal: LP_VIEW_GOAL, label: "Landing page view" },
+    { order: 2, goal: LP_CTA_GOAL, label: "Landing CTA click (location param)" },
+    { order: 3, goal: ONBOARDING_STARTED_GOAL, label: "Onboarding started" },
+    {
+      order: 4,
+      goal: ONBOARDING_CONTINUE_GOAL,
+      label: `Onboarding continue (${ONBOARDING_STEP_ORDER.length} steps + ${introSlideCount} intro slides via step_id / intro_slide params)`,
+    },
+    { order: 5, goal: ONBOARDING_SKIP_GOAL, label: "Onboarding skip (step_id param)" },
+    { order: 6, goal: ONBOARDING_SIGNUP_GOAL, label: "Sign up (method param)" },
+    { order: 7, goal: ONBOARDING_COMPLETED_GOAL, label: "Onboarding completed" },
+    { order: 8, goal: ONBOARDING_CHECKOUT_STARTED_GOAL, label: "Checkout started" },
   ];
-
-  let order = 4;
-  ONBOARDING_STEP_ORDER.forEach((stepId) => {
-    const stepNumber = onboardingStepNumber(stepId);
-    if (stepId === "intro") {
-      for (let slide = 1; slide <= introSlideCount; slide += 1) {
-        funnel.push({
-          order: order++,
-          goal: onboardingIntroGoalName(slide),
-          label: `Intro slide ${slide}`,
-          step_id: stepId,
-          step_number: stepNumber,
-        });
-      }
-      return;
-    }
-
-    if (stepId === "signup") {
-      funnel.push({
-        order: order++,
-        goal: onboardingContinueGoalName(stepId),
-        label: ONBOARDING_STEP_LABELS[stepId] || stepId,
-        step_id: stepId,
-        step_number: stepNumber,
-      });
-      funnel.push({ order: order++, goal: ONBOARDING_SIGNUP_GOAL, label: "Sign up (Google or email)", step_id: stepId, step_number: stepNumber });
-      return;
-    }
-
-    funnel.push({
-      order: order++,
-      goal: onboardingContinueGoalName(stepId),
-      label: ONBOARDING_STEP_LABELS[stepId] || stepId,
-      step_id: stepId,
-      step_number: stepNumber,
-    });
-  });
-
-  funnel.push({ order: order++, goal: "onboarding_completed", label: "Onboarding completed" });
-  funnel.push({ order: order++, goal: "onboarding_checkout_started", label: "Checkout started" });
-  return funnel;
 }
 
 export const ONBOARDING_DATAFAST_FUNNEL = buildOnboardingDatafastFunnel();
@@ -193,14 +166,13 @@ export function trackDatafastGoal(goalName, params) {
 }
 
 export function trackOnboardingContinue(stepId, params = {}) {
-  trackDatafastGoal(onboardingContinueGoalName(stepId), withStepMeta(stepId, params));
+  trackDatafastGoal(ONBOARDING_CONTINUE_GOAL, withStepMeta(stepId, params));
 }
 
-/** One goal per intro slide (1-based) so funnel counts are not inflated by 5×. */
 export function trackOnboardingIntroContinue(introIndex, slideCount, params = {}) {
   const total = Math.max(1, Number(slideCount) || 1);
   const slideNumber = Math.min(Math.max(0, Number(introIndex) || 0) + 1, total);
-  trackDatafastGoal(onboardingIntroGoalName(slideNumber), withStepMeta("intro", {
+  trackDatafastGoal(ONBOARDING_CONTINUE_GOAL, withStepMeta("intro", {
     intro_slide: String(introIndex),
     intro_total: String(total),
     intro_slide_number: String(slideNumber),
@@ -209,10 +181,19 @@ export function trackOnboardingIntroContinue(introIndex, slideCount, params = {}
 }
 
 export function trackOnboardingSkip(stepId, params = {}) {
-  trackDatafastGoal(onboardingSkipGoalName(stepId), withStepMeta(stepId, params));
+  trackDatafastGoal(ONBOARDING_SKIP_GOAL, withStepMeta(stepId, params));
 }
 
 /** Track a successful onboarding signup (Google or email). */
 export function trackOnboardingSignup(method, params = {}) {
   trackDatafastGoal(ONBOARDING_SIGNUP_GOAL, { method, ...params });
 }
+
+/** All custom DataFast goals currently emitted by the app (for ops / limit audits). */
+export const DATAFAST_GOAL_CATALOG = [
+  ...ONBOARDING_DATAFAST_FUNNEL.map((row) => row.goal),
+  "friend_referral_enrolled",
+  "friend_referral_shared",
+  "friend_referral_redeemed",
+  "friend_referral_progress",
+];

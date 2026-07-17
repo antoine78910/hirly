@@ -39,6 +39,40 @@ def test_execute_endpoint_calls_executor_and_returns_attempt(monkeypatch):
     assert result["attempt"]["stage_reached"] == "plan"
 
 
+def test_execute_endpoint_returns_soft_error_when_job_missing(monkeypatch):
+    async def fake_load(job_id, user):
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    monkeypatch.setattr(server, "_load_or_create_agent_application", fake_load)
+    admin = server.User(user_id="admin", email="anto.delbos@gmail.com", name="Admin")
+    body = server.AdminAutoApplyExecuteRequest(job_id="missing", dry_run=True)
+    result = asyncio.run(server.admin_auto_apply_execute(body, admin=admin))
+    assert result["attempt"] is None
+    assert result["result"]["status"] == "error"
+    assert result["result"]["error"]["message"] == "Job not found"
+    assert result["result"]["error"]["http_status"] == 404
+
+
+def test_execute_endpoint_keeps_result_when_latest_attempt_fails(monkeypatch):
+    async def fake_load(job_id, user):
+        return ({"job_id": job_id}, {}, {})
+
+    async def fake_execute(db, job, profile, app_doc, user, *, dry_run=False, headless=True):
+        return {"status": "prepared", "stage_reached": "plan", "reason": "ready_not_submitted"}
+
+    async def fake_latest(db, user_id, job_id):
+        raise RuntimeError("mongo down")
+
+    monkeypatch.setattr(server, "_load_or_create_agent_application", fake_load)
+    monkeypatch.setattr(server, "auto_apply_execute_application", fake_execute)
+    monkeypatch.setattr(server, "auto_apply_latest_attempt", fake_latest)
+    admin = server.User(user_id="admin", email="anto.delbos@gmail.com", name="Admin")
+    body = server.AdminAutoApplyExecuteRequest(job_id="j1", dry_run=True)
+    result = asyncio.run(server.admin_auto_apply_execute(body, admin=admin))
+    assert result["result"]["status"] == "prepared"
+    assert result["attempt"] is None
+
+
 def test_metrics_endpoint_delegates_to_summary(monkeypatch):
     async def fake_summary(db, provider):
         assert provider == "greenhouse"

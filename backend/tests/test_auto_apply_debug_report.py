@@ -59,3 +59,27 @@ def test_format_run_error_from_generic_exception():
     assert detail["exception_class"] == "ValueError"
     assert "publication_unresolved" in detail["message"]
     assert detail["checkpoint"] == "inspect"
+
+
+def test_format_run_error_proxy_connect_hint():
+    detail = format_run_error(
+        RuntimeError("Proxy could not reach target host (HTTP 572)."),
+        checkpoint="open_page",
+    )
+    assert detail["hint"]
+    assert "572" in detail["hint"] or "proxy" in detail["hint"].lower()
+
+
+def test_transport_error_report_shape():
+    from auto_apply.debug_report import transport_error_report
+
+    report = transport_error_report(
+        message="Gateway timeout",
+        phase="execute",
+        stage="driver",
+        http_status=504,
+        timed_out=True,
+    )
+    assert report["status"] == "error"
+    assert report["error"]["http_status"] == 504
+    assert report["debug"]["timeline"][0]["detail"] == "Gateway timeout"

@@ -108,9 +108,39 @@ async def execute_application(
                        reason="no_driver_for_provider")
 
     driver_version = getattr(driver, "version", "unknown")
-    claim = await metrics.claim_attempt(db, user_id=user_id, job_id=job_id,
-                                        provider=driver.provider, driver=driver.provider,
-                                        driver_version=driver_version)
+    try:
+        claim = await metrics.claim_attempt(
+            db,
+            user_id=user_id,
+            job_id=job_id,
+            provider=driver.provider,
+            driver=driver.provider,
+            driver_version=driver_version,
+        )
+    except Exception as exc:
+        error_detail = format_run_error(exc, checkpoint="claim")
+        reason = error_detail.get("message") or exc.__class__.__name__
+        logger.warning(
+            "auto_apply_claim_failed job=%s error=%s",
+            job_id,
+            reason[:300],
+        )
+        return _report(
+            started=started,
+            stage="driver",
+            status="error",
+            reason=reason,
+            error=error_detail,
+            debug={
+                "error": error_detail,
+                "timeline": [{
+                    "stage": "driver",
+                    "status": "error",
+                    "detail": reason,
+                }],
+            },
+            driver_version=driver_version,
+        )
     if claim is None:
         active = await metrics.active_attempt_status(db, user_id, job_id)
         status = "already_submitted" if active == "submitted_success" else "already_in_flight"

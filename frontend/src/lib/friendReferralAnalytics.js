@@ -3,13 +3,10 @@ import { trackDatafastGoal } from "./datafast";
 
 /** DataFast funnel — friend referral (invite 3 friends). */
 export const FRIEND_REFERRAL_DATAFAST_FUNNEL = [
-  { order: 1, goal: "friend_referral_code_generated", label: "Referral code generated" },
-  { order: 2, goal: "friend_referral_code_copied", label: "Referral code copied" },
-  { order: 3, goal: "friend_referral_code_shared", label: "Referral code shared" },
-  { order: 4, goal: "friend_referral_code_redeemed", label: "Referral code redeemed (invitee)" },
-  { order: 5, goal: "friend_referral_invite_received", label: "Friend joined via code (referrer)" },
-  { order: 6, goal: "friend_referral_reward_unlocked", label: "3 friends — free access unlocked" },
-  { order: 7, goal: "friend_referral_reward_claimed", label: "Free subscription claimed" },
+  { order: 1, goal: "friend_referral_enrolled", label: "Referral code generated" },
+  { order: 2, goal: "friend_referral_shared", label: "Referral code copied or shared" },
+  { order: 3, goal: "friend_referral_redeemed", label: "Referral code redeemed (invitee)" },
+  { order: 4, goal: "friend_referral_progress", label: "Referrer progress (friend joined / reward ready / claimed)" },
 ];
 
 function trackFriendReferralGoal(goal, params = {}) {
@@ -18,31 +15,31 @@ function trackFriendReferralGoal(goal, params = {}) {
 }
 
 export function trackFriendReferralCodeGenerated(params = {}) {
-  trackFriendReferralGoal("friend_referral_code_generated", params);
+  trackFriendReferralGoal("friend_referral_enrolled", params);
 }
 
 export function trackFriendReferralCodeCopied(params = {}) {
-  trackFriendReferralGoal("friend_referral_code_copied", params);
+  trackFriendReferralGoal("friend_referral_shared", { action: "copy", ...params });
 }
 
 export function trackFriendReferralCodeShared(params = {}) {
-  trackFriendReferralGoal("friend_referral_code_shared", params);
+  trackFriendReferralGoal("friend_referral_shared", { action: "share", ...params });
 }
 
 export function trackFriendReferralCodeRedeemed(params = {}) {
-  trackFriendReferralGoal("friend_referral_code_redeemed", params);
+  trackFriendReferralGoal("friend_referral_redeemed", params);
 }
 
 export function trackFriendReferralInviteReceived(params = {}) {
-  trackFriendReferralGoal("friend_referral_invite_received", params);
+  trackFriendReferralGoal("friend_referral_progress", { milestone: "friend_joined", ...params });
 }
 
 export function trackFriendReferralRewardUnlocked(params = {}) {
-  trackFriendReferralGoal("friend_referral_reward_unlocked", params);
+  trackFriendReferralGoal("friend_referral_progress", { milestone: "reward_ready", ...params });
 }
 
 export function trackFriendReferralRewardClaimed(params = {}) {
-  trackFriendReferralGoal("friend_referral_reward_claimed", params);
+  trackFriendReferralGoal("friend_referral_progress", { milestone: "reward_claimed", ...params });
 }
 
 /** Fire referrer-side goals when uses_count increases or reward becomes available. */

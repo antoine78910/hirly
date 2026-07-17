@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Loader2, Play, RefreshCw, Terminal } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
-import { adminApiErrorMessage } from "../lib/adminApi";
+import { adminApiErrorMessage, syntheticAutoApplyErrorReport } from "../lib/adminApi";
 import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
 import AutoApplyRunPanel from "../components/admin/AutoApplyRunPanel";
 import { Button } from "../components/ui/button";
@@ -36,24 +36,6 @@ const fmtDate = (value) => {
   if (Number.isNaN(date.getTime())) return String(value);
   return date.toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 };
-
-function syntheticErrorReport(detail, fallbackMessage) {
-  const message = detail?.message || fallbackMessage || "Execution failed";
-  return {
-    stage_reached: detail?.phase === "open_browser" || detail?.phase === "open_page" ? "submit" : "driver",
-    status: "error",
-    reason: message,
-    error: detail && typeof detail === "object" ? detail : { message, phase: "execute" },
-    debug: {
-      error: detail && typeof detail === "object" ? detail : { message, phase: "execute" },
-      timeline: [{
-        stage: detail?.phase === "open_browser" || detail?.phase === "open_page" ? "submit" : "driver",
-        status: "error",
-        detail: message,
-      }],
-    },
-  };
-}
 
 function notifyRunResult(result) {
   const failed = new Set(["error", "submit_failed", "verification_failed", "unsupported", "needs_user_input"]);
@@ -140,27 +122,9 @@ export default function AdminAutoApplyLab() {
       loadSwipes();
     } catch (err) {
       if (err?.response?.status === 403) setAccessDenied(true);
-      const detail = err.response?.data?.detail;
-      const status = err?.response?.status;
-      const timedOut = err?.code === "ECONNABORTED" || /timeout/i.test(String(err?.message || ""));
-      const message = timedOut
-        ? "Request timed out waiting for the browser run (proxy retries can take several minutes). Check Railway logs or retry."
-        : adminApiErrorMessage(err, "Execution failed");
+      const message = adminApiErrorMessage(err, "Execution failed");
       setError(message);
-      const fallback = detail && typeof detail === "object"
-        ? syntheticErrorReport(detail, message)
-        : {
-            stage_reached: "driver",
-            status: "error",
-            reason: message,
-            error: {
-              message,
-              phase: "execute",
-              http_status: status || null,
-              timed_out: timedOut,
-            },
-          };
-      finishConsole(fallback);
+      finishConsole(syntheticAutoApplyErrorReport(err, message));
       toast.error(message);
     } finally {
       setRunningRow(null);
@@ -204,14 +168,9 @@ export default function AdminAutoApplyLab() {
       if (err?.response?.status === 403) {
         setAccessDenied(true);
       }
-      const detail = err.response?.data?.detail;
       const message = adminApiErrorMessage(err, "Execution failed");
       setError(message);
-      finishConsole(
-        detail && typeof detail === "object"
-          ? syntheticErrorReport(detail, message)
-          : { stage_reached: "driver", status: "error", reason: message, error: { message, phase: "execute" } },
-      );
+      finishConsole(syntheticAutoApplyErrorReport(err, message));
       toast.error(message);
     } finally {
       setRunning(false);
