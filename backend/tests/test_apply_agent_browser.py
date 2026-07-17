@@ -130,6 +130,37 @@ def test_browser_storage_state_json(monkeypatch, tmp_path):
     assert opts["storage_state"]["cookies"][0]["name"] == "a"
 
 
+def test_normalize_storage_state_and_inject():
+    import asyncio
+    from apply_agent.browser import inject_storage_state_cookies, normalize_storage_state
+
+    payload = {"cookies": [{"name": "dd", "value": "1", "domain": ".smartrecruiters.com", "path": "/"}]}
+    assert normalize_storage_state(payload)["cookies"][0]["name"] == "dd"
+    assert normalize_storage_state(json.dumps(payload))["cookies"][0]["name"] == "dd"
+
+    added = []
+
+    class _Ctx:
+        async def add_cookies(self, cookies):
+            added.extend(cookies)
+
+    count = asyncio.run(inject_storage_state_cookies(_Ctx(), payload))
+    assert count == 1
+    assert added[0]["name"] == "dd"
+
+
+def test_persistent_context_options_drop_storage_state(monkeypatch):
+    """launch_persistent_context must not receive storage_state (Playwright TypeError)."""
+    monkeypatch.delenv("BROWSER_STORAGE_STATE", raising=False)
+    payload = {"cookies": [{"name": "a", "value": "b", "domain": ".x.com", "path": "/"}]}
+    monkeypatch.setenv("BROWSER_STORAGE_STATE_JSON", json.dumps(payload))
+    opts = browser_context_options()
+    assert "storage_state" in opts
+    pending = opts.pop("storage_state", None)
+    assert "storage_state" not in opts
+    assert pending["cookies"][0]["name"] == "a"
+
+
 def test_warm_session_configured(monkeypatch, tmp_path):
     monkeypatch.delenv("BROWSER_STORAGE_STATE_JSON", raising=False)
     monkeypatch.delenv("BROWSER_STORAGE_STATE", raising=False)

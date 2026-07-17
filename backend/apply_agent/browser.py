@@ -475,6 +475,48 @@ async def _apply_cookies(context: Any) -> None:
         logger.warning("browser_cookies_inject_failed error=%s", str(exc)[:200])
 
 
+def normalize_storage_state(storage_state: Any) -> Optional[Dict[str, Any]]:
+    """Load a Playwright storage_state dict from dict / JSON string / file path."""
+    if not storage_state:
+        return None
+    if isinstance(storage_state, dict):
+        return storage_state
+    if isinstance(storage_state, str):
+        raw = storage_state.strip()
+        if not raw:
+            return None
+        if Path(raw).exists():
+            raw = Path(raw).read_text(encoding="utf-8")
+        try:
+            data = json.loads(raw)
+        except Exception as exc:
+            logger.warning("browser_storage_state_normalize_failed error=%s", str(exc)[:200])
+            return None
+        return data if isinstance(data, dict) else None
+    return None
+
+
+async def inject_storage_state_cookies(context: Any, storage_state: Any) -> int:
+    """Add cookies from a storage_state payload (for persistent contexts).
+
+    `launch_persistent_context` rejects the `storage_state` kwarg — inject cookies
+    after the context exists instead.
+    """
+    data = normalize_storage_state(storage_state)
+    if not data:
+        return 0
+    cookies = data.get("cookies") or []
+    if not isinstance(cookies, list) or not cookies:
+        return 0
+    try:
+        await context.add_cookies(cookies)
+        logger.info("browser_storage_state_cookies_injected count=%s", len(cookies))
+        return len(cookies)
+    except Exception as exc:
+        logger.warning("browser_storage_state_cookies_failed error=%s", str(exc)[:200])
+        return 0
+
+
 @asynccontextmanager
 async def launch_page(
     *,
@@ -554,19 +596,32 @@ async def launch_page(
                     (proxy.get("username") or "")[:24] or "-",
                     force_new_proxy_sid,
                 )
-            browser_user_data_dir = os.environ.get("BROWSER_USER_DATA_DIR")
+            browser_user_data_dir = (os.environ.get("BROWSER_USER_DATA_DIR") or "").strip() or None
             context_options = browser_context_options()
             if proxy and not browser_user_data_dir:
                 # Non-persistent contexts also need proxy on the context.
                 context_options["proxy"] = proxy
+            # Prefer storage_state (Railway secret) over a persistent profile when both
+            # are set — launch_persistent_context rejects the storage_state kwarg.
+            pending_storage = None
+            if browser_user_data_dir and context_options.get("storage_state") is not None:
+                pending_storage = context_options.pop("storage_state", None)
+                logger.info(
+                    "browser_persistent_context_storage_state_deferred "
+                    "reason=launch_persistent_context_rejects_storage_state"
+                )
             init_script = stealth_init_script()
             if browser_user_data_dir:
                 # Persistent profile keeps real cookies / localStorage across runs.
+                if proxy:
+                    launch_kwargs["proxy"] = proxy
                 context = await p.chromium.launch_persistent_context(
                     user_data_dir=browser_user_data_dir,
                     **launch_kwargs,
                     **context_options,
                 )
+                if pending_storage is not None:
+                    await inject_storage_state_cookies(context, pending_storage)
             else:
                 browser = await p.chromium.launch(**launch_kwargs)
                 context = await browser.new_context(**context_options)
