@@ -36,13 +36,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-try:
-    from dotenv import load_dotenv
+from apply_agent.browser_env import load_browser_secrets  # noqa: E402
 
-    # override=True: a leftover SID=7 in the shell must not win over .env
-    load_dotenv(ROOT / ".env", override=True)
-except ImportError:
-    pass
+load_browser_secrets(override=True)
 
 from apply_agent.browser import (  # noqa: E402
     browser_context_options,
@@ -107,7 +103,7 @@ async def main() -> None:
     print("  user  :", proxy.get("username"))
     print("  start :", start_url)
     print("  out   :", OUT_PATH)
-    print("  env   :", ROOT / ".env")
+    print("  secrets:", ROOT / ".browser-secrets.env")
 
     async with async_playwright() as p:
         launch_kwargs = {

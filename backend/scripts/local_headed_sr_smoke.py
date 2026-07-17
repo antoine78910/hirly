@@ -25,6 +25,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from apply_agent.browser_env import load_browser_secrets  # noqa: E402
+
+load_browser_secrets(override=True)
+
 from apply_agent.blockers import captcha_active, detect_captcha, dismiss_cookie_banner  # noqa: E402
 from apply_agent.browser import (  # noqa: E402
     browser_proxy_settings,

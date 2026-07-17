@@ -226,6 +226,12 @@ from referral_email_service import (
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
+try:
+    from apply_agent.browser_env import load_browser_secrets
+
+    load_browser_secrets(override=True)
+except Exception:
+    pass
 
 
 def _normalize_supabase_url(value: str | None) -> str:

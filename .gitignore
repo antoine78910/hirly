@@ -110,6 +110,8 @@ frontend/node_modules/.cache/default-development/14.pack
 
 backend/.browser-profile/
 backend/sr-browser-profile/
+backend/.browser-secrets.env
+backend/.secrets/
 backend/sr-storage-state.json
 backend/sr-storage-state.railway.txt
 backend/**/sr-storage-state*.json
