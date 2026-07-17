@@ -565,11 +565,23 @@ async def launch_page(
                 await browser.close()
 
 
-def write_resume_file(app_doc: Dict[str, Any], tmpdir: str) -> Optional[str]:
+def write_resume_file(
+    app_doc: Dict[str, Any],
+    tmpdir: str,
+    profile: Optional[Dict[str, Any]] = None,
+) -> Optional[str]:
+    """Write the resume bytes to disk for Playwright upload.
+
+    Prefer the tailored CV from Review; fall back to the profile original
+    upload (every swiper has one).
+    """
     resume_b64 = app_doc.get("tailored_cv_file_b64")
+    filename = app_doc.get("tailored_cv_filename") or "tailored_cv.docx"
+    if not resume_b64 and profile:
+        resume_b64 = profile.get("cv_original_b64")
+        filename = profile.get("cv_filename") or "resume.pdf"
     if not resume_b64:
         return None
-    filename = app_doc.get("tailored_cv_filename") or "tailored_cv.docx"
     path = Path(tmpdir) / safe_filename(filename)
     path.write_bytes(base64.b64decode(resume_b64))
     return str(path)

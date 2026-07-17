@@ -83,7 +83,7 @@ async def run_apply_attempt(
         return result
 
     with tempfile.TemporaryDirectory(prefix="apply_agent_") as tmpdir:
-        resume_path = write_resume_file(app_doc, tmpdir)
+        resume_path = write_resume_file(app_doc, tmpdir, profile=profile)
         cover_letter_path = write_cover_letter_file(app_doc, tmpdir)
 
         async with launch_page(headless=headless) as page:

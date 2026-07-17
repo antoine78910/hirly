@@ -219,7 +219,7 @@ async def execute_application(
         checkpoint = "submit"
         with tempfile.TemporaryDirectory(prefix="auto_apply_") as tmp:
             documents = {
-                "resume_path": write_resume_file(app_doc, tmp),
+                "resume_path": write_resume_file(app_doc, tmp, profile=profile),
                 "cover_letter_path": write_cover_letter_file(app_doc, tmp),
             }
             ctx = SubmissionContext(job=job, blueprint=blueprint, plan=application_plan,

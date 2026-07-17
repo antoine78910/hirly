@@ -308,3 +308,31 @@ def test_build_candidate_context_uses_real_address_when_disabled(monkeypatch):
     context = agent_module.build_candidate_context(profile, app_doc, user)
 
     assert context["profile.contact.email"] == "candidate@example.com"
+
+
+def test_build_candidate_context_falls_back_to_profile_cv():
+    import apply_agent.agent as agent_module
+
+    profile = {
+        "contact": {"email": "candidate@example.com", "name": "Jane Doe"},
+        "cv_original_b64": "UkVTVU1F",
+        "cv_filename": "jane.pdf",
+    }
+    app_doc = {"application_id": "app_abc123"}
+    context = agent_module.build_candidate_context(profile, app_doc, {"email": "candidate@example.com"})
+    assert context.get("application.tailored_cv_file") is None
+    assert context["profile.cv_file"] == "__resume_file__"
+
+
+def test_write_resume_file_falls_back_to_profile(tmp_path):
+    import base64
+    from apply_agent.browser import write_resume_file
+
+    raw = b"%PDF-1.4 fake"
+    path = write_resume_file(
+        {},
+        str(tmp_path),
+        profile={"cv_original_b64": base64.b64encode(raw).decode("ascii"), "cv_filename": "cv.pdf"},
+    )
+    assert path
+    assert open(path, "rb").read() == raw

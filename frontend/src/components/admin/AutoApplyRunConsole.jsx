@@ -41,8 +41,8 @@ function boolLabel(value) {
 
 function hintForMissing(fieldKey, dataAvailability) {
   if (fieldKey !== "resume") return null;
-  if (dataAvailability?.tailored_cv_file) return null;
-  return "No tailored CV on this application. The user must complete Review (tailored CV) before auto-apply can upload a resume.";
+  if (dataAvailability?.tailored_cv_file || dataAvailability?.profile_cv_original) return null;
+  return "No CV file on this application or profile. The user must upload a resume before auto-apply can continue.";
 }
 
 function blockedHint(report) {

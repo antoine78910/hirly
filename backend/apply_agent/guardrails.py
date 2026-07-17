@@ -46,6 +46,7 @@ APPROVED_SOURCE_PREFIXES = (
     "profile.application_defaults.",
     "profile.application_answers_profile.",
     "profile.education",
+    "profile.cv_file",
     "application.tailored_cv_file",
     "application.cover_letter_file",
     "application.generated_answers",

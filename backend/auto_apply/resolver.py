@@ -25,7 +25,7 @@ _TYPE_SOURCES: Dict[FieldType, List[str]] = {
     FieldType.LOCATION: ["profile.contact.location"],
     FieldType.LINKEDIN: ["profile.contact.linkedin"],
     FieldType.WEBSITE: ["profile.contact.website"],
-    FieldType.RESUME: ["application.tailored_cv_file"],
+    FieldType.RESUME: ["application.tailored_cv_file", "profile.cv_file"],
     FieldType.COVER_LETTER: ["application.cover_letter_file"],
 }
 

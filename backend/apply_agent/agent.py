@@ -126,6 +126,10 @@ def build_candidate_context(profile: Dict[str, Any], app_doc: Dict[str, Any], us
 
     if app_doc.get("tailored_cv_file_b64") or app_doc.get("tailored_cv_text"):
         context["application.tailored_cv_file"] = "__resume_file__"
+    elif profile.get("cv_original_b64"):
+        # Swipe requires an uploaded CV — use the profile original when Review
+        # has not produced a tailored file yet.
+        context["profile.cv_file"] = "__resume_file__"
     cover_letter_text = _cover_letter_text(app_doc)
     if cover_letter_text:
         context["application.cover_letter_file"] = "__cover_letter_file__"

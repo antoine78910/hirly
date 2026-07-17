@@ -96,7 +96,7 @@ def _patch_common(monkeypatch):
         "profile.contact.email": "ada@example.com",
         "application.tailored_cv_file": "__resume_file__",
     })
-    monkeypatch.setattr(ex, "write_resume_file", lambda app_doc, tmp: "/tmp/cv.pdf")
+    monkeypatch.setattr(ex, "write_resume_file", lambda app_doc, tmp, profile=None: "/tmp/cv.pdf")
     monkeypatch.setattr(ex, "write_cover_letter_file", lambda app_doc, tmp: None)
 
 

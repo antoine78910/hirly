@@ -73,3 +73,19 @@ def test_consent_checkbox_auto_resolves():
     assert len(answers) == 1
     assert answers[0].value == "true"
     assert unresolved == []
+
+
+def test_resume_falls_back_to_profile_cv_file():
+    fields = [
+        NormalizedField("resume", FieldType.RESUME, required=True, supported=True,
+                        binding='input[type="file"]'),
+    ]
+    answers, unresolved = resolve(
+        _bp(fields),
+        {"profile.cv_file": "__resume_file__"},
+        profile={"cv_original_b64": "abc"},
+    )
+    assert len(answers) == 1
+    assert answers[0].source == "profile.cv_file"
+    assert answers[0].is_file is True
+    assert unresolved == []
