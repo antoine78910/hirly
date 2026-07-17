@@ -53,7 +53,7 @@
       "xvfb",
       "xauth"
     ],
-    "startCommand": "xvfb-run -a -s \"-screen 0 1920x1080x24\" python run_server.py",
+    "startCommand": "python run_server.py",
     "variables": {
       "PLAYWRIGHT_BROWSERS_PATH": "/app/.playwright-browsers",
       "BROWSER_HEADLESS": "0"

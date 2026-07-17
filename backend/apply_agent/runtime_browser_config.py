@@ -14,7 +14,7 @@ from pathlib import Path
 
 # Sticky PrivateProxy session shared by capture + production headed runs.
 RUNTIME_STICKY_ENABLED = True
-RUNTIME_STICKY_SID = 424
+RUNTIME_STICKY_SID = 618
 RUNTIME_STICKY_TTL_MINUTES = 60
 
 # Always use a real Chromium window (Xvfb on Railway). Set True only to debug.

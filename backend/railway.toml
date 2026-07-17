@@ -1,5 +1,5 @@
 [deploy]
-startCommand = "xvfb-run -a -s \"-screen 0 1920x1080x24\" python run_server.py"
+startCommand = "python run_server.py"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 120
 restartPolicyType = "ON_FAILURE"
