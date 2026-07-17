@@ -190,6 +190,8 @@ _ONETRUST_ACCEPT_SELECTORS = (
     "#onetrust-reject-all-handler",
     "button:has-text('Tout refuser')",
     "button:has-text('Reject all')",
+    "button:has-text('Autoriser tous les cookies')",
+    "button:has-text('Allow all cookies')",
 )
 _ONETRUST_CLOSE_SELECTORS = (
     "#close-pc-btn-handler",
@@ -225,6 +227,7 @@ async def dismiss_cookie_banner(page: Any) -> None:
         "Accept", "Accept all", "I agree", "Got it", "OK",
         "Reject all", "Refuse all",
         "Accepter", "Accepter tous les cookies", "Tout accepter", "J'accepte",
+        "Autoriser tous les cookies", "Allow all cookies",
         "Tout refuser", "Refuser", "Continuer sans accepter",
     ):
         try:

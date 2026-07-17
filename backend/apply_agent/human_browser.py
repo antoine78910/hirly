@@ -129,18 +129,35 @@ async def human_type(locator: Any, page: Any, text: str) -> None:
     value = str(text)
     delays = keystroke_delays_ms(value)
     # Prefer real keyboard events when the locator is focused.
+    typed_ok = False
     try:
         for char, delay in zip(value, delays):
             await page.keyboard.type(char, delay=0)
             await page.wait_for_timeout(delay)
             if should_take_thinking_pause() and random.random() < 0.35:
                 await human_pause(page, 250, 700)
-        return
+        typed_ok = True
     except Exception:
-        pass
-    # Fallback: Playwright sequential press on the locator.
-    avg = int(sum(delays) / len(delays)) if delays else 80
-    await locator.press_sequentially(value, delay=avg)
+        typed_ok = False
+    if not typed_ok:
+        avg = int(sum(delays) / len(delays)) if delays else 80
+        try:
+            await locator.press_sequentially(value, delay=avg)
+            typed_ok = True
+        except Exception:
+            typed_ok = False
+    # SmartRecruiters spl-input shadow fields sometimes swallow keystrokes
+    # (email/tel) — verify and fall back to fill so the value sticks.
+    try:
+        current = await locator.input_value(timeout=1500)
+    except Exception:
+        current = ""
+    if (current or "").strip() != value.strip():
+        try:
+            await locator.fill(value, timeout=5000)
+        except Exception:
+            if not typed_ok:
+                raise
 
 
 async def human_check(locator: Any, page: Any) -> None:
