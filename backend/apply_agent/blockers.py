@@ -192,6 +192,8 @@ _ONETRUST_ACCEPT_SELECTORS = (
     "button:has-text('Reject all')",
     "button:has-text('Autoriser tous les cookies')",
     "button:has-text('Allow all cookies')",
+    "button:has-text('Confirmer la sélection')",
+    "button:has-text('Confirm my choices')",
 )
 _ONETRUST_CLOSE_SELECTORS = (
     "#close-pc-btn-handler",
