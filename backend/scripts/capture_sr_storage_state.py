@@ -175,15 +175,14 @@ async def main() -> None:
         hint_path.write_text(compact, encoding="utf-8")
         print(f"Also wrote compact JSON -> {hint_path}")
         print()
-        print("Railway env (use the SAME sticky sid as this capture):")
-        print(f"  BROWSER_PROXY={os.environ.get('BROWSER_PROXY')}")
-        print("  BROWSER_PROXY_STICKY=1")
-        if sticky_sid:
-            print(f"  BROWSER_PROXY_STICKY_SID={sticky_sid}")
-        print(f"  BROWSER_PROXY_STICKY_TTL={os.environ.get('BROWSER_PROXY_STICKY_TTL', '120')}")
-        print("  BROWSER_STORAGE_STATE_JSON=<paste contents of sr-storage-state.railway.txt>")
+        bundled = ROOT / "apply_agent" / "data" / "sr_storage_state.json"
+        bundled.write_text(OUT_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+        print(f"Copied into deployed bundle -> {bundled}")
         print()
-        print("Do NOT commit these JSON files.")
+        print("Next: commit + push (sticky SID lives in runtime_browser_config.py).")
+        print("  git add apply_agent/data/sr_storage_state.json apply_agent/runtime_browser_config.py")
+        print("  git commit && git push")
+        print("Railway no longer needs BROWSER_STORAGE_STATE_JSON / STICKY_SID in the dashboard.")
 
         await context.close()
         await browser.close()

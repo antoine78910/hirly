@@ -115,3 +115,6 @@ backend/.secrets/
 backend/sr-storage-state.json
 backend/sr-storage-state.railway.txt
 backend/**/sr-storage-state*.json
+# Bundled runtime cookies (deployed with the app — do not ignore):
+!backend/apply_agent/data/
+!backend/apply_agent/data/sr_storage_state.json

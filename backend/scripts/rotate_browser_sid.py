@@ -14,8 +14,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from apply_agent.browser_env import load_browser_secrets, rotate_sticky_sid, secrets_path
+from apply_agent.browser_env import load_browser_secrets, rotate_sticky_sid
 from apply_agent.browser import browser_proxy_settings
+from apply_agent.runtime_browser_config import BUNDLED_STORAGE_STATE_PATH
 
 
 def main() -> None:
@@ -27,10 +28,13 @@ def main() -> None:
     rotate_sticky_sid(sid)
     load_browser_secrets(override=True)
     proxy = browser_proxy_settings() or {}
-    print(f"Updated {secrets_path()}")
+    print("Updated apply_agent/runtime_browser_config.py RUNTIME_STICKY_SID")
     print(f"BROWSER_PROXY_STICKY_SID={sid}")
     print(f"sticky username={proxy.get('username')}")
-    print("Recapture cookies next: python scripts/capture_sr_storage_state.py")
+    print("Recapture, then copy JSON to:", BUNDLED_STORAGE_STATE_PATH)
+    print("  python scripts/capture_sr_storage_state.py")
+    print("  copy sr-storage-state.json -> apply_agent/data/sr_storage_state.json")
+    print("  git add + push")
 
 
 if __name__ == "__main__":
