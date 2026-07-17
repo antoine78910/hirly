@@ -202,17 +202,18 @@ def test_release_stale_in_flight_unblocks_claim():
             db, user_id="u1", job_id="j1", provider="smartrecruiters", driver="smartrecruiters",
         )
         assert first is not None
-        # Simulate an orphan left by a killed Railway worker.
-        first["claimed_at"] = "2020-01-01T00:00:00+00:00"
-        first["updated_at"] = "2020-01-01T00:00:00+00:00"
-        blocked = await metrics.claim_attempt(
+        # Simulate an orphan left by a killed Railway worker (mutate stored row).
+        stored = db.auto_apply_attempts.rows[0]
+        stored["claimed_at"] = "2020-01-01T00:00:00+00:00"
+        stored["updated_at"] = "2020-01-01T00:00:00+00:00"
+        second = await metrics.claim_attempt(
             db, user_id="u1", job_id="j1", provider="smartrecruiters", driver="smartrecruiters",
         )
         # Without release, insert would conflict — release_stale runs inside claim_attempt.
-        assert blocked is not None
-        assert blocked["id"] != first["id"]
-        assert first["status"] == "error"
-        assert first["reason"] == "stale_in_flight_released"
+        assert second is not None
+        assert second["id"] != first["id"]
+        assert stored["status"] == "error"
+        assert stored["reason"] == "stale_in_flight_released"
         return True
 
     assert asyncio.run(run()) is True
