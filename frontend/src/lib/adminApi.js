@@ -1,3 +1,40 @@
+import { getDirectApiBase } from "./api";
+
+/** Absolute Railway API URL in prod; relative path locally (axios baseURL). */
+export function autoApplyApiUrl(path) {
+  const clean = path.startsWith("/") ? path : `/${path}`;
+  const base = (getDirectApiBase() || "").replace(/\/+$/, "");
+  if (!base || base === "/api" || !/^https?:\/\//i.test(base)) {
+    return clean;
+  }
+  return `${base}${clean}`;
+}
+
+export function isTransientNetworkError(err) {
+  if (err?.response) return false;
+  if (err?.code === "ERR_NETWORK" || err?.code === "ECONNABORTED") return true;
+  const msg = String(err?.message || "");
+  return /network error|failed to fetch|load failed/i.test(msg);
+}
+
+/**
+ * Retry a request on brief network blips (Railway/Vercel deploy restarts).
+ * Does not retry HTTP error responses.
+ */
+export async function withNetworkRetries(fn, { attempts = 3, delayMs = 1200 } = {}) {
+  let lastErr;
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (!isTransientNetworkError(err) || i === attempts - 1) throw err;
+      await new Promise((resolve) => setTimeout(resolve, delayMs * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 /** Map axios errors from admin API calls to user-facing messages. */
 export function adminApiErrorMessage(err, fallback) {
   if (!err?.response) {
@@ -15,8 +52,9 @@ export function adminApiErrorMessage(err, fallback) {
       return "Could not reach the API server. Start the backend (port 8001) and refresh.";
     }
     return (
-      "Could not reach the server (network/CORS). "
-      + "If this was a long auto-apply run, Railway may have dropped the connection — check logs and retry."
+      "Could not reach the API (network blip or deploy restart). "
+      + "Auto-apply now calls Railway directly — wait a few seconds and retry. "
+      + "If it keeps failing, check Railway logs."
     );
   }
 

@@ -2,7 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 import { Loader2, Play, RefreshCw, Terminal } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
-import { adminApiErrorMessage, syntheticAutoApplyErrorReport } from "../lib/adminApi";
+import {
+  adminApiErrorMessage,
+  autoApplyApiUrl,
+  isTransientNetworkError,
+  syntheticAutoApplyErrorReport,
+  withNetworkRetries,
+} from "../lib/adminApi";
 import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
 import AutoApplyRunPanel from "../components/admin/AutoApplyRunPanel";
 import { Button } from "../components/ui/button";
@@ -87,18 +93,22 @@ function reportFromAttempt(attempt) {
 /**
  * Start execute (returns immediately) then poll status until the background
  * browser run finishes — avoids Railway gateway 502 on long proxy retries.
+ * Uses direct Railway API in production (bypasses Vercel rewrite drops).
  */
 async function runAutoApplyWithPolling({ jobId, userId, dryRun }) {
-  const { data: start } = await api.post(
-    "/admin/auto-apply/execute",
-    {
-      job_id: jobId,
-      user_id: userId,
-      dry_run: dryRun,
-      headless: true,
-    },
-    { timeout: 60000 },
-  );
+  const start = await withNetworkRetries(async () => {
+    const { data } = await api.post(
+      autoApplyApiUrl("/admin/auto-apply/execute"),
+      {
+        job_id: jobId,
+        user_id: userId,
+        dry_run: dryRun,
+        headless: true,
+      },
+      { timeout: 60000 },
+    );
+    return data;
+  });
 
   if (!start?.polling && start?.result && start.result.status !== "in_flight") {
     return start.result;
@@ -107,17 +117,29 @@ async function runAutoApplyWithPolling({ jobId, userId, dryRun }) {
   const startedAt = start?.started_at || new Date().toISOString();
   const pollUserId = start?.user_id || userId;
   const deadline = Date.now() + 12 * 60 * 1000; // proxy retries can take several minutes
+  let consecutiveNetworkErrors = 0;
 
   while (Date.now() < deadline) {
     await sleep(2500);
-    const { data } = await api.get("/admin/auto-apply/status", {
-      params: { job_id: jobId, user_id: pollUserId },
-      timeout: 30000,
-    });
-    const attempt = data?.attempt;
-    if (!attemptIsForThisRun(attempt, startedAt)) continue;
-    if (attempt.status === "in_flight" && !attempt.execution_report) continue;
-    return reportFromAttempt(attempt);
+    try {
+      const { data } = await api.get(autoApplyApiUrl("/admin/auto-apply/status"), {
+        params: { job_id: jobId, user_id: pollUserId },
+        timeout: 30000,
+      });
+      consecutiveNetworkErrors = 0;
+      const attempt = data?.attempt;
+      if (!attemptIsForThisRun(attempt, startedAt)) continue;
+      if (attempt.status === "in_flight" && !attempt.execution_report) continue;
+      return reportFromAttempt(attempt);
+    } catch (err) {
+      // Brief deploy/network blips during a long browser run should not kill the poll loop.
+      if (isTransientNetworkError(err)) {
+        consecutiveNetworkErrors += 1;
+        if (consecutiveNetworkErrors >= 10) throw err;
+        continue;
+      }
+      throw err;
+    }
   }
 
   throw Object.assign(new Error("Auto-apply is still running after 12 minutes. Check Railway logs or refresh status."), {

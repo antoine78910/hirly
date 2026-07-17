@@ -1,4 +1,51 @@
-import { adminApiErrorMessage, syntheticAutoApplyErrorReport } from "./adminApi";
+import {
+  adminApiErrorMessage,
+  autoApplyApiUrl,
+  isTransientNetworkError,
+  syntheticAutoApplyErrorReport,
+  withNetworkRetries,
+} from "./adminApi";
+
+describe("autoApplyApiUrl", () => {
+  it("keeps relative paths when direct base is same-origin /api", () => {
+    expect(autoApplyApiUrl("/admin/auto-apply/execute")).toBe("/admin/auto-apply/execute");
+  });
+});
+
+describe("isTransientNetworkError", () => {
+  it("detects axios network failures", () => {
+    expect(isTransientNetworkError({ code: "ERR_NETWORK", message: "Network Error" })).toBe(true);
+    expect(isTransientNetworkError({ response: { status: 500 } })).toBe(false);
+  });
+});
+
+describe("withNetworkRetries", () => {
+  it("retries transient network errors then succeeds", async () => {
+    let calls = 0;
+    const result = await withNetworkRetries(async () => {
+      calls += 1;
+      if (calls < 2) {
+        const err = new Error("Network Error");
+        err.code = "ERR_NETWORK";
+        throw err;
+      }
+      return "ok";
+    }, { attempts: 3, delayMs: 1 });
+    expect(result).toBe("ok");
+    expect(calls).toBe(2);
+  });
+
+  it("does not retry HTTP responses", async () => {
+    let calls = 0;
+    await expect(withNetworkRetries(async () => {
+      calls += 1;
+      const err = new Error("boom");
+      err.response = { status: 500 };
+      throw err;
+    }, { attempts: 3, delayMs: 1 })).rejects.toMatchObject({ response: { status: 500 } });
+    expect(calls).toBe(1);
+  });
+});
 
 describe("adminApiErrorMessage", () => {
   it("explains gateway timeouts", () => {
@@ -16,7 +63,7 @@ describe("adminApiErrorMessage", () => {
   it("does not collapse network failures to Execution failed", () => {
     const msg = adminApiErrorMessage({ message: "Network Error", code: "ERR_NETWORK" }, "Execution failed");
     expect(msg).not.toBe("Execution failed");
-    expect(msg.toLowerCase()).toMatch(/server|network|railway|cors/);
+    expect(msg.toLowerCase()).toMatch(/api|network|railway|retry/);
   });
 
   it("explains client timeouts", () => {
