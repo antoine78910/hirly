@@ -1108,6 +1108,7 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
         self.rome_profiles = SupabaseCollectionAdapter("rome_profiles", supabase_url, secret_key)
         self.friend_referral_codes = SupabaseCollectionAdapter("friend_referral_codes", supabase_url, secret_key)
         self.friend_referral_redemptions = SupabaseCollectionAdapter("friend_referral_redemptions", supabase_url, secret_key)
+        self.notifications = SupabaseCollectionAdapter("notifications", supabase_url, secret_key)
 
     async def close(self) -> None:
         return None
