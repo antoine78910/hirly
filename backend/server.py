@@ -11099,8 +11099,13 @@ async def admin_get_user(user_id: str, admin: User = Depends(require_admin_user)
     billing_payload = _billing_status_payload(user_doc)
     billing_raw = _billing_from_user(user_doc)
 
-    all_events = await _analytics_events()
-    user_events = [event for event in all_events if event.get("user_id") == user_id]
+    try:
+        user_events = await db.analytics_events.find(
+            {"user_id": user_id}, {"_id": 0},
+        ).sort("created_at", -1).to_list(2000)
+    except Exception as exc:
+        logger.warning("admin_user_analytics_events_read_failed user_id=%s error=%s", user_id, str(exc)[:200])
+        user_events = []
     onboarding_progress = _onboarding_progress_for_events(user_events)
     activity_stats = _estimate_time_spent([event.get("created_at") for event in user_events])
     last_event_at = max(
