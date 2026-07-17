@@ -36,6 +36,14 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+try:
+    from dotenv import load_dotenv
+
+    # override=True: a leftover SID=7 in the shell must not win over .env
+    load_dotenv(ROOT / ".env", override=True)
+except ImportError:
+    pass
+
 from apply_agent.browser import (  # noqa: E402
     browser_context_options,
     browser_proxy_settings,
@@ -59,19 +67,35 @@ async def _current_ip(page) -> str:
         return f"(ip check failed: {exc})"
 
 
+def _proxy_looks_dead(ip_body: str) -> bool:
+    text = (ip_body or "").lower()
+    markers = (
+        "failed",
+        "connection to the target host",
+        "tunnel",
+        "ip check failed",
+        "err_",
+        "proxy error",
+    )
+    if any(m in text for m in markers):
+        return True
+    return '"ip"' not in text and not any(ch.isdigit() for ch in text)
+
+
 async def main() -> None:
     start_url = (os.environ.get("SR_CAPTURE_URL") or DEFAULT_START).strip()
     proxy = browser_proxy_settings()
     if not proxy:
         raise SystemExit(
             "BROWSER_PROXY is required so cookies are minted on the proxy IP.\n"
-            "Example: jw7ib-fr:PASS:edge1-us.privateproxy.me:8888"
+            "Example: jw7ib-fr:PASS:edge1-us.privateproxy.me:8888\n"
+            "Tip: put vars in backend/.env — this script loads it automatically."
         )
 
     sticky_sid = os.environ.get("BROWSER_PROXY_STICKY_SID", "").strip()
     if not sticky_sid:
         print(
-            "WARNING: set BROWSER_PROXY_STICKY_SID (e.g. 7) so Railway reuses "
+            "WARNING: set BROWSER_PROXY_STICKY_SID (e.g. 42) so Railway reuses "
             "the SAME sticky IP as this capture session."
         )
 
@@ -83,6 +107,7 @@ async def main() -> None:
     print("  user  :", proxy.get("username"))
     print("  start :", start_url)
     print("  out   :", OUT_PATH)
+    print("  env   :", ROOT / ".env")
 
     async with async_playwright() as p:
         launch_kwargs = {
@@ -105,8 +130,33 @@ async def main() -> None:
 
         ip_body = await _current_ip(page)
         print("Exit IP via proxy:", ip_body)
+        if _proxy_looks_dead(ip_body):
+            await context.close()
+            await browser.close()
+            raise SystemExit(
+                "Proxy exit is dead (tunnel/connect failure).\n"
+                "In backend/.env set a NEW BROWSER_PROXY_STICKY_SID (e.g. 43 or 55),\n"
+                "optionally drop -city-montpellier from BROWSER_PROXY, then retry:\n"
+                "  python scripts/capture_sr_storage_state.py"
+            )
 
-        await page.goto(start_url, wait_until="domcontentloaded", timeout=90000)
+        last_err: Exception | None = None
+        for attempt in range(1, 4):
+            try:
+                await page.goto(start_url, wait_until="domcontentloaded", timeout=90000)
+                last_err = None
+                break
+            except Exception as exc:
+                last_err = exc
+                print(f"goto attempt {attempt}/3 failed: {exc.__class__.__name__}: {str(exc)[:160]}")
+                await page.wait_for_timeout(1500)
+        if last_err is not None:
+            await context.close()
+            await browser.close()
+            raise SystemExit(
+                f"Could not open SmartRecruiters via proxy: {last_err}\n"
+                "Change BROWSER_PROXY_STICKY_SID in .env and retry."
+            ) from last_err
         print()
         print("=" * 60)
         print("In the Chrome window:")
