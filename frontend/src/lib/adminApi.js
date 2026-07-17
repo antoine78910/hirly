@@ -45,6 +45,9 @@ export async function withNetworkRetries(fn, { attempts = 3, delayMs = 1200 } = 
 /** Map axios errors from admin API calls to user-facing messages. */
 export function adminApiErrorMessage(err, fallback) {
   if (!err?.response) {
+    if (err?.code === "POLL_DEADLINE") {
+      return String(err.message || fallback || "Auto-apply is still running.");
+    }
     if (err?.code === "ECONNABORTED" || /timeout/i.test(String(err?.message || ""))) {
       return (
         "Auto-apply is still running or the API stopped answering status polls. "
@@ -132,7 +135,10 @@ export function syntheticAutoApplyErrorReport(err, fallbackMessage) {
   }
 
   const status = err?.response?.status || null;
-  const timedOut = err?.code === "ECONNABORTED" || /timeout/i.test(String(err?.message || ""));
+  const pollDeadline = err?.code === "POLL_DEADLINE";
+  const timedOut = !pollDeadline && (
+    err?.code === "ECONNABORTED" || /timeout/i.test(String(err?.message || ""))
+  );
   const message = adminApiErrorMessage(err, fallbackMessage || "Execution failed");
 
   let phase = "execute";
@@ -148,9 +154,11 @@ export function syntheticAutoApplyErrorReport(err, fallbackMessage) {
       message,
       phase,
       http_status: status,
-      timed_out: timedOut,
-      exception_class: timedOut ? "Timeout" : (status ? `HTTP${status}` : "NetworkError"),
-      hint: timedOut || status === 502 || status === 504
+      timed_out: timedOut || pollDeadline,
+      exception_class: pollDeadline
+        ? "PollDeadline"
+        : (timedOut ? "Timeout" : (status ? `HTTP${status}` : "NetworkError")),
+      hint: timedOut || pollDeadline || status === 502 || status === 504
         ? "Long browser runs with proxy retries can exceed the gateway limit. Retry, or check Railway logs."
         : undefined,
     };

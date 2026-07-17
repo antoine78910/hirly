@@ -192,3 +192,27 @@ def test_known_signatures_and_summary():
     sigs, summ = asyncio.run(run())
     assert sigs == frozenset({"sigA"})
     assert summ["verified_success"] == 1 and summ["submit_attempts"] == 2
+
+
+def test_release_stale_in_flight_unblocks_claim():
+    db = _FakeDB()
+
+    async def run():
+        first = await metrics.claim_attempt(
+            db, user_id="u1", job_id="j1", provider="smartrecruiters", driver="smartrecruiters",
+        )
+        assert first is not None
+        # Simulate an orphan left by a killed Railway worker.
+        first["claimed_at"] = "2020-01-01T00:00:00+00:00"
+        first["updated_at"] = "2020-01-01T00:00:00+00:00"
+        blocked = await metrics.claim_attempt(
+            db, user_id="u1", job_id="j1", provider="smartrecruiters", driver="smartrecruiters",
+        )
+        # Without release, insert would conflict — release_stale runs inside claim_attempt.
+        assert blocked is not None
+        assert blocked["id"] != first["id"]
+        assert first["status"] == "error"
+        assert first["reason"] == "stale_in_flight_released"
+        return True
+
+    assert asyncio.run(run()) is True

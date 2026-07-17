@@ -9819,6 +9819,7 @@ async def _admin_auto_apply_background_run(
     target_user: User,
     dry_run: bool,
     headless: Optional[bool],
+    run_id: Optional[str] = None,
 ) -> None:
     """Run prepare + execute off the HTTP request so Railway's gateway cannot 502."""
     from auto_apply.debug_report import format_run_error, transport_error_report
@@ -9835,6 +9836,11 @@ async def _admin_auto_apply_background_run(
             dry_run=dry_run,
             headless=_resolve_auto_apply_headless(headless),
         )
+        if run_id and isinstance(result, dict):
+            result.setdefault("debug", {})
+            if isinstance(result["debug"], dict):
+                result["debug"]["run_id"] = run_id
+            result["run_id"] = run_id
     except HTTPException as http_exc:
         detail = http_exc.detail
         message = detail if isinstance(detail, str) else (
@@ -9900,12 +9906,31 @@ async def admin_auto_apply_execute(body: AdminAutoApplyExecuteRequest, admin: Us
             }
 
         started_at = datetime.now(timezone.utc).isoformat()
+        run_id = uuid.uuid4().hex
+        # Orphan in_flight rows (killed deploy/worker) block the unique claim index.
+        try:
+            from auto_apply.metrics import release_stale_in_flight as _release_stale
+
+            released = await _release_stale_in_flight(
+                db, target_user.user_id, body.job_id, max_age_s=120.0, force=False,
+            )
+            if released:
+                logger.info(
+                    "admin_auto_apply_released_stale user=%s job=%s n=%s",
+                    target_user.user_id,
+                    body.job_id,
+                    released,
+                )
+        except Exception as release_exc:
+            logger.warning("admin_auto_apply_release_stale_failed error=%s", str(release_exc)[:200])
+
         task = asyncio.create_task(
             _admin_auto_apply_background_run(
                 job_id=body.job_id,
                 target_user=target_user,
                 dry_run=body.dry_run,
                 headless=body.headless,
+                run_id=run_id,
             )
         )
         _AUTO_APPLY_BACKGROUND_TASKS.add(task)
@@ -9915,6 +9940,7 @@ async def admin_auto_apply_execute(body: AdminAutoApplyExecuteRequest, admin: Us
             "accepted": True,
             "polling": True,
             "started_at": started_at,
+            "run_id": run_id,
             "job_id": body.job_id,
             "user_id": target_user.user_id,
             "result": {
@@ -9935,6 +9961,7 @@ async def admin_auto_apply_execute(body: AdminAutoApplyExecuteRequest, admin: Us
                 "job_id": body.job_id,
                 "user_id": target_user.user_id,
                 "claimed_at": started_at,
+                "run_id": run_id,
             },
         }
     except HTTPException as http_exc:

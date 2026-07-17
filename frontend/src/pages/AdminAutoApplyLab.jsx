@@ -58,11 +58,25 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function attemptIsForThisRun(attempt, startedAt) {
-  if (!attempt || !startedAt) return false;
-  const claimed = attempt.claimed_at || attempt.created_at || "";
-  const updated = attempt.updated_at || "";
-  return claimed >= startedAt || updated >= startedAt;
+function attemptIsForThisRun(attempt, startedAt, runId) {
+  if (!attempt) return false;
+  if (runId) {
+    if (attempt.run_id === runId) return true;
+    if (attempt.execution_report?.run_id === runId) return true;
+    if (attempt.execution_report?.debug?.run_id === runId) return true;
+  }
+  if (!startedAt) return false;
+  // Allow slight clock skew between API accept time and DB claim time.
+  const startedMs = Date.parse(startedAt);
+  const claimedMs = Date.parse(attempt.claimed_at || attempt.created_at || "") || 0;
+  const updatedMs = Date.parse(attempt.updated_at || "") || 0;
+  if (!Number.isFinite(startedMs)) {
+    const claimed = attempt.claimed_at || attempt.created_at || "";
+    const updated = attempt.updated_at || "";
+    return claimed >= startedAt || updated >= startedAt;
+  }
+  const skewMs = 15_000;
+  return claimedMs >= startedMs - skewMs || updatedMs >= startedMs - skewMs;
 }
 
 function reportFromAttempt(attempt) {
@@ -91,6 +105,14 @@ function reportFromAttempt(attempt) {
   };
 }
 
+async function fetchLatestAttempt(jobId, userId) {
+  const { data } = await api.get(autoApplyApiUrl("/admin/auto-apply/status"), {
+    params: { job_id: jobId, user_id: userId },
+    timeout: 20000,
+  });
+  return data?.attempt || null;
+}
+
 /**
  * Start execute (returns immediately) then poll status until the background
  * browser run finishes — avoids Railway gateway 502 on long proxy retries.
@@ -107,7 +129,8 @@ async function runAutoApplyWithPolling({ jobId, userId, dryRun }) {
         // Always headed (local Chrome / Railway Xvfb). Backend also forces headed.
         headless: false,
       },
-      { timeout: 60000 },
+      // Cold start + admin auth can exceed 60s after a Railway deploy.
+      { timeout: 120000 },
     );
     return data;
   });
@@ -117,40 +140,69 @@ async function runAutoApplyWithPolling({ jobId, userId, dryRun }) {
   }
 
   const startedAt = start?.started_at || new Date().toISOString();
+  const runId = start?.run_id || null;
   const pollUserId = start?.user_id || userId;
-  // Driver proxy retries are capped server-side (~3 min); keep a buffer for inspect/fill.
-  const deadline = Date.now() + 6 * 60 * 1000;
+  // Driver + captcha + fill regularly needs >6 min on a cold sticky proxy.
+  const deadline = Date.now() + 10 * 60 * 1000;
   let consecutiveNetworkErrors = 0;
+  let consecutiveTimeouts = 0;
 
   while (Date.now() < deadline) {
-    await sleep(2000);
+    await sleep(2500);
     try {
-      const { data } = await api.get(autoApplyApiUrl("/admin/auto-apply/status"), {
-        params: { job_id: jobId, user_id: pollUserId },
-        // Keep short: Chromium can starve the event loop; long timeouts just delay the next poll.
-        timeout: 15000,
-      });
+      const attempt = await fetchLatestAttempt(jobId, pollUserId);
       consecutiveNetworkErrors = 0;
-      const attempt = data?.attempt;
-      if (!attemptIsForThisRun(attempt, startedAt)) continue;
+      consecutiveTimeouts = 0;
+      if (!attemptIsForThisRun(attempt, startedAt, runId)) continue;
       if (attempt.status === "in_flight" && !attempt.execution_report) continue;
       return reportFromAttempt(attempt);
     } catch (err) {
-      // Timeouts mean "status slow right now" — keep polling until the deadline.
-      if (isRequestTimeoutError(err)) continue;
+      // Timeouts mean "status worker busy" — keep polling until the deadline.
+      if (isRequestTimeoutError(err)) {
+        consecutiveTimeouts += 1;
+        continue;
+      }
       if (isTransientNetworkError(err)) {
         consecutiveNetworkErrors += 1;
-        if (consecutiveNetworkErrors >= 20) throw err;
+        if (consecutiveNetworkErrors >= 30) throw err;
         continue;
       }
       throw err;
     }
   }
 
-  throw Object.assign(
-    new Error("Auto-apply is still running after 6 minutes. Check Railway logs or refresh status."),
-    { code: "ECONNABORTED" },
+  // One last status read before surfacing a poll-deadline error.
+  try {
+    const attempt = await fetchLatestAttempt(jobId, pollUserId);
+    if (attempt && attemptIsForThisRun(attempt, startedAt, runId)) {
+      if (attempt.execution_report) return reportFromAttempt(attempt);
+      if (attempt.status === "in_flight") {
+        return {
+          status: "in_flight",
+          stage_reached: attempt.stage_reached || "driver",
+          reason: "still_running_after_poll_deadline",
+          debug: {
+            timeline: [{
+              stage: "driver",
+              status: "ok",
+              detail: "Browser still running after 10 minutes — open Railway logs or refresh status shortly.",
+            }],
+          },
+        };
+      }
+      return reportFromAttempt(attempt);
+    }
+  } catch {
+    // fall through
+  }
+
+  const err = new Error(
+    consecutiveTimeouts > 5
+      ? "Status polls kept timing out (browser worker busy). Retry after deploy finishes, or check Railway logs."
+      : "Auto-apply is still running after 10 minutes. Check Railway logs or refresh status.",
   );
+  err.code = "POLL_DEADLINE";
+  throw err;
 }
 
 export default function AdminAutoApplyLab() {

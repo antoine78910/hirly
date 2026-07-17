@@ -469,7 +469,8 @@ def ensure_virtual_display() -> bool:
             stderr=subprocess.DEVNULL,
         )
         os.environ["DISPLAY"] = display
-        time.sleep(0.4)
+        # Brief yield for Xvfb bind; keep short so the ASGI loop stays responsive.
+        time.sleep(0.15)
         if _XVFB_PROC.poll() is not None:
             logger.warning("xvfb_exited_early display=%s code=%s", display, _XVFB_PROC.returncode)
             return False

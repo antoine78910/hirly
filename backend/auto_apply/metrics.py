@@ -26,9 +26,56 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+async def release_stale_in_flight(
+    db,
+    user_id: str,
+    job_id: str,
+    *,
+    max_age_s: float = 180.0,
+    force: bool = False,
+) -> int:
+    """Mark stuck ``in_flight`` rows terminal so a new admin run can claim.
+
+    Railway deploys / killed workers leave orphan in_flight rows that block
+    claim_attempt via the partial unique index.
+    """
+    rows = await db.auto_apply_attempts.find(
+        {"user_id": user_id, "job_id": job_id, "status": "in_flight"},
+    ).limit(20).to_list(20)
+    if not rows:
+        return 0
+    now = datetime.now(timezone.utc)
+    released = 0
+    for row in rows:
+        if not force:
+            stamp = row.get("updated_at") or row.get("claimed_at") or row.get("created_at") or ""
+            try:
+                claimed = datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
+                if claimed.tzinfo is None:
+                    claimed = claimed.replace(tzinfo=timezone.utc)
+                age = (now - claimed).total_seconds()
+            except Exception:
+                age = max_age_s + 1
+            if age < max_age_s:
+                continue
+        await db.auto_apply_attempts.update_one(
+            {"id": row["id"]},
+            {"$set": {
+                "status": "error",
+                "reason": "stale_in_flight_released",
+                "stage_reached": row.get("stage_reached") or "driver",
+                "updated_at": _now(),
+            }},
+        )
+        released += 1
+    return released
+
+
 async def claim_attempt(
     db, *, user_id: str, job_id: str, provider: str, driver: str, driver_version: str = "unknown",
 ) -> Optional[Dict[str, Any]]:
+    # Auto-clear orphans from killed Railway workers before inserting.
+    await release_stale_in_flight(db, user_id, job_id, max_age_s=180.0)
     row = {
         "id": uuid.uuid4().hex,
         "user_id": user_id,

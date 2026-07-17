@@ -44,4 +44,15 @@ import uvicorn
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8001"))
-    uvicorn.run("server:app", host="0.0.0.0", port=port, log_level="info")
+    # Two workers: Chromium can starve one event loop during headed apply;
+    # the other worker keeps answering /admin/auto-apply/status polls from DB.
+    workers = int(os.environ.get("WEB_CONCURRENCY", "2") or "2")
+    workers = max(1, min(workers, 4))
+    uvicorn.run(
+        "server:app",
+        host="0.0.0.0",
+        port=port,
+        workers=workers,
+        log_level="info",
+        timeout_keep_alive=75,
+    )
