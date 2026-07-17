@@ -30,7 +30,7 @@ def main() -> None:
         "AUTO_APPLY_DRIVER_DEADLINE_S",
     ]
     print("=== Railway variables (from .browser-secrets.env) ===")
-    print("BROWSER_HEADLESS=true")
+    print("BROWSER_HEADLESS=false")
     print("BROWSER_SUBMIT_DRY_RUN=false")
     for key in keys:
         val = (os.environ.get(key) or "").strip()

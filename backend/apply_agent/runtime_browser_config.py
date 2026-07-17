@@ -12,10 +12,13 @@ import json
 import os
 from pathlib import Path
 
-# Sticky PrivateProxy session shared by capture + production headless runs.
+# Sticky PrivateProxy session shared by capture + production headed runs.
 RUNTIME_STICKY_ENABLED = True
 RUNTIME_STICKY_SID = 424
 RUNTIME_STICKY_TTL_MINUTES = 60
+
+# Always use a real Chromium window (Xvfb on Railway). Set True only to debug.
+RUNTIME_HEADLESS = False
 
 # Fallback when Railway/local BROWSER_PROXY is unset (same pack as local capture).
 RUNTIME_BROWSER_PROXY = "jw7ib-fr:fw9fvvdy:edge1-us.privateproxy.me:8888"
@@ -38,7 +41,7 @@ def bundled_storage_state_json() -> str:
 
 
 def apply_runtime_browser_defaults(*, force: bool = True) -> None:
-    """Inject sticky SID + bundled cookies into os.environ.
+    """Inject sticky SID + bundled cookies + headed mode into os.environ.
 
     force=True (default): code wins over Railway/env so a push updates prod.
     """
@@ -50,6 +53,9 @@ def apply_runtime_browser_defaults(*, force: bool = True) -> None:
         os.environ["BROWSER_PROXY_STICKY"] = "1"
         os.environ["BROWSER_PROXY_STICKY_SID"] = str(RUNTIME_STICKY_SID)
         os.environ["BROWSER_PROXY_STICKY_TTL"] = str(RUNTIME_STICKY_TTL_MINUTES)
+
+    if force:
+        os.environ["BROWSER_HEADLESS"] = "1" if RUNTIME_HEADLESS else "0"
 
     bundled = bundled_storage_state_json()
     if bundled and (force or not (os.environ.get("BROWSER_STORAGE_STATE_JSON") or "").strip()):

@@ -16,7 +16,9 @@
     "libasound2",
     "libpango-1.0-0",
     "libcairo2",
-    "fonts-liberation"
+    "fonts-liberation",
+    "xvfb",
+    "xauth"
   ],
   "steps": {
     "build": {
@@ -47,11 +49,14 @@
       "libasound2",
       "libpango-1.0-0",
       "libcairo2",
-      "fonts-liberation"
+      "fonts-liberation",
+      "xvfb",
+      "xauth"
     ],
-    "startCommand": "python run_server.py",
+    "startCommand": "xvfb-run -a -s \"-screen 0 1920x1080x24\" python run_server.py",
     "variables": {
-      "PLAYWRIGHT_BROWSERS_PATH": "/app/.playwright-browsers"
+      "PLAYWRIGHT_BROWSERS_PATH": "/app/.playwright-browsers",
+      "BROWSER_HEADLESS": "0"
     }
   }
 }

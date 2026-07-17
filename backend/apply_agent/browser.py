@@ -14,6 +14,8 @@ import os
 import random
 import re
 import shutil
+import subprocess
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, AsyncIterator, Dict, List, Optional
@@ -138,7 +140,7 @@ def browser_context_options() -> Dict[str, Any]:
     return options
 
 
-def chromium_launch_args(*, headless: bool = True) -> List[str]:
+def chromium_launch_args(*, headless: bool = False) -> List[str]:
     args = [
         "--disable-blink-features=AutomationControlled",
         "--disable-dev-shm-usage",
@@ -446,21 +448,64 @@ def _load_cookies_from_env() -> List[Dict[str, Any]]:
     return cookies
 
 
-def headed_browser_available() -> bool:
-    """True when the host can open a visible Chromium window (local dev)."""
+_XVFB_PROC: Any = None
+
+
+def ensure_virtual_display() -> bool:
+    """Ensure a DISPLAY exists (native local UI, or Xvfb on Linux/Railway)."""
+    global _XVFB_PROC
     if os.name == "nt":
         return True
     if os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"):
         return True
-    return False
-
-
-def effective_headless(requested: bool = True) -> bool:
-    """Servers without a display must stay headless even if the client asks otherwise."""
-    if not requested and headed_browser_available():
+    xvfb = shutil.which("Xvfb")
+    if not xvfb:
         return False
-    if not requested and not headed_browser_available():
-        logger.warning("headed_browser_unavailable_forcing_headless")
+    display = (os.environ.get("BROWSER_XVFB_DISPLAY") or ":99").strip() or ":99"
+    try:
+        _XVFB_PROC = subprocess.Popen(
+            [xvfb, display, "-screen", "0", "1920x1080x24", "-nolisten", "tcp"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        os.environ["DISPLAY"] = display
+        time.sleep(0.4)
+        if _XVFB_PROC.poll() is not None:
+            logger.warning("xvfb_exited_early display=%s code=%s", display, _XVFB_PROC.returncode)
+            return False
+        logger.info("xvfb_started display=%s", display)
+        return True
+    except Exception as exc:
+        logger.warning("xvfb_start_failed error=%s", str(exc)[:200])
+        return False
+
+
+def headed_browser_available() -> bool:
+    """True when Chromium can run with a real window (local UI or Xvfb)."""
+    if os.name == "nt":
+        return True
+    if os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"):
+        return True
+    return ensure_virtual_display()
+
+
+def env_forces_headless() -> bool:
+    return os.environ.get("BROWSER_HEADLESS", "0").lower() in ("1", "true", "yes", "on")
+
+
+def effective_headless(requested: bool = False) -> bool:
+    """Prefer a real Chromium window. Headless only if env forces it or no display.
+
+    ``requested=True`` is treated as a soft preference; BROWSER_HEADLESS=0 (runtime
+    default) still wins so local + Railway stay headed after push.
+    """
+    if env_forces_headless():
+        return True
+    if headed_browser_available():
+        if requested:
+            logger.info("browser_headed_forced_over_client_request")
+        return False
+    logger.warning("headed_browser_unavailable_forcing_headless")
     return True
 
 
@@ -520,7 +565,7 @@ async def inject_storage_state_cookies(context: Any, storage_state: Any) -> int:
 @asynccontextmanager
 async def launch_page(
     *,
-    headless: bool = True,
+    headless: bool = False,
     force_new_proxy_sid: bool = False,
     disable_proxy: bool = False,
 ) -> AsyncIterator[Any]:
@@ -531,6 +576,7 @@ async def launch_page(
     SID retries — Railway egress can still reach some ATS hosts).
     """
     headless = effective_headless(headless)
+    logger.info("browser_launch_mode=%s", "headless" if headless else "headed")
     # Prefer Patchright when available: it patches Playwright CDP leaks that
     # DataDome (SmartRecruiters) fingerprints. Opt out with BROWSER_ENGINE=playwright.
     engine = (os.environ.get("BROWSER_ENGINE") or "auto").strip().lower()

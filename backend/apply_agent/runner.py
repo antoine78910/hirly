@@ -58,7 +58,7 @@ async def run_apply_attempt(
     user: Dict[str, Any],
     *,
     click_submit: bool = False,
-    headless: bool = True,
+    headless: bool = False,
     db: Any = None,
     invent_missing_answers: bool = False,
 ) -> ApplyRunResult:

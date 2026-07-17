@@ -96,7 +96,7 @@ def _report(
 
 async def execute_application(
     db, job: Dict[str, Any], profile: Dict[str, Any], app_doc: Dict[str, Any], user: Dict[str, Any],
-    *, dry_run: bool = False, headless: bool = True,
+    *, dry_run: bool = False, headless: bool = False,
 ) -> Dict[str, Any]:
     started = time.monotonic()
     user_id = str(user.get("user_id"))

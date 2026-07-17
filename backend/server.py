@@ -12860,12 +12860,14 @@ async def _load_or_create_agent_application(
 
 
 def _browser_engine_headless() -> bool:
-    return os.environ.get("BROWSER_HEADLESS", "true").lower() not in ("0", "false", "no", "off")
+    # Default headed (false). Runtime config forces BROWSER_HEADLESS=0 on boot.
+    return os.environ.get("BROWSER_HEADLESS", "false").lower() in ("1", "true", "yes", "on")
 
 
 def _resolve_auto_apply_headless(requested: Optional[bool]) -> bool:
+    # Prefer runtime/env; client headless=true is ignored when BROWSER_HEADLESS=0.
     if requested is None:
-        return _browser_engine_headless()
+        return effective_headless(_browser_engine_headless())
     return effective_headless(requested)
 
 

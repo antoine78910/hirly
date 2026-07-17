@@ -51,7 +51,7 @@ class SubmissionContext:
     plan: ApplicationPlan
     documents: Dict[str, Any] = field(default_factory=dict)
     dry_run: bool = False
-    headless: bool = True
+    headless: bool = False
 
 
 @dataclass

@@ -8,6 +8,7 @@ from apply_agent.browser import (
     browser_proxy_settings,
     chromium_launch_args,
     effective_headless,
+    env_forces_headless,
     headed_browser_available,
     is_proxy_connect_failure_status,
     is_proxy_connect_failure_text,
@@ -21,13 +22,31 @@ from apply_agent.browser import (
 )
 
 
-def test_effective_headless_forces_headless_without_display(monkeypatch):
+def test_effective_headless_prefers_headed_when_display_exists(monkeypatch):
+    monkeypatch.setenv("BROWSER_HEADLESS", "0")
+    monkeypatch.setenv("DISPLAY", ":0")
+    monkeypatch.setattr("apply_agent.browser.os.name", "posix", raising=False)
+    assert headed_browser_available() is True
+    assert effective_headless(False) is False
+    # Client asking headless is ignored when runtime forces headed.
+    assert effective_headless(True) is False
+
+
+def test_effective_headless_env_can_force_headless(monkeypatch):
+    monkeypatch.setenv("BROWSER_HEADLESS", "1")
+    monkeypatch.setenv("DISPLAY", ":0")
+    assert env_forces_headless() is True
+    assert effective_headless(False) is True
+
+
+def test_effective_headless_falls_back_without_display_or_xvfb(monkeypatch):
+    monkeypatch.setenv("BROWSER_HEADLESS", "0")
     monkeypatch.delenv("DISPLAY", raising=False)
     monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
     monkeypatch.setattr("apply_agent.browser.os.name", "posix", raising=False)
+    monkeypatch.setattr("apply_agent.browser.ensure_virtual_display", lambda: False)
     assert headed_browser_available() is False
     assert effective_headless(False) is True
-    assert effective_headless(True) is True
 
 
 def test_stealth_init_script_hides_webdriver(monkeypatch):
