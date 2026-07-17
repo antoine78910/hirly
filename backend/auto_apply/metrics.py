@@ -105,6 +105,67 @@ async def latest_attempt(db, user_id: str, job_id: str) -> Optional[Dict[str, An
     return sorted(rows, key=lambda r: r.get("created_at") or "", reverse=True)[0]
 
 
+def _compact_execution_report(report: Dict[str, Any]) -> Dict[str, Any]:
+    """Store a console-ready report without huge binary payloads."""
+    compact = dict(report or {})
+    screenshots = compact.get("screenshots") or []
+    if screenshots:
+        # Keep at most one screenshot for the admin console.
+        compact["screenshots"] = screenshots[:1]
+    evidence = compact.get("submission_evidence")
+    if isinstance(evidence, dict) and evidence.get("screenshot_b64"):
+        evidence = dict(evidence)
+        # Screenshot already mirrored on report.screenshots.
+        evidence.pop("screenshot_b64", None)
+        compact["submission_evidence"] = evidence
+    return compact
+
+
+async def persist_execution_report(
+    db, user_id: str, job_id: str, report: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """Attach the full ExecutionReport to the latest attempt so polling clients
+    can render the console after an async (background) run.
+
+    If no attempt row exists yet (prepare failed before claim), insert a
+    terminal error row so the poller can still finish.
+    """
+    compact = _compact_execution_report(report)
+    now = _now()
+    attempt = await latest_attempt(db, user_id, job_id)
+    if not attempt:
+        row = {
+            "id": uuid.uuid4().hex,
+            "user_id": user_id,
+            "job_id": job_id,
+            "provider": "unknown",
+            "driver": "unknown",
+            "driver_version": "unknown",
+            "status": compact.get("status") or "error",
+            "stage_reached": compact.get("stage_reached") or "driver",
+            "reason": compact.get("reason") or "prepare_failed",
+            "verdict": compact.get("verdict"),
+            "claimed_at": now,
+            "created_at": now,
+            "updated_at": now,
+            "execution_report": compact,
+        }
+        await db.auto_apply_attempts.insert_one(row)
+        return row
+
+    await db.auto_apply_attempts.update_one(
+        {"id": attempt["id"]},
+        {"$set": {
+            "execution_report": compact,
+            "updated_at": now,
+        }},
+    )
+    attempt = dict(attempt)
+    attempt["execution_report"] = compact
+    attempt["updated_at"] = now
+    return attempt
+
+
 async def known_successful_signatures(db, provider: str) -> frozenset:
     rows = await db.auto_apply_attempts.find(
         {"provider": provider, "status": "submitted_success"}, {"blueprint_signature": 1}

@@ -75,6 +75,7 @@ from apply_agent.browser import effective_headless
 from apply_agent.runner import run_apply_attempt
 from auto_apply.executor import execute_application as auto_apply_execute_application
 from auto_apply.metrics import latest_attempt as auto_apply_latest_attempt
+from auto_apply.metrics import persist_execution_report as auto_apply_persist_execution_report
 from auto_apply.metrics import summary as auto_apply_metrics_summary
 from db import create_database_adapter
 from db.supabase_adapter import count_supabase_table, test_supabase_connection
@@ -9802,65 +9803,48 @@ async def _auto_apply_target_user(user_id: Optional[str], admin: User) -> User:
     return User(user_id=loaded["user_id"], email=loaded.get("email", ""), name=loaded.get("name", ""))
 
 
-@api_router.post("/admin/auto-apply/execute")
-async def admin_auto_apply_execute(body: AdminAutoApplyExecuteRequest, admin: User = Depends(require_admin_user)):
-    """Run the auto-apply pipeline for one job. Thin wrapper: it only loads the
-    application context and delegates to execute_application -- no orchestration
-    is duplicated here. Works for any registered ATS driver without changes.
+_AUTO_APPLY_BACKGROUND_TASKS: set = set()
 
-    Always returns a JSON body with `result` (ExecutionReport-shaped) so the admin
-    console can show a real error instead of a bare gateway/500 failure.
-    """
+
+async def _admin_auto_apply_background_run(
+    *,
+    job_id: str,
+    target_user: User,
+    dry_run: bool,
+    headless: Optional[bool],
+) -> None:
+    """Run prepare + execute off the HTTP request so Railway's gateway cannot 502."""
     from auto_apply.debug_report import format_run_error, transport_error_report
 
+    result: Dict[str, Any]
     try:
-        target_user = await _auto_apply_target_user(body.user_id, admin)
-        job, profile, app_doc = await _load_or_create_agent_application(body.job_id, target_user)
+        job, profile, app_doc = await _load_or_create_agent_application(
+            job_id,
+            target_user,
+            require_tailored_package=False,
+        )
+        result = await auto_apply_execute_application(
+            db, job, profile, app_doc, target_user.model_dump(mode="json"),
+            dry_run=dry_run,
+            headless=_resolve_auto_apply_headless(headless),
+        )
     except HTTPException as http_exc:
         detail = http_exc.detail
         message = detail if isinstance(detail, str) else (
             (detail or {}).get("message") if isinstance(detail, dict) else str(detail)
         )
-        return {
-            "result": transport_error_report(
-                message=str(message or "Request failed"),
-                phase="prepare",
-                stage="driver",
-                http_status=http_exc.status_code,
-                exception_class="HTTPException",
-            ),
-            "attempt": None,
-        }
-    except Exception as exc:
-        error_detail = format_run_error(exc, checkpoint="prepare")
-        logger.warning(
-            "admin_auto_apply_prepare_failed job=%s error=%s",
-            body.job_id,
-            error_detail.get("message", str(exc))[:300],
-        )
-        return {
-            "result": transport_error_report(
-                message=error_detail.get("message") or str(exc),
-                phase="prepare",
-                stage="driver",
-                exception_class=error_detail.get("exception_class") or exc.__class__.__name__,
-                extra={"traceback": error_detail.get("traceback"), "hint": error_detail.get("hint")},
-            ),
-            "attempt": None,
-        }
-
-    try:
-        result = await auto_apply_execute_application(
-            db, job, profile, app_doc, target_user.model_dump(mode="json"),
-            dry_run=body.dry_run,
-            headless=_resolve_auto_apply_headless(body.headless),
+        result = transport_error_report(
+            message=str(message or "Request failed"),
+            phase="prepare",
+            stage="driver",
+            http_status=http_exc.status_code,
+            exception_class="HTTPException",
         )
     except Exception as exc:
-        # execute_application is supposed to catch everything; belt-and-suspenders.
         error_detail = format_run_error(exc, checkpoint="execute")
         logger.warning(
-            "admin_auto_apply_execute_unhandled job=%s error=%s",
-            body.job_id,
+            "admin_auto_apply_background_failed job=%s error=%s",
+            job_id,
             error_detail.get("message", str(exc))[:300],
         )
         result = transport_error_report(
@@ -9871,23 +9855,103 @@ async def admin_auto_apply_execute(body: AdminAutoApplyExecuteRequest, admin: Us
             extra={"traceback": error_detail.get("traceback"), "hint": error_detail.get("hint")},
         )
 
-    attempt = None
     try:
-        attempt = await auto_apply_latest_attempt(db, target_user.user_id, job.get("job_id"))
+        await auto_apply_persist_execution_report(db, target_user.user_id, job_id, result)
     except Exception as exc:
         logger.warning(
-            "admin_auto_apply_latest_attempt_failed job=%s error=%s",
-            body.job_id,
+            "admin_auto_apply_persist_report_failed job=%s error=%s",
+            job_id,
             str(exc)[:200],
         )
-    return {"result": result, "attempt": attempt}
+
+
+@api_router.post("/admin/auto-apply/execute")
+async def admin_auto_apply_execute(body: AdminAutoApplyExecuteRequest, admin: User = Depends(require_admin_user)):
+    """Start an auto-apply run in the background and return immediately.
+
+    Browser + residential-proxy retries regularly exceed Railway's HTTP gateway
+    limit (~100s). The admin console polls `/admin/auto-apply/status` until the
+    attempt leaves `in_flight` and reads `execution_report`.
+    """
+    from auto_apply.debug_report import transport_error_report
+
+    try:
+        target_user = await _auto_apply_target_user(body.user_id, admin)
+        job = await db.jobs.find_one({"job_id": body.job_id}, {"_id": 0, "job_id": 1})
+        if not job:
+            return {
+                "accepted": False,
+                "polling": False,
+                "result": transport_error_report(
+                    message="Job not found",
+                    phase="prepare",
+                    stage="driver",
+                    http_status=404,
+                    exception_class="HTTPException",
+                ),
+                "attempt": None,
+            }
+    except HTTPException as http_exc:
+        detail = http_exc.detail
+        message = detail if isinstance(detail, str) else str(detail)
+        return {
+            "accepted": False,
+            "polling": False,
+            "result": transport_error_report(
+                message=str(message or "Request failed"),
+                phase="prepare",
+                stage="driver",
+                http_status=http_exc.status_code,
+                exception_class="HTTPException",
+            ),
+            "attempt": None,
+        }
+
+    started_at = datetime.now(timezone.utc).isoformat()
+    task = asyncio.create_task(
+        _admin_auto_apply_background_run(
+            job_id=body.job_id,
+            target_user=target_user,
+            dry_run=body.dry_run,
+            headless=body.headless,
+        )
+    )
+    _AUTO_APPLY_BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_AUTO_APPLY_BACKGROUND_TASKS.discard)
+
+    return {
+        "accepted": True,
+        "polling": True,
+        "started_at": started_at,
+        "job_id": body.job_id,
+        "user_id": target_user.user_id,
+        "result": {
+            "status": "in_flight",
+            "stage_reached": "driver",
+            "reason": "run_started",
+            "debug": {
+                "timeline": [{
+                    "stage": "driver",
+                    "status": "ok",
+                    "detail": "Run accepted — browser pipeline running in background",
+                }],
+            },
+        },
+        "attempt": {
+            "status": "in_flight",
+            "stage_reached": "driver",
+            "job_id": body.job_id,
+            "user_id": target_user.user_id,
+            "claimed_at": started_at,
+        },
+    }
 
 
 @api_router.get("/admin/auto-apply/status")
 async def admin_auto_apply_status(job_id: str, user_id: Optional[str] = None, admin: User = Depends(require_admin_user)):
     """Latest attempt record for a job -- exposes stage, status, reason,
-    missing_fields, driver_version, blueprint_signature and lifecycle timestamps
-    for debugging and frontend display."""
+    missing_fields, driver_version, blueprint_signature, lifecycle timestamps,
+    and the persisted execution_report (when the async run finished)."""
     target = user_id or admin.user_id
     return {"attempt": await auto_apply_latest_attempt(db, target, job_id)}
 
@@ -12681,7 +12745,12 @@ async def greenhouse_form_preview(job_id: str, user: User = Depends(get_current_
     }
 
 
-async def _load_or_create_agent_application(job_id: str, user: User) -> tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+async def _load_or_create_agent_application(
+    job_id: str,
+    user: User,
+    *,
+    require_tailored_package: bool = True,
+) -> tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
     job = await db.jobs.find_one({"job_id": job_id}, {"_id": 0})
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -12702,6 +12771,25 @@ async def _load_or_create_agent_application(job_id: str, user: User) -> tuple[Di
         or not app_doc.get("tailored_cv_file_b64")
     )
     if package_missing:
+        # Auto-apply can upload the profile CV directly — skip the slow AI
+        # package generation that often trips Railway's gateway timeout.
+        if (
+            not require_tailored_package
+            and (profile.get("cv_original_b64") or profile.get("cv_filename"))
+        ):
+            if not app_doc:
+                now = datetime.now(timezone.utc).isoformat()
+                app_doc = {
+                    "application_id": f"app_{uuid.uuid4().hex[:12]}",
+                    "user_id": user.user_id,
+                    "job_id": job_id,
+                    "status": "applied",
+                    "created_at": now,
+                    "updated_at": now,
+                }
+                await db.applications.insert_one(app_doc)
+            return job, profile, app_doc
+
         generated_doc = await _generate_application_doc(user, profile, job)
         if app_doc:
             generated_doc["application_id"] = app_doc["application_id"]

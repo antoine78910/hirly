@@ -45,8 +45,8 @@ export default function AutoApplyRunPanel({
               <Loader2 className="h-8 w-8 animate-spin text-violet-400" />
               <p className="font-display text-base font-semibold text-white">{runLabel || "Running auto-apply…"}</p>
               <p className="max-w-sm text-sm text-zinc-400">
-                Inspect → classify → resolve → plan → browser fill → submit → verify.
-                Logs appear here when the run completes.
+                The browser run continues on the server (avoids Railway gateway timeouts).
+                This console polls until inspect → classify → resolve → plan → submit → verify finishes.
               </p>
             </div>
           ) : report ? (

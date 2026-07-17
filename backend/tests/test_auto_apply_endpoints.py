@@ -14,39 +14,46 @@ def test_admin_dependency_rejects_non_admin():
 
 
 def test_execute_endpoint_calls_executor_and_returns_attempt(monkeypatch):
-    async def fake_load(job_id, user):
-        return ({"job_id": job_id, "ats_provider": "greenhouse"}, {"contact": {}}, {"application_id": "a1"})
+    async def fake_find_one(query, projection=None):
+        if query.get("job_id") == "j1":
+            return {"job_id": "j1"}
+        return None
 
-    async def fake_execute(db, job, profile, app_doc, user, *, dry_run=False, headless=True):
-        assert job["job_id"] == "j1" and dry_run is True
-        return {"status": "prepared", "reason": "ready_not_submitted"}
+    monkeypatch.setattr(server.db.jobs, "find_one", fake_find_one)
 
-    async def fake_latest(db, user_id, job_id):
-        return {"status": "prepared", "stage_reached": "plan", "driver_version": "greenhouse-1.0.0",
-                "blueprint_signature": "sigX", "missing_fields": [], "claimed_at": "t0",
-                "submitted_at": None, "verified_at": None, "reason": "ready_not_submitted"}
+    created = []
 
-    monkeypatch.setattr(server, "_load_or_create_agent_application", fake_load)
-    monkeypatch.setattr(server, "auto_apply_execute_application", fake_execute)
-    monkeypatch.setattr(server, "auto_apply_latest_attempt", fake_latest)
+    def capture_task(coro):
+        created.append(coro)
+        coro.close()
+
+        class _Done:
+            def add_done_callback(self, cb):
+                pass
+
+        return _Done()
+
+    monkeypatch.setattr(server.asyncio, "create_task", capture_task)
+
     admin = server.User(user_id="admin", email="anto.delbos@gmail.com", name="Admin")
     body = server.AdminAutoApplyExecuteRequest(job_id="j1", dry_run=True)
     result = asyncio.run(server.admin_auto_apply_execute(body, admin=admin))
-    assert result["result"]["status"] == "prepared"
-    # Debug fields exposed via the persisted attempt.
-    assert result["attempt"]["driver_version"] == "greenhouse-1.0.0"
-    assert result["attempt"]["blueprint_signature"] == "sigX"
-    assert result["attempt"]["stage_reached"] == "plan"
+    assert result["accepted"] is True
+    assert result["polling"] is True
+    assert result["result"]["status"] == "in_flight"
+    assert result["started_at"]
+    assert created, "background task should be scheduled"
 
 
 def test_execute_endpoint_returns_soft_error_when_job_missing(monkeypatch):
-    async def fake_load(job_id, user):
-        raise HTTPException(status_code=404, detail="Job not found")
+    async def fake_find_one(query, projection=None):
+        return None
 
-    monkeypatch.setattr(server, "_load_or_create_agent_application", fake_load)
+    monkeypatch.setattr(server.db.jobs, "find_one", fake_find_one)
     admin = server.User(user_id="admin", email="anto.delbos@gmail.com", name="Admin")
     body = server.AdminAutoApplyExecuteRequest(job_id="missing", dry_run=True)
     result = asyncio.run(server.admin_auto_apply_execute(body, admin=admin))
+    assert result["accepted"] is False
     assert result["attempt"] is None
     assert result["result"]["status"] == "error"
     assert result["result"]["error"]["message"] == "Job not found"
@@ -54,23 +61,25 @@ def test_execute_endpoint_returns_soft_error_when_job_missing(monkeypatch):
 
 
 def test_execute_endpoint_keeps_result_when_latest_attempt_fails(monkeypatch):
-    async def fake_load(job_id, user):
+    """Background worker still finishes even if persist/latest fail."""
+    async def fake_load(job_id, user, require_tailored_package=True):
         return ({"job_id": job_id}, {}, {})
 
     async def fake_execute(db, job, profile, app_doc, user, *, dry_run=False, headless=True):
         return {"status": "prepared", "stage_reached": "plan", "reason": "ready_not_submitted"}
 
-    async def fake_latest(db, user_id, job_id):
+    async def fake_persist(db, user_id, job_id, report):
         raise RuntimeError("mongo down")
 
     monkeypatch.setattr(server, "_load_or_create_agent_application", fake_load)
     monkeypatch.setattr(server, "auto_apply_execute_application", fake_execute)
-    monkeypatch.setattr(server, "auto_apply_latest_attempt", fake_latest)
+    monkeypatch.setattr(server, "auto_apply_persist_execution_report", fake_persist)
+
+    # Run the background helper directly (no HTTP scheduling).
     admin = server.User(user_id="admin", email="anto.delbos@gmail.com", name="Admin")
-    body = server.AdminAutoApplyExecuteRequest(job_id="j1", dry_run=True)
-    result = asyncio.run(server.admin_auto_apply_execute(body, admin=admin))
-    assert result["result"]["status"] == "prepared"
-    assert result["attempt"] is None
+    asyncio.run(server._admin_auto_apply_background_run(
+        job_id="j1", target_user=admin, dry_run=True, headless=True,
+    ))
 
 
 def test_metrics_endpoint_delegates_to_summary(monkeypatch):

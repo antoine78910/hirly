@@ -43,7 +43,86 @@ function notifyRunResult(result) {
     toast.error(result.reason?.replaceAll("_", " ") || result.error?.message || "Auto-apply failed");
     return;
   }
+  if (result?.status === "in_flight") return;
   toast.success(`${result.status} (stage: ${result.stage_reached}, ${result.duration_ms}ms)`);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function attemptIsForThisRun(attempt, startedAt) {
+  if (!attempt || !startedAt) return false;
+  const claimed = attempt.claimed_at || attempt.created_at || "";
+  const updated = attempt.updated_at || "";
+  return claimed >= startedAt || updated >= startedAt;
+}
+
+function reportFromAttempt(attempt) {
+  if (attempt?.execution_report && typeof attempt.execution_report === "object") {
+    return attempt.execution_report;
+  }
+  return {
+    status: attempt?.status || "error",
+    stage_reached: attempt?.stage_reached || "driver",
+    reason: attempt?.reason || "Run finished without a detailed report",
+    verdict: attempt?.verdict || null,
+    missing_fields: attempt?.missing_fields || [],
+    driver_version: attempt?.driver_version || null,
+    blueprint_signature: attempt?.blueprint_signature || null,
+    debug: {
+      timeline: [{
+        stage: attempt?.stage_reached || "driver",
+        status: attempt?.status === "in_flight" ? "ok" : "error",
+        detail: attempt?.reason || attempt?.status || "—",
+      }],
+      execution: attempt?.evidence || null,
+    },
+    error: attempt?.status === "error"
+      ? { message: attempt?.reason || "Execution failed", phase: attempt?.stage_reached || "execute" }
+      : null,
+  };
+}
+
+/**
+ * Start execute (returns immediately) then poll status until the background
+ * browser run finishes — avoids Railway gateway 502 on long proxy retries.
+ */
+async function runAutoApplyWithPolling({ jobId, userId, dryRun }) {
+  const { data: start } = await api.post(
+    "/admin/auto-apply/execute",
+    {
+      job_id: jobId,
+      user_id: userId,
+      dry_run: dryRun,
+      headless: true,
+    },
+    { timeout: 60000 },
+  );
+
+  if (!start?.polling && start?.result && start.result.status !== "in_flight") {
+    return start.result;
+  }
+
+  const startedAt = start?.started_at || new Date().toISOString();
+  const pollUserId = start?.user_id || userId;
+  const deadline = Date.now() + 12 * 60 * 1000; // proxy retries can take several minutes
+
+  while (Date.now() < deadline) {
+    await sleep(2500);
+    const { data } = await api.get("/admin/auto-apply/status", {
+      params: { job_id: jobId, user_id: pollUserId },
+      timeout: 30000,
+    });
+    const attempt = data?.attempt;
+    if (!attemptIsForThisRun(attempt, startedAt)) continue;
+    if (attempt.status === "in_flight" && !attempt.execution_report) continue;
+    return reportFromAttempt(attempt);
+  }
+
+  throw Object.assign(new Error("Auto-apply is still running after 12 minutes. Check Railway logs or refresh status."), {
+    code: "ECONNABORTED",
+  });
 }
 
 export default function AdminAutoApplyLab() {
@@ -105,18 +184,11 @@ export default function AdminAutoApplyLab() {
         : `Apply · ${row.company || row.title || row.job_id}`,
     );
     try {
-      const { data } = await api.post(
-        "/admin/auto-apply/execute",
-        {
-          job_id: row.job_id,
-          user_id: row.user_id,
-          dry_run: isDryRun,
-          headless: true,
-        },
-        // Proxy sticky retries + SR warm-up regularly exceed 4 minutes.
-        { timeout: 480000 },
-      );
-      const result = data.result || data;
+      const result = await runAutoApplyWithPolling({
+        jobId: row.job_id,
+        userId: row.user_id,
+        dryRun: isDryRun,
+      });
       finishConsole(result);
       notifyRunResult(result);
       loadSwipes();
@@ -209,155 +281,119 @@ export default function AdminAutoApplyLab() {
               Supported ATS: {supportedProviders.length ? supportedProviders.join(", ") : "—"}
             </p>
           </div>
-          <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1000px] text-left text-sm">
-                <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
+          {swipesLoading ? (
+            <div className="flex items-center gap-2 text-sm text-zinc-500">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading right swipes…
+            </div>
+          ) : swipes.length === 0 ? (
+            <p className="text-sm text-zinc-500">No right swipes found yet.</p>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-zinc-200">
+              <table className="min-w-full text-left text-sm">
+                <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
                   <tr>
-                    <th className="px-4 py-3">User</th>
-                    <th className="px-4 py-3">Job</th>
-                    <th className="px-4 py-3">ATS</th>
-                    <th className="px-4 py-3">Last attempt</th>
-                    <th className="px-4 py-3">Swiped</th>
-                    <th className="px-4 py-3 text-right">Auto apply</th>
+                    <th className="px-3 py-2">When</th>
+                    <th className="px-3 py-2">User</th>
+                    <th className="px-3 py-2">Job</th>
+                    <th className="px-3 py-2">ATS</th>
+                    <th className="px-3 py-2">Last run</th>
+                    <th className="px-3 py-2">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-100">
-                  {swipesLoading ? (
-                    <tr>
-                      <td className="px-4 py-8 text-center text-zinc-500" colSpan={6}>
-                        <Loader2 className="mx-auto h-5 w-5 animate-spin" />
-                      </td>
-                    </tr>
-                  ) : swipes.length ? swipes.map((row) => {
+                <tbody>
+                  {swipes.map((row) => {
                     const key = `${row.user_id}:${row.job_id}`;
-                    const isRunning = runningRow === key;
-                    const attempt = row.latest_attempt;
+                    const busy = runningRow === key;
                     return (
-                      <tr key={key} className="hover:bg-zinc-50">
-                        <td className="px-4 py-3">
-                          <p className="font-semibold text-zinc-900">{row.user_email || row.user_id}</p>
-                          {row.user_name ? <p className="text-xs text-zinc-400">{row.user_name}</p> : null}
+                      <tr key={key} className="border-t border-zinc-100">
+                        <td className="px-3 py-2 whitespace-nowrap text-zinc-500">{fmtDate(row.created_at)}</td>
+                        <td className="px-3 py-2">
+                          <div className="font-medium text-zinc-900">{row.user_name || row.user_email || row.user_id}</div>
+                          <div className="text-xs text-zinc-400">{row.user_email}</div>
                         </td>
-                        <td className="px-4 py-3">
-                          <p className="font-medium text-zinc-900">{row.title || row.job_id}</p>
-                          <p className="text-xs text-zinc-400">{row.company || (row.job_found ? "" : "job no longer in DB")}</p>
+                        <td className="px-3 py-2">
+                          <div className="font-medium text-zinc-900">{row.title || row.job_id}</div>
+                          <div className="text-xs text-zinc-400">{row.company}</div>
                         </td>
-                        <td className="px-4 py-3">
-                          <span className="capitalize">{row.ats_provider}</span>
-                          <p className={`text-xs font-semibold ${row.driver_supported ? "text-emerald-600" : "text-zinc-400"}`}>
-                            {row.driver_supported ? "driver ready" : "no driver"}
-                          </p>
+                        <td className="px-3 py-2">
+                          <span className={row.driver_supported ? "text-emerald-700" : "text-amber-700"}>
+                            {row.ats_provider || "—"}
+                          </span>
                         </td>
-                        <td className="px-4 py-3">
-                          {attempt ? (
-                            <>
-                              <span className="inline-flex rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-semibold capitalize text-zinc-700">
-                                {String(attempt.status || "").replaceAll("_", " ") || "unknown"}
-                              </span>
-                              {attempt.reason ? (
-                                <p className="mt-1 max-w-[220px] truncate text-xs text-zinc-400" title={attempt.reason}>
-                                  {attempt.reason}
-                                </p>
-                              ) : null}
-                            </>
-                          ) : (
-                            <span className="text-xs text-zinc-400">never run</span>
-                          )}
+                        <td className="px-3 py-2 text-xs text-zinc-500">
+                          {row.latest_attempt
+                            ? `${row.latest_attempt.status} · ${row.latest_attempt.stage_reached || "—"}`
+                            : "—"}
                         </td>
-                        <td className="px-4 py-3 text-zinc-600">{fmtDate(row.swiped_at)}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex justify-end gap-2">
+                        <td className="px-3 py-2">
+                          <div className="flex flex-wrap gap-2">
                             <Button
                               size="sm"
                               variant="outline"
-                              disabled={!row.job_found || Boolean(runningRow)}
+                              disabled={busy || !row.driver_supported}
                               onClick={() => runForSwipe(row, true)}
                             >
-                              {isRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
                               Dry run
                             </Button>
                             <Button
                               size="sm"
-                              disabled={!row.job_found || !row.driver_supported || Boolean(runningRow)}
+                              disabled={busy || !row.driver_supported}
                               onClick={() => runForSwipe(row, false)}
                             >
-                              {isRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
                               Apply
                             </Button>
                           </div>
                         </td>
                       </tr>
                     );
-                  }) : (
-                    <tr>
-                      <td className="px-4 py-8 text-center text-zinc-500" colSpan={6}>No right swipes found.</td>
-                    </tr>
-                  )}
+                  })}
                 </tbody>
               </table>
             </div>
-          </div>
+          )}
         </div>
       ) : null}
 
-      <h2 className="mb-3 font-display text-lg font-bold text-zinc-900">URL validation harness</h2>
-      <div className="max-w-2xl space-y-4 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-        <div className="space-y-1">
-          <label className="text-sm font-medium text-zinc-800">Greenhouse job URL</label>
-          <input
-            type="url"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://boards.greenhouse.io/company/jobs/1234567"
-            className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900"
-          />
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-zinc-800">Resume</label>
-            <input type="file" onChange={(e) => setResumeFile(e.target.files?.[0] || null)}
-              className="block w-full text-sm text-zinc-700" />
+      {!accessDenied ? (
+        <div className="rounded-xl border border-zinc-200 bg-white p-4">
+          <h2 className="mb-3 font-display text-lg font-bold text-zinc-900">URL harness</h2>
+          <div className="space-y-3">
+            <input
+              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+              placeholder="https://boards.greenhouse.io/..."
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+            />
+            <div className="flex flex-wrap gap-3">
+              <label className="text-sm text-zinc-600">
+                Resume
+                <input type="file" className="mt-1 block text-xs" onChange={(e) => setResumeFile(e.target.files?.[0] || null)} />
+              </label>
+              <label className="text-sm text-zinc-600">
+                Cover letter
+                <input type="file" className="mt-1 block text-xs" onChange={(e) => setCoverFile(e.target.files?.[0] || null)} />
+              </label>
+            </div>
+            <textarea
+              className="w-full rounded-lg border border-zinc-300 px-3 py-2 font-mono text-xs"
+              rows={4}
+              placeholder='Additional answers JSON, e.g. {"visa":"No"}'
+              value={answersText}
+              onChange={(e) => setAnswersText(e.target.value)}
+            />
+            <label className="flex items-center gap-2 text-sm text-zinc-700">
+              <input type="checkbox" checked={dryRun} onChange={(e) => setDryRun(e.target.checked)} />
+              Dry run (stop before browser submit)
+            </label>
+            <Button onClick={run} disabled={running}>
+              {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+              Run URL harness
+            </Button>
           </div>
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-zinc-800">Cover letter (text file)</label>
-            <input type="file" accept=".txt,text/plain" onChange={(e) => setCoverFile(e.target.files?.[0] || null)}
-              className="block w-full text-sm text-zinc-700" />
-          </div>
         </div>
-
-        <div className="space-y-1">
-          <label className="text-sm font-medium text-zinc-800">
-            Additional answers (JSON, optional) — e.g. {'{"salary": "100000", "visa_status": "Citizen"}'}
-          </label>
-          <textarea
-            value={answersText}
-            onChange={(e) => setAnswersText(e.target.value)}
-            rows={4}
-            placeholder='{"portfolio": "https://...", "salary": "100000"}'
-            className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 font-mono text-xs text-zinc-900"
-          />
-        </div>
-
-        <label className="flex items-center gap-2 text-sm text-zinc-700">
-          <input type="checkbox" checked={dryRun} onChange={(e) => setDryRun(e.target.checked)} />
-          Dry run (inspect + classify + resolve + plan, but do NOT submit)
-        </label>
-
-        <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
-          The log console opens automatically on each run. Browser runs headless on the server — use the step log and screenshot to verify fills.
-          If you see
-          {" "}
-          <code className="rounded bg-zinc-200 px-1">needs_user_input:resume</code>
-          , complete Review first.
-        </div>
-
-        <Button type="button" onClick={run} disabled={running}>
-          {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-          {running ? "Running…" : dryRun ? "Run dry run" : "Run REAL submission"}
-        </Button>
-      </div>
+      ) : null}
 
       <AutoApplyRunPanel
         open={consoleOpen}
