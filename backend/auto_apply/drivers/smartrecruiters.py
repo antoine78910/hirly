@@ -396,7 +396,18 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
                         pass
                     if await self._wait_for_oneclick_form(page):
                         return
-                    # CTA clicked but form still missing — try direct oneclick below.
+                    # CTA already landed on oneclick (or DataDome wall). Do NOT
+                    # hard-navigate again — a second hop looks like a bot.
+                    if "oneclick-ui" in (page.url or ""):
+                        if evidence is not None:
+                            evidence.raw.setdefault("step_log", []).append({
+                                "action": "reveal_form",
+                                "locator": page.url,
+                                "status": "ok",
+                                "value_preview": "oneclick_after_cta_no_direct_nav",
+                                "error": "",
+                            })
+                        return
                     break
             except Exception:
                 continue
@@ -405,6 +416,9 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
         if evidence is not None:
             app_url = str((evidence.raw or {}).get("application_url") or "").strip()
         on_oneclick = "oneclick-ui" in (page.url or "")
+        # Only use direct oneclick nav when the CTA never moved us off the posting.
+        if clicked and on_oneclick:
+            return
         if "oneclick-ui" in app_url and not on_oneclick:
             try:
                 resp = await page.goto(app_url, wait_until="domcontentloaded", timeout=30000)
