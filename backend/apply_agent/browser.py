@@ -330,6 +330,21 @@ def proxy_configured() -> bool:
     return False
 
 
+def warm_session_configured() -> bool:
+    """True when cookies/storage state are injected (usually IP-bound to sticky proxy)."""
+    if os.environ.get("BROWSER_STORAGE_STATE_JSON", "").strip():
+        return True
+    if os.environ.get("BROWSER_COOKIES_JSON", "").strip():
+        return True
+    path = os.environ.get("BROWSER_STORAGE_STATE", "").strip()
+    if path and Path(path).exists():
+        return True
+    cookies_file = os.environ.get("BROWSER_COOKIES_FILE", "").strip()
+    if cookies_file and Path(cookies_file).exists():
+        return True
+    return False
+
+
 def browser_proxy_settings(*, force_random_sid: bool = False) -> Optional[Dict[str, str]]:
     """Playwright proxy dict from env, or None when unset.
 

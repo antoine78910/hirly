@@ -104,7 +104,9 @@ async function runAutoApplyWithPolling({ jobId, userId, dryRun }) {
         job_id: jobId,
         user_id: userId,
         dry_run: dryRun,
-        headless: true,
+        // Prefer a real Chrome window locally. Railway has no display so the
+        // backend still forces headless via effective_headless().
+        headless: process.env.NODE_ENV === "production",
       },
       { timeout: 60000 },
     );
@@ -250,7 +252,7 @@ export default function AdminAutoApplyLab() {
       const payload = {
         greenhouse_url: url.trim(),
         dry_run: dryRun,
-        headless: true,
+        headless: process.env.NODE_ENV === "production",
         additional_answers: additionalAnswers,
       };
       if (resumeFile) {

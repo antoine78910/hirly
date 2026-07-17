@@ -16,6 +16,7 @@ import logging
 import os
 import random
 import time
+import asyncio
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
@@ -32,11 +33,12 @@ from apply_agent.browser import (
     launch_page,
     proxy_configured,
     screenshot_b64,
+    warm_session_configured,
 )
 from apply_agent.guardrails import canonical
 from apply_agent.human_browser import (
     human_check, human_click, human_mouse_wander, human_pause, human_scroll,
-    human_select, human_type, human_upload,
+    human_select, human_type, human_upload, try_pass_datadome_slider,
 )
 from apply_agent.models import ApplyAgentError
 from apply_agent.recovery import recover_stuck_page
@@ -169,6 +171,18 @@ class BrowserApplyDriver(ApplyDriver):
             exception_class="ProxyConnectFailure",
         )
 
+    async def _wait_for_manual_captcha_clear(self, page: Any, *, timeout_ms: int = 180_000) -> bool:
+        """Headed runs: give the operator time to solve DataDome in the real Chrome window."""
+        deadline = time.monotonic() + (timeout_ms / 1000.0)
+        while time.monotonic() < deadline:
+            if not captcha_active(await detect_captcha(page)):
+                return True
+            try:
+                await page.wait_for_timeout(2000)
+            except Exception:
+                await asyncio.sleep(2)
+        return not captcha_active(await detect_captcha(page))
+
     async def _abort_if_blocked(
         self,
         page: Any,
@@ -176,6 +190,7 @@ class BrowserApplyDriver(ApplyDriver):
         *,
         http_status: Optional[int] = None,
         stage: str = "bot_wall",
+        allow_manual_captcha: bool = False,
     ) -> bool:
         """Return True when the run should stop (bot wall / login / captcha)."""
         if await detect_offer_expired(page):
@@ -206,6 +221,31 @@ class BrowserApplyDriver(ApplyDriver):
             await self._log_step(evidence, action="login_wall", locators=["body"], status="blocked")
             return True
         if captcha_active(await detect_captcha(page)):
+            # Auto slider first; headed local runs then wait for a human solve.
+            try:
+                await try_pass_datadome_slider(page, attempts=2)
+            except Exception:
+                pass
+            if not captcha_active(await detect_captcha(page)):
+                await self._log_step(
+                    evidence, action="captcha", locators=["body"], status="ok",
+                    value_preview="datadome_slider_passed",
+                )
+                return False
+            if allow_manual_captcha:
+                await self._log_step(
+                    evidence,
+                    action="captcha_wait_manual",
+                    locators=["body"],
+                    status="retry",
+                    value_preview="Solve the captcha in the Chrome window (up to 3 min)",
+                )
+                if await self._wait_for_manual_captcha_clear(page, timeout_ms=180_000):
+                    await self._log_step(
+                        evidence, action="captcha", locators=["body"], status="ok",
+                        value_preview="manual_solve",
+                    )
+                    return False
             evidence.blocked_reason = "captcha"
             evidence.screenshot_b64 = await screenshot_b64(page)
             await self._log_step(evidence, action="captcha", locators=["body"], status="blocked")
@@ -270,18 +310,26 @@ class BrowserApplyDriver(ApplyDriver):
                     ) from exc
                 if not would_retry:
                     raise
-                # Last retry: drop the residential proxy — PrivateProxy 572 often
-                # means the exit cannot reach the ATS at all; Railway direct can.
+                # Last retry: drop the residential proxy ONLY when we have no
+                # warm cookies — storage state is IP-bound to the sticky exit.
                 next_is_last = attempt + 1 >= max_attempts
+                warm = warm_session_configured()
+                fixed_sticky = bool(os.environ.get("BROWSER_PROXY_STICKY_SID", "").strip().isdigit())
                 if (
                     next_is_last
                     and allow_direct
                     and proxy_configured()
                     and not disable_proxy
+                    and not warm
                 ):
                     disable_proxy = True
                     force_new_proxy_sid = False
                     retry_label = "direct_no_proxy"
+                elif warm and fixed_sticky:
+                    # Keep the capture IP — rotating SID invalidates DataDome cookies.
+                    force_new_proxy_sid = False
+                    disable_proxy = False
+                    retry_label = "same_sticky_sid"
                 else:
                     # Dead residential exit (HTTP 572 etc.) — mint a fresh sticky sid.
                     force_new_proxy_sid = True
@@ -308,20 +356,24 @@ class BrowserApplyDriver(ApplyDriver):
             # mint a new sticky sid and try again before failing the run.
             # Skip when STICKY_SID is fixed (warm cookie sessions must keep one IP).
             fixed_sticky = bool(os.environ.get("BROWSER_PROXY_STICKY_SID", "").strip().isdigit())
+            warm = warm_session_configured()
             retry_blockers = {"bot_protection", "captcha"}
             if (
                 last_evidence.blocked_reason in retry_blockers
                 and attempt < max_attempts
                 and (proxy_configured() or last_evidence.blocked_reason == "captcha")
-                and not (fixed_sticky and last_evidence.blocked_reason == "bot_protection")
+                and not (fixed_sticky and last_evidence.blocked_reason == "bot_protection" and warm)
                 and time.monotonic() < deadline_at
                 and not disable_proxy
             ):
                 next_is_last = attempt + 1 >= max_attempts
-                if next_is_last and allow_direct and proxy_configured():
+                if next_is_last and allow_direct and proxy_configured() and not warm:
                     disable_proxy = True
                     force_new_proxy_sid = False
                     retry_label = "direct_no_proxy"
+                elif warm and fixed_sticky:
+                    force_new_proxy_sid = False
+                    retry_label = "same_sticky_sid"
                 else:
                     force_new_proxy_sid = True
                     retry_label = "new_proxy_sid"
@@ -427,7 +479,13 @@ class BrowserApplyDriver(ApplyDriver):
                 await _wait_for_meaningful_body(page, timeout_ms=10000)
                 await human_pause(page, 800, 1400)
 
-                if await self._abort_if_blocked(page, evidence, http_status=http_status, stage="bot_wall"):
+                if await self._abort_if_blocked(
+                    page,
+                    evidence,
+                    http_status=http_status,
+                    stage="bot_wall",
+                    allow_manual_captcha=not ctx.headless,
+                ):
                     # Still capture a recovery screenshot for debugging popups / walls.
                     try:
                         recovery = await recover_stuck_page(page, reason="bot_wall", use_vision=False)
@@ -461,7 +519,12 @@ class BrowserApplyDriver(ApplyDriver):
 
                 # SmartRecruiters (and similar) often serve the bot wall only
                 # after the Apply CTA navigates to oneclick-ui — re-check here.
-                if await self._abort_if_blocked(page, evidence, stage="bot_wall_after_reveal"):
+                if await self._abort_if_blocked(
+                    page,
+                    evidence,
+                    stage="bot_wall_after_reveal",
+                    allow_manual_captcha=not ctx.headless,
+                ):
                     return evidence
 
                 starting_url = page.url

@@ -294,7 +294,11 @@ def _install_proxy_retry_fakes(monkeypatch):
     monkeypatch.setattr(driver_mod, "screenshot_b64", empty_shot)
     monkeypatch.setattr(driver_mod, "captcha_active", lambda d: False)
     monkeypatch.setattr(driver_mod, "proxy_configured", lambda: True)
+    monkeypatch.setattr(driver_mod, "warm_session_configured", lambda: False)
     monkeypatch.setenv("AUTO_APPLY_ALLOW_DIRECT", "1")
+    monkeypatch.delenv("BROWSER_PROXY_STICKY_SID", raising=False)
+    monkeypatch.delenv("BROWSER_STORAGE_STATE", raising=False)
+    monkeypatch.delenv("BROWSER_STORAGE_STATE_JSON", raising=False)
 
 
 def test_proxy_connect_572_retries_with_new_sid(monkeypatch):

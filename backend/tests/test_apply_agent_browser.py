@@ -9,11 +9,14 @@ from apply_agent.browser import (
     chromium_launch_args,
     effective_headless,
     headed_browser_available,
+    is_proxy_connect_failure_status,
+    is_proxy_connect_failure_text,
     is_transient_navigation_error,
     parse_proxy_credentials,
     privateproxy_sticky_username,
     proxy_configured,
     stealth_init_script,
+    warm_session_configured,
     _load_cookies_from_env,
 )
 
@@ -125,6 +128,18 @@ def test_browser_storage_state_json(monkeypatch, tmp_path):
     monkeypatch.setenv("BROWSER_STORAGE_STATE_JSON", json.dumps(payload))
     opts = browser_context_options()
     assert opts["storage_state"]["cookies"][0]["name"] == "a"
+
+
+def test_warm_session_configured(monkeypatch, tmp_path):
+    monkeypatch.delenv("BROWSER_STORAGE_STATE_JSON", raising=False)
+    monkeypatch.delenv("BROWSER_STORAGE_STATE", raising=False)
+    monkeypatch.delenv("BROWSER_COOKIES_JSON", raising=False)
+    monkeypatch.delenv("BROWSER_COOKIES_FILE", raising=False)
+    assert warm_session_configured() is False
+    path = tmp_path / "state.json"
+    path.write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("BROWSER_STORAGE_STATE", str(path))
+    assert warm_session_configured() is True
 
 
 def test_proxy_configured_and_nav_timeout(monkeypatch):
