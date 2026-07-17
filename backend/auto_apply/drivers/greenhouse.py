@@ -135,7 +135,7 @@ class GreenhouseApplyDriver(BrowserApplyDriver):
             payload = resp.json()
         return _blueprint_from_questions(payload)
 
-    async def reveal_form(self, page: Any) -> None:
+    async def reveal_form(self, page: Any, evidence: Any = None) -> None:
         # Newer job-boards.greenhouse.io renders the form behind an Apply button.
         for selector in ('a[href*="#app"]', 'button#apply_button', 'a.template-btn-submit'):
             try:

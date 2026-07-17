@@ -1,10 +1,10 @@
 """SmartRecruiters driver: oneclick-ui hosted apply forms.
 
-Flow: job posting -> "Je suis intéressé(e)" (#st-apply) -> oneclick-ui form.
-inspect_application builds a deterministic blueprint from the standard oneclick
-field layout (French + English accessible names) plus optional screening
-questions when the oneclick configuration API responds. submit() navigates
-directly to the oneclick URL and fills via Playwright role selectors.
+Flow: job posting -> Apply CTA ("Je suis intéressé(e)" / #st-apply / text button)
+-> oneclick-ui form. Falls back to direct oneclick navigation when the CTA
+selectors miss. inspect_application builds a deterministic blueprint from the
+standard oneclick field layout (French + English accessible names) plus optional
+screening questions when the oneclick configuration API responds.
 """
 from __future__ import annotations
 
@@ -335,7 +335,7 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
             elapsed += 1100
         return False
 
-    async def reveal_form(self, page: Any) -> None:
+    async def reveal_form(self, page: Any, evidence: Any = None) -> None:
         url = page.url or ""
         if "oneclick-ui" in url:
             await self._wait_for_oneclick_form(page)
@@ -343,7 +343,22 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
         # Expired postings keep a CTA whose label is no longer "Je suis intéressé(e)".
         if await detect_offer_expired(page):
             return
-        for selector in ("#st-apply", 'a[data-sr-track="apply"]', 'a.js-oneclick[href*="oneclick-ui"]'):
+
+        # Accor / FR boards often use a plain text button without #st-apply.
+        apply_selectors = (
+            "#st-apply",
+            'a[data-sr-track="apply"]',
+            'a.js-oneclick[href*="oneclick-ui"]',
+            'button:has-text("Je suis intéressé")',
+            'a:has-text("Je suis intéressé")',
+            'button:has-text("I\'m interested")',
+            'a:has-text("I\'m interested")',
+            'button:has-text("Apply now")',
+            'a:has-text("Apply now")',
+            'role=button[name=/intéressé|interested|apply/i]',
+        )
+        clicked = False
+        for selector in apply_selectors:
             try:
                 loc = page.locator(selector)
                 if await loc.count():
@@ -355,15 +370,60 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
                         return
                     await human_pause(page, 800, 1800)
                     await human_click(loc.first, page)
+                    clicked = True
+                    if evidence is not None:
+                        evidence.raw.setdefault("step_log", []).append({
+                            "action": "reveal_form",
+                            "locator": selector,
+                            "status": "ok",
+                            "value_preview": "apply_cta_clicked",
+                            "error": "",
+                        })
                     await human_pause(page, 1800, 3200)
                     try:
                         await page.wait_for_load_state("networkidle", timeout=12000)
                     except Exception:
                         pass
-                    await self._wait_for_oneclick_form(page)
-                    return
+                    if await self._wait_for_oneclick_form(page):
+                        return
+                    # CTA clicked but form still missing — try direct oneclick below.
+                    break
             except Exception:
                 continue
+
+        app_url = ""
+        if evidence is not None:
+            app_url = str((evidence.raw or {}).get("application_url") or "").strip()
+        if "oneclick-ui" in app_url and "oneclick-ui" not in (page.url or ""):
+            try:
+                await page.goto(app_url, wait_until="domcontentloaded", timeout=30000)
+                if evidence is not None:
+                    evidence.raw.setdefault("step_log", []).append({
+                        "action": "reveal_form",
+                        "locator": app_url,
+                        "status": "ok",
+                        "value_preview": "oneclick_direct_nav",
+                        "error": "",
+                    })
+                await self._wait_for_oneclick_form(page)
+                return
+            except Exception as exc:
+                if evidence is not None:
+                    evidence.raw.setdefault("step_log", []).append({
+                        "action": "reveal_form",
+                        "locator": app_url,
+                        "status": "error",
+                        "value_preview": "oneclick_direct_nav",
+                        "error": str(exc)[:240],
+                    })
+        elif evidence is not None and not clicked:
+            evidence.raw.setdefault("step_log", []).append({
+                "action": "reveal_form",
+                "locator": "apply_cta",
+                "status": "not_found",
+                "value_preview": "still_on_posting",
+                "error": "Apply CTA not found and no oneclick URL available",
+            })
 
     async def _apply_step(self, page: Any, step, documents: Dict[str, Any], evidence) -> None:
         if step.action == "check":

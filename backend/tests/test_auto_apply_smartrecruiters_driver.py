@@ -123,6 +123,108 @@ def test_driver_is_registered():
     assert DRIVER_REGISTRY.for_job({"ats_provider": "smartrecruiters"}) is not None
 
 
+class _RevealLocator:
+    def __init__(self, text="", count=0):
+        self._text = text
+        self._count = count
+        self.first = self
+        self.clicked = False
+
+    async def count(self):
+        return self._count
+
+    async def inner_text(self, timeout=0):
+        return self._text
+
+
+class _RevealPage:
+    def __init__(self):
+        self.url = "https://jobs.smartrecruiters.com/Accor/744000137165134-receptionniste-night-h-f-cdi"
+        self.goto_urls = []
+        self._cta = _RevealLocator("Je suis intéressé(e)", count=1)
+
+    def locator(self, selector):
+        if selector == 'button:has-text("Je suis intéressé")':
+            return self._cta
+        return _RevealLocator(count=0)
+
+    async def goto(self, url, wait_until=None, timeout=None):
+        self.goto_urls.append(url)
+        self.url = url
+
+    async def wait_for_load_state(self, *args, **kwargs):
+        return None
+
+
+def test_reveal_form_clicks_french_interested_button(monkeypatch):
+    from auto_apply.models import SubmissionEvidence
+
+    driver = SmartRecruitersApplyDriver()
+    page = _RevealPage()
+    evidence = SubmissionEvidence(raw={
+        "application_url": (
+            "https://jobs.smartrecruiters.com/oneclick-ui/company/Accor/"
+            "publication/9792f2d8-6c92-4148-ab59-fed4b4fb9ecf?dcr_ci=Accor"
+        ),
+        "step_log": [],
+    })
+    clicks = []
+
+    async def fake_detect(_page):
+        return False
+
+    async def fake_pause(*args, **kwargs):
+        return None
+
+    async def fake_click(loc, page=None):
+        clicks.append(loc)
+        loc.clicked = True
+        page.url = evidence.raw["application_url"]
+
+    async def fake_wait(_page, timeout_ms=45000):
+        return True
+
+    monkeypatch.setattr("auto_apply.drivers.smartrecruiters.detect_offer_expired", fake_detect)
+    monkeypatch.setattr("auto_apply.drivers.smartrecruiters.human_pause", fake_pause)
+    monkeypatch.setattr("auto_apply.drivers.smartrecruiters.human_click", fake_click)
+    monkeypatch.setattr(driver, "_wait_for_oneclick_form", fake_wait)
+
+    asyncio.run(driver.reveal_form(page, evidence))
+    assert clicks, "expected Apply CTA click"
+    assert evidence.raw["step_log"][0]["value_preview"] == "apply_cta_clicked"
+    assert evidence.raw["step_log"][0]["locator"] == 'button:has-text("Je suis intéressé")'
+
+
+def test_reveal_form_falls_back_to_oneclick_url(monkeypatch):
+    from auto_apply.models import SubmissionEvidence
+
+    driver = SmartRecruitersApplyDriver()
+    page = _RevealPage()
+    page._cta = _RevealLocator(count=0)
+    oneclick = (
+        "https://jobs.smartrecruiters.com/oneclick-ui/company/Accor/"
+        "publication/9792f2d8-6c92-4148-ab59-fed4b4fb9ecf?dcr_ci=Accor"
+    )
+    evidence = SubmissionEvidence(raw={"application_url": oneclick, "step_log": []})
+
+    async def fake_detect(_page):
+        return False
+
+    async def fake_pause(*args, **kwargs):
+        return None
+
+    async def fake_wait(_page, timeout_ms=45000):
+        return True
+
+    monkeypatch.setattr("auto_apply.drivers.smartrecruiters.detect_offer_expired", fake_detect)
+    monkeypatch.setattr("auto_apply.drivers.smartrecruiters.human_pause", fake_pause)
+    monkeypatch.setattr(driver, "_wait_for_oneclick_form", fake_wait)
+
+    asyncio.run(driver.reveal_form(page, evidence))
+    assert page.goto_urls == [oneclick]
+    assert evidence.raw["step_log"][0]["value_preview"] == "oneclick_direct_nav"
+
+
 def test_inspect_application_merges_configuration(monkeypatch):
     driver = SmartRecruitersApplyDriver()
 

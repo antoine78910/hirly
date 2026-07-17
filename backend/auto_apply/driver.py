@@ -115,7 +115,7 @@ class BrowserApplyDriver(ApplyDriver):
         await human_pause(page, 600, 1400)
         await human_mouse_wander(page)
 
-    async def reveal_form(self, page: Any) -> None:
+    async def reveal_form(self, page: Any, evidence: Optional[SubmissionEvidence] = None) -> None:
         """Optional fixed-selector click to reveal a form behind an Apply CTA.
         Default: nothing. Subclasses override with a deterministic selector."""
         return None
@@ -354,7 +354,7 @@ class BrowserApplyDriver(ApplyDriver):
                     return evidence
 
                 await self.after_navigation(page, evidence)
-                await self.reveal_form(page)
+                await self.reveal_form(page, evidence)
                 await human_pause(page, 1000, 1800)
                 try:
                     await page.wait_for_load_state("networkidle", timeout=15000)
