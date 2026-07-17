@@ -27,8 +27,8 @@ _ERROR_HINTS = {
 
 _PROXY_HINT = (
     "Residential proxy could not reach the ATS (often PrivateProxy HTTP 572). "
-    "Retries mint a new sticky SID automatically — if all attempts fail, check "
-    "BROWSER_PROXY credentials / STICKY_SID on Railway, or try again later."
+    "Retries mint a new sticky SID, then one direct (no-proxy) attempt. "
+    "If all fail, check BROWSER_PROXY / STICKY_SID on Railway, or try again later."
 )
 
 

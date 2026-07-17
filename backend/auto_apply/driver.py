@@ -217,14 +217,18 @@ class BrowserApplyDriver(ApplyDriver):
         nav_url = self.navigation_url(ctx.job)
         evidence = SubmissionEvidence(raw={"application_url": url, "navigation_url": nav_url})
         # Residential proxies often hand out dead exits — relaunch with a fresh
-        # sticky sid when the first navigation times out. Cap wall-clock so a
-        # string of dead exits cannot burn 5+ minutes before the admin console
+        # sticky sid, then one direct (no-proxy) attempt. Cap wall-clock so a
+        # string of dead exits cannot burn minutes before the admin console
         # surfaces a real error.
         max_attempts = 3
         deadline_at = time.monotonic() + driver_submit_deadline_s()
         last_open_page_error: Optional[ApplyAgentError] = None
         last_evidence = evidence
         force_new_proxy_sid = False
+        disable_proxy = False
+        allow_direct = os.environ.get("AUTO_APPLY_ALLOW_DIRECT", "1").strip().lower() not in (
+            "0", "false", "no",
+        )
         for attempt in range(1, max_attempts + 1):
             if time.monotonic() >= deadline_at and attempt > 1:
                 raise ApplyAgentError(
@@ -245,6 +249,7 @@ class BrowserApplyDriver(ApplyDriver):
                     attempt=attempt,
                     max_attempts=max_attempts,
                     force_new_proxy_sid=force_new_proxy_sid,
+                    disable_proxy=disable_proxy,
                 )
             except ApplyAgentError as exc:
                 last_open_page_error = exc
@@ -265,20 +270,36 @@ class BrowserApplyDriver(ApplyDriver):
                     ) from exc
                 if not would_retry:
                     raise
-                # Dead residential exit (HTTP 572 etc.) — mint a fresh sticky sid.
-                force_new_proxy_sid = True
+                # Last retry: drop the residential proxy — PrivateProxy 572 often
+                # means the exit cannot reach the ATS at all; Railway direct can.
+                next_is_last = attempt + 1 >= max_attempts
+                if (
+                    next_is_last
+                    and allow_direct
+                    and proxy_configured()
+                    and not disable_proxy
+                ):
+                    disable_proxy = True
+                    force_new_proxy_sid = False
+                    retry_label = "direct_no_proxy"
+                else:
+                    # Dead residential exit (HTTP 572 etc.) — mint a fresh sticky sid.
+                    force_new_proxy_sid = True
+                    disable_proxy = False
+                    retry_label = "new_proxy_sid"
                 await self._log_step(
                     evidence,
                     action="navigate_retry",
                     locators=[nav_url],
                     status="retry",
-                    error=f"attempt {attempt}/{max_attempts}: {str(exc)[:180]}",
+                    error=f"attempt {attempt}/{max_attempts}: {str(exc)[:160]} → {retry_label}",
                 )
                 logger.warning(
-                    "apply_nav_retry provider=%s attempt=%s/%s error=%s",
+                    "apply_nav_retry provider=%s attempt=%s/%s next=%s error=%s",
                     self.provider,
                     attempt,
                     max_attempts,
+                    retry_label,
                     str(exc)[:200],
                 )
                 continue
@@ -294,8 +315,16 @@ class BrowserApplyDriver(ApplyDriver):
                 and (proxy_configured() or last_evidence.blocked_reason == "captcha")
                 and not (fixed_sticky and last_evidence.blocked_reason == "bot_protection")
                 and time.monotonic() < deadline_at
+                and not disable_proxy
             ):
-                force_new_proxy_sid = True
+                next_is_last = attempt + 1 >= max_attempts
+                if next_is_last and allow_direct and proxy_configured():
+                    disable_proxy = True
+                    force_new_proxy_sid = False
+                    retry_label = "direct_no_proxy"
+                else:
+                    force_new_proxy_sid = True
+                    retry_label = "new_proxy_sid"
                 await self._log_step(
                     evidence,
                     action="bot_wall_retry",
@@ -303,14 +332,15 @@ class BrowserApplyDriver(ApplyDriver):
                     status="retry",
                     error=(
                         f"attempt {attempt}/{max_attempts}: "
-                        f"{last_evidence.blocked_reason}"
+                        f"{last_evidence.blocked_reason} → {retry_label}"
                     ),
                 )
                 logger.warning(
-                    "apply_bot_wall_retry provider=%s attempt=%s/%s reason=%s",
+                    "apply_bot_wall_retry provider=%s attempt=%s/%s next=%s reason=%s",
                     self.provider,
                     attempt,
                     max_attempts,
+                    retry_label,
                     last_evidence.blocked_reason,
                 )
                 # Clear so the next attempt can set a fresh blocked_reason.
@@ -331,11 +361,13 @@ class BrowserApplyDriver(ApplyDriver):
         attempt: int,
         max_attempts: int,
         force_new_proxy_sid: bool = False,
+        disable_proxy: bool = False,
     ) -> SubmissionEvidence:
         try:
             async with launch_page(
                 headless=ctx.headless,
                 force_new_proxy_sid=force_new_proxy_sid,
+                disable_proxy=disable_proxy,
             ) as page:
                 await self._log_step(
                     evidence,
@@ -346,6 +378,7 @@ class BrowserApplyDriver(ApplyDriver):
                         f"{'headless' if ctx.headless else 'visible'}"
                         f"{f' · try {attempt}/{max_attempts}' if max_attempts > 1 else ''}"
                         f"{' · new_proxy_sid' if force_new_proxy_sid else ''}"
+                        f"{' · direct_no_proxy' if disable_proxy else ''}"
                     ),
                 )
                 http_status = None

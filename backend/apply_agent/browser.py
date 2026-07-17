@@ -465,9 +465,13 @@ async def launch_page(
     *,
     headless: bool = True,
     force_new_proxy_sid: bool = False,
+    disable_proxy: bool = False,
 ) -> AsyncIterator[Any]:
     """Yields a ready-to-use Playwright `Page`. Closes browser/context/page on
     exit regardless of outcome.
+
+    disable_proxy=True skips BROWSER_PROXY entirely (last-resort after HTTP 572
+    SID retries — Railway egress can still reach some ATS hosts).
     """
     headless = effective_headless(headless)
     # Prefer Patchright when available: it patches Playwright CDP leaks that
@@ -522,7 +526,11 @@ async def launch_page(
                 launch_kwargs["channel"] = channel
             elif executable_path:
                 launch_kwargs["executable_path"] = executable_path
-            proxy = browser_proxy_settings(force_random_sid=force_new_proxy_sid)
+            proxy = None if disable_proxy else browser_proxy_settings(
+                force_random_sid=force_new_proxy_sid,
+            )
+            if disable_proxy and proxy_configured():
+                logger.info("browser_proxy_disabled reason=direct_fallback")
             if proxy:
                 launch_kwargs["proxy"] = proxy
                 logger.info(

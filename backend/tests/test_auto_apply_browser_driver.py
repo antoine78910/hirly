@@ -152,7 +152,7 @@ class _EmailLikeDriver(ApplyDriver):
 
 def _install_fake_page(monkeypatch, page):
     @asynccontextmanager
-    async def fake_launch(*, headless=True, force_new_proxy_sid=False):
+    async def fake_launch(*, headless=True, force_new_proxy_sid=False, disable_proxy=False):
         yield page
     monkeypatch.setattr(driver_mod, "launch_page", fake_launch)
 
@@ -293,6 +293,8 @@ def _install_proxy_retry_fakes(monkeypatch):
     monkeypatch.setattr(driver_mod, "recover_stuck_page", noop_recover)
     monkeypatch.setattr(driver_mod, "screenshot_b64", empty_shot)
     monkeypatch.setattr(driver_mod, "captcha_active", lambda d: False)
+    monkeypatch.setattr(driver_mod, "proxy_configured", lambda: True)
+    monkeypatch.setenv("AUTO_APPLY_ALLOW_DIRECT", "1")
 
 
 def test_proxy_connect_572_retries_with_new_sid(monkeypatch):
@@ -321,8 +323,11 @@ def test_proxy_connect_572_retries_with_new_sid(monkeypatch):
             return loc
 
     @asynccontextmanager
-    async def tracking_launch(*, headless=True, force_new_proxy_sid=False):
-        launch_kwargs.append({"force_new_proxy_sid": force_new_proxy_sid})
+    async def tracking_launch(*, headless=True, force_new_proxy_sid=False, disable_proxy=False):
+        launch_kwargs.append({
+            "force_new_proxy_sid": force_new_proxy_sid,
+            "disable_proxy": disable_proxy,
+        })
         page = _ProxyFailPage(known_selectors=set())
         pages.append(page)
         yield page
@@ -341,9 +346,70 @@ def test_proxy_connect_572_retries_with_new_sid(monkeypatch):
     assert raised.value.phase == "open_page"
     assert "572" in str(raised.value)
     assert len(pages) == 3
-    assert launch_kwargs[0]["force_new_proxy_sid"] is False
-    assert launch_kwargs[1]["force_new_proxy_sid"] is True
-    assert launch_kwargs[2]["force_new_proxy_sid"] is True
+    assert launch_kwargs[0] == {"force_new_proxy_sid": False, "disable_proxy": False}
+    assert launch_kwargs[1] == {"force_new_proxy_sid": True, "disable_proxy": False}
+    assert launch_kwargs[2] == {"force_new_proxy_sid": False, "disable_proxy": True}
+
+
+def test_proxy_572_then_direct_fallback_succeeds(monkeypatch):
+    """After proxy 572s, the last attempt runs without proxy and can complete."""
+    pages = []
+    launch_kwargs = []
+
+    class _ProxyThenOkPage(_FakePage):
+        def __init__(self, *, fail_proxy: bool):
+            super().__init__(known_selectors={
+                '[name="email"]',
+                'button[type="submit"], input[type="submit"], button:has-text("Submit")',
+            })
+            self._fail_proxy = fail_proxy
+
+        async def goto(self, url, wait_until=None, timeout=0):
+            self.url = url
+            if self._fail_proxy:
+                class _R:
+                    status = 572
+                return _R()
+
+            class _R:
+                status = 200
+            return _R()
+
+        def locator(self, selector):
+            self.queried.append(selector)
+            loc = _FakeLocator(self, selector, exists=selector in self.known)
+            if selector == "body":
+                async def body_text(timeout=0):
+                    if self._fail_proxy:
+                        return "Failed to connect to target host"
+                    return "thank you for applying"
+                loc.inner_text = body_text
+            return loc
+
+    @asynccontextmanager
+    async def tracking_launch(*, headless=True, force_new_proxy_sid=False, disable_proxy=False):
+        launch_kwargs.append({
+            "force_new_proxy_sid": force_new_proxy_sid,
+            "disable_proxy": disable_proxy,
+        })
+        page = _ProxyThenOkPage(fail_proxy=not disable_proxy)
+        pages.append(page)
+        yield page
+
+    monkeypatch.setattr(driver_mod, "launch_page", tracking_launch)
+    _install_proxy_retry_fakes(monkeypatch)
+
+    plan = ApplicationPlan(steps=[
+        PlanStep(action="fill", locators=['[name="email"]'], value="a@b.co"),
+        PlanStep(action="submit", locators=[]),
+    ])
+    ctx = SubmissionContext(job={"external_url": "https://x/y"}, blueprint=None, plan=plan, documents={})
+    ev = asyncio.run(_StubDriver().submit(ctx))
+
+    assert len(pages) == 3
+    assert launch_kwargs[2]["disable_proxy"] is True
+    assert ev.submit_performed is True
+    assert pages[-1].filled[-1] == ('[name="email"]', "a@b.co")
 
 
 def test_proxy_retries_stop_when_driver_deadline_exceeded(monkeypatch):
@@ -371,7 +437,7 @@ def test_proxy_retries_stop_when_driver_deadline_exceeded(monkeypatch):
             return loc
 
     @asynccontextmanager
-    async def tracking_launch(*, headless=True, force_new_proxy_sid=False):
+    async def tracking_launch(*, headless=True, force_new_proxy_sid=False, disable_proxy=False):
         page = _ProxyFailPage(known_selectors=set())
         pages.append(page)
         yield page
@@ -463,8 +529,11 @@ def test_proxy_connect_after_reveal_retries_with_new_sid(monkeypatch):
             await super()._apply_step(page, step, documents, evidence)
 
     @asynccontextmanager
-    async def tracking_launch(*, headless=True, force_new_proxy_sid=False):
-        launch_kwargs.append({"force_new_proxy_sid": force_new_proxy_sid})
+    async def tracking_launch(*, headless=True, force_new_proxy_sid=False, disable_proxy=False):
+        launch_kwargs.append({
+            "force_new_proxy_sid": force_new_proxy_sid,
+            "disable_proxy": disable_proxy,
+        })
         page = _PostRevealProxyPage()
         pages.append(page)
         yield page
@@ -484,9 +553,9 @@ def test_proxy_connect_after_reveal_retries_with_new_sid(monkeypatch):
     assert "Failed to connect" in str(raised.value) or "Proxy could not reach" in str(raised.value)
     assert filled_on_attempts == [], "must not fill fields on the proxy error page"
     assert len(pages) == 3
-    assert launch_kwargs[0]["force_new_proxy_sid"] is False
-    assert launch_kwargs[1]["force_new_proxy_sid"] is True
-    assert launch_kwargs[2]["force_new_proxy_sid"] is True
+    assert launch_kwargs[0] == {"force_new_proxy_sid": False, "disable_proxy": False}
+    assert launch_kwargs[1] == {"force_new_proxy_sid": True, "disable_proxy": False}
+    assert launch_kwargs[2] == {"force_new_proxy_sid": False, "disable_proxy": True}
 
 
 def test_bot_wall_after_reveal_aborts_before_fills(monkeypatch):
