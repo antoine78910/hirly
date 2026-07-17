@@ -164,16 +164,48 @@ async def human_upload(locator: Any, page: Any, path: str) -> None:
     await human_pause(page, 700, 1500)
 
 
-async def try_pass_datadome_slider(page: Any, *, attempts: int = 3) -> bool:
-    """Best-effort DataDome device-check slider (SmartRecruiters oneclick).
+async def _datadome_frame(page: Any) -> Any:
+    try:
+        frames = page.frames
+    except Exception:
+        return None
+    return next((f for f in frames if "captcha-delivery" in ((getattr(f, "url", None) or ""))), None)
+
+
+async def wait_for_datadome_frame(page: Any, *, timeout_ms: int = 12000) -> Any:
+    """Poll until the captcha-delivery iframe exists (slider often mounts a beat late)."""
+    deadline_ms = max(0, int(timeout_ms))
+    elapsed = 0
+    while elapsed <= deadline_ms:
+        frame = await _datadome_frame(page)
+        if frame is not None:
+            return frame
+        await page.wait_for_timeout(150)
+        elapsed += 150
+    return None
+
+
+async def try_pass_datadome_slider(
+    page: Any,
+    *,
+    attempts: int = 4,
+    wait_for_frame_ms: int = 12000,
+) -> bool:
+    """Drag the DataDome slider right as soon as it is laid out.
 
     Waits for `#ddv1-captcha-container .slider` inside the captcha-delivery
     iframe, converts iframe-local coords to page coords, then drags to
     `.sliderTarget`. Returns True when the iframe disappears.
     """
+    frame = await wait_for_datadome_frame(page, timeout_ms=wait_for_frame_ms)
+    if frame is None:
+        logger.info("datadome_slider_no_iframe wait_ms=%s", wait_for_frame_ms)
+        return False
+
     for attempt in range(max(1, attempts)):
-        frame = next((f for f in page.frames if "captcha-delivery" in (f.url or "")), None)
+        frame = await _datadome_frame(page)
         if frame is None:
+            logger.info("datadome_slider_passed attempt=%s reason=iframe_gone", attempt + 1)
             return True
 
         # Ensure visual puzzle mode (not audio) is selected.
@@ -182,13 +214,14 @@ async def try_pass_datadome_slider(page: Any, *, attempts: int = 3) -> bool:
             if await puzzle_btn.count():
                 cls = (await puzzle_btn.get_attribute("class")) or ""
                 if "toggled" not in cls:
-                    await puzzle_btn.click(timeout=2000)
-                    await human_pause(page, 400, 700)
+                    await puzzle_btn.click(timeout=1500)
+                    await page.wait_for_timeout(250)
         except Exception:
             pass
 
+        # Poll fast — drag the moment the handle + target are laid out.
         coords = None
-        for _ in range(30):
+        for _ in range(40):
             try:
                 coords = await frame.evaluate(
                     """() => {
@@ -219,12 +252,12 @@ async def try_pass_datadome_slider(page: Any, *, attempts: int = 3) -> bool:
                 coords = None
             if coords:
                 break
-            await human_pause(page, 350, 600)
+            await page.wait_for_timeout(120)
         if not coords:
             logger.info("datadome_slider_not_ready attempt=%s", attempt + 1)
             try:
-                await frame.click("#captcha__reload__button", timeout=2000)
-                await human_pause(page, 1000, 1800)
+                await frame.click("#captcha__reload__button", timeout=1500)
+                await page.wait_for_timeout(800)
             except Exception:
                 pass
             continue
@@ -240,7 +273,7 @@ async def try_pass_datadome_slider(page: Any, *, attempts: int = 3) -> bool:
 
         sx = ox + float(coords["sx"])
         sy = oy + float(coords["sy"])
-        ex = ox + float(coords["ex"]) + random.uniform(4, 12)
+        ex = ox + float(coords["ex"]) + random.uniform(6, 14)
         ey = oy + float(coords["ey"])
         logger.info(
             "datadome_slider_drag attempt=%s from=(%.1f,%.1f) to=(%.1f,%.1f)",
@@ -251,36 +284,36 @@ async def try_pass_datadome_slider(page: Any, *, attempts: int = 3) -> bool:
             ey,
         )
         try:
-            await page.mouse.move(sx - 35, sy + random.uniform(-5, 5), steps=10)
-            await human_pause(page, 180, 400)
-            await page.mouse.move(sx, sy, steps=8)
-            await human_pause(page, 120, 280)
+            # Grab quickly — long approach delays look like a stalled bot and
+            # the user sees the handle disappear when we close the browser.
+            await page.mouse.move(sx, sy, steps=4)
+            await page.wait_for_timeout(random.randint(40, 90))
             await page.mouse.down()
-            await human_pause(page, 40, 90)
-            steps = random.randint(36, 52)
+            await page.wait_for_timeout(random.randint(20, 50))
+            steps = random.randint(28, 40)
             for i in range(steps):
                 t = (i + 1) / steps
                 ease = 0.5 - 0.5 * math.cos(math.pi * t)
-                x = sx + (ex - sx) * ease + random.gauss(0, 0.45)
-                y = sy + math.sin(t * math.pi) * random.uniform(0.3, 1.8) + random.gauss(0, 0.3)
+                x = sx + (ex - sx) * ease + random.gauss(0, 0.35)
+                y = sy + math.sin(t * math.pi) * random.uniform(0.2, 1.4) + random.gauss(0, 0.25)
                 await page.mouse.move(x, y)
-                await page.wait_for_timeout(int(random.uniform(12, 24) + (12 if t > 0.85 else 0)))
-            await page.mouse.move(ex + random.uniform(0, 6), ey + random.uniform(-1, 1), steps=4)
-            await human_pause(page, 40, 100)
+                await page.wait_for_timeout(int(random.uniform(8, 16) + (8 if t > 0.85 else 0)))
+            await page.mouse.move(ex + random.uniform(2, 8), ey + random.uniform(-1, 1), steps=3)
+            await page.wait_for_timeout(random.randint(30, 70))
             await page.mouse.up()
         except Exception as exc:
             logger.info("datadome_slider_drag_failed error=%s", str(exc)[:160])
             continue
 
-        await human_pause(page, 2200, 3800)
-        if not any("captcha-delivery" in (f.url or "") for f in page.frames):
+        await page.wait_for_timeout(random.randint(1400, 2200))
+        if await _datadome_frame(page) is None:
             logger.info("datadome_slider_passed attempt=%s", attempt + 1)
             return True
         try:
-            frame = next((f for f in page.frames if "captcha-delivery" in (f.url or "")), None)
+            frame = await _datadome_frame(page)
             if frame:
-                await frame.click("#captcha__reload__button", timeout=2000)
-                await human_pause(page, 1200, 2200)
+                await frame.click("#captcha__reload__button", timeout=1500)
+                await page.wait_for_timeout(900)
         except Exception:
             pass
-    return not any("captcha-delivery" in (f.url or "") for f in page.frames)
+    return await _datadome_frame(page) is None

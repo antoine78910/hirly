@@ -334,15 +334,21 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
                     return True
             except Exception:
                 pass
-            # DataDome device-check often appears only after /config 403.
-            if slider_attempts < 2 and any(
-                "captcha-delivery" in (f.url or "") for f in page.frames
-            ):
+            # DataDome device-check often appears only after /config 403 —
+            # drag as soon as the iframe/slider mounts; do not wait out the loop.
+            has_dd_frame = any("captcha-delivery" in (f.url or "") for f in page.frames)
+            try:
+                body_l = (await page.locator("body").inner_text(timeout=800)).lower()
+            except Exception:
+                body_l = ""
+            wants_slider = has_dd_frame or ("faites glisser" in body_l) or ("glisser vers la droite" in body_l)
+            if slider_attempts < 4 and wants_slider:
                 slider_attempts += 1
                 logger.info("sr_datadome_slider_attempt n=%s", slider_attempts)
-                await try_pass_datadome_slider(page, attempts=3)
-            await human_pause(page, 900, 1300)
-            elapsed += 1100
+                await try_pass_datadome_slider(page, attempts=4, wait_for_frame_ms=8000)
+                continue
+            await human_pause(page, 400, 700)
+            elapsed += 550
         return False
 
     async def reveal_form(self, page: Any, evidence: Any = None) -> None:

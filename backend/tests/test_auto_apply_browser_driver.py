@@ -231,6 +231,7 @@ def test_login_wall_aborts_with_blocked_reason(monkeypatch):
 
 def test_bot_wall_aborts_with_blocked_reason(monkeypatch):
     page = _FakePage(known_selectors=set())
+    page.frames = []
 
     async def goto_403(url, wait_until=None, timeout=0):
         page.url = url
@@ -243,10 +244,19 @@ def test_bot_wall_aborts_with_blocked_reason(monkeypatch):
 
     async def yes_bot(p, http_status=None):
         return True
+    async def no_slider(p, attempts=4, wait_for_frame_ms=0):
+        return False
     monkeypatch.setattr(driver_mod, "detect_bot_wall", yes_bot)
+    monkeypatch.setattr(driver_mod, "try_pass_datadome_slider", no_slider)
 
     plan = ApplicationPlan(steps=[PlanStep(action="submit", locators=[])])
-    ctx = SubmissionContext(job={"external_url": "https://x/y"}, blueprint=None, plan=plan, documents={})
+    ctx = SubmissionContext(
+        job={"external_url": "https://x/y"},
+        blueprint=None,
+        plan=plan,
+        documents={},
+        headless=True,
+    )
     ev = asyncio.run(_StubDriver().submit(ctx))
     assert ev.blocked_reason == "bot_protection" and ev.submit_performed is False
 
@@ -565,6 +575,7 @@ def test_proxy_connect_after_reveal_retries_with_new_sid(monkeypatch):
 def test_bot_wall_after_reveal_aborts_before_fills(monkeypatch):
     """SmartRecruiters often shows the bot wall only after Apply/oneclick."""
     page = _FakePage(known_selectors=set())
+    page.frames = []
     _install_fake_page(monkeypatch, page)
     calls = {"n": 0}
 
@@ -572,13 +583,23 @@ def test_bot_wall_after_reveal_aborts_before_fills(monkeypatch):
         calls["n"] += 1
         return calls["n"] >= 2
 
+    async def no_slider(p, attempts=4, wait_for_frame_ms=0):
+        return False
+
     monkeypatch.setattr(driver_mod, "detect_bot_wall", bot_after_first)
+    monkeypatch.setattr(driver_mod, "try_pass_datadome_slider", no_slider)
 
     plan = ApplicationPlan(steps=[
         PlanStep(action="fill", locators=['[name="email"]'], value="a@b.co"),
         PlanStep(action="submit", locators=[]),
     ])
-    ctx = SubmissionContext(job={"external_url": "https://x/y"}, blueprint=None, plan=plan, documents={})
+    ctx = SubmissionContext(
+        job={"external_url": "https://x/y"},
+        blueprint=None,
+        plan=plan,
+        documents={},
+        headless=True,
+    )
     ev = asyncio.run(_StubDriver().submit(ctx))
     assert ev.blocked_reason == "bot_protection"
     assert ev.submit_performed is False

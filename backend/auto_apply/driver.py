@@ -204,35 +204,53 @@ class BrowserApplyDriver(ApplyDriver):
                 error="expired_cta_or_copy",
             )
             return True
-        if await detect_bot_wall(page, http_status=http_status):
-            evidence.blocked_reason = "bot_protection"
-            evidence.screenshot_b64 = await screenshot_b64(page)
-            await self._log_step(
-                evidence,
-                action=stage,
-                locators=["body"],
-                status="blocked",
-                error=f"HTTP {http_status or 'page'}",
-            )
-            return True
         if await detect_login_wall(page):
             evidence.blocked_reason = "login_wall"
             evidence.screenshot_b64 = await screenshot_b64(page)
             await self._log_step(evidence, action="login_wall", locators=["body"], status="blocked")
             return True
-        if captcha_active(await detect_captcha(page)):
-            # Auto slider first; headed local runs then wait for a human solve.
+
+        # DataDome shows FR "Accès temporairement restreint" + a slider. That
+        # copy used to trip bot_wall and close the browser before we dragged.
+        captcha_dbg = await detect_captcha(page)
+        wall_hit = await detect_bot_wall(page, http_status=http_status)
+        if captcha_active(captcha_dbg) or wall_hit:
+            wait_ms = 15000 if captcha_active(captcha_dbg) else 6000
+            await self._log_step(
+                evidence,
+                action="datadome_slider_attempt",
+                locators=["iframe[src*=captcha-delivery]"],
+                status="retry",
+                value_preview=f"wait_frame_ms={wait_ms}",
+            )
             try:
-                await try_pass_datadome_slider(page, attempts=2)
-            except Exception:
-                pass
-            if not captcha_active(await detect_captcha(page)):
+                passed = await try_pass_datadome_slider(
+                    page, attempts=4, wait_for_frame_ms=wait_ms,
+                )
+            except Exception as exc:
+                passed = False
                 await self._log_step(
-                    evidence, action="captcha", locators=["body"], status="ok",
+                    evidence,
+                    action="datadome_slider_attempt",
+                    locators=["body"],
+                    status="error",
+                    error=str(exc)[:200],
+                )
+            # Re-check from DOM only — navigation may still be HTTP 403.
+            captcha_dbg = await detect_captcha(page)
+            wall_hit = await detect_bot_wall(page, http_status=None)
+            if passed or (not captcha_active(captcha_dbg) and not wall_hit):
+                await self._log_step(
+                    evidence,
+                    action="captcha",
+                    locators=["body"],
+                    status="ok",
                     value_preview="datadome_slider_passed",
                 )
                 return False
-            if allow_manual_captcha:
+            # Only wait for a human when the slider/captcha UI is still up —
+            # a hard bot wall without challenge must abort immediately.
+            if allow_manual_captcha and captcha_active(captcha_dbg):
                 await self._log_step(
                     evidence,
                     action="captcha_wait_manual",
@@ -246,9 +264,17 @@ class BrowserApplyDriver(ApplyDriver):
                         value_preview="manual_solve",
                     )
                     return False
-            evidence.blocked_reason = "captcha"
+            evidence.blocked_reason = (
+                "captcha" if captcha_active(captcha_dbg) else "bot_protection"
+            )
             evidence.screenshot_b64 = await screenshot_b64(page)
-            await self._log_step(evidence, action="captcha", locators=["body"], status="blocked")
+            await self._log_step(
+                evidence,
+                action="captcha" if evidence.blocked_reason == "captcha" else stage,
+                locators=["body"],
+                status="blocked",
+                error=f"HTTP {http_status or 'page'}",
+            )
             return True
         return False
 
