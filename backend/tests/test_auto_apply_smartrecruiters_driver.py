@@ -142,15 +142,28 @@ class _RevealPage:
         self.url = "https://jobs.smartrecruiters.com/Accor/744000137165134-receptionniste-night-h-f-cdi"
         self.goto_urls = []
         self._cta = _RevealLocator("Je suis intéressé(e)", count=1)
+        self.body_text = "Job posting"
+        self.goto_status = 200
 
     def locator(self, selector):
         if selector == 'button:has-text("Je suis intéressé")':
             return self._cta
+        if selector == "body":
+            loc = _RevealLocator(self.body_text, count=1)
+            return loc
         return _RevealLocator(count=0)
 
     async def goto(self, url, wait_until=None, timeout=None):
         self.goto_urls.append(url)
         self.url = url
+        status = self.goto_status
+
+        class _R:
+            pass
+
+        resp = _R()
+        resp.status = status
+        return resp
 
     async def wait_for_load_state(self, *args, **kwargs):
         return None
@@ -223,6 +236,42 @@ def test_reveal_form_falls_back_to_oneclick_url(monkeypatch):
     asyncio.run(driver.reveal_form(page, evidence))
     assert page.goto_urls == [oneclick]
     assert evidence.raw["step_log"][0]["value_preview"] == "oneclick_direct_nav"
+    assert evidence.raw["step_log"][0]["status"] == "ok"
+
+
+def test_reveal_form_marks_oneclick_proxy_fail(monkeypatch):
+    from auto_apply.models import SubmissionEvidence
+
+    driver = SmartRecruitersApplyDriver()
+    page = _RevealPage()
+    page._cta = _RevealLocator(count=0)
+    page.body_text = "Failed to connect to target host"
+    oneclick = (
+        "https://jobs.smartrecruiters.com/oneclick-ui/company/Accor/"
+        "publication/9792f2d8-6c92-4148-ab59-fed4b4fb9ecf?dcr_ci=Accor"
+    )
+    evidence = SubmissionEvidence(raw={"application_url": oneclick, "step_log": []})
+    waited = []
+
+    async def fake_detect(_page):
+        return False
+
+    async def fake_pause(*args, **kwargs):
+        return None
+
+    async def fake_wait(_page, timeout_ms=45000):
+        waited.append(True)
+        return True
+
+    monkeypatch.setattr("auto_apply.drivers.smartrecruiters.detect_offer_expired", fake_detect)
+    monkeypatch.setattr("auto_apply.drivers.smartrecruiters.human_pause", fake_pause)
+    monkeypatch.setattr(driver, "_wait_for_oneclick_form", fake_wait)
+
+    asyncio.run(driver.reveal_form(page, evidence))
+    assert page.goto_urls == [oneclick]
+    assert evidence.raw["step_log"][0]["status"] == "error"
+    assert "Proxy could not reach" in evidence.raw["step_log"][0]["error"]
+    assert waited == [], "must not wait for form on proxy error page"
 
 
 def test_inspect_application_merges_configuration(monkeypatch):

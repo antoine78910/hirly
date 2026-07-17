@@ -120,6 +120,46 @@ class BrowserApplyDriver(ApplyDriver):
         Default: nothing. Subclasses override with a deterministic selector."""
         return None
 
+    async def _raise_if_proxy_connect_failure(
+        self,
+        page: Any,
+        evidence: SubmissionEvidence,
+        *,
+        target_url: str,
+        http_status: Optional[int] = None,
+        stage: str = "navigate",
+    ) -> None:
+        """Abort+retry when PrivateProxy serves HTTP 572 / Failed to connect page."""
+        body_preview = ""
+        try:
+            body_preview = await page.locator("body").inner_text(timeout=3000)
+        except Exception:
+            body_preview = ""
+        if not (
+            is_proxy_connect_failure_status(http_status)
+            or is_proxy_connect_failure_text(body_preview)
+        ):
+            return
+        evidence.screenshot_b64 = await screenshot_b64(page)
+        detail = (
+            f"Proxy could not reach target host "
+            f"(HTTP {http_status or 'page'})."
+        )
+        await self._log_step(
+            evidence,
+            action=stage,
+            locators=[target_url],
+            status="error",
+            value_preview=(target_url or "")[:100],
+            error=detail[:200],
+        )
+        raise ApplyAgentError(
+            "open_page",
+            detail,
+            target_url=target_url,
+            exception_class="ProxyConnectFailure",
+        )
+
     async def _abort_if_blocked(
         self,
         page: Any,
@@ -306,31 +346,13 @@ class BrowserApplyDriver(ApplyDriver):
                 # Proxy gateway failures (PrivateProxy HTTP 572 + "Failed to connect
                 # to target host") still yield a Response — abort+retry instead of
                 # filling fields on the error page.
-                body_preview = ""
-                try:
-                    body_preview = await page.locator("body").inner_text(timeout=3000)
-                except Exception:
-                    body_preview = ""
-                if is_proxy_connect_failure_status(http_status) or is_proxy_connect_failure_text(body_preview):
-                    evidence.screenshot_b64 = await screenshot_b64(page)
-                    detail = (
-                        f"Proxy could not reach target host "
-                        f"(HTTP {http_status or 'page'})."
-                    )
-                    await self._log_step(
-                        evidence,
-                        action="navigate",
-                        locators=[nav_url],
-                        status="error",
-                        value_preview=nav_url[:100],
-                        error=detail[:200],
-                    )
-                    raise ApplyAgentError(
-                        "open_page",
-                        detail,
-                        target_url=nav_url,
-                        exception_class="ProxyConnectFailure",
-                    )
+                await self._raise_if_proxy_connect_failure(
+                    page,
+                    evidence,
+                    target_url=nav_url,
+                    http_status=http_status,
+                    stage="navigate",
+                )
 
                 try:
                     await page.wait_for_load_state("networkidle", timeout=15000)
@@ -362,6 +384,15 @@ class BrowserApplyDriver(ApplyDriver):
                     pass
                 await dismiss_cookie_banner(page)
                 await _wait_for_meaningful_body(page, timeout_ms=12000)
+
+                # Apply CTA / oneclick can hit a dead exit even when the posting
+                # page loaded — retry with a fresh sticky sid instead of filling.
+                await self._raise_if_proxy_connect_failure(
+                    page,
+                    evidence,
+                    target_url=page.url or url or nav_url,
+                    stage="reveal_form_proxy",
+                )
 
                 # SmartRecruiters (and similar) often serve the bot wall only
                 # after the Apply CTA navigates to oneclick-ui — re-check here.

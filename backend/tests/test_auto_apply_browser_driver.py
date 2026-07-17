@@ -251,43 +251,7 @@ def test_bot_wall_aborts_with_blocked_reason(monkeypatch):
     assert ev.blocked_reason == "bot_protection" and ev.submit_performed is False
 
 
-def test_proxy_connect_572_retries_with_new_sid(monkeypatch):
-    """PrivateProxy HTTP 572 must abort open_page and retry — not fill the error page."""
-    from apply_agent.models import ApplyAgentError
-
-    pages = []
-    launch_kwargs = []
-
-    class _ProxyFailPage(_FakePage):
-        async def goto(self, url, wait_until=None, timeout=0):
-            self.url = url
-
-            class _R:
-                status = 572
-
-            return _R()
-
-        async def inner_text(self, timeout=0):
-            return "Failed to connect to target host"
-
-        def locator(self, selector):
-            self.queried.append(selector)
-            loc = _FakeLocator(self, selector, exists=False)
-            if selector == "body":
-                async def body_text(timeout=0):
-                    return "Failed to connect to target host"
-                loc.inner_text = body_text
-            return loc
-
-    @asynccontextmanager
-    async def tracking_launch(*, headless=True, force_new_proxy_sid=False):
-        launch_kwargs.append({"force_new_proxy_sid": force_new_proxy_sid})
-        page = _ProxyFailPage(known_selectors=set())
-        pages.append(page)
-        yield page
-
-    monkeypatch.setattr(driver_mod, "launch_page", tracking_launch)
-
+def _install_proxy_retry_fakes(monkeypatch):
     async def no_login(p):
         return False
 
@@ -330,6 +294,42 @@ def test_proxy_connect_572_retries_with_new_sid(monkeypatch):
     monkeypatch.setattr(driver_mod, "screenshot_b64", empty_shot)
     monkeypatch.setattr(driver_mod, "captcha_active", lambda d: False)
 
+
+def test_proxy_connect_572_retries_with_new_sid(monkeypatch):
+    """PrivateProxy HTTP 572 must abort open_page and retry — not fill the error page."""
+    from apply_agent.models import ApplyAgentError
+
+    pages = []
+    launch_kwargs = []
+
+    class _ProxyFailPage(_FakePage):
+        async def goto(self, url, wait_until=None, timeout=0):
+            self.url = url
+
+            class _R:
+                status = 572
+
+            return _R()
+
+        def locator(self, selector):
+            self.queried.append(selector)
+            loc = _FakeLocator(self, selector, exists=False)
+            if selector == "body":
+                async def body_text(timeout=0):
+                    return "Failed to connect to target host"
+                loc.inner_text = body_text
+            return loc
+
+    @asynccontextmanager
+    async def tracking_launch(*, headless=True, force_new_proxy_sid=False):
+        launch_kwargs.append({"force_new_proxy_sid": force_new_proxy_sid})
+        page = _ProxyFailPage(known_selectors=set())
+        pages.append(page)
+        yield page
+
+    monkeypatch.setattr(driver_mod, "launch_page", tracking_launch)
+    _install_proxy_retry_fakes(monkeypatch)
+
     plan = ApplicationPlan(steps=[
         PlanStep(action="fill", locators=['[name="email"]'], value="a@b.co"),
         PlanStep(action="submit", locators=[]),
@@ -340,6 +340,85 @@ def test_proxy_connect_572_retries_with_new_sid(monkeypatch):
         asyncio.run(_StubDriver().submit(ctx))
     assert raised.value.phase == "open_page"
     assert "572" in str(raised.value)
+    assert len(pages) == 3
+    assert launch_kwargs[0]["force_new_proxy_sid"] is False
+    assert launch_kwargs[1]["force_new_proxy_sid"] is True
+    assert launch_kwargs[2]["force_new_proxy_sid"] is True
+
+
+def test_proxy_connect_after_reveal_retries_with_new_sid(monkeypatch):
+    """Posting can load, but oneclick hop may still return Failed to connect — retry, don't fill."""
+    from apply_agent.models import ApplyAgentError
+
+    pages = []
+    launch_kwargs = []
+    filled_on_attempts = []
+
+    class _PostRevealProxyPage(_FakePage):
+        def __init__(self):
+            super().__init__(known_selectors=set())
+            self.body_text = "Réceptionniste — Je suis intéressé(e)"
+            self.phase = "posting"
+
+        async def goto(self, url, wait_until=None, timeout=0):
+            self.url = url
+
+            class _R:
+                status = 200
+
+            return _R()
+
+        def locator(self, selector):
+            self.queried.append(selector)
+            loc = _FakeLocator(self, selector, exists=False)
+            if selector == "body":
+                async def body_text(timeout=0):
+                    return self.body_text
+                loc.inner_text = body_text
+            return loc
+
+    class _RevealThenProxyDriver(_StubDriver):
+        async def reveal_form(self, page, evidence=None):
+            page.phase = "oneclick_proxy_fail"
+            page.url = (
+                "https://jobs.smartrecruiters.com/oneclick-ui/company/Accor/"
+                "publication/f4fd7ff2-de42-4a77-90b1-6aec443b4dfb"
+            )
+            page.body_text = "Failed to connect to target host"
+            if evidence is not None:
+                evidence.raw.setdefault("step_log", []).append({
+                    "action": "reveal_form",
+                    "locator": page.url,
+                    "status": "ok",
+                    "value_preview": "oneclick_direct_nav",
+                    "error": "",
+                })
+
+        async def _apply_step(self, page, step, documents, evidence):
+            filled_on_attempts.append(page.phase)
+            await super()._apply_step(page, step, documents, evidence)
+
+    @asynccontextmanager
+    async def tracking_launch(*, headless=True, force_new_proxy_sid=False):
+        launch_kwargs.append({"force_new_proxy_sid": force_new_proxy_sid})
+        page = _PostRevealProxyPage()
+        pages.append(page)
+        yield page
+
+    monkeypatch.setattr(driver_mod, "launch_page", tracking_launch)
+    _install_proxy_retry_fakes(monkeypatch)
+
+    plan = ApplicationPlan(steps=[
+        PlanStep(action="fill", locators=['#first-name-input >> input'], value="Grace"),
+        PlanStep(action="submit", locators=[]),
+    ])
+    ctx = SubmissionContext(job={"external_url": "https://x/y"}, blueprint=None, plan=plan, documents={})
+
+    with pytest.raises(ApplyAgentError) as raised:
+        asyncio.run(_RevealThenProxyDriver().submit(ctx))
+    assert raised.value.phase == "open_page"
+    assert "Failed to connect" in str(raised.value) or "Proxy could not reach" in str(raised.value)
+    assert filled_on_attempts == [], "must not fill fields on the proxy error page"
     assert len(pages) == 3
     assert launch_kwargs[0]["force_new_proxy_sid"] is False
     assert launch_kwargs[1]["force_new_proxy_sid"] is True

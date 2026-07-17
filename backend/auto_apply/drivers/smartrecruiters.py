@@ -26,6 +26,10 @@ from application_blueprint import (
 from application_failure import text_indicates_offer_expired
 from apply_agent.blockers import detect_offer_expired
 from apply_agent.guardrails import canonical
+from apply_agent.browser import (
+    is_proxy_connect_failure_status,
+    is_proxy_connect_failure_text,
+)
 from apply_agent.human_browser import (
     human_click,
     human_mouse_wander,
@@ -318,6 +322,12 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
         slider_attempts = 0
         while elapsed < deadline:
             try:
+                body = await page.locator("body").inner_text(timeout=1500)
+                if is_proxy_connect_failure_text(body):
+                    return False
+            except Exception:
+                pass
+            try:
                 if await page.locator(
                     'input:visible, textarea:visible, [role="textbox"]:visible'
                 ).count() >= 3:
@@ -394,18 +404,34 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
         app_url = ""
         if evidence is not None:
             app_url = str((evidence.raw or {}).get("application_url") or "").strip()
-        if "oneclick-ui" in app_url and "oneclick-ui" not in (page.url or ""):
+        on_oneclick = "oneclick-ui" in (page.url or "")
+        if "oneclick-ui" in app_url and not on_oneclick:
             try:
-                await page.goto(app_url, wait_until="domcontentloaded", timeout=30000)
+                resp = await page.goto(app_url, wait_until="domcontentloaded", timeout=30000)
+                status = None if resp is None else getattr(resp, "status", None)
+                body = ""
+                try:
+                    body = await page.locator("body").inner_text(timeout=3000)
+                except Exception:
+                    body = ""
+                proxy_fail = (
+                    is_proxy_connect_failure_status(status)
+                    or is_proxy_connect_failure_text(body)
+                )
                 if evidence is not None:
                     evidence.raw.setdefault("step_log", []).append({
                         "action": "reveal_form",
                         "locator": app_url,
-                        "status": "ok",
+                        "status": "error" if proxy_fail else "ok",
                         "value_preview": "oneclick_direct_nav",
-                        "error": "",
+                        "error": (
+                            f"Proxy could not reach target host (HTTP {status or 'page'})."
+                            if proxy_fail
+                            else ""
+                        ),
                     })
-                await self._wait_for_oneclick_form(page)
+                if not proxy_fail:
+                    await self._wait_for_oneclick_form(page)
                 return
             except Exception as exc:
                 if evidence is not None:
