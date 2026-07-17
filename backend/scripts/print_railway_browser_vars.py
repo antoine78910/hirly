@@ -32,6 +32,11 @@ def main() -> None:
     print("=== Railway variables (from .browser-secrets.env) ===")
     print("BROWSER_HEADLESS=false")
     print("BROWSER_SUBMIT_DRY_RUN=false")
+    print("BROWSER_REMOTE=auto")
+    print("BROWSER_REMOTE_COUNTRY=fr")
+    print("# SmartRecruiters only — set these from Bright Data Scraping Browser zone:")
+    print("# BRIGHTDATA_BROWSER_USER=brd-customer-XXX-zone-YYYY")
+    print("# BRIGHTDATA_BROWSER_PASSWORD=********")
     for key in keys:
         val = (os.environ.get(key) or "").strip()
         if val:

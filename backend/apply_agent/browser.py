@@ -563,21 +563,15 @@ async def inject_storage_state_cookies(context: Any, storage_state: Any) -> int:
         return 0
 
 
-@asynccontextmanager
-async def launch_page(
+async def _launch_page_local(
     *,
-    headless: bool = False,
-    force_new_proxy_sid: bool = False,
-    disable_proxy: bool = False,
+    headless: bool,
+    force_new_proxy_sid: bool,
+    disable_proxy: bool,
 ) -> AsyncIterator[Any]:
-    """Yields a ready-to-use Playwright `Page`. Closes browser/context/page on
-    exit regardless of outcome.
-
-    disable_proxy=True skips BROWSER_PROXY entirely (last-resort after HTTP 572
-    SID retries — Railway egress can still reach some ATS hosts).
-    """
+    """Local Patchright/Playwright Chromium (+ optional PrivateProxy)."""
     headless = effective_headless(headless)
-    logger.info("browser_launch_mode=%s", "headless" if headless else "headed")
+    logger.info("browser_launch_mode=%s transport=local", "headless" if headless else "headed")
     # Prefer Patchright when available: it patches Playwright CDP leaks that
     # DataDome (SmartRecruiters) fingerprints. Opt out with BROWSER_ENGINE=playwright.
     engine = (os.environ.get("BROWSER_ENGINE") or "auto").strip().lower()
@@ -692,6 +686,122 @@ async def launch_page(
                 await context.close()
             if browser is not None:
                 await browser.close()
+
+
+async def _launch_page_brightdata() -> AsyncIterator[Any]:
+    """Connect to Bright Data Browser API over CDP (fingerprint + unlock managed)."""
+    from .remote_browser import brightdata_ws_endpoint
+
+    endpoint = brightdata_ws_endpoint()
+    if not endpoint:
+        raise ApplyAgentError(
+            "open_browser",
+            "Bright Data Browser API credentials missing "
+            "(BRIGHTDATA_BROWSER_USER / BRIGHTDATA_BROWSER_PASSWORD).",
+        )
+    # CDP connect uses stock Playwright (Bright Data's remote Chromium).
+    try:
+        from playwright.async_api import async_playwright as async_playwright
+    except ImportError as exc:
+        raise ApplyAgentError(
+            "open_browser",
+            "Playwright is required for Bright Data connect_over_cdp.",
+            exception_class=exc.__class__.__name__,
+        ) from exc
+
+    # Log without password.
+    safe_ep = endpoint.split("@")[-1] if "@" in endpoint else endpoint
+    logger.info("browser_launch_mode=remote transport=brightdata endpoint=%s", safe_ep)
+
+    async with async_playwright() as p:
+        browser = None
+        try:
+            browser = await p.chromium.connect_over_cdp(endpoint)
+            # Bright Data usually exposes a default context.
+            if browser.contexts:
+                context = browser.contexts[0]
+            else:
+                context = await browser.new_context(**browser_context_options())
+            # Do not inject local PrivateProxy cookies by default — Bright Data
+            # manages session/fingerprint. Optional warm cookies still help SR.
+            if (os.environ.get("BROWSER_REMOTE_INJECT_COOKIES") or "").strip().lower() in (
+                "1", "true", "yes", "on",
+            ):
+                await inject_storage_state_cookies(
+                    context, os.environ.get("BROWSER_STORAGE_STATE_JSON") or "",
+                )
+                await _apply_cookies(context)
+            page = context.pages[0] if context.pages else await context.new_page()
+            try:
+                page.set_default_navigation_timeout(
+                    max(120_000, browser_navigation_timeout_ms()),
+                )
+            except Exception:
+                pass
+            try:
+                yield page
+            finally:
+                try:
+                    await page.close()
+                except Exception:
+                    pass
+        except ApplyAgentError:
+            raise
+        except Exception as exc:
+            raise ApplyAgentError(
+                "open_browser",
+                f"Bright Data browser connect failed: {exc.__class__.__name__}: {str(exc)[:300]}",
+                exception_class=exc.__class__.__name__,
+            ) from exc
+        finally:
+            if browser is not None:
+                try:
+                    await browser.close()
+                except Exception:
+                    pass
+
+
+@asynccontextmanager
+async def launch_page(
+    *,
+    headless: bool = False,
+    force_new_proxy_sid: bool = False,
+    disable_proxy: bool = False,
+    prefer_remote: bool = False,
+) -> AsyncIterator[Any]:
+    """Yields a ready-to-use Playwright `Page`. Closes browser/context/page on
+    exit regardless of outcome.
+
+    prefer_remote=True (SmartRecruiters): use Bright Data Browser API when
+    configured; optionally fall back to local Chromium on connect failure.
+
+    disable_proxy=True skips BROWSER_PROXY entirely (last-resort after HTTP 572
+    SID retries — Railway egress can still reach some ATS hosts).
+    """
+    from .remote_browser import (
+        remote_fallback_to_local,
+        should_use_remote_browser,
+    )
+
+    if should_use_remote_browser(prefer_remote=prefer_remote):
+        try:
+            async for page in _launch_page_brightdata():
+                yield page
+            return
+        except Exception as exc:
+            if not remote_fallback_to_local():
+                raise
+            logger.warning(
+                "browser_remote_fallback_local error=%s",
+                str(exc)[:240],
+            )
+
+    async for page in _launch_page_local(
+        headless=headless,
+        force_new_proxy_sid=force_new_proxy_sid,
+        disable_proxy=disable_proxy,
+    ):
+        yield page
 
 
 def write_resume_file(

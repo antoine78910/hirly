@@ -212,10 +212,15 @@ def _company_slug(job: Dict[str, Any], posting_url: str) -> str:
 
 class SmartRecruitersApplyDriver(BrowserApplyDriver):
     provider = "smartrecruiters"
-    version = "smartrecruiters-1.2.1"
+    version = "smartrecruiters-1.3.0"
 
     def __init__(self):
         self._adapter = SmartRecruitersAtsAdapter()
+
+    def prefer_remote_browser(self) -> bool:
+        # DataDome fingerprinting beats local Chromium on Railway; use Bright
+        # Data Browser API when credentials are configured (launch_page decides).
+        return True
 
     def can_handle(self, job: Dict[str, Any]) -> bool:
         return str(job.get("ats_provider") or job.get("provider") or "").lower() == "smartrecruiters"

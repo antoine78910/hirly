@@ -429,6 +429,13 @@ class BrowserApplyDriver(ApplyDriver):
             raise last_open_page_error
         return last_evidence
 
+    def prefer_remote_browser(self) -> bool:
+        """Opt into Bright Data / remote anti-detect browser when configured.
+
+        SmartRecruiters overrides this; Greenhouse stays on local Chromium.
+        """
+        return False
+
     async def _submit_browser_session(
         self,
         ctx: SubmissionContext,
@@ -441,11 +448,15 @@ class BrowserApplyDriver(ApplyDriver):
         force_new_proxy_sid: bool = False,
         disable_proxy: bool = False,
     ) -> SubmissionEvidence:
+        prefer_remote = self.prefer_remote_browser()
+        if prefer_remote:
+            evidence.raw["browser_transport"] = "remote_preferred"
         try:
             async with launch_page(
                 headless=ctx.headless,
                 force_new_proxy_sid=force_new_proxy_sid,
                 disable_proxy=disable_proxy,
+                prefer_remote=prefer_remote,
             ) as page:
                 await self._log_step(
                     evidence,
