@@ -105,20 +105,56 @@ async def latest_attempt(db, user_id: str, job_id: str) -> Optional[Dict[str, An
     return sorted(rows, key=lambda r: r.get("created_at") or "", reverse=True)[0]
 
 
+# Base64 screenshots larger than this blow up Supabase/Railway JSON responses
+# (admin /status polls) and surface as opaque HTTP 500 Internal Server Error.
+_MAX_STORED_SCREENSHOT_CHARS = 120_000
+
+
 def _compact_execution_report(report: Dict[str, Any]) -> Dict[str, Any]:
     """Store a console-ready report without huge binary payloads."""
     compact = dict(report or {})
     screenshots = compact.get("screenshots") or []
-    if screenshots:
-        # Keep at most one screenshot for the admin console.
-        compact["screenshots"] = screenshots[:1]
+    safe_shots: List[str] = []
+    omitted = False
+    for shot in screenshots[:1]:
+        if isinstance(shot, str) and 0 < len(shot) <= _MAX_STORED_SCREENSHOT_CHARS:
+            safe_shots.append(shot)
+        elif isinstance(shot, str) and shot:
+            omitted = True
+            compact["screenshot_omitted"] = True
+            compact["screenshot_chars"] = len(shot)
+    compact["screenshots"] = safe_shots
+    if omitted and not safe_shots:
+        compact.setdefault("screenshot_omitted", True)
+
     evidence = compact.get("submission_evidence")
     if isinstance(evidence, dict) and evidence.get("screenshot_b64"):
         evidence = dict(evidence)
-        # Screenshot already mirrored on report.screenshots.
+        # Screenshot already mirrored on report.screenshots (when small enough).
         evidence.pop("screenshot_b64", None)
         compact["submission_evidence"] = evidence
+
+    raw = compact.get("debug")
+    if isinstance(raw, dict):
+        raw = dict(raw)
+        nested = raw.get("execution")
+        if isinstance(nested, dict) and nested.get("screenshot_b64"):
+            nested = dict(nested)
+            nested.pop("screenshot_b64", None)
+            raw["execution"] = nested
+        compact["debug"] = raw
     return compact
+
+
+def status_safe_attempt(attempt: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Return an attempt payload safe for HTTP JSON (no multi-MB screenshots)."""
+    if not attempt:
+        return None
+    out = dict(attempt)
+    report = out.get("execution_report")
+    if isinstance(report, dict):
+        out["execution_report"] = _compact_execution_report(report)
+    return out
 
 
 async def persist_execution_report(
@@ -132,6 +168,13 @@ async def persist_execution_report(
     """
     compact = _compact_execution_report(report)
     now = _now()
+    terminal_status = str(compact.get("status") or "error")
+    # Never leave the unique (user_id, job_id) index stuck on in_flight after
+    # the background run finished writing its report.
+    if terminal_status == "in_flight":
+        terminal_status = "error"
+    stage = str(compact.get("stage_reached") or "driver")
+    reason = str(compact.get("reason") or "prepare_failed")
     attempt = await latest_attempt(db, user_id, job_id)
     if not attempt:
         row = {
@@ -140,10 +183,10 @@ async def persist_execution_report(
             "job_id": job_id,
             "provider": "unknown",
             "driver": "unknown",
-            "driver_version": "unknown",
-            "status": compact.get("status") or "error",
-            "stage_reached": compact.get("stage_reached") or "driver",
-            "reason": compact.get("reason") or "prepare_failed",
+            "driver_version": compact.get("driver_version") or "unknown",
+            "status": terminal_status,
+            "stage_reached": stage,
+            "reason": reason,
             "verdict": compact.get("verdict"),
             "claimed_at": now,
             "created_at": now,
@@ -157,11 +200,20 @@ async def persist_execution_report(
         {"id": attempt["id"]},
         {"$set": {
             "execution_report": compact,
+            "status": terminal_status,
+            "stage_reached": stage,
+            "reason": reason,
+            "verdict": compact.get("verdict"),
+            "driver_version": compact.get("driver_version") or attempt.get("driver_version"),
+            "blueprint_signature": compact.get("blueprint_signature") or attempt.get("blueprint_signature"),
             "updated_at": now,
         }},
     )
     attempt = dict(attempt)
     attempt["execution_report"] = compact
+    attempt["status"] = terminal_status
+    attempt["stage_reached"] = stage
+    attempt["reason"] = reason
     attempt["updated_at"] = now
     return attempt
 

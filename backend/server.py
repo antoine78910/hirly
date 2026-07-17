@@ -76,6 +76,7 @@ from apply_agent.runner import run_apply_attempt
 from auto_apply.executor import execute_application as auto_apply_execute_application
 from auto_apply.metrics import latest_attempt as auto_apply_latest_attempt
 from auto_apply.metrics import persist_execution_report as auto_apply_persist_execution_report
+from auto_apply.metrics import status_safe_attempt as auto_apply_status_safe_attempt
 from auto_apply.metrics import summary as auto_apply_metrics_summary
 from db import create_database_adapter
 from db.supabase_adapter import count_supabase_table, test_supabase_connection
@@ -9873,7 +9874,7 @@ async def admin_auto_apply_execute(body: AdminAutoApplyExecuteRequest, admin: Us
     limit (~100s). The admin console polls `/admin/auto-apply/status` until the
     attempt leaves `in_flight` and reads `execution_report`.
     """
-    from auto_apply.debug_report import transport_error_report
+    from auto_apply.debug_report import format_run_error, transport_error_report
 
     try:
         target_user = await _auto_apply_target_user(body.user_id, admin)
@@ -9891,6 +9892,45 @@ async def admin_auto_apply_execute(body: AdminAutoApplyExecuteRequest, admin: Us
                 ),
                 "attempt": None,
             }
+
+        started_at = datetime.now(timezone.utc).isoformat()
+        task = asyncio.create_task(
+            _admin_auto_apply_background_run(
+                job_id=body.job_id,
+                target_user=target_user,
+                dry_run=body.dry_run,
+                headless=body.headless,
+            )
+        )
+        _AUTO_APPLY_BACKGROUND_TASKS.add(task)
+        task.add_done_callback(_AUTO_APPLY_BACKGROUND_TASKS.discard)
+
+        return {
+            "accepted": True,
+            "polling": True,
+            "started_at": started_at,
+            "job_id": body.job_id,
+            "user_id": target_user.user_id,
+            "result": {
+                "status": "in_flight",
+                "stage_reached": "driver",
+                "reason": "run_started",
+                "debug": {
+                    "timeline": [{
+                        "stage": "driver",
+                        "status": "ok",
+                        "detail": "Run accepted — browser pipeline running in background",
+                    }],
+                },
+            },
+            "attempt": {
+                "status": "in_flight",
+                "stage_reached": "driver",
+                "job_id": body.job_id,
+                "user_id": target_user.user_id,
+                "claimed_at": started_at,
+            },
+        }
     except HTTPException as http_exc:
         detail = http_exc.detail
         message = detail if isinstance(detail, str) else str(detail)
@@ -9906,45 +9946,21 @@ async def admin_auto_apply_execute(body: AdminAutoApplyExecuteRequest, admin: Us
             ),
             "attempt": None,
         }
-
-    started_at = datetime.now(timezone.utc).isoformat()
-    task = asyncio.create_task(
-        _admin_auto_apply_background_run(
-            job_id=body.job_id,
-            target_user=target_user,
-            dry_run=body.dry_run,
-            headless=body.headless,
-        )
-    )
-    _AUTO_APPLY_BACKGROUND_TASKS.add(task)
-    task.add_done_callback(_AUTO_APPLY_BACKGROUND_TASKS.discard)
-
-    return {
-        "accepted": True,
-        "polling": True,
-        "started_at": started_at,
-        "job_id": body.job_id,
-        "user_id": target_user.user_id,
-        "result": {
-            "status": "in_flight",
-            "stage_reached": "driver",
-            "reason": "run_started",
-            "debug": {
-                "timeline": [{
-                    "stage": "driver",
-                    "status": "ok",
-                    "detail": "Run accepted — browser pipeline running in background",
-                }],
-            },
-        },
-        "attempt": {
-            "status": "in_flight",
-            "stage_reached": "driver",
-            "job_id": body.job_id,
-            "user_id": target_user.user_id,
-            "claimed_at": started_at,
-        },
-    }
+    except Exception as exc:
+        error_detail = format_run_error(exc, checkpoint="execute_accept")
+        logger.exception("admin_auto_apply_execute_failed job=%s", body.job_id)
+        return {
+            "accepted": False,
+            "polling": False,
+            "result": transport_error_report(
+                message=error_detail.get("message") or str(exc),
+                phase=str(error_detail.get("phase") or "execute"),
+                stage="driver",
+                exception_class=error_detail.get("exception_class") or exc.__class__.__name__,
+                extra={"traceback": error_detail.get("traceback"), "hint": error_detail.get("hint")},
+            ),
+            "attempt": None,
+        }
 
 
 @api_router.get("/admin/auto-apply/status")
@@ -9952,8 +9968,28 @@ async def admin_auto_apply_status(job_id: str, user_id: Optional[str] = None, ad
     """Latest attempt record for a job -- exposes stage, status, reason,
     missing_fields, driver_version, blueprint_signature, lifecycle timestamps,
     and the persisted execution_report (when the async run finished)."""
+    from auto_apply.debug_report import format_run_error, transport_error_report
+
     target = user_id or admin.user_id
-    return {"attempt": await auto_apply_latest_attempt(db, target, job_id)}
+    try:
+        attempt = await auto_apply_latest_attempt(db, target, job_id)
+        return {"attempt": auto_apply_status_safe_attempt(attempt)}
+    except Exception as exc:
+        error_detail = format_run_error(exc, checkpoint="status")
+        logger.exception("admin_auto_apply_status_failed job=%s", job_id)
+        return {
+            "attempt": {
+                "status": "error",
+                "stage_reached": "driver",
+                "reason": error_detail.get("message") or str(exc),
+                "execution_report": transport_error_report(
+                    message=error_detail.get("message") or str(exc),
+                    phase="status",
+                    stage="driver",
+                    exception_class=error_detail.get("exception_class") or exc.__class__.__name__,
+                ),
+            },
+        }
 
 
 @api_router.get("/admin/auto-apply/metrics")

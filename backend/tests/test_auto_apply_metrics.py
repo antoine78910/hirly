@@ -140,6 +140,41 @@ def test_needs_user_input_has_no_submit_timestamps():
     assert row["verified_at"] is None
 
 
+def test_compact_execution_report_drops_huge_screenshots():
+    huge = "A" * (metrics._MAX_STORED_SCREENSHOT_CHARS + 10)
+    compact = metrics._compact_execution_report({
+        "status": "submit_failed",
+        "screenshots": [huge],
+        "submission_evidence": {"screenshot_b64": huge, "final_url": "https://x"},
+    })
+    assert compact["screenshots"] == []
+    assert compact["screenshot_omitted"] is True
+    assert "screenshot_b64" not in (compact.get("submission_evidence") or {})
+
+
+def test_persist_execution_report_updates_terminal_status():
+    db = _FakeDB()
+
+    async def run():
+        claim = await metrics.claim_attempt(
+            db, user_id="u1", job_id="j1", provider="smartrecruiters",
+            driver="smartrecruiters", driver_version="sr-1",
+        )
+        assert claim["status"] == "in_flight"
+        await metrics.persist_execution_report(db, "u1", "j1", {
+            "status": "submit_failed",
+            "stage_reached": "submit",
+            "reason": "submit_button_not_found",
+            "screenshots": ["tiny"],
+        })
+        return db.auto_apply_attempts.rows[0]
+
+    row = asyncio.run(run())
+    assert row["status"] == "submit_failed"
+    assert row["stage_reached"] == "submit"
+    assert row["execution_report"]["reason"] == "submit_button_not_found"
+
+
 def test_known_signatures_and_summary():
     db = _FakeDB()
 

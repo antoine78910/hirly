@@ -42,7 +42,17 @@ export function adminApiErrorMessage(err, fallback) {
   if (typeof nested === "string" && nested.trim()) return nested.trim();
 
   const detail = data?.detail;
-  if (typeof detail === "string" && detail.trim()) return detail.trim();
+  if (typeof detail === "string" && detail.trim()) {
+    const trimmed = detail.trim();
+    if (trimmed === "Internal Server Error" || /^internal server error$/i.test(trimmed)) {
+      return (
+        "Server error (500) while starting or polling auto-apply. "
+        + "Often a deploy restart or an oversized status payload — retry in a moment, "
+        + "or check Railway logs."
+      );
+    }
+    return trimmed;
+  }
   if (detail && typeof detail === "object" && !Array.isArray(detail)) {
     const message = detail.message || detail.detail;
     if (typeof message === "string" && message.trim()) return message.trim();

@@ -23,6 +23,14 @@ describe("adminApiErrorMessage", () => {
     const msg = adminApiErrorMessage({ code: "ECONNABORTED", message: "timeout of 480000ms exceeded" }, "Execution failed");
     expect(msg).toMatch(/timed out/i);
   });
+
+  it("rewrites opaque Internal Server Error detail", () => {
+    const msg = adminApiErrorMessage({
+      response: { status: 500, data: { detail: "Internal Server Error" } },
+    }, "Execution failed");
+    expect(msg).toMatch(/500/);
+    expect(msg.toLowerCase()).toMatch(/retry|railway|oversized/);
+  });
 });
 
 describe("syntheticAutoApplyErrorReport", () => {
