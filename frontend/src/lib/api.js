@@ -277,8 +277,10 @@ api.interceptors.request.use((config) => {
   } catch {
     path = normalizeApiPath(config.url || "");
   }
-  if (path.startsWith("/admin")) {
-    config.timeout = Math.max(config.timeout || 0, 60000);
+  // Default admin timeout only when the caller did not set one — status polling
+  // must stay short so a hung worker cannot burn 60s per poll.
+  if (path.startsWith("/admin") && (config.timeout == null || config.timeout === 0)) {
+    config.timeout = 60000;
   }
   if (method === "post") {
     let path = "";

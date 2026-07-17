@@ -133,10 +133,10 @@ def test_proxy_configured_and_nav_timeout(monkeypatch):
     monkeypatch.delenv("BROWSER_PROXY_SERVER", raising=False)
     monkeypatch.delenv("BROWSER_NAVIGATION_TIMEOUT_MS", raising=False)
     assert proxy_configured() is False
-    assert browser_navigation_timeout_ms() == 45000
+    assert browser_navigation_timeout_ms() == 30000
     monkeypatch.setenv("BROWSER_PROXY", "jw7ib-fr:secret:edge1-us.privateproxy.me:8888")
     assert proxy_configured() is True
-    assert browser_navigation_timeout_ms() == 90000
+    assert browser_navigation_timeout_ms() == 45000
 
 
 def test_transient_navigation_error_detects_timeout():

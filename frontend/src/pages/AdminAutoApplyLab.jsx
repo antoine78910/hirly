@@ -5,6 +5,7 @@ import { api } from "../lib/api";
 import {
   adminApiErrorMessage,
   autoApplyApiUrl,
+  isRequestTimeoutError,
   isTransientNetworkError,
   syntheticAutoApplyErrorReport,
   withNetworkRetries,
@@ -116,15 +117,17 @@ async function runAutoApplyWithPolling({ jobId, userId, dryRun }) {
 
   const startedAt = start?.started_at || new Date().toISOString();
   const pollUserId = start?.user_id || userId;
-  const deadline = Date.now() + 12 * 60 * 1000; // proxy retries can take several minutes
+  // Driver proxy retries are capped server-side (~3 min); keep a buffer for inspect/fill.
+  const deadline = Date.now() + 6 * 60 * 1000;
   let consecutiveNetworkErrors = 0;
 
   while (Date.now() < deadline) {
-    await sleep(2500);
+    await sleep(2000);
     try {
       const { data } = await api.get(autoApplyApiUrl("/admin/auto-apply/status"), {
         params: { job_id: jobId, user_id: pollUserId },
-        timeout: 30000,
+        // Keep short: Chromium can starve the event loop; long timeouts just delay the next poll.
+        timeout: 15000,
       });
       consecutiveNetworkErrors = 0;
       const attempt = data?.attempt;
@@ -132,19 +135,21 @@ async function runAutoApplyWithPolling({ jobId, userId, dryRun }) {
       if (attempt.status === "in_flight" && !attempt.execution_report) continue;
       return reportFromAttempt(attempt);
     } catch (err) {
-      // Brief deploy/network blips during a long browser run should not kill the poll loop.
+      // Timeouts mean "status slow right now" — keep polling until the deadline.
+      if (isRequestTimeoutError(err)) continue;
       if (isTransientNetworkError(err)) {
         consecutiveNetworkErrors += 1;
-        if (consecutiveNetworkErrors >= 10) throw err;
+        if (consecutiveNetworkErrors >= 20) throw err;
         continue;
       }
       throw err;
     }
   }
 
-  throw Object.assign(new Error("Auto-apply is still running after 12 minutes. Check Railway logs or refresh status."), {
-    code: "ECONNABORTED",
-  });
+  throw Object.assign(
+    new Error("Auto-apply is still running after 6 minutes. Check Railway logs or refresh status."),
+    { code: "ECONNABORTED" },
+  );
 }
 
 export default function AdminAutoApplyLab() {

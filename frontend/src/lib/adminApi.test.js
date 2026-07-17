@@ -1,6 +1,7 @@
 import {
   adminApiErrorMessage,
   autoApplyApiUrl,
+  isRequestTimeoutError,
   isTransientNetworkError,
   syntheticAutoApplyErrorReport,
   withNetworkRetries,
@@ -13,9 +14,17 @@ describe("autoApplyApiUrl", () => {
 });
 
 describe("isTransientNetworkError", () => {
-  it("detects axios network failures", () => {
+  it("detects axios network failures but not timeouts", () => {
     expect(isTransientNetworkError({ code: "ERR_NETWORK", message: "Network Error" })).toBe(true);
+    expect(isTransientNetworkError({ code: "ECONNABORTED", message: "timeout of 15000ms exceeded" })).toBe(false);
     expect(isTransientNetworkError({ response: { status: 500 } })).toBe(false);
+  });
+});
+
+describe("isRequestTimeoutError", () => {
+  it("detects axios timeouts", () => {
+    expect(isRequestTimeoutError({ code: "ECONNABORTED", message: "timeout of 15000ms exceeded" })).toBe(true);
+    expect(isRequestTimeoutError({ code: "ERR_NETWORK", message: "Network Error" })).toBe(false);
   });
 });
 
@@ -68,7 +77,18 @@ describe("adminApiErrorMessage", () => {
 
   it("explains client timeouts", () => {
     const msg = adminApiErrorMessage({ code: "ECONNABORTED", message: "timeout of 480000ms exceeded" }, "Execution failed");
-    expect(msg).toMatch(/timed out/i);
+    expect(msg.toLowerCase()).toMatch(/still running|refresh status|railway/);
+  });
+
+  it("does not retry timeouts in withNetworkRetries", async () => {
+    let calls = 0;
+    await expect(withNetworkRetries(async () => {
+      calls += 1;
+      const err = new Error("timeout of 15000ms exceeded");
+      err.code = "ECONNABORTED";
+      throw err;
+    }, { attempts: 3, delayMs: 1 })).rejects.toMatchObject({ code: "ECONNABORTED" });
+    expect(calls).toBe(1);
   });
 
   it("rewrites opaque Internal Server Error detail", () => {

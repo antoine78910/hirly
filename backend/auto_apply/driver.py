@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import os
 import random
+import time
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
@@ -46,6 +47,14 @@ logger = logging.getLogger(__name__)
 
 _TIMEOUT_MS = 45000
 _SUBMIT_SELECTOR = 'button[type="submit"], input[type="submit"], button:has-text("Submit")'
+
+
+def driver_submit_deadline_s() -> float:
+    """Wall-clock budget for browser submit + proxy SID retries."""
+    raw = os.environ.get("AUTO_APPLY_DRIVER_DEADLINE_S", "").strip()
+    if raw and raw.replace(".", "", 1).isdigit():
+        return max(60.0, float(raw))
+    return 180.0
 
 
 async def _goto_apply_page(page: Any, nav_url: str):
@@ -208,13 +217,25 @@ class BrowserApplyDriver(ApplyDriver):
         nav_url = self.navigation_url(ctx.job)
         evidence = SubmissionEvidence(raw={"application_url": url, "navigation_url": nav_url})
         # Residential proxies often hand out dead exits — relaunch with a fresh
-        # sticky sid when the first navigation times out. Also retry a couple
-        # times without proxy: DataDome challenges are intermittent.
+        # sticky sid when the first navigation times out. Cap wall-clock so a
+        # string of dead exits cannot burn 5+ minutes before the admin console
+        # surfaces a real error.
         max_attempts = 3
+        deadline_at = time.monotonic() + driver_submit_deadline_s()
         last_open_page_error: Optional[ApplyAgentError] = None
         last_evidence = evidence
         force_new_proxy_sid = False
         for attempt in range(1, max_attempts + 1):
+            if time.monotonic() >= deadline_at and attempt > 1:
+                raise ApplyAgentError(
+                    "open_page",
+                    (
+                        f"Proxy/browser retries exceeded {int(driver_submit_deadline_s())}s budget "
+                        f"after {attempt - 1} attempt(s). Check BROWSER_PROXY / sticky SID."
+                    ),
+                    target_url=nav_url,
+                    exception_class="DriverDeadlineExceeded",
+                )
             try:
                 last_evidence = await self._submit_browser_session(
                     ctx,
@@ -227,12 +248,22 @@ class BrowserApplyDriver(ApplyDriver):
                 )
             except ApplyAgentError as exc:
                 last_open_page_error = exc
-                retryable = (
+                would_retry = (
                     exc.phase == "open_page"
                     and attempt < max_attempts
                     and is_transient_navigation_error(exc)
                 )
-                if not retryable:
+                if would_retry and time.monotonic() >= deadline_at:
+                    raise ApplyAgentError(
+                        "open_page",
+                        (
+                            f"Proxy/browser retries exceeded {int(driver_submit_deadline_s())}s budget "
+                            f"after {attempt} attempt(s). Check BROWSER_PROXY / sticky SID."
+                        ),
+                        target_url=nav_url,
+                        exception_class="DriverDeadlineExceeded",
+                    ) from exc
+                if not would_retry:
                     raise
                 # Dead residential exit (HTTP 572 etc.) — mint a fresh sticky sid.
                 force_new_proxy_sid = True
@@ -262,6 +293,7 @@ class BrowserApplyDriver(ApplyDriver):
                 and attempt < max_attempts
                 and (proxy_configured() or last_evidence.blocked_reason == "captcha")
                 and not (fixed_sticky and last_evidence.blocked_reason == "bot_protection")
+                and time.monotonic() < deadline_at
             ):
                 force_new_proxy_sid = True
                 await self._log_step(

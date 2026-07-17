@@ -12,9 +12,16 @@ export function autoApplyApiUrl(path) {
 
 export function isTransientNetworkError(err) {
   if (err?.response) return false;
-  if (err?.code === "ERR_NETWORK" || err?.code === "ECONNABORTED") return true;
+  // Timeouts (ECONNABORTED) are NOT blips — retrying them just stacks waits.
+  if (err?.code === "ERR_NETWORK") return true;
   const msg = String(err?.message || "");
   return /network error|failed to fetch|load failed/i.test(msg);
+}
+
+export function isRequestTimeoutError(err) {
+  if (err?.response) return false;
+  if (err?.code === "ECONNABORTED") return true;
+  return /timeout/i.test(String(err?.message || ""));
 }
 
 /**
@@ -40,8 +47,9 @@ export function adminApiErrorMessage(err, fallback) {
   if (!err?.response) {
     if (err?.code === "ECONNABORTED" || /timeout/i.test(String(err?.message || ""))) {
       return (
-        "Request timed out waiting for the browser run "
-        + "(proxy retries can take several minutes). Check Railway logs or retry."
+        "Auto-apply is still running or the API stopped answering status polls. "
+        + "Wait for the Vercel/Railway deploy to finish, then refresh status — "
+        + "or check Railway logs if it stays stuck."
       );
     }
     const networkMsg = String(err?.message || "").trim();

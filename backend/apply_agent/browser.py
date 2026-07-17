@@ -288,13 +288,17 @@ def is_transient_navigation_error(exc: BaseException) -> bool:
 
 
 def browser_navigation_timeout_ms() -> int:
-    """Longer timeout when traffic goes through a residential proxy."""
+    """Longer timeout when traffic goes through a residential proxy.
+
+    Keep proxy navigations bounded — dead exits should fail fast and rotate SID
+    instead of burning ~90s per attempt (admin console looked "stuck" for minutes).
+    """
     explicit = os.environ.get("BROWSER_NAVIGATION_TIMEOUT_MS", "").strip()
     if explicit.isdigit():
         return max(15000, int(explicit))
     if proxy_configured():
-        return 90000
-    return 45000
+        return 45000
+    return 30000
 
 
 def privateproxy_sticky_username(

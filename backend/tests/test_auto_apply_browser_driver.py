@@ -346,6 +346,70 @@ def test_proxy_connect_572_retries_with_new_sid(monkeypatch):
     assert launch_kwargs[2]["force_new_proxy_sid"] is True
 
 
+def test_proxy_retries_stop_when_driver_deadline_exceeded(monkeypatch):
+    """Dead exits must not burn minutes — abort after the wall-clock budget."""
+    from apply_agent.models import ApplyAgentError
+
+    pages = []
+
+    class _ProxyFailPage(_FakePage):
+        async def goto(self, url, wait_until=None, timeout=0):
+            self.url = url
+
+            class _R:
+                status = 572
+
+            return _R()
+
+        def locator(self, selector):
+            self.queried.append(selector)
+            loc = _FakeLocator(self, selector, exists=False)
+            if selector == "body":
+                async def body_text(timeout=0):
+                    return "Failed to connect to target host"
+                loc.inner_text = body_text
+            return loc
+
+    @asynccontextmanager
+    async def tracking_launch(*, headless=True, force_new_proxy_sid=False):
+        page = _ProxyFailPage(known_selectors=set())
+        pages.append(page)
+        yield page
+
+    monkeypatch.setattr(driver_mod, "launch_page", tracking_launch)
+    _install_proxy_retry_fakes(monkeypatch)
+    monkeypatch.setenv("AUTO_APPLY_DRIVER_DEADLINE_S", "60")
+    clock = {"t": 1000.0}
+
+    def fake_monotonic():
+        # After the first failed attempt, pretend the budget is already spent.
+        return clock["t"]
+
+    monkeypatch.setattr(driver_mod.time, "monotonic", fake_monotonic)
+
+    original_session = driver_mod.BrowserApplyDriver._submit_browser_session
+
+    async def advancing_session(self, *args, **kwargs):
+        try:
+            return await original_session(self, *args, **kwargs)
+        finally:
+            clock["t"] += 120.0
+
+    monkeypatch.setattr(driver_mod.BrowserApplyDriver, "_submit_browser_session", advancing_session)
+
+    plan = ApplicationPlan(steps=[
+        PlanStep(action="fill", locators=['[name="email"]'], value="a@b.co"),
+        PlanStep(action="submit", locators=[]),
+    ])
+    ctx = SubmissionContext(job={"external_url": "https://x/y"}, blueprint=None, plan=plan, documents={})
+
+    with pytest.raises(ApplyAgentError) as raised:
+        asyncio.run(_StubDriver().submit(ctx))
+    assert raised.value.exception_class == "DriverDeadlineExceeded"
+    assert "budget" in str(raised.value).lower() or "exceeded" in str(raised.value).lower()
+    assert len(pages) == 1
+
+
 def test_proxy_connect_after_reveal_retries_with_new_sid(monkeypatch):
     """Posting can load, but oneclick hop may still return Failed to connect — retry, don't fill."""
     from apply_agent.models import ApplyAgentError
