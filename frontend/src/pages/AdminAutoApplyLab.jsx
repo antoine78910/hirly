@@ -387,7 +387,7 @@ export default function AdminAutoApplyLab() {
                     const busy = runningRow === key;
                     return (
                       <tr key={key} className="border-t border-zinc-100">
-                        <td className="px-3 py-2 whitespace-nowrap text-zinc-500">{fmtDate(row.created_at)}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-zinc-500">{fmtDate(row.swiped_at || row.created_at)}</td>
                         <td className="px-3 py-2">
                           <div className="font-medium text-zinc-900">{row.user_name || row.user_email || row.user_id}</div>
                           <div className="text-xs text-zinc-400">{row.user_email}</div>
