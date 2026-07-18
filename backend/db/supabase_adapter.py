@@ -7,6 +7,7 @@ preserving API response shapes.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from datetime import date, datetime, timezone
@@ -229,8 +230,40 @@ _shared_http_client: Optional[httpx.AsyncClient] = None
 def _get_shared_http_client(timeout: float = 30.0) -> httpx.AsyncClient:
     global _shared_http_client
     if _shared_http_client is None or _shared_http_client.is_closed:
-        _shared_http_client = httpx.AsyncClient(timeout=timeout)
+        # Separate connect/read budgets: PostgREST can be slow under load while
+        # Bright Data / auto-apply runs; a flat 30s ReadTimeout on auth breaks the lab.
+        timeout_cfg = httpx.Timeout(
+            connect=min(15.0, timeout),
+            read=max(60.0, timeout),
+            write=30.0,
+            pool=60.0,
+        )
+        _shared_http_client = httpx.AsyncClient(
+            timeout=timeout_cfg,
+            limits=httpx.Limits(max_connections=40, max_keepalive_connections=20),
+        )
     return _shared_http_client
+
+
+async def _http_get_with_retries(
+    client: httpx.AsyncClient,
+    url: str,
+    *,
+    params: Any,
+    headers: Dict[str, str],
+    attempts: int = 3,
+) -> httpx.Response:
+    last_exc: Optional[BaseException] = None
+    for attempt in range(max(1, attempts)):
+        try:
+            return await client.get(url, params=params, headers=headers)
+        except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.RemoteProtocolError) as exc:
+            last_exc = exc
+            if attempt >= attempts - 1:
+                raise
+            await asyncio.sleep(0.35 * (attempt + 1))
+    assert last_exc is not None
+    raise last_exc
 
 
 class SupabaseWriteResult(dict):
@@ -865,7 +898,8 @@ class SupabaseCollectionAdapter(CollectionPort):
                 request_params["order"] = "imported_at.desc.nullslast"
             if remote_filter_params is not None:
                 request_params.update(remote_filter_params)
-            response = await client.get(
+            response = await _http_get_with_retries(
+                client,
                 url,
                 params=request_params,
                 headers=headers,

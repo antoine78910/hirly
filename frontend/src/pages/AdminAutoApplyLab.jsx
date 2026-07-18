@@ -413,6 +413,7 @@ export default function AdminAutoApplyLab() {
                               variant="outline"
                               disabled={busy || !row.driver_supported}
                               onClick={() => runForSwipe(row, true)}
+                              title="Plan only — does not open Bright Data / browser"
                             >
                               {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
                               Dry run
@@ -421,8 +422,9 @@ export default function AdminAutoApplyLab() {
                               size="sm"
                               disabled={busy || !row.driver_supported}
                               onClick={() => runForSwipe(row, false)}
+                              title="Real apply — opens Bright Data browser and can submit"
                             >
-                              Apply
+                              Apply (real)
                             </Button>
                           </div>
                         </td>

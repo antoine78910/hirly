@@ -48,7 +48,14 @@ export function adminApiErrorMessage(err, fallback) {
     if (err?.code === "POLL_DEADLINE") {
       return String(err.message || fallback || "Auto-apply is still running.");
     }
-    if (err?.code === "ECONNABORTED" || /timeout/i.test(String(err?.message || ""))) {
+    const rawMsg = String(err?.message || "");
+    if (/ReadTimeout|ConnectTimeout/i.test(rawMsg)) {
+      return (
+        "Database/API timed out (Supabase ReadTimeout). "
+        + "Retry in a few seconds — often overload, not Bright Data."
+      );
+    }
+    if (err?.code === "ECONNABORTED" || /timeout/i.test(rawMsg)) {
       return (
         "Auto-apply is still running or the API stopped answering status polls. "
         + "Wait for the Vercel/Railway deploy to finish, then refresh status — "

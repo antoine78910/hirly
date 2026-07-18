@@ -44,9 +44,9 @@ import uvicorn
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8001"))
-    # Two workers: Chromium can starve one event loop during headed apply;
-    # the other worker keeps answering /admin/auto-apply/status polls from DB.
-    workers = int(os.environ.get("WEB_CONCURRENCY", "2") or "2")
+    # Default 1 worker: Bright Data CDP is remote I/O (event-loop friendly).
+    # Extra workers double Supabase load and made auth ReadTimeouts more common.
+    workers = int(os.environ.get("WEB_CONCURRENCY", "1") or "1")
     workers = max(1, min(workers, 4))
     uvicorn.run(
         "server:app",
