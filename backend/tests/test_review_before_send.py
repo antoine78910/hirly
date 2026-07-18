@@ -143,7 +143,7 @@ def test_update_account_settings_persists_value(monkeypatch):
 
     result = asyncio.run(server.update_account_settings(body, user=user))
 
-    assert result == {"require_review_before_send": False}
+    assert result == {"require_review_before_send": False, "language": None}
     assert fake_db.users.updates[0][1]["$set"]["require_review_before_send"] is False
 
 
@@ -153,5 +153,39 @@ def test_set_user_require_review_before_send_404s_for_unknown_user(monkeypatch):
 
     with pytest.raises(HTTPException) as exc_info:
         asyncio.run(server._set_user_require_review_before_send("missing_user", True))
+
+    assert exc_info.value.status_code == 404
+
+
+def test_update_account_settings_persists_language(monkeypatch):
+    fake_db = _DB()
+    monkeypatch.setattr(server, "db", fake_db)
+    user = _user()
+    body = server.AccountSettingsUpdate(language="fr")
+
+    result = asyncio.run(server.update_account_settings(body, user=user))
+
+    assert result == {"require_review_before_send": True, "language": "fr"}
+    assert fake_db.users.updates[0][1]["$set"]["language"] == "fr"
+
+
+def test_update_account_settings_ignores_invalid_language(monkeypatch):
+    fake_db = _DB()
+    monkeypatch.setattr(server, "db", fake_db)
+    user = _user()
+    body = server.AccountSettingsUpdate(language="de")
+
+    result = asyncio.run(server.update_account_settings(body, user=user))
+
+    assert result == {"require_review_before_send": True, "language": None}
+    assert fake_db.users.updates == []
+
+
+def test_set_user_language_404s_for_unknown_user(monkeypatch):
+    fake_db = _DB(matched_count=0)
+    monkeypatch.setattr(server, "db", fake_db)
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(server._set_user_language("missing_user", "fr"))
 
     assert exc_info.value.status_code == 404

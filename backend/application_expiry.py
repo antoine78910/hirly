@@ -9,7 +9,7 @@ from application_failure import (
     classify_application_failure,
     should_auto_expire_application,
 )
-from notifications_service import create_notification
+from notifications_service import create_notification, resolve_user_language
 
 
 def _billing_from_user(user_doc: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -69,15 +69,25 @@ async def mark_application_offer_expired(
         await _refund_application_credit(db, app_doc["user_id"])
         update["credit_refunded_at"] = now
         job = await db.jobs.find_one({"job_id": app_doc.get("job_id")}, {"_id": 0}) or {}
-        job_label = job.get("title") or "this position"
-        if job.get("company"):
-            job_label += f" at {job['company']}"
+        user_doc = await db.users.find_one({"user_id": app_doc["user_id"]}, {"_id": 0, "language": 1})
+        if resolve_user_language(user_doc) == "fr":
+            job_label = job.get("title") or "ce poste"
+            if job.get("company"):
+                job_label += f" chez {job['company']}"
+            title = "Cette offre d'emploi a expiré"
+            body = f"Nous avons remboursé le crédit utilisé pour {job_label}."
+        else:
+            job_label = job.get("title") or "this position"
+            if job.get("company"):
+                job_label += f" at {job['company']}"
+            title = "This job offer has expired"
+            body = f"We've refunded the credit used for {job_label}."
         await create_notification(
             db,
             user_id=app_doc["user_id"],
             type="offer_expired",
-            title="This job offer has expired",
-            body=f"We've refunded the credit used for {job_label}.",
+            title=title,
+            body=body,
             application_id=application_id,
         )
 

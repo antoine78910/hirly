@@ -15,6 +15,13 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def resolve_user_language(user_doc: Optional[Dict[str, Any]]) -> str:
+    """The "en"/"fr" the user has selected in the app, defaulting to "fr" to
+    match the frontend's own default (see readStoredAppLang in appUi.js)."""
+    language = (user_doc or {}).get("language")
+    return language if language in {"en", "fr"} else "fr"
+
+
 async def create_notification(
     db,
     *,

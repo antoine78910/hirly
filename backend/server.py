@@ -62,6 +62,7 @@ from notifications_service import (
     list_notifications,
     mark_all_notifications_read,
     mark_notification_read,
+    resolve_user_language,
 )
 from application_failure import classify_application_failure
 from application_expiry import (
@@ -684,6 +685,7 @@ class User(BaseModel):
     training_access: bool = False
     is_admin: bool = False
     require_review_before_send: bool = True
+    language: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -970,6 +972,7 @@ class ApplicationDefaultsUpdate(BaseModel):
 
 class AccountSettingsUpdate(BaseModel):
     require_review_before_send: Optional[bool] = None
+    language: Optional[str] = None
 
 
 class CvSourceUpdate(BaseModel):
@@ -5823,12 +5826,16 @@ async def onboarding_suggest_roles(body: OnboardingSuggestRolesRequest):
 async def update_account_settings(body: AccountSettingsUpdate, user: User = Depends(get_current_user)):
     if body.require_review_before_send is not None:
         await _set_user_require_review_before_send(user.user_id, body.require_review_before_send)
+    language = body.language if body.language in {"en", "fr"} else None
+    if language is not None:
+        await _set_user_language(user.user_id, language)
     return {
         "require_review_before_send": (
             body.require_review_before_send
             if body.require_review_before_send is not None
             else user.require_review_before_send
-        )
+        ),
+        "language": language if language is not None else user.language,
     }
 
 
@@ -10639,6 +10646,16 @@ async def _set_user_require_review_before_send(user_id: str, value: bool) -> Non
         raise HTTPException(status_code=404, detail="User not found")
 
 
+async def _set_user_language(user_id: str, value: str) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    result = await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {"language": value, "updated_at": now}},
+    )
+    if getattr(result, "matched_count", 0) == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+
+
 def _admin_email_set() -> set[str]:
     return {"anto.delbos@gmail.com", "oudrhiriyouneslfim@gmail.com"} | _env_email_set("ADMIN_EMAILS")
 
@@ -11294,7 +11311,7 @@ async def admin_grant_credits(
     admin: User = Depends(require_admin_user),
 ):
     """Grant bonus credits to a user and notify them, in one consistent step."""
-    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0, "billing": 1})
+    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0, "billing": 1, "language": 1})
     if not user_doc:
         raise HTTPException(status_code=404, detail="User not found")
     billing = _billing_from_user(user_doc)
@@ -11308,11 +11325,16 @@ async def admin_grant_credits(
             "billing.updated_at": datetime.now(timezone.utc).isoformat(),
         }},
     )
+    title = (
+        f"Vous avez reçu {body.credits} crédits gratuits"
+        if resolve_user_language(user_doc) == "fr"
+        else f"You received {body.credits} free credits"
+    )
     await create_notification(
         db,
         user_id=user_id,
         type="credits_granted",
-        title=f"You received {body.credits} free credits",
+        title=title,
         body=body.reason,
     )
     return {

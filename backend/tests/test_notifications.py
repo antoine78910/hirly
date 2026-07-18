@@ -4,7 +4,18 @@ import pytest
 from fastapi import HTTPException
 
 import server
-from notifications_service import create_notification
+from notifications_service import create_notification, resolve_user_language
+
+
+def test_resolve_user_language_reads_valid_values():
+    assert resolve_user_language({"language": "en"}) == "en"
+    assert resolve_user_language({"language": "fr"}) == "fr"
+
+
+def test_resolve_user_language_defaults_to_french():
+    assert resolve_user_language({}) == "fr"
+    assert resolve_user_language(None) == "fr"
+    assert resolve_user_language({"language": "de"}) == "fr"
 
 
 class _Collection:
@@ -146,6 +157,39 @@ def test_admin_grant_credits_is_additive_and_notifies(monkeypatch):
     assert notification["user_id"] == "user_1"
     assert "20" in notification["title"]
     assert notification["body"] == "Apology for CV issues"
+
+
+def test_admin_grant_credits_notification_localized_for_english_user(monkeypatch):
+    db = _DB(users=[_base_user(language="en")])
+    monkeypatch.setattr(server, "db", db)
+
+    asyncio.run(server.admin_grant_credits(
+        "user_1", server.AdminGrantCreditsRequest(credits=5, reason="Test"), admin=_admin(),
+    ))
+
+    assert db.notifications.rows[0]["title"] == "You received 5 free credits"
+
+
+def test_admin_grant_credits_notification_localized_for_french_user(monkeypatch):
+    db = _DB(users=[_base_user(language="fr")])
+    monkeypatch.setattr(server, "db", db)
+
+    asyncio.run(server.admin_grant_credits(
+        "user_1", server.AdminGrantCreditsRequest(credits=5, reason="Test"), admin=_admin(),
+    ))
+
+    assert db.notifications.rows[0]["title"] == "Vous avez reçu 5 crédits gratuits"
+
+
+def test_admin_grant_credits_notification_defaults_to_french_when_unset(monkeypatch):
+    db = _DB(users=[_base_user()])
+    monkeypatch.setattr(server, "db", db)
+
+    asyncio.run(server.admin_grant_credits(
+        "user_1", server.AdminGrantCreditsRequest(credits=5, reason="Test"), admin=_admin(),
+    ))
+
+    assert db.notifications.rows[0]["title"] == "Vous avez reçu 5 crédits gratuits"
 
 
 def test_admin_grant_credits_missing_user_raises_404(monkeypatch):

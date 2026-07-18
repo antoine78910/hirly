@@ -94,6 +94,33 @@ def test_offer_expired_refund_clamped_to_plan_total(monkeypatch):
     assert db.users.rows[0]["billing"]["credits_remaining"] == 200
 
 
+def test_offer_expired_notification_localized_for_french_user(monkeypatch):
+    db = _DB(applications=[_base_application()], users=[_base_user(language="fr")])
+    monkeypatch.setattr(server, "db", db)
+
+    asyncio.run(server.admin_update_application_manual_status(
+        "app_1", server.AdminManualStatusUpdate(manual_status="offer_expired"), admin=_admin(),
+    ))
+
+    notification = db.notifications.rows[0]
+    assert notification["title"] == "Cette offre d'emploi a expiré"
+    assert "Software Engineer" in notification["body"]
+    assert "chez Acme" in notification["body"]
+
+
+def test_offer_expired_notification_localized_for_english_user(monkeypatch):
+    db = _DB(applications=[_base_application()], users=[_base_user(language="en")])
+    monkeypatch.setattr(server, "db", db)
+
+    asyncio.run(server.admin_update_application_manual_status(
+        "app_1", server.AdminManualStatusUpdate(manual_status="offer_expired"), admin=_admin(),
+    ))
+
+    notification = db.notifications.rows[0]
+    assert notification["title"] == "This job offer has expired"
+    assert "at Acme" in notification["body"]
+
+
 def test_offer_expired_does_not_double_refund(monkeypatch):
     db = _DB(applications=[_base_application()], users=[_base_user()])
     monkeypatch.setattr(server, "db", db)
