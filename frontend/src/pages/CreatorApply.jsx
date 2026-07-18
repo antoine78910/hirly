@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, MessageCircle, AlarmClock, Search, Rocket, Send } from "lucide-react";
 import { BRAND } from "../lib/brand";
 import { api } from "../lib/api";
+import { sel } from "../lib/selectionTheme";
 import {
   countryFlag,
   filterPhoneCountries,
@@ -41,7 +42,10 @@ function Field({ label, children }) {
 }
 
 const inputClass =
-  "w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-[15px] text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-orange-300";
+  "w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-[15px] text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-linkedin/30 focus:border-linkedin";
+
+const continueButtonClass =
+  "w-full rounded-full gradient-linkedin text-white font-bold py-3.5 text-base disabled:opacity-40 disabled:cursor-not-allowed hover:enabled:opacity-90 transition-opacity shadow-[0_12px_40px_-12px_rgba(124,58,237,0.45)]";
 
 export default function CreatorApply() {
   const navigate = useNavigate();
@@ -133,7 +137,7 @@ export default function CreatorApply() {
   };
 
   return (
-    <div className="min-h-dvh relative overflow-hidden bg-gradient-to-br from-white via-orange-50 to-orange-100/70">
+    <div className="min-h-dvh relative overflow-hidden gradient-linkedin-soft">
       <div
         className="pointer-events-none absolute inset-0 opacity-60"
         style={{
@@ -164,7 +168,7 @@ export default function CreatorApply() {
             </button>
             <div className="flex-1 h-1.5 rounded-full bg-zinc-200/80 overflow-hidden">
               <motion.div
-                className="h-full rounded-full bg-orange-500"
+                className="h-full rounded-full gradient-linkedin"
                 initial={false}
                 animate={{ width: `${progress}%` }}
                 transition={{ type: "spring", stiffness: 300, damping: 30 }}
@@ -210,13 +214,13 @@ export default function CreatorApply() {
       </div>
 
       {!submitted && step !== "final" && (
-        <div className="fixed inset-x-0 bottom-0 border-t border-black/5 bg-gradient-to-t from-orange-50 via-orange-50/95 to-transparent pt-8 pb-6">
+        <div className="fixed inset-x-0 bottom-0 border-t border-black/5 bg-gradient-to-t from-white via-white/95 to-transparent pt-8 pb-6">
           <div className="max-w-3xl mx-auto px-6">
             <button
               type="button"
               onClick={goNext}
               disabled={!canContinue()}
-              className="w-full rounded-full bg-orange-500 disabled:bg-orange-300 disabled:cursor-not-allowed text-white font-bold py-3.5 text-base transition-colors hover:enabled:bg-orange-600"
+              className={continueButtonClass}
             >
               Plus loin
             </button>
@@ -240,7 +244,7 @@ function SocialStep({ form, set }) {
     <div>
       <StepTitle>Vos profils sur les réseaux sociaux</StepTitle>
       <Field label="TikTok">
-        <div className="flex rounded-xl border border-zinc-200 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-orange-300">
+        <div className="flex rounded-xl border border-zinc-200 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-linkedin/30">
           <span className="px-4 py-3 text-[15px] text-zinc-400 bg-zinc-50 border-r border-zinc-200 whitespace-nowrap">
             tiktok.com/@
           </span>
@@ -253,7 +257,7 @@ function SocialStep({ form, set }) {
         </div>
       </Field>
       <Field label="Instagram">
-        <div className="flex rounded-xl border border-zinc-200 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-orange-300">
+        <div className="flex rounded-xl border border-zinc-200 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-linkedin/30">
           <span className="px-4 py-3 text-[15px] text-zinc-400 bg-zinc-50 border-r border-zinc-200 whitespace-nowrap">
             instagram.com/
           </span>
@@ -274,15 +278,13 @@ function RadioCard({ selected, onClick, children }) {
     <button
       type="button"
       onClick={onClick}
-      className={`w-full flex items-center gap-3 rounded-2xl border px-5 py-4 text-left text-[15px] transition-colors ${
-        selected
-          ? "border-orange-400 bg-orange-50 text-zinc-900"
-          : "border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300"
+      className={`w-full flex items-center gap-3 rounded-2xl border px-5 py-4 text-left text-[15px] ${
+        selected ? sel.optionOn : sel.optionOff
       }`}
     >
       <span
         className={`grid place-items-center w-5 h-5 rounded-full border shrink-0 ${
-          selected ? "bg-orange-500 border-orange-500" : "border-zinc-300"
+          selected ? "bg-linkedin border-linkedin" : "border-zinc-300"
         }`}
       >
         {selected && <span className="w-2 h-2 rounded-full bg-white" />}
@@ -349,7 +351,7 @@ function WhatsappStep({ form, set, phoneCountries }) {
               const match = phoneCountries.find((c) => c.iso2 === iso2);
               set({ whatsappCountry: iso2, whatsappDial: match?.dial || form.whatsappDial });
             }}
-            className="rounded-xl border border-zinc-200 bg-white px-3 py-3 text-[15px] text-zinc-900 focus:outline-none focus:ring-2 focus:ring-orange-300"
+            className="rounded-xl border border-zinc-200 bg-white px-3 py-3 text-[15px] text-zinc-900 focus:outline-none focus:ring-2 focus:ring-linkedin/30"
           >
             {phoneCountries.map((c) => (
               <option key={c.iso2} value={c.iso2}>
@@ -375,7 +377,7 @@ function WhatsappStep({ form, set, phoneCountries }) {
 function InfoCard({ icon: Icon, title, children }) {
   return (
     <div className="flex gap-3.5 rounded-2xl border border-zinc-200 bg-white p-4">
-      <span className="grid place-items-center w-9 h-9 rounded-xl bg-orange-50 text-orange-600 shrink-0">
+      <span className="grid place-items-center w-9 h-9 rounded-xl bg-linkedin-light text-linkedin shrink-0">
         <Icon className="w-4.5 h-4.5" />
       </span>
       <div>
@@ -403,7 +405,7 @@ function WhatsappConsentStep({ form, set }) {
           type="checkbox"
           checked={form.whatsappConsent}
           onChange={(e) => set({ whatsappConsent: e.target.checked })}
-          className="w-4 h-4 rounded border-zinc-300 text-orange-500 focus:ring-orange-300"
+          className="w-4 h-4 rounded border-zinc-300 text-violet-600 focus:ring-violet-300"
         />
         J'accepte d'être contactée par {BRAND.NAME}.
       </label>
@@ -438,10 +440,8 @@ function LocationStep({ form, set }) {
             key={c.iso2}
             type="button"
             onClick={() => set({ country: c.iso2 })}
-            className={`flex items-center gap-2.5 rounded-xl border px-4 py-3.5 text-left text-[15px] transition-colors ${
-              form.country === c.iso2
-                ? "border-orange-400 bg-orange-50 text-zinc-900"
-                : "border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300"
+            className={`flex items-center gap-2.5 rounded-xl border px-4 py-3.5 text-left text-[15px] ${
+              form.country === c.iso2 ? sel.optionOn : sel.optionOff
             }`}
           >
             <span className="text-xs font-bold text-zinc-400">{c.iso2}</span>
@@ -452,7 +452,7 @@ function LocationStep({ form, set }) {
       <select
         value={form.country === "other" ? "other" : ""}
         onChange={() => set({ country: "other" })}
-        className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3.5 text-[15px] text-zinc-700 focus:outline-none focus:ring-2 focus:ring-orange-300"
+        className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3.5 text-[15px] text-zinc-700 focus:outline-none focus:ring-2 focus:ring-linkedin/30"
       >
         <option value="">Un autre pays</option>
         <option value="other">Un autre pays...</option>
@@ -509,7 +509,7 @@ function FinalStep({ form, set, error, submitting, onSubmit }) {
         type="button"
         onClick={onSubmit}
         disabled={submitting}
-        className="w-full inline-flex items-center justify-center gap-2 rounded-full bg-orange-500 disabled:opacity-60 text-white font-bold py-3.5 text-base transition-colors hover:enabled:bg-orange-600"
+        className="w-full inline-flex items-center justify-center gap-2 rounded-full gradient-linkedin disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-3.5 text-base hover:enabled:opacity-90 transition-opacity shadow-[0_12px_40px_-12px_rgba(124,58,237,0.45)]"
       >
         <Send className="w-4 h-4" />
         {submitting ? "Envoi..." : "Soumettre"}
@@ -521,7 +521,7 @@ function FinalStep({ form, set, error, submitting, onSubmit }) {
 function FinalConfirmation() {
   return (
     <div className="text-center py-10">
-      <span className="mx-auto mb-6 grid place-items-center w-16 h-16 rounded-full bg-orange-100 text-orange-600">
+      <span className="mx-auto mb-6 grid place-items-center w-16 h-16 rounded-full bg-linkedin-light text-linkedin">
         <Send className="w-7 h-7" />
       </span>
       <h1 className="font-display font-black text-3xl tracking-tight text-zinc-900 mb-3">
@@ -532,7 +532,7 @@ function FinalConfirmation() {
       </p>
       <Link
         to="/"
-        className="inline-flex items-center gap-2 rounded-full bg-orange-500 hover:bg-orange-600 text-white font-bold px-7 py-3 text-base transition-colors"
+        className="inline-flex items-center gap-2 rounded-full gradient-linkedin hover:opacity-90 text-white font-bold px-7 py-3 text-base transition-opacity"
       >
         Retour à l'accueil
       </Link>
