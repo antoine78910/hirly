@@ -1,3 +1,5 @@
+import asyncio
+
 from job_providers.apply_eligibility import (
     classify_apply_link,
     is_france_travail_offer,
@@ -9,6 +11,23 @@ from job_validation import cheap_validate_job_applyability
 from jobs_service import _provider_attempt_queries
 
 import server
+
+
+class _FakeJobsCollection:
+    def __init__(self, job):
+        self._job = dict(job)
+
+    async def find_one(self, filter, projection=None):
+        return dict(self._job)
+
+    async def update_one(self, filter, update, upsert=False):
+        self._job.update(update.get("$set", {}))
+        return {"matched_count": 1}
+
+
+class _FakeDB:
+    def __init__(self, job):
+        self.jobs = _FakeJobsCollection(job)
 
 def test_france_travail_apply_link_is_manual_ready():
     url = "https://candidat.francetravail.fr/offres/recherche/detail/048KLTP"
@@ -31,8 +50,8 @@ def test_france_travail_cheap_validation_is_feed_visible():
         "country_code": "fr",
     }
     validation = cheap_validate_job_applyability(job)
-    assert validation["applyability_tier"] == "C"
-    assert validation["validation_status"] in {"valid", "unknown"}
+    assert validation["applyability_tier"] == "B"
+    assert validation["validation_status"] == "valid"
     assert validation["manual_fulfillment_ready"] is True
     assert validation["requires_login"] is False
     assert server._job_is_blocked_for_feed({**job, **validation}) is False
@@ -89,6 +108,31 @@ def test_france_travail_direct_apply_url_gets_normal_ats_classification():
     result = classify_apply_link(url, source="France Travail")
     assert result["apply_fulfillment_status"] == "manual_ready"
     assert result["apply_url_provider"] == "greenhouse"
+
+
+def test_france_travail_manual_listing_passes_pre_apply_validation(monkeypatch):
+    """Regression test: swiping right on a France Travail listing with no
+    resolvable employer ATS used to be rejected by validate_job_before_application
+    (stuck at tier C / validation_status=unknown forever, since these listings
+    never get a later browser-driven re-validation pass), so no application or
+    swipe row was ever recorded — the card just disappeared client-side with no
+    trace. It must now be treated like any other manual-fulfillment job."""
+    url = "https://candidat.francetravail.fr/offres/recherche/detail/048KLTP"
+    job = {
+        "job_id": "job_ft_2",
+        "provider": "france_travail",
+        "source": "France Travail",
+        "external_url": url,
+        "selected_apply_url": url,
+        "title": "Developpeur web",
+        "company": "Acme",
+    }
+    monkeypatch.setattr(server, "db", _FakeDB(job))
+
+    result = asyncio.run(server.validate_job_before_application(job))
+
+    assert result["allowed"] is True
+    assert result["applyability_tier"] == "B"
 
 
 def test_france_travail_provider_uses_single_attempt_query():

@@ -102,6 +102,33 @@ def _cheap_validate_job_applyability(job: Dict[str, Any]) -> Dict[str, Any]:
             rejection_reason="captcha_or_bot_protection",
         )
 
+    if is_france_travail_offer(
+        provider=str(job.get("provider") or ""),
+        source=str(job.get("source") or ""),
+        url=selected_url,
+    ):
+        # candidat.francetravail.fr never resolves to a recognized direct-ATS
+        # domain, so without this branch it falls through to the generic
+        # "needs later browser validation" bucket below and stays there
+        # forever — these listings route to admin manual fulfillment instead
+        # of a browser-driven apply, so there is no later validation pass
+        # that would ever promote them out of tier C.
+        return _result(
+            now=now,
+            status="valid",
+            reason="France Travail listing — apply on France Travail with guided manual fulfillment.",
+            tier="B",
+            score=0.7,
+            selected_url=selected_url,
+            provider="francetravail",
+            ats_provider=ats_provider,
+            apply_status="manual_ready",
+            requires_login=False,
+            requires_account_creation=False,
+            captcha_detected=False,
+            rejection_reason=None,
+        )
+
     if platform.get("category") == "account_required" and not is_france_travail_offer(
         provider=str(job.get("provider") or ""),
         source=str(job.get("source") or ""),
