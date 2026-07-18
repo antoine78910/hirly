@@ -5,7 +5,11 @@ from apply_agent.remote_browser import (
 )
 
 
-def test_brightdata_username_appends_country(monkeypatch):
+def test_brightdata_username_appends_country_only_when_set(monkeypatch):
+    monkeypatch.delenv("BROWSER_REMOTE_COUNTRY", raising=False)
+    assert brightdata_username_with_country("brd-customer-1-zone-sb") == (
+        "brd-customer-1-zone-sb"
+    )
     monkeypatch.setenv("BROWSER_REMOTE_COUNTRY", "fr")
     assert brightdata_username_with_country("brd-customer-1-zone-sb") == (
         "brd-customer-1-zone-sb-country-fr"
@@ -18,7 +22,7 @@ def test_brightdata_username_appends_country(monkeypatch):
 def test_brightdata_ws_endpoint_builds_wss(monkeypatch):
     monkeypatch.setenv("BRIGHTDATA_BROWSER_USER", "brd-customer-1-zone-sb")
     monkeypatch.setenv("BRIGHTDATA_BROWSER_PASSWORD", "s3cret!")
-    monkeypatch.setenv("BROWSER_REMOTE_COUNTRY", "fr")
+    monkeypatch.delenv("BROWSER_REMOTE_COUNTRY", raising=False)
     monkeypatch.delenv("BRIGHTDATA_BROWSER_HOST", raising=False)
     monkeypatch.delenv("BRIGHTDATA_BROWSER_PORT", raising=False)
     ep = brightdata_ws_endpoint()
@@ -26,7 +30,7 @@ def test_brightdata_ws_endpoint_builds_wss(monkeypatch):
     assert ep.startswith("wss://")
     assert "@brd.superproxy.io:9222" in ep
     assert "s3cret" in ep or "s3cret%21" in ep
-    assert "country-fr" in ep
+    assert "country-fr" not in ep
 
 
 def test_should_use_remote_only_when_preferred_and_configured(monkeypatch):

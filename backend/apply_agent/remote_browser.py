@@ -44,8 +44,13 @@ def brightdata_configured() -> bool:
 
 
 def brightdata_username_with_country(username: str) -> str:
-    """Append ``-country-XX`` when BROWSER_REMOTE_COUNTRY is set and missing."""
-    country = (os.environ.get("BROWSER_REMOTE_COUNTRY") or "fr").strip().lower()
+    """Optionally append ``-country-XX`` when ``BROWSER_REMOTE_COUNTRY`` is set.
+
+    Default is *no* country suffix — Bright Data Scraping Browser rejects
+    unknown username shapes with ``403 Auth Failed (wrong_customer_name)``.
+    Only set BROWSER_REMOTE_COUNTRY if your zone docs say to use it.
+    """
+    country = (os.environ.get("BROWSER_REMOTE_COUNTRY") or "").strip().lower()
     if not country or len(country) != 2:
         return username
     token = f"-country-{country}"
