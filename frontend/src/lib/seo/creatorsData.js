@@ -6,6 +6,10 @@
 
 export const CPM_RATE = 1; // $ per 1,000 views
 
+// Only show the earnings badge on videos viral enough that the payout is
+// actually impressive — smaller clips just show the view count.
+export const VIRAL_VIEWS_THRESHOLD = 30000;
+
 export const creatorVideos = [
   {
     id: "7661332402953915680",

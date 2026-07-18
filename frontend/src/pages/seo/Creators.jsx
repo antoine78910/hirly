@@ -26,6 +26,7 @@ import {
   creatorCount,
   formatViews,
   formatEarnings,
+  VIRAL_VIEWS_THRESHOLD,
 } from "../../lib/seo/creatorsData";
 
 const applyMailto = supportMailto("Candidature — Programme créateurs Hirly");
@@ -136,11 +137,13 @@ function VideoCard({ video, featured }) {
       />
       <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-black/40" />
 
-      {/* Earnings badge */}
-      <div className="absolute top-3 right-3 flex items-center gap-1 rounded-full bg-white/95 backdrop-blur px-2.5 py-1 text-[11px] font-bold text-zinc-900 shadow-sm">
-        <DollarSign className="w-3 h-3 text-emerald-600" />
-        {formatEarnings(video.views)}
-      </div>
+      {/* Earnings badge — only for videos viral enough that the payout is impressive */}
+      {video.views >= VIRAL_VIEWS_THRESHOLD && (
+        <div className="absolute top-3 right-3 flex items-center gap-1 rounded-full bg-white/95 backdrop-blur px-2.5 py-1 text-[11px] font-bold text-zinc-900 shadow-sm">
+          <DollarSign className="w-3 h-3 text-emerald-600" />
+          {formatEarnings(video.views)}
+        </div>
+      )}
 
       {/* Play affordance */}
       <div className="absolute inset-0 grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity">
