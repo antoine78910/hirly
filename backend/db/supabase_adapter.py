@@ -833,8 +833,22 @@ class SupabaseCursorAdapter(CursorPort):
 
     async def to_list(self, length: Optional[int]):
         limit = length if length is not None else self._limit
-        pushed_limit = (limit if not self._sort_spec else None) or (self._limit if not self._sort_spec else None)
-        rows = await self.collection._read_documents(self.filter, pushed_limit)
+        # A sort on columns PostgREST can order by natively (real promoted
+        # columns, not nested JSONB) can be pushed down alongside the limit —
+        # letting Postgres do an indexed ORDER BY ... LIMIT N instead of this
+        # adapter fetching up to MAX_READ_ROWS full rows via deep-offset
+        # pagination just to re-sort a handful of them in Python.
+        pushable_columns = TABLE_FILTER_COLUMNS.get(self.collection.table_name, set())
+        order_param = None
+        if self._sort_spec and all(key in pushable_columns for key, _ in self._sort_spec):
+            order_param = ",".join(
+                f"{key}.{'desc.nullslast' if direction < 0 else 'asc'}"
+                for key, direction in self._sort_spec
+            )
+            pushed_limit = limit
+        else:
+            pushed_limit = limit if not self._sort_spec else None
+        rows = await self.collection._read_documents(self.filter, pushed_limit, order=order_param)
         if self._sort_spec:
             for key, direction in reversed(self._sort_spec):
                 rows.sort(key=lambda item: (item.get(key) is None, item.get(key)), reverse=direction < 0)
@@ -879,6 +893,7 @@ class SupabaseCollectionAdapter(CollectionPort):
         read_limit: Optional[int] = None,
         *,
         select: str = "data",
+        order: Optional[str] = None,
     ) -> List[Document]:
         self._require_read_supported()
         assert self.supabase_url is not None
@@ -903,7 +918,9 @@ class SupabaseCollectionAdapter(CollectionPort):
                 "limit": str(page_limit),
                 "offset": str(offset),
             }
-            if self.table_name == "jobs":
+            if order:
+                request_params["order"] = order
+            elif self.table_name == "jobs":
                 request_params["order"] = "imported_at.desc.nullslast"
             if remote_filter_params is not None:
                 request_params.update(remote_filter_params)
