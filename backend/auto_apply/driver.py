@@ -509,19 +509,20 @@ class BrowserApplyDriver(ApplyDriver):
                 )
 
                 try:
-                    await page.wait_for_load_state("networkidle", timeout=15000)
+                    await page.wait_for_load_state("domcontentloaded", timeout=8000)
                 except Exception:
                     pass
                 await dismiss_cookie_banner(page)
-                await _wait_for_meaningful_body(page, timeout_ms=10000)
-                await human_pause(page, 800, 1400)
+                await _wait_for_meaningful_body(page, timeout_ms=6000)
+                await human_pause(page, 300, 700)
 
                 if await self._abort_if_blocked(
                     page,
                     evidence,
                     http_status=http_status,
                     stage="bot_wall",
-                    allow_manual_captcha=not ctx.headless,
+                    # Bright Data solves captchas server-side — never block 3 min for a human.
+                    allow_manual_captcha=(not ctx.headless) and not prefer_remote,
                 ):
                     # Still capture a recovery screenshot for debugging popups / walls.
                     try:
@@ -537,13 +538,14 @@ class BrowserApplyDriver(ApplyDriver):
 
                 await self.after_navigation(page, evidence)
                 await self.reveal_form(page, evidence)
-                await human_pause(page, 1000, 1800)
+                await human_pause(page, 400, 900)
                 try:
-                    await page.wait_for_load_state("networkidle", timeout=15000)
+                    # networkidle often stalls 10–15s on SR analytics; DOM ready is enough.
+                    await page.wait_for_load_state("domcontentloaded", timeout=8000)
                 except Exception:
                     pass
                 await dismiss_cookie_banner(page)
-                await _wait_for_meaningful_body(page, timeout_ms=12000)
+                await _wait_for_meaningful_body(page, timeout_ms=6000)
 
                 # Apply CTA / oneclick can hit a dead exit even when the posting
                 # page loaded — retry with a fresh sticky sid instead of filling.
@@ -566,21 +568,29 @@ class BrowserApplyDriver(ApplyDriver):
 
                 starting_url = page.url
 
+                from apply_agent.remote_browser import should_use_remote_browser
+
+                remote_session = bool(prefer_remote) and should_use_remote_browser(
+                    prefer_remote=True,
+                )
+
                 for step in ctx.plan.steps:
                     if step.action == "submit":
                         # Read the form once more before submitting.
                         await dismiss_cookie_banner(page)
+                        # Vision pre-submit is slow (OpenAI round-trip); skip on Bright Data.
                         recovery = await recover_stuck_page(
-                            page, reason="pre_submit", use_vision=True,
+                            page, reason="pre_submit", use_vision=not remote_session,
                         )
                         evidence.raw.setdefault("recovery", []).append(
                             {k: recovery.get(k) for k in ("reason", "actions", "notes", "stuck")}
                         )
                         if recovery.get("screenshot_b64"):
                             evidence.screenshot_b64 = recovery["screenshot_b64"]
-                        await human_scroll(page, direction="up")
-                        await human_pause(page, 900, 2000)
-                        await human_mouse_wander(page)
+                        if not remote_session:
+                            await human_scroll(page, direction="up")
+                            await human_mouse_wander(page)
+                        await human_pause(page, 300, 700)
                         await dismiss_cookie_banner(page)
                         await self._click_submit(page, evidence)
                         continue

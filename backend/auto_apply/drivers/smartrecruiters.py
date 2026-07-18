@@ -318,6 +318,12 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
 
     async def after_navigation(self, page: Any, evidence) -> None:
         """Warm the SmartRecruiters origin a bit before interacting with Apply."""
+        from apply_agent.remote_browser import should_use_remote_browser
+
+        # Bright Data already unlocks/fingerprint — long local warmups just burn $ and time.
+        if should_use_remote_browser(prefer_remote=True):
+            await human_pause(page, 250, 500)
+            return
         await human_pause(page, 2200, 4200)
         await human_mouse_wander(page)
         await human_scroll(page)
@@ -395,7 +401,7 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
                         label = ""
                     if text_indicates_offer_expired(label):
                         return
-                    await human_pause(page, 800, 1800)
+                    await human_pause(page, 400, 900)
                     await human_click(loc.first, page)
                     clicked = True
                     if evidence is not None:
@@ -406,12 +412,12 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
                             "value_preview": "apply_cta_clicked",
                             "error": "",
                         })
-                    await human_pause(page, 1800, 3200)
+                    await human_pause(page, 600, 1200)
                     try:
-                        await page.wait_for_load_state("networkidle", timeout=12000)
+                        await page.wait_for_load_state("domcontentloaded", timeout=8000)
                     except Exception:
                         pass
-                    if await self._wait_for_oneclick_form(page):
+                    if await self._wait_for_oneclick_form(page, timeout_ms=25000):
                         return
                     # CTA already landed on oneclick (or DataDome wall). Do NOT
                     # hard-navigate again — a second hop looks like a bot.

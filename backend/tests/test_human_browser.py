@@ -1,6 +1,7 @@
 import asyncio
 
 from apply_agent.human_browser import (
+    browser_pace_scale,
     keystroke_delays_ms,
     should_take_thinking_pause,
     try_pass_datadome_slider,
@@ -36,3 +37,13 @@ class _NoFramePage:
 def test_try_pass_datadome_slider_returns_false_without_iframe():
     """Missing iframe must not report success (old bug closed the browser early)."""
     assert asyncio.run(try_pass_datadome_slider(_NoFramePage(), wait_for_frame_ms=0)) is False
+
+
+def test_browser_pace_scale_faster_with_brightdata(monkeypatch):
+    monkeypatch.delenv("BROWSER_PACE_SCALE", raising=False)
+    monkeypatch.setenv("BROWSER_REMOTE", "auto")
+    monkeypatch.setenv("BRIGHTDATA_BROWSER_USER", "u")
+    monkeypatch.setenv("BRIGHTDATA_BROWSER_PASSWORD", "p")
+    assert browser_pace_scale() == 0.35
+    monkeypatch.setenv("BROWSER_PACE_SCALE", "0.5")
+    assert browser_pace_scale() == 0.5

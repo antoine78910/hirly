@@ -3,18 +3,46 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 import random
 from typing import Any, List, Optional
 
 logger = logging.getLogger(__name__)
 
 
+def browser_pace_scale() -> float:
+    """Scale human delays. Bright Data sessions default faster (fingerprint is theirs)."""
+    raw = (os.environ.get("BROWSER_PACE_SCALE") or "").strip()
+    if raw:
+        try:
+            return max(0.15, min(1.5, float(raw)))
+        except ValueError:
+            pass
+    try:
+        from .remote_browser import brightdata_configured, remote_browser_mode
+
+        mode = remote_browser_mode()
+        if mode not in ("0", "false", "off", "no", "local", "none") and brightdata_configured():
+            return 0.35
+    except Exception:
+        pass
+    return 1.0
+
+
+def _scaled_ms(min_ms: int, max_ms: int) -> int:
+    scale = browser_pace_scale()
+    lo = max(40, int(min_ms * scale))
+    hi = max(lo, int(max_ms * scale))
+    return random.randint(lo, hi)
+
+
 async def human_pause(page: Any, min_ms: int = 600, max_ms: int = 1600) -> None:
-    await page.wait_for_timeout(random.randint(min_ms, max_ms))
+    await page.wait_for_timeout(_scaled_ms(min_ms, max_ms))
 
 
 def keystroke_delays_ms(text: str) -> List[int]:
     """Per-character typing delays with occasional slower beats."""
+    scale = browser_pace_scale()
     delays: List[int] = []
     for index, char in enumerate(str(text)):
         if char in " @.-_/":
@@ -26,14 +54,15 @@ def keystroke_delays_ms(text: str) -> List[int]:
         # Humans sometimes hesitate mid-word.
         if index > 0 and random.random() < 0.08:
             base += random.randint(120, 320)
-        delays.append(base)
+        delays.append(max(15, int(base * scale)))
     return delays
 
 
 def should_take_thinking_pause(*, force_seed: Optional[float] = None) -> bool:
-    """~12% chance of a longer "read the field" pause between actions."""
+    """Longer mid-field pauses; rarer when pace is accelerated (Bright Data)."""
     roll = force_seed if force_seed is not None else random.random()
-    return roll < 0.12
+    threshold = 0.04 if browser_pace_scale() < 0.6 else 0.12
+    return roll < threshold
 
 
 async def human_mouse_wander(page: Any) -> None:
