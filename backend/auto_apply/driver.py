@@ -637,16 +637,14 @@ class BrowserApplyDriver(ApplyDriver):
                             await human_mouse_wander(page)
 
                 await self._gather_evidence(page, evidence, starting_url)
-                # Retry submit only on concrete form problems.
-                # Do NOT key off evidence.raw["recovery"] — pre_submit always
-                # populates it and was causing a blind second Envoyer click.
-                submit_looks_done = bool(
-                    evidence.confirmation_text or evidence.submit_control_gone
+                # Retry once when the application form is clearly still open
+                # (false "Envoyer gone" / consent toggle / dead click).
+                form_still_open = bool((evidence.raw or {}).get("form_still_open"))
+                submit_looks_done = bool(evidence.confirmation_text) or (
+                    evidence.submit_control_gone is True and not form_still_open
                 )
-                if (
-                    evidence.submit_performed
-                    and not submit_looks_done
-                    and evidence.validation_errors
+                if evidence.submit_performed and not submit_looks_done and (
+                    form_still_open or evidence.validation_errors
                 ):
                     stuck_check = await recover_stuck_page(
                         page,
@@ -670,7 +668,7 @@ class BrowserApplyDriver(ApplyDriver):
                             status="blocked",
                             error="required_fields_empty",
                         )
-                    elif not evidence.confirmation_text and not evidence.submit_control_gone:
+                    else:
                         await self._click_submit(page, evidence)
                         await self._gather_evidence(page, evidence, starting_url)
                 if not evidence.screenshot_b64:
@@ -771,26 +769,57 @@ class BrowserApplyDriver(ApplyDriver):
                 await self._log_step(evidence, action="submit", locators=[_SUBMIT_SELECTOR],
                                      status="error", error=str(exc))
 
+    async def _application_form_still_open(self, page: Any, body_text: str = "") -> bool:
+        """True when the apply form is still on screen (submit did not leave)."""
+        try:
+            n = await page.locator(
+                "#first-name-input >> input, #first-name-input, "
+                "#email-input >> input, #email-input, "
+                'input[type="email"]:visible'
+            ).count()
+            if n >= 1:
+                return True
+        except Exception:
+            pass
+        hay = canonical(body_text or "")
+        return any(
+            marker in hay
+            for marker in (
+                "postulez facilement",
+                "informations personnelles",
+                "confirmez votre e mail",
+                "confirmez votre email",
+                "choose an option to autofill",
+                "personal information",
+            )
+        )
+
     async def _gather_evidence(self, page: Any, evidence: SubmissionEvidence, starting_url: str) -> None:
-        """Poll briefly for confirmation / submit-button disappearance (SR SPA)."""
-        deadline_ms = 10_000
+        """Poll briefly for confirmation / form leave (SR SPA)."""
+        deadline_ms = 12_000
         elapsed = 0
-        poll_ms = 800
+        poll_ms = 900
         raw_text = ""
         while elapsed <= deadline_ms:
             try:
-                await page.wait_for_timeout(poll_ms if elapsed else 1200)
-                elapsed += poll_ms if elapsed else 1200
+                await page.wait_for_timeout(poll_ms if elapsed else 1500)
+                elapsed += poll_ms if elapsed else 1500
                 raw_text = await page.locator("body").inner_text(timeout=5000)
             except Exception:
                 raw_text = ""
             text = " ".join((raw_text or "").split())
             evidence.confirmation_text = confirmation_text_found(canonical(text))
+            form_open = await self._application_form_still_open(page, raw_text or "")
+            evidence.raw["form_still_open"] = form_open
             submit_loc = await self._first_locator(
                 page,
                 [_SUBMIT_SELECTOR, 'button:has-text("Envoyer")'],
             )
-            if submit_loc is None:
+            if form_open:
+                # Shadow Envoyer is often invisible to Playwright — never treat
+                # "button not found" as success while the form is still there.
+                evidence.submit_control_gone = False
+            elif submit_loc is None:
                 evidence.submit_control_gone = True
             else:
                 try:
@@ -799,12 +828,14 @@ class BrowserApplyDriver(ApplyDriver):
                     evidence.submit_control_gone = False
             evidence.final_url = page.url
             evidence.url_changed = bool(page.url) and page.url != starting_url
-            if evidence.confirmation_text or evidence.submit_control_gone:
+            if evidence.confirmation_text or (evidence.submit_control_gone and not form_open):
+                break
+            if not form_open and elapsed >= 4000:
+                # Form left without matching our confirmation phrases yet.
                 break
         evidence.validation_errors = collect_post_submit_errors(raw_text or "")
-        # Real success page may still contain legal "error"/"please" copy — drop
-        # validation_errors once we already have a success signal.
-        if evidence.confirmation_text or evidence.submit_control_gone:
+        form_open = bool(evidence.raw.get("form_still_open"))
+        if evidence.confirmation_text or (evidence.submit_control_gone and not form_open):
             evidence.validation_errors = []
         evidence.raw["post_submit_body_preview"] = (raw_text or "")[:500]
 

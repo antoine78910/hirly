@@ -488,6 +488,48 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
                 "error": "Apply CTA not found and no oneclick URL available",
             })
 
+    async def _ensure_consent_checked(self, page: Any) -> bool:
+        """Check Accor/SR privacy consent without toggling it back off.
+
+        Previously we set ``checked=true`` then called ``inp.click()``, which
+        toggled the box OFF — Envoyer appeared to click but the SPA rejected.
+        """
+        try:
+            return bool(
+                await page.evaluate(
+                    """() => {
+                      const host = document.querySelector('spl-checkbox[data-test="consent-box"]')
+                        || document.querySelector('spl-checkbox[data-test*="consent"]')
+                        || document.querySelector('spl-checkbox');
+                      if (!host) return false;
+                      host.scrollIntoView({block:'center'});
+                      const inp = host.shadowRoot
+                        && host.shadowRoot.querySelector('input[type=checkbox]');
+                      const already = (inp && inp.checked)
+                        || host.getAttribute('aria-checked') === 'true'
+                        || host.getAttribute('value') === 'true'
+                        || host.hasAttribute('checked');
+                      if (already) return true;
+                      if (inp) {
+                        // Click once only when unchecked — do not set+click (toggles off).
+                        inp.click();
+                      } else {
+                        try { host.click(); } catch (e) {}
+                      }
+                      if (inp && !inp.checked) {
+                        inp.checked = true;
+                        inp.dispatchEvent(new Event('input', {bubbles:true}));
+                        inp.dispatchEvent(new Event('change', {bubbles:true}));
+                      }
+                      host.setAttribute('value', 'true');
+                      host.setAttribute('aria-checked', 'true');
+                      return !!(inp ? inp.checked : true);
+                    }"""
+                )
+            )
+        except Exception:
+            return False
+
     async def _apply_step(self, page: Any, step, documents: Dict[str, Any], evidence) -> None:
         if step.action == "check":
             preview = str(step.value or "")[:100]
@@ -498,29 +540,15 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
                                      status="not_found", value_preview=preview)
                 return
             try:
-                await page.evaluate(
-                    """() => {
-                      const host = document.querySelector('spl-checkbox[data-test="consent-box"]')
-                        || document.querySelector('spl-checkbox');
-                      if (!host) return false;
-                      host.scrollIntoView({block:'center'});
-                      const inp = host.shadowRoot && host.shadowRoot.querySelector('input[type=checkbox]');
-                      if (inp) {
-                        inp.checked = true;
-                        inp.dispatchEvent(new Event('input', {bubbles:true}));
-                        inp.dispatchEvent(new Event('change', {bubbles:true}));
-                        inp.click();
-                      }
-                      host.setAttribute('value', 'true');
-                      try { host.click(); } catch (e) {}
-                      return true;
-                    }"""
+                ok = await self._ensure_consent_checked(page)
+                await self._log_step(
+                    evidence,
+                    action="check",
+                    locators=step.locators,
+                    status="ok" if ok else "error",
+                    value_preview=preview,
+                    error="" if ok else "consent_not_checked",
                 )
-                box = await loc.bounding_box()
-                if box and 0 <= box["y"] <= 4000:
-                    await page.mouse.click(box["x"] + 10, box["y"] + box["height"] / 2)
-                await self._log_step(evidence, action="check", locators=step.locators,
-                                     status="ok", value_preview=preview)
                 return
             except Exception as exc:
                 await self._log_step(evidence, action="check", locators=step.locators,
@@ -552,41 +580,61 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
                 return
         await super()._apply_step(page, step, documents, evidence)
 
+    async def _shadow_click_envoyer(self, page: Any) -> bool:
+        try:
+            return bool(
+                await page.evaluate(
+                    """() => {
+                      function textOf(el) {
+                        return ((el.innerText || el.textContent || '') + ' '
+                          + (el.getAttribute('aria-label') || '')).trim();
+                      }
+                      function deep(root, out=[]) {
+                        root.querySelectorAll(
+                          'button, [role=button], spl-button, .c-spl-button'
+                        ).forEach(el => out.push(el));
+                        root.querySelectorAll('*').forEach(el => {
+                          if (el.shadowRoot) deep(el.shadowRoot, out);
+                        });
+                        return out;
+                      }
+                      const hit = deep(document).find(b => {
+                        const t = textOf(b);
+                        return t === 'Envoyer' || /^Envoyer\\b/i.test(t);
+                      });
+                      if (!hit) return false;
+                      hit.scrollIntoView({block:'center'});
+                      const inner = hit.shadowRoot
+                        && hit.shadowRoot.querySelector('button');
+                      (inner || hit).click();
+                      return true;
+                    }"""
+                )
+            )
+        except Exception:
+            return False
+
     async def _click_submit(self, page: Any, evidence) -> None:
-        # Prefer visible text "Envoyer" — role name can match empty primary buttons.
+        # Consent must be on — otherwise Envoyer is a no-op and the form stays.
+        consent_ok = await self._ensure_consent_checked(page)
+        evidence.raw["consent_checked_before_submit"] = consent_ok
+
         selectors = ['button:has-text("Envoyer")', *list(_SUBMIT_SELECTORS)]
+        # Prefer deep shadow click: Playwright often "clicks" a visible Envoyer
+        # that is not the live SAP control.
+        if await self._shadow_click_envoyer(page):
+            evidence.submit_performed = True
+            await self._log_step(
+                evidence,
+                action="submit",
+                locators=selectors,
+                status="ok",
+                value_preview="shadow_envoyer",
+            )
+            return
+
         loc = await self._first_locator(page, selectors)
         if loc is None:
-            # Deep shadow click (SAP spl-button).
-            clicked = await page.evaluate(
-                """() => {
-                  function textOf(el) {
-                    return ((el.innerText || el.textContent || '') + ' '
-                      + (el.getAttribute('aria-label') || '')).trim();
-                  }
-                  function deep(root, out=[]) {
-                    root.querySelectorAll('button, [role=button], spl-button, .c-spl-button')
-                      .forEach(el => out.push(el));
-                    root.querySelectorAll('*').forEach(el => {
-                      if (el.shadowRoot) deep(el.shadowRoot, out);
-                    });
-                    return out;
-                  }
-                  const hit = deep(document).find(b => textOf(b) === 'Envoyer'
-                    || textOf(b).includes('Envoyer'));
-                  if (!hit) return false;
-                  hit.scrollIntoView({block:'center'});
-                  hit.click();
-                  const inner = hit.shadowRoot && hit.shadowRoot.querySelector('button');
-                  if (inner) inner.click();
-                  return true;
-                }"""
-            )
-            if clicked:
-                evidence.submit_performed = True
-                await self._log_step(evidence, action="submit", locators=selectors, status="ok",
-                                     error="shadow_js_click")
-                return
             evidence.raw["submit"] = "button_not_found"
             await self._log_step(evidence, action="submit", locators=selectors, status="not_found")
             return

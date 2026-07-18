@@ -44,3 +44,33 @@ def test_confirmation_and_submit_gone_is_verified():
         network_ok=True,
     )
     assert verify(ev).status == "verified_success"
+
+
+def test_form_still_open_is_not_success_even_if_envoyer_locator_misses():
+    """Accor debug case: shadow Envoyer not found but form still visible."""
+    ev = SubmissionEvidence(
+        submit_performed=True,
+        submit_control_gone=True,
+        network_ok=True,
+        url_changed=False,
+        confirmation_text=None,
+        raw={
+            "form_still_open": True,
+            "post_submit_body_preview": "Postulez facilement Informations personnelles",
+        },
+    )
+    v = verify(ev)
+    assert v.status == "unverified"
+    assert v.reason == "form_still_open_after_submit"
+
+
+def test_form_cleared_without_url_change_can_verify():
+    ev = SubmissionEvidence(
+        submit_performed=True,
+        submit_control_gone=True,
+        network_ok=True,
+        url_changed=False,
+        raw={"form_still_open": False},
+    )
+    assert verify(ev).status == "verified_success"
+    assert verify(ev).reason == "form_cleared"
