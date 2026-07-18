@@ -42,11 +42,20 @@ SUCCESS_PHRASES = (
     "thanks for applying",
     "we ve received your application",
     "we have received your application",
+    "successfully submitted",
+    "application successfully submitted",
     "merci pour votre candidature",
     "votre candidature a ete envoyee",
     "votre candidature a été envoyée",
     "candidature envoyee",
     "candidature envoyée",
+    # SmartRecruiters / Accor oneclick (matched via canonical()).
+    "nous avons bien recu votre candidature",
+    "votre candidature a bien ete recue",
+    "votre candidature a bien ete transmise",
+    "candidature a bien ete envoyee",
+    "candidature transmise",
+    "merci nous avons bien recu",
 )
 
 SUCCESS_URL_TOKENS = ("confirmation", "success", "submitted", "thank-you", "thank_you")
@@ -74,7 +83,29 @@ BOT_WALL_MARKERS = (
     "quelque chose bloque le fonctionnement de javascript",
 )
 
-_POST_SUBMIT_ERROR_TERMS = ("required", "error", "invalid", "please", "missing", "failed", "could not", "must")
+# Keep these specific — bare "please"/"error"/"obligatoire" false-positive on
+# privacy copy and required-field labels while the form is still open.
+_POST_SUBMIT_ERROR_TERMS = (
+    "is required",
+    "are required",
+    "field is required",
+    "this field is required",
+    "ce champ est obligatoire",
+    "champ est obligatoire",
+    "veuillez renseigner",
+    "veuillez remplir",
+    "invalid email",
+    "email invalide",
+    "format invalide",
+    "n est pas valide",
+    "n'est pas valide",
+    "could not submit",
+    "unable to submit",
+    "echec de l envoi",
+    "échec de l'envoi",
+    "submission failed",
+    "envoi impossible",
+)
 
 
 async def detect_captcha(page: Any, *, click_error: str = "") -> Dict[str, Any]:
@@ -294,8 +325,10 @@ async def reveal_apply_form(page: Any) -> bool:
 
 
 def confirmation_text_found(page_text_canonical: str) -> Optional[str]:
+    haystack = canonical(page_text_canonical)
     for phrase in SUCCESS_PHRASES:
-        if phrase in page_text_canonical:
+        needle = canonical(phrase)
+        if needle and needle in haystack:
             return phrase
     return None
 
@@ -304,6 +337,9 @@ def collect_post_submit_errors(page_text: str) -> List[str]:
     lines = [line.strip() for line in page_text.splitlines() if line.strip()]
     errors: List[str] = []
     for line in lines:
+        # Long legal/cookie paragraphs often contain "error"/"please" — ignore them.
+        if len(line) > 160:
+            continue
         if any(term in canonical(line) for term in _POST_SUBMIT_ERROR_TERMS):
             errors.append(line[:300])
         if len(errors) >= 10:

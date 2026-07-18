@@ -637,10 +637,16 @@ class BrowserApplyDriver(ApplyDriver):
                             await human_mouse_wander(page)
 
                 await self._gather_evidence(page, evidence, starting_url)
-                # If submit left validation errors / empty requireds, recover once and retry submit.
-                if evidence.submit_performed and (
-                    evidence.validation_errors
-                    or (evidence.raw.get("recovery") and not evidence.confirmation_text)
+                # Retry submit only on concrete form problems.
+                # Do NOT key off evidence.raw["recovery"] — pre_submit always
+                # populates it and was causing a blind second Envoyer click.
+                submit_looks_done = bool(
+                    evidence.confirmation_text or evidence.submit_control_gone
+                )
+                if (
+                    evidence.submit_performed
+                    and not submit_looks_done
+                    and evidence.validation_errors
                 ):
                     stuck_check = await recover_stuck_page(
                         page,
@@ -664,8 +670,7 @@ class BrowserApplyDriver(ApplyDriver):
                             status="blocked",
                             error="required_fields_empty",
                         )
-                    elif not evidence.confirmation_text:
-                        # Popup cleared — try submit once more.
+                    elif not evidence.confirmation_text and not evidence.submit_control_gone:
                         await self._click_submit(page, evidence)
                         await self._gather_evidence(page, evidence, starting_url)
                 if not evidence.screenshot_b64:
@@ -767,24 +772,41 @@ class BrowserApplyDriver(ApplyDriver):
                                      status="error", error=str(exc))
 
     async def _gather_evidence(self, page: Any, evidence: SubmissionEvidence, starting_url: str) -> None:
-        try:
-            await page.wait_for_timeout(1500)
-            raw_text = await page.locator("body").inner_text(timeout=5000)
-        except Exception:
-            raw_text = ""
-        text = " ".join(raw_text.split())
-        evidence.confirmation_text = confirmation_text_found(canonical(text))
-        evidence.validation_errors = collect_post_submit_errors(text)
-        submit_loc = await self._first_locator(page, [_SUBMIT_SELECTOR])
-        if submit_loc is None:
-            evidence.submit_control_gone = True
-        else:
+        """Poll briefly for confirmation / submit-button disappearance (SR SPA)."""
+        deadline_ms = 10_000
+        elapsed = 0
+        poll_ms = 800
+        raw_text = ""
+        while elapsed <= deadline_ms:
             try:
-                evidence.submit_control_gone = not await submit_loc.is_visible(timeout=1500)
+                await page.wait_for_timeout(poll_ms if elapsed else 1200)
+                elapsed += poll_ms if elapsed else 1200
+                raw_text = await page.locator("body").inner_text(timeout=5000)
             except Exception:
-                evidence.submit_control_gone = False
-        evidence.final_url = page.url
-        evidence.url_changed = bool(page.url) and page.url != starting_url
+                raw_text = ""
+            text = " ".join((raw_text or "").split())
+            evidence.confirmation_text = confirmation_text_found(canonical(text))
+            submit_loc = await self._first_locator(
+                page,
+                [_SUBMIT_SELECTOR, 'button:has-text("Envoyer")'],
+            )
+            if submit_loc is None:
+                evidence.submit_control_gone = True
+            else:
+                try:
+                    evidence.submit_control_gone = not await submit_loc.is_visible(timeout=800)
+                except Exception:
+                    evidence.submit_control_gone = False
+            evidence.final_url = page.url
+            evidence.url_changed = bool(page.url) and page.url != starting_url
+            if evidence.confirmation_text or evidence.submit_control_gone:
+                break
+        evidence.validation_errors = collect_post_submit_errors(raw_text or "")
+        # Real success page may still contain legal "error"/"please" copy — drop
+        # validation_errors once we already have a success signal.
+        if evidence.confirmation_text or evidence.submit_control_gone:
+            evidence.validation_errors = []
+        evidence.raw["post_submit_body_preview"] = (raw_text or "")[:500]
 
 
 class _Registry:
