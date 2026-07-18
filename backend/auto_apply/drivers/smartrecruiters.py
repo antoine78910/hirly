@@ -54,6 +54,10 @@ _SUBMIT_SELECTORS = (
     'role=button[name="Submit"]',
     'role=button[name="Submit application"]',
     'button:has-text("Envoyer")',
+    'button:has-text("Soumettre")',
+    'button:has-text("Submit")',
+    'button:has-text("Submit application")',
+    'button:has-text("Send application")',
 )
 _SR_FIELD_TYPE_MAP = {
     "INPUT_TEXT": FieldType.TEXT,
@@ -344,6 +348,8 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
                     return False
             except Exception:
                 pass
+            if self._oneclick_url_looks_expired(page.url or ""):
+                return False
             try:
                 # Prefer Accor/SR contact fields — generic :visible inputs can
                 # match header/search chrome while the form shell is still blank.
@@ -465,15 +471,56 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
             pass
         await human_pause(page, 700, 1400)
 
+    def _oneclick_url_looks_expired(self, url: str) -> bool:
+        u = (url or "").lower()
+        return "oneclick-ui" in u and "/expired" in u
+
+    async def _mark_offer_expired(self, page: Any, evidence: Any, *, detail: str) -> None:
+        await self._mark_reveal_blocked(
+            page,
+            evidence,
+            reason="offer_expired",
+            preview="offer_expired",
+            error=detail,
+        )
+
     async def _ensure_oneclick_form_ready(
         self, page: Any, evidence: Any = None, *, timeout_ms: int = 25000,
     ) -> bool:
         """Wait for fields; reload once if we only have the blank oneclick chrome."""
+        if self._oneclick_url_looks_expired(page.url or ""):
+            await self._mark_offer_expired(
+                page,
+                evidence,
+                detail="oneclick URL contains /expired",
+            )
+            return False
+        if await detect_offer_expired(page):
+            await self._mark_offer_expired(
+                page,
+                evidence,
+                detail="expired copy on oneclick page",
+            )
+            return False
         if await self._wait_for_oneclick_form(page, timeout_ms=timeout_ms):
             return True
         if "oneclick-ui" not in (page.url or ""):
             return False
+        if self._oneclick_url_looks_expired(page.url or ""):
+            await self._mark_offer_expired(
+                page,
+                evidence,
+                detail="redirected to /expired oneclick URL",
+            )
+            return False
         await self._reload_oneclick_shell(page, evidence)
+        if self._oneclick_url_looks_expired(page.url or ""):
+            await self._mark_offer_expired(
+                page,
+                evidence,
+                detail="still on /expired after reload",
+            )
+            return False
         if await self._wait_for_oneclick_form(page, timeout_ms=min(20000, timeout_ms)):
             return True
         # Template exhausted — cheap vision/heuristic supervisor (whitelist only).
@@ -491,6 +538,9 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
                 return True
         except Exception as exc:
             logger.info("sr_fallback_supervisor_failed error=%s", str(exc)[:160])
+        # skip_offer sets offer_expired — never overwrite with form_not_loaded.
+        if evidence is not None and evidence.blocked_reason == "offer_expired":
+            return False
         await self._mark_reveal_blocked(
             page,
             evidence,
@@ -507,6 +557,11 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
             return
         # Expired postings keep a CTA whose label is no longer "Je suis intéressé(e)".
         if await detect_offer_expired(page):
+            await self._mark_offer_expired(
+                page,
+                evidence,
+                detail="expired copy on posting page",
+            )
             return
 
         # Accor / FR boards often use a plain text button without #st-apply.
@@ -683,6 +738,10 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
                     """() => {
                       const host = document.querySelector('spl-checkbox[data-test="consent-box"]')
                         || document.querySelector('spl-checkbox[data-test*="consent"]')
+                        || document.querySelector('[data-test="consent-box"]')
+                        || document.querySelector('spl-checkbox[aria-label*="privacy" i]')
+                        || document.querySelector('spl-checkbox[aria-label*="confidential" i]')
+                        || document.querySelector('input[type=checkbox][name*="consent" i]')
                         || document.querySelector('spl-checkbox');
                       if (!host) return false;
                       host.scrollIntoView({block:'center'});
@@ -716,19 +775,15 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
     async def _apply_step(self, page: Any, step, documents: Dict[str, Any], evidence) -> None:
         if step.action == "check":
             preview = str(step.value or "")[:100]
-            loc = await self._first_locator(page, step.locators)
-            if loc is None:
-                evidence.raw.setdefault("unmatched_steps", []).append(step.locators[:1])
-                await self._log_step(evidence, action="check", locators=step.locators,
-                                     status="not_found", value_preview=preview)
-                return
+            # Primark/EN boards may not expose spl-checkbox[data-test=consent-box]
+            # in the Playwright tree — still try shadow/JS consent.
             try:
                 ok = await self._ensure_consent_checked(page)
                 await self._log_step(
                     evidence,
                     action="check",
                     locators=step.locators,
-                    status="ok" if ok else "error",
+                    status="ok" if ok else "not_found",
                     value_preview=preview,
                     error="" if ok else "consent_not_checked",
                 )
@@ -783,7 +838,10 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
                       }
                       const hit = deep(document).find(b => {
                         const t = textOf(b);
-                        return t === 'Envoyer' || /^Envoyer\\b/i.test(t);
+                        return /^(Envoyer|Soumettre|Submit|Send)(\\b|$)/i.test(t)
+                          || /^Submit application/i.test(t)
+                          || /^Send application/i.test(t)
+                          || /^Envoyer ma candidature/i.test(t);
                       });
                       if (!hit) return false;
                       hit.scrollIntoView({block:'center'});
@@ -798,13 +856,16 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
             return False
 
     async def _click_submit(self, page: Any, evidence) -> None:
-        # Consent must be on — otherwise Envoyer is a no-op and the form stays.
+        # Consent must be on — otherwise submit is a no-op and the form stays.
         consent_ok = await self._ensure_consent_checked(page)
         evidence.raw["consent_checked_before_submit"] = consent_ok
 
-        selectors = ['button:has-text("Envoyer")', *list(_SUBMIT_SELECTORS)]
-        # Prefer deep shadow click: Playwright often "clicks" a visible Envoyer
-        # that is not the live SAP control.
+        selectors = [
+            'button:has-text("Envoyer")',
+            'button:has-text("Submit")',
+            *list(_SUBMIT_SELECTORS),
+        ]
+        # Prefer deep shadow click: Playwright often misses SAP spl-button.
         if await self._shadow_click_envoyer(page):
             evidence.submit_performed = True
             await self._log_step(
@@ -812,7 +873,7 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
                 action="submit",
                 locators=selectors,
                 status="ok",
-                value_preview="shadow_envoyer",
+                value_preview="shadow_submit",
             )
             return
 

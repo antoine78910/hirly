@@ -24,6 +24,18 @@ def test_heuristic_blank_shell_reloads():
     assert d.action == "reload_oneclick"
 
 
+def test_heuristic_expired_url_skips():
+    d = heuristic_decide(
+        "oneclick_form_not_loaded",
+        url=(
+            "https://jobs.smartrecruiters.com/oneclick-ui/company/primark/"
+            "publication/448b4033/expired?dcr_ci=primark"
+        ),
+        body_snip="",
+    )
+    assert d.action == "skip_offer"
+
+
 def test_heuristic_nav_timeout_retries_session():
     d = heuristic_decide("oneclick_nav_timeout", url="https://jobs.smartrecruiters.com/Accor/1")
     assert d.action == "abort_retry_session"

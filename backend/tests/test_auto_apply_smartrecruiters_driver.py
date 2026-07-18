@@ -259,6 +259,67 @@ def test_reveal_form_skips_direct_nav_when_cta_already_on_oneclick(monkeypatch):
     assert evidence.blocked_reason == "oneclick_form_not_loaded"
 
 
+def test_ensure_oneclick_form_ready_stops_on_expired_url(monkeypatch):
+    from auto_apply.models import SubmissionEvidence
+
+    driver = SmartRecruitersApplyDriver()
+    page = _RevealPage()
+    page.url = (
+        "https://jobs.smartrecruiters.com/oneclick-ui/company/primark/"
+        "publication/448b4033-a215-4223-ac96-1ee00f8c6f5b/expired?dcr_ci=primark"
+    )
+    evidence = SubmissionEvidence(raw={"step_log": []})
+
+    async def fake_detect(_page):
+        return False
+
+    monkeypatch.setattr("auto_apply.drivers.smartrecruiters.detect_offer_expired", fake_detect)
+
+    ok = asyncio.run(driver._ensure_oneclick_form_ready(page, evidence, timeout_ms=500))
+    assert ok is False
+    assert evidence.blocked_reason == "offer_expired"
+
+
+def test_ensure_oneclick_does_not_overwrite_skip_offer(monkeypatch):
+    from auto_apply.models import SubmissionEvidence
+
+    driver = SmartRecruitersApplyDriver()
+    page = _RevealPage()
+    page.url = (
+        "https://jobs.smartrecruiters.com/oneclick-ui/company/primark/"
+        "publication/448b4033-a215-4223-ac96-1ee00f8c6f5b?dcr_ci=primark"
+    )
+    evidence = SubmissionEvidence(raw={"step_log": []})
+
+    async def fake_detect(_page):
+        return False
+
+    async def fake_wait(_page, timeout_ms=45000):
+        return False
+
+    async def fake_reload_shell(_page, _evidence=None):
+        return None
+
+    async def fake_fallback(*args, **kwargs):
+        evidence.blocked_reason = "offer_expired"
+        return False
+
+    async def fake_pause(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr("auto_apply.drivers.smartrecruiters.detect_offer_expired", fake_detect)
+    monkeypatch.setattr("auto_apply.drivers.smartrecruiters.human_pause", fake_pause)
+    monkeypatch.setattr(driver, "_wait_for_oneclick_form", fake_wait)
+    monkeypatch.setattr(driver, "_reload_oneclick_shell", fake_reload_shell)
+    monkeypatch.setattr(
+        "auto_apply.fallback_supervisor.run_fallback_supervisor", fake_fallback,
+    )
+
+    ok = asyncio.run(driver._ensure_oneclick_form_ready(page, evidence, timeout_ms=500))
+    assert ok is False
+    assert evidence.blocked_reason == "offer_expired"
+
+
 def test_ensure_oneclick_form_ready_succeeds_after_reload(monkeypatch):
     from auto_apply.models import SubmissionEvidence
 

@@ -11,6 +11,8 @@ OFFER_EXPIRED_MARKERS = (
     "offer_expired",
     "offer has expired",
     "job expired",
+    "job ad has expired",
+    "this job ad has expired",
     "position expired",
     "job closed",
     "position closed",

@@ -97,8 +97,17 @@ def heuristic_decide(reason: str, *, url: str = "", body_snip: str = "") -> Fall
     hay = f"{body_snip or ''}".lower()
     url_l = (url or "").lower()
 
-    if any(tok in hay for tok in ("expir", "no longer available", "plus disponible", "offre pourvue")):
-        return FallbackDecision("skip_offer", issue="offer_looks_expired", confidence=0.7)
+    if "/expired" in url_l or any(
+        tok in hay
+        for tok in (
+            "expir",
+            "no longer available",
+            "plus disponible",
+            "offre pourvue",
+            "job ad has expired",
+        )
+    ):
+        return FallbackDecision("skip_offer", issue="offer_looks_expired", confidence=0.85)
 
     if reason == "oneclick_nav_timeout":
         return FallbackDecision(
