@@ -16,6 +16,7 @@ import Compare from "@/pages/seo/Compare";
 import ForProfile from "@/pages/seo/ForProfile";
 import HowItWorks from "@/pages/seo/HowItWorks";
 import UseCases from "@/pages/seo/UseCases";
+import Creators from "@/pages/seo/Creators";
 import Signup from "@/pages/Signup";
 import SignIn from "@/pages/SignIn";
 import Onboarding from "@/pages/Onboarding";
@@ -98,7 +99,7 @@ function shouldShowBottomNav(pathname) {
   if (LANDING_CONTRACT_PATH_SLUGS.some((slug) => pathname === `/${slug}`)) return false;
   if (pathname === "/signup" || pathname === "/signin") return false;
   if (pathname.startsWith("/invite/")) return false;
-  if (pathname === "/how-it-works" || pathname === "/use-cases") return false;
+  if (pathname === "/how-it-works" || pathname === "/use-cases" || pathname === "/creators") return false;
   if (pathname.startsWith("/blog") || pathname.startsWith("/compare") || pathname.startsWith("/for/")) return false;
   if (pathname === "/admin" || pathname.startsWith("/admin/")) return false;
   if (pathname === "/onboarding" || pathname.startsWith("/onboarding/")) return false;
@@ -172,6 +173,7 @@ function AppRouter() {
         ))}
         <Route path="/how-it-works" element={<HowItWorks />} />
         <Route path="/use-cases" element={<UseCases />} />
+        <Route path="/creators" element={<Creators />} />
         <Route path="/blog" element={<Blog />} />
         <Route path="/blog/:slug" element={<BlogPost />} />
         <Route path="/compare/:slug" element={<Compare />} />

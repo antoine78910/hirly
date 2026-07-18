@@ -52,6 +52,7 @@ export default function MarketingLayout({ children }) {
                 <li><Link to="/for/juniors" className="hover:text-zinc-900">For juniors</Link></li>
                 <li><Link to="/for/reconversion" className="hover:text-zinc-900">For career changers</Link></li>
                 <li><Link to="/for/developpeurs" className="hover:text-zinc-900">For developers</Link></li>
+                <li><Link to="/creators" className="hover:text-zinc-900">Creators program</Link></li>
               </ul>
             </div>
             <div>

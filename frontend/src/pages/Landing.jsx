@@ -542,6 +542,7 @@ export default function Landing() {
                   { label: lang === "fr" ? "Pour les juniors" : "For juniors", href: "/for/juniors" },
                   { label: lang === "fr" ? "Reconversion pro" : "Career changers", href: "/for/reconversion" },
                   { label: lang === "fr" ? "Pour les devs" : "For developers", href: "/for/developpeurs" },
+                  { label: lang === "fr" ? "Programme créateurs" : "Creators program", href: "/creators" },
                 ].map((l) => (
                   <li key={l.href}>
                     <a href={l.href} className="text-sm text-zinc-500 hover:text-zinc-900 transition-colors">
