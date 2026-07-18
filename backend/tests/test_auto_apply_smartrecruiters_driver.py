@@ -238,10 +238,16 @@ def test_reveal_form_skips_direct_nav_when_cta_already_on_oneclick(monkeypatch):
 
     page.reload = fake_reload
 
+    async def no_fallback(*args, **kwargs):
+        return False
+
     monkeypatch.setattr("auto_apply.drivers.smartrecruiters.detect_offer_expired", fake_detect)
     monkeypatch.setattr("auto_apply.drivers.smartrecruiters.human_pause", fake_pause)
     monkeypatch.setattr("auto_apply.drivers.smartrecruiters.human_click", fake_click)
     monkeypatch.setattr(driver, "_wait_for_oneclick_form", fake_wait)
+    monkeypatch.setattr(
+        "auto_apply.fallback_supervisor.run_fallback_supervisor", no_fallback,
+    )
 
     asyncio.run(driver.reveal_form(page, evidence))
     assert page.goto_urls == [], "must not hard-navigate to a second oneclick URL"

@@ -476,6 +476,21 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
         await self._reload_oneclick_shell(page, evidence)
         if await self._wait_for_oneclick_form(page, timeout_ms=min(20000, timeout_ms)):
             return True
+        # Template exhausted — cheap vision/heuristic supervisor (whitelist only).
+        try:
+            from auto_apply.fallback_supervisor import run_fallback_supervisor
+
+            recovered = await run_fallback_supervisor(
+                page,
+                evidence,
+                reason="oneclick_form_not_loaded",
+                driver=self,
+                form_ready_check=lambda p: self._wait_for_oneclick_form(p, timeout_ms=12000),
+            )
+            if recovered:
+                return True
+        except Exception as exc:
+            logger.info("sr_fallback_supervisor_failed error=%s", str(exc)[:160])
         await self._mark_reveal_blocked(
             page,
             evidence,
@@ -564,6 +579,21 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
         if "oneclick-ui" in app_url and not on_oneclick:
             resp, nav_err = await self._goto_oneclick(page, app_url)
             if nav_err:
+                # Supervisor may choose abort_retry_session (outer loop) or wait.
+                try:
+                    from auto_apply.fallback_supervisor import run_fallback_supervisor
+
+                    recovered = await run_fallback_supervisor(
+                        page,
+                        evidence,
+                        reason="oneclick_nav_timeout",
+                        driver=self,
+                        form_ready_check=lambda p: self._wait_for_oneclick_form(p, timeout_ms=10000),
+                    )
+                    if recovered:
+                        return
+                except Exception as exc:
+                    logger.info("sr_fallback_nav_timeout_failed error=%s", str(exc)[:160])
                 await self._mark_reveal_blocked(
                     page,
                     evidence,
@@ -619,6 +649,20 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
                 "error": "Apply CTA not found and no oneclick URL available",
             })
         elif evidence is not None and clicked and not on_oneclick and not evidence.blocked_reason:
+            try:
+                from auto_apply.fallback_supervisor import run_fallback_supervisor
+
+                recovered = await run_fallback_supervisor(
+                    page,
+                    evidence,
+                    reason="oneclick_nav_timeout",
+                    driver=self,
+                    form_ready_check=lambda p: self._wait_for_oneclick_form(p, timeout_ms=10000),
+                )
+                if recovered:
+                    return
+            except Exception as exc:
+                logger.info("sr_fallback_cta_nav_failed error=%s", str(exc)[:160])
             await self._mark_reveal_blocked(
                 page,
                 evidence,
