@@ -304,6 +304,13 @@ CREATE TABLE IF NOT EXISTS notifications (
 );
 CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications (user_id);
 
+CREATE TABLE IF NOT EXISTS creator_applications (
+  creator_application_id TEXT PRIMARY KEY,
+  email TEXT NOT NULL,
+  data JSONB NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_creator_applications_email ON creator_applications (email);
+
 CREATE TABLE IF NOT EXISTS company_boards (
   board_id TEXT PRIMARY KEY,
   data JSONB NOT NULL

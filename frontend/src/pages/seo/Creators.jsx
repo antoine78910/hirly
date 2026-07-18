@@ -18,7 +18,6 @@ import {
 import MarketingLayout from "../../components/marketing/MarketingLayout";
 import SEOHead from "../../components/seo/SEOHead";
 import MarketingFaq from "../../components/marketing/MarketingFaq";
-import { supportMailto } from "../../lib/brand";
 import {
   topCreatorVideos,
   totalViews,
@@ -28,8 +27,6 @@ import {
   formatEarnings,
   VIRAL_VIEWS_THRESHOLD,
 } from "../../lib/seo/creatorsData";
-
-const applyMailto = supportMailto("Candidature — Programme créateurs Hirly");
 
 const steps = [
   {
@@ -53,7 +50,7 @@ const steps = [
   {
     icon: Banknote,
     step: "04",
-    title: "Tu es payée à la vue",
+    title: "Tu es payée sur tes vues",
     body: "1$ de CPM, sans plafond. Une vidéo à 235K vues, c'est 235$. Pas de minimum de followers, pas de quota — juste tes vues, payées chaque mois.",
   },
 ];
@@ -185,20 +182,20 @@ export default function Creators() {
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
             <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-4">Programme créateurs</p>
             <h1 className="font-display font-black text-4xl sm:text-5xl lg:text-6xl tracking-tight leading-[1.05] mb-5">
-              Ta voix. Nos offres.{" "}
-              <span className="italic text-swiipr-gradient">Payée à la vue.</span>
+              Poste une vidéo.{" "}
+              <span className="italic text-swiipr-gradient">Jusqu'à 400$ dès ta première semaine.</span>
             </h1>
             <p className="text-zinc-600 text-lg sm:text-xl leading-relaxed max-w-2xl mx-auto mb-8">
               Rejoins le programme créateurs Hirly : partage ton expérience de la recherche d'emploi sur TikTok et Instagram,
-              et sois payée 1$ pour 1000 vues — sans plafond, sans minimum de followers.
+              et sois payée sur tes vues — sans plafond, sans minimum de followers.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3">
-              <a
-                href={applyMailto}
+              <Link
+                to="/creators/apply"
                 className="inline-flex items-center gap-2 rounded-full gradient-linkedin text-white font-semibold px-6 py-3 text-base hover:opacity-90 transition-opacity"
               >
                 Candidater maintenant <ArrowRight className="w-4 h-4" />
-              </a>
+              </Link>
               <a
                 href="#exemples"
                 className="inline-flex items-center gap-2 rounded-full border border-zinc-300 text-zinc-700 font-semibold px-6 py-3 text-base hover:border-zinc-400 transition-colors"
@@ -335,12 +332,12 @@ export default function Creators() {
               Prête à être payée pour ta prochaine vidéo ?
             </h2>
             <p className="text-zinc-500 mb-7">Envoie-nous ton profil. Réponse sous 48h.</p>
-            <a
-              href={applyMailto}
+            <Link
+              to="/creators/apply"
               className="inline-flex items-center gap-2 rounded-full gradient-linkedin text-white font-semibold px-7 py-3 text-base hover:opacity-90 transition-opacity"
             >
               Candidater au programme <ArrowRight className="w-4 h-4" />
-            </a>
+            </Link>
             <p className="mt-6 text-xs text-zinc-400">
               Tu es déjà utilisatrice de Hirly ?{" "}
               <Link to="/referral" className="underline hover:text-zinc-600">

@@ -64,6 +64,7 @@ from notifications_service import (
     mark_notification_read,
     resolve_user_language,
 )
+from creator_applications_service import create_creator_application
 from application_failure import classify_application_failure
 from application_expiry import (
     expire_open_applications_for_job,
@@ -1021,6 +1022,20 @@ class OnboardingSuggestCategoriesRequest(BaseModel):
     location: str = ""
     contract_type: str = ""
     location_data: Optional[Dict[str, Any]] = None
+
+
+class CreatorApplicationRequest(BaseModel):
+    email: str
+    first_name: str
+    last_name: str
+    tiktok_handle: Optional[str] = None
+    instagram_handle: Optional[str] = None
+    has_company: Optional[str] = None
+    whatsapp_country: Optional[str] = None
+    whatsapp_number: Optional[str] = None
+    country: Optional[str] = None
+    referred_by: Optional[str] = None
+    message: Optional[str] = None
 
 
 class OnboardingSuggestRolesRequest(BaseModel):
@@ -5825,6 +5840,36 @@ async def onboarding_suggest_categories(body: OnboardingSuggestCategoriesRequest
         body.contract_type.strip(),
         body.location_data,
     )
+
+
+@api_router.post("/creators/apply")
+async def submit_creator_application(body: CreatorApplicationRequest):
+    """Public, unauthenticated submission from the /creators program landing page."""
+    email = body.email.strip().lower()
+    first_name = body.first_name.strip()
+    last_name = body.last_name.strip()
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="A valid email is required")
+    if not first_name or not last_name:
+        raise HTTPException(status_code=400, detail="First and last name are required")
+    if not (body.tiktok_handle or "").strip() and not (body.instagram_handle or "").strip():
+        raise HTTPException(status_code=400, detail="At least one social profile is required")
+
+    doc = await create_creator_application(
+        db,
+        email=email,
+        first_name=first_name,
+        last_name=last_name,
+        tiktok_handle=(body.tiktok_handle or "").strip() or None,
+        instagram_handle=(body.instagram_handle or "").strip() or None,
+        has_company=body.has_company,
+        whatsapp_country=body.whatsapp_country,
+        whatsapp_number=(body.whatsapp_number or "").strip() or None,
+        country=body.country,
+        referred_by=(body.referred_by or "").strip() or None,
+        message=(body.message or "").strip() or None,
+    )
+    return {"ok": True, "creator_application_id": doc["creator_application_id"]}
 
 
 @api_router.post("/onboarding/suggest-roles")

@@ -8,7 +8,7 @@ function usesDocumentScroll(pathname) {
   if (pathname === "/" || pathname === "/signup" || pathname === "/signin" || pathname === "/auth/callback") return true;
   if (pathname === "/terms" || pathname === "/privacy") return true;
   if (pathname === "/referral") return true;
-  if (pathname === "/how-it-works" || pathname === "/use-cases" || pathname === "/creators") return true;
+  if (pathname === "/how-it-works" || pathname === "/use-cases" || pathname === "/creators" || pathname === "/creators/apply") return true;
   if (pathname === "/blog" || pathname.startsWith("/blog/")) return true;
   if (pathname.startsWith("/compare/")) return true;
   if (pathname.startsWith("/for/")) return true;

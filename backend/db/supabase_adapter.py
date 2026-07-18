@@ -48,6 +48,7 @@ MIGRATED_TABLES = {
     "friend_referral_redemptions",
     "auto_apply_attempts",
     "notifications",
+    "creator_applications",
 }
 TABLE_PRIMARY_KEYS = {
     "users": "user_id",
@@ -77,6 +78,7 @@ TABLE_PRIMARY_KEYS = {
     "friend_referral_redemptions": "redemption_id",
     "auto_apply_attempts": "id",
     "notifications": "notification_id",
+    "creator_applications": "creator_application_id",
 }
 TABLE_FILTER_COLUMNS = {
     "users": {"user_id", "email", "name", "created_at"},
@@ -217,6 +219,7 @@ TABLE_FILTER_COLUMNS = {
         "claimed_at", "submitted_at", "verified_at", "created_at", "updated_at",
     },
     "notifications": {"notification_id", "user_id"},
+    "creator_applications": {"creator_application_id", "email"},
 }
 MAX_READ_ROWS = 10000
 READ_PAGE_SIZE = 1000
@@ -613,6 +616,12 @@ def _supabase_row(table: str, document: Document) -> Dict[str, Any]:
         return {
             "notification_id": _document_key(table, doc),
             "user_id": doc.get("user_id"),
+            "data": doc,
+        }
+    if table == "creator_applications":
+        return {
+            "creator_application_id": _document_key(table, doc),
+            "email": doc.get("email"),
             "data": doc,
         }
     raise ValueError(f"Unsupported Supabase table: {table}")
@@ -1143,6 +1152,7 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
         self.friend_referral_codes = SupabaseCollectionAdapter("friend_referral_codes", supabase_url, secret_key)
         self.friend_referral_redemptions = SupabaseCollectionAdapter("friend_referral_redemptions", supabase_url, secret_key)
         self.notifications = SupabaseCollectionAdapter("notifications", supabase_url, secret_key)
+        self.creator_applications = SupabaseCollectionAdapter("creator_applications", supabase_url, secret_key)
 
     async def close(self) -> None:
         return None
