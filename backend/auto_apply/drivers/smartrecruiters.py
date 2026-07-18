@@ -345,6 +345,14 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
             except Exception:
                 pass
             try:
+                # Prefer Accor/SR contact fields — generic :visible inputs can
+                # match header/search chrome while the form shell is still blank.
+                if await page.locator(
+                    "#first-name-input >> input, #first-name-input, "
+                    "#email-input >> input, #email-input, "
+                    'input[type="email"]:visible'
+                ).count() >= 1:
+                    return True
                 if await page.locator(
                     'input:visible, textarea:visible, [role="textbox"]:visible'
                 ).count() >= 3:
@@ -368,10 +376,72 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
             elapsed += 550
         return False
 
+    async def _reload_oneclick_shell(self, page: Any, evidence: Any = None) -> None:
+        """Blank Accor shell (logo + title, no fields) often needs one soft reload."""
+        url = (page.url or "").strip()
+        if "oneclick-ui" not in url:
+            return
+        if evidence is not None:
+            evidence.raw.setdefault("step_log", []).append({
+                "action": "reveal_form",
+                "locator": url,
+                "status": "retry",
+                "value_preview": "oneclick_blank_shell_reload",
+                "error": "",
+            })
+        try:
+            await page.reload(wait_until="domcontentloaded", timeout=30000)
+        except Exception:
+            try:
+                await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            except Exception as exc:
+                if evidence is not None:
+                    evidence.raw.setdefault("step_log", []).append({
+                        "action": "reveal_form",
+                        "locator": url,
+                        "status": "error",
+                        "value_preview": "oneclick_blank_shell_reload",
+                        "error": str(exc)[:200],
+                    })
+                return
+        try:
+            await page.wait_for_load_state("domcontentloaded", timeout=8000)
+        except Exception:
+            pass
+        await human_pause(page, 700, 1400)
+
+    async def _ensure_oneclick_form_ready(
+        self, page: Any, evidence: Any = None, *, timeout_ms: int = 25000,
+    ) -> bool:
+        """Wait for fields; reload once if we only have the blank oneclick chrome."""
+        if await self._wait_for_oneclick_form(page, timeout_ms=timeout_ms):
+            return True
+        if "oneclick-ui" not in (page.url or ""):
+            return False
+        await self._reload_oneclick_shell(page, evidence)
+        if await self._wait_for_oneclick_form(page, timeout_ms=min(20000, timeout_ms)):
+            return True
+        if evidence is not None:
+            evidence.blocked_reason = "oneclick_form_not_loaded"
+            evidence.raw.setdefault("step_log", []).append({
+                "action": "reveal_form",
+                "locator": page.url or "oneclick-ui",
+                "status": "blocked",
+                "value_preview": "oneclick_blank_shell",
+                "error": "oneclick header loaded but form fields never appeared",
+            })
+            try:
+                from apply_agent.browser import screenshot_b64
+
+                evidence.screenshot_b64 = await screenshot_b64(page)
+            except Exception:
+                pass
+        return False
+
     async def reveal_form(self, page: Any, evidence: Any = None) -> None:
         url = page.url or ""
         if "oneclick-ui" in url:
-            await self._wait_for_oneclick_form(page)
+            await self._ensure_oneclick_form_ready(page, evidence, timeout_ms=30000)
             return
         # Expired postings keep a CTA whose label is no longer "Je suis intéressé(e)".
         if await detect_offer_expired(page):
@@ -417,19 +487,19 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
                         await page.wait_for_load_state("domcontentloaded", timeout=8000)
                     except Exception:
                         pass
-                    if await self._wait_for_oneclick_form(page, timeout_ms=25000):
+                    if await self._ensure_oneclick_form_ready(page, evidence, timeout_ms=25000):
                         return
-                    # CTA already landed on oneclick (or DataDome wall). Do NOT
-                    # hard-navigate again — a second hop looks like a bot.
+                    # Still on oneclick but blank/blocked — do not hard-nav away.
                     if "oneclick-ui" in (page.url or ""):
-                        if evidence is not None:
+                        if evidence is not None and not evidence.blocked_reason:
                             evidence.raw.setdefault("step_log", []).append({
                                 "action": "reveal_form",
                                 "locator": page.url,
-                                "status": "ok",
+                                "status": "blocked",
                                 "value_preview": "oneclick_after_cta_no_direct_nav",
-                                "error": "",
+                                "error": "oneclick reached but form not ready",
                             })
+                            evidence.blocked_reason = "oneclick_form_not_loaded"
                         return
                     break
             except Exception:
@@ -441,6 +511,8 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
         on_oneclick = "oneclick-ui" in (page.url or "")
         # Only use direct oneclick nav when the CTA never moved us off the posting.
         if clicked and on_oneclick:
+            if evidence is not None and not evidence.blocked_reason:
+                await self._ensure_oneclick_form_ready(page, evidence, timeout_ms=20000)
             return
         if "oneclick-ui" in app_url and not on_oneclick:
             try:
@@ -468,7 +540,7 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
                         ),
                     })
                 if not proxy_fail:
-                    await self._wait_for_oneclick_form(page)
+                    await self._ensure_oneclick_form_ready(page, evidence, timeout_ms=30000)
                 return
             except Exception as exc:
                 if evidence is not None:

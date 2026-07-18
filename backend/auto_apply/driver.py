@@ -383,11 +383,16 @@ class BrowserApplyDriver(ApplyDriver):
             # Skip when STICKY_SID is fixed (warm cookie sessions must keep one IP).
             fixed_sticky = bool(os.environ.get("BROWSER_PROXY_STICKY_SID", "").strip().isdigit())
             warm = warm_session_configured()
-            retry_blockers = {"bot_protection", "captcha"}
+            # Blank oneclick shell is often a bad remote session — retry once.
+            retry_blockers = {"bot_protection", "captcha", "oneclick_form_not_loaded"}
             if (
                 last_evidence.blocked_reason in retry_blockers
                 and attempt < max_attempts
-                and (proxy_configured() or last_evidence.blocked_reason == "captcha")
+                and (
+                    proxy_configured()
+                    or self.prefer_remote_browser()
+                    or last_evidence.blocked_reason in {"captcha", "oneclick_form_not_loaded"}
+                )
                 and not (fixed_sticky and last_evidence.blocked_reason == "bot_protection" and warm)
                 and time.monotonic() < deadline_at
                 and not disable_proxy
@@ -538,6 +543,14 @@ class BrowserApplyDriver(ApplyDriver):
 
                 await self.after_navigation(page, evidence)
                 await self.reveal_form(page, evidence)
+                # Blank oneclick shell (header only) — stop before 9× not_found fills.
+                if evidence.blocked_reason:
+                    if not evidence.screenshot_b64:
+                        try:
+                            evidence.screenshot_b64 = await screenshot_b64(page)
+                        except Exception:
+                            pass
+                    return evidence
                 await human_pause(page, 400, 900)
                 try:
                     # networkidle often stalls 10–15s on SR analytics; DOM ready is enough.

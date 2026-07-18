@@ -209,7 +209,7 @@ def test_reveal_form_clicks_french_interested_button(monkeypatch):
 
 
 def test_reveal_form_skips_direct_nav_when_cta_already_on_oneclick(monkeypatch):
-    """After Apply CTA lands on oneclick, a second page.goto is bot-like — skip it."""
+    """After Apply CTA lands on oneclick, do not goto a different URL; reload shell instead."""
     from auto_apply.models import SubmissionEvidence
 
     driver = SmartRecruitersApplyDriver()
@@ -219,6 +219,7 @@ def test_reveal_form_skips_direct_nav_when_cta_already_on_oneclick(monkeypatch):
         "publication/7c13523d-2378-46fc-81aa-112ffd689b7a?dcr_ci=Accor"
     )
     evidence = SubmissionEvidence(raw={"application_url": oneclick, "step_log": []})
+    page.reload_calls = 0
 
     async def fake_detect(_page):
         return False
@@ -230,7 +231,12 @@ def test_reveal_form_skips_direct_nav_when_cta_already_on_oneclick(monkeypatch):
         page.url = oneclick
 
     async def fake_wait(_page, timeout_ms=45000):
-        return False  # form blocked (captcha) but URL already oneclick
+        return False  # blank shell / captcha — form never appears
+
+    async def fake_reload(wait_until=None, timeout=None):
+        page.reload_calls += 1
+
+    page.reload = fake_reload
 
     monkeypatch.setattr("auto_apply.drivers.smartrecruiters.detect_offer_expired", fake_detect)
     monkeypatch.setattr("auto_apply.drivers.smartrecruiters.human_pause", fake_pause)
@@ -238,11 +244,48 @@ def test_reveal_form_skips_direct_nav_when_cta_already_on_oneclick(monkeypatch):
     monkeypatch.setattr(driver, "_wait_for_oneclick_form", fake_wait)
 
     asyncio.run(driver.reveal_form(page, evidence))
-    assert page.goto_urls == [], "must not hard-navigate after CTA already reached oneclick"
+    assert page.goto_urls == [], "must not hard-navigate to a second oneclick URL"
+    assert page.reload_calls == 1, "blank shell should soft-reload once"
     previews = [s.get("value_preview") for s in evidence.raw["step_log"]]
     assert "apply_cta_clicked" in previews
-    assert "oneclick_after_cta_no_direct_nav" in previews
+    assert "oneclick_blank_shell_reload" in previews
     assert "oneclick_direct_nav" not in previews
+    assert evidence.blocked_reason == "oneclick_form_not_loaded"
+
+
+def test_ensure_oneclick_form_ready_succeeds_after_reload(monkeypatch):
+    from auto_apply.models import SubmissionEvidence
+
+    driver = SmartRecruitersApplyDriver()
+    page = _RevealPage()
+    page.url = (
+        "https://jobs.smartrecruiters.com/oneclick-ui/company/Accor/"
+        "publication/abc/dcr_ci=Accor"
+    )
+    evidence = SubmissionEvidence(raw={"step_log": []})
+    waits = {"n": 0}
+
+    async def fake_wait(_page, timeout_ms=45000):
+        waits["n"] += 1
+        return waits["n"] >= 2
+
+    async def fake_reload(wait_until=None, timeout=None):
+        return None
+
+    async def fake_pause(*args, **kwargs):
+        return None
+
+    page.reload = fake_reload
+    monkeypatch.setattr(driver, "_wait_for_oneclick_form", fake_wait)
+    monkeypatch.setattr("auto_apply.drivers.smartrecruiters.human_pause", fake_pause)
+
+    ok = asyncio.run(driver._ensure_oneclick_form_ready(page, evidence, timeout_ms=1000))
+    assert ok is True
+    assert evidence.blocked_reason is None
+    assert any(
+        s.get("value_preview") == "oneclick_blank_shell_reload"
+        for s in evidence.raw["step_log"]
+    )
 
 
 def test_reveal_form_falls_back_to_oneclick_url(monkeypatch):
