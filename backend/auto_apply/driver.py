@@ -556,23 +556,24 @@ class BrowserApplyDriver(ApplyDriver):
                     stage="reveal_form_proxy",
                 )
 
+                from apply_agent.remote_browser import should_use_remote_browser
+
+                remote_session = bool(prefer_remote) and should_use_remote_browser(
+                    prefer_remote=True,
+                )
+
                 # SmartRecruiters (and similar) often serve the bot wall only
                 # after the Apply CTA navigates to oneclick-ui — re-check here.
                 if await self._abort_if_blocked(
                     page,
                     evidence,
                     stage="bot_wall_after_reveal",
-                    allow_manual_captcha=not ctx.headless,
+                    # Bright Data solves captchas server-side — never block 3 min for a human.
+                    allow_manual_captcha=(not ctx.headless) and not prefer_remote,
                 ):
                     return evidence
 
                 starting_url = page.url
-
-                from apply_agent.remote_browser import should_use_remote_browser
-
-                remote_session = bool(prefer_remote) and should_use_remote_browser(
-                    prefer_remote=True,
-                )
 
                 for step in ctx.plan.steps:
                     if step.action == "submit":
@@ -601,7 +602,7 @@ class BrowserApplyDriver(ApplyDriver):
                         recovery = await recover_stuck_page(
                             page,
                             reason="click_intercepted",
-                            use_vision=True,
+                            use_vision=not remote_session,
                         )
                         evidence.raw.setdefault("recovery", []).append(
                             {
@@ -625,12 +626,15 @@ class BrowserApplyDriver(ApplyDriver):
                                 value_preview=str(step.value or "")[:80],
                                 error=str(retry_exc)[:200],
                             )
-                    # Between fields: short read pause + occasional scroll/wander.
-                    await human_pause(page, 900, 2200)
-                    if random.random() < 0.45:
-                        await human_scroll(page)
-                    if random.random() < 0.35:
-                        await human_mouse_wander(page)
+                    # Between fields: short pause. Skip wander/scroll on Bright Data.
+                    if remote_session:
+                        await human_pause(page, 120, 320)
+                    else:
+                        await human_pause(page, 900, 2200)
+                        if random.random() < 0.45:
+                            await human_scroll(page)
+                        if random.random() < 0.35:
+                            await human_mouse_wander(page)
 
                 await self._gather_evidence(page, evidence, starting_url)
                 # If submit left validation errors / empty requireds, recover once and retry submit.
@@ -639,7 +643,9 @@ class BrowserApplyDriver(ApplyDriver):
                     or (evidence.raw.get("recovery") and not evidence.confirmation_text)
                 ):
                     stuck_check = await recover_stuck_page(
-                        page, reason="submit_validation", use_vision=True,
+                        page,
+                        reason="submit_validation",
+                        use_vision=not remote_session,
                     )
                     evidence.raw.setdefault("recovery", []).append(
                         {k: stuck_check.get(k) for k in ("reason", "actions", "notes", "stuck", "stuck_after")}

@@ -152,7 +152,14 @@ class _EmailLikeDriver(ApplyDriver):
 
 def _install_fake_page(monkeypatch, page):
     @asynccontextmanager
-    async def fake_launch(*, headless=True, force_new_proxy_sid=False, disable_proxy=False):
+    async def fake_launch(
+        *,
+        headless=True,
+        force_new_proxy_sid=False,
+        disable_proxy=False,
+        prefer_remote=False,
+        **kwargs,
+    ):
         yield page
     monkeypatch.setattr(driver_mod, "launch_page", fake_launch)
 
@@ -337,7 +344,14 @@ def test_proxy_connect_572_retries_with_new_sid(monkeypatch):
             return loc
 
     @asynccontextmanager
-    async def tracking_launch(*, headless=True, force_new_proxy_sid=False, disable_proxy=False):
+    async def tracking_launch(
+        *,
+        headless=True,
+        force_new_proxy_sid=False,
+        disable_proxy=False,
+        prefer_remote=False,
+        **kwargs,
+    ):
         launch_kwargs.append({
             "force_new_proxy_sid": force_new_proxy_sid,
             "disable_proxy": disable_proxy,
@@ -401,7 +415,14 @@ def test_proxy_572_then_direct_fallback_succeeds(monkeypatch):
             return loc
 
     @asynccontextmanager
-    async def tracking_launch(*, headless=True, force_new_proxy_sid=False, disable_proxy=False):
+    async def tracking_launch(
+        *,
+        headless=True,
+        force_new_proxy_sid=False,
+        disable_proxy=False,
+        prefer_remote=False,
+        **kwargs,
+    ):
         launch_kwargs.append({
             "force_new_proxy_sid": force_new_proxy_sid,
             "disable_proxy": disable_proxy,
@@ -451,7 +472,14 @@ def test_proxy_retries_stop_when_driver_deadline_exceeded(monkeypatch):
             return loc
 
     @asynccontextmanager
-    async def tracking_launch(*, headless=True, force_new_proxy_sid=False, disable_proxy=False):
+    async def tracking_launch(
+        *,
+        headless=True,
+        force_new_proxy_sid=False,
+        disable_proxy=False,
+        prefer_remote=False,
+        **kwargs,
+    ):
         page = _ProxyFailPage(known_selectors=set())
         pages.append(page)
         yield page
@@ -543,7 +571,14 @@ def test_proxy_connect_after_reveal_retries_with_new_sid(monkeypatch):
             await super()._apply_step(page, step, documents, evidence)
 
     @asynccontextmanager
-    async def tracking_launch(*, headless=True, force_new_proxy_sid=False, disable_proxy=False):
+    async def tracking_launch(
+        *,
+        headless=True,
+        force_new_proxy_sid=False,
+        disable_proxy=False,
+        prefer_remote=False,
+        **kwargs,
+    ):
         launch_kwargs.append({
             "force_new_proxy_sid": force_new_proxy_sid,
             "disable_proxy": disable_proxy,
