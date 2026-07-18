@@ -32,6 +32,8 @@ export const APP_UI = {
       billing: "Billing",
       referral: "Refer a friend",
       logOut: "Log out",
+      blurEmail: "Blur email",
+      showEmail: "Show email",
     },
     billingPage: {
       title: "Billing & Subscription",
@@ -1055,6 +1057,8 @@ export const APP_UI = {
       billing: "Facturation",
       referral: "Parrainer un ami",
       logOut: "Se déconnecter",
+      blurEmail: "Flouter l'email",
+      showEmail: "Afficher l'email",
     },
     billingPage: {
       title: "Facturation & abonnement",

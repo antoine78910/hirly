@@ -49,7 +49,7 @@ export default function DesktopAppShell({ children, headerRight = null }) {
     <div className={`flex h-dvh ${theme.root} ${isDark ? "dark" : ""}`} data-theme={themeMode}>
       <aside className={`flex w-56 shrink-0 flex-col border-r px-3 py-4 lg:w-60 ${theme.sidebar}`}>
         <DesktopAccountMenu
-          triggerClassName={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm ${theme.accountBtn}`}
+          triggerClassName={`flex w-full min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-2 text-left text-sm ${theme.accountBtn}`}
         />
 
         <p className={`mt-6 px-2 text-[11px] font-semibold uppercase tracking-wider ${theme.sectionLabel}`}>
