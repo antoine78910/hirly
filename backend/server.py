@@ -79,6 +79,7 @@ from auto_apply.metrics import latest_attempt as auto_apply_latest_attempt
 from auto_apply.metrics import persist_execution_report as auto_apply_persist_execution_report
 from auto_apply.metrics import status_safe_attempt as auto_apply_status_safe_attempt
 from auto_apply.metrics import summary as auto_apply_metrics_summary
+from auto_apply import queue as auto_apply_queue
 from db import create_database_adapter
 from db.supabase_adapter import count_supabase_table, test_supabase_connection
 from influencer_store import create_influencer, get_influencer, list_influencers, update_influencer
@@ -4987,15 +4988,33 @@ async def _process_application_generation_queue(user_id: str) -> None:
                     job_id,
                     update_doc.get("package_status"),
                 )
-                if update_doc.get("package_status") in {"generated", "generated_text_only"} and _agent_auto_prepare_enabled(job):
-                    try:
-                        await _run_agent_apply(job_id, queued_user, click_submit=False)
-                        logger.info("agent_auto_prepare_complete user_id=%s application_id=%s job_id=%s", user_id, application_id, job_id)
-                    except Exception as exc:
-                        logger.warning(
-                            "agent_auto_prepare_failed user_id=%s application_id=%s job_id=%s error=%s",
-                            user_id, application_id, job_id, str(exc)[:300],
-                        )
+                latest_for_queue = await db.applications.find_one(
+                    {"application_id": application_id, "user_id": user_id},
+                    {"_id": 0},
+                ) or {**latest_app, **update_doc}
+                if update_doc.get("package_status") in {"generated", "generated_text_only"}:
+                    if auto_apply_queue.provider_for_job(job):
+                        try:
+                            await auto_apply_queue.enqueue_application(
+                                db,
+                                latest_for_queue,
+                                job,
+                                user_doc=user_doc,
+                            )
+                        except Exception as exc:
+                            logger.warning(
+                                "auto_apply_enqueue_failed user_id=%s application_id=%s job_id=%s error=%s",
+                                user_id, application_id, job_id, str(exc)[:300],
+                            )
+                    elif _agent_auto_prepare_enabled(job):
+                        try:
+                            await _run_agent_apply(job_id, queued_user, click_submit=False)
+                            logger.info("agent_auto_prepare_complete user_id=%s application_id=%s job_id=%s", user_id, application_id, job_id)
+                        except Exception as exc:
+                            logger.warning(
+                                "agent_auto_prepare_failed user_id=%s application_id=%s job_id=%s error=%s",
+                                user_id, application_id, job_id, str(exc)[:300],
+                            )
             except Exception as exc:
                 logger.exception("queued_application_generation_failed user_id=%s application_id=%s job_id=%s", user_id, application_id, job_id)
                 failed_at = datetime.now(timezone.utc).isoformat()
@@ -9296,6 +9315,12 @@ async def list_applications(user: User = Depends(get_current_user)):
     return {"applications": result}
 
 
+@api_router.get("/applications/auto-apply-queue")
+async def list_auto_apply_queue(user: User = Depends(get_current_user)):
+    """Waiting list + recent outcomes for the production auto-apply worker."""
+    return await auto_apply_queue.list_queue_for_user(db, user.user_id)
+
+
 @api_router.post("/applications/{application_id}/approve-documents")
 async def approve_application_documents(application_id: str, user: User = Depends(get_current_user)):
     """Mark CV and cover letter as reviewed by the candidate."""
@@ -9319,6 +9344,18 @@ async def approve_application_documents(application_id: str, user: User = Depend
         {"application_id": application_id, "user_id": user.user_id},
         {"_id": 0},
     ) or app_doc
+    try:
+        await auto_apply_queue.release_after_document_approval(db, updated)
+        updated = await db.applications.find_one(
+            {"application_id": application_id, "user_id": user.user_id},
+            {"_id": 0},
+        ) or updated
+    except Exception as exc:
+        logger.warning(
+            "auto_apply_release_after_review_failed application_id=%s error=%s",
+            application_id,
+            str(exc)[:200],
+        )
     job = await db.jobs.find_one({"job_id": updated.get("job_id")}, {"_id": 0})
     return _public_application_doc(_normalize_application_status_fields(updated), job)
 
@@ -10393,6 +10430,9 @@ def _user_facing_submission_status(app_doc: Dict[str, Any]) -> str:
         return "submitted"
     if manual_status == "needs_user_input":
         return "action_required"
+    queue_status = app_doc.get("auto_apply_queue_status")
+    if queue_status in {"queued", "running", "awaiting_review"}:
+        return "pending"
     if manual_status in {"manual_review_needed", "manual_in_progress", "manual_blocked"}:
         return "pending"
     return submission
@@ -16168,6 +16208,7 @@ async def startup_seed():
         asyncio.create_task(_run_stripe_subscription_reconcile_loop())
     asyncio.create_task(_startup_seed_impl())
     asyncio.create_task(_resume_pending_application_generation())
+    asyncio.create_task(auto_apply_queue.startup(db))
     # Temporarily paused (default True): DB was reported under load from the
     # combined harvest/discovery crons plus manual bulk-harvest testing.
     # Resume via PAUSE_JOB_MAINTENANCE_CRONS=false in Railway once load has

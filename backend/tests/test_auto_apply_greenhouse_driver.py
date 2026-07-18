@@ -72,6 +72,14 @@ def test_application_url_prefers_external_url():
         "https://boards.greenhouse.io/acme/jobs/1"
 
 
+def test_application_url_falls_back_to_source_url_and_data():
+    d = GreenhouseApplyDriver()
+    assert d.application_url({"source_url": "https://job-boards.greenhouse.io/acme/jobs/9"}) == \
+        "https://job-boards.greenhouse.io/acme/jobs/9"
+    assert d.application_url({"data": {"absolute_url": "https://boards.greenhouse.io/acme/jobs/2"}}) == \
+        "https://boards.greenhouse.io/acme/jobs/2"
+
+
 def test_can_handle_and_exposes_version():
     d = GreenhouseApplyDriver()
     assert d.can_handle({"ats_provider": "greenhouse"}) is True

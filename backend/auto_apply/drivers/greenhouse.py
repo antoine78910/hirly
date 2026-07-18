@@ -107,9 +107,19 @@ def _blueprint_from_questions(payload: Dict[str, Any]) -> ApplicationBlueprint:
     )
 
 
+def _job_http_url(job: Dict[str, Any], *keys: str) -> str:
+    data = job.get("data") if isinstance(job.get("data"), dict) else {}
+    for source in (job, data):
+        for key in keys:
+            value = source.get(key)
+            if isinstance(value, str) and value.startswith(("http://", "https://")):
+                return value
+    return ""
+
+
 class GreenhouseApplyDriver(BrowserApplyDriver):
     provider = "greenhouse"
-    version = "greenhouse-1.0.0"
+    version = "greenhouse-1.1.0"
 
     def __init__(self):
         self._adapter = GreenhouseAtsAdapter()
@@ -118,16 +128,25 @@ class GreenhouseApplyDriver(BrowserApplyDriver):
         return str(job.get("ats_provider") or job.get("provider") or "").lower() == "greenhouse"
 
     def application_url(self, job: Dict[str, Any]) -> str:
-        for key in ("external_url", "selected_apply_url", "apply_url"):
-            value = job.get(key)
-            if isinstance(value, str) and value.startswith(("http://", "https://")):
-                return value
-        return ""
+        return _job_http_url(
+            job,
+            "external_url",
+            "selected_apply_url",
+            "apply_url",
+            "absolute_url",
+            "application_url",
+            "source_url",
+            "url",
+            "job_url",
+        )
 
     async def inspect_application(self, job: Dict[str, Any]) -> ApplicationBlueprint:
         import httpx
-        token = job.get("board_token") or self._adapter.extract_source_key_from_url(self.application_url(job))
+        app_url = self.application_url(job)
+        token = job.get("board_token") or self._adapter.extract_source_key_from_url(app_url)
         job_id = job.get("provider_job_id")
+        if not token or not job_id:
+            raise ValueError("greenhouse_board_or_job_unresolved")
         url = f"{self._adapter.base_url}/{token}/jobs/{job_id}"
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.get(url, params={"questions": "true"})
@@ -136,12 +155,20 @@ class GreenhouseApplyDriver(BrowserApplyDriver):
         return _blueprint_from_questions(payload)
 
     async def reveal_form(self, page: Any, evidence: Any = None) -> None:
-        # Newer job-boards.greenhouse.io renders the form behind an Apply button.
-        for selector in ('a[href*="#app"]', 'button#apply_button', 'a.template-btn-submit'):
+        # job-boards.greenhouse.io often hides the form behind Apply / #app.
+        for selector in (
+            'a[href*="#app"]',
+            'button#apply_button',
+            'a#apply_button',
+            'a.template-btn-submit',
+            'button[data-provides="apply-button"]',
+            'a[data-provides="apply-button"]',
+        ):
             try:
                 loc = page.locator(selector)
                 if await loc.count():
                     await loc.first.click(timeout=3000)
+                    await page.wait_for_timeout(400)
                     return
             except Exception:
                 continue

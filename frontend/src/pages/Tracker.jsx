@@ -7,7 +7,7 @@ import { FINANCE_DEMO_CHANGED } from "../lib/financeDemoApi";
 import { DEMO_ACCOUNT_CHANGED } from "../lib/demoAccount";
 import {
   Loader2, Search, AlertCircle, ArrowRight, BriefcaseBusiness, Send, Zap,
-  Clock3, Sparkles, CheckCircle2, FileSearch,
+  Clock3, Sparkles, CheckCircle2, FileSearch, ListOrdered,
 } from "lucide-react";
 import { BrandHeader } from "../components/app/AppScreenHeader";
 import { AppPage, AppPageScroll, SHELL_PAGE_CLASS } from "../components/app/AppPageShell";
@@ -56,6 +56,10 @@ const fmtListDate = (iso, lang) => {
 };
 
 const listStatusLabel = (application, t) => {
+  const queueStatus = application?.auto_apply_queue_status;
+  if (queueStatus === "running") return t("tracker.autoApplyQueueStatusRunning");
+  if (queueStatus === "queued") return t("tracker.autoApplyQueueStatusQueued");
+  if (queueStatus === "awaiting_review") return t("tracker.autoApplyQueueStatusAwaitingReview");
   const key = resolveDisplayStatus(application);
   const labels = {
     submitted: t("tracker.listViewApplication"),
@@ -67,6 +71,18 @@ const listStatusLabel = (application, t) => {
     expired: t("tracker.expired"),
   };
   return labels[key] || t("tracker.listViewDetails");
+};
+
+const queueStatusLabel = (status, t) => {
+  const map = {
+    queued: t("tracker.autoApplyQueueStatusQueued"),
+    running: t("tracker.autoApplyQueueStatusRunning"),
+    awaiting_review: t("tracker.autoApplyQueueStatusAwaitingReview"),
+    succeeded: t("tracker.autoApplyQueueStatusSucceeded"),
+    failed: t("tracker.autoApplyQueueStatusFailed"),
+    skipped: t("tracker.autoApplyQueueStatusSkipped"),
+  };
+  return map[status] || status;
 };
 
 function TrackerApplicationRow({ application, onOpen, t, lang }) {
@@ -312,6 +328,7 @@ export default function Tracker() {
   const [passedRows, setPassedRows] = useState([]);
   const [passedLoading, setPassedLoading] = useState(false);
   const [applyingPassedId, setApplyingPassedId] = useState(null);
+  const [autoApplyQueue, setAutoApplyQueue] = useState({ items: [], active_count: 0, enabled: false });
   const openedFromUrlRef = useRef(null);
 
   const setActiveTab = (tab) => {
@@ -349,10 +366,27 @@ export default function Tracker() {
     }
   };
 
+  const loadAutoApplyQueue = useCallback(async () => {
+    try {
+      const { data } = await api.get("/applications/auto-apply-queue");
+      setAutoApplyQueue({
+        items: Array.isArray(data?.items) ? data.items : [],
+        active_count: Number(data?.active_count) || 0,
+        enabled: Boolean(data?.enabled),
+        providers: data?.providers || [],
+      });
+    } catch {
+      // Queue endpoint may be unavailable on older backends.
+    }
+  }, []);
+
   const load = async ({ silent = false } = {}) => {
     if (!silent) setLoading(true);
     try {
-      const { applications, profile } = await fetchTrackerPageData(api);
+      const [{ applications, profile }] = await Promise.all([
+        fetchTrackerPageData(api),
+        loadAutoApplyQueue(),
+      ]);
       setApps(applications);
       setProfile(profile);
       return applications;
@@ -383,6 +417,16 @@ export default function Tracker() {
     trackEvent("tracker_view");
     load();
   }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    if (activeTab !== "applications") return undefined;
+    if (!(autoApplyQueue.active_count > 0)) return undefined;
+    const id = window.setInterval(() => {
+      void loadAutoApplyQueue();
+      void load({ silent: true });
+    }, 8000);
+    return () => window.clearInterval(id);
+  }, [activeTab, autoApplyQueue.active_count, loadAutoApplyQueue]);
 
   useEffect(() => {
     const applicationId = searchParams.get("application_id");
@@ -672,6 +716,68 @@ export default function Tracker() {
         <section className={activeTab === "applications" && showResumeBanner ? "mt-6 border-t shell-border-b pt-6 pb-8 md:mt-10 md:pt-8" : "pb-8 pt-3 md:pt-4"}>
           {activeTab === "applications" ? (
           <>
+          {autoApplyQueue.enabled ? (
+            <div
+              className="mb-4 rounded-2xl border shell-border shell-inset p-3 md:p-4"
+              data-testid="auto-apply-queue"
+            >
+              <div className="flex items-start gap-2">
+                <div className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-linkedin/10 text-linkedin">
+                  <ListOrdered className="h-4 w-4" strokeWidth={2} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="shell-title text-sm font-semibold">{t("tracker.autoApplyQueueTitle")}</p>
+                  <p className="mt-0.5 text-xs shell-body">
+                    {t("tracker.autoApplyQueueSubtitle", { n: autoApplyQueue.active_count || 0 })}
+                  </p>
+                </div>
+              </div>
+              {(autoApplyQueue.items || []).filter((item) =>
+                ["queued", "running", "awaiting_review"].includes(item.queue_status)
+              ).length === 0 ? (
+                <p className="mt-3 text-xs shell-body" data-testid="auto-apply-queue-empty">
+                  {t("tracker.autoApplyQueueEmpty")}
+                </p>
+              ) : (
+                <ul className="mt-3 space-y-2" data-testid="auto-apply-queue-list">
+                  {(autoApplyQueue.items || [])
+                    .filter((item) => ["queued", "running", "awaiting_review"].includes(item.queue_status))
+                    .map((item) => {
+                      const app = apps.find((a) => a.application_id === item.application_id);
+                      return (
+                        <li key={item.application_id}>
+                          <button
+                            type="button"
+                            onClick={() => app && openApplication(app)}
+                            className="flex w-full items-center gap-2 rounded-xl border shell-border bg-white/50 px-3 py-2 text-left transition-colors hover:bg-zinc-50 dark:bg-zinc-900/40 dark:hover:bg-zinc-800/60"
+                            data-testid={`auto-apply-queue-item-${item.application_id}`}
+                          >
+                            <span className="shrink-0 rounded-full bg-linkedin/10 px-2 py-0.5 text-[10px] font-bold text-linkedin">
+                              {item.position
+                                ? t("tracker.autoApplyQueuePosition", { n: item.position })
+                                : "·"}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-semibold shell-title">
+                                {item.title || t("tracker.untitledRole")}
+                              </p>
+                              <p className="truncate text-xs text-zinc-500">
+                                {item.company || t("tracker.unknownCompany")}
+                                {item.provider ? ` · ${item.provider}` : ""}
+                              </p>
+                            </div>
+                            <span className="shrink-0 text-[11px] font-semibold text-linkedin">
+                              {queueStatusLabel(item.queue_status, t)}
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                </ul>
+              )}
+            </div>
+          ) : null}
+
           {/* Status filter chips — horizontal scroll with counts */}
           <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar" data-testid="tracker-status-filters">
             <button
