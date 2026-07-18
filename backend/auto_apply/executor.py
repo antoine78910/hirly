@@ -192,6 +192,18 @@ async def execute_application(
         answers, unresolved = resolve(blueprint, candidate_context, profile)
         if unresolved:
             missing = [f.key for f in unresolved]
+            missing_details = [
+                {
+                    "field_name": f.key,
+                    "label": f.label or f.key,
+                    "question": f.label or f.key,
+                    "reason": "needs_user_input",
+                    "field_type": f.type.value,
+                    "type": f.type.value,
+                    "options": list(f.validation.allowed_options or []),
+                }
+                for f in unresolved
+            ]
             reason = "needs_user_input:" + ",".join(missing[:5])
             debug = build_debug_report(
                 job=job, profile=profile, app_doc=app_doc, blueprint=blueprint, decision=decision,
@@ -200,8 +212,10 @@ async def execute_application(
             )
             await metrics.record_terminal(db, claim, status="needs_user_input", reason=reason,
                                           stage_reached="resolve", missing_fields=missing, **base)
-            return _report(started=started, stage="resolve", status="needs_user_input",
+            report = _report(started=started, stage="resolve", status="needs_user_input",
                            reason=reason, missing_fields=missing, debug=debug, **report_common)
+            report["missing_field_details"] = missing_details
+            return report
 
         checkpoint = "plan"
         application_plan = build_plan(blueprint, answers)

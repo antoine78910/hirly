@@ -10513,7 +10513,7 @@ def _admin_application_row(app_doc: Dict[str, Any], user_doc: Optional[Dict[str,
         "user_email": (user_doc or {}).get("email"),
         "company": (job_doc or {}).get("company") or app_doc.get("company"),
         "title": (job_doc or {}).get("title") or app_doc.get("title"),
-        "ats_provider": (job_doc or {}).get("ats_provider") or app_doc.get("submission_provider"),
+        "ats_provider": (job_doc or {}).get("ats_provider") or app_doc.get("submission_provider") or app_doc.get("ats_provider") or app_doc.get("auto_apply_provider"),
         "submission_status": app_doc.get("submission_status"),
         "user_facing_submission_status": _user_facing_submission_status(app_doc),
         "package_status": app_doc.get("package_status"),
@@ -10526,6 +10526,11 @@ def _admin_application_row(app_doc: Dict[str, Any], user_doc: Optional[Dict[str,
         "has_tailored_resume": bool(tailored_resume),
         "has_cover_letter": bool(cover_letter),
         "email_confirmed_outcome": app_doc.get("email_confirmed_outcome"),
+        "auto_apply_queue_status": app_doc.get("auto_apply_queue_status"),
+        "auto_apply_queue_reason": app_doc.get("auto_apply_queue_reason"),
+        "auto_apply_provider": app_doc.get("auto_apply_provider"),
+        "prepared_missing_information": app_doc.get("prepared_missing_information") or [],
+        "submitted_at": app_doc.get("submitted_at"),
     }
 
 
@@ -14451,24 +14456,43 @@ async def _resolve_agent_missing_info(
     payload["questions"] = questions
 
     remaining_missing = [item for item in pending if item.get("field_name") not in answered_field_names]
-    submission_status = "action_required" if remaining_missing else "prepared"
+    is_auto_apply = bool(app_doc.get("auto_apply_provider") or app_doc.get("auto_apply_queue_status"))
+    submission_status = "action_required" if remaining_missing else ("not_submitted" if is_auto_apply else "prepared")
     now = datetime.now(timezone.utc).isoformat()
+    update_doc = {
+        "prepared_application_payload": payload,
+        "prepared_missing_information": remaining_missing,
+        "submission_status": submission_status,
+        "updated_at": now,
+    }
+    if is_auto_apply and not remaining_missing:
+        update_doc.update({
+            "auto_apply_queue_status": "queued",
+            "auto_apply_queue_reason": "answers_provided",
+            "auto_apply_finished_at": None,
+            "auto_apply_started_at": None,
+            "manual_status": None,
+            "submission_error": None,
+        })
     await db.applications.update_one(
         {"application_id": application_id, "user_id": user.user_id},
-        {"$set": {
-            "prepared_application_payload": payload,
-            "prepared_missing_information": remaining_missing,
-            "submission_status": submission_status,
-            "updated_at": now,
-        }},
+        {"$set": update_doc},
     )
 
-    if body.save_to_profile:
+    # Always persist reusable answers for future similar questions when any
+    # answers were provided (auto-apply path); otherwise honor the flag.
+    should_save_profile = body.save_to_profile or is_auto_apply
+    if should_save_profile:
         profile_updates = {
             f"application_answers_profile.{_canonical_field_name(label)}": value
             for label, value in ((q.get("label"), q.get("value")) for q in questions)
             if label and not _is_empty_answer(value)
         }
+        # Also key by field_name for resolver matching.
+        for field_name, value in answers.items():
+            if _is_empty_answer(value):
+                continue
+            profile_updates[f"application_answers_profile.{_canonical_field_name(field_name)}"] = value
         if profile_updates:
             profile_updates["updated_at"] = now
             await db.profiles.update_one(
@@ -14483,10 +14507,23 @@ async def _resolve_agent_missing_info(
     )
     updated = _normalize_application_status_fields(updated or {})
     job = await db.jobs.find_one({"job_id": updated.get("job_id")}, {"_id": 0})
+    if is_auto_apply and not remaining_missing:
+        try:
+            await auto_apply_queue.enqueue_application(db, updated, job, force=True)
+            updated = await db.applications.find_one(
+                {"application_id": application_id, "user_id": user.user_id},
+                {"_id": 0},
+            ) or updated
+        except Exception as exc:
+            logger.warning(
+                "auto_apply_requeue_after_answers_failed application_id=%s error=%s",
+                application_id,
+                str(exc)[:200],
+            )
     return {
         "application_id": application_id,
         "submission_status": submission_status,
-        "ready_for_submission": submission_status == "prepared",
+        "ready_for_submission": submission_status in {"prepared", "not_submitted", "ready"} and not remaining_missing,
         "missing_information": remaining_missing,
         "blockers": [],
         "resolved_count": len(answered_field_names),
@@ -14509,6 +14546,13 @@ async def resolve_missing_info(
         raise HTTPException(status_code=404, detail="Application not found")
 
     if app_doc.get("agent_apply_result") and not app_doc.get("prepared_application_payload"):
+        return await _resolve_agent_missing_info(application_id, app_doc, body, user)
+
+    # Auto-apply driver path: same answer storage as agent (no Greenhouse payload).
+    if (
+        (app_doc.get("auto_apply_provider") or app_doc.get("auto_apply_queue_status") or app_doc.get("prepared_missing_information"))
+        and not app_doc.get("prepared_application_payload")
+    ):
         return await _resolve_agent_missing_info(application_id, app_doc, body, user)
 
     payload = app_doc.get("prepared_application_payload")

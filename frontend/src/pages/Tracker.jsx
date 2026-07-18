@@ -318,7 +318,7 @@ export default function Tracker() {
   const [open, setOpen] = useState(false);
   const [detailTab, setDetailTab] = useState("application");
   const [missingAnswers, setMissingAnswers] = useState({});
-  const [saveMissingToProfile, setSaveMissingToProfile] = useState(false);
+  const [saveMissingToProfile, setSaveMissingToProfile] = useState(true);
   const [savingMissing, setSavingMissing] = useState(false);
   const [preparingAgain, setPreparingAgain] = useState(false);
   const [submittingFinal, setSubmittingFinal] = useState(false);
@@ -716,67 +716,65 @@ export default function Tracker() {
         <section className={activeTab === "applications" && showResumeBanner ? "mt-6 border-t shell-border-b pt-6 pb-8 md:mt-10 md:pt-8" : "pb-8 pt-3 md:pt-4"}>
           {activeTab === "applications" ? (
           <>
-          {autoApplyQueue.enabled ? (
-            <div
-              className="mb-4 rounded-2xl border shell-border shell-inset p-3 md:p-4"
-              data-testid="auto-apply-queue"
-            >
-              <div className="flex items-start gap-2">
-                <div className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-linkedin/10 text-linkedin">
-                  <ListOrdered className="h-4 w-4" strokeWidth={2} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="shell-title text-sm font-semibold">{t("tracker.autoApplyQueueTitle")}</p>
-                  <p className="mt-0.5 text-xs shell-body">
-                    {t("tracker.autoApplyQueueSubtitle", { n: autoApplyQueue.active_count || 0 })}
-                  </p>
-                </div>
+          <div
+            className="mb-4 rounded-2xl border shell-border shell-inset p-3 md:p-4"
+            data-testid="auto-apply-queue"
+          >
+            <div className="flex items-start gap-2">
+              <div className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-linkedin/10 text-linkedin">
+                <ListOrdered className="h-4 w-4" strokeWidth={2} />
               </div>
-              {(autoApplyQueue.items || []).filter((item) =>
-                ["queued", "running", "awaiting_review"].includes(item.queue_status)
-              ).length === 0 ? (
-                <p className="mt-3 text-xs shell-body" data-testid="auto-apply-queue-empty">
-                  {t("tracker.autoApplyQueueEmpty")}
+              <div className="min-w-0 flex-1">
+                <p className="shell-title text-sm font-semibold">{t("tracker.autoApplyQueueTitle")}</p>
+                <p className="mt-0.5 text-xs shell-body">
+                  {t("tracker.autoApplyQueueSubtitle", { n: autoApplyQueue.active_count || 0 })}
                 </p>
-              ) : (
-                <ul className="mt-3 space-y-2" data-testid="auto-apply-queue-list">
-                  {(autoApplyQueue.items || [])
-                    .filter((item) => ["queued", "running", "awaiting_review"].includes(item.queue_status))
-                    .map((item) => {
-                      const app = apps.find((a) => a.application_id === item.application_id);
-                      return (
-                        <li key={item.application_id}>
-                          <button
-                            type="button"
-                            onClick={() => app && openApplication(app)}
-                            className="flex w-full items-center gap-2 rounded-xl border shell-border bg-white/50 px-3 py-2 text-left transition-colors hover:bg-zinc-50 dark:bg-zinc-900/40 dark:hover:bg-zinc-800/60"
-                            data-testid={`auto-apply-queue-item-${item.application_id}`}
-                          >
-                            <span className="shrink-0 rounded-full bg-linkedin/10 px-2 py-0.5 text-[10px] font-bold text-linkedin">
-                              {item.position
-                                ? t("tracker.autoApplyQueuePosition", { n: item.position })
-                                : "·"}
-                            </span>
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-semibold shell-title">
-                                {item.title || t("tracker.untitledRole")}
-                              </p>
-                              <p className="truncate text-xs text-zinc-500">
-                                {item.company || t("tracker.unknownCompany")}
-                                {item.provider ? ` · ${item.provider}` : ""}
-                              </p>
-                            </div>
-                            <span className="shrink-0 text-[11px] font-semibold text-linkedin">
-                              {queueStatusLabel(item.queue_status, t)}
-                            </span>
-                          </button>
-                        </li>
-                      );
-                    })}
-                </ul>
-              )}
+              </div>
             </div>
-          ) : null}
+            {(autoApplyQueue.items || []).filter((item) =>
+              ["queued", "running", "awaiting_review"].includes(item.queue_status)
+            ).length === 0 ? (
+              <p className="mt-3 text-xs shell-body" data-testid="auto-apply-queue-empty">
+                {t("tracker.autoApplyQueueEmpty")}
+              </p>
+            ) : (
+              <ul className="mt-3 space-y-2" data-testid="auto-apply-queue-list">
+                {(autoApplyQueue.items || [])
+                  .filter((item) => ["queued", "running", "awaiting_review"].includes(item.queue_status))
+                  .map((item) => {
+                    const app = apps.find((a) => a.application_id === item.application_id);
+                    return (
+                      <li key={item.application_id}>
+                        <button
+                          type="button"
+                          onClick={() => app && openApplication(app)}
+                          className="flex w-full items-center gap-2 rounded-xl border shell-border bg-white/50 px-3 py-2 text-left transition-colors hover:bg-zinc-50 dark:bg-zinc-900/40 dark:hover:bg-zinc-800/60"
+                          data-testid={`auto-apply-queue-item-${item.application_id}`}
+                        >
+                          <span className="shrink-0 rounded-full bg-linkedin/10 px-2 py-0.5 text-[10px] font-bold text-linkedin">
+                            {item.position
+                              ? t("tracker.autoApplyQueuePosition", { n: item.position })
+                              : "·"}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold shell-title">
+                              {item.title || t("tracker.untitledRole")}
+                            </p>
+                            <p className="truncate text-xs text-zinc-500">
+                              {item.company || t("tracker.unknownCompany")}
+                              {item.provider ? ` · ${item.provider}` : ""}
+                            </p>
+                          </div>
+                          <span className="shrink-0 text-[11px] font-semibold text-linkedin">
+                            {queueStatusLabel(item.queue_status, t)}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+              </ul>
+            )}
+          </div>
 
           {/* Status filter chips — horizontal scroll with counts */}
           <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar" data-testid="tracker-status-filters">

@@ -871,7 +871,17 @@ class _Registry:
 
     def for_job(self, job: Dict[str, Any]) -> Optional[ApplyDriver]:
         provider = str(job.get("ats_provider") or job.get("provider") or "").lower()
-        return self._by_provider.get(provider)
+        if provider and provider in self._by_provider:
+            return self._by_provider[provider]
+        # Fall back to URL / can_handle for jobs whose provider string is missing
+        # or uses an alternate label (e.g. detection-only domains).
+        for driver in self._by_provider.values():
+            try:
+                if driver.can_handle(job):
+                    return driver
+            except Exception:
+                continue
+        return None
 
     def providers(self) -> List[str]:
         return sorted(self._by_provider.keys())

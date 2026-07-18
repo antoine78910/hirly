@@ -97,7 +97,7 @@ def test_map_execution_success_and_needs_input():
     })
     assert need["auto_apply_queue_status"] == "failed"
     assert need["submission_status"] == "action_required"
-    assert need["prepared_missing_information"] == ["foo"]
+    assert need["prepared_missing_information"][0]["field_name"] == "foo"
 
     expired = q.map_execution_to_queue({"status": "submit_failed", "reason": "offer_expired"})
     assert expired["auto_apply_queue_status"] == "skipped"

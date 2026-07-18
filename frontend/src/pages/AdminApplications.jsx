@@ -5,6 +5,7 @@ import { api } from "../lib/api";
 import { adminApiErrorMessage } from "../lib/adminApi";
 import { Button } from "../components/ui/button";
 import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
+import { AdminPipelineSteps } from "../components/admin/AdminPipelineSteps";
 
 const FILTERS = [
   { key: "all", label: "All" },
@@ -152,6 +153,44 @@ export default function AdminApplications() {
           })}
         </div>
 
+        {!accessDenied ? (
+          <div className="mb-4 rounded-lg border border-zinc-200 bg-white p-4 shadow-sm" data-testid="admin-auto-apply-queue-panel">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-bold text-zinc-900">Auto-apply waiting list</h3>
+                <p className="mt-0.5 text-xs text-zinc-500">
+                  Production queue status across users (empty list is expected when nothing is pending).
+                </p>
+              </div>
+              <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-xs font-semibold text-zinc-700">
+                {applications.filter((a) => ["queued", "running", "awaiting_review"].includes(a.auto_apply_queue_status)).length} active
+              </span>
+            </div>
+            {applications.filter((a) => ["queued", "running", "awaiting_review"].includes(a.auto_apply_queue_status)).length === 0 ? (
+              <p className="mt-3 text-sm text-zinc-500" data-testid="admin-auto-apply-queue-empty">
+                Queue is empty — no applications waiting for auto-apply right now.
+              </p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {applications
+                  .filter((a) => ["queued", "running", "awaiting_review"].includes(a.auto_apply_queue_status))
+                  .slice(0, 20)
+                  .map((app) => (
+                    <li key={app.application_id} className="flex items-center justify-between gap-3 rounded-md bg-zinc-50 px-3 py-2 text-sm">
+                      <Link className="min-w-0 font-semibold text-linkedin hover:underline" to={`/admin/applications/${app.application_id}`}>
+                        <span className="truncate">{app.company || "Unknown"} · {app.title || "Role"}</span>
+                      </Link>
+                      <span className="shrink-0 capitalize text-xs font-semibold text-zinc-600">
+                        {String(app.auto_apply_queue_status || "").replaceAll("_", " ")}
+                        {app.auto_apply_provider ? ` · ${app.auto_apply_provider}` : ""}
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </div>
+        ) : null}
+
         {accessDenied ? (
           <AdminAccessDenied />
         ) : error ? (
@@ -166,6 +205,7 @@ export default function AdminApplications() {
                 <th className="px-4 py-3">Company</th>
                 <th className="px-4 py-3">Job</th>
                 <th className="px-4 py-3">ATS</th>
+                <th className="px-4 py-3">Pipeline</th>
                 <th className="px-4 py-3">User-facing status</th>
                 <th className="px-4 py-3">Manual status</th>
                 <th className="px-4 py-3">Assigned to</th>
@@ -176,7 +216,7 @@ export default function AdminApplications() {
             <tbody className="divide-y divide-zinc-100">
               {loading ? (
                 <tr>
-                  <td className="px-4 py-8 text-center text-zinc-500" colSpan={9}>
+                  <td className="px-4 py-8 text-center text-zinc-500" colSpan={10}>
                     <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                   </td>
                 </tr>
@@ -193,7 +233,10 @@ export default function AdminApplications() {
                   </td>
                   <td className="px-4 py-3 font-medium">{app.company || "Unknown"}</td>
                   <td className="px-4 py-3">{app.title || "Unknown role"}</td>
-                  <td className="px-4 py-3 capitalize">{app.ats_provider || "unknown"}</td>
+                  <td className="px-4 py-3 capitalize">{app.ats_provider || app.auto_apply_provider || "unknown"}</td>
+                  <td className="px-4 py-3 min-w-[280px]">
+                    <AdminPipelineSteps application={app} compact />
+                  </td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${statusBadgeClass(submissionStatus)}`}>
                       {statusLabel(submissionStatus)}
@@ -212,7 +255,7 @@ export default function AdminApplications() {
                 );
               }) : (
                 <tr>
-                  <td className="px-4 py-8 text-center text-zinc-500" colSpan={9}>No applications found.</td>
+                  <td className="px-4 py-8 text-center text-zinc-500" colSpan={10}>No applications found.</td>
                 </tr>
               )}
             </tbody>

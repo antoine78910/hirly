@@ -7,6 +7,7 @@ import { adminApiErrorMessage } from "../lib/adminApi";
 import { Button } from "../components/ui/button";
 import { Textarea } from "../components/ui/textarea";
 import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
+import { AdminPipelineSteps } from "../components/admin/AdminPipelineSteps";
 import { trackEvent } from "../lib/analytics";
 
 const ACTIONS = [
@@ -291,6 +292,21 @@ export default function AdminApplicationDetail() {
 
       <div className="mt-6 grid gap-5 lg:grid-cols-[1fr_360px]">
         <div className="space-y-5">
+          <Section title="Pipeline steps">
+            <AdminPipelineSteps
+              application={{
+                ...app,
+                prepared_missing_information: missing,
+                ats_provider: job.ats_provider || app.ats_provider,
+              }}
+            />
+            <p className="mt-3 text-xs text-zinc-500">
+              Queue: {app.auto_apply_queue_status || "—"}
+              {app.auto_apply_provider ? ` · ${app.auto_apply_provider}` : ""}
+              {app.auto_apply_queue_reason ? ` · ${app.auto_apply_queue_reason}` : ""}
+            </p>
+          </Section>
+
           <Section title="Manual completion panel">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <Button

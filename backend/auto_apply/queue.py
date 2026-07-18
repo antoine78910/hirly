@@ -20,7 +20,13 @@ logger = logging.getLogger(__name__)
 
 QUEUE_STATUSES_ACTIVE = frozenset({"queued", "awaiting_review", "running"})
 QUEUE_STATUSES_TERMINAL = frozenset({"succeeded", "failed", "skipped"})
-DEFAULT_PROVIDERS = ("smartrecruiters", "greenhouse")
+DEFAULT_PROVIDERS = (
+    "smartrecruiters",
+    "greenhouse",
+    "taleez",
+    "teamtailor",
+    "jobaffinity",
+)
 
 _worker_task: Optional[asyncio.Task] = None
 _claim_lock = asyncio.Lock()
@@ -218,6 +224,23 @@ def map_execution_to_queue(report: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     if status == "needs_user_input":
+        details = report.get("missing_field_details")
+        missing = list(report.get("missing_fields") or [])
+        if isinstance(details, list) and details:
+            prepared = details
+        else:
+            prepared = [
+                {
+                    "field_name": key,
+                    "label": key,
+                    "question": key,
+                    "reason": "needs_user_input",
+                    "field_type": "input_text",
+                    "type": "input_text",
+                    "options": [],
+                }
+                for key in missing
+            ]
         update = {
             "auto_apply_queue_status": "failed",
             "auto_apply_queue_reason": reason or "needs_user_input",
@@ -225,9 +248,8 @@ def map_execution_to_queue(report: Dict[str, Any]) -> Dict[str, Any]:
             "submission_status": "action_required",
             "manual_status": "needs_user_input",
             "submission_error": reason or "needs_user_input",
+            "prepared_missing_information": prepared,
         }
-        if missing:
-            update["prepared_missing_information"] = missing
         return update
 
     if status == "already_in_flight":
