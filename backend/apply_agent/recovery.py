@@ -230,7 +230,7 @@ async def _vision_recovery_actions(screenshot: str, stuck: Dict[str, Any]) -> Li
                     ],
                 }
             ],
-            max_tokens=400,
+            max_completion_tokens=400,
         )
         raw = response.choices[0].message.content or "{}"
         parsed = json.loads(raw)

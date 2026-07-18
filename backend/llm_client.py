@@ -31,6 +31,11 @@ async def complete_json_text(system_message: str, prompt: str) -> str:
     return response.choices[0].message.content or ""
 
 
+def _chat_output_token_kwargs(limit: int) -> Dict[str, int]:
+    """Newer OpenAI models reject ``max_tokens``; use ``max_completion_tokens``."""
+    return {"max_completion_tokens": int(limit)}
+
+
 async def extract_text_from_image_bytes(content: bytes, mime: str = "image/png") -> str:
     """OCR-style plain-text extraction from a resume image via vision."""
     import base64
@@ -57,7 +62,7 @@ async def extract_text_from_image_bytes(content: bytes, mime: str = "image/png")
                 ],
             }
         ],
-        max_tokens=4096,
+        **_chat_output_token_kwargs(4096),
     )
     return (response.choices[0].message.content or "").strip()
 
