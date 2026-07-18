@@ -154,6 +154,13 @@ def data_availability(profile: Dict[str, Any], app_doc: Dict[str, Any]) -> Dict[
         "first_name": bool(contact.get("first_name") or contact.get("name")),
         "location": bool(contact.get("location") or profile.get("target_location")),
         "linkedin": bool(contact.get("linkedin")),
+        "experience": bool(profile.get("experience")),
+        "education": bool(profile.get("education")),
+        "years_experience": bool(
+            (profile.get("experience_summary") or {}).get("years_experience")
+            if isinstance(profile.get("experience_summary"), dict) else False
+        ) or bool(profile.get("experience")),
+        "application_defaults": sorted((profile.get("application_defaults") or {}).keys()),
     }
 
 

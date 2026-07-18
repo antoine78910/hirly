@@ -46,6 +46,9 @@ APPROVED_SOURCE_PREFIXES = (
     "profile.application_defaults.",
     "profile.application_answers_profile.",
     "profile.education",
+    "profile.experience",
+    "profile.experience_summary.",
+    "profile.derived.",
     "profile.cv_file",
     "application.tailored_cv_file",
     "application.cover_letter_file",
@@ -102,6 +105,9 @@ def validate_agent_fill(field: Dict[str, Any], proposed: Dict[str, Any], profile
         # Sensitive/legal fields may only be filled from an explicit saved
         # default or a pre-approved decline option -- never a freshly
         # generated/inferred value, no matter how confident the agent is.
+        # Derived CV facts are mirrored into application_defaults for
+        # experience / education / availability. Visa, criminal, EEO still
+        # require an explicit saved answer — never profile.derived.*.
         allowed_sensitive_prefixes = (
             "profile.application_defaults.",
             "profile.application_answers_profile.",

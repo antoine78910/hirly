@@ -124,6 +124,14 @@ def build_candidate_context(profile: Dict[str, Any], app_doc: Dict[str, Any], us
         put("profile.education.discipline", first.get("discipline") or first.get("field_of_study"))
         put("profile.education.graduation_year", first.get("graduation_year") or first.get("year"))
 
+    # CV / profile-derived facts (years of experience, education level, etc.)
+    # so the resolver can answer common ATS questions without asking the user.
+    try:
+        from auto_apply.profile_facts import put_derived_into_context
+        put_derived_into_context(context, profile)
+    except Exception:
+        pass
+
     if app_doc.get("tailored_cv_file_b64") or app_doc.get("tailored_cv_text"):
         context["application.tailored_cv_file"] = "__resume_file__"
     elif profile.get("cv_original_b64"):
