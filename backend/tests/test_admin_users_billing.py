@@ -95,6 +95,15 @@ def _fake_db():
 def test_admin_list_exposes_paid_plan_and_swipes_without_applications(monkeypatch):
     monkeypatch.setattr(server, "db", _fake_db())
 
+    reconcile_calls = 0
+
+    async def _reconcile():
+        nonlocal reconcile_calls
+        reconcile_calls += 1
+        return {"scanned": 1, "updated": 0, "unmatched": 0}
+
+    monkeypatch.setattr(server, "_reconcile_stripe_subscriptions_once", _reconcile)
+
     response = asyncio.run(server.admin_list_users(admin=object()))
 
     assert len(response["users"]) == 1
@@ -108,6 +117,7 @@ def test_admin_list_exposes_paid_plan_and_swipes_without_applications(monkeypatc
     assert user["left_swipes"] == 1
     assert user["right_swipes"] == 1
     assert user["last_active_at"] == "2026-07-11T10:00:00+00:00"
+    assert reconcile_calls == 0
 
 
 def test_admin_user_detail_exposes_billing_and_swipe_summary(monkeypatch):

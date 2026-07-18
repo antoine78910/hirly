@@ -57,9 +57,8 @@ export function adminApiErrorMessage(err, fallback) {
     }
     if (err?.code === "ECONNABORTED" || /timeout/i.test(rawMsg)) {
       return (
-        "Auto-apply is still running or the API stopped answering status polls. "
-        + "Wait for the Vercel/Railway deploy to finish, then refresh status — "
-        + "or check Railway logs if it stays stuck."
+        `${fallback || "The admin request"} timed out. `
+        + "Refresh and retry; if it continues, check Railway or Supabase health."
       );
     }
     const networkMsg = String(err?.message || "").trim();

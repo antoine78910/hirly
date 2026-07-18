@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 import { api } from "../lib/api";
-import { adminApiErrorMessage } from "../lib/adminApi";
+import { adminApiErrorMessage, autoApplyApiUrl } from "../lib/adminApi";
 import { Button } from "../components/ui/button";
 import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
 
@@ -85,7 +85,7 @@ export default function AdminAnalytics() {
     setError("");
     setAccessDenied(false);
     try {
-      const response = await api.get("/admin/analytics");
+      const response = await api.get(autoApplyApiUrl("/admin/analytics"), { timeout: 60000 });
       setData(response.data);
     } catch (err) {
       setData(null);

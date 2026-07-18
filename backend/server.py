@@ -10560,12 +10560,24 @@ def _profile_completion(profile: Optional[Dict[str, Any]]) -> int:
     if not profile:
         return 0
     checks = [
-        bool(profile.get("cv_text")),
+        _admin_profile_has_cv(profile),
         bool(profile.get("target_role") or profile.get("target_roles")),
         bool(profile.get("target_location") or profile.get("target_location_data")),
         bool((profile.get("application_answers_profile") or {}) or (profile.get("application_defaults") or {})),
     ]
     return int(round((sum(1 for item in checks if item) / len(checks)) * 100))
+
+
+def _admin_profile_has_cv(profile: Optional[Dict[str, Any]]) -> bool:
+    if not profile:
+        return False
+    return any(profile.get(key) for key in (
+        "cv_text",
+        "cv_filename",
+        "cv_original_filename",
+        "cv_storage_path",
+        "cv_file_id",
+    ))
 
 
 def _attention_status(status: Optional[str]) -> bool:
@@ -10621,6 +10633,25 @@ async def _admin_safe_find(
         return []
 
 
+async def _admin_safe_read(
+    collection,
+    *,
+    select: str,
+    filter: Optional[Dict[str, Any]] = None,
+    limit: int = 10000,
+) -> List[Dict[str, Any]]:
+    """Use compact PostgREST selects in production, with test/in-memory fallback."""
+    name = getattr(collection, "name", None) or getattr(collection, "table_name", "unknown")
+    read_with_select = getattr(collection, "read_with_select", None)
+    if callable(read_with_select):
+        try:
+            return await read_with_select(filter or {}, limit, select=select)
+        except Exception as exc:
+            logger.warning("admin_safe_read_failed collection=%s error=%s", name, str(exc)[:200])
+            return []
+    return await _admin_safe_find(collection, filter, limit=limit)
+
+
 async def _admin_safe_find_one(collection, filter: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     name = getattr(collection, "name", None) or getattr(collection, "table_name", "unknown")
     try:
@@ -10638,20 +10669,76 @@ async def _admin_jobs_for_ids(job_ids: List[str]) -> List[Dict[str, Any]]:
     chunk_size = 80
     for index in range(0, len(unique_ids), chunk_size):
         chunk = unique_ids[index:index + chunk_size]
-        jobs.extend(await _admin_safe_find(db.jobs, {"job_id": {"$in": chunk}}, limit=len(chunk)))
+        jobs.extend(await _admin_safe_read(
+            db.jobs,
+            filter={"job_id": {"$in": chunk}},
+            limit=len(chunk),
+            select="job_id,title,company,location,ats_provider",
+        ))
     return jobs
 
 
 async def _admin_base_data(
     *,
     include_swipes: bool = True,
+    include_jobs: bool = True,
 ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
-    users = await _admin_safe_find(db.users)
-    profiles = await _admin_safe_find(db.profiles)
-    swipes = await _admin_safe_find(db.swipes) if include_swipes else []
-    applications = await _admin_safe_find(db.applications)
-    job_ids = list({app.get("job_id") for app in applications if app.get("job_id")})
-    jobs = await _admin_jobs_for_ids(job_ids)
+    users_task = _admin_safe_read(
+        db.users,
+        select=(
+            "user_id,email,name:data->>name,billing:data->billing,"
+            "friend_referral:data->friend_referral,created_at:data->>created_at,"
+            "updated_at:data->>updated_at,last_login_at:data->>last_login_at,"
+            "demo_account:data->demo_account"
+        ),
+    )
+    profiles_task = _admin_safe_read(
+        db.profiles,
+        select=(
+            "user_id,target_role:data->>target_role,target_roles:data->target_roles,"
+            "target_location:data->>target_location,target_location_data:data->target_location_data,"
+            "application_defaults:data->application_defaults,"
+            "application_answers_profile:data->application_answers_profile,extras:data->extras,"
+            "contact:data->contact,contract_type:data->>contract_type,seniority:data->>seniority,"
+            "cv_filename:data->>cv_filename,cv_original_filename:data->>cv_original_filename,"
+            "cv_storage_path:data->>cv_storage_path,cv_file_id:data->>cv_file_id,"
+            "updated_at:data->>updated_at"
+        ),
+    )
+    applications_task = _admin_safe_read(
+        db.applications,
+        select=(
+            "application_id,user_id,job_id,package_status:data->>package_status,"
+            "submission_status:data->>submission_status,submission_provider:data->>submission_provider,"
+            "admin_status:data->>admin_status,manual_status:data->>manual_status,"
+            "created_at:data->>created_at,updated_at:data->>updated_at,submitted_at:data->>submitted_at,"
+            "assigned_to:data->>assigned_to,assigned_at:data->>assigned_at,"
+            "prepared_missing_information:data->prepared_missing_information,"
+            "prepared_blockers:data->prepared_blockers,submission_error:data->>submission_error,"
+            "email_confirmed_outcome:data->>email_confirmed_outcome"
+        ),
+    )
+    swipes_task = (
+        _admin_safe_read(
+            db.swipes,
+            select=(
+                "user_id,job_id,direction:data->>direction,"
+                "created_at:data->>created_at,updated_at:data->>updated_at"
+            ),
+        )
+        if include_swipes
+        else asyncio.sleep(0, result=[])
+    )
+    users, profiles, applications, swipes = await asyncio.gather(
+        users_task,
+        profiles_task,
+        applications_task,
+        swipes_task,
+    )
+    jobs = []
+    if include_jobs:
+        job_ids = list({app.get("job_id") for app in applications if app.get("job_id")})
+        jobs = await _admin_jobs_for_ids(job_ids)
     return users, profiles, swipes, applications, jobs
 
 
@@ -10760,11 +10847,16 @@ async def _require_record_tools_user(user: User = Depends(get_current_user)) -> 
 
 
 async def _analytics_events() -> List[Dict[str, Any]]:
-    try:
-        return await db.analytics_events.find({}, {"_id": 0}).sort("created_at", -1).to_list(10000)
-    except Exception as exc:
-        logger.warning("analytics_events_read_failed error=%s", str(exc)[:200])
-        return []
+    events = await _admin_safe_read(
+        db.analytics_events,
+        limit=10000,
+        select=(
+            "event_id,user_id,anonymous_id,event,page,source,created_at,"
+            "properties:data->properties"
+        ),
+    )
+    events.sort(key=lambda item: item.get("created_at") or "", reverse=True)
+    return events
 
 
 def _event_actor(event_doc: Dict[str, Any]) -> str:
@@ -10930,7 +11022,10 @@ def _profile_onboarding_answers(profile: Optional[Dict[str, Any]]) -> Dict[str, 
 
 
 async def _admin_user_analytics_payload() -> Dict[str, Any]:
-    users, profiles, swipes, applications, _jobs = await _admin_base_data(include_swipes=True)
+    users, profiles, swipes, applications, _jobs = await _admin_base_data(
+        include_swipes=True,
+        include_jobs=False,
+    )
     events = await _analytics_events()
     events_by_user = _group_events_by_user(events)
     profile_map = {item.get("user_id"): item for item in profiles}
@@ -11012,7 +11107,7 @@ async def _admin_user_analytics_payload() -> Dict[str, Any]:
             "email": user_doc.get("email"),
             "name": user_doc.get("name"),
             "demo_account": bool(user_doc.get("demo_account")),
-            "cv_uploaded": bool((profile or {}).get("cv_text")),
+            "cv_uploaded": _admin_profile_has_cv(profile),
             "profile_completion": _profile_completion(profile),
             "total_applications": app_counts.get(uid, 0),
             "total_swipes": swipe_counts.get(uid, 0),
@@ -11118,11 +11213,10 @@ async def admin_user_analytics(admin: User = Depends(require_admin_user)):
 
 @api_router.get("/admin/users")
 async def admin_list_users(admin: User = Depends(require_admin_user)):
-    try:
-        await _reconcile_stripe_subscriptions_once()
-    except Exception as exc:
-        logger.warning("admin_users_stripe_reconcile_failed error=%s", str(exc)[:200])
-    users, profiles, swipes, applications, _jobs = await _admin_base_data(include_swipes=True)
+    users, profiles, swipes, applications, _jobs = await _admin_base_data(
+        include_swipes=True,
+        include_jobs=False,
+    )
     profile_map = {item.get("user_id"): item for item in profiles}
     app_counts: Dict[str, int] = {}
     last_app_at: Dict[str, Any] = {}
@@ -11175,7 +11269,7 @@ async def admin_list_users(admin: User = Depends(require_admin_user)):
             "name": user_doc.get("name"),
             "demo_account": bool(user_doc.get("demo_account")),
             "profile_completion": _profile_completion(profile),
-            "cv_uploaded": bool((profile or {}).get("cv_text")),
+            "cv_uploaded": _admin_profile_has_cv(profile),
             "total_applications": app_counts.get(uid, 0),
             "total_swipes": swipe_counts.get(uid, 0),
             "right_swipes": right_swipe_counts.get(uid, 0),
@@ -12157,7 +12251,9 @@ async def admin_analytics(admin: User = Depends(require_admin_user)):
     signup_actors = _unique_event_actors(events, "auth_success") or {user.get("user_id") for user in users if user.get("user_id")}
     onboarding_started_actors = _unique_event_actors(events, "onboarding_started")
     onboarding_completed_actors = _unique_event_actors(events, "onboarding_completed") or {profile.get("user_id") for profile in profiles if profile.get("target_role")}
-    cv_uploaded_actors = _unique_event_actors(events, "cv_upload_completed") or {profile.get("user_id") for profile in profiles if profile.get("cv_text")}
+    cv_uploaded_actors = _unique_event_actors(events, "cv_upload_completed") or {
+        profile.get("user_id") for profile in profiles if _admin_profile_has_cv(profile)
+    }
     first_swipe_actors = {swipe.get("user_id") for swipe in swipes if swipe.get("user_id")}
     right_swipe_count = sum(1 for swipe in swipes if swipe.get("direction") == "right")
 

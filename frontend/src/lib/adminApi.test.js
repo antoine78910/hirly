@@ -77,7 +77,8 @@ describe("adminApiErrorMessage", () => {
 
   it("explains client timeouts", () => {
     const msg = adminApiErrorMessage({ code: "ECONNABORTED", message: "timeout of 480000ms exceeded" }, "Execution failed");
-    expect(msg.toLowerCase()).toMatch(/still running|refresh status|railway/);
+    expect(msg).toContain("Execution failed timed out");
+    expect(msg.toLowerCase()).toMatch(/railway|supabase/);
   });
 
   it("does not retry timeouts in withNetworkRetries", async () => {

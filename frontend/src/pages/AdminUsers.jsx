@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
-import { adminApiErrorMessage } from "../lib/adminApi";
+import { adminApiErrorMessage, autoApplyApiUrl } from "../lib/adminApi";
 import { Button } from "../components/ui/button";
 import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
 
@@ -48,7 +48,7 @@ export default function AdminUsers() {
     setError("");
     setAccessDenied(false);
     try {
-      const { data } = await api.get("/admin/users");
+      const { data } = await api.get(autoApplyApiUrl("/admin/users"), { timeout: 60000 });
       setUsers(data.users || []);
     } catch (err) {
       setUsers([]);

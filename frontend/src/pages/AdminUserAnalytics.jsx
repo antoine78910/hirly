@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Loader2, RefreshCw } from "lucide-react";
 import { api } from "../lib/api";
-import { adminApiErrorMessage } from "../lib/adminApi";
+import { adminApiErrorMessage, autoApplyApiUrl } from "../lib/adminApi";
 import {
   ONBOARDING_ANSWER_LABELS,
   buildOnboardingAnswerDistribution,
@@ -83,7 +83,7 @@ export default function AdminUserAnalytics() {
     setError("");
     setAccessDenied(false);
     try {
-      const { data: payload } = await api.get("/admin/user-analytics");
+      const { data: payload } = await api.get(autoApplyApiUrl("/admin/user-analytics"), { timeout: 60000 });
       setData(payload);
     } catch (err) {
       setData(null);
