@@ -312,11 +312,45 @@ def test_reveal_form_falls_back_to_oneclick_url(monkeypatch):
     monkeypatch.setattr("auto_apply.drivers.smartrecruiters.detect_offer_expired", fake_detect)
     monkeypatch.setattr("auto_apply.drivers.smartrecruiters.human_pause", fake_pause)
     monkeypatch.setattr(driver, "_wait_for_oneclick_form", fake_wait)
+    monkeypatch.setenv("BROWSER_NAVIGATION_TIMEOUT_MS", "5000")
 
     asyncio.run(driver.reveal_form(page, evidence))
     assert page.goto_urls == [oneclick]
     assert evidence.raw["step_log"][0]["value_preview"] == "oneclick_direct_nav"
     assert evidence.raw["step_log"][0]["status"] == "ok"
+
+
+def test_reveal_form_goto_timeout_blocks_instead_of_filling(monkeypatch):
+    """Regression: Page.goto timeout must not fall through to 9× not_found fills."""
+    from auto_apply.models import SubmissionEvidence
+
+    driver = SmartRecruitersApplyDriver()
+    page = _RevealPage()
+    page._cta = _RevealLocator(count=0)
+    oneclick = (
+        "https://jobs.smartrecruiters.com/oneclick-ui/company/Accor/"
+        "publication/e74c0c79-6b5c-4eab-b989-a51a3625acc1?dcr_ci=Accor"
+    )
+    evidence = SubmissionEvidence(raw={"application_url": oneclick, "step_log": []})
+
+    async def boom(url, wait_until=None, timeout=None):
+        page.goto_urls.append(url)
+        raise TimeoutError("Page.goto: Timeout 30000ms exceeded")
+
+    async def fake_detect(_page):
+        return False
+
+    async def fake_pause(*args, **kwargs):
+        return None
+
+    page.goto = boom
+    monkeypatch.setattr("auto_apply.drivers.smartrecruiters.detect_offer_expired", fake_detect)
+    monkeypatch.setattr("auto_apply.drivers.smartrecruiters.human_pause", fake_pause)
+    monkeypatch.setenv("BROWSER_NAVIGATION_TIMEOUT_MS", "1000")
+
+    asyncio.run(driver.reveal_form(page, evidence))
+    assert evidence.blocked_reason == "oneclick_nav_timeout"
+    assert any(s.get("value_preview") == "oneclick_direct_nav" for s in evidence.raw["step_log"])
 
 
 def test_reveal_form_marks_oneclick_proxy_fail(monkeypatch):

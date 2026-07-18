@@ -376,6 +376,62 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
             elapsed += 550
         return False
 
+    async def _wait_for_oneclick_url(self, page: Any, *, timeout_ms: int = 20000) -> bool:
+        """CTA navigation to oneclick can lag behind the click on Bright Data."""
+        elapsed = 0
+        while elapsed < timeout_ms:
+            if "oneclick-ui" in (page.url or ""):
+                return True
+            await human_pause(page, 350, 600)
+            elapsed += 500
+        return "oneclick-ui" in (page.url or "")
+
+    async def _goto_oneclick(self, page: Any, url: str) -> tuple[Any, Optional[str]]:
+        """Navigate with commit (domcontentloaded often hangs 30s+ on SR/BD)."""
+        from apply_agent.browser import browser_navigation_timeout_ms
+
+        timeout_ms = max(60_000, int(browser_navigation_timeout_ms() or 60_000))
+        resp = None
+        try:
+            resp = await page.goto(url, wait_until="commit", timeout=timeout_ms)
+        except Exception as exc:
+            # Timeout can still leave us on a usable oneclick shell.
+            if "oneclick-ui" in (page.url or ""):
+                return resp, None
+            return None, str(exc)[:240]
+        try:
+            await page.wait_for_load_state("domcontentloaded", timeout=20_000)
+        except Exception:
+            pass
+        return resp, None
+
+    async def _mark_reveal_blocked(
+        self,
+        page: Any,
+        evidence: Any,
+        *,
+        reason: str,
+        preview: str,
+        error: str,
+        locator: str = "",
+    ) -> None:
+        if evidence is None:
+            return
+        evidence.blocked_reason = reason
+        evidence.raw.setdefault("step_log", []).append({
+            "action": "reveal_form",
+            "locator": locator or (page.url if page is not None else "") or "oneclick-ui",
+            "status": "blocked",
+            "value_preview": preview,
+            "error": error[:240],
+        })
+        try:
+            from apply_agent.browser import screenshot_b64
+
+            evidence.screenshot_b64 = await screenshot_b64(page)
+        except Exception:
+            pass
+
     async def _reload_oneclick_shell(self, page: Any, evidence: Any = None) -> None:
         """Blank Accor shell (logo + title, no fields) often needs one soft reload."""
         url = (page.url or "").strip()
@@ -390,22 +446,21 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
                 "error": "",
             })
         try:
-            await page.reload(wait_until="domcontentloaded", timeout=30000)
+            await page.reload(wait_until="commit", timeout=45000)
         except Exception:
-            try:
-                await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-            except Exception as exc:
-                if evidence is not None:
-                    evidence.raw.setdefault("step_log", []).append({
-                        "action": "reveal_form",
-                        "locator": url,
-                        "status": "error",
-                        "value_preview": "oneclick_blank_shell_reload",
-                        "error": str(exc)[:200],
-                    })
+            err = None
+            _, err = await self._goto_oneclick(page, url)
+            if err and evidence is not None:
+                evidence.raw.setdefault("step_log", []).append({
+                    "action": "reveal_form",
+                    "locator": url,
+                    "status": "error",
+                    "value_preview": "oneclick_blank_shell_reload",
+                    "error": err,
+                })
                 return
         try:
-            await page.wait_for_load_state("domcontentloaded", timeout=8000)
+            await page.wait_for_load_state("domcontentloaded", timeout=12000)
         except Exception:
             pass
         await human_pause(page, 700, 1400)
@@ -421,21 +476,13 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
         await self._reload_oneclick_shell(page, evidence)
         if await self._wait_for_oneclick_form(page, timeout_ms=min(20000, timeout_ms)):
             return True
-        if evidence is not None:
-            evidence.blocked_reason = "oneclick_form_not_loaded"
-            evidence.raw.setdefault("step_log", []).append({
-                "action": "reveal_form",
-                "locator": page.url or "oneclick-ui",
-                "status": "blocked",
-                "value_preview": "oneclick_blank_shell",
-                "error": "oneclick header loaded but form fields never appeared",
-            })
-            try:
-                from apply_agent.browser import screenshot_b64
-
-                evidence.screenshot_b64 = await screenshot_b64(page)
-            except Exception:
-                pass
+        await self._mark_reveal_blocked(
+            page,
+            evidence,
+            reason="oneclick_form_not_loaded",
+            preview="oneclick_blank_shell",
+            error="oneclick header loaded but form fields never appeared",
+        )
         return False
 
     async def reveal_form(self, page: Any, evidence: Any = None) -> None:
@@ -482,9 +529,10 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
                             "value_preview": "apply_cta_clicked",
                             "error": "",
                         })
-                    await human_pause(page, 600, 1200)
+                    # Bright Data: SPA navigation lags the click — wait for URL.
+                    await self._wait_for_oneclick_url(page, timeout_ms=20000)
                     try:
-                        await page.wait_for_load_state("domcontentloaded", timeout=8000)
+                        await page.wait_for_load_state("domcontentloaded", timeout=12000)
                     except Exception:
                         pass
                     if await self._ensure_oneclick_form_ready(page, evidence, timeout_ms=25000):
@@ -492,14 +540,13 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
                     # Still on oneclick but blank/blocked — do not hard-nav away.
                     if "oneclick-ui" in (page.url or ""):
                         if evidence is not None and not evidence.blocked_reason:
-                            evidence.raw.setdefault("step_log", []).append({
-                                "action": "reveal_form",
-                                "locator": page.url,
-                                "status": "blocked",
-                                "value_preview": "oneclick_after_cta_no_direct_nav",
-                                "error": "oneclick reached but form not ready",
-                            })
-                            evidence.blocked_reason = "oneclick_form_not_loaded"
+                            await self._mark_reveal_blocked(
+                                page,
+                                evidence,
+                                reason="oneclick_form_not_loaded",
+                                preview="oneclick_after_cta_no_direct_nav",
+                                error="oneclick reached but form not ready",
+                            )
                         return
                     break
             except Exception:
@@ -515,43 +562,55 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
                 await self._ensure_oneclick_form_ready(page, evidence, timeout_ms=20000)
             return
         if "oneclick-ui" in app_url and not on_oneclick:
-            try:
-                resp = await page.goto(app_url, wait_until="domcontentloaded", timeout=30000)
-                status = None if resp is None else getattr(resp, "status", None)
-                body = ""
-                try:
-                    body = await page.locator("body").inner_text(timeout=3000)
-                except Exception:
-                    body = ""
-                proxy_fail = (
-                    is_proxy_connect_failure_status(status)
-                    or is_proxy_connect_failure_text(body)
+            resp, nav_err = await self._goto_oneclick(page, app_url)
+            if nav_err:
+                await self._mark_reveal_blocked(
+                    page,
+                    evidence,
+                    reason="oneclick_nav_timeout",
+                    preview="oneclick_direct_nav",
+                    error=nav_err,
+                    locator=app_url,
                 )
-                if evidence is not None:
-                    evidence.raw.setdefault("step_log", []).append({
-                        "action": "reveal_form",
-                        "locator": app_url,
-                        "status": "error" if proxy_fail else "ok",
-                        "value_preview": "oneclick_direct_nav",
-                        "error": (
-                            f"Proxy could not reach target host (HTTP {status or 'page'})."
-                            if proxy_fail
-                            else ""
-                        ),
-                    })
-                if not proxy_fail:
-                    await self._ensure_oneclick_form_ready(page, evidence, timeout_ms=30000)
                 return
-            except Exception as exc:
+            status = None if resp is None else getattr(resp, "status", None)
+            body = ""
+            try:
+                body = await page.locator("body").inner_text(timeout=3000)
+            except Exception:
+                body = ""
+            proxy_fail = (
+                is_proxy_connect_failure_status(status)
+                or is_proxy_connect_failure_text(body)
+            )
+            if evidence is not None:
+                evidence.raw.setdefault("step_log", []).append({
+                    "action": "reveal_form",
+                    "locator": app_url,
+                    "status": "error" if proxy_fail else "ok",
+                    "value_preview": "oneclick_direct_nav",
+                    "error": (
+                        f"Proxy could not reach target host (HTTP {status or 'page'})."
+                        if proxy_fail
+                        else ""
+                    ),
+                })
+            if proxy_fail:
                 if evidence is not None:
-                    evidence.raw.setdefault("step_log", []).append({
-                        "action": "reveal_form",
-                        "locator": app_url,
-                        "status": "error",
-                        "value_preview": "oneclick_direct_nav",
-                        "error": str(exc)[:240],
-                    })
-        elif evidence is not None and not clicked:
+                    evidence.blocked_reason = evidence.blocked_reason or "proxy_connect_failure"
+                return
+            if not await self._ensure_oneclick_form_ready(page, evidence, timeout_ms=30000):
+                if evidence is not None and not evidence.blocked_reason:
+                    await self._mark_reveal_blocked(
+                        page,
+                        evidence,
+                        reason="oneclick_form_not_loaded",
+                        preview="oneclick_direct_nav",
+                        error="navigated to oneclick but form never appeared",
+                        locator=app_url,
+                    )
+            return
+        if evidence is not None and not clicked:
             evidence.raw.setdefault("step_log", []).append({
                 "action": "reveal_form",
                 "locator": "apply_cta",
@@ -559,6 +618,14 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
                 "value_preview": "still_on_posting",
                 "error": "Apply CTA not found and no oneclick URL available",
             })
+        elif evidence is not None and clicked and not on_oneclick and not evidence.blocked_reason:
+            await self._mark_reveal_blocked(
+                page,
+                evidence,
+                reason="oneclick_nav_timeout",
+                preview="cta_did_not_reach_oneclick",
+                error="Apply CTA clicked but page never reached oneclick-ui",
+            )
 
     async def _ensure_consent_checked(self, page: Any) -> bool:
         """Check Accor/SR privacy consent without toggling it back off.

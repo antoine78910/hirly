@@ -383,15 +383,21 @@ class BrowserApplyDriver(ApplyDriver):
             # Skip when STICKY_SID is fixed (warm cookie sessions must keep one IP).
             fixed_sticky = bool(os.environ.get("BROWSER_PROXY_STICKY_SID", "").strip().isdigit())
             warm = warm_session_configured()
-            # Blank oneclick shell is often a bad remote session — retry once.
-            retry_blockers = {"bot_protection", "captcha", "oneclick_form_not_loaded"}
+            # Blank/slow oneclick is often a bad remote session — retry once.
+            retry_blockers = {
+                "bot_protection",
+                "captcha",
+                "oneclick_form_not_loaded",
+                "oneclick_nav_timeout",
+            }
             if (
                 last_evidence.blocked_reason in retry_blockers
                 and attempt < max_attempts
                 and (
                     proxy_configured()
                     or self.prefer_remote_browser()
-                    or last_evidence.blocked_reason in {"captcha", "oneclick_form_not_loaded"}
+                    or last_evidence.blocked_reason
+                    in {"captcha", "oneclick_form_not_loaded", "oneclick_nav_timeout"}
                 )
                 and not (fixed_sticky and last_evidence.blocked_reason == "bot_protection" and warm)
                 and time.monotonic() < deadline_at
