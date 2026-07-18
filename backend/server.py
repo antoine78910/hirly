@@ -1051,7 +1051,7 @@ async def get_current_user(
 
     last_failure = "Invalid session"
     for token_source, token in candidates:
-        logger.info("auth_me token_received source=%s path=%s", token_source, request.url.path)
+        logger.debug("auth_me token_received source=%s path=%s", token_source, request.url.path)
         session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
         if not session:
             logger.info("auth_me invalid_token reason=session_not_found source=%s", token_source)
