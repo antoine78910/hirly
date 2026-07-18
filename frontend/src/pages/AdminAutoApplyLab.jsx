@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Play, RefreshCw, Terminal } from "lucide-react";
+import { ExternalLink, Loader2, Play, RefreshCw, Terminal } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import {
@@ -393,8 +393,30 @@ export default function AdminAutoApplyLab() {
                           <div className="text-xs text-zinc-400">{row.user_email}</div>
                         </td>
                         <td className="px-3 py-2">
-                          <div className="font-medium text-zinc-900">{row.title || row.job_id}</div>
-                          <div className="text-xs text-zinc-400">{row.company}</div>
+                          {(() => {
+                            const atsUrl = row.apply_url || row.external_url || "";
+                            const label = row.title || row.job_id;
+                            return (
+                              <>
+                                {atsUrl ? (
+                                  <a
+                                    href={atsUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex max-w-[280px] items-center gap-1 font-medium text-sky-700 underline-offset-2 hover:underline"
+                                    title="Open ATS posting (check if expired)"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <span className="truncate">{label}</span>
+                                    <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                                  </a>
+                                ) : (
+                                  <div className="font-medium text-zinc-900">{label}</div>
+                                )}
+                                <div className="text-xs text-zinc-400">{row.company}</div>
+                              </>
+                            );
+                          })()}
                         </td>
                         <td className="px-3 py-2">
                           <span className={row.driver_supported ? "text-emerald-700" : "text-amber-700"}>

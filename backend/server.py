@@ -10091,7 +10091,15 @@ async def admin_auto_apply_right_swipes(
             "title": job.get("title") or "",
             "company": job.get("company") or "",
             "ats_provider": str(job.get("ats_provider") or job.get("provider") or "").lower() or "unknown",
-            "apply_url": job.get("external_url") or job.get("selected_apply_url") or job.get("apply_url") or "",
+            # Prefer the public posting URL so admins can open the ATS and check expiry.
+            "apply_url": (
+                job.get("external_url")
+                or job.get("selected_apply_url")
+                or job.get("job_apply_link")
+                or job.get("apply_url")
+                or ""
+            ),
+            "external_url": job.get("external_url") or "",
             "driver_supported": bool(job) and DRIVER_REGISTRY.for_job(job) is not None,
             "swiped_at": swipe_row.get("created_at"),
             "latest_attempt": {
