@@ -276,6 +276,11 @@ api_router = APIRouter(prefix="/api")
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Supabase via httpx logs every GET/POST at INFO — floods Railway and hides
+# auto-apply / Bright Data lines. Keep warnings+ only for HTTP client noise.
+for _noisy in ("httpx", "httpcore", "hpack", "h2", "urllib3"):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
+
 _feed_job_pool_cache: Dict[str, Any] = {"query_key": "", "rows": [], "fetched_at": 0.0}
 _FEED_JOB_POOL_TTL_SECONDS = 90.0
 _feed_sync_refresh_cooldown_until = 0.0
@@ -1041,7 +1046,7 @@ async def get_current_user(
         candidates.append((source, session_token))
 
     if not candidates:
-        logger.info("auth_me token_missing path=%s", request.url.path)
+        logger.debug("auth_me token_missing path=%s", request.url.path)
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     last_failure = "Invalid session"
