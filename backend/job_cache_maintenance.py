@@ -784,6 +784,7 @@ def build_inventory_funnel_goals(
     total_jobs: int,
     valid_ab_jobs: int,
     imports_last_24h: int,
+    imports_last_7d: int,
     imports_by_source_24h: Dict[str, int],
     ats_sources_count: int,
     stale_jobs: int,
@@ -797,21 +798,41 @@ def build_inventory_funnel_goals(
     stale_share = (stale_jobs / total_jobs * 100.0) if total_jobs else 0.0
     direct_share_24h = (direct_ats_24h / imports_last_24h * 100.0) if imports_last_24h else 0.0
 
+    stock_target = float(env_int("JOBS_GOAL_INVENTORY_STOCK", 500_000))
+    weekly_target = float(env_int("JOBS_GOAL_WEEKLY_IMPORTS", 500_000))
+    daily_target = float(env_int("JOBS_GOAL_DAILY_IMPORTS", max(1, int(weekly_target / 7))))
+
     goals = [
+        _make_goal(
+            goal_id="inventory_stock",
+            label="Inventory stock",
+            description="Unique jobs currently in the database — main 500k target.",
+            current=total_jobs,
+            target=stock_target,
+            unit="jobs",
+        ),
+        _make_goal(
+            goal_id="weekly_imports",
+            label="Weekly inventory push",
+            description="Jobs touched in the last 7 days (includes refreshes of known offers).",
+            current=imports_last_7d,
+            target=weekly_target,
+            unit="jobs/week",
+        ),
         _make_goal(
             goal_id="daily_imports",
             label="Daily import volume",
             description="Jobs touched (imported_at) in the last 24h across all sources.",
             current=imports_last_24h,
-            target=float(env_int("JOBS_GOAL_DAILY_IMPORTS", 1500)),
+            target=daily_target,
             unit="jobs/day",
         ),
         _make_goal(
             goal_id="france_travail_daily",
             label="France Travail daily",
-            description="FT API harvest activity in the last 24h. Warns if the city loop stalls.",
+            description="FT API harvest activity in the last 24h. Warns if the département loop stalls.",
             current=ft_24h,
-            target=float(env_int("JOBS_GOAL_FT_DAILY", 400)),
+            target=float(env_int("JOBS_GOAL_FT_DAILY", 25_000)),
             unit="jobs/day",
         ),
         _make_goal(
@@ -819,7 +840,7 @@ def build_inventory_funnel_goals(
             label="Auto-apply ready (A/B)",
             description="Share of inventory in validated tiers A/B — feed + auto-apply quality.",
             current=ab_share,
-            target=float(env_int("JOBS_GOAL_AB_SHARE_PCT", 20)),
+            target=float(env_int("JOBS_GOAL_AB_SHARE_PCT", 15)),
             unit="%",
         ),
         _make_goal(
@@ -827,7 +848,7 @@ def build_inventory_funnel_goals(
             label="Direct ATS share (24h)",
             description="Share of last-24h imports from company boards (Greenhouse, SR, …).",
             current=direct_share_24h,
-            target=float(env_int("JOBS_GOAL_ATS_SHARE_PCT", 15)),
+            target=float(env_int("JOBS_GOAL_ATS_SHARE_PCT", 10)),
             unit="%",
         ),
         _make_goal(
@@ -835,7 +856,7 @@ def build_inventory_funnel_goals(
             label="ATS boards tracked",
             description="Known company boards in ats_company_sources (discovery funnel).",
             current=ats_sources_count,
-            target=float(env_int("JOBS_GOAL_ATS_SOURCES", 100)),
+            target=float(env_int("JOBS_GOAL_ATS_SOURCES", 500)),
             unit="boards",
         ),
         _make_goal(
@@ -843,7 +864,7 @@ def build_inventory_funnel_goals(
             label="Stale inventory",
             description="Jobs not seen recently — high = harvest not refreshing or dead links.",
             current=stale_share,
-            target=float(env_int("JOBS_GOAL_MAX_STALE_PCT", 25)),
+            target=float(env_int("JOBS_GOAL_MAX_STALE_PCT", 35)),
             unit="%",
             direction="lte",
         ),
@@ -1038,6 +1059,7 @@ async def job_inventory_analytics(db, *, days: int = 30) -> Dict[str, Any]:
         total_jobs=total_jobs,
         valid_ab_jobs=valid_ab_jobs,
         imports_last_24h=imports_last_24h,
+        imports_last_7d=imports_last_7d,
         imports_by_source_24h=imports_by_source_24h,
         ats_sources_count=ats_sources_count,
         stale_jobs=stale_jobs,

@@ -75,7 +75,7 @@ function FunnelGoalsPanel({ funnelGoals }) {
           <div>
             <h2 className="font-display text-lg font-bold text-zinc-900">Crawl funnel goals</h2>
             <p className="text-sm text-zinc-500">
-              Track harvest health: volume, France Travail, quality, and ATS discovery.
+              Primary target: 500k jobs touched / week via France Travail blitz + ATS boards.
             </p>
           </div>
         </div>
@@ -290,7 +290,7 @@ export default function AdminJobs() {
   return (
     <AdminShell
       title="Job inventory"
-      subtitle="Total cached offers and daily import activity by source."
+      subtitle="Fill target: 500k touches / week. Daily activity by source + funnel goals below."
       actions={(
         <Button variant="outline" onClick={load} disabled={loading}>
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}

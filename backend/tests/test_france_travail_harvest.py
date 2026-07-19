@@ -5,7 +5,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import france_travail_harvest as harvest_module
-from france_travail_harvest import harvest_france_travail, _harvest_cities
+from france_travail_harvest import (
+    harvest_france_travail,
+    _harvest_cities,
+    _harvest_targets,
+    inventory_blitz_enabled,
+)
 from job_providers.base import ProviderResult
 
 
@@ -50,12 +55,25 @@ def test_harvest_cities_default_covers_secondary_markets(monkeypatch):
     assert len(cities) >= 20
 
 
+def test_blitz_targets_cover_all_departements(monkeypatch):
+    monkeypatch.delenv("FT_HARVEST_CITIES", raising=False)
+    monkeypatch.delenv("FT_HARVEST_LOCATIONS", raising=False)
+    monkeypatch.setenv("JOBS_INVENTORY_BLITZ", "true")
+    targets = _harvest_targets()
+    assert inventory_blitz_enabled() is True
+    assert len(targets) > 1000  # ~101 depts × ~24 roles
+    assert any(t["location"].startswith("Département 75") for t in targets)
+    assert any(t["role"] == "developpeur" for t in targets)
+    assert any(t["role"] == "" for t in targets)
+
+
 def test_harvest_rotates_cities_city_only(monkeypatch):
     fake_provider = _FakeProvider()
     monkeypatch.setattr(harvest_module, "is_job_provider_configured", lambda name=None: True)
     monkeypatch.setattr(harvest_module, "get_job_provider", lambda name, key="": fake_provider)
     monkeypatch.setenv("FT_HARVEST_CITIES", "Paris,Lyon,Marseille")
     monkeypatch.setenv("FT_HARVEST_QUERY_PAUSE_SECONDS", "0.01")
+    monkeypatch.setenv("JOBS_INVENTORY_BLITZ", "false")
     db = _FakeDb()
 
     summary = asyncio.run(harvest_france_travail(db, max_queries=3, start_offset=0))
@@ -67,6 +85,26 @@ def test_harvest_rotates_cities_city_only(monkeypatch):
     assert fake_provider.queries[0].location == "Paris, France"
     assert fake_provider.queries[1].location == "Lyon, France"
     assert fake_provider.queries[2].location == "Marseille, France"
+
+
+def test_harvest_blitz_uses_department_and_role(monkeypatch):
+    fake_provider = _FakeProvider()
+    monkeypatch.setattr(harvest_module, "is_job_provider_configured", lambda name=None: True)
+    monkeypatch.setattr(harvest_module, "get_job_provider", lambda name, key="": fake_provider)
+    monkeypatch.delenv("FT_HARVEST_CITIES", raising=False)
+    monkeypatch.delenv("FT_HARVEST_LOCATIONS", raising=False)
+    monkeypatch.setenv("JOBS_INVENTORY_BLITZ", "true")
+    monkeypatch.setenv("FT_HARVEST_DEPARTEMENTS", "75,69")
+    monkeypatch.setenv("FT_HARVEST_ROLES", ",commercial")
+    monkeypatch.setenv("FT_HARVEST_QUERY_PAUSE_SECONDS", "0")
+    monkeypatch.setenv("FT_HARVEST_CONCURRENCY", "2")
+    db = _FakeDb()
+
+    summary = asyncio.run(harvest_france_travail(db, max_queries=4, dry_run=True, start_offset=0))
+    assert summary["mode"] == "blitz_dept_role"
+    assert summary["jobs_fetched"] == 4
+    assert any("Département 75" in q.location for q in fake_provider.queries)
+    assert any(q.role == "commercial" for q in fake_provider.queries)
 
 
 def test_harvest_dry_run_does_not_write(monkeypatch):

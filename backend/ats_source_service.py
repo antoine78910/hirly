@@ -217,11 +217,14 @@ async def refresh_known_ats_sources(
     prioritize_europe: bool = True,
     concurrency: Optional[int] = None,
 ) -> Dict[str, Any]:
-    refresh_limit = max(1, min(int(limit or env_int("JOBS_ATS_REFRESH_LIMIT", 40)), 150))
-    hours = max(1, int(older_than_hours if older_than_hours is not None else env_int("JOBS_ATS_REFRESH_OLDER_THAN_HOURS", 12)))
+    blitz = env_bool("JOBS_INVENTORY_BLITZ", True)
+    default_refresh_limit = 80 if blitz else 40
+    default_concurrency = 8 if blitz else 5
+    refresh_limit = max(1, min(int(limit or env_int("JOBS_ATS_REFRESH_LIMIT", default_refresh_limit)), 200))
+    hours = max(1, int(older_than_hours if older_than_hours is not None else env_int("JOBS_ATS_REFRESH_OLDER_THAN_HOURS", 6 if blitz else 12)))
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
     resolved_country = (country_code or refresh_country_code_filter() or "").strip().lower() or None
-    max_concurrency = max(1, min(int(concurrency if concurrency is not None else env_int("JOBS_ATS_REFRESH_CONCURRENCY", 5)), 12))
+    max_concurrency = max(1, min(int(concurrency if concurrency is not None else env_int("JOBS_ATS_REFRESH_CONCURRENCY", default_concurrency)), 16))
     query: Dict[str, Any] = {"is_active": True}
     if provider:
         query["ats_provider"] = provider.strip().lower()
@@ -287,13 +290,14 @@ async def run_ats_direct_maintenance(
     discover = None
     if env_bool("JOBS_ATS_DISCOVER_FROM_CACHE_ENABLED", True):
         discover = await discover_ats_sources_prioritizing_europe(db, dry_run=dry_run)
+    blitz = env_bool("JOBS_INVENTORY_BLITZ", True)
     refresh = await refresh_known_ats_sources(
         db,
-        country_code=refresh_country_code_filter(),
-        limit=env_int("JOBS_ATS_REFRESH_LIMIT", 40),
-        older_than_hours=env_int("JOBS_ATS_REFRESH_OLDER_THAN_HOURS", 12),
+        country_code=refresh_country_code_filter() or ("fr" if blitz else None),
+        limit=env_int("JOBS_ATS_REFRESH_LIMIT", 80 if blitz else 40),
+        older_than_hours=env_int("JOBS_ATS_REFRESH_OLDER_THAN_HOURS", 6 if blitz else 12),
         dry_run=dry_run,
-        concurrency=env_int("JOBS_ATS_REFRESH_CONCURRENCY", 5),
+        concurrency=env_int("JOBS_ATS_REFRESH_CONCURRENCY", 8 if blitz else 5),
     )
     friendly_company_pages = None
     if env_bool("JOBS_DISCOVER_FRIENDLY_COMPANY_PAGES_ENABLED", True):

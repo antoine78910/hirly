@@ -32,7 +32,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from ats_source_service import _careers_url, env_int
+from ats_source_service import _careers_url, env_bool, env_int
 from company_career_page_prober import probe_career_page_friendliness
 from job_providers.ats_adapters.registry import adapter_for_url, default_ats_adapters
 from job_providers.ats_detection import detect_ats_from_url
@@ -200,7 +200,8 @@ async def discover_via_company_list(
     companies = companies or _company_names()
     if not companies:
         return {"enabled": True, "reason": "no_companies_configured"}
-    max_companies = max(1, min(int(max_companies_per_run or env_int("COMPANY_DISCOVERY_COMPANIES_PER_RUN", 40)), len(companies)))
+    default_companies = 80 if env_bool("JOBS_INVENTORY_BLITZ", True) else 40
+    max_companies = max(1, min(int(max_companies_per_run or env_int("COMPANY_DISCOVERY_COMPANIES_PER_RUN", default_companies)), len(companies)))
     recheck_after_days = max(1, env_int("COMPANY_DISCOVERY_RECHECK_DAYS", 60))
     recheck_cutoff = datetime.now(timezone.utc) - timedelta(days=recheck_after_days)
 

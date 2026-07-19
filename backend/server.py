@@ -16528,13 +16528,17 @@ async def startup_seed():
     asyncio.create_task(_startup_seed_impl())
     asyncio.create_task(_resume_pending_application_generation())
     asyncio.create_task(auto_apply_queue.startup(db))
-    # Default True protects Supabase under load. For continuous FR inventory
-    # growth set PAUSE_JOB_MAINTENANCE_CRONS=false (read on each restart).
-    # Recommended with light feed + purge: FT + ATS loops on; keep JSearch
-    # harvest off unless quota allows (JSEARCH_HARVEST_ENABLED=true).
-    if _env_bool("PAUSE_JOB_MAINTENANCE_CRONS", True):
-        logger.warning("job_maintenance_crons_paused reason=db_load_protection")
+    # With JOBS_INVENTORY_BLITZ (default on), crons start unless explicitly paused.
+    # Set PAUSE_JOB_MAINTENANCE_CRONS=true to stop background harvest under DB load.
+    blitz = _env_bool("JOBS_INVENTORY_BLITZ", True)
+    pause_default = not blitz
+    if _env_bool("PAUSE_JOB_MAINTENANCE_CRONS", pause_default):
+        logger.warning(
+            "job_maintenance_crons_paused blitz=%s hint=set_PAUSE_JOB_MAINTENANCE_CRONS_false_to_fill_inventory",
+            blitz,
+        )
     else:
+        logger.info("job_maintenance_crons_starting blitz=%s target=500k_jobs_per_week", blitz)
         asyncio.create_task(run_france_travail_harvest_loop(db))
         asyncio.create_task(run_jsearch_harvest_loop(db))
         asyncio.create_task(run_ats_direct_maintenance_loop(db))

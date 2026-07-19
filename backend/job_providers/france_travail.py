@@ -35,7 +35,12 @@ _CONTRACT_HINT_TO_TYPE_CONTRAT = {
     "freelance": "MIS",
 }
 
-_DEPARTEMENT_RE = re.compile(r"\b(\d{2}|2[AB])\b", re.IGNORECASE)
+# Metropolitan (01-95, 2A/2B) + DOM (971…).
+_DEPARTEMENT_RE = re.compile(r"\b(\d{2,3}|2[AB])\b", re.IGNORECASE)
+_DEPT_LOCATION_RE = re.compile(
+    r"^(?:d[eé]partement|dept)\s+(\d{2,3}|2[AB])\b",
+    re.IGNORECASE,
+)
 
 # France Travail expects arrondissement INSEE codes for Paris/Lyon/Marseille, not global city codes.
 _MUNICIPALITY_AGGREGATION_CODES = {"75056", "69123", "13055"}
@@ -258,8 +263,10 @@ class FranceTravailProvider:
             return ProviderResult(jobs=[], raw_response={"skipped": "non_france_country"})
 
         page_size = max(1, min(int(query.page_size or self._env_int("FRANCE_TRAVAIL_PAGE_SIZE", 50)), 150))
-        max_pages = max(1, min(int(query.max_pages or self._env_int("FRANCE_TRAVAIL_MAX_PAGES", 2)), 10))
-        target_count = max(query.limit, min(page_size * max_pages, 300))
+        max_pages = max(1, min(int(query.max_pages or self._env_int("FRANCE_TRAVAIL_MAX_PAGES", 2)), 20))
+        # FT allows deep range pagination; old hard-cap of 300 starved harvest volume.
+        max_results = max(50, min(self._env_int("FRANCE_TRAVAIL_MAX_RESULTS", 1500), 3000))
+        target_count = max(int(query.limit or 0), min(page_size * max_pages, max_results))
 
         param_variants = await self._search_param_variants(query)
         payloads: List[Any] = []
@@ -711,8 +718,15 @@ class FranceTravailProvider:
         city = location.split(",")[0].strip()
         if not city or len(city) < 2:
             return None, distance, None
+        # Explicit harvest targets like "Département 75" or bare "75".
+        dept_label = _DEPT_LOCATION_RE.match(city)
+        if dept_label:
+            return None, distance, dept_label.group(1).upper().replace("AB", "2A")
+        bare_dept = _DEPARTEMENT_RE.fullmatch(city.strip())
+        if bare_dept:
+            return None, distance, bare_dept.group(1).upper().replace("AB", "2A")
         commune_code, departement = await self._lookup_commune_code_and_departement(city)
-        return commune_code, distance, departement
+        return commune_code, distance, departement or self._departement_from_location(location)
 
     def _search_distance_km(self, query: JobSearchQuery) -> int:
         if query.radius_km is not None:
@@ -896,9 +910,15 @@ class FranceTravailProvider:
         return "mid"
 
     def _request_interval(self) -> float:
-        # FT allows ~10 req/s; keep a small safety margin without adding needless
-        # latency now that we may try several motsCles variants per search.
-        return max(0.15, self._env_float("FRANCE_TRAVAIL_REQUEST_INTERVAL_SECONDS", 0.25))
+        # FT allows ~10 req/s; blitz harvest uses a tighter default.
+        default = 0.15 if self._env_bool("JOBS_INVENTORY_BLITZ", True) else 0.25
+        return max(0.1, self._env_float("FRANCE_TRAVAIL_REQUEST_INTERVAL_SECONDS", default))
+
+    def _env_bool(self, name: str, default: bool = False) -> bool:
+        value = os.environ.get(name)
+        if value is None:
+            return default
+        return value.strip().lower() in ("1", "true", "yes", "on")
 
     def _retry_after_seconds(self, response: httpx.Response) -> float:
         raw = response.headers.get("Retry-After")

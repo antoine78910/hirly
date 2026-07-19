@@ -555,21 +555,25 @@ def test_job_inventory_analytics_builds_source_breakdown_and_daily_series():
     assert result["daily"]
     assert "jsearch" in result["chart_sources"]
     assert result["funnel_goals"]["overall_status"] in {"ok", "warn", "bad"}
-    assert len(result["funnel_goals"]["goals"]) == 6
+    assert len(result["funnel_goals"]["goals"]) == 8
     assert len(result["funnel_goals"]["funnel"]) == 5
     assert result["funnel_goals"]["signals"]["stale_jobs"] >= 0
+    assert any(goal["id"] == "inventory_stock" for goal in result["funnel_goals"]["goals"])
+    assert any(goal["id"] == "weekly_imports" for goal in result["funnel_goals"]["goals"])
 
 
 def test_build_inventory_funnel_goals_marks_stale_and_volume():
     result = maintenance.build_inventory_funnel_goals(
         total_jobs=1000,
         valid_ab_jobs=300,
-        imports_last_24h=2000,
-        imports_by_source_24h={"france_travail": 800, "greenhouse": 400},
-        ats_sources_count=120,
+        imports_last_24h=80_000,
+        imports_last_7d=520_000,
+        imports_by_source_24h={"france_travail": 40_000, "greenhouse": 10_000},
+        ats_sources_count=600,
         stale_jobs=100,
     )
     by_id = {goal["id"]: goal for goal in result["goals"]}
+    assert by_id["weekly_imports"]["status"] == "ok"
     assert by_id["daily_imports"]["status"] == "ok"
     assert by_id["france_travail_daily"]["status"] == "ok"
     assert by_id["auto_apply_ready_share"]["status"] == "ok"
@@ -580,6 +584,7 @@ def test_build_inventory_funnel_goals_marks_stale_and_volume():
         total_jobs=1000,
         valid_ab_jobs=10,
         imports_last_24h=50,
+        imports_last_7d=200,
         imports_by_source_24h={"jsearch": 50},
         ats_sources_count=2,
         stale_jobs=600,
