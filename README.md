@@ -52,6 +52,35 @@ npm install --legacy-peer-deps
 npm start
 ```
 
+## TypeScript Workspace
+
+New isolated TypeScript capabilities use the root Bun workspace. The workspace
+is limited to `apps/*` and `packages/*`; the production Create React App in
+`frontend/` is intentionally excluded.
+
+```bash
+bun install --frozen-lockfile
+bun run format
+bun run lint
+bun run typecheck
+bun run test
+bun run build
+```
+
+Run the legacy frontend from its own directory with its existing npm install
+path. Do not replace this with a root Bun install:
+
+```bash
+cd frontend
+npm install --legacy-peer-deps
+CI=false npm run build
+```
+
+The root `vercel.json`, `frontend/vercel.json`, `frontend/package.json`, and
+`frontend/package-lock.json` remain authoritative for the current frontend
+deployment. New workspace applications must use separate deployment projects
+and must not take over existing routes.
+
 ## Engineering Stack Policy
 
 Hirly fixes existing Python behavior in place, builds new isolated backend
