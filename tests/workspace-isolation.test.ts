@@ -33,7 +33,9 @@ describe("root Bun workspace isolation", () => {
     expect(rootPackage.private).toBe(true);
     expect(rootPackage.packageManager).toMatch(/^bun@\d+\.\d+\.\d+$/);
     expect([...patterns].sort()).toEqual(["apps/*", "packages/*"]);
-    expect(patterns.some((pattern) => pattern.includes("frontend"))).toBe(false);
+    expect(patterns.some((pattern) => pattern.includes("frontend"))).toBe(
+      false,
+    );
 
     const resolvedManifests = patterns.flatMap((pattern) =>
       Array.from(
@@ -62,19 +64,17 @@ describe("root Bun workspace isolation", () => {
   test("root quality commands stay scoped away from the legacy frontend", () => {
     const rootPackage = readJson<PackageJson>("package.json");
 
-    for (const scriptName of [
-      "format",
-      "lint",
-      "typecheck",
-      "test",
-      "build",
-    ]) {
+    for (const scriptName of ["format", "lint", "typecheck", "test", "build"]) {
       const command = rootPackage.scripts?.[scriptName];
       expect(command).toBeTruthy();
       expect(command).not.toContain("frontend");
     }
 
-    for (const requiredFile of ["bun.lock", "bunfig.toml", "tsconfig.base.json"]) {
+    for (const requiredFile of [
+      "bun.lock",
+      "bunfig.toml",
+      "tsconfig.base.json",
+    ]) {
       expect(existsSync(join(repoRoot, requiredFile))).toBe(true);
     }
   });
