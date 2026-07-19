@@ -182,6 +182,7 @@ from location_intelligence import COUNTRY_NAME_TO_CODE, country_to_jsearch_langu
 from role_query_terms import resolve_role_match_tokens
 from location_search import search_locations
 from llm_client import LLMProviderNotConfigured, complete_json_text, extract_text_from_image_bytes
+from openai import RateLimitError as LLMRateLimitError
 from onboarding_suggestions import suggest_categories, suggest_roles
 from profile_search_preferences import (
     resolve_profile_target_location_data,
@@ -5221,6 +5222,15 @@ async def upload_cv(file: UploadFile = File(...), user: User = Depends(get_curre
             status_code=503,
             detail="AI provider is not configured. Scanned or photo resumes require vision OCR.",
         )
+    except LLMRateLimitError as e:
+        # Scanned/photo CVs have no non-AI extraction path, so an exhausted quota
+        # blocks them outright — surface a clean, actionable message instead of
+        # letting the raw provider error (or an unhandled 500) reach the user.
+        logger.error("cv_upload_ai_quota_exceeded_ocr user_id=%s error=%s", user.user_id, str(e))
+        raise HTTPException(
+            status_code=503,
+            detail="Our AI provider is temporarily at capacity. Please try again in a few minutes, or upload a PDF/DOCX version of your CV instead of a photo scan.",
+        )
     if not cv_text.strip():
         raise HTTPException(
             status_code=400,
@@ -5232,9 +5242,15 @@ async def upload_cv(file: UploadFile = File(...), user: User = Depends(get_curre
     except LLMProviderNotConfigured as e:
         logger.warning("cv_upload_ai_provider_not_configured user_id=%s error=%s", user.user_id, str(e))
         extracted = _fallback_extract_profile_from_cv(cv_text)
+    except LLMRateLimitError as e:
+        # Text-based CVs (the common case) have a heuristic fallback, so an
+        # exhausted AI quota degrades the profile quality instead of blocking
+        # the upload entirely.
+        logger.error("cv_upload_ai_quota_exceeded user_id=%s error=%s", user.user_id, str(e))
+        extracted = _fallback_extract_profile_from_cv(cv_text)
     except Exception as e:
         logger.exception("CV extraction failed")
-        raise HTTPException(status_code=500, detail=f"AI extraction failed: {e}")
+        raise HTTPException(status_code=500, detail="We couldn't finish analyzing your CV. Please try again in a moment.")
 
     mime = _mime_from_profile_document_filename(filename)
 

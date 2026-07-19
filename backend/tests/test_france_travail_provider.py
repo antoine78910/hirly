@@ -208,6 +208,29 @@ def test_france_travail_normalization_maps_core_fields():
     assert "francetravail.fr" in job["external_url"]
 
 
+def test_france_travail_normalization_never_uses_entreprise_description_as_company():
+    provider = FranceTravailProvider(client_id="PAR_test", client_secret="secret")
+    job = provider.normalize_job(
+        {
+            "id": "048ANON",
+            "intitule": "Développeur web",
+            "description": "Mission sur un produit SaaS.",
+            "typeContrat": "CDI",
+            "typeContratLibelle": "CDI",
+            "dateCreation": "2026-06-01T10:00:00Z",
+            "entreprise": {
+                "description": "Notre entreprise est spécialisée dans le développement de solutions logicielles innovantes.",
+            },
+            "lieuTravail": {"libelle": "Lyon (69)", "commune": "Lyon", "codePostal": "69003"},
+        },
+        JobSearchQuery(role="développeur", location="Lyon, France", country="fr", language="fr"),
+        "2026-07-03T10:00:00+00:00",
+    )
+
+    assert job is not None
+    assert job["company"] == "Entreprise confidentielle"
+
+
 def test_france_travail_normalization_extracts_offer_details_and_salary():
     provider = FranceTravailProvider(client_id="PAR_test", client_secret="secret")
     job = provider.normalize_job(

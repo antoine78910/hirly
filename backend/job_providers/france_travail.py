@@ -491,8 +491,11 @@ class FranceTravailProvider:
         external_id = row.get("id")
         title = sanitize_display_title(row.get("intitule"), fallback=row.get("romeLibelle"))
         entreprise = row.get("entreprise") if isinstance(row.get("entreprise"), dict) else {}
-        company = entreprise.get("nom") or entreprise.get("enseigne") or entreprise.get("description")
-        if not external_id or not title or not company:
+        # entreprise.description is a free-text paragraph about the employer (used on
+        # anonymized postings that omit nom/enseigne) — never a company name, so it must
+        # not be used as a fallback here or it ends up displayed as the "company" value.
+        company = entreprise.get("nom") or entreprise.get("enseigne") or "Entreprise confidentielle"
+        if not external_id or not title:
             return None
 
         ft_detail_url = (
