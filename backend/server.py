@@ -179,7 +179,7 @@ from employment_kind import (
     resolve_profile_contract_type,
 )
 from location_intelligence import COUNTRY_NAME_TO_CODE, country_to_jsearch_language, expand_location_radius, normalize_place_name
-from role_query_terms import resolve_role_match_tokens
+from role_query_terms import ACADEMIC_LEVEL_STOPWORDS, resolve_role_match_tokens
 from location_search import search_locations
 from llm_client import LLMProviderNotConfigured, complete_json_text, extract_text_from_image_bytes
 from openai import RateLimitError as LLMRateLimitError
@@ -6241,7 +6241,7 @@ async def get_feed(
         stop = {
             "and", "or", "the", "a", "an", "of", "for", "to", "in", "with",
             "remote", "jobs", "job", "cdi", "cdd", "full", "time",
-        }
+        } | ACADEMIC_LEVEL_STOPWORDS
         return [
             token
             for token in re.findall(r"[a-z0-9]+", (value or "").lower())
@@ -6283,7 +6283,7 @@ async def get_feed(
         "operations": {"operations", "operationnel", "ops"},
         "finance_accounting": {"finance", "financier", "accountant", "comptable", "comptabilite", "accounting", "auditor", "audit", "controleur de gestion", "controller", "treasury", "tresorerie", "credit"},
         "banking_insurance": {"bank", "banque", "banking", "bancaire", "insurance", "assurance", "assureur", "actuary", "actuaire", "courtier"},
-        "legal": {"legal", "juridique", "lawyer", "avocat", "avocate", "attorney", "notaire", "notary", "paralegal", "juriste", "compliance", "conformite"},
+        "legal": {"legal", "juridique", "lawyer", "avocat", "avocate", "attorney", "notaire", "notary", "paralegal", "juriste", "compliance", "conformite", "droit"},
         "consulting": {"consultant", "consultante", "consulting", "conseil", "advisory"},
         "supply_chain_logistics": {"warehouse", "logistics", "logistique", "magasinier", "preparateur", "supply chain", "approvisionnement", "inventory", "stock", "cariste", "forklift"},
         "transportation_driving": {"driver", "delivery", "chauffeur", "livreur", "livreuse", "trucking", "routier", "taxi", "vtc", "coursier"},
@@ -8632,7 +8632,7 @@ async def get_feed(
     radius_scope = (search_radius or "50km").lower().strip()
 
     def _tokens(value: str) -> List[str]:
-        stop = {"and", "or", "the", "a", "an", "of", "for", "to", "in", "with", "remote", "jobs", "job"}
+        stop = {"and", "or", "the", "a", "an", "of", "for", "to", "in", "with", "remote", "jobs", "job"} | ACADEMIC_LEVEL_STOPWORDS
         return [token for token in re.findall(r"[a-z0-9]+", (value or "").lower()) if len(token) > 2 and token not in stop]
 
     # Some role labels are ambiguous/homonymous across languages (e.g.
@@ -15999,7 +15999,7 @@ async def dev_jobs_query_debug(
     ).strip()
 
     def _tokens(value: str) -> List[str]:
-        stop = {"and", "or", "the", "a", "an", "of", "for", "to", "in", "with", "remote", "jobs", "job"}
+        stop = {"and", "or", "the", "a", "an", "of", "for", "to", "in", "with", "remote", "jobs", "job"} | ACADEMIC_LEVEL_STOPWORDS
         return [token for token in re.findall(r"[a-z0-9]+", (value or "").lower()) if len(token) > 2 and token not in stop]
 
     _role_match_override = resolve_role_match_tokens(target_role)

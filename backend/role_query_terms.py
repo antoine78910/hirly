@@ -54,6 +54,19 @@ for _entry in _ROLE_QUERY_OVERRIDES.values():
         _ALIAS_TO_ENTRY[_normalize(_alias)] = _entry
 
 
+# French academic-level shorthand (e.g. a profile's target_role reading
+# "Bac+5 droit" instead of an actual job title like "Juriste") describes an
+# education level, not a profession -- it's never useful signal for matching
+# a job title, and short abbreviations like "bac" are prone to false-positive
+# substring collisions (e.g. "bac" spuriously matching inside "back end").
+# Stripped from role-matching tokenizers across every field/sector, not just
+# law -- this isn't specific to any one profile.
+ACADEMIC_LEVEL_STOPWORDS = frozenset({
+    "bac", "bts", "dut", "deug", "licence", "master", "doctorat",
+    "bachelor", "l1", "l2", "l3", "m1", "m2",
+})
+
+
 def resolve_role_match_tokens(role_text: Optional[str]) -> Optional[List[str]]:
     """Safe token list to score against instead of naively tokenizing
     role_text. Returns None when role_text isn't a known ambiguous case."""
