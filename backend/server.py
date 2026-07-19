@@ -6324,7 +6324,7 @@ async def get_feed(
         "transportation_driving": {"driver", "delivery", "chauffeur", "livreur", "livreuse", "trucking", "routier", "taxi", "vtc", "coursier"},
         "aviation_maritime": {"pilot", "pilote", "aviation", "airline", "flight attendant", "steward", "hotesse", "maritime", "marin", "seafarer"},
         "manufacturing_production": {"manufacturing", "production", "factory", "usine", "assembly", "assemblage", "machiniste", "machinist", "technicien de production"},
-        "construction_trades": {"construction", "batiment", "chantier", "electricien", "electrician", "plumber", "plombier", "carpenter", "charpentier", "mason", "macon", "welder", "soudeur", "roofer", "couvreur", "peintre", "hvac", "chauffagiste"},
+        "construction_trades": {"construction", "batiment", "chantier", "electricien", "electrician", "plumber", "plombier", "carpenter", "charpentier", "mason", "macon", "welder", "soudeur", "roofer", "couvreur", "peintre", "hvac", "chauffagiste", "cvc", "climatisation", "chauffage", "climaticien", "genie climatique"},
         "engineering_technical": {"mechanical engineer", "electrical engineer", "civil engineer", "industrial engineer", "ingenieur mecanique", "ingenieur electrique", "ingenieur civil", "technicien", "technician", "maintenance"},
         "real_estate": {"real estate", "immobilier", "realtor", "property manager", "syndic"},
         "hospitality_food_service": {"hospitality", "hotellerie", "hotel", "restaurant", "waiter", "serveur", "serveuse", "barista", "barman", "bartender", "kitchen", "cuisine", "cuisinier", "cuisiniere", "commis de cuisine", "plongeur", "concierge"},
