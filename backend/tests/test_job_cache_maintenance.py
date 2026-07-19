@@ -564,8 +564,8 @@ def test_job_inventory_analytics_builds_source_breakdown_and_daily_series():
 
 def test_build_inventory_funnel_goals_marks_stale_and_volume():
     result = maintenance.build_inventory_funnel_goals(
-        total_jobs=1000,
-        valid_ab_jobs=300,
+        total_jobs=520_000,
+        valid_ab_jobs=100_000,
         imports_last_24h=80_000,
         imports_last_7d=520_000,
         imports_by_source_24h={"france_travail": 40_000, "greenhouse": 10_000},
@@ -573,6 +573,7 @@ def test_build_inventory_funnel_goals_marks_stale_and_volume():
         stale_jobs=100,
     )
     by_id = {goal["id"]: goal for goal in result["goals"]}
+    assert by_id["inventory_stock"]["status"] == "ok"
     assert by_id["weekly_imports"]["status"] == "ok"
     assert by_id["daily_imports"]["status"] == "ok"
     assert by_id["france_travail_daily"]["status"] == "ok"
