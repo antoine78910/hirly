@@ -5,7 +5,7 @@ French job markets, **city-only** (no role keyword) so each query captures the
 broadest local inventory (e.g. all Paris offers, not just "barista Paris").
 
 Results are upserted into Supabase (`jobs` table). A background loop rotates
-through the top 10 cities and re-runs frequently to pick up new postings.
+through cities and re-runs frequently to pick up new postings.
 
 Designed to run either:
 - as a background loop started at app startup (FT_HARVEST_ENABLED=true), or
@@ -26,7 +26,7 @@ from jobs_service import upsert_imported_jobs
 
 logger = logging.getLogger(__name__)
 
-# Top 10 French job markets, highest volume first.
+# Broader FR coverage: top metros first, then secondary markets.
 DEFAULT_HARVEST_CITIES = [
     "Paris",
     "Lyon",
@@ -38,6 +38,16 @@ DEFAULT_HARVEST_CITIES = [
     "Strasbourg",
     "Bordeaux",
     "Lille",
+    "Rennes",
+    "Reims",
+    "Saint-Etienne",
+    "Le Havre",
+    "Toulon",
+    "Grenoble",
+    "Dijon",
+    "Angers",
+    "Nimes",
+    "Villeurbanne",
 ]
 
 _harvest_cursor = 0
@@ -89,7 +99,7 @@ async def harvest_france_travail(
     dry_run: bool = False,
     start_offset: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Run one harvest slice: rotate through top cities with broad (no-role) queries."""
+    """Run one harvest slice: rotate through cities with broad (no-role) queries."""
     global _harvest_cursor
     if not is_job_provider_configured("france_travail"):
         return {"enabled": False, "reason": "france_travail_not_configured", "runs": []}
@@ -98,11 +108,11 @@ async def harvest_france_travail(
     if not cities:
         return {"enabled": True, "reason": "no_cities_configured", "runs": []}
 
-    # Default: sweep all top-10 cities each cycle.
     queries = max(1, min(int(max_queries or _env_int("FT_HARVEST_QUERIES_PER_RUN", 10)), len(cities)))
     page_size = max(10, min(_env_int("FT_HARVEST_PAGE_SIZE", 100), 150))
-    max_pages = max(1, min(_env_int("FT_HARVEST_MAX_PAGES", 3), 5))
-    pause_seconds = max(0.2, _env_float("FT_HARVEST_QUERY_PAUSE_SECONDS", 0.5))
+    max_pages = max(1, min(_env_int("FT_HARVEST_MAX_PAGES", 5), 10))
+    pause_seconds = max(0.0, _env_float("FT_HARVEST_QUERY_PAUSE_SECONDS", 0.15))
+    concurrency = max(1, min(_env_int("FT_HARVEST_CONCURRENCY", 3), 8))
 
     async with _harvest_lock:
         cursor = start_offset % len(cities) if start_offset is not None else _harvest_cursor % len(cities)
@@ -115,40 +125,59 @@ async def harvest_france_travail(
             "cursor_start": cursor,
             "cities_total": len(cities),
             "queries_planned": queries,
+            "concurrency": concurrency,
             "jobs_fetched": 0,
             "jobs_upserted": 0,
             "errors": [],
             "runs": [],
         }
-        for index in range(queries):
+        semaphore = asyncio.Semaphore(concurrency)
+        runs: List[Optional[Dict[str, Any]]] = [None] * queries
+
+        async def _harvest_city(index: int) -> None:
             city = cities[(cursor + index) % len(cities)]
             location_label = f"{city}, France"
             run: Dict[str, Any] = {"city": city, "location": location_label, "role": "(all)"}
-            try:
-                result = await provider.search(JobSearchQuery(
-                    role="",
-                    location=location_label,
-                    country="fr",
-                    limit=page_size * max_pages,
-                    page_size=page_size,
-                    max_pages=max_pages,
-                ))
-                jobs = result.jobs or []
-                run["fetched"] = len(jobs)
-                summary["jobs_fetched"] += len(jobs)
-                if jobs and not dry_run:
-                    stats = await upsert_imported_jobs(db, jobs)
-                    run["upserted"] = stats.get("total_imported", 0)
-                    summary["jobs_upserted"] += run["upserted"]
-            except Exception as exc:
-                message = f"{exc.__class__.__name__}: {str(exc)[:200]}"
-                run["error"] = message
-                summary["errors"].append({"city": city, "location": location_label, "error": message})
-                logger.warning("ft_harvest_query_failed city=%s error=%s", city, message)
-                await asyncio.sleep(pause_seconds * 4)
+            async with semaphore:
+                try:
+                    # Sequential mode only: parallel mode is paced by FT provider lock.
+                    if concurrency == 1 and index > 0 and pause_seconds > 0:
+                        await asyncio.sleep(pause_seconds)
+                    result = await provider.search(JobSearchQuery(
+                        role="",
+                        location=location_label,
+                        country="fr",
+                        limit=page_size * max_pages,
+                        page_size=page_size,
+                        max_pages=max_pages,
+                    ))
+                    jobs = result.jobs or []
+                    run["fetched"] = len(jobs)
+                    if jobs and not dry_run:
+                        stats = await upsert_imported_jobs(db, jobs)
+                        run["upserted"] = stats.get("total_imported", 0)
+                except Exception as exc:
+                    message = f"{exc.__class__.__name__}: {str(exc)[:200]}"
+                    run["error"] = message
+                    logger.warning("ft_harvest_query_failed city=%s error=%s", city, message)
+                    await asyncio.sleep(max(pause_seconds, 0.2) * 4)
+            runs[index] = run
+
+        await asyncio.gather(*(_harvest_city(index) for index in range(queries)))
+
+        for run in runs:
+            if not run:
+                continue
             summary["runs"].append(run)
-            if index < queries - 1:
-                await asyncio.sleep(pause_seconds)
+            summary["jobs_fetched"] += int(run.get("fetched") or 0)
+            summary["jobs_upserted"] += int(run.get("upserted") or 0)
+            if run.get("error"):
+                summary["errors"].append({
+                    "city": run.get("city"),
+                    "location": run.get("location"),
+                    "error": run["error"],
+                })
+
         if start_offset is None:
             _harvest_cursor = (cursor + queries) % len(cities)
         summary["cursor_next"] = (cursor + queries) % len(cities)
@@ -157,10 +186,11 @@ async def harvest_france_travail(
     global _last_run_summary
     _last_run_summary = summary
     logger.info(
-        "ft_harvest_run_complete mode=city_only cursor=%s->%s cities=%s fetched=%s upserted=%s errors=%s elapsed_ms=%s",
+        "ft_harvest_run_complete mode=city_only cursor=%s->%s cities=%s concurrency=%s fetched=%s upserted=%s errors=%s elapsed_ms=%s",
         summary["cursor_start"],
         summary["cursor_next"],
         queries,
+        concurrency,
         summary["jobs_fetched"],
         summary["jobs_upserted"],
         len(summary["errors"]),
@@ -178,7 +208,7 @@ async def run_france_travail_harvest_loop(db) -> None:
     if not harvest_enabled():
         logger.info("ft_harvest_loop_disabled")
         return
-    interval_minutes = max(5, _env_int("FT_HARVEST_INTERVAL_MINUTES", 720))
+    interval_minutes = max(5, _env_int("FT_HARVEST_INTERVAL_MINUTES", 60))
     initial_delay = max(0, _env_int("FT_HARVEST_INITIAL_DELAY_SECONDS", 60))
     logger.info(
         "ft_harvest_loop_started mode=city_only interval_minutes=%s initial_delay_seconds=%s cities=%s",

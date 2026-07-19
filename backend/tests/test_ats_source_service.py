@@ -232,6 +232,47 @@ def test_refresh_known_sources_respects_limit_and_age(monkeypatch):
     assert refreshed == ["a"]
 
 
+def test_refresh_known_sources_filters_by_env_country(monkeypatch):
+    old = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    db = _FakeDB(sources=[
+        {"id": "greenhouse:us", "ats_provider": "greenhouse", "source_key": "us", "is_active": True, "last_checked_at": old, "country_code": "us"},
+        {"id": "greenhouse:fr", "ats_provider": "greenhouse", "source_key": "fr", "is_active": True, "last_checked_at": old, "country_code": "fr"},
+    ])
+    refreshed = []
+
+    async def fake_refresh(*args, **kwargs):
+        refreshed.append(kwargs["source_key"])
+        return {"errors": [], "source_key": kwargs["source_key"]}
+
+    monkeypatch.setenv("JOBS_ATS_REFRESH_COUNTRY_CODE", "fr")
+    monkeypatch.setattr(service, "refresh_ats_source", fake_refresh)
+    result = asyncio.run(service.refresh_known_ats_sources(db, limit=10, older_than_hours=12))
+    assert result["country_code"] == "fr"
+    assert refreshed == ["fr"]
+
+
+def test_refresh_known_sources_runs_concurrently(monkeypatch):
+    old = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    db = _FakeDB(sources=[
+        {"id": f"greenhouse:{i}", "ats_provider": "greenhouse", "source_key": str(i), "is_active": True, "last_checked_at": old, "country_code": "fr"}
+        for i in range(4)
+    ])
+    in_flight = {"current": 0, "max": 0}
+
+    async def fake_refresh(*args, **kwargs):
+        in_flight["current"] += 1
+        in_flight["max"] = max(in_flight["max"], in_flight["current"])
+        await asyncio.sleep(0.05)
+        in_flight["current"] -= 1
+        return {"errors": [], "source_key": kwargs["source_key"]}
+
+    monkeypatch.setattr(service, "refresh_ats_source", fake_refresh)
+    result = asyncio.run(service.refresh_known_ats_sources(db, limit=4, older_than_hours=12, concurrency=3))
+    assert result["concurrency"] == 3
+    assert result["refreshed_sources_count"] == 4
+    assert in_flight["max"] >= 2
+
+
 def test_admin_ats_endpoint_is_protected():
     user = server.User(user_id="u", email="user@example.com", name="User")
     with pytest.raises(HTTPException) as exc:

@@ -16528,10 +16528,10 @@ async def startup_seed():
     asyncio.create_task(_startup_seed_impl())
     asyncio.create_task(_resume_pending_application_generation())
     asyncio.create_task(auto_apply_queue.startup(db))
-    # Temporarily paused (default True): DB was reported under load from the
-    # combined harvest/discovery crons plus manual bulk-harvest testing.
-    # Resume via PAUSE_JOB_MAINTENANCE_CRONS=false in Railway once load has
-    # settled -- no redeploy needed, this is read fresh on every restart.
+    # Default True protects Supabase under load. For continuous FR inventory
+    # growth set PAUSE_JOB_MAINTENANCE_CRONS=false (read on each restart).
+    # Recommended with light feed + purge: FT + ATS loops on; keep JSearch
+    # harvest off unless quota allows (JSEARCH_HARVEST_ENABLED=true).
     if _env_bool("PAUSE_JOB_MAINTENANCE_CRONS", True):
         logger.warning("job_maintenance_crons_paused reason=db_load_protection")
     else:

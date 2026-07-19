@@ -200,6 +200,12 @@ async def refresh_ats_source(
         return summary
 
 
+def refresh_country_code_filter() -> Optional[str]:
+    """Optional hard filter for ATS refresh (e.g. JOBS_ATS_REFRESH_COUNTRY_CODE=fr)."""
+    raw = (os.environ.get("JOBS_ATS_REFRESH_COUNTRY_CODE") or "").strip().lower()
+    return raw or None
+
+
 async def refresh_known_ats_sources(
     db,
     *,
@@ -209,39 +215,59 @@ async def refresh_known_ats_sources(
     older_than_hours: Optional[int] = None,
     dry_run: bool = False,
     prioritize_europe: bool = True,
+    concurrency: Optional[int] = None,
 ) -> Dict[str, Any]:
-    refresh_limit = max(1, min(int(limit or env_int("JOBS_ATS_REFRESH_LIMIT", 25)), 100))
+    refresh_limit = max(1, min(int(limit or env_int("JOBS_ATS_REFRESH_LIMIT", 40)), 150))
     hours = max(1, int(older_than_hours if older_than_hours is not None else env_int("JOBS_ATS_REFRESH_OLDER_THAN_HOURS", 12)))
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    resolved_country = (country_code or refresh_country_code_filter() or "").strip().lower() or None
+    max_concurrency = max(1, min(int(concurrency if concurrency is not None else env_int("JOBS_ATS_REFRESH_CONCURRENCY", 5)), 12))
     query: Dict[str, Any] = {"is_active": True}
     if provider:
         query["ats_provider"] = provider.strip().lower()
-    if country_code:
-        query["country_code"] = country_code.strip().lower()
+    if resolved_country:
+        query["country_code"] = resolved_country
     rows = await db.ats_company_sources.find(query, {"_id": 0}).limit(refresh_limit * 5).to_list(refresh_limit * 5)
     stale = [row for row in rows if _checked_before(row.get("last_checked_at"), cutoff)]
-    if prioritize_europe and not country_code:
+    if prioritize_europe and not resolved_country:
         priority_codes = set(priority_country_codes())
         stale.sort(key=lambda row: 0 if str(row.get("country_code") or "").lower() in priority_codes else 1)
     candidates = stale[:refresh_limit]
     summary = {
         "dry_run": dry_run,
         "provider": provider,
-        "country_code": country_code,
+        "country_code": resolved_country,
         "limit": refresh_limit,
+        "concurrency": max_concurrency,
         "scanned_count": len(rows),
         "refreshed_sources_count": 0,
         "runs": [],
         "errors": [],
     }
-    logger.info("ats_known_sources_refresh_start query=%s candidates=%s dry_run=%s", query, len(candidates), dry_run)
-    for source in candidates:
-        run = await refresh_ats_source(
-            db,
-            ats_provider=source.get("ats_provider"),
-            source_key=source.get("source_key"),
-            dry_run=dry_run,
-        )
+    logger.info(
+        "ats_known_sources_refresh_start query=%s candidates=%s concurrency=%s dry_run=%s",
+        query,
+        len(candidates),
+        max_concurrency,
+        dry_run,
+    )
+    semaphore = asyncio.Semaphore(max_concurrency)
+    runs: List[Optional[Dict[str, Any]]] = [None] * len(candidates)
+
+    async def _refresh_one(index: int, source: Dict[str, Any]) -> None:
+        async with semaphore:
+            run = await refresh_ats_source(
+                db,
+                ats_provider=source.get("ats_provider"),
+                source_key=source.get("source_key"),
+                dry_run=dry_run,
+            )
+            runs[index] = run
+
+    await asyncio.gather(*(_refresh_one(index, source) for index, source in enumerate(candidates)))
+    for run in runs:
+        if not run:
+            continue
         summary["runs"].append(run)
         if run.get("errors"):
             summary["errors"].extend(run["errors"])
@@ -263,9 +289,11 @@ async def run_ats_direct_maintenance(
         discover = await discover_ats_sources_prioritizing_europe(db, dry_run=dry_run)
     refresh = await refresh_known_ats_sources(
         db,
-        limit=env_int("JOBS_ATS_REFRESH_LIMIT", 25),
+        country_code=refresh_country_code_filter(),
+        limit=env_int("JOBS_ATS_REFRESH_LIMIT", 40),
         older_than_hours=env_int("JOBS_ATS_REFRESH_OLDER_THAN_HOURS", 12),
         dry_run=dry_run,
+        concurrency=env_int("JOBS_ATS_REFRESH_CONCURRENCY", 5),
     )
     friendly_company_pages = None
     if env_bool("JOBS_DISCOVER_FRIENDLY_COMPANY_PAGES_ENABLED", True):

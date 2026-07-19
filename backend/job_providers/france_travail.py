@@ -232,6 +232,26 @@ class FranceTravailProvider:
                 timeout = 12.0
         self.timeout = max(1.0, min(float(timeout), 30.0))
 
+    # Shared across instances so parallel city harvest stays under FT ~10 req/s.
+    _pace_lock: Optional[asyncio.Lock] = None
+    _last_request_monotonic: float = 0.0
+
+    @classmethod
+    def _get_pace_lock(cls) -> asyncio.Lock:
+        if cls._pace_lock is None:
+            cls._pace_lock = asyncio.Lock()
+        return cls._pace_lock
+
+    async def _pace_request(self) -> None:
+        """Serialize outbound FT HTTP calls with the configured interval."""
+        lock = self._get_pace_lock()
+        async with lock:
+            now = time.monotonic()
+            wait = self._request_interval() - (now - FranceTravailProvider._last_request_monotonic)
+            if wait > 0:
+                await asyncio.sleep(wait)
+            FranceTravailProvider._last_request_monotonic = time.monotonic()
+
     async def search(self, query: JobSearchQuery) -> ProviderResult:
         country = (query.country or "fr").lower()
         if country not in ("fr", "france"):
@@ -320,18 +340,18 @@ class FranceTravailProvider:
         for page_index in range(max_pages):
             if len(rows) >= target_count:
                 break
-            if page_index > 0:
-                await asyncio.sleep(self._request_interval())
             start = page_index * page_size
             end = start + page_size - 1
             page_params = dict(params)
             page_params["range"] = f"{start}-{end}"
+            await self._pace_request()
             response = await client.get(self.search_url, params=page_params, headers=headers)
             if response.status_code == 204:
                 break
             if response.status_code == 429:
                 retry_after = self._retry_after_seconds(response)
                 await asyncio.sleep(retry_after)
+                await self._pace_request()
                 response = await client.get(self.search_url, params=page_params, headers=headers)
             response.raise_for_status()
             payload = response.json() if response.content else {}
