@@ -10,7 +10,7 @@
     "format": "bun run --workspaces --if-present format",
     "lint": "bun run --workspaces --if-present lint",
     "typecheck": "bun run --workspaces --if-present typecheck",
-    "test": "bun test --pass-with-no-tests tests/workspace-isolation.test.ts && bun run --workspaces --if-present test",
+    "test": "bun test --pass-with-no-tests ./tests/workspace-isolation.test.ts && bun run --workspaces --if-present test",
     "build": "bun run --workspaces --if-present build"
   },
   "devDependencies": {
