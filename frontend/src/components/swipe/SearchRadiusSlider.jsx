@@ -19,11 +19,29 @@ export default function SearchRadiusSlider({
 }) {
   const radiusKm = radiusToKm(value);
   const [expanded, setExpanded] = useState(false);
+  const [liveRadiusKm, setLiveRadiusKm] = useState(radiusKm);
   const rootRef = useRef(null);
 
-  const handleChange = ([next]) => {
+  useEffect(() => {
+    setLiveRadiusKm(radiusKm);
+  }, [radiusKm]);
+
+  // onValueChange fires continuously on every drag tick -- only update the
+  // displayed number here, never the parent. A single drag can fire 100+ of
+  // these; if each one called onChange (which triggers a full feed reload in
+  // Swipe.jsx), the feed gets reset mid-request over and over and never
+  // finishes loading (confirmed: one user's drag fired 154 reloads in ~30s).
+  // onValueCommit fires once, when the drag/keypress interaction ends, which
+  // is the right moment to actually apply the new radius.
+  const handleLiveChange = ([next]) => {
+    setLiveRadiusKm(next);
+  };
+
+  const handleCommit = ([next]) => {
     onChange?.(radiusFromKm(next));
   };
+
+  const displayValue = radiusFromKm(liveRadiusKm);
 
   useEffect(() => {
     if (!expanded) return undefined;
@@ -52,7 +70,7 @@ export default function SearchRadiusSlider({
         >
           <span className="text-zinc-500 dark:text-zinc-400">{label}</span>
           <span className="font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
-            {formatSearchRadius(value)}
+            {formatSearchRadius(displayValue)}
           </span>
         </button>
         {expanded ? (
@@ -60,8 +78,9 @@ export default function SearchRadiusSlider({
             min={MIN_SEARCH_RADIUS_KM}
             max={MAX_SEARCH_RADIUS_KM}
             step={1}
-            value={[radiusKm]}
-            onValueChange={handleChange}
+            value={[liveRadiusKm]}
+            onValueChange={handleLiveChange}
+            onValueCommit={handleCommit}
             className="mt-2 py-0.5"
             aria-label={label}
           />
@@ -74,14 +93,15 @@ export default function SearchRadiusSlider({
     <section data-testid={testId}>
       <div className="mb-3 flex items-center justify-between gap-3">
         <h3 className="font-display text-2xl font-bold text-inherit">{label}</h3>
-        <span className="text-sm font-semibold text-linkedin">{formatSearchRadius(value)}</span>
+        <span className="text-sm font-semibold text-linkedin">{formatSearchRadius(displayValue)}</span>
       </div>
       <Slider
         min={MIN_SEARCH_RADIUS_KM}
         max={MAX_SEARCH_RADIUS_KM}
         step={1}
-        value={[radiusKm]}
-        onValueChange={handleChange}
+        value={[liveRadiusKm]}
+        onValueChange={handleLiveChange}
+        onValueCommit={handleCommit}
         aria-label={label}
       />
       <div className="mt-2 flex justify-between text-[11px] text-sprout-muted">
