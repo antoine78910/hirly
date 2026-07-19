@@ -52,6 +52,19 @@ npm install --legacy-peer-deps
 npm start
 ```
 
+## Engineering Stack Policy
+
+Hirly fixes existing Python behavior in place, builds new isolated backend
+capabilities in TypeScript, and migrates bounded Python capabilities when
+substantial product work reaches them. See `AGENTS.md` and
+`docs/engineering/stack-migration-policy.md`.
+
+Enable the tracked stack-policy pre-commit hook once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
 ## Greenhouse Submission Safety
 
 `GREENHOUSE_SUBMIT_DRY_RUN=true` is the default. With dry run enabled, the submit endpoint validates and builds the multipart payload but does not send the application to Greenhouse.
