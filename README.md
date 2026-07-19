@@ -65,6 +65,7 @@ bun run lint
 bun run typecheck
 bun run test
 bun run build
+bun test tests/workspace-isolation.test.ts
 ```
 
 Run the legacy frontend from its own directory with its existing npm install
@@ -80,6 +81,11 @@ The root `vercel.json`, `frontend/vercel.json`, `frontend/package.json`, and
 `frontend/package-lock.json` remain authoritative for the current frontend
 deployment. New workspace applications must use separate deployment projects
 and must not take over existing routes.
+
+The local checks above do not create or validate a Vercel preview. Previewing
+the current production project with root Bun files present is an external,
+approval-gated isolation check and must be completed before activating a root
+workspace deployment path.
 
 ## Engineering Stack Policy
 
