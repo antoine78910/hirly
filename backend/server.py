@@ -10979,7 +10979,7 @@ def _admin_email_set() -> set[str]:
     return {
         "anto.delbos@gmail.com",
         "oudrhiriyouneslfim@gmail.com",
-        "odaissa75@gmail.com",
+        "tboutron@lssm.co",
     } | _env_email_set("ADMIN_EMAILS")
 
 
