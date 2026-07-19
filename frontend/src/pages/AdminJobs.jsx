@@ -9,7 +9,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Briefcase, Loader2, RefreshCw } from "lucide-react";
+import { Briefcase, CheckCircle2, AlertTriangle, XCircle, Loader2, RefreshCw, Target } from "lucide-react";
 import { api } from "../lib/api";
 import { adminApiErrorMessage } from "../lib/adminApi";
 import { Button } from "../components/ui/button";
@@ -17,6 +17,158 @@ import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
 
 const fmt = (value) => Number(value || 0).toLocaleString();
+
+const STATUS_STYLES = {
+  ok: {
+    badge: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+    bar: "bg-emerald-500",
+    label: "On track",
+    Icon: CheckCircle2,
+  },
+  warn: {
+    badge: "bg-amber-50 text-amber-800 ring-amber-200",
+    bar: "bg-amber-500",
+    label: "Watch",
+    Icon: AlertTriangle,
+  },
+  bad: {
+    badge: "bg-rose-50 text-rose-700 ring-rose-200",
+    bar: "bg-rose-500",
+    label: "Needs attention",
+    Icon: XCircle,
+  },
+};
+
+function statusMeta(status) {
+  return STATUS_STYLES[status] || STATUS_STYLES.warn;
+}
+
+function formatGoalValue(goal) {
+  const value = goal?.current;
+  if (goal?.unit === "%") return `${Number(value || 0).toFixed(1)}%`;
+  return fmt(value);
+}
+
+function formatGoalTarget(goal) {
+  if (goal?.unit === "%") {
+    const op = goal.direction === "lte" ? "≤" : "≥";
+    return `${op} ${Number(goal.target || 0)}%`;
+  }
+  const op = goal.direction === "lte" ? "≤" : "≥";
+  return `${op} ${fmt(goal.target)} ${goal.unit || ""}`.trim();
+}
+
+function FunnelGoalsPanel({ funnelGoals }) {
+  if (!funnelGoals?.goals?.length) return null;
+  const overall = statusMeta(funnelGoals.overall_status);
+  const OverallIcon = overall.Icon;
+  const funnel = funnelGoals.funnel || [];
+  const signals = funnelGoals.signals || {};
+
+  return (
+    <section className="overflow-hidden rounded-xl border border-zinc-200 bg-gradient-to-b from-zinc-50 to-white shadow-sm">
+      <div className="flex flex-col gap-3 border-b border-zinc-200/80 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 rounded-lg bg-zinc-900 p-2 text-white">
+            <Target className="h-4 w-4" />
+          </div>
+          <div>
+            <h2 className="font-display text-lg font-bold text-zinc-900">Crawl funnel goals</h2>
+            <p className="text-sm text-zinc-500">
+              Track harvest health: volume, France Travail, quality, and ATS discovery.
+            </p>
+          </div>
+        </div>
+        <span
+          className={`inline-flex items-center gap-1.5 self-start rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${overall.badge}`}
+        >
+          <OverallIcon className="h-3.5 w-3.5" />
+          {overall.label}
+        </span>
+      </div>
+
+      {funnel.length ? (
+        <div className="border-b border-zinc-100 px-5 py-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch">
+            {funnel.map((step, index) => (
+              <div key={step.id} className="flex flex-1 items-stretch gap-3">
+                <div className="flex-1 rounded-lg border border-zinc-200 bg-white px-3 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">{step.label}</p>
+                  <p className="mt-1 font-display text-2xl font-bold text-zinc-900">{fmt(step.value)}</p>
+                </div>
+                {index < funnel.length - 1 ? (
+                  <div className="hidden items-center text-zinc-300 lg:flex" aria-hidden>
+                    →
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-3">
+        {funnelGoals.goals.map((goal) => {
+          const meta = statusMeta(goal.status);
+          const StatusIcon = meta.Icon;
+          return (
+            <div
+              key={goal.id}
+              className="rounded-lg border border-zinc-200 bg-white p-4 transition-shadow hover:shadow-sm"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-zinc-900">{goal.label}</p>
+                  <p className="mt-1 text-xs leading-relaxed text-zinc-500">{goal.description}</p>
+                </div>
+                <span
+                  className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${meta.badge}`}
+                >
+                  <StatusIcon className="h-3 w-3" />
+                  {meta.label}
+                </span>
+              </div>
+              <div className="mt-4 flex items-end justify-between gap-3">
+                <p className="font-display text-3xl font-bold text-zinc-950">{formatGoalValue(goal)}</p>
+                <p className="pb-1 text-xs font-medium text-zinc-500">Goal {formatGoalTarget(goal)}</p>
+              </div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-zinc-100">
+                <div
+                  className={`h-full rounded-full transition-[width] duration-500 ${meta.bar}`}
+                  style={{ width: `${Math.max(4, Math.min(100, Number(goal.progress_pct || 0)))}%` }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {(signals.ft_last_run_fetched != null || signals.ats_last_run_refreshed != null) ? (
+        <div className="flex flex-wrap gap-x-5 gap-y-2 border-t border-zinc-100 px-5 py-3 text-xs text-zinc-500">
+          {signals.ft_last_run_fetched != null ? (
+            <span>
+              Last FT run: {fmt(signals.ft_last_run_fetched)} fetched
+              {signals.ft_last_run_errors ? ` · ${signals.ft_last_run_errors} errors` : " · clean"}
+              {signals.ft_last_run_elapsed_ms != null ? ` · ${fmt(signals.ft_last_run_elapsed_ms)} ms` : ""}
+            </span>
+          ) : null}
+          {signals.ats_last_run_refreshed != null ? (
+            <span>
+              Last ATS maintenance: {fmt(signals.ats_last_run_refreshed)} boards refreshed
+              {signals.ats_last_run_errors ? ` · ${signals.ats_last_run_errors} errors` : ""}
+            </span>
+          ) : (
+            <span>No in-process harvest summary yet (appears after a background or admin run).</span>
+          )}
+        </div>
+      ) : (
+        <div className="border-t border-zinc-100 px-5 py-3 text-xs text-zinc-500">
+          Live harvest signals appear after France Travail / ATS maintenance runs on this server.
+        </div>
+      )}
+    </section>
+  );
+}
 
 const SOURCE_COLORS = {
   jsearch: "#6366f1",
@@ -228,6 +380,8 @@ export default function AdminJobs() {
               )}
             </div>
           </section>
+
+          <FunnelGoalsPanel funnelGoals={data?.funnel_goals} />
 
           <section className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
             <h2 className="font-display text-lg font-bold text-zinc-900">Sources breakdown</h2>

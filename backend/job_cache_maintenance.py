@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 
 from ats_source_service import (
     discover_ats_sources_from_cached_jobs,
+    last_maintenance_summary as last_ats_maintenance_summary,
     refresh_known_ats_sources,
     run_ats_direct_maintenance,
 )
@@ -712,6 +713,176 @@ SOURCE_DISPLAY_NAMES = {
     "unknown": "Unknown",
 }
 
+DIRECT_ATS_PROVIDERS = {
+    "greenhouse",
+    "lever",
+    "ashby",
+    "smartrecruiters",
+    "recruitee",
+    "personio",
+    "teamtailor",
+    "workday",
+    "flatchr",
+    "taleez",
+    "jobaffinity",
+}
+
+
+def _goal_status(current: float, target: float, *, direction: str = "gte") -> str:
+    if target <= 0:
+        return "ok"
+    if direction == "lte":
+        if current <= target:
+            return "ok"
+        if current <= target * 1.5:
+            return "warn"
+        return "bad"
+    if current >= target:
+        return "ok"
+    if current >= target * 0.5:
+        return "warn"
+    return "bad"
+
+
+def _goal_progress_pct(current: float, target: float, *, direction: str = "gte") -> float:
+    if target <= 0:
+        return 100.0
+    if direction == "lte":
+        # Full bar when at/under target; shrinks as we exceed it.
+        if current <= target:
+            return 100.0
+        return max(0.0, min(100.0, (target / current) * 100.0))
+    return max(0.0, min(100.0, (current / target) * 100.0))
+
+
+def _make_goal(
+    *,
+    goal_id: str,
+    label: str,
+    description: str,
+    current: float,
+    target: float,
+    unit: str,
+    direction: str = "gte",
+) -> Dict[str, Any]:
+    status = _goal_status(current, target, direction=direction)
+    return {
+        "id": goal_id,
+        "label": label,
+        "description": description,
+        "current": round(current, 1) if isinstance(current, float) else int(current),
+        "target": target,
+        "unit": unit,
+        "direction": direction,
+        "status": status,
+        "progress_pct": round(_goal_progress_pct(current, target, direction=direction), 1),
+    }
+
+
+def build_inventory_funnel_goals(
+    *,
+    total_jobs: int,
+    valid_ab_jobs: int,
+    imports_last_24h: int,
+    imports_by_source_24h: Dict[str, int],
+    ats_sources_count: int,
+    stale_jobs: int,
+    ft_last_run: Optional[Dict[str, Any]] = None,
+    ats_last_run: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Operational goals for the FR crawl → inventory → auto-apply funnel."""
+    ft_24h = int(imports_by_source_24h.get("france_travail") or 0)
+    direct_ats_24h = sum(int(imports_by_source_24h.get(p) or 0) for p in DIRECT_ATS_PROVIDERS)
+    ab_share = (valid_ab_jobs / total_jobs * 100.0) if total_jobs else 0.0
+    stale_share = (stale_jobs / total_jobs * 100.0) if total_jobs else 0.0
+    direct_share_24h = (direct_ats_24h / imports_last_24h * 100.0) if imports_last_24h else 0.0
+
+    goals = [
+        _make_goal(
+            goal_id="daily_imports",
+            label="Daily import volume",
+            description="Jobs touched (imported_at) in the last 24h across all sources.",
+            current=imports_last_24h,
+            target=float(env_int("JOBS_GOAL_DAILY_IMPORTS", 1500)),
+            unit="jobs/day",
+        ),
+        _make_goal(
+            goal_id="france_travail_daily",
+            label="France Travail daily",
+            description="FT API harvest activity in the last 24h. Warns if the city loop stalls.",
+            current=ft_24h,
+            target=float(env_int("JOBS_GOAL_FT_DAILY", 400)),
+            unit="jobs/day",
+        ),
+        _make_goal(
+            goal_id="auto_apply_ready_share",
+            label="Auto-apply ready (A/B)",
+            description="Share of inventory in validated tiers A/B — feed + auto-apply quality.",
+            current=ab_share,
+            target=float(env_int("JOBS_GOAL_AB_SHARE_PCT", 20)),
+            unit="%",
+        ),
+        _make_goal(
+            goal_id="direct_ats_share",
+            label="Direct ATS share (24h)",
+            description="Share of last-24h imports from company boards (Greenhouse, SR, …).",
+            current=direct_share_24h,
+            target=float(env_int("JOBS_GOAL_ATS_SHARE_PCT", 15)),
+            unit="%",
+        ),
+        _make_goal(
+            goal_id="ats_boards",
+            label="ATS boards tracked",
+            description="Known company boards in ats_company_sources (discovery funnel).",
+            current=ats_sources_count,
+            target=float(env_int("JOBS_GOAL_ATS_SOURCES", 100)),
+            unit="boards",
+        ),
+        _make_goal(
+            goal_id="stale_inventory",
+            label="Stale inventory",
+            description="Jobs not seen recently — high = harvest not refreshing or dead links.",
+            current=stale_share,
+            target=float(env_int("JOBS_GOAL_MAX_STALE_PCT", 25)),
+            unit="%",
+            direction="lte",
+        ),
+    ]
+
+    status_rank = {"ok": 0, "warn": 1, "bad": 2}
+    overall = "ok"
+    for goal in goals:
+        if status_rank[goal["status"]] > status_rank[overall]:
+            overall = goal["status"]
+
+    ft_errors = len((ft_last_run or {}).get("errors") or [])
+    ats_errors = len((ats_last_run or {}).get("errors") or [])
+    if ft_errors >= 3 or ats_errors >= 3:
+        overall = "bad"
+    elif (ft_errors or ats_errors) and overall == "ok":
+        overall = "warn"
+
+    return {
+        "overall_status": overall,
+        "goals": goals,
+        "funnel": [
+            {"id": "imports_24h", "label": "Imports 24h", "value": imports_last_24h},
+            {"id": "france_travail", "label": "France Travail", "value": ft_24h},
+            {"id": "auto_apply_ready", "label": "A/B ready", "value": valid_ab_jobs},
+            {"id": "ats_boards", "label": "ATS boards", "value": ats_sources_count},
+            {"id": "direct_ats_24h", "label": "Direct ATS 24h", "value": direct_ats_24h},
+        ],
+        "signals": {
+            "ft_last_run_fetched": (ft_last_run or {}).get("jobs_fetched"),
+            "ft_last_run_errors": ft_errors,
+            "ft_last_run_elapsed_ms": (ft_last_run or {}).get("elapsed_ms"),
+            "ats_last_run_refreshed": ((ats_last_run or {}).get("refresh") or {}).get("refreshed_sources_count"),
+            "ats_last_run_errors": ats_errors,
+            "direct_ats_imports_24h": direct_ats_24h,
+            "stale_jobs": stale_jobs,
+        },
+    }
+
 
 def _normalize_job_source(provider: Any) -> str:
     text = str(provider or "unknown").strip().lower()
@@ -815,6 +986,12 @@ async def job_inventory_analytics(db, *, days: int = 30) -> Dict[str, Any]:
     cutoff_7d = (now - timedelta(days=7)).date().isoformat()
     imports_last_24h = sum(day["total"] for day in daily_series if day["date"] >= cutoff_24h)
     imports_last_7d = sum(day["total"] for day in daily_series if day["date"] >= cutoff_7d)
+    imports_by_source_24h: Dict[str, int] = {}
+    for day in daily_series:
+        if day["date"] < cutoff_24h:
+            continue
+        for source, count in (day.get("sources") or {}).items():
+            imports_by_source_24h[source] = imports_by_source_24h.get(source, 0) + int(count)
 
     by_source_list = sorted(
         [
@@ -830,6 +1007,44 @@ async def job_inventory_analytics(db, *, days: int = 30) -> Dict[str, Any]:
         reverse=True,
     )
 
+    ats_sources_count = 0
+    if hasattr(db, "ats_company_sources"):
+        try:
+            ats_sources_count = await db.ats_company_sources.count_documents({})
+        except Exception:
+            ats_sources_count = 0
+
+    stale_after_days = max(1, env_int("JOBS_STALE_AFTER_DAYS", 30))
+    stale_cutoff = (now - timedelta(days=stale_after_days)).isoformat()
+    stale_jobs = 0
+    try:
+        stale_jobs = await db.jobs.count_documents({"last_seen_at": {"$lte": stale_cutoff}})
+    except Exception:
+        stale_jobs = 0
+
+    ft_last_run = None
+    try:
+        from france_travail_harvest import last_harvest_summary
+        ft_last_run = last_harvest_summary()
+    except Exception:
+        ft_last_run = None
+    ats_last_run = None
+    try:
+        ats_last_run = last_ats_maintenance_summary()
+    except Exception:
+        ats_last_run = None
+
+    funnel_goals = build_inventory_funnel_goals(
+        total_jobs=total_jobs,
+        valid_ab_jobs=valid_ab_jobs,
+        imports_last_24h=imports_last_24h,
+        imports_by_source_24h=imports_by_source_24h,
+        ats_sources_count=ats_sources_count,
+        stale_jobs=stale_jobs,
+        ft_last_run=ft_last_run,
+        ats_last_run=ats_last_run,
+    )
+
     return {
         "total_jobs": total_jobs,
         "valid_ab_jobs": valid_ab_jobs,
@@ -841,6 +1056,7 @@ async def job_inventory_analytics(db, *, days: int = 30) -> Dict[str, Any]:
         "period_days": period_days,
         "activity_rows": len(rows),
         "activity_capped": len(rows) >= 15000,
+        "funnel_goals": funnel_goals,
     }
 
 

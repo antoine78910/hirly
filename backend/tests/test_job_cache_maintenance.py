@@ -539,12 +539,13 @@ def test_job_inventory_analytics_builds_source_breakdown_and_daily_series():
     yesterday = (now - timedelta(days=1)).isoformat()
     week_ago = (now - timedelta(days=8)).isoformat()
     jobs = [
-        _job(1, provider="jsearch", imported_at=yesterday),
-        _job(2, provider="jsearch", imported_at=yesterday),
-        _job(3, provider="france_travail", imported_at=yesterday),
-        _job(4, provider="greenhouse", imported_at=week_ago),
+        _job(1, provider="jsearch", imported_at=yesterday, validation_status="valid", applyability_tier="A"),
+        _job(2, provider="jsearch", imported_at=yesterday, validation_status="valid", applyability_tier="B"),
+        _job(3, provider="france_travail", imported_at=yesterday, validation_status="valid", applyability_tier="A"),
+        _job(4, provider="greenhouse", imported_at=week_ago, validation_status="valid", applyability_tier="A"),
     ]
     db = _FakeDB(jobs)
+    db.ats_company_sources = _Collection([{"id": "greenhouse:acme"}, {"id": "greenhouse:beta"}])
     result = asyncio.run(maintenance.job_inventory_analytics(db, days=14))
 
     assert result["total_jobs"] == 4
@@ -553,6 +554,37 @@ def test_job_inventory_analytics_builds_source_breakdown_and_daily_series():
     assert any(row["source"] == "jsearch" and row["count"] == 2 for row in result["by_source"])
     assert result["daily"]
     assert "jsearch" in result["chart_sources"]
+    assert result["funnel_goals"]["overall_status"] in {"ok", "warn", "bad"}
+    assert len(result["funnel_goals"]["goals"]) == 6
+    assert len(result["funnel_goals"]["funnel"]) == 5
+    assert result["funnel_goals"]["signals"]["stale_jobs"] >= 0
+
+
+def test_build_inventory_funnel_goals_marks_stale_and_volume():
+    result = maintenance.build_inventory_funnel_goals(
+        total_jobs=1000,
+        valid_ab_jobs=300,
+        imports_last_24h=2000,
+        imports_by_source_24h={"france_travail": 800, "greenhouse": 400},
+        ats_sources_count=120,
+        stale_jobs=100,
+    )
+    by_id = {goal["id"]: goal for goal in result["goals"]}
+    assert by_id["daily_imports"]["status"] == "ok"
+    assert by_id["france_travail_daily"]["status"] == "ok"
+    assert by_id["auto_apply_ready_share"]["status"] == "ok"
+    assert by_id["stale_inventory"]["status"] == "ok"
+    assert result["overall_status"] == "ok"
+
+    weak = maintenance.build_inventory_funnel_goals(
+        total_jobs=1000,
+        valid_ab_jobs=10,
+        imports_last_24h=50,
+        imports_by_source_24h={"jsearch": 50},
+        ats_sources_count=2,
+        stale_jobs=600,
+    )
+    assert weak["overall_status"] == "bad"
 
 
 def test_admin_maintenance_disabled_blocks_endpoint(monkeypatch):
