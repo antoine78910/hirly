@@ -136,7 +136,9 @@ def _csv_env(name: str) -> List[str]:
 
 
 def harvest_enabled() -> bool:
-    return _env_bool("JSEARCH_HARVEST_ENABLED", True) and is_job_provider_configured("jsearch")
+    # Harvesting can spend API quota without a user request, so it must be an
+    # explicit deployment choice. Feed-triggered JSearch discovery is separate.
+    return _env_bool("JSEARCH_HARVEST_ENABLED", False) and is_job_provider_configured("jsearch")
 
 
 def _harvest_cities() -> List[str]:
