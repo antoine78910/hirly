@@ -10976,7 +10976,11 @@ async def _set_user_language(user_id: str, value: str) -> None:
 
 
 def _admin_email_set() -> set[str]:
-    return {"anto.delbos@gmail.com", "oudrhiriyouneslfim@gmail.com"} | _env_email_set("ADMIN_EMAILS")
+    return {
+        "anto.delbos@gmail.com",
+        "oudrhiriyouneslfim@gmail.com",
+        "odaissa75@gmail.com",
+    } | _env_email_set("ADMIN_EMAILS")
 
 
 def _is_admin_email(email: Optional[str]) -> bool:
