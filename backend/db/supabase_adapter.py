@@ -223,9 +223,52 @@ TABLE_FILTER_COLUMNS = {
 }
 MAX_READ_ROWS = 10000
 READ_PAGE_SIZE = 1000
-# Jobs keep most feed fields in the JSONB document. Selecting non-column fields
-# through PostgREST raises a 400 and makes /jobs/feed fail, so read the document.
+# Full document — used for hydrate / apply / admin detail.
 JOB_FEED_SELECT = "data"
+# Light feed pool: table columns only (no JSONB). Cuts egress ~10–50× vs select=data.
+# Final swipe cards call hydrate to load full `data` for the few returned jobs.
+JOB_FEED_LIGHT_SELECT = ",".join(
+    [
+        "job_id",
+        "provider",
+        "external_id",
+        "title",
+        "normalized_title",
+        "company",
+        "normalized_company",
+        "location",
+        "city",
+        "region",
+        "country_code",
+        "remote",
+        "salary_min",
+        "salary_max",
+        "currency",
+        "posted_at",
+        "imported_at",
+        "last_seen_at",
+        "provider_search_key",
+        "ats_provider",
+        "auto_apply_supported",
+        "manual_fulfillment_ready",
+        "apply_fulfillment_status",
+        "apply_url_provider",
+        "selected_apply_url",
+        "validation_status",
+        "validation_reason",
+        "validation_checked_at",
+        "requires_login",
+        "requires_account_creation",
+        "captcha_detected",
+        "has_cv_upload",
+        "has_cover_letter",
+        "has_custom_questions",
+        "applyability_score",
+        "applyability_tier",
+        "rejection_reason",
+        "fingerprint",
+    ]
+)
 
 _shared_http_client: Optional[httpx.AsyncClient] = None
 
@@ -630,10 +673,22 @@ def _supabase_row(table: str, document: Document) -> Dict[str, Any]:
 def _restore_document(row: Dict[str, Any]) -> Document:
     data = row.get("data")
     if isinstance(data, dict):
-        return dict(data)
+        # Prefer JSONB document, but keep any top-level columns that were also selected.
+        restored = dict(data)
+        for key, value in row.items():
+            if key in {"data", "migrated_at"}:
+                continue
+            if value is not None and (key not in restored or restored.get(key) in (None, "")):
+                restored[key] = value
+        return restored
     restored = dict(row)
     restored.pop("data", None)
     restored.pop("migrated_at", None)
+    # Light feed rows: expose apply URL aliases expected by swipe cards.
+    if restored.get("selected_apply_url") and not restored.get("external_url"):
+        restored["external_url"] = restored["selected_apply_url"]
+    if restored.get("selected_apply_url") and not restored.get("apply_url"):
+        restored["apply_url"] = restored["selected_apply_url"]
     return restored
 
 
@@ -801,6 +856,10 @@ def _postgrest_filter_params(table: str, filter: Optional[Filter]) -> Optional[D
                 params[param_key] = f"gte.{_postgrest_value(condition.get('$gte'))}"
             elif "$lte" in condition and len(condition) == 1:
                 params[param_key] = f"lte.{_postgrest_value(condition.get('$lte'))}"
+            elif "$lt" in condition and len(condition) == 1:
+                params[param_key] = f"lt.{_postgrest_value(condition.get('$lt'))}"
+            elif "$gt" in condition and len(condition) == 1:
+                params[param_key] = f"gt.{_postgrest_value(condition.get('$gt'))}"
             else:
                 return None
         else:
@@ -831,25 +890,39 @@ class SupabaseCursorAdapter(CursorPort):
         self._limit = count
         return self
 
+    def _postgrest_order(self) -> Optional[str]:
+        """Convert sort spec to a PostgREST order clause when columns are pushable."""
+        if not self._sort_spec:
+            if self.collection.table_name == "jobs":
+                return "imported_at.desc.nullslast"
+            return None
+        parts: List[str] = []
+        filter_columns = TABLE_FILTER_COLUMNS.get(self.collection.table_name) or set()
+        for key, direction in self._sort_spec:
+            if key not in filter_columns and self.collection.table_name != "jobs":
+                return None
+            if key not in filter_columns and key != "imported_at":
+                return None
+            suffix = "desc" if direction < 0 else "asc"
+            parts.append(f"{key}.{suffix}.nullslast")
+        return ",".join(parts) if parts else None
+
     async def to_list(self, length: Optional[int]):
         limit = length if length is not None else self._limit
-        # A sort on columns PostgREST can order by natively (real promoted
-        # columns, not nested JSONB) can be pushed down alongside the limit —
-        # letting Postgres do an indexed ORDER BY ... LIMIT N instead of this
-        # adapter fetching up to MAX_READ_ROWS full rows via deep-offset
-        # pagination just to re-sort a handful of them in Python.
-        pushable_columns = TABLE_FILTER_COLUMNS.get(self.collection.table_name, set())
-        order_param = None
-        if self._sort_spec and all(key in pushable_columns for key, _ in self._sort_spec):
-            order_param = ",".join(
-                f"{key}.{'desc.nullslast' if direction < 0 else 'asc'}"
-                for key, direction in self._sort_spec
-            )
-            pushed_limit = limit
+        # Push ORDER BY to PostgREST when columns are real table columns so
+        # Postgres can do indexed ORDER BY ... LIMIT N. Unpushable sorts still
+        # need a wider fetch for correct local reordering.
+        order = self._postgrest_order()
+        if self._sort_spec and not order:
+            pushed_limit = None
         else:
-            pushed_limit = limit if not self._sort_spec else None
-        rows = await self.collection._read_documents(self.filter, pushed_limit, order=order_param)
-        if self._sort_spec:
+            pushed_limit = limit
+        rows = await self.collection._read_documents(
+            self.filter,
+            pushed_limit,
+            order=order,
+        )
+        if self._sort_spec and not order:
             for key, direction in reversed(self._sort_spec):
                 rows.sort(key=lambda item: (item.get(key) is None, item.get(key)), reverse=direction < 0)
         if self._limit is not None:
@@ -906,10 +979,18 @@ class SupabaseCollectionAdapter(CollectionPort):
         remote_filter_params = _postgrest_filter_params(self.table_name, filter)
         can_push_filter = remote_filter_params is not None
         client = _get_shared_http_client()
+        default_order = "imported_at.desc.nullslast" if self.table_name == "jobs" else None
+        order_clause = order or default_order
         while offset < MAX_READ_ROWS:
             page_limit = READ_PAGE_SIZE
             if read_limit is not None and can_push_filter:
                 remaining = max(0, read_limit - len(documents))
+                if remaining <= 0:
+                    break
+                page_limit = min(page_limit, remaining)
+            elif read_limit is not None and not can_push_filter:
+                # Still bound pages when filtering locally to avoid full-table reads.
+                remaining = max(0, max(read_limit * 3, READ_PAGE_SIZE) - len(documents))
                 if remaining <= 0:
                     break
                 page_limit = min(page_limit, remaining)
@@ -918,10 +999,8 @@ class SupabaseCollectionAdapter(CollectionPort):
                 "limit": str(page_limit),
                 "offset": str(offset),
             }
-            if order:
-                request_params["order"] = order
-            elif self.table_name == "jobs":
-                request_params["order"] = "imported_at.desc.nullslast"
+            if order_clause:
+                request_params["order"] = order_clause
             if remote_filter_params is not None:
                 request_params.update(remote_filter_params)
             response = await _http_get_with_retries(
@@ -1106,12 +1185,12 @@ class SupabaseCollectionAdapter(CollectionPort):
         self._require_read_supported()
         key = TABLE_PRIMARY_KEYS[self.table_name]
         url = (self.supabase_url or "").rstrip("/") + f"/rest/v1/{self.table_name}"
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.delete(
-                url,
-                params={key: f"eq.{key_value}"},
-                headers=_supabase_headers(self.secret_key or ""),
-            )
+        client = _get_shared_http_client()
+        response = await client.delete(
+            url,
+            params={key: f"eq.{key_value}"},
+            headers=_supabase_headers(self.secret_key or ""),
+        )
         if response.status_code not in (200, 202, 204):
             raise RuntimeError(f"Supabase {self.table_name} delete returned HTTP {response.status_code}: {response.text[:300]}")
 
@@ -1263,13 +1342,13 @@ async def upsert_supabase_documents(
         "Prefer": "resolution=merge-duplicates",
     }
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.post(
-                url,
-                params={"on_conflict": conflict_key},
-                headers=headers,
-                content=json.dumps(rows),
-            )
+        client = _get_shared_http_client(timeout=timeout)
+        response = await client.post(
+            url,
+            params={"on_conflict": conflict_key},
+            headers=headers,
+            content=json.dumps(rows),
+        )
         if response.status_code not in (200, 201, 204):
             return {
                 "ok": False,

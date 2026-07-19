@@ -12,6 +12,18 @@ class _Cursor:
     def __init__(self, rows):
         self.rows = list(rows)
 
+    def sort(self, key_or_list, direction=None):
+        if direction is None and isinstance(key_or_list, list):
+            specs = [(key, int(dir_value)) for key, dir_value in key_or_list]
+        else:
+            specs = [(str(key_or_list), int(direction or 1))]
+        for key, dir_value in reversed(specs):
+            self.rows.sort(
+                key=lambda item: (item.get(key) is None, str(item.get(key) or "")),
+                reverse=dir_value < 0,
+            )
+        return self
+
     def limit(self, count):
         self.rows = self.rows[:count]
         return self
@@ -24,6 +36,7 @@ class _Collection:
     def __init__(self, rows=None):
         self.rows = list(rows or [])
         self.updated = []
+        self.insert_many_calls = []
 
     def find(self, filter=None, projection=None):
         return _Cursor([dict(row) for row in self.rows if _matches(row, filter or {})])
@@ -34,10 +47,35 @@ class _Collection:
             if _matches(row, filter):
                 row.update(update.get("$set") or {})
                 return {"matched_count": 1, "modified_count": 1}
+        if upsert:
+            doc = dict(filter)
+            doc.update(update.get("$set") or {})
+            self.rows.append(doc)
+            return {"matched_count": 0, "modified_count": 1}
         return {"matched_count": 0, "modified_count": 0}
+
+    async def insert_many(self, documents):
+        docs = [dict(doc) for doc in documents]
+        self.insert_many_calls.append(docs)
+        for doc in docs:
+            job_id = doc.get("job_id")
+            replaced = False
+            for index, row in enumerate(self.rows):
+                if job_id and row.get("job_id") == job_id:
+                    self.rows[index] = {**row, **doc}
+                    replaced = True
+                    break
+            if not replaced:
+                self.rows.append(doc)
+        return {"inserted_count": len(docs)}
 
     async def count_documents(self, filter):
         return len([row for row in self.rows if _matches(row, filter or {})])
+
+    async def delete_one(self, filter):
+        before = len(self.rows)
+        self.rows = [row for row in self.rows if not _matches(row, filter or {})]
+        return {"deleted_count": 1 if len(self.rows) < before else 0}
 
 
 class _FakeDB:
@@ -52,6 +90,10 @@ def _matches(row, filter):
             if "$in" in expected and value not in expected["$in"]:
                 return False
             if "$gte" in expected and str(value or "") < str(expected["$gte"] or ""):
+                return False
+            if "$lte" in expected and str(value or "") > str(expected["$lte"] or ""):
+                return False
+            if "$lt" in expected and not (str(value or "") < str(expected["$lt"] or "")):
                 return False
         elif value != expected:
             return False
@@ -118,6 +160,71 @@ def test_expire_stale_marks_invalid_without_deleting():
     assert len(db.jobs.rows) == 1
     assert db.jobs.rows[0]["validation_status"] == "invalid"
     assert db.jobs.rows[0]["applyability_tier"] == "E"
+
+
+def test_expire_stale_targets_oldest_not_newest():
+    stale = (datetime.now(timezone.utc) - timedelta(days=60)).isoformat()
+    recent = datetime.now(timezone.utc).isoformat()
+    db = _FakeDB([
+        _job(1, last_seen_at=recent, imported_at=recent, validation_status="valid", applyability_tier="A"),
+        _job(2, last_seen_at=stale, imported_at=stale, validation_status="valid", applyability_tier="A"),
+    ])
+    result = asyncio.run(maintenance.expire_stale_jobs(db, older_than_days=30, limit=1))
+    assert result["expired_count"] == 1
+    by_id = {row["job_id"]: row for row in db.jobs.rows}
+    assert by_id["job_2"]["applyability_tier"] == "E"
+    assert by_id["job_1"]["applyability_tier"] == "A"
+
+
+def test_purge_invalid_deletes_tier_e_jobs():
+    stale = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
+    recent = datetime.now(timezone.utc).isoformat()
+    db = _FakeDB([
+        _job(1, applyability_tier="E", last_seen_at=stale, imported_at=stale),
+        _job(2, applyability_tier="A", last_seen_at=recent, imported_at=recent),
+        _job(3, applyability_tier="D", last_seen_at=stale, imported_at=stale),
+    ])
+    result = asyncio.run(
+        maintenance.purge_invalid_jobs(db, older_than_days=30, expire_first=False, limit=10)
+    )
+    assert result["matched_count"] == 2
+    assert result["deleted_count"] == 2
+    assert [row["job_id"] for row in db.jobs.rows] == ["job_2"]
+
+
+def test_purge_invalid_dry_run_does_not_delete():
+    stale = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
+    db = _FakeDB([_job(1, applyability_tier="E", last_seen_at=stale, imported_at=stale)])
+    result = asyncio.run(
+        maintenance.purge_invalid_jobs(db, older_than_days=30, expire_first=False, dry_run=True)
+    )
+    assert result["matched_count"] == 1
+    assert result["deleted_count"] == 0
+    assert len(db.jobs.rows) == 1
+
+
+def test_admin_purge_invalid_endpoint(monkeypatch):
+    calls = {}
+
+    async def fake_purge(*args, **kwargs):
+        calls.update(kwargs)
+        return {"deleted_count": 3, "matched_count": 3}
+
+    monkeypatch.setattr(server, "purge_invalid_jobs", fake_purge)
+    monkeypatch.setenv("JOBS_MAINTENANCE_ENABLED", "true")
+    admin = server.User(user_id="admin", email="anto.delbos@gmail.com", name="Admin")
+    body = server.AdminJobsPurgeInvalidRequest(
+        older_than_days=30,
+        applyability_tiers=["E"],
+        expire_first=False,
+        dry_run=True,
+        limit=100,
+    )
+    result = asyncio.run(server.admin_jobs_purge_invalid(body, admin=admin))
+    assert result["deleted_count"] == 3
+    assert calls["older_than_days"] == 30
+    assert calls["applyability_tiers"] == ["E"]
+    assert calls["dry_run"] is True
 
 
 def test_job_cache_status_counts_and_groups():

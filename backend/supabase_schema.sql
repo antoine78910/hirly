@@ -117,6 +117,9 @@ CREATE INDEX IF NOT EXISTS idx_jobs_validation_status ON jobs (validation_status
 CREATE INDEX IF NOT EXISTS idx_jobs_applyability_tier ON jobs (applyability_tier);
 CREATE INDEX IF NOT EXISTS idx_jobs_normalized_title ON jobs (normalized_title);
 CREATE INDEX IF NOT EXISTS idx_jobs_normalized_company ON jobs (normalized_company);
+-- Feed hot path: tier + validation + country, ordered by recency.
+CREATE INDEX IF NOT EXISTS idx_jobs_feed_tier_country_imported
+  ON jobs (applyability_tier, validation_status, country_code, imported_at DESC NULLS LAST);
 -- Fingerprints are intentionally indexed but not unique until existing
 -- provider duplicates have been audited and backfilled safely.
 CREATE INDEX IF NOT EXISTS idx_jobs_fingerprint ON jobs (fingerprint);

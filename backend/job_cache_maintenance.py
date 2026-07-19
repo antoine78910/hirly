@@ -395,14 +395,47 @@ async def expire_stale_jobs(
 ) -> Dict[str, Any]:
     days = int(older_than_days if older_than_days is not None else env_int("JOBS_STALE_AFTER_DAYS", 30))
     cutoff = datetime.now(timezone.utc) - timedelta(days=max(1, days))
+    cutoff_iso = cutoff.isoformat()
     expire_limit = max(1, min(int(limit or env_int("JOBS_MAINTENANCE_REVALIDATE_LIMIT", 100)), 1000))
-    query: Dict[str, Any] = {}
+    base_query: Dict[str, Any] = {}
     if provider:
-        query["provider"] = provider
+        base_query["provider"] = provider
     if country_code:
-        query["country_code"] = country_code.strip().lower()
-    rows = await db.jobs.find(query, {"_id": 0}).limit(expire_limit * 3).to_list(expire_limit * 3)
-    stale_jobs = [job for job in rows if _is_stale(job, cutoff)][:expire_limit]
+        base_query["country_code"] = country_code.strip().lower()
+
+    # Target oldest inventory first (previously default imported_at DESC sampled newest).
+    fetch_limit = min(expire_limit * 3, 1500)
+    seen_ids: set = set()
+    candidate_rows: List[Dict[str, Any]] = []
+
+    async def _collect(extra_filter: Dict[str, Any], order_key: str) -> None:
+        query = {**base_query, **extra_filter}
+        cursor = db.jobs.find(query, {"_id": 0})
+        sort = getattr(cursor, "sort", None)
+        if callable(sort):
+            cursor = cursor.sort(order_key, 1)
+        rows = await cursor.limit(fetch_limit).to_list(fetch_limit)
+        for job in rows:
+            job_id = job.get("job_id")
+            if not job_id or job_id in seen_ids:
+                continue
+            seen_ids.add(job_id)
+            candidate_rows.append(job)
+
+    await _collect({"last_seen_at": {"$lte": cutoff_iso}}, "last_seen_at")
+    if len(candidate_rows) < expire_limit:
+        await _collect({"imported_at": {"$lte": cutoff_iso}}, "imported_at")
+
+    # Fallback when adapters/fakes ignore date filters: still prefer ASC order.
+    if not candidate_rows:
+        cursor = db.jobs.find(base_query, {"_id": 0})
+        sort = getattr(cursor, "sort", None)
+        if callable(sort):
+            cursor = cursor.sort([("last_seen_at", 1), ("imported_at", 1)])
+        rows = await cursor.limit(fetch_limit).to_list(fetch_limit)
+        candidate_rows.extend(rows)
+
+    stale_jobs = [job for job in candidate_rows if _is_stale(job, cutoff)][:expire_limit]
     now = datetime.now(timezone.utc).isoformat()
     update = {
         "validation_status": "invalid",
@@ -414,8 +447,51 @@ async def expire_stale_jobs(
         "manual_fulfillment_ready": False,
         "apply_fulfillment_status": "blocked_expired",
     }
-    summary = {"dry_run": dry_run, "scanned_count": len(stale_jobs), "expired_count": 0, "errors": []}
-    logger.info("job_cache_expire_stale_start query=%s candidates=%s cutoff=%s dry_run=%s", query, len(stale_jobs), cutoff.isoformat(), dry_run)
+    summary = {
+        "dry_run": dry_run,
+        "scanned_count": len(stale_jobs),
+        "candidates_considered": len(candidate_rows),
+        "expired_count": 0,
+        "errors": [],
+    }
+    logger.info(
+        "job_cache_expire_stale_start query=%s candidates=%s stale=%s cutoff=%s dry_run=%s",
+        base_query,
+        len(candidate_rows),
+        len(stale_jobs),
+        cutoff_iso,
+        dry_run,
+    )
+
+    # Batch soft-expire updates (same payload) when the adapter supports insert_many-style upserts.
+    if not dry_run and stale_jobs:
+        expired_docs = []
+        for job in stale_jobs:
+            job_id = job.get("job_id")
+            if not job_id:
+                continue
+            row = dict(job)
+            row.update(update)
+            expired_docs.append(row)
+        insert_many = getattr(db.jobs, "insert_many", None)
+        if callable(insert_many) and expired_docs:
+            try:
+                await insert_many(expired_docs)
+                summary["expired_count"] = len(expired_docs)
+                for job in stale_jobs:
+                    job_id = job.get("job_id")
+                    if not job_id:
+                        continue
+                    try:
+                        from application_expiry import expire_open_applications_for_job
+                        await expire_open_applications_for_job(db, job_id, source="stale_job_maintenance")
+                    except Exception as exc:
+                        logger.warning("job_cache_expire_applications_failed job_id=%s error=%s", job_id, exc)
+                logger.info("job_cache_expire_stale_complete summary=%s", _loggable_summary(summary))
+                return summary
+            except Exception as exc:
+                logger.warning("job_cache_expire_batch_failed error=%s; falling back to update_one", exc)
+
     for job in stale_jobs:
         job_id = job.get("job_id")
         try:
@@ -431,6 +507,81 @@ async def expire_stale_jobs(
             logger.warning("job_cache_expire_job_failed job_id=%s error=%s", job_id, exc)
             summary["errors"].append({"job_id": job_id, "error": f"{exc.__class__.__name__}: {str(exc)[:160]}"})
     logger.info("job_cache_expire_stale_complete summary=%s", _loggable_summary(summary))
+    return summary
+
+
+async def purge_invalid_jobs(
+    db,
+    *,
+    older_than_days: Optional[int] = None,
+    applyability_tiers: Optional[List[str]] = None,
+    expire_first: bool = True,
+    country_code: Optional[str] = None,
+    limit: Optional[int] = None,
+    dry_run: bool = False,
+) -> Dict[str, Any]:
+    """Hard-delete invalid/expired inventory to shrink storage + egress.
+
+    Default: soft-expire stale rows first, then delete tier E / invalid jobs.
+    """
+    expire_summary: Dict[str, Any] = {"skipped": True}
+    if expire_first:
+        expire_summary = await expire_stale_jobs(
+            db,
+            older_than_days=older_than_days,
+            country_code=country_code,
+            limit=limit,
+            dry_run=dry_run,
+        )
+
+    days = int(older_than_days if older_than_days is not None else env_int("JOBS_STALE_AFTER_DAYS", 30))
+    cutoff = datetime.now(timezone.utc) - timedelta(days=max(1, days))
+    cutoff_iso = cutoff.isoformat()
+    purge_limit = max(1, min(int(limit or env_int("JOBS_PURGE_LIMIT", 500)), 2000))
+    tiers = [str(t).upper() for t in (applyability_tiers or ["E", "D"])]
+
+    query: Dict[str, Any] = {
+        "applyability_tier": {"$in": tiers},
+        "last_seen_at": {"$lte": cutoff_iso},
+    }
+    if country_code:
+        query["country_code"] = country_code.strip().lower()
+
+    rows = await db.jobs.find(query, {"_id": 0, "job_id": 1}).limit(purge_limit).to_list(purge_limit)
+    # Fallback when last_seen_at filter yields nothing (legacy rows).
+    if not rows:
+        fallback = {"applyability_tier": {"$in": tiers}}
+        if country_code:
+            fallback["country_code"] = country_code.strip().lower()
+        rows = await db.jobs.find(fallback, {"_id": 0, "job_id": 1}).limit(purge_limit).to_list(purge_limit)
+
+    job_ids = [row.get("job_id") for row in rows if row.get("job_id")]
+    summary: Dict[str, Any] = {
+        "dry_run": dry_run,
+        "expire_first": expire_summary,
+        "matched_count": len(job_ids),
+        "deleted_count": 0,
+        "errors": [],
+        "tiers": tiers,
+        "cutoff": cutoff_iso,
+    }
+    logger.info(
+        "job_cache_purge_invalid_start matched=%s dry_run=%s tiers=%s",
+        len(job_ids),
+        dry_run,
+        tiers,
+    )
+    if dry_run or not job_ids:
+        return summary
+
+    for job_id in job_ids:
+        try:
+            await db.jobs.delete_one({"job_id": job_id})
+            summary["deleted_count"] += 1
+        except Exception as exc:
+            logger.warning("job_cache_purge_delete_failed job_id=%s error=%s", job_id, exc)
+            summary["errors"].append({"job_id": job_id, "error": f"{exc.__class__.__name__}: {str(exc)[:160]}"})
+    logger.info("job_cache_purge_invalid_complete summary=%s", _loggable_summary(summary))
     return summary
 
 
@@ -480,6 +631,7 @@ async def run_job_cache_maintenance(
 async def job_cache_status(db, *, stale_after_days: Optional[int] = None) -> Dict[str, Any]:
     days = int(stale_after_days if stale_after_days is not None else env_int("JOBS_STALE_AFTER_DAYS", 30))
     cutoff = datetime.now(timezone.utc) - timedelta(days=max(1, days))
+    cutoff_iso = cutoff.isoformat()
     total_jobs = await db.jobs.count_documents({})
     valid_ab_jobs = await db.jobs.count_documents({"validation_status": "valid", "applyability_tier": {"$in": ["A", "B"]}})
     unknown_c_jobs = await db.jobs.count_documents({"applyability_tier": "C"})
@@ -488,21 +640,31 @@ async def job_cache_status(db, *, stale_after_days: Optional[int] = None) -> Dic
     if hasattr(db, "ats_company_sources"):
         source_count = await db.ats_company_sources.count_documents({})
 
-    sample_limit = min(max(total_jobs, 1), 5000)
+    # Prefer a DB-side stale estimate; fall back to a small in-memory sample.
+    stale_jobs = 0
+    try:
+        stale_jobs = await db.jobs.count_documents({"last_seen_at": {"$lte": cutoff_iso}})
+    except Exception:
+        stale_jobs = 0
+
+    # Small sample for ATS breakdown + recency markers (was up to 5000 full docs).
+    sample_limit = min(max(total_jobs, 1), env_int("JOBS_CACHE_STATUS_SAMPLE_LIMIT", 300))
     jobs = await db.jobs.find({}, {"_id": 0}).limit(sample_limit).to_list(sample_limit)
     by_ats_provider: Dict[str, int] = {}
-    stale_jobs = 0
     last_imported_at = None
     last_seen_at = None
     last_validation_checked_at = None
+    sampled_stale = 0
     for job in jobs:
         provider = str(job.get("ats_provider") or job.get("provider") or "unknown").lower()
         by_ats_provider[provider] = by_ats_provider.get(provider, 0) + 1
         if _is_stale(job, cutoff):
-            stale_jobs += 1
+            sampled_stale += 1
         last_imported_at = _max_iso(last_imported_at, job.get("imported_at"))
         last_seen_at = _max_iso(last_seen_at, job.get("last_seen_at"))
         last_validation_checked_at = _max_iso(last_validation_checked_at, job.get("validation_checked_at"))
+    if stale_jobs <= 0:
+        stale_jobs = sampled_stale
 
     return {
         "total_jobs": total_jobs,

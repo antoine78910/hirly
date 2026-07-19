@@ -138,6 +138,7 @@ from job_cache_maintenance import (
     expire_stale_jobs,
     job_cache_status,
     job_inventory_analytics,
+    purge_invalid_jobs,
     refresh_jobs_for_query_or_filters,
     revalidate_cached_jobs,
     run_job_cache_maintenance,
@@ -395,7 +396,7 @@ def schedule_feed_background_refresh(
 
 
 async def _get_feed_job_candidates(base_query: Dict[str, Any], limit: int) -> List[Dict[str, Any]]:
-    cache_key = json.dumps(base_query, sort_keys=True, default=str)
+    cache_key = json.dumps({"q": base_query, "light": True}, sort_keys=True, default=str)
     now = time.monotonic()
     if (
         _feed_job_pool_cache["query_key"] == cache_key
@@ -406,7 +407,10 @@ async def _get_feed_job_candidates(base_query: Dict[str, Any], limit: int) -> Li
         return list(_feed_job_pool_cache["rows"][:limit])
     jobs_col = db.jobs
     if hasattr(jobs_col, "read_with_select"):
-        rows = await jobs_col.read_with_select(base_query, limit)
+        from db.supabase_adapter import JOB_FEED_LIGHT_SELECT
+
+        # Column-only select — never pull full JSONB for the candidate pool.
+        rows = await jobs_col.read_with_select(base_query, limit, select=JOB_FEED_LIGHT_SELECT)
     else:
         rows = await jobs_col.find(base_query, {"_id": 0}).limit(limit).to_list(limit)
     _feed_job_pool_cache["query_key"] = cache_key
@@ -416,13 +420,13 @@ async def _get_feed_job_candidates(base_query: Dict[str, Any], limit: int) -> Li
 
 
 async def _hydrate_feed_jobs(jobs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Load full job payloads (descriptions) only for jobs missing text fields."""
+    """Load full JSONB payloads only for jobs missing description text (final deck)."""
     if not jobs:
         return jobs
     missing_ids = [
         job.get("job_id")
         for job in jobs
-        if job.get("job_id") and not (job.get("description") or job.get("clean_description"))
+        if job.get("job_id") and not (job.get("description") or job.get("clean_description") or job.get("job_description_sections"))
     ]
     if not missing_ids:
         return jobs
@@ -431,7 +435,29 @@ async def _hydrate_feed_jobs(jobs: List[Dict[str, Any]]) -> List[Dict[str, Any]]
     hydrated: List[Dict[str, Any]] = []
     for job in jobs:
         full = by_id.get(job.get("job_id"))
-        merged = {**job, **(full or {})}
+        merged = {**(full or {}), **job} if full else dict(job)
+        # Prefer light-row match_* / server fields; prefer full-row description body.
+        if full:
+            for key in (
+                "description",
+                "clean_description",
+                "job_description_sections",
+                "requirements",
+                "offer_details",
+                "summary",
+                "tagline",
+                "company_logo",
+                "seniority",
+                "job_type",
+                "employment_type",
+                "contract_type",
+                "industry",
+                "sector",
+                "tech_stack",
+                "rome_label",
+            ):
+                if full.get(key) is not None:
+                    merged[key] = full[key]
         for key, value in job.items():
             if key.startswith("_"):
                 merged[key] = value
@@ -771,6 +797,15 @@ class AdminJobsExpireStaleRequest(BaseModel):
     older_than_days: Optional[int] = None
     provider: Optional[str] = None
     country_code: Optional[str] = None
+    limit: Optional[int] = None
+    dry_run: bool = False
+
+
+class AdminJobsPurgeInvalidRequest(BaseModel):
+    older_than_days: Optional[int] = None
+    country_code: Optional[str] = None
+    applyability_tiers: Optional[List[str]] = None
+    expire_first: bool = True
     limit: Optional[int] = None
     dry_run: bool = False
 
@@ -6657,14 +6692,17 @@ async def get_feed(
         )
 
         base_query: Dict[str, Any] = {}
+        # Hard cap avoids pulling 1000+ full JSONB job docs into memory per request.
+        feed_candidate_hard_cap = max(120, min(_env_int("JOBS_FEED_CANDIDATE_HARD_CAP", 350), 600))
         if prefetch:
             candidate_limit = min(max(40, requested_limit * 6), 120)
         else:
             candidate_limit = max(80, requested_limit * 16) if explicit_filters else max(120, requested_limit * 24)
         if explicit_location_filter and not prefetch:
-            candidate_limit = max(candidate_limit, 1000)
+            candidate_limit = max(candidate_limit, min(400, feed_candidate_hard_cap))
         if is_worldwide_radius and not prefetch:
-            candidate_limit = max(candidate_limit, requested_limit * 80, 1000)
+            candidate_limit = max(candidate_limit, min(requested_limit * 40, feed_candidate_hard_cap))
+        candidate_limit = min(candidate_limit, feed_candidate_hard_cap)
 
         refresh_results = []
         provider_search_keys: List[str] = []
@@ -7371,8 +7409,10 @@ async def get_feed(
                 query["country_code"] = {"$in": country_filter_codes}
             db_started = time.perf_counter()
             rows = await _get_feed_job_candidates(query, candidate_limit)
-            if explicit_local_intent:
-                broad_rows = await _get_feed_job_candidates({}, candidate_limit)
+            # Avoid unbounded find({}) when country-filtered inventory is already usable.
+            if explicit_local_intent and len(rows) < max(20, requested_limit * 2):
+                broad_limit = min(candidate_limit, 150)
+                broad_rows = await _get_feed_job_candidates({}, broad_limit)
                 seen_ids = {row.get("job_id") for row in rows}
                 for row in broad_rows:
                     job_id = row.get("job_id")
@@ -9754,6 +9794,29 @@ async def admin_jobs_expire_stale(body: AdminJobsExpireStaleRequest, admin: User
         db,
         older_than_days=body.older_than_days,
         provider=body.provider,
+        country_code=body.country_code,
+        limit=body.limit,
+        dry_run=body.dry_run,
+    )
+
+
+@api_router.post("/admin/jobs/purge-invalid")
+async def admin_jobs_purge_invalid(body: AdminJobsPurgeInvalidRequest, admin: User = Depends(require_admin_user)):
+    """Expire stale jobs then hard-delete invalid/D/E inventory (egress + storage)."""
+    _require_job_maintenance_enabled()
+    logger.info(
+        "admin_jobs_purge_invalid_requested admin=%s older_than_days=%s tiers=%s expire_first=%s dry_run=%s",
+        admin.email,
+        body.older_than_days,
+        body.applyability_tiers,
+        body.expire_first,
+        body.dry_run,
+    )
+    return await purge_invalid_jobs(
+        db,
+        older_than_days=body.older_than_days,
+        applyability_tiers=body.applyability_tiers,
+        expire_first=body.expire_first,
         country_code=body.country_code,
         limit=body.limit,
         dry_run=body.dry_run,

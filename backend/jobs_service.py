@@ -4,6 +4,7 @@ Supabase is the source of truth. External providers import normalized jobs into
 the active database adapter.
 """
 
+import hashlib
 import logging
 import os
 import re
@@ -291,54 +292,102 @@ def _fallback_locations(query: JobSearchQuery) -> List[Optional[str]]:
     return [loc for loc in locations if loc and loc not in seen]
 
 
+def _ensure_job_id(job: Dict[str, Any]) -> Dict[str, Any]:
+    """Guarantee a stable PK for batch upserts (PostgREST on_conflict=job_id)."""
+    if job.get("job_id"):
+        return job
+    provider = str(job.get("provider") or "unknown")
+    external_id = str(job.get("external_id") or "")
+    if not external_id:
+        return job
+    digest = hashlib.sha1(f"{provider}:{external_id}".encode("utf-8")).hexdigest()[:16]
+    job["job_id"] = f"job_{digest}"
+    return job
+
+
+def _prepare_job_for_upsert(job: Dict[str, Any]) -> Dict[str, Any]:
+    prepared = enrich_job_employment_kind(dict(job))
+    sanitized_title = sanitize_display_title(prepared.get("title"), fallback=prepared.get("rome_label"))
+    if sanitized_title:
+        prepared["title"] = sanitized_title
+    prepared = _with_cheap_validation(prepared)
+    return _ensure_job_id(prepared)
+
+
+async def _write_job_chunk(db, chunk: List[Dict[str, Any]]) -> None:
+    """Persist a chunk of jobs — prefer multi-row upsert, fall back to update_one."""
+    if not chunk:
+        return
+    insert_many = getattr(db.jobs, "insert_many", None)
+    if callable(insert_many):
+        try:
+            await insert_many(chunk)
+            return
+        except Exception as exc:
+            logger.warning(
+                "job_batch_insert_many_failed size=%s error=%s; falling back to update_one",
+                len(chunk),
+                exc,
+            )
+    for job in chunk:
+        await db.jobs.update_one(
+            {"provider": job["provider"], "external_id": job["external_id"]},
+            {"$set": job},
+            upsert=True,
+        )
+
+
 async def _import_provider_jobs(db, provider, query: JobSearchQuery) -> Dict[str, int]:
     result = await provider.search(query)
-    stats = {
-        "total_imported": 0,
-        "auto_apply_supported_imported": 0,
-        "unknown_ats_imported": 0,
-        "jobs": [],
+    prepared_jobs = [_prepare_job_for_upsert(job) for job in (result.jobs or [])]
+    batch_stats = await _upsert_job_batch(db, prepared_jobs, already_prepared=True)
+    return {
+        **batch_stats,
+        "jobs": prepared_jobs,
     }
-    for job in result.jobs:
-        job = _with_cheap_validation(job)
-        await db.jobs.update_one(
-            {"provider": job["provider"], "external_id": job["external_id"]},
-            {"$set": job},
-            upsert=True,
-        )
-        stats["total_imported"] += 1
-        stats["jobs"].append(job)
-        if job.get("auto_apply_supported") is True:
-            stats["auto_apply_supported_imported"] += 1
-        if job.get("ats_provider") == "unknown":
-            stats["unknown_ats_imported"] += 1
-    return stats
 
 
-async def _upsert_job_batch(db, jobs: List[Dict[str, Any]], progress: Optional[Dict[str, Any]] = None, progress_base: int = 0) -> Dict[str, int]:
+async def _upsert_job_batch(
+    db,
+    jobs: List[Dict[str, Any]],
+    progress: Optional[Dict[str, Any]] = None,
+    progress_base: int = 0,
+    *,
+    already_prepared: bool = False,
+) -> Dict[str, int]:
     stats = {
         "total_imported": 0,
         "auto_apply_supported_imported": 0,
         "unknown_ats_imported": 0,
     }
+    if not jobs:
+        return stats
+
+    prepared: List[Dict[str, Any]] = []
     for job in jobs:
-        job = enrich_job_employment_kind(dict(job))
-        sanitized_title = sanitize_display_title(job.get("title"), fallback=job.get("rome_label"))
-        if sanitized_title:
-            job["title"] = sanitized_title
-        job = _with_cheap_validation(job)
-        await db.jobs.update_one(
-            {"provider": job["provider"], "external_id": job["external_id"]},
-            {"$set": job},
-            upsert=True,
-        )
-        stats["total_imported"] += 1
+        row = job if already_prepared else _prepare_job_for_upsert(job)
+        if not row.get("provider") or not row.get("external_id") or not row.get("job_id"):
+            logger.warning(
+                "job_upsert_skip missing_keys provider=%s external_id=%s job_id=%s",
+                row.get("provider"),
+                row.get("external_id"),
+                row.get("job_id"),
+            )
+            continue
+        prepared.append(row)
+
+    chunk_size = max(10, min(_env_int("JOB_UPSERT_BATCH_SIZE", 75), 200))
+    for offset in range(0, len(prepared), chunk_size):
+        chunk = prepared[offset : offset + chunk_size]
+        await _write_job_chunk(db, chunk)
+        stats["total_imported"] += len(chunk)
         if progress is not None:
             progress["jobs_upserted_so_far"] = progress_base + stats["total_imported"]
-        if job.get("auto_apply_supported") is True:
-            stats["auto_apply_supported_imported"] += 1
-        if job.get("ats_provider") == "unknown":
-            stats["unknown_ats_imported"] += 1
+        for job in chunk:
+            if job.get("auto_apply_supported") is True:
+                stats["auto_apply_supported_imported"] += 1
+            if job.get("ats_provider") == "unknown":
+                stats["unknown_ats_imported"] += 1
     return stats
 
 
@@ -1289,32 +1338,10 @@ async def refresh_jobs_for_profile_if_needed(
         "provider_cooldown_until": None,
     }
 
+    # SmartRecruiters / Workday run only when local cache is not feed-ready
+    # (see after the freshness short-circuit below).
     smartrecruiters_result = None
     workday_result = None
-    try:
-        from smartrecruiters_search import refresh_smartrecruiters_jobs_for_query
-
-        smartrecruiters_result = await refresh_smartrecruiters_jobs_for_query(
-            db,
-            query=query,
-            limit=query_limit_override or query.limit,
-        )
-    except Exception as exc:
-        logger.warning("smartrecruiters_search_failed error=%s", exc)
-
-    try:
-        from job_search_routing import resolve_primary_provider
-        from workday_search import refresh_workday_jobs_for_query, should_run_workday_search
-
-        primary_for_routing = resolve_primary_provider(query)
-        if should_run_workday_search(query, primary_provider=primary_for_routing):
-            workday_result = await refresh_workday_jobs_for_query(
-                db,
-                query=query,
-                limit=query_limit_override or query.limit,
-            )
-    except Exception as exc:
-        logger.warning("workday_search_failed error=%s", exc)
 
     greenhouse_result = None
     lever_result = None
@@ -1435,8 +1462,37 @@ async def refresh_jobs_for_profile_if_needed(
             "relevant_count": fresh_relevant_count,
             "feed_ready_count": fresh_feed_ready_count,
             "min_feed_ready_count": min_feed_ready_count,
+            "smartrecruiters": None,
+            "workday": None,
             **base_metadata,
         }
+
+    # Cache is thin — supplemental ATS searches are worth the latency/load.
+    try:
+        from smartrecruiters_search import refresh_smartrecruiters_jobs_for_query
+
+        smartrecruiters_result = await refresh_smartrecruiters_jobs_for_query(
+            db,
+            query=query,
+            limit=query_limit_override or query.limit,
+        )
+    except Exception as exc:
+        logger.warning("smartrecruiters_search_failed error=%s", exc)
+
+    try:
+        from job_search_routing import resolve_primary_provider
+        from workday_search import refresh_workday_jobs_for_query, should_run_workday_search
+
+        primary_for_routing = resolve_primary_provider(query)
+        if should_run_workday_search(query, primary_provider=primary_for_routing):
+            workday_result = await refresh_workday_jobs_for_query(
+                db,
+                query=query,
+                limit=query_limit_override or query.limit,
+            )
+    except Exception as exc:
+        logger.warning("workday_search_failed error=%s", exc)
+
     # Skip per-key counts when forcing a refresh — they only appear in error
     # metadata and wasting ~6 s of the 8 s per-location budget.
     any_cached = 0
