@@ -158,6 +158,154 @@ def test_right_swipes_endpoint_joins_users_jobs_and_attempts(monkeypatch):
     assert sr["latest_attempt"] is None
 
 
+def test_right_swipes_endpoint_includes_application_status(monkeypatch):
+    import auto_apply.drivers  # noqa: F401
+
+    swipe_rows = [
+        {"user_id": "u1", "job_id": "j-gh", "direction": "right", "created_at": "2026-07-15T10:00:00+00:00"},
+        {"user_id": "u2", "job_id": "j-sr", "direction": "right", "created_at": "2026-07-15T09:00:00+00:00"},
+    ]
+    jobs = [
+        {"job_id": "j-gh", "title": "Analyst", "company": "Acme", "ats_provider": "greenhouse"},
+        {"job_id": "j-sr", "title": "Consultant", "company": "Beta", "ats_provider": "smartrecruiters"},
+    ]
+    application_rows = [
+        {"user_id": "u1", "job_id": "j-gh", "application_id": "app_1", "submission_status": "submitted",
+         "created_at": "2026-07-15T10:05:00+00:00"},
+    ]
+
+    async def fake_safe_find(collection, filter=None, limit=10000, sort=None):
+        name = getattr(collection, "name", None) or getattr(collection, "table_name", "")
+        if "swipe" in str(name):
+            return swipe_rows
+        if "application" in str(name):
+            return application_rows
+        return []
+
+    async def fake_jobs_for_ids(job_ids):
+        return [j for j in jobs if j["job_id"] in job_ids]
+
+    monkeypatch.setattr(server, "_admin_safe_find", fake_safe_find)
+    monkeypatch.setattr(server, "_admin_jobs_for_ids", fake_jobs_for_ids)
+    admin = server.User(user_id="admin", email="anto.delbos@gmail.com", name="Admin")
+    out = asyncio.run(server.admin_auto_apply_right_swipes(limit=100, admin=admin))
+
+    by_job = {row["job_id"]: row for row in out["swipes"]}
+    assert by_job["j-gh"]["has_application"] is True
+    assert by_job["j-gh"]["application_id"] == "app_1"
+    assert by_job["j-gh"]["submission_status"] == "submitted"
+    assert by_job["j-sr"]["has_application"] is False
+    assert by_job["j-sr"]["application_id"] is None
+    assert by_job["j-sr"]["submission_status"] == "not_submitted"
+
+
+def test_sync_application_status_marks_submitted_on_success():
+    rows = [{"application_id": "app_1", "user_id": "u1", "submission_status": "not_submitted"}]
+
+    class _Apps:
+        async def update_one(self, filt, update):
+            for row in rows:
+                if all(row.get(k) == v for k, v in filt.items()):
+                    row.update(update["$set"])
+
+    class _DB:
+        applications = _Apps()
+
+    import server as srv
+    old_db = srv.db
+    srv.db = _DB()
+    try:
+        asyncio.run(srv._sync_application_status_from_auto_apply_result(
+            "app_1", "u1", {"status": "submitted_success"},
+        ))
+    finally:
+        srv.db = old_db
+    assert rows[0]["submission_status"] == "submitted"
+    assert rows[0]["submitted_at"]
+
+
+def test_sync_application_status_marks_failed_for_manual_review_statuses():
+    rows = [{"application_id": "app_1", "user_id": "u1", "submission_status": "not_submitted"}]
+
+    class _Apps:
+        async def update_one(self, filt, update):
+            for row in rows:
+                if all(row.get(k) == v for k, v in filt.items()):
+                    row.update(update["$set"])
+
+    class _DB:
+        applications = _Apps()
+
+    import server as srv
+    old_db = srv.db
+    srv.db = _DB()
+    try:
+        for status in ("submit_failed", "verification_failed", "error", "unsupported", "needs_user_input"):
+            rows[0]["submission_status"] = "not_submitted"
+            asyncio.run(srv._sync_application_status_from_auto_apply_result(
+                "app_1", "u1", {"status": status},
+            ))
+            assert rows[0]["submission_status"] == "failed"
+    finally:
+        srv.db = old_db
+
+
+def test_sync_application_status_ignores_transient_statuses():
+    calls = []
+
+    class _Apps:
+        async def update_one(self, filt, update):
+            calls.append((filt, update))
+
+    class _DB:
+        applications = _Apps()
+
+    import server as srv
+    old_db = srv.db
+    srv.db = _DB()
+    try:
+        for status in ("already_in_flight", "prepared", "in_flight"):
+            asyncio.run(srv._sync_application_status_from_auto_apply_result(
+                "app_1", "u1", {"status": status},
+            ))
+    finally:
+        srv.db = old_db
+    assert calls == []
+
+
+def test_background_run_syncs_application_status_only_for_real_runs(monkeypatch):
+    async def fake_load(job_id, user, require_tailored_package=True):
+        return ({"job_id": job_id}, {}, {"application_id": "app_1"})
+
+    async def fake_execute(db, job, profile, app_doc, user, *, dry_run=False, headless=True):
+        return {"status": "submitted_success", "stage_reached": "verify"}
+
+    async def fake_persist(db, user_id, job_id, report):
+        return None
+
+    synced = []
+
+    async def fake_sync(application_id, user_id, result):
+        synced.append((application_id, user_id, result["status"]))
+
+    monkeypatch.setattr(server, "_load_or_create_agent_application", fake_load)
+    monkeypatch.setattr(server, "auto_apply_execute_application", fake_execute)
+    monkeypatch.setattr(server, "auto_apply_persist_execution_report", fake_persist)
+    monkeypatch.setattr(server, "_sync_application_status_from_auto_apply_result", fake_sync)
+
+    admin = server.User(user_id="admin", email="anto.delbos@gmail.com", name="Admin")
+
+    asyncio.run(server._admin_auto_apply_background_run(
+        job_id="j1", target_user=admin, dry_run=True, headless=True,
+    ))
+    assert synced == [], "dry runs must not update the application record"
+
+    asyncio.run(server._admin_auto_apply_background_run(
+        job_id="j1", target_user=admin, dry_run=False, headless=True,
+    ))
+    assert synced == [("app_1", "admin", "submitted_success")]
+
+
 def test_greenhouse_driver_registered_via_startup_import():
     import auto_apply.drivers  # noqa: F401  (startup performs this registration)
     from auto_apply.driver import DRIVER_REGISTRY

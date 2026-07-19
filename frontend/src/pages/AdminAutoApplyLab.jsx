@@ -223,6 +223,11 @@ export default function AdminAutoApplyLab() {
   const [supportedProviders, setSupportedProviders] = useState([]);
   const [swipesLoading, setSwipesLoading] = useState(true);
   const [runningRow, setRunningRow] = useState(null);
+  const [onlyUnapplied, setOnlyUnapplied] = useState(true);
+
+  const visibleSwipes = onlyUnapplied
+    ? swipes.filter((row) => (row.submission_status || "not_submitted") === "not_submitted")
+    : swipes;
 
   const loadSwipes = useCallback(async () => {
     setSwipesLoading(true);
@@ -357,9 +362,19 @@ export default function AdminAutoApplyLab() {
         <div className="mb-8">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h2 className="font-display text-lg font-bold text-zinc-900">User right swipes</h2>
-            <p className="text-xs text-zinc-500">
-              Supported ATS: {supportedProviders.length ? supportedProviders.join(", ") : "—"}
-            </p>
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 text-xs font-medium text-zinc-600">
+                <input
+                  type="checkbox"
+                  checked={onlyUnapplied}
+                  onChange={(e) => setOnlyUnapplied(e.target.checked)}
+                />
+                Only show jobs without an application yet
+              </label>
+              <p className="text-xs text-zinc-500">
+                Supported ATS: {supportedProviders.length ? supportedProviders.join(", ") : "—"}
+              </p>
+            </div>
           </div>
           {swipesLoading ? (
             <div className="flex items-center gap-2 text-sm text-zinc-500">
@@ -368,6 +383,8 @@ export default function AdminAutoApplyLab() {
             </div>
           ) : swipes.length === 0 ? (
             <p className="text-sm text-zinc-500">No right swipes found yet.</p>
+          ) : visibleSwipes.length === 0 ? (
+            <p className="text-sm text-zinc-500">No unapplied jobs — everything has an application record. Uncheck the filter to see all.</p>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-zinc-200">
               <table className="min-w-full text-left text-sm">
@@ -377,12 +394,13 @@ export default function AdminAutoApplyLab() {
                     <th className="px-3 py-2">User</th>
                     <th className="px-3 py-2">Job</th>
                     <th className="px-3 py-2">ATS</th>
+                    <th className="px-3 py-2">Application</th>
                     <th className="px-3 py-2">Last run</th>
                     <th className="px-3 py-2">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {swipes.map((row) => {
+                  {visibleSwipes.map((row) => {
                     const key = `${row.user_id}:${row.job_id}`;
                     const busy = runningRow === key;
                     return (
@@ -421,6 +439,19 @@ export default function AdminAutoApplyLab() {
                         <td className="px-3 py-2">
                           <span className={row.driver_supported ? "text-emerald-700" : "text-amber-700"}>
                             {row.ats_provider || "—"}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2">
+                          <span
+                            className={
+                              row.submission_status === "submitted"
+                                ? "text-emerald-700"
+                                : row.submission_status === "failed" || row.submission_status === "blocked_captcha"
+                                ? "text-red-700"
+                                : "text-zinc-500"
+                            }
+                          >
+                            {(row.submission_status || "not_submitted").replaceAll("_", " ")}
                           </span>
                         </td>
                         <td className="px-3 py-2 text-xs text-zinc-500">

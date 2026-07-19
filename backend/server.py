@@ -9922,6 +9922,33 @@ async def _auto_apply_target_user(user_id: Optional[str], admin: User) -> User:
 
 _AUTO_APPLY_BACKGROUND_TASKS: set = set()
 
+# Real (non-dry-run) auto-apply outcomes that should be mirrored onto the
+# application record so the admin Applications tab reflects what happened —
+# success means no more manual work is needed; the rest routes into the
+# existing manual-review queue (_effective_manual_status already promotes
+# submission_status="failed" to "manual_review_needed").
+_AUTO_APPLY_RESULT_SUBMITTED_STATUSES = {"submitted_success", "already_submitted"}
+_AUTO_APPLY_RESULT_NEEDS_MANUAL_STATUSES = {
+    "submit_failed", "verification_failed", "error", "unsupported", "needs_user_input",
+}
+
+
+async def _sync_application_status_from_auto_apply_result(
+    application_id: str, user_id: str, result: Dict[str, Any],
+) -> None:
+    status = (result or {}).get("status")
+    if status not in _AUTO_APPLY_RESULT_SUBMITTED_STATUSES and status not in _AUTO_APPLY_RESULT_NEEDS_MANUAL_STATUSES:
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    if status in _AUTO_APPLY_RESULT_SUBMITTED_STATUSES:
+        update = {"submission_status": "submitted", "submitted_at": now, "updated_at": now}
+    else:
+        update = {"submission_status": "failed", "updated_at": now}
+    await db.applications.update_one(
+        {"application_id": application_id, "user_id": user_id},
+        {"$set": update},
+    )
+
 
 async def _admin_auto_apply_background_run(
     *,
@@ -9934,6 +9961,7 @@ async def _admin_auto_apply_background_run(
     """Run prepare + execute off the HTTP request so Railway's gateway cannot 502."""
     from auto_apply.debug_report import format_run_error, transport_error_report
 
+    application_id: Optional[str] = None
     result: Dict[str, Any]
     try:
         job, profile, app_doc = await _load_or_create_agent_application(
@@ -9941,6 +9969,7 @@ async def _admin_auto_apply_background_run(
             target_user,
             require_tailored_package=False,
         )
+        application_id = app_doc.get("application_id")
         result = await auto_apply_execute_application(
             db, job, profile, app_doc, target_user.model_dump(mode="json"),
             dry_run=dry_run,
@@ -9986,6 +10015,17 @@ async def _admin_auto_apply_background_run(
             job_id,
             str(exc)[:200],
         )
+
+    if not dry_run and application_id:
+        try:
+            await _sync_application_status_from_auto_apply_result(application_id, target_user.user_id, result)
+        except Exception as exc:
+            logger.warning(
+                "admin_auto_apply_status_sync_failed job=%s application_id=%s error=%s",
+                job_id,
+                application_id,
+                str(exc)[:200],
+            )
 
 
 @api_router.post("/admin/auto-apply/execute")
@@ -10175,11 +10215,23 @@ async def admin_auto_apply_right_swipes(
             if previous is None or (row.get("created_at") or "") > (previous.get("created_at") or ""):
                 latest_attempts[key] = row
 
+    applications_by_key: Dict[tuple, Dict[str, Any]] = {}
+    for index in range(0, len(job_ids), chunk_size):
+        chunk = job_ids[index:index + chunk_size]
+        rows = await _admin_safe_find(db.applications, {"job_id": {"$in": chunk}}, limit=2000)
+        for row in rows:
+            key = (row.get("user_id"), row.get("job_id"))
+            previous = applications_by_key.get(key)
+            if previous is None or (row.get("created_at") or "") > (previous.get("created_at") or ""):
+                applications_by_key[key] = row
+
     items: List[Dict[str, Any]] = []
     for swipe_row in swipes:
         job = jobs.get(swipe_row.get("job_id")) or {}
         user_row = users.get(swipe_row.get("user_id")) or {}
         attempt = latest_attempts.get((swipe_row.get("user_id"), swipe_row.get("job_id")))
+        application = applications_by_key.get((swipe_row.get("user_id"), swipe_row.get("job_id")))
+        normalized_application = _normalize_application_status_fields(application) if application else None
         items.append({
             "user_id": swipe_row.get("user_id"),
             "user_email": user_row.get("email") or "",
@@ -10189,6 +10241,9 @@ async def admin_auto_apply_right_swipes(
             "title": job.get("title") or "",
             "company": job.get("company") or "",
             "ats_provider": str(job.get("ats_provider") or job.get("provider") or "").lower() or "unknown",
+            "application_id": (application or {}).get("application_id"),
+            "has_application": bool(application),
+            "submission_status": (normalized_application or {}).get("submission_status") or "not_submitted",
             # Prefer the public posting URL so admins can open the ATS and check expiry.
             "apply_url": (
                 job.get("external_url")
