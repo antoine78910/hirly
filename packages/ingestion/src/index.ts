@@ -343,6 +343,12 @@ function sha1(value: string): string {
 const sensitiveKey =
   /(authorization|cookie|credential|database.?url|evidence.?body|password|secret|token)/i;
 const piiKey = /(^|_)(email|phone|first.?name|last.?name|full.?name)($|_)/i;
+const documentPiiKeys = [
+  /^(?:cv|resume|curriculumvitae)(?:file|filename|document|content|bytes|body|data|url|path)?$/,
+  /^(?:original|upload|uploaded|attachment|document|file)?filename$/,
+  /^(?:fileupload|uploadedfile|uploadfile)(?:name|filename|content|bytes|body|data|url|path)?$/,
+  /^(?:attachment|document|file)(?:content|bytes|body|data)$/,
+];
 const email = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const phone =
   /(?:\+\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)[\s.-]?)?\d[\d\s.-]{7,}\d/g;
@@ -351,11 +357,22 @@ const credentialUrl = /\b(?:postgres(?:ql)?|https?):\/\/[^/\s:@]+:[^@\s]+@/gi;
 const querySecret =
   /([?&](?:access_token|api_key|apikey|authorization|password|secret|token)=)[^&#\s]*/gi;
 
+function isDocumentPiiKey(key: string): boolean {
+  const normalized = key
+    .normalize("NFKD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+  return documentPiiKeys.some((pattern) => pattern.test(normalized));
+}
+
 export function sanitizeSourceDocument(
   value: unknown,
   key = "",
 ): unknown {
-  if (sensitiveKey.test(key) || piiKey.test(key)) return "[REDACTED]";
+  if (sensitiveKey.test(key) || piiKey.test(key) || isDocumentPiiKey(key)) {
+    return "[REDACTED]";
+  }
   if (typeof value === "string") {
     return value
       .replace(credentialUrl, (match) => {
