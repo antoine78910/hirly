@@ -30,6 +30,17 @@ function compact(sql: string): string {
   return sql.replace(/--.*$/gm, "").replace(/\s+/g, " ").trim().toLowerCase();
 }
 
+function securityDefinerFunctions(
+  sql: string,
+): Array<{ name: string; body: string }> {
+  return Array.from(
+    compact(sql).matchAll(
+      /create(?: or replace)? function\s+([a-z0-9_."]+)\s*\([\s\S]*?\)\s*returns[\s\S]*?security definer[\s\S]*?as \$\$([\s\S]*?)\$\$;/g,
+    ),
+    (match) => ({ name: match[1]!, body: match[2]! }),
+  );
+}
+
 describe("G002 additive inventory migration", () => {
   test("creates the durable worker tables without changing canonical jobs", () => {
     const migration = foundationMigration();
@@ -55,7 +66,14 @@ describe("G002 additive inventory migration", () => {
   });
 
   test("enforces idempotency, lease fencing, and immutable attempts", () => {
-    const sql = compact(foundationMigration().sql);
+    const migration = foundationMigration();
+    const sql = compact(migration.sql);
+    const claimFunction = securityDefinerFunctions(migration.sql).find(
+      ({ body }) =>
+        body.includes("for update") &&
+        body.includes("skip locked") &&
+        body.includes("claim_generation"),
+    );
 
     expect(sql).toMatch(/unique\s*\(\s*kind\s*,\s*idempotency_key\s*\)/);
     expect(sql).toMatch(/unique\s*\(\s*run_id\s*,\s*task_key\s*\)/);
@@ -70,46 +88,65 @@ describe("G002 additive inventory migration", () => {
     expect(sql).toMatch(
       /(?:revoke|trigger)[\s\S]*worker_task_attempts|worker_task_attempts[\s\S]*(?:revoke|trigger)/,
     );
+    expect(claimFunction).toBeDefined();
+    expect(claimFunction?.body).toContain("lease_expired");
+    expect(claimFunction?.body).toMatch(
+      /update public\.worker_task_attempts[\s\S]*finished_at[\s\S]*lease_expired/,
+    );
   });
 
   test("serializes provider authorization, writer ownership, and scheduling", () => {
-    const sql = compact(foundationMigration().sql);
+    const migration = foundationMigration();
+    const sql = compact(migration.sql);
+    const functions = securityDefinerFunctions(migration.sql);
+    const scheduleFunction = functions.find(
+      ({ body }) =>
+        body.includes("worker_schedules") &&
+        body.includes("scheduled_for") &&
+        body.includes("next_due_at"),
+    );
+    const canonicalWriteFunction = functions.find(
+      ({ body }) =>
+        body.includes("insert into public.jobs") &&
+        body.includes("provider_registry"),
+    );
 
     expect(sql).toMatch(
       /enabled[\s\S]*authorization_status[\s\S]*authorized[\s\S]*writer_runtime[\s\S]*typescript/,
     );
-    expect(sql).toMatch(/provider_registry[\s\S]*for (?:no key )?update/);
-    expect(sql).toMatch(/worker_schedules[\s\S]*for (?:no key )?update/);
     expect(sql).toMatch(
       /unique[\s\S]*schedule_id[\s\S]*scheduled_for|schedule_id[\s\S]*scheduled_for[\s\S]*unique/,
     );
     expect(sql).toMatch(/writer_runtime[\s\S]*(?:python|typescript)/);
+    expect(scheduleFunction).toBeDefined();
+    expect(scheduleFunction?.body).toMatch(
+      /from public\.worker_schedules[\s\S]*for (?:no key )?update/,
+    );
+    expect(scheduleFunction?.body).toContain("insert into public.worker_runs");
+    expect(canonicalWriteFunction).toBeDefined();
+    expect(canonicalWriteFunction?.body).toMatch(
+      /from public\.provider_registry[\s\S]*for (?:no key )?update/,
+    );
   });
 
   test("locks down every security-definer function", () => {
     const sql = foundationMigration().sql;
     const normalized = compact(sql);
-    const securityDefinerFunctions = Array.from(
-      normalized.matchAll(
-        /create(?: or replace)? function\s+([a-z0-9_."]+)[\s\S]*?security definer/g,
-      ),
-      (match) => match[1]!,
-    );
+    const functions = securityDefinerFunctions(sql);
 
-    expect(securityDefinerFunctions.length).toBeGreaterThan(0);
+    expect(functions.length).toBeGreaterThan(0);
     expect(normalized).toMatch(
       /security definer[\s\S]*set search_path\s*=\s*(?:pg_catalog|public)/,
     );
-
-    for (const functionName of securityDefinerFunctions) {
-      const shortName = functionName.replace(/^public\./, "").replaceAll('"', "");
-      expect(normalized).toMatch(
-        new RegExp(
-          `revoke execute on function [^;]*${shortName}[^;]* from (?:public|anon|authenticated)`,
-        ),
-      );
-    }
-
+    expect(normalized).toMatch(
+      /revoke all on all functions in schema worker_private from public/,
+    );
+    expect(normalized).toMatch(
+      /revoke all on all functions in schema worker_private from anon/,
+    );
+    expect(normalized).toMatch(
+      /revoke all on all functions in schema worker_private from authenticated/,
+    );
     expect(normalized).toMatch(/grant execute on function[\s\S]*worker/);
     expect(normalized).toMatch(/grant execute on function[\s\S]*operator/);
     expect(normalized).toMatch(
