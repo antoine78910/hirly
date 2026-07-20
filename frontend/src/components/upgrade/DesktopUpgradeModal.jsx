@@ -29,6 +29,7 @@ import {
   tierPricePerApplication,
 } from "@/lib/subscriptionTiers";
 import LegalLink from "@/components/legal/LegalLink";
+import { trackEvent } from "@/lib/analytics";
 
 const FEATURE_ICONS = { zap: Zap, sparkles: Sparkles, rocket: Rocket, check: Check, heart: HeartHandshake };
 
@@ -205,6 +206,7 @@ export default function DesktopUpgradeModal({ open, onClose }) {
           return_path: returnPath,
         });
         if (data?.url) {
+          trackEvent("checkout_started", { source: "app_upgrade", plan: selectedTier, interval: billingInterval });
           window.location.href = data.url;
           return;
         }
@@ -218,6 +220,7 @@ export default function DesktopUpgradeModal({ open, onClose }) {
         return_path: returnPath,
       }));
       if (data?.url) {
+        trackEvent("checkout_started", { source: "app", plan: selectedTier, interval: billingInterval });
         window.location.href = data.url;
         return;
       }
