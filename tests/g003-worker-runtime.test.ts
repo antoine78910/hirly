@@ -1,16 +1,21 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { createJsonLogger } from "@hirly/observability";
-import type { ClaimedTask, Lease } from "@hirly/db";
+import { createJsonLogger } from "../packages/observability/src/index";
+import type { ClaimedTask, Lease } from "../packages/db/src/index";
 import { Consumer } from "../apps/worker/src/runtime/consumer";
-import { nextCronOccurrence } from "../apps/worker/src/runtime/scheduler";
+import {
+  nextCronOccurrence,
+  runSchedulerTick,
+} from "../apps/worker/src/runtime/scheduler";
 import { startHttpServer } from "../apps/worker/src/http/server";
 import type { RuntimeConfig } from "../apps/worker/src/runtime/config";
 import type {
   ConsumerRepository,
   RuntimeStore,
 } from "../apps/worker/src/runtime/types";
+import { parseCliArgs } from "../apps/worker/src/cli";
+import { createWorkerRuntime } from "../apps/worker/src/runtime/lifecycle";
 
 const repoRoot = join(import.meta.dir, "..");
 
@@ -238,6 +243,65 @@ describe("G003 persisted scheduler identity", () => {
     expect(first.toISOString()).toBe("2026-10-25T00:30:00.000Z");
     expect(second.toISOString()).toBe("2026-10-25T01:30:00.000Z");
   });
+
+  test("bounds catch-up from persisted next_due_at", async () => {
+    const successors: string[] = [];
+    const store = {
+      async dueSchedules() {
+        return [
+          {
+            id: "schedule-1",
+            cronExpression: "* * * * *",
+            timezone: "UTC",
+            nextDueAt: new Date("2026-07-20T10:00:00.000Z"),
+            maxCatchUp: 2,
+          },
+        ];
+      },
+      async enqueueDueSchedule(_id: string, successor: Date) {
+        successors.push(successor.toISOString());
+        return `run-${successors.length}`;
+      },
+    } as RuntimeStore;
+
+    expect(
+      await runSchedulerTick(store, {
+        now: new Date("2026-07-20T10:05:00.000Z"),
+      }),
+    ).toBe(2);
+    expect(successors).toEqual([
+      "2026-07-20T10:01:00.000Z",
+      "2026-07-20T10:02:00.000Z",
+    ]);
+  });
+
+  test("stops a catch-up batch when the locked schedule is disabled or advanced", async () => {
+    let attempts = 0;
+    const store = {
+      async dueSchedules() {
+        return [
+          {
+            id: "schedule-disabled-during-race",
+            cronExpression: "* * * * *",
+            timezone: "UTC",
+            nextDueAt: new Date("2026-07-20T10:00:00.000Z"),
+            maxCatchUp: 10,
+          },
+        ];
+      },
+      async enqueueDueSchedule() {
+        attempts += 1;
+        return null;
+      },
+    } as RuntimeStore;
+
+    expect(
+      await runSchedulerTick(store, {
+        now: new Date("2026-07-20T10:30:00.000Z"),
+      }),
+    ).toBe(0);
+    expect(attempts).toBe(1);
+  });
 });
 
 describe("G003 HTTP health and control-plane hardening", () => {
@@ -407,7 +471,7 @@ describe("G003 HTTP health and control-plane hardening", () => {
             body: oversized,
           })
         ).status,
-      ).toBe(400);
+      ).toBe(413);
       expect(fixture.enqueueCalls).toBe(0);
     } finally {
       server.stop(true);
@@ -440,24 +504,83 @@ describe("G003 HTTP health and control-plane hardening", () => {
 });
 
 describe("G003 CLI and graceful lifecycle test seams", () => {
-  test("CLI parsing is import-safe and independently testable", () => {
-    const source = read("apps/worker/src/cli.ts");
-    expect(source).toMatch(/export (?:function|const) parseCliArgs/);
-    expect(source).toContain("import.meta.main");
+  test("CLI parsing is import-safe, typed, and rejects malformed commands", () => {
+    expect(parseCliArgs(["enqueue-maintenance", "manual-1"])).toEqual({
+      type: "enqueue-maintenance",
+      idempotencyKey: "manual-1",
+    });
+    expect(
+      parseCliArgs(["enqueue-provider", "apec", "manual-2"]),
+    ).toEqual({
+      type: "enqueue-provider",
+      provider: "apec",
+      idempotencyKey: "manual-2",
+    });
+    expect(() =>
+      parseCliArgs(["enqueue-provider", "unknown", "manual-3"]),
+    ).toThrow();
+    expect(() =>
+      parseCliArgs(["enqueue-maintenance", "manual-4", "unexpected"]),
+    ).toThrow();
   });
 
-  test("readiness flips before drain and the database closes last", () => {
-    const source = read("apps/worker/src/app.ts");
-    const notReady = source.indexOf("health.ready = false");
-    const stopServer = source.indexOf("server.stop", notReady);
-    const stopScheduler = source.indexOf("scheduler.stop", stopServer);
-    const stopConsumer = source.indexOf("consumer.stop", stopScheduler);
-    const closeDatabase = source.indexOf("repository.close", stopConsumer);
+  test("readiness flips before drain, shutdown is idempotent, and database closes last", async () => {
+    const events: string[] = [];
+    let ready = false;
+    const health = {
+      get ready() {
+        return ready;
+      },
+      set ready(value: boolean) {
+        ready = value;
+        events.push(`ready:${value}`);
+      },
+    };
+    const runtime = createWorkerRuntime({
+      health,
+      consumer: {
+        start() {
+          events.push("consumer:start");
+        },
+        async stop(timeoutMs) {
+          events.push(`consumer:stop:${timeoutMs}`);
+        },
+      },
+      scheduler: {
+        start() {
+          events.push("scheduler:start");
+        },
+        async stop() {
+          events.push("scheduler:stop");
+        },
+      },
+      server: {
+        stop(force) {
+          events.push(`server:stop:${force}`);
+        },
+      },
+      repository: {
+        async close() {
+          events.push("repository:close");
+        },
+      },
+      shutdownMs: 250,
+    });
 
-    expect(notReady).toBeGreaterThan(-1);
-    expect(stopServer).toBeGreaterThan(notReady);
-    expect(stopScheduler).toBeGreaterThan(stopServer);
-    expect(stopConsumer).toBeGreaterThan(stopScheduler);
-    expect(closeDatabase).toBeGreaterThan(stopConsumer);
+    runtime.start();
+    const firstStop = runtime.stop();
+    const secondStop = runtime.stop();
+    expect(secondStop).toBe(firstStop);
+    await firstStop;
+    expect(events).toEqual([
+      "consumer:start",
+      "scheduler:start",
+      "ready:true",
+      "ready:false",
+      "server:stop:false",
+      "scheduler:stop",
+      "consumer:stop:250",
+      "repository:close",
+    ]);
   });
 });
