@@ -47,6 +47,14 @@ CREATE INDEX IF NOT EXISTS provider_work_claims_live_provider_idx
   ON public.provider_work_claims(provider, ownership_epoch, expires_at)
   WHERE finished_at IS NULL;
 
+CREATE TABLE IF NOT EXISTS worker_private.provider_write_transactions (
+  transaction_id bigint PRIMARY KEY,
+  claim_id uuid NOT NULL
+    REFERENCES public.provider_work_claims(id) ON DELETE RESTRICT,
+  provider text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+
 CREATE OR REPLACE FUNCTION public.enforce_provider_work_claim_history()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -78,6 +86,46 @@ DROP TRIGGER IF EXISTS provider_work_claims_immutable
 CREATE TRIGGER provider_work_claims_immutable
 BEFORE UPDATE OR DELETE ON public.provider_work_claims
 FOR EACH ROW EXECUTE FUNCTION public.enforce_provider_work_claim_history();
+
+CREATE OR REPLACE FUNCTION worker_private.enforce_claimed_provider_job_write()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+DECLARE
+  v_provider text := coalesce(NEW.provider, OLD.provider);
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM public.provider_work_claims
+    WHERE provider = v_provider
+  ) AND NOT EXISTS (
+    SELECT 1
+    FROM worker_private.provider_write_transactions AS transaction_claim
+    JOIN public.provider_work_claims AS claim
+      ON claim.id = transaction_claim.claim_id
+    JOIN public.provider_registry AS registry
+      ON registry.provider = claim.provider
+    WHERE transaction_claim.transaction_id = txid_current()
+      AND transaction_claim.provider = v_provider
+      AND claim.provider = v_provider
+      AND claim.finished_at IS NULL
+      AND claim.expires_at > clock_timestamp()
+      AND registry.writer_runtime = claim.captured_runtime
+      AND registry.ownership_epoch = claim.ownership_epoch
+  ) THEN
+    RAISE EXCEPTION 'claimed provider jobs require guarded RPC'
+      USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END
+$$;
+
+DROP TRIGGER IF EXISTS jobs_claimed_provider_write_guard ON public.jobs;
+CREATE TRIGGER jobs_claimed_provider_write_guard
+BEFORE INSERT OR UPDATE ON public.jobs
+FOR EACH ROW EXECUTE FUNCTION worker_private.enforce_claimed_provider_job_write();
 
 CREATE OR REPLACE FUNCTION worker_private.provider_claim_is_current(
   p_claim_id uuid,
@@ -252,6 +300,12 @@ BEGIN
     RAISE EXCEPTION 'provider work claim is stale' USING ERRCODE = '42501';
   END IF;
 
+  INSERT INTO worker_private.provider_write_transactions (
+    transaction_id, claim_id, provider
+  )
+  SELECT txid_current(), claim.id, claim.provider
+  FROM public.provider_work_claims AS claim
+  WHERE claim.id = p_provider_claim_id;
   IF NOT worker_private.write_jobs_and_complete(
     p_task_id, p_lease_token, p_claim_generation, p_lease_owner, p_jobs
   ) THEN
@@ -260,6 +314,8 @@ BEGIN
   UPDATE public.provider_work_claims
   SET finished_at = clock_timestamp()
   WHERE id = p_provider_claim_id AND finished_at IS NULL;
+  DELETE FROM worker_private.provider_write_transactions
+  WHERE transaction_id = txid_current();
   RETURN true;
 END
 $$;
@@ -426,6 +482,11 @@ BEGIN
       USING ERRCODE = '22023';
   END IF;
 
+  INSERT INTO worker_private.provider_write_transactions (
+    transaction_id, claim_id, provider
+  )
+  VALUES (txid_current(), p_claim_id, v_provider);
+
   FOR p_job IN SELECT value FROM jsonb_array_elements(p_jobs)
   LOOP
     IF p_job->>'provider' IS DISTINCT FROM v_provider
@@ -547,6 +608,8 @@ BEGIN
       last_seen_at = EXCLUDED.last_seen_at;
     v_written := v_written + 1;
   END LOOP;
+  DELETE FROM worker_private.provider_write_transactions
+  WHERE transaction_id = txid_current();
   RETURN v_written;
 END
 $$;
@@ -649,9 +712,15 @@ END
 $$;
 
 REVOKE ALL ON public.provider_work_claims FROM PUBLIC;
+REVOKE ALL ON worker_private.provider_write_transactions FROM PUBLIC;
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.provider_work_claims
   FROM hirly_inventory_worker, hirly_inventory_operator;
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE
+  ON worker_private.provider_write_transactions
+  FROM hirly_inventory_worker, hirly_inventory_operator;
 REVOKE ALL ON FUNCTION public.enforce_provider_work_claim_history()
+  FROM PUBLIC;
+REVOKE ALL ON FUNCTION worker_private.enforce_claimed_provider_job_write()
   FROM PUBLIC;
 REVOKE ALL ON FUNCTION worker_private.provider_claim_is_current(uuid, text, text)
   FROM PUBLIC;
@@ -707,6 +776,9 @@ BEGIN
     GRANT EXECUTE ON FUNCTION public.python_provider_jobs_upsert(uuid, text, jsonb)
       TO service_role;
     REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.provider_work_claims
+      FROM service_role;
+    REVOKE INSERT, UPDATE, DELETE, TRUNCATE
+      ON worker_private.provider_write_transactions
       FROM service_role;
   END IF;
 END
