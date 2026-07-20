@@ -10,11 +10,14 @@ BEGIN
       FROM service_role;
     REVOKE EXECUTE ON FUNCTION public.python_provider_work_finish(uuid, text)
       FROM service_role;
+    REVOKE EXECUTE ON FUNCTION public.python_provider_jobs_upsert(uuid, text, jsonb)
+      FROM service_role;
   END IF;
 END
 $$;
 
 DROP FUNCTION IF EXISTS public.python_provider_work_finish(uuid, text);
+DROP FUNCTION IF EXISTS public.python_provider_jobs_upsert(uuid, text, jsonb);
 DROP FUNCTION IF EXISTS public.python_provider_work_heartbeat(uuid, text, integer);
 DROP FUNCTION IF EXISTS public.python_provider_work_claim(text, text, integer);
 DROP FUNCTION IF EXISTS worker_private.write_jobs_and_complete(
