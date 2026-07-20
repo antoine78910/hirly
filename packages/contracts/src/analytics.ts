@@ -96,9 +96,6 @@ export const analyticsRegistrySchema = z
   })
   .strict()
   .superRefine((registry, context) => {
-    const canonicalNames = new Set(
-      registry.events.map((event) => event.name),
-    );
     const names = new Set<string>();
     const aliases = new Set<string>();
     for (const [index, event] of registry.events.entries()) {
@@ -111,7 +108,7 @@ export const analyticsRegistrySchema = z
       }
       names.add(event.name);
       for (const alias of event.legacyAliases) {
-        if (canonicalNames.has(alias) || aliases.has(alias)) {
+        if (names.has(alias) || aliases.has(alias)) {
           context.addIssue({
             code: "custom",
             message: "legacy aliases must resolve to exactly one canonical event",
