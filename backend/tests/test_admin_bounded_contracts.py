@@ -45,6 +45,19 @@ def test_admin_bounded_endpoints_use_one_operation_each(monkeypatch):
     ]
 
 
+def test_admin_overview_uses_bounded_snapshot_by_default(monkeypatch):
+    db = _AdminDb()
+    monkeypatch.setattr(server, "db", db)
+    monkeypatch.delenv("ADMIN_OVERVIEW_RPC_ENABLED", raising=False)
+    monkeypatch.setenv("ADMIN_BOUNDED_RPC_ENABLED", "false")
+    admin = server.User(user_id="admin", email="admin@example.com", name="Admin")
+
+    result = asyncio.run(server.admin_overview(admin))
+
+    assert db.calls == [("overview",)]
+    assert result["metrics"] == {}
+
+
 def test_admin_database_failure_is_not_a_successful_empty_result():
     class _Broken:
         table_name = "applications"
@@ -60,6 +73,7 @@ def test_admin_database_failure_is_not_a_successful_empty_result():
 def test_admin_contract_rollout_and_security():
     root = Path(__file__).parents[1]
     assert "ADMIN_BOUNDED_RPC_ENABLED=false" in (root / ".env.example").read_text()
+    assert "ADMIN_OVERVIEW_RPC_ENABLED=true" in (root / ".env.example").read_text()
     sql = (root / "db/migrations/20260720001600_admin_bounded_contracts.sql").read_text()
     down = (root / "db/migrations/20260720001600_admin_bounded_contracts.down.sql").read_text()
     assert "SET statement_timeout = '10s'" in sql

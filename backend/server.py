@@ -12224,11 +12224,17 @@ async def _admin_user_analytics_payload() -> Dict[str, Any]:
 
 @api_router.get("/admin/overview")
 async def admin_overview(admin: User = Depends(require_admin_user)):
-    if _env_enabled("ADMIN_BOUNDED_RPC_ENABLED", "false"):
+    if _env_enabled("ADMIN_OVERVIEW_RPC_ENABLED", "true"):
         snapshot = getattr(db, "admin_overview_snapshot", None)
         if not callable(snapshot):
-            raise HTTPException(status_code=503, detail="Admin aggregate contract is unavailable")
-        return await snapshot()
+            if _env_enabled("ADMIN_BOUNDED_RPC_ENABLED", "false"):
+                raise HTTPException(status_code=503, detail="Admin aggregate contract is unavailable")
+        else:
+            try:
+                return await snapshot()
+            except Exception as exc:
+                logger.exception("admin_overview_snapshot_failed")
+                raise HTTPException(status_code=503, detail="Admin overview snapshot failed") from exc
     users, profiles, _swipes, applications, jobs = await _admin_base_data(include_swipes=False)
     normalized_apps = [_normalize_application_status_fields(app_doc) for app_doc in applications]
     user_map = {item.get("user_id"): item for item in users}
