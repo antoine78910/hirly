@@ -292,6 +292,11 @@ describe("G015 release verification contract", () => {
     expect(workflow).toContain("bun run verify:job-supply-release --");
     expect(workflow).toContain("--allow-disposable-database");
     expect(workflow).toContain('--expected-head "$(git rev-parse HEAD)"');
+    expect(workflow).toContain("sudo apt-get install -y postgresql-client zsh");
+    expect(workflow).toContain("sudo apt-get install -y zsh");
+    expect(workflow).toContain(
+      ".venv/bin/python -m pip install --disable-pip-version-check pytest==9.1.1",
+    );
     for (const sharedSuiteVariable of [
       "G002_TEST_DATABASE_URL:",
       "G003_TEST_DATABASE_URL:",
