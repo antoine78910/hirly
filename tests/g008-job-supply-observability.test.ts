@@ -123,6 +123,7 @@ describe("G008 job-supply observability contract", () => {
 
   test("makes reconciled France Travail census manifests immutable", () => {
     expect(censusManifestDefinition).not.toContain("coverage_run_id");
+    expect(censusManifestDefinition).toContain("source_run_ids");
     expect(migration).toContain(
       "source_run_ids uuid[] NOT NULL CHECK (cardinality(source_run_ids) > 0)",
     );
