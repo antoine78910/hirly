@@ -136,6 +136,10 @@ ALTER TABLE public.jobs
   ADD COLUMN IF NOT EXISTS first_seen_at timestamptz,
   ADD COLUMN IF NOT EXISTS expires_at timestamptz,
   ADD COLUMN IF NOT EXISTS removed_at timestamptz,
+  ADD COLUMN IF NOT EXISTS lifecycle_state text CHECK (
+    lifecycle_state IS NULL
+    OR lifecycle_state IN ('active', 'stale', 'removed', 'expired', 'blocked')
+  ),
   ADD COLUMN IF NOT EXISTS lifecycle_checked_at timestamptz,
   ADD COLUMN IF NOT EXISTS route_classification text,
   ADD COLUMN IF NOT EXISTS route_confidence numeric CHECK (
@@ -316,6 +320,9 @@ AS $$
   )
 $$;
 
+ALTER FUNCTION worker_private.career_source_runnable(uuid, text, text)
+  OWNER TO hirly_inventory_operator;
+
 REVOKE ALL ON public.raw_job_snapshots, public.job_occurrences,
   public.canonical_job_groups, public.canonical_job_group_members,
   public.canonical_job_group_events FROM PUBLIC;
@@ -328,6 +335,7 @@ GRANT SELECT ON public.job_occurrences, public.canonical_job_groups,
   public.canonical_job_group_members, public.canonical_job_group_events,
   public.raw_job_snapshot_metadata, public.career_source_runtime_status
   TO hirly_inventory_operator;
+GRANT SELECT ON public.provider_registry TO hirly_inventory_operator;
 GRANT EXECUTE ON FUNCTION worker_private.career_source_runnable(uuid, text, text)
   TO hirly_inventory_worker, hirly_inventory_operator;
 
