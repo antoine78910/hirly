@@ -1,146 +1,134 @@
 {
   "schemaVersion": 1,
-  "runId": "904f054c-2338-4b97-8347-0c2705f6a6a1",
-  "runChecksum": "cfa41f829afe6409559be25ba9f40f497270caae0fe989b225f5cc9480d04fed",
-  "generatedAt": "2026-07-20T08:35:40.148Z",
+  "runId": "0a0879b6-bf62-4e4d-81ad-0dfa48c18086",
+  "runChecksum": "d42233d4820289408bbc2eb12c0d54bb26ed0f8244ee36d58b60cdddb3495ac9",
+  "generatedAt": "2026-07-20T03:53:28.834Z",
   "datasetDigest": "c8e49dd470f4e7dd4faffd00b89e4e7348e5f7a1c031730f6be1226192efe875",
-  "executedAt": "2026-07-20T08:35:40.148Z",
-  "fixtureMode": false,
-  "verdict": "FAIL",
-  "invariantFailures": [
-    "PAG-JSEARCH-001:reproduction_failed:127",
-    "WORKDAY-FAILURE-001:reproduction_failed:127",
-    "PAG-FT-001:reproduction_failed:127",
-    "FILTER-001:reproduction_failed:127",
-    "REFRESH-001:reproduction_failed:127",
-    "DEDUP-001:reproduction_failed:127",
-    "SCHED-001:reproduction_failed:127",
-    "FEED-PAG-001:reproduction_failed:127",
-    "QUERY-MANIFEST-LOCAL-001:reproduction_failed:127",
-    "SQL-EVALUATOR-LOCAL-001:reproduction_failed:1",
-    "CAP-DIRECT-LOCAL-001:reproduction_failed:127"
-  ],
+  "executedAt": "2026-07-20T03:53:28.834Z",
+  "fixtureMode": true,
+  "verdict": "PARTIAL",
+  "invariantFailures": [],
   "commandResults": [
     {
       "command": ".venv/bin/python -m pytest -q backend/tests/test_jsearch_request_budget.py",
-      "exitCode": 127,
+      "exitCode": 0,
       "rows": [
         "PAG-JSEARCH-001"
       ],
-      "executedAt": "2026-07-20T08:35:38.697Z",
-      "stdout": "",
-      "stderr": "sh: .venv/bin/python: No such file or directory\n",
-      "checksum": "7cb6add623929e34b3ed24cd6363ddaf31dff37785114608ed4edc6f99a59b5e"
+      "executedAt": "2026-07-20T03:53:07.614Z",
+      "stdout": ".....                                                                    [100%]\n5 passed in 3.07s\n",
+      "stderr": "",
+      "checksum": "d2d99f9eb98bb108f72423d012c4a783bb11bcb286a859d0fcb058f008cde44e"
     },
     {
       "command": ".venv/bin/python -m pytest -q backend/tests/test_workday_search.py",
-      "exitCode": 127,
+      "exitCode": 0,
       "rows": [
         "WORKDAY-FAILURE-001"
       ],
-      "executedAt": "2026-07-20T08:35:38.782Z",
-      "stdout": "",
-      "stderr": "sh: .venv/bin/python: No such file or directory\n",
-      "checksum": "987660f1361c4acadafd3399ff339e6375ae55d55d208dba128b2a6f0649a877"
+      "executedAt": "2026-07-20T03:53:08.008Z",
+      "stdout": "..........                                                               [100%]\n10 passed in 0.07s\n",
+      "stderr": "",
+      "checksum": "447e53a2fa33a564496381a1a8fdf9123a6b47a6c1f2eece57ee06932b7f192b"
     },
     {
       "command": ".venv/bin/python -m pytest -q backend/tests/test_france_travail_provider.py",
-      "exitCode": 127,
+      "exitCode": 0,
       "rows": [
         "PAG-FT-001"
       ],
-      "executedAt": "2026-07-20T08:35:38.869Z",
-      "stdout": "",
-      "stderr": "sh: .venv/bin/python: No such file or directory\n",
-      "checksum": "a7c9e847f7eb524ab3c1c0f0026e7c1fc6fe9f63b2b57718915034bffb5e34c2"
+      "executedAt": "2026-07-20T03:53:08.754Z",
+      "stdout": ".........................                                                [100%]\n25 passed in 0.44s\n",
+      "stderr": "",
+      "checksum": "db08164c239766b425eb10c51c4d3b8d4dcb7b054458b353f7d6b854843c6068"
     },
     {
       "command": ".venv/bin/python -m pytest -q backend/tests/test_jsearch_validation_integration.py backend/tests/test_job_dedup_golden.py",
-      "exitCode": 127,
+      "exitCode": 0,
       "rows": [
         "FILTER-001"
       ],
-      "executedAt": "2026-07-20T08:35:38.945Z",
-      "stdout": "",
-      "stderr": "sh: .venv/bin/python: No such file or directory\n",
-      "checksum": "84daa2e39af7f6454198f2108ce23e888755c506a336ba09f859efc0b2befa9b"
+      "executedAt": "2026-07-20T03:53:09.165Z",
+      "stdout": ".........                                                                [100%]\n9 passed in 0.09s\n",
+      "stderr": "",
+      "checksum": "9802af7a1730af32d76ce68149a025a15a211699b59e121ee7f22226955d6b1e"
     },
     {
       "command": ".venv/bin/python -m pytest -q backend/tests/test_job_cache_maintenance.py",
-      "exitCode": 127,
+      "exitCode": 0,
       "rows": [
         "REFRESH-001"
       ],
-      "executedAt": "2026-07-20T08:35:39.036Z",
-      "stdout": "",
-      "stderr": "sh: .venv/bin/python: No such file or directory\n",
-      "checksum": "757c9859bcff65818b63e666983cb337816c4d3034487e47088d384c84b60683"
+      "executedAt": "2026-07-20T03:53:10.486Z",
+      "stdout": ".............................                                            [100%]\n=============================== warnings summary ===============================\n.venv/lib/python3.13/site-packages/starlette/formparsers.py:12\n  /Users/tboutron/Documents/clients/hirly/monorepo-hirly/.venv/lib/python3.13/site-packages/starlette/formparsers.py:12: PendingDeprecationWarning: Please use `import python_multipart` instead.\n    import multipart\n\nbackend/server.py:17125\n  /Users/tboutron/Documents/clients/hirly/monorepo-hirly/backend/server.py:17125: DeprecationWarning: \n          on_event is deprecated, use lifespan event handlers instead.\n  \n          Read more about it in the\n          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).\n          \n    @app.on_event(\"startup\")\n\n.venv/lib/python3.13/site-packages/fastapi/applications.py:4495\n.venv/lib/python3.13/site-packages/fastapi/applications.py:4495\n  /Users/tboutron/Documents/clients/hirly/monorepo-hirly/.venv/lib/python3.13/site-packages/fastapi/applications.py:4495: DeprecationWarning: \n          on_event is deprecated, use lifespan event handlers instead.\n  \n          Read more about it in the\n          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).\n          \n    return self.router.on_event(event_type)\n\nbackend/server.py:17185\n  /Users/tboutron/Documents/clients/hirly/monorepo-hirly/backend/server.py:17185: DeprecationWarning: \n          on_event is deprecated, use lifespan event handlers instead.\n  \n          Read more about it in the\n          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).\n          \n    @app.on_event(\"shutdown\")\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n29 passed, 5 warnings in 0.86s\n",
+      "stderr": "",
+      "checksum": "adad1aa022f0a90f494bd0db3988e2722cc4664faaa8aad2cb125b8c95cb3470"
     },
     {
       "command": ".venv/bin/python -m pytest -q backend/tests/test_job_dedup_golden.py",
-      "exitCode": 127,
+      "exitCode": 0,
       "rows": [
         "DEDUP-001"
       ],
-      "executedAt": "2026-07-20T08:35:39.110Z",
-      "stdout": "",
-      "stderr": "sh: .venv/bin/python: No such file or directory\n",
-      "checksum": "8c2ff8248d8f4bcde64de1b1e759ee3a72c3128ae29f5566f27163f81dac25ee"
+      "executedAt": "2026-07-20T03:53:10.866Z",
+      "stdout": "....                                                                     [100%]\n4 passed in 0.07s\n",
+      "stderr": "",
+      "checksum": "1cb2b3d5df6dd7c739268a394f67e83a2e78ebe229fd5da397f26fabccaaea32"
     },
     {
       "command": ".venv/bin/python -m pytest -q backend/tests/test_ingestion_scheduler_ledger.py backend/tests/test_ats_source_service.py && bun test tests/job-ingestion-audit.test.ts apps/worker/test/scheduler.test.ts",
-      "exitCode": 127,
+      "exitCode": 0,
       "rows": [
         "SCHED-001"
       ],
-      "executedAt": "2026-07-20T08:35:39.195Z",
-      "stdout": "",
-      "stderr": "sh: .venv/bin/python: No such file or directory\n",
-      "checksum": "575642827a27e2e24ff7e1f825ed5b9485a137920e5e261e35b39461186da35f"
+      "executedAt": "2026-07-20T03:53:12.428Z",
+      "stdout": "................................                                         [100%]\n=============================== warnings summary ===============================\n.venv/lib/python3.13/site-packages/starlette/formparsers.py:12\n  /Users/tboutron/Documents/clients/hirly/monorepo-hirly/.venv/lib/python3.13/site-packages/starlette/formparsers.py:12: PendingDeprecationWarning: Please use `import python_multipart` instead.\n    import multipart\n\nbackend/server.py:17125\n  /Users/tboutron/Documents/clients/hirly/monorepo-hirly/backend/server.py:17125: DeprecationWarning: \n          on_event is deprecated, use lifespan event handlers instead.\n  \n          Read more about it in the\n          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).\n          \n    @app.on_event(\"startup\")\n\n.venv/lib/python3.13/site-packages/fastapi/applications.py:4495\n.venv/lib/python3.13/site-packages/fastapi/applications.py:4495\n  /Users/tboutron/Documents/clients/hirly/monorepo-hirly/.venv/lib/python3.13/site-packages/fastapi/applications.py:4495: DeprecationWarning: \n          on_event is deprecated, use lifespan event handlers instead.\n  \n          Read more about it in the\n          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).\n          \n    return self.router.on_event(event_type)\n\nbackend/server.py:17185\n  /Users/tboutron/Documents/clients/hirly/monorepo-hirly/backend/server.py:17185: DeprecationWarning: \n          on_event is deprecated, use lifespan event handlers instead.\n  \n          Read more about it in the\n          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).\n          \n    @app.on_event(\"shutdown\")\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n32 passed, 5 warnings in 0.97s\nbun test v1.3.14 (0d9b296a)\n",
+      "stderr": "\ntests/job-ingestion-audit.test.ts:\n(pass) job ingestion run-ledger migration > extends the existing ledger without moving writer ownership [0.14ms]\n(pass) job ingestion run-ledger migration > keeps Python interval metadata out of the Bun cron scheduler [0.04ms]\n(pass) job ingestion run-ledger migration > exposes alertable failed, stale, zero and incomplete states [0.22ms]\n(pass) job ingestion run-ledger migration > keeps terminal proof facts immutable and behind fenced RPCs [0.03ms]\n(pass) job ingestion run-ledger migration > uses the manifest-aware run-begin signature for privileges and rollback [0.02ms]\n(pass) job ingestion run-ledger migration > has a reversible rollback [0.01ms]\n\napps/worker/test/scheduler.test.ts:\n(pass) persisted scheduler cron policy > computes the next UTC occurrence after the persisted identity [2.47ms]\n(pass) persisted scheduler cron policy > rejects malformed cron and timezone input [0.41ms]\n(pass) persisted scheduler cron policy > bounds catch-up using persisted occurrences rather than wall-clock keys [5.51ms]\n\n 9 pass\n 0 fail\n 51 expect() calls\nRan 9 tests across 2 files. [58.00ms]\n",
+      "checksum": "0d590f1a66acf9d96bd25996af42067950f53de0eb8f0a855aee8c9600762c63"
     },
     {
       "command": ".venv/bin/python -m pytest -q backend/tests/test_supabase_cursor_limit.py backend/tests/test_feed_db_first.py",
-      "exitCode": 127,
+      "exitCode": 0,
       "rows": [
         "FEED-PAG-001"
       ],
-      "executedAt": "2026-07-20T08:35:39.270Z",
-      "stdout": "",
-      "stderr": "sh: .venv/bin/python: No such file or directory\n",
-      "checksum": "ce84aca3cf2aa8dd81bbc79f840e2560fd8c10bd8474becbea41efd212ddf192"
+      "executedAt": "2026-07-20T03:53:20.797Z",
+      "stdout": "....................................................................     [100%]\n=============================== warnings summary ===============================\n.venv/lib/python3.13/site-packages/starlette/formparsers.py:12\n  /Users/tboutron/Documents/clients/hirly/monorepo-hirly/.venv/lib/python3.13/site-packages/starlette/formparsers.py:12: PendingDeprecationWarning: Please use `import python_multipart` instead.\n    import multipart\n\nbackend/server.py:17125\n  /Users/tboutron/Documents/clients/hirly/monorepo-hirly/backend/server.py:17125: DeprecationWarning: \n          on_event is deprecated, use lifespan event handlers instead.\n  \n          Read more about it in the\n          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).\n          \n    @app.on_event(\"startup\")\n\n.venv/lib/python3.13/site-packages/fastapi/applications.py:4495\n.venv/lib/python3.13/site-packages/fastapi/applications.py:4495\n  /Users/tboutron/Documents/clients/hirly/monorepo-hirly/.venv/lib/python3.13/site-packages/fastapi/applications.py:4495: DeprecationWarning: \n          on_event is deprecated, use lifespan event handlers instead.\n  \n          Read more about it in the\n          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).\n          \n    return self.router.on_event(event_type)\n\nbackend/server.py:17185\n  /Users/tboutron/Documents/clients/hirly/monorepo-hirly/backend/server.py:17185: DeprecationWarning: \n          on_event is deprecated, use lifespan event handlers instead.\n  \n          Read more about it in the\n          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).\n          \n    @app.on_event(\"shutdown\")\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n68 passed, 5 warnings in 7.86s\n",
+      "stderr": "",
+      "checksum": "b660f6a7590fb05f7b6daa93ef1bf06059b9e76d8ad13ae01bc11e436c619550"
     },
     {
       "command": ".venv/bin/python -m pytest -q backend/tests/test_france_travail_harvest.py backend/tests/test_jsearch_request_budget.py backend/tests/test_job_cache_maintenance.py",
-      "exitCode": 127,
+      "exitCode": 0,
       "rows": [
         "QUERY-MANIFEST-LOCAL-001"
       ],
-      "executedAt": "2026-07-20T08:35:39.341Z",
-      "stdout": "",
-      "stderr": "sh: .venv/bin/python: No such file or directory\n",
-      "checksum": "96ab12caddaf2af64645d455947e076f45c32d4f25ddb8e0c83d74677a8bc23b"
+      "executedAt": "2026-07-20T03:53:26.849Z",
+      "stdout": "..........................................                               [100%]\n=============================== warnings summary ===============================\n.venv/lib/python3.13/site-packages/starlette/formparsers.py:12\n  /Users/tboutron/Documents/clients/hirly/monorepo-hirly/.venv/lib/python3.13/site-packages/starlette/formparsers.py:12: PendingDeprecationWarning: Please use `import python_multipart` instead.\n    import multipart\n\nbackend/server.py:17125\n  /Users/tboutron/Documents/clients/hirly/monorepo-hirly/backend/server.py:17125: DeprecationWarning: \n          on_event is deprecated, use lifespan event handlers instead.\n  \n          Read more about it in the\n          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).\n          \n    @app.on_event(\"startup\")\n\n.venv/lib/python3.13/site-packages/fastapi/applications.py:4495\n.venv/lib/python3.13/site-packages/fastapi/applications.py:4495\n  /Users/tboutron/Documents/clients/hirly/monorepo-hirly/.venv/lib/python3.13/site-packages/fastapi/applications.py:4495: DeprecationWarning: \n          on_event is deprecated, use lifespan event handlers instead.\n  \n          Read more about it in the\n          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).\n          \n    return self.router.on_event(event_type)\n\nbackend/server.py:17185\n  /Users/tboutron/Documents/clients/hirly/monorepo-hirly/backend/server.py:17185: DeprecationWarning: \n          on_event is deprecated, use lifespan event handlers instead.\n  \n          Read more about it in the\n          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).\n          \n    @app.on_event(\"shutdown\")\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n42 passed, 5 warnings in 5.54s\n",
+      "stderr": "",
+      "checksum": "cdc334065b671d8f50a86d4fbd1da6e718fff298fff4a0647b59977f57898749"
     },
     {
       "command": "bun test apps/job-ingestion-audit/test/sql-evaluator.test.ts",
-      "exitCode": 1,
+      "exitCode": 0,
       "rows": [
         "SQL-EVALUATOR-LOCAL-001"
       ],
-      "executedAt": "2026-07-20T08:35:39.462Z",
+      "executedAt": "2026-07-20T03:53:26.949Z",
       "stdout": "bun test v1.3.14 (0d9b296a)\n",
-      "stderr": "\napps/job-ingestion-audit/test/sql-evaluator.test.ts:\n\n# Unhandled error between tests\n-------------------------------\nerror: Cannot find package 'postgres' from '/Users/tboutron/Documents/clients/hirly/monorepo-hirly/.omx/team/g010-france-travail-b-2b528356/worktrees/worker-3/apps/job-ingestion-audit/src/sql-evaluator.ts'\n-------------------------------\n\n\n 0 pass\n 1 fail\n 1 error\nRan 1 test across 1 file. [35.00ms]\n",
-      "checksum": "3feb4d8404de5449c9c1099452540dfda66df4f57ee4f8313002218c7a776beb"
+      "stderr": "\napps/job-ingestion-audit/test/sql-evaluator.test.ts:\n(pass) read-only SQL evaluator > accepts SELECT and rejects mutations [1.06ms]\n(pass) read-only SQL evaluator > requires and summarizes exactly five samples [0.10ms]\n\n 2 pass\n 0 fail\n 5 expect() calls\nRan 2 tests across 1 file. [29.00ms]\n",
+      "checksum": "63ef607185d3478857edbd31c8405fdeddfe98388ad9bf219521be209ef20bf3"
     },
     {
       "command": ".venv/bin/python -m pytest -q backend/tests/test_ats_adapters.py backend/tests/test_ats_source_service.py",
-      "exitCode": 127,
+      "exitCode": 0,
       "rows": [
         "CAP-DIRECT-LOCAL-001"
       ],
-      "executedAt": "2026-07-20T08:35:39.565Z",
-      "stdout": "",
-      "stderr": "sh: .venv/bin/python: No such file or directory\n",
-      "checksum": "431fff75462a88f2ac6cebf5c915e8595eca4dcfabc48e29893f6e9ceb9a55f3"
+      "executedAt": "2026-07-20T03:53:28.383Z",
+      "stdout": "..........................................                               [100%]\n=============================== warnings summary ===============================\n.venv/lib/python3.13/site-packages/starlette/formparsers.py:12\n  /Users/tboutron/Documents/clients/hirly/monorepo-hirly/.venv/lib/python3.13/site-packages/starlette/formparsers.py:12: PendingDeprecationWarning: Please use `import python_multipart` instead.\n    import multipart\n\nbackend/server.py:17125\n  /Users/tboutron/Documents/clients/hirly/monorepo-hirly/backend/server.py:17125: DeprecationWarning: \n          on_event is deprecated, use lifespan event handlers instead.\n  \n          Read more about it in the\n          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).\n          \n    @app.on_event(\"startup\")\n\n.venv/lib/python3.13/site-packages/fastapi/applications.py:4495\n.venv/lib/python3.13/site-packages/fastapi/applications.py:4495\n  /Users/tboutron/Documents/clients/hirly/monorepo-hirly/.venv/lib/python3.13/site-packages/fastapi/applications.py:4495: DeprecationWarning: \n          on_event is deprecated, use lifespan event handlers instead.\n  \n          Read more about it in the\n          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).\n          \n    return self.router.on_event(event_type)\n\nbackend/server.py:17185\n  /Users/tboutron/Documents/clients/hirly/monorepo-hirly/backend/server.py:17185: DeprecationWarning: \n          on_event is deprecated, use lifespan event handlers instead.\n  \n          Read more about it in the\n          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).\n          \n    @app.on_event(\"shutdown\")\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n42 passed, 5 warnings in 0.89s\n",
+      "stderr": "",
+      "checksum": "b07e57bca56311ae6f43cb70dbcc8b245ab762ba78518898b243c587903fb326"
     },
     {
       "command": "test -n \"$FRANCE_TRAVAIL_CLIENT_ID\" && test -n \"$FRANCE_TRAVAIL_CLIENT_SECRET\"",
@@ -148,10 +136,10 @@
       "rows": [
         "CAP-FT-LIVE-001"
       ],
-      "executedAt": "2026-07-20T08:35:39.654Z",
+      "executedAt": "2026-07-20T03:53:28.442Z",
       "stdout": "",
       "stderr": "",
-      "checksum": "98643142c5a3608b6bad4662e5d2085a1e9a8c51d112032e582551f82880d1b9"
+      "checksum": "217aadab9bb3118886531391eabfde4e89c131564063c5137c5d84331384ac22"
     },
     {
       "command": "test -n \"$JSEARCH_API_KEY\"",
@@ -159,10 +147,10 @@
       "rows": [
         "CAP-JSEARCH-LIVE-001"
       ],
-      "executedAt": "2026-07-20T08:35:39.729Z",
+      "executedAt": "2026-07-20T03:53:28.504Z",
       "stdout": "",
       "stderr": "",
-      "checksum": "3e62349decc0a1115a5c9d45cae26eed3642f0b78112626263c719ba484aff58"
+      "checksum": "4a57a6c5c9ee97275041a1345a0d320cd41572f0d67b6ce69ceddb6f502bdc9d"
     },
     {
       "command": "test -n \"$DIRECT_ATS_AUDIT_SOURCE\"",
@@ -170,10 +158,10 @@
       "rows": [
         "CAP-DIRECT-ATS-001"
       ],
-      "executedAt": "2026-07-20T08:35:39.807Z",
+      "executedAt": "2026-07-20T03:53:28.566Z",
       "stdout": "",
       "stderr": "",
-      "checksum": "e39b9fd68edb4f712ed7a74af9033b7e2e8aa6e9023abfe201bb661f45b56b6c"
+      "checksum": "f712495993e665f179171485044d6b700e4ac761eac058790040f132af03e279"
     },
     {
       "command": "test -n \"$INGESTION_AUDIT_PARTITION_TOTALS_SNAPSHOT\" && test -f \"$INGESTION_AUDIT_PARTITION_TOTALS_SNAPSHOT\"",
@@ -181,10 +169,10 @@
       "rows": [
         "QUERY-PARTITION-001"
       ],
-      "executedAt": "2026-07-20T08:35:39.888Z",
+      "executedAt": "2026-07-20T03:53:28.630Z",
       "stdout": "",
       "stderr": "",
-      "checksum": "d469ee696f7a3f0db96ded3a10a4f5e226dd4260fbd615bf71c010f919a55cb3"
+      "checksum": "d7ae2a914918d7c89df26d499790f87eaaebc5a37c55e266e82461111b74f5a3"
     },
     {
       "command": "test -n \"$INGESTION_AUDIT_PROVIDER_METADATA_PATH\" && test -f \"$INGESTION_AUDIT_PROVIDER_METADATA_PATH\"",
@@ -192,10 +180,10 @@
       "rows": [
         "COVERAGE-001"
       ],
-      "executedAt": "2026-07-20T08:35:39.970Z",
+      "executedAt": "2026-07-20T03:53:28.695Z",
       "stdout": "",
       "stderr": "",
-      "checksum": "6b3a83260ddfdd8a03340c8d6080b2a0ff8836346624f7ec506bee8ef4d49957"
+      "checksum": "a246256b56bbb81a37be70ac474b2db91390f7a7deebc8189d03bd7c1a61bcff"
     },
     {
       "command": "test -n \"$INGESTION_AUDIT_SQL_DATABASE_URL\"",
@@ -203,10 +191,10 @@
       "rows": [
         "SQL-FEED-001"
       ],
-      "executedAt": "2026-07-20T08:35:40.059Z",
+      "executedAt": "2026-07-20T03:53:28.763Z",
       "stdout": "",
       "stderr": "",
-      "checksum": "7b5950b51d93043c009e4125949855619f7bbf7d9bc7e5fbf12b2695b9d8aa09"
+      "checksum": "1514f19819878064141a3553f96809c189496824345bb9cbf4d3f24d86007092"
     },
     {
       "command": "test -n \"$INGESTION_AUDIT_COHORT_DATABASE_URL\"",
@@ -214,10 +202,10 @@
       "rows": [
         "COVERAGE-COHORT-001"
       ],
-      "executedAt": "2026-07-20T08:35:40.144Z",
+      "executedAt": "2026-07-20T03:53:28.831Z",
       "stdout": "",
       "stderr": "",
-      "checksum": "5252ff9d92c1f819e7d4c87da31b4d2964c208b5bd1b31fddda9fefda44e0d39"
+      "checksum": "aa2448eb9a0313e28989461d66e8e8d2c301c35e27ef16b92e0d285331c45a7d"
     }
   ],
   "evidenceDigests": {
@@ -236,5 +224,5 @@
     "apps/job-ingestion-audit/src/sql-evaluator.ts": "0952cc8e48cc662fa451704ef7e1d0e47a98692907962bb04a71a05b582bbea6",
     "backend/tests/test_ats_source_service.py": "f8dcbc3cb68c7a4fa50ebe18a229e4af4bd530c676c92a2029362796fc3609ca"
   },
-  "resultChecksum": "cfa41f829afe6409559be25ba9f40f497270caae0fe989b225f5cc9480d04fed"
+  "resultChecksum": "d42233d4820289408bbc2eb12c0d54bb26ed0f8244ee36d58b60cdddb3495ac9"
 }
