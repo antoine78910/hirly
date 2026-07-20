@@ -512,6 +512,7 @@ export async function runIngestion<RawJob>(input: {
   now?: () => Date;
   clock?: Clock;
   sleep?: Sleep;
+  rateGate?: ProviderRateGate;
   onMetrics?: (metrics: IngestionMetrics) => void;
 }): Promise<IngestionResult> {
   if (
@@ -526,11 +527,9 @@ export async function runIngestion<RawJob>(input: {
   const startedAt = performance.now();
   const signal = input.signal ?? new AbortController().signal;
   const now = input.now ?? (() => new Date());
-  const rateGate = new ProviderRateGate(
-    input.rateLimit,
-    input.clock,
-    input.sleep,
-  );
+  const rateGate =
+    input.rateGate ??
+    new ProviderRateGate(input.rateLimit, input.clock, input.sleep);
   const metrics: IngestionMetrics = {
     fetched: 0,
     accepted: 0,
