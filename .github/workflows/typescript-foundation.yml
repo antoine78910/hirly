@@ -33,6 +33,8 @@ jobs:
       G015_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hirly_test
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.14

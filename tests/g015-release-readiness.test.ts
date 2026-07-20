@@ -294,6 +294,7 @@ describe("G015 release verification contract", () => {
     expect(workflow).toContain('--expected-head "$(git rev-parse HEAD)"');
     expect(workflow).toContain("sudo apt-get install -y postgresql-client zsh");
     expect(workflow).toContain("sudo apt-get install -y zsh");
+    expect(workflow.match(/fetch-depth: 0/g)?.length).toBeGreaterThanOrEqual(2);
     expect(workflow).toContain(
       ".venv/bin/python -m pip install --disable-pip-version-check pytest==9.1.1",
     );
