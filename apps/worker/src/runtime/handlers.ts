@@ -39,6 +39,17 @@ export function createTaskHandlers(
       try {
         await store.assertProviderRunnable(provider);
         const module = modules[provider] ?? getProviderModule(provider);
+        if (!store.claimProviderWork) {
+          throw new IngestionError(
+            "integrity_error",
+            "provider ownership claim boundary is unavailable",
+          );
+        }
+        const providerClaim = await store.claimProviderWork(
+          task,
+          provider,
+          Math.max(1, Math.ceil((task.leaseUntil.getTime() - Date.now()) / 1_000)),
+        );
         let rateGate = rateGates.get(provider);
         if (!rateGate) {
           rateGate = new ProviderRateGate(module.rateLimit);
@@ -61,7 +72,11 @@ export function createTaskHandlers(
           adapter: module.adapter,
           repository: {
             async upsertCanonicalBatch(jobs) {
-              const current = await writeJobsAndComplete(task, jobs);
+              const current = await writeJobsAndComplete(
+                task,
+                providerClaim,
+                jobs,
+              );
               if (!current) {
                 throw new IngestionError(
                   "integrity_error",

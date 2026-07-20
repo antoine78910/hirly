@@ -27,6 +27,14 @@ export interface ClaimedTask extends Lease {
   leaseUntil: Date;
 }
 
+export interface ProviderWorkClaim {
+  claimId: string;
+  provider: Provider;
+  runtime: "typescript";
+  ownershipEpoch: bigint;
+  expiresAt: Date;
+}
+
 export interface DueSchedule {
   id: string;
   cronExpression: string;
@@ -247,6 +255,7 @@ export class WorkerRepository {
 
   async writeJobsAndComplete(
     lease: Lease,
+    providerClaim: ProviderWorkClaim,
     jobs: CanonicalJob[],
   ): Promise<boolean> {
     const databaseJobs = jobs.map((job) => ({
@@ -283,10 +292,45 @@ export class WorkerRepository {
         ${lease.leaseToken}::uuid,
         ${lease.claimGeneration.toString()}::bigint,
         ${lease.leaseOwner},
+        ${providerClaim.claimId}::uuid,
         ${this.sql.json(asJson(databaseJobs))}
       )
     `;
     return row?.write_jobs_and_complete === true;
+  }
+
+  async claimProviderWork(
+    lease: Lease,
+    provider: Provider,
+    leaseSeconds: number,
+  ): Promise<ProviderWorkClaim> {
+    const [row] = await this.sql<
+      {
+        claim_id: string;
+        provider: Provider;
+        runtime: "typescript";
+        ownership_epoch: string;
+        expires_at: Date;
+      }[]
+    >`
+      SELECT *
+      FROM worker_private.claim_provider_work(
+        ${lease.taskId}::uuid,
+        ${lease.leaseToken}::uuid,
+        ${lease.claimGeneration.toString()}::bigint,
+        ${lease.leaseOwner},
+        ${provider},
+        ${leaseSeconds}
+      )
+    `;
+    if (!row) throw new Error("authorization_blocked");
+    return {
+      claimId: row.claim_id,
+      provider: row.provider,
+      runtime: row.runtime,
+      ownershipEpoch: BigInt(row.ownership_epoch),
+      expiresAt: row.expires_at,
+    };
   }
 
   async setProviderAuthorization(input: {

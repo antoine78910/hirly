@@ -1,6 +1,7 @@
 import type {
   ClaimedTask,
   Lease,
+  ProviderWorkClaim,
   WorkerRepository,
 } from "@hirly/db";
 import type {
@@ -20,8 +21,14 @@ export interface RuntimeStore {
   dueSchedules(limit: number): Promise<DueSchedule[]>;
   enqueueDueSchedule(scheduleId: string, nextDueAt: Date): Promise<string | null>;
   getRun(runId: string): Promise<RunView | null>;
+  claimProviderWork?(
+    lease: Lease,
+    provider: Provider,
+    leaseSeconds: number,
+  ): Promise<ProviderWorkClaim>;
   writeJobsAndComplete?(
     lease: Lease,
+    providerClaim: ProviderWorkClaim,
     jobs: CanonicalJob[],
   ): Promise<boolean>;
 }
