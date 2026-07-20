@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
   afterCheckpoint,
-  stablePayloadHash,
   transformLegacyAnalyticsRow,
   type LegacyAnalyticsRow,
 } from "../src/transform";
@@ -29,7 +28,7 @@ describe("analytics historical transform", () => {
       identityQuality: "identified_at_ingest",
     });
     expect(first.payload).toMatchObject({
-      event: "signup_completed",
+      event: "user_signed_up",
       distinct_id: exactRow.userId,
       timestamp: exactRow.exactBusinessTimestamp,
       properties: {
@@ -142,5 +141,113 @@ describe("analytics historical transform", () => {
         "2025-01-03T00:00:00.000Z",
       ).digest,
     ).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  test("separates transport acceptance from read-side observation", async () => {
+    const calls: string[] = [];
+    const claim = {
+      runId: "11111111-1111-4111-8111-111111111111",
+      sourceEventId: "event-1",
+      sourceCreatedAt: new Date(exactRow.createdAt),
+      canonicalEventName: "user_signed_up",
+      payloadHash: "a".repeat(64),
+      transformedPayload: {},
+      leaseOwner: "operator",
+      leaseToken: "22222222-2222-4222-8222-222222222222",
+      leaseExpiresAt: new Date("2025-01-01T00:05:00.000Z"),
+      attemptCount: 1,
+    };
+    let claimed = false;
+    const repository = {
+      seed: async () => {
+        calls.push("seed");
+      },
+      claim: async () => {
+        if (claimed) return [];
+        claimed = true;
+        calls.push("claim");
+        return [claim];
+      },
+      markSendStarted: async () => {
+        calls.push("send_started");
+        return true;
+      },
+      markAccepted: async () => {
+        calls.push("accepted");
+        return true;
+      },
+      markUncertain: async () => {
+        calls.push("uncertain");
+        return true;
+      },
+    };
+    await runBackfill({
+      rows: [exactRow],
+      sourceCutoffAt: "2025-01-03T00:00:00.000Z",
+      dryRun: false,
+      runId: claim.runId,
+      leaseOwner: "operator",
+      repository: repository as never,
+      transport: {
+        send: async () => {
+          calls.push("transport");
+          return { outcome: "accepted", metadata: { status: 200 } };
+        },
+      },
+      rateLimitPerSecond: Number.POSITIVE_INFINITY,
+    });
+    expect(calls).toEqual([
+      "seed",
+      "claim",
+      "send_started",
+      "transport",
+      "accepted",
+    ]);
+    expect(calls).not.toContain("observed");
+  });
+
+  test("stops without replay when delivery outcome is uncertain", async () => {
+    const calls: string[] = [];
+    const claim = {
+      runId: "11111111-1111-4111-8111-111111111111",
+      sourceEventId: "event-1",
+      sourceCreatedAt: new Date(exactRow.createdAt),
+      canonicalEventName: "user_signed_up",
+      payloadHash: "a".repeat(64),
+      transformedPayload: {},
+      leaseOwner: "operator",
+      leaseToken: "22222222-2222-4222-8222-222222222222",
+      leaseExpiresAt: new Date("2025-01-01T00:05:00.000Z"),
+      attemptCount: 1,
+    };
+    const repository = {
+      seed: async () => {},
+      claim: async () => {
+        calls.push("claim");
+        return [claim];
+      },
+      markSendStarted: async () => true,
+      markAccepted: async () => true,
+      markUncertain: async () => {
+        calls.push("uncertain");
+        return true;
+      },
+    };
+    await runBackfill({
+      rows: [exactRow],
+      sourceCutoffAt: "2025-01-03T00:00:00.000Z",
+      dryRun: false,
+      runId: claim.runId,
+      leaseOwner: "operator",
+      repository: repository as never,
+      transport: {
+        send: async () => ({
+          outcome: "uncertain",
+          metadata: { timeout: true },
+        }),
+      },
+      rateLimitPerSecond: Number.POSITIVE_INFINITY,
+    });
+    expect(calls).toEqual(["claim", "uncertain"]);
   });
 });

@@ -111,7 +111,7 @@ export class AnalyticsBackfillRepository {
   async seed(runId: string, rows: MigrationLedgerSeed[]): Promise<void> {
     await this.sql.begin(async (transaction) => {
       for (const row of rows) {
-        await transaction`
+        const changed = await transaction<{ source_event_id: string }[]>`
           INSERT INTO public.posthog_migration_ledger (
             run_id, source_event_id, source_created_at, canonical_event_name,
             transform_version, payload_hash, timestamp_quality, identity_quality,
@@ -149,7 +149,13 @@ export class AnalyticsBackfillRepository {
             updated_at = clock_timestamp()
           WHERE public.posthog_migration_ledger.transform_version = EXCLUDED.transform_version
             AND public.posthog_migration_ledger.payload_hash = EXCLUDED.payload_hash
+          RETURNING source_event_id
         `;
+        if (changed.length === 0) {
+          throw new Error(
+            `ledger_source_mutation_detected:${row.sourceEventId}`,
+          );
+        }
       }
     });
   }
