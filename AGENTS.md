@@ -336,30 +336,30 @@ This file is generated for a live OMX team worker run and is disposable.
 
 ## Worker Identity
 - Team: implement-the-approve-7fff681c
-- Worker: worker-1
+- Worker: worker-2
 - Role: executor
 - Leader cwd: /Users/tboutron/Documents/clients/hirly/monorepo-hirly
-- Worktree root: /Users/tboutron/Documents/clients/hirly/monorepo-hirly/.omx/team/implement-the-approve-7fff681c/worktrees/worker-1
+- Worktree root: /Users/tboutron/Documents/clients/hirly/monorepo-hirly/.omx/team/implement-the-approve-7fff681c/worktrees/worker-2
 - Team state root: /Users/tboutron/.omx-runs/run-20260719222951-4b01/.omx/state
-- Inbox path: /Users/tboutron/.omx-runs/run-20260719222951-4b01/.omx/state/team/implement-the-approve-7fff681c/workers/worker-1/inbox.md
-- Mailbox path: /Users/tboutron/.omx-runs/run-20260719222951-4b01/.omx/state/team/implement-the-approve-7fff681c/mailbox/worker-1.json
+- Inbox path: /Users/tboutron/.omx-runs/run-20260719222951-4b01/.omx/state/team/implement-the-approve-7fff681c/workers/worker-2/inbox.md
+- Mailbox path: /Users/tboutron/.omx-runs/run-20260719222951-4b01/.omx/state/team/implement-the-approve-7fff681c/mailbox/worker-2.json
 - Leader mailbox path: /Users/tboutron/.omx-runs/run-20260719222951-4b01/.omx/state/team/implement-the-approve-7fff681c/mailbox/leader-fixed.json
 - Task directory: /Users/tboutron/.omx-runs/run-20260719222951-4b01/.omx/state/team/implement-the-approve-7fff681c/tasks
-- Worker status path: /Users/tboutron/.omx-runs/run-20260719222951-4b01/.omx/state/team/implement-the-approve-7fff681c/workers/worker-1/status.json
-- Worker identity path: /Users/tboutron/.omx-runs/run-20260719222951-4b01/.omx/state/team/implement-the-approve-7fff681c/workers/worker-1/identity.json
+- Worker status path: /Users/tboutron/.omx-runs/run-20260719222951-4b01/.omx/state/team/implement-the-approve-7fff681c/workers/worker-2/status.json
+- Worker identity path: /Users/tboutron/.omx-runs/run-20260719222951-4b01/.omx/state/team/implement-the-approve-7fff681c/workers/worker-2/identity.json
 
 
 
 
 ## Protocol
-1. Read your inbox at `/Users/tboutron/.omx-runs/run-20260719222951-4b01/.omx/state/team/implement-the-approve-7fff681c/workers/worker-1/inbox.md`.
+1. Read your inbox at `/Users/tboutron/.omx-runs/run-20260719222951-4b01/.omx/state/team/implement-the-approve-7fff681c/workers/worker-2/inbox.md`.
 2. Load the worker skill from the first existing path:
    - `${CODEX_HOME:-~/.codex}/skills/worker/SKILL.md`
    - `/Users/tboutron/Documents/clients/hirly/monorepo-hirly/.codex/skills/worker/SKILL.md`
    - `/Users/tboutron/Documents/clients/hirly/monorepo-hirly/skills/worker/SKILL.md`
 3. Send startup ACK before task work:
 
-   `omx team api send-message --input "{"team_name":"implement-the-approve-7fff681c","from_worker":"worker-1","to_worker":"leader-fixed","body":"ACK: worker-1 initialized"}" --json`
+   `omx team api send-message --input "{"team_name":"implement-the-approve-7fff681c","from_worker":"worker-2","to_worker":"leader-fixed","body":"ACK: worker-2 initialized"}" --json`
 
 4. Resolve canonical team state root in this order: `OMX_TEAM_STATE_ROOT` env -> worker identity `team_state_root` -> config/manifest `team_state_root` -> local cwd fallback.
 5. Read task files from `/Users/tboutron/.omx-runs/run-20260719222951-4b01/.omx/state/team/implement-the-approve-7fff681c/tasks/task-<id>.json` using bare `task_id` values in APIs.
@@ -368,13 +368,13 @@ This file is generated for a live OMX team worker run and is disposable.
    - `omx team api transition-task-status --json`
    - `omx team api release-task-claim --json` only for rollback to pending
 7. Use mailbox delivery flow:
-   - `omx team api mailbox-list --input "{"team_name":"implement-the-approve-7fff681c","worker":"worker-1"}" --json`
-   - `omx team api mailbox-mark-delivered --input "{"team_name":"implement-the-approve-7fff681c","worker":"worker-1","message_id":"<MESSAGE_ID>"}" --json`
+   - `omx team api mailbox-list --input "{"team_name":"implement-the-approve-7fff681c","worker":"worker-2"}" --json`
+   - `omx team api mailbox-mark-delivered --input "{"team_name":"implement-the-approve-7fff681c","worker":"worker-2","message_id":"<MESSAGE_ID>"}" --json`
 8. Preserve leader steering via inbox/mailbox nudges; task payload stays in inbox/task JSON, not this file.
 9. Do not pass `workingDirectory` to legacy team_* MCP tools; use `omx team api` CLI interop.
 
 ## Message Protocol
-- Always include `from_worker: "worker-1"`
+- Always include `from_worker: "worker-2"`
 - Send leader messages to `to_worker: "leader-fixed"`
 
 ## Team Coordination Gate
