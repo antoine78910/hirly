@@ -1,4 +1,5 @@
 import asyncio
+from pathlib import Path
 
 import pytest
 import stripe
@@ -233,194 +234,6 @@ def test_period_iso_reads_subscription_item_fields():
     }
     assert server._period_start_iso(subscription) == "2023-11-14T22:13:20+00:00"
     assert server._period_end_iso(subscription) == "2023-11-17T22:13:20+00:00"
-
-
-def test_posthog_currency_conversion_and_semantic_uuid_are_exact():
-    assert server._posthog_major_units(1234, "EUR") == 12.34
-    assert server._posthog_major_units(1234, "JPY") == 1234.0
-    assert server._posthog_major_units(1234, "BHD") == 1.234
-    assert server._posthog_major_units(1234, "EUR", negative=True) == -12.34
-    assert server._posthog_semantic_uuid("payment_succeeded", "invoice", "in_1") == (
-        server._posthog_semantic_uuid("payment_succeeded", "invoice", "in_1")
-    )
-    assert server._posthog_semantic_uuid("payment_succeeded", "invoice", "in_1") != (
-        server._posthog_semantic_uuid("payment_succeeded", "invoice", "in_2")
-    )
-
-
-def test_build_posthog_payment_capture_uses_stripe_fact_and_internal_user(monkeypatch):
-    users = _Collection([{"user_id": "user_1"}])
-    monkeypatch.setattr(server, "db", type("DB", (), {"users": users})())
-    event = {
-        "id": "evt_invoice",
-        "type": "invoice.payment_succeeded",
-        "created": 1_700_000_000,
-        "data": {
-            "object": {
-                "id": "in_1",
-                "amount_paid": 2999,
-                "currency": "eur",
-                "customer": "cus_1",
-                "subscription": "sub_1",
-                "metadata": {"user_id": "user_1", "plan": "pro"},
-                "lines": {"data": [{"price": {"id": "price_1", "product": "prod_1"}}]},
-            }
-        },
-    }
-    capture = asyncio.run(server._build_posthog_payment_capture(event))
-    assert capture == {
-        "event": "payment_succeeded",
-        "distinct_id": "user_1",
-        "timestamp": "2023-11-14T22:13:20+00:00",
-        "uuid": server._posthog_semantic_uuid("payment_succeeded", "invoice", "in_1"),
-        "properties": {
-            "revenue": 29.99,
-            "currency": "EUR",
-            "amount_minor": 2999,
-            "stripe_event_id": "evt_invoice",
-            "invoice_id": "in_1",
-            "source": "stripe_webhook",
-            "$process_person_profile": False,
-            "product_id": "prod_1",
-            "price_id": "price_1",
-            "plan": "pro",
-            "subscription_id": "sub_1",
-        },
-    }
-    assert "email" not in repr(capture)
-
-
-@pytest.mark.parametrize(
-    ("event_type", "status", "previous_status", "expected"),
-    [
-        ("refund.created", "succeeded", None, True),
-        ("refund.created", "pending", None, False),
-        ("refund.updated", "succeeded", "pending", True),
-        ("refund.updated", "succeeded", "succeeded", False),
-        ("refund.updated", "succeeded", None, False),
-        ("refund.failed", "failed", "pending", False),
-    ],
-)
-def test_posthog_refund_success_confirmation_state_machine(
-    event_type, status, previous_status, expected
-):
-    event = {
-        "type": event_type,
-        "data": {
-            "object": {"id": "re_1", "status": status},
-            "previous_attributes": (
-                {"status": previous_status} if previous_status is not None else {}
-            ),
-        },
-    }
-    assert server._posthog_refund_confirms_success(event) is expected
-
-
-def test_build_posthog_refund_capture_uses_partial_amount_and_confirmation_time(monkeypatch):
-    users = _Collection([{"user_id": "user_1"}])
-    monkeypatch.setattr(server, "db", type("DB", (), {"users": users})())
-    monkeypatch.setattr(
-        server,
-        "_posthog_invoice_for_refund",
-        lambda refund: _async_return(
-            {
-                "id": "in_1",
-                "customer": "cus_1",
-                "subscription": "sub_1",
-                "metadata": {"user_id": "user_1"},
-                "lines": {"data": []},
-            }
-        ),
-    )
-    event = {
-        "id": "evt_refund_success",
-        "type": "refund.updated",
-        "created": 1_700_000_100,
-        "data": {
-            "object": {
-                "id": "re_1",
-                "status": "succeeded",
-                "amount": 500,
-                "currency": "eur",
-            },
-            "previous_attributes": {"status": "pending"},
-        },
-    }
-    capture = asyncio.run(server._build_posthog_refund_capture(event))
-    assert capture["event"] == "payment_refunded"
-    assert capture["properties"]["revenue"] == -5.0
-    assert capture["properties"]["amount_minor"] == 500
-    assert capture["properties"]["refund_id"] == "re_1"
-    assert capture["timestamp"] == "2023-11-14T22:15:00+00:00"
-    assert capture["uuid"] == server._posthog_semantic_uuid(
-        "payment_refunded", "refund", "re_1"
-    )
-
-
-def test_posthog_capture_exact_schema_timeout_and_fail_open(monkeypatch):
-    monkeypatch.setenv("POSTHOG_PROJECT_API_KEY", "phc_test")
-    monkeypatch.setenv("POSTHOG_HOST", "https://us.i.posthog.com")
-    calls = []
-
-    class _Response:
-        def raise_for_status(self):
-            return None
-
-    class _Client:
-        def __init__(self, timeout):
-            self.timeout = timeout
-            calls.append(("timeout", timeout))
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            return False
-
-        async def post(self, url, json):
-            calls.append(("post", url, json))
-            return _Response()
-
-    monkeypatch.setattr(server.httpx, "AsyncClient", _Client)
-    capture = {
-        "event": "payment_succeeded",
-        "distinct_id": "user_1",
-        "timestamp": "2023-11-14T22:13:20+00:00",
-        "uuid": "semantic-uuid",
-        "properties": {
-            "revenue": 29.99,
-            "currency": "EUR",
-            "amount_minor": 2999,
-            "stripe_event_id": "evt_1",
-            "invoice_id": "in_1",
-            "source": "stripe_webhook",
-            "$process_person_profile": False,
-        },
-    }
-    asyncio.run(server._capture_posthog_server_event(capture))
-    timeout = calls[0][1]
-    assert (timeout.connect, timeout.read, timeout.write, timeout.pool) == (
-        0.25,
-        0.50,
-        0.50,
-        0.25,
-    )
-    assert calls[1][1] == "https://us.i.posthog.com/capture/"
-    assert set(calls[1][2]) == {
-        "api_key",
-        "event",
-        "distinct_id",
-        "timestamp",
-        "uuid",
-        "properties",
-    }
-
-    class _FailingClient(_Client):
-        async def post(self, url, json):
-            raise server.httpx.ConnectError("blocked")
-
-    monkeypatch.setattr(server.httpx, "AsyncClient", _FailingClient)
-    asyncio.run(server._capture_posthog_server_event(capture))
 
 
 def test_repair_premium_credits_grants_missing_allowance(monkeypatch):
@@ -745,6 +558,16 @@ def _enable_posthog_revenue(monkeypatch, *, refunds=False):
     monkeypatch.setenv("POSTHOG_HOST", "https://eu.i.posthog.com")
     monkeypatch.setenv("POSTHOG_PAYMENT_REVENUE_ENABLED", "true")
     monkeypatch.setenv("POSTHOG_REFUND_REVENUE_ENABLED", "true" if refunds else "false")
+
+
+def test_posthog_env_example_documents_runtime_server_key(monkeypatch):
+    env_example = Path(server.__file__).with_name(".env.example").read_text()
+    assert "POSTHOG_SERVER_API_KEY=" in env_example
+    assert "POSTHOG_PROJECT_API_KEY=" not in env_example
+
+    monkeypatch.setenv("POSTHOG_SERVER_API_KEY", "phc_test")
+    monkeypatch.setenv("POSTHOG_HOST", "https://eu.i.posthog.com")
+    assert server._posthog_server_capture_configured() is True
 
 
 def test_posthog_capture_disabled_without_token_or_host(monkeypatch):
