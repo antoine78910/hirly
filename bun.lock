@@ -9,6 +9,20 @@
         "typescript": "5.9.3",
       },
     },
+    "apps/worker": {
+      "name": "@hirly/worker",
+      "version": "0.1.0",
+      "dependencies": {
+        "@hirly/config": "workspace:*",
+        "@hirly/contracts": "workspace:*",
+        "@hirly/db": "workspace:*",
+        "@hirly/observability": "workspace:*",
+        "zod": "4.1.12",
+      },
+      "devDependencies": {
+        "typescript": "5.9.3",
+      },
+    },
     "packages/config": {
       "name": "@hirly/config",
       "version": "0.1.0",
@@ -59,6 +73,8 @@
     "@hirly/db": ["@hirly/db@workspace:packages/db"],
 
     "@hirly/observability": ["@hirly/observability@workspace:packages/observability"],
+
+    "@hirly/worker": ["@hirly/worker@workspace:apps/worker"],
 
     "@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
 
