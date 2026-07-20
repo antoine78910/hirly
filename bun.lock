@@ -9,6 +9,14 @@
         "typescript": "5.9.3",
       },
     },
+    "apps/job-ingestion-audit": {
+      "name": "@hirly/job-ingestion-audit",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@types/bun": "1.3.14",
+        "typescript": "5.9.3",
+      },
+    },
     "apps/worker": {
       "name": "@hirly/worker",
       "version": "0.1.0",
@@ -84,6 +92,8 @@
     "@hirly/db": ["@hirly/db@workspace:packages/db"],
 
     "@hirly/ingestion": ["@hirly/ingestion@workspace:packages/ingestion"],
+
+    "@hirly/job-ingestion-audit": ["@hirly/job-ingestion-audit@workspace:apps/job-ingestion-audit"],
 
     "@hirly/observability": ["@hirly/observability@workspace:packages/observability"],
 
