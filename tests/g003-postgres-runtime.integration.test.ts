@@ -183,6 +183,20 @@ async function seedRuntimeFixtures(): Promise<string> {
 if (databaseUrl) {
   beforeAll(async () => {
     await applyFile("backend/db/jobs_inventory_schema.sql");
+    await assertSql(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+          CREATE ROLE anon NOLOGIN;
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_roles WHERE rolname = 'authenticated'
+        ) THEN
+          CREATE ROLE authenticated NOLOGIN;
+        END IF;
+      END
+      $$;
+    `);
     await applyFile(migrationPath());
     await applyFile(runtimeMigrationPath());
   });
@@ -370,10 +384,11 @@ describe("G003 least-privilege runtime repository", () => {
     async () => {
       await seedRuntimeFixtures();
       for (const role of ["anon", "authenticated"]) {
-        const roleExists = await assertSql(
-          `SELECT count(*) FROM pg_roles WHERE rolname = '${role}';`,
-        );
-        if (roleExists !== "1") continue;
+        expect(
+          await assertSql(
+            `SELECT count(*) FROM pg_roles WHERE rolname = '${role}';`,
+          ),
+        ).toBe("1");
 
         for (const statement of [
           "SELECT count(*) FROM worker_private.list_due_schedules(10)",
