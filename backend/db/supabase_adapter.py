@@ -288,12 +288,28 @@ _db_journey_tag: ContextVar[str] = ContextVar("db_journey_tag", default="unattri
 _db_remote_request_count: ContextVar[int] = ContextVar("db_remote_request_count", default=0)
 _db_response_bytes: ContextVar[int] = ContextVar("db_response_bytes", default=0)
 _db_retry_count: ContextVar[int] = ContextVar("db_retry_count", default=0)
+DATABASE_JOURNEY_TAGS = frozenset(
+    {
+        "admin",
+        "auth",
+        "feed",
+        "gmail_sync",
+        "job_ingestion",
+        "landing",
+        "notifications",
+        "onboarding",
+        "queue",
+        "training",
+        "unattributed",
+    }
+)
 
 
 @contextmanager
 def database_journey(tag: str) -> Iterator[None]:
     """Attach a low-cardinality product journey tag to adapter metrics."""
-    token = _db_journey_tag.set((tag or "unattributed").strip() or "unattributed")
+    normalized_tag = (tag or "").strip()
+    token = _db_journey_tag.set(normalized_tag if normalized_tag in DATABASE_JOURNEY_TAGS else "unattributed")
     try:
         yield
     finally:
@@ -329,16 +345,21 @@ def _emit_adapter_metric(
     table: str,
     started_at: float,
     snapshot: tuple[int, int, int],
+    rows_fetched: int = 0,
     rows_returned: int = 0,
     filter_status: str = "not_applicable",
     status: str = "ok",
+    transport_metric: bool = False,
 ) -> None:
     requests_before, bytes_before, retries_before = snapshot
+    request_count = max(0, _db_remote_request_count.get() - requests_before)
     metric = {
         "operation": operation,
         "table": table,
         "filter_status": filter_status,
-        "remote_request_count": max(0, _db_remote_request_count.get() - requests_before),
+        "remote_request_count": 0 if transport_metric else request_count,
+        "transport_request_count": request_count if transport_metric else 0,
+        "rows_fetched": max(0, int(rows_fetched)),
         "rows_returned": max(0, int(rows_returned)),
         "response_bytes": max(0, _db_response_bytes.get() - bytes_before),
         "elapsed_ms": max(0, int((time.perf_counter() - started_at) * 1000)),
@@ -387,6 +408,8 @@ async def _http_get_with_retries(
                 table=url.rstrip("/").rsplit("/", 1)[-1],
                 started_at=started_at,
                 snapshot=snapshot,
+                status="ok" if response.status_code in (200, 206) else "error",
+                transport_metric=True,
             )
             return response
         except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.RemoteProtocolError) as exc:
@@ -399,6 +422,7 @@ async def _http_get_with_retries(
                     started_at=started_at,
                     snapshot=snapshot,
                     status="error",
+                    transport_metric=True,
                 )
                 raise
             _db_retry_count.set(_db_retry_count.get() + 1)
@@ -1148,6 +1172,7 @@ class SupabaseCollectionAdapter(CollectionPort):
                 table=self.table_name,
                 started_at=started_at,
                 snapshot=snapshot,
+                rows_fetched=len(documents),
                 rows_returned=len(result),
                 filter_status="pushed" if can_push_filter else "local",
             )
@@ -1158,6 +1183,7 @@ class SupabaseCollectionAdapter(CollectionPort):
                 table=self.table_name,
                 started_at=started_at,
                 snapshot=snapshot,
+                rows_fetched=len(documents),
                 rows_returned=len(documents),
                 filter_status="pushed" if can_push_filter else "local",
                 status="error",

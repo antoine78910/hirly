@@ -96,9 +96,11 @@ def test_read_emits_pii_free_journey_metric(monkeypatch, caplog):
         "remote_request_count": 0,
         "response_bytes": 0,
         "retry_count": 0,
+        "rows_fetched": 1,
         "rows_returned": 1,
         "status": "ok",
         "table": "users",
+        "transport_request_count": 0,
     }
     assert "user-1" not in metrics[-1].getMessage()
 
@@ -139,6 +141,7 @@ def test_http_get_retry_metric_counts_attempts_without_logging_request_data(monk
         .split(" ", 1)[1]
     )
     assert metric["operation"] == "http_get"
-    assert metric["remote_request_count"] == 2
+    assert metric["remote_request_count"] == 0
+    assert metric["transport_request_count"] == 2
     assert metric["retry_count"] == 1
     assert "secret" not in caplog.records[-1].getMessage()
