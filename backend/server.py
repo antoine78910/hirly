@@ -34,7 +34,7 @@ from decimal import Decimal
 from pathlib import Path
 from urllib.parse import quote as url_quote, urlparse
 from pydantic import BaseModel, Field, ConfigDict, PrivateAttr
-from typing import List, Optional, Dict, Any, Literal, Tuple
+from typing import Annotated, List, Optional, Dict, Any, Literal, Tuple
 from datetime import datetime, timezone, timedelta
 import httpx
 import stripe
@@ -12167,9 +12167,9 @@ async def admin_user_analytics(admin: User = Depends(require_admin_user)):
 
 @api_router.get("/admin/users")
 async def admin_list_users(
-    page: int = Query(1, ge=1, le=10000),
-    page_size: int = Query(100, ge=1, le=500),
-    window_days: int = Query(30, ge=1, le=365),
+    page: Annotated[int, Query(ge=1, le=10000)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=500)] = 100,
+    window_days: Annotated[int, Query(ge=1, le=365)] = 30,
     admin: User = Depends(require_admin_user),
 ):
     if _env_enabled("ADMIN_BOUNDED_RPC_ENABLED", "false"):
@@ -12285,8 +12285,13 @@ async def admin_get_user(user_id: str, admin: User = Depends(require_admin_user)
         key=lambda value: _parse_dt(value) or datetime.min.replace(tzinfo=timezone.utc),
         default=None,
     )
-    login_sessions = await _admin_safe_find(
-        getattr(db, "user_sessions", None), {"user_id": user_id}, sort=[("created_at", -1)],
+    session_collection = getattr(db, "user_sessions", None)
+    login_sessions = (
+        await _admin_safe_find(
+            session_collection, {"user_id": user_id}, sort=[("created_at", -1)],
+        )
+        if session_collection is not None
+        else []
     )
 
     swipe_rows = await db.swipes.find(
@@ -13367,11 +13372,11 @@ async def admin_analytics(
 
 @api_router.get("/admin/applications")
 async def admin_list_applications(
-    status_filter: Optional[str] = Query(default=None, alias="filter"),
-    status: Optional[str] = Query(default=None),
-    page: int = Query(1, ge=1, le=10000),
-    page_size: int = Query(100, ge=1, le=500),
-    window_days: int = Query(30, ge=1, le=365),
+    status_filter: Annotated[Optional[str], Query(alias="filter")] = None,
+    status: Annotated[Optional[str], Query()] = None,
+    page: Annotated[int, Query(ge=1, le=10000)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=500)] = 100,
+    window_days: Annotated[int, Query(ge=1, le=365)] = 30,
     admin: User = Depends(require_admin_user),
 ):
     status_filter = status_filter or status
