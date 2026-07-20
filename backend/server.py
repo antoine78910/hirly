@@ -152,6 +152,7 @@ from france_travail_harvest import (
 from jsearch_harvest import (
     AGGRESSIVE_HARVEST_CITIES,
     AGGRESSIVE_HARVEST_ROLES,
+    harvest_autostart_enabled as jsearch_harvest_autostart_enabled,
     harvest_enabled as jsearch_harvest_enabled,
     harvest_jsearch,
     last_harvest_summary as jsearch_last_harvest_summary,
@@ -9934,6 +9935,7 @@ async def admin_jobs_jsearch_harvest_status(admin: User = Depends(require_admin_
     _require_job_maintenance_enabled()
     return {
         "harvest_enabled": jsearch_harvest_enabled(),
+        "harvest_autostart_enabled": jsearch_harvest_autostart_enabled(),
         "last_run": jsearch_last_harvest_summary(),
     }
 

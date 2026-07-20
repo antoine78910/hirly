@@ -88,3 +88,14 @@ def test_background_harvest_is_opt_in(monkeypatch):
 
     monkeypatch.setenv("JSEARCH_HARVEST_ENABLED", "true")
     assert jsearch_harvest.harvest_enabled() is True
+
+
+def test_background_harvest_autostart_requires_separate_opt_in(monkeypatch):
+    monkeypatch.setattr(jsearch_harvest, "is_job_provider_configured", lambda name=None: True)
+    monkeypatch.setenv("JSEARCH_HARVEST_ENABLED", "true")
+    monkeypatch.delenv("JSEARCH_HARVEST_AUTOSTART_ENABLED", raising=False)
+
+    assert jsearch_harvest.harvest_autostart_enabled() is False
+
+    monkeypatch.setenv("JSEARCH_HARVEST_AUTOSTART_ENABLED", "true")
+    assert jsearch_harvest.harvest_autostart_enabled() is True
