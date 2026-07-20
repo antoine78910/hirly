@@ -16,6 +16,11 @@ parameters AS (
   SELECT
     :'generated_at'::timestamptz AS generated_at,
     :'freshness_cutoff'::timestamptz AS freshness_cutoff,
+    (
+      extract(epoch FROM (
+        :'generated_at'::timestamptz - :'freshness_cutoff'::timestamptz
+      )) / 86400
+    )::integer AS freshness_window_days,
     :'coverage_run_id'::uuid AS coverage_run_id,
     regexp_split_to_array(:'trial_run_ids', '\s*,\s*')::uuid[] AS trial_run_ids
 ),
@@ -30,7 +35,12 @@ trial_run_evidence AS (
     coalesce(bool_and(
       (terminal.result->>'finishedAt')::timestamptz
         <= parameters.generated_at
-    ), false) AS all_terminal_finished_by_generation
+    ), false) AS all_terminal_finished_by_generation,
+    coalesce(bool_and(
+      run.requested_at <= parameters.generated_at
+        AND run.created_at <= parameters.generated_at
+        AND terminal.created_at <= parameters.generated_at
+    ), false) AS all_evidence_persisted_by_generation
   FROM parameters
   LEFT JOIN LATERAL unnest(parameters.trial_run_ids) AS requested(run_id)
     ON true
@@ -41,6 +51,43 @@ trial_run_evidence AS (
     AND terminal.scorecard_key = 'trial-result'
   GROUP BY parameters.trial_run_ids, parameters.generated_at
 ),
+coverage_evidence AS (
+  SELECT coverage.id, coverage.requested_at, coverage.finished_at
+  FROM parameters
+  JOIN public.worker_runs AS coverage
+    ON coverage.id = parameters.coverage_run_id
+  WHERE coverage.kind = 'inventory_maintenance'
+    AND coverage.provider IS NULL
+    AND coverage.status = 'succeeded'
+    AND coverage.requested_at <= parameters.generated_at
+    AND coverage.started_at IS NOT NULL
+    AND coverage.started_at <= parameters.generated_at
+    AND coverage.finished_at IS NOT NULL
+    AND coverage.finished_at <= parameters.generated_at
+    AND parameters.freshness_window_days IN (1, 7, 30)
+    AND parameters.generated_at - parameters.freshness_cutoff
+      = make_interval(days => parameters.freshness_window_days)
+    AND coverage.summary @> jsonb_build_object(
+      'schemaVersion', 'hirly.paid-user-inventory-coverage.v1',
+      'scope', 'paid_user_inventory',
+      'coverageRunId', coverage.id::text,
+      'freshnessWindowDays', parameters.freshness_window_days,
+      'freshnessCutoff', to_char(
+        parameters.freshness_cutoff AT TIME ZONE 'UTC',
+        'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
+      )
+    )
+    AND EXISTS (
+      SELECT 1
+      FROM public.paid_user_inventory_snapshots AS snapshot
+      WHERE snapshot.coverage_run_id = coverage.id
+        AND snapshot.freshness_window_days = parameters.freshness_window_days
+        AND snapshot.evaluated_at >= parameters.freshness_cutoff
+        AND snapshot.evaluated_at <= coverage.finished_at
+        AND snapshot.created_at >= coverage.requested_at
+        AND snapshot.created_at <= coverage.finished_at
+    )
+),
 measurement_gate AS (
   SELECT
     (
@@ -50,14 +97,23 @@ measurement_gate AS (
       AND evidence.terminal_run_count = evidence.requested_run_count
       AND evidence.all_terminal_completed
       AND evidence.all_terminal_finished_by_generation
+      AND evidence.all_evidence_persisted_by_generation
       AND parameters.generated_at >= parameters.freshness_cutoff
-      AND EXISTS (
+      AND EXISTS (SELECT 1 FROM coverage_evidence)
+      AND NOT EXISTS (
         SELECT 1
-        FROM public.worker_runs AS coverage
-        WHERE coverage.id = parameters.coverage_run_id
-          AND coverage.status = 'succeeded'
-          AND coverage.finished_at IS NOT NULL
-          AND coverage.finished_at <= parameters.generated_at
+        FROM public.source_trial_pages AS page
+        WHERE page.run_id = ANY(parameters.trial_run_ids)
+          AND (
+            page.fetched_at > parameters.generated_at
+            OR page.created_at > parameters.generated_at
+          )
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.source_trial_candidates AS candidate
+        WHERE candidate.run_id = ANY(parameters.trial_run_ids)
+          AND candidate.created_at > parameters.generated_at
       )
       AND NOT EXISTS (
         SELECT 1
@@ -66,8 +122,12 @@ measurement_gate AS (
           AND NOT EXISTS (
             SELECT 1
             FROM public.paid_user_source_contributions AS contribution
+            JOIN coverage_evidence AS coverage
+              ON coverage.id = contribution.coverage_run_id
             WHERE contribution.coverage_run_id = parameters.coverage_run_id
               AND contribution.source_id = requested_run.source_id
+              AND contribution.created_at >= coverage.requested_at
+              AND contribution.created_at <= coverage.finished_at
           )
       )
     ) AS trial_runs_complete
@@ -218,6 +278,7 @@ trial_candidates AS (
     AND terminal.result->>'status' = 'completed'
   CROSS JOIN parameters
   WHERE candidate.run_id = ANY(parameters.trial_run_ids)
+    AND candidate.created_at <= parameters.generated_at
 ),
 classified_candidates AS (
   SELECT
@@ -311,7 +372,10 @@ paid_cohort_aggregates AS (
     ), 0)::bigint AS paid_user_job_matches
   FROM public.paid_user_source_contributions AS contribution
   CROSS JOIN parameters
+  CROSS JOIN coverage_evidence AS coverage
   WHERE contribution.coverage_run_id = parameters.coverage_run_id
+    AND contribution.created_at >= coverage.requested_at
+    AND contribution.created_at <= coverage.finished_at
   GROUP BY contribution.source_id
 ),
 source_aggregates AS (

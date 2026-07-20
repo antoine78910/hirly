@@ -132,7 +132,16 @@ evidence-generation timestamp, freshness cutoff, succeeded paid-cohort coverage
 run and exact trial run IDs. The query returns one aggregate JSON value only.
 It refuses to report `COMPLETE` unless every distinct requested trial has its
 singular reconciled `completed` terminal result and every requested source has
-paid-cohort contribution evidence from the succeeded coverage run. Current
+paid-cohort contribution evidence from the succeeded coverage run. The coverage
+run must be a provider-null `inventory_maintenance` run whose summary binds
+`schemaVersion=hirly.paid-user-inventory-coverage.v1`,
+`scope=paid_user_inventory`, its own `coverageRunId`, the exact
+`freshnessWindowDays`, and the UTC `freshnessCutoff`. At least one matching
+paid-user snapshot must have been evaluated and persisted inside the run, and
+all selected snapshots, contributions, trial runs, pages, candidates, and
+terminal evidence must exist by their applicable coverage or generation
+boundary. An unrelated succeeded worker run, copied summary, late contribution,
+or future trial row therefore remains `BLOCKED_EXTERNAL`. Current
 inventory uses the authoritative canonical group where present and a conservative
 fingerprint/URL/ATS/occurrence fallback; trial candidates apply duplicate
 precedence in this order: provider occurrence, canonical apply URL, ATS posting

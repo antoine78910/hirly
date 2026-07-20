@@ -78,6 +78,14 @@ describe("G016 aggregate net-new inventory measurement", () => {
       trialRunIds: [...input.trialRunIds].reverse(),
       sources: [...input.sources].reverse(),
     }).digest).toBe(report.digest);
+    const equalInstantReport = buildNetNewMeasurement({
+      ...input,
+      generatedAt: "2026-07-20T16:00:00+02:00",
+      freshnessCutoff: "2026-06-20T16:00:00+02:00",
+    });
+    expect(equalInstantReport.generatedAt).toBe("2026-07-20T14:00:00.000Z");
+    expect(equalInstantReport.freshnessCutoff).toBe("2026-06-20T14:00:00.000Z");
+    expect(equalInstantReport.digest).toBe(report.digest);
   });
 
   test("refuses sample, blocked and unreconciled evidence", () => {
@@ -100,6 +108,10 @@ describe("G016 aggregate net-new inventory measurement", () => {
       ...input,
       generatedAt: "2026-05-20T14:00:00.000Z",
     })).toThrow("must not precede freshnessCutoff");
+    expect(() => buildNetNewMeasurement({
+      ...input,
+      generatedAt: "2026-07-20",
+    })).toThrow("explicit timezone");
     expect(() => buildNetNewMeasurement({
       ...input,
       sources: [input.sources[0]!, input.sources[0]!],
@@ -125,6 +137,14 @@ describe("G016 aggregate net-new inventory measurement", () => {
     expect(sql).toContain("trial_runs_complete");
     expect(sql).toContain("'BLOCKED_EXTERNAL'");
     expect(sql).toContain("coverage.finished_at <= parameters.generated_at");
+    expect(sql).toContain("coverage.kind = 'inventory_maintenance'");
+    expect(sql).toContain("coverage.provider IS NULL");
+    expect(sql).toContain("'hirly.paid-user-inventory-coverage.v1'");
+    expect(sql).toContain("snapshot.freshness_window_days = parameters.freshness_window_days");
+    expect(sql).toContain("contribution.created_at <= coverage.finished_at");
+    expect(sql).toContain("candidate.created_at <= parameters.generated_at");
+    expect(sql).toContain("candidate.created_at > parameters.generated_at");
+    expect(sql).toContain("page.created_at > parameters.generated_at");
     expect(sql).toContain("contribution.source_id = requested_run.source_id");
     expect(sql).toContain("jobs.canonical_group_id");
     expect(sql).toContain("source_rollup");

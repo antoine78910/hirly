@@ -75,6 +75,8 @@ const rate = (numerator: number, denominator: number): number =>
   denominator === 0 ? 0 : round(numerator / denominator);
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const isoTimestampPattern =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/i;
 
 function requireCount(value: number, path: string): number {
   if (!Number.isSafeInteger(value) || value < 0) {
@@ -94,6 +96,15 @@ function requireUuid(value: string, path: string): string {
   const normalized = requireText(value, path);
   if (!uuidPattern.test(normalized)) fail(`${path} must be a UUID`);
   return normalized.toLowerCase();
+}
+
+function requireTimestamp(value: string, path: string): string {
+  const timestamp = requireText(value, path);
+  const milliseconds = Date.parse(timestamp);
+  if (!isoTimestampPattern.test(timestamp) || !Number.isFinite(milliseconds)) {
+    fail(`${path} must be an ISO timestamp with an explicit timezone`);
+  }
+  return new Date(milliseconds).toISOString();
 }
 
 function canonicalize(value: unknown): unknown {
@@ -204,11 +215,9 @@ export function buildNetNewMeasurement(
     fail(`status ${input.status} is not scoreable: ${input.blockerReason ?? "missing blocker reason"}`);
   }
   if (input.sample !== false) fail("sample evidence is not scoreable");
-  if (!Number.isFinite(Date.parse(input.generatedAt))) fail("generatedAt must be an ISO timestamp");
-  if (!Number.isFinite(Date.parse(input.freshnessCutoff))) {
-    fail("freshnessCutoff must be an ISO timestamp");
-  }
-  if (Date.parse(input.generatedAt) < Date.parse(input.freshnessCutoff)) {
+  const generatedAt = requireTimestamp(input.generatedAt, "generatedAt");
+  const freshnessCutoff = requireTimestamp(input.freshnessCutoff, "freshnessCutoff");
+  if (Date.parse(generatedAt) < Date.parse(freshnessCutoff)) {
     fail("generatedAt must not precede freshnessCutoff");
   }
   const coverageRunId = requireUuid(input.coverageRunId, "coverageRunId");
@@ -267,8 +276,8 @@ export function buildNetNewMeasurement(
   const unsigned = {
     schemaVersion: "hirly.multi-source-net-new-measurement.v1" as const,
     status: "COMPLETE" as const,
-    generatedAt: input.generatedAt,
-    freshnessCutoff: input.freshnessCutoff,
+    generatedAt,
+    freshnessCutoff,
     coverageRunId,
     trialRunCount: trialRunIds.length,
     trialRunDigest: digest([...trialRunIds].sort()),
