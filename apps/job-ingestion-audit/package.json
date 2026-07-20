@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "audit": "bun src/cli.ts",
+    "rank:ats": "bun src/ats-ranking-cli.ts",
     "sql-evaluate": "bun src/sql-evaluator.ts",
     "census:france-travail": "bun src/census-cli.ts",
     "test": "bun test",
@@ -14,6 +15,7 @@
   },
   "dependencies": {
     "@hirly/db": "workspace:*",
+    "@hirly/ingestion": "workspace:*",
     "postgres": "3.4.7"
   },
   "devDependencies": {
