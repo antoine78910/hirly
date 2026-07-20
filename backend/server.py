@@ -1727,7 +1727,6 @@ def _analytics_event_document(
     canonical_event_id = (event_id or body.event_id or "").strip()[:160] or f"evt_{uuid.uuid4().hex}"
     return {
         "event_id": canonical_event_id,
-        "client_event_id": (body.event_id or "").strip()[:160] or None,
         "batch_id": batch_id,
         "user_id": user.user_id if user else None,
         "anonymous_id": (body.anonymous_id or "").strip()[:160] or None,
@@ -1790,7 +1789,7 @@ async def track_analytics_events(
         "ok": True,
         "stored": True,
         "batch_id": body.batch_id,
-        "accepted_event_ids": [document["client_event_id"] or document["event_id"] for document in documents],
+        "accepted_event_ids": [item.event_id or document["event_id"] for item, document in zip(body.events, documents)],
     }
 
 
