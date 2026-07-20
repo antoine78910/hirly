@@ -16,6 +16,9 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "baseUrl": "src",
+    "paths": {
+      "@/*": ["*"]
+    },
     "types": ["jest", "node", "react", "react-dom"]
   },
   "include": ["src"]

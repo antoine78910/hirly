@@ -9,8 +9,8 @@ jest.mock("./api", () => ({
 }));
 
 jest.mock("./posthogClient", () => ({
+  ...jest.requireActual("./posthogClient"),
   capturePostHogEvent: jest.fn(),
-  sanitizeAnalyticsProperties: jest.requireActual("./posthogClient").sanitizeAnalyticsProperties,
 }));
 
 describe("trackEvent PostHog parallel delivery", () => {

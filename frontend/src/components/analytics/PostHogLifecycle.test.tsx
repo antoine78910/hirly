@@ -1,5 +1,5 @@
-import { StrictMode } from "react";
-import { act, render } from "@testing-library/react";
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter, useNavigate } from "react-router-dom";
 
 import PostHogLifecycle from "./PostHogLifecycle";
@@ -37,21 +37,32 @@ function Harness() {
 }
 
 describe("PostHogLifecycle", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
   beforeEach(() => {
     jest.clearAllMocks();
     currentUser = null;
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
   });
 
-  it("captures initial and pathname-only navigation once under StrictMode", () => {
-    render(
-      <StrictMode>
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it("observes pathname-only navigation and replay lifecycle", () => {
+    act(() => {
+      root.render(
         <MemoryRouter initialEntries={["/onboarding?step=phone#x"]}>
           <Harness />
-        </MemoryRouter>
-      </StrictMode>,
-    );
-    expect(mockCapturePostHogPageview).toHaveBeenCalledTimes(1);
+        </MemoryRouter>,
+      );
+    });
     expect(mockCapturePostHogPageview).toHaveBeenLastCalledWith("/onboarding");
+    expect(mockSyncPostHogReplay).toHaveBeenCalledTimes(1);
 
     act(() => navigate("/onboarding?step=other#secret"));
     expect(mockCapturePostHogPageview).toHaveBeenCalledTimes(1);
@@ -61,24 +72,25 @@ describe("PostHogLifecycle", () => {
     expect(mockCapturePostHogPageview).toHaveBeenLastCalledWith("/swipe");
   });
 
-  it("resets before switching identified users", () => {
+  it("forwards stable identities and anonymous resets to the safe client boundary", () => {
     currentUser = { user_id: "user-a" };
-    const rendered = render(
-      <MemoryRouter>
-        <Harness />
-      </MemoryRouter>,
-    );
+    act(() => {
+      root.render(
+        <MemoryRouter>
+          <Harness />
+        </MemoryRouter>,
+      );
+    });
     expect(mockIdentifyPostHogUser).toHaveBeenCalledWith("user-a");
 
-    currentUser = { user_id: "user-b" };
-    rendered.rerender(
-      <MemoryRouter>
-        <Harness />
-      </MemoryRouter>,
-    );
-    expect(mockResetPostHog.mock.invocationCallOrder[0]).toBeLessThan(
-      mockIdentifyPostHogUser.mock.invocationCallOrder[1],
-    );
-    expect(mockIdentifyPostHogUser).toHaveBeenLastCalledWith("user-b");
+    currentUser = null;
+    act(() => {
+      root.render(
+        <MemoryRouter>
+          <Harness />
+        </MemoryRouter>,
+      );
+    });
+    expect(mockResetPostHog).toHaveBeenCalled();
   });
 });

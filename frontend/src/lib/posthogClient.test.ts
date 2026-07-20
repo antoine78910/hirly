@@ -16,7 +16,10 @@ import {
   __resetPostHogForTests,
   buildPostHogConfig,
   capturePostHogEvent,
+  capturePostHogPageview,
+  identifyPostHogUser,
   initializePostHog,
+  resetPostHog,
   sanitizeAnalyticsProperties,
   sanitizePostHogEvent,
 } from "./posthogClient";
@@ -69,22 +72,24 @@ describe("posthog client", () => {
       disable_surveys: true,
       disable_session_recording: true,
       advanced_disable_flags: true,
-      advanced_disable_feature_flags: false,
     });
+    expect(profileA).not.toHaveProperty("advanced_disable_feature_flags");
 
     process.env.REACT_APP_POSTHOG_REPLAY_ENABLED = "true";
     const profileB = buildPostHogConfig();
     expect(profileB).toMatchObject({
       disable_session_recording: false,
-      advanced_disable_flags: false,
       advanced_disable_feature_flags: true,
       session_recording: {
         maskAllInputs: true,
         maskTextSelector: "*",
         recordCrossOriginIframes: false,
-        recordCanvas: false,
+        captureCanvas: { recordCanvas: false },
+        recordHeaders: false,
+        recordBody: false,
       },
     });
+    expect(profileB).not.toHaveProperty("advanced_disable_flags");
     expect(profileB).not.toHaveProperty("enable_heatmaps");
   });
 
@@ -127,6 +132,38 @@ describe("posthog client", () => {
         plan: "pro",
       },
     });
+  });
+
+  it("allows replay snapshots only in the replay build profile", () => {
+    const snapshot = { event: "$snapshot", properties: { $snapshot_data: "opaque" } } as never;
+    expect(sanitizePostHogEvent(snapshot)).toBeNull();
+    process.env.REACT_APP_POSTHOG_REPLAY_ENABLED = "true";
+    expect(sanitizePostHogEvent(snapshot)).toBe(snapshot);
+    expect(sanitizePostHogEvent({ event: "$feature_flag_called", properties: {} } as never)).toBeNull();
+  });
+
+  it("deduplicates strict-mode pageviews and resets before an identity switch", () => {
+    process.env.REACT_APP_POSTHOG_TOKEN = "phc_test";
+    process.env.REACT_APP_POSTHOG_HOST = "https://us.i.posthog.com";
+    initializePostHog();
+
+    capturePostHogPageview("/onboarding");
+    capturePostHogPageview("/onboarding");
+    capturePostHogPageview("/swipe");
+    expect(mockCapture).toHaveBeenCalledTimes(2);
+    expect(mockCapture).toHaveBeenLastCalledWith("$pageview", {
+      $current_url: "http://localhost/swipe",
+    });
+
+    identifyPostHogUser("user-a");
+    identifyPostHogUser("user-a");
+    identifyPostHogUser("user-b");
+    expect(mockIdentify).toHaveBeenCalledTimes(2);
+    expect(mockReset.mock.invocationCallOrder[0]).toBeLessThan(
+      mockIdentify.mock.invocationCallOrder[1],
+    );
+    resetPostHog();
+    expect(mockReset).toHaveBeenCalledTimes(2);
   });
 
   it("keeps capture best-effort", () => {

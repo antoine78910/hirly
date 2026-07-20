@@ -33,6 +33,10 @@ export const trackEvent = (event, properties = {}) => {
       ? stripUrlSecrets(document.referrer)
       : undefined,
   };
-  capturePostHogEvent(event, sanitizedProperties);
+  try {
+    capturePostHogEvent(event, sanitizedProperties);
+  } catch (_) {
+    // Keep the first-party sink independent even if the vendor adapter regresses.
+  }
   return api.post("/analytics/event", payload).catch(() => {});
 };
