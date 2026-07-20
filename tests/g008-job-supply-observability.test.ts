@@ -136,6 +136,9 @@ describe("G008 job-supply observability contract", () => {
     expect(migration).toContain("manifest_digest text NOT NULL UNIQUE");
     expect(migration).toContain("BEFORE UPDATE OR DELETE");
     expect(migration).toMatch(/reject_immutable_census_(?:manifest|evidence)/);
+    expect(runner).toContain("coverage_run_id, schema_version");
+    expect(runner).toContain("france_travail_census_manifest_runs");
+    expect(runner).not.toContain("source_run_ids");
   });
 
   test("rolls back every added object and ledger field", () => {
