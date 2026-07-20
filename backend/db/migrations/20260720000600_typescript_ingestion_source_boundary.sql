@@ -185,6 +185,10 @@ CREATE TABLE IF NOT EXISTS public.job_occurrences (
     REFERENCES public.career_sources(id, provider)
     ON DELETE RESTRICT,
   CONSTRAINT job_occurrences_snapshot_identity_fk
+    FOREIGN KEY (raw_snapshot_id, source_id, external_id)
+    REFERENCES public.raw_job_snapshots(id, source_id, external_id)
+    ON DELETE RESTRICT,
+  CONSTRAINT job_occurrences_snapshot_content_fk
     FOREIGN KEY (raw_snapshot_id, source_id, external_id, content_hash)
     REFERENCES public.raw_job_snapshots(id, source_id, external_id, content_hash)
     ON DELETE RESTRICT,
