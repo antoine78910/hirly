@@ -8,6 +8,8 @@ export const providerSchema = z.enum([
   "wttj",
   "indeed",
   "france_travail",
+  "greenhouse",
+  "lever",
 ]);
 export const triggerSourceSchema = z.enum(["schedule", "cli", "http", "system"]);
 export const runKindSchema = z.enum(["provider_ingestion", "inventory_maintenance"]);

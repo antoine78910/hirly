@@ -6,6 +6,8 @@ import { helloWorkProvider } from "./providers/hellowork";
 import { wttjProvider } from "./providers/wttj";
 import { indeedProvider } from "./providers/indeed";
 import { franceTravailProvider } from "./providers/france-travail";
+import { greenhouseProvider } from "./providers/greenhouse";
+import { leverProvider } from "./providers/lever";
 
 export const providerModules = {
   apec: apecProvider,
@@ -13,6 +15,8 @@ export const providerModules = {
   wttj: wttjProvider,
   indeed: indeedProvider,
   france_travail: franceTravailProvider,
+  greenhouse: greenhouseProvider,
+  lever: leverProvider,
 } satisfies Record<Provider, ProviderCore<unknown>>;
 
 export function getProviderModule(provider: Provider): ProviderCore<unknown> {
@@ -35,4 +39,6 @@ export {
   wttjProvider,
   indeedProvider,
   franceTravailProvider,
+  greenhouseProvider,
+  leverProvider,
 };

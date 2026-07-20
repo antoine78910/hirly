@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "hirly.ats-fixture.v1",
+  "provenance": {
+    "kind": "sanitized_official_documentation_example",
+    "source": "https://github.com/lever/postings-api",
+    "capturedAt": "2026-07-20T00:00:00.000Z",
+    "containsPersonalData": false
+  },
+  "provider": "lever",
+  "tenantKey": "leverdemo",
+  "countryCodes": ["US"],
+  "raw": [
+    {
+      "id": "posting-001",
+      "text": "Platform Engineer",
+      "categories": {
+        "location": "San Francisco, CA",
+        "allLocations": ["San Francisco, CA"],
+        "commitment": "Full-time",
+        "team": "Engineering",
+        "department": "Product"
+      },
+      "country": "US",
+      "descriptionPlain": "Build reliable platform services.",
+      "additionalPlain": "Work with a distributed engineering team.",
+      "createdAt": 1710000000000,
+      "hostedUrl": "https://jobs.lever.co/leverdemo/posting-001",
+      "applyUrl": "https://jobs.lever.co/leverdemo/posting-001/apply",
+      "workplaceType": "hybrid"
+    },
+    {
+      "id": "posting-002",
+      "text": "Security Engineer",
+      "categories": {
+        "location": "Remote",
+        "allLocations": ["Remote"],
+        "commitment": "Full-time",
+        "team": "Security",
+        "department": "Engineering"
+      },
+      "country": "US",
+      "descriptionPlain": "Improve product and infrastructure security.",
+      "additionalPlain": "",
+      "createdAt": 1710000001000,
+      "hostedUrl": "https://jobs.lever.co/leverdemo/posting-002",
+      "applyUrl": "https://jobs.lever.co/leverdemo/posting-002/apply",
+      "workplaceType": "remote"
+    }
+  ]
+}
