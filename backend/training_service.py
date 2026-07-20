@@ -271,11 +271,12 @@ def _public_course(course: Dict[str, Any], module_count: int = 0, lang: str = "e
 
 async def list_published_courses(db, lang: str = "en") -> List[Dict[str, Any]]:
     courses = await db.training_courses.find({"published": True}).sort("created_at", -1).to_list(200)
-    out = []
-    for course in courses:
-        modules = await db.training_modules.find({"course_id": course["course_id"]}).to_list(200)
-        out.append(_public_course(course, len(modules), lang))
-    return out
+    course_ids = [course["course_id"] for course in courses]
+    modules = await db.training_modules.find({"course_id": {"$in": course_ids}}).to_list(1000) if course_ids else []
+    counts: Dict[str, int] = {}
+    for module in modules:
+        counts[module["course_id"]] = counts.get(module["course_id"], 0) + 1
+    return [_public_course(course, counts.get(course["course_id"], 0), lang) for course in courses]
 
 
 async def get_course_detail(db, course_id: str, user_id: Optional[str] = None, lang: str = "en") -> Optional[Dict[str, Any]]:
@@ -689,14 +690,20 @@ async def upload_training_video(
 
 async def list_user_enrollments(db, user_id: str, lang: str = "en") -> List[Dict[str, Any]]:
     enrollments = await db.training_enrollments.find({"user_id": user_id}).sort("updated_at", -1).to_list(100)
+    course_ids = list({enr["course_id"] for enr in enrollments})
+    courses = await db.training_courses.find({"course_id": {"$in": course_ids}}).to_list(200) if course_ids else []
+    modules = await db.training_modules.find({"course_id": {"$in": course_ids}}).to_list(1000) if course_ids else []
+    course_map = {course["course_id"]: course for course in courses}
+    module_counts: Dict[str, int] = {}
+    for module in modules:
+        module_counts[module["course_id"]] = module_counts.get(module["course_id"], 0) + 1
     out = []
     for enr in enrollments:
-        course = await db.training_courses.find_one({"course_id": enr["course_id"]}, {"_id": 0})
+        course = course_map.get(enr["course_id"])
         if not course:
             continue
-        modules = await db.training_modules.find({"course_id": enr["course_id"]}).to_list(200)
         out.append({
-            **_public_course(course, len(modules), lang),
+            **_public_course(course, module_counts.get(enr["course_id"], 0), lang),
             "progress_percent": enr.get("progress_percent", 0),
             "enrolled_at": enr.get("enrolled_at"),
         })
@@ -739,22 +746,26 @@ async def creator_dashboard(db, creator_id: str) -> Dict[str, Any]:
 async def list_creator_students(db, creator_id: str) -> List[Dict[str, Any]]:
     courses = await db.training_courses.find({"creator_id": creator_id}).to_list(200)
     course_map = {c["course_id"]: c for c in courses}
+    course_ids = list(course_map)
+    enrollments = await db.training_enrollments.find({"course_id": {"$in": course_ids}}).sort("updated_at", -1).to_list(500) if course_ids else []
+    user_ids = list({enr["user_id"] for enr in enrollments})
+    users = await db.users.find({"user_id": {"$in": user_ids}}, {"_id": 0, "user_id": 1, "email": 1, "name": 1}).to_list(500) if user_ids else []
+    user_map = {user["user_id"]: user for user in users}
     out = []
-    for cid in course_map:
-        enrollments = await db.training_enrollments.find({"course_id": cid}).sort("updated_at", -1).to_list(500)
-        for enr in enrollments:
-            user = await db.users.find_one({"user_id": enr["user_id"]}, {"_id": 0, "email": 1, "name": 1})
-            course = course_map[cid]
-            out.append({
-                "enrollment_id": enr["enrollment_id"],
-                "user_id": enr["user_id"],
-                "email": (user or {}).get("email"),
-                "name": (user or {}).get("name"),
-                "course_id": cid,
-                "course_title": course.get("title"),
-                "progress_percent": enr.get("progress_percent", 0),
-                "updated_at": enr.get("updated_at"),
-            })
+    for enr in enrollments:
+        cid = enr["course_id"]
+        user = user_map.get(enr["user_id"]) or {}
+        course = course_map[cid]
+        out.append({
+            "enrollment_id": enr["enrollment_id"],
+            "user_id": enr["user_id"],
+            "email": user.get("email"),
+            "name": user.get("name"),
+            "course_id": cid,
+            "course_title": course.get("title"),
+            "progress_percent": enr.get("progress_percent", 0),
+            "updated_at": enr.get("updated_at"),
+        })
     out.sort(key=lambda row: row.get("updated_at") or "", reverse=True)
     return out
 

@@ -48,7 +48,7 @@ class CollectionPort(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def insert_many(self, documents: Iterable[Document]) -> Any:
+    async def insert_many(self, documents: Iterable[Document], *, ignore_duplicates: bool = False) -> Any:
         raise NotImplementedError
 
     @abstractmethod
