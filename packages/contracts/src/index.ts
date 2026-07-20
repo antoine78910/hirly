@@ -112,6 +112,7 @@ export const sourceRegistryEntrySchema = z
     accessType: sourceAccessTypeSchema,
     policyId: z.uuid().nullable(),
     enabled: z.boolean(),
+    transportEnabled: z.boolean(),
     incrementalEnabled: z.boolean(),
     backfillEnabled: z.boolean(),
     checkpoint: sourceCheckpointSchema.nullable(),

@@ -15,6 +15,7 @@ ALTER TABLE public.jobs
   DROP COLUMN IF EXISTS route_confidence,
   DROP COLUMN IF EXISTS route_classification,
   DROP COLUMN IF EXISTS lifecycle_checked_at,
+  DROP COLUMN IF EXISTS lifecycle_state,
   DROP COLUMN IF EXISTS removed_at,
   DROP COLUMN IF EXISTS expires_at,
   DROP COLUMN IF EXISTS first_seen_at,

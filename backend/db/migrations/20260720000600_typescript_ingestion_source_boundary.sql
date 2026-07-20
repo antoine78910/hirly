@@ -70,6 +70,9 @@ ALTER TABLE public.jobs
   ADD COLUMN IF NOT EXISTS first_seen_at timestamptz,
   ADD COLUMN IF NOT EXISTS expires_at timestamptz,
   ADD COLUMN IF NOT EXISTS removed_at timestamptz,
+  ADD COLUMN IF NOT EXISTS lifecycle_state text CHECK (
+    lifecycle_state IS NULL OR lifecycle_state IN ('active', 'stale', 'removed', 'expired', 'blocked')
+  ),
   ADD COLUMN IF NOT EXISTS lifecycle_checked_at timestamptz,
   ADD COLUMN IF NOT EXISTS route_classification text,
   ADD COLUMN IF NOT EXISTS route_confidence numeric CHECK (
@@ -175,10 +178,13 @@ SELECT
   source.incremental_enabled,
   source.backfill_enabled,
   source.country_kill_switches,
+  source.checkpoint,
+  source.policy_id,
   registry.country_kill_switches AS provider_country_kill_switches,
+  registry.enabled AS provider_enabled,
   registry.writer_runtime,
   policy.approval_status,
-  (
+  coalesce((
     source.enabled
     AND source.transport_enabled
     AND registry.enabled
@@ -188,7 +194,7 @@ SELECT
     AND policy.commercial_use_allowed
     AND policy.redisplay_allowed
     AND policy.expires_at > clock_timestamp()
-  ) AS runnable
+  ), false) AS runnable
 FROM public.career_sources AS source
 JOIN public.provider_registry AS registry ON registry.provider = source.provider
 LEFT JOIN public.source_policy AS policy
