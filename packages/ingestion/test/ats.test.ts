@@ -110,6 +110,16 @@ describe("G011 ATS URL classification", () => {
     expect(result.match).not.toBe("tenant");
   });
 
+  test("rejects malformed percent-encoding instead of preserving the raw path", () => {
+    const result = classifyAtsUrl("https://jobs.lever.co/acme/%E0%A4%A");
+    expect(result).toMatchObject({
+      provider: null,
+      tenantKey: null,
+      postingId: null,
+      match: "invalid_url",
+    });
+  });
+
   test("publishes exact provider host patterns for audit artifacts", () => {
     expect(ATS_PROVIDER_HOST_PATTERNS.greenhouse).toEqual([
       "boards.greenhouse.io",
