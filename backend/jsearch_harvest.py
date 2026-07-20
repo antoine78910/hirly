@@ -168,6 +168,11 @@ def harvest_enabled() -> bool:
     return _env_bool("JSEARCH_HARVEST_ENABLED", False) and is_job_provider_configured("jsearch")
 
 
+def harvest_autostart_enabled() -> bool:
+    """Require a second opt-in before a startup loop can spend JSearch quota."""
+    return harvest_enabled() and _env_bool("JSEARCH_HARVEST_AUTOSTART_ENABLED", False)
+
+
 def _harvest_cities() -> List[str]:
     return _csv_env("JSEARCH_HARVEST_CITIES") or DEFAULT_HARVEST_CITIES
 
@@ -460,7 +465,7 @@ async def run_jsearch_harvest_loop(db) -> None:
     """Periodic harvester started from the app startup hook, independent of
     the live feed's synchronous JSearch fallback.
     """
-    if not harvest_enabled():
+    if not harvest_autostart_enabled():
         logger.info("jsearch_harvest_loop_disabled")
         return
     interval_minutes = max(5, _env_int("JSEARCH_HARVEST_INTERVAL_MINUTES", 15))
@@ -475,7 +480,7 @@ async def run_jsearch_harvest_loop(db) -> None:
     while True:
         ledger_run_id = None
         try:
-            if harvest_enabled():
+            if harvest_autostart_enabled():
                 begin = getattr(db, "begin_python_ingestion_run", None)
                 claim = (
                     await begin(

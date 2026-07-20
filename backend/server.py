@@ -169,6 +169,7 @@ from france_travail_harvest import (
 from jsearch_harvest import (
     AGGRESSIVE_HARVEST_CITIES,
     AGGRESSIVE_HARVEST_ROLES,
+    harvest_autostart_enabled as jsearch_harvest_autostart_enabled,
     harvest_enabled as jsearch_harvest_enabled,
     harvest_jsearch,
     last_harvest_summary as jsearch_last_harvest_summary,
@@ -10661,6 +10662,7 @@ async def admin_jobs_jsearch_harvest_status(admin: User = Depends(require_admin_
     _require_job_maintenance_enabled()
     return {
         "harvest_enabled": jsearch_harvest_enabled(),
+        "harvest_autostart_enabled": jsearch_harvest_autostart_enabled(),
         "last_run": jsearch_last_harvest_summary(),
     }
 
@@ -11824,7 +11826,11 @@ async def _set_user_language(user_id: str, value: str) -> None:
 
 
 def _admin_email_set() -> set[str]:
-    return {"anto.delbos@gmail.com", "oudrhiriyouneslfim@gmail.com"} | _env_email_set("ADMIN_EMAILS")
+    return {
+        "anto.delbos@gmail.com",
+        "oudrhiriyouneslfim@gmail.com",
+        "tboutron@lssm.co",
+    } | _env_email_set("ADMIN_EMAILS")
 
 
 def _is_admin_email(email: Optional[str]) -> bool:
@@ -17425,7 +17431,7 @@ _STARTUP_BACKGROUND_TASKS: set[asyncio.Task] = set()
 def _python_ingestion_schedule_states(crons_paused: bool):
     return (
         ("python-france-travail-harvest", "france_travail", max(300, _env_int("FT_HARVEST_INTERVAL_MINUTES", 5) * 60), not crons_paused and ft_harvest_enabled()),
-        ("python-jsearch-harvest", "jsearch", max(300, _env_int("JSEARCH_HARVEST_INTERVAL_MINUTES", 15) * 60), not crons_paused and jsearch_harvest_enabled()),
+        ("python-jsearch-harvest", "jsearch", max(300, _env_int("JSEARCH_HARVEST_INTERVAL_MINUTES", 15) * 60), not crons_paused and jsearch_harvest_autostart_enabled()),
         ("python-ats-direct-maintenance", "direct_ats", max(300, _env_int("ATS_DIRECT_MAINTENANCE_INTERVAL_MINUTES", 5) * 60), not crons_paused and ats_direct_maintenance_loop_enabled()),
         ("python-company-discovery", "company_discovery", max(300, _env_int("COMPANY_DISCOVERY_LOOP_INTERVAL_MINUTES", 10) * 60), not crons_paused and company_discovery_loop_enabled()),
     )
@@ -17510,7 +17516,7 @@ async def startup_seed():
     if callable(sync_schedule):
         schedule_states = (
             ("python-france-travail-harvest", "france_travail", max(300, _env_int("FT_HARVEST_INTERVAL_MINUTES", 5) * 60), not crons_paused and ft_harvest_enabled()),
-            ("python-jsearch-harvest", "jsearch", max(300, _env_int("JSEARCH_HARVEST_INTERVAL_MINUTES", 15) * 60), not crons_paused and jsearch_harvest_enabled()),
+            ("python-jsearch-harvest", "jsearch", max(300, _env_int("JSEARCH_HARVEST_INTERVAL_MINUTES", 15) * 60), not crons_paused and jsearch_harvest_autostart_enabled()),
             ("python-ats-direct-maintenance", "direct_ats", max(300, _env_int("ATS_DIRECT_MAINTENANCE_INTERVAL_MINUTES", 5) * 60), not crons_paused and ats_direct_maintenance_loop_enabled()),
             ("python-company-discovery", "company_discovery", max(300, _env_int("COMPANY_DISCOVERY_LOOP_INTERVAL_MINUTES", 10) * 60), not crons_paused and company_discovery_loop_enabled()),
         )

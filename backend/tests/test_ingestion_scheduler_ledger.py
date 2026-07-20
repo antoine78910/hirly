@@ -64,7 +64,7 @@ def test_jsearch_completed_occurrence_writes_terminal_counters(monkeypatch):
         "errors": [],
         "completeness": "complete_snapshot",
     })
-    monkeypatch.setattr(jsearch_harvest, "harvest_enabled", lambda: True)
+    monkeypatch.setattr(jsearch_harvest, "harvest_autostart_enabled", lambda: True)
     monkeypatch.setattr(jsearch_harvest, "harvest_jsearch", harvest)
     monkeypatch.setattr(jsearch_harvest.asyncio, "sleep", _one_iteration_sleep())
     monkeypatch.setenv("JSEARCH_HARVEST_INITIAL_DELAY_SECONDS", "0")
@@ -85,7 +85,7 @@ def test_jsearch_completed_occurrence_writes_terminal_counters(monkeypatch):
 
 def test_jsearch_terminal_failure_is_persisted(monkeypatch):
     db = _LedgerDB(acquired=True)
-    monkeypatch.setattr(jsearch_harvest, "harvest_enabled", lambda: True)
+    monkeypatch.setattr(jsearch_harvest, "harvest_autostart_enabled", lambda: True)
     monkeypatch.setattr(
         jsearch_harvest,
         "harvest_jsearch",

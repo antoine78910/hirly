@@ -69,10 +69,19 @@ def test_paused_ingestion_schedules_are_registered_disabled(monkeypatch):
 def test_provider_disabled_schedule_is_not_expected(monkeypatch):
     monkeypatch.setattr(server, "ft_harvest_enabled", lambda: False)
     monkeypatch.setattr(server, "jsearch_harvest_enabled", lambda: True)
+    monkeypatch.setattr(server, "jsearch_harvest_autostart_enabled", lambda: False)
     states = {
         source: enabled
         for _schedule, source, _cadence, enabled
         in server._python_ingestion_schedule_states(False)
     }
     assert states["france_travail"] is False
+    assert states["jsearch"] is False
+
+    monkeypatch.setattr(server, "jsearch_harvest_autostart_enabled", lambda: True)
+    states = {
+        source: enabled
+        for _schedule, source, _cadence, enabled
+        in server._python_ingestion_schedule_states(False)
+    }
     assert states["jsearch"] is True
