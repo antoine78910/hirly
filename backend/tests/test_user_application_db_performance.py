@@ -35,6 +35,34 @@ class _Client:
         return _Response(self.payload)
 
 
+class _Cursor:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def sort(self, *_args):
+        return self
+
+    def limit(self, *_args):
+        return self
+
+    async def to_list(self, _limit):
+        return list(self.rows)
+
+
+class _Collection:
+    def __init__(self, db, rows):
+        self.db = db
+        self.rows = rows
+
+    def find(self, *_args):
+        self.db.operations += 1
+        return _Cursor(self.rows)
+
+    async def find_one(self, *_args):
+        self.db.operations += 1
+        return self.rows[0] if self.rows else None
+
+
 def test_safe_inclusion_projection_avoids_jsonb(monkeypatch):
     client = _Client([{"job_id": "j1"}])
     monkeypatch.setattr(supabase_adapter, "_get_shared_http_client", lambda **_kwargs: client)
@@ -120,6 +148,36 @@ def test_application_status_rpc_is_one_remote_operation(monkeypatch):
     assert len(client.calls) == 1
     assert client.calls[0][0] == "post"
     assert client.calls[0][1].endswith("/rpc/patch_user_application_status")
+
+
+def test_tracker_list_and_detail_each_use_two_operations_after_auth(monkeypatch):
+    application = {
+        "application_id": "a1",
+        "user_id": "u1",
+        "job_id": "j1",
+        "status": "applied",
+        "created_at": "2026-07-20T12:00:00Z",
+    }
+    job = {"job_id": "j1", "title": "Engineer", "company": "Hirly"}
+
+    list_db = SimpleNamespace(operations=0)
+    list_db.applications = _Collection(list_db, [application])
+    list_db.jobs = _Collection(list_db, [job])
+    monkeypatch.setattr(server, "db", list_db)
+    user = server.User(user_id="u1", email="u@example.com", name="User")
+    listed = asyncio.run(server.list_applications(user))
+
+    assert listed["applications"][0]["application_id"] == "a1"
+    assert list_db.operations == 2
+
+    detail_db = SimpleNamespace(operations=0)
+    detail_db.applications = _Collection(detail_db, [application])
+    detail_db.jobs = _Collection(detail_db, [job])
+    monkeypatch.setattr(server, "db", detail_db)
+    detailed = asyncio.run(server.get_application("a1", user))
+
+    assert detailed["application_id"] == "a1"
+    assert detail_db.operations == 2
 
 
 def test_tracker_migration_syncs_old_writes_and_is_service_role_only():
