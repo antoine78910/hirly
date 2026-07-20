@@ -40,6 +40,8 @@ jobs:
       - run: bun run format
       - run: bun run lint
       - run: bun run typecheck
+      - name: Run G003 worker adversarial matrix
+        run: bun run test:g003
       - run: bun run test
       - run: bun run build
 
