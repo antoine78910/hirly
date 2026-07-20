@@ -6515,7 +6515,7 @@ async def get_feed(
     prefetch: bool = False,
     score: bool = False,                                  # opt-in AI scoring (slow); default off for snappy UX
     search_role: Optional[str] = None,                    # override profile target_role for this feed request
-    audit_mode: bool = Query(False, include_in_schema=False),
+    audit_mode: bool = False,
 ):
     started_at = time.perf_counter()
     logger.info(
