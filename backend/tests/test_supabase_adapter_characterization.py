@@ -95,9 +95,13 @@ def test_read_metrics_include_journey_pushdown_counts_and_no_filter_values(monke
         "remote_request_count": 1,
         "response_bytes": len(_Response([{"data": {"event_id": "evt_1", "event": "cta_signup_clicked"}}]).content),
         "retry_count": 0,
+        "rows_fetched": 1,
         "rows_returned": 1,
         "status": "ok",
         "table": "analytics_events",
+        "transport_request_count": 0,
+        "transport_response_bytes": 0,
+        "transport_retry_count": 0,
     }
     assert "cta_signup_clicked" not in read_line
 
@@ -132,8 +136,10 @@ def test_http_get_retry_metric_counts_attempts_without_logging_headers(monkeypat
         record.message for record in caplog.records if '"operation":"http_get"' in record.message
     )
     metric = json.loads(metric_line.split("db_adapter_metric ", 1)[1])
-    assert metric["remote_request_count"] == 2
-    assert metric["retry_count"] == 1
+    assert metric["remote_request_count"] == 0
+    assert metric["transport_request_count"] == 2
+    assert metric["retry_count"] == 0
+    assert metric["transport_retry_count"] == 1
     assert metric["journey"] == "landing"
     assert "secret" not in metric_line
     assert "private" not in metric_line

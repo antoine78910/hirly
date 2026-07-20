@@ -353,6 +353,8 @@ def _emit_adapter_metric(
 ) -> None:
     requests_before, bytes_before, retries_before = snapshot
     request_count = max(0, _db_remote_request_count.get() - requests_before)
+    response_bytes = max(0, _db_response_bytes.get() - bytes_before)
+    retry_count = max(0, _db_retry_count.get() - retries_before)
     metric = {
         "operation": operation,
         "table": table,
@@ -361,9 +363,11 @@ def _emit_adapter_metric(
         "transport_request_count": request_count if transport_metric else 0,
         "rows_fetched": max(0, int(rows_fetched)),
         "rows_returned": max(0, int(rows_returned)),
-        "response_bytes": max(0, _db_response_bytes.get() - bytes_before),
+        "response_bytes": 0 if transport_metric else response_bytes,
+        "transport_response_bytes": response_bytes if transport_metric else 0,
         "elapsed_ms": max(0, int((time.perf_counter() - started_at) * 1000)),
-        "retry_count": max(0, _db_retry_count.get() - retries_before),
+        "retry_count": 0 if transport_metric else retry_count,
+        "transport_retry_count": retry_count if transport_metric else 0,
         "journey": _db_journey_tag.get(),
         "status": status,
     }
