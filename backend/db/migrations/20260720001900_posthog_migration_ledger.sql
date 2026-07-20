@@ -116,6 +116,16 @@ BEGIN
     AND lease_expires_at <= v_now
     AND send_started_at IS NOT NULL;
 
+  -- Any unresolved outcome freezes the run. An operator must reconcile it
+  -- read-side before another source row can be sent.
+  IF EXISTS (
+    SELECT 1
+    FROM public.posthog_migration_ledger
+    WHERE run_id = p_run_id AND status = 'uncertain'
+  ) THEN
+    RETURN;
+  END IF;
+
   RETURN QUERY
   WITH candidates AS (
     SELECT ledger.run_id, ledger.source_event_id

@@ -43,6 +43,9 @@ describe("PostHog migration ledger contract", () => {
     expect(up).toMatch(
       /lease_expires_at <= v_now[\s\S]*send_started_at IS NULL/s,
     );
+    expect(up).toMatch(
+      /WHERE run_id = p_run_id AND status = 'uncertain'[\s\S]*RETURN;/s,
+    );
     expect(up).toContain("FOR UPDATE SKIP LOCKED");
   });
 
