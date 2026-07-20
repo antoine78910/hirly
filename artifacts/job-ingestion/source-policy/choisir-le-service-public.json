@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "source-policy-evidence.v1",
+  "sourceKey": "choisir-le-service-public",
+  "displayName": "Choisir le Service Public",
+  "qualificationStatus": "requires_legal_review",
+  "productionEligible": false,
+  "capturedAt": "2026-07-20T00:00:00.000Z",
+  "approvedPlanStatement": "Open Licence 2.0; attribution required",
+  "evidence": [
+    {
+      "kind": "dataset_page",
+      "url": "https://www.data.gouv.fr/datasets/les-offres-diffusees-sur-choisir-le-service-public"
+    },
+    {
+      "kind": "licence_text",
+      "url": "https://github.com/etalab/licence-ouverte/blob/master/LO.md"
+    }
+  ],
+  "unresolvedRights": [
+    "commercial use by a paid consumer product",
+    "listing and full-text redisplay",
+    "raw payload and description retention",
+    "canonical apply linking",
+    "required attribution wording",
+    "permitted access method",
+    "update and removal obligations",
+    "termination and retention"
+  ],
+  "activationConstraints": [
+    "Live transport remains disabled.",
+    "Canonical writes remain disabled.",
+    "A source-specific reviewed policy record is required before activation."
+  ]
+}
