@@ -10,6 +10,8 @@ const URL_KEY_PATTERN = /(^|[_-])(url|uri|href|referrer|page|path)([_-]|$)/i;
 const SENSITIVE_KEY_PATTERN =
   /(access|auth|bearer|card|code|coverletter|cv|document|email|linkedin|message|name|password|phone|refresh|resume|secret|session|token)/;
 const ALLOWED_SYSTEM_EVENTS = new Set(["$identify", "$pageview"]);
+const CANONICAL_USER_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 let client: PostHog | null = null;
 let initialized = false;
@@ -125,6 +127,9 @@ export const initializePostHog = (): PostHog | null => {
 
 export const getPostHogClient = (): PostHog | null => client;
 
+export const isCanonicalAnalyticsUserId = (value: unknown): value is string =>
+  typeof value === "string" && CANONICAL_USER_ID_PATTERN.test(value);
+
 export const capturePostHogEvent = (
   event: string,
   properties: Properties = {},
@@ -153,7 +158,7 @@ export const capturePostHogPageview = (pathname: string): void => {
 };
 
 export const identifyPostHogUser = (userId: string): void => {
-  if (!client || !userId || identifiedUserId === userId) return;
+  if (!client || !isCanonicalAnalyticsUserId(userId) || identifiedUserId === userId) return;
   try {
     if (identifiedUserId) client.reset();
     client.identify(userId);
