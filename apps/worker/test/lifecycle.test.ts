@@ -9,6 +9,7 @@ describe("worker lifecycle", () => {
       health,
       consumer: {
         start: () => calls.push("consumer:start"),
+        stopClaiming: () => calls.push("consumer:stop-claiming"),
         stop: async () => {
           calls.push(`consumer:stop:ready=${health.ready}`);
         },
@@ -20,7 +21,9 @@ describe("worker lifecycle", () => {
         },
       },
       server: {
-        stop: () => calls.push(`server:stop:ready=${health.ready}`),
+        stop: async () => {
+          calls.push(`server:stop:ready=${health.ready}`);
+        },
       },
       repository: {
         close: async () => {
@@ -35,6 +38,7 @@ describe("worker lifecycle", () => {
     expect(calls).toEqual([
       "consumer:start",
       "scheduler:start",
+      "consumer:stop-claiming",
       "server:stop:ready=false",
       "scheduler:stop:ready=false",
       "consumer:stop:ready=false",

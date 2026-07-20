@@ -6,6 +6,7 @@ import { createTaskHandlers } from "./runtime/handlers";
 import { Consumer } from "./runtime/consumer";
 import { Scheduler } from "./runtime/scheduler";
 import { startHttpServer } from "./http/server";
+import { createWorkerRuntime } from "./runtime/lifecycle";
 
 export async function startApplication(
   environment: Record<string, string | undefined> = process.env,
@@ -45,19 +46,22 @@ export async function startApplication(
     health,
   });
   await repository.ping();
-  consumer.start();
-  scheduler.start();
-  health.ready = true;
+  const runtime = createWorkerRuntime({
+    health,
+    consumer,
+    scheduler,
+    server,
+    repository,
+    shutdownMs: config.WORKER_SHUTDOWN_MS,
+  });
+  runtime.start();
 
-  let stopping: Promise<void> | undefined;
-  const stop = () =>
-    (stopping ??= (async () => {
-      health.ready = false;
-      server.stop(false);
-      await scheduler.stop();
-      await consumer.stop(config.WORKER_SHUTDOWN_MS);
-      await repository.close();
-    })());
-
-  return { config, server, consumer, scheduler, health, stop };
+  return {
+    config,
+    server,
+    consumer,
+    scheduler,
+    health,
+    stop: runtime.stop,
+  };
 }

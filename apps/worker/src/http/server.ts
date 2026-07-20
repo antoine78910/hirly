@@ -47,7 +47,8 @@ function authenticate(request: Request, token: string | undefined): Response | n
 
 async function parseEnqueueRequest(request: Request): Promise<EnqueueRun> {
   const contentLength = Number(request.headers.get("content-length") ?? "0");
-  if (contentLength > 64 * 1024) throw new Error("payload_too_large");
+  if (contentLength > 64 * 1024) throw new PayloadTooLargeError();
+  const bytes = await readBodyLimited(request, 64 * 1024);
   const controlEnqueueSchema = z.discriminatedUnion("kind", [
     z
       .object({
@@ -93,20 +94,49 @@ async function parseEnqueueRequest(request: Request): Promise<EnqueueRun> {
       })
       .strict(),
   ]);
-  return enqueueRunSchema.parse(controlEnqueueSchema.parse(await request.json()));
+  return enqueueRunSchema.parse(
+    controlEnqueueSchema.parse(JSON.parse(new TextDecoder().decode(bytes))),
+  );
 }
 
-export function startHttpServer(input: {
+async function readBodyLimited(request: Request, limit: number): Promise<Uint8Array> {
+  if (!request.body) return new Uint8Array();
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > limit) {
+      await reader.cancel("payload_too_large");
+      throw new PayloadTooLargeError();
+    }
+    chunks.push(value);
+  }
+  const body = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body;
+}
+
+class PayloadTooLargeError extends Error {
+  constructor() {
+    super("payload_too_large");
+  }
+}
+
+export function createHttpHandler(input: {
   config: RuntimeConfig;
   queue: QueueRepository & Enqueuer;
   store: RuntimeStore;
   logger: Logger;
   health: HealthState;
-}): Bun.Server<unknown> {
-  return Bun.serve({
-    port: input.config.PORT,
-    idleTimeout: 10,
-    async fetch(request) {
+}) {
+  return async function fetch(request: Request): Promise<Response> {
       const url = new URL(request.url);
       if (request.method === "GET" && url.pathname === "/health/live") {
         return json(
@@ -180,11 +210,35 @@ export function startHttpServer(input: {
           return run ? json(run) : json({ error: "not_found" }, 404);
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : "invalid_input";
-        const status = message === "authorization_blocked" ? 409 : 400;
-        return json({ error: message }, status);
+        const authorizationBlocked =
+          error instanceof Error &&
+          (error.message === "authorization_blocked" ||
+            "code" in error &&
+              (error as { code?: string }).code === "authorization_blocked");
+        const status =
+          error instanceof PayloadTooLargeError
+            ? 413
+            : authorizationBlocked
+              ? 409
+              : 400;
+        const code =
+          error instanceof PayloadTooLargeError
+            ? "payload_too_large"
+            : authorizationBlocked
+              ? "authorization_blocked"
+              : "invalid_input";
+        return json({ error: code }, status);
       }
       return json({ error: "not_found" }, 404);
-    },
+  };
+}
+
+export function startHttpServer(
+  input: Parameters<typeof createHttpHandler>[0],
+): Bun.Server<unknown> {
+  return Bun.serve({
+    port: input.config.PORT,
+    idleTimeout: 10,
+    fetch: createHttpHandler(input),
   });
 }

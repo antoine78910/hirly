@@ -1,24 +1,53 @@
 import { startApplication } from "./app";
 
-const application = await startApplication();
-let stopping = false;
+interface ShutdownApplication {
+  config: { NODE_ENV: string };
+  stop(): Promise<void>;
+}
 
-const shutdown = async (signal: string) => {
-  if (stopping) return;
-  stopping = true;
-  console.log(
-    JSON.stringify({
-      service: "hirly-worker",
-      version: "0.1.0",
-      environment: application.config.NODE_ENV,
-      event: "worker.shutdown",
-      severity: "info",
-      details: { signal },
-    }),
-  );
-  await application.stop();
-  process.exit(0);
-};
+export function createShutdownHandler(input: {
+  application: ShutdownApplication;
+  write?: (line: string) => void;
+  exit?: (code: number) => void;
+}) {
+  const write = input.write ?? ((line: string) => console.log(line));
+  const exit = input.exit ?? ((code: number) => process.exit(code));
+  let stopping: Promise<void> | undefined;
 
-process.on("SIGTERM", () => void shutdown("SIGTERM"));
-process.on("SIGINT", () => void shutdown("SIGINT"));
+  return (signal: "SIGTERM" | "SIGINT"): Promise<void> =>
+    (stopping ??= (async () => {
+      write(
+        JSON.stringify({
+          service: "hirly-worker",
+          version: "0.1.0",
+          environment: input.application.config.NODE_ENV,
+          event: "worker.shutdown",
+          severity: "info",
+          details: { signal },
+        }),
+      );
+      try {
+        await input.application.stop();
+        exit(0);
+      } catch {
+        write(
+          JSON.stringify({
+            service: "hirly-worker",
+            version: "0.1.0",
+            environment: input.application.config.NODE_ENV,
+            event: "worker.shutdown_failed",
+            severity: "error",
+            reasonCode: "shutdown_failed",
+          }),
+        );
+        exit(1);
+      }
+    })());
+}
+
+if (import.meta.main) {
+  const application = await startApplication();
+  const shutdown = createShutdownHandler({ application });
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  process.on("SIGINT", () => void shutdown("SIGINT"));
+}
