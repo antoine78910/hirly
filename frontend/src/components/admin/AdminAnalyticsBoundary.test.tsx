@@ -1,6 +1,5 @@
-import { act } from "react";
+import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { MemoryRouter } from "react-router-dom";
 
 import AdminAnalyticsBoundary, {
   validatedAdminPostHogUrl,
@@ -9,6 +8,30 @@ import AdminAnalyticsBoundary, {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 jest.mock("../../lib/analytics", () => ({ trackEvent: jest.fn() }));
+jest.mock("./AdminShell", () => ({
+  __esModule: true,
+  default: ({ children }: { children: ReactNode }) => <main>{children}</main>,
+}));
+jest.mock(
+  "react-router-dom",
+  () => ({
+    Link: ({
+      to,
+      children,
+      className,
+    }: {
+      to: string;
+      children: ReactNode;
+      className?: string;
+    }) => (
+      <a className={className} href={to}>
+        {children}
+      </a>
+    ),
+    useLocation: () => ({ pathname: "/admin/analytics" }),
+  }),
+  { virtual: true },
+);
 
 describe("AdminAnalyticsBoundary", () => {
   let container: HTMLDivElement;
@@ -34,11 +57,9 @@ describe("AdminAnalyticsBoundary", () => {
   function renderBoundary() {
     act(() => {
       root.render(
-        <MemoryRouter>
-          <AdminAnalyticsBoundary>
-            <div data-testid="legacy">Legacy analytics</div>
-          </AdminAnalyticsBoundary>
-        </MemoryRouter>,
+        <AdminAnalyticsBoundary>
+          <div data-testid="legacy">Legacy analytics</div>
+        </AdminAnalyticsBoundary>,
       );
     });
   }
