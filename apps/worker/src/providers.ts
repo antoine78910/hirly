@@ -10,7 +10,6 @@ import { dataGouvProvider } from "./providers/data-gouv";
 import { greenhouseProvider } from "./providers/greenhouse";
 import { leverProvider } from "./providers/lever";
 import { recruiteeProvider } from "./providers/recruitee";
-import { nicokaProvider } from "./providers/nicoka";
 
 export const providerModules = {
   apec: apecProvider,
@@ -22,7 +21,6 @@ export const providerModules = {
   greenhouse: greenhouseProvider,
   lever: leverProvider,
   recruitee: recruiteeProvider,
-  nicoka: nicokaProvider,
 } satisfies Record<Provider, ProviderCore<unknown>>;
 
 export function getProviderModule(provider: Provider): ProviderCore<unknown> {
@@ -49,5 +47,4 @@ export {
   greenhouseProvider,
   leverProvider,
   recruiteeProvider,
-  nicokaProvider,
 };
