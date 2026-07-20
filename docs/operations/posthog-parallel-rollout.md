@@ -190,11 +190,77 @@ Use this exact exporter. It fails closed on command failure, malformed pages,
 empty continuation pages, missing/repeated cursors, and incomplete pagination:
 
 ```sh
+run_stripe_page() {
+  emulate -L zsh
+  local timeout_seconds="${STRIPE_PAGE_TIMEOUT_SECONDS:-20}"
+  local kill_grace_seconds="${STRIPE_PAGE_KILL_GRACE_SECONDS:-1}"
+  local temp_dir="" stdout_file="" stderr_file="" timeout_marker=""
+  local stripe_pid="" watchdog_pid="" page_status=0
+
+  [[ "$timeout_seconds" == <-> && "$timeout_seconds" -gt 0 ]] || {
+    print -u2 -- "STRIPE_PAGE_TIMEOUT_SECONDS must be a positive integer"
+    return 64
+  }
+  [[ "$kill_grace_seconds" == <-> && "$kill_grace_seconds" -gt 0 ]] || {
+    print -u2 -- "STRIPE_PAGE_KILL_GRACE_SECONDS must be a positive integer"
+    return 64
+  }
+
+  temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/posthog-stripe-page.XXXXXX")" || return 1
+  stdout_file="$temp_dir/stdout"
+  stderr_file="$temp_dir/stderr"
+  timeout_marker="$temp_dir/timed-out"
+
+  {
+    command stripe "$@" >"$stdout_file" 2>"$stderr_file" &
+    stripe_pid=$!
+    (
+      sleep "$timeout_seconds"
+      if kill -0 "$stripe_pid" 2>/dev/null; then
+        : > "$timeout_marker"
+        kill -TERM "$stripe_pid" 2>/dev/null || true
+        sleep "$kill_grace_seconds"
+        kill -KILL "$stripe_pid" 2>/dev/null || true
+      fi
+    ) &
+    watchdog_pid=$!
+
+    wait "$stripe_pid" || page_status=$?
+    kill -TERM "$watchdog_pid" 2>/dev/null || true
+    wait "$watchdog_pid" 2>/dev/null || true
+    watchdog_pid=""
+
+    if [[ -f "$timeout_marker" ]]; then
+      print -u2 -- "stripe page timed out after ${timeout_seconds}s"
+      [[ -s "$stderr_file" ]] && cat "$stderr_file" >&2
+      return 124
+    fi
+    if (( page_status != 0 )); then
+      [[ -s "$stderr_file" ]] && cat "$stderr_file" >&2
+      return "$page_status"
+    fi
+    cat "$stdout_file"
+  } always {
+    if [[ -n "$watchdog_pid" ]]; then
+      kill -TERM "$watchdog_pid" 2>/dev/null || true
+      wait "$watchdog_pid" 2>/dev/null || true
+    fi
+    if [[ -n "$stripe_pid" ]] && kill -0 "$stripe_pid" 2>/dev/null; then
+      kill -TERM "$stripe_pid" 2>/dev/null || true
+      sleep "$kill_grace_seconds"
+      kill -KILL "$stripe_pid" 2>/dev/null || true
+      wait "$stripe_pid" 2>/dev/null || true
+    fi
+    [[ -n "$temp_dir" ]] && rm -rf -- "$temp_dir"
+  }
+}
+
 export_stripe_events() {
   local event_type="$1" output="$2"
   local cursor="" previous_cursor="" response="" has_more="" next_cursor=""
   local page_count=0 total_event_count=0 page_event_count=0
   : > "$output"
+  rm -f -- "${output}.manifest.json"
 
   while true; do
     local -a args=(
@@ -205,7 +271,7 @@ export_stripe_events() {
       -d "limit=100"
     )
     [[ -n "$cursor" ]] && args+=(-d "starting_after=$cursor")
-    response="$(stripe "${args[@]}")" || return 1
+    response="$(run_stripe_page "${args[@]}")" || return $?
     printf '%s\n' "$response" |
       jq -e '.object == "list" and (.data | type == "array")
              and (.has_more | type == "boolean")' >/dev/null || return 1

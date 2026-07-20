@@ -21,7 +21,7 @@ from profile_search_preferences import (
     resolve_profile_target_location_label,
     resolve_profile_target_role,
 )
-from job_normalization import classify_dedup_pair, sanitize_display_title
+from job_normalization import build_job_fingerprint, classify_dedup_pair, sanitize_display_title
 from job_providers import (
     get_board_provider,
     get_job_provider,
@@ -407,6 +407,7 @@ def _prepare_job_for_upsert(job: Dict[str, Any]) -> Dict[str, Any]:
     if sanitized_title:
         prepared["title"] = sanitized_title
     prepared = _with_cheap_validation(prepared)
+    prepared["fingerprint"] = prepared.get("fingerprint") or build_job_fingerprint(prepared)
     return _ensure_job_id(prepared)
 
 

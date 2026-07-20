@@ -294,7 +294,41 @@ async def harvest_jsearch(
                 run["fetched"] = fetched
                 raw_response = result.raw_response or {}
                 completeness = raw_response.get("completeness")
-                run["raw_records"] = int(raw_response.get("rows_seen") or fetched)
+                if completeness == "capped_unknown":
+                    child_results = []
+                    child_raw_total = 0
+                    child_jobs_by_id = {
+                        str(job.get("job_id")): job for job in jobs if job.get("job_id")
+                    }
+                    for contract_hint in ("fulltime", "parttime", "contract", "internship"):
+                        child = await provider.search(JobSearchQuery(
+                            role=role,
+                            location=location_label,
+                            country="fr",
+                            language=country_to_jsearch_language("fr"),
+                            limit=page_size * max_pages,
+                            page_size=page_size,
+                            max_pages=max_pages,
+                            date_posted=freshness_window,
+                            contract_hint=contract_hint,
+                        ))
+                        child_results.append((child.raw_response or {}).get("completeness"))
+                        child_raw_total += int((child.raw_response or {}).get("rows_seen") or len(child.jobs or []))
+                        for child_job in child.jobs or []:
+                            if child_job.get("job_id"):
+                                child_jobs_by_id[str(child_job["job_id"])] = child_job
+                    jobs = list(child_jobs_by_id.values())
+                    fetched = len(jobs)
+                    run["fetched"] = fetched
+                    run["split_children"] = child_results
+                    completeness = (
+                        "complete_partition_split"
+                        if all(state == "complete_without_source_total" for state in child_results)
+                        else "capped_unknown"
+                    )
+                else:
+                    child_raw_total = 0
+                run["raw_records"] = int(raw_response.get("rows_seen") or fetched) + child_raw_total
                 run["normalized"] = fetched
                 run["rejected_by_reason"] = {
                     "normalization_failed": max(0, run["raw_records"] - fetched)
@@ -371,7 +405,8 @@ async def harvest_jsearch(
             if position < len(selected_indices) - 1:
                 await asyncio.sleep(pause_seconds)
         all_partitions_complete = not summary["errors"] and len(summary["runs"]) == queries
-        cursor_next = (cursor + queries) % len(combos) if all_partitions_complete else cursor
+        all_partitions_attempted = len(summary["runs"]) == queries
+        cursor_next = (cursor + queries) % len(combos) if all_partitions_attempted else cursor
         if start_offset is None:
             _harvest_cursor = cursor_next
         summary["cursor_next"] = cursor_next

@@ -23,7 +23,8 @@ class _JobsCollection:
         self.insert_many_calls = []
 
     def find(self, filter=None, projection=None):
-        return _Cursor([])
+        ids = set(((filter or {}).get("job_id") or {}).get("$in") or [])
+        return _Cursor([dict(row) for row in self.rows if row.get("job_id") in ids])
 
     async def update_one(self, filter, update, upsert=False):
         self.update_one_calls += 1
@@ -81,6 +82,28 @@ def test_upsert_job_batch_falls_back_to_update_one_without_insert_many():
     assert stats["total_imported"] == 2
     assert db.jobs.update_one_calls == 2
     assert db.jobs.insert_many_calls == []
+
+
+def test_upsert_accounting_uses_actual_existing_identity_outcomes():
+    db = _FakeDB()
+    unchanged = jobs_service._prepare_job_for_upsert(_job(1))
+    stale = jobs_service._prepare_job_for_upsert(_job(2))
+    stale["validation_status"] = "invalid"
+    stale["title"] = "Old title"
+    stale["fingerprint"] = "old-fingerprint"
+    db.jobs.rows = [unchanged, stale]
+
+    stats = asyncio.run(jobs_service._upsert_job_batch(
+        db,
+        [_job(1), _job(2), _job(3), _job(3)],
+    ))
+
+    assert stats["inserted"] == 1
+    assert stats["updated"] == 1
+    assert stats["reactivated"] == 1
+    assert stats["exact_duplicate"] == 2  # unchanged existing + duplicate occurrence in batch
+    assert stats["write_failed"] == 0
+    assert stats["inserted"] + stats["updated"] + stats["exact_duplicate"] == 4
 
 
 def test_ensure_job_id_generates_stable_id():

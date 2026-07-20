@@ -67,9 +67,14 @@ const terminalCounts = Object.fromEntries(
 );
 
 const evidenceFailures: string[] = [];
+const evidenceDigests: Record<string, string> = {};
 for (const row of rows) {
   try {
-    await stat(resolve(root, row.finalEvidence));
+    const evidencePath = resolve(root, row.finalEvidence);
+    const metadata = await stat(evidencePath);
+    evidenceDigests[row.finalEvidence] = metadata.isFile()
+      ? stableDigest(await readFile(evidencePath, "utf8"))
+      : stableDigest({ directory: row.finalEvidence, modifiedAt: metadata.mtime.toISOString() });
   } catch {
     evidenceFailures.push(`${row.riskId}:missing_evidence_path:${row.finalEvidence}`);
   }
@@ -79,7 +84,10 @@ const commandResults: Array<{
   command: string;
   exitCode: number;
   rows: string[];
+  executedAt: string;
+  checksum: string;
 }> = [];
+const auditStartedAt = new Date();
 const passCommands = new Map<string, string[]>();
 for (const row of rows.filter((candidate) => candidate.status === "PASS")) {
   passCommands.set(row.reproductionCommand, [
@@ -94,7 +102,11 @@ for (const [command, riskIds] of passCommands) {
     stderr: "pipe",
     env: Bun.env,
   });
-  commandResults.push({ command, exitCode: spawned.exitCode, rows: riskIds });
+  const executedAt = new Date().toISOString();
+  commandResults.push({
+    command, exitCode: spawned.exitCode, rows: riskIds, executedAt,
+    checksum: stableDigest({ command, exitCode: spawned.exitCode, rows: riskIds }),
+  });
   if (spawned.exitCode !== 0) {
     evidenceFailures.push(`${riskIds.join(",")}:reproduction_failed:${spawned.exitCode}`);
   }
@@ -108,10 +120,17 @@ for (const row of rows.filter((candidate) => candidate.status === "BLOCKED_EXTER
     stderr: "pipe",
     env: Bun.env,
   });
-  commandResults.push({ command: check, exitCode: spawned.exitCode, rows: [row.riskId] });
+  const executedAt = new Date().toISOString();
+  commandResults.push({
+    command: check, exitCode: spawned.exitCode, rows: [row.riskId], executedAt,
+    checksum: stableDigest({ command: check, exitCode: spawned.exitCode, rows: [row.riskId] }),
+  });
   if (spawned.exitCode === 0) {
     evidenceFailures.push(`${row.riskId}:external_dependency_available_block_must_be_resolved`);
   }
+}
+if (Date.now() - auditStartedAt.getTime() > 5 * 60 * 1000) {
+  evidenceFailures.push("command_evidence_stale");
 }
 
 const invariantFailures = [
@@ -164,6 +183,7 @@ const result = {
     digest: stableDigest(coverage.records),
   },
   commandResults,
+  evidenceDigests,
   rows: machineRows,
 };
 const summary = [
@@ -254,6 +274,15 @@ await writeFile(runResultsPath, `${JSON.stringify({
   verdict: result.verdict,
   invariantFailures,
   commandResults,
+  evidenceDigests,
+  resultChecksum: stableDigest({
+    verdict: result.verdict,
+    invariantFailures,
+    commandResults: commandResults.map(({ command, exitCode, rows, checksum }) => ({
+      command, exitCode, rows, checksum,
+    })),
+    evidenceDigests,
+  }),
 }, null, 2)}\n`);
 console.log(summary);
 if (invariantFailures.length) process.exitCode = 1;
