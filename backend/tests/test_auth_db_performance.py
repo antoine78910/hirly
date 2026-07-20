@@ -360,6 +360,14 @@ def test_auth_migration_declares_indexes_sync_and_rpc_security():
     assert "AUTH_JOINED_SESSION_LOOKUP_ENABLED" in migration
 
 
+def test_auth_performance_rollout_switches_default_off():
+    env_example = (server.Path(server.__file__).parent / ".env.example").read_text()
+
+    assert "AUTH_JOINED_SESSION_LOOKUP_ENABLED=false" in env_example
+    assert "AUTH_RETURNED_USER_WRITE_ENABLED=false" in env_example
+    assert "AUTH_IDEMPOTENT_READ_RETRY_ENABLED=false" in env_example
+
+
 def test_training_access_reuses_joined_creator_flag(monkeypatch):
     monkeypatch.setattr("training_access.training_open_access_enabled", lambda: False)
 
