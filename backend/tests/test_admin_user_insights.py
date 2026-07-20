@@ -61,7 +61,7 @@ def test_onboarding_progress_reports_drop_off_step():
     progress = server._onboarding_progress_for_events(events)
     assert progress["completed"] is False
     assert progress["furthest_step"] == "location"
-    assert progress["drop_off_step"] == "contractType"
+    assert progress["drop_off_step"] == "compare2x"
 
 
 def test_onboarding_progress_completed():
@@ -99,7 +99,7 @@ def test_admin_user_analytics_exposes_onboarding_and_activity(monkeypatch):
     assert response["summary"]["total_users"] == 1
     user = response["users"][0]
     assert user["onboarding_answers"]["job_search_status"] == "actively_looking"
-    assert user["onboarding_progress"]["drop_off_step"] == "contractType"
+    assert user["onboarding_progress"]["drop_off_step"] == "compare2x"
     assert user["time_spent_minutes"] > 0
     assert response["onboarding_dropoff"]["in_progress"] == 1
 
@@ -121,7 +121,7 @@ def test_admin_get_user_exposes_onboarding_and_activity(monkeypatch):
     onboarding = response["onboarding"]
     assert onboarding["answers"]["job_search_status"] == "actively_looking"
     assert onboarding["progress"]["completed"] is False
-    assert onboarding["progress"]["drop_off_step"] == "contractType"
+    assert onboarding["progress"]["drop_off_step"] == "compare2x"
 
     activity = response["activity"]
     assert activity["last_login_at"] == "2026-07-11T09:00:00+00:00"
