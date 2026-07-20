@@ -1,0 +1,49 @@
+{
+  "workflow": "ralplan",
+  "mode": "deliberate",
+  "task": "Remediate database performance issues in strict product-journey order: landing, signup, onboarding, user application usage, admin.",
+  "classification": "PY_FIX",
+  "planning_artifacts": {
+    "context": ".omx/context/database-performance-journey-remediation-20260720T094654Z.md",
+    "prd": ".omx/plans/prd-database-performance-journey-remediation.md",
+    "test_spec": ".omx/plans/test-spec-database-performance-journey-remediation.md"
+  },
+  "ralplan_architect_review": {
+    "path": ".omx/plans/ralplan-architect-review-database-performance-journey-remediation.md",
+    "verdict": "APPROVE",
+    "sequence": 1,
+    "agent_role": "architect",
+    "provenance_kind": "omx_adapted",
+    "session_id": "019f7ee1-3ea1-7df2-8316-62522a328dbb",
+    "thread_id": "019f7eef-5210-7f30-ac6d-640a55fc1982",
+    "completed_at": "2026-07-20T10:07:59.468Z"
+  },
+  "ralplan_critic_review": {
+    "path": ".omx/plans/ralplan-critic-review-database-performance-journey-remediation.md",
+    "verdict": "APPROVE",
+    "sequence": 2,
+    "agent_role": "critic",
+    "provenance_kind": "omx_adapted",
+    "session_id": "019f7ee1-3ea1-7df2-8316-62522a328dbb",
+    "thread_id": "019f7f02-6344-7a12-86dd-fb6f5c9ce72f",
+    "completed_at": "2026-07-20T10:12:08.264Z"
+  },
+  "ralplan_consensus_gate": {
+    "complete": true,
+    "required_order_satisfied": true,
+    "implementation_started": false,
+    "goal_state_interacted_with": false
+  },
+  "execution_handoff": {
+    "immediate_recommended_lane": "$team",
+    "strict_journey_order": [
+      "landing page",
+      "signup and authentication",
+      "onboarding",
+      "user application usage",
+      "admin panel"
+    ],
+    "goal_mode": "deferred while another agent owns goal state",
+    "automatic_transition": false
+  }
+}
