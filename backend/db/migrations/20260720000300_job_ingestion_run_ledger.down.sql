@@ -2,7 +2,7 @@ BEGIN;
 DROP FUNCTION IF EXISTS public.python_ingestion_run_complete(uuid, uuid, bigint, text, text, text, jsonb);
 DROP FUNCTION IF EXISTS public.python_ingestion_partition_record(uuid, uuid, bigint, text, text, text, jsonb, text);
 DROP FUNCTION IF EXISTS public.python_ingestion_run_heartbeat(uuid, uuid, bigint, text, integer);
-DROP FUNCTION IF EXISTS public.python_ingestion_run_begin(text, text, integer, text, integer);
+DROP FUNCTION IF EXISTS public.python_ingestion_run_begin(text, text, integer, text, integer, jsonb);
 DROP FUNCTION IF EXISTS public.python_ingestion_schedule_sync(text, text, integer, boolean);
 DROP VIEW IF EXISTS public.worker_ingestion_alerts;
 DROP TABLE IF EXISTS public.worker_run_partitions;
