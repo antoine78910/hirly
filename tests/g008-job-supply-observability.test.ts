@@ -102,7 +102,7 @@ describe("G008 job-supply observability migration", () => {
     expect(migration).toContain("fetched_records = normalized_records + rejected_records");
     expect(migration).toContain("actionable_records <= normalized_records");
     expect(migration).toContain("BEFORE UPDATE OR DELETE");
-    expect(migration).toContain("reject_immutable_census_manifest");
+    expect(migration).toMatch(/reject_immutable_census_(?:manifest|evidence)/);
   });
 
   test("fully reverses additive G008 objects", () => {
@@ -110,6 +110,7 @@ describe("G008 job-supply observability migration", () => {
       "paid_user_inventory_baseline",
       "job_supply_ats_host_baseline",
       "job_supply_source_baseline",
+      "france_travail_census_manifest_runs",
       "france_travail_census_manifests",
       "paid_user_inventory_snapshots",
       "source_policies",
