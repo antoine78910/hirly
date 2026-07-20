@@ -345,7 +345,7 @@ export default function ReviewApplicationDetail() {
                     {cvSource === "original" ? (
                       <ResumeCurrentPreview profile={profile} active compact />
                     ) : editingCv ? (
-                      <div className="space-y-6" data-testid="cv-edit-form">
+                      <div className="ph-no-capture space-y-6" data-testid="cv-edit-form">
                         {cvExperienceDraft.length > 0 ? (
                           <div>
                             <h3 className="mb-2 text-xs font-bold uppercase tracking-wide shell-body">{t("review.experience")}</h3>

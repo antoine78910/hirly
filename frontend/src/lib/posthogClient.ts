@@ -6,12 +6,63 @@ const MAX_OBJECT_KEYS = 50;
 const MAX_STRING_LENGTH = 500;
 const URL_KEY_PATTERN = /(^|[_-])(url|uri|href|referrer|page|path)([_-]|$)/i;
 const SENSITIVE_KEY_PATTERN =
-  /(^|[_-])(access|auth|bearer|card|cover[_-]?letter|cv|email|linkedin|name|password|phone|refresh|resume|secret|session|token)([_-]|$)/i;
+  /(^|[_-])(access|auth|bearer|card|code|cover[_-]?letter|cv|document|email|linkedin|message|name|password|phone|refresh|resume|secret|session|token)([_-]|$)/i;
+const ALLOWED_CUSTOM_EVENTS = new Set([
+  "action_required_answer_saved",
+  "admin_application_assigned",
+  "admin_application_email_sent",
+  "admin_application_opened",
+  "admin_status_updated",
+  "admin_view",
+  "application_action_required",
+  "application_blocked",
+  "application_defaults_updated",
+  "application_generated",
+  "application_generation_started",
+  "application_prepare_failed",
+  "application_prepared",
+  "application_submitted",
+  "auth_success",
+  "checkout_started",
+  "cta_login_clicked",
+  "cta_signup_clicked",
+  "cta_start_swiping_clicked",
+  "cv_upload_completed",
+  "cv_upload_failed",
+  "cv_upload_started",
+  "filters_applied",
+  "friend_referral_enrolled",
+  "friend_referral_progress",
+  "friend_referral_redeemed",
+  "friend_referral_shared",
+  "job_card_viewed",
+  "job_swiped_left",
+  "job_swiped_right",
+  "landing_account_logout",
+  "landing_view",
+  "login_email_submitted",
+  "onboarding_completed",
+  "onboarding_started",
+  "onboarding_step_completed",
+  "password_reset_completed",
+  "password_reset_page_view",
+  "password_reset_requested",
+  "prepare_again_clicked",
+  "profile_updated",
+  "profile_view",
+  "signin_google_clicked",
+  "signin_page_view",
+  "swipe_page_view",
+  "tracker_view",
+]);
+const ALLOWED_SYSTEM_EVENTS = new Set(["$identify", "$pageview"]);
 
 let client: PostHog | null = null;
 let initialized = false;
+let lastCapturedPath: string | null = null;
+let identifiedUserId: string | null = null;
 
-const stripUrlSecrets = (value: string): string => {
+export const stripUrlSecrets = (value: string): string => {
   try {
     const parsed = new URL(value, typeof window !== "undefined" ? window.location.origin : "https://invalid.local");
     return `${parsed.origin === "https://invalid.local" ? "" : parsed.origin}${parsed.pathname}`;
@@ -53,7 +104,9 @@ export const sanitizeAnalyticsProperties = (
 };
 
 export const sanitizePostHogEvent = (event: CaptureResult | null): CaptureResult | null => {
-  if (!event || event.event === "$snapshot") return null;
+  if (!event) return null;
+  if (event.event === "$snapshot") return isReplayEnabled() ? event : null;
+  if (!ALLOWED_SYSTEM_EVENTS.has(event.event) && !ALLOWED_CUSTOM_EVENTS.has(event.event)) return null;
   const properties = sanitizeAnalyticsProperties(event.properties) as Properties | undefined;
   if (!properties) return null;
   for (const key of ["$current_url", "$referrer", "$pathname", "current_url", "referrer", "url", "path"]) {
@@ -77,8 +130,9 @@ export const buildPostHogConfig = (): Partial<PostHogConfig> => {
     capture_heatmaps: false,
     disable_surveys: true,
     disable_session_recording: !replayEnabled,
-    advanced_disable_flags: replayEnabled ? false : true,
-    advanced_disable_feature_flags: replayEnabled,
+    ...(replayEnabled
+      ? { advanced_disable_feature_flags: true }
+      : { advanced_disable_flags: true }),
     enable_recording_console_log: false,
     capture_performance: false,
     session_recording: {
@@ -126,22 +180,27 @@ export const capturePostHogEvent = (event: string, properties: Properties = {}):
 export const capturePostHogPageview = (pathname: string): void => {
   if (!client || typeof window === "undefined") return;
   const canonicalPathname = pathname.startsWith("/") ? pathname : `/${pathname}`;
+  if (lastCapturedPath === canonicalPathname) return;
+  lastCapturedPath = canonicalPathname;
   capturePostHogEvent("$pageview", {
     $current_url: `${window.location.origin}${canonicalPathname}`,
   });
 };
 
 export const identifyPostHogUser = (userId: string): void => {
-  if (!client || !userId) return;
+  if (!client || !userId || identifiedUserId === userId) return;
   try {
+    if (identifiedUserId) client.reset();
     client.identify(userId);
+    identifiedUserId = userId;
   } catch {}
 };
 
 export const resetPostHog = (): void => {
-  if (!client) return;
+  if (!client || !identifiedUserId) return;
   try {
     client.reset();
+    identifiedUserId = null;
   } catch {}
 };
 
@@ -156,4 +215,6 @@ export const syncPostHogReplay = (): void => {
 export const __resetPostHogForTests = (): void => {
   client = null;
   initialized = false;
+  lastCapturedPath = null;
+  identifiedUserId = null;
 };

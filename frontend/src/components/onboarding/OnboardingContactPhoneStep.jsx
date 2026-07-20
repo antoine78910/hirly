@@ -73,7 +73,7 @@ function PhoneCountryCodePicker({ lang, value, countryIso2, onCountryChange }) {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={copy.searchPlaceholder}
-              className="min-w-0 flex-1 bg-transparent text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none"
+              className="ph-no-capture min-w-0 flex-1 bg-transparent text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none"
               data-testid="phone-country-search"
             />
           </div>

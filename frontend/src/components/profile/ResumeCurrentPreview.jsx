@@ -139,14 +139,14 @@ export default function ResumeCurrentPreview({
             <iframe
               src={`${blobUrl}#toolbar=0&navpanes=0&view=FitH`}
               title={t("resumeSheet.previewFrameTitle")}
-              className="h-full w-full border-0 bg-white"
+              className="ph-no-capture h-full w-full border-0 bg-white"
               data-testid="resume-preview-pdf"
             />
           ) : mode === "image" && blobUrl ? (
             <img
               src={blobUrl}
               alt={filename}
-              className="pointer-events-none h-full w-full select-none object-contain object-top bg-white"
+              className="ph-no-capture pointer-events-none h-full w-full select-none object-contain object-top bg-white"
               draggable={false}
               data-testid="resume-preview-image"
             />

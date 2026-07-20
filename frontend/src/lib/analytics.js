@@ -1,5 +1,9 @@
 import { api } from "./api";
-import { capturePostHogEvent, sanitizeAnalyticsProperties } from "./posthogClient";
+import {
+  capturePostHogEvent,
+  sanitizeAnalyticsProperties,
+  stripUrlSecrets,
+} from "./posthogClient";
 
 const ANONYMOUS_ID_KEY = "hirly.analytics.anonymous_id";
 const getAnonymousId = () => {
@@ -25,7 +29,9 @@ export const trackEvent = (event, properties = {}) => {
     properties: sanitizedProperties,
     anonymous_id: getAnonymousId(),
     page: typeof window !== "undefined" ? window.location.pathname : undefined,
-    source: typeof document !== "undefined" ? document.referrer || undefined : undefined,
+    source: typeof document !== "undefined" && document.referrer
+      ? stripUrlSecrets(document.referrer)
+      : undefined,
   };
   capturePostHogEvent(event, sanitizedProperties);
   return api.post("/analytics/event", payload).catch(() => {});
