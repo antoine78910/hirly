@@ -59,6 +59,12 @@ describe("G010 whole-provider ownership epoch migration", () => {
     }
     expect(migration).toContain("provider_work_claims_live_operation_unique");
     expect(migration).toContain("provider_work_claims_task_attempt_unique");
+    expect(migration).toContain(
+      "INSERT INTO public.provider_work_claims AS inserted_claim",
+    );
+    expect(migration).toContain("FROM public.worker_tasks AS task");
+    expect(migration).toContain("task.provider = p_provider");
+    expect(migration).toContain("inserted_claim.provider");
     expect(migration).toContain("provider work claim history is immutable");
     expect(migration).toContain("provider writer must transition through none");
     expect(migration).toContain(

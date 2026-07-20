@@ -287,14 +287,14 @@ BEGIN
   END IF;
 
   PERFORM 1
-  FROM public.worker_tasks
-  WHERE id = p_task_id
-    AND provider = p_provider
-    AND status = 'running'
-    AND lease_token = p_lease_token
-    AND claim_generation = p_claim_generation
-    AND lease_owner = p_lease_owner
-    AND lease_until > clock_timestamp()
+  FROM public.worker_tasks AS task
+  WHERE task.id = p_task_id
+    AND task.provider = p_provider
+    AND task.status = 'running'
+    AND task.lease_token = p_lease_token
+    AND task.claim_generation = p_claim_generation
+    AND task.lease_owner = p_lease_owner
+    AND task.lease_until > clock_timestamp()
   FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'worker task lease is not current' USING ERRCODE = '42501';
@@ -311,16 +311,16 @@ BEGIN
     RAISE EXCEPTION 'provider is not owned by TypeScript' USING ERRCODE = '42501';
   END IF;
 
-  UPDATE public.provider_work_claims
+  UPDATE public.provider_work_claims AS stale_claim
   SET finished_at = clock_timestamp()
-  WHERE provider = p_provider
-    AND captured_runtime = 'typescript'
-    AND lease_owner = p_lease_owner
-    AND finished_at IS NULL
-    AND expires_at <= clock_timestamp();
+  WHERE stale_claim.provider = p_provider
+    AND stale_claim.captured_runtime = 'typescript'
+    AND stale_claim.lease_owner = p_lease_owner
+    AND stale_claim.finished_at IS NULL
+    AND stale_claim.expires_at <= clock_timestamp();
 
   RETURN QUERY
-  INSERT INTO public.provider_work_claims (
+  INSERT INTO public.provider_work_claims AS inserted_claim (
     provider, captured_runtime, ownership_epoch, lease_owner, task_id,
     task_lease_token, task_claim_generation, expires_at
   )
@@ -329,7 +329,12 @@ BEGIN
     p_lease_token, p_claim_generation,
     clock_timestamp() + make_interval(secs => p_lease_seconds)
   )
-  RETURNING id, provider, captured_runtime, ownership_epoch, expires_at;
+  RETURNING
+    inserted_claim.id,
+    inserted_claim.provider,
+    inserted_claim.captured_runtime,
+    inserted_claim.ownership_epoch,
+    inserted_claim.expires_at;
 END
 $$;
 
