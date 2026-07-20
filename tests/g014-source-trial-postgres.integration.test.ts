@@ -164,7 +164,7 @@ describe("G014 real-Postgres source trial isolation", () => {
           'tenant_feed', 'test',
           clock_timestamp() - interval '1 minute',
           clock_timestamp() + interval '1 hour',
-          1, 1, 1, 4096, true, 'g014-test', 'g014-fixture'
+          2, 1, 1, 4096, true, 'g014-test', 'g014-fixture'
         );
 
         SET LOCAL ROLE hirly_source_trial_worker;
@@ -195,17 +195,28 @@ describe("G014 real-Postgres source trial isolation", () => {
         $budget$;
 
         SELECT set_config(
+          'g014.run_key',
+          'greenhouse:g014:' || gen_random_uuid()::text,
+          true
+        );
+        SELECT set_config(
+          'g014.run_requested_at',
+          clock_timestamp()::text,
+          true
+        );
+        SELECT set_config(
           'g014.run_id',
           worker_private.begin_source_trial(jsonb_build_object(
             'schemaVersion', 'hirly.source-trial-manifest.v1',
-            'trialKey', 'greenhouse:g014:' || gen_random_uuid()::text,
+            'trialKey', current_setting('g014.run_key'),
             'sourceId', current_setting('g014.source_id'),
             'provider', 'greenhouse',
             'tenantKey', 'g014-foundation',
             'environment', 'test',
             'countryCodes', jsonb_build_array('FR'),
             'policyEvidenceId', current_setting('g014.evidence_id'),
-            'requestedAt', to_jsonb(clock_timestamp()),
+            'requestedAt',
+              to_jsonb(current_setting('g014.run_requested_at')::timestamptz),
             'expiresAt', to_jsonb(clock_timestamp() + interval '30 minutes'),
             'budget', jsonb_build_object(
               'maxPages', 1, 'maxCandidates', 1, 'maxBytes', 4096
@@ -213,6 +224,163 @@ describe("G014 real-Postgres source trial isolation", () => {
           ))::text,
           true
         );
+
+        SELECT set_config(
+          'g014.empty_run_key',
+          'greenhouse:g014:empty:' || gen_random_uuid()::text,
+          true
+        );
+        SELECT set_config(
+          'g014.empty_run_requested_at',
+          clock_timestamp()::text,
+          true
+        );
+        SELECT set_config(
+          'g014.empty_run_id',
+          worker_private.begin_source_trial(jsonb_build_object(
+            'schemaVersion', 'hirly.source-trial-manifest.v1',
+            'trialKey', current_setting('g014.empty_run_key'),
+            'sourceId', current_setting('g014.source_id'),
+            'provider', 'greenhouse',
+            'tenantKey', 'g014-foundation',
+            'environment', 'test',
+            'countryCodes', jsonb_build_array('FR'),
+            'policyEvidenceId', current_setting('g014.evidence_id'),
+            'requestedAt', to_jsonb(
+              current_setting('g014.empty_run_requested_at')::timestamptz
+            ),
+            'expiresAt', to_jsonb(clock_timestamp() + interval '30 minutes'),
+            'budget', jsonb_build_object(
+              'maxPages', 1, 'maxCandidates', 1, 'maxBytes', 4096
+            )
+          ))::text,
+          true
+        );
+
+        RESET ROLE;
+        UPDATE public.source_trial_policies
+        SET policy_evidence_id =
+          current_setting('g014.replacement_evidence_id')::uuid
+        WHERE source_id = current_setting('g014.source_id')::uuid
+          AND environment = 'test';
+        SET LOCAL ROLE hirly_source_trial_worker;
+        DO $stale_evidence$
+        BEGIN
+          BEGIN
+            PERFORM worker_private.record_source_trial_page(
+              current_setting('g014.run_id')::uuid,
+              1,
+              clock_timestamp(),
+              '{"items":[]}',
+              encode(
+                digest(convert_to('{"items":[]}', 'UTF8'), 'sha256'),
+                'hex'
+              ),
+              octet_length(convert_to('{"items":[]}', 'UTF8'))
+            );
+            RAISE EXCEPTION 'stale policy evidence unexpectedly accepted';
+          EXCEPTION WHEN insufficient_privilege THEN NULL;
+          END;
+        END
+        $stale_evidence$;
+        RESET ROLE;
+        UPDATE public.source_trial_policies
+        SET policy_evidence_id = current_setting('g014.evidence_id')::uuid
+        WHERE source_id = current_setting('g014.source_id')::uuid
+          AND environment = 'test';
+        SET LOCAL ROLE hirly_source_trial_worker;
+
+        DO $empty_completed$
+        BEGIN
+          BEGIN
+            PERFORM worker_private.record_source_trial_scorecard(
+              current_setting('g014.empty_run_id')::uuid,
+              'trial-result',
+              jsonb_build_object(
+                'schemaVersion', 'hirly.source-trial-result.v1',
+                'runId', current_setting('g014.empty_run_id'),
+                'trialKey', current_setting('g014.empty_run_key'),
+                'status', 'completed',
+                'startedAt', to_jsonb(
+                  current_setting(
+                    'g014.empty_run_requested_at'
+                  )::timestamptz
+                ),
+                'finishedAt', to_jsonb(clock_timestamp()),
+                'pagesFetched', 0,
+                'candidatesObserved', 0,
+                'bytesStored', 0,
+                'stopReason', NULL
+              )
+            );
+            RAISE EXCEPTION 'empty completed result unexpectedly accepted';
+          EXCEPTION WHEN insufficient_privilege THEN NULL;
+          END;
+        END
+        $empty_completed$;
+
+        SELECT worker_private.record_source_trial_scorecard(
+          current_setting('g014.empty_run_id')::uuid,
+          'trial-result',
+          jsonb_build_object(
+            'schemaVersion', 'hirly.source-trial-result.v1',
+            'runId', current_setting('g014.empty_run_id'),
+            'trialKey', current_setting('g014.empty_run_key'),
+            'status', 'failed',
+            'startedAt', to_jsonb(
+              current_setting('g014.empty_run_requested_at')::timestamptz
+            ),
+            'finishedAt', to_jsonb(clock_timestamp()),
+            'pagesFetched', 0,
+            'candidatesObserved', 0,
+            'bytesStored', 0,
+            'stopReason', 'rate_limited'
+          )
+        );
+
+        DO $terminal_fence$
+        BEGIN
+          BEGIN
+            PERFORM worker_private.record_source_trial_scorecard(
+              current_setting('g014.empty_run_id')::uuid,
+              'contradictory-result',
+              jsonb_build_object(
+                'schemaVersion', 'hirly.source-trial-result.v1',
+                'runId', current_setting('g014.empty_run_id'),
+                'trialKey', current_setting('g014.empty_run_key'),
+                'status', 'failed',
+                'startedAt', to_jsonb(
+                  current_setting(
+                    'g014.empty_run_requested_at'
+                  )::timestamptz
+                ),
+                'finishedAt', to_jsonb(clock_timestamp()),
+                'pagesFetched', 0,
+                'candidatesObserved', 0,
+                'bytesStored', 0,
+                'stopReason', 'contradiction'
+              )
+            );
+            RAISE EXCEPTION 'second terminal result unexpectedly accepted';
+          EXCEPTION WHEN insufficient_privilege OR unique_violation THEN NULL;
+          END;
+          BEGIN
+            PERFORM worker_private.record_source_trial_page(
+              current_setting('g014.empty_run_id')::uuid,
+              1,
+              clock_timestamp(),
+              '{"items":[]}',
+              encode(
+                digest(convert_to('{"items":[]}', 'UTF8'), 'sha256'),
+                'hex'
+              ),
+              octet_length(convert_to('{"items":[]}', 'UTF8'))
+            );
+            RAISE EXCEPTION 'post-terminal page unexpectedly accepted';
+          EXCEPTION WHEN insufficient_privilege THEN NULL;
+          END;
+        END
+        $terminal_fence$;
 
         DO $digest_mismatch$
         BEGIN
@@ -271,15 +439,88 @@ describe("G014 real-Postgres source trial isolation", () => {
           )
         );
 
+        DO $invalid_terminal_values$
+        BEGIN
+          BEGIN
+            PERFORM worker_private.record_source_trial_scorecard(
+              current_setting('g014.run_id')::uuid,
+              'trial-result',
+              jsonb_build_object(
+                'schemaVersion', 'hirly.source-trial-result.v1',
+                'runId', current_setting('g014.run_id'),
+                'trialKey', current_setting('g014.run_key'),
+                'status', 'completed',
+                'startedAt', to_jsonb(
+                  current_setting('g014.run_requested_at')::timestamptz
+                ),
+                'finishedAt', to_jsonb(clock_timestamp()),
+                'pagesFetched', -1,
+                'candidatesObserved', 1,
+                'bytesStored', 26,
+                'stopReason', NULL
+              )
+            );
+            RAISE EXCEPTION 'negative terminal count unexpectedly accepted';
+          EXCEPTION WHEN insufficient_privilege THEN NULL;
+          END;
+          BEGIN
+            PERFORM worker_private.record_source_trial_scorecard(
+              current_setting('g014.run_id')::uuid,
+              'trial-result',
+              jsonb_build_object(
+                'schemaVersion', 'hirly.source-trial-result.v1',
+                'runId', current_setting('g014.run_id'),
+                'trialKey', current_setting('g014.run_key'),
+                'status', 'completed',
+                'startedAt', to_jsonb(
+                  current_setting('g014.run_requested_at')::timestamptz
+                ),
+                'finishedAt', to_jsonb(clock_timestamp()),
+                'pagesFetched', 1.5,
+                'candidatesObserved', 1,
+                'bytesStored', 26,
+                'stopReason', NULL
+              )
+            );
+            RAISE EXCEPTION 'fractional terminal count unexpectedly accepted';
+          EXCEPTION WHEN insufficient_privilege THEN NULL;
+          END;
+          BEGIN
+            PERFORM worker_private.record_source_trial_scorecard(
+              current_setting('g014.run_id')::uuid,
+              'contradictory-result',
+              jsonb_build_object(
+                'schemaVersion', 'hirly.source-trial-result.v1',
+                'runId', current_setting('g014.run_id'),
+                'trialKey', 'contradictory-trial-key',
+                'status', 'completed',
+                'startedAt', to_jsonb(
+                  current_setting('g014.run_requested_at')::timestamptz
+                ),
+                'finishedAt', to_jsonb(clock_timestamp()),
+                'pagesFetched', 1,
+                'candidatesObserved', 1,
+                'bytesStored', 26,
+                'stopReason', NULL
+              )
+            );
+            RAISE EXCEPTION 'contradictory terminal identity accepted';
+          EXCEPTION WHEN insufficient_privilege THEN NULL;
+          END;
+        END
+        $invalid_terminal_values$;
+
         SELECT worker_private.record_source_trial_scorecard(
           current_setting('g014.run_id')::uuid,
-          'trial-result.v1',
+          'trial-result',
           jsonb_build_object(
             'schemaVersion', 'hirly.source-trial-result.v1',
             'runId', current_setting('g014.run_id'),
-            'trialKey', 'g014',
+            'trialKey', current_setting('g014.run_key'),
             'status', 'completed',
-            'startedAt', to_jsonb(clock_timestamp()),
+            'startedAt', to_jsonb(
+              current_setting('g014.run_requested_at')::timestamptz
+            ),
             'finishedAt', to_jsonb(clock_timestamp()),
             'pagesFetched', 1,
             'candidatesObserved', 1,
@@ -288,39 +529,32 @@ describe("G014 real-Postgres source trial isolation", () => {
           )
         );
 
-        RESET ROLE;
-
-        UPDATE public.source_trial_policies
-        SET policy_evidence_id =
-          current_setting('g014.replacement_evidence_id')::uuid
-        WHERE source_id = current_setting('g014.source_id')::uuid
-          AND environment = 'test';
-
-        SET LOCAL ROLE hirly_source_trial_worker;
-        DO $stale_evidence$
+        DO $completed_terminal_fence$
         BEGIN
           BEGIN
             PERFORM worker_private.record_source_trial_scorecard(
               current_setting('g014.run_id')::uuid,
-              'stale-policy-result',
+              'trial-result',
               jsonb_build_object(
                 'schemaVersion', 'hirly.source-trial-result.v1',
                 'runId', current_setting('g014.run_id'),
-                'trialKey', 'g014',
-                'status', 'failed',
-                'startedAt', to_jsonb(clock_timestamp()),
+                'trialKey', current_setting('g014.run_key'),
+                'status', 'completed',
+                'startedAt', to_jsonb(
+                  current_setting('g014.run_requested_at')::timestamptz
+                ),
                 'finishedAt', to_jsonb(clock_timestamp()),
                 'pagesFetched', 1,
                 'candidatesObserved', 1,
                 'bytesStored', 26,
-                'stopReason', 'stale_policy_evidence'
+                'stopReason', NULL
               )
             );
-            RAISE EXCEPTION 'stale policy evidence unexpectedly accepted';
-          EXCEPTION WHEN insufficient_privilege THEN NULL;
+            RAISE EXCEPTION 'duplicate completed result unexpectedly accepted';
+          EXCEPTION WHEN insufficient_privilege OR unique_violation THEN NULL;
           END;
         END
-        $stale_evidence$;
+        $completed_terminal_fence$;
         RESET ROLE;
 
         DO $immutable$
@@ -396,10 +630,10 @@ describe("G014 real-Postgres source trial isolation", () => {
 
       const proof = JSON.parse(result.split("\n").at(-1) ?? "{}");
       expect(proof).toEqual({
-        runs: 1,
+        runs: 2,
         pages: 1,
         candidates: 1,
-        scorecards: 1,
+        scorecards: 2,
         canonicalPrivileges: false,
         canonicalRpcPrivileges: false,
         executableRpcs: [

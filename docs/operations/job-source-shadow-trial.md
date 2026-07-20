@@ -78,6 +78,13 @@ serialized payload; the database rejects a caller claim that does not
 reconcile. If the policy switches to different evidence after a run begins, all
 further writes for the old run are rejected.
 
+Each run has exactly one terminal `trial-result`. Postgres validates its complete
+schema and bound run/trial identity, requires integer counters to equal the
+persisted page, candidate and byte totals, and requires at least one persisted
+page before accepting `completed`. The terminal write holds the same per-run
+advisory lock as page and candidate writes. Once accepted, it fences every
+later page, candidate or contradictory result append.
+
 ## Repeated-sync bakeoff
 
 Run each candidate for 14 consecutive days and include at least one complete

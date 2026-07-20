@@ -176,8 +176,9 @@ CREATE TABLE IF NOT EXISTS public.source_trial_scorecards (
   scorecard_key text NOT NULL CHECK (length(btrim(scorecard_key)) > 0),
   result jsonb NOT NULL CHECK (jsonb_typeof(result) = 'object'),
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  CONSTRAINT source_trial_scorecards_run_key_unique
-    UNIQUE (run_id, scorecard_key)
+  CONSTRAINT source_trial_scorecards_run_unique UNIQUE (run_id),
+  CONSTRAINT source_trial_scorecards_terminal_key
+    CHECK (scorecard_key = 'trial-result')
 );
 
 CREATE OR REPLACE FUNCTION worker_private.reject_immutable_source_trial_evidence()
@@ -255,6 +256,11 @@ AS $$
       AND NOT source.backfill_enabled
       AND evidence.source_key = source.source_key
       AND evidence.qualification_status <> 'blocked'
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.source_trial_scorecards AS terminal
+        WHERE terminal.run_id = run.id
+      )
   )
 $$;
 
@@ -557,21 +563,117 @@ SECURITY DEFINER
 SET search_path = pg_catalog, public, worker_private
 AS $$
 DECLARE
+  v_run public.source_trial_runs;
   v_scorecard_id uuid;
+  v_started_at timestamptz;
+  v_finished_at timestamptz;
+  v_pages_fetched bigint;
+  v_candidates_observed bigint;
+  v_bytes_stored bigint;
+  v_persisted_pages bigint;
+  v_persisted_candidates bigint;
+  v_persisted_bytes bigint;
+  v_status text;
+  v_stop_reason text;
 BEGIN
-  IF NOT worker_private.source_trial_run_is_writable(p_run_id)
-    OR p_scorecard_key IS NULL OR length(btrim(p_scorecard_key)) = 0
-    OR length(p_scorecard_key) > 256
+  PERFORM pg_advisory_xact_lock(hashtextextended(p_run_id::text, 0));
+  SELECT * INTO v_run
+  FROM public.source_trial_runs
+  WHERE id = p_run_id;
+
+  IF v_run.id IS NULL
+    OR NOT worker_private.source_trial_run_is_writable(p_run_id)
+    OR p_scorecard_key IS DISTINCT FROM 'trial-result'
     OR p_result IS NULL OR jsonb_typeof(p_result) <> 'object'
-    OR p_result->>'schemaVersion' <> 'hirly.source-trial-result.v1'
-    OR p_result->>'runId' <> p_run_id::text
   THEN
     RAISE EXCEPTION 'source trial scorecard gate rejected evidence'
       USING ERRCODE = '42501';
   END IF;
 
+  IF (SELECT count(*) FROM jsonb_object_keys(p_result)) <> 10
+    OR NOT (p_result ?& ARRAY[
+      'schemaVersion', 'runId', 'trialKey', 'status', 'startedAt',
+      'finishedAt', 'pagesFetched', 'candidatesObserved', 'bytesStored',
+      'stopReason'
+    ])
+    OR p_result->>'schemaVersion'
+      IS DISTINCT FROM 'hirly.source-trial-result.v1'
+    OR p_result->>'runId' IS DISTINCT FROM p_run_id::text
+    OR p_result->>'trialKey' IS DISTINCT FROM v_run.trial_key
+    OR p_result->>'status' IS NULL
+    OR p_result->>'status' NOT IN (
+      'completed', 'budget_exhausted', 'policy_expired', 'failed'
+    )
+    OR jsonb_typeof(p_result->'startedAt') <> 'string'
+    OR jsonb_typeof(p_result->'finishedAt') <> 'string'
+    OR jsonb_typeof(p_result->'pagesFetched') <> 'number'
+    OR jsonb_typeof(p_result->'candidatesObserved') <> 'number'
+    OR jsonb_typeof(p_result->'bytesStored') <> 'number'
+    OR p_result->>'pagesFetched' !~ '^(0|[1-9][0-9]*)$'
+    OR p_result->>'candidatesObserved' !~ '^(0|[1-9][0-9]*)$'
+    OR p_result->>'bytesStored' !~ '^(0|[1-9][0-9]*)$'
+    OR jsonb_typeof(p_result->'stopReason') NOT IN ('string', 'null')
+  THEN
+    RAISE EXCEPTION 'source trial scorecard gate rejected evidence'
+      USING ERRCODE = '42501';
+  END IF;
+
+  BEGIN
+    v_started_at := (p_result->>'startedAt')::timestamptz;
+    v_finished_at := (p_result->>'finishedAt')::timestamptz;
+    v_pages_fetched := (p_result->>'pagesFetched')::bigint;
+    v_candidates_observed := (p_result->>'candidatesObserved')::bigint;
+    v_bytes_stored := (p_result->>'bytesStored')::bigint;
+  EXCEPTION
+    WHEN invalid_text_representation
+      OR numeric_value_out_of_range
+      OR datetime_field_overflow
+  THEN
+    RAISE EXCEPTION 'source trial scorecard contains invalid typed values'
+      USING ERRCODE = '22023';
+  END;
+
+  v_status := p_result->>'status';
+  v_stop_reason := p_result->>'stopReason';
+  SELECT
+    count(*),
+    coalesce(sum(page.byte_count), 0)
+  INTO v_persisted_pages, v_persisted_bytes
+  FROM public.source_trial_pages AS page
+  WHERE page.run_id = p_run_id;
+  SELECT count(*)
+  INTO v_persisted_candidates
+  FROM public.source_trial_candidates AS candidate
+  WHERE candidate.run_id = p_run_id;
+
+  IF v_started_at <> v_run.requested_at
+    OR v_finished_at < v_started_at
+    OR v_finished_at > v_run.expires_at
+    OR v_finished_at > clock_timestamp() + interval '5 minutes'
+    OR v_pages_fetched < 0
+    OR v_candidates_observed < 0
+    OR v_bytes_stored < 0
+    OR v_pages_fetched <> v_persisted_pages
+    OR v_candidates_observed <> v_persisted_candidates
+    OR v_bytes_stored <> v_persisted_bytes
+    OR (v_status = 'completed' AND v_persisted_pages = 0)
+    OR (v_status = 'completed' AND v_stop_reason IS NOT NULL)
+    OR (
+      v_status <> 'completed'
+      AND (
+        v_stop_reason IS NULL
+        OR length(btrim(v_stop_reason)) = 0
+        OR length(v_stop_reason) > 512
+      )
+    )
+  THEN
+    RAISE EXCEPTION
+      'source trial terminal result does not reconcile with persisted evidence'
+      USING ERRCODE = '42501';
+  END IF;
+
   INSERT INTO public.source_trial_scorecards (run_id, scorecard_key, result)
-  VALUES (p_run_id, btrim(p_scorecard_key), p_result)
+  VALUES (p_run_id, 'trial-result', p_result)
   RETURNING id INTO v_scorecard_id;
 
   RETURN v_scorecard_id;

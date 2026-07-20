@@ -1,8 +1,9 @@
 BEGIN;
 
 -- Evidence is append-only. Refuse an accidental rollback that would silently
--- destroy a completed or in-progress trial; an operator must explicitly archive
--- and remove trial evidence before retrying this down migration.
+-- destroy a completed or in-progress trial, including its singular reconciled
+-- terminal result; an operator must explicitly archive and remove trial
+-- evidence before retrying this down migration.
 DO $$
 BEGIN
   IF to_regclass('public.source_trial_runs') IS NOT NULL THEN

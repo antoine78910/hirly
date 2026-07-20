@@ -94,6 +94,39 @@ describe("G014 source trial foundation", () => {
     );
   });
 
+  test("allows exactly one reconciled terminal result per run", () => {
+    expect(migration).toMatch(
+      /source_trial_scorecards_run_unique UNIQUE \(run_id\)/i,
+    );
+    expect(migration).toMatch(
+      /source_trial_scorecards_terminal_key[\s\S]*scorecard_key = 'trial-result'/i,
+    );
+    expect(migration).toMatch(
+      /record_source_trial_scorecard[\s\S]*pg_advisory_xact_lock\(hashtextextended\(p_run_id::text, 0\)\)/i,
+    );
+    expect(migration).toMatch(
+      /p_result \?& ARRAY\[[\s\S]*'stopReason'[\s\S]*\]/i,
+    );
+    expect(migration).toMatch(
+      /v_pages_fetched <> v_persisted_pages/i,
+    );
+    expect(migration).toMatch(
+      /v_candidates_observed <> v_persisted_candidates/i,
+    );
+    expect(migration).toMatch(
+      /v_bytes_stored <> v_persisted_bytes/i,
+    );
+    expect(migration).toMatch(
+      /v_status = 'completed' AND v_persisted_pages = 0/i,
+    );
+    expect(migration).toContain(
+      "p_result->>'pagesFetched' !~ '^(0|[1-9][0-9]*)$'",
+    );
+    expect(migration).toMatch(
+      /NOT EXISTS \([\s\S]*public\.source_trial_scorecards AS terminal[\s\S]*terminal\.run_id = run\.id/i,
+    );
+  });
+
   test("grants the NOINHERIT trial role only evidence RPC execution", () => {
     expect(migration).toMatch(
       /CREATE ROLE hirly_source_trial_worker[\s\S]*NOINHERIT/i,
