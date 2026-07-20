@@ -4,10 +4,10 @@
 -- physical database that owns public.jobs and the worker ledger:
 --
 -- psql "$JOBS_DATABASE_URL" \
---   -v freshness_cutoff="'2026-07-13T00:00:00Z'" \
---   -v window_start="'2026-07-01T00:00:00Z'" \
---   -v window_end="'2026-07-15T00:00:00Z'" \
---   -v coverage_run_id="'00000000-0000-0000-0000-000000000000'" \
+--   -v freshness_cutoff="2026-07-13T00:00:00Z" \
+--   -v window_start="2026-07-01T00:00:00Z" \
+--   -v window_end="2026-07-15T00:00:00Z" \
+--   -v coverage_run_id="00000000-0000-0000-0000-000000000000" \
 --   -f scripts/job-supply-observability.sql
 --
 -- This script never mutates jobs, writer ownership, schedules, policies, or
