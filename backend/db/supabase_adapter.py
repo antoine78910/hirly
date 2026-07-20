@@ -1082,6 +1082,8 @@ class SupabaseCollectionAdapter(CollectionPort):
         assert self.supabase_url is not None
         assert self.secret_key is not None
 
+        started_at = time.perf_counter()
+        snapshot = _metric_snapshot()
         url = self.supabase_url.rstrip("/") + f"/rest/v1/{self.table_name}"
         headers = _supabase_headers(self.secret_key)
         documents: List[Document] = []
@@ -1091,53 +1093,76 @@ class SupabaseCollectionAdapter(CollectionPort):
         client = _get_shared_http_client()
         default_order = "imported_at.desc.nullslast,job_id.desc.nullslast" if self.table_name == "jobs" else None
         order_clause = order or default_order
-        while offset < MAX_READ_ROWS:
-            page_limit = READ_PAGE_SIZE
-            if read_limit is not None and can_push_filter:
-                remaining = max(0, read_limit - len(documents))
-                if remaining <= 0:
-                    break
-                page_limit = min(page_limit, remaining)
-            elif read_limit is not None and not can_push_filter:
-                # Still bound pages when filtering locally to avoid full-table reads.
-                remaining = max(0, max(read_limit * 3, READ_PAGE_SIZE) - len(documents))
-                if remaining <= 0:
-                    break
-                page_limit = min(page_limit, remaining)
-            request_params: Dict[str, str] = {
-                "select": select,
-                "limit": str(page_limit),
-                "offset": str(offset),
-            }
-            if order_clause:
-                request_params["order"] = order_clause
-            if remote_filter_params is not None:
-                request_params.update(remote_filter_params)
-            response = await _http_get_with_retries(
-                client,
-                url,
-                params=request_params,
-                headers=headers,
-            )
-            if response.status_code not in (200, 206):
-                raise RuntimeError(
-                    f"Supabase {self.table_name} read returned HTTP {response.status_code}: {response.text[:300]}"
+        try:
+            rows: List[Any] = []
+            while offset < MAX_READ_ROWS:
+                page_limit = READ_PAGE_SIZE
+                if read_limit is not None and can_push_filter:
+                    remaining = max(0, read_limit - len(documents))
+                    if remaining <= 0:
+                        break
+                    page_limit = min(page_limit, remaining)
+                elif read_limit is not None and not can_push_filter:
+                    # Still bound pages when filtering locally to avoid full-table reads.
+                    remaining = max(0, max(read_limit * 3, READ_PAGE_SIZE) - len(documents))
+                    if remaining <= 0:
+                        break
+                    page_limit = min(page_limit, remaining)
+                request_params: Dict[str, str] = {
+                    "select": select,
+                    "limit": str(page_limit),
+                    "offset": str(offset),
+                }
+                if order_clause:
+                    request_params["order"] = order_clause
+                if remote_filter_params is not None:
+                    request_params.update(remote_filter_params)
+                response = await _http_get_with_retries(
+                    client,
+                    url,
+                    params=request_params,
+                    headers=headers,
                 )
-            rows = response.json()
-            if not isinstance(rows, list) or not rows:
-                break
-            documents.extend(_restore_document(row) for row in rows)
-            if len(rows) < page_limit:
-                break
-            offset += page_limit
-        if offset >= MAX_READ_ROWS and len(rows) >= page_limit:
-            raise RuntimeError(
-                f"Supabase {self.table_name} read reached MAX_READ_ROWS={MAX_READ_ROWS}; result is incomplete"
+                if response.status_code not in (200, 206):
+                    raise RuntimeError(
+                        f"Supabase {self.table_name} read returned HTTP {response.status_code}: {response.text[:300]}"
+                    )
+                rows = response.json()
+                if not isinstance(rows, list) or not rows:
+                    break
+                documents.extend(_restore_document(row) for row in rows)
+                if len(rows) < page_limit:
+                    break
+                offset += page_limit
+            if offset >= MAX_READ_ROWS and len(rows) >= page_limit:
+                raise RuntimeError(
+                    f"Supabase {self.table_name} read reached MAX_READ_ROWS={MAX_READ_ROWS}; result is incomplete"
+                )
+            if can_push_filter:
+                result = documents
+            else:
+                filtered = [document for document in documents if _matches_filter(document, filter)]
+                result = filtered[:read_limit] if read_limit is not None else filtered
+            _emit_adapter_metric(
+                operation="read_documents",
+                table=self.table_name,
+                started_at=started_at,
+                snapshot=snapshot,
+                rows_returned=len(result),
+                filter_status="pushed" if can_push_filter else "local",
             )
-        if can_push_filter:
-            return documents
-        filtered = [document for document in documents if _matches_filter(document, filter)]
-        return filtered[:read_limit] if read_limit is not None else filtered
+            return result
+        except Exception:
+            _emit_adapter_metric(
+                operation="read_documents",
+                table=self.table_name,
+                started_at=started_at,
+                snapshot=snapshot,
+                rows_returned=len(documents),
+                filter_status="pushed" if can_push_filter else "local",
+                status="error",
+            )
+            raise
 
     async def find_one(self, filter: Filter, projection: Projection = None, sort: Optional[List[tuple[str, int]]] = None):
         cursor = SupabaseCursorAdapter(self, filter, projection)
