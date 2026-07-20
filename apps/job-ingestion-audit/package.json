@@ -5,10 +5,14 @@
   "type": "module",
   "scripts": {
     "audit": "bun src/cli.ts",
+    "census": "bun src/census-cli.ts",
     "test": "bun test",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hirly/db": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "1.3.14",

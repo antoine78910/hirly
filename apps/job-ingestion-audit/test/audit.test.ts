@@ -11,6 +11,11 @@ import {
   type CoverageManifest,
 } from "../src/audit";
 import { readFileSync } from "node:fs";
+import {
+  buildFranceTravailCensusManifest,
+  summarizePaidUserCoverage,
+  type FranceTravailPartitionEvidence,
+} from "../src/observability";
 
 const partitions = JSON.parse(readFileSync(
   new URL("../fixtures/pagination-golden.json", import.meta.url),
@@ -20,38 +25,10 @@ const coverageManifest = JSON.parse(readFileSync(
   new URL("../fixtures/coverage-manifest.json", import.meta.url),
   "utf8",
 )) as CoverageManifest;
-const franceTravailCensusManifest = JSON.parse(readFileSync(
-  new URL("../fixtures/france-travail-census-manifest.json", import.meta.url),
+const franceTravailPartitions = JSON.parse(readFileSync(
+  new URL("../fixtures/france-travail-census-partitions.json", import.meta.url),
   "utf8",
-)) as {
-  schemaVersion: number;
-  paidCohort: {
-    snapshotHash: string;
-    samplingSeed: string;
-    strata: Array<{ id: string; weight: number }>;
-  };
-  partitionRules: {
-    order: string[];
-    retrievableCap: number;
-    splitOnlyWhenAboveCap: boolean;
-  };
-  partitions: Array<{
-    id: string;
-    publishedFrom: string;
-    publishedUntil: string;
-    terminalState: "complete" | "capped" | "blocked" | "failed";
-    sourceReportedTotal: number | null;
-    fetched: number;
-    normalized: number;
-    rejectedByReason: Record<string, number>;
-    occurrenceDeduplicated: number;
-    inserted: number;
-    updated: number;
-    active: number;
-    actionable: number;
-  }>;
-  manifestDigest: string;
-};
+)) as FranceTravailPartitionEvidence[];
 
 describe("job-ingestion audit invariants", () => {
   test("requires exact external-ID set equality", () => {
@@ -133,50 +110,61 @@ describe("job-ingestion audit invariants", () => {
     }
   });
 
-  test("freezes a deterministic, cohort-weighted France Travail census manifest", () => {
-    const { manifestDigest, ...digestInput } = franceTravailCensusManifest;
-    expect(manifestDigest).toBe(stableDigest(digestInput));
-    expect(franceTravailCensusManifest.paidCohort.snapshotHash).toMatch(/^[a-f0-9]{64}$/);
-    expect(franceTravailCensusManifest.paidCohort.samplingSeed).not.toHaveLength(0);
-    expect(
-      franceTravailCensusManifest.paidCohort.strata.reduce(
-        (total, stratum) => total + stratum.weight,
-        0,
-      ),
-    ).toBeCloseTo(1, 10);
-    expect(franceTravailCensusManifest.partitionRules.order).toEqual([
-      "publication_window",
-      "rome",
-      "department",
-      "contract",
-    ]);
-    expect(franceTravailCensusManifest.partitionRules.splitOnlyWhenAboveCap).toBe(true);
-    expect(new Set(franceTravailCensusManifest.partitions.map(({ id }) => id)).size)
-      .toBe(franceTravailCensusManifest.partitions.length);
+  test("computes paid-user percentiles and exhaustion from PR1 aggregates", () => {
+    expect(summarizePaidUserCoverage([
+      {
+        hashedUserId: "a".repeat(64), relevantTotal: 4, uniqueTotal: 4,
+        actionableTotal: 4, unseenActionableTotal: 0, routeKnownTotal: 4,
+        directEmployerTotal: 1,
+      },
+      {
+        hashedUserId: "b".repeat(64), relevantTotal: 10, uniqueTotal: 8,
+        actionableTotal: 6, unseenActionableTotal: 4, routeKnownTotal: 7,
+        directEmployerTotal: 2,
+      },
+      {
+        hashedUserId: "c".repeat(64), relevantTotal: 20, uniqueTotal: 16,
+        actionableTotal: 12, unseenActionableTotal: 8, routeKnownTotal: 14,
+        directEmployerTotal: 4,
+      },
+    ])).toMatchObject({
+      paidUsers: 3,
+      p10: 0.8,
+      median: 4,
+      p90: 7.2,
+      exhaustionRate: 1 / 3,
+    });
   });
 
-  test("uses non-overlapping windows and reconciles every terminal census partition", () => {
-    const partitions = [...franceTravailCensusManifest.partitions].sort(
-      (left, right) => left.publishedFrom.localeCompare(right.publishedFrom),
+  test("builds deterministic immutable France Travail census evidence", () => {
+    const generatedAt = "2026-07-20T00:00:00.000Z";
+    const first = buildFranceTravailCensusManifest(franceTravailPartitions, generatedAt);
+    const second = buildFranceTravailCensusManifest(
+      [...franceTravailPartitions].reverse(),
+      generatedAt,
     );
-    for (const [index, partition] of partitions.entries()) {
-      const rejected = Object.values(partition.rejectedByReason)
-        .reduce((total, count) => total + count, 0);
-      expect(partition.fetched).toBe(partition.normalized + rejected);
-      expect(partition.normalized).toBe(
-        partition.occurrenceDeduplicated + partition.inserted + partition.updated,
-      );
-      expect(partition.actionable).toBeLessThanOrEqual(partition.active);
-      if (partition.terminalState === "complete" && partition.sourceReportedTotal !== null) {
-        expect(partition.fetched).toBe(partition.sourceReportedTotal);
-      }
-      if (partition.terminalState === "capped") {
-        expect(partition.fetched).toBe(franceTravailCensusManifest.partitionRules.retrievableCap);
-        expect(partition.sourceReportedTotal).toBeGreaterThan(partition.fetched);
-      }
-      if (index > 0) {
-        expect(partitions[index - 1].publishedUntil <= partition.publishedFrom).toBe(true);
-      }
-    }
+    expect(first).toEqual(second);
+    expect(first).toMatchObject({
+      schemaVersion: 1,
+      terminalState: "complete",
+      partitionCount: 2,
+      sourceReportedTotal: 2,
+      fetchedRecords: 2,
+      normalizedRecords: 2,
+      rejectedRecords: 0,
+      actionableRecords: 2,
+    });
+    expect(first.digest).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  test("marks cap pressure non-complete and rejects unreconciled accounting", () => {
+    expect(buildFranceTravailCensusManifest([
+      { ...franceTravailPartitions[0]!, capHit: true },
+    ], "2026-07-20T00:00:00.000Z").terminalState).toBe("capped");
+    expect(() => buildFranceTravailCensusManifest([
+      { ...franceTravailPartitions[0]!, normalizedRecords: 1 },
+    ], "2026-07-20T00:00:00.000Z")).toThrow(
+      "france_travail_partition_accounting",
+    );
   });
 });
