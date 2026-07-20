@@ -1,7 +1,11 @@
+import json
+from pathlib import Path
+
 from job_providers.ats_adapters.ashby import AshbyAtsAdapter
 from job_providers.ats_adapters.greenhouse import GreenhouseAtsAdapter
 from job_providers.ats_adapters.lever import LeverAtsAdapter
 from job_providers.ats_adapters.personio import PersonioAtsAdapter
+from job_providers.ats_adapters.recruitee import RecruiteeAtsAdapter
 from job_providers.ats_adapters.smartrecruiters import SmartRecruitersAtsAdapter
 from job_providers.ats_adapters.teamtailor import TeamtailorAtsAdapter
 from smartrecruiters_search import build_smartrecruiters_keyword
@@ -50,6 +54,45 @@ def test_lever_normalization():
     assert job["external_id"] == "acme:posting-123"
     assert job["team"] == "Marketing"
     assert job["selected_apply_url"] == "https://jobs.lever.co/acme/posting-123"
+
+
+def test_recruitee_shared_fixture_characterizes_typescript_parity():
+    fixture_path = (
+        Path(__file__).resolve().parents[2]
+        / "tests"
+        / "fixtures"
+        / "g011"
+        / "recruitee.json"
+    )
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+    assert fixture["provenance"]["containsPersonalData"] is False
+
+    adapter = RecruiteeAtsAdapter()
+    first = adapter.normalize_job(
+        fixture["raw"][0], source_key=fixture["tenantKey"]
+    )
+    assert first is not None
+    assert first["job_id"] == "job_50b64f88b279b00b"
+    assert first["provider"] == "recruitee"
+    assert first["external_id"] == "vaulttec:4401"
+    assert first["provider_job_id"] == "4401"
+    assert first["title"] == "Ingénieur plateforme"
+    assert first["company"] == "Vault-Tec"
+    assert first["location"] == "Paris, France"
+    assert first["country_code"] == "FR"
+    assert first["description"] == "Construire des services fiables."
+    assert first["selected_apply_url"] == (
+        "https://vaulttec.recruitee.com/o/ingenieur-plateforme"
+    )
+    assert first["apply_url_provider"] == "recruitee"
+    assert first["manual_fulfillment_ready"] is True
+
+    second = adapter.normalize_job(
+        fixture["raw"][1], source_key=fixture["tenantKey"]
+    )
+    assert second is not None
+    assert second["country_code"] is None
+    assert second["location"] == "Lyon"
 
 
 def test_ashby_source_key_extraction():

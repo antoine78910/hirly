@@ -1,0 +1,41 @@
+{
+  "provenance": {
+    "kind": "sanitized_official_documentation_example",
+    "source": "https://docs.recruitee.com/reference/offers",
+    "containsPersonalData": false
+  },
+  "provider": "recruitee",
+  "tenantKey": "vaulttec",
+  "countryCodes": ["FR"],
+  "raw": [
+    {
+      "id": 4401,
+      "title": "Ingénieur plateforme",
+      "slug": "ingenieur-plateforme",
+      "status": "published",
+      "careers_url": "https://vaulttec.recruitee.com/o/ingenieur-plateforme",
+      "careers_apply_url": "https://vaulttec.recruitee.com/o/ingenieur-plateforme",
+      "description": "<p>Construire des services fiables.</p>",
+      "location": "Paris, France",
+      "country_code": "fr",
+      "company_name": "Vault-Tec",
+      "department": "Engineering",
+      "employment_type_code": "full_time",
+      "remote": false,
+      "published_at": "2026-07-19T10:00:00+00:00"
+    },
+    {
+      "id": "4402",
+      "title": "Site Reliability Engineer",
+      "slug": "site-reliability-engineer",
+      "status": "published",
+      "careers_url": "https://vaulttec.recruitee.com/o/site-reliability-engineer",
+      "description": "Keep systems available.",
+      "city": "Lyon",
+      "company_name": "Vault-Tec",
+      "employment_type_code": "permanent",
+      "remote": true,
+      "created_at": "2026-07-18T09:00:00+00:00"
+    }
+  ]
+}

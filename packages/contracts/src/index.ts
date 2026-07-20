@@ -13,6 +13,7 @@ export const providerSchema = z.enum([
   "data_gouv",
   "greenhouse",
   "lever",
+  "recruitee",
 ]);
 export const triggerSourceSchema = z.enum(["schedule", "cli", "http", "system"]);
 export const runKindSchema = z.enum(["provider_ingestion", "inventory_maintenance"]);
