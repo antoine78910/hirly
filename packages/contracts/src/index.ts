@@ -14,6 +14,8 @@ export const providerSchema = z.enum([
   "greenhouse",
   "lever",
   "recruitee",
+  "nicoka",
+  "sprout",
 ]);
 export const triggerSourceSchema = z.enum(["schedule", "cli", "http", "system"]);
 export const runKindSchema = z.enum(["provider_ingestion", "inventory_maintenance"]);
@@ -477,7 +479,16 @@ export const canonicalJobSchema = z
     company: z.string().min(1),
     normalizedCompany: z.string().min(1),
     location: z.string().min(1),
+    city: z.string().min(1).nullable().optional(),
+    region: z.string().min(1).nullable().optional(),
     countryCode: z.string().regex(/^[A-Z]{2}$/),
+    remote: z.boolean().nullable().optional(),
+    salaryMin: z.number().nonnegative().nullable().optional(),
+    salaryMax: z.number().nonnegative().nullable().optional(),
+    currency: z.string().regex(/^[A-Z]{3}$/).nullable().optional(),
+    postedAt: z.iso.datetime({ offset: true }).nullable().optional(),
+    importedAt: z.iso.datetime({ offset: true }).nullable().optional(),
+    lastSeenAt: z.iso.datetime({ offset: true }).nullable().optional(),
     selectedApplyUrl: z.url().nullable(),
     validationStatus: z.enum(["valid", "invalid", "unknown"]),
     validationReason: z.string().min(1),
@@ -504,6 +515,67 @@ export const canonicalJobSchema = z
     rejectionReason: z.string().min(1).nullable(),
     fingerprint: z.string().min(1),
     data: z.record(z.string(), z.unknown()),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (
+      value.salaryMin != null &&
+      value.salaryMax != null &&
+      value.salaryMin > value.salaryMax
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "salary minimum cannot exceed salary maximum",
+        path: ["salaryMin"],
+      });
+    }
+  });
+
+export const sourcePageCommitEntrySchema = z
+  .object({
+    canonical: canonicalJobSchema,
+    contentHash: z.string().regex(/^[0-9a-f]{64}$/),
+    fetchedAt: z.iso.datetime({ offset: true }),
+    sourceDocument: z.record(z.string(), z.unknown()),
+    canonicalSourceUrl: z.url().nullable(),
+    canonicalApplyUrl: z.url().nullable(),
+    atsPostingId: z.string().trim().min(1).max(512).nullable(),
+    publishedAt: z.iso.datetime({ offset: true }).nullable(),
+    expiresAt: z.iso.datetime({ offset: true }).nullable(),
+    lifecycleState: sourceLifecycleStateSchema,
+    attribution: z.record(z.string(), z.unknown()),
+    policyId: z.uuid(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.canonical.provider !== "sprout") {
+      context.addIssue({
+        code: "custom",
+        message: "source page commit entries are Sprout-scoped",
+        path: ["canonical", "provider"],
+      });
+    }
+  });
+
+export const sourcePageCommitSchema = z
+  .object({
+    sourceId: z.uuid(),
+    countryCode: z.literal("FR"),
+    mode: z.enum(["incremental", "backfill"]),
+    checkpointIn: sourceCheckpointSchema,
+    checkpointOut: sourceCheckpointSchema,
+    complete: z.boolean(),
+    entries: z.array(sourcePageCommitEntrySchema).min(1).max(500),
+  })
+  .strict();
+
+export const sourcePageCommitResultSchema = z
+  .object({
+    snapshotsInserted: z.number().int().nonnegative(),
+    canonicalUpserts: z.number().int().nonnegative(),
+    occurrencesUpserted: z.number().int().nonnegative(),
+    groupsCreated: z.number().int().nonnegative(),
+    checkpoint: sourceCheckpointSchema,
   })
   .strict();
 
@@ -568,5 +640,9 @@ export type RawProviderJobEnvelope = z.infer<
 export type EnqueueRun = z.infer<typeof enqueueRunSchema>;
 export type RunView = z.infer<typeof runViewSchema>;
 export type CanonicalJob = z.infer<typeof canonicalJobSchema>;
+export type SourcePageCommit = z.infer<typeof sourcePageCommitSchema>;
+export type SourcePageCommitResult = z.infer<
+  typeof sourcePageCommitResultSchema
+>;
 export type ValidationResult = z.infer<typeof validationResultSchema>;
 export type StableErrorCode = z.infer<typeof stableErrorCodeSchema>;

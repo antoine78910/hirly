@@ -5,6 +5,7 @@ import {
   enqueueRunSchema,
   healthSchema,
   providerRegistrySchema,
+  sourcePageCommitSchema,
   sourceTrialManifestSchema,
   sourceTrialResultSchema,
 } from "../src";
@@ -95,6 +96,83 @@ describe("shared contracts", () => {
         }),
       ).toThrow();
     }
+  });
+
+  test("validates Sprout source commits and additive canonical fields", () => {
+    const canonical = {
+      jobId: "job_0123456789abcdef",
+      provider: "sprout" as const,
+      externalId: "123",
+      title: "Software Engineer",
+      normalizedTitle: "software engineer",
+      company: "Example SAS",
+      normalizedCompany: "example",
+      location: "Paris, Ile-de-France, France",
+      city: "Paris",
+      region: "Ile-de-France",
+      countryCode: "FR",
+      remote: true,
+      salaryMin: 50_000,
+      salaryMax: 70_000,
+      currency: "EUR",
+      postedAt: "2026-07-20T12:00:00+00:00",
+      importedAt: "2026-07-20T13:00:00+00:00",
+      lastSeenAt: "2026-07-20T13:00:00+00:00",
+      selectedApplyUrl: "https://example.com/jobs/123",
+      validationStatus: "valid" as const,
+      validationReason: "apply URL is reachable",
+      validationCheckedAt: "2026-07-20T13:00:00+00:00",
+      applyabilityTier: "B" as const,
+      applyabilityScore: 0.8,
+      applyFulfillmentStatus: "manual_ready" as const,
+      applyUrlProvider: "example",
+      atsProvider: "unknown",
+      requiresLogin: false,
+      requiresAccountCreation: false,
+      captchaDetected: false,
+      manualFulfillmentReady: true,
+      autoApplySupported: false,
+      rejectionReason: null,
+      fingerprint: "fixture-fingerprint",
+      data: { source: "sprout" },
+    };
+    expect(
+      sourcePageCommitSchema.parse({
+        sourceId: "11111111-1111-4111-8111-111111111111",
+        countryCode: "FR",
+        mode: "backfill",
+        checkpointIn: { version: "sprout.offset.v1", offset: 0 },
+        checkpointOut: { version: "sprout.offset.v1", offset: 100 },
+        complete: false,
+        entries: [
+          {
+            canonical,
+            contentHash: "a".repeat(64),
+            fetchedAt: "2026-07-20T13:00:00+00:00",
+            sourceDocument: { id: 123, title: "Software Engineer" },
+            canonicalSourceUrl: null,
+            canonicalApplyUrl: "https://example.com/jobs/123",
+            atsPostingId: null,
+            publishedAt: "2026-07-20T12:00:00+00:00",
+            expiresAt: null,
+            lifecycleState: "active",
+            attribution: { provider: "sprout" },
+            policyId: "22222222-2222-4222-8222-222222222222",
+          },
+        ],
+      }).entries[0]?.canonical,
+    ).toEqual(canonical);
+    expect(() =>
+      sourcePageCommitSchema.parse({
+        sourceId: "11111111-1111-4111-8111-111111111111",
+        countryCode: "FR",
+        mode: "backfill",
+        checkpointIn: {},
+        checkpointOut: {},
+        complete: false,
+        entries: [{ canonical: { ...canonical, salaryMin: 80_000 } }],
+      }),
+    ).toThrow();
   });
 
   test("validates bounded non-production source trial manifests and results", () => {
