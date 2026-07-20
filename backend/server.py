@@ -11690,7 +11690,15 @@ async def _find_user_by_email(email: str) -> Optional[Dict[str, Any]]:
     user_doc = await db.users.find_one({"email": normalized}, {"_id": 0})
     if user_doc:
         return user_doc
-    users = await _admin_safe_find(db.users)
+    find = getattr(db.users, "find", None)
+    if not callable(find):
+        return None
+    try:
+        cursor = find({}, {"_id": 0})
+        users = await cursor.to_list(10000)
+    except Exception:
+        logger.exception("auth_email_fallback_scan_failed")
+        return None
     for user_doc in users:
         if (user_doc.get("email") or "").strip().lower() == normalized:
             return user_doc
