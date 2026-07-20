@@ -30,7 +30,7 @@ import base64
 import time
 import hashlib
 import unicodedata
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from urllib.parse import quote as url_quote, urlparse
 from pydantic import BaseModel, Field, ConfigDict, PrivateAttr
@@ -3675,442 +3675,276 @@ async def _record_processed_stripe_event(event: Any) -> None:
         logger.info("stripe_event_record_duplicate_or_failed event_id=%s error=%s", event_id, str(exc)[:160])
 
 
-_POSTHOG_REVENUE_UUID_NAMESPACE = uuid.UUID("f637c7f8-e2ef-5ee7-a976-c3017843ab42")
-_POSTHOG_ZERO_DECIMAL_CURRENCIES = {
-    "BIF", "CLP", "DJF", "GNF", "JPY", "KMF", "KRW", "MGA", "PYG", "RWF",
-    "UGX", "VND", "VUV", "XAF", "XOF", "XPF",
+_POSTHOG_CAPTURE_NAMESPACE = uuid.UUID("69fbb143-6b0b-42ca-8a9b-7f2c1b41c041")
+_POSTHOG_CURRENCY_EXPONENTS = {
+    "BHD": 3,
+    "CLF": 4,
+    "IQD": 3,
+    "JOD": 3,
+    "JPY": 0,
+    "KWD": 3,
+    "LYD": 3,
+    "OMR": 3,
+    "TND": 3,
 }
-_POSTHOG_THREE_DECIMAL_CURRENCIES = {"BHD", "JOD", "KWD", "OMR", "TND"}
-_POSTHOG_TWO_DECIMAL_CURRENCIES = {
-    "AED", "AFN", "ALL", "AMD", "ANG", "AOA", "ARS", "AUD", "AWG", "AZN",
-    "BAM", "BBD", "BDT", "BGN", "BMD", "BND", "BOB", "BRL", "BSD", "BTN",
-    "BWP", "BYN", "BZD", "CAD", "CDF", "CHF", "CNY", "COP", "CRC", "CVE",
-    "CZK", "DKK", "DOP", "DZD", "EGP", "ETB", "EUR", "FJD", "FKP", "GBP",
-    "GEL", "GIP", "GMD", "GTQ", "GYD", "HKD", "HNL", "HRK", "HTG", "HUF",
-    "IDR", "ILS", "INR", "ISK", "JMD", "KES", "KGS", "KHR", "KYD", "KZT",
-    "LAK", "LBP", "LKR", "LRD", "LSL", "MAD", "MDL", "MKD", "MMK", "MNT",
-    "MOP", "MUR", "MVR", "MWK", "MXN", "MYR", "MZN", "NAD", "NGN", "NIO",
-    "NOK", "NPR", "NZD", "PAB", "PEN", "PGK", "PHP", "PKR", "PLN", "QAR",
-    "RON", "RSD", "SAR", "SBD", "SCR", "SEK", "SGD", "SHP", "SLE", "SOS",
-    "SRD", "STD", "SZL", "THB", "TJS", "TOP", "TRY", "TTD", "TWD", "TZS",
-    "UAH", "USD", "UYU", "UZS", "WST", "XCD", "YER", "ZAR", "ZMW",
-}
-_POSTHOG_ANALYTICS_TIMEOUT_SECONDS = 1.0
-_POSTHOG_STRIPE_ENRICHMENT_TIMEOUT_SECONDS = 0.20
 
 
-def _posthog_server_capture_configured() -> bool:
-    return bool(
-        os.environ.get("POSTHOG_SERVER_API_KEY", "").strip()
-        and _posthog_capture_url()
+def _posthog_server_configured() -> bool:
+    token = (
+        os.environ.get("POSTHOG_PROJECT_API_KEY", "").strip()
+        or os.environ.get("POSTHOG_SERVER_API_KEY", "").strip()
     )
-
-
-def _build_posthog_client(api_key: str, host: str):
-    return Posthog(
-        api_key,
-        host=host,
-        enable_exception_autocapture=True,
-    )
-
-
-def _posthog_revenue_enabled(event_name: str) -> bool:
-    env_name = (
-        "POSTHOG_PAYMENT_REVENUE_ENABLED"
-        if event_name == "payment_succeeded"
-        else "POSTHOG_REFUND_REVENUE_ENABLED"
-    )
-    return _posthog_server_capture_configured() and os.environ.get(env_name, "").strip().lower() == "true"
-
-
-def _posthog_revenue_uuid(event_name: str, object_type: str, object_id: str) -> str:
-    semantic_key = f"{event_name}:{object_type}:{object_id}"
-    return str(uuid.uuid5(_POSTHOG_REVENUE_UUID_NAMESPACE, semantic_key))
-
-
-def _posthog_major_amount(amount_minor: int, currency: str) -> Decimal:
-    normalized_currency = str(currency or "").upper()
-    if normalized_currency in _POSTHOG_ZERO_DECIMAL_CURRENCIES:
-        exponent = 0
-    elif normalized_currency in _POSTHOG_THREE_DECIMAL_CURRENCIES:
-        exponent = 3
-    elif normalized_currency in _POSTHOG_TWO_DECIMAL_CURRENCIES:
-        exponent = 2
-    else:
-        raise ValueError("unsupported currency for PostHog revenue conversion")
-    return Decimal(int(amount_minor)).scaleb(-exponent)
-
-
-def _posthog_capture_url() -> Optional[str]:
     host = os.environ.get("POSTHOG_HOST", "").strip()
-    if not host:
-        return None
+    return bool(token and host.startswith("https://"))
+
+
+def _posthog_revenue_enabled(kind: str) -> bool:
+    switch = "POSTHOG_PAYMENT_REVENUE_ENABLED" if kind == "payment" else "POSTHOG_REFUND_REVENUE_ENABLED"
+    return _env_bool(switch, False) and _posthog_server_configured()
+
+
+def _posthog_semantic_uuid(event: str, object_type: str, object_id: str) -> str:
+    return str(uuid.uuid5(_POSTHOG_CAPTURE_NAMESPACE, f"{event}:{object_type}:{object_id}"))
+
+
+def _posthog_major_units(amount_minor: int, currency: str, *, negative: bool = False) -> float:
+    exponent = _POSTHOG_CURRENCY_EXPONENTS.get(currency.upper(), 2)
     try:
-        parsed = urlparse(host)
-        port = parsed.port
-    except ValueError:
-        return None
-    if (
-        parsed.scheme != "https"
-        or not parsed.hostname
-        or port is not None
-        or parsed.username
-        or parsed.password
-        or parsed.query
-        or parsed.fragment
-        or parsed.path.rstrip("/")
-    ):
-        return None
-    hostname = parsed.hostname.lower()
-    configured_hosts = {
-        item.strip().lower()
-        for item in os.environ.get("POSTHOG_ALLOWED_HOSTS", "").split(",")
-        if item.strip()
-    }
-    canonical_host = hostname in {"us.i.posthog.com", "eu.i.posthog.com"}
-    if not canonical_host and hostname not in configured_hosts:
-        return None
-    return f"https://{hostname}/capture/"
+        amount = Decimal(int(amount_minor)).scaleb(-exponent)
+    except (InvalidOperation, TypeError, ValueError, OverflowError):
+        raise ValueError("invalid amount_minor") from None
+    return float(-amount if negative else amount)
 
 
-def _posthog_stripe_timestamp(event: Dict[str, Any]) -> Optional[str]:
+def _posthog_event_timestamp(event: Dict[str, Any]) -> Optional[str]:
     try:
-        created = int(event.get("created"))
-    except (TypeError, ValueError):
+        return datetime.fromtimestamp(int(event["created"]), tz=timezone.utc).isoformat()
+    except (KeyError, TypeError, ValueError, OverflowError):
         return None
-    return datetime.fromtimestamp(created, tz=timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _posthog_price_properties(source: Dict[str, Any]) -> Dict[str, Any]:
-    lines = ((source.get("lines") or {}).get("data") or [])
-    if not lines:
-        lines = ((source.get("items") or {}).get("data") or [])
-    line = lines[0] if lines else {}
-    price = line.get("price") or {}
-    if isinstance(price, str):
-        price = {"id": price}
-    product = price.get("product")
-    properties = {
-        "price_id": _stripe_object_id(price),
-        "product_id": _stripe_object_id(product),
-    }
-    metadata = source.get("metadata") or {}
-    plan = metadata.get("plan") if isinstance(metadata, dict) else None
-    if plan:
-        properties["plan"] = str(plan)
-    return {key: value for key, value in properties.items() if value}
-
-
-async def _posthog_existing_user_id(*candidate_ids: Any) -> Optional[str]:
-    for candidate in candidate_ids:
-        user_id = str(candidate or "").strip()
-        if not user_id:
-            continue
-        found = await db.users.find_one({"user_id": user_id}, {"_id": 0, "user_id": 1})
-        if found and found.get("user_id") == user_id:
-            return user_id
-    return None
-
-
-async def _posthog_resolve_billing_user_id(
+async def _resolve_posthog_user_id(
     *,
     metadata: Optional[Dict[str, Any]] = None,
-    subscription_id: Optional[str] = None,
     customer_id: Optional[str] = None,
+    subscription_id: Optional[str] = None,
 ) -> Optional[str]:
-    metadata_user_id = (metadata or {}).get("user_id")
-    resolved = await _posthog_existing_user_id(metadata_user_id)
-    if resolved:
-        return resolved
+    """Resolve an existing Hirly identity without email fallback or user creation."""
+    metadata_user_id = str((metadata or {}).get("user_id") or "").strip()
+    if metadata_user_id:
+        found = await db.users.find_one({"user_id": metadata_user_id}, {"_id": 0, "user_id": 1})
+        if found:
+            return found.get("user_id")
     if subscription_id:
         found = await db.users.find_one(
-            {"stripe_subscription_id": subscription_id},
+            {"billing.stripe_subscription_id": subscription_id},
             {"_id": 0, "user_id": 1},
         )
-        if found and found.get("user_id"):
-            return str(found["user_id"])
+        if found:
+            return found.get("user_id")
     if customer_id:
         found = await db.users.find_one(
-            {"stripe_customer_id": customer_id},
+            {"billing.stripe_customer_id": customer_id},
             {"_id": 0, "user_id": 1},
         )
-        if found and found.get("user_id"):
-            return str(found["user_id"])
+        if found:
+            return found.get("user_id")
     return None
 
 
-async def _capture_posthog_server_event(
-    *,
-    event_name: str,
-    distinct_id: str,
-    timestamp: str,
-    semantic_uuid: str,
-    properties: Dict[str, Any],
-) -> bool:
-    api_key = os.environ.get("POSTHOG_SERVER_API_KEY", "").strip()
-    capture_url = _posthog_capture_url()
-    if not api_key or not capture_url:
-        logger.warning("posthog_server_capture_skipped_invalid_config event=%s", event_name)
-        return False
+def _posthog_invoice_product_properties(invoice: Dict[str, Any]) -> Dict[str, Any]:
+    properties: Dict[str, Any] = {}
+    lines = ((invoice.get("lines") or {}).get("data") or [])
+    if lines:
+        price = (lines[0] or {}).get("price") or {}
+        product_id = _stripe_object_id(price.get("product"))
+        if product_id:
+            properties["product_id"] = product_id
+        if price.get("id"):
+            properties["price_id"] = price["id"]
+    plan = (invoice.get("metadata") or {}).get("plan")
+    if plan:
+        properties["plan"] = str(plan)
+    return properties
 
-    body = {
-        "api_key": api_key,
-        "event": event_name,
-        "distinct_id": distinct_id,
+
+async def _build_posthog_payment_capture(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    invoice = event.get("data", {}).get("object") or {}
+    invoice_id = str(invoice.get("id") or "").strip()
+    currency = str(invoice.get("currency") or "").upper()
+    timestamp = _posthog_event_timestamp(event)
+    try:
+        amount_minor = int(invoice.get("amount_paid"))
+    except (TypeError, ValueError):
+        amount_minor = 0
+    subscription_id = _stripe_object_id(invoice.get("subscription"))
+    user_id = await _resolve_posthog_user_id(
+        metadata=invoice.get("metadata") or {},
+        customer_id=_stripe_object_id(invoice.get("customer")),
+        subscription_id=subscription_id,
+    )
+    if not all((invoice_id, currency, timestamp, user_id)) or amount_minor <= 0:
+        logger.warning(
+            "posthog_revenue_skipped_invalid kind=payment stripe_event_id=%s semantic_id=%s",
+            event.get("id"),
+            invoice_id or "missing",
+        )
+        return None
+    properties: Dict[str, Any] = {
+        "revenue": _posthog_major_units(amount_minor, currency),
+        "currency": currency,
+        "amount_minor": amount_minor,
+        "stripe_event_id": event.get("id"),
+        "invoice_id": invoice_id,
+        "source": "stripe_webhook",
+        "$process_person_profile": False,
+        **_posthog_invoice_product_properties(invoice),
+    }
+    if subscription_id:
+        properties["subscription_id"] = subscription_id
+    return {
+        "event": "payment_succeeded",
+        "distinct_id": user_id,
         "timestamp": timestamp,
-        "uuid": semantic_uuid,
+        "uuid": _posthog_semantic_uuid("payment_succeeded", "invoice", invoice_id),
         "properties": properties,
     }
-    timeout = httpx.Timeout(connect=0.25, read=0.50, write=0.50, pool=0.25)
-    started = time.monotonic()
-    try:
-        async def _send() -> int:
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                response = await client.post(capture_url, json=body)
-                response.raise_for_status()
-                return response.status_code
-
-        status_code = await asyncio.wait_for(_send(), timeout=0.75)
-        logger.info(
-            "posthog_server_capture_succeeded event=%s status_class=%s latency_ms=%s",
-            event_name,
-            f"{status_code // 100}xx",
-            int((time.monotonic() - started) * 1000),
-        )
-        return True
-    except Exception as exc:
-        logger.warning(
-            "posthog_server_capture_failed event=%s error_type=%s latency_ms=%s",
-            event_name,
-            type(exc).__name__,
-            int((time.monotonic() - started) * 1000),
-        )
-        return False
 
 
-async def _capture_posthog_invoice_payment(
-    event: Dict[str, Any],
-    invoice: Dict[str, Any],
-    subscription: Optional[Dict[str, Any]] = None,
-) -> bool:
-    if not _posthog_revenue_enabled("payment_succeeded"):
-        return False
-    invoice_id = str(invoice.get("id") or "").strip()
-    stripe_event_id = str(event.get("id") or "").strip()
-    amount_minor = invoice.get("amount_paid")
-    currency = str(invoice.get("currency") or "").upper()
-    timestamp = _posthog_stripe_timestamp(event)
-    subscription_id = _stripe_object_id(invoice.get("subscription"))
-    customer_id = _stripe_object_id(invoice.get("customer"))
-    metadata = {
-        **((subscription or {}).get("metadata") or {}),
-        **(invoice.get("metadata") or {}),
-    }
-    user_id = await _posthog_resolve_billing_user_id(
-        metadata=metadata,
-        subscription_id=subscription_id,
-        customer_id=customer_id,
-    )
-    if not all((stripe_event_id, invoice_id, user_id, timestamp, currency)) or not isinstance(amount_minor, int) or amount_minor <= 0:
-        logger.warning(
-            "posthog_revenue_skipped_invalid event=payment_succeeded stripe_event_id=%s invoice_id=%s",
-            event.get("id"),
-            invoice_id or None,
-        )
-        return False
-
-    properties = {
-        "revenue": float(_posthog_major_amount(amount_minor, currency)),
-        "currency": currency,
-        "amount_minor": amount_minor,
-        "stripe_event_id": stripe_event_id,
-        "invoice_id": invoice_id,
-        "subscription_id": subscription_id,
-        **_posthog_price_properties(invoice),
-        **(_posthog_price_properties(subscription or {}) if subscription else {}),
-        "source": "stripe_webhook",
-        "$process_person_profile": False,
-    }
-    properties = {key: value for key, value in properties.items() if value is not None}
-    return await _capture_posthog_server_event(
-        event_name="payment_succeeded",
-        distinct_id=user_id,
-        timestamp=timestamp,
-        semantic_uuid=_posthog_revenue_uuid("payment_succeeded", "invoice", invoice_id),
-        properties=properties,
-    )
-
-
-def _posthog_refund_success_confirmed(event: Dict[str, Any], refund: Dict[str, Any]) -> bool:
+def _posthog_refund_confirms_success(event: Dict[str, Any]) -> bool:
+    refund = event.get("data", {}).get("object") or {}
     if str(refund.get("status") or "").lower() != "succeeded":
         return False
-    event_type = event.get("type")
-    if event_type == "refund.created":
+    if event.get("type") == "refund.created":
         return True
-    if event_type != "refund.updated":
+    if event.get("type") != "refund.updated":
         return False
-    previous_status = ((event.get("data") or {}).get("previous_attributes") or {}).get("status")
-    return bool(previous_status and str(previous_status).lower() != "succeeded")
+    previous_status = str(
+        (event.get("data", {}).get("previous_attributes") or {}).get("status") or ""
+    ).lower()
+    return bool(previous_status and previous_status != "succeeded")
 
 
-async def _posthog_stripe_retrieve(resource: Any, object_id: Any) -> Dict[str, Any]:
-    normalized_id = _stripe_object_id(object_id)
-    if not normalized_id:
-        return {}
-    response = await asyncio.wait_for(
-        asyncio.to_thread(resource.retrieve, normalized_id),
-        timeout=_POSTHOG_STRIPE_ENRICHMENT_TIMEOUT_SECONDS,
-    )
-    return _stripe_to_dict(response)
-
-
-async def _posthog_refund_context(refund: Dict[str, Any]) -> Dict[str, Any]:
-    charge = refund.get("charge")
-    payment_intent = refund.get("payment_intent")
-    charge_obj: Dict[str, Any] = {}
-    payment_intent_obj: Dict[str, Any] = {}
-    invoice_obj: Dict[str, Any] = {}
-    subscription_obj: Dict[str, Any] = {}
-
-    if isinstance(charge, dict):
-        charge_obj = charge
-    elif charge:
-        charge_obj = await _posthog_stripe_retrieve(stripe.Charge, charge)
-    payment_intent = payment_intent or charge_obj.get("payment_intent")
-    if isinstance(payment_intent, dict):
-        payment_intent_obj = payment_intent
-    elif payment_intent:
-        payment_intent_obj = await _posthog_stripe_retrieve(stripe.PaymentIntent, payment_intent)
-
-    invoice = charge_obj.get("invoice") or payment_intent_obj.get("invoice")
-    if isinstance(invoice, dict):
-        invoice_obj = invoice
-    elif invoice:
-        invoice_obj = await _posthog_stripe_retrieve(stripe.Invoice, invoice)
-    subscription_id = _stripe_object_id(invoice_obj.get("subscription"))
-    if subscription_id:
-        subscription_obj = await _posthog_stripe_retrieve(stripe.Subscription, subscription_id)
-    customer_id = (
-        _stripe_object_id(invoice_obj.get("customer"))
-        or _stripe_object_id(payment_intent_obj.get("customer"))
-        or _stripe_object_id(charge_obj.get("customer"))
-        or _stripe_object_id(subscription_obj.get("customer"))
-    )
-    metadata = {
-        **(subscription_obj.get("metadata") or {}),
-        **(invoice_obj.get("metadata") or {}),
-        **(payment_intent_obj.get("metadata") or {}),
-        **(charge_obj.get("metadata") or {}),
-        **(refund.get("metadata") or {}),
-    }
-    return {
-        "invoice": invoice_obj,
-        "subscription": subscription_obj,
-        "invoice_id": _stripe_object_id(invoice_obj),
-        "subscription_id": subscription_id,
-        "customer_id": customer_id,
-        "currency": str(
-            refund.get("currency")
-            or charge_obj.get("currency")
-            or invoice_obj.get("currency")
-            or ""
-        ).upper(),
-        "user_id": await _posthog_resolve_billing_user_id(
-            metadata=metadata,
-            subscription_id=subscription_id,
-            customer_id=customer_id,
-        ),
-    }
-
-
-async def _capture_posthog_refund(event: Dict[str, Any], refund: Dict[str, Any]) -> bool:
-    if not _posthog_revenue_enabled("payment_refunded"):
-        return False
-    refund_id = str(refund.get("id") or "").strip()
-    refund_status = str(refund.get("status") or "").lower()
-    if refund_status not in {"succeeded", "pending", "requires_action", "failed", "canceled"}:
-        logger.warning(
-            "posthog_refund_revenue_status_unconfirmed stripe_event_id=%s refund_id=%s",
-            event.get("id"),
-            refund_id or None,
+async def _posthog_invoice_for_refund(refund: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    invoice_id = _stripe_object_id(refund.get("invoice"))
+    charge_id = _stripe_object_id(refund.get("charge"))
+    charge: Dict[str, Any] = {}
+    if charge_id:
+        try:
+            charge = _stripe_to_dict(await asyncio.to_thread(stripe.Charge.retrieve, charge_id))
+            invoice_id = invoice_id or _stripe_object_id(charge.get("invoice"))
+        except Exception as exc:
+            logger.warning(
+                "posthog_revenue_skipped_invalid kind=refund charge_id=%s error=%s",
+                charge_id,
+                str(exc)[:120],
+            )
+    if not invoice_id:
+        payment_intent_id = _stripe_object_id(refund.get("payment_intent")) or _stripe_object_id(
+            charge.get("payment_intent")
         )
-        return False
-    if not _posthog_refund_success_confirmed(event, refund):
-        logger.info(
-            "posthog_refund_revenue_nonterminal stripe_event_id=%s refund_id=%s status=%s",
-            event.get("id"),
-            refund.get("id"),
-            str(refund.get("status") or "unknown").lower(),
-        )
-        return False
-    stripe_event_id = str(event.get("id") or "").strip()
-    amount_minor = refund.get("amount")
-    timestamp = _posthog_stripe_timestamp(event)
+        if payment_intent_id:
+            try:
+                payment_intent = _stripe_to_dict(
+                    await asyncio.to_thread(stripe.PaymentIntent.retrieve, payment_intent_id)
+                )
+                invoice_id = _stripe_object_id(payment_intent.get("invoice"))
+            except Exception:
+                invoice_id = None
+    if not invoice_id:
+        return None
     try:
-        context = await _posthog_refund_context(refund)
+        return _stripe_to_dict(await asyncio.to_thread(stripe.Invoice.retrieve, invoice_id))
     except Exception as exc:
         logger.warning(
-            "posthog_revenue_skipped_invalid event=payment_refunded stripe_event_id=%s refund_id=%s error_type=%s",
-            event.get("id"),
-            refund_id or None,
-            type(exc).__name__,
+            "posthog_revenue_skipped_invalid kind=refund invoice_id=%s error=%s",
+            invoice_id,
+            str(exc)[:120],
         )
-        return False
-    currency = context.get("currency")
-    user_id = context.get("user_id")
-    invoice_id = context.get("invoice_id")
-    if not all((stripe_event_id, refund_id, user_id, invoice_id, timestamp, currency)) or not isinstance(amount_minor, int) or amount_minor <= 0:
-        logger.warning(
-            "posthog_revenue_skipped_invalid event=payment_refunded stripe_event_id=%s refund_id=%s",
-            event.get("id"),
-            refund_id or None,
-        )
-        return False
+        return None
 
-    properties = {
-        "revenue": -float(_posthog_major_amount(amount_minor, currency)),
+
+async def _build_posthog_refund_capture(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    if not _posthog_refund_confirms_success(event):
+        return None
+    refund = event.get("data", {}).get("object") or {}
+    refund_id = str(refund.get("id") or "").strip()
+    currency = str(refund.get("currency") or "").upper()
+    timestamp = _posthog_event_timestamp(event)
+    try:
+        amount_minor = int(refund.get("amount"))
+    except (TypeError, ValueError):
+        amount_minor = 0
+    invoice = await _posthog_invoice_for_refund(refund)
+    if not invoice:
+        return None
+    invoice_id = str(invoice.get("id") or "").strip()
+    subscription_id = _stripe_object_id(invoice.get("subscription"))
+    user_id = await _resolve_posthog_user_id(
+        metadata={**(invoice.get("metadata") or {}), **(refund.get("metadata") or {})},
+        customer_id=_stripe_object_id(invoice.get("customer")),
+        subscription_id=subscription_id,
+    )
+    if not all((refund_id, invoice_id, currency, timestamp, user_id)) or amount_minor <= 0:
+        logger.warning(
+            "posthog_revenue_skipped_invalid kind=refund stripe_event_id=%s semantic_id=%s",
+            event.get("id"),
+            refund_id or "missing",
+        )
+        return None
+    properties: Dict[str, Any] = {
+        "revenue": _posthog_major_units(amount_minor, currency, negative=True),
         "currency": currency,
         "amount_minor": amount_minor,
-        "stripe_event_id": stripe_event_id,
+        "stripe_event_id": event.get("id"),
         "refund_id": refund_id,
         "invoice_id": invoice_id,
-        "subscription_id": context.get("subscription_id"),
-        **_posthog_price_properties(context.get("invoice") or {}),
-        **_posthog_price_properties(context.get("subscription") or {}),
         "source": "stripe_webhook",
         "$process_person_profile": False,
+        **_posthog_invoice_product_properties(invoice),
     }
-    properties = {key: value for key, value in properties.items() if value is not None}
-    return await _capture_posthog_server_event(
-        event_name="payment_refunded",
-        distinct_id=user_id,
-        timestamp=timestamp,
-        semantic_uuid=_posthog_revenue_uuid("payment_refunded", "refund", refund_id),
-        properties=properties,
+    if subscription_id:
+        properties["subscription_id"] = subscription_id
+    return {
+        "event": "payment_refunded",
+        "distinct_id": user_id,
+        "timestamp": timestamp,
+        "uuid": _posthog_semantic_uuid("payment_refunded", "refund", refund_id),
+        "properties": properties,
+    }
+
+
+async def _capture_posthog_server_event(capture: Optional[Dict[str, Any]]) -> None:
+    if not capture or not _posthog_server_configured():
+        return
+    token = (
+        os.environ.get("POSTHOG_PROJECT_API_KEY", "").strip()
+        or os.environ.get("POSTHOG_SERVER_API_KEY", "").strip()
     )
-
-
-async def _capture_posthog_revenue_fail_open(
-    capture: Any,
-    *args: Any,
-    event_id: Optional[str],
-    event_name: str,
-) -> bool:
+    host = os.environ["POSTHOG_HOST"].strip().rstrip("/")
+    body = {"api_key": token, **capture}
+    started = time.monotonic()
     try:
-        return bool(
-            await asyncio.wait_for(
-                capture(*args),
-                timeout=_POSTHOG_ANALYTICS_TIMEOUT_SECONDS,
-            )
+        timeout = httpx.Timeout(connect=0.25, read=0.50, write=0.50, pool=0.25)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await asyncio.wait_for(client.post(f"{host}/capture/", json=body), timeout=0.75)
+            response.raise_for_status()
+        logger.info(
+            "posthog_server_capture_succeeded event=%s stripe_event_id=%s semantic_id=%s latency_ms=%s",
+            capture["event"],
+            capture["properties"].get("stripe_event_id"),
+            capture["uuid"],
+            int((time.monotonic() - started) * 1000),
         )
     except Exception as exc:
         logger.warning(
-            "posthog_revenue_adapter_failed event=%s stripe_event_id=%s error_type=%s",
-            event_name,
-            event_id,
+            "posthog_server_capture_failed event=%s stripe_event_id=%s semantic_id=%s latency_ms=%s error=%s",
+            capture["event"],
+            capture["properties"].get("stripe_event_id"),
+            capture["uuid"],
+            int((time.monotonic() - started) * 1000),
             type(exc).__name__,
         )
-        return False
 
 
 @api_router.post("/stripe/webhook")
@@ -4163,23 +3997,11 @@ async def stripe_webhook(request: Request):
                 await _update_user_billing_by_customer_id(customer_id, {"last_payment_status": payment_status})
             else:
                 logger.warning("stripe_invoice_event_missing_subscription_customer event_id=%s type=%s", event_id, event_type)
-            if event_type == "invoice.payment_succeeded":
-                await _capture_posthog_revenue_fail_open(
-                    _capture_posthog_invoice_payment,
-                    event,
-                    obj,
-                    subscription,
-                    event_id=event_id,
-                    event_name="payment_succeeded",
-                )
+            if event_type == "invoice.payment_succeeded" and _posthog_revenue_enabled("payment"):
+                await _capture_posthog_server_event(await _build_posthog_payment_capture(event))
         elif event_type in {"refund.created", "refund.updated", "refund.failed"}:
-            await _capture_posthog_revenue_fail_open(
-                _capture_posthog_refund,
-                event,
-                obj,
-                event_id=event_id,
-                event_name="payment_refunded",
-            )
+            if _posthog_revenue_enabled("refund"):
+                await _capture_posthog_server_event(await _build_posthog_refund_capture(event))
         else:
             logger.info("stripe_webhook ignored event_type=%s", event_type)
     except Exception:

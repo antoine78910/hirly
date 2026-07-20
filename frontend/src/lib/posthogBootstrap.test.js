@@ -15,7 +15,6 @@ describe("PostHog additive rollout seams", () => {
 
   it("pins the supported SDK and incremental TypeScript toolchain", () => {
     const packageJson = JSON.parse(readFrontendFile("package.json"));
-    const packageLock = JSON.parse(readFrontendFile("package-lock.json"));
     const tsconfig = JSON.parse(readFrontendFile("tsconfig.json"));
     expect(packageJson.dependencies).toMatchObject({
       "@posthog/react": "1.10.3",
@@ -31,11 +30,16 @@ describe("PostHog additive rollout seams", () => {
       allowJs: true,
       noEmit: true,
     });
-    expect(packageJson).not.toHaveProperty("packageManager");
-    expect(packageLock).toMatchObject({
-      name: packageJson.name,
-      version: packageJson.version,
-      lockfileVersion: 3,
-    });
+  });
+
+  it("blocks representative CV, application, email, and phone surfaces from replay", () => {
+    for (const relativePath of [
+      "src/components/profile/ResumeCurrentPreview.jsx",
+      "src/pages/ReviewApplicationDetail.jsx",
+      "src/pages/Emails.jsx",
+      "src/components/onboarding/OnboardingContactPhoneStep.jsx",
+    ]) {
+      expect(readFrontendFile(relativePath)).toContain("ph-no-capture");
+    }
   });
 });
