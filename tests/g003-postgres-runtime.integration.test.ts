@@ -103,6 +103,8 @@ async function assertSql(sql: string): Promise<string> {
 
 async function resetG003Fixtures(): Promise<void> {
   await assertSql(`
+    BEGIN;
+    SET LOCAL session_replication_role = replica;
     DELETE FROM public.worker_task_attempts
     WHERE task_id IN (
       SELECT task.id
@@ -116,6 +118,7 @@ async function resetG003Fixtures(): Promise<void> {
     );
     DELETE FROM public.worker_runs WHERE idempotency_key LIKE 'g003:%';
     DELETE FROM public.worker_schedules WHERE id LIKE 'g003-%';
+    COMMIT;
   `);
 }
 
