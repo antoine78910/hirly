@@ -2,7 +2,6 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "bun:test";
 import type { SourceRegistryEntry } from "../packages/contracts/src";
 import {
-  IngestionError,
   stableJobId,
   toCanonicalJob,
   type SourceContext,
@@ -180,6 +179,11 @@ describe("G012 disabled CSP fixture adapter", () => {
     expect(pages[0]).toMatchObject({
       complete: false,
       sourceReportedTotal: 2,
+      scope: {
+        datasetId: CSP_DATASET_ID,
+        resourceId: CSP_QUALIFICATION_RESOURCE_ID,
+        mode: "full",
+      },
     });
     expect(pages[1]).toMatchObject({
       complete: true,
@@ -235,6 +239,6 @@ describe("G012 disabled CSP fixture adapter", () => {
         fixturePolicyId,
       ),
     ).toThrow();
-    expect(() => new URL(row.sourceUrl)).not.toThrow(IngestionError);
+    expect(row.sourceUrl).toBe(CSP_DATASET_URL);
   });
 });
