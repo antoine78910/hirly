@@ -25,18 +25,23 @@ SELECT
   to_regclass('public.paid_user_source_contributions') AS source_contributions_table;
 
 SELECT
-  registry.provider,
-  registry.enabled AS provider_enabled,
-  registry.writer_runtime,
-  registry.authorization_status,
-  source.source_key,
-  source.collection_enabled,
-  policy.policy_status,
-  policy.production_enabled
-FROM public.provider_registry AS registry
-LEFT JOIN public.career_sources AS source ON source.provider = registry.provider
-LEFT JOIN public.source_policies AS policy ON policy.source_id = source.id
-ORDER BY registry.provider, source.source_key;
+  provider,
+  enabled AS provider_enabled,
+  writer_runtime,
+  authorization_status
+FROM public.provider_registry
+ORDER BY provider;
+
+SELECT
+  provider,
+  source_key,
+  enabled AS source_enabled,
+  authorization_status,
+  writer_runtime,
+  policy_status,
+  production_eligible
+FROM public.career_source_activation_status
+ORDER BY provider, source_key;
 
 -- 1. Inventory, freshness, actionability, route coverage, and duplicate proxy.
 SELECT
@@ -127,6 +132,7 @@ SELECT
   run.pages_requested,
   run.pages_completed,
   run.retries,
+  run.requests_count,
   run.source_reported_total,
   run.raw_records,
   run.normalized_records,
@@ -181,13 +187,13 @@ ORDER BY run.requested_at DESC;
 -- 7. Cost per incremental fresh, relevant, actionable canonical group.
 WITH cost AS (
   SELECT
-    source_id,
+    career_source_id AS source_id,
     request_cost_currency,
     sum(request_cost_minor)::bigint AS cost_minor
   FROM public.worker_runs
   WHERE requested_at >= :'window_start'::timestamptz
     AND requested_at < :'window_end'::timestamptz
-  GROUP BY source_id, request_cost_currency
+  GROUP BY career_source_id, request_cost_currency
 ), contribution AS (
   SELECT
     source_id,
