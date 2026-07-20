@@ -90,14 +90,7 @@ TABLE_PRIMARY_KEYS = {
     "creator_applications": "creator_application_id",
 }
 TABLE_FILTER_COLUMNS = {
-    "users": {
-        "user_id",
-        "email",
-        "name",
-        "created_at",
-        "stripe_customer_id",
-        "stripe_subscription_id",
-    },
+    "users": {"user_id", "email", "name", "created_at"},
     "user_sessions": {"session_token", "user_id", "expires_at", "created_at"},
     "jobs": {
         "job_id",
@@ -482,14 +475,11 @@ def _document_key(table: str, doc: Document) -> str:
 def _supabase_row(table: str, document: Document) -> Dict[str, Any]:
     doc = _json_safe(document)
     if table == "users":
-        billing = doc.get("billing") if isinstance(doc.get("billing"), dict) else {}
         return {
             "user_id": _document_key(table, doc),
             "email": doc.get("email"),
             "name": doc.get("name"),
             "created_at": doc.get("created_at"),
-            "stripe_customer_id": billing.get("stripe_customer_id"),
-            "stripe_subscription_id": billing.get("stripe_subscription_id"),
             "data": doc,
         }
     if table == "user_sessions":
@@ -1608,51 +1598,6 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
                 table="rpc",
                 started_at=started_at,
                 snapshot=snapshot,
-                status="error",
-            )
-            raise
-
-    async def resolve_auth_session(self, session_token: str) -> Optional[Dict[str, Any]]:
-        """Resolve a session, user, and bounded role flags in one PostgREST RPC."""
-        started_at = time.perf_counter()
-        snapshot = _metric_snapshot()
-        client = _get_shared_http_client(timeout=1.5)
-        try:
-            response = await client.post(
-                self.supabase_url.rstrip("/") + "/rest/v1/rpc/resolve_auth_session",
-                json={"p_session_token": session_token},
-                headers={
-                    **_supabase_headers(self.secret_key),
-                    "Content-Type": "application/json",
-                },
-            )
-            _record_remote_response(response)
-            if response.status_code not in (200, 201):
-                raise RuntimeError(
-                    "Supabase auth RPC resolve_auth_session returned HTTP "
-                    f"{response.status_code}: {response.text[:300]}"
-                )
-            payload = response.json() if response.content else None
-            if isinstance(payload, list):
-                payload = payload[0] if payload else None
-            if payload is not None and not isinstance(payload, dict):
-                raise RuntimeError("Supabase auth RPC returned an invalid payload")
-            _emit_adapter_metric(
-                operation="resolve_auth_session",
-                table="user_sessions",
-                started_at=started_at,
-                snapshot=snapshot,
-                rows_returned=1 if payload else 0,
-                filter_status="pushed",
-            )
-            return payload
-        except Exception:
-            _emit_adapter_metric(
-                operation="resolve_auth_session",
-                table="user_sessions",
-                started_at=started_at,
-                snapshot=snapshot,
-                filter_status="pushed",
                 status="error",
             )
             raise
