@@ -1782,6 +1782,7 @@ async def track_analytics_events(
     try:
         # Make deterministic batch replay insert-ignore: never allow a later
         # payload to overwrite the first canonical event document.
+        accepted_event_ids = [item.event_id or doc["event_id"] for item, doc in zip(body.events, documents)]
         existing_ids = set()
         finder = getattr(db.analytics_events, "find", None)
         if finder is not None:
@@ -1798,7 +1799,7 @@ async def track_analytics_events(
         "ok": True,
         "stored": True,
         "batch_id": body.batch_id,
-        "accepted_event_ids": [item.event_id or document["event_id"] for item, document in zip(body.events, documents)],
+        "accepted_event_ids": accepted_event_ids,
     }
 
 
