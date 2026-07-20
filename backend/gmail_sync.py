@@ -430,6 +430,12 @@ async def sync_gmail_application_emails(
         job_ids = list({app.get("job_id") for app in submitted_apps if app.get("job_id")})
         jobs = await db.jobs.find({"job_id": {"$in": job_ids}}, {"_id": 0}).to_list(len(job_ids)) if job_ids else []
         job_map = {job.get("job_id"): job for job in jobs}
+        existing_rows = await db.application_emails.find(
+            {"user_id": user_id},
+            {"_id": 0},
+        ).to_list(max_apps * per_app)
+        existing_by_id = {row.get("email_id"): row for row in existing_rows if row.get("email_id")}
+        pending_email_writes: List[Dict[str, Any]] = []
 
         stored = 0
         checked_messages = 0
@@ -451,7 +457,7 @@ async def sync_gmail_application_emails(
                 if score < 6:
                     continue
                 email_id = f"gmail_{hashlib.sha1(f'{user_id}:{gmail_id}'.encode()).hexdigest()[:28]}"
-                existing = await db.application_emails.find_one({"email_id": email_id}, {"_id": 0})
+                existing = existing_by_id.get(email_id)
                 if existing and int(existing.get("match_score") or 0) > score:
                     continue
                 now = _now_iso()
@@ -476,7 +482,8 @@ async def sync_gmail_application_emails(
                     "created_at": (existing or {}).get("created_at") or now,
                     "updated_at": now,
                 }
-                await db.application_emails.update_one({"email_id": email_id}, {"$set": document}, upsert=True)
+                pending_email_writes.append(document)
+                existing_by_id[email_id] = document
                 if not existing:
                     stored += 1
                 if _outcome_rank(classification) > best_rank:
@@ -494,6 +501,9 @@ async def sync_gmail_application_emails(
                         "email_confirmed_from": best_message.get("from"),
                     }},
                 )
+
+        for start in range(0, len(pending_email_writes), 100):
+            await db.application_emails.insert_many(pending_email_writes[start:start + 100])
 
         await db.gmail_connections.update_one(
             {"user_id": user_id},
