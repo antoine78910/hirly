@@ -6215,33 +6215,6 @@ async def get_profile(user: User = Depends(get_current_user)):
     return profile
 
 
-def _profile_completion(profile: Dict[str, Any]) -> Dict[str, Any]:
-    defaults = profile.get("application_defaults") or {}
-    contact = profile.get("contact") or {}
-    checks = [
-        ("cv_uploaded", bool(profile.get("cv_text") or profile.get("cv_filename"))),
-        ("target_roles", bool(profile.get("target_role") or profile.get("target_roles"))),
-        ("location", bool(profile.get("target_location") or profile.get("target_location_data"))),
-        ("linkedin_or_portfolio", bool(contact.get("linkedin") or contact.get("website") or contact.get("github"))),
-        ("application_defaults", all(
-            defaults.get(key) not in (None, "")
-            for key in (
-                "work_authorized_countries",
-                "requires_sponsorship",
-                "current_location_city",
-                "former_employer_restriction_or_noncompete",
-            )
-        ) or bool(defaults.get("prefer_not_to_say_demographics"))),
-    ]
-    completed = sum(1 for _, ok in checks if ok)
-    return {
-        "percentage": round((completed / len(checks)) * 100),
-        "completed": completed,
-        "total": len(checks),
-        "items": {key: ok for key, ok in checks},
-    }
-
-
 async def _cancel_stripe_subscription_for_user(user_doc: Dict[str, Any]) -> None:
     billing = user_doc.get("billing") or {}
     sub_id = billing.get("stripe_subscription_id")
