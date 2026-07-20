@@ -3925,9 +3925,22 @@ async def stripe_webhook(request: Request):
             else:
                 logger.warning("stripe_invoice_event_missing_subscription_customer event_id=%s type=%s", event_id, event_type)
             if event_type == "invoice.payment_succeeded":
-                await _capture_posthog_invoice_payment(event, obj, subscription)
+                await _capture_posthog_revenue_fail_open(
+                    _capture_posthog_invoice_payment,
+                    event,
+                    obj,
+                    subscription,
+                    event_id=event_id,
+                    event_name="payment_succeeded",
+                )
         elif event_type in {"refund.created", "refund.updated", "refund.failed"}:
-            await _capture_posthog_refund(event, obj)
+            await _capture_posthog_revenue_fail_open(
+                _capture_posthog_refund,
+                event,
+                obj,
+                event_id=event_id,
+                event_name="payment_refunded",
+            )
         else:
             logger.info("stripe_webhook ignored event_type=%s", event_type)
     except Exception:
