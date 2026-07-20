@@ -22,7 +22,6 @@ export interface DueSchedule {
   cronExpression: string;
   timezone: string;
   nextDueAt: Date;
-  maxCatchUp: number;
 }
 
 export interface TaskHandler {

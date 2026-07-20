@@ -18,10 +18,9 @@ export class PostgresRuntimeStore implements RuntimeStore {
         cron_expression: string;
         timezone: string;
         next_due_at: Date;
-        max_catch_up: number;
       }[]
     >`
-      SELECT id, cron_expression, timezone, next_due_at, max_catch_up
+      SELECT id, cron_expression, timezone, next_due_at
       FROM public.worker_schedules
       WHERE enabled AND next_due_at <= clock_timestamp()
       ORDER BY next_due_at, id
@@ -32,7 +31,6 @@ export class PostgresRuntimeStore implements RuntimeStore {
       cronExpression: row.cron_expression,
       timezone: row.timezone,
       nextDueAt: row.next_due_at,
-      maxCatchUp: row.max_catch_up,
     }));
   }
 
