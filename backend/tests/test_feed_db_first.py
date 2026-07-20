@@ -24,6 +24,16 @@ class _Collection:
     def __init__(self, rows=None):
         self.rows = list(rows or [])
 
+    async def _reject_write(self, *_args, **_kwargs):
+        raise AssertionError("feed characterization must not mutate product collections")
+
+    insert_one = _reject_write
+    insert_many = _reject_write
+    update_one = _reject_write
+    update_many = _reject_write
+    delete_one = _reject_write
+    delete_many = _reject_write
+
     async def find_one(self, filter, projection=None):
         for row in self.rows:
             if _matches(row, filter):
@@ -43,6 +53,7 @@ class _FakeDB:
         self.geo_places = _Collection(geo_places or [])
         self.profiles = _Collection([profile])
         self.swipes = _Collection(swipes or [])
+        self.applications = _Collection([])
 
 
 def _matches(row, filter):
