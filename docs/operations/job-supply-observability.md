@@ -1,173 +1,222 @@
-# Job-supply observability foundation
+# G008 job-supply observability operations
 
 Classification: `TS_NEW`.
 
-This G008 foundation adds source-policy, disabled career-source, cohort aggregate,
-France Travail census, and source-run metadata to the Postgres database that
-owns `public.jobs`. It does not authorize or enable a provider, change a feed,
-or transfer canonical writer ownership.
+This runbook is the operator boundary for PR2 of the French job-supply plan. It
+does not activate a source, transfer provider ownership, fetch France Travail,
+or mutate canonical jobs.
 
-## Invariants
+## Safety contract
 
-- `provider_registry.writer_runtime` remains the sole writer-runtime authority.
-  `career_sources` has no runtime-owner or ownership-epoch column.
-- Policies and sources default to `enabled=false`.
-- Enabling a policy rejects expired evidence and requires approved commercial
-  use, redisplay, production access methods, evidence, reviewer, and expiry.
-- Enabling a career source requires an enabled/authorized provider with a
-  non-`none` writer and an enabled, approved, unexpired production policy.
-- Downgrading a provider or policy disables its currently enabled sources.
-- A provider still changes writer only through the existing provider-registry
-  operator boundary. Source enablement never assigns a writer.
-- `worker_runs` remains the authoritative source-run ledger. No competing
-  `source_runs` table is created.
-- Cohort dimensions accept only bounded aggregate keys. CV text, role, location,
-  search terms, application payloads, and other profile detail are rejected.
-- Existing `jobs`, feed reads, Python schedules, and canonical writers are
-  unchanged by this migration.
+- `provider_registry.writer_runtime` remains the only canonical-writer
+  authority.
+- Every new source and policy starts disabled.
+- Policy activation rejects already-expired evidence. Source activation requires
+  an enabled, authorized provider and a current approved production policy with
+  commercial-use and redisplay permission.
+- `career_sources` has no writer-runtime field. Source activation never assigns
+  or transfers provider writer ownership.
+- Run measurement SQL with a read-only database role.
+- The census runner may write immutable audit evidence only. It must not write
+  `jobs`, enable a provider/source/schedule, or call a provider writer.
+- No production credential, CV text, application payload, raw profile text, or
+  unhashed user identifier belongs in an artifact or log.
+- Persisted `cohort_dimensions` accept only `country_code`,
+  `subscription_tier`, `experience_band`, `activity_band`, and
+  `inventory_segment`, with bounded primitive values. Free-form role, location,
+  search, CV, and application data are rejected by the database constraint.
+- Missing topology, credentials, migration, or PR1 aggregate inputs is
+  `BLOCKED_EXTERNAL`, never an invented zero or successful census.
 
-## Apply
+## Applied-topology preflight
 
-Apply the migration to the inventory database after migrations `00100`,
-`00200`, and `00300`:
+The physical database used for measurement must contain `jobs`,
+`provider_registry`, `source_policy`, `career_sources`, `worker_runs`,
+`worker_run_partitions`, `paid_user_inventory_snapshots`,
+`paid_user_source_contributions`, and the
+`career_source_activation_status` safety view.
+
+Before measurement, capture:
+
+```sql
+SELECT current_database(), to_regclass('public.jobs'),
+  to_regclass('public.worker_runs'),
+  to_regclass('public.worker_run_partitions');
+
+SELECT provider, enabled, writer_runtime, authorization_status
+FROM public.provider_registry
+ORDER BY provider;
+
+SELECT provider, source_key, enabled, policy_status, production_eligible
+FROM public.career_source_activation_status
+ORDER BY provider, source_key;
+```
+
+Stop if the canonical database is ambiguous or if any provider has two
+authoritative writers. The G008 migration must not change the before/after
+provider-registry rows.
+
+Apply only after the worker foundation and ingestion-ledger migrations:
 
 ```bash
 psql "$JOBS_DATABASE_URL" -v ON_ERROR_STOP=1 \
   -f backend/db/migrations/20260720000400_job_supply_observability.sql
 ```
 
-Preflight the physical topology:
+## Reproduce operator measurements
 
-```sql
-SELECT
-  current_database() AS database_name,
-  to_regclass('public.jobs') AS jobs_table,
-  to_regclass('public.provider_registry') AS provider_registry,
-  to_regclass('public.worker_runs') AS worker_runs,
-  to_regclass('public.worker_run_partitions') AS worker_run_partitions;
+Use a fixed UTC freshness cutoff, measurement window, and PR1 coverage run:
 
-SELECT provider, authorization_status, enabled, writer_runtime
-FROM public.provider_registry
-ORDER BY provider;
+```bash
+psql "$JOBS_DATABASE_URL" \
+  -v freshness_cutoff="2026-07-13T00:00:00Z" \
+  -v window_start="2026-07-01T00:00:00Z" \
+  -v window_end="2026-07-15T00:00:00Z" \
+  -v coverage_run_id="00000000-0000-0000-0000-000000000000" \
+  -f scripts/job-supply-observability.sql \
+  | tee artifacts/job-ingestion/job-supply-observability.txt
 ```
 
-Stop if the target is not the physical inventory database or any prerequisite
-object is missing.
+The script runs in a read-only transaction and reports:
 
-## Added metadata
+1. applied topology plus provider/source/policy safety state;
+2. source inventory, freshness, actionability, known routes and duplicate proxy;
+3. apply-host/ATS counts used for connector ranking;
+4. paid-user P10/P50/P90, median and feed exhaustion;
+5. actionable source concentration;
+6. run/partition completeness and request cost;
+7. France Travail stage reconciliation;
+8. cost per incremental fresh, relevant, actionable canonical group.
 
-- `source_policy`: reviewed access, commercial-use, redisplay, retention,
-  attribution, evidence/agreement reference, review, expiry, and environment
-  gates.
-- `career_sources`: provider source/tenant identity, company/country metadata,
-  access type, policy, cadence, checkpoint, health, and disabled discovery
-  state.
-- `worker_runs`: source, mode, normalized scope, checkpoints, requests, bytes,
-  duration, cost, actionable count, residuals, and immutable planned/complete
-  scope tokens.
-- `paid_user_inventory_snapshots`: pseudonymous per-run aggregate coverage with
-  an allowlisted cohort-dimension contract.
-- `paid_user_source_contributions`: aggregate source/group contribution facts.
-- `france_travail_census_manifests`: immutable, reconciled census evidence and
-  explicit run membership.
-- Read-only source, ATS-host, paid-user, and activation-status views.
+Treat the pre-group fingerprint duplicate rate as an estimate. Do not use total
+job rows as a rollout gate.
 
-Runtime roles have no insert/update grant on `source_policy` or
-`career_sources`. This phase records foundation metadata through a migration or
-database-owner operation only. A future activation change must add a reviewed,
-least-privilege operator RPC rather than grant direct table mutation.
+## France Travail census execution contract
 
-## Post-migration checks
+### Frozen definition
 
-The provider-registry rows must match the preflight snapshot, and every new
-policy/source must remain disabled until explicitly reviewed:
+Create the definition before observing results. Canonicalize JSON object keys
+and array ordering, then SHA-256 the definition as `definitionDigest`.
 
-```sql
-SELECT provider, authorization_status, enabled, writer_runtime
-FROM public.provider_registry
-ORDER BY provider;
+Required definition fields:
 
-SELECT count(*) AS enabled_policy_count
-FROM public.source_policy
-WHERE enabled;
-
-SELECT count(*) AS enabled_source_count
-FROM public.career_sources
-WHERE enabled;
-
-SELECT *
-FROM public.career_source_activation_status
-WHERE enabled OR production_eligible
-ORDER BY provider, source_key;
+```text
+schemaVersion
+generatedAt
+paidCohortSnapshot: { evaluatedAt, digest, evaluatorVersion }
+profileStrata: [{ dimensions, weight }]
+sampling: { mode, deterministicSeed, sampledProfiles, totalEligibleProfiles }
+partitionRules:
+  publicationWindows
+  romeFamiliesOrOccupations
+  departmentsOrRegions
+  contractTypes
+  sourceCap
+  pageSize
+  splitOrder
+partitions:
+  partitionId
+  publicationWindow
+  romeCode
+  geography
+  contractType
+definitionDigest
 ```
 
-For the G008 census deployment, both enabled counts must be `0` and the final
-query must return no rows.
+Only allowlisted aggregate strata are permitted: contract, role family,
+seniority band, geography band and freshness window. Free-form profile fields
+are forbidden. If sampling is unnecessary, record `mode = "all"` and a null
+seed rather than omitting the decision.
 
-Inspect run evidence without raw payloads:
+### Partition execution evidence
 
-```sql
-SELECT
-  id,
-  provider,
-  career_source_id,
-  run_mode,
-  status,
-  completeness_state,
-  requests_count,
-  response_bytes,
-  duration_ms,
-  request_cost_minor,
-  request_cost_currency,
-  requested_at,
-  finished_at
-FROM public.worker_runs
-ORDER BY requested_at DESC
-LIMIT 100;
+Every partition records:
+
+```text
+partitionId
+runId
+status: completed_with_results | completed_zero_results | capped | blocked | failed
+sourceReportedTotal
+fetchedRecords
+normalizedRecords
+rejectedRecords
+actionableRecords
+requestCount
+retryCount
+cursorOrRangeHistory
+terminalReason
+startedAt
+finishedAt
 ```
 
-Absence reconciliation requires a succeeded `complete_snapshot` whose
-`complete_scope_token` exactly matches its immutable `planned_scope_token`.
-Incomplete, capped, blocked, failed, or tokenless runs cannot prove absence.
+The definition is immutable. Execution evidence may append terminal partition
+results, but cannot change cohort, weights, sampling, cap/window rules, or
+partition boundaries after results are seen.
 
-## Policy and privacy handling
+### Terminal rules
 
-- Store evidence/agreement references, never credentials or agreement bodies.
-- Keep logs and residual labels bounded and redacted.
-- Do not store CV text, target role/location, raw search terms, application
-  payloads, tokens, cookies, or unredacted provider errors.
-- `cohort_dimensions` allows only `country_code`, `subscription_tier`,
-  `experience_band`, `activity_band`, and `inventory_segment`, with primitive
-  values of at most 64 characters.
-- `hashed_user_id` is pseudonymous operational data, not anonymized data; retain
-  it only for the approved evidence window.
-- Policy expiry is evaluated at activation and in the activation-status view.
-  An expired policy cannot authorize a new source run.
+Mark a census `complete` only when:
 
-## Blocked-to-live transition
+- every frozen partition is terminal-complete;
+- no partition hit the retrievable cap;
+- every complete partition has a non-null source-reported total;
+- fetched external IDs are unique within the partition;
+- `fetchedRecords = normalizedRecords + rejectedRecords`;
+- `actionableRecords <= normalizedRecords`;
+- partition totals reconcile to the source-reported total;
+- every evidence `runId` is durably linked to `worker_runs`;
+- no credentials or user-sensitive payloads occur in evidence.
 
-G008 ends with sources disabled. A later production activation must:
+Otherwise use:
 
-1. characterize the provider against versioned fixtures;
-2. record a current approved production policy;
-3. prove the provider has exactly one canonical writer;
-4. add a least-privilege source registration/enablement RPC;
-5. run shadow/dry-run ingestion with zero `jobs` mutations;
-6. exercise provider/country rollback;
-7. enable one bounded source canary and monitor inventory/fulfillment gates.
+- `capped` for a cap hit or source-total mismatch requiring a frozen child
+  partition;
+- `blocked` for missing authorization, credentials, topology, PR1 aggregates,
+  or externally unavailable API capability;
+- `failed` for a terminal execution or accounting failure.
 
-Tenant/country switches may narrow scheduling only after the whole provider
-belongs to one runtime. They must never split canonical writes between Python
-and TypeScript.
+Never convert a capped, blocked, partial or failed result into zero. Never use
+an incomplete census to expire inventory.
+
+### Immutable artifact
+
+After every partition is terminal, create an evidence object containing the
+unchanged definition, ordered partition evidence, aggregate counts,
+`terminalState`, and `definitionDigest`. Canonicalize and SHA-256 the complete
+object as `evidenceDigest`.
+
+Persist it only through the audit app's immutable-manifest boundary. A repeated
+identical digest is idempotent; update/delete is forbidden. Export the same JSON
+under `artifacts/job-ingestion/` for review. The FT-PY versus FT-TS decision
+must cite both digests and may not redefine the cohort or partitions.
+
+## Live-run gate
+
+No live credentialed census is part of this implementation lane. When an
+authorized operator later runs the audit app:
+
+1. capture provider-registry rows and applied topology;
+2. verify every new source/policy/schedule is disabled;
+3. run dry mode first and inspect definition/partition digests;
+4. execute only the frozen manifest;
+5. persist immutable evidence after reconciliation;
+6. rerun `scripts/job-supply-observability.sql`;
+7. confirm jobs and provider-registry checksums are unchanged.
+
+If any check fails, stop and record `BLOCKED_EXTERNAL` or the terminal failure.
 
 ## Rollback
 
-The down migration is destructive and is only for an isolated test database:
+1. Stop the census/audit command; no source schedule should be active.
+2. Preserve exported definition/evidence digests for audit.
+3. Roll back only the additive G008 migration using its paired down migration.
+4. Re-run topology and provider-registry queries.
+5. Confirm writer ownership and all canonical job rows are unchanged.
+
+The paired down migration is destructive and is only for an isolated test
+database:
 
 ```bash
 psql "$TEST_JOBS_DATABASE_URL" -v ON_ERROR_STOP=1 \
   -f backend/db/migrations/20260720000400_job_supply_observability.down.sql
 ```
-
-In production, leave additive metadata in place, keep sources disabled, stop
-census/schedules, and preserve run evidence for diagnosis.
