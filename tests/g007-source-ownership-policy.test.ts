@@ -15,6 +15,13 @@ function migrationFiles(): string[] {
     .sort();
 }
 
+function stripDollarQuotedRoutineBodies(sql: string): string {
+  return sql.replace(
+    /(\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:FUNCTION|PROCEDURE)\b[\s\S]*?\bAS\s+)(\$[a-z_][a-z0-9_]*\$|\$\$)[\s\S]*?\2/gi,
+    "$1$2$2",
+  );
+}
+
 describe("G007 source ownership and policy invariants", () => {
   test("keeps every characterized ingestion and feed stage Python-owned", () => {
     const registry = JSON.parse(
@@ -71,6 +78,7 @@ describe("G007 source ownership and policy invariants", () => {
       )
       .map((name) => read(`backend/db/migrations/${name}`))
       .join("\n");
+    const applyTimeSql = stripDollarQuotedRoutineBodies(laterMigrations);
 
     expect(foundation).toMatch(
       /NOT enabled OR \(\s*authorization_status = 'authorized'\s*AND writer_runtime = 'typescript'/,
@@ -81,8 +89,27 @@ describe("G007 source ownership and policy invariants", () => {
     expect(foundation).toContain(
       "false, 'none', '{\"requestsPerMinute\":1,\"concurrency\":1}'",
     );
-    expect(laterMigrations).not.toMatch(
-      /update\s+(?:public\.)?provider_registry\s+set\s+(?:enabled|writer_runtime)/i,
+    expect(applyTimeSql).not.toMatch(
+      /(?:insert\s+into|update|delete\s+from)\s+(?:public\.)?provider_registry\b/i,
+    );
+
+    expect(laterMigrations).toMatch(
+      /CREATE OR REPLACE FUNCTION worker_private\.transition_provider_writer\([\s\S]*?SECURITY DEFINER\s+SET search_path = pg_catalog\s+AS \$\$/i,
+    );
+    expect(laterMigrations).toMatch(
+      /REVOKE ALL ON FUNCTION worker_private\.transition_provider_writer\(text, text, text, bigint\)\s+FROM PUBLIC;/i,
+    );
+
+    const transitionGrants =
+      laterMigrations.match(
+        /GRANT EXECUTE ON FUNCTION worker_private\.transition_provider_writer\([\s\S]*?;/gi,
+      ) ?? [];
+    expect(transitionGrants).toHaveLength(1);
+    expect(transitionGrants[0]).toMatch(
+      /\(\s*text, text, text, bigint\s*\)\s+TO hirly_inventory_operator;/i,
+    );
+    expect(transitionGrants[0]).not.toMatch(
+      /\b(?:PUBLIC|hirly_inventory_worker|service_role)\b/i,
     );
   });
 });
