@@ -35,7 +35,7 @@ DROP FUNCTION IF EXISTS worker_private.claim_provider_work(
 DROP FUNCTION IF EXISTS worker_private.transition_provider_writer(
   text, text, text, bigint
 );
-DROP FUNCTION IF EXISTS worker_private.require_provider_claims(text);
+DROP FUNCTION IF EXISTS worker_private.enable_provider_claim_enforcement(text);
 DROP FUNCTION IF EXISTS worker_private.provider_claim_is_current(uuid, text, text);
 DROP TRIGGER IF EXISTS jobs_claimed_provider_write_guard ON public.jobs;
 DROP FUNCTION IF EXISTS worker_private.enforce_claimed_provider_job_write();

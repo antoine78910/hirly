@@ -54,7 +54,9 @@ describe("G010 whole-provider ownership epoch migration", () => {
     expect(migration).toContain(
       "ADD COLUMN IF NOT EXISTS claims_required boolean NOT NULL DEFAULT false",
     );
-    expect(migration).toContain("worker_private.require_provider_claims");
+    expect(migration).toContain(
+      "worker_private.enable_provider_claim_enforcement",
+    );
     expect(migration).toContain("BEFORE INSERT OR UPDATE OR DELETE ON public.jobs");
     expect(migration).toContain(
       "registry.ownership_epoch = claim.ownership_epoch",

@@ -101,6 +101,18 @@ DECLARE
     ELSE NEW.provider
   END;
 BEGIN
+  IF TG_OP = 'UPDATE'
+    AND OLD.provider IS DISTINCT FROM NEW.provider
+    AND EXISTS (
+      SELECT 1
+      FROM public.provider_registry
+      WHERE provider IN (OLD.provider, NEW.provider)
+        AND claims_required
+    )
+  THEN
+    RAISE EXCEPTION 'claimed provider identity cannot be changed'
+      USING ERRCODE = '42501';
+  END IF;
   IF EXISTS (
     SELECT 1
     FROM public.provider_registry
@@ -200,7 +212,7 @@ BEGIN
   UPDATE public.provider_registry
   SET enabled = false,
       writer_runtime = p_new_runtime,
-      claims_required = claims_required OR p_new_runtime = 'none',
+      claims_required = true,
       ownership_epoch = ownership_epoch + 1,
       updated_at = clock_timestamp()
   WHERE provider = p_provider
@@ -209,7 +221,7 @@ BEGIN
 END
 $$;
 
-CREATE OR REPLACE FUNCTION worker_private.require_provider_claims(
+CREATE OR REPLACE FUNCTION worker_private.enable_provider_claim_enforcement(
   p_provider text
 )
 RETURNS public.provider_registry
@@ -756,7 +768,7 @@ REVOKE ALL ON FUNCTION worker_private.provider_claim_is_current(uuid, text, text
   FROM PUBLIC;
 REVOKE ALL ON FUNCTION worker_private.transition_provider_writer(text, text, text, bigint)
   FROM PUBLIC;
-REVOKE ALL ON FUNCTION worker_private.require_provider_claims(text)
+REVOKE ALL ON FUNCTION worker_private.enable_provider_claim_enforcement(text)
   FROM PUBLIC;
 REVOKE ALL ON FUNCTION worker_private.claim_provider_work(uuid, uuid, bigint, text, text, integer)
   FROM PUBLIC;
@@ -787,7 +799,7 @@ GRANT EXECUTE ON FUNCTION worker_private.finish_provider_work(
 GRANT EXECUTE ON FUNCTION worker_private.transition_provider_writer(
   text, text, text, bigint
 ) TO hirly_inventory_operator;
-GRANT EXECUTE ON FUNCTION worker_private.require_provider_claims(text)
+GRANT EXECUTE ON FUNCTION worker_private.enable_provider_claim_enforcement(text)
   TO hirly_inventory_operator;
 
 REVOKE ALL ON FUNCTION public.python_provider_work_claim(text, text, integer)

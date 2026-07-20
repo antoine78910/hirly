@@ -57,7 +57,8 @@ describe("G010 real-Postgres whole-provider fencing", () => {
           DELETE FROM public.jobs WHERE job_id = 'g010-pre-activation';
 
           INSERT INTO public.jobs (job_id, provider, external_id, data)
-          VALUES ('g010-other-provider', 'apec', 'g010-other-provider', '{}'::jsonb);
+          VALUES ('g010-other-provider', 'apec', 'g010-other-provider', '{}'::jsonb)
+          ON CONFLICT (job_id) DO UPDATE SET title = NULL;
 
           DO $proof$
           DECLARE
@@ -135,6 +136,20 @@ describe("G010 real-Postgres whole-provider fencing", () => {
             ) <> 1 THEN
               RAISE EXCEPTION 'claim-aware Python upsert failed';
             END IF;
+            BEGIN
+              UPDATE public.jobs
+              SET provider = 'apec'
+              WHERE job_id = v_job_id;
+              RAISE EXCEPTION 'provider identity UPDATE bypass unexpectedly succeeded';
+            EXCEPTION WHEN insufficient_privilege THEN NULL;
+            END;
+            BEGIN
+              UPDATE public.jobs
+              SET external_id = 'g010-mutated'
+              WHERE job_id = v_job_id;
+              RAISE EXCEPTION 'provider identity fields unexpectedly mutated';
+            EXCEPTION WHEN insufficient_privilege THEN NULL;
+            END;
             IF NOT public.python_provider_work_finish(
               (v_new->>'claim_id')::uuid, 'g010-new-operation'
             ) THEN
