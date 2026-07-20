@@ -71,7 +71,16 @@ export function requireBoundAtsUrl(input: {
   const parts = url.pathname
     .split("/")
     .filter(Boolean)
-    .map((part) => decodeURIComponent(part).toLowerCase());
+    .map((part) => {
+      try {
+        return decodeURIComponent(part).toLowerCase();
+      } catch {
+        throw new IngestionError(
+          "invalid_input",
+          `${input.provider} canonical URL contains an invalid encoded path`,
+        );
+      }
+    });
   const tenant = input.tenantKey.toLowerCase();
   const posting = input.postingId.toLowerCase();
   const expected =

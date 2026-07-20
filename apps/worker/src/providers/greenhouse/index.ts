@@ -91,7 +91,7 @@ export const greenhouseProvider: ProviderCore<GreenhouseRawJob> = {
     provider: "greenhouse",
     normalizeRaw(raw) {
       const parsed = greenhouseRawJobSchema.parse(raw);
-      return normalized(parsed, "fixture-tenant", "ZZ");
+      return normalized(parsed, routeTenant(parsed.absolute_url), "ZZ");
     },
   },
   transport: new DisabledProviderTransport<GreenhouseRawJob>("greenhouse"),
@@ -115,6 +115,10 @@ class GreenhouseFixtureSourceAdapter extends FixtureOnlyAtsSourceAdapter<Greenho
       atsPostingId: raw.id,
     };
   }
+}
+
+function routeTenant(value: string): string {
+  return new URL(value).pathname.split("/").filter(Boolean)[0] ?? "";
 }
 
 export function createGreenhouseFixtureSourceAdapter(

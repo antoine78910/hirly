@@ -231,6 +231,69 @@ describe("G011 disabled ATS fixture connectors", () => {
     });
   });
 
+  test("rejects hostile and cross-tenant Greenhouse canonical URLs", async () => {
+    const data = await fixture<GreenhouseRawJob>("greenhouse");
+    const entry = source("greenhouse", data.tenantKey, data.countryCodes);
+    const adapter = createGreenhouseFixtureSourceAdapter(
+      data.raw,
+      fixturePolicyId,
+    );
+    for (const absolute_url of [
+      "http://boards.greenhouse.io/vaulttec/jobs/127817",
+      "https://user:password@boards.greenhouse.io/vaulttec/jobs/127817",
+      "https://boards.greenhouse.io.evil.example/vaulttec/jobs/127817",
+      "https://boards.greenhouse.io/other/jobs/127817",
+      "https://boards.greenhouse.io/vaulttec/jobs/other",
+    ]) {
+      expect(() =>
+        adapter.normalize(
+          { ...data.raw[0], absolute_url },
+          context(entry),
+        ),
+      ).toThrow(IngestionError);
+    }
+  });
+
+  test("rejects hostile, cross-region and cross-tenant Lever routes", async () => {
+    const data = await fixture<LeverRawJob>("lever");
+    const entry = source("lever", data.tenantKey, data.countryCodes);
+    const adapter = createLeverFixtureSourceAdapter(
+      data.raw,
+      fixturePolicyId,
+    );
+    const original = data.raw[0];
+    const attacks: LeverRawJob[] = [
+      {
+        ...original,
+        hostedUrl: "http://jobs.lever.co/leverdemo/posting-001",
+      },
+      {
+        ...original,
+        applyUrl:
+          "https://user:password@jobs.lever.co/leverdemo/posting-001/apply",
+      },
+      {
+        ...original,
+        hostedUrl:
+          "https://jobs.lever.co.evil.example/leverdemo/posting-001",
+      },
+      {
+        ...original,
+        applyUrl: "https://jobs.lever.co/other/posting-001/apply",
+      },
+      {
+        ...original,
+        applyUrl:
+          "https://jobs.eu.lever.co/leverdemo/posting-001/apply",
+      },
+    ];
+    for (const attack of attacks) {
+      expect(() => adapter.normalize(attack, context(entry))).toThrow(
+        IngestionError,
+      );
+    }
+  });
+
   test("fails closed on invalid checkpoints and classifies provider errors", async () => {
     const data = await fixture<GreenhouseRawJob>("greenhouse");
     const rows = data.raw.map((raw) => greenhouseRawJobSchema.parse(raw));

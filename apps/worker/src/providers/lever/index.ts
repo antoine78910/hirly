@@ -9,8 +9,11 @@ import {
   type AtsFixtureCursor,
   type AtsFixtureScope,
 } from "../ats-fixture";
-import type { SourceAdapter, SourceContext } from "@hirly/ingestion";
-import { IngestionError } from "@hirly/ingestion";
+import {
+  IngestionError,
+  type SourceAdapter,
+  type SourceContext,
+} from "@hirly/ingestion";
 
 const optionalText = z.string().trim().min(1).nullable().optional();
 
@@ -120,7 +123,7 @@ export const leverProvider: ProviderCore<LeverRawJob> = {
     provider: "lever",
     normalizeRaw(raw) {
       const parsed = leverRawJobSchema.parse(raw);
-      return normalized(parsed, "fixture-tenant", "ZZ");
+      return normalized(parsed, routeTenant(parsed.hostedUrl), "ZZ");
     },
   },
   transport: new DisabledProviderTransport<LeverRawJob>("lever"),
@@ -144,6 +147,10 @@ class LeverFixtureSourceAdapter extends FixtureOnlyAtsSourceAdapter<LeverRawJob>
       atsPostingId: raw.id,
     };
   }
+}
+
+function routeTenant(value: string): string {
+  return new URL(value).pathname.split("/").filter(Boolean)[0] ?? "";
 }
 
 export function createLeverFixtureSourceAdapter(
