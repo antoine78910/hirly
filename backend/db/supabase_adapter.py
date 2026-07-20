@@ -1231,17 +1231,56 @@ class SupabaseCollectionAdapter(CollectionPort):
         return [_restore_document(row) for row in rows]
 
     async def insert_one(self, document: Document):
-        result = await upsert_supabase_documents(self.supabase_url or "", self.secret_key or "", self.table_name, [document])
-        if not result.get("ok"):
-            raise RuntimeError(result.get("error") or f"Supabase {self.table_name} insert failed")
-        return SupabaseWriteResult(inserted_id=_document_key(self.table_name, _json_safe(document)))
+        started_at = time.perf_counter()
+        snapshot = _metric_snapshot()
+        try:
+            result = await upsert_supabase_documents(self.supabase_url or "", self.secret_key or "", self.table_name, [document])
+            if not result.get("ok"):
+                raise RuntimeError(result.get("error") or f"Supabase {self.table_name} insert failed")
+            _emit_adapter_metric(
+                operation="insert_one",
+                table=self.table_name,
+                started_at=started_at,
+                snapshot=snapshot,
+                rows_returned=1,
+            )
+            return SupabaseWriteResult(inserted_id=_document_key(self.table_name, _json_safe(document)))
+        except Exception:
+            _emit_adapter_metric(
+                operation="insert_one",
+                table=self.table_name,
+                started_at=started_at,
+                snapshot=snapshot,
+                status="error",
+            )
+            raise
 
     async def insert_many(self, documents):
+        started_at = time.perf_counter()
+        snapshot = _metric_snapshot()
         docs = list(documents)
-        result = await upsert_supabase_documents(self.supabase_url or "", self.secret_key or "", self.table_name, docs)
-        if not result.get("ok"):
-            raise RuntimeError(result.get("error") or f"Supabase {self.table_name} insert_many failed")
-        return SupabaseWriteResult(inserted_count=result.get("rows", 0))
+        try:
+            result = await upsert_supabase_documents(self.supabase_url or "", self.secret_key or "", self.table_name, docs)
+            if not result.get("ok"):
+                raise RuntimeError(result.get("error") or f"Supabase {self.table_name} insert_many failed")
+            inserted_count = int(result.get("rows", 0))
+            _emit_adapter_metric(
+                operation="insert_many",
+                table=self.table_name,
+                started_at=started_at,
+                snapshot=snapshot,
+                rows_returned=inserted_count,
+            )
+            return SupabaseWriteResult(inserted_count=inserted_count)
+        except Exception:
+            _emit_adapter_metric(
+                operation="insert_many",
+                table=self.table_name,
+                started_at=started_at,
+                snapshot=snapshot,
+                status="error",
+            )
+            raise
 
     async def update_one(self, filter: Filter, update: Document, upsert: bool = False):
         started_at = time.perf_counter()
