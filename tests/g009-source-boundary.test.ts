@@ -189,13 +189,13 @@ describe("G009 source persistence contract", () => {
     const { migration } = sourceBoundaryMigration();
 
     expect(migration).toMatch(
-      /raw_job_snapshots_source_external_hash_unique[\s\S]*UNIQUE\s*\(\s*source_id\s*,\s*external_id\s*,\s*content_hash\s*\)/i,
+      /raw_job_snapshots_run_source_external_hash_unique[\s\S]*UNIQUE\s*\(\s*run_id\s*,\s*source_id\s*,\s*external_id\s*,\s*content_hash\s*\)/i,
     );
     expect(migration).toMatch(
-      /source_id uuid NOT NULL REFERENCES public\.career_sources\(id\) ON DELETE RESTRICT/i,
+      /raw_job_snapshots_source_provider_fk[\s\S]*FOREIGN KEY\s*\(\s*source_id\s*,\s*provider\s*\)[\s\S]*REFERENCES public\.career_sources\s*\(\s*id\s*,\s*provider\s*\)/i,
     );
     expect(migration).toMatch(
-      /run_id uuid NOT NULL REFERENCES public\.worker_runs\(id\) ON DELETE RESTRICT/i,
+      /raw_job_snapshots_run_source_provider_fk[\s\S]*FOREIGN KEY\s*\(\s*run_id\s*,\s*source_id\s*,\s*provider\s*\)[\s\S]*REFERENCES public\.worker_runs\s*\(\s*id\s*,\s*career_source_id\s*,\s*provider\s*\)/i,
     );
     expect(migration).toMatch(
       /raw_job_snapshots_immutable[\s\S]*BEFORE UPDATE OR DELETE ON public\.raw_job_snapshots/i,
@@ -212,10 +212,7 @@ describe("G009 source persistence contract", () => {
       /job_occurrences_source_external_unique UNIQUE\s*\(\s*source_id\s*,\s*external_id\s*\)/i,
     );
     expect(migration).toMatch(
-      /raw_snapshot_id uuid NOT NULL REFERENCES public\.raw_job_snapshots\(id\) ON DELETE RESTRICT/i,
-    );
-    expect(migration).toMatch(
-      /UNIQUE\s*\(\s*id\s*,\s*source_id\s*,\s*external_id\s*\)[\s\S]*FOREIGN KEY\s*\(\s*raw_snapshot_id\s*,\s*source_id\s*,\s*external_id\s*\)\s*REFERENCES public\.raw_job_snapshots\s*\(\s*id\s*,\s*source_id\s*,\s*external_id\s*\)/i,
+      /raw_job_snapshots_identity_unique[\s\S]*UNIQUE\s*\(\s*id\s*,\s*source_id\s*,\s*external_id\s*,\s*content_hash\s*\)[\s\S]*job_occurrences_snapshot_identity_fk[\s\S]*FOREIGN KEY\s*\(\s*raw_snapshot_id\s*,\s*source_id\s*,\s*external_id\s*,\s*content_hash\s*\)\s*REFERENCES public\.raw_job_snapshots\s*\(\s*id\s*,\s*source_id\s*,\s*external_id\s*,\s*content_hash\s*\)/i,
     );
     expect(migration).not.toMatch(
       /\b(?:DROP|RENAME)\s+(?:COLUMN\s+)?(?:public\.)?jobs?\b|\bALTER\s+COLUMN\s+job_id\b/i,
