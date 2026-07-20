@@ -1736,6 +1736,13 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
             },
         )
 
+    async def mark_all_notifications_read(self, user_id: str, *, limit: int = 500) -> int:
+        result = await self._python_ingestion_rpc(
+            "mark_all_notifications_read",
+            {"p_user_id": user_id, "p_limit": min(max(limit, 1), 500)},
+        )
+        return int(result or 0)
+
     async def _python_provider_rpc(self, function_name: str, payload: Dict[str, Any]) -> Any:
         adapter = self._jobs_inventory_rpc_adapter
         return await adapter._python_ingestion_rpc(function_name, payload)
