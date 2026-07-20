@@ -1,4 +1,5 @@
-import { readFile, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "bun:test";
 import type { SourceRegistryEntry } from "../packages/contracts/src";
 import {
@@ -110,10 +111,22 @@ describe("G012 composed delivery", () => {
       bpcePages[0]!,
       context(bpceSource),
     );
-    const canonicalJobs = [
-      toCanonicalJob(cspOccurrence.job, now),
-      toCanonicalJob(bpceOccurrence.job, now),
+    const occurrences = [
+      cspOccurrence,
+      csp.normalize(cspFixture.initialSnapshot[0]!, context(cspSource)),
+      bpceOccurrence,
+      bpce.normalize(bpcePages[0]!, context(bpceSource)),
     ];
+    const deduplicated = new Map(
+      occurrences.map((occurrence) => [
+        `${occurrence.job.envelope.provider}:${occurrence.externalId}`,
+        occurrence,
+      ]),
+    );
+    expect(deduplicated.size).toBe(2);
+    const canonicalJobs = [...deduplicated.values()].map((occurrence) =>
+      toCanonicalJob(occurrence.job, now),
+    );
 
     expect(new Set(canonicalJobs.map((job) => job.jobId)).size).toBe(2);
     for (const job of canonicalJobs) {
@@ -145,6 +158,7 @@ describe("G012 composed delivery", () => {
         ),
       ),
     ) as Array<{
+      sourceKey: string;
       qualificationStatus: string;
       productionEligible: boolean;
     }>;
@@ -153,10 +167,16 @@ describe("G012 composed delivery", () => {
       evidence.every((item) => item.qualificationStatus !== "approved"),
     ).toBeTrue();
 
+    const actualEvidence = evidence[0]!;
     const qualification = qualifyDataGouvDataset({
-      datasetId: "dataset",
+      datasetId: actualEvidence.sourceKey,
       resourceId: "resource",
-      discovery: { keywordOnly: true, evidenceRef: "catalogue-only" },
+      discovery: {
+        keywordOnly:
+          actualEvidence.qualificationStatus !== "approved",
+        evidenceRef:
+          "artifacts/job-ingestion/source-policy/choisir-le-service-public.json",
+      },
       freshness: {
         resourceUpdatedAt: now.toISOString(),
         evaluatedAt: now.toISOString(),
@@ -165,10 +185,11 @@ describe("G012 composed delivery", () => {
       },
       licence: {
         name: "",
-        evidenceRef: "",
-        commercialUseAllowed: false,
-        redisplayAllowed: false,
-        fullTextRetentionAllowed: false,
+        evidenceRef:
+          "artifacts/job-ingestion/source-policy/choisir-le-service-public.json",
+        commercialUseAllowed: actualEvidence.productionEligible,
+        redisplayAllowed: actualEvidence.productionEligible,
+        fullTextRetentionAllowed: actualEvidence.productionEligible,
         attributionText: "",
       },
       identity: {
@@ -204,7 +225,7 @@ describe("G012 composed delivery", () => {
           writerRuntime: "none",
           providerCountryKillSwitches: {},
           sourceCountryKillSwitches: {},
-          source: source("dataset", "resource"),
+          source: source(actualEvidence.sourceKey, "resource"),
           policy: {
             approvalStatus: "unverified",
             enabled: false,

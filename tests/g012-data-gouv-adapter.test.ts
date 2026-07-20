@@ -257,6 +257,19 @@ describe("G012 generic data.gouv fixture boundary", () => {
         // Source/resource binding is checked before page emission.
       }
     }).toThrow("match the bound resource and policy");
+    await expect(async () => {
+      for await (const _page of sourceAdapter.discover({
+        source: {
+          ...source(),
+          policyId: "00000000-0000-4000-8000-000000000099",
+        },
+        mode: "full",
+        cursor: null,
+        signal: new AbortController().signal,
+      })) {
+        // Policy binding is checked before page emission.
+      }
+    }).toThrow("match the bound resource and policy");
     expect(() =>
       sourceAdapter.normalize(
         {
