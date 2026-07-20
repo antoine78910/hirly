@@ -38,6 +38,7 @@ describe("main production release workflow", () => {
 
   test("stages Vercel before promotion", () => {
     expect(workflow).toContain("--skip-domain");
+    expect(workflow).toContain("vercel@56.4.0 curl /");
     expect(workflow).toContain('vercel@56.4.0 promote "$DEPLOYMENT_URL"');
     expect(workflow.indexOf("--skip-domain")).toBeLessThan(
       workflow.indexOf('vercel@56.4.0 promote "$DEPLOYMENT_URL"'),

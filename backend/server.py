@@ -51,6 +51,23 @@ try:
 except ImportError:
     _OTEL_AVAILABLE = False
 
+try:
+    from opentelemetry._logs import set_logger_provider as _otel_set_logger_provider
+    from opentelemetry.exporter.otlp.proto.http._log_exporter import (
+        OTLPLogExporter as _OtelLogExporter,
+    )
+    from opentelemetry.sdk._logs import (
+        LoggerProvider as _OtelLoggerProvider,
+        LoggingHandler as _OtelLoggingHandler,
+    )
+    from opentelemetry.sdk._logs.export import (
+        BatchLogRecordProcessor as _OtelBatchLogRecordProcessor,
+    )
+    from opentelemetry.sdk.resources import Resource as _OtelLogResource
+    _POSTHOG_LOGS_AVAILABLE = True
+except ImportError:
+    _POSTHOG_LOGS_AVAILABLE = False
+
 # Optional file parsing libs
 from pypdf import PdfReader
 import docx as docx_lib
@@ -296,12 +313,146 @@ _application_generation_locks: Dict[str, asyncio.Lock] = {}
 _application_generation_tasks: Dict[str, asyncio.Task] = {}
 
 _posthog_client: Optional[Posthog] = None
+_posthog_log_provider: Optional[Any] = None
+_posthog_log_handler: Optional[logging.Handler] = None
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+
+def _posthog_base_url(host: Optional[str] = None) -> Optional[str]:
+    configured_host = (
+        host if host is not None else os.environ.get("POSTHOG_HOST", "")
+    ).strip()
+    if not configured_host:
+        return None
+    try:
+        parsed = urlparse(configured_host)
+        port = parsed.port
+    except ValueError:
+        return None
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or port is not None
+        or parsed.username
+        or parsed.password
+        or parsed.query
+        or parsed.fragment
+        or parsed.path.rstrip("/")
+    ):
+        return None
+    hostname = parsed.hostname.lower()
+    configured_hosts = {
+        item.strip().lower()
+        for item in os.environ.get("POSTHOG_ALLOWED_HOSTS", "").split(",")
+        if item.strip()
+    }
+    if (
+        hostname not in {"us.i.posthog.com", "eu.i.posthog.com"}
+        and hostname not in configured_hosts
+    ):
+        return None
+    return f"https://{hostname}"
+
+
+def _posthog_capture_url() -> Optional[str]:
+    base_url = _posthog_base_url()
+    return f"{base_url}/capture/" if base_url else None
+
+
+def _posthog_logs_endpoint() -> Optional[str]:
+    base_url = _posthog_base_url()
+    return f"{base_url}/i/v1/logs" if base_url else None
+
+
+def _posthog_server_capture_configured() -> bool:
+    return bool(
+        os.environ.get("POSTHOG_SERVER_API_KEY", "").strip()
+        and _posthog_base_url()
+    )
+
+
+def _build_posthog_client(api_key: str, host: str):
+    return Posthog(
+        api_key,
+        host=host,
+        enable_exception_autocapture=True,
+    )
+
+
+def _configure_posthog_logs(api_key: str, endpoint: str) -> bool:
+    global _posthog_log_handler, _posthog_log_provider
+    if not _POSTHOG_LOGS_AVAILABLE:
+        logger.warning("posthog_logs_unavailable reason=missing_otel_dependency")
+        return False
+    if _posthog_log_provider is not None:
+        return True
+
+    try:
+        provider = _OtelLoggerProvider(
+            resource=_OtelLogResource(attributes={"service.name": "hirly-backend"})
+        )
+        exporter = _OtelLogExporter(
+            endpoint=endpoint,
+            headers={"Authorization": f"Bearer {api_key}"},
+        )
+        provider.add_log_record_processor(_OtelBatchLogRecordProcessor(exporter))
+        handler = _OtelLoggingHandler(logger_provider=provider)
+        _otel_set_logger_provider(provider)
+        logging.getLogger().addHandler(handler)
+    except Exception as setup_error:
+        logger.warning(
+            "posthog_logs_initialization_failed error=%s",
+            type(setup_error).__name__,
+        )
+        return False
+    _posthog_log_provider = provider
+    _posthog_log_handler = handler
+    return True
+
+
+def _shutdown_posthog_logs() -> None:
+    global _posthog_log_handler, _posthog_log_provider
+    if _posthog_log_handler is not None:
+        logging.getLogger().removeHandler(_posthog_log_handler)
+        _posthog_log_handler = None
+    if _posthog_log_provider is not None:
+        _posthog_log_provider.shutdown()
+        _posthog_log_provider = None
+
+
+def _capture_posthog_exception(exception: BaseException) -> Optional[str]:
+    if _posthog_client is None:
+        return None
+    try:
+        return _posthog_client.capture_exception(exception)
+    except Exception as capture_error:
+        logger.warning(
+            "posthog_exception_capture_failed error=%s",
+            type(capture_error).__name__,
+        )
+        return None
+
+
+@app.exception_handler(Exception)
+async def _posthog_unhandled_exception_handler(
+    _request: Request,
+    exception: Exception,
+) -> JSONResponse:
+    _capture_posthog_exception(exception)
+    logger.error(
+        "unhandled_request_exception error=%s",
+        type(exception).__name__,
+        exc_info=(type(exception), exception, exception.__traceback__),
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+    )
 
 _ANALYTICS_REGISTRY_PATH = (
     Path(__file__).resolve().parents[1]
@@ -17630,6 +17781,12 @@ async def startup_seed():
         _posthog_client = _build_posthog_client(_ph_api_key, _ph_host)
         atexit.register(_posthog_client.shutdown)
         logger.info("posthog_client_initialized host=%s", _ph_host)
+        _ph_logs_endpoint = _posthog_logs_endpoint()
+        if _ph_logs_endpoint and _configure_posthog_logs(
+            _ph_api_key,
+            _ph_logs_endpoint,
+        ):
+            logger.info("posthog_logs_initialized")
         if _OTEL_AVAILABLE:
             _otel_provider = _OtelTracerProvider(
                 resource=_OtelResource(attributes={_OTEL_SERVICE_NAME: "hirly-backend"})
@@ -17688,6 +17845,7 @@ async def shutdown_db_client():
     global _supabase_auth_http_client
     if _posthog_client is not None:
         _posthog_client.flush()
+    _shutdown_posthog_logs()
     if _supabase_auth_http_client is not None and not _supabase_auth_http_client.is_closed:
         await _supabase_auth_http_client.aclose()
     _supabase_auth_http_client = None

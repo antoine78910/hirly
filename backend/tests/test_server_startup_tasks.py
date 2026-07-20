@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from importlib.metadata import version
 from pathlib import Path
 
@@ -12,6 +13,10 @@ def test_observability_dependencies_are_release_pinned_and_importable():
     expected = {
         "posthog": ("posthog[otel]", "7.27.0"),
         "opentelemetry-sdk": ("opentelemetry-sdk", "1.44.0"),
+        "opentelemetry-exporter-otlp-proto-http": (
+            "opentelemetry-exporter-otlp-proto-http",
+            "1.44.0",
+        ),
         "opentelemetry-instrumentation-openai-v2": (
             "opentelemetry-instrumentation-openai-v2",
             "2.4b0",
@@ -54,6 +59,105 @@ def test_posthog_client_uses_7x_positional_project_key(monkeypatch):
             "enable_exception_autocapture": True,
         },
     }
+
+
+def test_posthog_logs_endpoint_uses_validated_ingestion_host(monkeypatch):
+    monkeypatch.setenv("POSTHOG_HOST", "https://eu.i.posthog.com")
+    monkeypatch.delenv("POSTHOG_ALLOWED_HOSTS", raising=False)
+    assert server._posthog_logs_endpoint() == "https://eu.i.posthog.com/i/v1/logs"
+
+    monkeypatch.setenv("POSTHOG_HOST", "https://analytics.tryhirly.com")
+    monkeypatch.setenv("POSTHOG_ALLOWED_HOSTS", "analytics.tryhirly.com")
+    assert server._posthog_logs_endpoint() == "https://analytics.tryhirly.com/i/v1/logs"
+
+    monkeypatch.setenv("POSTHOG_HOST", "https://collector.invalid")
+    monkeypatch.delenv("POSTHOG_ALLOWED_HOSTS", raising=False)
+    assert server._posthog_logs_endpoint() is None
+
+
+def test_posthog_logs_configures_root_otel_handler(monkeypatch):
+    calls = {}
+
+    class FakeProvider:
+        def __init__(self, *, resource):
+            calls["resource"] = resource
+
+        def add_log_record_processor(self, processor):
+            calls["processor"] = processor
+
+    class FakeExporter:
+        def __init__(self, **kwargs):
+            calls["exporter_kwargs"] = kwargs
+
+    class FakeProcessor:
+        def __init__(self, exporter):
+            calls["exporter"] = exporter
+
+    class FakeHandler(logging.Handler):
+        def __init__(self, *, logger_provider):
+            super().__init__()
+            calls["handler_provider"] = logger_provider
+
+    monkeypatch.setattr(server, "_POSTHOG_LOGS_AVAILABLE", True)
+    monkeypatch.setattr(server, "_OtelLoggerProvider", FakeProvider)
+    monkeypatch.setattr(server, "_OtelLogExporter", FakeExporter)
+    monkeypatch.setattr(server, "_OtelBatchLogRecordProcessor", FakeProcessor)
+    monkeypatch.setattr(server, "_OtelLoggingHandler", FakeHandler)
+    monkeypatch.setattr(server, "_OtelLogResource", lambda **kwargs: kwargs)
+    monkeypatch.setattr(server, "_otel_set_logger_provider", lambda provider: calls.setdefault("provider", provider))
+    monkeypatch.setattr(server, "_posthog_log_provider", None)
+    monkeypatch.setattr(server, "_posthog_log_handler", None)
+
+    root_logger = logging.getLogger()
+    original_handlers = list(root_logger.handlers)
+    try:
+        assert server._configure_posthog_logs(
+            "phc_test",
+            "https://eu.i.posthog.com/i/v1/logs",
+        )
+        assert calls["exporter_kwargs"] == {
+            "endpoint": "https://eu.i.posthog.com/i/v1/logs",
+            "headers": {"Authorization": "Bearer phc_test"},
+        }
+        assert calls["provider"] is calls["handler_provider"]
+        assert server._posthog_log_handler in root_logger.handlers
+    finally:
+        for handler in root_logger.handlers:
+            if handler not in original_handlers:
+                root_logger.removeHandler(handler)
+
+
+def test_posthog_exception_capture_is_non_blocking(monkeypatch):
+    captured = []
+
+    class FakePosthog:
+        def capture_exception(self, exception):
+            captured.append(exception)
+            return "error-id"
+
+    error = RuntimeError("boom")
+    monkeypatch.setattr(server, "_posthog_client", FakePosthog())
+    assert server._capture_posthog_exception(error) == "error-id"
+    assert captured == [error]
+
+    class BrokenPosthog:
+        def capture_exception(self, _exception):
+            raise RuntimeError("vendor unavailable")
+
+    monkeypatch.setattr(server, "_posthog_client", BrokenPosthog())
+    assert server._capture_posthog_exception(error) is None
+
+
+def test_fastapi_unhandled_exception_handler_captures_and_returns_generic_500(monkeypatch):
+    captured = []
+    error = RuntimeError("sensitive internal detail")
+    monkeypatch.setattr(server, "_capture_posthog_exception", captured.append)
+
+    response = asyncio.run(server._posthog_unhandled_exception_handler(None, error))
+
+    assert captured == [error]
+    assert response.status_code == 500
+    assert response.body == b'{"detail":"Internal server error"}'
 
 
 def test_startup_task_is_retained_until_completion():

@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'production-release' || format('ci-{0}', github.ref) }}
-  cancel-in-progress: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+  cancel-in-progress: ${{ github.event_name != 'push' || github.ref != 'refs/heads/main' }}
 
 jobs:
   bun-workspaces:
@@ -219,7 +219,17 @@ jobs:
       - name: Verify the staged frontend
         env:
           DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
-        run: curl --fail --show-error --silent --retry 5 --retry-all-errors "$DEPLOYMENT_URL/" >/dev/null
+        run: >-
+          npx --yes vercel@56.4.0 curl /
+          --deployment "$DEPLOYMENT_URL"
+          --yes
+          --token "$VERCEL_TOKEN"
+          --
+          --fail
+          --show-error
+          --silent
+          --retry 5
+          --retry-all-errors
       - name: Promote the verified frontend
         env:
           DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
