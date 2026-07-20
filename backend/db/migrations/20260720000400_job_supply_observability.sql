@@ -378,10 +378,10 @@ CREATE TABLE IF NOT EXISTS public.paid_user_source_contributions (
 
 CREATE TABLE IF NOT EXISTS public.france_travail_census_manifests (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  coverage_run_id uuid NOT NULL REFERENCES public.worker_runs(id) ON DELETE RESTRICT,
   schema_version integer NOT NULL CHECK (schema_version > 0),
   manifest_digest text NOT NULL UNIQUE CHECK (manifest_digest ~ '^[a-f0-9]{64}$'),
   generated_at timestamptz NOT NULL,
+  source_run_ids uuid[] NOT NULL CHECK (cardinality(source_run_ids) > 0),
   partition_count integer NOT NULL CHECK (partition_count > 0),
   terminal_state text NOT NULL CHECK (
     terminal_state IN ('complete', 'capped', 'blocked', 'failed')
