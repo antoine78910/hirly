@@ -8,6 +8,7 @@
   ],
   "scripts": {
     "audit:job-ingestion": "bun run --cwd apps/job-ingestion-audit audit",
+    "verify:job-supply-release": "node scripts/verify-job-supply-release.mjs",
     "format": "bun run --workspaces --if-present format",
     "lint": "bun run --workspaces --if-present lint",
     "typecheck": "bun run --workspaces --if-present typecheck",
