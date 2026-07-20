@@ -10,6 +10,7 @@ from db.supabase_adapter import (
     _http_get_with_retries,
     _postgrest_filter_params,
     database_journey,
+    upsert_supabase_documents,
 )
 
 
@@ -203,3 +204,37 @@ def test_bulk_update_characterizes_one_update_per_matched_document(monkeypatch):
         {"event_id": "evt_1"},
         {"event_id": "evt_2"},
     ]
+
+
+def test_insert_many_can_atomically_ignore_conflicts_without_changing_default(monkeypatch):
+    prefers = []
+
+    class _Client:
+        async def post(self, *_args, **kwargs):
+            prefers.append(kwargs["headers"]["Prefer"])
+            return _Response([])
+
+    monkeypatch.setattr(adapter, "_get_shared_http_client", lambda *_args, **_kwargs: _Client())
+    document = {"event_id": "evt_1", "event": "landing_view"}
+
+    ignored = asyncio.run(
+        upsert_supabase_documents(
+            "https://example.supabase.co",
+            "secret",
+            "analytics_events",
+            [document],
+            ignore_duplicates=True,
+        )
+    )
+    merged = asyncio.run(
+        upsert_supabase_documents(
+            "https://example.supabase.co",
+            "secret",
+            "analytics_events",
+            [document],
+        )
+    )
+
+    assert ignored["ok"] is True
+    assert merged["ok"] is True
+    assert prefers == ["resolution=ignore-duplicates", "resolution=merge-duplicates"]

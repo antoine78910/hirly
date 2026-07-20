@@ -1780,18 +1780,9 @@ async def track_analytics_events(
     if payload_size > 64 * 1024:
         raise HTTPException(status_code=413, detail="analytics batch too large")
     try:
-        # Make deterministic batch replay insert-ignore: never allow a later
-        # payload to overwrite the first canonical event document.
         accepted_event_ids = [item.event_id or doc["event_id"] for item, doc in zip(body.events, documents)]
-        existing_ids = set()
-        finder = getattr(db.analytics_events, "find", None)
-        if finder is not None:
-            existing_rows = await finder({"event_id": {"$in": [doc["event_id"] for doc in documents]}}).to_list(len(documents))
-            existing_ids = {str(row.get("event_id")) for row in existing_rows}
-        documents = [doc for doc in documents if str(doc["event_id"]) not in existing_ids]
         with database_journey("landing"):
-            if documents:
-                await db.analytics_events.insert_many(documents)
+            await db.analytics_events.insert_many(documents, ignore_duplicates=True)
     except Exception as exc:
         logger.warning("analytics_batch_store_failed batch=%s error=%s", body.batch_id[:32], str(exc)[:200])
         return {"ok": False, "stored": False, "accepted_event_ids": []}

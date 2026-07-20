@@ -1285,12 +1285,18 @@ class SupabaseCollectionAdapter(CollectionPort):
             )
             raise
 
-    async def insert_many(self, documents):
+    async def insert_many(self, documents, *, ignore_duplicates: bool = False):
         started_at = time.perf_counter()
         snapshot = _metric_snapshot()
         docs = list(documents)
         try:
-            result = await upsert_supabase_documents(self.supabase_url or "", self.secret_key or "", self.table_name, docs)
+            result = await upsert_supabase_documents(
+                self.supabase_url or "",
+                self.secret_key or "",
+                self.table_name,
+                docs,
+                ignore_duplicates=ignore_duplicates,
+            )
             if not result.get("ok"):
                 raise RuntimeError(result.get("error") or f"Supabase {self.table_name} insert_many failed")
             inserted_count = int(result.get("rows", 0))
@@ -1869,8 +1875,10 @@ async def upsert_supabase_documents(
     table: str,
     documents: List[Document],
     timeout: float = 30.0,
+    *,
+    ignore_duplicates: bool = False,
 ) -> Dict[str, Any]:
-    """Upsert application documents into Supabase jsonb-backed tables."""
+    """Insert application documents, merging conflicts unless explicitly ignored."""
     if table not in MIGRATED_TABLES:
         raise ValueError(f"Unsupported Supabase migration table: {table}")
     if not documents:
@@ -1884,7 +1892,7 @@ async def upsert_supabase_documents(
     headers = {
         **_supabase_headers(secret_key),
         "Content-Type": "application/json",
-        "Prefer": "resolution=merge-duplicates",
+        "Prefer": f"resolution={'ignore' if ignore_duplicates else 'merge'}-duplicates",
     }
     try:
         client = _get_shared_http_client(timeout=timeout)
