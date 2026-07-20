@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "source-policy-evidence.v1",
+  "sourceKey": "data-gouv-generic",
+  "displayName": "Generic data.gouv employment datasets",
+  "qualificationStatus": "dataset_specific_evidence_required",
+  "productionEligible": false,
+  "capturedAt": "2026-07-20T00:00:00.000Z",
+  "approvedPlanStatement": "Only explicit, compatible licences",
+  "evidence": [
+    {
+      "kind": "catalogue",
+      "url": "https://www.data.gouv.fr/datasets/catalogue-des-donnees-de-data-gouv-fr"
+    },
+    {
+      "kind": "licence_text",
+      "url": "https://github.com/etalab/licence-ouverte/blob/master/LO.md"
+    }
+  ],
+  "unresolvedRights": [
+    "dataset-specific commercial use by a paid consumer product",
+    "dataset-specific listing and full-text redisplay",
+    "dataset-specific raw payload and description retention",
+    "dataset-specific canonical apply linking",
+    "dataset-specific attribution wording",
+    "dataset-specific permitted resource access method",
+    "dataset-specific update and removal obligations",
+    "dataset-specific termination and retention"
+  ],
+  "activationConstraints": [
+    "Catalogue membership is not rights evidence.",
+    "Each dataset and resource requires its own immutable evidence record.",
+    "Live transport and canonical writes remain disabled until qualification completes."
+  ]
+}
