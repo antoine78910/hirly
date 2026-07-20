@@ -20,6 +20,27 @@ export const eventSchema = z
     triggerSource: z.string().optional(),
     attempt: z.number().int().positive().optional(),
     maxAttempts: z.number().int().positive().optional(),
+    durationsMs: z
+      .object({
+        queueWait: z.number().nonnegative(),
+        fetch: z.number().nonnegative(),
+        normalization: z.number().nonnegative(),
+        validation: z.number().nonnegative(),
+        database: z.number().nonnegative(),
+        total: z.number().nonnegative(),
+      })
+      .strict()
+      .optional(),
+    counts: z
+      .object({
+        fetched: z.number().int().nonnegative(),
+        accepted: z.number().int().nonnegative(),
+        rejected: z.number().int().nonnegative(),
+        deduplicated: z.number().int().nonnegative(),
+        upserted: z.number().int().nonnegative(),
+      })
+      .strict()
+      .optional(),
     outcome: z.string().optional(),
     reasonCode: z.string().optional(),
     details: z.record(z.string(), z.unknown()).optional(),

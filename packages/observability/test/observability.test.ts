@@ -29,6 +29,21 @@ describe("structured observability", () => {
       taskId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
       attempt: 1,
       maxAttempts: 5,
+      durationsMs: {
+        queueWait: 2,
+        fetch: 3,
+        normalization: 4,
+        validation: 5,
+        database: 6,
+        total: 20,
+      },
+      counts: {
+        fetched: 3,
+        accepted: 2,
+        rejected: 1,
+        deduplicated: 0,
+        upserted: 2,
+      },
       outcome: "succeeded",
     });
     expect(JSON.parse(line).event).toBe("task.completed");
