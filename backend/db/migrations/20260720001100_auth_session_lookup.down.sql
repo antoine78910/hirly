@@ -1,4 +1,10 @@
-REVOKE ALL ON FUNCTION public.resolve_auth_session(text) FROM service_role;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
+    REVOKE ALL ON FUNCTION public.resolve_auth_session(text) FROM service_role;
+  END IF;
+END
+$$;
 DROP FUNCTION IF EXISTS public.resolve_auth_session(text);
 DROP TRIGGER IF EXISTS trg_sync_user_promoted_auth_fields ON public.users;
 DROP FUNCTION IF EXISTS public.sync_user_promoted_auth_fields();

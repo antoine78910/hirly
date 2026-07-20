@@ -2,6 +2,7 @@ import asyncio
 from types import SimpleNamespace
 
 import server
+from db import supabase_adapter
 
 
 class _Collection:
@@ -102,3 +103,21 @@ def test_joined_auth_lookup_uses_one_database_operation_and_reissues_cookie(monk
     assert cookies == ["cookie-token"]
     assert user.user_id == "user_1"
     assert user._auth_flags["is_training_creator"] is True
+
+
+def test_user_stripe_identity_is_promoted_for_indexed_lookup():
+    row = supabase_adapter._supabase_row(
+        "users",
+        {
+            "user_id": "user_1",
+            "email": "person@example.com",
+            "billing": {
+                "stripe_customer_id": "cus_123",
+                "stripe_subscription_id": "sub_123",
+            },
+        },
+    )
+
+    assert row["stripe_customer_id"] == "cus_123"
+    assert row["stripe_subscription_id"] == "sub_123"
+    assert "stripe_customer_id" in supabase_adapter.TABLE_FILTER_COLUMNS["users"]

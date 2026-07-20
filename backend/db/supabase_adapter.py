@@ -90,7 +90,14 @@ TABLE_PRIMARY_KEYS = {
     "creator_applications": "creator_application_id",
 }
 TABLE_FILTER_COLUMNS = {
-    "users": {"user_id", "email", "name", "created_at"},
+    "users": {
+        "user_id",
+        "email",
+        "name",
+        "created_at",
+        "stripe_customer_id",
+        "stripe_subscription_id",
+    },
     "user_sessions": {"session_token", "user_id", "expires_at", "created_at"},
     "jobs": {
         "job_id",
@@ -475,11 +482,14 @@ def _document_key(table: str, doc: Document) -> str:
 def _supabase_row(table: str, document: Document) -> Dict[str, Any]:
     doc = _json_safe(document)
     if table == "users":
+        billing = doc.get("billing") if isinstance(doc.get("billing"), dict) else {}
         return {
             "user_id": _document_key(table, doc),
             "email": doc.get("email"),
             "name": doc.get("name"),
             "created_at": doc.get("created_at"),
+            "stripe_customer_id": billing.get("stripe_customer_id"),
+            "stripe_subscription_id": billing.get("stripe_subscription_id"),
             "data": doc,
         }
     if table == "user_sessions":
