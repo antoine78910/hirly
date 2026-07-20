@@ -23,6 +23,8 @@ inventory AS (
     coalesce(nullif(job.fingerprint, ''), job.job_id) AS unique_key,
     lower(coalesce(job.provider, '')) AS provider,
     lower(coalesce(job.ats_provider, 'unknown')) AS ats_provider,
+    job.title,
+    job.normalized_title,
     job.selected_apply_url,
     job.validation_status,
     job.validation_checked_at,
@@ -142,10 +144,89 @@ provider_counts AS (
   FROM bucketed
   WHERE runtime_ready
   GROUP BY provider
+),
+paid_profiles AS (
+  SELECT
+    users.user_id,
+    CASE
+      WHEN jsonb_typeof(profiles.data -> 'target_roles') = 'array'
+        THEN profiles.data -> 'target_roles'
+      WHEN nullif(btrim(profiles.target_role), '') IS NOT NULL
+        THEN jsonb_build_array(profiles.target_role)
+      WHEN nullif(btrim(profiles.data ->> 'target_role'), '') IS NOT NULL
+        THEN jsonb_build_array(profiles.data ->> 'target_role')
+      ELSE '[]'::jsonb
+    END AS target_roles
+  FROM public.users AS users
+  JOIN public.profiles AS profiles USING (user_id)
+  WHERE lower(coalesce(users.data #>> '{billing,subscription_status}', ''))
+    IN ('active', 'trialing')
+),
+paid_role_tokens AS (
+  SELECT DISTINCT
+    paid_profiles.user_id,
+    role_token.token
+  FROM paid_profiles
+  CROSS JOIN LATERAL jsonb_array_elements_text(paid_profiles.target_roles)
+    AS target_role(value)
+  CROSS JOIN LATERAL regexp_split_to_table(
+    lower(target_role.value),
+    '[^[:alnum:]+#.-]+'
+  ) AS role_token(token)
+  WHERE length(role_token.token) >= 3
+    AND role_token.token NOT IN (
+      'and', 'avec', 'dans', 'des', 'for', 'les', 'pour', 'the'
+    )
+),
+evaluated_paid_users AS (
+  SELECT DISTINCT user_id
+  FROM paid_role_tokens
+),
+paid_user_matches AS (
+  SELECT DISTINCT
+    paid_role_tokens.user_id,
+    bucketed.unique_key
+  FROM paid_role_tokens
+  JOIN bucketed
+    ON bucketed.runtime_ready
+   AND lower(coalesce(bucketed.normalized_title, bucketed.title, ''))
+      LIKE '%' || paid_role_tokens.token || '%'
+),
+paid_user_counts AS (
+  SELECT
+    evaluated_paid_users.user_id,
+    count(paid_user_matches.unique_key)::bigint AS runtime_ready_jobs
+  FROM evaluated_paid_users
+  LEFT JOIN paid_user_matches USING (user_id)
+  GROUP BY evaluated_paid_users.user_id
+),
+paid_user_coverage AS (
+  SELECT
+    count(*)::bigint AS evaluated_paid_users,
+    count(*) FILTER (WHERE runtime_ready_jobs = 0)::bigint AS exhausted_paid_users,
+    coalesce(
+      percentile_disc(0.1) WITHIN GROUP (ORDER BY runtime_ready_jobs),
+      0
+    )::bigint AS p10,
+    coalesce(
+      percentile_disc(0.5) WITHIN GROUP (ORDER BY runtime_ready_jobs),
+      0
+    )::bigint AS p50,
+    coalesce(
+      percentile_disc(0.9) WITHIN GROUP (ORDER BY runtime_ready_jobs),
+      0
+    )::bigint AS p90
+  FROM paid_user_counts
 )
 SELECT jsonb_build_object(
-  'status', 'BLOCKED_EXTERNAL',
-  'blockerReason', 'paid_user_auto_applicable_coverage_not_yet_measured',
+  'status', CASE
+    WHEN paid_user_coverage.evaluated_paid_users > 0 THEN 'COMPLETE'
+    ELSE 'BLOCKED_EXTERNAL'
+  END,
+  'blockerReason', CASE
+    WHEN paid_user_coverage.evaluated_paid_users > 0 THEN NULL
+    ELSE 'paid_user_role_cohort_unavailable'
+  END,
   'sample', false,
   'generatedAt', parameters.generated_at,
   'freshnessCutoff', parameters.freshness_cutoff,
@@ -173,13 +254,21 @@ SELECT jsonb_build_object(
       'direct_manual_only', coalesce((SELECT count FROM failure_counts WHERE route_bucket = 'direct_manual_only'), 0)
     ),
   'paidUserCoverage', jsonb_build_object(
-    'status', 'BLOCKED_EXTERNAL',
-    'evaluatedPaidUsers', 0,
-    'exhaustedPaidUsers', 0,
-    'p10', 0,
-    'p50', 0,
-    'p90', 0
+    'evaluatedPaidUsers', paid_user_coverage.evaluated_paid_users,
+    'exhaustedPaidUsers', paid_user_coverage.exhausted_paid_users,
+    'p10', paid_user_coverage.p10,
+    'p50', paid_user_coverage.p50,
+    'p90', paid_user_coverage.p90
   )
 )
 FROM bucketed
-CROSS JOIN parameters;
+CROSS JOIN parameters
+CROSS JOIN paid_user_coverage
+GROUP BY
+  parameters.generated_at,
+  parameters.freshness_cutoff,
+  paid_user_coverage.evaluated_paid_users,
+  paid_user_coverage.exhausted_paid_users,
+  paid_user_coverage.p10,
+  paid_user_coverage.p50,
+  paid_user_coverage.p90;

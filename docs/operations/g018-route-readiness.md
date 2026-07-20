@@ -130,6 +130,13 @@ Thresholds are evidence gates, not activation instructions. A `GO` artifact
 still requires the source-policy, writer-ownership, rollout and rollback gates
 for each proposed source.
 
+The current-versus-preferred occurrence aggregate is produced separately with
+`docs/operations/sql/french-occurrence-preference-census.sql`. Execute it in an
+explicit read-only transaction with the same `generated_at` and
+`freshness_cutoff` values as the route census. It compares the current freshest
+occurrence with the direct-route ordering, but outputs counts only and never
+emits or updates group, occurrence or job identifiers.
+
 ## Remaining external evidence
 
 The baseline is intentionally `BLOCKED_EXTERNAL` because no fresh paid-user

@@ -249,8 +249,35 @@ describe("G018 route-readiness evidence", () => {
       /\b(insert|update|delete|merge|truncate|alter|drop|create|grant|revoke)\b/,
     );
     expect(sql).toContain("'known_ats_without_runtime_driver'");
-    expect(sql).toContain("'paid_user_auto_applicable_coverage_not_yet_measured'");
+    expect(sql).toContain("'paid_user_role_cohort_unavailable'");
     expect(sql).toContain("'BLOCKED_EXTERNAL'");
+    expect(sql).toContain("'{billing,subscription_status}'");
+    expect(sql).toContain("percentile_disc(0.1)");
+    expect(sql).toContain("percentile_disc(0.5)");
+    expect(sql).toContain("percentile_disc(0.9)");
+    expect(sql).not.toContain("'userId'");
     expect(sql).not.toMatch(/jsonb_agg\s*\(/i);
+
+    const occurrenceSql = readFileSync(
+      new URL(
+        "../../../docs/operations/sql/french-occurrence-preference-census.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const normalizedOccurrenceSql = occurrenceSql
+      .replace(/--.*$/gm, " ")
+      .toLowerCase();
+    expect(normalizedOccurrenceSql.trimStart().startsWith("\\set")).toBe(true);
+    expect(normalizedOccurrenceSql).not.toMatch(
+      /\b(insert|update|delete|merge|truncate|alter|drop|create|grant|revoke)\b/,
+    );
+    expect(occurrenceSql).toContain("'verifiedRuntimeSelectionUplift'");
+    expect(occurrenceSql).toContain("'directSelectionUplift'");
+    expect(occurrenceSql).toContain("'canonicalWrites', false");
+    expect(occurrenceSql).toContain("'applicationSubmissions', false");
+    expect(occurrenceSql).not.toContain("'occurrenceKey'");
+    expect(occurrenceSql).not.toContain("'groupKey'");
+    expect(occurrenceSql).not.toMatch(/jsonb_agg\s*\(/i);
   });
 });

@@ -215,6 +215,7 @@ CREATE TABLE public.admin_user_read_model (
   last_event_at timestamptz, last_login_at timestamptz,
   last_active_at timestamptz NOT NULL DEFAULT '-infinity',
   search_text text NOT NULL DEFAULT '', source_changed_at timestamptz,
+  application_facts_generation bigint NOT NULL DEFAULT 0,
   model_updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
 CREATE INDEX admin_user_rm_order_idx ON public.admin_user_read_model(last_active_at DESC,user_id ASC);
@@ -268,6 +269,7 @@ CREATE TABLE public.admin_read_model_state (
   first_clean_canonical_change_at timestamptz,
   clean_reconciliation_count smallint NOT NULL DEFAULT 0
     CHECK(clean_reconciliation_count BETWEEN 0 AND 2),
+  application_facts_generation bigint NOT NULL DEFAULT 0,
   users_rows bigint NOT NULL DEFAULT 0, applications_rows bigint NOT NULL DEFAULT 0,
   last_error text
 );
@@ -953,7 +955,6 @@ CREATE OR REPLACE FUNCTION public.admin_backfill_applications(
 ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER
 SET search_path=pg_catalog,public SET statement_timeout='30s' SET lock_timeout='1s' AS $$
 DECLARE id text;n integer:=0;last_id text;remaining boolean;
-  projected_ids text[]:=ARRAY[]::text[];affected_user_ids text[];
 BEGIN
  PERFORM set_config('hirly.admin_backfill','on',true);
  -- The read-model row is the durable completion ledger.  Do not filter by the
@@ -966,8 +967,7 @@ BEGIN
   WHERE r.application_id IS NULL
   ORDER BY a.application_id LIMIT LEAST(GREATEST(COALESCE(p_limit,1000),500),2000)
   FOR UPDATE OF a SKIP LOCKED LOOP
-   PERFORM public.admin_project_application(id);
-   projected_ids:=array_append(projected_ids,id);n:=n+1;last_id:=id;
+   PERFORM public.admin_project_application(id);n:=n+1;last_id:=id;
  END LOOP;
  SELECT EXISTS(
   SELECT 1 FROM public.applications a
@@ -978,10 +978,9 @@ BEGIN
  IF NOT remaining THEN
   PERFORM set_config('hirly.admin_backfill','off',true);
   PERFORM public.admin_rebuild_application_scope_counts();
-  SELECT array_agg(u.user_id) INTO affected_user_ids FROM public.users u;
-  IF affected_user_ids IS NOT NULL THEN
-   PERFORM public.admin_rebuild_users(affected_user_ids);
-  END IF;
+  UPDATE public.admin_read_model_state
+  SET application_facts_generation=GREATEST(application_facts_generation,1)
+  WHERE singleton;
  END IF;
  RETURN jsonb_build_object(
   'processed',n,'next_application_id',CASE WHEN remaining THEN last_id END,
@@ -992,21 +991,30 @@ CREATE OR REPLACE FUNCTION public.admin_backfill_users(
  p_after_user_id text DEFAULT NULL,p_limit integer DEFAULT 500
 ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER
 SET search_path=pg_catalog,public SET statement_timeout='30s' SET lock_timeout='1s' AS $$
-DECLARE ids text[]; remaining boolean;
+DECLARE ids text[];remaining boolean;target_generation bigint;
 BEGIN
  PERFORM set_config('hirly.admin_backfill','on',true);
+ SELECT application_facts_generation INTO target_generation
+ FROM public.admin_read_model_state WHERE singleton;
  SELECT array_agg(user_id ORDER BY user_id) INTO ids FROM (
   SELECT u.user_id FROM public.users u
   LEFT JOIN public.admin_user_read_model r ON r.user_id=u.user_id
   WHERE r.user_id IS NULL
+    OR r.application_facts_generation<target_generation
   ORDER BY u.user_id LIMIT LEAST(GREATEST(COALESCE(p_limit,500),1),500)
   FOR UPDATE OF u SKIP LOCKED
  ) x;
- IF ids IS NOT NULL THEN PERFORM public.admin_rebuild_users(ids); END IF;
+ IF ids IS NOT NULL THEN
+  PERFORM public.admin_rebuild_users(ids);
+  UPDATE public.admin_user_read_model
+  SET application_facts_generation=target_generation
+  WHERE user_id=ANY(ids);
+ END IF;
  SELECT EXISTS(
   SELECT 1 FROM public.users u
   LEFT JOIN public.admin_user_read_model r ON r.user_id=u.user_id
   WHERE r.user_id IS NULL
+    OR r.application_facts_generation<target_generation
  ) INTO remaining;
  RETURN jsonb_build_object(
   'processed',COALESCE(cardinality(ids),0),
@@ -1016,10 +1024,11 @@ END $$;
 
 CREATE OR REPLACE FUNCTION public.admin_reconcile_read_models(p_mark_ready boolean DEFAULT false)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER
-SET search_path=pg_catalog,public SET statement_timeout='30s' SET lock_timeout='1s' AS $$
+SET search_path=pg_catalog,public SET statement_timeout='10min' SET lock_timeout='1s' AS $$
 DECLARE cu bigint;mu bigint;ca bigint;ma bigint;cc bigint;mc bigint;
   v_user_fact_mismatches bigint;v_scope_shard_mismatches bigint;
   v_queue_mismatches bigint;v_answer_mismatches bigint;
+  v_stale_user_application_facts bigint;
   v_application_hash_before text;v_application_hash_after text;
   v_user_hash_before text;v_user_hash_after text;
   v_sample_application_ids text[];v_sample_user_ids text[];
@@ -1039,6 +1048,9 @@ BEGIN
  SELECT count(*) INTO cc FROM public.applications;
  SELECT COALESCE(sum(total),0) INTO mc
  FROM public.admin_application_scope_count WHERE scope_key='all';
+ SELECT count(*) INTO v_stale_user_application_facts
+ FROM public.admin_user_read_model r
+ WHERE r.application_facts_generation<v_state.application_facts_generation;
 
  WITH application_facts AS (
    SELECT a.user_id,count(*) app_count,
@@ -1203,6 +1215,7 @@ BEGIN
    END IF;
  END;
  ok:=cu=mu AND ca=ma AND cc=mc AND v_user_fact_mismatches=0
+   AND v_stale_user_application_facts=0
    AND v_scope_shard_mismatches=0 AND v_queue_mismatches=0
    AND v_answer_mismatches=0
    AND v_application_hash_before=v_application_hash_after
@@ -1240,6 +1253,7 @@ BEGIN
  RETURN jsonb_build_object('ok',ok,'canonical_users',cu,'model_users',mu,
   'canonical_applications',ca,'model_applications',ma,'counter_applications',mc,
   'user_fact_mismatches',v_user_fact_mismatches,
+  'stale_user_application_facts',v_stale_user_application_facts,
   'scope_shard_mismatches',v_scope_shard_mismatches,
   'queue_mismatches',v_queue_mismatches,'answer_mismatches',v_answer_mismatches,
   'application_semantic_hash',v_application_hash_before,
