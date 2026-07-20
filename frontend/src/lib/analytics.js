@@ -1,6 +1,7 @@
 import { api } from "./api";
 import {
   capturePostHogEvent,
+  hasIdentifiedPostHogUser,
   sanitizeAnalyticsProperties,
   stripUrlSecrets,
 } from "./posthogClient";
@@ -9,12 +10,6 @@ import {
   resolveAnalyticsEvent,
 } from "./analyticsRegistry";
 
-export const ANALYTICS_OUTBOX_KEY = "hirly.analytics.outbox";
-export const ANALYTICS_BATCH_MAX_EVENTS = 20;
-export const ANALYTICS_BATCH_MAX_BYTES = 64 * 1024;
-export const ANALYTICS_OUTBOX_MAX_EVENTS = 100;
-export const ANALYTICS_OUTBOX_MAX_BYTES = 256 * 1024;
-const OUTBOX_TTL_MS = 24 * 60 * 60 * 1000;
 const ANONYMOUS_ID_KEY = "hirly.analytics.anonymous_id";
 const getAnonymousId = () => {
   if (typeof window === "undefined") return null;
@@ -49,6 +44,10 @@ export const trackEvent = (event, properties = {}) => {
   };
   if (
     resolved?.definition.authoritativeSource === "frontend" &&
+    (
+      resolved.definition.identityPolicy !== "identified" ||
+      hasIdentifiedPostHogUser()
+    ) &&
     canonicalProperties
   ) {
     try {
@@ -69,8 +68,3 @@ export const trackEvent = (event, properties = {}) => {
   }
   return api.post("/analytics/event", payload).catch(() => {});
 };
-
-if (typeof window !== "undefined") {
-  window.addEventListener("online", () => flushAnalyticsOutbox());
-  window.setTimeout(() => flushAnalyticsOutbox(), 0);
-}

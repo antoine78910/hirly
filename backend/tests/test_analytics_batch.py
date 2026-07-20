@@ -58,8 +58,8 @@ def test_analytics_batch_is_bounded_and_server_idempotent(monkeypatch):
     first_result = asyncio.run(server.track_analytics_events(first, _Request(), None))
     second_result = asyncio.run(server.track_analytics_events(second, _Request(), None))
 
-    assert first_result["accepted_event_ids"] == ["client-1"]
-    assert second_result["accepted_event_ids"] == ["client-replay"]
+    assert first_result["accepted_event_ids"] == second_result["accepted_event_ids"]
+    assert first_result["accepted_event_ids"][0].startswith("evt_batch_")
     assert len(db.analytics_events.batches) == 1
     assert db.analytics_events.batches[0][0]["batch_id"] == "batch-fixed"
     assert db.analytics_events.batches[0][0]["user_id"] is None
@@ -118,7 +118,8 @@ def test_partial_replay_acknowledges_every_validated_client_event(monkeypatch):
     asyncio.run(server.track_analytics_events(first, _Request(), None))
     result = asyncio.run(server.track_analytics_events(replay, _Request(), None))
 
-    assert result["accepted_event_ids"] == ["first-replayed", "second"]
+    assert result["accepted_event_ids"][0] in db.analytics_events.rows
+    assert result["accepted_event_ids"][1] in db.analytics_events.rows
     assert len(db.analytics_events.rows) == 2
     assert db.analytics_events.operations == 2
 
@@ -139,7 +140,7 @@ def test_concurrent_replay_shape_uses_atomic_insert_ignore_without_reads(monkeyp
 
     results = asyncio.run(run_concurrent_replays())
 
-    assert [result["accepted_event_ids"] for result in results] == [["client-event"], ["client-event"]]
+    assert results[0]["accepted_event_ids"] == results[1]["accepted_event_ids"]
     assert len(db.analytics_events.rows) == 1
     assert db.analytics_events.operations == 2
     assert db.analytics_events.ignore_duplicates == [True, True]
@@ -165,6 +166,7 @@ def test_live_event_preserves_valid_occurrence_and_registry_metadata():
     assert document["registry_valid"] is True
     assert document["canonical_properties"] == {"plan": "pro"}
     assert document["registry_rejected_properties"] == ["email"]
+    assert document["properties"] == {"plan": "pro"}
     assert document["occurred_at"] == "2026-07-20T17:59:00Z"
     assert document["received_at"] == "2026-07-20T18:00:00+00:00"
     assert document["timestamp_quality"] == "validated_client_occurrence"
@@ -204,7 +206,46 @@ def test_live_event_falls_back_to_receipt_time_outside_clock_window():
     assert future["timestamp_quality"] == "server_received_at"
     assert stale["timestamp_quality"] == "server_received_at"
     assert invalid["timestamp_quality"] == "server_received_at"
+    assert future["occurred_at"] is None
+    assert stale["occurred_at"] is None
     assert invalid["occurred_at"] is None
+
+
+def test_identified_frontend_event_is_not_registry_valid_for_anonymous_actor():
+    document = server._analytics_event_document(
+        server.AnalyticsEventRequest(
+            event="checkout_started",
+            occurred_at="2026-07-20T17:59:00Z",
+            properties={"plan": "pro"},
+        ),
+        _Request(),
+        None,
+        now="2026-07-20T18:00:00+00:00",
+    )
+
+    assert document["identity_quality"] == "anonymous"
+    assert document["registry_valid"] is False
+
+
+def test_batch_idempotency_is_scoped_to_actor(monkeypatch):
+    db = _Db()
+    monkeypatch.setattr(server, "db", db)
+    body = server.AnalyticsBatchRequest(
+        batch_id="shared-batch",
+        events=[server.AnalyticsEventRequest(event="landing_view")],
+    )
+
+    first = asyncio.run(server.track_analytics_events(body, _Request(), _user()))
+    second = asyncio.run(
+        server.track_analytics_events(
+            body,
+            _Request(),
+            _user("123e4567-e89b-12d3-a456-426614174001"),
+        )
+    )
+
+    assert first["accepted_event_ids"] != second["accepted_event_ids"]
+    assert len(db.analytics_events.rows) == 2
 
 
 def test_backend_capture_validates_identity_owner_properties_and_fails_open(monkeypatch):

@@ -1,6 +1,9 @@
 import { api } from "./api";
 import { trackEvent } from "./analytics";
-import { capturePostHogEvent } from "./posthogClient";
+import {
+  capturePostHogEvent,
+  hasIdentifiedPostHogUser,
+} from "./posthogClient";
 
 jest.mock("./api", () => ({
   api: {
@@ -11,6 +14,7 @@ jest.mock("./api", () => ({
 jest.mock("./posthogClient", () => ({
   ...jest.requireActual("./posthogClient"),
   capturePostHogEvent: jest.fn(),
+  hasIdentifiedPostHogUser: jest.fn(),
 }));
 
 describe("trackEvent PostHog parallel delivery", () => {
@@ -18,6 +22,7 @@ describe("trackEvent PostHog parallel delivery", () => {
     jest.clearAllMocks();
     window.localStorage.clear();
     api.post.mockResolvedValue({ data: {} });
+    hasIdentifiedPostHogUser.mockReturnValue(true);
   });
 
   it("sends a canonical registry event to PostHog and preserves the audit event", async () => {
@@ -64,6 +69,13 @@ describe("trackEvent PostHog parallel delivery", () => {
         occurred_at: expect.any(String),
       }),
     );
+  });
+
+  it("does not capture identified-only facts before identity is isolated", async () => {
+    hasIdentifiedPostHogUser.mockReturnValue(false);
+    await trackEvent("checkout_started", { plan: "pro" });
+    expect(capturePostHogEvent).not.toHaveBeenCalled();
+    expect(api.post).toHaveBeenCalled();
   });
 
   it("does not let either sink failure block the caller", async () => {
