@@ -46,7 +46,9 @@ function authenticate(request: Request, token: string | undefined): Response | n
 
 async function parseEnqueueRequest(request: Request): Promise<EnqueueRun> {
   const contentLength = Number(request.headers.get("content-length") ?? "0");
-  if (contentLength > 64 * 1024) throw new Error("payload_too_large");
+  if (contentLength > 64 * 1024) throw new PayloadTooLargeError();
+  const bytes = new Uint8Array(await request.arrayBuffer());
+  if (bytes.byteLength > 64 * 1024) throw new PayloadTooLargeError();
   const controlEnqueueSchema = z.discriminatedUnion("kind", [
     z
       .object({
@@ -92,20 +94,25 @@ async function parseEnqueueRequest(request: Request): Promise<EnqueueRun> {
       })
       .strict(),
   ]);
-  return enqueueRunSchema.parse(controlEnqueueSchema.parse(await request.json()));
+  return enqueueRunSchema.parse(
+    controlEnqueueSchema.parse(JSON.parse(new TextDecoder().decode(bytes))),
+  );
 }
 
-export function startHttpServer(input: {
+class PayloadTooLargeError extends Error {
+  constructor() {
+    super("payload_too_large");
+  }
+}
+
+export function createHttpHandler(input: {
   config: RuntimeConfig;
   queue: QueueRepository & Enqueuer;
   store: RuntimeStore;
   logger: Logger;
   health: HealthState;
-}): Bun.Server<unknown> {
-  return Bun.serve({
-    port: input.config.PORT,
-    idleTimeout: 10,
-    async fetch(request) {
+}) {
+  return async function fetch(request: Request): Promise<Response> {
       const url = new URL(request.url);
       if (request.method === "GET" && url.pathname === "/health/live") {
         return json(
@@ -171,10 +178,24 @@ export function startHttpServer(input: {
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : "invalid_input";
-        const status = message === "authorization_blocked" ? 409 : 400;
+        const status =
+          error instanceof PayloadTooLargeError
+            ? 413
+            : message === "authorization_blocked"
+              ? 409
+              : 400;
         return json({ error: message }, status);
       }
       return json({ error: "not_found" }, 404);
-    },
+  };
+}
+
+export function startHttpServer(
+  input: Parameters<typeof createHttpHandler>[0],
+): Bun.Server<unknown> {
+  return Bun.serve({
+    port: input.config.PORT,
+    idleTimeout: 10,
+    fetch: createHttpHandler(input),
   });
 }

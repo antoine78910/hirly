@@ -123,7 +123,7 @@ export class Consumer {
           ? "retry_exhausted"
           : "provider_transient";
       outcome = permanent || exhausted ? "failed" : "retryable";
-      await this.repository.finish(task, outcome, {
+      const current = await this.repository.finish(task, outcome, {
         errorCode: reasonCode,
         errorMessage: safeErrorMessage(error),
         retryAt:
@@ -131,6 +131,10 @@ export class Consumer {
             ? new Date(Date.now() + retryDelayMs(task.attempts))
             : undefined,
       });
+      if (!current) {
+        outcome = "failed";
+        reasonCode = "lease_lost";
+      }
     } finally {
       clearInterval(heartbeat);
       this.logger.emit({
@@ -171,4 +175,13 @@ export class Consumer {
   get activeCount(): number {
     return this.active.size;
   }
+}
+
+export function createConsumer(
+  repository: ConsumerRepository,
+  handlers: TaskHandlers,
+  logger: Logger,
+  options: ConsumerOptions,
+): Consumer {
+  return new Consumer(repository, handlers, logger, options);
 }
