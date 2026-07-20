@@ -1,5 +1,8 @@
 import asyncio
+import inspect
 
+import gmail_sync
+from auto_apply import queue
 from notifications_service import mark_all_notifications_read
 from training_service import (
     list_creator_students,
@@ -94,3 +97,29 @@ def test_notification_mark_all_uses_one_bounded_mutation():
     db = _Db()
     assert asyncio.run(mark_all_notifications_read(db, user_id="u1")) == 3
     assert db.calls == [("u1", 500)]
+
+
+def test_gmail_sync_preloads_existing_messages_and_batches_writes():
+    source = inspect.getsource(gmail_sync.sync_gmail_application_emails)
+
+    assert "existing_by_id" in source
+    assert "application_emails.find_one" not in source
+    assert "application_emails.insert_many" in source
+    assert "range(0, len(pending_email_writes), 100)" in source
+
+
+def test_auto_apply_backfill_uses_one_bounded_contract(monkeypatch):
+    monkeypatch.setenv("AUTO_APPLY_QUEUE_ENABLED", "true")
+    monkeypatch.setenv("AUTO_APPLY_QUEUE_PROVIDERS", "smartrecruiters,greenhouse")
+
+    class _Db:
+        def __init__(self):
+            self.calls = []
+
+        async def backfill_auto_apply_queue(self, providers, *, limit):
+            self.calls.append((providers, limit))
+            return 2
+
+    db = _Db()
+    assert asyncio.run(queue.backfill_pending_applications(db, limit=200)) == 2
+    assert db.calls == [(["greenhouse", "smartrecruiters"], 200)]

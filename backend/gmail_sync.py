@@ -15,7 +15,7 @@ import unicodedata
 import uuid
 from datetime import datetime, timezone, timedelta
 from email.utils import parsedate_to_datetime
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 import httpx
