@@ -189,7 +189,7 @@ describe("G009 source persistence contract", () => {
     const { migration } = sourceBoundaryMigration();
 
     expect(migration).toMatch(
-      /raw_job_snapshots_source_external_hash_unique[\s\S]*UNIQUE\s*\(\s*source_id\s*,\s*external_id\s*,\s*content_hash\s*\)/i,
+      /raw_job_snapshots_run_source_external_hash_unique[\s\S]*UNIQUE\s*\(\s*run_id\s*,\s*source_id\s*,\s*external_id\s*,\s*content_hash\s*\)/i,
     );
     expect(migration).toMatch(
       /source_id uuid NOT NULL REFERENCES public\.career_sources\(id\) ON DELETE RESTRICT/i,
