@@ -19,6 +19,7 @@ import type {
 } from "../apps/worker/src/runtime/types";
 import { parseCliArgs } from "../apps/worker/src/cli";
 import { createWorkerRuntime } from "../apps/worker/src/runtime/lifecycle";
+import { createShutdownHandler } from "../apps/worker/src/main";
 
 const repoRoot = join(import.meta.dir, "..");
 
@@ -683,12 +684,48 @@ describe("G003 CLI and graceful lifecycle test seams", () => {
     const mainSource = read("apps/worker/src/main.ts");
     expect(mainSource).toContain('process.on("SIGTERM"');
     expect(mainSource).toContain('process.on("SIGINT"');
-    expect(mainSource).toMatch(
-      /await application\.stop\(\);[\s\S]*process\.exit\(0\)/,
-    );
-    expect(mainSource).toMatch(
-      /catch[\s\S]*worker\.shutdown_failed[\s\S]*process\.exit\(1\)/,
-    );
+
+    const successfulExits: number[] = [];
+    let stopCalls = 0;
+    const successfulShutdown = createShutdownHandler({
+      application: {
+        config: { NODE_ENV: "test" },
+        async stop() {
+          stopCalls += 1;
+        },
+      },
+      write() {},
+      exit(code) {
+        successfulExits.push(code);
+      },
+    });
+    const firstSignal = successfulShutdown("SIGTERM");
+    const repeatedSignal = successfulShutdown("SIGINT");
+    expect(repeatedSignal).toBe(firstSignal);
+    await firstSignal;
+    expect(stopCalls).toBe(1);
+    expect(successfulExits).toEqual([0]);
+
+    const failureLines: string[] = [];
+    const failureExits: number[] = [];
+    await createShutdownHandler({
+      application: {
+        config: { NODE_ENV: "test" },
+        async stop() {
+          throw new Error("postgresql://worker:secret@db.internal/jobs");
+        },
+      },
+      write(line) {
+        failureLines.push(line);
+      },
+      exit(code) {
+        failureExits.push(code);
+      },
+    })("SIGTERM");
+    expect(failureExits).toEqual([1]);
+    expect(failureLines.join("\n")).toContain("worker.shutdown_failed");
+    expect(failureLines.join("\n")).not.toContain("secret");
+    expect(failureLines.join("\n")).not.toContain("db.internal");
 
     const child = Bun.spawn(
       [
