@@ -5,6 +5,7 @@ COPY apps/worker/package.json apps/worker/package.json
 COPY packages/config/package.json packages/config/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/db/package.json packages/db/package.json
+COPY packages/ingestion/package.json packages/ingestion/package.json
 COPY packages/observability/package.json packages/observability/package.json
 RUN bun install --frozen-lockfile
 COPY apps/worker apps/worker
