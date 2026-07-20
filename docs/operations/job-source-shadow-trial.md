@@ -115,6 +115,30 @@ The scorecard reports:
 It refuses sample data, `BLOCKED_EXTERNAL`, mismatched evidence digests,
 incomplete snapshots, zero-volume collapse and users outside the frozen cohort.
 
+## Multi-source aggregate uplift measurement
+
+For G016-style multi-source comparisons, run
+`docs/operations/sql/multi-source-net-new-measurement.sql` with a fixed
+freshness cutoff, paid-cohort coverage run and exact trial run IDs. The query
+returns one aggregate JSON value only. It applies duplicate precedence in this
+order: provider occurrence, canonical apply URL, ATS posting identity, then
+fingerprint. It does not emit job IDs, external IDs, candidate/source payloads
+or hashed user IDs.
+
+Save the returned JSON object and build the immutable decision artifact:
+
+```bash
+bun run --cwd apps/job-ingestion-audit measure:net-new -- \
+  --input artifacts/job-ingestion/g016-net-new-measurement-input.json \
+  --output artifacts/job-ingestion/g016-net-new-measurement.json
+```
+
+The builder refuses sample or blocked evidence and requires every observed
+candidate to reconcile to exactly one duplicate layer or incremental net-new.
+It reports fresh/relevant/actionable paid-cohort contribution,
+auto-applicable uplift and projected France Travail concentration without
+including any user- or job-level rows.
+
 ## Go/no-go
 
 Do not activate a source because the API is convenient. A production proposal
