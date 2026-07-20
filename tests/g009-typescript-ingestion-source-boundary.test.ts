@@ -107,6 +107,19 @@ describe("G009 disabled TypeScript source contract", () => {
     ).toBe("writer_not_typescript");
     expect(
       sourceActivationBlockReason(
+        policy({
+          source: {
+            ...policy().source,
+            transportEnabled: false,
+          },
+        }),
+        "FR",
+        "incremental",
+        now,
+      ),
+    ).toBe("transport_disabled");
+    expect(
+      sourceActivationBlockReason(
         policy({ providerCountryKillSwitches: { FR: true } }),
         "FR",
         "incremental",
