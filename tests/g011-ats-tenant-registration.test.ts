@@ -47,6 +47,8 @@ describe("G011 disabled ATS tenant registration", () => {
     expect(registrationFunction).toMatch(
       /INSERT INTO public\.career_sources[\s\S]*?false,\s*'candidate',\s*false,\s*false,\s*false/,
     );
+    expect(registrationFunction).not.toContain("p_policy_id");
+    expect(registrationFunction).toMatch(/p_access_type,\s*NULL,/);
     expect(registrationFunction).not.toMatch(/\btrue\b/i);
   });
 
