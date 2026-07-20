@@ -1507,3 +1507,54 @@ def test_role_and_location_filters_still_shape_response(monkeypatch):
     assert response["jobs"]
     assert all("match_score" in job and "match_reasons" in job for job in response["jobs"])
     assert response["searched_location"] == "Paris, France"
+
+
+def test_fixed_coverage_fixture_is_side_effect_free_with_refresh_enabled(monkeypatch):
+    eligible = [_job(index) for index in range(1, 6)]
+    wrong_location = _job(6)
+    wrong_location.update({"location": "Lyon, France", "city": "Lyon"})
+    wrong_role = _job(7, title="Backend Engineer")
+    invalid = _job(8, status="invalid")
+    blocked = _job(9, tier="D")
+    already_swiped = _job(10)
+
+    scheduled = []
+
+    def _schedule(*args, **kwargs):
+        scheduled.append((args, kwargs))
+        raise AssertionError("coverage characterization must not schedule provider refresh")
+
+    monkeypatch.setattr(server, "schedule_feed_background_refresh", _schedule)
+    response, calls = _run_feed(
+        monkeypatch,
+        [
+            *eligible,
+            wrong_location,
+            wrong_role,
+            invalid,
+            blocked,
+            already_swiped,
+        ],
+        env={
+            "JOBS_FEED_BACKGROUND_REFRESH_ENABLED": "true",
+            "JOBS_DB_MIN_GOOD_RESULTS_BEFORE_JSEARCH": "1",
+            "JOBS_DB_WEAK_RESULTS_THRESHOLD": "1",
+        },
+        swiped_ids=["job_10"],
+        locations_json=json.dumps([{
+            "location_label": "Paris, France",
+            "country": "France",
+            "country_code": "fr",
+        }]),
+        geo_places=_geo_places(),
+    )
+
+    assert {job["job_id"] for job in response["jobs"]} == {
+        "job_1",
+        "job_2",
+        "job_3",
+        "job_4",
+        "job_5",
+    }
+    assert calls["refresh"] == 0
+    assert scheduled == []
