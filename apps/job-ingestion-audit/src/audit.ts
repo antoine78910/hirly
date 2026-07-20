@@ -87,6 +87,78 @@ export interface MaterializedCoverage {
   records: CoverageRecord[];
 }
 
+export interface PaidUserInventorySnapshot {
+  userHash: string;
+  relevantTotal: number;
+  uniqueTotal: number;
+  actionableTotal: number;
+  unseenActionableTotal: number;
+  routeKnownTotal: number;
+  directEmployerTotal: number;
+  terminalReason: string;
+}
+
+export interface PaidUserCoverageBaseline {
+  cohortSize: number;
+  p10: number | null;
+  median: number | null;
+  p90: number | null;
+  feedExhaustionRate: number | null;
+  routeKnownRate: number | null;
+  directEmployerRate: number | null;
+  terminalReasonCounts: Record<string, number>;
+}
+
+export interface FranceTravailCensusPartition {
+  id: string;
+  publishedAfter: string;
+  publishedBefore: string;
+  parameters: Record<string, string>;
+}
+
+export interface FranceTravailCensusManifestInput {
+  schemaVersion: 1;
+  manifestVersion: string;
+  paidCohortSnapshotAt: string;
+  paidCohortSnapshotHash: string;
+  profileStrata: Array<Record<string, unknown>>;
+  samplingSeed: string;
+  capRules: {
+    pageSize: number;
+    maxRecordsPerPartition: number;
+    maxRetries: number;
+  };
+  publicationWindowRules: {
+    boundary: "half-open";
+    timezone: "UTC";
+  };
+  partitions: FranceTravailCensusPartition[];
+}
+
+export interface FranceTravailCensusManifest extends FranceTravailCensusManifestInput {
+  manifestDigest: string;
+}
+
+export interface FranceTravailPartitionAccounting {
+  partitionId: string;
+  status: "complete" | "capped" | "blocked" | "failed";
+  sourceReportedTotal: number | null;
+  httpRecords: number;
+  uniqueExternalIds: number;
+  duplicateRawRecords: number;
+  normalized: number;
+  rejectedNormalization: number;
+  occurrenceInserted: number;
+  occurrenceUpdated: number;
+  occurrenceDeduplicated: number;
+  writeFailed: number;
+  active: number;
+  actionable: number;
+  relevant: number;
+  namedResiduals: Record<string, number>;
+  blockerReason?: string;
+}
+
 export function stableDigest(value: unknown): string {
   const canonicalize = (input: unknown): unknown => {
     if (Array.isArray(input)) return input.map(canonicalize);
@@ -102,6 +174,178 @@ export function stableDigest(value: unknown): string {
   return createHash("sha256")
     .update(JSON.stringify(canonicalize(value)))
     .digest("hex");
+}
+
+function percentile(values: number[], fraction: number): number | null {
+  if (!values.length) return null;
+  const sorted = [...values].sort((left, right) => left - right);
+  const position = (sorted.length - 1) * fraction;
+  const lower = Math.floor(position);
+  const upper = Math.ceil(position);
+  const lowerValue = sorted[lower]!;
+  const upperValue = sorted[upper]!;
+  return lowerValue + (upperValue - lowerValue) * (position - lower);
+}
+
+export function computePaidUserCoverageBaseline(
+  snapshots: PaidUserInventorySnapshot[],
+): PaidUserCoverageBaseline {
+  if (!snapshots.length) {
+    return {
+      cohortSize: 0,
+      p10: null,
+      median: null,
+      p90: null,
+      feedExhaustionRate: null,
+      routeKnownRate: null,
+      directEmployerRate: null,
+      terminalReasonCounts: {},
+    };
+  }
+  const unseen = snapshots.map((snapshot) => snapshot.unseenActionableTotal);
+  const actionable = snapshots.reduce((sum, snapshot) => sum + snapshot.actionableTotal, 0);
+  const terminalReasonCounts: Record<string, number> = {};
+  for (const snapshot of snapshots) {
+    terminalReasonCounts[snapshot.terminalReason] =
+      (terminalReasonCounts[snapshot.terminalReason] ?? 0) + 1;
+  }
+  return {
+    cohortSize: snapshots.length,
+    p10: percentile(unseen, 0.1),
+    median: percentile(unseen, 0.5),
+    p90: percentile(unseen, 0.9),
+    feedExhaustionRate:
+      snapshots.filter((snapshot) => snapshot.unseenActionableTotal === 0).length
+      / snapshots.length,
+    routeKnownRate: actionable === 0
+      ? null
+      : snapshots.reduce((sum, snapshot) => sum + snapshot.routeKnownTotal, 0) / actionable,
+    directEmployerRate: actionable === 0
+      ? null
+      : snapshots.reduce((sum, snapshot) => sum + snapshot.directEmployerTotal, 0) / actionable,
+    terminalReasonCounts: Object.fromEntries(
+      Object.entries(terminalReasonCounts).sort(([left], [right]) => left.localeCompare(right)),
+    ),
+  };
+}
+
+function manifestInput(
+  manifest: FranceTravailCensusManifestInput | FranceTravailCensusManifest,
+): FranceTravailCensusManifestInput {
+  const { manifestDigest: _manifestDigest, ...input } =
+    manifest as FranceTravailCensusManifest;
+  return input;
+}
+
+export function freezeFranceTravailCensusManifest(
+  input: FranceTravailCensusManifestInput,
+): FranceTravailCensusManifest {
+  const frozen = structuredClone(input);
+  return {
+    ...frozen,
+    manifestDigest: stableDigest(frozen),
+  };
+}
+
+export function validateFranceTravailCensusManifest(
+  manifest: FranceTravailCensusManifest,
+): string[] {
+  const failures: string[] = [];
+  if (manifest.schemaVersion !== 1) failures.push("unsupported_manifest_schema");
+  if (!manifest.manifestVersion.trim()) failures.push("missing_manifest_version");
+  if (!/^[0-9a-f]{64}$/.test(manifest.paidCohortSnapshotHash)) {
+    failures.push("invalid_paid_cohort_snapshot_hash");
+  }
+  if (!manifest.samplingSeed.trim()) failures.push("missing_sampling_seed");
+  if (manifest.capRules.pageSize < 1 || manifest.capRules.pageSize > 150) {
+    failures.push("invalid_page_size");
+  }
+  if (manifest.capRules.maxRecordsPerPartition < manifest.capRules.pageSize) {
+    failures.push("invalid_partition_cap");
+  }
+  if (stableDigest(manifestInput(manifest)) !== manifest.manifestDigest) {
+    failures.push("manifest_digest_mismatch");
+  }
+
+  const ids = new Set<string>();
+  const partitionsByParameters = new Map<string, FranceTravailCensusPartition[]>();
+  for (const partition of manifest.partitions) {
+    if (ids.has(partition.id)) failures.push(`duplicate_partition:${partition.id}`);
+    ids.add(partition.id);
+    const start = Date.parse(partition.publishedAfter);
+    const end = Date.parse(partition.publishedBefore);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) {
+      failures.push(`invalid_partition_window:${partition.id}`);
+      continue;
+    }
+    const key = stableDigest(partition.parameters);
+    partitionsByParameters.set(key, [
+      ...(partitionsByParameters.get(key) ?? []),
+      partition,
+    ]);
+  }
+  for (const partitions of partitionsByParameters.values()) {
+    const sorted = [...partitions].sort(
+      (left, right) => Date.parse(left.publishedAfter) - Date.parse(right.publishedAfter),
+    );
+    for (let index = 1; index < sorted.length; index += 1) {
+      const previous = sorted[index - 1]!;
+      const current = sorted[index]!;
+      if (Date.parse(current.publishedAfter) < Date.parse(previous.publishedBefore)) {
+        failures.push(`overlapping_partition_windows:${previous.id}:${current.id}`);
+      }
+    }
+  }
+  return [...new Set(failures)].sort();
+}
+
+export function reconcileFranceTravailPartition(
+  accounting: FranceTravailPartitionAccounting,
+): string[] {
+  const failures: string[] = [];
+  const residual = Object.values(accounting.namedResiduals)
+    .reduce((sum, count) => sum + count, 0);
+  if (accounting.httpRecords !== accounting.uniqueExternalIds + accounting.duplicateRawRecords) {
+    failures.push("http_unique_accounting_mismatch");
+  }
+  if (
+    accounting.uniqueExternalIds
+    !== accounting.normalized + accounting.rejectedNormalization
+  ) {
+    failures.push("normalization_accounting_mismatch");
+  }
+  if (
+    accounting.normalized
+    !== accounting.occurrenceInserted + accounting.occurrenceUpdated
+      + accounting.occurrenceDeduplicated + accounting.writeFailed
+  ) {
+    failures.push("occurrence_accounting_mismatch");
+  }
+  if (
+    accounting.sourceReportedTotal !== null
+    && accounting.sourceReportedTotal !== accounting.uniqueExternalIds + residual
+  ) {
+    failures.push("source_total_accounting_mismatch");
+  }
+  if (
+    accounting.actionable > accounting.active
+    || accounting.relevant > accounting.actionable
+  ) {
+    failures.push("coverage_stage_order_mismatch");
+  }
+  if (accounting.status === "complete" && accounting.sourceReportedTotal === null) {
+    failures.push("complete_without_source_total");
+  }
+  if (accounting.status === "complete" && residual > 0) {
+    failures.push("complete_with_residuals");
+  }
+  if (
+    (accounting.status === "capped" || accounting.status === "blocked")
+    && !accounting.blockerReason?.trim()
+  ) {
+    failures.push(`${accounting.status}_without_reason`);
+  }
+  return [...new Set(failures)].sort();
 }
 
 export function evaluatePartition(partition: PartitionFact): string[] {
