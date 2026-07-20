@@ -879,6 +879,32 @@ def test_posthog_refund_uses_partial_amount_and_negative_revenue(monkeypatch):
     )
 
 
+def test_posthog_refund_unknown_status_retrieves_only_for_validation(monkeypatch):
+    _enable_posthog_revenue(monkeypatch, refunds=True)
+    retrieved = []
+    captures = []
+    monkeypatch.setattr(
+        server.stripe.Refund,
+        "retrieve",
+        lambda refund_id: retrieved.append(refund_id) or {"id": refund_id, "status": "succeeded"},
+    )
+    monkeypatch.setattr(
+        server,
+        "_capture_posthog_server_event",
+        lambda **kwargs: captures.append(kwargs) or _async_return(True),
+    )
+    event = {
+        "id": "evt_refund_unknown",
+        "type": "refund.updated",
+        "created": 1_700_000_100,
+        "data": {"previous_attributes": {"status": "pending"}},
+    }
+
+    assert asyncio.run(server._capture_posthog_refund(event, {"id": "re_unknown"})) is False
+    assert retrieved == ["re_unknown"]
+    assert captures == []
+
+
 def test_stripe_webhook_records_event_when_posthog_capture_fails(monkeypatch):
     monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test")
     monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
