@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import server
+from jobs_service import FEED_COVERAGE_EVALUATOR_VERSION, build_feed_coverage_snapshot
 
 
 class _Cursor:
@@ -142,6 +143,7 @@ def _run_feed(
     force_provider_refresh=False,
     prefetch=False,
     search_role=None,
+    audit_mode=False,
 ):
     env = env or {}
     for key, value in {
@@ -205,6 +207,7 @@ def _run_feed(
         prefetch=prefetch,
         score=False,
         search_role=search_role,
+        audit_mode=audit_mode,
     ))
     return response, calls
 
