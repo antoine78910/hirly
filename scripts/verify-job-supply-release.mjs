@@ -234,7 +234,11 @@ export function buildReleaseVerificationPlan(options = {}) {
       ...(!includeFrontend ? [blocked("FRONTEND_NOT_REQUESTED", "repository", "legacy frontend build not requested; use --with-frontend or --profile full")] : []),
       ...(!includeDocker ? [blocked("DOCKER_NOT_REQUESTED", "repository", "worker Docker build not requested; use --with-docker or --profile full")] : []),
       ...(!databaseUrl ? [blocked("DATABASE_NOT_PROVIDED", "infrastructure", "PostgreSQL release matrix requires G015_TEST_DATABASE_URL plus --allow-disposable-database")] : []),
-      blocked("DEPLOYMENT_NOT_PERFORMED", "deployment", "Vercel/Railway preview or production deployment is approval-gated and was not performed"),
+      blocked(
+        "REMOTE_DEPLOYMENT_VALIDATION_NOT_PERFORMED_BY_VERIFIER",
+        "deployment",
+        "this repository verifier neither performs nor inspects remote Vercel/Railway deployments; attach a separate authorized production-state attestation",
+      ),
       blocked("SOURCE_ACTIVATION_NOT_PERFORMED", "source", "provider/source activation and external source fetching were not performed"),
     ],
   };
@@ -815,7 +819,13 @@ function run(plan) {
     tools: collectToolEvidence(plan),
     artifacts: collectArtifactEvidence(),
     blockedExternal: plan.blockedExternal,
-    safeguards: { productionDeploymentPerformed: false, providerActivationPerformed: false, canonicalWriterTransferPerformed: false, applicationSubmissionPerformed: false, externalStateInspected: false },
+    safeguards: {
+      deploymentSideEffectsPerformedByVerifier: false,
+      providerActivationPerformed: false,
+      canonicalWriterTransferPerformed: false,
+      applicationSubmissionPerformed: false,
+      externalStateInspectedByVerifier: false,
+    },
   };
 }
 

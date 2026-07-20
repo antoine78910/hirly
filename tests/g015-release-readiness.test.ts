@@ -70,7 +70,7 @@ describe("G015 release verification contract", () => {
     expect(plan.commands.find((entry) => entry.id === "postgres-release-matrix")?.redactEnvironment).toBe(true);
     expect(plan.blockedExternal.every((entry) => entry.status === "BLOCKED_EXTERNAL")).toBe(true);
     expect(plan.blockedExternal.map((entry) => entry.code)).toEqual([
-      "DEPLOYMENT_NOT_PERFORMED",
+      "REMOTE_DEPLOYMENT_VALIDATION_NOT_PERFORMED_BY_VERIFIER",
       "SOURCE_ACTIVATION_NOT_PERFORMED",
     ]);
     const matrixEnv = plan.commands.find((entry) => entry.id === "postgres-release-matrix")?.env ?? {};
@@ -91,6 +91,20 @@ describe("G015 release verification contract", () => {
       verificationId: "20260720120000-123-deadbeef",
     });
     expect(plan.expectedHead).toBe("a".repeat(40));
+  });
+
+  test("documents the authorized production validation separately from the side-effect-free verifier", async () => {
+    const evidence = await readFile(
+      join(root, "docs/operations/job-supply-production-validation-2026-07-20.md"),
+      "utf8",
+    );
+    expect(evidence).toContain("bad5ba6de60bf6844779717369ca9df208914c33");
+    expect(evidence).toContain("cddef0ef-78d4-4058-8e6e-c412d2cd8218");
+    expect(evidence).toContain("dpl_9xvodCo1hPpdXyGKFaWbFmS94pyQ");
+    expect(evidence).toContain("`apps/worker` was not deployed");
+    expect(evidence).toContain("source tables were absent");
+    expect(evidence).toContain("No provider/source activation");
+    expect(evidence).toContain("read-only");
   });
 
   test("derives bounded unique database names while retaining connection credentials", () => {

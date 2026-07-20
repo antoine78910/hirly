@@ -73,6 +73,10 @@ const manifest: SourceTrialManifest = {
   environment: "staging",
   countryCodes: ["FR"],
   policyEvidenceId,
+  tenantSelectionEvidence: {
+    reference: "source-ranking/2026-07-20/data-gouv-qualified.json",
+    sha256: "c".repeat(64),
+  },
   requestedAt: "2026-07-20T11:00:00Z",
   expiresAt: "2026-07-21T11:00:00Z",
   budget: {

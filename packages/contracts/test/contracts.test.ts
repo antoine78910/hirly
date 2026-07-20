@@ -107,6 +107,10 @@ describe("shared contracts", () => {
       environment: "staging" as const,
       countryCodes: ["FR"],
       policyEvidenceId: "018f02d8-a8b8-7f1d-a419-bf38eaf22a91",
+      tenantSelectionEvidence: {
+        reference: "ats-ranking/2026-07-20/greenhouse-hirly.json",
+        sha256: "a".repeat(64),
+      },
       requestedAt: "2026-07-20T12:00:00+00:00",
       expiresAt: "2026-07-21T12:00:00+00:00",
       budget: {
@@ -173,6 +177,17 @@ describe("shared contracts", () => {
       {
         ...manifest,
         requestedAt: manifest.expiresAt,
+      },
+      {
+        ...manifest,
+        tenantSelectionEvidence: {
+          ...manifest.tenantSelectionEvidence,
+          sha256: "not-a-digest",
+        },
+      },
+      {
+        ...manifest,
+        tenantSelectionEvidence: undefined,
       },
     ]) {
       expect(() => sourceTrialManifestSchema.parse(invalid)).toThrow();

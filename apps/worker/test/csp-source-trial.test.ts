@@ -88,6 +88,10 @@ const manifest: SourceTrialManifest = {
   environment: "staging",
   countryCodes: ["FR"],
   policyEvidenceId,
+  tenantSelectionEvidence: {
+    reference: "source-ranking/2026-07-20/csp-b3f661d.json",
+    sha256: "b".repeat(64),
+  },
   requestedAt: "2026-07-20T11:00:00Z",
   expiresAt: "2026-07-21T11:00:00Z",
   budget: {

@@ -4,6 +4,21 @@ This runbook closes the repository-level integration requirements for the
 French supply and ATS work. It is not an instruction to deploy or enable a
 source. External production actions require a separate operator approval.
 
+## Current release state
+
+The operator authorized and completed the existing CRA frontend and FastAPI
+backend release plus the primary-application migrations on 2026-07-20. The
+authorized, read-only validation is recorded in
+[`job-supply-production-validation-2026-07-20.md`](job-supply-production-validation-2026-07-20.md).
+That release did **not** deploy `apps/worker`, apply the inventory/source
+migrations, activate a provider/source/schedule, or transfer canonical writer
+ownership.
+
+The repository verifier below remains deliberately side-effect free. Its
+`REMOTE_DEPLOYMENT_VALIDATION_NOT_PERFORMED_BY_VERIFIER` blocker means only
+that the command did not inspect remote infrastructure; it is not a claim that
+the legacy application has never been deployed.
+
 ## Verification command
 
 Repository-only verification:
@@ -98,6 +113,7 @@ Apply in this order with `psql -v ON_ERROR_STOP=1`:
 9. `20260720000900_ats_registration_activation_hardening.sql`
 10. `20260720001000_open_source_policy_evidence.sql`
 11. `20260720001100_source_trial_foundation.sql`
+12. `20260720001150_source_trial_tenant_selection_binding.sql`
 
 The following same-day migrations belong to the **primary application
 database**, not the split inventory database. They are documented here so a
@@ -152,9 +168,10 @@ Repository checks must prove:
 - `WORKER_CONTROL_ENABLED=false` unless a separately protected operator control
   plane is approved.
 
-An actual Vercel preview, Railway service creation, Supabase migration or
+An actual Vercel preview, Railway service creation, database migration or
 provider request is external production/staging work and is not performed by
-this repository verification command.
+this repository verification command. Authorized remote evidence must be
+captured separately, as in the dated production-validation record above.
 
 ## Disabled deployment sequence
 
@@ -209,6 +226,9 @@ Use `docs/operations/job-source-readiness-matrix.md` and require:
 
 Repository evidence can prove code defaults, migration grants, tests,
 configuration files and local checksums. It cannot prove the current Railway,
-Vercel, Supabase or vendor account state without authorized external access.
-The final manifest must say “not performed” for those actions rather than claim
-that remote state was inspected.
+Vercel, database or vendor account state without authorized external access.
+The repository verifier must say that remote validation was not performed
+**by the verifier** rather than making a global deployment claim. A separate
+authorized attestation may record remote state, but it must identify its
+observation time, commands, exact deployment IDs and remaining unverified
+boundaries.

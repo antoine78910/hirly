@@ -77,6 +77,36 @@ bun run --cwd apps/worker trial -- \
 
 For Lever EU boards add `--lever-region eu`.
 
+French open-data previews use the separate evidence-only operator entrypoint.
+They require the source-trial policy manifest, the exact sealed resource
+manifest, and the reviewed resource-manifest SHA-256. The recorded response is
+always explicit, so preview cannot fall through to a network request:
+
+```bash
+# Choisir le Service Public CSV
+bun run --cwd apps/worker trial:french -- \
+  csp preview \
+  --manifest artifacts/job-ingestion/trials/csp-source-trial.json \
+  --resource-manifest artifacts/job-ingestion/trials/csp-resource.json \
+  --approved-manifest-digest '<reviewed-resource-manifest-sha256>' \
+  --response artifacts/job-ingestion/trials/csp-response.csv \
+  --output artifacts/job-ingestion/trials/csp-preview.json
+
+# One separately qualified data.gouv JSON resource
+bun run --cwd apps/worker trial:french -- \
+  data-gouv preview \
+  --manifest artifacts/job-ingestion/trials/data-gouv-source-trial.json \
+  --resource-manifest artifacts/job-ingestion/trials/data-gouv-resource.json \
+  --approved-manifest-digest '<reviewed-resource-manifest-sha256>' \
+  --response artifacts/job-ingestion/trials/data-gouv-response.json \
+  --output artifacts/job-ingestion/trials/data-gouv-preview.json
+```
+
+The output records `canonicalWrites=false` and
+`sourceActivationChanges=false`. A digest mismatch, resource/policy binding
+mismatch, expired policy, budget excess, unqualified data.gouv resource, or
+unexpected response shape fails closed.
+
 ## Policy-gated evidence run
 
 The live trial command calls `begin_source_trial` before the network request.
@@ -90,6 +120,26 @@ bun run --cwd apps/worker trial -- \
   --manifest artifacts/job-ingestion/trials/greenhouse-acme-manifest.json \
   --output artifacts/job-ingestion/trials/greenhouse-acme-run.json
 ```
+
+For a previously previewed French resource, replace `preview` with `run` and
+remove `--response`. For example:
+
+```bash
+SOURCE_TRIAL_DATABASE_URL='postgresql://least-privilege-trial-role/...' \
+bun run --cwd apps/worker trial:french -- \
+  csp run \
+  --manifest artifacts/job-ingestion/trials/csp-source-trial.json \
+  --resource-manifest artifacts/job-ingestion/trials/csp-resource.json \
+  --approved-manifest-digest '<reviewed-resource-manifest-sha256>' \
+  --output artifacts/job-ingestion/trials/csp-run.json
+```
+
+Use `data-gouv run` with the corresponding qualified resource files. The run
+subcommand rejects fixture input. It performs at most the single request
+allowed by the sealed resource manifest and persists through the same
+least-privilege evidence repository as ATS trials. It does not expose a
+canonical job writer, application queue, ownership mutation, source enablement,
+or scheduling capability.
 
 Only immutable trial runs, raw pages, normalized candidates and run-result
 evidence can be appended. The trial role has no table DML and cannot execute
@@ -113,6 +163,11 @@ later page, candidate or contradictory result append.
 Run each candidate for 14 consecutive days and include at least one complete
 snapshot. Preserve each run artifact and content digest. Partial, failed,
 rate-limited or zero-collapse runs are evidence but cannot declare removals.
+
+G014 readiness proves that repeated runs reconcile safely; it does not claim
+that the 14-day bakeoff has already happened. The elapsed trial and its
+non-sample scorecard are G016 operational evidence. Never shorten the cadence
+in an artifact merely to turn readiness into a fabricated inventory result.
 
 Prepare a non-sample baseline and repeated trial snapshot input with one frozen
 paid-cohort digest, policy digest and control digest. Then run:

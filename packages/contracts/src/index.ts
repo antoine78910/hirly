@@ -93,6 +93,13 @@ export const sourceTrialBudgetSchema = z
   })
   .strict();
 
+export const sourceTrialTenantSelectionEvidenceSchema = z
+  .object({
+    reference: z.string().trim().min(1).max(2_048),
+    sha256: z.string().regex(/^[0-9a-f]{64}$/),
+  })
+  .strict();
+
 export const sourceTrialManifestSchema = z
   .object({
     schemaVersion: z.literal("hirly.source-trial-manifest.v1"),
@@ -111,6 +118,7 @@ export const sourceTrialManifestSchema = z
       .min(1)
       .max(250),
     policyEvidenceId: z.uuid(),
+    tenantSelectionEvidence: sourceTrialTenantSelectionEvidenceSchema,
     requestedAt: z.iso.datetime({ offset: true }),
     expiresAt: z.iso.datetime({ offset: true }),
     budget: sourceTrialBudgetSchema,

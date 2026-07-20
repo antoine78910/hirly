@@ -22,6 +22,10 @@ const manifest: SourceTrialManifest = {
   environment: "staging",
   countryCodes: ["FR"],
   policyEvidenceId: "018f02d8-a8b8-7f1d-a419-bf38eaf22a91",
+  tenantSelectionEvidence: {
+    reference: "ats-ranking/2026-07-20/greenhouse-vaulttec.json",
+    sha256: "a".repeat(64),
+  },
   requestedAt: "2026-07-20T11:00:00Z",
   expiresAt: "2026-07-21T11:00:00Z",
   budget: {
@@ -84,9 +88,11 @@ describe("G014 evidence-only source trial runner", () => {
 
   test("persists only through the evidence repository interface", async () => {
     const calls: string[] = [];
+    const observedManifests: SourceTrialManifest[] = [];
     const repository: SourceTrialEvidenceRepository = {
-      async beginSourceTrial() {
+      async beginSourceTrial(input) {
         calls.push("begin");
+        observedManifests.push(input);
         return "018f02d8-a8b8-7f1d-a419-bf38eaf22a92";
       },
       async recordSourceTrialPage() {
@@ -107,6 +113,11 @@ describe("G014 evidence-only source trial runner", () => {
       now: () => new Date("2026-07-20T12:00:00Z"),
     });
     expect(calls).toEqual(["begin", "page", "candidate", "scorecard"]);
+    expect(observedManifests).toEqual([
+      expect.objectContaining({
+        tenantSelectionEvidence: manifest.tenantSelectionEvidence,
+      }),
+    ]);
     expect(Object.keys(repository)).not.toContain("upsertCanonicalBatch");
     expect(Object.keys(repository)).not.toContain("enqueue");
   });

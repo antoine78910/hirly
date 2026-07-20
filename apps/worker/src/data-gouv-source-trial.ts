@@ -252,6 +252,12 @@ export function sealDataGouvTrialResourceManifest(
   );
 }
 
+export function parseDataGouvTrialResourceManifest(
+  input: unknown,
+): DataGouvTrialResourceManifest {
+  return deepFreeze(dataGouvTrialResourceManifestSchema.parse(input));
+}
+
 export interface QualifiedDataGouvTrialTransport {
   readonly trialOnly: true;
   readonly manualInvocationOnly: true;

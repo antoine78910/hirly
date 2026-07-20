@@ -17,6 +17,20 @@ const rollback = readFileSync(
   ),
   "utf8",
 );
+const tenantSelectionBinding = readFileSync(
+  join(
+    repoRoot,
+    "backend/db/migrations/20260720001150_source_trial_tenant_selection_binding.sql",
+  ),
+  "utf8",
+);
+const tenantSelectionBindingRollback = readFileSync(
+  join(
+    repoRoot,
+    "backend/db/migrations/20260720001150_source_trial_tenant_selection_binding.down.sql",
+  ),
+  "utf8",
+);
 
 describe("G014 source trial foundation", () => {
   test("creates disabled, tenant-bound, expiring trial policy and budgets", () => {
@@ -77,6 +91,39 @@ describe("G014 source trial foundation", () => {
     );
     expect(migration).toMatch(
       /v_candidate := p_serialized_candidate::jsonb/i,
+    );
+  });
+
+  test("binds admission and persisted runs to exact measured tenant-selection evidence", () => {
+    expect(tenantSelectionBinding).toMatch(
+      /source_trial_policies[\s\S]*tenant_selection_evidence_reference[\s\S]*tenant_selection_evidence_sha256/i,
+    );
+    expect(tenantSelectionBinding).toMatch(
+      /NOT trial_enabled[\s\S]*tenant_selection_evidence_reference IS NOT NULL[\s\S]*tenant_selection_evidence_sha256 IS NOT NULL/i,
+    );
+    expect(tenantSelectionBinding).toMatch(
+      /manifest#>>'\{tenantSelectionEvidence,reference\}'/i,
+    );
+    expect(tenantSelectionBinding).toMatch(
+      /manifest#>>'\{tenantSelectionEvidence,sha256\}'/i,
+    );
+    expect(tenantSelectionBinding).toMatch(
+      /v_policy\.tenant_selection_evidence_reference IS DISTINCT FROM v_reference/i,
+    );
+    expect(tenantSelectionBinding).toMatch(
+      /v_policy\.tenant_selection_evidence_sha256 IS DISTINCT FROM v_sha256/i,
+    );
+    expect(tenantSelectionBinding).toMatch(
+      /NEW\.tenant_selection_evidence_reference := v_reference/i,
+    );
+    expect(tenantSelectionBinding).toMatch(
+      /NEW\.tenant_selection_evidence_sha256 := v_sha256/i,
+    );
+    expect(tenantSelectionBinding).not.toMatch(
+      /INSERT INTO public\.(jobs|job_occurrences|canonical_job_groups|provider_registry|worker_schedules|worker_tasks|applications)\b/i,
+    );
+    expect(tenantSelectionBindingRollback).toContain(
+      "DROP FUNCTION IF EXISTS worker_private.bind_source_trial_tenant_selection",
     );
   });
 

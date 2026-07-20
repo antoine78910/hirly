@@ -246,6 +246,12 @@ export function sealCspTrialResourceManifest(
   );
 }
 
+export function parseCspTrialResourceManifest(
+  input: unknown,
+): CspTrialResourceManifest {
+  return deepFreeze(manifestSchema.parse(input));
+}
+
 export function sealQualifiedCspTrialResourceManifest(input: {
   sourceId: string;
   policyEvidenceId: string;

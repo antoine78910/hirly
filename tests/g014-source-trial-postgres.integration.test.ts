@@ -42,6 +42,7 @@ describe("G014 real-Postgres source trial isolation", () => {
         "20260720000900_ats_registration_activation_hardening.sql",
         "20260720001000_open_source_policy_evidence.sql",
         "20260720001100_source_trial_foundation.sql",
+        "20260720001150_source_trial_tenant_selection_binding.sql",
       ]) {
         await apply(`backend/db/migrations/${migration}`);
       }
@@ -229,7 +230,8 @@ describe("G014 real-Postgres source trial isolation", () => {
                 permitted_access_method, environment, starts_at, expires_at,
                 max_total_runs, max_pages_per_run, max_candidates_per_run,
                 max_bytes_per_run, trial_enabled, approved_by,
-                approval_reference
+                approval_reference, tenant_selection_evidence_reference,
+                tenant_selection_evidence_sha256
               ) VALUES (
                 current_setting('g014.source_id')::uuid,
                 'greenhouse', 'g014-foundation', v_evidence_id,
@@ -237,7 +239,7 @@ describe("G014 real-Postgres source trial isolation", () => {
                 clock_timestamp() - interval '1 minute',
                 clock_timestamp() + interval '1 hour',
                 1, 1, 1, 4096, true, 'g014-test',
-                'unqualified-evidence'
+                'unqualified-evidence', 'ats-ranking/g014.json', repeat('c', 64)
               );
               RAISE EXCEPTION
                 'unqualified source evidence unexpectedly authorized a trial';
@@ -254,7 +256,9 @@ describe("G014 real-Postgres source trial isolation", () => {
               source_id, provider, tenant_key, policy_evidence_id,
               permitted_access_method, environment, starts_at, expires_at,
               max_total_runs, max_pages_per_run, max_candidates_per_run,
-              max_bytes_per_run, trial_enabled, approved_by, approval_reference
+              max_bytes_per_run, trial_enabled, approved_by, approval_reference,
+              tenant_selection_evidence_reference,
+              tenant_selection_evidence_sha256
             ) VALUES (
               current_setting('g014.source_id')::uuid,
               'greenhouse', 'g014-foundation',
@@ -262,7 +266,8 @@ describe("G014 real-Postgres source trial isolation", () => {
               'tenant_feed', 'test',
               clock_timestamp() - interval '1 minute',
               clock_timestamp() + interval '1 hour',
-              1, 1, 1, 4096, true, 'g014-test', 'public-page-only'
+              1, 1, 1, 4096, true, 'g014-test', 'public-page-only',
+              'ats-ranking/g014.json', repeat('c', 64)
             );
             RAISE EXCEPTION 'public page unexpectedly treated as trial permission';
           EXCEPTION WHEN check_violation THEN NULL;
@@ -277,7 +282,9 @@ describe("G014 real-Postgres source trial isolation", () => {
               source_id, provider, tenant_key, policy_evidence_id,
               permitted_access_method, environment, starts_at, expires_at,
               max_total_runs, max_pages_per_run, max_candidates_per_run,
-              max_bytes_per_run, trial_enabled, approved_by, approval_reference
+              max_bytes_per_run, trial_enabled, approved_by, approval_reference,
+              tenant_selection_evidence_reference,
+              tenant_selection_evidence_sha256
             ) VALUES (
               current_setting('g014.source_id')::uuid,
               'greenhouse', 'g014-foundation',
@@ -285,7 +292,8 @@ describe("G014 real-Postgres source trial isolation", () => {
               'partner_feed', 'staging',
               clock_timestamp() - interval '1 minute',
               clock_timestamp() + interval '1 hour',
-              1, 1, 1, 4096, true, 'g014-test', 'g014-fixture'
+              1, 1, 1, 4096, true, 'g014-test', 'g014-fixture',
+              'ats-ranking/g014.json', repeat('c', 64)
             );
             RAISE EXCEPTION 'mismatched access method unexpectedly accepted';
           EXCEPTION WHEN check_violation THEN NULL;
@@ -297,7 +305,9 @@ describe("G014 real-Postgres source trial isolation", () => {
           source_id, provider, tenant_key, policy_evidence_id,
           permitted_access_method, environment, starts_at, expires_at,
           max_total_runs, max_pages_per_run, max_candidates_per_run,
-          max_bytes_per_run, trial_enabled, approved_by, approval_reference
+          max_bytes_per_run, trial_enabled, approved_by, approval_reference,
+          tenant_selection_evidence_reference,
+          tenant_selection_evidence_sha256
         ) VALUES (
           current_setting('g014.source_id')::uuid,
           'greenhouse', 'g014-foundation',
@@ -305,7 +315,8 @@ describe("G014 real-Postgres source trial isolation", () => {
           'tenant_feed', 'test',
           clock_timestamp() - interval '1 minute',
           clock_timestamp() + interval '1 hour',
-          2, 1, 1, 4096, true, 'g014-test', 'g014-fixture'
+          2, 1, 1, 4096, true, 'g014-test', 'g014-fixture',
+          'ats-ranking/g014.json', repeat('c', 64)
         );
 
         SET LOCAL ROLE hirly_source_trial_worker;
@@ -323,6 +334,10 @@ describe("G014 real-Postgres source trial isolation", () => {
               'environment', 'test',
               'countryCodes', jsonb_build_array('FR'),
               'policyEvidenceId', current_setting('g014.evidence_id'),
+              'tenantSelectionEvidence', jsonb_build_object(
+                'reference', 'ats-ranking/g014.json',
+                'sha256', repeat('c', 64)
+              ),
               'requestedAt', to_jsonb(clock_timestamp()),
               'expiresAt', to_jsonb(clock_timestamp() + interval '30 minutes'),
               'budget', jsonb_build_object(
@@ -334,6 +349,36 @@ describe("G014 real-Postgres source trial isolation", () => {
           END;
         END
         $budget$;
+
+        DO $tenant_selection_mismatch$
+        BEGIN
+          BEGIN
+            PERFORM worker_private.begin_source_trial(jsonb_build_object(
+              'schemaVersion', 'hirly.source-trial-manifest.v1',
+              'trialKey', 'greenhouse:g014:wrong-ranking:' ||
+                gen_random_uuid()::text,
+              'sourceId', current_setting('g014.source_id'),
+              'provider', 'greenhouse',
+              'tenantKey', 'g014-foundation',
+              'environment', 'test',
+              'countryCodes', jsonb_build_array('FR'),
+              'policyEvidenceId', current_setting('g014.evidence_id'),
+              'tenantSelectionEvidence', jsonb_build_object(
+                'reference', 'ats-ranking/g014.json',
+                'sha256', repeat('d', 64)
+              ),
+              'requestedAt', to_jsonb(clock_timestamp()),
+              'expiresAt', to_jsonb(clock_timestamp() + interval '30 minutes'),
+              'budget', jsonb_build_object(
+                'maxPages', 1, 'maxCandidates', 1, 'maxBytes', 4096
+              )
+            ));
+            RAISE EXCEPTION
+              'unapproved tenant ranking evidence unexpectedly accepted';
+          EXCEPTION WHEN insufficient_privilege THEN NULL;
+          END;
+        END
+        $tenant_selection_mismatch$;
 
         SELECT set_config(
           'g014.run_key',
@@ -356,6 +401,10 @@ describe("G014 real-Postgres source trial isolation", () => {
             'environment', 'test',
             'countryCodes', jsonb_build_array('FR'),
             'policyEvidenceId', current_setting('g014.evidence_id'),
+            'tenantSelectionEvidence', jsonb_build_object(
+              'reference', 'ats-ranking/g014.json',
+              'sha256', repeat('c', 64)
+            ),
             'requestedAt',
               to_jsonb(current_setting('g014.run_requested_at')::timestamptz),
             'expiresAt', to_jsonb(clock_timestamp() + interval '30 minutes'),
@@ -387,6 +436,10 @@ describe("G014 real-Postgres source trial isolation", () => {
             'environment', 'test',
             'countryCodes', jsonb_build_array('FR'),
             'policyEvidenceId', current_setting('g014.evidence_id'),
+            'tenantSelectionEvidence', jsonb_build_object(
+              'reference', 'ats-ranking/g014.json',
+              'sha256', repeat('c', 64)
+            ),
             'requestedAt', to_jsonb(
               current_setting('g014.empty_run_requested_at')::timestamptz
             ),
@@ -760,7 +813,9 @@ describe("G014 real-Postgres source trial isolation", () => {
           source_id, provider, tenant_key, policy_evidence_id,
           permitted_access_method, environment, starts_at, expires_at,
           max_total_runs, max_pages_per_run, max_candidates_per_run,
-          max_bytes_per_run, trial_enabled, approved_by, approval_reference
+          max_bytes_per_run, trial_enabled, approved_by, approval_reference,
+          tenant_selection_evidence_reference,
+          tenant_selection_evidence_sha256
         ) VALUES (
           current_setting('g014.source_id')::uuid,
           'greenhouse', 'g014-foundation',
@@ -768,7 +823,8 @@ describe("G014 real-Postgres source trial isolation", () => {
           'tenant_feed', 'development',
           clock_timestamp() - interval '1 minute',
           clock_timestamp() + interval '2 seconds',
-          1, 1, 1, 4096, true, 'g014-test', 'expiry-fixture'
+          1, 1, 1, 4096, true, 'g014-test', 'expiry-fixture',
+          'ats-ranking/g014.json', repeat('c', 64)
         );
         SET LOCAL ROLE hirly_source_trial_worker;
         SELECT set_config(
@@ -792,6 +848,10 @@ describe("G014 real-Postgres source trial isolation", () => {
             'environment', 'development',
             'countryCodes', jsonb_build_array('FR'),
             'policyEvidenceId', current_setting('g014.evidence_id'),
+            'tenantSelectionEvidence', jsonb_build_object(
+              'reference', 'ats-ranking/g014.json',
+              'sha256', repeat('c', 64)
+            ),
             'requestedAt', to_jsonb(
               current_setting('g014.expiry_run_requested_at')::timestamptz
             ),
@@ -911,6 +971,17 @@ describe("G014 real-Postgres source trial isolation", () => {
             SELECT production_eligible
             FROM public.source_policy_evidence
             WHERE id = current_setting('g014.evidence_id')::uuid
+          ),
+          'tenantSelectionBound', (
+            SELECT
+              tenant_selection_evidence_reference = 'ats-ranking/g014.json'
+              AND tenant_selection_evidence_sha256 = repeat('c', 64)
+              AND manifest#>>'{tenantSelectionEvidence,reference}'
+                = tenant_selection_evidence_reference
+              AND manifest#>>'{tenantSelectionEvidence,sha256}'
+                = tenant_selection_evidence_sha256
+            FROM public.source_trial_runs
+            WHERE id = current_setting('g014.run_id')::uuid
           )
         );
 
@@ -934,6 +1005,7 @@ describe("G014 real-Postgres source trial isolation", () => {
         providerEnabled: false,
         sourceEnabled: false,
         productionEligible: false,
+        tenantSelectionBound: true,
       });
     },
     30_000,
@@ -942,6 +1014,9 @@ describe("G014 real-Postgres source trial isolation", () => {
   runIntegration(
     "rolls back safely when no trial evidence exists",
     async () => {
+      await apply(
+        "backend/db/migrations/20260720001150_source_trial_tenant_selection_binding.down.sql",
+      );
       await apply(
         "backend/db/migrations/20260720001100_source_trial_foundation.down.sql",
       );
@@ -953,6 +1028,9 @@ describe("G014 real-Postgres source trial isolation", () => {
       ).toBe("t");
       await apply(
         "backend/db/migrations/20260720001100_source_trial_foundation.sql",
+      );
+      await apply(
+        "backend/db/migrations/20260720001150_source_trial_tenant_selection_binding.sql",
       );
     },
     30_000,
