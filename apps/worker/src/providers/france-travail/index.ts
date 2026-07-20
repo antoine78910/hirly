@@ -99,8 +99,8 @@ export const franceTravailProvider: ProviderCore<FranceTravailRawJob> = {
         location,
         countryCode: "FR",
         description: raw.description,
-        contractType: raw.typeContrat,
-        status: raw.etat,
+        contractType: raw.typeContrat ?? null,
+        status: raw.etat ?? null,
         applyUrls: applyUrls(raw),
       };
     },

@@ -248,9 +248,10 @@ export class WorkerRepository {
 
   async writeJobAndComplete(
     lease: Lease,
+    providerClaim: ProviderWorkClaim,
     job: CanonicalJob,
   ): Promise<boolean> {
-    return this.writeJobsAndComplete(lease, [job]);
+    return this.writeJobsAndComplete(lease, providerClaim, [job]);
   }
 
   async writeJobsAndComplete(
