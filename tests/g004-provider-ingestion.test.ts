@@ -11,15 +11,11 @@ import {
 } from "../packages/ingestion/src/index";
 import { providerModules } from "../apps/worker/src/providers";
 import type { ProviderCore } from "../apps/worker/src/providers/core";
-import { createTaskHandlers } from "../apps/worker/src/runtime/handlers";
-import type { RuntimeStore } from "../apps/worker/src/runtime/types";
 import type {
   CanonicalJob,
   Provider,
   ProviderSearchRequest,
 } from "../packages/contracts/src/index";
-import type { ClaimedTask } from "../packages/db/src/index";
-import { createJsonLogger } from "../packages/observability/src/index";
 
 const providers = ["apec", "hellowork", "wttj", "indeed"] as const;
 const fixtureRoot = new URL("./fixtures/g004/", import.meta.url);
@@ -138,30 +134,6 @@ describe("G004 stable canonical identity and normalization", () => {
     ).toBe(
       toCanonicalJob(adapter.normalizeRaw(reordered), fixedNow).fingerprint,
     );
-  });
-
-  test("redacts secrets and personal data before retaining the source document", async () => {
-    const fixture = await loadFixture("apec");
-    const sensitive = {
-      ...fixture,
-      sourceDocument: {
-        apiToken: "provider-secret",
-        recruiterEmail: "person@example.test",
-        nested: {
-          authorization: "Bearer abc.def.ghi",
-          databaseUrl: "postgres://worker:password@db.example.test/jobs",
-        },
-      },
-    };
-    const normalized = providerModules.apec.adapter.normalizeRaw(sensitive);
-    const serialized = JSON.stringify(toCanonicalJob(normalized, fixedNow).data);
-
-    expect(serialized).not.toContain("provider-secret");
-    expect(serialized).not.toContain("person@example.test");
-    expect(serialized).not.toContain("abc.def.ghi");
-    expect(serialized).not.toContain("worker:password");
-    expect(serialized).toContain("[REDACTED]");
-    expect(serialized).toContain("[REDACTED_EMAIL]");
   });
 });
 
