@@ -501,11 +501,11 @@ async def _import_provider_jobs(db, provider, query: JobSearchQuery) -> Dict[str
             already_prepared=True,
             provider_claim=provider_claim,
         )
-        return {
+        response = {
             **batch_stats,
             "jobs": prepared_jobs,
         }
-    finally:
+    except Exception:
         if provider_claim is not None:
             finish = getattr(db, "finish_python_provider_work", None)
             if callable(finish):
@@ -513,6 +513,12 @@ async def _import_provider_jobs(db, provider, query: JobSearchQuery) -> Dict[str
                     await finish(provider_claim)
                 except Exception as exc:
                     logger.warning("France Travail provider claim finish failed: %s", exc)
+        raise
+    if provider_claim is not None:
+        finish = getattr(db, "finish_python_provider_work", None)
+        if not callable(finish) or not await finish(provider_claim):
+            raise RuntimeError("France Travail provider ownership claim became stale")
+    return response
 
 
 async def _upsert_job_batch(

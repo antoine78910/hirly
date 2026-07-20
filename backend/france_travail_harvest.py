@@ -411,12 +411,24 @@ async def harvest_france_travail(
                         finish = getattr(db, "finish_python_provider_work", None)
                         if callable(finish):
                             try:
-                                await finish(provider_claim)
+                                finished = await finish(provider_claim)
+                                if not finished and "error" not in run:
+                                    run["error"] = (
+                                        "RuntimeError: France Travail provider ownership "
+                                        "claim became stale"
+                                    )
+                                    run["partition_status"] = "failed"
                             except Exception as exc:
                                 logger.warning(
                                     "ft_harvest_provider_claim_finish_failed error=%s",
                                     str(exc)[:200],
                                 )
+                                if "error" not in run:
+                                    run["error"] = (
+                                        "RuntimeError: France Travail provider claim "
+                                        f"finish failed: {str(exc)[:120]}"
+                                    )
+                                    run["partition_status"] = "failed"
             runs[index] = run
 
         await asyncio.gather(*(_harvest_one(index) for index in range(queries)))

@@ -80,6 +80,10 @@ class _DB:
         self.jobs = _Jobs()
         self.job_dedup_candidates = _Candidates()
 
+    async def upsert_python_provider_jobs(self, claim, jobs):
+        await self.jobs.insert_many(jobs)
+        return len(jobs)
+
 
 def test_golden_corpus_runs_through_real_upsert_without_false_merges():
     for case in json.loads(FIXTURE.read_text()):
