@@ -339,7 +339,7 @@ BEGIN
     UPDATE public.worker_task_attempts AS attempt
     SET
       finished_at = clock_timestamp(),
-      outcome = 'failed',
+      outcome = 'lease_expired',
       error_code = 'retry_exhausted',
       error_message = 'lease expired after maximum attempts'
     FROM exhausted
