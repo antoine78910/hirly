@@ -12,8 +12,8 @@ CREATE TABLE IF NOT EXISTS public.provider_work_claims (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   provider text NOT NULL
     REFERENCES public.provider_registry(provider) ON DELETE RESTRICT,
-  writer_runtime text NOT NULL
-    CHECK (writer_runtime IN ('python', 'typescript')),
+  captured_runtime text NOT NULL
+    CHECK (captured_runtime IN ('python', 'typescript')),
   ownership_epoch bigint NOT NULL CHECK (ownership_epoch >= 0),
   lease_owner text NOT NULL CHECK (length(btrim(lease_owner)) > 0),
   task_id uuid REFERENCES public.worker_tasks(id) ON DELETE RESTRICT,
@@ -23,12 +23,12 @@ CREATE TABLE IF NOT EXISTS public.provider_work_claims (
   finished_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT provider_work_claims_task_shape CHECK (
-    (writer_runtime = 'typescript'
+    (captured_runtime = 'typescript'
       AND task_id IS NOT NULL
       AND task_lease_token IS NOT NULL
       AND task_claim_generation IS NOT NULL)
     OR
-    (writer_runtime = 'python'
+    (captured_runtime = 'python'
       AND task_id IS NULL
       AND task_lease_token IS NULL
       AND task_claim_generation IS NULL)
@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS public.provider_work_claims (
     finished_at IS NULL OR finished_at >= created_at
   ),
   CONSTRAINT provider_work_claims_operation_unique
-    UNIQUE (provider, writer_runtime, lease_owner),
+    UNIQUE (provider, captured_runtime, lease_owner),
   CONSTRAINT provider_work_claims_task_attempt_unique
     UNIQUE (task_id, task_lease_token, task_claim_generation, provider)
 );
@@ -56,7 +56,7 @@ BEGIN
   IF TG_OP = 'DELETE'
     OR NEW.id <> OLD.id
     OR NEW.provider <> OLD.provider
-    OR NEW.writer_runtime <> OLD.writer_runtime
+    OR NEW.captured_runtime <> OLD.captured_runtime
     OR NEW.ownership_epoch <> OLD.ownership_epoch
     OR NEW.lease_owner <> OLD.lease_owner
     OR NEW.task_id IS DISTINCT FROM OLD.task_id
@@ -96,11 +96,11 @@ AS $$
     JOIN public.provider_registry AS registry
       ON registry.provider = claim.provider
     WHERE claim.id = p_claim_id
-      AND claim.writer_runtime = p_runtime
+      AND claim.captured_runtime = p_runtime
       AND (p_lease_owner IS NULL OR claim.lease_owner = p_lease_owner)
       AND claim.finished_at IS NULL
       AND claim.expires_at > clock_timestamp()
-      AND registry.writer_runtime = claim.writer_runtime
+      AND registry.writer_runtime = claim.captured_runtime
       AND registry.ownership_epoch = claim.ownership_epoch
   )
 $$;
@@ -207,7 +207,7 @@ BEGIN
 
   RETURN QUERY
   INSERT INTO public.provider_work_claims (
-    provider, writer_runtime, ownership_epoch, lease_owner, task_id,
+    provider, captured_runtime, ownership_epoch, lease_owner, task_id,
     task_lease_token, task_claim_generation, expires_at
   )
   VALUES (
@@ -215,7 +215,7 @@ BEGIN
     p_lease_token, p_claim_generation,
     clock_timestamp() + make_interval(secs => p_lease_seconds)
   )
-  RETURNING id, provider, writer_runtime, ownership_epoch, expires_at;
+  RETURNING id, provider, captured_runtime, ownership_epoch, expires_at;
 END
 $$;
 
@@ -238,7 +238,7 @@ BEGIN
   JOIN public.provider_registry AS registry
     ON registry.provider = claim.provider
   WHERE claim.id = p_provider_claim_id
-    AND claim.writer_runtime = 'typescript'
+    AND claim.captured_runtime = 'typescript'
     AND claim.task_id = p_task_id
     AND claim.task_lease_token = p_lease_token
     AND claim.task_claim_generation = p_claim_generation
@@ -294,7 +294,7 @@ BEGIN
   END IF;
 
   INSERT INTO public.provider_work_claims (
-    provider, writer_runtime, ownership_epoch, lease_owner, expires_at
+    provider, captured_runtime, ownership_epoch, lease_owner, expires_at
   )
   VALUES (
     p_provider, 'python', v_epoch, p_lease_owner,
@@ -305,7 +305,7 @@ BEGIN
   RETURN jsonb_build_object(
     'claim_id', v_claim.id,
     'provider', v_claim.provider,
-    'writer_runtime', v_claim.writer_runtime,
+    'writer_runtime', v_claim.captured_runtime,
     'ownership_epoch', v_claim.ownership_epoch,
     'expires_at', v_claim.expires_at
   );
@@ -331,7 +331,7 @@ BEGIN
   JOIN public.provider_registry AS registry
     ON registry.provider = claim.provider
   WHERE claim.id = p_claim_id
-    AND claim.writer_runtime = 'python'
+    AND claim.captured_runtime = 'python'
     AND claim.lease_owner = p_lease_owner
     AND claim.finished_at IS NULL
     AND claim.expires_at > clock_timestamp()
@@ -365,7 +365,7 @@ BEGIN
   JOIN public.provider_registry AS registry
     ON registry.provider = claim.provider
   WHERE claim.id = p_claim_id
-    AND claim.writer_runtime = 'python'
+    AND claim.captured_runtime = 'python'
     AND claim.lease_owner = p_lease_owner
     AND claim.finished_at IS NULL
     AND claim.expires_at > clock_timestamp()
@@ -408,7 +408,7 @@ BEGIN
   JOIN public.provider_registry AS registry
     ON registry.provider = claim.provider
   WHERE claim.id = p_claim_id
-    AND claim.writer_runtime = 'python'
+    AND claim.captured_runtime = 'python'
     AND claim.lease_owner = p_lease_owner
     AND claim.finished_at IS NULL
     AND claim.expires_at > clock_timestamp()
@@ -575,7 +575,7 @@ BEGIN
   JOIN public.worker_tasks AS task
     ON task.id = claim.task_id
   WHERE claim.id = p_claim_id
-    AND claim.writer_runtime = 'typescript'
+    AND claim.captured_runtime = 'typescript'
     AND claim.task_id = p_task_id
     AND claim.task_lease_token = p_lease_token
     AND claim.task_claim_generation = p_claim_generation
@@ -622,7 +622,7 @@ BEGIN
   JOIN public.provider_registry AS registry
     ON registry.provider = claim.provider
   WHERE claim.id = p_claim_id
-    AND claim.writer_runtime = 'typescript'
+    AND claim.captured_runtime = 'typescript'
     AND claim.task_id = p_task_id
     AND claim.task_lease_token = p_lease_token
     AND claim.task_claim_generation = p_claim_generation
