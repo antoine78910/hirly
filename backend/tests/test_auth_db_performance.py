@@ -1,6 +1,7 @@
 import asyncio
 from types import SimpleNamespace
 
+import pytest
 import server
 from db import supabase_adapter
 
@@ -375,3 +376,254 @@ def test_training_access_reuses_joined_creator_flag(monkeypatch):
         {"user_id": "user_1", "email": "person@example.com"},
         True,
     ) is True
+
+
+@pytest.mark.parametrize("gmail_enabled,expected_operations", [(False, 5), (True, 7)])
+def test_session_exchange_stays_within_application_db_budget(monkeypatch, gmail_enabled, expected_operations):
+    operations = []
+    existing_user = {
+        "user_id": "user_1",
+        "email": "person@example.com",
+        "name": "Old",
+    }
+
+    class _Users:
+        async def find_one(self, *_args, **_kwargs):
+            operations.append("user_lookup")
+            return existing_user
+
+    class _Sessions:
+        async def insert_one(self, _document):
+            operations.append("session_insert")
+
+    class _Profiles:
+        async def find_one(self, *_args, **_kwargs):
+            operations.append("profile_lookup")
+            return {"user_id": "user_1", "cv_text": "cv", "target_role": "Engineer"}
+
+    class _GmailConnections:
+        async def find_one(self, *_args, **_kwargs):
+            operations.append("gmail_lookup")
+            return {"user_id": "user_1", "connected": True}
+
+    async def _patch_auth_user(user_id, patch):
+        operations.append("user_patch")
+        return {**existing_user, **patch, "user_id": user_id}
+
+    async def _creator(*_args, **_kwargs):
+        operations.append("creator_lookup")
+        return False
+
+    async def _store_gmail(*_args, **_kwargs):
+        operations.append("gmail_write")
+
+    class _AuthResponse:
+        status_code = 200
+        content = b"{}"
+        text = "{}"
+
+        def json(self):
+            return {
+                "id": "supabase_1",
+                "email": "person@example.com",
+                "user_metadata": {"full_name": "Person"},
+            }
+
+    async def _auth_request(*_args, **_kwargs):
+        return _AuthResponse()
+
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SECRET_KEY", "secret")
+    monkeypatch.setenv("AUTH_RETURNED_USER_WRITE_ENABLED", "true")
+    monkeypatch.setattr(
+        server,
+        "db",
+        SimpleNamespace(
+            users=_Users(),
+            user_sessions=_Sessions(),
+            profiles=_Profiles(),
+            gmail_connections=_GmailConnections(),
+            patch_auth_user=_patch_auth_user,
+        ),
+    )
+    monkeypatch.setattr(server, "_request_supabase_auth", _auth_request)
+    monkeypatch.setattr(server, "_set_app_session_cookie", lambda *_args: None)
+    monkeypatch.setattr(server, "is_training_creator", _creator)
+    monkeypatch.setattr(server, "store_gmail_tokens", _store_gmail)
+
+    result = asyncio.run(
+        server._session_payload_from_supabase_token(
+            "access-token",
+            SimpleNamespace(),
+            provider_token="gmail-token" if gmail_enabled else None,
+        )
+    )
+
+    assert len(operations) == expected_operations
+    assert result["user"]["user_id"] == "user_1"
+    assert operations.count("user_lookup") == 1
+    assert operations.count("user_patch") == 1
+    assert operations.count("session_insert") == 1
+    assert operations.count("creator_lookup") == 1
+
+
+@pytest.mark.parametrize(
+    "resolved,detail",
+    [
+        (None, "Invalid session"),
+        ({"status": "expired"}, "Session expired"),
+        ({"status": "user_not_found"}, "User not found"),
+    ],
+)
+def test_joined_auth_preserves_invalid_session_lifecycle(monkeypatch, resolved, detail):
+    class _Db:
+        async def resolve_auth_session(self, _token):
+            return resolved
+
+    monkeypatch.setenv("AUTH_JOINED_SESSION_LOOKUP_ENABLED", "true")
+    monkeypatch.setattr(server, "db", _Db())
+    request = SimpleNamespace(url=SimpleNamespace(path="/api/auth/me"))
+
+    with pytest.raises(server.HTTPException) as raised:
+        asyncio.run(
+            server.get_current_user(
+                request,
+                SimpleNamespace(),
+                session_token="session",
+                authorization=None,
+            )
+        )
+
+    assert raised.value.status_code == 401
+    assert raised.value.detail == detail
+
+
+def test_signup_exchange_auth_me_logout_journey(monkeypatch):
+    users = {}
+    sessions = {}
+
+    class _Users:
+        async def find_one(self, filter, *_args, **_kwargs):
+            if "email" in filter:
+                return next((row for row in users.values() if row["email"] == filter["email"]), None)
+            return users.get(filter.get("user_id"))
+
+        async def insert_one(self, document):
+            users[document["user_id"]] = dict(document)
+
+    class _Sessions:
+        async def insert_one(self, document):
+            sessions[document["session_token"]] = dict(document)
+
+        async def delete_many(self, filter):
+            sessions.pop(filter["session_token"], None)
+
+    class _Profiles:
+        async def find_one(self, *_args, **_kwargs):
+            return {"user_id": "user_1", "cv_text": "cv", "target_role": "Engineer"}
+
+    class _Db:
+        users = _Users()
+        user_sessions = _Sessions()
+        profiles = _Profiles()
+
+        async def resolve_auth_session(self, token):
+            session = sessions.get(token)
+            if not session:
+                return None
+            user = users.get(session["user_id"])
+            return {
+                "status": "ok",
+                "user": user,
+                "flags": {
+                    "is_training_creator": False,
+                    "has_training_access": False,
+                    "is_admin": False,
+                },
+            }
+
+    class _AuthResponse:
+        status_code = 200
+        content = b"{}"
+        text = "{}"
+
+        def json(self):
+            return {
+                "id": "supabase_1",
+                "email": "new@example.com",
+                "user_metadata": {"full_name": "New User"},
+            }
+
+    async def _auth_request(*_args, **_kwargs):
+        return _AuthResponse()
+
+    async def _creator(*_args, **_kwargs):
+        return False
+
+    cookies = []
+    response = SimpleNamespace(
+        set_cookie=lambda **kwargs: cookies.append(("set", kwargs["value"])),
+        delete_cookie=lambda *args, **kwargs: cookies.append(("delete", args, kwargs)),
+    )
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SECRET_KEY", "secret")
+    monkeypatch.setenv("AUTH_JOINED_SESSION_LOOKUP_ENABLED", "true")
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setattr(server, "db", _Db())
+    monkeypatch.setattr(server, "_request_supabase_auth", _auth_request)
+    monkeypatch.setattr(server, "is_training_creator", _creator)
+
+    exchanged = asyncio.run(server._session_payload_from_supabase_token("access", response))
+    token = exchanged["session_token"]
+    request = SimpleNamespace(url=SimpleNamespace(path="/api/auth/me"))
+    user = asyncio.run(
+        server.get_current_user(
+            request,
+            response,
+            session_token=token,
+            authorization=None,
+        )
+    )
+    me = asyncio.run(server.auth_me(user))
+    logged_out = asyncio.run(server.auth_logout(response, session_token=token, authorization=None))
+
+    assert len(users) == 1
+    assert len(sessions) == 0
+    assert me["user"]["email"] == "new@example.com"
+    assert logged_out == {"ok": True}
+    assert any(item[0] == "set" for item in cookies)
+    assert any(item[0] == "delete" for item in cookies)
+
+
+def test_promoted_stripe_fields_follow_old_version_json_deletion():
+    initial = supabase_adapter._supabase_row(
+        "users",
+        {
+            "user_id": "user_1",
+            "email": "person@example.com",
+            "billing": {
+                "stripe_customer_id": "cus_1",
+                "stripe_subscription_id": "sub_1",
+            },
+        },
+    )
+    deleted = supabase_adapter._supabase_row(
+        "users",
+        {
+            "user_id": "user_1",
+            "email": "person@example.com",
+            "billing": {},
+        },
+    )
+    migration = (
+        server.Path(server.__file__).parent
+        / "db"
+        / "migrations"
+        / "20260720001100_auth_session_lookup.sql"
+    ).read_text()
+
+    assert initial["stripe_customer_id"] == "cus_1"
+    assert deleted["stripe_customer_id"] is None
+    assert deleted["stripe_subscription_id"] is None
+    assert "NEW.stripe_customer_id := NULLIF(NEW.data #>> '{billing,stripe_customer_id}', '')" in migration
+    assert "NEW.stripe_subscription_id := NULLIF(NEW.data #>> '{billing,stripe_subscription_id}', '')" in migration
