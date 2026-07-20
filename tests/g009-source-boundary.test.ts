@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   runIngestion,
   stableJobId,
@@ -7,6 +8,39 @@ import {
   type ProviderAdapter,
   type ProviderTransport,
 } from "../packages/ingestion/src";
+
+const repoRoot = join(import.meta.dir, "..");
+const migrationsDirectory = join(repoRoot, "backend", "db", "migrations");
+
+function read(path: string): string {
+  return readFileSync(join(repoRoot, path), "utf8");
+}
+
+function sourceBoundaryMigration(): {
+  migration: string;
+  rollback: string;
+} {
+  const matches = readdirSync(migrationsDirectory)
+    .filter((name) => name.endsWith(".sql") && !name.endsWith(".down.sql"))
+    .filter((name) => {
+      const sql = read(`backend/db/migrations/${name}`);
+      return [
+        "public.raw_job_snapshots",
+        "public.job_occurrences",
+        "public.canonical_job_groups",
+        "public.canonical_job_group_members",
+      ].every((object) => sql.includes(object));
+    });
+
+  expect(matches).toHaveLength(1);
+  const filename = matches[0]!;
+  return {
+    migration: read(`backend/db/migrations/${filename}`),
+    rollback: read(
+      `backend/db/migrations/${filename.replace(/\.sql$/, ".down.sql")}`,
+    ),
+  };
+}
 
 function normalizedJob(externalId: string): NormalizedProviderJob {
   return {
@@ -146,6 +180,106 @@ describe("G009 source adapter contract", () => {
     expect(providerCore).toContain("provider transport is disabled");
     expect(providerRegistry).toContain(
       "false, 'none', '{\"requestsPerMinute\":1,\"concurrency\":1}'",
+    );
+  });
+});
+
+describe("G009 source persistence contract", () => {
+  test("links immutable raw snapshots to source identity and the run checkpoint ledger", () => {
+    const { migration } = sourceBoundaryMigration();
+
+    expect(migration).toMatch(
+      /raw_job_snapshots_source_external_hash_unique[\s\S]*UNIQUE\s*\(\s*source_id\s*,\s*external_id\s*,\s*content_hash\s*\)/i,
+    );
+    expect(migration).toMatch(
+      /source_id uuid NOT NULL REFERENCES public\.career_sources\(id\) ON DELETE RESTRICT/i,
+    );
+    expect(migration).toMatch(
+      /run_id uuid NOT NULL REFERENCES public\.worker_runs\(id\) ON DELETE RESTRICT/i,
+    );
+    expect(migration).toMatch(
+      /raw_job_snapshots_immutable[\s\S]*BEFORE UPDATE OR DELETE ON public\.raw_job_snapshots/i,
+    );
+  });
+
+  test("keeps occurrence IDs stable and preserves every legacy jobs reference", () => {
+    const { migration } = sourceBoundaryMigration();
+
+    expect(migration).toMatch(
+      /job_id text NOT NULL UNIQUE REFERENCES public\.jobs\(job_id\) ON DELETE RESTRICT/i,
+    );
+    expect(migration).toMatch(
+      /job_occurrences_source_external_unique UNIQUE\s*\(\s*source_id\s*,\s*external_id\s*\)/i,
+    );
+    expect(migration).toMatch(
+      /raw_snapshot_id uuid NOT NULL REFERENCES public\.raw_job_snapshots\(id\) ON DELETE RESTRICT/i,
+    );
+    expect(migration).not.toMatch(
+      /\b(?:DROP|RENAME)\s+(?:COLUMN\s+)?(?:public\.)?jobs?\b|\bALTER\s+COLUMN\s+job_id\b/i,
+    );
+  });
+
+  test("uses immutable UUID groups without re-keying occurrence-derived jobs", () => {
+    const { migration } = sourceBoundaryMigration();
+
+    expect(migration).toMatch(
+      /CREATE TABLE IF NOT EXISTS public\.canonical_job_groups\s*\([\s\S]*?id uuid PRIMARY KEY DEFAULT gen_random_uuid\(\)/i,
+    );
+    expect(migration).toMatch(
+      /canonical_job_group_members\s*\([\s\S]*?job_id text PRIMARY KEY REFERENCES public\.jobs\(job_id\) ON DELETE RESTRICT/i,
+    );
+    expect(migration).toMatch(
+      /canonical_job_group_events_immutable[\s\S]*BEFORE UPDATE OR DELETE ON public\.canonical_job_group_events/i,
+    );
+    expect(migration).toContain(
+      "event_type IN ('created', 'merged', 'split', 'preferred_job_changed', 'manual_override')",
+    );
+  });
+
+  test("keeps sources disabled behind policy and provider/country kill switches", () => {
+    const { migration } = sourceBoundaryMigration();
+    const observability = read(
+      "backend/db/migrations/20260720000400_job_supply_observability.sql",
+    );
+
+    for (const disabledDefault of [
+      "transport_enabled boolean NOT NULL DEFAULT false",
+      "incremental_enabled boolean NOT NULL DEFAULT false",
+      "backfill_enabled boolean NOT NULL DEFAULT false",
+    ]) {
+      expect(migration).toContain(disabledDefault);
+    }
+    expect(migration).toContain(
+      "country_kill_switches jsonb NOT NULL DEFAULT '{}'::jsonb",
+    );
+    expect(migration).toContain("registry.country_kill_switches");
+    expect(migration).toContain("registry.writer_runtime = 'typescript'");
+    expect(migration).toContain("policy.approval_status = 'approved'");
+    expect(observability).toContain("enabled boolean NOT NULL DEFAULT false");
+    expect(migration).not.toMatch(
+      /\b(?:UPDATE|INSERT\s+INTO)\s+(?:public\.)?provider_registry\b/i,
+    );
+    expect(migration).not.toMatch(
+      /\b(?:UPDATE|INSERT\s+INTO)\s+(?:public\.)?career_sources\b/i,
+    );
+  });
+
+  test("is reversible and grants no canonical mutation capability", () => {
+    const { migration, rollback } = sourceBoundaryMigration();
+
+    for (const object of [
+      "raw_job_snapshots",
+      "job_occurrences",
+      "canonical_job_groups",
+      "canonical_job_group_members",
+      "canonical_job_group_events",
+    ]) {
+      expect(rollback).toContain(`DROP TABLE IF EXISTS public.${object}`);
+    }
+    expect(rollback).toContain("DROP COLUMN IF EXISTS canonical_group_id");
+    expect(rollback).toContain("DROP COLUMN IF EXISTS source_id");
+    expect(migration).not.toMatch(
+      /GRANT\s+(?:INSERT|UPDATE|DELETE|ALL)[\s\S]*?(?:raw_job_snapshots|job_occurrences|canonical_job_groups)/i,
     );
   });
 });
