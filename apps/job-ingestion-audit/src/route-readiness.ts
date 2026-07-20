@@ -1,0 +1,345 @@
+import { createHash } from "node:crypto";
+
+export const routeFailureReasons = [
+  "missing_url",
+  "expired_or_unavailable",
+  "account_or_login_required",
+  "captcha_or_bot_wall",
+  "aggregator_or_discovery_route",
+  "unknown_ats",
+  "known_ats_without_runtime_driver",
+  "runtime_driver_route_unresolved",
+  "unsupported_required_fields",
+  "missing_user_input",
+  "stale_validation",
+  "direct_manual_only",
+] as const;
+
+export type RouteFailureReason = (typeof routeFailureReasons)[number];
+
+export interface RouteReadinessAggregateInput {
+  status: "COMPLETE" | "BLOCKED_EXTERNAL";
+  blockerReason?: string;
+  sample: boolean;
+  generatedAt: string;
+  freshnessCutoff: string;
+  queryVersion: string;
+  layeredFrenchJobs: number;
+  staticAutoApplicable: number;
+  runtimeReadyAutoApplicable: number;
+  actionableJobs: number;
+  franceTravailRuntimeReady: number;
+  topProviderRuntimeReady: number;
+  failureBuckets: Record<RouteFailureReason, number>;
+  paidUserCoverage: {
+    evaluatedPaidUsers: number;
+    exhaustedPaidUsers: number;
+    p10: number;
+    p50: number;
+    p90: number;
+  };
+}
+
+export interface RouteReadinessReport extends RouteReadinessAggregateInput {
+  schemaVersion: "hirly.french-route-readiness.v1";
+  status: "COMPLETE";
+  autoApplicableRate: number;
+  optimisticOverclaim: number;
+  feedExhaustionRate: number;
+  franceTravailRuntimeReadyShare: number;
+  topProviderRuntimeReadyShare: number;
+  digest: string;
+}
+
+export type OccurrenceAuthority =
+  | "direct_employer"
+  | "official_public"
+  | "aggregator"
+  | "unknown";
+
+export type OccurrenceRoute =
+  | "verified_runtime_ats"
+  | "direct_ats"
+  | "direct_company"
+  | "manual_public"
+  | "account_required"
+  | "discovery_only"
+  | "unknown";
+
+export interface OccurrencePreferenceCandidate {
+  groupKey: string;
+  occurrenceKey: string;
+  active: boolean;
+  authority: OccurrenceAuthority;
+  route: OccurrenceRoute;
+  confidence: number;
+  verifiedAt?: string;
+}
+
+export interface OccurrencePreferenceReport {
+  schemaVersion: "hirly.occurrence-preference-dry-run.v1";
+  groupsEvaluated: number;
+  groupsWithSelection: number;
+  selectionsChanged: number;
+  verifiedRuntimeSelections: number;
+  directSelections: number;
+  digest: string;
+}
+
+const isoTimestampPattern =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/i;
+
+const fail = (message: string): never => {
+  throw new Error(`ROUTE_READINESS_REFUSED: ${message}`);
+};
+
+function count(value: number, path: string): number {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    fail(`${path} must be a non-negative safe integer`);
+  }
+  return value;
+}
+
+function timestamp(value: string, path: string): string {
+  if (!isoTimestampPattern.test(value) || !Number.isFinite(Date.parse(value))) {
+    fail(`${path} must be an ISO timestamp with an explicit timezone`);
+  }
+  return new Date(value).toISOString();
+}
+
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (typeof value === "object" && value !== null) {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entry]) => [key, canonicalize(entry)]),
+    );
+  }
+  return value;
+}
+
+function digest(value: unknown): string {
+  return createHash("sha256")
+    .update(JSON.stringify(canonicalize(value)))
+    .digest("hex");
+}
+
+function rate(numerator: number, denominator: number): number {
+  return denominator === 0 ? 0 : Number((numerator / denominator).toFixed(8));
+}
+
+export function buildRouteReadinessReport(
+  input: RouteReadinessAggregateInput,
+): RouteReadinessReport {
+  if (input.status !== "COMPLETE") {
+    fail(`status is not scoreable: ${input.blockerReason ?? "missing blocker reason"}`);
+  }
+  if (input.sample !== false) fail("sample evidence is not scoreable");
+  const generatedAt = timestamp(input.generatedAt, "generatedAt");
+  const freshnessCutoff = timestamp(input.freshnessCutoff, "freshnessCutoff");
+  if (Date.parse(generatedAt) < Date.parse(freshnessCutoff)) {
+    fail("generatedAt must not precede freshnessCutoff");
+  }
+  if (!/^g018-route-readiness-v\d+$/.test(input.queryVersion)) {
+    fail("queryVersion is not recognized");
+  }
+
+  const layeredFrenchJobs = count(input.layeredFrenchJobs, "layeredFrenchJobs");
+  const actionableJobs = count(input.actionableJobs, "actionableJobs");
+  const staticAutoApplicable = count(
+    input.staticAutoApplicable,
+    "staticAutoApplicable",
+  );
+  const runtimeReadyAutoApplicable = count(
+    input.runtimeReadyAutoApplicable,
+    "runtimeReadyAutoApplicable",
+  );
+  const franceTravailRuntimeReady = count(
+    input.franceTravailRuntimeReady,
+    "franceTravailRuntimeReady",
+  );
+  const topProviderRuntimeReady = count(
+    input.topProviderRuntimeReady,
+    "topProviderRuntimeReady",
+  );
+  if (
+    runtimeReadyAutoApplicable > staticAutoApplicable
+    || staticAutoApplicable > actionableJobs
+    || actionableJobs > layeredFrenchJobs
+    || franceTravailRuntimeReady > runtimeReadyAutoApplicable
+    || topProviderRuntimeReady > runtimeReadyAutoApplicable
+  ) {
+    fail("inventory counters violate strict-auto <= static-auto <= actionable <= inventory");
+  }
+
+  const failureBuckets = Object.fromEntries(
+    routeFailureReasons.map((reason) => [
+      reason,
+      count(input.failureBuckets[reason], `failureBuckets.${reason}`),
+    ]),
+  ) as Record<RouteFailureReason, number>;
+  const failureTotal = Object.values(failureBuckets).reduce(
+    (sum, value) => sum + value,
+    0,
+  );
+  if (failureTotal + runtimeReadyAutoApplicable !== layeredFrenchJobs) {
+    fail("failure buckets do not reconcile to layered French inventory");
+  }
+
+  const coverage = {
+    evaluatedPaidUsers: count(
+      input.paidUserCoverage.evaluatedPaidUsers,
+      "paidUserCoverage.evaluatedPaidUsers",
+    ),
+    exhaustedPaidUsers: count(
+      input.paidUserCoverage.exhaustedPaidUsers,
+      "paidUserCoverage.exhaustedPaidUsers",
+    ),
+    p10: count(input.paidUserCoverage.p10, "paidUserCoverage.p10"),
+    p50: count(input.paidUserCoverage.p50, "paidUserCoverage.p50"),
+    p90: count(input.paidUserCoverage.p90, "paidUserCoverage.p90"),
+  };
+  if (
+    coverage.exhaustedPaidUsers > coverage.evaluatedPaidUsers
+    || coverage.p10 > coverage.p50
+    || coverage.p50 > coverage.p90
+  ) {
+    fail("paid-user coverage counters are inconsistent");
+  }
+
+  const unsigned = {
+    ...input,
+    schemaVersion: "hirly.french-route-readiness.v1" as const,
+    status: "COMPLETE" as const,
+    generatedAt,
+    freshnessCutoff,
+    layeredFrenchJobs,
+    actionableJobs,
+    staticAutoApplicable,
+    runtimeReadyAutoApplicable,
+    franceTravailRuntimeReady,
+    topProviderRuntimeReady,
+    failureBuckets,
+    paidUserCoverage: coverage,
+    autoApplicableRate: rate(runtimeReadyAutoApplicable, layeredFrenchJobs),
+    optimisticOverclaim: staticAutoApplicable - runtimeReadyAutoApplicable,
+    feedExhaustionRate: rate(
+      coverage.exhaustedPaidUsers,
+      coverage.evaluatedPaidUsers,
+    ),
+    franceTravailRuntimeReadyShare: rate(
+      franceTravailRuntimeReady,
+      runtimeReadyAutoApplicable,
+    ),
+    topProviderRuntimeReadyShare: rate(
+      topProviderRuntimeReady,
+      runtimeReadyAutoApplicable,
+    ),
+  };
+  return { ...unsigned, digest: digest(unsigned) };
+}
+
+const routeRank: Record<OccurrenceRoute, number> = {
+  verified_runtime_ats: 700,
+  direct_ats: 600,
+  direct_company: 500,
+  manual_public: 300,
+  account_required: 200,
+  discovery_only: 100,
+  unknown: 0,
+};
+
+const authorityRank: Record<OccurrenceAuthority, number> = {
+  direct_employer: 30,
+  official_public: 20,
+  aggregator: 10,
+  unknown: 0,
+};
+
+function preferenceScore(candidate: OccurrencePreferenceCandidate): number {
+  if (!candidate.active) return -1;
+  if (
+    !Number.isFinite(candidate.confidence)
+    || candidate.confidence < 0
+    || candidate.confidence > 1
+  ) {
+    fail("occurrence confidence must be between 0 and 1");
+  }
+  const verified = candidate.verifiedAt
+    ? Date.parse(timestamp(candidate.verifiedAt, "occurrence.verifiedAt"))
+    : 0;
+  const recency = verified === 0 ? 0 : Math.floor(verified / 86_400_000) % 10_000;
+  return (
+    routeRank[candidate.route] * 1_000_000
+    + authorityRank[candidate.authority] * 10_000
+    + Math.round(candidate.confidence * 1_000) * 10
+    + recency
+  );
+}
+
+export function buildOccurrencePreferenceDryRun(
+  candidates: OccurrencePreferenceCandidate[],
+  currentSelections: Record<string, string | undefined> = {},
+): OccurrencePreferenceReport {
+  const groups = new Map<string, OccurrencePreferenceCandidate[]>();
+  for (const candidate of candidates) {
+    if (!candidate.groupKey.trim() || !candidate.occurrenceKey.trim()) {
+      fail("occurrence groupKey and occurrenceKey are required");
+    }
+    const group = groups.get(candidate.groupKey) ?? [];
+    if (group.some((item) => item.occurrenceKey === candidate.occurrenceKey)) {
+      fail("duplicate occurrence identity in canonical group");
+    }
+    group.push(candidate);
+    groups.set(candidate.groupKey, group);
+  }
+
+  let groupsWithSelection = 0;
+  let selectionsChanged = 0;
+  let verifiedRuntimeSelections = 0;
+  let directSelections = 0;
+  const sealedSelections: Array<[string, string]> = [];
+  for (const [groupKey, group] of [...groups].sort(([left], [right]) =>
+    left.localeCompare(right))) {
+    const ranked = group
+      .map((candidate) => ({ candidate, score: preferenceScore(candidate) }))
+      .filter(({ score }) => score >= 0)
+      .sort(
+        (left, right) =>
+          right.score - left.score
+          || left.candidate.occurrenceKey.localeCompare(
+            right.candidate.occurrenceKey,
+          ),
+      );
+    const selected = ranked[0]?.candidate;
+    if (!selected) continue;
+    groupsWithSelection += 1;
+    if (currentSelections[groupKey] !== selected.occurrenceKey) {
+      selectionsChanged += 1;
+    }
+    if (selected.route === "verified_runtime_ats") {
+      verifiedRuntimeSelections += 1;
+    }
+    if (
+      selected.route === "verified_runtime_ats"
+      || selected.route === "direct_ats"
+      || selected.route === "direct_company"
+    ) {
+      directSelections += 1;
+    }
+    sealedSelections.push([groupKey, selected.occurrenceKey]);
+  }
+  const unsigned = {
+    schemaVersion: "hirly.occurrence-preference-dry-run.v1" as const,
+    groupsEvaluated: groups.size,
+    groupsWithSelection,
+    selectionsChanged,
+    verifiedRuntimeSelections,
+    directSelections,
+  };
+  return {
+    ...unsigned,
+    digest: digest({ ...unsigned, selections: sealedSelections }),
+  };
+}

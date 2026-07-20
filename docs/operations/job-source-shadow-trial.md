@@ -14,7 +14,7 @@ Classification: `TS_NEW`.
 | Lever | Bounded, exact allowlisted tenant and global/EU host, one complete postings request | Disabled | Existing Python canonical ownership is unchanged |
 | Choisir le Service Public | Bounded evidence-only CSV transport for one exact dataset/resource/content digest | Disabled | Fixed qualified snapshot only; no canonical apply route, production readiness or canonical writer |
 | Qualified data.gouv resource | Generic evidence-only transport bound to one separately approved dataset/resource/manifest digest | Disabled | Conditional per-resource capability; the catalogue is not an allowlist |
-| BPCE via data.gouv | Not ready for persistence | Disabled | Current export is mutable; require a fresh digest and recruiter-PII redaction adapter |
+| BPCE via data.gouv | Bounded evidence-only transport implemented; fresh aggregate evidence captured; policy still blocked | Disabled | Recruiter PII is stripped before hashing, logging or persistence; mutable export requires a separately sealed digest for every trial capture |
 | Ashby | Not ready | Disabled | URL classification exists, but the shared provider contract has no Ashby TS provider |
 
 ATS transports accept no arbitrary URL or credentials. They construct a fixed
@@ -26,9 +26,13 @@ the trial manifest. Every transport enforces request/page, byte and time limits.
 The CSP resource is only `qualified_evidence_only`: its sealed snapshot can
 measure volume, freshness and duplicates, but it cannot demonstrate an
 actionable application route. Generic data.gouv support does not qualify any
-dataset automatically. BPCE remains `BLOCKED_EXTERNAL` until a fresh mutable
-capture is digest-bound and recruiter personal data is removed before
-persistence or logging.
+dataset automatically. The BPCE transport is implemented and a fresh
+aggregate-only capture exists, but remains `BLOCKED_EXTERNAL` until an operator
+reviews its sanitized digest and exact row count, allowlists the sealed manifest
+and provisions a non-production trial policy. Only then is that exact capture
+`qualified_evidence_only`. Recruiter name and email fields are excluded before
+hashing, evidence serialization, persistence or logging. This does not make
+BPCE production eligible.
 
 ## Policy precondition
 
@@ -100,12 +104,43 @@ bun run --cwd apps/worker trial:french -- \
   --approved-manifest-digest '<reviewed-resource-manifest-sha256>' \
   --response artifacts/job-ingestion/trials/data-gouv-response.json \
   --output artifacts/job-ingestion/trials/data-gouv-preview.json
+
+# BPCE mutable official export, after sealing this capture's sanitized digest
+bun run --cwd apps/worker trial:french -- \
+  bpce preview \
+  --manifest artifacts/job-ingestion/trials/bpce-source-trial.json \
+  --resource-manifest artifacts/job-ingestion/trials/bpce-resource.json \
+  --approved-manifest-digest '<reviewed-resource-manifest-sha256>' \
+  --response artifacts/job-ingestion/trials/bpce-response.json \
+  --output artifacts/job-ingestion/trials/bpce-preview.json
 ```
 
 The output records `canonicalWrites=false` and
 `sourceActivationChanges=false`. A digest mismatch, resource/policy binding
 mismatch, expired policy, budget excess, unqualified data.gouv resource, or
 unexpected response shape fails closed.
+
+### BPCE capture and review
+
+BPCE uses the fixed credential-free official export:
+`https://bpce.opendatasoft.com/api/explore/v2.1/catalog/datasets/groupe-bpce-offres-emploi/exports/json`.
+Do not place an unreviewed download in the trial database. For each capture:
+
+1. Download once with redirects disabled and record the capture timestamp.
+2. Parse with `bpceUpstreamRecordSchema`; unknown fields, including
+   `nom_recruteur_principal` and `email_recruteur_principal`, are stripped.
+3. Compute `sanitizedContentSha256` over the stable serialized
+   `hirly.bpce-sanitized-snapshot.v1` value and record its exact row count.
+4. Seal and review the resource manifest; pass only its exact
+   `manifestDigest` to preview/run.
+5. Inspect the preview's stable external IDs, selected apply URLs, ATS
+   classifications, actionable count and duplicate contribution before any
+   repeated bakeoff.
+
+The transport rejects redirects, credentials, non-JSON responses, oversized or
+timed-out bodies, record-count drift and sanitized-digest drift. Its readiness,
+preview and persisted evidence all keep `productionEligible=false`,
+`canonicalWrites=false`, and `sourceActivationChanges=false`.
 
 ## Policy-gated evidence run
 
@@ -134,7 +169,8 @@ bun run --cwd apps/worker trial:french -- \
   --output artifacts/job-ingestion/trials/csp-run.json
 ```
 
-Use `data-gouv run` with the corresponding qualified resource files. The run
+Use `data-gouv run` or `bpce run` with the corresponding qualified resource
+files. The run
 subcommand rejects fixture input. It performs at most the single request
 allowed by the sealed resource manifest and persists through the same
 least-privilege evidence repository as ATS trials. It does not expose a
@@ -194,6 +230,26 @@ It refuses sample data, `BLOCKED_EXTERNAL`, mismatched evidence digests,
 incomplete snapshots, zero-volume collapse and users outside the frozen cohort.
 
 ## Multi-source aggregate uplift measurement
+
+Before the aggregate query, produce one frozen paid-cohort coverage run in the
+same isolated evidence database. Do not use the production worker credential.
+The input contains only salted user digests, aggregate-safe cohort dimensions,
+normalized role/country tokens, seen canonical-group digests and exact terminal
+trial bindings:
+
+```bash
+COVERAGE_DATABASE_URL='postgresql://isolated-evidence-owner/...' \
+bun run --cwd apps/job-ingestion-audit measure:paid-cohort -- \
+  --input artifacts/job-ingestion/trials/paid-cohort-coverage-input.json
+```
+
+The producer accepts only a provider-null `inventory_maintenance` run, exact
+1/7/30-day windows and terminal completed trial runs. It persists only
+`paid_user_inventory_snapshots`, `paid_user_source_contributions` and the
+coverage run's aggregate summary. Its disposable PostgreSQL test proves
+idempotent replay and an unchanged `jobs` row count. The current implementation
+is for an isolated migrated evidence database; it is not authorization to apply
+the source migrations or run this producer against production.
 
 For G016-style multi-source comparisons, run
 `docs/operations/sql/multi-source-net-new-measurement.sql` with a fixed

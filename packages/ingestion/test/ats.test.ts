@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
+  APPLICATION_CAPABILITIES,
+  ATS_PROVIDERS,
   ATS_PROVIDER_HOST_PATTERNS,
   classifyAtsUrl,
+  isStrictAutoApplicableProvider,
   type AtsProvider,
 } from "../src/ats";
 
@@ -130,5 +133,31 @@ describe("G011 ATS URL classification", () => {
       "*.nicoka.com",
       "trial.nicoka.com/{tenant}",
     ]);
+  });
+
+  test("catalogues every detectable provider without conflating detection and submission", () => {
+    expect(Object.keys(APPLICATION_CAPABILITIES).sort()).toEqual(
+      [...ATS_PROVIDERS].sort(),
+    );
+    for (const provider of ATS_PROVIDERS) {
+      const capability = APPLICATION_CAPABILITIES[provider];
+      expect(capability.urlDetection).toBeTrue();
+      if (capability.queuePermitted || capability.noSubmitVerified) {
+        expect(capability.driverRegistered).toBeTrue();
+      }
+    }
+  });
+
+  test("strict auto-applicable providers match registered, queue-permitted drivers", () => {
+    expect(ATS_PROVIDERS.filter(isStrictAutoApplicableProvider).sort()).toEqual([
+      "greenhouse",
+      "jobaffinity",
+      "smartrecruiters",
+      "taleez",
+      "teamtailor",
+    ]);
+    expect(isStrictAutoApplicableProvider("lever")).toBeFalse();
+    expect(isStrictAutoApplicableProvider("ashby")).toBeFalse();
+    expect(isStrictAutoApplicableProvider("unknown")).toBeFalse();
   });
 });

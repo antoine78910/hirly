@@ -1,4 +1,10 @@
+import json
+
 from job_providers.ats_detection import (
+    APPLICATION_CAPABILITIES,
+    _BUNDLED_CAPABILITY_CATALOGUE_PATH,
+    _REPOSITORY_CAPABILITY_CATALOGUE_PATH,
+    _load_application_capabilities,
     PRIMARY_AUTO_APPLY_ATS,
     detect_ats_from_html,
     detect_ats_from_url,
@@ -35,26 +41,67 @@ def test_detect_public_ats_urls():
         assert detect_job_platform(url)["category"] == "direct_ats"
 
 
-def test_primary_auto_apply_ats_includes_friendly_platforms():
-    # Confirmed via live application-flow audit: no mandatory login/account
-    # creation, publicly reachable apply forms, no confirmed CAPTCHA.
-    for provider in (
+def test_primary_auto_apply_ats_requires_the_full_runtime_capability():
+    expected = {
         "greenhouse",
-        "lever",
-        "ashby",
-        "teamtailor",
-        "werecruit",
-        "jobaffinity",
-        "flatchr",
-        "personio",
         "smartrecruiters",
-        "breezyhr",
-    ):
-        assert provider in PRIMARY_AUTO_APPLY_ATS
+        "taleez",
+        "teamtailor",
+        "jobaffinity",
+    }
+    assert PRIMARY_AUTO_APPLY_ATS == expected
+    assert PRIMARY_AUTO_APPLY_ATS == {
+        provider
+        for provider, capability in APPLICATION_CAPABILITIES.items()
+        if capability["driverRegistered"]
+        and capability["queuePermitted"]
+        and capability["noSubmitVerified"]
+    }
+    assert {"lever", "ashby", "werecruit", "flatchr", "personio", "breezyhr"}.isdisjoint(
+        PRIMARY_AUTO_APPLY_ATS
+    )
 
-    # Platforms with confirmed CAPTCHA/mandatory-login blockers must stay out.
-    for provider in ("workday", "successfactors", "workable", "recruitee", "bamboohr"):
-        assert provider not in PRIMARY_AUTO_APPLY_ATS
+
+def test_application_capability_catalogue_has_strict_boolean_fields():
+    required = {
+        "urlDetection",
+        "inventoryConnector",
+        "tenantExtraction",
+        "driverRegistered",
+        "queuePermitted",
+        "noSubmitVerified",
+    }
+    assert APPLICATION_CAPABILITIES
+    for capability in APPLICATION_CAPABILITIES.values():
+        assert set(capability) == required
+        assert all(isinstance(capability[field], bool) for field in required)
+        assert capability["urlDetection"]
+        if capability["queuePermitted"] or capability["noSubmitVerified"]:
+            assert capability["driverRegistered"]
+
+
+def test_backend_bundled_capability_catalogue_matches_reviewed_source():
+    reviewed = json.loads(
+        _REPOSITORY_CAPABILITY_CATALOGUE_PATH.read_text(encoding="utf-8")
+    )
+    bundled = json.loads(
+        _BUNDLED_CAPABILITY_CATALOGUE_PATH.read_text(encoding="utf-8")
+    )
+    assert bundled == reviewed
+
+
+def test_backend_root_deployment_loads_bundled_capability_catalogue():
+    capabilities = _load_application_capabilities(
+        (_BUNDLED_CAPABILITY_CATALOGUE_PATH,)
+    )
+    assert capabilities == APPLICATION_CAPABILITIES
+    assert {
+        provider
+        for provider, capability in capabilities.items()
+        if capability["driverRegistered"]
+        and capability["queuePermitted"]
+        and capability["noSubmitVerified"]
+    } == PRIMARY_AUTO_APPLY_ATS
 
 
 def test_detect_html_markers():

@@ -34,7 +34,7 @@ const manifest = JSON.parse(
 };
 
 describe("G016 official source access evidence", () => {
-  test("qualifies only the two exact open-data candidates for evidence-only transport", () => {
+  test("qualifies only CSP for evidence-only transport and keeps BPCE fail-closed", () => {
     expect(manifest.classification).toBe("TS_NEW");
     expect(manifest.scope).toBe("evidence_only");
     expect(manifest.productionEligible).toBeFalse();
@@ -44,7 +44,7 @@ describe("G016 official source access evidence", () => {
       .filter((source) => source.evidenceOnlyTransportEligible)
       .map((source) => source.sourceKey)
       .sort();
-    expect(eligible).toEqual(["bpce-open-feed", "choisir-le-service-public"]);
+    expect(eligible).toEqual(["choisir-le-service-public"]);
 
     for (const source of manifest.sources) {
       expect(source.productionEligible).toBeFalse();
@@ -60,7 +60,7 @@ describe("G016 official source access evidence", () => {
     const approved = manifest.sources.filter(
       (source) => source.decision === "qualified_evidence_only",
     );
-    expect(approved).toHaveLength(2);
+    expect(approved).toHaveLength(1);
 
     for (const source of approved) {
       expect(source.sampleManifest).toBeDefined();
@@ -70,6 +70,12 @@ describe("G016 official source access evidence", () => {
       expect(source.sampleManifest?.byteLength).toBeGreaterThan(0);
       expect(source.sampleManifest?.parsedRows).toBeGreaterThan(0);
     }
+
+    const bpce = manifest.sources.find(
+      (source) => source.sourceKey === "bpce-open-feed",
+    );
+    expect(bpce?.decision).toBe("blocked_external_prerequisites_missing");
+    expect(bpce?.evidenceOnlyTransportEligible).toBeFalse();
   });
 
   test("keeps every source without written commercial rights contract-gated", () => {

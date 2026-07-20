@@ -24,7 +24,7 @@ export const QUALIFIED_CSP_CONTENT_SHA256 =
   "a4c34e24156138e89e83a9a98a296214a81f39b4bdf3f89aff83e62069fb1e5b" as const;
 export const QUALIFIED_CSP_BYTE_LENGTH = 84_407_563 as const;
 export const G016_SOURCE_POLICY_ARTIFACT_SHA256 =
-  "b9c5e56976b2aaf44fb7ef07e80e728b9b6aed09f0d128aec0713ef14f2c6952" as const;
+  "633a45895aa1b7092234904e73c1a8cd34840052016843b3b8942235e1f66ec2" as const;
 
 export const cspQualifiedEvidenceReadiness = Object.freeze({
   source: "choisir-le-service-public",
@@ -39,17 +39,6 @@ export const cspQualifiedEvidenceReadiness = Object.freeze({
   ]),
   sourcePolicyArtifact:
     "artifacts/job-ingestion/source-policy/g016-official-access-2026-07-20.json",
-} as const);
-
-export const bpceEvidenceTrialReadiness = Object.freeze({
-  source: "bpce-open-feed",
-  state: "BLOCKED_EXTERNAL",
-  trialTransportReady: false,
-  productionReady: false,
-  reasonCodes: Object.freeze([
-    "mutable_capture_requires_fresh_digest",
-    "recruiter_pii_redaction_adapter_required",
-  ]),
 } as const);
 
 const sha256Schema = z.string().regex(/^[0-9a-f]{64}$/);

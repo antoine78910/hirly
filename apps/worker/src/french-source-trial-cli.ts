@@ -12,6 +12,12 @@ import {
   type CspSourceTrialPreview,
 } from "./csp-source-trial";
 import {
+  parseBpceTrialResourceManifest,
+  persistBpceSourceTrial,
+  previewBpceSourceTrial,
+  type BpceSourceTrialPreview,
+} from "./bpce-source-trial";
+import {
   parseDataGouvTrialResourceManifest,
   persistDataGouvSourceTrial,
   previewDataGouvSourceTrial,
@@ -19,10 +25,11 @@ import {
 } from "./data-gouv-source-trial";
 import { PostgresSourceTrialEvidenceRepository } from "./source-trial-cli";
 
-type FrenchTrialSource = "csp" | "data-gouv";
+type FrenchTrialSource = "csp" | "data-gouv" | "bpce";
 type FrenchSourceTrialPreview =
   | CspSourceTrialPreview
-  | DataGouvSourceTrialPreview;
+  | DataGouvSourceTrialPreview
+  | BpceSourceTrialPreview;
 
 export type FrenchSourceTrialCliCommand =
   | {
@@ -50,11 +57,11 @@ export function parseFrenchSourceTrialArgs(
 ): FrenchSourceTrialCliCommand {
   const [source, type, ...rest] = args;
   if (
-    !["csp", "data-gouv"].includes(source ?? "") ||
+    !["csp", "data-gouv", "bpce"].includes(source ?? "") ||
     !["preview", "run"].includes(type ?? "")
   ) {
     throw new Error(
-      "usage: french-source-trial <csp|data-gouv> <preview|run> --manifest <path> --resource-manifest <path> --approved-manifest-digest <sha256> [--response <path>] --output <path>",
+      "usage: french-source-trial <csp|data-gouv|bpce> <preview|run> --manifest <path> --resource-manifest <path> --approved-manifest-digest <sha256> [--response <path>] --output <path>",
     );
   }
   const values = new Map<string, string>();
@@ -130,16 +137,24 @@ export async function runFrenchSourceTrialCli(
 
   if (command.type === "preview") {
     const fixture = await readFile(resolve(command.responsePath), "utf8");
-    const result =
-      command.source === "csp"
-        ? await previewCspSourceTrial({
+    let result: FrenchSourceTrialPreview;
+    if (command.source === "csp") {
+      result = await previewCspSourceTrial({
             manifest,
             resourceManifest:
               parseCspTrialResourceManifest(resourceDocument),
             approvedManifestDigests,
             fetch: async () => fixtureResponse(fixture, "text/csv"),
-          })
-        : await previewDataGouvSourceTrial({
+          });
+    } else if (command.source === "bpce") {
+      result = await previewBpceSourceTrial({
+        manifest,
+        resourceManifest: parseBpceTrialResourceManifest(resourceDocument),
+        approvedManifestDigests,
+        fetch: async () => fixtureResponse(fixture, "application/json"),
+      });
+    } else {
+      result = await previewDataGouvSourceTrial({
             manifest,
             resourceManifest:
               parseDataGouvTrialResourceManifest(resourceDocument),
@@ -147,6 +162,7 @@ export async function runFrenchSourceTrialCli(
             fetch: async () =>
               fixtureResponse(fixture, "application/json"),
           });
+    }
     await writeOutput(command.outputPath, result);
     return result;
   }
@@ -161,22 +177,31 @@ export async function runFrenchSourceTrialCli(
     createDatabase(databaseUrl, { max: 2 }),
   );
   try {
-    const result =
-      command.source === "csp"
-        ? await persistCspSourceTrial({
+    let result: FrenchSourceTrialPreview;
+    if (command.source === "csp") {
+      result = await persistCspSourceTrial({
             manifest,
             resourceManifest:
               parseCspTrialResourceManifest(resourceDocument),
             approvedManifestDigests,
             repository,
-          })
-        : await persistDataGouvSourceTrial({
+          });
+    } else if (command.source === "bpce") {
+      result = await persistBpceSourceTrial({
+        manifest,
+        resourceManifest: parseBpceTrialResourceManifest(resourceDocument),
+        approvedManifestDigests,
+        repository,
+      });
+    } else {
+      result = await persistDataGouvSourceTrial({
             manifest,
             resourceManifest:
               parseDataGouvTrialResourceManifest(resourceDocument),
             approvedManifestDigests,
             repository,
           });
+    }
     await writeOutput(command.outputPath, result);
     return result;
   } finally {

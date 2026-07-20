@@ -85,6 +85,17 @@ def test_provider_for_job_smartrecruiters_and_greenhouse():
     assert q.provider_for_job({"ats_provider": "lever"}) is None
 
 
+def test_capability_catalogue_reconciles_registered_drivers_and_queue_defaults():
+    registered = set(q.DRIVER_REGISTRY.providers())
+    queue_defaults = set(q.DEFAULT_PROVIDERS)
+
+    assert queue_defaults == registered
+    for provider, capability in q.APPLICATION_CAPABILITIES.items():
+        assert capability["driverRegistered"] == (provider in registered)
+        assert capability["queuePermitted"] == (provider in queue_defaults)
+        assert capability["noSubmitVerified"] == (provider in queue_defaults)
+
+
 def test_map_execution_success_and_needs_input():
     ok = q.map_execution_to_queue({"status": "submitted_success", "reason": "verified"})
     assert ok["auto_apply_queue_status"] == "succeeded"

@@ -16,17 +16,20 @@ from typing import Any, Dict, Optional, Set
 
 from .driver import DRIVER_REGISTRY
 from db.base import is_missing_database_contract_error
+from job_providers.ats_detection import APPLICATION_CAPABILITIES
 
 logger = logging.getLogger(__name__)
 
 QUEUE_STATUSES_ACTIVE = frozenset({"queued", "awaiting_review", "running"})
 QUEUE_STATUSES_TERMINAL = frozenset({"succeeded", "failed", "skipped"})
-DEFAULT_PROVIDERS = (
-    "smartrecruiters",
-    "greenhouse",
-    "taleez",
-    "teamtailor",
-    "jobaffinity",
+DEFAULT_PROVIDERS = tuple(
+    sorted(
+        provider
+        for provider, capability in APPLICATION_CAPABILITIES.items()
+        if capability["driverRegistered"]
+        and capability["queuePermitted"]
+        and capability["noSubmitVerified"]
+    )
 )
 
 _worker_task: Optional[asyncio.Task] = None

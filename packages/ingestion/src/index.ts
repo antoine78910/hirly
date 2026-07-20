@@ -15,6 +15,7 @@ import {
   type SourceRuntimePolicy,
   type ValidationResult,
 } from "@hirly/contracts";
+import { classifyAtsUrl, isStrictAutoApplicableProvider } from "./ats";
 
 export interface ProviderPage<RawJob> {
   items: RawJob[];
@@ -457,19 +458,6 @@ export function normalizeCountryCode(value: string): string {
   return countryCode;
 }
 
-const directAtsDomains: Record<string, string> = {
-  "boards.greenhouse.io": "greenhouse",
-  "jobs.lever.co": "lever",
-  "jobs.ashbyhq.com": "ashby",
-  "apply.workable.com": "workable",
-  "recruitee.com": "recruitee",
-  "teamtailor.com": "teamtailor",
-  "smartrecruiters.com": "smartrecruiters",
-  "myworkdayjobs.com": "workday",
-  "jobs.personio.com": "personio",
-  "flatchr.io": "flatchr",
-};
-const primaryAutoApplyAts = new Set(["greenhouse", "lever", "ashby"]);
 const franceTravailApplyDomain = "candidat.francetravail.fr";
 const accountRequiredDomains = [
   "apec.fr",
@@ -508,7 +496,7 @@ export function selectApplyUrl(urls: string[]): string | null {
   return (
     valid.find((url) => {
       const host = hostname(url);
-      return Boolean(host && findDomainMatch(host, Object.keys(directAtsDomains)));
+      return classifyAtsUrl(url).provider !== null;
     }) ??
     valid.find((url) => {
       const host = hostname(url);
@@ -606,12 +594,9 @@ export function validateApplyability(
       rejectionReason: null,
     };
   }
-  const directDomain = host
-    ? findDomainMatch(host, Object.keys(directAtsDomains))
-    : null;
-  if (directDomain) {
-    const atsProvider = directAtsDomains[directDomain] ?? "unknown";
-    const automatic = primaryAutoApplyAts.has(atsProvider);
+  const atsProvider = classifyAtsUrl(selectedApplyUrl).provider;
+  if (atsProvider) {
+    const automatic = isStrictAutoApplicableProvider(atsProvider);
     return {
       ...common,
       validationStatus: "valid",

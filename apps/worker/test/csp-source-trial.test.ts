@@ -11,7 +11,6 @@ import {
   QUALIFIED_CSP_DATASET_ID,
   QUALIFIED_CSP_RESOURCE_ID,
   QUALIFIED_CSP_RESOURCE_URL,
-  bpceEvidenceTrialReadiness,
   createCspTrialTransport,
   cspQualifiedEvidenceReadiness,
   persistCspSourceTrial,
@@ -138,11 +137,6 @@ describe("G014 qualified CSP CSV evidence-only trial", () => {
       trialTransportReady: true,
       productionReady: false,
       canonicalWriteReady: false,
-    });
-    expect(bpceEvidenceTrialReadiness).toMatchObject({
-      state: "BLOCKED_EXTERNAL",
-      trialTransportReady: false,
-      productionReady: false,
     });
   });
 

@@ -152,6 +152,42 @@ describe("G004 stable canonical identity and normalization", () => {
     expect(job.autoApplySupported).toBeTrue();
   });
 
+  test("does not overclaim detected ATS URLs without a registered queue driver", async () => {
+    const fixture = await loadFixture("apec");
+    const normalized = providerModules.apec.adapter.normalizeRaw({
+      ...fixture,
+      applyUrls: ["https://jobs.lever.co/example/001"],
+    });
+    const job = toCanonicalJob(normalized, fixedNow);
+
+    expect(job.atsProvider).toBe("lever");
+    expect(job.applyabilityTier).toBe("B");
+    expect(job.manualFulfillmentReady).toBeTrue();
+    expect(job.autoApplySupported).toBeFalse();
+  });
+
+  test.each([
+    [
+      "https://jobs.smartrecruiters.com/example/744000000000001-role",
+      "smartrecruiters",
+    ],
+    ["https://example.taleez.com/jobs/001", "taleez"],
+  ])(
+    "marks a catalogued queue driver auto-applicable: %s",
+    async (applyUrl, provider) => {
+      const fixture = await loadFixture("apec");
+      const normalized = providerModules.apec.adapter.normalizeRaw({
+        ...fixture,
+        applyUrls: [applyUrl],
+      });
+      const job = toCanonicalJob(normalized, fixedNow);
+
+      expect(job.atsProvider).toBe(provider);
+      expect(job.applyabilityTier).toBe("A");
+      expect(job.autoApplySupported).toBeTrue();
+    },
+  );
+
   test("keeps fingerprints stable across non-semantic source-document ordering", async () => {
     const fixture = await loadFixture("hellowork");
     const reordered = {

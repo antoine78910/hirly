@@ -1,0 +1,157 @@
+{
+  "schemaVersion": "hirly.application-capabilities.v1",
+  "providers": {
+    "greenhouse": {
+      "urlDetection": true,
+      "inventoryConnector": true,
+      "tenantExtraction": true,
+      "driverRegistered": true,
+      "queuePermitted": true,
+      "noSubmitVerified": true
+    },
+    "lever": {
+      "urlDetection": true,
+      "inventoryConnector": true,
+      "tenantExtraction": true,
+      "driverRegistered": false,
+      "queuePermitted": false,
+      "noSubmitVerified": false
+    },
+    "ashby": {
+      "urlDetection": true,
+      "inventoryConnector": true,
+      "tenantExtraction": true,
+      "driverRegistered": false,
+      "queuePermitted": false,
+      "noSubmitVerified": false
+    },
+    "workable": {
+      "urlDetection": true,
+      "inventoryConnector": false,
+      "tenantExtraction": true,
+      "driverRegistered": false,
+      "queuePermitted": false,
+      "noSubmitVerified": false
+    },
+    "recruitee": {
+      "urlDetection": true,
+      "inventoryConnector": true,
+      "tenantExtraction": true,
+      "driverRegistered": false,
+      "queuePermitted": false,
+      "noSubmitVerified": false
+    },
+    "personio": {
+      "urlDetection": true,
+      "inventoryConnector": true,
+      "tenantExtraction": true,
+      "driverRegistered": false,
+      "queuePermitted": false,
+      "noSubmitVerified": false
+    },
+    "smartrecruiters": {
+      "urlDetection": true,
+      "inventoryConnector": true,
+      "tenantExtraction": true,
+      "driverRegistered": true,
+      "queuePermitted": true,
+      "noSubmitVerified": true
+    },
+    "teamtailor": {
+      "urlDetection": true,
+      "inventoryConnector": true,
+      "tenantExtraction": true,
+      "driverRegistered": true,
+      "queuePermitted": true,
+      "noSubmitVerified": true
+    },
+    "flatchr": {
+      "urlDetection": true,
+      "inventoryConnector": true,
+      "tenantExtraction": true,
+      "driverRegistered": false,
+      "queuePermitted": false,
+      "noSubmitVerified": false
+    },
+    "nicoka": {
+      "urlDetection": true,
+      "inventoryConnector": false,
+      "tenantExtraction": true,
+      "driverRegistered": false,
+      "queuePermitted": false,
+      "noSubmitVerified": false
+    },
+    "workday": {
+      "urlDetection": true,
+      "inventoryConnector": false,
+      "tenantExtraction": false,
+      "driverRegistered": false,
+      "queuePermitted": false,
+      "noSubmitVerified": false
+    },
+    "icims": {
+      "urlDetection": true,
+      "inventoryConnector": false,
+      "tenantExtraction": false,
+      "driverRegistered": false,
+      "queuePermitted": false,
+      "noSubmitVerified": false
+    },
+    "taleez": {
+      "urlDetection": true,
+      "inventoryConnector": false,
+      "tenantExtraction": false,
+      "driverRegistered": true,
+      "queuePermitted": true,
+      "noSubmitVerified": true
+    },
+    "werecruit": {
+      "urlDetection": true,
+      "inventoryConnector": false,
+      "tenantExtraction": false,
+      "driverRegistered": false,
+      "queuePermitted": false,
+      "noSubmitVerified": false
+    },
+    "digitalrecruiters": {
+      "urlDetection": true,
+      "inventoryConnector": false,
+      "tenantExtraction": false,
+      "driverRegistered": false,
+      "queuePermitted": false,
+      "noSubmitVerified": false
+    },
+    "jobaffinity": {
+      "urlDetection": true,
+      "inventoryConnector": false,
+      "tenantExtraction": false,
+      "driverRegistered": true,
+      "queuePermitted": true,
+      "noSubmitVerified": true
+    },
+    "bamboohr": {
+      "urlDetection": true,
+      "inventoryConnector": false,
+      "tenantExtraction": false,
+      "driverRegistered": false,
+      "queuePermitted": false,
+      "noSubmitVerified": false
+    },
+    "successfactors": {
+      "urlDetection": true,
+      "inventoryConnector": false,
+      "tenantExtraction": false,
+      "driverRegistered": false,
+      "queuePermitted": false,
+      "noSubmitVerified": false
+    },
+    "breezyhr": {
+      "urlDetection": true,
+      "inventoryConnector": false,
+      "tenantExtraction": false,
+      "driverRegistered": false,
+      "queuePermitted": false,
+      "noSubmitVerified": false
+    }
+  }
+}

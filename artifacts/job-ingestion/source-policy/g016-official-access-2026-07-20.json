@@ -71,8 +71,8 @@
       "accessFinding": "The publisher exposes credential-free CSV and JSON exports and states that the data may be displayed on job platforms.",
       "rightsFinding": "Open Licence 2.0 permits commercial reuse and redisplay with attribution; the dataset page expressly supports platform display.",
       "representativeFeedFinding": "The current JSON export contains stable references, descriptions and direct apply URLs and is suitable for a bounded evidence-only snapshot.",
-      "decision": "qualified_evidence_only",
-      "evidenceOnlyTransportEligible": true,
+      "decision": "blocked_external_prerequisites_missing",
+      "evidenceOnlyTransportEligible": false,
       "productionEligible": false,
       "blockers": [
         "The upstream export URL is mutable, so every bakeoff capture must bind a fresh content digest.",

@@ -1,3 +1,5 @@
+import capabilityCatalogue from "./application-capabilities.json";
+
 export const ATS_PROVIDERS = [
   "greenhouse",
   "lever",
@@ -21,6 +23,43 @@ export const ATS_PROVIDERS = [
 ] as const;
 
 export type AtsProvider = (typeof ATS_PROVIDERS)[number];
+
+export interface ApplicationCapability {
+  urlDetection: boolean;
+  inventoryConnector: boolean;
+  tenantExtraction: boolean;
+  driverRegistered: boolean;
+  queuePermitted: boolean;
+  noSubmitVerified: boolean;
+}
+
+export const APPLICATION_CAPABILITY_SCHEMA_VERSION =
+  "hirly.application-capabilities.v1" as const;
+
+if (capabilityCatalogue.schemaVersion !== APPLICATION_CAPABILITY_SCHEMA_VERSION) {
+  throw new Error("application capability catalogue version mismatch");
+}
+
+export const APPLICATION_CAPABILITIES =
+  capabilityCatalogue.providers as Readonly<Record<AtsProvider, ApplicationCapability>>;
+
+const catalogueProviders = Object.keys(APPLICATION_CAPABILITIES);
+if (
+  catalogueProviders.length !== ATS_PROVIDERS.length
+  || ATS_PROVIDERS.some((provider) => !APPLICATION_CAPABILITIES[provider])
+) {
+  throw new Error("application capability catalogue does not cover every ATS provider");
+}
+
+export function isStrictAutoApplicableProvider(
+  provider: string | null | undefined,
+): provider is AtsProvider {
+  if (!provider || !ATS_PROVIDERS.includes(provider as AtsProvider)) return false;
+  const capability = APPLICATION_CAPABILITIES[provider as AtsProvider];
+  return capability.driverRegistered
+    && capability.queuePermitted
+    && capability.noSubmitVerified;
+}
 
 export const ATS_PROVIDER_HOST_PATTERNS: Readonly<
   Record<AtsProvider, readonly string[]>

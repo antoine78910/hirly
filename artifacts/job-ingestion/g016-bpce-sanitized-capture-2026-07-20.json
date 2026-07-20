@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "hirly.g016-bpce-sanitized-capture.v1",
+  "classification": "TS_NEW",
+  "capturedAt": "2026-07-20T18:48:56.979Z",
+  "sourceKey": "bpce-open-feed",
+  "datasetId": "groupe-bpce-offres-emploi-publiques",
+  "resourceId": "dc0d68bd-993f-48c1-b645-dbc91c6745b1",
+  "resourceUrl": "https://bpce.opendatasoft.com/api/explore/v2.1/catalog/datasets/groupe-bpce-offres-emploi/exports/json",
+  "upstreamBytes": 11685243,
+  "sanitizedRecords": 2069,
+  "sanitizedContentSha256": "853e602def382d6d4e80860247d584d9575611a739bfdd17c588bdae6e29e1aa",
+  "recruiterPiiKeysPresent": false,
+  "rawPayloadRetained": false,
+  "canonicalWritesAllowed": false,
+  "productionEligible": false,
+  "sourceEnabled": false,
+  "status": "BLOCKED_EXTERNAL",
+  "remainingBlockers": [
+    "fresh_sanitized_capture_digest_not_sealed_in_trial_policy",
+    "trial_policy_not_provisioned",
+    "non_sample_paid_cohort_value_unproven",
+    "complete_snapshot_removal_reconciliation_unproven",
+    "production_policy_and_writer_gates_unproven"
+  ]
+}

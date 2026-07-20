@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
@@ -63,20 +65,72 @@ DISCOVERY_ONLY_DOMAINS = {
 
 GOOGLE_DISCOVERY_HOSTS = {"google.com", "www.google.com"}
 
+_REPOSITORY_CAPABILITY_CATALOGUE_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "packages"
+    / "ingestion"
+    / "src"
+    / "application-capabilities.json"
+)
+_BUNDLED_CAPABILITY_CATALOGUE_PATH = (
+    Path(__file__).resolve().parent / "application-capabilities.snapshot.json"
+)
+_CAPABILITY_CATALOGUE_PATHS = (
+    _REPOSITORY_CAPABILITY_CATALOGUE_PATH,
+    _BUNDLED_CAPABILITY_CATALOGUE_PATH,
+)
+
+
+def _parse_application_capabilities(path: Path) -> Dict[str, Dict[str, bool]]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if payload.get("schemaVersion") != "hirly.application-capabilities.v1":
+        return {}
+    providers = payload.get("providers")
+    if not isinstance(providers, dict):
+        return {}
+    required = {
+        "urlDetection",
+        "inventoryConnector",
+        "tenantExtraction",
+        "driverRegistered",
+        "queuePermitted",
+        "noSubmitVerified",
+    }
+    result: Dict[str, Dict[str, bool]] = {}
+    for provider, capability in providers.items():
+        if not (
+            isinstance(provider, str)
+            and isinstance(capability, dict)
+            and required == set(capability)
+            and all(isinstance(capability[key], bool) for key in required)
+        ):
+            return {}
+        result[provider] = capability
+    return result
+
+
+def _load_application_capabilities(
+    paths: tuple[Path, ...] = _CAPABILITY_CATALOGUE_PATHS,
+) -> Dict[str, Dict[str, bool]]:
+    """Load the reviewed source or its verified backend bundle, fail-closed."""
+
+    for path in paths:
+        capabilities = _parse_application_capabilities(path)
+        if capabilities:
+            return capabilities
+    return {}
+
+
+APPLICATION_CAPABILITIES = _load_application_capabilities()
 PRIMARY_AUTO_APPLY_ATS = {
-    "greenhouse",
-    "lever",
-    "ashby",
-    # Confirmed via live application-flow audit (2026-07-06): no mandatory
-    # candidate login/account creation, publicly reachable apply forms, and
-    # (where verifiable) no confirmed CAPTCHA/bot-wall on the real apply flow.
-    "teamtailor",
-    "werecruit",
-    "jobaffinity",
-    "flatchr",
-    "personio",
-    "smartrecruiters",
-    "breezyhr",
+    provider
+    for provider, capability in APPLICATION_CAPABILITIES.items()
+    if capability["driverRegistered"]
+    and capability["queuePermitted"]
+    and capability["noSubmitVerified"]
 }
 
 

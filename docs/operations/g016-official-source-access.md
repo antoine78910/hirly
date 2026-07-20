@@ -13,7 +13,7 @@ Machine-readable evidence and captured sample digests live in
 | Source | Official access | Commercial/redisplay finding | Representative feed | G016 decision |
 | --- | --- | --- | --- | --- |
 | Choisir le Service Public | Credential-free weekly data.gouv CSV | Open Licence 2.0 permits commercial reuse and redisplay with attribution | Fixed 2026-06-28 CSV captured; 183,467 parsed rows and 181,643 unique references | `qualified_evidence_only`; no production |
-| BPCE via data.gouv | Credential-free JSON/CSV export | Open Licence 2.0 plus an explicit invitation to display on job platforms | Current capture has 2,070 rows, descriptions and direct apply URLs | `qualified_evidence_only`; redact recruiter PII; no production |
+| BPCE via data.gouv | Credential-free JSON/CSV export | Open Licence 2.0 plus an explicit invitation to display on job platforms | Fresh sanitized capture has 2,069 rows, descriptions and direct apply URLs | `BLOCKED_EXTERNAL`; reviewed trial policy and sealed manifest still required |
 | Other data.gouv datasets | Public catalogue; resource access varies | Catalogue membership is not source-specific rights evidence | No generic feed | `dataset_specific_evidence_required` |
 | Apec | XML excerpts only by partnership convention; robots prohibited | Commercial Hirly redisplay is not publicly authorized | No anonymous representative feed | `provider_contract_missing` |
 | La Bonne Alternance | Token-gated API and complete JSON download | Published API terms reserve use to non-profit purposes and prohibit commercialization | Technically representative for alternance, but not commercially cleared | `provider_contract_missing` |
@@ -46,13 +46,17 @@ The official [dataset page](https://www.data.gouv.fr/datasets/groupe-bpce-offres
 states that the publisher shares all offers, refreshes four times daily and
 allows the data to be displayed on job platforms. Open Licence 2.0 applies.
 
-The captured JSON export has SHA-256
-`88812357b8bc48fe23d276f041af70798c42453797a84c937929dd8c981434a4`
-and 2,070 rows. It includes stable references, descriptions and apply URLs, but
-also recruiter names and email addresses. A transport must drop those personal
-fields before logs or evidence persistence. Because the export URL is mutable,
-each run must bind an exact content digest and never reuse this digest for a
-later response.
+The 2026-07-20 evidence transport captured 2,069 rows (11,685,243 upstream
+bytes), stripped unrecognized fields including recruiter names and email
+addresses, and produced sanitized SHA-256
+`853e602def382d6d4e80860247d584d9575611a739bfdd17c588bdae6e29e1aa`.
+Only aggregate evidence is retained in
+`artifacts/job-ingestion/g016-bpce-sanitized-capture-2026-07-20.json`; the raw
+response was deleted. Because the export URL is mutable, the digest applies
+only to that capture and cannot authorize a later response. The source remains
+`BLOCKED_EXTERNAL` until an operator reviews and seals a trial policy and
+manifest. This capture is evidence, not an executable trial allowlist or
+production activation.
 
 ## Contract-gated sources
 
@@ -90,9 +94,36 @@ An application submission is not an approval. No source-policy decision,
 trial-readiness flag, production-readiness flag, writer ownership or kill switch
 may change until the response is reviewed and immutable evidence is recorded.
 
+## Trial policy provisioning
+
+After a rights decision is reviewed, first seal it with
+`source-policy:persist`. The provisioning CLI accepts only a digest-verified
+`EVIDENCE_CAPTURED` record whose selected `licence_text` or
+`written_permission` item individually covers commercial use, redisplay,
+retention and the access method:
+
+```bash
+bun run --cwd apps/job-ingestion-audit source-trial:provision -- \
+  --input artifacts/job-ingestion/trials/<source>-provisioning.json \
+  --policy-evidence artifacts/job-ingestion/source-policy/<source>-reviewed.json \
+  --sql-output artifacts/job-ingestion/trials/<source>-review.sql \
+  --manifest-output artifacts/job-ingestion/trials/<source>-manifest.json
+```
+
+The command makes zero database or network calls. It creates new files only and
+returns `REVIEW_REQUIRED`. The SQL is restricted to a disabled
+`career_sources` row, immutable `trial_approved` evidence with
+`production_eligible=false`, and a bounded non-production trial policy. It does
+not mutate `provider_registry`, canonical jobs, schedules, applications,
+queues, writer ownership or source transport/activation flags. Review the SQL
+before executing it with an authorized database operator credential; the
+resulting trial manifest is run separately with the least-privilege
+`hirly_source_trial_worker` credential.
+
 ## Downstream boundary
 
-G016 transports must consume only the two exact approved candidates above,
+G016 transports must consume only exact approved candidates above (currently
+the sealed Choisir le Service Public resource),
 bind source/resource identifiers and captured digests, enforce request/byte/time
 budgets, persist only noncanonical immutable evidence, and return typed blockers
 for every contract-gated source. No result in this document changes the single
