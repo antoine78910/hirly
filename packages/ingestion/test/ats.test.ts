@@ -75,8 +75,10 @@ describe("G011 ATS URL classification", () => {
 
   test.each([
     ["https://greenhouse.io", "greenhouse"],
+    ["https://support.greenhouse.io", "greenhouse"],
     ["https://api.eu.lever.co/v0/postings/acme", "lever"],
     ["https://www.workable.com/boards/workable.xml", "workable"],
+    ["https://resources.workable.com", "workable"],
     ["https://careers.recruitee.com", "recruitee"],
     ["https://jobs.personio.com/job/123", "personio"],
     ["https://myworkdayjobs.com/en-US/acme", "workday"],

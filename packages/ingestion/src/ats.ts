@@ -89,6 +89,11 @@ const EXACT_HOST_PROVIDERS = new Map<string, AtsProvider>([
 const SUFFIX_HOST_PROVIDERS: ReadonlyArray<
   readonly [suffix: string, provider: AtsProvider]
 > = [
+  [".greenhouse.io", "greenhouse"],
+  [".ashbyhq.com", "ashby"],
+  [".workable.com", "workable"],
+  [".smartrecruiters.com", "smartrecruiters"],
+  [".flatchr.io", "flatchr"],
   [".jobs.personio.com", "personio"],
   [".jobs.personio.de", "personio"],
   [".recruitee.com", "recruitee"],
