@@ -8147,6 +8147,10 @@ async def get_feed(
         elif prefetch:
             request_trace["prefetch"] = True
             request_trace["local_jsearch_skip_reason"] = "prefetch_db_only"
+        if audit_mode:
+            should_refresh = False
+            background_refresh_wanted = False
+            request_trace["local_jsearch_skip_reason"] = "coverage_audit_mode"
         request_trace["local_jsearch_discovery_should_run"] = bool(should_refresh and explicit_local_intent)
         if explicit_local_intent and not should_refresh:
             if not sync_refresh_enabled:
