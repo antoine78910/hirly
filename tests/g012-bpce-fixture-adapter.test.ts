@@ -96,7 +96,7 @@ describe("G012 BPCE disabled fixture adapter", () => {
       })) {
         // Source validation occurs before fixture data is emitted.
       }
-    }).toThrow("every disabled mode");
+    }).toThrow("every mode disabled");
   });
 
   test("normalizes stable identity, France, direct apply route, and provenance", async () => {
@@ -250,5 +250,28 @@ describe("G012 BPCE disabled fixture adapter", () => {
           fixturePolicyId,
         ),
     ).toThrow(IngestionError);
+    const adapter = createBpceFixtureSourceAdapter(data, fixturePolicyId);
+    expect(() =>
+      adapter.normalize(
+        {
+          datasetId: "other-dataset",
+          resourceId: "other-resource",
+          recordId: "other-record",
+          title: "Other",
+          employer: "Other",
+          location: "Paris",
+          countryCode: "FR",
+          description: "",
+          contractType: null,
+          status: "active",
+          applyUrls: ["https://apply.example.org/other"],
+          sourceUrl: "https://www.data.gouv.fr/",
+          publishedAt: null,
+          expiresAt: null,
+          sourceDocument: {},
+        },
+        context(),
+      ),
+    ).toThrow("does not match the bound dataset resource");
   });
 });

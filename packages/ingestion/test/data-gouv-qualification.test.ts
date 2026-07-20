@@ -75,8 +75,8 @@ function runtimePolicy(
     sourceCountryKillSwitches: {},
     source: {
       id: "11111111-1111-4111-8111-111111111111",
-      provider: "apec",
-      sourceKey: "data-gouv:fixture",
+      provider: "data_gouv",
+      sourceKey: "dataset-offres-emploi:resource-2026-07",
       tenantKey: null,
       countryCodes: ["FR"],
       accessType: "open_data",
@@ -247,6 +247,20 @@ describe("data.gouv dataset qualification", () => {
         now,
       ),
     ).toBe("source_country_killed");
+    expect(
+      dataGouvProductionBlockReason(
+        qualified,
+        runtimePolicy({
+          source: {
+            ...runtimePolicy().source,
+            sourceKey: "another-dataset:another-resource",
+          },
+        }),
+        "FR",
+        "incremental",
+        now,
+      ),
+    ).toBe("qualification_source_mismatch");
     expect(
       dataGouvProductionBlockReason(
         qualified,

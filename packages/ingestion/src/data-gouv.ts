@@ -124,19 +124,35 @@ function fixturePageSize(source: SourceRegistryEntry): number {
     : 100;
 }
 
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  if (value !== null && typeof value === "object") {
+    return `{${Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
 function stableSnapshotDigest(rows: readonly DataGouvRawJob[]): string {
-  const normalized = rows.map((row) => ({
-    externalId: stableDataGouvExternalId(
-      row.datasetId,
-      row.resourceId,
-      row.recordId,
-    ),
-    sourceDocument: row.sourceDocument,
-  }));
   return createHash("sha256")
-    .update(JSON.stringify(normalized), "utf8")
+    .update(canonicalJson(rows), "utf8")
     .digest("hex");
 }
+
+export type DisabledDataGouvSourceAdapter<
+  RawJob extends DataGouvRawJob = DataGouvRawJob,
+> = SourceAdapter<
+  RawJob,
+  DataGouvFixtureCursor,
+  DataGouvFixtureScope
+> & {
+  readonly canonicalWriteReady: false;
+  readonly sourcePolicyEligible: false;
+};
 
 export class FixtureOnlyDataGouvSourceAdapter<
   RawJob extends DataGouvRawJob = DataGouvRawJob,
@@ -251,13 +267,21 @@ export class FixtureOnlyDataGouvSourceAdapter<
     }
   }
 
-  normalize(raw: RawJob, _context: SourceContext): NormalizedOccurrence {
+  normalize(raw: RawJob, context: SourceContext): NormalizedOccurrence {
+    this.assertSource(context.source);
+    this.assertRow(raw);
     const externalId = stableDataGouvExternalId(
       raw.datasetId,
       raw.resourceId,
       raw.recordId,
     );
     const countryCode = normalizeCountryCode(raw.countryCode);
+    if (!context.source.countryCodes.includes(countryCode)) {
+      throw new IngestionError(
+        "invalid_input",
+        "data.gouv fixture row country is outside the bound source countries",
+      );
+    }
     return {
       externalId,
       canonicalSourceUrl: raw.sourceUrl,
@@ -290,6 +314,7 @@ export class FixtureOnlyDataGouvSourceAdapter<
   }
 
   validateActive(raw: RawJob, now: Date): SourceLifecycleEvidence {
+    this.assertRow(raw);
     const explicitExpiry = raw.expiresAt
       ? new Date(raw.expiresAt)
       : null;
@@ -329,6 +354,8 @@ export class FixtureOnlyDataGouvSourceAdapter<
     if (
       source.provider !== this.provider ||
       source.accessType !== this.access ||
+      source.sourceKey !== `${this.datasetId}:${this.resourceId}` ||
+      source.policyId !== this.attributionMetadata.policyId ||
       source.enabled ||
       source.transportEnabled ||
       source.incrementalEnabled ||
@@ -336,7 +363,19 @@ export class FixtureOnlyDataGouvSourceAdapter<
     ) {
       throw new IngestionError(
         "invalid_input",
-        "data.gouv fixture sources must use the data_gouv provider, open_data access, and every disabled mode",
+        "data.gouv fixture sources must match the bound resource and policy, use open_data access, and keep every mode disabled",
+      );
+    }
+  }
+
+  private assertRow(raw: DataGouvRawJob): void {
+    if (
+      raw.datasetId !== this.datasetId ||
+      raw.resourceId !== this.resourceId
+    ) {
+      throw new IngestionError(
+        "invalid_input",
+        "data.gouv fixture row does not match the bound dataset resource",
       );
     }
   }

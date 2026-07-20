@@ -7,7 +7,8 @@
     ".": "./src/index.ts",
     "./ats": "./src/ats.ts",
     "./ats-discovery": "./src/ats-discovery.ts",
-    "./data-gouv": "./src/data-gouv.ts"
+    "./data-gouv": "./src/data-gouv.ts",
+    "./data-gouv-qualification": "./src/data-gouv-qualification.ts"
   },
   "scripts": {
     "lint": "tsc --noEmit",

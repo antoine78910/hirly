@@ -5,8 +5,8 @@ import {
   type DataGouvFixtureCursor,
   type DataGouvFixtureScope,
   type DataGouvRawJob,
+  type DisabledDataGouvSourceAdapter,
 } from "@hirly/ingestion/data-gouv";
-import type { SourceAdapter } from "@hirly/ingestion";
 
 export const BPCE_DATASET_URL =
   "https://www.data.gouv.fr/datasets/groupe-bpce-offres-emploi-publiques";
@@ -111,10 +111,6 @@ export class BpceFixtureSourceAdapter extends FixtureOnlyDataGouvSourceAdapter {
 export function createBpceFixtureSourceAdapter(
   fixture: BpceOpenFeedFixture,
   policyId: string,
-): SourceAdapter<
-  DataGouvRawJob,
-  DataGouvFixtureCursor,
-  DataGouvFixtureScope
-> {
+): DisabledDataGouvSourceAdapter<DataGouvRawJob> {
   return new BpceFixtureSourceAdapter(fixture, policyId);
 }
