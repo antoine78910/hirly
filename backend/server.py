@@ -36,8 +36,20 @@ from urllib.parse import quote as url_quote, urlparse
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Dict, Any, Literal, Tuple
 from datetime import datetime, timezone, timedelta
+import atexit
 import httpx
 import stripe
+from posthog import Posthog, new_context, identify_context, capture as posthog_capture
+
+try:
+    from opentelemetry import trace as _otel_trace
+    from opentelemetry.sdk.trace import TracerProvider as _OtelTracerProvider
+    from opentelemetry.sdk.resources import Resource as _OtelResource, SERVICE_NAME as _OTEL_SERVICE_NAME
+    from posthog.ai.otel import PostHogSpanProcessor as _PostHogSpanProcessor
+    from opentelemetry.instrumentation.openai_v2 import OpenAIInstrumentor as _OpenAIInstrumentor
+    _OTEL_AVAILABLE = True
+except ImportError:
+    _OTEL_AVAILABLE = False
 
 # Optional file parsing libs
 from pypdf import PdfReader
@@ -281,6 +293,8 @@ DATABASE_PROVIDER = "supabase"
 db = create_database_adapter()
 _application_generation_locks: Dict[str, asyncio.Lock] = {}
 _application_generation_tasks: Dict[str, asyncio.Task] = {}
+
+_posthog_client: Optional[Posthog] = None
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -1351,6 +1365,7 @@ async def _session_payload_from_supabase_token(
         or email.split("@")[0]
     )
     picture = metadata.get("avatar_url") or metadata.get("picture") or identity_data.get("avatar_url") or identity_data.get("picture")
+    existing_user = await db.users.find_one({"email": (email or "").strip().lower()}, {"_id": 0, "user_id": 1})
     user_doc = await _upsert_auth_user(
         email=email,
         name=name,
@@ -1363,6 +1378,19 @@ async def _session_payload_from_supabase_token(
     )
     session_token = await _create_app_session(user_doc["user_id"], source)
     _set_app_session_cookie(response, session_token)
+
+    if _posthog_client is not None:
+        is_new_user = existing_user is None
+        event_name = "user_signed_up" if is_new_user else "user_logged_in"
+        with new_context():
+            identify_context(user_doc["user_id"])
+            posthog_capture(
+                event_name,
+                properties={
+                    "auth_source": source,
+                    "has_gmail_provider": bool(provider_token or provider_refresh_token),
+                },
+            )
 
     gmail_connection = {"connected": False, "email": None, "last_synced_at": None}
     if provider_token or provider_refresh_token:
@@ -2774,6 +2802,18 @@ async def create_billing_checkout_session(
     else:
         session_kwargs["allow_promotion_codes"] = True
     session = stripe.checkout.Session.create(**session_kwargs)
+    if _posthog_client is not None:
+        with new_context():
+            identify_context(user.user_id)
+            posthog_capture(
+                "checkout_started",
+                properties={
+                    "billing_plan": billing_plan,
+                    "billing_interval": billing_interval,
+                    "checkout_source": checkout_source,
+                    "has_referral_discount": signup_discount_eligible,
+                },
+            )
     return {"url": session["url"]}
 
 
@@ -5810,6 +5850,19 @@ async def upload_cv(file: UploadFile = File(...), user: User = Depends(get_curre
         {"$set": profile_doc},
         upsert=True,
     )
+    if _posthog_client is not None:
+        with new_context():
+            identify_context(user.user_id)
+            posthog_capture(
+                "cv_uploaded",
+                properties={
+                    "file_format": fmt,
+                    "has_photo": bool(photo_bytes),
+                    "skills_count": len(extracted.get("skills") or []),
+                    "experience_count": len(extracted.get("experience") or []),
+                    "used_ai_fallback": bool(extracted.get("extraction_fallback_reason")),
+                },
+            )
     # don't ship the heavy fields back
     profile_doc.pop("cv_text", None)
     profile_doc.pop("cv_original_b64", None)
@@ -6155,6 +6208,10 @@ async def delete_account(user: User = Depends(get_current_user)):
     """Wipe everything the user created. Sessions are revoked too."""
     user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0}) or {}
     logger.info("account_delete_start user_id=%s", user.user_id)
+    if _posthog_client is not None:
+        with new_context():
+            identify_context(user.user_id)
+            posthog_capture("account_deleted")
     await _cancel_stripe_subscription_for_user(user_doc)
     await _delete_all_user_data(user.user_id)
     await _delete_supabase_auth_user(user_doc)
@@ -9612,6 +9669,16 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
             log_phase("response_build_done")
             phase = "swipe_complete"
             log_phase("swipe_complete")
+            if _posthog_client is not None and not existing:
+                with new_context():
+                    identify_context(user.user_id)
+                    posthog_capture(
+                        "job_dismissed",
+                        properties={
+                            "job_provider": job.get("provider"),
+                            "ats_provider": job.get("ats_provider"),
+                        },
+                    )
             return response
 
         profile = await db.profiles.find_one({"user_id": user.user_id}, {"_id": 0})
@@ -9765,6 +9832,18 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
             application_id=saved_doc.get("application_id"),
             status_returned_to_frontend=response.get("submission_status"),
         )
+        if _posthog_client is not None and not existing_app:
+            with new_context():
+                identify_context(user.user_id)
+                posthog_capture(
+                    "job_application_created",
+                    properties={
+                        "application_id": saved_doc.get("application_id"),
+                        "job_provider": job.get("provider"),
+                        "ats_provider": job.get("ats_provider"),
+                        "package_status": saved_doc.get("package_status"),
+                    },
+                )
         return response
     except LLMProviderNotConfigured as exc:
         phase = "application_generation_start"
@@ -17136,6 +17215,27 @@ def _spawn_observed_startup_task(coro, *, name: str) -> asyncio.Task:
 @app.on_event("startup")
 async def startup_seed():
     """Register routes immediately; run seeding in the background."""
+    global _posthog_client
+    _ph_api_key = os.environ.get("POSTHOG_SERVER_API_KEY", "").strip()
+    _ph_host = os.environ.get("POSTHOG_HOST", "").strip()
+    if _ph_api_key and _ph_host:
+        _posthog_client = Posthog(
+            api_key=_ph_api_key,
+            host=_ph_host,
+            enable_exception_autocapture=True,
+        )
+        atexit.register(_posthog_client.shutdown)
+        logger.info("posthog_client_initialized host=%s", _ph_host)
+        if _OTEL_AVAILABLE:
+            _otel_provider = _OtelTracerProvider(
+                resource=_OtelResource(attributes={_OTEL_SERVICE_NAME: "hirly-backend"})
+            )
+            _otel_provider.add_span_processor(
+                _PostHogSpanProcessor(api_key=_ph_api_key, host=_ph_host)
+            )
+            _otel_trace.set_tracer_provider(_otel_provider)
+            _OpenAIInstrumentor().instrument()
+            logger.info("posthog_otel_ai_observability_initialized")
     # Register concrete ApplyDrivers once at startup. The executor never imports
     # concrete drivers itself -- this import is the single registration point.
     import auto_apply.drivers  # noqa: F401
@@ -17195,4 +17295,6 @@ async def startup_seed():
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    if _posthog_client is not None:
+        _posthog_client.flush()
     await db.close()

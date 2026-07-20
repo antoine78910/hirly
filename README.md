@@ -66,6 +66,7 @@ bun run typecheck
 bun run test
 bun run build
 bun test tests/workspace-isolation.test.ts
+bun run verify:job-supply-release
 ```
 
 Run the legacy frontend from its own directory with its existing npm install
@@ -86,6 +87,15 @@ The local checks above do not create or validate a Vercel preview. Previewing
 the current production project with root Bun files present is an external,
 approval-gated isolation check and must be completed before activating a root
 workspace deployment path.
+
+Job-source operations are documented separately:
+
+- `docs/operations/job-source-readiness-matrix.md` is the authoritative
+  provider policy, trial, production, and canonical-writer readiness view.
+- `docs/operations/job-source-shadow-trial.md` describes evidence-only source
+  trials that cannot write canonical jobs or enqueue applications.
+- `docs/operations/job-supply-release-readiness.md` defines ordered migrations,
+  full local verification, deployment preflight, and rollback.
 
 ## Engineering Stack Policy
 
