@@ -678,4 +678,37 @@ describe("G003 CLI and graceful lifecycle test seams", () => {
       "repository:close",
     ]);
   });
+
+  test("main handles termination only after graceful stop and invalid CLI exits nonzero", async () => {
+    const mainSource = read("apps/worker/src/main.ts");
+    expect(mainSource).toContain('process.on("SIGTERM"');
+    expect(mainSource).toContain('process.on("SIGINT"');
+    expect(mainSource).toMatch(
+      /await application\.stop\(\);[\s\S]*process\.exit\(0\)/,
+    );
+
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        join(repoRoot, "apps", "worker", "src", "cli.ts"),
+        "not-a-command",
+      ],
+      {
+        env: {
+          ...process.env,
+          NODE_ENV: "test",
+          JOBS_DATABASE_URL: "postgresql://127.0.0.1:1/disposable",
+          WORKER_CONTROL_ENABLED: "false",
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    const [exitCode, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stderr).text(),
+    ]);
+    expect(exitCode).not.toBe(0);
+    expect(stderr).toContain("usage:");
+  });
 });

@@ -194,6 +194,67 @@ if (databaseUrl) {
 
 describe("G003 least-privilege runtime repository", () => {
   runIntegration(
+    "recovers an expired lease after process restart and fences the stale attempt",
+    async () => {
+      await resetG003Fixtures();
+      await assertSql(`
+        SELECT worker_private.enqueue_run(
+          'inventory_maintenance',
+          NULL,
+          'g003:restart-recovery',
+          'system',
+          'g003-restart-task',
+          'inventory.maintenance',
+          '{}'::jsonb
+        );
+        SELECT count(*)
+        FROM worker_private.claim_tasks('crashed-worker', 1, 30);
+        UPDATE public.worker_tasks
+        SET lease_until = clock_timestamp() - interval '1 second'
+        WHERE task_key = 'g003-restart-task';
+        SELECT count(*)
+        FROM worker_private.claim_tasks('restarted-worker', 1, 30);
+      `);
+
+      expect(
+        await assertSql(`
+          SELECT attempts, claim_generation, lease_owner
+          FROM public.worker_tasks
+          WHERE task_key = 'g003-restart-task';
+        `),
+      ).toBe("2|2|restarted-worker");
+      expect(
+        await assertSql(`
+          SELECT worker_private.finish_task(
+            task.id,
+            attempt.lease_token,
+            attempt.claim_generation,
+            attempt.lease_owner,
+            'succeeded'
+          )
+          FROM public.worker_tasks AS task
+          JOIN public.worker_task_attempts AS attempt
+            ON attempt.task_id = task.id
+           AND attempt.attempt_number = 1
+          WHERE task.task_key = 'g003-restart-task';
+        `),
+      ).toBe("f");
+      expect(
+        await assertSql(`
+          SELECT attempt_number, outcome
+          FROM public.worker_task_attempts
+          WHERE task_id = (
+            SELECT id
+            FROM public.worker_tasks
+            WHERE task_key = 'g003-restart-task'
+          )
+          ORDER BY attempt_number;
+        `),
+      ).toBe("1|lease_expired\n2|");
+    },
+  );
+
+  runIntegration(
     "discovers only due enabled schedules through the worker function",
     async () => {
       await seedRuntimeFixtures();
@@ -352,6 +413,28 @@ describe("G003 least-privilege runtime repository", () => {
       expect(metadata).not.toContain("payload");
       expect(metadata).not.toContain("idempotency");
       expect(metadata).not.toContain("lease_token");
+      expect(
+        await assertSql(`
+          SELECT count(*)
+          FROM pg_proc AS procedure
+          JOIN pg_namespace AS namespace
+            ON namespace.oid = procedure.pronamespace
+          CROSS JOIN LATERAL aclexplode(
+            coalesce(
+              procedure.proacl,
+              acldefault('f', procedure.proowner)
+            )
+          ) AS privilege
+          WHERE namespace.nspname = 'worker_private'
+            AND procedure.proname IN (
+              'provider_runnable',
+              'list_due_schedules',
+              'get_run'
+            )
+            AND privilege.grantee = 0
+            AND privilege.privilege_type = 'EXECUTE';
+        `),
+      ).toBe("0");
     },
   );
 });
