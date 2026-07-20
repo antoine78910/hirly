@@ -33,7 +33,7 @@ import unicodedata
 from decimal import Decimal
 from pathlib import Path
 from urllib.parse import quote as url_quote, urlparse
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, PrivateAttr
 from typing import List, Optional, Dict, Any, Literal, Tuple
 from datetime import datetime, timezone, timedelta
 import atexit
@@ -95,7 +95,7 @@ from auto_apply.metrics import status_safe_attempt as auto_apply_status_safe_att
 from auto_apply.metrics import summary as auto_apply_metrics_summary
 from auto_apply import queue as auto_apply_queue
 from db import create_database_adapter
-from db.supabase_adapter import count_supabase_table, test_supabase_connection
+from db.supabase_adapter import count_supabase_table, database_journey, test_supabase_connection
 from influencer_store import create_influencer, get_influencer, list_influencers, update_influencer
 from creator_social_service import build_dashboard, refresh_all_creators, refresh_creator
 from creator_social_config import add_creator as add_tracked_creator
@@ -431,7 +431,12 @@ async def _get_feed_job_candidates(base_query: Dict[str, Any], limit: int) -> Li
         from db.supabase_adapter import JOB_FEED_LIGHT_SELECT
 
         # Column-only select — never pull full JSONB for the candidate pool.
-        rows = await jobs_col.read_with_select(base_query, limit, select=JOB_FEED_LIGHT_SELECT)
+        rows = await jobs_col.read_with_select(
+            base_query,
+            limit,
+            select=JOB_FEED_LIGHT_SELECT,
+            require_pushed=True,
+        )
     else:
         rows = await jobs_col.find(base_query, {"_id": 0}).limit(limit).to_list(limit)
     _feed_job_pool_cache["query_key"] = cache_key
@@ -737,6 +742,7 @@ class User(BaseModel):
     require_review_before_send: bool = True
     language: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    _auth_flags: Dict[str, bool] = PrivateAttr(default_factory=dict)
 
 
 class Profile(BaseModel):
@@ -912,9 +918,15 @@ class InviteEmailAuthRequest(BaseModel):
 class AnalyticsEventRequest(BaseModel):
     event: str
     properties: Dict[str, Any] = Field(default_factory=dict)
+    event_id: Optional[str] = None
     anonymous_id: Optional[str] = None
     page: Optional[str] = None
     source: Optional[str] = None
+
+
+class AnalyticsBatchRequest(BaseModel):
+    batch_id: str
+    events: List[AnalyticsEventRequest] = Field(default_factory=list)
 
 
 class BillingCheckoutRequest(BaseModel):
@@ -1078,6 +1090,12 @@ class StructuredProfileDataUpdate(BaseModel):
     application_defaults: Dict[str, Any] = Field(default_factory=dict)
 
 
+class OnboardingProfilePatch(BaseModel):
+    onboarding: Dict[str, Any] = Field(default_factory=dict)
+    preferences: Dict[str, Any] = Field(default_factory=dict)
+    contact: Dict[str, Any] = Field(default_factory=dict)
+
+
 class OnboardingCategoryItem(BaseModel):
     id: str
     label: str
@@ -1112,6 +1130,50 @@ class OnboardingSuggestRolesRequest(BaseModel):
 
 # ===================== Auth helpers =====================
 
+_supabase_auth_http_client: Optional[httpx.AsyncClient] = None
+
+
+def _get_supabase_auth_http_client() -> httpx.AsyncClient:
+    global _supabase_auth_http_client
+    if _supabase_auth_http_client is None or _supabase_auth_http_client.is_closed:
+        _supabase_auth_http_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=3.0, read=15.0, write=15.0, pool=3.0),
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+        )
+    return _supabase_auth_http_client
+
+
+async def _request_supabase_auth(
+    method: str,
+    url: str,
+    *,
+    headers: Dict[str, str],
+    json_body: Optional[Dict[str, Any]] = None,
+) -> httpx.Response:
+    """Use the shared auth client and retry only explicitly enabled idempotent reads."""
+    normalized_method = method.upper()
+    attempts = 2 if normalized_method == "GET" and _env_bool("AUTH_IDEMPOTENT_READ_RETRY_ENABLED") else 1
+    client = _get_supabase_auth_http_client()
+    for attempt in range(attempts):
+        try:
+            return await client.request(
+                normalized_method,
+                url,
+                headers=headers,
+                json=json_body,
+            )
+        except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.PoolTimeout, httpx.RemoteProtocolError):
+            if attempt >= attempts - 1:
+                raise
+            logger.warning(
+                "auth_http_retry method=%s attempt=%s max_attempts=%s",
+                normalized_method,
+                attempt + 2,
+                attempts,
+            )
+            await asyncio.sleep(0.05)
+    raise RuntimeError("Supabase auth request exhausted without a response")
+
 async def get_current_user(
     request: Request,
     response: Response,
@@ -1136,6 +1198,28 @@ async def get_current_user(
     last_failure = "Invalid session"
     for token_source, token in candidates:
         logger.debug("auth_me token_received source=%s path=%s", token_source, request.url.path)
+        if _env_bool("AUTH_JOINED_SESSION_LOOKUP_ENABLED"):
+            resolver = getattr(db, "resolve_auth_session", None)
+            if callable(resolver):
+                resolved = await resolver(token)
+                status = (resolved or {}).get("status")
+                if status == "ok":
+                    user = User(**((resolved or {}).get("user") or {}))
+                    user._auth_flags = {
+                        key: bool(value)
+                        for key, value in ((resolved or {}).get("flags") or {}).items()
+                        if key in {"is_training_creator", "has_training_access", "is_admin"}
+                    }
+                    _set_app_session_cookie(response, token)
+                    return user
+                if status == "expired":
+                    last_failure = "Session expired"
+                elif status == "user_not_found":
+                    last_failure = "User not found"
+                else:
+                    last_failure = "Invalid session"
+                continue
+
         session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
         if not session:
             logger.info("auth_me invalid_token reason=session_not_found source=%s", token_source)
@@ -1170,7 +1254,12 @@ async def get_current_user(
 
 # ===================== Auth routes =====================
 
-async def _upsert_auth_user(email: str, name: str, picture: Optional[str], extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+async def _upsert_auth_user_with_status(
+    email: str,
+    name: str,
+    picture: Optional[str],
+    extra: Optional[Dict[str, Any]] = None,
+) -> Tuple[Dict[str, Any], bool]:
     normalized_email = (email or "").strip().lower()
     existing = await _find_user_by_email(normalized_email)
     if existing:
@@ -1178,10 +1267,17 @@ async def _upsert_auth_user(email: str, name: str, picture: Optional[str], extra
         update = {"name": name, "picture": picture}
         if extra:
             update.update(extra)
+        patch_auth_user = getattr(db, "patch_auth_user", None)
+        if _env_bool("AUTH_RETURNED_USER_WRITE_ENABLED") and callable(patch_auth_user):
+            returned = await patch_auth_user(user_id, update)
+            if not returned:
+                raise RuntimeError("Auth user disappeared during returned patch")
+            return returned, False
         await db.users.update_one(
             {"user_id": user_id},
             {"$set": update},
         )
+        return {**existing, **update}, False
     else:
         user_id = f"user_{uuid.uuid4().hex[:12]}"
         user_doc = {
@@ -1194,7 +1290,16 @@ async def _upsert_auth_user(email: str, name: str, picture: Optional[str], extra
         if extra:
             user_doc.update(extra)
         await db.users.insert_one(user_doc)
-    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+        return user_doc, True
+
+
+async def _upsert_auth_user(
+    email: str,
+    name: str,
+    picture: Optional[str],
+    extra: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    user_doc, _ = await _upsert_auth_user_with_status(email, name, picture, extra)
     return user_doc
 
 
@@ -1255,13 +1360,12 @@ async def _supabase_admin_request(
         "Authorization": f"Bearer {supabase_secret}",
         "Content-Type": "application/json",
     }
-    async with httpx.AsyncClient(timeout=15.0) as http:
-        return await http.request(
-            method,
-            f"{supabase_url}{path}",
-            headers=headers,
-            json=json_body,
-        )
+    return await _request_supabase_auth(
+        method,
+        f"{supabase_url}{path}",
+        headers=headers,
+        json_body=json_body,
+    )
 
 
 async def _supabase_password_access_token(email: str, password: str) -> str:
@@ -1338,14 +1442,14 @@ async def _session_payload_from_supabase_token(
     provider_token_expires_at: Optional[Any] = None,
 ) -> Dict[str, Any]:
     supabase_url, supabase_secret = _supabase_admin_config()
-    async with httpx.AsyncClient(timeout=15.0) as http:
-        r = await http.get(
-            f"{supabase_url}/auth/v1/user",
-            headers={
-                "apikey": supabase_secret,
-                "Authorization": f"Bearer {access_token}",
-            },
-        )
+    r = await _request_supabase_auth(
+        "GET",
+        f"{supabase_url}/auth/v1/user",
+        headers={
+            "apikey": supabase_secret,
+            "Authorization": f"Bearer {access_token}",
+        },
+    )
     if r.status_code != 200:
         logger.info("supabase_session invalid_token status=%s body=%s", r.status_code, r.text[:200])
         raise HTTPException(status_code=401, detail="Invalid Supabase access token")
@@ -1365,8 +1469,7 @@ async def _session_payload_from_supabase_token(
         or email.split("@")[0]
     )
     picture = metadata.get("avatar_url") or metadata.get("picture") or identity_data.get("avatar_url") or identity_data.get("picture")
-    existing_user = await db.users.find_one({"email": (email or "").strip().lower()}, {"_id": 0, "user_id": 1})
-    user_doc = await _upsert_auth_user(
+    user_doc, is_new_user = await _upsert_auth_user_with_status(
         email=email,
         name=name,
         picture=picture,
@@ -1380,7 +1483,6 @@ async def _session_payload_from_supabase_token(
     _set_app_session_cookie(response, session_token)
 
     if _posthog_client is not None:
-        is_new_user = existing_user is None
         event_name = "user_signed_up" if is_new_user else "user_logged_in"
         with new_context():
             identify_context(user_doc["user_id"])
@@ -1415,11 +1517,11 @@ async def _session_payload_from_supabase_token(
                 "last_sync_error": str(exc)[:200],
             }
 
-    profile = await db.profiles.find_one({"user_id": user_doc["user_id"]}, {"_id": 0, "cv_text": 1, "target_role": 1})
-    creator_flag, training_access = await asyncio.gather(
+    profile, creator_flag = await asyncio.gather(
+        db.profiles.find_one({"user_id": user_doc["user_id"]}, {"_id": 0, "cv_text": 1, "target_role": 1}),
         is_training_creator(db, user_doc["user_id"]),
-        _resolve_training_access_from_user_doc(user_doc),
     )
+    training_access = _training_access_from_user_and_creator(user_doc, creator_flag)
     logger.info("supabase_session success user_id=%s email=%s", user_doc["user_id"], email)
     return {
         "user": user_doc,
@@ -1433,6 +1535,11 @@ async def _session_payload_from_supabase_token(
 
 
 async def _resolve_training_access_from_user_doc(user_doc: Dict[str, Any]) -> bool:
+    creator = await is_training_creator(db, user_doc.get("user_id")) if user_doc.get("user_id") else False
+    return _training_access_from_user_and_creator(user_doc, creator)
+
+
+def _training_access_from_user_and_creator(user_doc: Dict[str, Any], creator: bool) -> bool:
     from training_access import training_open_access_enabled
 
     if training_open_access_enabled():
@@ -1446,7 +1553,7 @@ async def _resolve_training_access_from_user_doc(user_doc: Dict[str, Any]) -> bo
         return True
     if _is_admin_email(user_doc.get("email")):
         return True
-    return await is_training_creator(db, user_id)
+    return creator
 
 
 @api_router.post("/auth/supabase-session")
@@ -1689,11 +1796,26 @@ async def tutorial_session(response: Response):
 
 @api_router.get("/auth/me")
 async def auth_me(user: User = Depends(get_current_user)):
-    profile, creator, training_access = await asyncio.gather(
-        db.profiles.find_one({"user_id": user.user_id}, {"_id": 0}),
-        is_training_creator(db, user.user_id),
-        _resolve_training_access(user),
-    )
+    flags = user._auth_flags
+    if flags:
+        from training_access import training_open_access_enabled
+
+        profile = await db.profiles.find_one({"user_id": user.user_id}, {"_id": 0})
+        creator = flags.get("is_training_creator", False)
+        training_access = bool(
+            flags.get("has_training_access", False)
+            or training_open_access_enabled()
+            or user.training_access
+            or user.user_id == TUTORIAL_FILMING_USER_ID
+            or _is_admin_email(user.email)
+            or creator
+        )
+    else:
+        profile, creator, training_access = await asyncio.gather(
+            db.profiles.find_one({"user_id": user.user_id}, {"_id": 0}),
+            is_training_creator(db, user.user_id),
+            _resolve_training_access(user),
+        )
     logger.info(
         "auth_me cv_readiness user_id=%s profile_exists=%s has_cv_text=%s has_cv_filename=%s has_preferences=%s",
         user.user_id,
@@ -1708,7 +1830,7 @@ async def auth_me(user: User = Depends(get_current_user)):
         "has_preferences": profile is not None and bool(profile.get("target_role")),
         "is_training_creator": creator,
         "has_training_access": training_access,
-        "is_admin": _is_admin_email(user.email) or bool(getattr(user, "is_admin", False)),
+        "is_admin": _is_admin_email(user.email) or flags.get("is_admin", False) or bool(getattr(user, "is_admin", False)),
     }
 
 
@@ -1733,36 +1855,88 @@ def _hash_ip(request: Request) -> Optional[str]:
     return hashlib.sha256(f"{salt}:{raw_ip}".encode("utf-8")).hexdigest()[:24]
 
 
-@api_router.post("/analytics/event")
-async def track_analytics_event(
+def _analytics_event_document(
     body: AnalyticsEventRequest,
     request: Request,
-    user: Optional[User] = Depends(_optional_current_user),
-):
+    user: Optional[User],
+    *,
+    now: Optional[str] = None,
+    event_id: Optional[str] = None,
+    batch_id: Optional[str] = None,
+) -> Dict[str, Any]:
     event_name = (body.event or "").strip()
     if not event_name:
         raise HTTPException(status_code=400, detail="event required")
     if len(event_name) > 120:
         raise HTTPException(status_code=400, detail="event too long")
-    now = datetime.now(timezone.utc).isoformat()
-    event_doc = {
-        "event_id": f"evt_{uuid.uuid4().hex}",
+    canonical_event_id = (event_id or body.event_id or "").strip()[:160] or f"evt_{uuid.uuid4().hex}"
+    return {
+        "event_id": canonical_event_id,
+        "batch_id": batch_id,
         "user_id": user.user_id if user else None,
         "anonymous_id": (body.anonymous_id or "").strip()[:160] or None,
         "event": event_name,
         "properties": body.properties or {},
         "page": (body.page or "").strip()[:300] or None,
         "source": (body.source or "").strip()[:120] or None,
-        "created_at": now,
+        "created_at": now or datetime.now(timezone.utc).isoformat(),
         "user_agent": request.headers.get("user-agent"),
         "ip_hash": _hash_ip(request),
     }
+
+
+@api_router.post("/analytics/event")
+async def track_analytics_event(
+    body: AnalyticsEventRequest,
+    request: Request,
+    user: Optional[User] = Depends(_optional_current_user),
+):
+    event_doc = _analytics_event_document(body, request, user)
     try:
-        await db.analytics_events.insert_one(event_doc)
+        with database_journey("landing"):
+            await db.analytics_events.insert_one(event_doc)
     except Exception as exc:
-        logger.warning("analytics_event_store_failed event=%s error=%s", event_name, str(exc)[:200])
+        logger.warning("analytics_event_store_failed event=%s error=%s", event_doc["event"], str(exc)[:200])
         return {"ok": False, "stored": False}
     return {"ok": True, "stored": True, "event_id": event_doc["event_id"]}
+
+
+@api_router.post("/analytics/events")
+async def track_analytics_events(
+    body: AnalyticsBatchRequest,
+    request: Request,
+    user: Optional[User] = Depends(_optional_current_user),
+):
+    if not body.batch_id.strip() or len(body.batch_id) > 160:
+        raise HTTPException(status_code=400, detail="batch_id required")
+    if not body.events or len(body.events) > 20:
+        raise HTTPException(status_code=400, detail="events must contain 1 to 20 items")
+    documents = [
+        _analytics_event_document(
+            item,
+            request,
+            user,
+            event_id=f"evt_batch_{hashlib.sha256(f'{body.batch_id}:{index}'.encode()).hexdigest()[:48]}",
+            batch_id=body.batch_id,
+        )
+        for index, item in enumerate(body.events)
+    ]
+    payload_size = len(json.dumps(documents, separators=(",", ":"), default=str).encode("utf-8"))
+    if payload_size > 64 * 1024:
+        raise HTTPException(status_code=413, detail="analytics batch too large")
+    try:
+        accepted_event_ids = [item.event_id or doc["event_id"] for item, doc in zip(body.events, documents)]
+        with database_journey("landing"):
+            await db.analytics_events.insert_many(documents, ignore_duplicates=True)
+    except Exception as exc:
+        logger.warning("analytics_batch_store_failed batch=%s error=%s", body.batch_id[:32], str(exc)[:200])
+        return {"ok": False, "stored": False, "accepted_event_ids": []}
+    return {
+        "ok": True,
+        "stored": True,
+        "batch_id": body.batch_id,
+        "accepted_event_ids": accepted_event_ids,
+    }
 
 
 async def _store_friend_referral_analytics(
@@ -2384,7 +2558,7 @@ async def _update_user_billing_by_customer_id(customer_id: str, updates: Dict[st
 async def _resolve_user_id_for_stripe_customer(customer_id: str) -> Optional[str]:
     if not customer_id:
         return None
-    existing = await db.users.find_one({"billing.stripe_customer_id": customer_id}, {"_id": 0, "user_id": 1})
+    existing = await db.users.find_one({"stripe_customer_id": customer_id}, {"_id": 0, "user_id": 1})
     if existing:
         return existing.get("user_id")
     if not _stripe_configured():
@@ -3641,14 +3815,14 @@ async def _posthog_resolve_billing_user_id(
         return resolved
     if subscription_id:
         found = await db.users.find_one(
-            {"billing.stripe_subscription_id": subscription_id},
+            {"stripe_subscription_id": subscription_id},
             {"_id": 0, "user_id": 1},
         )
         if found and found.get("user_id"):
             return str(found["user_id"])
     if customer_id:
         found = await db.users.find_one(
-            {"billing.stripe_customer_id": customer_id},
+            {"stripe_customer_id": customer_id},
             {"_id": 0, "user_id": 1},
         )
         if found and found.get("user_id"):
@@ -6110,33 +6284,6 @@ async def get_profile(user: User = Depends(get_current_user)):
     return profile
 
 
-def _profile_completion(profile: Dict[str, Any]) -> Dict[str, Any]:
-    defaults = profile.get("application_defaults") or {}
-    contact = profile.get("contact") or {}
-    checks = [
-        ("cv_uploaded", bool(profile.get("cv_text") or profile.get("cv_filename"))),
-        ("target_roles", bool(profile.get("target_role") or profile.get("target_roles"))),
-        ("location", bool(profile.get("target_location") or profile.get("target_location_data"))),
-        ("linkedin_or_portfolio", bool(contact.get("linkedin") or contact.get("website") or contact.get("github"))),
-        ("application_defaults", all(
-            defaults.get(key) not in (None, "")
-            for key in (
-                "work_authorized_countries",
-                "requires_sponsorship",
-                "current_location_city",
-                "former_employer_restriction_or_noncompete",
-            )
-        ) or bool(defaults.get("prefer_not_to_say_demographics"))),
-    ]
-    completed = sum(1 for _, ok in checks if ok)
-    return {
-        "percentage": round((completed / len(checks)) * 100),
-        "completed": completed,
-        "total": len(checks),
-        "items": {key: ok for key, ok in checks},
-    }
-
-
 async def _cancel_stripe_subscription_for_user(user_doc: Dict[str, Any]) -> None:
     billing = user_doc.get("billing") or {}
     sub_id = billing.get("stripe_subscription_id")
@@ -6385,6 +6532,25 @@ async def patch_profile_extras(payload: Dict[str, Any], user: User = Depends(get
         upsert=True,
     )
     return {"ok": True, "extras": merged}
+
+
+@api_router.patch("/profile/onboarding")
+async def patch_onboarding_profile(body: OnboardingProfilePatch, user: User = Depends(get_current_user)):
+    """Atomically persist onboarding progress, search preferences, and contact."""
+    contact = {key: value for key, value in body.contact.items() if value is not None}
+    contact["email"] = user.email
+    preferences = {key: value for key, value in body.preferences.items() if value is not None}
+    preferences["updated_at"] = datetime.now(timezone.utc).isoformat()
+    patcher = getattr(db, "patch_onboarding_profile", None)
+    if patcher is None:
+        raise HTTPException(status_code=503, detail="Atomic onboarding persistence is unavailable")
+    profile = await patcher(
+        user.user_id,
+        extras={"onboarding": body.onboarding},
+        preferences=preferences,
+        contact=contact,
+    )
+    return {"ok": True, "profile": _sanitize_profile_for_client(profile)}
 
 
 @api_router.get("/locations/search")
@@ -10685,7 +10851,7 @@ async def admin_auto_apply_execute(body: AdminAutoApplyExecuteRequest, admin: Us
         try:
             from auto_apply.metrics import release_stale_in_flight as _release_stale
 
-            released = await _release_stale_in_flight(
+            released = await _release_stale(
                 db, target_user.user_id, body.job_id, max_age_s=120.0, force=False,
             )
             if released:
@@ -11482,8 +11648,8 @@ async def _admin_safe_find(
             cursor = cursor.limit(limit)
         return await cursor.to_list(limit)
     except Exception as exc:
-        logger.warning("admin_safe_find_failed collection=%s error=%s", name, str(exc)[:200])
-        return []
+        logger.exception("admin_safe_find_failed collection=%s", name)
+        raise HTTPException(status_code=503, detail=f"Admin database read failed: {name}") from exc
 
 
 async def _admin_safe_read(
@@ -11500,8 +11666,8 @@ async def _admin_safe_read(
         try:
             return await read_with_select(filter or {}, limit, select=select)
         except Exception as exc:
-            logger.warning("admin_safe_read_failed collection=%s error=%s", name, str(exc)[:200])
-            return []
+            logger.exception("admin_safe_read_failed collection=%s", name)
+            raise HTTPException(status_code=503, detail=f"Admin database read failed: {name}") from exc
     return await _admin_safe_find(collection, filter, limit=limit)
 
 
@@ -11510,8 +11676,8 @@ async def _admin_safe_find_one(collection, filter: Dict[str, Any]) -> Optional[D
     try:
         return await collection.find_one(filter, {"_id": 0})
     except Exception as exc:
-        logger.warning("admin_safe_find_one_failed collection=%s error=%s", name, str(exc)[:200])
-        return None
+        logger.exception("admin_safe_find_one_failed collection=%s", name)
+        raise HTTPException(status_code=503, detail=f"Admin database read failed: {name}") from exc
 
 
 async def _admin_jobs_for_ids(job_ids: List[str]) -> List[Dict[str, Any]]:
@@ -11602,7 +11768,15 @@ async def _find_user_by_email(email: str) -> Optional[Dict[str, Any]]:
     user_doc = await db.users.find_one({"email": normalized}, {"_id": 0})
     if user_doc:
         return user_doc
-    users = await _admin_safe_find(db.users)
+    find = getattr(db.users, "find", None)
+    if not callable(find):
+        return None
+    try:
+        cursor = find({}, {"_id": 0})
+        users = await cursor.to_list(10000)
+    except Exception:
+        logger.exception("auth_email_fallback_scan_failed")
+        return None
     for user_doc in users:
         if (user_doc.get("email") or "").strip().lower() == normalized:
             return user_doc
@@ -12009,6 +12183,11 @@ async def _admin_user_analytics_payload() -> Dict[str, Any]:
 
 @api_router.get("/admin/overview")
 async def admin_overview(admin: User = Depends(require_admin_user)):
+    if _env_enabled("ADMIN_BOUNDED_RPC_ENABLED", "false"):
+        snapshot = getattr(db, "admin_overview_snapshot", None)
+        if not callable(snapshot):
+            raise HTTPException(status_code=503, detail="Admin aggregate contract is unavailable")
+        return await snapshot()
     users, profiles, _swipes, applications, jobs = await _admin_base_data(include_swipes=False)
     normalized_apps = [_normalize_application_status_fields(app_doc) for app_doc in applications]
     user_map = {item.get("user_id"): item for item in users}
@@ -12065,7 +12244,20 @@ async def admin_user_analytics(admin: User = Depends(require_admin_user)):
 
 
 @api_router.get("/admin/users")
-async def admin_list_users(admin: User = Depends(require_admin_user)):
+async def admin_list_users(
+    page: int = Query(1, ge=1, le=10000),
+    page_size: int = Query(100, ge=1, le=500),
+    window_days: int = Query(30, ge=1, le=365),
+    admin: User = Depends(require_admin_user),
+):
+    page = page if isinstance(page, int) else 1
+    page_size = page_size if isinstance(page_size, int) else 100
+    window_days = window_days if isinstance(window_days, int) else 30
+    if _env_enabled("ADMIN_BOUNDED_RPC_ENABLED", "false"):
+        page_reader = getattr(db, "admin_users_page", None)
+        if not callable(page_reader):
+            raise HTTPException(status_code=503, detail="Admin user page contract is unavailable")
+        return await page_reader(page=page, page_size=page_size, window_days=window_days)
     users, profiles, swipes, applications, _jobs = await _admin_base_data(
         include_swipes=True,
         include_jobs=False,
@@ -12137,7 +12329,13 @@ async def admin_list_users(admin: User = Depends(require_admin_user)):
             "credits_remaining": billing.get("credits_remaining"),
         })
     rows.sort(key=lambda item: _parse_dt(item.get("last_active_at")) or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
-    return {"users": rows}
+    start = (page - 1) * page_size
+    return {
+        "users": rows[start:start + page_size],
+        "page": page,
+        "page_size": page_size,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @api_router.get("/admin/users/{user_id}")
@@ -12168,8 +12366,13 @@ async def admin_get_user(user_id: str, admin: User = Depends(require_admin_user)
         key=lambda value: _parse_dt(value) or datetime.min.replace(tzinfo=timezone.utc),
         default=None,
     )
-    login_sessions = await _admin_safe_find(
-        getattr(db, "user_sessions", None), {"user_id": user_id}, sort=[("created_at", -1)],
+    session_collection = getattr(db, "user_sessions", None)
+    login_sessions = (
+        await _admin_safe_find(
+            session_collection, {"user_id": user_id}, sort=[("created_at", -1)],
+        )
+        if session_collection is not None
+        else []
     )
 
     swipe_rows = await db.swipes.find(
@@ -13060,7 +13263,15 @@ async def admin_training_analytics_endpoint(
 
 
 @api_router.get("/admin/analytics")
-async def admin_analytics(admin: User = Depends(require_admin_user)):
+async def admin_analytics(
+    window_days: int = Query(30, ge=1, le=365),
+    admin: User = Depends(require_admin_user),
+):
+    if _env_enabled("ADMIN_BOUNDED_RPC_ENABLED", "false"):
+        snapshot = getattr(db, "admin_analytics_snapshot", None)
+        if not callable(snapshot):
+            raise HTTPException(status_code=503, detail="Admin analytics contract is unavailable")
+        return await snapshot(window_days)
     users, profiles, swipes, applications, jobs = await _admin_base_data(include_swipes=True)
     events = await _analytics_events()
     normalized_apps = [_normalize_application_status_fields(app_doc) for app_doc in applications]
@@ -13244,9 +13455,27 @@ async def admin_analytics(admin: User = Depends(require_admin_user)):
 async def admin_list_applications(
     status_filter: Optional[str] = Query(default=None, alias="filter"),
     status: Optional[str] = Query(default=None),
+    page: int = Query(1, ge=1, le=10000),
+    page_size: int = Query(100, ge=1, le=500),
+    window_days: int = Query(30, ge=1, le=365),
     admin: User = Depends(require_admin_user),
 ):
+    status_filter = status_filter if isinstance(status_filter, str) else None
+    status = status if isinstance(status, str) else None
+    page = page if isinstance(page, int) else 1
+    page_size = page_size if isinstance(page_size, int) else 100
+    window_days = window_days if isinstance(window_days, int) else 30
     status_filter = status_filter or status
+    if _env_enabled("ADMIN_BOUNDED_RPC_ENABLED", "false"):
+        page_reader = getattr(db, "admin_applications_page", None)
+        if not callable(page_reader):
+            raise HTTPException(status_code=503, detail="Admin application page contract is unavailable")
+        return await page_reader(
+            page=page,
+            page_size=page_size,
+            window_days=window_days,
+            status_filter=status_filter,
+        )
     apps = await _admin_safe_find(db.applications, sort=[("updated_at", -1)], limit=1000)
     allowed_statuses = _admin_status_filter(status_filter)
     if allowed_statuses is not None:
@@ -13281,6 +13510,9 @@ async def admin_list_applications(
             for app_doc in apps
         ],
         "filter": status_filter or "all",
+        "page": page,
+        "page_size": page_size,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -15680,6 +15912,14 @@ async def download_cover_letter(application_id: str, user: User = Depends(get_cu
 
 @api_router.patch("/applications/{application_id}/status")
 async def update_status(application_id: str, update: StatusUpdate, user: User = Depends(get_current_user)):
+    if _env_enabled("APPLICATION_TRACKER_RPC_ENABLED", "false"):
+        patch_status = getattr(db, "patch_user_application_status", None)
+        if not callable(patch_status):
+            raise HTTPException(status_code=503, detail="Application tracker contract is unavailable")
+        updated = await patch_status(application_id, user.user_id, update.status)
+        if not updated:
+            raise HTTPException(status_code=404, detail="Not found")
+        return {"ok": True}
     res = await db.applications.update_one(
         {"application_id": application_id, "user_id": user.user_id},
         {"$set": {"status": update.status}},
@@ -17297,6 +17537,10 @@ async def startup_seed():
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    global _supabase_auth_http_client
     if _posthog_client is not None:
         _posthog_client.flush()
+    if _supabase_auth_http_client is not None and not _supabase_auth_http_client.is_closed:
+        await _supabase_auth_http_client.aclose()
+    _supabase_auth_http_client = None
     await db.close()

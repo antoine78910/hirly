@@ -12,7 +12,7 @@ import asyncio
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, Optional, Set
 
 from .driver import DRIVER_REGISTRY
 
@@ -288,6 +288,9 @@ async def backfill_pending_applications(db, *, limit: int = 200) -> int:
     providers = sorted(queue_providers())
     if not providers:
         return 0
+    set_based_backfill = getattr(db, "backfill_auto_apply_queue", None)
+    if set_based_backfill is not None:
+        return await set_based_backfill(providers, limit=limit)
 
     # Prefer app.ats_provider (denormalized). Also scan recent not_submitted packages.
     candidates = await db.applications.find(

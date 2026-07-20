@@ -59,6 +59,9 @@ async def mark_notification_read(db, *, user_id: str, notification_id: str) -> b
 
 
 async def mark_all_notifications_read(db, *, user_id: str) -> int:
+    marker = getattr(db, "mark_all_notifications_read", None)
+    if marker is not None:
+        return await marker(user_id, limit=500)
     rows = await db.notifications.find({"user_id": user_id, "read": False}, {"_id": 0}).to_list(500)
     now = _now_iso()
     for row in rows:
