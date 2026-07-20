@@ -210,7 +210,21 @@ TABLE_FILTER_COLUMNS = {
     "company_boards": {"board_id", "ats_provider", "company", "board_token", "enabled", "priority", "last_synced_at"},
     "profiles": {"user_id", "target_role", "target_location", "updated_at"},
     "swipes": {"swipe_id", "user_id", "job_id", "direction", "created_at"},
-    "applications": {"application_id", "user_id", "job_id", "status", "package_status", "submission_status", "created_at", "updated_at"},
+    "applications": {
+        "application_id",
+        "user_id",
+        "job_id",
+        "status",
+        "package_status",
+        "submission_status",
+        "generation_status",
+        "generation_started_at",
+        "generation_completed_at",
+        "submitted_at",
+        "status_updated_at",
+        "created_at",
+        "updated_at",
+    },
     "gmail_connections": {"user_id", "email", "connected", "last_synced_at", "updated_at"},
     "application_emails": {"email_id", "user_id", "application_id", "job_id", "provider", "gmail_message_id", "gmail_thread_id", "received_at", "classification"},
     "browser_submission_runs": {"run_id", "application_id", "job_id", "user_id", "provider", "status", "dry_run", "created_at"},
@@ -859,6 +873,19 @@ def _project_document(document: Document, projection: Projection) -> Document:
     return projected
 
 
+def _projection_select(table: str, projection: Projection) -> str:
+    """Push safe inclusion projections into PostgREST without fetching JSONB."""
+    if not projection:
+        return "data"
+    include_keys = {key for key, value in projection.items() if value and key != "_id"}
+    if not include_keys:
+        return "data"
+    columns = TABLE_FILTER_COLUMNS.get(table, set())
+    if any("." in key or key not in columns for key in include_keys):
+        return "data"
+    return ",".join(sorted(include_keys))
+
+
 def _comparable(value: Any) -> Any:
     if isinstance(value, str):
         try:
@@ -1068,6 +1095,7 @@ class SupabaseCursorAdapter(CursorPort):
         rows = await self.collection._read_documents(
             self.filter,
             pushed_limit,
+            select=_projection_select(self.collection.table_name, self.projection),
             order=order,
         )
         if self._sort_spec and not order:
@@ -1221,8 +1249,13 @@ class SupabaseCollectionAdapter(CollectionPort):
         limit: int,
         *,
         select: str = JOB_FEED_SELECT,
+        require_pushed: bool = False,
     ) -> List[Document]:
         """Read rows with an explicit PostgREST select list."""
+        if require_pushed and _postgrest_filter_params(self.table_name, filter) is None:
+            raise RuntimeError(
+                f"Supabase {self.table_name} critical read rejected an unsupported local filter"
+            )
         return await self._read_documents(filter, read_limit=limit, select=select)
 
     async def find_geo_places_by_bounding_box(
@@ -1735,6 +1768,27 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
                 "p_contact": _json_safe(contact),
             },
         )
+
+    async def patch_user_application_status(
+        self,
+        application_id: str,
+        user_id: str,
+        status: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Atomically patch and return one user-owned tracker application."""
+        payload = await self._python_ingestion_rpc(
+            "patch_user_application_status",
+            {
+                "p_application_id": application_id,
+                "p_user_id": user_id,
+                "p_status": status,
+            },
+        )
+        if isinstance(payload, list):
+            payload = payload[0] if payload else None
+        if payload is not None and not isinstance(payload, dict):
+            raise RuntimeError("Application status RPC returned an invalid payload")
+        return payload
 
     async def _python_provider_rpc(self, function_name: str, payload: Dict[str, Any]) -> Any:
         adapter = self._jobs_inventory_rpc_adapter
