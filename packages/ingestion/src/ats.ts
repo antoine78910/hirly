@@ -139,17 +139,15 @@ const RESERVED_TENANTS = new Set([
   "www",
 ]);
 
-function pathParts(url: URL): string[] {
-  return url.pathname
-    .split("/")
-    .filter(Boolean)
-    .map((part) => {
-      try {
-        return decodeURIComponent(part);
-      } catch {
-        return part;
-      }
-    });
+function pathParts(url: URL): string[] | null {
+  try {
+    return url.pathname
+      .split("/")
+      .filter(Boolean)
+      .map((part) => decodeURIComponent(part));
+  } catch {
+    return null;
+  }
 }
 
 function normalizeTenant(value: string | undefined): string | null {
@@ -301,6 +299,16 @@ export function classifyAtsUrl(input: string): AtsUrlClassification {
   }
 
   const parts = pathParts(url);
+  if (!parts) {
+    return {
+      originalUrl,
+      provider: null,
+      tenantKey: null,
+      boardKey: null,
+      postingId: null,
+      match: "invalid_url",
+    };
+  }
   const tenantKey = tenantForProvider(provider, url, parts);
   return {
     originalUrl,

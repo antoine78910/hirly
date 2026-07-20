@@ -8,6 +8,7 @@ export const providerSchema = z.enum([
   "wttj",
   "indeed",
   "france_travail",
+  "data_gouv",
   "greenhouse",
   "lever",
 ]);
