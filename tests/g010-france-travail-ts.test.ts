@@ -47,7 +47,7 @@ describe("France Travail TS migration boundary", () => {
       accessToken: "fixture-token",
       endpoint: "https://fixture.invalid/search",
       fetcher: async (request) => {
-        const url = new URL(request.url);
+        const url = new URL(request instanceof Request ? request.url : String(request));
         calls.push(url.searchParams.get("range") ?? "");
         const start = Number((url.searchParams.get("range") ?? "0").split("-")[0]);
         const rows = start === 0
