@@ -13,32 +13,35 @@ const exporterFunctions = runbook.match(
 
 const runExporterScenario = (stripeShim, scenario) => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "posthog-runbook-test-"));
-  const binDir = path.join(tempDir, "bin");
-  const scratchDir = path.join(tempDir, "scratch");
-  fs.mkdirSync(binDir);
-  fs.mkdirSync(scratchDir);
-  fs.writeFileSync(path.join(binDir, "stripe"), `#!/bin/zsh\n${stripeShim}\n`, { mode: 0o755 });
-  const script = path.join(tempDir, "scenario.zsh");
-  fs.writeFileSync(
-    script,
-    `set -u\n${exporterFunctions}\nexport TEST_ROOT=${JSON.stringify(tempDir)}\n${scenario}\n`,
-  );
-  const startedAt = Date.now();
-  const result = spawnSync("zsh", [script], {
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      PATH: `${binDir}:${process.env.PATH}`,
-      TMPDIR: scratchDir,
-      STRIPE_PAGE_TIMEOUT_SECONDS: "1",
-      STRIPE_PAGE_KILL_GRACE_SECONDS: "1",
-    },
-    timeout: 7000,
-  });
-  const elapsedMs = Date.now() - startedAt;
-  const scratchEntries = fs.readdirSync(scratchDir);
-  fs.rmSync(tempDir, { recursive: true, force: true });
-  return { ...result, elapsedMs, scratchEntries };
+  try {
+    const binDir = path.join(tempDir, "bin");
+    const scratchDir = path.join(tempDir, "scratch");
+    fs.mkdirSync(binDir);
+    fs.mkdirSync(scratchDir);
+    fs.writeFileSync(path.join(binDir, "stripe"), `#!/bin/zsh\n${stripeShim}\n`, { mode: 0o755 });
+    const script = path.join(tempDir, "scenario.zsh");
+    fs.writeFileSync(
+      script,
+      `set -u\n${exporterFunctions}\nexport TEST_ROOT=${JSON.stringify(tempDir)}\n${scenario}\n`,
+    );
+    const startedAt = Date.now();
+    const result = spawnSync("zsh", [script], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH}`,
+        TMPDIR: scratchDir,
+        STRIPE_PAGE_TIMEOUT_SECONDS: "1",
+        STRIPE_PAGE_KILL_GRACE_SECONDS: "1",
+      },
+      timeout: 7000,
+    });
+    const elapsedMs = Date.now() - startedAt;
+    const scratchEntries = fs.readdirSync(scratchDir);
+    return { ...result, elapsedMs, scratchEntries };
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
 };
 
 describe("PostHog production-gate runbook contract", () => {
