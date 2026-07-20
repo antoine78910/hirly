@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "manifestId": "ft-census-2026-07-20-fixture",
+  "generatedAt": "2026-07-20T00:00:00.000Z",
+  "paidCohort": {
+    "snapshotAt": "2026-07-19T23:59:59.000Z",
+    "snapshotHash": "0d1b66404bcf29403658e6a0bde14c708ea684dd5e2b87d63c6f72b2d6ff5476",
+    "samplingSeed": "hirly-ft-census-v1",
+    "strata": [
+      {
+        "id": "cadres-ile-de-france",
+        "weight": 0.55
+      },
+      {
+        "id": "tech-regions",
+        "weight": 0.3
+      },
+      {
+        "id": "alternance-national",
+        "weight": 0.15
+      }
+    ]
+  },
+  "partitionRules": {
+    "order": [
+      "publication_window",
+      "rome",
+      "department",
+      "contract"
+    ],
+    "retrievableCap": 3000,
+    "publicationWindowDays": 7,
+    "splitOnlyWhenAboveCap": true
+  },
+  "partitions": [
+    {
+      "id": "2026-07-06--2026-07-13:rome-M18",
+      "publishedFrom": "2026-07-06T00:00:00.000Z",
+      "publishedUntil": "2026-07-13T00:00:00.000Z",
+      "rome": "M18",
+      "department": null,
+      "contract": null,
+      "terminalState": "complete",
+      "sourceReportedTotal": 2,
+      "fetched": 2,
+      "normalized": 2,
+      "rejectedByReason": {},
+      "occurrenceDeduplicated": 0,
+      "inserted": 1,
+      "updated": 1,
+      "active": 2,
+      "actionable": 2
+    },
+    {
+      "id": "2026-07-13--2026-07-20:rome-M18:department-75",
+      "publishedFrom": "2026-07-13T00:00:00.000Z",
+      "publishedUntil": "2026-07-20T00:00:00.000Z",
+      "rome": "M18",
+      "department": "75",
+      "contract": null,
+      "terminalState": "capped",
+      "sourceReportedTotal": 3100,
+      "fetched": 3000,
+      "normalized": 2950,
+      "rejectedByReason": {
+        "invalid_apply_url": 30,
+        "missing_title": 20
+      },
+      "occurrenceDeduplicated": 150,
+      "inserted": 2500,
+      "updated": 300,
+      "active": 2750,
+      "actionable": 2600
+    }
+  ],
+  "manifestDigest": "e140d6cc7be80bf509bf52e328b0d7b6471c7e833268cb8ed683d75e70195894"
+}
