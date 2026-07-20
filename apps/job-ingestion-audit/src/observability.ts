@@ -108,6 +108,9 @@ function terminalState(
 ): FranceTravailCensusManifest["terminalState"] {
   if (partitions.some(({ status }) => status === "failed")) return "failed";
   if (partitions.some(({ status }) => status === "blocked")) return "blocked";
+  if (partitions.some(({ sourceReportedTotal }) => sourceReportedTotal === null)) {
+    return "blocked";
+  }
   if (partitions.some(({ capHit }) => capHit)) return "capped";
   if (partitions.some((partition) => (
     partition.sourceReportedTotal !== null
