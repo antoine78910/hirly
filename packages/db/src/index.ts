@@ -11,6 +11,8 @@ import {
 } from "@hirly/contracts";
 import postgres, { type Sql } from "postgres";
 
+export * from "./analytics-backfill";
+
 export type Database = Sql<Record<string, postgres.PostgresType>>;
 
 export interface Lease {

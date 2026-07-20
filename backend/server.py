@@ -432,7 +432,11 @@ def _classify_analytics_occurrence(
         else "server_received_at"
     )
     return {
-        "occurred_at": occurred.isoformat().replace("+00:00", "Z"),
+        "occurred_at": (
+            occurred.isoformat().replace("+00:00", "Z")
+            if quality == "validated_client_occurrence"
+            else None
+        ),
         "received_at": received_at,
         "timestamp_quality": quality,
         "clock_skew_ms": clock_skew_ms,
@@ -472,7 +476,15 @@ def _capture_posthog_registry_event(
         )
         return False
     received_at = datetime.now(timezone.utc).isoformat()
-    event_timestamp = occurred_at or received_at
+    parsed_occurred_at = _parse_analytics_utc(occurred_at)
+    if timestamp_quality != "server_received_at" and parsed_occurred_at is None:
+        logger.warning("posthog_registry_event_invalid_timestamp event=%s", event_name)
+        return False
+    event_timestamp = (
+        parsed_occurred_at.isoformat()
+        if parsed_occurred_at is not None
+        else received_at
+    )
     try:
         with new_context():
             identify_context(canonical_user_id)
@@ -2076,6 +2088,22 @@ def _analytics_event_document(
         )
     canonical_event_id = (event_id or body.event_id or "").strip()[:160] or f"evt_{uuid.uuid4().hex}"
     user_id = user.user_id if user else None
+    identity_quality = (
+        "canonical_user_id"
+        if _canonical_analytics_user_id(user_id)
+        else ("anonymous" if not user_id else "invalid_user_id")
+    )
+    identity_allowed = bool(
+        definition
+        and (
+            definition.get("identityPolicy") == "either"
+            or identity_quality == "canonical_user_id"
+        )
+    )
+    timestamp_allowed = bool(
+        definition
+        and occurrence["timestamp_quality"] in definition.get("canonicalTimeQualities", [])
+    )
     return {
         "event_id": canonical_event_id,
         "batch_id": batch_id,
@@ -2089,16 +2117,14 @@ def _analytics_event_document(
             definition
             and not missing_properties
             and definition.get("authoritativeSource") == "frontend"
+            and identity_allowed
+            and timestamp_allowed
         ),
         "canonical_properties": canonical_properties,
         "registry_rejected_properties": rejected_properties,
         "registry_missing_properties": missing_properties,
-        "identity_quality": (
-            "canonical_user_id"
-            if _canonical_analytics_user_id(user_id)
-            else ("anonymous" if not user_id else "invalid_user_id")
-        ),
-        "properties": body.properties or {},
+        "identity_quality": identity_quality,
+        "properties": canonical_properties if definition else {},
         "session_id": (body.session_id or "").strip()[:160] or None,
         "page": (body.page or "").strip()[:300] or None,
         "source": (body.source or "").strip()[:120] or None,
@@ -2116,6 +2142,9 @@ async def track_analytics_event(
     user: Optional[User] = Depends(_optional_current_user),
 ):
     event_doc = _analytics_event_document(body, request, user)
+    payload_size = len(json.dumps(event_doc, separators=(",", ":"), default=str).encode("utf-8"))
+    if payload_size > 64 * 1024:
+        raise HTTPException(status_code=413, detail="analytics event too large")
     try:
         with database_journey("landing"):
             await db.analytics_events.insert_one(event_doc)
@@ -2135,12 +2164,15 @@ async def track_analytics_events(
         raise HTTPException(status_code=400, detail="batch_id required")
     if not body.events or len(body.events) > 20:
         raise HTTPException(status_code=400, detail="events must contain 1 to 20 items")
+    actor_scope = (
+        _canonical_analytics_user_id(user.user_id) if user else None
+    ) or (body.events[0].anonymous_id or "").strip()[:160] or _hash_ip(request) or "anonymous"
     documents = [
         _analytics_event_document(
             item,
             request,
             user,
-            event_id=f"evt_batch_{hashlib.sha256(f'{body.batch_id}:{index}'.encode()).hexdigest()[:48]}",
+            event_id=f"evt_batch_{hashlib.sha256(f'{actor_scope}:{body.batch_id}:{index}'.encode()).hexdigest()[:48]}",
             batch_id=body.batch_id,
         )
         for index, item in enumerate(body.events)
@@ -2149,7 +2181,7 @@ async def track_analytics_events(
     if payload_size > 64 * 1024:
         raise HTTPException(status_code=413, detail="analytics batch too large")
     try:
-        accepted_event_ids = [item.event_id or doc["event_id"] for item, doc in zip(body.events, documents)]
+        accepted_event_ids = [doc["event_id"] for doc in documents]
         with database_journey("landing"):
             await db.analytics_events.insert_many(documents, ignore_duplicates=True)
     except Exception as exc:

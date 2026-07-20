@@ -130,6 +130,8 @@ export const getPostHogClient = (): PostHog | null => client;
 export const isCanonicalAnalyticsUserId = (value: unknown): value is string =>
   typeof value === "string" && CANONICAL_USER_ID_PATTERN.test(value);
 
+export const hasIdentifiedPostHogUser = (): boolean => identifiedUserId !== null;
+
 export const capturePostHogEvent = (
   event: string,
   properties: Properties = {},
@@ -158,16 +160,18 @@ export const capturePostHogPageview = (pathname: string): void => {
 };
 
 export const identifyPostHogUser = (userId: string): void => {
-  if (!client || !isCanonicalAnalyticsUserId(userId) || identifiedUserId === userId) return;
+  if (!client || identifiedUserId === userId) return;
   try {
-    if (identifiedUserId) client.reset();
+    client.reset();
+    identifiedUserId = null;
+    if (!isCanonicalAnalyticsUserId(userId)) return;
     client.identify(userId);
     identifiedUserId = userId;
   } catch {}
 };
 
 export const resetPostHog = (): void => {
-  if (!client || !identifiedUserId) return;
+  if (!client) return;
   try {
     client.reset();
     identifiedUserId = null;

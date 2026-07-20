@@ -6,6 +6,8 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'posthog_warehouse_reader') THEN
     CREATE ROLE posthog_warehouse_reader NOLOGIN
       NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION;
+    COMMENT ON ROLE posthog_warehouse_reader IS
+      'managed-by-hirly-migration-20260720001800';
   END IF;
 END
 $$;

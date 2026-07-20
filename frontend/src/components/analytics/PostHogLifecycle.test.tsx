@@ -75,11 +75,17 @@ describe("PostHogLifecycle", () => {
     expect(mockIdentifyPostHogUser).toHaveBeenCalledWith(
       "123e4567-e89b-12d3-a456-426614174000",
     );
+    expect(mockIdentifyPostHogUser.mock.invocationCallOrder[0]).toBeLessThan(
+      mockCapturePostHogPageview.mock.invocationCallOrder[0],
+    );
 
     mockCurrentUser = null;
     act(() => {
       root.render(<PostHogLifecycle />);
     });
     expect(mockResetPostHog).toHaveBeenCalled();
+    expect(mockResetPostHog.mock.invocationCallOrder[0]).toBeLessThan(
+      mockCapturePostHogPageview.mock.invocationCallOrder.at(-1)!,
+    );
   });
 });

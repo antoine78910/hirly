@@ -9,6 +9,17 @@
         "typescript": "5.9.3",
       },
     },
+    "apps/analytics-backfill": {
+      "name": "@hirly/analytics-backfill",
+      "version": "0.1.0",
+      "dependencies": {
+        "@hirly/contracts": "workspace:*",
+        "@hirly/db": "workspace:*",
+      },
+      "devDependencies": {
+        "typescript": "5.9.3",
+      },
+    },
     "apps/job-ingestion-audit": {
       "name": "@hirly/job-ingestion-audit",
       "version": "0.1.0",
@@ -90,6 +101,8 @@
     },
   },
   "packages": {
+    "@hirly/analytics-backfill": ["@hirly/analytics-backfill@workspace:apps/analytics-backfill"],
+
     "@hirly/config": ["@hirly/config@workspace:packages/config"],
 
     "@hirly/contracts": ["@hirly/contracts@workspace:packages/contracts"],
