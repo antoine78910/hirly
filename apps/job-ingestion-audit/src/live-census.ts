@@ -84,7 +84,8 @@ export async function collectLiveJobSupplyReport(
           ${transaction.array(census.sourceRunIds)}::uuid[], ${census.partitionCount},
           ${census.terminalState}, ${census.sourceReportedTotal}, ${census.fetchedRecords},
           ${census.normalizedRecords}, ${census.rejectedRecords},
-          ${census.actionableRecords}, ${transaction.json(census)}
+          ${census.actionableRecords},
+          ${transaction.json(JSON.parse(JSON.stringify(census)))}
         )
         ON CONFLICT (manifest_digest) DO NOTHING
         RETURNING id
