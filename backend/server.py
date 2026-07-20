@@ -11570,8 +11570,8 @@ async def _admin_safe_find(
             cursor = cursor.limit(limit)
         return await cursor.to_list(limit)
     except Exception as exc:
-        logger.warning("admin_safe_find_failed collection=%s error=%s", name, str(exc)[:200])
-        return []
+        logger.exception("admin_safe_find_failed collection=%s", name)
+        raise HTTPException(status_code=503, detail=f"Admin database read failed: {name}") from exc
 
 
 async def _admin_safe_read(
@@ -11588,8 +11588,8 @@ async def _admin_safe_read(
         try:
             return await read_with_select(filter or {}, limit, select=select)
         except Exception as exc:
-            logger.warning("admin_safe_read_failed collection=%s error=%s", name, str(exc)[:200])
-            return []
+            logger.exception("admin_safe_read_failed collection=%s", name)
+            raise HTTPException(status_code=503, detail=f"Admin database read failed: {name}") from exc
     return await _admin_safe_find(collection, filter, limit=limit)
 
 
@@ -11598,8 +11598,8 @@ async def _admin_safe_find_one(collection, filter: Dict[str, Any]) -> Optional[D
     try:
         return await collection.find_one(filter, {"_id": 0})
     except Exception as exc:
-        logger.warning("admin_safe_find_one_failed collection=%s error=%s", name, str(exc)[:200])
-        return None
+        logger.exception("admin_safe_find_one_failed collection=%s", name)
+        raise HTTPException(status_code=503, detail=f"Admin database read failed: {name}") from exc
 
 
 async def _admin_jobs_for_ids(job_ids: List[str]) -> List[Dict[str, Any]]:
@@ -12097,6 +12097,11 @@ async def _admin_user_analytics_payload() -> Dict[str, Any]:
 
 @api_router.get("/admin/overview")
 async def admin_overview(admin: User = Depends(require_admin_user)):
+    if _env_enabled("ADMIN_BOUNDED_RPC_ENABLED", "false"):
+        snapshot = getattr(db, "admin_overview_snapshot", None)
+        if not callable(snapshot):
+            raise HTTPException(status_code=503, detail="Admin aggregate contract is unavailable")
+        return await snapshot()
     users, profiles, _swipes, applications, jobs = await _admin_base_data(include_swipes=False)
     normalized_apps = [_normalize_application_status_fields(app_doc) for app_doc in applications]
     user_map = {item.get("user_id"): item for item in users}
@@ -12153,7 +12158,17 @@ async def admin_user_analytics(admin: User = Depends(require_admin_user)):
 
 
 @api_router.get("/admin/users")
-async def admin_list_users(admin: User = Depends(require_admin_user)):
+async def admin_list_users(
+    page: int = Query(1, ge=1, le=10000),
+    page_size: int = Query(100, ge=1, le=500),
+    window_days: int = Query(30, ge=1, le=365),
+    admin: User = Depends(require_admin_user),
+):
+    if _env_enabled("ADMIN_BOUNDED_RPC_ENABLED", "false"):
+        page_reader = getattr(db, "admin_users_page", None)
+        if not callable(page_reader):
+            raise HTTPException(status_code=503, detail="Admin user page contract is unavailable")
+        return await page_reader(page=page, page_size=page_size, window_days=window_days)
     users, profiles, swipes, applications, _jobs = await _admin_base_data(
         include_swipes=True,
         include_jobs=False,
@@ -12225,7 +12240,13 @@ async def admin_list_users(admin: User = Depends(require_admin_user)):
             "credits_remaining": billing.get("credits_remaining"),
         })
     rows.sort(key=lambda item: _parse_dt(item.get("last_active_at")) or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
-    return {"users": rows}
+    start = (page - 1) * page_size
+    return {
+        "users": rows[start:start + page_size],
+        "page": page,
+        "page_size": page_size,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @api_router.get("/admin/users/{user_id}")
@@ -13148,7 +13169,15 @@ async def admin_training_analytics_endpoint(
 
 
 @api_router.get("/admin/analytics")
-async def admin_analytics(admin: User = Depends(require_admin_user)):
+async def admin_analytics(
+    window_days: int = Query(30, ge=1, le=365),
+    admin: User = Depends(require_admin_user),
+):
+    if _env_enabled("ADMIN_BOUNDED_RPC_ENABLED", "false"):
+        snapshot = getattr(db, "admin_analytics_snapshot", None)
+        if not callable(snapshot):
+            raise HTTPException(status_code=503, detail="Admin analytics contract is unavailable")
+        return await snapshot(window_days)
     users, profiles, swipes, applications, jobs = await _admin_base_data(include_swipes=True)
     events = await _analytics_events()
     normalized_apps = [_normalize_application_status_fields(app_doc) for app_doc in applications]
@@ -13332,9 +13361,22 @@ async def admin_analytics(admin: User = Depends(require_admin_user)):
 async def admin_list_applications(
     status_filter: Optional[str] = Query(default=None, alias="filter"),
     status: Optional[str] = Query(default=None),
+    page: int = Query(1, ge=1, le=10000),
+    page_size: int = Query(100, ge=1, le=500),
+    window_days: int = Query(30, ge=1, le=365),
     admin: User = Depends(require_admin_user),
 ):
     status_filter = status_filter or status
+    if _env_enabled("ADMIN_BOUNDED_RPC_ENABLED", "false"):
+        page_reader = getattr(db, "admin_applications_page", None)
+        if not callable(page_reader):
+            raise HTTPException(status_code=503, detail="Admin application page contract is unavailable")
+        return await page_reader(
+            page=page,
+            page_size=page_size,
+            window_days=window_days,
+            status_filter=status_filter,
+        )
     apps = await _admin_safe_find(db.applications, sort=[("updated_at", -1)], limit=1000)
     allowed_statuses = _admin_status_filter(status_filter)
     if allowed_statuses is not None:
@@ -13369,6 +13411,9 @@ async def admin_list_applications(
             for app_doc in apps
         ],
         "filter": status_filter or "all",
+        "page": page,
+        "page_size": page_size,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
     }
 
 

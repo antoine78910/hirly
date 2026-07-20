@@ -1790,6 +1790,47 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
             raise RuntimeError("Application status RPC returned an invalid payload")
         return payload
 
+    async def admin_overview_snapshot(self) -> Dict[str, Any]:
+        result = await self._python_ingestion_rpc("admin_overview_snapshot", {})
+        return result if isinstance(result, dict) else {}
+
+    async def admin_analytics_snapshot(self, window_days: int) -> Dict[str, Any]:
+        result = await self._python_ingestion_rpc(
+            "admin_analytics_snapshot",
+            {"p_window_days": min(max(int(window_days), 1), 365)},
+        )
+        return result if isinstance(result, dict) else {}
+
+    async def admin_users_page(self, *, page: int, page_size: int, window_days: int) -> Dict[str, Any]:
+        result = await self._python_ingestion_rpc(
+            "admin_users_page",
+            {
+                "p_limit": min(max(int(page_size), 1), 500),
+                "p_offset": max(int(page) - 1, 0) * min(max(int(page_size), 1), 500),
+                "p_window_days": min(max(int(window_days), 1), 365),
+            },
+        )
+        return result if isinstance(result, dict) else {}
+
+    async def admin_applications_page(
+        self,
+        *,
+        page: int,
+        page_size: int,
+        window_days: int,
+        status_filter: Optional[str],
+    ) -> Dict[str, Any]:
+        result = await self._python_ingestion_rpc(
+            "admin_applications_page",
+            {
+                "p_limit": min(max(int(page_size), 1), 500),
+                "p_offset": max(int(page) - 1, 0) * min(max(int(page_size), 1), 500),
+                "p_window_days": min(max(int(window_days), 1), 365),
+                "p_status": status_filter,
+            },
+        )
+        return result if isinstance(result, dict) else {}
+
     async def backfill_auto_apply_queue(self, providers: List[str], *, limit: int = 200) -> int:
         result = await self._python_ingestion_rpc(
             "backfill_auto_apply_queue",
