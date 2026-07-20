@@ -56,7 +56,7 @@ describe("trackEvent PostHog parallel delivery", () => {
       throw new Error("posthog unavailable");
     });
     api.post.mockRejectedValueOnce(new Error("first-party unavailable"));
-    await expect(trackEvent("safe_event", { step: 1 })).resolves.toBeUndefined();
+    await expect(trackEvent("landing_view", { step: 1 })).resolves.toBeUndefined();
   });
 
   it("keeps empty events as no-ops", async () => {

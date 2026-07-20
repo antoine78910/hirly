@@ -66,7 +66,6 @@ const EVENT_ALLOWLIST = new Set([
   "friend_referral_shared",
   "friend_referral_redeemed",
   "friend_referral_progress",
-  "safe_event",
 ]);
 
 let flushPromise = null;
