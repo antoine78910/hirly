@@ -16864,6 +16864,32 @@ async def _startup_seed_impl():
         logger.warning(f"Seed failed: {e}")
 
 
+_STARTUP_BACKGROUND_TASKS: set[asyncio.Task] = set()
+
+
+def _spawn_observed_startup_task(coro, *, name: str) -> asyncio.Task:
+    """Retain startup tasks and make terminal failures visible."""
+    task = asyncio.create_task(coro, name=name)
+    _STARTUP_BACKGROUND_TASKS.add(task)
+
+    def _completed(completed: asyncio.Task) -> None:
+        _STARTUP_BACKGROUND_TASKS.discard(completed)
+        if completed.cancelled():
+            logger.warning("startup_background_task_cancelled task=%s", name)
+            return
+        error = completed.exception()
+        if error is not None:
+            logger.error(
+                "startup_background_task_failed task=%s error=%s",
+                name,
+                error,
+                exc_info=(type(error), error, error.__traceback__),
+            )
+
+    task.add_done_callback(_completed)
+    return task
+
+
 @app.on_event("startup")
 async def startup_seed():
     """Register routes immediately; run seeding in the background."""
@@ -16886,10 +16912,10 @@ async def startup_seed():
             "Register https://<your-backend>/api/stripe/webhook in the Stripe Dashboard."
         )
     if _env_bool("STRIPE_RECONCILIATION_ENABLED", True) and _stripe_configured():
-        asyncio.create_task(_run_stripe_subscription_reconcile_loop())
-    asyncio.create_task(_startup_seed_impl())
-    asyncio.create_task(_resume_pending_application_generation())
-    asyncio.create_task(auto_apply_queue.startup(db))
+        _spawn_observed_startup_task(_run_stripe_subscription_reconcile_loop(), name="stripe-reconcile")
+    _spawn_observed_startup_task(_startup_seed_impl(), name="startup-seed")
+    _spawn_observed_startup_task(_resume_pending_application_generation(), name="application-generation-resume")
+    _spawn_observed_startup_task(auto_apply_queue.startup(db), name="auto-apply-queue")
     # With JOBS_INVENTORY_BLITZ (default on), crons start unless explicitly paused.
     # Set PAUSE_JOB_MAINTENANCE_CRONS=true to stop background harvest under DB load.
     blitz = _env_bool("JOBS_INVENTORY_BLITZ", True)
@@ -16901,11 +16927,11 @@ async def startup_seed():
         )
     else:
         logger.info("job_maintenance_crons_starting blitz=%s target=500k_jobs_per_week", blitz)
-        asyncio.create_task(run_france_travail_harvest_loop(db))
-        asyncio.create_task(run_jsearch_harvest_loop(db))
-        asyncio.create_task(run_ats_direct_maintenance_loop(db))
-        asyncio.create_task(run_company_discovery_loop(db))
-    asyncio.create_task(run_creator_social_refresh_loop())
+        _spawn_observed_startup_task(run_france_travail_harvest_loop(db), name="france-travail-harvest")
+        _spawn_observed_startup_task(run_jsearch_harvest_loop(db), name="jsearch-harvest")
+        _spawn_observed_startup_task(run_ats_direct_maintenance_loop(db), name="ats-direct-maintenance")
+        _spawn_observed_startup_task(run_company_discovery_loop(db), name="company-discovery")
+    _spawn_observed_startup_task(run_creator_social_refresh_loop(), name="creator-social-refresh")
 
 
 @app.on_event("shutdown")

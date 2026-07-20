@@ -272,6 +272,15 @@ async def harvest_jsearch(
                 jobs = result.jobs or []
                 fetched = len(jobs)
                 run["fetched"] = fetched
+                completeness = (result.raw_response or {}).get("completeness")
+                run["completeness"] = completeness or "unknown"
+                if completeness == "capped_unknown":
+                    run["status"] = "capped"
+                    summary["errors"].append({
+                        "role": role,
+                        "location": location_label,
+                        "error": "provider_result_cap_reached",
+                    })
                 summary["jobs_fetched"] += fetched
                 if jobs and not dry_run:
                     stats = await upsert_imported_jobs(db, jobs)
@@ -311,9 +320,12 @@ async def harvest_jsearch(
             summary["runs"].append(run)
             if position < len(selected_indices) - 1:
                 await asyncio.sleep(pause_seconds)
+        all_partitions_complete = not summary["errors"] and len(summary["runs"]) == queries
+        cursor_next = (cursor + queries) % len(combos) if all_partitions_complete else cursor
         if start_offset is None:
-            _harvest_cursor = (cursor + queries) % len(combos)
-        summary["cursor_next"] = (cursor + queries) % len(combos)
+            _harvest_cursor = cursor_next
+        summary["cursor_next"] = cursor_next
+        summary["completeness"] = "complete_snapshot" if all_partitions_complete else "partial"
         summary["combos_in_backoff"] = len(_combo_next_eligible_cycle)
         summary["elapsed_ms"] = int((time.perf_counter() - started) * 1000)
 

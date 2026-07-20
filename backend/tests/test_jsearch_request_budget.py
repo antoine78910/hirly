@@ -80,6 +80,32 @@ def test_multi_page_search_uses_one_bundled_http_request(monkeypatch):
     assert len(result.jobs) == 2
 
 
+def test_jsearch_cap_hit_is_explicitly_non_complete(monkeypatch):
+    calls = []
+    payload = {
+        "data": [
+            {"job_id": "job-1", "job_title": "Engineer", "employer_name": "Acme"},
+            {"job_id": "job-2", "job_title": "Engineer", "employer_name": "Acme"},
+        ]
+    }
+    monkeypatch.setattr(
+        "job_providers.jsearch.httpx.AsyncClient",
+        lambda **kwargs: _Client(calls, payload),
+    )
+
+    result = asyncio.run(JSearchProvider(api_key="test").search(JobSearchQuery(
+        role="engineer",
+        location="Paris",
+        country="fr",
+        limit=1,
+        max_pages=1,
+        page_size=1,
+    )))
+
+    assert result.raw_response["completeness"] == "capped_unknown"
+    assert result.raw_response["requested_cap"] == 1
+
+
 def test_background_harvest_is_opt_in(monkeypatch):
     monkeypatch.delenv("JSEARCH_HARVEST_ENABLED", raising=False)
     monkeypatch.setattr(jsearch_harvest, "is_job_provider_configured", lambda name=None: True)
@@ -88,3 +114,32 @@ def test_background_harvest_is_opt_in(monkeypatch):
 
     monkeypatch.setenv("JSEARCH_HARVEST_ENABLED", "true")
     assert jsearch_harvest.harvest_enabled() is True
+
+
+def test_failed_partition_does_not_advance_over_unattempted_queries(monkeypatch):
+    class _FailingProvider:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def search(self, _query):
+            raise RuntimeError("rate limited")
+
+    monkeypatch.setattr(jsearch_harvest, "is_job_provider_configured", lambda _name=None: True)
+    monkeypatch.setattr(jsearch_harvest, "JSearchProvider", _FailingProvider)
+    monkeypatch.setattr(jsearch_harvest, "_cooldown_until", lambda _name: None)
+    monkeypatch.setattr(jsearch_harvest, "_is_rate_limit_error", lambda _exc: True)
+    monkeypatch.setattr(jsearch_harvest, "_set_rate_limit_cooldown", lambda _name: None)
+    jsearch_harvest._harvest_cursor = 0
+
+    result = asyncio.run(jsearch_harvest.harvest_jsearch(
+        object(),
+        max_queries=2,
+        cities=["Paris"],
+        roles=["engineer", "designer"],
+        dry_run=True,
+    ))
+
+    assert result["aborted_reason"] == "rate_limited"
+    assert len(result["runs"]) == 1
+    assert result["cursor_next"] == 0
+    assert jsearch_harvest._harvest_cursor == 0

@@ -67,6 +67,7 @@ def _profile():
         "target_role": "Marketing Manager",
         "target_location": "Paris, France",
         "target_location_data": {"location_label": "Paris, France", "country_code": "fr", "country": "France"},
+        "contact": {"phone": "+33 6 12 34 56 78"},
     }
 
 

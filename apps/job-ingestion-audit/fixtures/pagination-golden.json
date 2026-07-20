@@ -1,0 +1,38 @@
+[
+  {
+    "id": "PAG-001-one-page",
+    "status": "completed_with_results",
+    "expectedExternalIds": ["a", "b"],
+    "fetchedExternalIds": ["a", "b"],
+    "sourceTotal": 2,
+    "cap": null,
+    "cursorHistory": ["0"]
+  },
+  {
+    "id": "PAG-003-full-plus-one",
+    "status": "completed_with_results",
+    "expectedExternalIds": ["a", "b", "c"],
+    "fetchedExternalIds": ["a", "b", "c"],
+    "sourceTotal": 3,
+    "cap": 10,
+    "cursorHistory": ["0", "1"]
+  },
+  {
+    "id": "PAG-008-repeated-cursor",
+    "status": "failed",
+    "expectedExternalIds": ["a", "b"],
+    "fetchedExternalIds": ["a"],
+    "sourceTotal": 2,
+    "cap": null,
+    "cursorHistory": ["same", "same"]
+  },
+  {
+    "id": "PAG-021-cap-hit",
+    "status": "blocked",
+    "expectedExternalIds": [],
+    "fetchedExternalIds": ["a", "b"],
+    "sourceTotal": null,
+    "cap": 2,
+    "cursorHistory": ["0"]
+  }
+]

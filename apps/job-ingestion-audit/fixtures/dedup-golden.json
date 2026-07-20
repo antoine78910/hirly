@@ -1,0 +1,10 @@
+[
+  {"id":"exact-cross-source","candidate":true,"autoMerge":false,"protectedDistinct":false},
+  {"id":"tracking-url-variant","candidate":true,"autoMerge":false,"protectedDistinct":false},
+  {"id":"same-title-different-location","candidate":false,"autoMerge":false,"protectedDistinct":true},
+  {"id":"different-seniority","candidate":false,"autoMerge":false,"protectedDistinct":true},
+  {"id":"recurrent-opening","candidate":false,"autoMerge":false,"protectedDistinct":true},
+  {"id":"repost-new-external-id","candidate":true,"autoMerge":false,"protectedDistinct":false},
+  {"id":"multilingual-copy","candidate":true,"autoMerge":false,"protectedDistinct":false},
+  {"id":"similar-description-distinct","candidate":false,"autoMerge":false,"protectedDistinct":true}
+]

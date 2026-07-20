@@ -128,17 +128,12 @@ export class ProviderRateGate {
   private async acquire(signal: AbortSignal): Promise<void> {
     while (this.active >= this.config.concurrency) {
       await new Promise<void>((resolve, reject) => {
-        const wake = () => {
+        const abort = () => reject(signal.reason);
+        signal.addEventListener("abort", abort, { once: true });
+        this.waiters.push(() => {
           signal.removeEventListener("abort", abort);
           resolve();
-        };
-        const abort = () => {
-          const index = this.waiters.indexOf(wake);
-          if (index >= 0) this.waiters.splice(index, 1);
-          reject(signal.reason);
-        };
-        signal.addEventListener("abort", abort, { once: true });
-        this.waiters.push(wake);
+        });
       });
     }
     signal.throwIfAborted();

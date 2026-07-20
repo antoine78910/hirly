@@ -393,7 +393,16 @@ async def expire_stale_jobs(
     country_code: Optional[str] = None,
     limit: Optional[int] = None,
     dry_run: bool = False,
+    complete_snapshot: bool = False,
 ) -> Dict[str, Any]:
+    if not complete_snapshot:
+        return {
+            "dry_run": dry_run,
+            "skipped": True,
+            "reason": "complete_snapshot_required",
+            "expired_count": 0,
+            "errors": [],
+        }
     days = int(older_than_days if older_than_days is not None else env_int("JOBS_STALE_AFTER_DAYS", 30))
     cutoff = datetime.now(timezone.utc) - timedelta(days=max(1, days))
     cutoff_iso = cutoff.isoformat()
@@ -520,11 +529,22 @@ async def purge_invalid_jobs(
     country_code: Optional[str] = None,
     limit: Optional[int] = None,
     dry_run: bool = False,
+    complete_snapshot: bool = False,
 ) -> Dict[str, Any]:
     """Hard-delete invalid/expired inventory to shrink storage + egress.
 
     Default: soft-expire stale rows first, then delete tier E / invalid jobs.
     """
+    if not complete_snapshot:
+        return {
+            "dry_run": dry_run,
+            "skipped": True,
+            "reason": "complete_snapshot_required",
+            "matched_count": 0,
+            "deleted_count": 0,
+            "errors": [],
+        }
+
     expire_summary: Dict[str, Any] = {"skipped": True}
     if expire_first:
         expire_summary = await expire_stale_jobs(
@@ -533,6 +553,7 @@ async def purge_invalid_jobs(
             country_code=country_code,
             limit=limit,
             dry_run=dry_run,
+            complete_snapshot=True,
         )
 
     days = int(older_than_days if older_than_days is not None else env_int("JOBS_STALE_AFTER_DAYS", 30))
@@ -549,13 +570,6 @@ async def purge_invalid_jobs(
         query["country_code"] = country_code.strip().lower()
 
     rows = await db.jobs.find(query, {"_id": 0, "job_id": 1}).limit(purge_limit).to_list(purge_limit)
-    # Fallback when last_seen_at filter yields nothing (legacy rows).
-    if not rows:
-        fallback = {"applyability_tier": {"$in": tiers}}
-        if country_code:
-            fallback["country_code"] = country_code.strip().lower()
-        rows = await db.jobs.find(fallback, {"_id": 0, "job_id": 1}).limit(purge_limit).to_list(purge_limit)
-
     job_ids = [row.get("job_id") for row in rows if row.get("job_id")]
     summary: Dict[str, Any] = {
         "dry_run": dry_run,

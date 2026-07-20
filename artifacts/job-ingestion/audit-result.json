@@ -1,0 +1,227 @@
+{
+  "schemaVersion": 1,
+  "datasetVersion": "job-ingestion-golden.v1",
+  "generatedAt": "2026-07-20T00:00:00.000Z",
+  "verdict": "PARTIAL",
+  "invariantFailures": [],
+  "digest": "1eff22144ad48cb696c280a56630c6a990658e70078f1151cc23871d7be619df",
+  "funnel": {
+    "rawReceived": 12,
+    "normalized": 11,
+    "rejectedNormalization": 1,
+    "acceptedAfterFilters": 8,
+    "rejectedByReason": {
+      "missing_title": 1,
+      "missing_company": 1,
+      "unusable_apply_url": 1
+    },
+    "newIdentity": 4,
+    "existingIdentity": 2,
+    "duplicateOccurrence": 1,
+    "fuzzyCandidateOnly": 1
+  },
+  "rows": [
+    {
+      "riskId": "PAG-FT-001",
+      "suspectedFailure": "France Travail pagination can silently complete after repeated pages or a local maximum.",
+      "affectedPath": "France Travail provider",
+      "references": [
+        "backend/job_providers/france_travail.py:_fetch_search_pages"
+      ],
+      "reproductionCommand": ".venv/bin/python -m pytest -q backend/tests/test_france_travail_provider.py",
+      "expected": "repeated, empty-intermediate, source-total mismatch and local-cap states are non-success",
+      "actual": "regression suite passes",
+      "baseline": {
+        "silentCompletionCases": 3
+      },
+      "rootCause": "loop termination did not carry an explicit completeness state",
+      "status": "PASS",
+      "proposedFix": "fail closed with pagination metadata and exact source-total reconciliation",
+      "regressionTest": "PAG-FT-REPEAT,PAG-FT-TOTAL,PAG-FT-CAP",
+      "finalEvidence": "backend/tests/test_france_travail_provider.py"
+    },
+    {
+      "riskId": "CAP-LIVE-001",
+      "suspectedFailure": "Provider-plan caps truncate accessible inventory.",
+      "affectedPath": "France Travail/JSearch/Workday live APIs",
+      "references": [
+        "backend/job_providers"
+      ],
+      "reproductionCommand": "bun run audit:job-ingestion --fixtures",
+      "expected": "live accessible totals reconcile to exact IDs",
+      "actual": "credentials and plan-specific contracts unavailable",
+      "baseline": {},
+      "rootCause": null,
+      "status": "BLOCKED_EXTERNAL",
+      "proposedFix": null,
+      "regressionTest": "PAG-020,PAG-021",
+      "finalEvidence": "artifacts/job-ingestion/coverage-matrix.json",
+      "blocker": {
+        "dependency": "read-only provider credentials plus active plan documentation",
+        "capabilityCheck": "test -n \"$FRANCE_TRAVAIL_CLIENT_ID\" && test -n \"$RAPIDAPI_KEY\"",
+        "unblockProcedure": "run the audit with read-only provider credentials and archive response total/range metadata"
+      }
+    },
+    {
+      "riskId": "QUERY-PARTITION-001",
+      "suspectedFailure": "Broad queries are silently truncated.",
+      "affectedPath": "partition manifest",
+      "references": [
+        "artifacts/job-ingestion/coverage-matrix.json"
+      ],
+      "reproductionCommand": "bun run audit:job-ingestion --fixtures",
+      "expected": "every partition has a distinct terminal state",
+      "actual": "fixture manifest terminal states validate",
+      "baseline": {
+        "planned": 4
+      },
+      "rootCause": "no prior durable partition manifest",
+      "status": "PASS",
+      "proposedFix": "versioned manifest and cap-hit non-success state",
+      "regressionTest": "PAG-021",
+      "finalEvidence": "apps/job-ingestion-audit/fixtures/pagination-golden.json"
+    },
+    {
+      "riskId": "FILTER-001",
+      "suspectedFailure": "Filters discard jobs without stable reasons.",
+      "affectedPath": "normalization/validation",
+      "references": [
+        "apps/job-ingestion-audit/fixtures/funnel.json"
+      ],
+      "reproductionCommand": "bun test apps/job-ingestion-audit",
+      "expected": "stage counts reconcile by stable reason",
+      "actual": "accounting equations pass",
+      "baseline": {
+        "raw": 12,
+        "accepted": 8
+      },
+      "rootCause": "stage-level accounting was absent",
+      "status": "PASS",
+      "proposedFix": "stable reason funnel",
+      "regressionTest": "FUNNEL-001",
+      "finalEvidence": "artifacts/job-ingestion/funnel-after.json"
+    },
+    {
+      "riskId": "COVERAGE-001",
+      "suspectedFailure": "Partner, contract, geography and occupation branches are not fully observed.",
+      "affectedPath": "all providers",
+      "references": [
+        "artifacts/job-ingestion/coverage-matrix.json"
+      ],
+      "reproductionCommand": "bun run audit:job-ingestion --fixtures",
+      "expected": "authoritative live provider x contract x geography x occupation matrix",
+      "actual": "local planned matrix exists; authoritative live metadata unavailable",
+      "baseline": {},
+      "rootCause": null,
+      "status": "BLOCKED_EXTERNAL",
+      "proposedFix": null,
+      "regressionTest": "COVERAGE-MANIFEST-001",
+      "finalEvidence": "artifacts/job-ingestion/coverage-matrix.json",
+      "blocker": {
+        "dependency": "provider metadata and anonymized paying-cohort aggregates",
+        "capabilityCheck": "test -n \"$DATABASE_URL\"",
+        "unblockProcedure": "export read-only DATABASE_URL and provider metadata snapshots, then rerun coverage evaluator"
+      }
+    },
+    {
+      "riskId": "REFRESH-001",
+      "suspectedFailure": "Partial runs can drive stale invalidation and cutoff-free purge.",
+      "affectedPath": "job cache maintenance",
+      "references": [
+        "backend/job_cache_maintenance.py:expire_stale_jobs",
+        "backend/job_cache_maintenance.py:purge_invalid_jobs"
+      ],
+      "reproductionCommand": ".venv/bin/python -m pytest -q backend/tests/test_job_cache_maintenance.py",
+      "expected": "absence mutation requires explicit complete snapshot",
+      "actual": "fail-closed gate tests pass",
+      "baseline": {
+        "cutoffFreeFallback": true
+      },
+      "rootCause": "maintenance had no completed-run proof input",
+      "status": "PASS",
+      "proposedFix": "explicit completeness gate and deletion fallback removal",
+      "regressionTest": "REFRESH-PARTIAL-001",
+      "finalEvidence": "backend/tests/test_job_cache_maintenance.py"
+    },
+    {
+      "riskId": "DEDUP-001",
+      "suspectedFailure": "Fuzzy deduplication can destroy distinct openings.",
+      "affectedPath": "canonical identity",
+      "references": [
+        "backend/jobs_service.py",
+        "apps/job-ingestion-audit/fixtures/dedup-golden.json"
+      ],
+      "reproductionCommand": "bun test apps/job-ingestion-audit",
+      "expected": "provider+external ID stays canonical; fuzzy matches are review-only",
+      "actual": "golden corpus contains protected distinct cases; no auto fuzzy merge",
+      "baseline": {
+        "automaticFuzzyMerges": 0
+      },
+      "rootCause": null,
+      "status": "PASS",
+      "proposedFix": null,
+      "regressionTest": "DEDUP-GOLDEN-001",
+      "finalEvidence": "apps/job-ingestion-audit/fixtures/dedup-golden.json"
+    },
+    {
+      "riskId": "SCHED-001",
+      "suspectedFailure": "Scheduled ingestion can fail silently.",
+      "affectedPath": "worker run ledger",
+      "references": [
+        "backend/db/migrations/20260720000300_job_ingestion_run_ledger.sql"
+      ],
+      "reproductionCommand": "bun test tests/g003-database-foundation.test.ts apps/worker/test/scheduler.test.ts",
+      "expected": "run/partition counters, missed/stale/zero/drop alerts and idempotency are durable",
+      "actual": "additive ledger contract and alert view are schema-tested",
+      "baseline": {
+        "pythonProcessLocalLoops": true
+      },
+      "rootCause": "in-process loops had no durable stage/partition accounting",
+      "status": "PASS",
+      "proposedFix": "extend existing worker ledger without moving canonical writer",
+      "regressionTest": "SCHED-LEDGER-001",
+      "finalEvidence": "backend/db/migrations/20260720000300_job_ingestion_run_ledger.sql"
+    },
+    {
+      "riskId": "SQL-FEED-001",
+      "suspectedFailure": "Feed offset pagination and ingestion SQL degrade at representative cardinality.",
+      "affectedPath": "Postgres/PostgREST feed and ingestion",
+      "references": [
+        "backend/db/supabase_adapter.py"
+      ],
+      "reproductionCommand": "DATABASE_URL=<readonly> bun test tests/g003-postgres-runtime.integration.test.ts",
+      "expected": "five-sample result digest and plan distribution",
+      "actual": "no read-only database credentials available",
+      "baseline": {},
+      "rootCause": null,
+      "status": "BLOCKED_EXTERNAL",
+      "proposedFix": null,
+      "regressionTest": "SQL-FEED-GOLDEN-001",
+      "finalEvidence": "artifacts/job-ingestion/sql/SQL-FEED-001/blocked.json",
+      "blocker": {
+        "dependency": "read-only representative Postgres connection and product SLO",
+        "capabilityCheck": "test -n \"$DATABASE_URL\"",
+        "unblockProcedure": "provide read-only staging URL, execute five EXPLAIN ANALYZE samples, compare ordered-ID digest"
+      }
+    },
+    {
+      "riskId": "FEED-PAG-001",
+      "suspectedFailure": "Feed fixture failures indicate production pagination regression.",
+      "affectedPath": "backend feed tests",
+      "references": [
+        "backend/tests/test_feed_db_first.py:_profile"
+      ],
+      "reproductionCommand": ".venv/bin/python -m pytest -q backend/tests/test_feed_db_first.py",
+      "expected": "phone-ready fixture exercises feed behavior",
+      "actual": "59 tests pass after fixture repair; production guard unchanged",
+      "baseline": {
+        "failures": 57
+      },
+      "rootCause": "test profile omitted required contact.phone",
+      "status": "PASS",
+      "proposedFix": "repair fixture only",
+      "regressionTest": "FEED-DB-FIRST",
+      "finalEvidence": "backend/tests/test_feed_db_first.py"
+    }
+  ]
+}

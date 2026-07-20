@@ -117,9 +117,18 @@ class JSearchProvider:
             rows.append(row)
 
         imported_at = datetime.now(timezone.utc).isoformat()
+        cap_hit = len(rows) >= target_count
         jobs = [self.normalize_job(row, query, imported_at) for row in rows[:target_count]]
         jobs = [job for job in jobs if job is not None]
-        return ProviderResult(raw_response={"pages": [payload], "rows_seen": len(rows)}, jobs=jobs[:target_count])
+        return ProviderResult(
+            raw_response={
+                "pages": [payload],
+                "rows_seen": len(rows),
+                "requested_cap": target_count,
+                "completeness": "capped_unknown" if cap_hit else "complete_without_source_total",
+            },
+            jobs=jobs[:target_count],
+        )
 
     def _env_int(self, name: str, default: int) -> int:
         try:

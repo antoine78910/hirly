@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "dimensions": ["provider", "contractType", "geography", "occupation"],
+  "rows": [
+    {"provider":"france_travail","contractType":"all-configured","geography":"FR departments incl. DOM","occupation":"BLITZ_HARVEST_ROLES","state":"planned","evidence":"backend/france_travail_harvest.py"},
+    {"provider":"jsearch","contractType":"provider-dependent","geography":"configured profile/query locations","occupation":"configured roles","state":"blocked","reason":"active RapidAPI plan and live metadata unavailable"},
+    {"provider":"workday","contractType":"board-dependent","geography":"board-dependent","occupation":"board-dependent","state":"blocked","reason":"authoritative CXS board contract unavailable"},
+    {"provider":"direct_ats","contractType":"board-dependent","geography":"board-dependent","occupation":"board-dependent","state":"not_queried","reason":"dynamic board inventory requires read-only source snapshot"}
+  ]
+}

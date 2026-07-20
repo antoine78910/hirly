@@ -9,6 +9,7 @@ import os
 import re
 import time
 import unicodedata
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote
@@ -23,6 +24,10 @@ from .base import JobSearchQuery, ProviderResult
 
 _logger = logging.getLogger(__name__)
 _TOKEN_CACHE: Dict[str, Any] = {"access_token": None, "expires_at": 0.0}
+
+
+class IncompletePaginationError(RuntimeError):
+    """Raised when a page loop cannot prove an exact, complete result set."""
 
 _CONTRACT_HINT_TO_TYPE_CONTRAT = {
     "cdi": "CDI",
@@ -270,6 +275,7 @@ class FranceTravailProvider:
 
         param_variants = await self._search_param_variants(query)
         payloads: List[Any] = []
+        pagination_states: List[Dict[str, Any]] = []
         rows: List[Dict[str, Any]] = []
         seen_ids = set()
         variant_errors: List[str] = []
@@ -282,7 +288,7 @@ class FranceTravailProvider:
                         break
                     await asyncio.sleep(self._request_interval())
                 try:
-                    variant_rows, variant_payloads = await self._fetch_search_pages(
+                    variant_rows, variant_payloads, pagination_state = await self._fetch_search_pages(
                         client,
                         headers,
                         variant_params,
@@ -313,6 +319,7 @@ class FranceTravailProvider:
                     )
                     continue
                 payloads.extend(variant_payloads)
+                pagination_states.append({"variant": variant_index, **pagination_state})
                 rows.extend(variant_rows)
                 if len(rows) >= target_count:
                     break
@@ -327,7 +334,14 @@ class FranceTravailProvider:
         jobs = [self.normalize_job(row, query, imported_at) for row in rows[:target_count]]
         jobs = [job for job in jobs if job is not None]
         return ProviderResult(
-            raw_response={"pages": payloads, "rows_seen": len(rows), "params_variants": param_variants, "variant_errors": variant_errors},
+            raw_response={
+                "pages": payloads,
+                "rows_seen": len(rows),
+                "params_variants": param_variants,
+                "variant_errors": variant_errors,
+                "pagination_states": pagination_states,
+                "completeness": "complete" if not variant_errors else "partial_variant_failure",
+            },
             jobs=jobs[:target_count],
         )
 
@@ -341,9 +355,11 @@ class FranceTravailProvider:
         max_pages: int,
         target_count: int,
         seen_ids: set,
-    ) -> Tuple[List[Dict[str, Any]], List[Any]]:
+    ) -> Tuple[List[Dict[str, Any]], List[Any], Dict[str, Any]]:
         payloads: List[Any] = []
         rows: List[Dict[str, Any]] = []
+        source_total: Optional[int] = None
+        exhausted = False
         for page_index in range(max_pages):
             if len(rows) >= target_count:
                 break
@@ -354,6 +370,7 @@ class FranceTravailProvider:
             await self._pace_request()
             response = await client.get(self.search_url, params=page_params, headers=headers)
             if response.status_code == 204:
+                exhausted = True
                 break
             if response.status_code == 429:
                 retry_after = self._retry_after_seconds(response)
@@ -362,6 +379,16 @@ class FranceTravailProvider:
                 response = await client.get(self.search_url, params=page_params, headers=headers)
             response.raise_for_status()
             payload = response.json() if response.content else {}
+            raw_content_range = None
+            response_headers = getattr(response, "headers", None)
+            if isinstance(response_headers, Mapping):
+                candidate = response_headers.get("Content-Range")
+                if isinstance(candidate, str):
+                    raw_content_range = candidate
+            if raw_content_range and "/" in raw_content_range:
+                total_text = raw_content_range.rsplit("/", 1)[-1].strip()
+                if total_text.isdigit():
+                    source_total = int(total_text)
             payloads.append({"status_code": response.status_code, "payload": payload, "params": page_params})
             page_rows = self._extract_offers(payload)
             new_rows = 0
@@ -374,9 +401,37 @@ class FranceTravailProvider:
                 rows.append(row)
                 new_rows += 1
             has_more = response.status_code == 206 or bool(payload.get("has_more"))
-            if not page_rows or new_rows == 0 or len(rows) >= target_count or not has_more:
+            if not page_rows:
+                if has_more:
+                    raise IncompletePaginationError(
+                        f"France Travail returned an empty intermediate page at range {page_params['range']}"
+                    )
+                exhausted = True
                 break
-        return rows, payloads
+            if new_rows == 0:
+                raise IncompletePaginationError(
+                    f"France Travail repeated an all-duplicate page at range {page_params['range']}"
+                )
+            if len(rows) >= target_count:
+                exhausted = source_total is None or len(seen_ids) >= source_total
+                break
+            if not has_more:
+                exhausted = True
+                break
+        if source_total is not None and len(seen_ids) < source_total:
+            raise IncompletePaginationError(
+                f"France Travail source total {source_total} exceeds fetched unique IDs {len(seen_ids)}"
+            )
+        if not exhausted:
+            raise IncompletePaginationError(
+                f"France Travail local max_pages={max_pages} reached before exhaustion"
+            )
+        return rows, payloads, {
+            "status": "complete",
+            "source_total": source_total,
+            "unique_external_ids": len(rows),
+            "pages_completed": len(payloads),
+        }
 
     async def _search_param_variants(self, query: JobSearchQuery) -> List[Dict[str, Any]]:
         """Build ordered param variants: one per keyword candidate at the resolved
