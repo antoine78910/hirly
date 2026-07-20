@@ -96,7 +96,17 @@ describe("G014 real-Postgres source trial isolation", () => {
           'written_permission', 'g014-test-approval',
           'tests/fixtures/g014-policy.json',
           repeat('a', 64), clock_timestamp(), 'requires_legal_review', false,
-          '{"trialOnly":true}'::jsonb
+          '{
+            "trialEligible": true,
+            "provider": "greenhouse",
+            "sourceKey": "greenhouse:g014-foundation",
+            "tenantKey": "g014-foundation",
+            "permittedAccessMethod": "tenant_feed",
+            "environments": ["test"],
+            "rights": [
+              "commercial_use", "redisplay", "retention", "access_method"
+            ]
+          }'::jsonb
         );
         SELECT set_config(
           'g014.evidence_id',
@@ -117,7 +127,17 @@ describe("G014 real-Postgres source trial isolation", () => {
           'written_permission', 'g014-test-replacement-approval',
           'tests/fixtures/g014-policy-replacement.json',
           repeat('b', 64), clock_timestamp(), 'requires_legal_review', false,
-          '{"trialOnly":true}'::jsonb
+          '{
+            "trialEligible": true,
+            "provider": "greenhouse",
+            "sourceKey": "greenhouse:g014-foundation",
+            "tenantKey": "g014-foundation",
+            "permittedAccessMethod": "tenant_feed",
+            "environments": ["test"],
+            "rights": [
+              "commercial_use", "redisplay", "retention", "access_method"
+            ]
+          }'::jsonb
         );
         SELECT set_config(
           'g014.replacement_evidence_id',
@@ -128,6 +148,50 @@ describe("G014 real-Postgres source trial isolation", () => {
           ),
           true
         );
+
+        INSERT INTO public.source_policy_evidence (
+          source_key, evidence_key, evidence_type, evidence_reference,
+          artifact_path, artifact_sha256, captured_at, qualification_status,
+          production_eligible, claim_scope
+        ) VALUES (
+          'greenhouse:g014-foundation', 'g014-public-only-fixture',
+          'dataset_page', 'https://example.test/public-board',
+          'tests/fixtures/g014-public-page.json',
+          repeat('c', 64), clock_timestamp(), 'requires_legal_review', false,
+          '{"publicReadable":true,"trialEligible":false}'::jsonb
+        );
+        SELECT set_config(
+          'g014.public_only_evidence_id',
+          (
+            SELECT id::text FROM public.source_policy_evidence
+            WHERE source_key = 'greenhouse:g014-foundation'
+              AND evidence_key = 'g014-public-only-fixture'
+          ),
+          true
+        );
+
+        DO $public_is_not_permission$
+        BEGIN
+          BEGIN
+            INSERT INTO public.source_trial_policies (
+              source_id, provider, tenant_key, policy_evidence_id,
+              permitted_access_method, environment, starts_at, expires_at,
+              max_total_runs, max_pages_per_run, max_candidates_per_run,
+              max_bytes_per_run, trial_enabled, approved_by, approval_reference
+            ) VALUES (
+              current_setting('g014.source_id')::uuid,
+              'greenhouse', 'g014-foundation',
+              current_setting('g014.public_only_evidence_id')::uuid,
+              'tenant_feed', 'test',
+              clock_timestamp() - interval '1 minute',
+              clock_timestamp() + interval '1 hour',
+              1, 1, 1, 4096, true, 'g014-test', 'public-page-only'
+            );
+            RAISE EXCEPTION 'public page unexpectedly treated as trial permission';
+          EXCEPTION WHEN check_violation THEN NULL;
+          END;
+        END
+        $public_is_not_permission$;
 
         DO $mismatch$
         BEGIN
