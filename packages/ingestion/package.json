@@ -9,7 +9,7 @@
   "scripts": {
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test": "bun test --pass-with-no-tests",
+    "test": "bun test",
     "build": "tsc --noEmit"
   },
   "dependencies": {

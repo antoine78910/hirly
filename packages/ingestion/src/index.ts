@@ -97,7 +97,6 @@ const defaultSleep: Sleep = (milliseconds, signal) =>
 export class ProviderRateGate {
   private active = 0;
   private lastStartedAt = Number.NEGATIVE_INFINITY;
-  private startQueue: Promise<void> = Promise.resolve();
   private readonly waiters: Array<() => void> = [];
 
   constructor(
@@ -112,25 +111,6 @@ export class ProviderRateGate {
   ): Promise<T> {
     await this.acquire(signal);
     try {
-      return await this.startOperation(operation, signal);
-    } finally {
-      this.active -= 1;
-      this.waiters.shift()?.();
-    }
-  }
-
-  private async startOperation<T>(
-    operation: () => Promise<T>,
-    signal: AbortSignal,
-  ): Promise<T> {
-    let releaseStart!: () => void;
-    const previousStart = this.startQueue;
-    this.startQueue = new Promise<void>((resolve) => {
-      releaseStart = resolve;
-    });
-    await previousStart;
-    let result: Promise<T>;
-    try {
       const minimumInterval = 60_000 / this.config.requestsPerMinute;
       const delay = Math.max(
         0,
@@ -139,11 +119,11 @@ export class ProviderRateGate {
       if (delay > 0) await this.sleep(delay, signal);
       signal.throwIfAborted();
       this.lastStartedAt = this.clock();
-      result = operation();
+      return await operation();
     } finally {
-      releaseStart();
+      this.active -= 1;
+      this.waiters.shift()?.();
     }
-    return await result;
   }
 
   private async acquire(signal: AbortSignal): Promise<void> {
@@ -164,47 +144,6 @@ export class ProviderRateGate {
 
 function sha1(value: string): string {
   return createHash("sha1").update(value, "utf8").digest("hex");
-}
-
-const sensitiveKey =
-  /(authorization|cookie|credential|database.?url|evidence.?body|password|secret|token)/i;
-const piiKey = /(^|_)(email|phone|first.?name|last.?name|full.?name)($|_)/i;
-const email = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
-const phone =
-  /(?:\+\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)[\s.-]?)?\d[\d\s.-]{7,}\d/g;
-const bearer = /\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi;
-const credentialUrl = /\b(?:postgres(?:ql)?|https?):\/\/[^/\s:@]+:[^@\s]+@/gi;
-const querySecret =
-  /([?&](?:access_token|api_key|apikey|authorization|password|secret|token)=)[^&#\s]*/gi;
-
-export function sanitizeSourceDocument(
-  value: unknown,
-  key = "",
-): unknown {
-  if (sensitiveKey.test(key) || piiKey.test(key)) return "[REDACTED]";
-  if (typeof value === "string") {
-    return value
-      .replace(credentialUrl, (match) => {
-        const schemeEnd = match.indexOf("://") + 3;
-        return `${match.slice(0, schemeEnd)}[REDACTED]@`;
-      })
-      .replace(bearer, "Bearer [REDACTED]")
-      .replace(querySecret, "$1[REDACTED]")
-      .replace(email, "[REDACTED_EMAIL]")
-      .replace(phone, "[REDACTED_PHONE]");
-  }
-  if (Array.isArray(value)) {
-    return value.map((entry) => sanitizeSourceDocument(entry));
-  }
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value).map(([entryKey, entry]) => [
-        entryKey,
-        sanitizeSourceDocument(entry, entryKey),
-      ]),
-    );
-  }
-  return value;
 }
 
 export function stableJobId(provider: Provider, externalId: string): string {
@@ -492,7 +431,7 @@ export function toCanonicalJob(
     countryCode: normalizeCountryCode(job.countryCode),
     ...validation,
     fingerprint: buildFingerprint(job),
-    data: sanitizeSourceDocument(envelope.payload),
+    data: envelope.payload,
   });
 }
 
@@ -507,7 +446,6 @@ export async function runIngestion<RawJob>(input: {
   now?: () => Date;
   clock?: Clock;
   sleep?: Sleep;
-  rateGate?: ProviderRateGate;
   onMetrics?: (metrics: IngestionMetrics) => void;
 }): Promise<IngestionResult> {
   if (
@@ -522,9 +460,11 @@ export async function runIngestion<RawJob>(input: {
   const startedAt = performance.now();
   const signal = input.signal ?? new AbortController().signal;
   const now = input.now ?? (() => new Date());
-  const rateGate =
-    input.rateGate ??
-    new ProviderRateGate(input.rateLimit, input.clock, input.sleep);
+  const rateGate = new ProviderRateGate(
+    input.rateLimit,
+    input.clock,
+    input.sleep,
+  );
   const metrics: IngestionMetrics = {
     fetched: 0,
     accepted: 0,
