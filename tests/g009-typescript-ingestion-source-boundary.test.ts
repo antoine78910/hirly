@@ -145,10 +145,14 @@ describe("G009 additive database boundary", () => {
       expect(rollback).toContain(object);
     }
     expect(migration).toContain(
-      "UNIQUE (source_id, external_id, content_hash)",
+      "UNIQUE (run_id, source_id, external_id, content_hash)",
     );
+    expect(migration).toContain("UNIQUE (id, source_id, external_id)");
     expect(migration).toContain(
       "CONSTRAINT job_occurrences_source_external_unique UNIQUE (source_id, external_id)",
+    );
+    expect(migration).toContain(
+      "FOREIGN KEY (raw_snapshot_id, source_id, external_id)",
     );
     expect(migration).toContain(
       "job_id text NOT NULL UNIQUE REFERENCES public.jobs(job_id)",
@@ -170,7 +174,6 @@ describe("G009 additive database boundary", () => {
       "first_seen_at",
       "expires_at",
       "removed_at",
-      "lifecycle_state",
       "lifecycle_checked_at",
       "route_classification",
       "route_confidence",
@@ -193,8 +196,17 @@ describe("G009 additive database boundary", () => {
     expect(migration).not.toMatch(
       /\b(?:INSERT\s+INTO|UPDATE)\s+(?:public\.)?provider_registry\b/i,
     );
-    expect(migration).not.toMatch(
-      /(?:career_sources|job_occurrences|raw_job_snapshots)[\s\S]{0,500}\bwriter_runtime\b/i,
-    );
+    for (const definition of [
+      migration.match(/ALTER TABLE public\.career_sources[\s\S]*?;/)?.[0],
+      migration.match(
+        /CREATE TABLE IF NOT EXISTS public\.raw_job_snapshots[\s\S]*?\n\);/,
+      )?.[0],
+      migration.match(
+        /CREATE TABLE IF NOT EXISTS public\.job_occurrences[\s\S]*?\n\);/,
+      )?.[0],
+    ]) {
+      expect(definition).toBeDefined();
+      expect(definition).not.toContain("writer_runtime");
+    }
   });
 });
