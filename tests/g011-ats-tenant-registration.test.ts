@@ -41,6 +41,9 @@ describe("G011 disabled ATS tenant registration", () => {
     expect(registrationFunction).toContain(
       "career source key and tenant identify different rows",
     );
+    expect(registrationFunction).toContain(
+      "pg_advisory_xact_lock(hashtextextended(p_provider, 0))",
+    );
     expect(registrationFunction).toMatch(
       /INSERT INTO public\.career_sources[\s\S]*?false,\s*'candidate',\s*false,\s*false,\s*false/,
     );

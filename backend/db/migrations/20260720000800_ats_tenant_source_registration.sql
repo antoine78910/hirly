@@ -45,6 +45,11 @@ BEGIN
       USING ERRCODE = '22023';
   END IF;
 
+  -- Candidate registration is low-volume. A provider-scoped transaction lock
+  -- makes concurrent source-key/tenant-key rediscovery deterministic across
+  -- both unique identities instead of relying on one conflict target.
+  PERFORM pg_advisory_xact_lock(hashtextextended(p_provider, 0));
+
   SELECT source.*
   INTO v_by_key
   FROM public.career_sources AS source

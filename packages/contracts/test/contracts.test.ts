@@ -62,4 +62,37 @@ describe("shared contracts", () => {
       healthSchema.parse({ status: "ready", contractVersion: CONTRACT_VERSION }),
     ).toEqual({ status: "ready", contractVersion: CONTRACT_VERSION });
   });
+
+  test("validates disabled ATS tenant registration metadata", () => {
+    const candidate = {
+      provider: "greenhouse",
+      sourceKey: "greenhouse:hirly",
+      tenantKey: "hirly",
+      companyId: null,
+      companyName: "Hirly",
+      countryCodes: ["FR"],
+      baseUrl: "https://boards.greenhouse.io/hirly",
+      accessType: "tenant_feed" as const,
+      policyId: null,
+      syncFrequencySeconds: 3600,
+      checkpoint: { version: "ats-discovery.v1" },
+    };
+
+    expect(careerSourceCandidateRegistrationSchema.parse(candidate)).toEqual(
+      candidate,
+    );
+    for (const baseUrl of [
+      "http://boards.greenhouse.io/hirly",
+      "https://user:secret@boards.greenhouse.io/hirly",
+      "https://boards.greenhouse.io/hirly?token=secret",
+      "https://boards.greenhouse.io/hirly#jobs",
+    ]) {
+      expect(() =>
+        careerSourceCandidateRegistrationSchema.parse({
+          ...candidate,
+          baseUrl,
+        }),
+      ).toThrow();
+    }
+  });
 });
