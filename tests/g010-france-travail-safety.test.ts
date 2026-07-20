@@ -51,6 +51,23 @@ describe("G010 France Travail production safety contract", () => {
       ).not.toMatch(
         /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+(?:public\.)?provider_registry\b/i,
       );
+
+      for (const tableDefinition of sql.matchAll(
+        /CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?\s+public\.([a-z_]+)\s*\(([\s\S]*?)\n\);/gi,
+      )) {
+        if (tableDefinition[1] === "provider_registry") continue;
+        expect(
+          tableDefinition[2],
+          `${name} must not create a second writer-runtime authority`,
+        ).not.toMatch(/\bwriter_runtime\b/i);
+      }
+
+      if (/\b(?:ownership_epoch|writer_claim)\b/i.test(sql)) {
+        expect(sql, `${name} ownership fencing must use provider_registry`)
+          .toMatch(/\bprovider_registry\b/i);
+        expect(sql, `${name} ownership fencing must validate writer_runtime`)
+          .toMatch(/\bwriter_runtime\b/i);
+      }
     }
 
     const sourceBoundary = read(
@@ -106,6 +123,12 @@ describe("G010 France Travail production safety contract", () => {
     for (const { name, sql } of guardedForwardMigrations()) {
       expect(sql, `${name} must retain the public.jobs table`).not.toMatch(
         /\bDROP\s+(?:TABLE\s+)?(?:IF\s+EXISTS\s+)?public\.jobs\b/i,
+      );
+      expect(
+        sql,
+        `${name} must retain backward-compatible public.jobs reads`,
+      ).not.toMatch(
+        /\bREVOKE\s+(?:ALL|SELECT)\s+ON\s+(?:TABLE\s+)?public\.jobs\b/i,
       );
 
       for (const statement of sqlStatements(sql).filter((candidate) =>
