@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "hirly.provider-fixture.v1",
+  "provenance": {
+    "kind": "synthetic_sanitized",
+    "approvalRef": ".omx/plans/prd-nextjs-bun-foundation.md#phase-4",
+    "containsPersonalData": false
+  },
+  "provider": "indeed",
+  "externalId": "indeed-001",
+  "title": "Security Engineer",
+  "company": "Sécurité Exemple GmbH",
+  "location": "Paris, Île-de-France",
+  "countryCode": "FR",
+  "description": "Renforcer la sécurité applicative.",
+  "contractType": "CDI",
+  "status": "open",
+  "applyUrls": [
+    "https://fr.indeed.com/viewjob?jk=001"
+  ],
+  "sourceDocument": {
+    "fixture": "indeed-approved-synthetic",
+    "clearanceRequired": false
+  }
+}
