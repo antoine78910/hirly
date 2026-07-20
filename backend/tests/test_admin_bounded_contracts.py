@@ -1,7 +1,5 @@
 import asyncio
 from pathlib import Path
-from types import SimpleNamespace
-
 import pytest
 
 import server
@@ -67,6 +65,12 @@ def test_admin_contract_rollout_and_security():
     assert "SET statement_timeout = '10s'" in sql
     assert "LEAST(GREATEST(COALESCE(p_limit,100),1),500)" in sql
     assert "LEAST(COALESCE(p_window_days,30),365)" in sql
+    assert "left(u.email::text,320)" in sql
+    assert "left(u.name::text,256)" in sql
+    assert "left(j.company::text,256)" in sql
+    assert "left(j.title::text,512)" in sql
+    assert "left(a.submission_status::text,64)" in sql
+    assert "left(COALESCE(p_status,'all'),64)" in sql
     assert "'generated_at'" in sql
     assert "REVOKE ALL" in sql and "service_role" in sql
     assert "DROP FUNCTION IF EXISTS public.admin_overview_snapshot" in down

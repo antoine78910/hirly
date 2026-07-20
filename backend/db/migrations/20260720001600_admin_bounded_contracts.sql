@@ -72,7 +72,10 @@ AS $$
            GREATEST(COALESCE(p_offset,0),0) off,
            GREATEST(1,LEAST(COALESCE(p_window_days,30),365)) days
   ), page AS (
-    SELECT u.user_id, u.email, u.name, u.created_at,
+    SELECT left(u.user_id::text,128) user_id,
+           left(u.email::text,320) email,
+           left(u.name::text,256) name,
+           u.created_at,
            COALESCE((SELECT count(*) FROM public.applications a WHERE a.user_id=u.user_id),0) total_applications,
            COALESCE((SELECT count(*) FROM public.swipes s WHERE s.user_id=u.user_id),0) total_swipes
     FROM public.users u, bounds
@@ -106,9 +109,17 @@ AS $$
            GREATEST(COALESCE(p_offset,0),0) off,
            GREATEST(1,LEAST(COALESCE(p_window_days,30),365)) days
   ), page AS (
-    SELECT a.application_id, a.user_id, u.email user_email, a.job_id,
-           j.company, j.title, j.ats_provider, a.submission_status,
-           a.package_status, a.status, a.created_at, a.updated_at, a.submitted_at
+    SELECT left(a.application_id::text,128) application_id,
+           left(a.user_id::text,128) user_id,
+           left(u.email::text,320) user_email,
+           left(a.job_id::text,128) job_id,
+           left(j.company::text,256) company,
+           left(j.title::text,512) title,
+           left(j.ats_provider::text,64) ats_provider,
+           left(a.submission_status::text,64) submission_status,
+           left(a.package_status::text,64) package_status,
+           left(a.status::text,64) status,
+           a.created_at, a.updated_at, a.submitted_at
     FROM public.applications a
     LEFT JOIN public.users u ON u.user_id=a.user_id
     LEFT JOIN public.jobs j ON j.job_id=a.job_id
@@ -120,7 +131,7 @@ AS $$
   )
   SELECT jsonb_build_object(
     'applications', COALESCE(jsonb_agg(to_jsonb(page)), '[]'::jsonb),
-    'filter', COALESCE(p_status,'all'),
+    'filter', left(COALESCE(p_status,'all'),64),
     'page', ((SELECT off FROM bounds) / (SELECT lim FROM bounds)) + 1,
     'page_size', (SELECT lim FROM bounds),
     'generated_at', clock_timestamp()
