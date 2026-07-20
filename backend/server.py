@@ -83,7 +83,7 @@ from auto_apply.metrics import status_safe_attempt as auto_apply_status_safe_att
 from auto_apply.metrics import summary as auto_apply_metrics_summary
 from auto_apply import queue as auto_apply_queue
 from db import create_database_adapter
-from db.supabase_adapter import count_supabase_table, test_supabase_connection
+from db.supabase_adapter import count_supabase_table, database_journey, test_supabase_connection
 from influencer_store import create_influencer, get_influencer, list_influencers, update_influencer
 from creator_social_service import build_dashboard, refresh_all_creators, refresh_creator
 from creator_social_config import add_creator as add_tracked_creator
@@ -897,9 +897,15 @@ class InviteEmailAuthRequest(BaseModel):
 class AnalyticsEventRequest(BaseModel):
     event: str
     properties: Dict[str, Any] = Field(default_factory=dict)
+    event_id: Optional[str] = None
     anonymous_id: Optional[str] = None
     page: Optional[str] = None
     source: Optional[str] = None
+
+
+class AnalyticsBatchRequest(BaseModel):
+    batch_id: str
+    events: List[AnalyticsEventRequest] = Field(default_factory=list)
 
 
 class BillingCheckoutRequest(BaseModel):
@@ -1710,19 +1716,15 @@ def _analytics_event_document(
     user: Optional[User],
     *,
     now: Optional[str] = None,
-    event_id: Optional[str] = None,
-    batch_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     event_name = (body.event or "").strip()
     if not event_name:
         raise HTTPException(status_code=400, detail="event required")
     if len(event_name) > 120:
         raise HTTPException(status_code=400, detail="event too long")
-    canonical_event_id = (event_id or body.event_id or "").strip()[:160] or f"evt_{uuid.uuid4().hex}"
+    event_id = (body.event_id or "").strip()[:160] or f"evt_{uuid.uuid4().hex}"
     return {
-        "event_id": canonical_event_id,
-        "client_event_id": (body.event_id or "").strip()[:160] or None,
-        "batch_id": batch_id,
+        "event_id": event_id,
         "user_id": user.user_id if user else None,
         "anonymous_id": (body.anonymous_id or "").strip()[:160] or None,
         "event": event_name,
@@ -1741,28 +1743,12 @@ async def track_analytics_event(
     request: Request,
     user: Optional[User] = Depends(_optional_current_user),
 ):
-    event_name = (body.event or "").strip()
-    if not event_name:
-        raise HTTPException(status_code=400, detail="event required")
-    if len(event_name) > 120:
-        raise HTTPException(status_code=400, detail="event too long")
-    now = datetime.now(timezone.utc).isoformat()
-    event_doc = {
-        "event_id": f"evt_{uuid.uuid4().hex}",
-        "user_id": user.user_id if user else None,
-        "anonymous_id": (body.anonymous_id or "").strip()[:160] or None,
-        "event": event_name,
-        "properties": body.properties or {},
-        "page": (body.page or "").strip()[:300] or None,
-        "source": (body.source or "").strip()[:120] or None,
-        "created_at": now,
-        "user_agent": request.headers.get("user-agent"),
-        "ip_hash": _hash_ip(request),
-    }
+    event_doc = _analytics_event_document(body, request, user)
     try:
-        await db.analytics_events.insert_one(event_doc)
+        with database_journey("landing"):
+            await db.analytics_events.insert_one(event_doc)
     except Exception as exc:
-        logger.warning("analytics_event_store_failed event=%s error=%s", event_name, str(exc)[:200])
+        logger.warning("analytics_event_store_failed event=%s error=%s", event_doc["event"], str(exc)[:200])
         return {"ok": False, "stored": False}
     return {"ok": True, "stored": True, "event_id": event_doc["event_id"]}
 
@@ -1777,16 +1763,7 @@ async def track_analytics_events(
         raise HTTPException(status_code=400, detail="batch_id required")
     if not body.events or len(body.events) > 20:
         raise HTTPException(status_code=400, detail="events must contain 1 to 20 items")
-    documents = [
-        _analytics_event_document(
-            item,
-            request,
-            user,
-            event_id=f"evt_batch_{hashlib.sha256(f'{body.batch_id}:{index}'.encode()).hexdigest()[:48]}",
-            batch_id=body.batch_id,
-        )
-        for index, item in enumerate(body.events)
-    ]
+    documents = [_analytics_event_document(item, request, user) for item in body.events]
     payload_size = len(json.dumps(documents, separators=(",", ":"), default=str).encode("utf-8"))
     if payload_size > 64 * 1024:
         raise HTTPException(status_code=413, detail="analytics batch too large")
@@ -1800,7 +1777,7 @@ async def track_analytics_events(
         "ok": True,
         "stored": True,
         "batch_id": body.batch_id,
-        "accepted_event_ids": [document["client_event_id"] or document["event_id"] for document in documents],
+        "accepted_event_ids": [document["event_id"] for document in documents],
     }
 
 
