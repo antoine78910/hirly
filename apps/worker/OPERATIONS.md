@@ -15,6 +15,82 @@ or routing change. Those actions require a separate approval checkpoint.
 - The Python service and `backend/railway.toml` remain unchanged. Never run the
   Python and TypeScript writers for the same provider concurrently.
 
+## Provider core readiness and activation
+
+The Apec, HelloWork, Welcome to the Jungle (`wttj`), and Indeed modules are
+fixture-backed provider cores. Core readiness does not authorize live extraction
+or activation.
+
+| Provider | Initial authorization state | Live activation prerequisite |
+| --- | --- | --- |
+| Apec | `unverified` | Record an approved API, feed, license, or written permission. |
+| HelloWork | `unverified` | Record an approved API, feed, license, or written permission. |
+| WTTJ | `blocked` | Obtain written permission or an approved feed/API. |
+| Indeed | `blocked` | Obtain approved partner/API access for inventory search. |
+
+Until those prerequisites are recorded, only sanitized approved fixtures may
+cross the transport boundary. Do not add guessed endpoints, credentials,
+browser automation, login/CAPTCHA bypasses, or scraping fallbacks. A blocked or
+unverified transport must fail before any network call.
+
+Provider modules own only raw schemas, access/pagination boundaries, rate
+policy, and provider-to-canonical mapping. They must not import a database
+client or write canonical rows. All accepted records use the shared pipeline:
+
+```text
+fetch -> normalize raw -> normalize canonical -> validate applyability
+      -> assign identity/fingerprint -> deduplicate -> canonical batch upsert
+```
+
+The deterministic identity is
+`job_ + sha1(provider + ":" + external_id).slice(0, 16)`. A retry for the same
+`(provider, external_id)` must update the same row. An existing row whose
+`job_id` does not match that identity is an integrity failure and must not be
+overwritten.
+
+### Core-readiness evidence
+
+Before describing a provider core as ready, retain evidence for:
+
+- approved, sanitized fixture provenance and raw-schema validation;
+- pagination/cursor termination, duplicate-page handling, and stable failures;
+- normalized identity, country/location, apply URL, ATS, validation tier, and
+  manual/automatic fulfillment readiness;
+- complete sanitized source data in the canonical `data` document;
+- provider-specific request rate and concurrency limits;
+- fetched, accepted, rejected, deduplicated, and upserted counts plus fetch,
+  normalization, validation, database, and total durations;
+- an unauthorized test proving zero network calls and zero canonical writes;
+- an idempotent rerun proving one canonical row and the same stable identity.
+
+Core-readiness tests are fixture-only. A live contract test is a separate,
+opt-in gate and must remain skipped unless approved access and test credentials
+are present.
+
+### Activation sequence
+
+Activation requires both independent gates:
+
+1. The code-level transport has been implemented from an approved access method
+   and remains disabled by default.
+2. The persisted provider registry is `authorized`, contains a reviewed evidence
+   reference, declares `writer_runtime=typescript`, and is explicitly enabled.
+
+Then, and only after an operator approval checkpoint:
+
+1. Confirm no Python writer or schedule owns the provider/country.
+2. Run the provider fixture suite and a read-only/shadow comparison.
+3. Configure the documented rate and concurrency limits.
+4. Perform one bounded live dry run without canonical writes.
+5. Enable one provider/country canary and verify canonical read-back.
+6. Rerun the same bounded input to prove idempotence.
+7. Observe inventory quality, freshness, queue age, fulfillment readiness, and
+   duplicate protection before enabling a persisted schedule.
+
+Downgrading authorization, changing writer ownership, or disabling a provider
+must fence fetch and canonical write on the same provider-registry boundary.
+Fetched results may not write after a downgrade commits.
+
 ## Required configuration
 
 Configure secrets in the deployment platform, not in source, image layers,
@@ -132,10 +208,12 @@ First canary:
 
 1. Disable the affected schedule and provider.
 2. Stop new claims and allow active leases to finish or expire visibly.
-3. Roll back the worker deployment independently.
-4. Keep additive queue tables for diagnosis unless cleanup is explicitly
+3. Verify the TypeScript writer can no longer claim or complete provider work.
+4. Restore the previous writer only after that fence is proven.
+5. Roll back the worker deployment independently.
+6. Keep additive queue tables for diagnosis unless cleanup is explicitly
    approved.
-5. Never redirect canonical writes to Python while a TypeScript writer can still
+7. Never redirect canonical writes to Python while a TypeScript writer can still
    claim or complete work.
 
 Stop immediately on authorization uncertainty, duplicate ownership or writes,
