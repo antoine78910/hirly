@@ -227,9 +227,7 @@ export function sourceActivationBlockReason(
     input.policy.approvalStatus !== "approved" ||
     !input.policy.commercialUseAllowed ||
     !input.policy.redisplayAllowed ||
-    !input.policy.fullTextRetentionAllowed ||
-    !input.policy.enabledEnvironments.includes("production") ||
-    !input.policy.permittedAccessMethods.includes(input.source.accessType)
+    !input.policy.fullTextRetentionAllowed
   ) {
     return "policy_not_approved";
   }
