@@ -141,3 +141,8 @@ def test_tracker_migration_syncs_old_writes_and_is_service_role_only():
     assert "REVOKE ALL" in sql
     assert "GRANT EXECUTE" in sql and "service_role" in sql
     assert "DROP FUNCTION IF EXISTS public.patch_user_application_status" in down
+
+
+def test_tracker_rollout_defaults_off():
+    env_example = (Path(__file__).parents[1] / ".env.example").read_text()
+    assert "APPLICATION_TRACKER_RPC_ENABLED=false" in env_example
