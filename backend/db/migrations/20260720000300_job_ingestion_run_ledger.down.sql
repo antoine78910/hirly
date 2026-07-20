@@ -1,4 +1,7 @@
 BEGIN;
+DROP FUNCTION IF EXISTS public.python_ingestion_run_complete(uuid, text, text, jsonb);
+DROP FUNCTION IF EXISTS public.python_ingestion_run_heartbeat(uuid);
+DROP FUNCTION IF EXISTS public.python_ingestion_run_begin(text, text, integer);
 DROP VIEW IF EXISTS public.worker_ingestion_alerts;
 DROP TABLE IF EXISTS public.worker_run_partitions;
 ALTER TABLE public.worker_runs

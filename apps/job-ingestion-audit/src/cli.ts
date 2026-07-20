@@ -31,6 +31,22 @@ const invariantFailures = [
     evaluatePartition(partition).map((failure) => `${partition.id}:${failure}`),
   ),
 ];
+const machineRows = rows.map((row) => ({
+  risk_id: row.riskId,
+  suspected_failure: row.suspectedFailure,
+  affected_path: row.affectedPath,
+  file_and_symbol_references: row.references,
+  reproduction_command: row.reproductionCommand,
+  expected_behavior: row.expected,
+  actual_behavior: row.actual,
+  baseline_counts_or_latency: row.baseline,
+  root_cause: row.rootCause,
+  status: row.status,
+  proposed_fix: row.proposedFix,
+  regression_test: row.regressionTest,
+  final_verification_evidence: row.finalEvidence,
+  blocker: row.blocker ?? null,
+}));
 const digestInput = {
   rows: rows.map(({ riskId, status }) => ({ riskId, status })).sort((a, b) => a.riskId.localeCompare(b.riskId)),
   partitions: partitions.map(({ id, status, fetchedExternalIds }) => ({
@@ -48,7 +64,7 @@ const result = {
   invariantFailures,
   digest: stableDigest(digestInput),
   funnel,
-  rows,
+  rows: machineRows,
 };
 const summary = [
   "# Job Ingestion Audit",

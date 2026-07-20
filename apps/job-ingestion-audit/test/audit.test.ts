@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { evaluatePartition, reconcileFunnel, validateRows } from "../src/audit";
+import { readFileSync } from "node:fs";
 
 describe("job-ingestion audit invariants", () => {
   test("requires exact external-ID set equality", () => {
@@ -47,5 +48,21 @@ describe("job-ingestion audit invariants", () => {
       baseline: {}, rootCause: null, status: "BLOCKED_EXTERNAL", proposedFix: null,
       regressionTest: "SQL-001", finalEvidence: "artifacts/job-ingestion/sql/SQL-001",
     }])).toEqual(["SQL-001:unjustified_block"]);
+  });
+
+  test("fixture rows retain every pinned matrix input", () => {
+    const rows = JSON.parse(readFileSync(
+      new URL("../fixtures/audit-rows.json", import.meta.url),
+      "utf8",
+    ));
+    for (const row of rows) {
+      for (const field of [
+        "riskId", "suspectedFailure", "affectedPath", "references",
+        "reproductionCommand", "expected", "actual", "baseline", "rootCause",
+        "status", "proposedFix", "regressionTest", "finalEvidence",
+      ]) {
+        expect(field in row).toBe(true);
+      }
+    }
   });
 });

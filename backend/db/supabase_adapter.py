@@ -894,7 +894,7 @@ class SupabaseCursorAdapter(CursorPort):
         """Convert sort spec to a PostgREST order clause when columns are pushable."""
         if not self._sort_spec:
             if self.collection.table_name == "jobs":
-                return "imported_at.desc.nullslast"
+                return "imported_at.desc.nullslast,job_id.desc.nullslast"
             return None
         parts: List[str] = []
         filter_columns = TABLE_FILTER_COLUMNS.get(self.collection.table_name) or set()
@@ -905,6 +905,10 @@ class SupabaseCursorAdapter(CursorPort):
                 return None
             suffix = "desc" if direction < 0 else "asc"
             parts.append(f"{key}.{suffix}.nullslast")
+        if self.collection.table_name == "jobs" and not any(key == "job_id" for key, _direction in self._sort_spec):
+            direction = self._sort_spec[-1][1] if self._sort_spec else -1
+            suffix = "desc" if direction < 0 else "asc"
+            parts.append(f"job_id.{suffix}.nullslast")
         return ",".join(parts) if parts else None
 
     async def to_list(self, length: Optional[int]):
@@ -979,7 +983,7 @@ class SupabaseCollectionAdapter(CollectionPort):
         remote_filter_params = _postgrest_filter_params(self.table_name, filter)
         can_push_filter = remote_filter_params is not None
         client = _get_shared_http_client()
-        default_order = "imported_at.desc.nullslast" if self.table_name == "jobs" else None
+        default_order = "imported_at.desc.nullslast,job_id.desc.nullslast" if self.table_name == "jobs" else None
         order_clause = order or default_order
         while offset < MAX_READ_ROWS:
             page_limit = READ_PAGE_SIZE
@@ -1020,6 +1024,10 @@ class SupabaseCollectionAdapter(CollectionPort):
             if len(rows) < page_limit:
                 break
             offset += page_limit
+        if offset >= MAX_READ_ROWS and len(rows) >= page_limit:
+            raise RuntimeError(
+                f"Supabase {self.table_name} read reached MAX_READ_ROWS={MAX_READ_ROWS}; result is incomplete"
+            )
         if can_push_filter:
             return documents
         filtered = [document for document in documents if _matches_filter(document, filter)]
@@ -1249,6 +1257,65 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
         self.friend_referral_redemptions = SupabaseCollectionAdapter("friend_referral_redemptions", supabase_url, secret_key)
         self.notifications = SupabaseCollectionAdapter("notifications", supabase_url, secret_key)
         self.creator_applications = SupabaseCollectionAdapter("creator_applications", supabase_url, secret_key)
+
+    async def _python_ingestion_rpc(self, function_name: str, payload: Dict[str, Any]) -> Any:
+        client = _get_shared_http_client()
+        response = await client.post(
+            self.supabase_url.rstrip("/") + f"/rest/v1/rpc/{function_name}",
+            json=payload,
+            headers=_supabase_headers(self.secret_key),
+        )
+        if response.status_code not in (200, 201, 204):
+            raise RuntimeError(
+                f"Supabase ingestion ledger RPC {function_name} returned HTTP "
+                f"{response.status_code}: {response.text[:300]}"
+            )
+        return response.json() if response.content else None
+
+    async def begin_python_ingestion_run(
+        self,
+        *,
+        schedule_id: str,
+        source: str,
+        cadence_seconds: int,
+    ) -> Dict[str, Any]:
+        result = await self._python_ingestion_rpc(
+            "python_ingestion_run_begin",
+            {
+                "p_schedule_id": schedule_id,
+                "p_source": source,
+                "p_cadence_seconds": cadence_seconds,
+            },
+        )
+        if not isinstance(result, dict) or "acquired" not in result:
+            raise RuntimeError("python_ingestion_run_begin returned an invalid result")
+        return result
+
+    async def heartbeat_python_ingestion_run(self, run_id: str) -> bool:
+        result = await self._python_ingestion_rpc(
+            "python_ingestion_run_heartbeat",
+            {"p_run_id": run_id},
+        )
+        return result is True
+
+    async def complete_python_ingestion_run(
+        self,
+        *,
+        run_id: str,
+        status: str,
+        completeness_state: str,
+        summary: Dict[str, Any],
+    ) -> bool:
+        result = await self._python_ingestion_rpc(
+            "python_ingestion_run_complete",
+            {
+                "p_run_id": run_id,
+                "p_status": status,
+                "p_completeness_state": completeness_state,
+                "p_summary": summary,
+            },
+        )
+        return result is True
 
     async def close(self) -> None:
         return None

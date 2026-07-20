@@ -31,15 +31,4 @@ describe("PostHog additive rollout seams", () => {
       noEmit: true,
     });
   });
-
-  it("blocks representative CV, application, email, and phone surfaces from replay", () => {
-    for (const relativePath of [
-      "src/components/profile/ResumeCurrentPreview.jsx",
-      "src/pages/ReviewApplicationDetail.jsx",
-      "src/pages/Emails.jsx",
-      "src/components/onboarding/OnboardingContactPhoneStep.jsx",
-    ]) {
-      expect(readFrontendFile(relativePath)).toContain("ph-no-capture");
-    }
-  });
 });

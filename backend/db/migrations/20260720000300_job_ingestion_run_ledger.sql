@@ -48,6 +48,132 @@ CREATE TABLE IF NOT EXISTS public.worker_run_partitions (
 CREATE INDEX IF NOT EXISTS worker_run_partitions_status_heartbeat_idx
   ON public.worker_run_partitions (status, heartbeat_at, run_id);
 
+CREATE OR REPLACE FUNCTION public.python_ingestion_run_begin(
+  p_schedule_id text,
+  p_source text,
+  p_cadence_seconds integer
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_scheduled_for timestamptz;
+  v_run_id uuid;
+BEGIN
+  IF length(btrim(p_schedule_id)) = 0
+    OR length(btrim(p_source)) = 0
+    OR p_cadence_seconds NOT BETWEEN 60 AND 86400
+  THEN
+    RAISE EXCEPTION 'invalid Python ingestion schedule claim' USING ERRCODE = '22023';
+  END IF;
+  v_scheduled_for := to_timestamp(
+    floor(extract(epoch FROM clock_timestamp()) / p_cadence_seconds) * p_cadence_seconds
+  );
+
+  INSERT INTO public.worker_schedules (
+    id, task_type, provider, cron_expression, timezone, payload,
+    enabled, next_due_at, last_enqueued_at, max_catch_up
+  )
+  VALUES (
+    p_schedule_id, 'inventory.maintenance', NULL,
+    'python-interval:' || p_cadence_seconds::text, 'UTC',
+    jsonb_build_object('source', p_source), true,
+    v_scheduled_for + make_interval(secs => p_cadence_seconds),
+    v_scheduled_for, 0
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    payload = EXCLUDED.payload,
+    enabled = true,
+    next_due_at = greatest(public.worker_schedules.next_due_at, EXCLUDED.next_due_at),
+    last_enqueued_at = greatest(public.worker_schedules.last_enqueued_at, EXCLUDED.last_enqueued_at),
+    updated_at = clock_timestamp();
+
+  INSERT INTO public.worker_runs (
+    kind, provider, idempotency_key, trigger_source, status, schedule_id,
+    scheduled_for, scheduled_start, started_at, heartbeat_at, summary
+  )
+  VALUES (
+    'inventory_maintenance', NULL,
+    'python:' || p_schedule_id || ':' || to_char(v_scheduled_for AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+    'schedule', 'running', p_schedule_id, v_scheduled_for, v_scheduled_for,
+    clock_timestamp(), clock_timestamp(), jsonb_build_object('source', p_source)
+  )
+  ON CONFLICT (kind, idempotency_key) DO NOTHING
+  RETURNING id INTO v_run_id;
+
+  IF v_run_id IS NULL THEN
+    SELECT id INTO v_run_id
+    FROM public.worker_runs
+    WHERE kind = 'inventory_maintenance'
+      AND idempotency_key = 'python:' || p_schedule_id || ':' || to_char(v_scheduled_for AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"');
+    RETURN jsonb_build_object('acquired', false, 'run_id', v_run_id, 'scheduled_for', v_scheduled_for);
+  END IF;
+  RETURN jsonb_build_object('acquired', true, 'run_id', v_run_id, 'scheduled_for', v_scheduled_for);
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.python_ingestion_run_heartbeat(p_run_id uuid)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+  UPDATE public.worker_runs
+  SET heartbeat_at = clock_timestamp(), updated_at = clock_timestamp()
+  WHERE id = p_run_id AND status = 'running'
+  RETURNING true
+$$;
+
+CREATE OR REPLACE FUNCTION public.python_ingestion_run_complete(
+  p_run_id uuid,
+  p_status text,
+  p_completeness_state text,
+  p_summary jsonb
+)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF p_status NOT IN ('succeeded', 'partially_succeeded', 'failed')
+    OR p_completeness_state NOT IN ('complete_snapshot', 'partial', 'capped', 'failed', 'blocked')
+  THEN
+    RAISE EXCEPTION 'invalid Python ingestion terminal state' USING ERRCODE = '22023';
+  END IF;
+  UPDATE public.worker_runs
+  SET
+    status = p_status,
+    completeness_state = p_completeness_state,
+    finished_at = clock_timestamp(),
+    heartbeat_at = clock_timestamp(),
+    summary = coalesce(p_summary, '{}'::jsonb),
+    raw_records = CASE WHEN coalesce(p_summary->>'jobs_fetched', '') ~ '^[0-9]+$'
+      THEN (p_summary->>'jobs_fetched')::integer ELSE 0 END,
+    jobs_inserted = CASE WHEN coalesce(p_summary->>'jobs_upserted', '') ~ '^[0-9]+$'
+      THEN (p_summary->>'jobs_upserted')::integer ELSE 0 END,
+    error_code = CASE WHEN p_status = 'failed' THEN coalesce(p_summary->>'terminal_error', 'python_ingestion_failed') ELSE NULL END,
+    updated_at = clock_timestamp()
+  WHERE id = p_run_id AND status = 'running';
+  RETURN FOUND;
+END
+$$;
+
+REVOKE ALL ON FUNCTION public.python_ingestion_run_begin(text, text, integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.python_ingestion_run_heartbeat(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.python_ingestion_run_complete(uuid, text, text, jsonb) FROM PUBLIC;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
+    GRANT EXECUTE ON FUNCTION public.python_ingestion_run_begin(text, text, integer) TO service_role;
+    GRANT EXECUTE ON FUNCTION public.python_ingestion_run_heartbeat(uuid) TO service_role;
+    GRANT EXECUTE ON FUNCTION public.python_ingestion_run_complete(uuid, text, text, jsonb) TO service_role;
+  END IF;
+END
+$$;
+
 CREATE OR REPLACE VIEW public.worker_ingestion_alerts
 WITH (security_barrier = true)
 AS

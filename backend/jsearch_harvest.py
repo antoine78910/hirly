@@ -365,9 +365,53 @@ async def run_jsearch_harvest_loop(db) -> None:
     )
     await asyncio.sleep(initial_delay)
     while True:
+        ledger_run_id = None
         try:
             if harvest_enabled():
-                await harvest_jsearch(db)
+                begin = getattr(db, "begin_python_ingestion_run", None)
+                claim = (
+                    await begin(
+                        schedule_id="python-jsearch-harvest",
+                        source="jsearch",
+                        cadence_seconds=interval_minutes * 60,
+                    )
+                    if callable(begin)
+                    else {"acquired": True, "run_id": None}
+                )
+                if not claim.get("acquired"):
+                    logger.info(
+                        "jsearch_harvest_overlap_skipped run_id=%s scheduled_for=%s",
+                        claim.get("run_id"),
+                        claim.get("scheduled_for"),
+                    )
+                else:
+                    ledger_run_id = claim.get("run_id")
+                    summary = await harvest_jsearch(db)
+                    complete = getattr(db, "complete_python_ingestion_run", None)
+                    if ledger_run_id and callable(complete):
+                        errors = summary.get("errors") or []
+                        completeness = summary.get("completeness")
+                        await complete(
+                            run_id=ledger_run_id,
+                            status="succeeded" if not errors else "partially_succeeded",
+                            completeness_state=(
+                                "complete_snapshot"
+                                if not errors and completeness == "complete_snapshot"
+                                else "partial"
+                            ),
+                            summary=summary,
+                        )
         except Exception as exc:
+            complete = getattr(db, "complete_python_ingestion_run", None)
+            if ledger_run_id and callable(complete):
+                try:
+                    await complete(
+                        run_id=ledger_run_id,
+                        status="failed",
+                        completeness_state="failed",
+                        summary={"terminal_error": f"{exc.__class__.__name__}: {str(exc)[:200]}"},
+                    )
+                except Exception as ledger_exc:
+                    logger.error("jsearch_harvest_ledger_completion_failed error=%s", str(ledger_exc)[:300])
             logger.warning("jsearch_harvest_loop_error error=%s", str(exc)[:300])
         await asyncio.sleep(interval_minutes * 60)
