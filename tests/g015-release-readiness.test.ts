@@ -1,11 +1,18 @@
 import { describe, expect, test } from "bun:test";
-import { readFile, readdir } from "node:fs/promises";
-import { resolve } from "node:path";
+import { mkdtemp, mkdir, readFile, readdir, rm, symlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import {
   assertDisposableDatabase,
   buildReleaseVerificationPlan,
+  collectArtifactEvidence,
+  collectToolEvidence,
   executeCommand,
+  findMigrationActivationStatements,
+  isolatedDatabaseUrl,
   redactSensitiveText,
+  resolveManifestOutput,
+  sanitizedEnvironment,
   verifyDeploymentDefaults,
 } from "../scripts/verify-job-supply-release.mjs";
 
@@ -26,6 +33,7 @@ describe("G015 release verification contract", () => {
       profile: "full",
       databaseUrl,
       allowDisposableDatabase: true,
+      verificationId: "20260720120000-123-deadbeef",
     });
     expect(plan.commands.map((entry) => entry.id)).toEqual([
       "repository-attestation",
@@ -41,7 +49,10 @@ describe("G015 release verification contract", () => {
       "legacy-frontend-frozen-install",
       "legacy-frontend-build",
       "worker-docker-build",
+      "worker-docker-proof",
+      "postgres-provision",
       "postgres-release-matrix",
+      "postgres-disabled-state-proof",
     ]);
     expect(plan.commands.find((entry) => entry.id === "legacy-frontend-frozen-install")?.args).toEqual(["ci", "--legacy-peer-deps"]);
     expect(plan.commands.find((entry) => entry.id === "postgres-release-matrix")?.redactEnvironment).toBe(true);
@@ -52,11 +63,31 @@ describe("G015 release verification contract", () => {
     ]);
     const matrixEnv = plan.commands.find((entry) => entry.id === "postgres-release-matrix")?.env ?? {};
     expect(new Set(Object.values(matrixEnv)).size).toBe(7);
+    expect(
+      Object.values(matrixEnv).every((value) =>
+        String(value).includes("_20260720"),
+      ),
+    ).toBe(true);
+    expect(plan.dockerTag).toMatch(/^hirly-worker:release-verification-/);
+    expect(plan.commands.find((entry) => entry.id === "worker-docker-proof")?.captureOutput).toBe(true);
   });
 
   test("pins an expected head in the release plan", () => {
-    const plan = buildReleaseVerificationPlan({ profile: "repository", expectedHead: "a".repeat(40) });
+    const plan = buildReleaseVerificationPlan({
+      profile: "repository",
+      expectedHead: "a".repeat(40),
+      verificationId: "20260720120000-123-deadbeef",
+    });
     expect(plan.expectedHead).toBe("a".repeat(40));
+  });
+
+  test("derives bounded unique database names while retaining connection credentials", () => {
+    const base = `postgresql://release:super-secret@localhost/${"x".repeat(50)}_test`;
+    const isolated = isolatedDatabaseUrl(base, "20260720120000_123_deadbeef_g014");
+    const parsed = new URL(isolated);
+    expect(decodeURIComponent(parsed.pathname.slice(1)).length).toBeLessThanOrEqual(63);
+    expect(parsed.password).toBe("super-secret");
+    expect(parsed.pathname).toEndWith("_20260720120000_123_deadbeef_g014");
   });
 
   test("redacts credentials emitted by an actual child process", () => {
@@ -83,6 +114,105 @@ describe("G015 release verification contract", () => {
     expect(output).not.toContain("super-secret");
     expect(output).toContain("[REDACTED]");
     expect(redactSensitiveText(`password=super-secret`, [databaseUrl])).not.toContain("super-secret");
+  });
+
+  test("uses an explicit inherited environment allowlist", () => {
+    const environment = sanitizedEnvironment({
+      PATH: "/bin",
+      HOME: "/tmp/home",
+      LANG: "C",
+      GITHUB_TOKEN: "must-not-leak",
+      AWS_ACCESS_KEY_ID: "must-not-leak",
+      CUSTOM_DATABASE_URL: "postgresql://user:password@example.test/prod",
+    });
+    expect(environment).toEqual({ PATH: "/bin", HOME: "/tmp/home", LANG: "C" });
+
+    const previous = process.env.GITHUB_TOKEN;
+    process.env.GITHUB_TOKEN = "must-not-leak";
+    try {
+      const result = executeCommand({
+        id: "environment-probe",
+        executable: process.execPath,
+        args: ["-e", "process.stdout.write(String(process.env.GITHUB_TOKEN))"],
+        cwd: ".",
+        env: {},
+        redactEnvironment: false,
+        captureOutput: true,
+        evidenceKind: null,
+      }, {
+        stdout: () => {},
+        stderr: () => {},
+      });
+      expect(result.status).toBe(0);
+      expect(result.stdout).toBe("undefined");
+    } finally {
+      if (previous === undefined) delete process.env.GITHUB_TOKEN;
+      else process.env.GITHUB_TOKEN = previous;
+    }
+  });
+
+  test("contains manifest output and rejects symlink traversal", async () => {
+    const temporaryRoot = await mkdtemp(join(tmpdir(), "g015-output-"));
+    try {
+      await mkdir(resolve(temporaryRoot, ".omx/verification"), { recursive: true });
+      expect(
+        resolveManifestOutput(".omx/verification/manifest.json", temporaryRoot),
+      ).toBe(resolve(temporaryRoot, ".omx/verification/manifest.json"));
+      expect(() => resolveManifestOutput("../escape.json", temporaryRoot)).toThrow(
+        "contained under .omx/verification",
+      );
+      await symlink(
+        tmpdir(),
+        resolve(temporaryRoot, ".omx/verification/external"),
+      );
+      expect(() =>
+        resolveManifestOutput(
+          ".omx/verification/external/manifest.json",
+          temporaryRoot,
+        ),
+      ).toThrow("symbolic links");
+    } finally {
+      await rm(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("detects top-level activation while ignoring runtime function bodies", () => {
+    expect(
+      findMigrationActivationStatements(`
+        CREATE FUNCTION claim() RETURNS void LANGUAGE plpgsql AS $$
+        BEGIN
+          UPDATE public.worker_schedules SET enabled = true;
+        END
+        $$;
+        INSERT INTO public.provider_registry (provider, enabled)
+        VALUES ('unsafe', true);
+      `),
+    ).toHaveLength(1);
+    expect(
+      findMigrationActivationStatements(`
+        INSERT INTO public.career_sources (source_key, transport_enabled)
+        VALUES ('safe', false);
+      `),
+    ).toEqual([]);
+  });
+
+  test("hashes release tools and migration artifacts for the manifest", () => {
+    const artifacts = collectArtifactEvidence(root);
+    expect(artifacts.length).toBeGreaterThan(20);
+    expect(artifacts.every((entry) => entry.sha256.match(/^[a-f0-9]{64}$/))).toBe(true);
+    expect(artifacts.some((entry) => entry.path === "apps/worker/Dockerfile")).toBe(true);
+    expect(
+      artifacts.some((entry) =>
+        entry.path.endsWith("20260720001100_source_trial_foundation.sql"),
+      ),
+    ).toBe(true);
+    const tools = collectToolEvidence(
+      buildReleaseVerificationPlan({
+        profile: "repository",
+        verificationId: "20260720120000-123-deadbeef",
+      }),
+    );
+    expect(tools.every((tool) => tool.available && tool.sha256?.match(/^[a-f0-9]{64}$/))).toBe(true);
   });
 
   test("executes deployment and disabled-default safety assertions", () => {

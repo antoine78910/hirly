@@ -22,22 +22,41 @@ Add the complete disposable-Postgres matrix:
 
 ```bash
 G015_TEST_DATABASE_URL='postgresql://user:password@localhost/hirly_release_test' \
-  bun run verify:job-supply-release -- --profile full --allow-disposable-database
+  bun run verify:job-supply-release -- \
+    --profile full \
+    --allow-disposable-database \
+    --expected-head "$(git rev-parse HEAD)" \
+    --output ".omx/verification/job-supply-release-$(git rev-parse --short HEAD).json"
 ```
 
 The command refuses database verification unless both conditions hold: the URL targets
 loopback with a database name containing `test` or `disposable`, and the operator passes
 `--allow-disposable-database` (or sets `G015_ALLOW_DISPOSABLE_DATABASE=true`).
-The PostgreSQL suites are destructive and must never target staging or production.
+The supplied URL is a connection template, not a suite target. The verifier derives seven
+unique run-scoped names, proves each database did not exist, creates each from `template0`,
+proves it is empty, assigns exactly one database to each PostgreSQL suite, and drops all
+seven in a final cleanup path even after a failed check. Existing databases are never
+reused. The PostgreSQL suites are destructive and must never target staging or production.
 
 The command also requires a clean working tree, records the exact HEAD plus a content
 digest before and after verification, and fails if repository content changes during the
-run. Stack-policy validation covers newly added production Python modules over
+run. Use `--expected-head` to bind the run to the reviewed 40-character commit SHA. Output
+must be a new, non-symlinked path below `.omx/verification` and is written via an atomic
+rename. Stack-policy validation covers newly added production Python modules over
 `G015_BASE_SHA..HEAD`, or the merge-base with `origin/main` when that variable is
-unset. It writes `.omx/verification/job-supply-release-manifest.json`. Missing database,
+unset. The manifest records SHA-256 hashes for the verifier, lockfiles, Docker inputs,
+deployment configuration, every migration, and every invoked tool binary. Missing database,
 Docker, credentials, or external deployment authority is recorded as typed
 `blockedExternal` entries with `readinessStatus: BLOCKED_EXTERNAL`; it must never be
 represented as a passing live check.
+
+The full profile builds a unique Docker tag, records the image ID, layer digests and a
+digest of the inspected runtime configuration, then removes the tag in the verifier cleanup
+path. After the seven PostgreSQL suites, the verifier queries the migrated G014 database
+and requires zero enabled providers, TypeScript writers, worker/Python schedules, career
+source transports, production policies, and production-eligible policy evidence. Static
+migration inspection separately rejects top-level provider, source, policy, evidence, or
+schedule activation statements.
 
 ## Topology preflight
 
