@@ -39,6 +39,9 @@ DROP FUNCTION IF EXISTS worker_private.record_source_trial_page(
 );
 DROP FUNCTION IF EXISTS worker_private.begin_source_trial(jsonb);
 DROP FUNCTION IF EXISTS worker_private.source_trial_run_is_writable(uuid);
+DROP FUNCTION IF EXISTS worker_private.source_trial_terminal_is_eligible(
+  uuid, text, timestamptz
+);
 
 DROP TRIGGER IF EXISTS source_trial_scorecards_immutable
   ON public.source_trial_scorecards;
@@ -59,6 +62,9 @@ DROP TABLE IF EXISTS public.source_trial_policies;
 
 DROP FUNCTION IF EXISTS worker_private.reject_immutable_source_trial_evidence();
 DROP FUNCTION IF EXISTS worker_private.enforce_source_trial_policy();
+DROP FUNCTION IF EXISTS worker_private.source_policy_evidence_allows_trial(
+  uuid, text, text, text, text, text
+);
 
 -- Cluster roles are intentionally not dropped by schema rollback. Credentials
 -- or memberships may exist outside this migration's transactional ownership.

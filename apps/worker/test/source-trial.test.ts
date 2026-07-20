@@ -188,7 +188,15 @@ describe("G014 evidence-only source trial runner", () => {
         fetch: async () => Response.json(response),
         now: () => new Date("2026-07-22T12:00:00Z"),
       }),
-    ).rejects.toThrow("trial_policy_window_invalid");
+    ).rejects.toThrow("trial_policy_expired");
+
+    await expect(
+      previewAtsSourceTrial({
+        manifest,
+        fetch: async () => Response.json(response),
+        now: () => new Date("2026-07-20T10:00:00Z"),
+      }),
+    ).rejects.toThrow("trial_policy_not_started");
 
     await expect(
       previewAtsSourceTrial({
@@ -208,6 +216,40 @@ describe("G014 evidence-only source trial runner", () => {
         now: () => new Date("2026-07-20T12:00:00Z"),
       }),
     ).rejects.toThrow("trial_budget_exceeded:maxCandidates");
+  });
+
+  test("records policy_expired only after the manifest actually expires", async () => {
+    const results: Array<Parameters<
+      SourceTrialEvidenceRepository["recordSourceTrialScorecard"]
+    >[0]["result"]> = [];
+    const repository: SourceTrialEvidenceRepository = {
+      async beginSourceTrial() {
+        return "018f02d8-a8b8-7f1d-a419-bf38eaf22a92";
+      },
+      async recordSourceTrialPage() {
+        throw new Error("expired trials must not record pages");
+      },
+      async recordSourceTrialCandidate() {
+        throw new Error("expired trials must not record candidates");
+      },
+      async recordSourceTrialScorecard(input) {
+        results.push(input.result);
+      },
+    };
+
+    await expect(
+      persistAtsSourceTrial({
+        manifest,
+        repository,
+        now: () => new Date("2026-07-21T11:00:00Z"),
+      }),
+    ).rejects.toThrow("trial_policy_expired");
+    expect(results).toEqual([
+      expect.objectContaining({
+        status: "policy_expired",
+        stopReason: "policy_expired",
+      }),
+    ]);
   });
 
   test("CLI preview is fixture-only and a live run requires the dedicated trial role URL", async () => {

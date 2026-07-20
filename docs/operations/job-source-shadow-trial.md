@@ -29,7 +29,16 @@ An operator must create a disabled `career_sources` row and a current
 - explicit reviewer and approval reference;
 - start/expiry window;
 - total-run, page, candidate and byte budgets;
-- a matching non-blocked immutable policy evidence record.
+- a matching immutable `licence_text` or `written_permission` evidence record
+  whose reviewed claim scope explicitly covers trial eligibility, provider,
+  source, tenant, access method, environment, commercial use, redisplay and
+  retention.
+
+Public readability, an unauthenticated endpoint, a dataset catalogue page, or a
+`requires_legal_review` qualification status is not permission and cannot
+satisfy the trial gate. When the required reviewed evidence is unavailable,
+persist a typed `BLOCKED_EXTERNAL` source-policy result instead of starting a
+trial.
 
 The trial policy is separate from production eligibility. It neither requires
 nor changes `production_eligible`, provider authorization, canonical writer
@@ -114,6 +123,44 @@ The scorecard reports:
 
 It refuses sample data, `BLOCKED_EXTERNAL`, mismatched evidence digests,
 incomplete snapshots, zero-volume collapse and users outside the frozen cohort.
+
+## Multi-source aggregate uplift measurement
+
+For G016-style multi-source comparisons, run
+`docs/operations/sql/multi-source-net-new-measurement.sql` with a fixed
+evidence-generation timestamp, freshness cutoff, succeeded paid-cohort coverage
+run and exact trial run IDs. The query returns one aggregate JSON value only.
+It refuses to report `COMPLETE` unless every distinct requested trial has its
+singular reconciled `completed` terminal result and every requested source has
+paid-cohort contribution evidence from the succeeded coverage run. The coverage
+run must be a provider-null `inventory_maintenance` run whose summary binds
+`schemaVersion=hirly.paid-user-inventory-coverage.v1`,
+`scope=paid_user_inventory`, its own `coverageRunId`, the exact
+`freshnessWindowDays`, and the UTC `freshnessCutoff`. At least one matching
+paid-user snapshot must have been evaluated and persisted inside the run, and
+all selected snapshots, contributions, trial runs, pages, candidates, and
+terminal evidence must exist by their applicable coverage or generation
+boundary. An unrelated succeeded worker run, copied summary, late contribution,
+or future trial row therefore remains `BLOCKED_EXTERNAL`. Current
+inventory uses the authoritative canonical group where present and a conservative
+fingerprint/URL/ATS/occurrence fallback; trial candidates apply duplicate
+precedence in this order: provider occurrence, canonical apply URL, ATS posting
+identity, then fingerprint. It does not emit job IDs, external IDs,
+candidate/source payloads or hashed user IDs.
+
+Save the returned JSON object and build the immutable decision artifact:
+
+```bash
+bun run --cwd apps/job-ingestion-audit measure:net-new -- \
+  --input artifacts/job-ingestion/g016-net-new-measurement-input.json \
+  --output artifacts/job-ingestion/g016-net-new-measurement.json
+```
+
+The builder refuses sample or blocked evidence and requires every observed
+candidate to reconcile to exactly one duplicate layer or incremental net-new.
+It reports fresh/relevant/actionable paid-cohort contribution,
+auto-applicable uplift and projected France Travail concentration without
+including any user- or job-level rows.
 
 ## Go/no-go
 

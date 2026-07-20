@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "audit": "bun src/cli.ts",
+    "measure:net-new": "bun src/net-new-measurement-cli.ts",
     "rank:ats": "bun src/ats-ranking-cli.ts",
+    "source-policy:persist": "bun src/source-policy-result-cli.ts",
     "trial:scorecard": "bun src/trial-scorecard-cli.ts",
     "sql-evaluate": "bun src/sql-evaluator.ts",
     "census:france-travail": "bun src/census-cli.ts",

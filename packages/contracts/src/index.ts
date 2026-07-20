@@ -68,6 +68,22 @@ export const sourceTrialStatusSchema = z.enum([
   "policy_expired",
   "failed",
 ]);
+export const sourceTrialBudgetStopReasonSchema = z.enum([
+  "budget_exceeded",
+  "budget_exceeded:maxPages",
+  "budget_exceeded:maxCandidates",
+  "budget_exceeded:maxBytes",
+]);
+export const sourceTrialFailureStopReasonSchema = z.enum([
+  "cancelled",
+  "malformed",
+  "not_found",
+  "permanent",
+  "policy_not_started",
+  "rate_limited",
+  "retryable",
+  "unclassified_failure",
+]);
 
 export const sourceTrialBudgetSchema = z
   .object({
@@ -117,33 +133,44 @@ export const sourceTrialManifestSchema = z
     }
   });
 
-export const sourceTrialResultSchema = z
+const sourceTrialResultBaseSchema = z
   .object({
     schemaVersion: z.literal("hirly.source-trial-result.v1"),
     runId: z.uuid(),
     trialKey: z.string().trim().min(1).max(256),
-    status: sourceTrialStatusSchema,
     startedAt: z.iso.datetime({ offset: true }),
     finishedAt: z.iso.datetime({ offset: true }),
     pagesFetched: z.number().int().nonnegative(),
     candidatesObserved: z.number().int().nonnegative(),
     bytesStored: z.number().int().nonnegative(),
-    stopReason: z.string().trim().min(1).max(512).nullable(),
   })
-  .strict()
+  .strict();
+
+export const sourceTrialResultSchema = z
+  .discriminatedUnion("status", [
+    sourceTrialResultBaseSchema.extend({
+      status: z.literal("completed"),
+      stopReason: z.null(),
+    }),
+    sourceTrialResultBaseSchema.extend({
+      status: z.literal("budget_exhausted"),
+      stopReason: sourceTrialBudgetStopReasonSchema,
+    }),
+    sourceTrialResultBaseSchema.extend({
+      status: z.literal("policy_expired"),
+      stopReason: z.literal("policy_expired"),
+    }),
+    sourceTrialResultBaseSchema.extend({
+      status: z.literal("failed"),
+      stopReason: sourceTrialFailureStopReasonSchema,
+    }),
+  ])
   .superRefine((value, context) => {
     if (new Date(value.finishedAt) < new Date(value.startedAt)) {
       context.addIssue({
         code: "custom",
         message: "trial result cannot finish before it started",
         path: ["finishedAt"],
-      });
-    }
-    if (value.status !== "completed" && value.stopReason === null) {
-      context.addIssue({
-        code: "custom",
-        message: "non-completed trials require a stop reason",
-        path: ["stopReason"],
       });
     }
   });
