@@ -1,7 +1,14 @@
 BEGIN;
-
-DROP FUNCTION IF EXISTS public.assert_job_supply_observability_topology();
-DROP TABLE IF EXISTS public.paid_user_source_contributions;
+DROP VIEW IF EXISTS public.paid_user_inventory_baseline;
+DROP VIEW IF EXISTS public.job_supply_ats_host_baseline;
+DROP VIEW IF EXISTS public.job_supply_source_baseline;
+DROP TRIGGER IF EXISTS france_travail_census_manifests_immutable
+  ON public.france_travail_census_manifests;
+DROP TRIGGER IF EXISTS france_travail_census_manifest_runs_immutable
+  ON public.france_travail_census_manifest_runs;
+DROP FUNCTION IF EXISTS worker_private.reject_immutable_census_evidence();
+DROP TABLE IF EXISTS public.france_travail_census_manifest_runs;
+DROP TABLE IF EXISTS public.france_travail_census_manifests;
 DROP TABLE IF EXISTS public.paid_user_inventory_snapshots;
 DROP TABLE IF EXISTS public.france_travail_census_manifests;
 

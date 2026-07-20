@@ -72,21 +72,33 @@ export async function collectLiveJobSupplyReport(
     generatedAt,
   );
   if (persistManifest) {
-    await sql`
-      INSERT INTO public.france_travail_census_manifests (
-        schema_version, manifest_digest, generated_at, source_run_ids,
-        partition_count, terminal_state, source_reported_total, fetched_records,
-        normalized_records, rejected_records, actionable_records, manifest
-      )
-      VALUES (
-        ${census.schemaVersion}, ${census.digest}, ${new Date(census.generatedAt)},
-        ${sql.array(census.sourceRunIds)}::uuid[], ${census.partitionCount},
-        ${census.terminalState}, ${census.sourceReportedTotal}, ${census.fetchedRecords},
-        ${census.normalizedRecords}, ${census.rejectedRecords},
-        ${census.actionableRecords}, ${sql.json(census)}
-      )
-      ON CONFLICT (manifest_digest) DO NOTHING
-    `;
+    await sql.begin(async (transaction) => {
+      const [manifest] = await transaction<{ id: string }[]>`
+        INSERT INTO public.france_travail_census_manifests (
+          schema_version, manifest_digest, generated_at, source_run_ids,
+          partition_count, terminal_state, source_reported_total, fetched_records,
+          normalized_records, rejected_records, actionable_records, manifest
+        )
+        VALUES (
+          ${census.schemaVersion}, ${census.digest}, ${new Date(census.generatedAt)},
+          ${transaction.array(census.sourceRunIds)}::uuid[], ${census.partitionCount},
+          ${census.terminalState}, ${census.sourceReportedTotal}, ${census.fetchedRecords},
+          ${census.normalizedRecords}, ${census.rejectedRecords},
+          ${census.actionableRecords}, ${transaction.json(census)}
+        )
+        ON CONFLICT (manifest_digest) DO UPDATE
+          SET manifest_digest = EXCLUDED.manifest_digest
+        RETURNING id
+      `;
+      if (!manifest) throw new Error("france_travail_manifest_insert_failed");
+      for (const runId of census.sourceRunIds) {
+        await transaction`
+          INSERT INTO public.france_travail_census_manifest_runs (manifest_id, run_id)
+          VALUES (${manifest.id}, ${runId}::uuid)
+          ON CONFLICT (manifest_id, run_id) DO NOTHING
+        `;
+      }
+    });
   }
   const [sourceBaseline, atsHostBaseline, paidUserBaseline, sourceEnablement] = await Promise.all([
     sql<Record<string, unknown>[]>`SELECT * FROM public.job_supply_source_baseline ORDER BY provider`,
