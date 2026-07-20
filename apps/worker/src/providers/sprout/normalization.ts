@@ -94,9 +94,9 @@ function primaryLocation(
   locations: readonly NormalizedSproutLocation[],
 ): NormalizedSproutLocation | null {
   return (
-    locations
+    [...locations]
       .filter((location) => location.countryCode === "FR")
-      .toSorted((left, right) => {
+      .sort((left, right) => {
         const leftScore = Number(Boolean(left.city)) + Number(Boolean(left.region));
         const rightScore = Number(Boolean(right.city)) + Number(Boolean(right.region));
         return rightScore - leftScore || left.display.localeCompare(right.display);
