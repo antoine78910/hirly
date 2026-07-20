@@ -37,7 +37,7 @@ export interface DataGouvRawJob {
   resourceId: string;
   recordId: string;
   title: string;
-  company: string;
+  employer: string;
   location: string;
   countryCode: string;
   description: string;
@@ -278,7 +278,7 @@ export class FixtureOnlyDataGouvSourceAdapter<
           },
         },
         title: raw.title,
-        company: raw.company,
+        company: raw.employer,
         location: raw.location,
         countryCode,
         description: raw.description,
