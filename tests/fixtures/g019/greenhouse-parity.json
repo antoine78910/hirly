@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "hirly.greenhouse-parity.v1",
+  "provenance": {
+    "kind": "sanitized_official_documentation_example",
+    "source": "https://developer.greenhouse.io/job-board.html",
+    "containsPersonalData": false
+  },
+  "tenantKey": "vaulttec",
+  "countryCode": "US",
+  "raw": {
+    "id": 127817,
+    "internal_job_id": 144381,
+    "title": "Vault Designer",
+    "updated_at": "2016-01-14T10:55:28-05:00",
+    "location": { "name": "NYC" },
+    "absolute_url": "https://boards.greenhouse.io/vaulttec/jobs/127817",
+    "content": "Design safe, reliable vault systems."
+  },
+  "expected": {
+    "externalId": "vaulttec:127817",
+    "providerJobId": "127817",
+    "title": "Vault Designer",
+    "company": "vaulttec",
+    "location": "NYC",
+    "countryCode": "US",
+    "description": "Design safe, reliable vault systems.",
+    "sourceUrl": "https://boards.greenhouse.io/vaulttec/jobs/127817",
+    "applyUrl": "https://boards.greenhouse.io/vaulttec/jobs/127817",
+    "validationTier": "A",
+    "manualFulfillmentReady": true,
+    "autoApplySupported": true
+  }
+}

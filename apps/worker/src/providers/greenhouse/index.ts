@@ -89,7 +89,7 @@ export const greenhouseProvider: ProviderCore<GreenhouseRawJob> = {
   rateLimit,
   coreReady: true,
   liveTransportReady: false,
-  shadowModeReady: false,
+  shadowModeReady: true,
   canonicalWriteReady: false,
   activationRequirements: [
     "complete measured paid-user ranking with non-sample evidence",
@@ -174,5 +174,16 @@ export function createGreenhouseTrialTransport(
       });
       return page.jobs;
     },
+  };
+}
+
+export function createGreenhouseShadowTransport(
+  options: AtsTrialTransportOptions,
+): ReturnType<typeof createGreenhouseTrialTransport> & {
+  readonly shadowOnly: true;
+} {
+  return {
+    ...createGreenhouseTrialTransport(options),
+    shadowOnly: true,
   };
 }
