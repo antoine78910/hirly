@@ -10,6 +10,11 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 from company_career_page_prober import probe_career_page_friendliness
+from ingestion_run_lease import (
+    accounting_summary,
+    await_with_ingestion_heartbeat,
+    persist_terminal_partitions,
+)
 from job_providers.ats_adapters import adapter_for_url, get_ats_adapter, supported_ats_providers
 from job_validation import cheap_validate_job_applyability
 from jobs_service import upsert_imported_jobs
@@ -190,7 +195,7 @@ async def refresh_ats_source(
         if not dry_run and jobs:
             import_stats = await upsert_imported_jobs(db, jobs)
             summary["imported_count"] = int(import_stats.get("total_imported") or 0)
-        if not dry_run:
+        if not dry_run and completeness == "complete_without_source_total":
             await _update_source_status(
                 db,
                 source_id,
@@ -207,6 +212,18 @@ async def refresh_ats_source(
                     "updated_at": now,
                 },
                 success=True,
+            )
+        elif not dry_run:
+            await _record_source_failure(
+                db,
+                source_id,
+                provider,
+                key,
+                "source_cap_reached_needs_split"
+                if completeness == "capped_needs_split"
+                else "adapter_completeness_missing",
+                now,
+                completeness_state=completeness,
             )
         logger.info("ats_source_refresh_complete summary=%s", _compact_summary(summary))
         return summary
@@ -379,14 +396,25 @@ async def run_ats_direct_maintenance_loop(db) -> None:
                 if claim.get("acquired"):
                     ledger_run_id = claim.get("run_id")
                     async with _maintenance_loop_lock:
-                        _last_maintenance_summary = await run_ats_direct_maintenance(db)
+                        _last_maintenance_summary = await await_with_ingestion_heartbeat(
+                            db, ledger_run_id, run_ats_direct_maintenance(db)
+                        )
+                    _last_maintenance_summary = accounting_summary(_last_maintenance_summary or {})
+                    maintenance_errors: List[Any] = []
+                    for section_name in ("discover", "refresh", "friendly_company_pages"):
+                        section = (_last_maintenance_summary or {}).get(section_name)
+                        if isinstance(section, dict):
+                            maintenance_errors.extend(section.get("errors") or [])
+                    maintenance_fact = {
+                        "partition_id": "direct-ats-maintenance",
+                        "partition_status": (
+                            "failed" if maintenance_errors else "completed_with_results"
+                        ),
+                        "error": "; ".join(map(str, maintenance_errors[:3])) if maintenance_errors else None,
+                    }
+                    await persist_terminal_partitions(db, ledger_run_id, [maintenance_fact])
                     complete = getattr(db, "complete_python_ingestion_run", None)
                     if ledger_run_id and callable(complete):
-                        maintenance_errors: List[Any] = []
-                        for section_name in ("discover", "refresh", "friendly_company_pages"):
-                            section = (_last_maintenance_summary or {}).get(section_name)
-                            if isinstance(section, dict):
-                                maintenance_errors.extend(section.get("errors") or [])
                         await complete(
                             run_id=ledger_run_id,
                             status="partially_succeeded" if maintenance_errors else "succeeded",
@@ -634,7 +662,16 @@ async def _update_source_status(db, source_id: str, fields: Dict[str, Any], *, s
     await db.ats_company_sources.update_one({"id": source_id}, {"$set": merged}, upsert=True)
 
 
-async def _record_source_failure(db, source_id: str, provider: str, source_key: str, error: str, checked_at: str) -> None:
+async def _record_source_failure(
+    db,
+    source_id: str,
+    provider: str,
+    source_key: str,
+    error: str,
+    checked_at: str,
+    *,
+    completeness_state: str = "failed",
+) -> None:
     existing = await db.ats_company_sources.find_one({"id": source_id}, {"_id": 0}) or {}
     failure_count = int(existing.get("failure_count") or 0) + 1
     await db.ats_company_sources.update_one(
@@ -647,6 +684,7 @@ async def _record_source_failure(db, source_id: str, provider: str, source_key: 
             "is_active": existing.get("is_active", True),
             "last_checked_at": checked_at,
             "last_error": error[:500],
+            "last_completeness_state": completeness_state,
             "failure_count": failure_count,
             "updated_at": checked_at,
         }},

@@ -1,38 +1,27 @@
 [
-  {
-    "id": "PAG-001-one-page",
-    "status": "completed_with_results",
-    "expectedExternalIds": ["a", "b"],
-    "fetchedExternalIds": ["a", "b"],
-    "sourceTotal": 2,
-    "cap": null,
-    "cursorHistory": ["0"]
-  },
-  {
-    "id": "PAG-003-full-plus-one",
-    "status": "completed_with_results",
-    "expectedExternalIds": ["a", "b", "c"],
-    "fetchedExternalIds": ["a", "b", "c"],
-    "sourceTotal": 3,
-    "cap": 10,
-    "cursorHistory": ["0", "1"]
-  },
-  {
-    "id": "PAG-008-repeated-cursor",
-    "status": "failed",
-    "expectedExternalIds": ["a", "b"],
-    "fetchedExternalIds": ["a"],
-    "sourceTotal": 2,
-    "cap": null,
-    "cursorHistory": ["same", "same"]
-  },
-  {
-    "id": "PAG-021-cap-hit",
-    "status": "blocked",
-    "expectedExternalIds": [],
-    "fetchedExternalIds": ["a", "b"],
-    "sourceTotal": null,
-    "cap": 2,
-    "cursorHistory": ["0"]
-  }
+  {"id":"PAG-001-one-page","status":"completed_with_results","expectedExternalIds":["a","b"],"fetchedExternalIds":["a","b"],"sourceTotal":2,"cap":null,"cursorHistory":["0"],"termination":"partial_page","expectedFailures":[]},
+  {"id":"PAG-002-exact-full-page","status":"completed_with_results","expectedExternalIds":["a","b"],"fetchedExternalIds":["a","b"],"sourceTotal":2,"cap":null,"cursorHistory":["0","1"],"termination":"source_total","expectedFailures":[]},
+  {"id":"PAG-003-full-plus-one","status":"completed_with_results","expectedExternalIds":["a","b","c"],"fetchedExternalIds":["a","b","c"],"sourceTotal":3,"cap":10,"cursorHistory":["0","1"],"termination":"partial_page","expectedFailures":[]},
+  {"id":"PAG-004-several-full-pages","status":"completed_with_results","expectedExternalIds":["a","b","c","d","e","f"],"fetchedExternalIds":["a","b","c","d","e","f"],"sourceTotal":6,"cap":null,"cursorHistory":["0","1","2","3"],"termination":"source_total","expectedFailures":[]},
+  {"id":"PAG-005-partial-final-page","status":"completed_with_results","expectedExternalIds":["a","b","c","d","e"],"fetchedExternalIds":["a","b","c","d","e"],"sourceTotal":5,"cap":null,"cursorHistory":["0","1","2"],"termination":"partial_page","expectedFailures":[]},
+  {"id":"PAG-006-empty-first-page","status":"completed_zero_results","expectedExternalIds":[],"fetchedExternalIds":[],"sourceTotal":0,"cap":null,"cursorHistory":["0"],"termination":"empty_first_page","expectedFailures":[]},
+  {"id":"PAG-007-empty-intermediate-page","status":"failed","expectedExternalIds":["a","b","c"],"fetchedExternalIds":["a","b"],"sourceTotal":3,"cap":null,"cursorHistory":["0","1"],"termination":"empty_intermediate_page","expectedFailures":["external_id_set_mismatch","source_total_mismatch","unexpected_empty_intermediate_page"]},
+  {"id":"PAG-008-repeated-cursor","status":"failed","expectedExternalIds":["a","b"],"fetchedExternalIds":["a"],"sourceTotal":2,"cap":null,"cursorHistory":["0","1","1"],"termination":"failure","expectedFailures":["external_id_set_mismatch","repeated_cursor","source_total_mismatch"]},
+  {"id":"PAG-009-cursor-cycle","status":"failed","expectedExternalIds":["a","b","c"],"fetchedExternalIds":["a","b"],"sourceTotal":3,"cap":null,"cursorHistory":["root","next","root"],"termination":"failure","expectedFailures":["cursor_cycle","external_id_set_mismatch","source_total_mismatch"]},
+  {"id":"PAG-010-adjacent-page-duplicates","status":"completed_with_results","expectedExternalIds":["a","b","c"],"fetchedExternalIds":["a","b","b","c"],"sourceTotal":3,"cap":null,"cursorHistory":["0","1"],"termination":"partial_page","expectedFailures":[]},
+  {"id":"PAG-011-concurrent-insert","status":"completed_with_results","expectedExternalIds":["a","b","c","d"],"fetchedExternalIds":["a","b","c","d"],"sourceTotal":4,"cap":null,"cursorHistory":["a","b"],"mutationDuringPagination":"insert","mutationHandled":true,"uniqueSortTieBreaker":true,"expectedFailures":[]},
+  {"id":"PAG-012-concurrent-delete","status":"completed_with_results","expectedExternalIds":["a","c","d"],"fetchedExternalIds":["a","c","d"],"sourceTotal":3,"cap":null,"cursorHistory":["a","c"],"mutationDuringPagination":"delete","mutationHandled":true,"uniqueSortTieBreaker":true,"expectedFailures":[]},
+  {"id":"PAG-013-rate-limit-retry","status":"completed_with_results","expectedExternalIds":["a","b"],"fetchedExternalIds":["a","b"],"sourceTotal":2,"cap":null,"cursorHistory":["0","1"],"failure":"rate_limit","retryCount":1,"recoveredAfterRetry":true,"expectedFailures":[]},
+  {"id":"PAG-014-transient-network-retry","status":"completed_with_results","expectedExternalIds":["a","b"],"fetchedExternalIds":["a","b"],"sourceTotal":2,"cap":null,"cursorHistory":["0","1"],"failure":"transient_network","retryCount":2,"recoveredAfterRetry":true,"expectedFailures":[]},
+  {"id":"PAG-015-permanent-page-failure","status":"failed","expectedExternalIds":["a","b","c"],"fetchedExternalIds":["a","b"],"sourceTotal":3,"cap":null,"cursorHistory":["0","1"],"failure":"permanent_page","termination":"failure","retryCount":3,"recoveredAfterRetry":false,"expectedFailures":["external_id_set_mismatch","permanent_page_failure","source_total_mismatch"]},
+  {"id":"PAG-016-page-base-zero","status":"completed_with_results","expectedExternalIds":["a"],"fetchedExternalIds":["a"],"sourceTotal":1,"cap":null,"cursorHistory":["0"],"pageBase":0,"configuredPageBase":0,"expectedFailures":[]},
+  {"id":"PAG-017-page-base-one","status":"completed_with_results","expectedExternalIds":["a"],"fetchedExternalIds":["a"],"sourceTotal":1,"cap":null,"cursorHistory":["1"],"pageBase":1,"configuredPageBase":1,"expectedFailures":[]},
+  {"id":"PAG-018-wrong-page-base","status":"failed","expectedExternalIds":["a","b"],"fetchedExternalIds":["b"],"sourceTotal":2,"cap":null,"cursorHistory":["1"],"pageBase":0,"configuredPageBase":1,"expectedFailures":["external_id_set_mismatch","invalid_page_base","source_total_mismatch"]},
+  {"id":"PAG-019-boundary-less-than","status":"completed_with_results","expectedExternalIds":["a","b"],"fetchedExternalIds":["a","b"],"sourceTotal":2,"cap":null,"cursorHistory":["b","a"],"boundaryOperator":"<","expectedBoundaryOperator":"<","uniqueSortTieBreaker":true,"expectedFailures":[]},
+  {"id":"PAG-020-boundary-less-than-equal","status":"completed_with_results","expectedExternalIds":["a","b"],"fetchedExternalIds":["a","b","b"],"sourceTotal":2,"cap":null,"cursorHistory":["b","a"],"boundaryOperator":"<=","expectedBoundaryOperator":"<=","uniqueSortTieBreaker":true,"expectedFailures":[]},
+  {"id":"PAG-021-wrong-boundary","status":"failed","expectedExternalIds":["a","b","c"],"fetchedExternalIds":["a","c"],"sourceTotal":3,"cap":null,"cursorHistory":["c","a"],"boundaryOperator":"<","expectedBoundaryOperator":"<=","uniqueSortTieBreaker":true,"expectedFailures":["boundary_gap","external_id_set_mismatch","source_total_mismatch"]},
+  {"id":"PAG-022-identical-sort-with-tie-breaker","status":"completed_with_results","expectedExternalIds":["a","b","c"],"fetchedExternalIds":["a","b","c"],"sourceTotal":3,"cap":null,"cursorHistory":["2026-07-20:a","2026-07-20:b"],"uniqueSortTieBreaker":true,"expectedFailures":[]},
+  {"id":"PAG-023-identical-sort-without-tie-breaker","status":"failed","expectedExternalIds":["a","b","c"],"fetchedExternalIds":["a","c"],"sourceTotal":3,"cap":null,"cursorHistory":["2026-07-20"],"uniqueSortTieBreaker":false,"expectedFailures":["external_id_set_mismatch","missing_unique_tie_breaker","source_total_mismatch"]},
+  {"id":"PAG-024-cap-hit","status":"blocked","expectedExternalIds":["a","b","c"],"fetchedExternalIds":["a","b"],"sourceTotal":3,"cap":2,"cursorHistory":["0"],"termination":"cap","expectedFailures":["cap_hit_requires_split","external_id_set_mismatch","source_total_mismatch"]},
+  {"id":"PAG-025-source-total-mismatch","status":"failed","expectedExternalIds":["a","b","c"],"fetchedExternalIds":["a","b"],"sourceTotal":3,"cap":null,"cursorHistory":["0","1"],"termination":"source_total","expectedFailures":["external_id_set_mismatch","source_total_mismatch"]}
 ]

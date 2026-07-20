@@ -530,7 +530,7 @@ def test_france_travail_repeated_full_page_fails_closed():
         assert "all-duplicate page" in str(exc)
 
 
-def test_france_travail_content_range_total_mismatch_fails_closed():
+def test_france_travail_content_range_total_mismatch_preserves_capped_rows():
     provider = FranceTravailProvider(client_id="PAR_test", client_secret="secret")
 
     async def _run():
@@ -547,14 +547,13 @@ def test_france_travail_content_range_total_mismatch_fails_closed():
                 client, {}, {}, page_size=1, max_pages=1, target_count=2, seen_ids=set()
             )
 
-    try:
-        asyncio.run(_run())
-        assert False, "expected source-total mismatch to fail"
-    except RuntimeError as exc:
-        assert "source total 2" in str(exc)
+    rows, _payloads, state = asyncio.run(_run())
+    assert [row["id"] for row in rows] == ["A"]
+    assert state["status"] == "capped_needs_split"
+    assert state["terminal_reason"] == "source_total_not_reached"
 
 
-def test_france_travail_max_pages_before_exhaustion_fails_closed():
+def test_france_travail_max_pages_before_exhaustion_preserves_rows_for_split():
     provider = FranceTravailProvider(client_id="PAR_test", client_secret="secret")
 
     async def _run():
@@ -571,8 +570,29 @@ def test_france_travail_max_pages_before_exhaustion_fails_closed():
                 client, {}, {}, page_size=1, max_pages=1, target_count=2, seen_ids=set()
             )
 
-    try:
-        asyncio.run(_run())
-        assert False, "expected local cap to fail"
-    except RuntimeError as exc:
-        assert "max_pages=1" in str(exc)
+    rows, _payloads, state = asyncio.run(_run())
+    assert [row["id"] for row in rows] == ["A"]
+    assert state["status"] == "capped_needs_split"
+    assert state["terminal_reason"] == "local_max_pages_reached"
+
+
+def test_france_travail_full_page_without_content_range_is_not_complete():
+    provider = FranceTravailProvider(client_id="PAR_test", client_secret="secret")
+
+    async def _run():
+        response = AsyncMock()
+        response.status_code = 200
+        response.content = b'{"resultats":[{"id":"A"}]}'
+        response.json = lambda: {"resultats": [{"id": "A"}]}
+        response.raise_for_status = lambda: None
+        response.headers = {}
+        client = AsyncMock()
+        client.get = AsyncMock(return_value=response)
+        with patch.object(provider, "_pace_request", AsyncMock()):
+            return await provider._fetch_search_pages(
+                client, {}, {}, page_size=1, max_pages=1, target_count=1, seen_ids=set()
+            )
+
+    rows, _payloads, state = asyncio.run(_run())
+    assert [row["id"] for row in rows] == ["A"]
+    assert state["status"] == "capped_needs_split"

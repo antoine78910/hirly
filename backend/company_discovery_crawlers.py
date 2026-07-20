@@ -32,6 +32,11 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
 
 import httpx
+from ingestion_run_lease import (
+    accounting_summary,
+    await_with_ingestion_heartbeat,
+    persist_terminal_partitions,
+)
 
 from ats_source_service import _careers_url, env_bool, env_int
 from job_providers.ats_adapters.registry import default_ats_adapters
@@ -331,13 +336,27 @@ async def run_company_discovery_loop(db) -> None:
                 if claim.get("acquired"):
                     ledger_run_id = claim.get("run_id")
                     async with _discovery_loop_lock:
-                        _last_discovery_summary = await run_company_discovery(db)
+                        _last_discovery_summary = await await_with_ingestion_heartbeat(
+                            db, ledger_run_id, run_company_discovery(db)
+                        )
+                    _last_discovery_summary = accounting_summary(_last_discovery_summary or {})
+                    discovery_errors = []
+                    for section in (_last_discovery_summary or {}).values():
+                        if isinstance(section, dict):
+                            discovery_errors.extend(section.get("errors") or [])
+                    await persist_terminal_partitions(db, ledger_run_id, [{
+                        "partition_id": "company-discovery",
+                        "partition_status": (
+                            "failed" if discovery_errors else "completed_with_results"
+                        ),
+                        "error": "; ".join(map(str, discovery_errors[:3])) if discovery_errors else None,
+                    }])
                     complete = getattr(db, "complete_python_ingestion_run", None)
                     if ledger_run_id and callable(complete):
                         await complete(
                             run_id=ledger_run_id,
-                            status="succeeded",
-                            completeness_state="complete_snapshot",
+                            status="partially_succeeded" if discovery_errors else "succeeded",
+                            completeness_state="partial" if discovery_errors else "complete_snapshot",
                             summary=_last_discovery_summary or {},
                         )
                 else:

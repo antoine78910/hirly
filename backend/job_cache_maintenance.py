@@ -29,6 +29,35 @@ from location_intelligence import country_to_jsearch_language, expand_location_r
 logger = logging.getLogger(__name__)
 
 
+async def _has_complete_snapshot_proof(
+    db,
+    run_id: Optional[str],
+    *,
+    provider: Optional[str] = None,
+) -> bool:
+    if not run_id:
+        return False
+    worker_runs = getattr(db, "worker_runs", None)
+    partitions = getattr(db, "worker_run_partitions", None)
+    if worker_runs is None or partitions is None:
+        return False
+    run_query: Dict[str, Any] = {
+        "id": run_id,
+        "status": "succeeded",
+        "completeness_state": "complete_snapshot",
+    }
+    if provider:
+        run_query["source_id"] = provider
+    runs = await worker_runs.find(run_query, {"_id": 0}).limit(1).to_list(1)
+    if not runs:
+        return False
+    facts = await partitions.find({"run_id": run_id}, {"_id": 0}).limit(10000).to_list(10000)
+    return bool(facts) and all(
+        fact.get("status") in {"completed_with_results", "completed_zero_results"}
+        for fact in facts
+    )
+
+
 def env_bool(name: str, default: bool = False) -> bool:
     value = os.environ.get(name)
     if value is None:
@@ -393,13 +422,13 @@ async def expire_stale_jobs(
     country_code: Optional[str] = None,
     limit: Optional[int] = None,
     dry_run: bool = False,
-    complete_snapshot: bool = False,
+    completeness_run_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    if not complete_snapshot:
+    if not await _has_complete_snapshot_proof(db, completeness_run_id, provider=provider):
         return {
             "dry_run": dry_run,
             "skipped": True,
-            "reason": "complete_snapshot_required",
+            "reason": "completed_run_partition_proof_required",
             "expired_count": 0,
             "errors": [],
         }
@@ -529,17 +558,17 @@ async def purge_invalid_jobs(
     country_code: Optional[str] = None,
     limit: Optional[int] = None,
     dry_run: bool = False,
-    complete_snapshot: bool = False,
+    completeness_run_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Hard-delete invalid/expired inventory to shrink storage + egress.
 
     Default: soft-expire stale rows first, then delete tier E / invalid jobs.
     """
-    if not complete_snapshot:
+    if not await _has_complete_snapshot_proof(db, completeness_run_id):
         return {
             "dry_run": dry_run,
             "skipped": True,
-            "reason": "complete_snapshot_required",
+            "reason": "completed_run_partition_proof_required",
             "matched_count": 0,
             "deleted_count": 0,
             "errors": [],
@@ -553,7 +582,7 @@ async def purge_invalid_jobs(
             country_code=country_code,
             limit=limit,
             dry_run=dry_run,
-            complete_snapshot=True,
+            completeness_run_id=completeness_run_id,
         )
 
     days = int(older_than_days if older_than_days is not None else env_int("JOBS_STALE_AFTER_DAYS", 30))

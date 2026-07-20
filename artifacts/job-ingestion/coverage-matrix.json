@@ -1,10 +1,39 @@
 {
-  "schemaVersion": 1,
-  "dimensions": ["provider", "contractType", "geography", "occupation"],
-  "rows": [
-    {"provider":"france_travail","contractType":"all-configured","geography":"FR departments incl. DOM","occupation":"BLITZ_HARVEST_ROLES","state":"planned","evidence":"backend/france_travail_harvest.py"},
-    {"provider":"jsearch","contractType":"provider-dependent","geography":"configured profile/query locations","occupation":"configured roles","state":"blocked","reason":"active RapidAPI plan and live metadata unavailable"},
-    {"provider":"workday","contractType":"board-dependent","geography":"board-dependent","occupation":"board-dependent","state":"blocked","reason":"authoritative CXS board contract unavailable"},
-    {"provider":"direct_ats","contractType":"board-dependent","geography":"board-dependent","occupation":"board-dependent","state":"not_queried","reason":"dynamic board inventory requires read-only source snapshot"}
-  ]
+  "schemaVersion": 2,
+  "dimensions": {
+    "provider": ["france_travail", "jsearch", "workday", "greenhouse", "lever", "ashby", "recruitee", "personio", "smartrecruiters", "teamtailor"],
+    "contractType": ["permanent", "fixed_term", "temporary", "internship", "apprenticeship", "freelance", "unknown_preserved"],
+    "geography": ["france_departments", "european_priority", "remote"],
+    "occupation": ["engineering", "sales", "marketing", "operations", "healthcare", "hospitality", "other_preserved"]
+  },
+  "terminalRules": [
+    {
+      "providers": ["france_travail"],
+      "state": "blocked",
+      "reason": "local fixtures prove partition construction, but observed provider × contract × geography × occupation totals require read-only live credentials"
+    },
+    {
+      "providers": ["jsearch"],
+      "state": "blocked",
+      "reason": "active RapidAPI plan metadata and read-only observed payloads are unavailable"
+    },
+    {
+      "providers": ["workday"],
+      "state": "blocked",
+      "reason": "authoritative board inventory snapshot is unavailable"
+    },
+    {
+      "providers": ["greenhouse", "lever", "ashby", "recruitee", "personio", "smartrecruiters", "teamtailor"],
+      "state": "blocked",
+      "reason": "dynamic board inventory and anonymized cohort aggregates are unavailable"
+    }
+  ],
+  "expandedPartitionCount": 1470,
+  "terminalCounts": {
+    "completed_with_results": 0,
+    "completed_zero_results": 0,
+    "failed": 0,
+    "blocked": 1470,
+    "nonterminal": 0
+  }
 }

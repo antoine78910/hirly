@@ -1,10 +1,56 @@
 [
-  {"id":"exact-cross-source","candidate":true,"autoMerge":false,"protectedDistinct":false},
-  {"id":"tracking-url-variant","candidate":true,"autoMerge":false,"protectedDistinct":false},
-  {"id":"same-title-different-location","candidate":false,"autoMerge":false,"protectedDistinct":true},
-  {"id":"different-seniority","candidate":false,"autoMerge":false,"protectedDistinct":true},
-  {"id":"recurrent-opening","candidate":false,"autoMerge":false,"protectedDistinct":true},
-  {"id":"repost-new-external-id","candidate":true,"autoMerge":false,"protectedDistinct":false},
-  {"id":"multilingual-copy","candidate":true,"autoMerge":false,"protectedDistinct":false},
-  {"id":"similar-description-distinct","candidate":false,"autoMerge":false,"protectedDistinct":true}
+  {
+    "id":"exact-provider-occurrence",
+    "left":{"provider":"jsearch","external_id":"1","title":"Engineer","company":"Acme","location":"Paris, France"},
+    "right":{"provider":"jsearch","external_id":"1","title":"Engineer","company":"Acme","location":"Paris, France"},
+    "expected":"exact_occurrence","autoMerge":true
+  },
+  {
+    "id":"exact-cross-source",
+    "left":{"provider":"jsearch","external_id":"1","title":"Engineer","company":"Acme","location":"Paris, France","selected_apply_url":"https://jobs.acme.com/1"},
+    "right":{"provider":"france_travail","external_id":"X","title":"Engineer","company":"Acme","location":"Paris, France","selected_apply_url":"https://jobs.acme.com/1"},
+    "expected":"canonical_url_candidate","autoMerge":false
+  },
+  {
+    "id":"tracking-url-variant",
+    "left":{"provider":"jsearch","external_id":"1","title":"Engineer","company":"Acme","location":"Paris, France","selected_apply_url":"https://jobs.acme.com/1?utm_source=indeed&token=keep"},
+    "right":{"provider":"workday","external_id":"2","title":"Engineer","company":"Acme","location":"Paris, France","selected_apply_url":"https://jobs.acme.com/1?token=keep&utm_medium=cpc"},
+    "expected":"canonical_url_candidate","autoMerge":false
+  },
+  {
+    "id":"same-title-different-location",
+    "left":{"provider":"jsearch","external_id":"1","title":"Engineer","company":"Acme","location":"Paris, France","description":"Platform"},
+    "right":{"provider":"jsearch","external_id":"2","title":"Engineer","company":"Acme","location":"Lyon, France","description":"Platform"},
+    "expected":"distinct","autoMerge":false
+  },
+  {
+    "id":"different-seniority",
+    "left":{"provider":"jsearch","external_id":"1","title":"Junior Engineer","company":"Acme","location":"Paris, France","description":"Platform"},
+    "right":{"provider":"jsearch","external_id":"2","title":"Senior Engineer","company":"Acme","location":"Paris, France","description":"Platform"},
+    "expected":"distinct","autoMerge":false
+  },
+  {
+    "id":"recurrent-opening",
+    "left":{"provider":"jsearch","external_id":"1","title":"Sales Associate","company":"Acme","location":"Paris, France","description":"Store A"},
+    "right":{"provider":"jsearch","external_id":"2","title":"Sales Associate","company":"Acme","location":"Paris, France","description":"Store B"},
+    "expected":"distinct","autoMerge":false
+  },
+  {
+    "id":"repost-new-external-id",
+    "left":{"provider":"jsearch","external_id":"1","title":"Engineer","company":"Acme","location":"Paris, France","description":"Same role"},
+    "right":{"provider":"jsearch","external_id":"2","title":"Engineer","company":"Acme","location":"Paris, France","description":"Same role"},
+    "expected":"fingerprint_candidate","autoMerge":false
+  },
+  {
+    "id":"multilingual-copy",
+    "left":{"provider":"jsearch","external_id":"1","title":"Software Engineer","company":"Acme","location":"Paris, France","ats_provider":"greenhouse","ats_job_id":"123"},
+    "right":{"provider":"france_travail","external_id":"2","title":"Ingénieur logiciel","company":"Acme","location":"Paris, France","ats_provider":"greenhouse","ats_job_id":"123"},
+    "expected":"ats_id_candidate","autoMerge":false
+  },
+  {
+    "id":"similar-description-distinct",
+    "left":{"provider":"jsearch","external_id":"1","title":"Engineer API","company":"Acme","location":"Paris, France","description":"Build reliable APIs for customers"},
+    "right":{"provider":"jsearch","external_id":"2","title":"Engineer Data","company":"Acme","location":"Paris, France","description":"Build reliable data systems for customers"},
+    "expected":"distinct","autoMerge":false
+  }
 ]

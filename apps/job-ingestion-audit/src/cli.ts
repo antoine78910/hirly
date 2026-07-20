@@ -1,9 +1,9 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import {
-  evaluatePartition,
   reconcileFunnel,
   stableDigest,
+  validatePaginationFixtures,
   validateRows,
   type AuditRow,
   type Funnel,
@@ -27,9 +27,7 @@ const funnel = JSON.parse(await readFile(resolve(fixtureDir, "funnel.json"), "ut
 const invariantFailures = [
   ...validateRows(rows),
   ...reconcileFunnel(funnel),
-  ...partitions.flatMap((partition) =>
-    evaluatePartition(partition).map((failure) => `${partition.id}:${failure}`),
-  ),
+  ...validatePaginationFixtures(partitions),
 ];
 const machineRows = rows.map((row) => ({
   risk_id: row.riskId,

@@ -156,6 +156,30 @@ def test_refresh_source_surfaces_cap_as_needs_split(monkeypatch):
     assert result["errors"] == ["source_cap_reached_needs_split"]
 
 
+def test_capped_refresh_does_not_record_source_success_or_clear_error(monkeypatch):
+    db = _FakeDB(sources=[{
+        "id": "greenhouse:acme",
+        "last_success_at": "2026-07-19T00:00:00Z",
+        "last_error": "prior_error",
+        "failure_count": 2,
+    }])
+    monkeypatch.setattr(service, "get_ats_adapter", lambda _provider: _CappedAdapter())
+    async def fake_upsert(*_args, **_kwargs):
+        return {"total_imported": 2}
+    monkeypatch.setattr(service, "upsert_imported_jobs", fake_upsert)
+
+    result = asyncio.run(service.refresh_ats_source(
+        db, ats_provider="greenhouse", source_key="acme", limit=2
+    ))
+
+    source = db.ats_company_sources.rows[0]
+    assert result["status"] == "capped"
+    assert source["last_success_at"] == "2026-07-19T00:00:00Z"
+    assert source["last_error"] == "source_cap_reached_needs_split"
+    assert source["failure_count"] == 3
+    assert source["last_completeness_state"] == "capped_needs_split"
+
+
 def test_failed_source_refresh_records_failure(monkeypatch):
     db = _FakeDB()
     monkeypatch.setattr(service, "get_ats_adapter", lambda provider: _FailingAdapter())

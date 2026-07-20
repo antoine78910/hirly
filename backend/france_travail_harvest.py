@@ -19,6 +19,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from job_providers import get_job_provider, is_job_provider_configured
 from job_providers.base import JobSearchQuery
+from ingestion_run_lease import (
+    accounting_summary,
+    await_with_ingestion_heartbeat,
+    persist_terminal_partitions,
+)
 from jobs_service import upsert_imported_jobs
 
 logger = logging.getLogger(__name__)
@@ -216,6 +221,25 @@ async def harvest_france_travail(
             "concurrency": concurrency,
             "jobs_fetched": 0,
             "jobs_upserted": 0,
+            "pages_requested": 0,
+            "pages_completed": 0,
+            "retries": 0,
+            "raw_records": 0,
+            "normalized_records": 0,
+            "rejected_by_reason": {},
+            "exact_duplicates": None,
+            "fuzzy_duplicate_candidates": None,
+            "jobs_inserted": None,
+            "jobs_updated": None,
+            "jobs_reactivated": None,
+            "jobs_marked_inactive": 0,
+            "accounting_contract": {
+                "exact_duplicates": "unknown_upsert_contract",
+                "fuzzy_duplicate_candidates": "unknown_not_computed",
+                "jobs_inserted": "unknown_upsert_contract",
+                "jobs_updated": "unknown_upsert_contract",
+                "jobs_reactivated": "unknown_upsert_contract",
+            },
             "errors": [],
             "runs": [],
         }
@@ -245,6 +269,22 @@ async def harvest_france_travail(
                     ))
                     jobs = result.jobs or []
                     run["fetched"] = len(jobs)
+                    raw = result.raw_response if isinstance(result.raw_response, dict) else {}
+                    states = raw.get("pagination_states") or []
+                    run["pages_requested"] = sum(int(state.get("pages_completed") or 0) for state in states)
+                    run["pages_completed"] = run["pages_requested"]
+                    run["completeness"] = raw.get("completeness") or "unknown"
+                    run["partition_status"] = (
+                        "completed_with_results"
+                        if run["completeness"] == "complete" and jobs
+                        else "completed_zero_results"
+                        if run["completeness"] == "complete"
+                        else "blocked"
+                        if run["completeness"] == "capped_needs_split"
+                        else "failed"
+                    )
+                    if run["completeness"] == "capped_needs_split":
+                        run["error"] = "source_cap_reached_needs_split"
                     if jobs and not dry_run:
                         stats = await upsert_imported_jobs(db, jobs)
                         run["upserted"] = stats.get("total_imported", 0)
@@ -267,6 +307,10 @@ async def harvest_france_travail(
             summary["runs"].append(run)
             summary["jobs_fetched"] += int(run.get("fetched") or 0)
             summary["jobs_upserted"] += int(run.get("upserted") or 0)
+            summary["pages_requested"] += int(run.get("pages_requested") or 0)
+            summary["pages_completed"] += int(run.get("pages_completed") or 0)
+            summary["raw_records"] += int(run.get("fetched") or 0)
+            summary["normalized_records"] += int(run.get("fetched") or 0)
             if run.get("error"):
                 summary["errors"].append({
                     "city": run.get("city"),
@@ -274,9 +318,14 @@ async def harvest_france_travail(
                     "error": run["error"],
                 })
 
-        if start_offset is None:
+        all_partitions_complete = all(
+            run and str(run.get("partition_status", "")).startswith("completed_")
+            for run in runs
+        )
+        if start_offset is None and all_partitions_complete:
             _harvest_cursor = (cursor + queries) % len(targets)
-        summary["cursor_next"] = (cursor + queries) % len(targets)
+        summary["cursor_next"] = (cursor + queries) % len(targets) if all_partitions_complete else cursor
+        summary["completeness"] = "complete_snapshot" if all_partitions_complete else "partial"
         summary["elapsed_ms"] = int((time.perf_counter() - started) * 1000)
 
     global _last_run_summary
@@ -340,14 +389,22 @@ async def run_france_travail_harvest_loop(db) -> None:
                     )
                 else:
                     ledger_run_id = claim.get("run_id")
-                    summary = await harvest_france_travail(db)
+                    summary = await await_with_ingestion_heartbeat(
+                        db, ledger_run_id, harvest_france_travail(db)
+                    )
+                    summary = accounting_summary(summary)
+                    await persist_terminal_partitions(db, ledger_run_id, summary.get("runs") or [])
                     complete = getattr(db, "complete_python_ingestion_run", None)
                     if ledger_run_id and callable(complete):
                         errors = summary.get("errors") or []
                         await complete(
                             run_id=ledger_run_id,
                             status="succeeded" if not errors else "partially_succeeded",
-                            completeness_state="complete_snapshot" if not errors else "partial",
+                            completeness_state=(
+                                "complete_snapshot"
+                                if not errors and summary.get("completeness") == "complete_snapshot"
+                                else "partial"
+                            ),
                             summary=summary,
                         )
         except Exception as exc:

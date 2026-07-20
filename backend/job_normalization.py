@@ -6,6 +6,7 @@ import hashlib
 import re
 import unicodedata
 from typing import Any, Dict, Optional
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 
 _TITLE_HTML_RE = re.compile(r"<[^>]+>")
@@ -213,6 +214,69 @@ def build_job_fingerprint(job_dict: Dict[str, Any]) -> Optional[str]:
     ]
     raw = "|".join(bits)
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()
+
+
+def canonicalize_apply_url(value: Any) -> Optional[str]:
+    """Remove transport-only URL variance without changing the destination."""
+    if value in (None, ""):
+        return None
+    try:
+        parsed = urlsplit(str(value).strip())
+    except ValueError:
+        return None
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
+        return None
+    tracking_keys = {
+        "fbclid", "gclid", "mc_cid", "mc_eid", "ref", "referrer",
+        "source", "tracking", "trk",
+    }
+    retained = [
+        (key, item)
+        for key, item in parse_qsl(parsed.query, keep_blank_values=True)
+        if not key.lower().startswith("utm_") and key.lower() not in tracking_keys
+    ]
+    path = re.sub(r"/+", "/", parsed.path or "/").rstrip("/") or "/"
+    port = f":{parsed.port}" if parsed.port else ""
+    return urlunsplit((
+        parsed.scheme.lower(),
+        f"{parsed.hostname.lower()}{port}",
+        path,
+        urlencode(sorted(retained)),
+        "",
+    ))
+
+
+def classify_dedup_pair(left: Dict[str, Any], right: Dict[str, Any]) -> Dict[str, Any]:
+    """Classify occurrences without destructively fuzzy-merging distinct jobs."""
+    left_occurrence = (
+        str(left.get("provider") or "").strip().lower(),
+        str(left.get("external_id") or "").strip(),
+    )
+    right_occurrence = (
+        str(right.get("provider") or "").strip().lower(),
+        str(right.get("external_id") or "").strip(),
+    )
+    if all(left_occurrence) and left_occurrence == right_occurrence:
+        return {"classification": "exact_occurrence", "auto_merge": True, "preserve_provenance": True}
+
+    left_url = canonicalize_apply_url(
+        left.get("selected_apply_url") or left.get("external_url") or left.get("job_apply_link")
+    )
+    right_url = canonicalize_apply_url(
+        right.get("selected_apply_url") or right.get("external_url") or right.get("job_apply_link")
+    )
+    left_ats = (str(left.get("ats_provider") or "").lower(), str(left.get("ats_job_id") or ""))
+    right_ats = (str(right.get("ats_provider") or "").lower(), str(right.get("ats_job_id") or ""))
+    if left_url and left_url == right_url:
+        return {"classification": "canonical_url_candidate", "auto_merge": False, "preserve_provenance": True}
+    if all(left_ats) and left_ats == right_ats:
+        return {"classification": "ats_id_candidate", "auto_merge": False, "preserve_provenance": True}
+
+    left_fingerprint = build_job_fingerprint(left)
+    right_fingerprint = build_job_fingerprint(right)
+    if left_fingerprint and left_fingerprint == right_fingerprint:
+        return {"classification": "fingerprint_candidate", "auto_merge": False, "preserve_provenance": True}
+    return {"classification": "distinct", "auto_merge": False, "preserve_provenance": True}
 
 
 def normalize_company_logo_url(value: Any) -> Optional[str]:

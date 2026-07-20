@@ -800,6 +800,7 @@ class AdminJobsExpireStaleRequest(BaseModel):
     country_code: Optional[str] = None
     limit: Optional[int] = None
     dry_run: bool = False
+    completeness_run_id: Optional[str] = None
 
 
 class AdminJobsPurgeInvalidRequest(BaseModel):
@@ -809,6 +810,7 @@ class AdminJobsPurgeInvalidRequest(BaseModel):
     expire_first: bool = True
     limit: Optional[int] = None
     dry_run: bool = False
+    completeness_run_id: Optional[str] = None
 
 
 class AdminJobsMaintenanceRequest(BaseModel):
@@ -10246,6 +10248,7 @@ async def admin_jobs_expire_stale(body: AdminJobsExpireStaleRequest, admin: User
         country_code=body.country_code,
         limit=body.limit,
         dry_run=body.dry_run,
+        completeness_run_id=body.completeness_run_id,
     )
 
 
@@ -10269,6 +10272,7 @@ async def admin_jobs_purge_invalid(body: AdminJobsPurgeInvalidRequest, admin: Us
         country_code=body.country_code,
         limit=body.limit,
         dry_run=body.dry_run,
+        completeness_run_id=body.completeness_run_id,
     )
 
 

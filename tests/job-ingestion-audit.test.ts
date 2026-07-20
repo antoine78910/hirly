@@ -17,8 +17,19 @@ describe("job ingestion run-ledger migration", () => {
     expect(migration).toContain("complete_snapshot");
     expect(migration).not.toContain("UPDATE public.provider_registry SET writer_runtime");
     expect(migration).toContain("public.python_ingestion_run_begin");
-    expect(migration).toContain("ON CONFLICT (kind, idempotency_key) DO NOTHING");
     expect(migration).toContain("public.python_ingestion_run_complete");
+    expect(migration).toContain("worker_runs_python_source_running_unique");
+    expect(migration).toContain("lease_token = p_lease_token");
+    expect(migration).toContain("lease_generation = p_lease_generation");
+    expect(migration).toContain("lease_expires_at > clock_timestamp()");
+    expect(migration).toContain("status = 'queued'");
+    expect(migration).toContain("error_code = 'lease_expired'");
+  });
+
+  test("keeps Python interval metadata out of the Bun cron scheduler", () => {
+    expect(migration).toContain("CREATE TABLE IF NOT EXISTS public.python_ingestion_schedules");
+    expect(migration).not.toContain("python-interval:");
+    expect(migration).not.toContain("INSERT INTO public.worker_schedules");
   });
 
   test("exposes alertable failed, stale, zero and incomplete states", () => {
@@ -34,6 +45,8 @@ describe("job ingestion run-ledger migration", () => {
   test("has a reversible rollback", () => {
     expect(rollback).toContain("DROP VIEW IF EXISTS public.worker_ingestion_alerts");
     expect(rollback).toContain("DROP TABLE IF EXISTS public.worker_run_partitions");
+    expect(rollback).toContain("DROP TABLE IF EXISTS public.python_ingestion_schedules");
+    expect(rollback).toContain("DROP INDEX IF EXISTS public.worker_runs_python_source_running_unique");
     expect(rollback).toContain("DROP COLUMN IF EXISTS completeness_state");
   });
 });

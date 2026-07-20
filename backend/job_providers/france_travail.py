@@ -333,6 +333,9 @@ class FranceTravailProvider:
         imported_at = datetime.now(timezone.utc).isoformat()
         jobs = [self.normalize_job(row, query, imported_at) for row in rows[:target_count]]
         jobs = [job for job in jobs if job is not None]
+        pagination_complete = bool(pagination_states) and all(
+            state.get("status") == "complete" for state in pagination_states
+        )
         return ProviderResult(
             raw_response={
                 "pages": payloads,
@@ -340,7 +343,13 @@ class FranceTravailProvider:
                 "params_variants": param_variants,
                 "variant_errors": variant_errors,
                 "pagination_states": pagination_states,
-                "completeness": "complete" if not variant_errors else "partial_variant_failure",
+                "completeness": (
+                    "complete"
+                    if pagination_complete and not variant_errors
+                    else "capped_needs_split"
+                    if any(state.get("status") == "capped_needs_split" for state in pagination_states)
+                    else "partial_variant_failure"
+                ),
             },
             jobs=jobs[:target_count],
         )
@@ -413,21 +422,21 @@ class FranceTravailProvider:
                     f"France Travail repeated an all-duplicate page at range {page_params['range']}"
                 )
             if len(rows) >= target_count:
-                exhausted = source_total is None or len(seen_ids) >= source_total
+                # A full page with no reliable source total is not proof of
+                # exhaustion. Preserve the rows, but require a narrower split.
+                exhausted = source_total is not None and len(seen_ids) >= source_total
                 break
             if not has_more:
                 exhausted = True
                 break
+        capped_reason: Optional[str] = None
         if source_total is not None and len(seen_ids) < source_total:
-            raise IncompletePaginationError(
-                f"France Travail source total {source_total} exceeds fetched unique IDs {len(seen_ids)}"
-            )
-        if not exhausted:
-            raise IncompletePaginationError(
-                f"France Travail local max_pages={max_pages} reached before exhaustion"
-            )
+            capped_reason = "source_total_not_reached"
+        elif not exhausted:
+            capped_reason = "local_max_pages_reached"
         return rows, payloads, {
-            "status": "complete",
+            "status": "capped_needs_split" if capped_reason else "complete",
+            "terminal_reason": capped_reason,
             "source_total": source_total,
             "unique_external_ids": len(rows),
             "pages_completed": len(payloads),

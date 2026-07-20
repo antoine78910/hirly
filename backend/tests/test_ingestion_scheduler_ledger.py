@@ -6,6 +6,7 @@ import pytest
 import france_travail_harvest
 import jsearch_harvest
 import db.supabase_adapter as supabase_adapter
+from ingestion_run_lease import await_with_ingestion_heartbeat
 
 
 class _LedgerDB:
@@ -107,10 +108,16 @@ def test_supabase_ledger_claim_uses_narrow_rpc(monkeypatch):
     class _Response:
         status_code = 200
         text = ""
-        content = b'{"acquired":true,"run_id":"run-1"}'
+        content = b'{"acquired":true,"run_id":"run-1","lease_token":"token-1","lease_generation":1,"lease_owner":"host:1"}'
 
         def json(self):
-            return {"acquired": True, "run_id": "run-1"}
+            return {
+                "acquired": True,
+                "run_id": "run-1",
+                "lease_token": "token-1",
+                "lease_generation": 1,
+                "lease_owner": "host:1",
+            }
 
     class _Client:
         def __init__(self):
@@ -136,4 +143,90 @@ def test_supabase_ledger_claim_uses_narrow_rpc(monkeypatch):
         "p_schedule_id": "python-jsearch-harvest",
         "p_source": "jsearch",
         "p_cadence_seconds": 900,
+        "p_lease_owner": db._python_ingestion_lease_owner,
+        "p_lease_seconds": 300,
     }
+
+
+def test_long_run_heartbeats_until_completion():
+    class _HeartbeatDB:
+        def __init__(self):
+            self.heartbeats = 0
+
+        async def heartbeat_python_ingestion_run(self, _run_id):
+            self.heartbeats += 1
+            return True
+
+    async def operation():
+        await asyncio.sleep(0.015)
+        return "done"
+
+    db = _HeartbeatDB()
+    result = asyncio.run(await_with_ingestion_heartbeat(
+        db, "run-1", operation(), interval_seconds=0.002
+    ))
+    assert result == "done"
+    assert db.heartbeats >= 2
+
+
+@pytest.mark.parametrize("failure_mode", ["stale_lock", "database_outage", "timeout", "rate_limit"])
+def test_heartbeat_failure_fences_and_cancels_long_run(failure_mode):
+    cancelled = False
+
+    class _HeartbeatDB:
+        async def heartbeat_python_ingestion_run(self, _run_id):
+            if failure_mode == "stale_lock":
+                return False
+            raise RuntimeError(failure_mode)
+
+    async def operation():
+        nonlocal cancelled
+        try:
+            await asyncio.sleep(10)
+        except asyncio.CancelledError:
+            cancelled = True
+            raise
+
+    with pytest.raises(RuntimeError):
+        asyncio.run(await_with_ingestion_heartbeat(
+            _HeartbeatDB(), "run-1", operation(), interval_seconds=0.001
+        ))
+    assert cancelled is True
+
+
+def test_fenced_completion_uses_claim_token_generation_and_owner(monkeypatch):
+    class _Response:
+        status_code = 200
+        text = ""
+        content = b"true"
+
+        def json(self):
+            return True
+
+    class _Client:
+        def __init__(self):
+            self.calls = []
+
+        async def post(self, url, *, json, headers):
+            self.calls.append((url, json, headers))
+            return _Response()
+
+    client = _Client()
+    monkeypatch.setattr(supabase_adapter, "_get_shared_http_client", lambda: client)
+    db = supabase_adapter.SupabaseDatabaseAdapter("https://example.supabase.co", "secret")
+    db._python_ingestion_leases["run-1"] = {
+        "lease_token": "token-1",
+        "lease_generation": 3,
+        "lease_owner": "host:1",
+    }
+
+    assert asyncio.run(db.complete_python_ingestion_run(
+        run_id="run-1",
+        status="failed",
+        completeness_state="failed",
+        summary={"terminal_error": "post-write crash"},
+    ))
+    payload = client.calls[0][1]
+    assert payload["p_lease_token"] == "token-1"
+    assert payload["p_lease_generation"] == 3
+    assert payload["p_lease_owner"] == "host:1"

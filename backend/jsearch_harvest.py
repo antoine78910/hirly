@@ -22,6 +22,11 @@ from typing import Any, Dict, List, Optional
 from job_providers import get_job_provider, is_job_provider_configured
 from job_providers.base import JobSearchQuery
 from job_providers.jsearch import JSearchProvider
+from ingestion_run_lease import (
+    accounting_summary,
+    await_with_ingestion_heartbeat,
+    persist_terminal_partitions,
+)
 from jobs_service import upsert_imported_jobs
 from jobs_service import _cooldown_until, _is_rate_limit_error, _set_rate_limit_cooldown
 from location_intelligence import country_to_jsearch_language
@@ -276,6 +281,7 @@ async def harvest_jsearch(
                 run["completeness"] = completeness or "unknown"
                 if completeness == "capped_unknown":
                     run["status"] = "capped"
+                    run["partition_status"] = "blocked"
                     summary["errors"].append({
                         "role": role,
                         "location": location_label,
@@ -286,6 +292,12 @@ async def harvest_jsearch(
                     stats = await upsert_imported_jobs(db, jobs)
                     run["upserted"] = stats.get("total_imported", 0)
                     summary["jobs_upserted"] += run["upserted"]
+                if "partition_status" not in run:
+                    run["partition_status"] = (
+                        "completed_with_results" if fetched else "completed_zero_results"
+                    )
+                run["pages_requested"] = 1
+                run["pages_completed"] = 1
                 consecutive_errors = 0
                 # Backoff state is indexed by position in the *default* combo
                 # list -- skip touching it when running against a custom
@@ -302,6 +314,7 @@ async def harvest_jsearch(
             except Exception as exc:
                 message = f"{exc.__class__.__name__}: {str(exc)[:200]}"
                 run["error"] = message
+                run["partition_status"] = "failed"
                 summary["errors"].append({"role": role, "location": location_label, "error": message})
                 logger.warning("jsearch_harvest_query_failed role=%s location=%s error=%s", role, location_label, message)
                 summary["runs"].append(run)
@@ -386,7 +399,11 @@ async def run_jsearch_harvest_loop(db) -> None:
                     )
                 else:
                     ledger_run_id = claim.get("run_id")
-                    summary = await harvest_jsearch(db)
+                    summary = await await_with_ingestion_heartbeat(
+                        db, ledger_run_id, harvest_jsearch(db)
+                    )
+                    summary = accounting_summary(summary)
+                    await persist_terminal_partitions(db, ledger_run_id, summary.get("runs") or [])
                     complete = getattr(db, "complete_python_ingestion_run", None)
                     if ledger_run_id and callable(complete):
                         errors = summary.get("errors") or []

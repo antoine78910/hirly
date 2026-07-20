@@ -1,9 +1,15 @@
--- TS_NEW: additive accounting for the existing durable worker ledger.
--- This does not transfer scheduler dispatch or canonical job-writer ownership.
+-- TS_NEW: additive accounting and fenced leases for current Python-owned ingestion loops.
+-- Python interval metadata is deliberately isolated from worker_schedules because the Bun
+-- scheduler accepts cron expressions only.
 BEGIN;
 
 ALTER TABLE public.worker_runs
   ADD COLUMN IF NOT EXISTS scheduled_start timestamptz,
+  ADD COLUMN IF NOT EXISTS source_id text,
+  ADD COLUMN IF NOT EXISTS lease_owner text,
+  ADD COLUMN IF NOT EXISTS lease_token uuid,
+  ADD COLUMN IF NOT EXISTS lease_generation bigint NOT NULL DEFAULT 0 CHECK (lease_generation >= 0),
+  ADD COLUMN IF NOT EXISTS lease_expires_at timestamptz,
   ADD COLUMN IF NOT EXISTS pages_requested integer NOT NULL DEFAULT 0 CHECK (pages_requested >= 0),
   ADD COLUMN IF NOT EXISTS pages_completed integer NOT NULL DEFAULT 0 CHECK (pages_completed >= 0),
   ADD COLUMN IF NOT EXISTS retries integer NOT NULL DEFAULT 0 CHECK (retries >= 0),
@@ -18,7 +24,24 @@ ALTER TABLE public.worker_runs
   ADD COLUMN IF NOT EXISTS jobs_reactivated integer NOT NULL DEFAULT 0 CHECK (jobs_reactivated >= 0),
   ADD COLUMN IF NOT EXISTS jobs_marked_inactive integer NOT NULL DEFAULT 0 CHECK (jobs_marked_inactive >= 0),
   ADD COLUMN IF NOT EXISTS completeness_state text NOT NULL DEFAULT 'unknown'
-    CHECK (completeness_state IN ('unknown', 'complete_snapshot', 'partial', 'capped', 'failed', 'blocked'));
+    CHECK (completeness_state IN ('unknown', 'complete_snapshot', 'partial', 'capped', 'failed', 'blocked')),
+  ADD CONSTRAINT worker_runs_page_accounting_guard CHECK (pages_completed <= pages_requested),
+  ADD CONSTRAINT worker_runs_normalization_guard CHECK (normalized_records <= raw_records);
+
+CREATE UNIQUE INDEX IF NOT EXISTS worker_runs_python_source_running_unique
+  ON public.worker_runs (source_id)
+  WHERE source_id IS NOT NULL AND status = 'running';
+
+CREATE TABLE IF NOT EXISTS public.python_ingestion_schedules (
+  id text PRIMARY KEY CHECK (length(btrim(id)) > 0),
+  source_id text NOT NULL CHECK (length(btrim(source_id)) > 0),
+  cadence_seconds integer NOT NULL CHECK (cadence_seconds BETWEEN 60 AND 86400),
+  enabled boolean NOT NULL DEFAULT true,
+  next_expected_at timestamptz NOT NULL,
+  last_claimed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
 
 CREATE TABLE IF NOT EXISTS public.worker_run_partitions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -40,6 +63,7 @@ CREATE TABLE IF NOT EXISTS public.worker_run_partitions (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT worker_run_partitions_unique UNIQUE (run_id, partition_id),
+  CONSTRAINT worker_run_partitions_page_guard CHECK (pages_completed <= pages_requested),
   CONSTRAINT worker_run_partitions_terminal_shape CHECK (
     (status IN ('completed_with_results', 'completed_zero_results', 'failed', 'blocked')) = (completed_at IS NOT NULL)
   )
@@ -51,7 +75,9 @@ CREATE INDEX IF NOT EXISTS worker_run_partitions_status_heartbeat_idx
 CREATE OR REPLACE FUNCTION public.python_ingestion_run_begin(
   p_schedule_id text,
   p_source text,
-  p_cadence_seconds integer
+  p_cadence_seconds integer,
+  p_lease_owner text,
+  p_lease_seconds integer
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -59,75 +85,213 @@ SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 DECLARE
+  v_now timestamptz := clock_timestamp();
   v_scheduled_for timestamptz;
-  v_run_id uuid;
+  v_run public.worker_runs%ROWTYPE;
+  v_token uuid := gen_random_uuid();
 BEGIN
   IF length(btrim(p_schedule_id)) = 0
     OR length(btrim(p_source)) = 0
+    OR length(btrim(p_lease_owner)) = 0
     OR p_cadence_seconds NOT BETWEEN 60 AND 86400
+    OR p_lease_seconds NOT BETWEEN 30 AND 3600
   THEN
     RAISE EXCEPTION 'invalid Python ingestion schedule claim' USING ERRCODE = '22023';
   END IF;
+
   v_scheduled_for := to_timestamp(
-    floor(extract(epoch FROM clock_timestamp()) / p_cadence_seconds) * p_cadence_seconds
+    floor(extract(epoch FROM v_now) / p_cadence_seconds) * p_cadence_seconds
   );
 
-  INSERT INTO public.worker_schedules (
-    id, task_type, provider, cron_expression, timezone, payload,
-    enabled, next_due_at, last_enqueued_at, max_catch_up
+  INSERT INTO public.python_ingestion_schedules (
+    id, source_id, cadence_seconds, enabled, next_expected_at, last_claimed_at
   )
   VALUES (
-    p_schedule_id, 'inventory.maintenance', NULL,
-    'python-interval:' || p_cadence_seconds::text, 'UTC',
-    jsonb_build_object('source', p_source), true,
-    v_scheduled_for + make_interval(secs => p_cadence_seconds),
-    v_scheduled_for, 0
+    p_schedule_id, p_source, p_cadence_seconds, true,
+    v_scheduled_for + make_interval(secs => p_cadence_seconds), v_now
   )
   ON CONFLICT (id) DO UPDATE SET
-    payload = EXCLUDED.payload,
+    source_id = EXCLUDED.source_id,
+    cadence_seconds = EXCLUDED.cadence_seconds,
     enabled = true,
-    next_due_at = greatest(public.worker_schedules.next_due_at, EXCLUDED.next_due_at),
-    last_enqueued_at = greatest(public.worker_schedules.last_enqueued_at, EXCLUDED.last_enqueued_at),
-    updated_at = clock_timestamp();
+    next_expected_at = EXCLUDED.next_expected_at,
+    last_claimed_at = EXCLUDED.last_claimed_at,
+    updated_at = v_now;
 
-  INSERT INTO public.worker_runs (
-    kind, provider, idempotency_key, trigger_source, status, schedule_id,
-    scheduled_for, scheduled_start, started_at, heartbeat_at, summary
-  )
-  VALUES (
-    'inventory_maintenance', NULL,
-    'python:' || p_schedule_id || ':' || to_char(v_scheduled_for AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
-    'schedule', 'running', p_schedule_id, v_scheduled_for, v_scheduled_for,
-    clock_timestamp(), clock_timestamp(), jsonb_build_object('source', p_source)
-  )
-  ON CONFLICT (kind, idempotency_key) DO NOTHING
-  RETURNING id INTO v_run_id;
+  -- Expired work becomes resumable. A prior owner can no longer heartbeat or complete
+  -- because every mutation below is fenced by token + generation + owner.
+  UPDATE public.worker_runs
+  SET status = 'queued',
+      error_code = 'lease_expired',
+      error_message = 'run lease expired before terminal completion',
+      lease_owner = NULL,
+      lease_token = NULL,
+      lease_expires_at = NULL,
+      updated_at = v_now
+  WHERE source_id = p_source
+    AND status = 'running'
+    AND lease_expires_at <= v_now;
 
-  IF v_run_id IS NULL THEN
-    SELECT id INTO v_run_id
-    FROM public.worker_runs
-    WHERE kind = 'inventory_maintenance'
-      AND idempotency_key = 'python:' || p_schedule_id || ':' || to_char(v_scheduled_for AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"');
-    RETURN jsonb_build_object('acquired', false, 'run_id', v_run_id, 'scheduled_for', v_scheduled_for);
+  SELECT * INTO v_run
+  FROM public.worker_runs
+  WHERE kind = 'inventory_maintenance'
+    AND idempotency_key = 'python:' || p_schedule_id || ':' ||
+      to_char(v_scheduled_for AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+  FOR UPDATE;
+
+  IF FOUND AND v_run.status NOT IN ('queued') THEN
+    RETURN jsonb_build_object(
+      'acquired', false, 'run_id', v_run.id, 'scheduled_for', v_scheduled_for,
+      'status', v_run.status
+    );
   END IF;
-  RETURN jsonb_build_object('acquired', true, 'run_id', v_run_id, 'scheduled_for', v_scheduled_for);
+
+  IF FOUND THEN
+    UPDATE public.worker_runs
+    SET status = 'running',
+        started_at = coalesce(started_at, v_now),
+        heartbeat_at = v_now,
+        lease_owner = p_lease_owner,
+        lease_token = v_token,
+        lease_generation = lease_generation + 1,
+        lease_expires_at = v_now + make_interval(secs => p_lease_seconds),
+        error_code = NULL,
+        error_message = NULL,
+        updated_at = v_now
+    WHERE id = v_run.id
+    RETURNING * INTO v_run;
+  ELSE
+    BEGIN
+      INSERT INTO public.worker_runs (
+        kind, provider, source_id, idempotency_key, trigger_source, status, schedule_id,
+        scheduled_for, scheduled_start, started_at, heartbeat_at,
+        lease_owner, lease_token, lease_generation, lease_expires_at, summary
+      )
+      VALUES (
+        'inventory_maintenance', NULL, p_source,
+        'python:' || p_schedule_id || ':' ||
+          to_char(v_scheduled_for AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+        'schedule', 'running', p_schedule_id, v_scheduled_for, v_scheduled_for,
+        v_now, v_now, p_lease_owner, v_token, 1,
+        v_now + make_interval(secs => p_lease_seconds), jsonb_build_object('source', p_source)
+      )
+      RETURNING * INTO v_run;
+    EXCEPTION WHEN unique_violation THEN
+      SELECT * INTO v_run
+      FROM public.worker_runs
+      WHERE source_id = p_source AND status = 'running'
+      ORDER BY started_at DESC
+      LIMIT 1;
+      RETURN jsonb_build_object(
+        'acquired', false, 'run_id', v_run.id, 'scheduled_for', v_run.scheduled_for,
+        'status', v_run.status
+      );
+    END;
+  END IF;
+
+  RETURN jsonb_build_object(
+    'acquired', true,
+    'run_id', v_run.id,
+    'scheduled_for', v_scheduled_for,
+    'lease_token', v_run.lease_token,
+    'lease_generation', v_run.lease_generation,
+    'lease_owner', v_run.lease_owner,
+    'lease_expires_at', v_run.lease_expires_at
+  );
 END
 $$;
 
-CREATE OR REPLACE FUNCTION public.python_ingestion_run_heartbeat(p_run_id uuid)
+CREATE OR REPLACE FUNCTION public.python_ingestion_run_heartbeat(
+  p_run_id uuid,
+  p_lease_token uuid,
+  p_lease_generation bigint,
+  p_lease_owner text,
+  p_lease_seconds integer
+)
 RETURNS boolean
 LANGUAGE sql
 SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
   UPDATE public.worker_runs
-  SET heartbeat_at = clock_timestamp(), updated_at = clock_timestamp()
-  WHERE id = p_run_id AND status = 'running'
+  SET heartbeat_at = clock_timestamp(),
+      lease_expires_at = clock_timestamp() + make_interval(secs => p_lease_seconds),
+      updated_at = clock_timestamp()
+  WHERE id = p_run_id
+    AND status = 'running'
+    AND lease_token = p_lease_token
+    AND lease_generation = p_lease_generation
+    AND lease_owner = p_lease_owner
+    AND lease_expires_at > clock_timestamp()
   RETURNING true
+$$;
+
+CREATE OR REPLACE FUNCTION public.python_ingestion_partition_record(
+  p_run_id uuid,
+  p_lease_token uuid,
+  p_lease_generation bigint,
+  p_lease_owner text,
+  p_partition_id text,
+  p_status text,
+  p_counters jsonb,
+  p_terminal_error text
+)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF p_status NOT IN ('completed_with_results', 'completed_zero_results', 'failed', 'blocked')
+    OR length(btrim(p_partition_id)) = 0
+    OR NOT EXISTS (
+      SELECT 1 FROM public.worker_runs
+      WHERE id = p_run_id
+        AND status = 'running'
+        AND lease_token = p_lease_token
+        AND lease_generation = p_lease_generation
+        AND lease_owner = p_lease_owner
+        AND lease_expires_at > clock_timestamp()
+    )
+  THEN
+    RETURN false;
+  END IF;
+  INSERT INTO public.worker_run_partitions (
+    run_id, partition_id, status, started_at, heartbeat_at, completed_at,
+    pages_requested, pages_completed, retries, source_reported_total,
+    counters, terminal_error_code, terminal_error_reason
+  )
+  VALUES (
+    p_run_id, p_partition_id, p_status, clock_timestamp(), clock_timestamp(), clock_timestamp(),
+    coalesce((p_counters->>'pages_requested')::integer, 0),
+    coalesce((p_counters->>'pages_completed')::integer, 0),
+    coalesce((p_counters->>'retries')::integer, 0),
+    nullif(p_counters->>'source_reported_total', '')::integer,
+    coalesce(p_counters, '{}'::jsonb),
+    CASE WHEN p_status IN ('failed', 'blocked') THEN coalesce(p_counters->>'error_code', p_status) END,
+    left(p_terminal_error, 1000)
+  )
+  ON CONFLICT (run_id, partition_id) DO UPDATE SET
+    status = EXCLUDED.status,
+    heartbeat_at = EXCLUDED.heartbeat_at,
+    completed_at = EXCLUDED.completed_at,
+    pages_requested = EXCLUDED.pages_requested,
+    pages_completed = EXCLUDED.pages_completed,
+    retries = EXCLUDED.retries,
+    source_reported_total = EXCLUDED.source_reported_total,
+    counters = EXCLUDED.counters,
+    terminal_error_code = EXCLUDED.terminal_error_code,
+    terminal_error_reason = EXCLUDED.terminal_error_reason,
+    updated_at = clock_timestamp();
+  RETURN true;
+END
 $$;
 
 CREATE OR REPLACE FUNCTION public.python_ingestion_run_complete(
   p_run_id uuid,
+  p_lease_token uuid,
+  p_lease_generation bigint,
+  p_lease_owner text,
   p_status text,
   p_completeness_state text,
   p_summary jsonb
@@ -137,39 +301,73 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
+DECLARE
+  v_rejected jsonb := coalesce(p_summary->'rejected_by_reason', '{}'::jsonb);
 BEGIN
   IF p_status NOT IN ('succeeded', 'partially_succeeded', 'failed')
     OR p_completeness_state NOT IN ('complete_snapshot', 'partial', 'capped', 'failed', 'blocked')
+    OR jsonb_typeof(v_rejected) <> 'object'
   THEN
     RAISE EXCEPTION 'invalid Python ingestion terminal state' USING ERRCODE = '22023';
   END IF;
+  IF p_completeness_state = 'complete_snapshot' AND (
+    NOT EXISTS (SELECT 1 FROM public.worker_run_partitions WHERE run_id = p_run_id)
+    OR EXISTS (
+      SELECT 1 FROM public.worker_run_partitions
+      WHERE run_id = p_run_id
+        AND status NOT IN ('completed_with_results', 'completed_zero_results')
+    )
+  ) THEN
+    RAISE EXCEPTION 'complete snapshot requires terminal complete partition proof'
+      USING ERRCODE = '22023';
+  END IF;
+
   UPDATE public.worker_runs
-  SET
-    status = p_status,
-    completeness_state = p_completeness_state,
-    finished_at = clock_timestamp(),
-    heartbeat_at = clock_timestamp(),
-    summary = coalesce(p_summary, '{}'::jsonb),
-    raw_records = CASE WHEN coalesce(p_summary->>'jobs_fetched', '') ~ '^[0-9]+$'
-      THEN (p_summary->>'jobs_fetched')::integer ELSE 0 END,
-    jobs_inserted = CASE WHEN coalesce(p_summary->>'jobs_upserted', '') ~ '^[0-9]+$'
-      THEN (p_summary->>'jobs_upserted')::integer ELSE 0 END,
-    error_code = CASE WHEN p_status = 'failed' THEN coalesce(p_summary->>'terminal_error', 'python_ingestion_failed') ELSE NULL END,
-    updated_at = clock_timestamp()
-  WHERE id = p_run_id AND status = 'running';
+  SET status = p_status,
+      completeness_state = p_completeness_state,
+      finished_at = clock_timestamp(),
+      heartbeat_at = clock_timestamp(),
+      lease_expires_at = NULL,
+      summary = coalesce(p_summary, '{}'::jsonb),
+      pages_requested = coalesce((p_summary->>'pages_requested')::integer, 0),
+      pages_completed = coalesce((p_summary->>'pages_completed')::integer, 0),
+      retries = coalesce((p_summary->>'retries')::integer, 0),
+      source_reported_total = nullif(p_summary->>'source_reported_total', '')::integer,
+      raw_records = coalesce((p_summary->>'raw_records')::integer, (p_summary->>'jobs_fetched')::integer, 0),
+      normalized_records = coalesce((p_summary->>'normalized_records')::integer, (p_summary->>'jobs_fetched')::integer, 0),
+      rejected_by_reason = v_rejected,
+      exact_duplicates = coalesce((p_summary->>'exact_duplicates')::integer, 0),
+      fuzzy_duplicate_candidates = coalesce((p_summary->>'fuzzy_duplicate_candidates')::integer, 0),
+      jobs_inserted = coalesce((p_summary->>'jobs_inserted')::integer, (p_summary->>'jobs_upserted')::integer, 0),
+      jobs_updated = coalesce((p_summary->>'jobs_updated')::integer, 0),
+      jobs_reactivated = coalesce((p_summary->>'jobs_reactivated')::integer, 0),
+      jobs_marked_inactive = coalesce((p_summary->>'jobs_marked_inactive')::integer, 0),
+      error_code = CASE WHEN p_status = 'failed'
+        THEN coalesce(p_summary->>'terminal_error_code', 'python_ingestion_failed') ELSE NULL END,
+      error_message = CASE WHEN p_status = 'failed'
+        THEN left(coalesce(p_summary->>'terminal_error', 'Python ingestion failed'), 1000) ELSE NULL END,
+      updated_at = clock_timestamp()
+  WHERE id = p_run_id
+    AND status = 'running'
+    AND lease_token = p_lease_token
+    AND lease_generation = p_lease_generation
+    AND lease_owner = p_lease_owner
+    AND lease_expires_at > clock_timestamp();
   RETURN FOUND;
 END
 $$;
 
-REVOKE ALL ON FUNCTION public.python_ingestion_run_begin(text, text, integer) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.python_ingestion_run_heartbeat(uuid) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.python_ingestion_run_complete(uuid, text, text, jsonb) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.python_ingestion_run_begin(text, text, integer, text, integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.python_ingestion_run_heartbeat(uuid, uuid, bigint, text, integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.python_ingestion_partition_record(uuid, uuid, bigint, text, text, text, jsonb, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.python_ingestion_run_complete(uuid, uuid, bigint, text, text, text, jsonb) FROM PUBLIC;
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
-    GRANT EXECUTE ON FUNCTION public.python_ingestion_run_begin(text, text, integer) TO service_role;
-    GRANT EXECUTE ON FUNCTION public.python_ingestion_run_heartbeat(uuid) TO service_role;
-    GRANT EXECUTE ON FUNCTION public.python_ingestion_run_complete(uuid, text, text, jsonb) TO service_role;
+    GRANT EXECUTE ON FUNCTION public.python_ingestion_run_begin(text, text, integer, text, integer) TO service_role;
+    GRANT EXECUTE ON FUNCTION public.python_ingestion_run_heartbeat(uuid, uuid, bigint, text, integer) TO service_role;
+    GRANT EXECUTE ON FUNCTION public.python_ingestion_partition_record(uuid, uuid, bigint, text, text, text, jsonb, text) TO service_role;
+    GRANT EXECUTE ON FUNCTION public.python_ingestion_run_complete(uuid, uuid, bigint, text, text, text, jsonb) TO service_role;
   END IF;
 END
 $$;
@@ -182,14 +380,14 @@ SELECT
   run.provider,
   CASE
     WHEN run.status = 'failed' THEN 'failed_run'
-    WHEN run.status = 'running' AND run.heartbeat_at < clock_timestamp() - interval '15 minutes' THEN 'stale_running'
-    WHEN run.status = 'succeeded' AND run.summary ? 'jobs_fetched' AND run.raw_records = 0 THEN 'unexpected_zero_records'
+    WHEN run.status = 'running' AND run.lease_expires_at <= clock_timestamp() THEN 'stale_running'
+    WHEN run.status = 'succeeded' AND run.summary ? 'raw_records' AND run.raw_records = 0 THEN 'unexpected_zero_records'
     WHEN run.status = 'succeeded' AND run.raw_records > 0 AND run.raw_records < (
       SELECT avg(previous.raw_records) * 0.5
       FROM (
         SELECT prior.raw_records
         FROM public.worker_runs AS prior
-        WHERE prior.schedule_id = run.schedule_id
+        WHERE prior.source_id = run.source_id
           AND prior.status = 'succeeded'
           AND prior.id <> run.id
           AND prior.raw_records > 0
@@ -206,50 +404,28 @@ SELECT
   run.finished_at
 FROM public.worker_runs AS run
 WHERE run.status = 'failed'
-   OR (run.status = 'running' AND run.heartbeat_at < clock_timestamp() - interval '15 minutes')
-   OR (run.status = 'succeeded' AND run.summary ? 'jobs_fetched' AND run.raw_records = 0)
-   OR (run.status = 'succeeded' AND run.raw_records > 0 AND run.raw_records < (
-     SELECT avg(previous.raw_records) * 0.5
-     FROM (
-       SELECT prior.raw_records
-       FROM public.worker_runs AS prior
-       WHERE prior.schedule_id = run.schedule_id
-         AND prior.status = 'succeeded'
-         AND prior.id <> run.id
-         AND prior.raw_records > 0
-       ORDER BY prior.finished_at DESC
-       LIMIT 5
-     ) AS previous
-   ))
+   OR (run.status = 'running' AND run.lease_expires_at <= clock_timestamp())
+   OR (run.status = 'succeeded' AND run.summary ? 'raw_records' AND run.raw_records = 0)
    OR (run.status IN ('succeeded', 'partially_succeeded') AND run.completeness_state <> 'complete_snapshot')
 UNION ALL
-SELECT
-  NULL::uuid AS run_id,
-  schedule.provider,
-  'missed_expected_run'::text AS alert_code,
-  schedule.next_due_at AS requested_at,
-  NULL::timestamptz AS heartbeat_at,
-  NULL::timestamptz AS finished_at
-FROM public.worker_schedules AS schedule
+SELECT NULL::uuid, NULL::text, 'missed_expected_run'::text,
+       schedule.next_expected_at, NULL::timestamptz, NULL::timestamptz
+FROM public.python_ingestion_schedules AS schedule
 WHERE schedule.enabled
-  AND schedule.next_due_at < clock_timestamp() - interval '15 minutes'
+  AND schedule.next_expected_at < clock_timestamp() - make_interval(secs => schedule.cadence_seconds)
 UNION ALL
-SELECT
-  NULL::uuid AS run_id,
-  run.provider,
-  'repeated_partition_failure'::text AS alert_code,
-  max(run.requested_at) AS requested_at,
-  max(partition.heartbeat_at) AS heartbeat_at,
-  max(partition.completed_at) AS finished_at
+SELECT NULL::uuid, run.provider, 'repeated_partition_failure'::text,
+       max(run.requested_at), max(partition.heartbeat_at), max(partition.completed_at)
 FROM public.worker_run_partitions AS partition
 JOIN public.worker_runs AS run ON run.id = partition.run_id
 WHERE partition.status = 'failed'
 GROUP BY run.provider, partition.partition_id
 HAVING count(*) >= 3;
 
+REVOKE ALL ON public.python_ingestion_schedules FROM PUBLIC;
 REVOKE ALL ON public.worker_run_partitions FROM PUBLIC;
 REVOKE ALL ON public.worker_ingestion_alerts FROM PUBLIC;
-GRANT SELECT ON public.worker_run_partitions, public.worker_ingestion_alerts
+GRANT SELECT ON public.python_ingestion_schedules, public.worker_run_partitions, public.worker_ingestion_alerts
   TO hirly_inventory_reader, hirly_inventory_operator;
 GRANT SELECT, INSERT, UPDATE ON public.worker_run_partitions TO hirly_inventory_worker;
 

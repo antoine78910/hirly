@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
+import socket
 from datetime import date, datetime, timezone
 from typing import Any, AsyncIterator, Dict, List, Optional
 
@@ -1228,10 +1230,14 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
         self.supabase_url = supabase_url
         self.secret_key = secret_key
         self.db_url = db_url
+        self._python_ingestion_lease_owner = f"{socket.gethostname()}:{os.getpid()}"
+        self._python_ingestion_leases: Dict[str, Dict[str, Any]] = {}
         self.users = SupabaseCollectionAdapter("users", supabase_url, secret_key)
         self.user_sessions = SupabaseCollectionAdapter("user_sessions", supabase_url, secret_key)
         self.profiles = SupabaseCollectionAdapter("profiles", supabase_url, secret_key)
         self.jobs = SupabaseCollectionAdapter("jobs", supabase_url, secret_key)
+        self.worker_runs = SupabaseCollectionAdapter("worker_runs", supabase_url, secret_key)
+        self.worker_run_partitions = SupabaseCollectionAdapter("worker_run_partitions", supabase_url, secret_key)
         self.ats_company_sources = SupabaseCollectionAdapter("ats_company_sources", supabase_url, secret_key)
         self.friendly_company_career_pages = SupabaseCollectionAdapter("friendly_company_career_pages", supabase_url, secret_key)
         self.auto_apply_attempts = SupabaseCollectionAdapter("auto_apply_attempts", supabase_url, secret_key)
@@ -1285,16 +1291,59 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
                 "p_schedule_id": schedule_id,
                 "p_source": source,
                 "p_cadence_seconds": cadence_seconds,
+                "p_lease_owner": self._python_ingestion_lease_owner,
+                "p_lease_seconds": 300,
             },
         )
         if not isinstance(result, dict) or "acquired" not in result:
             raise RuntimeError("python_ingestion_run_begin returned an invalid result")
+        if result.get("acquired") and result.get("run_id"):
+            required = ("lease_token", "lease_generation", "lease_owner")
+            if any(not result.get(field) for field in required):
+                raise RuntimeError("python_ingestion_run_begin returned an unfenced lease")
+            self._python_ingestion_leases[str(result["run_id"])] = result
         return result
 
     async def heartbeat_python_ingestion_run(self, run_id: str) -> bool:
+        lease = self._python_ingestion_leases.get(str(run_id))
+        if not lease:
+            return False
         result = await self._python_ingestion_rpc(
             "python_ingestion_run_heartbeat",
-            {"p_run_id": run_id},
+            {
+                "p_run_id": run_id,
+                "p_lease_token": lease["lease_token"],
+                "p_lease_generation": lease["lease_generation"],
+                "p_lease_owner": lease["lease_owner"],
+                "p_lease_seconds": 300,
+            },
+        )
+        return result is True
+
+    async def record_python_ingestion_partition(
+        self,
+        *,
+        run_id: str,
+        partition_id: str,
+        status: str,
+        counters: Dict[str, Any],
+        terminal_error: Optional[str] = None,
+    ) -> bool:
+        lease = self._python_ingestion_leases.get(str(run_id))
+        if not lease:
+            return False
+        result = await self._python_ingestion_rpc(
+            "python_ingestion_partition_record",
+            {
+                "p_run_id": run_id,
+                "p_lease_token": lease["lease_token"],
+                "p_lease_generation": lease["lease_generation"],
+                "p_lease_owner": lease["lease_owner"],
+                "p_partition_id": partition_id,
+                "p_status": status,
+                "p_counters": counters,
+                "p_terminal_error": terminal_error,
+            },
         )
         return result is True
 
@@ -1306,15 +1355,23 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
         completeness_state: str,
         summary: Dict[str, Any],
     ) -> bool:
+        lease = self._python_ingestion_leases.get(str(run_id))
+        if not lease:
+            return False
         result = await self._python_ingestion_rpc(
             "python_ingestion_run_complete",
             {
                 "p_run_id": run_id,
+                "p_lease_token": lease["lease_token"],
+                "p_lease_generation": lease["lease_generation"],
+                "p_lease_owner": lease["lease_owner"],
                 "p_status": status,
                 "p_completeness_state": completeness_state,
                 "p_summary": summary,
             },
         )
+        if result is True:
+            self._python_ingestion_leases.pop(str(run_id), None)
         return result is True
 
     async def close(self) -> None:

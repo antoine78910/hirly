@@ -79,8 +79,16 @@ class _Collection:
 
 
 class _FakeDB:
-    def __init__(self, jobs=None):
+    def __init__(self, jobs=None, *, completeness="missing"):
         self.jobs = _Collection(jobs or [])
+        self.worker_runs = _Collection(
+            [{"id": "run-complete", "status": "succeeded", "completeness_state": completeness}]
+            if completeness != "missing" else []
+        )
+        self.worker_run_partitions = _Collection(
+            [{"run_id": "run-complete", "partition_id": "p1", "status": "completed_with_results"}]
+            if completeness != "missing" else []
+        )
 
 
 def _matches(row, filter):
@@ -154,8 +162,10 @@ def test_revalidate_updates_unknown_jobs():
 
 def test_expire_stale_marks_invalid_without_deleting():
     stale = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
-    db = _FakeDB([_job(last_seen_at=stale, imported_at=stale)])
-    result = asyncio.run(maintenance.expire_stale_jobs(db, older_than_days=30, limit=10, complete_snapshot=True))
+    db = _FakeDB([_job(last_seen_at=stale, imported_at=stale)], completeness="complete_snapshot")
+    result = asyncio.run(maintenance.expire_stale_jobs(
+        db, older_than_days=30, limit=10, completeness_run_id="run-complete"
+    ))
     assert result["expired_count"] == 1
     assert len(db.jobs.rows) == 1
     assert db.jobs.rows[0]["validation_status"] == "invalid"
@@ -168,8 +178,10 @@ def test_expire_stale_targets_oldest_not_newest():
     db = _FakeDB([
         _job(1, last_seen_at=recent, imported_at=recent, validation_status="valid", applyability_tier="A"),
         _job(2, last_seen_at=stale, imported_at=stale, validation_status="valid", applyability_tier="A"),
-    ])
-    result = asyncio.run(maintenance.expire_stale_jobs(db, older_than_days=30, limit=1, complete_snapshot=True))
+    ], completeness="complete_snapshot")
+    result = asyncio.run(maintenance.expire_stale_jobs(
+        db, older_than_days=30, limit=1, completeness_run_id="run-complete"
+    ))
     assert result["expired_count"] == 1
     by_id = {row["job_id"]: row for row in db.jobs.rows}
     assert by_id["job_2"]["applyability_tier"] == "E"
@@ -183,20 +195,36 @@ def test_partial_run_cannot_expire_or_purge_jobs():
     expire = asyncio.run(maintenance.expire_stale_jobs(db, older_than_days=30))
     purge = asyncio.run(maintenance.purge_invalid_jobs(db, older_than_days=30, expire_first=False))
 
-    assert expire["reason"] == "complete_snapshot_required"
-    assert purge["reason"] == "complete_snapshot_required"
+    assert expire["reason"] == "completed_run_partition_proof_required"
+    assert purge["reason"] == "completed_run_partition_proof_required"
     assert len(db.jobs.rows) == 1
+
+
+def test_failed_partition_blocks_expiry_even_when_run_claims_complete():
+    stale = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
+    db = _FakeDB([_job(last_seen_at=stale, imported_at=stale)], completeness="complete_snapshot")
+    db.worker_run_partitions.rows[0]["status"] = "failed"
+
+    result = asyncio.run(maintenance.expire_stale_jobs(
+        db, older_than_days=30, completeness_run_id="run-complete"
+    ))
+
+    assert result["reason"] == "completed_run_partition_proof_required"
+    assert db.jobs.rows[0]["validation_status"] == "unknown"
 
 
 def test_complete_snapshot_purge_has_no_cutoff_free_fallback():
     recent = datetime.now(timezone.utc).isoformat()
-    db = _FakeDB([_job(1, applyability_tier="E", last_seen_at=recent, imported_at=recent)])
+    db = _FakeDB(
+        [_job(1, applyability_tier="E", last_seen_at=recent, imported_at=recent)],
+        completeness="complete_snapshot",
+    )
 
     result = asyncio.run(maintenance.purge_invalid_jobs(
         db,
         older_than_days=30,
         expire_first=False,
-        complete_snapshot=True,
+        completeness_run_id="run-complete",
     ))
 
     assert result["matched_count"] == 0
@@ -210,9 +238,12 @@ def test_purge_invalid_deletes_tier_e_jobs():
         _job(1, applyability_tier="E", last_seen_at=stale, imported_at=stale),
         _job(2, applyability_tier="A", last_seen_at=recent, imported_at=recent),
         _job(3, applyability_tier="D", last_seen_at=stale, imported_at=stale),
-    ])
+    ], completeness="complete_snapshot")
     result = asyncio.run(
-        maintenance.purge_invalid_jobs(db, older_than_days=30, expire_first=False, limit=10, complete_snapshot=True)
+        maintenance.purge_invalid_jobs(
+            db, older_than_days=30, expire_first=False, limit=10,
+            completeness_run_id="run-complete",
+        )
     )
     assert result["matched_count"] == 2
     assert result["deleted_count"] == 2
@@ -221,9 +252,15 @@ def test_purge_invalid_deletes_tier_e_jobs():
 
 def test_purge_invalid_dry_run_does_not_delete():
     stale = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
-    db = _FakeDB([_job(1, applyability_tier="E", last_seen_at=stale, imported_at=stale)])
+    db = _FakeDB(
+        [_job(1, applyability_tier="E", last_seen_at=stale, imported_at=stale)],
+        completeness="complete_snapshot",
+    )
     result = asyncio.run(
-        maintenance.purge_invalid_jobs(db, older_than_days=30, expire_first=False, dry_run=True, complete_snapshot=True)
+        maintenance.purge_invalid_jobs(
+            db, older_than_days=30, expire_first=False, dry_run=True,
+            completeness_run_id="run-complete",
+        )
     )
     assert result["matched_count"] == 1
     assert result["deleted_count"] == 0

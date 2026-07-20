@@ -1,6 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { evaluatePartition, reconcileFunnel, validateRows } from "../src/audit";
+import {
+  evaluatePartition,
+  reconcileFunnel,
+  validatePaginationFixtures,
+  validateRows,
+  type PartitionFact,
+} from "../src/audit";
 import { readFileSync } from "node:fs";
+
+const partitions = JSON.parse(readFileSync(
+  new URL("../fixtures/pagination-golden.json", import.meta.url),
+  "utf8",
+)) as PartitionFact[];
 
 describe("job-ingestion audit invariants", () => {
   test("requires exact external-ID set equality", () => {
@@ -24,7 +35,15 @@ describe("job-ingestion audit invariants", () => {
       sourceTotal: 2,
       cap: 2,
       cursorHistory: ["cursor-a", "cursor-a"],
-    })).toEqual(["repeated_cursor", "cap_hit_marked_complete"]);
+    })).toEqual(["cap_hit_marked_complete", "repeated_cursor"]);
+  });
+
+  test("covers every mandated pagination scenario and validates negative cases", () => {
+    expect(partitions).toHaveLength(25);
+    expect(validatePaginationFixtures(partitions)).toEqual([]);
+    const permanentFailure = partitions.find((partition) => partition.id.endsWith("permanent-page-failure"));
+    expect(permanentFailure).toBeDefined();
+    expect(evaluatePartition(permanentFailure!)).toContain("permanent_page_failure");
   });
 
   test("reconciles stage accounting", () => {
