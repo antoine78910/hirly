@@ -61,6 +61,42 @@ CREATE TABLE IF NOT EXISTS public.source_trial_policies (
   )
 );
 
+CREATE OR REPLACE FUNCTION worker_private.source_policy_evidence_allows_trial(
+  p_evidence_id uuid,
+  p_source_key text,
+  p_provider text,
+  p_tenant_key text,
+  p_access_method text,
+  p_environment text
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SET search_path = pg_catalog, public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.source_policy_evidence AS evidence
+    WHERE evidence.id = p_evidence_id
+      AND evidence.source_key = p_source_key
+      AND evidence.evidence_type IN ('licence_text', 'written_permission')
+      AND evidence.claim_scope @> jsonb_build_object(
+        'trialEligible', true,
+        'provider', p_provider,
+        'sourceKey', p_source_key,
+        'tenantKey', p_tenant_key,
+        'permittedAccessMethod', p_access_method,
+        'rights', jsonb_build_array(
+          'commercial_use',
+          'redisplay',
+          'retention',
+          'access_method'
+        )
+      )
+      AND evidence.claim_scope->'environments' ? p_environment
+  )
+$$;
+
 CREATE OR REPLACE FUNCTION worker_private.enforce_source_trial_policy()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -81,8 +117,14 @@ BEGIN
       AND NOT source.transport_enabled
       AND NOT source.incremental_enabled
       AND NOT source.backfill_enabled
-      AND evidence.source_key = source.source_key
-      AND evidence.qualification_status <> 'blocked'
+      AND worker_private.source_policy_evidence_allows_trial(
+        evidence.id,
+        source.source_key,
+        NEW.provider,
+        NEW.tenant_key,
+        NEW.permitted_access_method,
+        NEW.environment
+      )
       AND NEW.starts_at <= clock_timestamp()
       AND NEW.expires_at > clock_timestamp()
   ) THEN
@@ -254,8 +296,14 @@ AS $$
       AND NOT source.transport_enabled
       AND NOT source.incremental_enabled
       AND NOT source.backfill_enabled
-      AND evidence.source_key = source.source_key
-      AND evidence.qualification_status <> 'blocked'
+      AND worker_private.source_policy_evidence_allows_trial(
+        evidence.id,
+        source.source_key,
+        run.provider,
+        run.tenant_key,
+        policy.permitted_access_method,
+        run.environment
+      )
       AND NOT EXISTS (
         SELECT 1
         FROM public.source_trial_scorecards AS terminal
@@ -357,8 +405,14 @@ BEGIN
       SELECT 1
       FROM public.source_policy_evidence AS evidence
       WHERE evidence.id = v_evidence_id
-        AND evidence.source_key = v_source.source_key
-        AND evidence.qualification_status <> 'blocked'
+        AND worker_private.source_policy_evidence_allows_trial(
+          evidence.id,
+          v_source.source_key,
+          v_policy.provider,
+          v_policy.tenant_key,
+          v_policy.permitted_access_method,
+          v_policy.environment
+        )
     )
     OR (
       SELECT count(*)
