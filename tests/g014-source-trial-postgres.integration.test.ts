@@ -102,7 +102,7 @@ describe("G014 real-Postgres source trial isolation", () => {
             "sourceKey": "greenhouse:g014-foundation",
             "tenantKey": "g014-foundation",
             "permittedAccessMethod": "tenant_feed",
-            "environments": ["development", "test"],
+            "environments": ["test"],
             "rights": [
               "commercial_use", "redisplay", "retention", "access_method"
             ]
@@ -133,7 +133,7 @@ describe("G014 real-Postgres source trial isolation", () => {
             "sourceKey": "greenhouse:g014-foundation",
             "tenantKey": "g014-foundation",
             "permittedAccessMethod": "tenant_feed",
-            "environments": ["development", "test"],
+            "environments": ["test"],
             "rights": [
               "commercial_use", "redisplay", "retention", "access_method"
             ]
