@@ -73,6 +73,8 @@ const fail = (message: string): never => {
 const round = (value: number): number => Number(value.toFixed(8));
 const rate = (numerator: number, denominator: number): number =>
   denominator === 0 ? 0 : round(numerator / denominator);
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function requireCount(value: number, path: string): number {
   if (!Number.isSafeInteger(value) || value < 0) {
@@ -86,6 +88,12 @@ function requireText(value: string, path: string): string {
     fail(`${path} must be a non-empty string`);
   }
   return value.trim();
+}
+
+function requireUuid(value: string, path: string): string {
+  const normalized = requireText(value, path);
+  if (!uuidPattern.test(normalized)) fail(`${path} must be a UUID`);
+  return normalized.toLowerCase();
 }
 
 function canonicalize(value: unknown): unknown {
@@ -200,12 +208,15 @@ export function buildNetNewMeasurement(
   if (!Number.isFinite(Date.parse(input.freshnessCutoff))) {
     fail("freshnessCutoff must be an ISO timestamp");
   }
-  const coverageRunId = requireText(input.coverageRunId, "coverageRunId");
+  if (Date.parse(input.generatedAt) < Date.parse(input.freshnessCutoff)) {
+    fail("generatedAt must not precede freshnessCutoff");
+  }
+  const coverageRunId = requireUuid(input.coverageRunId, "coverageRunId");
   if (!Array.isArray(input.trialRunIds) || input.trialRunIds.length === 0) {
     fail("trialRunIds must contain at least one run");
   }
   const trialRunIds = input.trialRunIds.map((runId, index) =>
-    requireText(runId, `trialRunIds[${index}]`));
+    requireUuid(runId, `trialRunIds[${index}]`));
   if (new Set(trialRunIds).size !== trialRunIds.length) {
     fail("trialRunIds contains duplicates");
   }
@@ -216,6 +227,10 @@ export function buildNetNewMeasurement(
     .sort((left, right) =>
       left.provider.localeCompare(right.provider) || left.tenant.localeCompare(right.tenant));
   if (sources.length === 0) fail("sources must contain at least one aggregate row");
+  const sourceKeys = sources.map((source) => `${source.provider}\u0000${source.tenant}`);
+  if (new Set(sourceKeys).size !== sourceKeys.length) {
+    fail("sources contains duplicate provider/tenant aggregates");
+  }
 
   const incrementalNetNew = sources.reduce((sum, source) => sum + source.incrementalNetNew, 0);
   const incrementalFreshRelevantActionable = sources.reduce(

@@ -3,6 +3,7 @@
 -- G016 read-only aggregate measurement input.
 --
 -- Required psql variables:
+--   generated_at      Fixed ISO timestamptz for reproducible evidence
 --   freshness_cutoff  ISO timestamptz, normally now() - 30 days
 --   coverage_run_id   paid-cohort coverage worker run UUID
 --   trial_run_ids     comma-separated source trial run UUIDs
@@ -13,9 +14,65 @@
 WITH
 parameters AS (
   SELECT
+    :'generated_at'::timestamptz AS generated_at,
     :'freshness_cutoff'::timestamptz AS freshness_cutoff,
     :'coverage_run_id'::uuid AS coverage_run_id,
-    string_to_array(:'trial_run_ids', ',')::uuid[] AS trial_run_ids
+    regexp_split_to_array(:'trial_run_ids', '\s*,\s*')::uuid[] AS trial_run_ids
+),
+trial_run_evidence AS (
+  SELECT
+    cardinality(parameters.trial_run_ids) AS requested_run_count,
+    count(DISTINCT requested.run_id)::integer AS distinct_requested_run_count,
+    count(DISTINCT run.id)::integer AS persisted_run_count,
+    count(DISTINCT terminal.run_id)::integer AS terminal_run_count,
+    coalesce(bool_and(terminal.result->>'status' = 'completed'), false)
+      AS all_terminal_completed,
+    coalesce(bool_and(
+      (terminal.result->>'finishedAt')::timestamptz
+        <= parameters.generated_at
+    ), false) AS all_terminal_finished_by_generation
+  FROM parameters
+  LEFT JOIN LATERAL unnest(parameters.trial_run_ids) AS requested(run_id)
+    ON true
+  LEFT JOIN public.source_trial_runs AS run
+    ON run.id = requested.run_id
+  LEFT JOIN public.source_trial_scorecards AS terminal
+    ON terminal.run_id = run.id
+    AND terminal.scorecard_key = 'trial-result'
+  GROUP BY parameters.trial_run_ids, parameters.generated_at
+),
+measurement_gate AS (
+  SELECT
+    (
+      evidence.requested_run_count > 0
+      AND evidence.distinct_requested_run_count = evidence.requested_run_count
+      AND evidence.persisted_run_count = evidence.requested_run_count
+      AND evidence.terminal_run_count = evidence.requested_run_count
+      AND evidence.all_terminal_completed
+      AND evidence.all_terminal_finished_by_generation
+      AND parameters.generated_at >= parameters.freshness_cutoff
+      AND EXISTS (
+        SELECT 1
+        FROM public.worker_runs AS coverage
+        WHERE coverage.id = parameters.coverage_run_id
+          AND coverage.status = 'succeeded'
+          AND coverage.finished_at IS NOT NULL
+          AND coverage.finished_at <= parameters.generated_at
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.source_trial_runs AS requested_run
+        WHERE requested_run.id = ANY(parameters.trial_run_ids)
+          AND NOT EXISTS (
+            SELECT 1
+            FROM public.paid_user_source_contributions AS contribution
+            WHERE contribution.coverage_run_id = parameters.coverage_run_id
+              AND contribution.source_id = requested_run.source_id
+          )
+      )
+    ) AS trial_runs_complete
+  FROM parameters
+  CROSS JOIN trial_run_evidence AS evidence
 ),
 inventory_rows AS (
   SELECT
@@ -51,6 +108,8 @@ inventory_rows AS (
       )
     ) AS auto_applicable,
     coalesce(
+      'group:' || jobs.canonical_group_id::text,
+      'fingerprint:' || nullif(btrim(jobs.fingerprint), ''),
       'url:' || nullif(lower(btrim(coalesce(jobs.canonical_apply_url, jobs.selected_apply_url))), ''),
       'ats:' || CASE
         WHEN nullif(lower(btrim(jobs.ats_provider)), '') IS NOT NULL
@@ -58,7 +117,8 @@ inventory_rows AS (
         THEN lower(btrim(jobs.ats_provider)) || ':' || btrim(jobs.ats_job_id)
         ELSE NULL
       END,
-      'fingerprint:' || nullif(btrim(jobs.fingerprint), ''),
+      'occurrence:' || lower(coalesce(jobs.provider, 'unknown'))
+        || ':' || nullif(btrim(jobs.external_id), ''),
       'job:' || jobs.job_id
     ) AS layered_key
   FROM public.jobs AS jobs
@@ -152,6 +212,10 @@ trial_candidates AS (
     ) AS fingerprint_rank
   FROM public.source_trial_candidates AS candidate
   JOIN public.source_trial_runs AS run ON run.id = candidate.run_id
+  JOIN public.source_trial_scorecards AS terminal
+    ON terminal.run_id = run.id
+    AND terminal.scorecard_key = 'trial-result'
+    AND terminal.result->>'status' = 'completed'
   CROSS JOIN parameters
   WHERE candidate.run_id = ANY(parameters.trial_run_ids)
 ),
@@ -269,11 +333,39 @@ source_aggregates AS (
   FROM candidate_aggregates AS candidate
   LEFT JOIN paid_cohort_aggregates AS cohort
     ON cohort.source_id = candidate.source_id
+),
+source_rollup AS (
+  SELECT
+    source.provider,
+    source.tenant,
+    sum(source.observed_candidates)::bigint AS observed_candidates,
+    sum(source.exact_occurrence_duplicates)::bigint
+      AS exact_occurrence_duplicates,
+    sum(source.canonical_url_duplicates)::bigint AS canonical_url_duplicates,
+    sum(source.ats_identity_duplicates)::bigint AS ats_identity_duplicates,
+    sum(source.fingerprint_duplicates)::bigint AS fingerprint_duplicates,
+    sum(source.incremental_net_new)::bigint AS incremental_net_new,
+    sum(source.incremental_fresh_relevant_actionable)::bigint
+      AS incremental_fresh_relevant_actionable,
+    sum(source.incremental_auto_applicable)::bigint
+      AS incremental_auto_applicable,
+    sum(source.paid_user_job_matches)::bigint AS paid_user_job_matches
+  FROM source_aggregates AS source
+  GROUP BY source.provider, source.tenant
 )
 SELECT jsonb_build_object(
-  'status', 'COMPLETE',
+  'status', CASE
+    WHEN measurement_gate.trial_runs_complete
+    THEN 'COMPLETE'
+    ELSE 'BLOCKED_EXTERNAL'
+  END,
+  'blockerReason', CASE
+    WHEN measurement_gate.trial_runs_complete
+    THEN NULL
+    ELSE 'trial or paid-cohort evidence is missing, duplicate, nonterminal, or incomplete'
+  END,
   'sample', false,
-  'generatedAt', clock_timestamp(),
+  'generatedAt', parameters.generated_at,
   'freshnessCutoff', parameters.freshness_cutoff,
   'coverageRunId', parameters.coverage_run_id,
   'trialRunIds', to_jsonb(parameters.trial_run_ids),
@@ -300,8 +392,9 @@ SELECT jsonb_build_object(
       'incrementalAutoApplicable', source.incremental_auto_applicable,
       'paidUserJobMatches', source.paid_user_job_matches
     ) ORDER BY source.provider, source.tenant)
-    FROM source_aggregates AS source
+    FROM source_rollup AS source
   ), '[]'::jsonb)
 ) AS measurement_input
 FROM baseline
-CROSS JOIN parameters;
+CROSS JOIN parameters
+CROSS JOIN measurement_gate;

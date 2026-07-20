@@ -128,11 +128,16 @@ incomplete snapshots, zero-volume collapse and users outside the frozen cohort.
 
 For G016-style multi-source comparisons, run
 `docs/operations/sql/multi-source-net-new-measurement.sql` with a fixed
-freshness cutoff, paid-cohort coverage run and exact trial run IDs. The query
-returns one aggregate JSON value only. It applies duplicate precedence in this
-order: provider occurrence, canonical apply URL, ATS posting identity, then
-fingerprint. It does not emit job IDs, external IDs, candidate/source payloads
-or hashed user IDs.
+evidence-generation timestamp, freshness cutoff, succeeded paid-cohort coverage
+run and exact trial run IDs. The query returns one aggregate JSON value only.
+It refuses to report `COMPLETE` unless every distinct requested trial has its
+singular reconciled `completed` terminal result and every requested source has
+paid-cohort contribution evidence from the succeeded coverage run. Current
+inventory uses the authoritative canonical group where present and a conservative
+fingerprint/URL/ATS/occurrence fallback; trial candidates apply duplicate
+precedence in this order: provider occurrence, canonical apply URL, ATS posting
+identity, then fingerprint. It does not emit job IDs, external IDs,
+candidate/source payloads or hashed user IDs.
 
 Save the returned JSON object and build the immutable decision artifact:
 
