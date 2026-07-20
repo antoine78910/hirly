@@ -125,6 +125,70 @@ export const sourceRegistryEntrySchema = z
   })
   .strict();
 
+export const registryProviderSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(64)
+  .regex(/^[a-z0-9]+(?:_[a-z0-9]+)*$/);
+
+const httpsBaseUrlSchema = z.url().superRefine((value, context) => {
+  const url = new URL(value);
+  if (
+    url.protocol !== "https:" ||
+    url.username.length > 0 ||
+    url.password.length > 0 ||
+    url.search.length > 0 ||
+    url.hash.length > 0
+  ) {
+    context.addIssue({
+      code: "custom",
+      message:
+        "base URL must use HTTPS without credentials, query parameters, or fragments",
+    });
+  }
+});
+
+export const careerSourceCandidateRegistrationSchema = z
+  .object({
+    provider: registryProviderSchema,
+    sourceKey: z.string().trim().min(1).max(512),
+    tenantKey: z.string().trim().min(1).max(512),
+    companyId: z.string().trim().min(1).max(512).nullable(),
+    companyName: z.string().trim().min(1).max(512).nullable(),
+    countryCodes: z
+      .array(z.string().regex(/^[A-Z]{2}$/))
+      .min(1)
+      .max(250),
+    baseUrl: httpsBaseUrlSchema,
+    accessType: sourceAccessTypeSchema,
+    policyId: z.uuid().nullable(),
+    syncFrequencySeconds: z.number().int().positive().nullable(),
+    checkpoint: sourceCheckpointSchema,
+  })
+  .strict();
+
+export const careerSourceCandidateSchema = careerSourceCandidateRegistrationSchema
+  .extend({
+    id: z.uuid(),
+    lastAttemptAt: z.iso.datetime({ offset: true }).nullable(),
+    lastSuccessAt: z.iso.datetime({ offset: true }).nullable(),
+    lastCompleteRunId: z.uuid().nullable(),
+    consecutiveFailures: z.number().int().nonnegative(),
+    enabled: z.boolean(),
+    transportEnabled: z.boolean(),
+    incrementalEnabled: z.boolean(),
+    backfillEnabled: z.boolean(),
+    discoveryState: z.enum([
+      "candidate",
+      "detected",
+      "validated",
+      "rejected",
+      "approved",
+    ]),
+  })
+  .strict();
+
 export const sourcePolicyStateSchema = z
   .object({
     approvalStatus: z.enum(["unverified", "approved", "blocked", "expired"]),
@@ -348,6 +412,12 @@ export type SourceLifecycleState = z.infer<typeof sourceLifecycleStateSchema>;
 export type SourceCheckpoint = z.infer<typeof sourceCheckpointSchema>;
 export type SourceFetchRequest = z.infer<typeof sourceFetchRequestSchema>;
 export type SourceRegistryEntry = z.infer<typeof sourceRegistryEntrySchema>;
+export type CareerSourceCandidateRegistration = z.infer<
+  typeof careerSourceCandidateRegistrationSchema
+>;
+export type CareerSourceCandidate = z.infer<
+  typeof careerSourceCandidateSchema
+>;
 export type SourcePolicyState = z.infer<typeof sourcePolicyStateSchema>;
 export type SourceRuntimePolicy = z.infer<typeof sourceRuntimePolicySchema>;
 export type RateLimitConfig = z.infer<typeof rateLimitConfigSchema>;

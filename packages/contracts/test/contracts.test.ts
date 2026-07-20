@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  careerSourceCandidateRegistrationSchema,
   CONTRACT_VERSION,
   enqueueRunSchema,
   healthSchema,

@@ -13,7 +13,7 @@ CREATE OR REPLACE FUNCTION worker_private.register_career_source_candidate(
   p_base_url text,
   p_access_type text,
   p_policy_id uuid,
-  p_sync_frequency interval,
+  p_sync_frequency_seconds integer,
   p_checkpoint jsonb
 )
 RETURNS public.career_sources
@@ -36,7 +36,10 @@ BEGIN
     OR p_access_type NOT IN ('public_api', 'open_data', 'tenant_feed', 'partner_feed')
     OR p_checkpoint IS NULL
     OR jsonb_typeof(p_checkpoint) <> 'object'
-    OR (p_sync_frequency IS NOT NULL AND p_sync_frequency <= interval '0 seconds')
+    OR (
+      p_sync_frequency_seconds IS NOT NULL
+      AND p_sync_frequency_seconds <= 0
+    )
   THEN
     RAISE EXCEPTION 'invalid career source candidate'
       USING ERRCODE = '22023';
@@ -100,7 +103,7 @@ BEGIN
       p_base_url,
       p_access_type,
       p_policy_id,
-      p_sync_frequency,
+      make_interval(secs => p_sync_frequency_seconds),
       p_checkpoint,
       false,
       'candidate',
@@ -137,7 +140,10 @@ BEGIN
     base_url = p_base_url,
     access_type = p_access_type,
     policy_id = coalesce(policy_id, p_policy_id),
-    sync_frequency = coalesce(p_sync_frequency, sync_frequency),
+    sync_frequency = coalesce(
+      make_interval(secs => p_sync_frequency_seconds),
+      sync_frequency
+    ),
     updated_at = clock_timestamp()
   WHERE id = v_source.id
   RETURNING * INTO v_source;
@@ -147,10 +153,10 @@ END
 $$;
 
 REVOKE ALL ON FUNCTION worker_private.register_career_source_candidate(
-  text, text, text, text, text, text[], text, text, uuid, interval, jsonb
+  text, text, text, text, text, text[], text, text, uuid, integer, jsonb
 ) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION worker_private.register_career_source_candidate(
-  text, text, text, text, text, text[], text, text, uuid, interval, jsonb
+  text, text, text, text, text, text[], text, text, uuid, integer, jsonb
 ) TO hirly_inventory_worker, hirly_inventory_operator;
 
 COMMIT;

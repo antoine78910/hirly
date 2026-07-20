@@ -1,6 +1,10 @@
 import {
+  careerSourceCandidateRegistrationSchema,
+  careerSourceCandidateSchema,
   runViewSchema,
   type CanonicalJob,
+  type CareerSourceCandidate,
+  type CareerSourceCandidateRegistration,
   type EnqueueRun,
   type Provider,
   type RunView,
@@ -360,6 +364,98 @@ export class WorkerRepository {
     await this.sql`
       SELECT worker_private.set_provider_enabled(${provider}, ${enabled})
     `;
+  }
+
+  async registerCareerSourceCandidate(
+    candidate: CareerSourceCandidateRegistration,
+  ): Promise<CareerSourceCandidate> {
+    const input = careerSourceCandidateRegistrationSchema.parse(candidate);
+    const [row] = await this.sql<
+      {
+        id: string;
+        provider: string;
+        source_key: string;
+        tenant_key: string;
+        company_id: string | null;
+        company_name: string | null;
+        country_codes: string[];
+        base_url: string;
+        access_type: CareerSourceCandidate["accessType"];
+        policy_id: string | null;
+        sync_frequency_seconds: number | null;
+        checkpoint: Record<string, unknown>;
+        last_attempt_at: Date | null;
+        last_success_at: Date | null;
+        last_complete_run_id: string | null;
+        consecutive_failures: number;
+        enabled: boolean;
+        transport_enabled: boolean;
+        incremental_enabled: boolean;
+        backfill_enabled: boolean;
+        discovery_state: CareerSourceCandidate["discoveryState"];
+      }[]
+    >`
+      SELECT
+        source.id,
+        source.provider,
+        source.source_key,
+        source.tenant_key,
+        source.company_id,
+        source.company_name,
+        source.country_codes,
+        source.base_url,
+        source.access_type,
+        source.policy_id,
+        extract(epoch FROM source.sync_frequency)::integer
+          AS sync_frequency_seconds,
+        source.checkpoint,
+        source.last_attempt_at,
+        source.last_success_at,
+        source.last_complete_run_id,
+        source.consecutive_failures,
+        source.enabled,
+        source.transport_enabled,
+        source.incremental_enabled,
+        source.backfill_enabled,
+        source.discovery_state
+      FROM worker_private.register_career_source_candidate(
+        ${input.provider},
+        ${input.sourceKey},
+        ${input.tenantKey},
+        ${input.companyId},
+        ${input.companyName},
+        ${input.countryCodes},
+        ${input.baseUrl},
+        ${input.accessType},
+        ${input.policyId}::uuid,
+        ${input.syncFrequencySeconds},
+        ${this.sql.json(asJson(input.checkpoint))}
+      ) AS source
+    `;
+    if (!row) throw new Error("register_career_source_candidate returned no row");
+    return careerSourceCandidateSchema.parse({
+      id: row.id,
+      provider: row.provider,
+      sourceKey: row.source_key,
+      tenantKey: row.tenant_key,
+      companyId: row.company_id,
+      companyName: row.company_name,
+      countryCodes: row.country_codes,
+      baseUrl: row.base_url,
+      accessType: row.access_type,
+      policyId: row.policy_id,
+      syncFrequencySeconds: row.sync_frequency_seconds,
+      checkpoint: row.checkpoint,
+      lastAttemptAt: row.last_attempt_at?.toISOString() ?? null,
+      lastSuccessAt: row.last_success_at?.toISOString() ?? null,
+      lastCompleteRunId: row.last_complete_run_id,
+      consecutiveFailures: row.consecutive_failures,
+      enabled: row.enabled,
+      transportEnabled: row.transport_enabled,
+      incrementalEnabled: row.incremental_enabled,
+      backfillEnabled: row.backfill_enabled,
+      discoveryState: row.discovery_state,
+    });
   }
 
   async setScheduleEnabled(
