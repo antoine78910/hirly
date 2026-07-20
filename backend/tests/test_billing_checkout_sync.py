@@ -550,3 +550,254 @@ def test_checkout_session_offers_promo_box_for_non_referred_user(monkeypatch):
 
     assert captured.get("allow_promotion_codes") is True
     assert "discounts" not in captured
+
+
+def _enable_posthog_revenue(monkeypatch, *, refunds=False):
+    monkeypatch.setenv("POSTHOG_SERVER_API_KEY", "phc_test")
+    monkeypatch.setenv("POSTHOG_HOST", "https://eu.i.posthog.com")
+    monkeypatch.setenv("POSTHOG_PAYMENT_REVENUE_ENABLED", "true")
+    monkeypatch.setenv("POSTHOG_REFUND_REVENUE_ENABLED", "true" if refunds else "false")
+
+
+def test_posthog_capture_disabled_without_token_or_host(monkeypatch):
+    monkeypatch.delenv("POSTHOG_SERVER_API_KEY", raising=False)
+    monkeypatch.delenv("POSTHOG_HOST", raising=False)
+
+    class _UnexpectedClient:
+        def __init__(self, **kwargs):
+            raise AssertionError("disabled PostHog capture must not create an HTTP client")
+
+    monkeypatch.setattr(server.httpx, "AsyncClient", _UnexpectedClient)
+    captured = asyncio.run(
+        server._capture_posthog_server_event(
+            event_name="payment_succeeded",
+            distinct_id="user_1",
+            timestamp="2026-01-01T00:00:00Z",
+            semantic_uuid="uuid",
+            properties={"source": "stripe_webhook"},
+        )
+    )
+    assert captured is False
+
+
+def test_posthog_capture_exact_schema_and_timeouts(monkeypatch):
+    _enable_posthog_revenue(monkeypatch)
+    request = {}
+
+    class _Response:
+        status_code = 200
+
+        def raise_for_status(self):
+            return None
+
+    class _Client:
+        def __init__(self, *, timeout):
+            request["timeout"] = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def post(self, url, *, json):
+            request["url"] = url
+            request["json"] = json
+            return _Response()
+
+    monkeypatch.setattr(server.httpx, "AsyncClient", _Client)
+    result = asyncio.run(
+        server._capture_posthog_server_event(
+            event_name="payment_succeeded",
+            distinct_id="user_1",
+            timestamp="2026-01-01T00:00:00Z",
+            semantic_uuid="uuid-1",
+            properties={"revenue": 12.34, "$process_person_profile": False},
+        )
+    )
+
+    assert result is True
+    assert request["url"] == "https://eu.i.posthog.com/capture/"
+    assert set(request["json"]) == {"api_key", "event", "distinct_id", "timestamp", "uuid", "properties"}
+    assert request["json"]["distinct_id"] == "user_1"
+    assert request["timeout"].connect == 0.25
+    assert request["timeout"].read == 0.50
+    assert request["timeout"].write == 0.50
+    assert request["timeout"].pool == 0.25
+
+
+def test_posthog_revenue_uuid_and_currency_conversion_are_semantic():
+    payment_a = server._posthog_revenue_uuid("payment_succeeded", "invoice", "in_123")
+    payment_b = server._posthog_revenue_uuid("payment_succeeded", "invoice", "in_123")
+    payment_other = server._posthog_revenue_uuid("payment_succeeded", "invoice", "in_456")
+    refund = server._posthog_revenue_uuid("payment_refunded", "refund", "re_123")
+
+    assert payment_a == payment_b
+    assert payment_a != payment_other
+    assert payment_a != refund
+    assert str(server._posthog_major_amount(1234, "EUR")) == "12.34"
+    assert str(server._posthog_major_amount(1234, "JPY")) == "1234"
+    assert str(server._posthog_major_amount(1234, "BHD")) == "1.234"
+
+
+def test_posthog_invoice_payment_uses_stable_user_and_allowlist(monkeypatch):
+    _enable_posthog_revenue(monkeypatch)
+    monkeypatch.setattr(
+        server,
+        "_posthog_resolve_billing_user_id",
+        lambda **kwargs: _async_return("user_1"),
+    )
+    captured = {}
+
+    async def _capture(**kwargs):
+        captured.update(kwargs)
+        return True
+
+    monkeypatch.setattr(server, "_capture_posthog_server_event", _capture)
+    event = {"id": "evt_invoice_1", "created": 1_700_000_000}
+    invoice = {
+        "id": "in_123",
+        "amount_paid": 2999,
+        "currency": "eur",
+        "customer": "cus_123",
+        "subscription": "sub_123",
+        "customer_email": "private@example.com",
+        "metadata": {"user_id": "user_1", "token": "secret"},
+        "lines": {"data": [{"price": {"id": "price_1", "product": "prod_1"}}]},
+    }
+
+    assert asyncio.run(server._capture_posthog_invoice_payment(event, invoice)) is True
+    assert captured["event_name"] == "payment_succeeded"
+    assert captured["distinct_id"] == "user_1"
+    assert captured["timestamp"] == "2023-11-14T22:13:20Z"
+    assert captured["semantic_uuid"] == server._posthog_revenue_uuid(
+        "payment_succeeded", "invoice", "in_123"
+    )
+    assert captured["properties"] == {
+        "revenue": 29.99,
+        "currency": "EUR",
+        "amount_minor": 2999,
+        "stripe_event_id": "evt_invoice_1",
+        "invoice_id": "in_123",
+        "subscription_id": "sub_123",
+        "price_id": "price_1",
+        "product_id": "prod_1",
+        "source": "stripe_webhook",
+        "$process_person_profile": False,
+    }
+    assert "customer_email" not in captured["properties"]
+    assert "token" not in captured["properties"]
+
+
+@pytest.mark.parametrize(
+    ("event_type", "status", "previous_status", "expected"),
+    [
+        ("refund.created", "succeeded", None, True),
+        ("refund.created", "pending", None, False),
+        ("refund.updated", "succeeded", "pending", True),
+        ("refund.updated", "succeeded", "succeeded", False),
+        ("refund.updated", "succeeded", None, False),
+        ("refund.failed", "failed", "pending", False),
+    ],
+)
+def test_posthog_refund_requires_terminal_success_transition(
+    event_type, status, previous_status, expected
+):
+    event = {
+        "type": event_type,
+        "data": {"previous_attributes": {} if previous_status is None else {"status": previous_status}},
+    }
+    assert server._posthog_refund_success_confirmed(event, {"status": status}) is expected
+
+
+def test_posthog_refund_uses_partial_amount_and_negative_revenue(monkeypatch):
+    _enable_posthog_revenue(monkeypatch, refunds=True)
+    monkeypatch.setattr(
+        server,
+        "_posthog_refund_context",
+        lambda refund: _async_return(
+            {
+                "invoice": {"id": "in_123"},
+                "subscription": {},
+                "invoice_id": "in_123",
+                "subscription_id": "sub_123",
+                "customer_id": "cus_123",
+                "currency": "EUR",
+                "user_id": "user_1",
+            }
+        ),
+    )
+    captured = {}
+
+    async def _capture(**kwargs):
+        captured.update(kwargs)
+        return True
+
+    monkeypatch.setattr(server, "_capture_posthog_server_event", _capture)
+    event = {
+        "id": "evt_refund_1",
+        "type": "refund.updated",
+        "created": 1_700_000_100,
+        "data": {"previous_attributes": {"status": "pending"}},
+    }
+    refund = {
+        "id": "re_123",
+        "status": "succeeded",
+        "amount": 500,
+        "amount_refunded": 2999,
+    }
+
+    assert asyncio.run(server._capture_posthog_refund(event, refund)) is True
+    assert captured["event_name"] == "payment_refunded"
+    assert captured["distinct_id"] == "user_1"
+    assert captured["properties"]["amount_minor"] == 500
+    assert captured["properties"]["revenue"] == -5.0
+    assert captured["semantic_uuid"] == server._posthog_revenue_uuid(
+        "payment_refunded", "refund", "re_123"
+    )
+
+
+def test_stripe_webhook_records_event_when_posthog_capture_fails(monkeypatch):
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test")
+    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
+    event = {
+        "id": "evt_invoice_1",
+        "type": "invoice.payment_succeeded",
+        "created": 1_700_000_000,
+        "data": {
+            "object": {
+                "id": "in_123",
+                "customer": "cus_123",
+                "subscription": None,
+                "amount_paid": 2999,
+                "currency": "eur",
+            }
+        },
+    }
+    monkeypatch.setattr(server.stripe.Webhook, "construct_event", lambda *args: event)
+    monkeypatch.setattr(server, "_stripe_event_already_processed", lambda event_id: _async_return(False))
+    order = []
+
+    async def _billing(customer_id, updates):
+        order.append("billing")
+
+    async def _capture(*args, **kwargs):
+        order.append("capture_failed")
+        return False
+
+    async def _record(processed_event):
+        order.append("record")
+
+    monkeypatch.setattr(server, "_update_user_billing_by_customer_id", _billing)
+    monkeypatch.setattr(server, "_capture_posthog_invoice_payment", _capture)
+    monkeypatch.setattr(server, "_record_processed_stripe_event", _record)
+
+    class _WebhookRequest:
+        headers = {"Stripe-Signature": "signature"}
+
+        async def body(self):
+            return b"{}"
+
+    result = asyncio.run(server.stripe_webhook(_WebhookRequest()))
+    assert result == {"received": True}
+    assert order == ["billing", "capture_failed", "record"]
