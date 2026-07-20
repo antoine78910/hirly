@@ -660,7 +660,16 @@ describe("G004 Bun runtime dispatch", () => {
     const writes: CanonicalJob[][] = [];
     const store = {
       async assertProviderRunnable() {},
-      async writeJobsAndComplete(_lease, jobs) {
+      async claimProviderWork() {
+        return {
+          claimId: "11111111-1111-4111-8111-111111111111",
+          provider: "apec" as const,
+          runtime: "typescript" as const,
+          ownershipEpoch: 1n,
+          expiresAt: task.leaseUntil,
+        };
+      },
+      async writeJobsAndComplete(_lease, _providerClaim, jobs) {
         writes.push(jobs);
         return true;
       },
@@ -766,6 +775,15 @@ describe("G004 Bun runtime dispatch", () => {
     const fixture = await loadFixture("apec");
     const store = {
       async assertProviderRunnable() {},
+      async claimProviderWork(_lease) {
+        return {
+          claimId: "11111111-1111-4111-8111-111111111111",
+          provider: "apec" as const,
+          runtime: "typescript" as const,
+          ownershipEpoch: 1n,
+          expiresAt: _lease.leaseUntil,
+        };
+      },
       async writeJobsAndComplete() {
         return false;
       },
