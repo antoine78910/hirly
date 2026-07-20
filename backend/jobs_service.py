@@ -114,15 +114,11 @@ def build_feed_coverage_snapshot(
         )
 
     def _is_actionable(job: Dict[str, Any]) -> bool:
-        status = str(job.get("apply_fulfillment_status") or "").strip().lower()
-        blocked = status.startswith("blocked") or status in {"expired", "discovery_only"}
-        has_url = bool(
-            job.get("selected_apply_url")
-            or job.get("external_url")
-            or job.get("apply_url")
-            or job.get("hosted_url")
-        )
-        return not blocked and has_url and str(job.get("application_mode") or "").lower() != "blocked"
+        return str(job.get("application_mode") or "").strip().lower() in {
+            "auto_apply",
+            "assisted",
+            "manual",
+        }
 
     def _is_fresh(job: Dict[str, Any]) -> bool:
         raw = job.get("posted_at") or job.get("first_seen_at") or job.get("imported_at")
@@ -156,6 +152,7 @@ def build_feed_coverage_snapshot(
         },
         "evaluated_at": evaluated_at.isoformat(),
         "source_set": source_set,
+        "coverage_scope": "ordered_no_refresh_feed",
         "freshness_window_days": freshness_window_days,
         "relevant_total": len(jobs),
         "fresh_relevant_total": sum(1 for job in jobs if _is_fresh(job)),
