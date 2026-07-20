@@ -35,6 +35,26 @@ export const rateLimitConfigSchema = z
   })
   .strict();
 
+export const providerSearchRequestSchema = z
+  .object({
+    provider: providerSchema,
+    query: z.string().trim().min(1).max(256).nullable().default(null),
+    location: z.string().trim().min(1).max(256).nullable().default(null),
+    countryCode: z.string().regex(/^[A-Z]{2}$/).nullable().default(null),
+    cursor: z.string().min(1).max(512).nullable().default(null),
+    pageSize: z.number().int().positive().max(100).default(50),
+    maxPages: z.number().int().positive().max(5).default(5),
+  })
+  .strict();
+
+export const rawProviderJobEnvelopeSchema = z
+  .object({
+    provider: providerSchema,
+    externalId: z.string().trim().min(1).max(512),
+    payload: z.record(z.string(), z.unknown()),
+  })
+  .strict();
+
 export const providerRegistrySchema = z
   .object({
     provider: providerSchema,
@@ -158,7 +178,7 @@ export const healthSchema = z
 export const canonicalJobSchema = z
   .object({
     jobId: z.string().regex(/^job_[0-9a-f]{16}$/),
-    provider: z.string().min(1),
+    provider: providerSchema,
     externalId: z.string().min(1),
     title: z.string().min(1),
     normalizedTitle: z.string().min(1),
@@ -195,6 +215,24 @@ export const canonicalJobSchema = z
   })
   .strict();
 
+export const validationResultSchema = canonicalJobSchema.pick({
+  selectedApplyUrl: true,
+  validationStatus: true,
+  validationReason: true,
+  validationCheckedAt: true,
+  applyabilityTier: true,
+  applyabilityScore: true,
+  applyFulfillmentStatus: true,
+  applyUrlProvider: true,
+  atsProvider: true,
+  requiresLogin: true,
+  requiresAccountCreation: true,
+  captchaDetected: true,
+  manualFulfillmentReady: true,
+  autoApplySupported: true,
+  rejectionReason: true,
+});
+
 export const stableErrorCodeSchema = z.enum([
   "authorization_blocked",
   "invalid_input",
@@ -207,8 +245,14 @@ export const stableErrorCodeSchema = z.enum([
 ]);
 
 export type Provider = z.infer<typeof providerSchema>;
+export type RateLimitConfig = z.infer<typeof rateLimitConfigSchema>;
 export type ProviderRegistry = z.infer<typeof providerRegistrySchema>;
+export type ProviderSearchRequest = z.infer<typeof providerSearchRequestSchema>;
+export type RawProviderJobEnvelope = z.infer<
+  typeof rawProviderJobEnvelopeSchema
+>;
 export type EnqueueRun = z.infer<typeof enqueueRunSchema>;
 export type RunView = z.infer<typeof runViewSchema>;
 export type CanonicalJob = z.infer<typeof canonicalJobSchema>;
+export type ValidationResult = z.infer<typeof validationResultSchema>;
 export type StableErrorCode = z.infer<typeof stableErrorCodeSchema>;

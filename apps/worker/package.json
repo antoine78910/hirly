@@ -17,6 +17,7 @@
     "@hirly/config": "workspace:*",
     "@hirly/contracts": "workspace:*",
     "@hirly/db": "workspace:*",
+    "@hirly/ingestion": "workspace:*",
     "@hirly/observability": "workspace:*",
     "zod": "4.1.12"
   },

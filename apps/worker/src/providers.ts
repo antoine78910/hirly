@@ -1,15 +1,24 @@
 import type { Provider } from "@hirly/contracts";
-import { PermanentTaskError } from "./runtime/retry";
+import type { ProviderCore } from "./providers/core";
+import { apecProvider } from "./providers/apec";
+import { helloWorkProvider } from "./providers/hellowork";
+import { wttjProvider } from "./providers/wttj";
+import { indeedProvider } from "./providers/indeed";
 
-// Provider transports remain deliberately inactive until a separately
-// authorized implementation and rollout decision is supplied.
-const activeProviderTransports = new Set<Provider>();
+export const providerModules = {
+  apec: apecProvider,
+  hellowork: helloWorkProvider,
+  wttj: wttjProvider,
+  indeed: indeedProvider,
+} satisfies Record<Provider, ProviderCore<unknown>>;
 
-export function assertProviderTransportActive(provider: Provider): void {
-  if (!activeProviderTransports.has(provider)) {
-    throw new PermanentTaskError(
-      "authorization_blocked",
-      `provider transport is inactive: ${provider}`,
-    );
-  }
+export function getProviderModule(provider: Provider): ProviderCore<unknown> {
+  return providerModules[provider];
 }
+
+export {
+  apecProvider,
+  helloWorkProvider,
+  wttjProvider,
+  indeedProvider,
+};
