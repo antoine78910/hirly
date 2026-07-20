@@ -4,6 +4,10 @@ import {
   sanitizeAnalyticsProperties,
   stripUrlSecrets,
 } from "./posthogClient";
+import {
+  registryPropertiesForEvent,
+  resolveAnalyticsEvent,
+} from "./analyticsRegistry";
 
 export const ANALYTICS_OUTBOX_KEY = "hirly.analytics.outbox";
 export const ANALYTICS_BATCH_MAX_EVENTS = 20;
@@ -29,20 +33,39 @@ const getAnonymousId = () => {
 
 export const trackEvent = (event, properties = {}) => {
   if (!event) return Promise.resolve();
+  const occurredAt = new Date().toISOString();
   const sanitizedProperties = sanitizeAnalyticsProperties(properties || {}) || {};
+  const resolved = resolveAnalyticsEvent(event);
+  const canonicalProperties = registryPropertiesForEvent(event, sanitizedProperties);
   const payload = {
     event,
     properties: sanitizedProperties,
+    occurred_at: occurredAt,
     anonymous_id: getAnonymousId(),
     page: typeof window !== "undefined" ? window.location.pathname : undefined,
     source: typeof document !== "undefined" && document.referrer
       ? stripUrlSecrets(document.referrer)
       : undefined,
   };
-  try {
-    capturePostHogEvent(event, sanitizedProperties);
-  } catch (_) {
-    // Keep the first-party sink independent even if the vendor adapter regresses.
+  if (
+    resolved?.definition.authoritativeSource === "frontend" &&
+    canonicalProperties
+  ) {
+    try {
+      capturePostHogEvent(
+        resolved.canonicalName,
+        {
+          ...canonicalProperties,
+          schema_version: resolved.definition.schemaVersion,
+          event_source: "frontend",
+          timestamp_quality: "validated_client_occurrence",
+          occurred_at: occurredAt,
+        },
+        occurredAt,
+      );
+    } catch (_) {
+      // Keep the first-party sink independent even if the vendor adapter regresses.
+    }
   }
   return api.post("/analytics/event", payload).catch(() => {});
 };

@@ -66,11 +66,15 @@ describe("PostHogLifecycle", () => {
   });
 
   it("forwards stable identities and anonymous resets to the safe client boundary", () => {
-    mockCurrentUser = { user_id: "user-a" };
+    mockCurrentUser = {
+      user_id: "123e4567-e89b-12d3-a456-426614174000",
+    };
     act(() => {
       root.render(<PostHogLifecycle />);
     });
-    expect(mockIdentifyPostHogUser).toHaveBeenCalledWith("user-a");
+    expect(mockIdentifyPostHogUser).toHaveBeenCalledWith(
+      "123e4567-e89b-12d3-a456-426614174000",
+    );
 
     mockCurrentUser = null;
     act(() => {

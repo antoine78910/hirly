@@ -303,6 +303,200 @@ api_router = APIRouter(prefix="/api")
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+_ANALYTICS_REGISTRY_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "packages"
+    / "contracts"
+    / "src"
+    / "analytics-registry.v1.json"
+)
+
+
+def _load_analytics_registry() -> Dict[str, Any]:
+    try:
+        registry = json.loads(_ANALYTICS_REGISTRY_PATH.read_text(encoding="utf-8"))
+        events = registry.get("events")
+        if registry.get("schemaVersion") != "hirly.analytics-registry.v1" or not isinstance(events, list):
+            raise ValueError("unsupported analytics registry")
+        return registry
+    except Exception as exc:
+        logger.error("analytics_registry_load_failed error=%s", type(exc).__name__)
+        return {"schemaVersion": "unavailable", "events": []}
+
+
+_ANALYTICS_REGISTRY = _load_analytics_registry()
+_ANALYTICS_EVENT_BY_NAME = {
+    event["name"]: event
+    for event in _ANALYTICS_REGISTRY["events"]
+    if isinstance(event, dict) and isinstance(event.get("name"), str)
+}
+_ANALYTICS_CANONICAL_BY_ALIAS = {
+    alias: event["name"]
+    for event in _ANALYTICS_REGISTRY["events"]
+    if isinstance(event, dict) and isinstance(event.get("name"), str)
+    for alias in event.get("legacyAliases", [])
+    if isinstance(alias, str)
+}
+
+
+def _analytics_event_definition(event_name: str) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
+    canonical_name = (
+        event_name
+        if event_name in _ANALYTICS_EVENT_BY_NAME
+        else _ANALYTICS_CANONICAL_BY_ALIAS.get(event_name)
+    )
+    return canonical_name, _ANALYTICS_EVENT_BY_NAME.get(canonical_name or "")
+
+
+def _canonical_analytics_user_id(value: Any) -> Optional[str]:
+    if not isinstance(value, str) or value != value.strip() or value != value.lower():
+        return None
+    try:
+        canonical = str(uuid.UUID(value))
+    except (ValueError, AttributeError):
+        return None
+    return canonical if canonical == value else None
+
+
+def _parse_analytics_utc(value: Any) -> Optional[datetime]:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None or parsed.utcoffset() != timedelta(0):
+        return None
+    return parsed.astimezone(timezone.utc)
+
+
+def _analytics_property_matches(value: Any, property_type: str) -> bool:
+    if property_type == "boolean":
+        return isinstance(value, bool)
+    if property_type == "integer":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if property_type == "number":
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if property_type == "timestamp":
+        return isinstance(value, str) and _parse_analytics_utc(value) is not None
+    return isinstance(value, str)
+
+
+def _registry_analytics_properties(
+    definition: Dict[str, Any],
+    properties: Dict[str, Any],
+) -> Tuple[Dict[str, Any], List[str], List[str]]:
+    allowed = {
+        **definition.get("requiredProperties", {}),
+        **definition.get("optionalProperties", {}),
+    }
+    accepted: Dict[str, Any] = {}
+    rejected: List[str] = []
+    for key, value in properties.items():
+        property_definition = allowed.get(key)
+        if (
+            not isinstance(property_definition, dict)
+            or property_definition.get("privacy") == "sensitive"
+            or not _analytics_property_matches(value, property_definition.get("type", ""))
+        ):
+            rejected.append(key)
+            continue
+        accepted[key] = value
+    missing = [
+        key
+        for key in definition.get("requiredProperties", {})
+        if key not in accepted
+    ]
+    return accepted, sorted(rejected), sorted(missing)
+
+
+def _classify_analytics_occurrence(
+    occurred_at: Optional[str],
+    received_at: str,
+) -> Dict[str, Any]:
+    received = _parse_analytics_utc(received_at)
+    if received is None:
+        raise ValueError("received_at must be an ISO-8601 UTC timestamp")
+    occurred = _parse_analytics_utc(occurred_at)
+    if occurred is None:
+        return {
+            "occurred_at": None,
+            "received_at": received_at,
+            "timestamp_quality": "server_received_at",
+            "clock_skew_ms": None,
+        }
+    clock_skew_ms = int((occurred - received).total_seconds() * 1000)
+    quality = (
+        "validated_client_occurrence"
+        if -24 * 60 * 60 * 1000 <= clock_skew_ms <= 5 * 60 * 1000
+        else "server_received_at"
+    )
+    return {
+        "occurred_at": occurred.isoformat().replace("+00:00", "Z"),
+        "received_at": received_at,
+        "timestamp_quality": quality,
+        "clock_skew_ms": clock_skew_ms,
+    }
+
+
+def _capture_posthog_registry_event(
+    event_name: str,
+    user_id: Any,
+    properties: Optional[Dict[str, Any]] = None,
+    *,
+    timestamp_quality: str = "server_received_at",
+    occurred_at: Optional[str] = None,
+) -> bool:
+    if _posthog_client is None:
+        return False
+    canonical_user_id = _canonical_analytics_user_id(user_id)
+    canonical_name, definition = _analytics_event_definition(event_name)
+    if (
+        not canonical_user_id
+        or not definition
+        or canonical_name != event_name
+        or definition.get("authoritativeSource") != "backend"
+        or timestamp_quality not in definition.get("canonicalTimeQualities", [])
+    ):
+        logger.warning("posthog_registry_event_rejected event=%s", event_name)
+        return False
+    safe_properties, rejected, missing = _registry_analytics_properties(
+        definition,
+        properties or {},
+    )
+    if missing:
+        logger.warning(
+            "posthog_registry_event_missing_properties event=%s missing=%s",
+            event_name,
+            ",".join(missing),
+        )
+        return False
+    received_at = datetime.now(timezone.utc).isoformat()
+    event_timestamp = occurred_at or received_at
+    try:
+        with new_context():
+            identify_context(canonical_user_id)
+            posthog_capture(
+                event_name,
+                properties={
+                    **safe_properties,
+                    "schema_version": definition["schemaVersion"],
+                    "event_source": "backend",
+                    "timestamp_quality": timestamp_quality,
+                    "received_at": received_at,
+                    **({"rejected_property_count": len(rejected)} if rejected else {}),
+                },
+                timestamp=event_timestamp,
+            )
+        return True
+    except Exception as exc:
+        logger.warning(
+            "posthog_registry_capture_failed event=%s error=%s",
+            event_name,
+            type(exc).__name__,
+        )
+        return False
+
 # Supabase via httpx logs every GET/POST at INFO — floods Railway and hides
 # auto-apply / Bright Data lines. Keep warnings+ only for HTTP client noise.
 for _noisy in ("httpx", "httpcore", "hpack", "h2", "urllib3"):
@@ -921,6 +1115,8 @@ class AnalyticsEventRequest(BaseModel):
     properties: Dict[str, Any] = Field(default_factory=dict)
     event_id: Optional[str] = None
     anonymous_id: Optional[str] = None
+    occurred_at: Optional[str] = None
+    session_id: Optional[str] = None
     page: Optional[str] = None
     source: Optional[str] = None
 
@@ -1483,17 +1679,15 @@ async def _session_payload_from_supabase_token(
     session_token = await _create_app_session(user_doc["user_id"], source)
     _set_app_session_cookie(response, session_token)
 
-    if _posthog_client is not None:
-        event_name = "user_signed_up" if is_new_user else "user_logged_in"
-        with new_context():
-            identify_context(user_doc["user_id"])
-            posthog_capture(
-                event_name,
-                properties={
-                    "auth_source": source,
-                    "has_gmail_provider": bool(provider_token or provider_refresh_token),
-                },
-            )
+    event_name = "user_signed_up" if is_new_user else "user_logged_in"
+    _capture_posthog_registry_event(
+        event_name,
+        user_doc["user_id"],
+        {
+            "auth_source": source,
+            "has_gmail_provider": bool(provider_token or provider_refresh_token),
+        },
+    )
 
     gmail_connection = {"connected": False, "email": None, "last_synced_at": None}
     if provider_token or provider_refresh_token:
@@ -1870,17 +2064,46 @@ def _analytics_event_document(
         raise HTTPException(status_code=400, detail="event required")
     if len(event_name) > 120:
         raise HTTPException(status_code=400, detail="event too long")
+    received_at = now or datetime.now(timezone.utc).isoformat()
+    occurrence = _classify_analytics_occurrence(body.occurred_at, received_at)
+    canonical_name, definition = _analytics_event_definition(event_name)
+    canonical_properties: Dict[str, Any] = {}
+    rejected_properties: List[str] = []
+    missing_properties: List[str] = []
+    if definition:
+        canonical_properties, rejected_properties, missing_properties = (
+            _registry_analytics_properties(definition, body.properties or {})
+        )
     canonical_event_id = (event_id or body.event_id or "").strip()[:160] or f"evt_{uuid.uuid4().hex}"
+    user_id = user.user_id if user else None
     return {
         "event_id": canonical_event_id,
         "batch_id": batch_id,
-        "user_id": user.user_id if user else None,
+        "user_id": user_id,
         "anonymous_id": (body.anonymous_id or "").strip()[:160] or None,
         "event": event_name,
+        "canonical_event": canonical_name,
+        "registry_version": _ANALYTICS_REGISTRY["schemaVersion"],
+        "registry_authoritative_source": definition.get("authoritativeSource") if definition else None,
+        "registry_valid": bool(
+            definition
+            and not missing_properties
+            and definition.get("authoritativeSource") == "frontend"
+        ),
+        "canonical_properties": canonical_properties,
+        "registry_rejected_properties": rejected_properties,
+        "registry_missing_properties": missing_properties,
+        "identity_quality": (
+            "canonical_user_id"
+            if _canonical_analytics_user_id(user_id)
+            else ("anonymous" if not user_id else "invalid_user_id")
+        ),
         "properties": body.properties or {},
+        "session_id": (body.session_id or "").strip()[:160] or None,
         "page": (body.page or "").strip()[:300] or None,
         "source": (body.source or "").strip()[:120] or None,
-        "created_at": now or datetime.now(timezone.utc).isoformat(),
+        "created_at": received_at,
+        **occurrence,
         "user_agent": request.headers.get("user-agent"),
         "ip_hash": _hash_ip(request),
     }
@@ -2977,18 +3200,6 @@ async def create_billing_checkout_session(
     else:
         session_kwargs["allow_promotion_codes"] = True
     session = stripe.checkout.Session.create(**session_kwargs)
-    if _posthog_client is not None:
-        with new_context():
-            identify_context(user.user_id)
-            posthog_capture(
-                "checkout_started",
-                properties={
-                    "billing_plan": billing_plan,
-                    "billing_interval": billing_interval,
-                    "checkout_source": checkout_source,
-                    "has_referral_discount": signup_discount_eligible,
-                },
-            )
     return {"url": session["url"]}
 
 
@@ -5857,19 +6068,17 @@ async def upload_cv(file: UploadFile = File(...), user: User = Depends(get_curre
         {"$set": profile_doc},
         upsert=True,
     )
-    if _posthog_client is not None:
-        with new_context():
-            identify_context(user.user_id)
-            posthog_capture(
-                "cv_uploaded",
-                properties={
-                    "file_format": fmt,
-                    "has_photo": bool(photo_bytes),
-                    "skills_count": len(extracted.get("skills") or []),
-                    "experience_count": len(extracted.get("experience") or []),
-                    "used_ai_fallback": bool(extracted.get("extraction_fallback_reason")),
-                },
-            )
+    _capture_posthog_registry_event(
+        "cv_uploaded",
+        user.user_id,
+        {
+            "file_format": fmt,
+            "has_photo": bool(photo_bytes),
+            "skills_count": len(extracted.get("skills") or []),
+            "experience_count": len(extracted.get("experience") or []),
+            "used_ai_fallback": bool(extracted.get("extraction_fallback_reason")),
+        },
+    )
     # don't ship the heavy fields back
     profile_doc.pop("cv_text", None)
     profile_doc.pop("cv_original_b64", None)
@@ -6188,10 +6397,7 @@ async def delete_account(user: User = Depends(get_current_user)):
     """Wipe everything the user created. Sessions are revoked too."""
     user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0}) or {}
     logger.info("account_delete_start user_id=%s", user.user_id)
-    if _posthog_client is not None:
-        with new_context():
-            identify_context(user.user_id)
-            posthog_capture("account_deleted")
+    _capture_posthog_registry_event("account_deleted", user.user_id)
     await _cancel_stripe_subscription_for_user(user_doc)
     await _delete_all_user_data(user.user_id)
     await _delete_supabase_auth_user(user_doc)
@@ -9729,16 +9935,15 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
             log_phase("response_build_done")
             phase = "swipe_complete"
             log_phase("swipe_complete")
-            if _posthog_client is not None and not existing:
-                with new_context():
-                    identify_context(user.user_id)
-                    posthog_capture(
-                        "job_dismissed",
-                        properties={
-                            "job_provider": job.get("provider"),
-                            "ats_provider": job.get("ats_provider"),
-                        },
-                    )
+            if not existing:
+                _capture_posthog_registry_event(
+                    "job_dismissed",
+                    user.user_id,
+                    {
+                        "job_provider": job.get("provider"),
+                        "ats_provider": job.get("ats_provider"),
+                    },
+                )
             return response
 
         profile = await db.profiles.find_one({"user_id": user.user_id}, {"_id": 0})
@@ -9892,18 +10097,17 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
             application_id=saved_doc.get("application_id"),
             status_returned_to_frontend=response.get("submission_status"),
         )
-        if _posthog_client is not None and not existing_app:
-            with new_context():
-                identify_context(user.user_id)
-                posthog_capture(
-                    "job_application_created",
-                    properties={
-                        "application_id": saved_doc.get("application_id"),
-                        "job_provider": job.get("provider"),
-                        "ats_provider": job.get("ats_provider"),
-                        "package_status": saved_doc.get("package_status"),
-                    },
-                )
+        if not existing_app:
+            _capture_posthog_registry_event(
+                "job_application_created",
+                user.user_id,
+                {
+                    "application_id": saved_doc.get("application_id"),
+                    "job_provider": job.get("provider"),
+                    "ats_provider": job.get("ats_provider"),
+                    "package_status": saved_doc.get("package_status"),
+                },
+            )
         return response
     except LLMProviderNotConfigured as exc:
         phase = "application_generation_start"

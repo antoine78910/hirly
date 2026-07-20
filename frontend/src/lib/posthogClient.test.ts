@@ -19,6 +19,7 @@ import {
   capturePostHogPageview,
   identifyPostHogUser,
   initializePostHog,
+  isCanonicalAnalyticsUserId,
   resetPostHog,
   sanitizeAnalyticsProperties,
   sanitizePostHogEvent,
@@ -152,19 +153,38 @@ describe("posthog client", () => {
     capturePostHogPageview("/onboarding");
     capturePostHogPageview("/swipe");
     expect(mockCapture).toHaveBeenCalledTimes(2);
-    expect(mockCapture).toHaveBeenLastCalledWith("$pageview", {
-      $current_url: "http://localhost/swipe",
-    });
+    expect(mockCapture).toHaveBeenLastCalledWith(
+      "$pageview",
+      {
+        $current_url: "http://localhost/swipe",
+      },
+      undefined,
+    );
 
-    identifyPostHogUser("user-a");
-    identifyPostHogUser("user-a");
-    identifyPostHogUser("user-b");
+    identifyPostHogUser("123e4567-e89b-12d3-a456-426614174000");
+    identifyPostHogUser("123e4567-e89b-12d3-a456-426614174000");
+    identifyPostHogUser("123e4567-e89b-12d3-a456-426614174001");
     expect(mockIdentify).toHaveBeenCalledTimes(2);
     expect(mockReset.mock.invocationCallOrder[0]).toBeLessThan(
       mockIdentify.mock.invocationCallOrder[1],
     );
     resetPostHog();
     expect(mockReset).toHaveBeenCalledTimes(2);
+  });
+
+  it("accepts only canonical lowercase UUID identities", () => {
+    expect(
+      isCanonicalAnalyticsUserId("123e4567-e89b-12d3-a456-426614174000"),
+    ).toBe(true);
+    for (const invalid of [
+      "",
+      "anonymous",
+      "user-a",
+      "123E4567-E89B-12D3-A456-426614174000",
+      "123e4567-e89b-02d3-a456-426614174000",
+    ]) {
+      expect(isCanonicalAnalyticsUserId(invalid)).toBe(false);
+    }
   });
 
   it("keeps capture best-effort", () => {
@@ -175,5 +195,23 @@ describe("posthog client", () => {
       throw new Error("blocked");
     });
     expect(() => capturePostHogEvent("checkout_started", { plan: "pro" })).not.toThrow();
+  });
+
+  it("preserves validated occurrence time in the SDK capture options", () => {
+    process.env.REACT_APP_POSTHOG_TOKEN = "phc_test";
+    process.env.REACT_APP_POSTHOG_HOST = "https://us.i.posthog.com";
+    initializePostHog();
+
+    capturePostHogEvent(
+      "checkout_intent_started",
+      { plan: "pro" },
+      "2026-07-20T18:00:00.000Z",
+    );
+
+    expect(mockCapture).toHaveBeenCalledWith(
+      "checkout_intent_started",
+      { plan: "pro" },
+      { timestamp: new Date("2026-07-20T18:00:00.000Z") },
+    );
   });
 });
