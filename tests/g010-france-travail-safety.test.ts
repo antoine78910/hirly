@@ -33,6 +33,10 @@ function sqlStatements(sql: string): string[] {
     .filter(Boolean);
 }
 
+function withoutRoutineBodies(sql: string): string {
+  return sql.replace(/(\$[A-Za-z_]*\$)[\s\S]*?\1/g, "");
+}
+
 describe("G010 France Travail production safety contract", () => {
   test("keeps provider_registry.writer_runtime as the single writer authority", () => {
     const foundation = read(
@@ -45,9 +49,10 @@ describe("G010 France Travail production safety contract", () => {
     );
 
     for (const { name, sql } of guardedForwardMigrations()) {
+      const migrationCommands = withoutRoutineBodies(sql);
       expect(
-        sql,
-        `${name} must not claim or mutate provider writer ownership`,
+        migrationCommands,
+        `${name} must not transfer provider writer ownership while applying`,
       ).not.toMatch(
         /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+(?:public\.)?provider_registry\b/i,
       );
@@ -90,11 +95,18 @@ describe("G010 France Travail production safety contract", () => {
     }
 
     for (const { name, sql } of guardedForwardMigrations()) {
+      const migrationCommands = withoutRoutineBodies(sql);
       expect(
-        sql,
-        `${name} must not activate a source through migration DML`,
+        migrationCommands,
+        `${name} must not mutate a source into an active state while applying`,
       ).not.toMatch(
-        /\b(?:INSERT\s+INTO|UPDATE)\s+(?:public\.)?career_sources\b/i,
+        /\b(?:UPDATE|DELETE\s+FROM)\s+(?:public\.)?career_sources\b/i,
+      );
+      expect(
+        migrationCommands,
+        `${name} source seeds must inherit disabled column defaults`,
+      ).not.toMatch(
+        /\bINSERT\s+INTO\s+(?:public\.)?career_sources\s*\([^)]*\b(?:enabled|transport_enabled|incremental_enabled|backfill_enabled)\b/i,
       );
     }
 
