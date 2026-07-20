@@ -79,6 +79,8 @@ CREATE TABLE IF NOT EXISTS public.raw_job_snapshots (
   CONSTRAINT raw_job_snapshots_run_source_external_hash_unique
     UNIQUE (run_id, source_id, external_id, content_hash),
   CONSTRAINT raw_job_snapshots_identity_unique
+    UNIQUE (id, source_id, external_id),
+  CONSTRAINT raw_job_snapshots_content_identity_unique
     UNIQUE (id, source_id, external_id, content_hash),
   CONSTRAINT raw_job_snapshots_source_provider_fk
     FOREIGN KEY (source_id, provider)
