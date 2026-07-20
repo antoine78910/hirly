@@ -47,6 +47,29 @@ def test_postgrest_filter_params_rejects_unregistered_or_logical_filters():
     assert _postgrest_filter_params("analytics_events", {"event": {"$ne": "landing_view"}}) is None
 
 
+def test_postgrest_filter_params_supports_bounded_job_title_search():
+    assert _postgrest_filter_params(
+        "jobs",
+        {
+            "country_code": {"$in": ["fr"]},
+            "$or": [
+                {"normalized_title": {"$ilike": "fullstack engineer"}},
+                {"title": {"$ilike": "fullstack engineer"}},
+            ],
+        },
+    ) == {
+        "country_code": "in.(fr)",
+        "or": (
+            "(normalized_title.ilike.*fullstack engineer*,"
+            "title.ilike.*fullstack engineer*)"
+        ),
+    }
+    assert _postgrest_filter_params(
+        "jobs",
+        {"$or": [{"provider": {"$ilike": "greenhouse"}}]},
+    ) is None
+
+
 def test_cursor_characterizes_local_projection_without_mutating_source(monkeypatch):
     source = [{"event_id": "evt_1", "event": "landing_view", "properties": {"plan": "pro"}}]
 

@@ -1054,7 +1054,12 @@ export default function Swipe() {
     // whether we show/clear the loading skeleton.
     const stackPrefetch = !replace && jobsRef.current.length > 0;
     const backendPrefetch =
-      stackPrefetch || (typeof reason === "string" && reason.startsWith("filters_"));
+      stackPrefetch
+      || (typeof reason === "string" && (
+        reason.startsWith("filters_")
+        || reason.startsWith("initial_")
+        || reason === "background_refresh_cache"
+      ));
     // Only restore-from-navigation should skip the loading skeleton. Any explicit
     // target/filter change must clear the stack and show a fresh search.
     const silentRefresh = replace && jobsRef.current.length > 0 && reason === "background_refresh_cache";

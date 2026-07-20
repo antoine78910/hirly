@@ -930,6 +930,8 @@ def _match_operator(value: Any, operator: str, expected: Any, condition: Dict[st
     if operator == "$regex":
         flags = re.IGNORECASE if "i" in str(condition.get("$options", "")) else 0
         return re.search(str(expected), str(value or ""), flags) is not None
+    if operator == "$ilike":
+        return str(expected or "").casefold() in str(value or "").casefold()
     if operator == "$not":
         if isinstance(expected, dict):
             return not _match_condition(value, expected)
@@ -1016,6 +1018,32 @@ def _postgrest_filter_params(table: str, filter: Optional[Filter]) -> Optional[D
     columns = TABLE_FILTER_COLUMNS.get(table, set())
     params: Dict[str, str] = {}
     for key, condition in filter.items():
+        if key == "$or":
+            if table != "jobs" or not isinstance(condition, list) or not condition:
+                return None
+            expressions: List[str] = []
+            for clause in condition:
+                if not isinstance(clause, dict) or len(clause) != 1:
+                    return None
+                clause_key, clause_condition = next(iter(clause.items()))
+                if (
+                    clause_key not in {"title", "normalized_title"}
+                    or not isinstance(clause_condition, dict)
+                    or set(clause_condition) != {"$ilike"}
+                ):
+                    return None
+                needle = str(clause_condition.get("$ilike") or "").strip()
+                if (
+                    len(needle) < 2
+                    or len(needle) > 80
+                    or re.fullmatch(r"[\w\s+\-]+", needle, flags=re.UNICODE) is None
+                ):
+                    return None
+                expressions.append(
+                    f"{_postgrest_filter_key(table, clause_key)}.ilike.*{needle}*"
+                )
+            params["or"] = f"({','.join(expressions)})"
+            continue
         if key.startswith("$") or "." in key or key not in columns:
             return None
         param_key = _postgrest_filter_key(table, key)

@@ -8037,7 +8037,37 @@ async def get_feed(
         async def _load_db_candidates(*, include_unknown: bool = False) -> tuple[List[Dict[str, Any]], Dict[str, Any], int, int, int]:
             query = _validated_cache_query(include_unknown=include_unknown)
             db_started = time.perf_counter()
-            rows = await _get_feed_job_candidates(query, candidate_limit)
+            role_needles: List[str] = []
+            normalized_role = normalize_place_name(target_role or "")
+            if normalized_role:
+                role_needles.append(normalized_role)
+            role_needles.extend(
+                token
+                for token in sorted(strict_tokens, key=len, reverse=True)
+                if len(token) >= 2
+            )
+            role_needles = list(dict.fromkeys(role_needles))[:4]
+            rows: List[Dict[str, Any]] = []
+            role_query: Dict[str, Any] = query
+            if role_needles:
+                seen_role_ids: set[str] = set()
+                for needle in role_needles:
+                    role_query = {
+                        **query,
+                        "$or": [
+                            {"normalized_title": {"$ilike": needle}},
+                            {"title": {"$ilike": needle}},
+                        ],
+                    }
+                    for row in await _get_feed_job_candidates(role_query, candidate_limit):
+                        job_id = row.get("job_id")
+                        if job_id and job_id not in seen_role_ids:
+                            rows.append(row)
+                            seen_role_ids.add(job_id)
+                    if len(rows) >= candidate_limit:
+                        break
+            else:
+                rows = await _get_feed_job_candidates(query, candidate_limit)
             if include_unknown_location and "country_code" in query:
                 unknown_query = {key: value for key, value in query.items() if key != "country_code"}
                 unknown_rows = await _get_feed_job_candidates(unknown_query, min(candidate_limit, 500))
@@ -8070,7 +8100,7 @@ async def get_feed(
                 applyable,
                 len(rows),
             )
-            return rows, query, unfiltered, applyable, rejected
+            return rows, role_query, unfiltered, applyable, rejected
 
         async def _load_legacy_direct_ats_candidates() -> tuple[List[Dict[str, Any]], Dict[str, Any], int, int, int]:
             query: Dict[str, Any] = {
@@ -8386,12 +8416,9 @@ async def get_feed(
             and not explicit_local_empty_inventory
             and _env_bool("JOBS_FEED_BACKGROUND_REFRESH_ENABLED", True)
         )
-        if prefetch and explicit_local_intent and local_inventory_count < requested_limit and not has_showable_cards:
-            should_refresh = True
+        if prefetch:
+            should_refresh = False
             background_refresh_wanted = False
-            request_trace["prefetch"] = True
-            request_trace["prefetch_forced_local_discovery"] = True
-        elif prefetch:
             request_trace["prefetch"] = True
             request_trace["local_jsearch_skip_reason"] = "prefetch_db_only"
         if audit_mode:

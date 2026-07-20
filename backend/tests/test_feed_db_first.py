@@ -61,6 +61,10 @@ class _FakeDB:
 
 def _matches(row, filter):
     for key, expected in (filter or {}).items():
+        if key == "$or":
+            if not any(_matches(row, clause) for clause in (expected or [])):
+                return False
+            continue
         value = row.get(key)
         if isinstance(expected, dict):
             if "$in" in expected and value not in expected["$in"]:
@@ -68,6 +72,8 @@ def _matches(row, filter):
             if "$gte" in expected and (value is None or value < expected["$gte"]):
                 return False
             if "$nin" in expected and value in expected["$nin"]:
+                return False
+            if "$ilike" in expected and str(expected["$ilike"]).casefold() not in str(value or "").casefold():
                 return False
         elif value != expected:
             return False
@@ -294,6 +300,39 @@ def _legacy_direct_job(index, *, country_code="gb", location="London, United Kin
 def test_db_first_enough_jobs_does_not_call_jsearch(monkeypatch):
     response, calls = _run_feed(monkeypatch, [_job(i) for i in range(35)])
     assert calls["refresh"] == 0
+
+
+def test_db_first_queries_for_role_before_bounding_candidate_pool(monkeypatch):
+    jobs = [
+        _job(index, title="Accountant")
+        for index in range(400)
+    ]
+    jobs.append(_job(999, title="Fullstack Engineer"))
+
+    response, calls = _run_feed(
+        monkeypatch,
+        jobs,
+        search_role="Fullstack Engineer",
+        locations_json=_location_payload("Paris"),
+        prefetch=True,
+    )
+
+    assert [job["job_id"] for job in response["jobs"]] == ["job_999"]
+    assert calls["refresh"] == 0
+    assert response["refresh_results"] == []
+
+
+def test_prefetch_never_blocks_on_provider_when_cached_inventory_is_empty(monkeypatch):
+    response, calls = _run_feed(
+        monkeypatch,
+        [],
+        locations_json=_location_payload("Paris"),
+        prefetch=True,
+    )
+
+    assert response["jobs"] == []
+    assert calls["refresh"] == 0
+    assert response["refresh_results"] == []
 
 
 def test_feed_audit_mode_matches_no_refresh_order_and_terminal_reason(monkeypatch):
