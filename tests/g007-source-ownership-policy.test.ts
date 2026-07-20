@@ -51,7 +51,9 @@ describe("G007 source ownership and policy invariants", () => {
       "matching",
       "application_route",
     ]) {
-      expect(registry.stages.some(({ stage }) => stage === requiredStage)).toBeTrue();
+      expect(
+        registry.stages.some(({ stage }) => stage === requiredStage),
+      ).toBeTrue();
     }
   });
 
@@ -72,8 +74,7 @@ describe("G007 source ownership and policy invariants", () => {
     );
     const laterMigrations = migrationFiles()
       .filter(
-        (name) =>
-          name !== "20260720000100_typescript_worker_foundation.sql",
+        (name) => name !== "20260720000100_typescript_worker_foundation.sql",
       )
       .map((name) => read(`backend/db/migrations/${name}`))
       .join("\n");
