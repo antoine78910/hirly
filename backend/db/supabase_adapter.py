@@ -1602,6 +1602,51 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
             )
             raise
 
+    async def resolve_auth_session(self, session_token: str) -> Optional[Dict[str, Any]]:
+        """Resolve a session, user, and bounded role flags in one PostgREST RPC."""
+        started_at = time.perf_counter()
+        snapshot = _metric_snapshot()
+        client = _get_shared_http_client(timeout=1.5)
+        try:
+            response = await client.post(
+                self.supabase_url.rstrip("/") + "/rest/v1/rpc/resolve_auth_session",
+                json={"p_session_token": session_token},
+                headers={
+                    **_supabase_headers(self.secret_key),
+                    "Content-Type": "application/json",
+                },
+            )
+            _record_remote_response(response)
+            if response.status_code not in (200, 201):
+                raise RuntimeError(
+                    "Supabase auth RPC resolve_auth_session returned HTTP "
+                    f"{response.status_code}: {response.text[:300]}"
+                )
+            payload = response.json() if response.content else None
+            if isinstance(payload, list):
+                payload = payload[0] if payload else None
+            if payload is not None and not isinstance(payload, dict):
+                raise RuntimeError("Supabase auth RPC returned an invalid payload")
+            _emit_adapter_metric(
+                operation="resolve_auth_session",
+                table="user_sessions",
+                started_at=started_at,
+                snapshot=snapshot,
+                rows_returned=1 if payload else 0,
+                filter_status="pushed",
+            )
+            return payload
+        except Exception:
+            _emit_adapter_metric(
+                operation="resolve_auth_session",
+                table="user_sessions",
+                started_at=started_at,
+                snapshot=snapshot,
+                filter_status="pushed",
+                status="error",
+            )
+            raise
+
     async def _python_provider_rpc(self, function_name: str, payload: Dict[str, Any]) -> Any:
         adapter = self._jobs_inventory_rpc_adapter
         return await adapter._python_ingestion_rpc(function_name, payload)
