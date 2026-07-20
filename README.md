@@ -110,6 +110,32 @@ Enable the tracked stack-policy pre-commit hook once per clone:
 git config core.hooksPath .githooks
 ```
 
+## Main production CI
+
+`Main CI and production release` is the sole release owner for `main`. After
+the repository checks pass, it applies tracked `supabase/migrations`, deploys
+Railway, waits for `/api/health` and the exact commit from `/api/version`, then
+creates, verifies, and promotes a staged Vercel production deployment.
+
+Configure a protected GitHub environment named `production` with:
+
+- secrets: `SUPABASE_DB_URL`, `RAILWAY_TOKEN`, `VERCEL_TOKEN`;
+- variables: `RAILWAY_PROJECT_ID`, `RAILWAY_SERVICE`,
+  `RAILWAY_BACKEND_URL`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`,
+  `VERCEL_FRONTEND_URL`.
+
+Disable Railway and Vercel Git-integration auto-promotion for `main`; otherwise
+those integrations create a second deployment owner that can race past the
+ordered workflow. Keep Vercel automatic production-domain assignment disabled,
+because the workflow intentionally deploys with `--skip-domain` and promotes
+only after backend readiness succeeds.
+
+Only `supabase/migrations` is applied automatically. The SQL under
+`backend/db/migrations` includes topology-specific and operator-gated changes
+and must not be swept into the primary application database by a generic CI
+glob. If Supabase migration history disagrees with production, the migration
+job fails closed and must be repaired explicitly after checksum comparison.
+
 ## Greenhouse Submission Safety
 
 `GREENHOUSE_SUBMIT_DRY_RUN=true` is the default. With dry run enabled, the submit endpoint validates and builds the multipart payload but does not send the application to Greenhouse.
