@@ -120,7 +120,13 @@ describe("G008 job-supply observability contract", () => {
 
   test("makes reconciled France Travail census manifests immutable", () => {
     expect(migration).toContain(
-      "coverage_run_id uuid NOT NULL REFERENCES public.worker_runs(id) ON DELETE RESTRICT",
+      "source_run_ids uuid[] NOT NULL CHECK (cardinality(source_run_ids) > 0)",
+    );
+    expect(migration).toContain(
+      "CREATE TABLE IF NOT EXISTS public.france_travail_census_manifest_runs",
+    );
+    expect(migration).toContain(
+      "run_id uuid NOT NULL REFERENCES public.worker_runs(id) ON DELETE RESTRICT",
     );
     expect(migration).toContain("manifest_digest text NOT NULL UNIQUE");
     expect(migration).toContain("BEFORE UPDATE OR DELETE");
@@ -138,8 +144,20 @@ describe("G008 job-supply observability contract", () => {
       expect(rollback).toContain(object);
     }
     for (const column of [
-      "actionable_records", "cost_microunits", "duration_ms",
-      "requests_completed", "cursor", "scope", "run_mode",
+      "career_source_id",
+      "run_mode",
+      "normalized_scope",
+      "checkpoint_in",
+      "checkpoint_out",
+      "requests_count",
+      "response_bytes",
+      "duration_ms",
+      "request_cost_minor",
+      "request_cost_currency",
+      "actionable_records",
+      "planned_scope_token",
+      "complete_scope_token",
+      "accounting_residuals",
     ]) {
       expect(rollback).toContain(`DROP COLUMN IF EXISTS ${column}`);
     }
