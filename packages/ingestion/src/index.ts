@@ -767,6 +767,12 @@ export async function runIngestion<RawJob>(input: {
         const normalized = input.adapter.normalizeRaw(raw);
         metrics.durationsMs.normalization +=
           performance.now() - normalizationStartedAt;
+        if (normalized.envelope.provider !== input.provider) {
+          throw new IngestionError(
+            "integrity_error",
+            "normalized provider identity mismatch",
+          );
+        }
         const identity = `${normalized.envelope.provider}:${normalized.envelope.externalId}`;
         if (identities.has(identity)) {
           metrics.deduplicated += 1;

@@ -108,7 +108,7 @@ export const sourceRegistryEntrySchema = z
     provider: providerSchema,
     sourceKey: z.string().trim().min(1).max(512),
     tenantKey: z.string().trim().min(1).max(512).nullable(),
-    countryCodes: z.array(z.string().regex(/^[A-Z]{2}$/)).max(250),
+    countryCodes: z.array(z.string().regex(/^[A-Z]{2}$/)).min(1).max(250),
     accessType: sourceAccessTypeSchema,
     policyId: z.uuid().nullable(),
     enabled: z.boolean(),
@@ -126,10 +126,10 @@ export const sourcePolicyStateSchema = z
     commercialUseAllowed: z.boolean(),
     redisplayAllowed: z.boolean(),
     fullTextRetentionAllowed: z.boolean(),
-    enabledEnvironments: z.array(
-      z.enum(["development", "test", "staging", "production"]),
-    ),
-    permittedAccessMethods: z.array(sourceAccessTypeSchema),
+    enabledEnvironments: z
+      .array(z.enum(["development", "test", "staging", "production"]))
+      .min(1),
+    permittedAccessMethods: z.array(sourceAccessTypeSchema).min(1),
     expiresAt: z.iso.datetime({ offset: true }).nullable(),
   })
   .strict();

@@ -104,6 +104,54 @@ describe("G009 source adapter contract", () => {
     expect(fetched).toBeFalse();
   });
 
+  test("rejects a normalized cross-provider envelope before canonical writes", async () => {
+    let writes = 0;
+
+    await expect(
+      runIngestion({
+        provider: "apec",
+        transport: {
+          async fetch() {
+            return {
+              items: [{ externalId: "cross-provider" }],
+              nextCursor: null,
+            };
+          },
+        },
+        adapter: {
+          provider: "apec",
+          normalizeRaw() {
+            return {
+              ...normalizedJob("cross-provider"),
+              envelope: {
+                provider: "indeed",
+                externalId: "cross-provider",
+                payload: { source: "contract-fixture" },
+              },
+            };
+          },
+        },
+        repository: {
+          async upsertCanonicalBatch() {
+            writes += 1;
+            return 1;
+          },
+        },
+        request: {
+          provider: "apec",
+          query: null,
+          location: null,
+          countryCode: "FR",
+          cursor: null,
+          pageSize: 50,
+          maxPages: 1,
+        },
+        rateLimit: { requestsPerMinute: 60_000, concurrency: 1 },
+      }),
+    ).rejects.toMatchObject({ code: "integrity_error" });
+    expect(writes).toBe(0);
+  });
+
   test("keeps stable IDs and deduplicates repeated source occurrences before one write", async () => {
     const raw = [
       { externalId: "same-source-id" },
@@ -192,10 +240,10 @@ describe("G009 source persistence contract", () => {
       /raw_job_snapshots_run_source_external_hash_unique[\s\S]*UNIQUE\s*\(\s*run_id\s*,\s*source_id\s*,\s*external_id\s*,\s*content_hash\s*\)/i,
     );
     expect(migration).toMatch(
-      /source_id uuid NOT NULL REFERENCES public\.career_sources\(id\) ON DELETE RESTRICT/i,
+      /raw_job_snapshots_source_provider_fk[\s\S]*FOREIGN KEY\s*\(\s*source_id\s*,\s*provider\s*\)[\s\S]*REFERENCES public\.career_sources\s*\(\s*id\s*,\s*provider\s*\)/i,
     );
     expect(migration).toMatch(
-      /run_id uuid NOT NULL REFERENCES public\.worker_runs\(id\) ON DELETE RESTRICT/i,
+      /raw_job_snapshots_run_source_provider_fk[\s\S]*FOREIGN KEY\s*\(\s*run_id\s*,\s*source_id\s*,\s*provider\s*\)[\s\S]*REFERENCES public\.worker_runs\s*\(\s*id\s*,\s*career_source_id\s*,\s*provider\s*\)/i,
     );
     expect(migration).toMatch(
       /raw_job_snapshots_immutable[\s\S]*BEFORE UPDATE OR DELETE ON public\.raw_job_snapshots/i,
@@ -211,9 +259,8 @@ describe("G009 source persistence contract", () => {
     expect(migration).toMatch(
       /job_occurrences_source_external_unique UNIQUE\s*\(\s*source_id\s*,\s*external_id\s*\)/i,
     );
-    expect(migration).toMatch(/raw_snapshot_id uuid NOT NULL/i);
     expect(migration).toMatch(
-      /UNIQUE\s*\(\s*id\s*,\s*source_id\s*,\s*external_id\s*\)[\s\S]*FOREIGN KEY\s*\(\s*raw_snapshot_id\s*,\s*source_id\s*,\s*external_id\s*\)\s*REFERENCES public\.raw_job_snapshots\s*\(\s*id\s*,\s*source_id\s*,\s*external_id\s*\)/i,
+      /raw_job_snapshots_identity_unique[\s\S]*UNIQUE\s*\(\s*id\s*,\s*source_id\s*,\s*external_id\s*,\s*content_hash\s*\)[\s\S]*job_occurrences_snapshot_identity_fk[\s\S]*FOREIGN KEY\s*\(\s*raw_snapshot_id\s*,\s*source_id\s*,\s*external_id\s*,\s*content_hash\s*\)\s*REFERENCES public\.raw_job_snapshots\s*\(\s*id\s*,\s*source_id\s*,\s*external_id\s*,\s*content_hash\s*\)/i,
     );
     expect(migration).not.toMatch(
       /\b(?:DROP|RENAME)\s+(?:COLUMN\s+)?(?:public\.)?jobs?\b|\bALTER\s+COLUMN\s+job_id\b/i,
@@ -289,7 +336,13 @@ describe("G009 source persistence contract", () => {
       /GRANT SELECT ON[\s\S]*public\.job_occurrences[\s\S]*public\.canonical_job_groups[\s\S]*TO hirly_inventory_operator/i,
     );
     expect(migration).toMatch(
-      /CREATE OR REPLACE FUNCTION worker_private\.career_source_runnable[\s\S]*SECURITY DEFINER[\s\S]*SET search_path = pg_catalog, public/i,
+      /CREATE OR REPLACE FUNCTION worker_private\.career_source_runnable[\s\S]*SECURITY DEFINER[\s\S]*SET search_path = pg_catalog/i,
+    );
+    expect(migration).not.toMatch(
+      /ALTER FUNCTION worker_private\.career_source_runnable[\s\S]*OWNER TO/i,
+    );
+    expect(migration).not.toMatch(
+      /GRANT SELECT ON public\.raw_job_snapshots/i,
     );
     expect(migration).toMatch(
       /REVOKE ALL ON FUNCTION worker_private\.career_source_runnable[\s\S]*FROM PUBLIC/i,
