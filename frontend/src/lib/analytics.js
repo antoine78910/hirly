@@ -36,8 +36,36 @@ const EVENT_ALLOWLIST = new Set([
   "profile_view",
   "application_generated",
   "application_submitted",
+  "application_action_required",
+  "application_blocked",
+  "application_defaults_updated",
+  "application_generation_started",
+  "application_prepare_failed",
+  "application_prepared",
+  "action_required_answer_saved",
+  "admin_application_assigned",
+  "admin_application_email_sent",
+  "admin_application_opened",
+  "admin_status_updated",
+  "admin_view",
+  "cv_upload_completed",
+  "cv_upload_failed",
+  "cv_upload_started",
+  "filters_applied",
   "swipe_page_view",
   "job_card_viewed",
+  "job_swiped_left",
+  "job_swiped_right",
+  "onboarding_step_completed",
+  "password_reset_completed",
+  "password_reset_page_view",
+  "password_reset_requested",
+  "prepare_again_clicked",
+  "tracker_view",
+  "friend_referral_enrolled",
+  "friend_referral_shared",
+  "friend_referral_redeemed",
+  "friend_referral_progress",
 ]);
 
 let flushPromise = null;
@@ -106,6 +134,10 @@ const pruneOutbox = (events, now = Date.now()) => {
 const enqueueEvent = (event) => {
   const existing = pruneOutbox(readAnalyticsOutbox());
   const next = pruneOutbox([...existing, event]);
+  if (byteLength(next) > ANALYTICS_OUTBOX_MAX_BYTES && next.every((item) => item.critical)) {
+    console.warn("analytics_outbox_critical_overflow");
+    return false;
+  }
   return writeAnalyticsOutbox(next);
 };
 
@@ -132,12 +164,16 @@ export const flushAnalyticsOutbox = async () => {
       if (response?.data?.stored !== true || !accepted.size) throw new Error("analytics batch was not acknowledged");
       writeAnalyticsOutbox(readAnalyticsOutbox().filter((event) => !accepted.has(event.event_id)));
       retryAttempt = 0;
+      if (readAnalyticsOutbox().length && typeof window !== "undefined") {
+        window.setTimeout(() => flushAnalyticsOutbox(), 0);
+      }
       return response;
     })
     .catch((error) => {
-      retryAttempt = Math.min(retryAttempt + 1, 5);
+      retryAttempt = Math.min(retryAttempt + 1, 6);
       if (typeof window !== "undefined" && !retryTimer) {
-        const delay = Math.min(60000, 1000 * (2 ** (retryAttempt - 1)));
+        const baseDelay = [1000, 2000, 4000, 8000, 16000, 60000][retryAttempt - 1];
+        const delay = Math.round(baseDelay * (0.8 + Math.random() * 0.4));
         retryTimer = window.setTimeout(() => {
           retryTimer = null;
           flushAnalyticsOutbox();
