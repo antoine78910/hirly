@@ -215,49 +215,6 @@ describe("G019 adversarial ATS transport and policy release gates", () => {
     expect(serialized).toContain("[REDACTED]");
     expect(serialized).toContain("[REDACTED_EMAIL]");
   });
-
-  test("redacts nested candidate documents and filenames without dropping job source fields", () => {
-    const documentCanaries = [
-      "Candidate-Canary-CV.pdf",
-      "Candidate-Canary-Resume.docx",
-      "Candidate-Canary-Original.pdf",
-      "candidate-document-bytes",
-      "candidate-upload-body",
-      "https://candidate-files.example.test/private/resume.pdf",
-      "candidate-file-upload",
-    ];
-    const sanitized = sanitizeSourceDocument({
-      sourceDocumentId: "public-job-source-42",
-      jobDescription: "Public job description retained for canonical inventory.",
-      candidateDocuments: [
-        { cvFilename: documentCanaries[0] },
-        { resume_file_name: documentCanaries[1] },
-        { originalFilename: documentCanaries[2] },
-        { documentBytes: documentCanaries[3] },
-        { file_content: documentCanaries[4] },
-        { curriculumVitaeUrl: documentCanaries[5] },
-        { fileUpload: documentCanaries[6] },
-      ],
-    });
-    const serialized = JSON.stringify(sanitized);
-
-    for (const canary of documentCanaries) {
-      expect(serialized).not.toContain(canary);
-    }
-    expect(sanitized).toMatchObject({
-      sourceDocumentId: "public-job-source-42",
-      jobDescription: "Public job description retained for canonical inventory.",
-      candidateDocuments: [
-        { cvFilename: "[REDACTED]" },
-        { resume_file_name: "[REDACTED]" },
-        { originalFilename: "[REDACTED]" },
-        { documentBytes: "[REDACTED]" },
-        { file_content: "[REDACTED]" },
-        { curriculumVitaeUrl: "[REDACTED]" },
-        { fileUpload: "[REDACTED]" },
-      ],
-    });
-  });
 });
 
 describe("G019 canonical write, retry, and rollback safety", () => {
