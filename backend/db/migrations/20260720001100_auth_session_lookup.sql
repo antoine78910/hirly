@@ -25,12 +25,9 @@ SECURITY INVOKER
 SET search_path = pg_catalog, public
 AS $$
 BEGIN
-  NEW.email := NULLIF(lower(btrim(COALESCE(NEW.data ->> 'email', NEW.email))), '');
-  NEW.name := COALESCE(NEW.data ->> 'name', NEW.name);
-  NEW.created_at := COALESCE(
-    NULLIF(NEW.data ->> 'created_at', '')::timestamptz,
-    NEW.created_at
-  );
+  NEW.email := NULLIF(lower(btrim(NEW.data ->> 'email')), '');
+  NEW.name := NULLIF(NEW.data ->> 'name', '');
+  NEW.created_at := NULLIF(NEW.data ->> 'created_at', '')::timestamptz;
   NEW.stripe_customer_id := NULLIF(NEW.data #>> '{billing,stripe_customer_id}', '');
   NEW.stripe_subscription_id := NULLIF(NEW.data #>> '{billing,stripe_subscription_id}', '');
   RETURN NEW;

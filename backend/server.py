@@ -1104,6 +1104,50 @@ class OnboardingSuggestRolesRequest(BaseModel):
 
 # ===================== Auth helpers =====================
 
+_supabase_auth_http_client: Optional[httpx.AsyncClient] = None
+
+
+def _get_supabase_auth_http_client() -> httpx.AsyncClient:
+    global _supabase_auth_http_client
+    if _supabase_auth_http_client is None or _supabase_auth_http_client.is_closed:
+        _supabase_auth_http_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=3.0, read=15.0, write=15.0, pool=3.0),
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+        )
+    return _supabase_auth_http_client
+
+
+async def _request_supabase_auth(
+    method: str,
+    url: str,
+    *,
+    headers: Dict[str, str],
+    json_body: Optional[Dict[str, Any]] = None,
+) -> httpx.Response:
+    """Use the shared auth client and retry only explicitly enabled idempotent reads."""
+    normalized_method = method.upper()
+    attempts = 2 if normalized_method == "GET" and _env_bool("AUTH_IDEMPOTENT_READ_RETRY_ENABLED") else 1
+    client = _get_supabase_auth_http_client()
+    for attempt in range(attempts):
+        try:
+            return await client.request(
+                normalized_method,
+                url,
+                headers=headers,
+                json=json_body,
+            )
+        except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.PoolTimeout, httpx.RemoteProtocolError):
+            if attempt >= attempts - 1:
+                raise
+            logger.warning(
+                "auth_http_retry method=%s attempt=%s max_attempts=%s",
+                normalized_method,
+                attempt + 2,
+                attempts,
+            )
+            await asyncio.sleep(0.05)
+    raise RuntimeError("Supabase auth request exhausted without a response")
+
 async def get_current_user(
     request: Request,
     response: Response,
@@ -1269,13 +1313,12 @@ async def _supabase_admin_request(
         "Authorization": f"Bearer {supabase_secret}",
         "Content-Type": "application/json",
     }
-    async with httpx.AsyncClient(timeout=15.0) as http:
-        return await http.request(
-            method,
-            f"{supabase_url}{path}",
-            headers=headers,
-            json=json_body,
-        )
+    return await _request_supabase_auth(
+        method,
+        f"{supabase_url}{path}",
+        headers=headers,
+        json_body=json_body,
+    )
 
 
 async def _supabase_password_access_token(email: str, password: str) -> str:
@@ -1352,14 +1395,14 @@ async def _session_payload_from_supabase_token(
     provider_token_expires_at: Optional[Any] = None,
 ) -> Dict[str, Any]:
     supabase_url, supabase_secret = _supabase_admin_config()
-    async with httpx.AsyncClient(timeout=15.0) as http:
-        r = await http.get(
-            f"{supabase_url}/auth/v1/user",
-            headers={
-                "apikey": supabase_secret,
-                "Authorization": f"Bearer {access_token}",
-            },
-        )
+    r = await _request_supabase_auth(
+        "GET",
+        f"{supabase_url}/auth/v1/user",
+        headers={
+            "apikey": supabase_secret,
+            "Authorization": f"Bearer {access_token}",
+        },
+    )
     if r.status_code != 200:
         logger.info("supabase_session invalid_token status=%s body=%s", r.status_code, r.text[:200])
         raise HTTPException(status_code=401, detail="Invalid Supabase access token")
@@ -17280,4 +17323,8 @@ async def startup_seed():
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    global _supabase_auth_http_client
+    if _supabase_auth_http_client is not None and not _supabase_auth_http_client.is_closed:
+        await _supabase_auth_http_client.aclose()
+    _supabase_auth_http_client = None
     await db.close()

@@ -121,3 +121,154 @@ def test_user_stripe_identity_is_promoted_for_indexed_lookup():
     assert row["stripe_customer_id"] == "cus_123"
     assert row["stripe_subscription_id"] == "sub_123"
     assert "stripe_customer_id" in supabase_adapter.TABLE_FILTER_COLUMNS["users"]
+
+
+def test_auth_http_retries_enabled_get_once(monkeypatch):
+    calls = []
+
+    class _Client:
+        is_closed = False
+
+        async def request(self, method, url, **kwargs):
+            calls.append((method, url, kwargs))
+            if len(calls) == 1:
+                raise server.httpx.ReadTimeout("transient")
+            return SimpleNamespace(status_code=200)
+
+    monkeypatch.setenv("AUTH_IDEMPOTENT_READ_RETRY_ENABLED", "true")
+    monkeypatch.setattr(server, "_get_supabase_auth_http_client", lambda: _Client())
+
+    async def _no_sleep(_delay):
+        return None
+
+    monkeypatch.setattr(server.asyncio, "sleep", _no_sleep)
+
+    response = asyncio.run(
+        server._request_supabase_auth(
+            "GET",
+            "https://example.supabase.co/auth/v1/user",
+            headers={"apikey": "redacted"},
+        )
+    )
+
+    assert response.status_code == 200
+    assert len(calls) == 2
+
+
+def test_supabase_auth_client_is_reused(monkeypatch):
+    created = []
+
+    class _Client:
+        is_closed = False
+
+        def __init__(self, **kwargs):
+            created.append(kwargs)
+
+    monkeypatch.setattr(server.httpx, "AsyncClient", _Client)
+    monkeypatch.setattr(server, "_supabase_auth_http_client", None)
+
+    first = server._get_supabase_auth_http_client()
+    second = server._get_supabase_auth_http_client()
+
+    assert first is second
+    assert len(created) == 1
+
+
+def test_auth_http_never_retries_post(monkeypatch):
+    calls = []
+
+    class _Client:
+        is_closed = False
+
+        async def request(self, method, url, **kwargs):
+            calls.append((method, url, kwargs))
+            raise server.httpx.ReadTimeout("do not replay mutation")
+
+    monkeypatch.setenv("AUTH_IDEMPOTENT_READ_RETRY_ENABLED", "true")
+    monkeypatch.setattr(server, "_get_supabase_auth_http_client", lambda: _Client())
+
+    try:
+        asyncio.run(
+            server._request_supabase_auth(
+                "POST",
+                "https://example.supabase.co/auth/v1/admin/users",
+                headers={"apikey": "redacted"},
+                json_body={"email": "person@example.com"},
+            )
+        )
+    except server.httpx.ReadTimeout:
+        pass
+    else:
+        raise AssertionError("non-idempotent auth mutation must not be replayed")
+
+    assert len(calls) == 1
+
+
+def test_auth_me_reuses_joined_flags_and_only_reads_profile(monkeypatch):
+    class _Profiles:
+        calls = 0
+
+        async def find_one(self, *_args, **_kwargs):
+            self.calls += 1
+            return {"user_id": "user_1", "cv_text": "cv", "target_role": "Engineer"}
+
+    profiles = _Profiles()
+    monkeypatch.setattr(server, "db", SimpleNamespace(profiles=profiles))
+    monkeypatch.setattr(
+        server,
+        "is_training_creator",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("joined flag must be reused")),
+    )
+    monkeypatch.setattr(
+        server,
+        "_resolve_training_access",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("joined flag must be reused")),
+    )
+    user = server.User(user_id="user_1", email="person@example.com", name="Person")
+    user._auth_flags = {
+        "is_training_creator": True,
+        "has_training_access": True,
+        "is_admin": False,
+    }
+
+    payload = asyncio.run(server.auth_me(user))
+
+    assert profiles.calls == 1
+    assert payload["is_training_creator"] is True
+    assert payload["has_training_access"] is True
+
+
+def test_joined_auth_invalid_bearer_falls_back_to_cookie_in_two_operations(monkeypatch):
+    calls = []
+
+    class _Db:
+        async def resolve_auth_session(self, token):
+            calls.append(token)
+            if token == "bad-bearer":
+                return None
+            return {
+                "status": "ok",
+                "user": {
+                    "user_id": "user_1",
+                    "email": "person@example.com",
+                    "name": "Person",
+                },
+                "flags": {},
+            }
+
+    monkeypatch.setenv("AUTH_JOINED_SESSION_LOOKUP_ENABLED", "true")
+    monkeypatch.setattr(server, "db", _Db())
+    monkeypatch.setattr(server, "_set_app_session_cookie", lambda *_args: None)
+    request = SimpleNamespace(url=SimpleNamespace(path="/api/auth/me"))
+
+    user = asyncio.run(
+        server.get_current_user(
+            request,
+            SimpleNamespace(),
+            session_token="good-cookie",
+            authorization="Bearer bad-bearer",
+        )
+    )
+
+    assert calls == ["bad-bearer", "good-cookie"]
+    assert user.user_id == "user_1"
