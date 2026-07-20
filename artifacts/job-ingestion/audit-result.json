@@ -26,9 +26,9 @@
       "completed_with_results": 0,
       "completed_zero_results": 0,
       "failed": 0,
-      "blocked": 1470,
-      "nonterminal": 0
-    }
+      "blocked": 1470
+    },
+    "digest": "c58cd21085ea307f2074ad96a44a97e092c3f37e363bea1d53459d7a8934675e"
   },
   "commandResults": [
     {
@@ -36,21 +36,27 @@
       "exitCode": 0,
       "rows": [
         "PAG-JSEARCH-001"
-      ]
+      ],
+      "executedAt": "2026-07-20T02:43:46.131Z",
+      "checksum": "373c806af8b62453b5e9ab7dba4d090c0803824cad2565e7dbc8afdf68041b8a"
     },
     {
       "command": ".venv/bin/python -m pytest -q backend/tests/test_workday_search.py",
       "exitCode": 0,
       "rows": [
         "WORKDAY-FAILURE-001"
-      ]
+      ],
+      "executedAt": "2026-07-20T02:43:47.128Z",
+      "checksum": "5989bd0580340d85ff5687de0109f7239afe9696c5a0c7feb4c0c3870e0c2db5"
     },
     {
       "command": ".venv/bin/python -m pytest -q backend/tests/test_france_travail_provider.py",
       "exitCode": 0,
       "rows": [
         "PAG-FT-001"
-      ]
+      ],
+      "executedAt": "2026-07-20T02:43:48.485Z",
+      "checksum": "dfa13c82c681a1cfd5d819c40e6b039a7f1b26ed39d89c4fedf4b2147c36fb07"
     },
     {
       "command": "bun test apps/job-ingestion-audit/test/audit.test.ts",
@@ -58,65 +64,97 @@
       "rows": [
         "QUERY-PARTITION-001",
         "FILTER-001"
-      ]
+      ],
+      "executedAt": "2026-07-20T02:43:48.615Z",
+      "checksum": "b2e99948c20b09130194c4a7211b78e90dbe967f90d69f3c0eb73ffdb9724722"
     },
     {
       "command": ".venv/bin/python -m pytest -q backend/tests/test_job_cache_maintenance.py",
       "exitCode": 0,
       "rows": [
         "REFRESH-001"
-      ]
+      ],
+      "executedAt": "2026-07-20T02:43:52.306Z",
+      "checksum": "98db1dcd1b094e53425c4c56009e68017b96e206ccc59472eabae9230831ac35"
     },
     {
       "command": ".venv/bin/python -m pytest -q backend/tests/test_job_dedup_golden.py",
       "exitCode": 0,
       "rows": [
         "DEDUP-001"
-      ]
+      ],
+      "executedAt": "2026-07-20T02:43:52.974Z",
+      "checksum": "7963ef2f334be9129466fd9ac060bb278e501dac6fd4e3f5cae7eef876e94218"
     },
     {
       "command": ".venv/bin/python -m pytest -q backend/tests/test_ingestion_scheduler_ledger.py backend/tests/test_ats_source_service.py && bun test tests/job-ingestion-audit.test.ts apps/worker/test/scheduler.test.ts",
       "exitCode": 0,
       "rows": [
         "SCHED-001"
-      ]
+      ],
+      "executedAt": "2026-07-20T02:43:55.821Z",
+      "checksum": "7527f42ddb826009fa0a71c397a74151cd1f0825b29f9115326e6c7fdc659467"
     },
     {
       "command": ".venv/bin/python -m pytest -q backend/tests/test_supabase_cursor_limit.py backend/tests/test_feed_db_first.py",
       "exitCode": 0,
       "rows": [
         "FEED-PAG-001"
-      ]
+      ],
+      "executedAt": "2026-07-20T02:44:04.909Z",
+      "checksum": "8204360461d59123a100702deeae2d21bedbce4d0411c81aea24197b531c74f7"
     },
     {
       "command": "test -n \"$FRANCE_TRAVAIL_CLIENT_ID\" && test -n \"$RAPIDAPI_KEY\"",
       "exitCode": 1,
       "rows": [
         "CAP-LIVE-001"
-      ]
+      ],
+      "executedAt": "2026-07-20T02:44:04.989Z",
+      "checksum": "a6348cf68622e246579f8166c8a976e8e23a81546de8725319292ae6e744fc52"
     },
     {
       "command": "test -n \"$DIRECT_ATS_AUDIT_SOURCE\"",
       "exitCode": 1,
       "rows": [
         "CAP-DIRECT-ATS-001"
-      ]
+      ],
+      "executedAt": "2026-07-20T02:44:05.064Z",
+      "checksum": "0ed171d4a0dbc78fef06f3786d3043b4dc3b0aa5778f91a964deb3a6cf0f01c6"
     },
     {
       "command": "test -n \"$DATABASE_URL\"",
       "exitCode": 1,
       "rows": [
         "COVERAGE-001"
-      ]
+      ],
+      "executedAt": "2026-07-20T02:44:05.157Z",
+      "checksum": "eb3d031581fbf9ffdfc764696ed084e7018214178be98ec5a7f7bd76c2e642c6"
     },
     {
       "command": "test -n \"$DATABASE_URL\"",
       "exitCode": 1,
       "rows": [
         "SQL-FEED-001"
-      ]
+      ],
+      "executedAt": "2026-07-20T02:44:05.234Z",
+      "checksum": "fdafed331e3c8fec24e89f91b52455b481a8f207d3306fdc6a13dada8ee7bc33"
     }
   ],
+  "evidenceDigests": {
+    "backend/tests/test_jsearch_request_budget.py": "515596d615138894700fa035ee40e834a9f9d9d0bf74b6f4a9b63ff52250838a",
+    "backend/tests/test_workday_search.py": "facb8d9cffb58c42f478725a3ebc6a0362b82ca99c6a2423dd0c4b7be2dcfc4e",
+    "backend/tests/test_france_travail_provider.py": "41250de28ca5795968d41fcc6a0fe6520431361ef4902b6a45f244f239130812",
+    "artifacts/job-ingestion/coverage-matrix.json": "78e9252b0002c433029e273e20712d09f4eb4aefec6b5f08aa4806451659d506",
+    "backend/tests/test_ats_adapters.py": "b98bdc203616ea178621bc810325a7ed83dad4b55b638f3ec2edd2e015dca642",
+    "apps/job-ingestion-audit/fixtures/pagination-golden.json": "61a78ff6970ff5afd5cb5dc125674a6250b661433aecc73abd04293ee33aa54d",
+    "artifacts/job-ingestion/funnel-after.json": "e2c7417165d67dd17801e2640063aef56dd4911a469184ce1568f114a39d50e4",
+    "backend/tests/test_job_cache_maintenance.py": "ca0a77f500617d1ba3cf8ffc1b1d3eecfac9b6e4e45a5e7a74a7dbf55271a693",
+    "apps/job-ingestion-audit/fixtures/dedup-golden.json": "fd13ca5b659ccc131dcff3ceb2b768d7c594cc99e8080ca82d12d2b4440e0522",
+    "backend/tests/test_ingestion_scheduler_ledger.py": "c961c221c59c501d431139266efd458f4d23b7b6a04676da2684647597033104",
+    "artifacts/job-ingestion/sql/SQL-FEED-001/blocked.json": "a5f75ea5595abff748bef7de45cb8f9a4b1347ebd5ce53432a8a781f27738b26",
+    "backend/tests/test_supabase_cursor_limit.py": "f5f58221d63e11e38fd409236f54ac76f5301a0c4a5b47fa2ce3c1ee3fc1cac3"
+  },
   "rows": [
     {
       "risk_id": "PAG-JSEARCH-001",
