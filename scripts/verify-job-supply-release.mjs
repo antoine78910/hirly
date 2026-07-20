@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, writeFileSync, renameSync, existsSync, lstatSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -76,6 +76,8 @@ export function buildReleaseVerificationPlan(options = {}) {
     commands.push(command("worker-docker-build", "docker", ["build", "-f", "apps/worker/Dockerfile", "-t", "hirly-worker:release-verification", "."]));
   }
   if (databaseUrl) {
+    const suiteNames = ["g002", "g003", "g004", "g010", "g011", "ledger", "g014"];
+    const suiteUrls = Object.fromEntries(suiteNames.map((name) => [name, isolatedDatabaseUrl(databaseUrl, name)]));
     commands.push(command("postgres-release-matrix", "bun", [
       "test",
       "tests/g002-postgres.integration.test.ts",
@@ -87,15 +89,16 @@ export function buildReleaseVerificationPlan(options = {}) {
       "tests/g014-source-trial-postgres.integration.test.ts",
     ], {
       env: Object.fromEntries([
-        "G002_TEST_DATABASE_URL", "G003_TEST_DATABASE_URL", "G004_TEST_DATABASE_URL",
-        "G010_TEST_DATABASE_URL", "G011_TEST_DATABASE_URL",
-        "JOB_INGESTION_LEDGER_TEST_DATABASE_URL", "G014_TEST_DATABASE_URL",
-      ].map((name) => [name, databaseUrl])),
+        ["G002_TEST_DATABASE_URL", suiteUrls.g002], ["G003_TEST_DATABASE_URL", suiteUrls.g003], ["G004_TEST_DATABASE_URL", suiteUrls.g004],
+        ["G010_TEST_DATABASE_URL", suiteUrls.g010], ["G011_TEST_DATABASE_URL", suiteUrls.g011],
+        ["JOB_INGESTION_LEDGER_TEST_DATABASE_URL", suiteUrls.ledger], ["G014_TEST_DATABASE_URL", suiteUrls.g014],
+      ]),
       redactEnvironment: true,
     }));
   }
   return {
     profile: full ? "full" : "repository",
+    expectedHead: options.expectedHead ?? null,
     commands,
     blockedExternal: [
       ...(!includeFrontend ? [blocked("FRONTEND_NOT_REQUESTED", "repository", "legacy frontend build not requested; use --with-frontend or --profile full")] : []),
@@ -105,6 +108,13 @@ export function buildReleaseVerificationPlan(options = {}) {
       blocked("SOURCE_ACTIVATION_NOT_PERFORMED", "source", "provider/source activation and external source fetching were not performed"),
     ],
   };
+}
+
+export function isolatedDatabaseUrl(databaseUrl, suite) {
+  const parsed = new URL(databaseUrl);
+  const name = decodeURIComponent(parsed.pathname.replace(/^\//, ""));
+  parsed.pathname = `/${name}_${suite}`;
+  return parsed.toString();
 }
 
 function command(id, executable, args, options = {}) {
@@ -202,12 +212,13 @@ export function verifyDeploymentDefaults(root = process.cwd()) {
 }
 
 function parseArgs(argv) {
-  const options = { profile: "repository", output: ".omx/verification/job-supply-release-manifest.json", includeFrontend: false, includeDocker: false, planOnly: false, databaseUrl: process.env.G015_TEST_DATABASE_URL ?? null, allowDisposableDatabase: process.env.G015_ALLOW_DISPOSABLE_DATABASE === "true" };
+  const options = { profile: "repository", output: ".omx/verification/job-supply-release-manifest.json", includeFrontend: false, includeDocker: false, planOnly: false, expectedHead: process.env.G015_EXPECTED_HEAD ?? null, databaseUrl: process.env.G015_TEST_DATABASE_URL ?? null, allowDisposableDatabase: process.env.G015_ALLOW_DISPOSABLE_DATABASE === "true" };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--with-frontend") options.includeFrontend = true;
     else if (argument === "--with-docker") options.includeDocker = true;
     else if (argument === "--allow-disposable-database") options.allowDisposableDatabase = true;
+    else if (argument === "--expected-head") options.expectedHead = argv[++index];
     else if (argument === "--plan") options.planOnly = true;
     else if (argument === "--profile") {
       const value = argv[++index];
@@ -223,7 +234,9 @@ function parseArgs(argv) {
 }
 
 export function executeCommand(item, output = { stdout: (value) => process.stdout.write(value), stderr: (value) => process.stderr.write(value) }) {
-  const result = spawnSync(item.executable, item.args, { cwd: resolve(process.cwd(), item.cwd), env: { ...process.env, ...item.env }, encoding: item.redactEnvironment ? "utf8" : undefined, stdio: item.redactEnvironment ? "pipe" : "inherit", shell: false });
+  const blocked = /(?:DATABASE_URL|SUPABASE|RAILWAY|VERCEL|POSTHOG|OPENAI|API_KEY|SECRET|TOKEN|PASSWORD)/i;
+  const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) => !blocked.test(key)));
+  const result = spawnSync(item.executable, item.args, { cwd: resolve(process.cwd(), item.cwd), env: { ...inherited, ...item.env }, encoding: item.redactEnvironment ? "utf8" : undefined, stdio: item.redactEnvironment ? "pipe" : "inherit", shell: false });
   if (item.redactEnvironment) {
     const secrets = Object.values(item.env);
     const stdout = redactSensitiveText(result.stdout, secrets);
@@ -239,7 +252,11 @@ function run(plan) {
   const startedAt = new Date();
   const initial = repositoryAttestation();
   const results = [];
-  if (!initial.clean) {
+  const expectedHead = plan.expectedHead ?? process.env.G015_EXPECTED_HEAD;
+  if (expectedHead && !/^[0-9a-f]{40}$/i.test(expectedHead)) throw new Error("--expected-head must be a 40-character commit SHA");
+  if (expectedHead && initial.head !== expectedHead) {
+    results.push({ id: "repository-attestation", status: "failed", exitCode: 1, durationMs: 0, error: `HEAD ${initial.head} does not match expected ${expectedHead}` });
+  } else if (!initial.clean) {
     results.push({ id: "repository-attestation", status: "failed", exitCode: 1, durationMs: 0, error: "working tree is not clean; verification cannot attest exact HEAD content" });
   } else {
     for (const item of plan.commands) {
@@ -255,7 +272,7 @@ function run(plan) {
   const passed = initial.clean && final.clean && contentUnchanged && results.length === plan.commands.length && results.every((result) => result.status === "passed");
   return {
     version: MANIFEST_VERSION, generatedAt: new Date().toISOString(), startedAt: startedAt.toISOString(), completedAt: new Date().toISOString(), profile: plan.profile,
-    exactHead: initial.head, repositoryAttestation: { initial, final, contentUnchanged },
+    exactHead: initial.head, expectedHead: expectedHead ?? null, repositoryAttestation: { initial, final, contentUnchanged },
     overallStatus: passed ? "passed" : "failed", readinessStatus: passed && plan.blockedExternal.length === 0 ? "READY" : passed ? "BLOCKED_EXTERNAL" : "FAILED",
     results, blockedExternal: plan.blockedExternal,
     safeguards: { productionDeploymentPerformed: false, providerActivationPerformed: false, canonicalWriterTransferPerformed: false, applicationSubmissionPerformed: false, externalStateInspected: false },
@@ -264,8 +281,12 @@ function run(plan) {
 
 function writeManifest(path, manifest) {
   const output = resolve(process.cwd(), path);
+  const root = resolve(process.cwd(), ".omx", "verification");
+  if (!output.startsWith(`${root}${process.platform === "win32" ? "\\" : "/"}`) || existsSync(output) || (lstatSync(dirname(output), { throwIfNoEntry: false })?.isSymbolicLink())) throw new Error("--output must be a new path contained under .omx/verification");
   mkdirSync(dirname(output), { recursive: true });
-  writeFileSync(output, `${JSON.stringify(manifest, null, 2)}\n`);
+  const temp = `${output}.${process.pid}.tmp`;
+  writeFileSync(temp, `${JSON.stringify(manifest, null, 2)}\n`, { flag: "wx" });
+  renameSync(temp, output);
 }
 
 const direct = import.meta.url === `file://${process.argv[1]}`;

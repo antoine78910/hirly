@@ -50,6 +50,13 @@ describe("G015 release verification contract", () => {
       "DEPLOYMENT_NOT_PERFORMED",
       "SOURCE_ACTIVATION_NOT_PERFORMED",
     ]);
+    const matrixEnv = plan.commands.find((entry) => entry.id === "postgres-release-matrix")?.env ?? {};
+    expect(new Set(Object.values(matrixEnv)).size).toBe(7);
+  });
+
+  test("pins an expected head in the release plan", () => {
+    const plan = buildReleaseVerificationPlan({ profile: "repository", expectedHead: "a".repeat(40) });
+    expect(plan.expectedHead).toBe("a".repeat(40));
   });
 
   test("redacts credentials emitted by an actual child process", () => {
