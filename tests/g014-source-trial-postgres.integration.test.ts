@@ -108,6 +108,27 @@ describe("G014 real-Postgres source trial isolation", () => {
           true
         );
 
+        INSERT INTO public.source_policy_evidence (
+          source_key, evidence_key, evidence_type, evidence_reference,
+          artifact_path, artifact_sha256, captured_at, qualification_status,
+          production_eligible, claim_scope
+        ) VALUES (
+          'greenhouse:g014-foundation', 'g014-replacement-fixture',
+          'written_permission', 'g014-test-replacement-approval',
+          'tests/fixtures/g014-policy-replacement.json',
+          repeat('b', 64), clock_timestamp(), 'requires_legal_review', false,
+          '{"trialOnly":true}'::jsonb
+        );
+        SELECT set_config(
+          'g014.replacement_evidence_id',
+          (
+            SELECT id::text FROM public.source_policy_evidence
+            WHERE source_key = 'greenhouse:g014-foundation'
+              AND evidence_key = 'g014-replacement-fixture'
+          ),
+          true
+        );
+
         DO $mismatch$
         BEGIN
           BEGIN
@@ -193,13 +214,42 @@ describe("G014 real-Postgres source trial isolation", () => {
           true
         );
 
+        DO $digest_mismatch$
+        BEGIN
+          BEGIN
+            PERFORM worker_private.record_source_trial_page(
+              current_setting('g014.run_id')::uuid,
+              1,
+              clock_timestamp(),
+              '{"items":[{"id":"job-1"}]}',
+              repeat('0', 64),
+              octet_length(
+                convert_to('{"items":[{"id":"job-1"}]}', 'UTF8')
+              )
+            );
+            RAISE EXCEPTION 'mismatched page digest unexpectedly accepted';
+          EXCEPTION WHEN insufficient_privilege THEN NULL;
+          END;
+        END
+        $digest_mismatch$;
+
         SELECT set_config(
           'g014.page_id',
           worker_private.record_source_trial_page(
             current_setting('g014.run_id')::uuid,
             1,
             clock_timestamp(),
-            '{"items":[{"id":"job-1"}]}'::jsonb
+            '{"items":[{"id":"job-1"}]}',
+            encode(
+              digest(
+                convert_to('{"items":[{"id":"job-1"}]}', 'UTF8'),
+                'sha256'
+              ),
+              'hex'
+            ),
+            octet_length(
+              convert_to('{"items":[{"id":"job-1"}]}', 'UTF8')
+            )
           )::text,
           true
         );
@@ -208,7 +258,17 @@ describe("G014 real-Postgres source trial isolation", () => {
           current_setting('g014.run_id')::uuid,
           current_setting('g014.page_id')::uuid,
           'job-1',
-          '{"externalId":"job-1","title":"Trial Engineer"}'::jsonb
+          '{"externalId":"job-1","title":"Trial Engineer"}',
+          encode(
+            digest(
+              convert_to(
+                '{"externalId":"job-1","title":"Trial Engineer"}',
+                'UTF8'
+              ),
+              'sha256'
+            ),
+            'hex'
+          )
         );
 
         SELECT worker_private.record_source_trial_scorecard(
@@ -228,6 +288,39 @@ describe("G014 real-Postgres source trial isolation", () => {
           )
         );
 
+        RESET ROLE;
+
+        UPDATE public.source_trial_policies
+        SET policy_evidence_id =
+          current_setting('g014.replacement_evidence_id')::uuid
+        WHERE source_id = current_setting('g014.source_id')::uuid
+          AND environment = 'test';
+
+        SET LOCAL ROLE hirly_source_trial_worker;
+        DO $stale_evidence$
+        BEGIN
+          BEGIN
+            PERFORM worker_private.record_source_trial_scorecard(
+              current_setting('g014.run_id')::uuid,
+              'stale-policy-result',
+              jsonb_build_object(
+                'schemaVersion', 'hirly.source-trial-result.v1',
+                'runId', current_setting('g014.run_id'),
+                'trialKey', 'g014',
+                'status', 'failed',
+                'startedAt', to_jsonb(clock_timestamp()),
+                'finishedAt', to_jsonb(clock_timestamp()),
+                'pagesFetched', 1,
+                'candidatesObserved', 1,
+                'bytesStored', 26,
+                'stopReason', 'stale_policy_evidence'
+              )
+            );
+            RAISE EXCEPTION 'stale policy evidence unexpectedly accepted';
+          EXCEPTION WHEN insufficient_privilege THEN NULL;
+          END;
+        END
+        $stale_evidence$;
         RESET ROLE;
 
         DO $immutable$

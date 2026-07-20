@@ -71,6 +71,12 @@ bun run --cwd apps/worker trial -- \
 Only immutable trial runs, raw pages, normalized candidates and run-result
 evidence can be appended. The trial role has no table DML and cannot execute
 canonical job, ownership, schedule, application or fulfillment functions.
+Rate-limited, budget-exhausted and failed attempts append a classified immutable
+run result before the runner returns the failure. Raw-page byte counts and page
+and candidate SHA-256 digests are checked in Postgres against each exact
+serialized payload; the database rejects a caller claim that does not
+reconcile. If the policy switches to different evidence after a run begins, all
+further writes for the old run are rejected.
 
 ## Repeated-sync bakeoff
 
@@ -109,4 +115,3 @@ requires measured incremental cohort value, reliable identifiers and removals,
 direct application quality, current commercial/redisplay/retention rights,
 bounded cost, alerts, a kill switch, and an exercised whole-provider writer
 rollback. Application submission remains a separate workstream.
-

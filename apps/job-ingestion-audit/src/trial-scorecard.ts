@@ -184,7 +184,9 @@ export function parseTrialSnapshots(value: unknown): TrialSnapshot[] {
     if (record.status !== "COMPLETE") fail(`${path} status must be COMPLETE (BLOCKED_EXTERNAL is not scoreable)`);
     if (record.sample !== false) fail(`${path}.sample must be false`);
     if (record.complete !== true) fail(`${path}.complete must be true`);
-    if (!Array.isArray(record.jobs)) fail(`${path}.jobs must be an array`);
+    if (!Array.isArray(record.jobs) || record.jobs.length === 0) {
+      fail(`${path}.jobs must contain at least one observed job; zero-volume runs are not complete snapshots`);
+    }
     const capturedAt = requireString(record.capturedAt, `${path}.capturedAt`);
     if (!Number.isFinite(Date.parse(capturedAt))) fail(`${path}.capturedAt must be an ISO timestamp`);
     return {

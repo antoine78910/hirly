@@ -240,6 +240,7 @@ AS $$
       ON evidence.id = run.policy_evidence_id
     WHERE run.id = p_run_id
       AND policy.trial_enabled
+      AND policy.policy_evidence_id = run.policy_evidence_id
       AND policy.tenant_key = run.tenant_key
       AND policy.permitted_access_method = source.access_type
       AND policy.environment = run.environment
@@ -406,7 +407,9 @@ CREATE OR REPLACE FUNCTION worker_private.record_source_trial_page(
   p_run_id uuid,
   p_page_number integer,
   p_fetched_at timestamptz,
-  p_payload jsonb
+  p_serialized_payload text,
+  p_content_hash text,
+  p_byte_count bigint
 )
 RETURNS uuid
 LANGUAGE plpgsql
@@ -416,21 +419,36 @@ AS $$
 DECLARE
   v_run public.source_trial_runs;
   v_page_id uuid;
+  v_payload jsonb;
   v_bytes bigint;
+  v_content_hash text;
 BEGIN
   PERFORM pg_advisory_xact_lock(hashtextextended(p_run_id::text, 0));
   SELECT * INTO v_run
   FROM public.source_trial_runs
   WHERE id = p_run_id;
 
-  v_bytes := octet_length(p_payload::text);
+  BEGIN
+    v_payload := p_serialized_payload::jsonb;
+  EXCEPTION WHEN invalid_text_representation THEN
+    RAISE EXCEPTION 'source trial page payload is not valid JSON'
+      USING ERRCODE = '22023';
+  END;
+  v_bytes := octet_length(convert_to(p_serialized_payload, 'UTF8'));
+  v_content_hash := encode(
+    digest(convert_to(p_serialized_payload, 'UTF8'), 'sha256'),
+    'hex'
+  );
   IF v_run.id IS NULL
     OR NOT worker_private.source_trial_run_is_writable(p_run_id)
     OR p_page_number IS NULL OR p_page_number < 1
     OR p_page_number > v_run.max_pages
     OR p_fetched_at IS NULL OR p_fetched_at > clock_timestamp() + interval '5 minutes'
-    OR p_payload IS NULL OR jsonb_typeof(p_payload) NOT IN ('object', 'array')
+    OR p_serialized_payload IS NULL
+    OR v_payload IS NULL OR jsonb_typeof(v_payload) NOT IN ('object', 'array')
     OR v_bytes < 1
+    OR p_content_hash IS NULL OR p_content_hash <> v_content_hash
+    OR p_byte_count IS NULL OR p_byte_count <> v_bytes
     OR v_bytes + coalesce((
       SELECT sum(page.byte_count)
       FROM public.source_trial_pages AS page
@@ -448,9 +466,9 @@ BEGIN
     p_run_id,
     p_page_number,
     p_fetched_at,
-    encode(digest(p_payload::text, 'sha256'), 'hex'),
+    v_content_hash,
     v_bytes,
-    p_payload
+    v_payload
   )
   RETURNING id INTO v_page_id;
 
@@ -462,7 +480,8 @@ CREATE OR REPLACE FUNCTION worker_private.record_source_trial_candidate(
   p_run_id uuid,
   p_page_id uuid,
   p_candidate_key text,
-  p_candidate jsonb
+  p_serialized_candidate text,
+  p_content_hash text
 )
 RETURNS uuid
 LANGUAGE plpgsql
@@ -472,17 +491,31 @@ AS $$
 DECLARE
   v_run public.source_trial_runs;
   v_candidate_id uuid;
+  v_candidate jsonb;
+  v_content_hash text;
 BEGIN
   PERFORM pg_advisory_xact_lock(hashtextextended(p_run_id::text, 0));
   SELECT * INTO v_run
   FROM public.source_trial_runs
   WHERE id = p_run_id;
 
+  BEGIN
+    v_candidate := p_serialized_candidate::jsonb;
+  EXCEPTION WHEN invalid_text_representation THEN
+    RAISE EXCEPTION 'source trial candidate is not valid JSON'
+      USING ERRCODE = '22023';
+  END;
+  v_content_hash := encode(
+    digest(convert_to(p_serialized_candidate, 'UTF8'), 'sha256'),
+    'hex'
+  );
   IF v_run.id IS NULL
     OR NOT worker_private.source_trial_run_is_writable(p_run_id)
     OR p_candidate_key IS NULL OR length(btrim(p_candidate_key)) = 0
     OR length(p_candidate_key) > 512
-    OR p_candidate IS NULL OR jsonb_typeof(p_candidate) <> 'object'
+    OR p_serialized_candidate IS NULL
+    OR v_candidate IS NULL OR jsonb_typeof(v_candidate) <> 'object'
+    OR p_content_hash IS NULL OR p_content_hash <> v_content_hash
     OR NOT EXISTS (
       SELECT 1 FROM public.source_trial_pages
       WHERE id = p_page_id AND run_id = p_run_id
@@ -504,8 +537,8 @@ BEGIN
     p_run_id,
     p_page_id,
     btrim(p_candidate_key),
-    encode(digest(p_candidate::text, 'sha256'), 'hex'),
-    p_candidate
+    v_content_hash,
+    v_candidate
   )
   RETURNING id INTO v_candidate_id;
 
@@ -555,10 +588,10 @@ REVOKE ALL ON FUNCTION worker_private.source_trial_run_is_writable(uuid)
   FROM PUBLIC;
 REVOKE ALL ON FUNCTION worker_private.begin_source_trial(jsonb) FROM PUBLIC;
 REVOKE ALL ON FUNCTION worker_private.record_source_trial_page(
-  uuid, integer, timestamptz, jsonb
+  uuid, integer, timestamptz, text, text, bigint
 ) FROM PUBLIC;
 REVOKE ALL ON FUNCTION worker_private.record_source_trial_candidate(
-  uuid, uuid, text, jsonb
+  uuid, uuid, text, text, text
 ) FROM PUBLIC;
 REVOKE ALL ON FUNCTION worker_private.record_source_trial_scorecard(
   uuid, text, jsonb
@@ -568,10 +601,10 @@ GRANT USAGE ON SCHEMA worker_private TO hirly_source_trial_worker;
 GRANT EXECUTE ON FUNCTION worker_private.begin_source_trial(jsonb)
   TO hirly_source_trial_worker;
 GRANT EXECUTE ON FUNCTION worker_private.record_source_trial_page(
-  uuid, integer, timestamptz, jsonb
+  uuid, integer, timestamptz, text, text, bigint
 ) TO hirly_source_trial_worker;
 GRANT EXECUTE ON FUNCTION worker_private.record_source_trial_candidate(
-  uuid, uuid, text, jsonb
+  uuid, uuid, text, text, text
 ) TO hirly_source_trial_worker;
 GRANT EXECUTE ON FUNCTION worker_private.record_source_trial_scorecard(
   uuid, text, jsonb

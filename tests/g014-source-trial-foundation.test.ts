@@ -47,7 +47,31 @@ describe("G014 source trial foundation", () => {
     expect(migration).toMatch(
       /evidence\.qualification_status <> 'blocked'/i,
     );
+    expect(migration).toMatch(
+      /policy\.policy_evidence_id = run\.policy_evidence_id/i,
+    );
     expect(migration).not.toContain("evidence.production_eligible");
+  });
+
+  test("reconciles the caller's exact serialized page bytes and digest", () => {
+    expect(migration).toMatch(
+      /p_serialized_payload text,[\s\S]*p_content_hash text,[\s\S]*p_byte_count bigint/i,
+    );
+    expect(migration).toMatch(
+      /v_payload := p_serialized_payload::jsonb/i,
+    );
+    expect(migration).toMatch(
+      /p_content_hash IS NULL OR p_content_hash <> v_content_hash/i,
+    );
+    expect(migration).toMatch(
+      /p_byte_count IS NULL OR p_byte_count <> v_bytes/i,
+    );
+    expect(migration).toMatch(
+      /p_serialized_candidate text,[\s\S]*p_content_hash text/i,
+    );
+    expect(migration).toMatch(
+      /v_candidate := p_serialized_candidate::jsonb/i,
+    );
   });
 
   test("keeps run, page, candidate, and scorecard evidence noncanonical and immutable", () => {

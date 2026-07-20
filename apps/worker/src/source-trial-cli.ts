@@ -2,7 +2,6 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import {
   sourceTrialManifestSchema,
-  type CanonicalJob,
   type SourceTrialManifest,
   type SourceTrialResult,
 } from "@hirly/contracts";
@@ -107,16 +106,18 @@ export class PostgresSourceTrialEvidenceRepository
     runId: string;
     pageNumber: number;
     fetchedAt: Date;
+    serializedPayload: string;
     contentHash: string;
     byteCount: number;
-    payload: unknown;
   }): Promise<string> {
     const [row] = await this.sql<{ page_id: string }[]>`
       SELECT worker_private.record_source_trial_page(
         ${input.runId}::uuid,
         ${input.pageNumber},
         ${input.fetchedAt},
-        ${this.sql.json(asJson(input.payload))}
+        ${input.serializedPayload},
+        ${input.contentHash},
+        ${input.byteCount}
       ) AS page_id
     `;
     if (!row) throw new Error("record_source_trial_page returned no page");
@@ -127,15 +128,16 @@ export class PostgresSourceTrialEvidenceRepository
     runId: string;
     pageId: string;
     candidateKey: string;
+    serializedCandidate: string;
     contentHash: string;
-    candidate: CanonicalJob;
   }): Promise<void> {
     await this.sql`
       SELECT worker_private.record_source_trial_candidate(
         ${input.runId}::uuid,
         ${input.pageId}::uuid,
         ${input.candidateKey},
-        ${this.sql.json(asJson(input.candidate))}
+        ${input.serializedCandidate},
+        ${input.contentHash}
       )
     `;
   }

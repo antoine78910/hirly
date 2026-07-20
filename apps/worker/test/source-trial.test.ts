@@ -111,6 +111,76 @@ describe("G014 evidence-only source trial runner", () => {
     expect(Object.keys(repository)).not.toContain("enqueue");
   });
 
+  test.each([
+    {
+      name: "rate-limited",
+      fetch: async () => new Response("", { status: 429 }),
+      manifest,
+      expectedStatus: "failed",
+      expectedReason: "rate_limited",
+    },
+    {
+      name: "over-budget",
+      fetch: async () => Response.json(response),
+      manifest: {
+        ...manifest,
+        budget: { ...manifest.budget, maxCandidates: 1 },
+      },
+      expectedStatus: "budget_exhausted",
+      expectedReason: "budget_exceeded:maxCandidates",
+    },
+    {
+      name: "failed",
+      fetch: async () => {
+        throw new Error("network unavailable");
+      },
+      manifest,
+      expectedStatus: "failed",
+      expectedReason: "retryable",
+    },
+  ])(
+    "persists an immutable classified result for a $name attempt",
+    async ({ fetch, manifest: trialManifest, expectedStatus, expectedReason }) => {
+      const results: Array<Parameters<
+        SourceTrialEvidenceRepository["recordSourceTrialScorecard"]
+      >[0]["result"]> = [];
+      const repository: SourceTrialEvidenceRepository = {
+        async beginSourceTrial() {
+          return "018f02d8-a8b8-7f1d-a419-bf38eaf22a92";
+        },
+        async recordSourceTrialPage() {
+          throw new Error("failed attempts must not record a page");
+        },
+        async recordSourceTrialCandidate() {
+          throw new Error("failed attempts must not record a candidate");
+        },
+        async recordSourceTrialScorecard(input) {
+          results.push(input.result);
+        },
+      };
+
+      await expect(
+        persistAtsSourceTrial({
+          manifest: trialManifest,
+          repository,
+          fetch,
+          now: () => new Date("2026-07-20T12:00:00Z"),
+        }),
+      ).rejects.toThrow();
+
+      expect(results).toEqual([
+        expect.objectContaining({
+          schemaVersion: "hirly.source-trial-result.v1",
+          status: expectedStatus,
+          stopReason: expectedReason,
+          pagesFetched: 0,
+          candidatesObserved: 0,
+          bytesStored: 0,
+        }),
+      ]);
+    },
+  );
+
   test("rejects expired policy, unsupported providers and manifest budgets", async () => {
     await expect(
       previewAtsSourceTrial({

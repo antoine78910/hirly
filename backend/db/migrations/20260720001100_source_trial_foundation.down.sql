@@ -19,10 +19,10 @@ REVOKE ALL ON FUNCTION worker_private.record_source_trial_scorecard(
   uuid, text, jsonb
 ) FROM hirly_source_trial_worker;
 REVOKE ALL ON FUNCTION worker_private.record_source_trial_candidate(
-  uuid, uuid, text, jsonb
+  uuid, uuid, text, text, text
 ) FROM hirly_source_trial_worker;
 REVOKE ALL ON FUNCTION worker_private.record_source_trial_page(
-  uuid, integer, timestamptz, jsonb
+  uuid, integer, timestamptz, text, text, bigint
 ) FROM hirly_source_trial_worker;
 REVOKE ALL ON FUNCTION worker_private.begin_source_trial(jsonb)
   FROM hirly_source_trial_worker;
@@ -31,10 +31,10 @@ DROP FUNCTION IF EXISTS worker_private.record_source_trial_scorecard(
   uuid, text, jsonb
 );
 DROP FUNCTION IF EXISTS worker_private.record_source_trial_candidate(
-  uuid, uuid, text, jsonb
+  uuid, uuid, text, text, text
 );
 DROP FUNCTION IF EXISTS worker_private.record_source_trial_page(
-  uuid, integer, timestamptz, jsonb
+  uuid, integer, timestamptz, text, text, bigint
 );
 DROP FUNCTION IF EXISTS worker_private.begin_source_trial(jsonb);
 DROP FUNCTION IF EXISTS worker_private.source_trial_run_is_writable(uuid);

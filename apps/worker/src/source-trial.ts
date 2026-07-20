@@ -22,7 +22,10 @@ import {
   type LeverRawJob,
   type LeverTrialRegion,
 } from "./providers/lever";
-import type { AtsTrialFetch } from "./providers/ats-trial-transport";
+import {
+  AtsTrialTransportError,
+  type AtsTrialFetch,
+} from "./providers/ats-trial-transport";
 
 export interface SourceTrialCandidate {
   candidateKey: string;
@@ -64,16 +67,16 @@ export interface SourceTrialEvidenceRepository {
     runId: string;
     pageNumber: number;
     fetchedAt: Date;
+    serializedPayload: string;
     contentHash: string;
     byteCount: number;
-    payload: unknown;
   }): Promise<string>;
   recordSourceTrialCandidate(input: {
     runId: string;
     pageId: string;
     candidateKey: string;
+    serializedCandidate: string;
     contentHash: string;
-    candidate: CanonicalJob;
   }): Promise<void>;
   recordSourceTrialScorecard(input: {
     runId: string;
@@ -174,29 +177,33 @@ export async function persistAtsSourceTrial(input: {
 }): Promise<SourceTrialPreview> {
   const manifest = sourceTrialManifestSchema.parse(input.manifest);
   const runId = await input.repository.beginSourceTrial(manifest);
-  const preview = await previewAtsSourceTrial({ ...input, manifest, runId });
-  const pageId = await input.repository.recordSourceTrialPage({
-    runId,
-    pageNumber: 1,
-    fetchedAt: new Date(preview.fetchedAt),
-    contentHash: preview.pageContentHash,
-    byteCount: preview.byteCount,
-    payload: preview.rawPage,
-  });
-  for (const candidate of preview.candidates) {
-    await input.repository.recordSourceTrialCandidate({
+  let pagesFetched = 0;
+  let candidatesObserved = 0;
+  let bytesStored = 0;
+  try {
+    const preview = await previewAtsSourceTrial({ ...input, manifest, runId });
+    const serializedPayload = stableJson(preview.rawPage);
+    const pageId = await input.repository.recordSourceTrialPage({
       runId,
-      pageId,
-      candidateKey: candidate.candidateKey,
-      contentHash: candidate.contentHash,
-      candidate: candidate.candidate,
+      pageNumber: 1,
+      fetchedAt: new Date(preview.fetchedAt),
+      serializedPayload,
+      contentHash: preview.pageContentHash,
+      byteCount: preview.byteCount,
     });
-  }
-  await input.repository.recordSourceTrialScorecard({
-    runId,
-    scorecardKey: "trial-result",
-    result: sourceTrialResultSchema.parse({
-      schemaVersion: "hirly.source-trial-result.v1",
+    pagesFetched = 1;
+    bytesStored = preview.byteCount;
+    for (const candidate of preview.candidates) {
+      await input.repository.recordSourceTrialCandidate({
+        runId,
+        pageId,
+        candidateKey: candidate.candidateKey,
+        serializedCandidate: stableJson(candidate.candidate),
+        contentHash: candidate.contentHash,
+      });
+      candidatesObserved += 1;
+    }
+    await recordTrialResult(input.repository, {
       runId,
       trialKey: manifest.trialKey,
       status: "completed",
@@ -206,9 +213,70 @@ export async function persistAtsSourceTrial(input: {
       candidatesObserved: preview.normalized,
       bytesStored: preview.byteCount,
       stopReason: null,
+    });
+    return preview;
+  } catch (error) {
+    const failure = classifyTrialFailure(error);
+    try {
+      await recordTrialResult(input.repository, {
+        runId,
+        trialKey: manifest.trialKey,
+        status: failure.status,
+        startedAt: manifest.requestedAt,
+        finishedAt: (input.now?.() ?? new Date()).toISOString(),
+        pagesFetched,
+        candidatesObserved,
+        bytesStored,
+        stopReason: failure.stopReason,
+      });
+    } catch (evidenceError) {
+      throw new AggregateError(
+        [error, evidenceError],
+        "trial_failure_evidence_write_failed",
+      );
+    }
+    throw error;
+  }
+}
+
+async function recordTrialResult(
+  repository: SourceTrialEvidenceRepository,
+  result: Omit<SourceTrialResult, "schemaVersion">,
+): Promise<void> {
+  await repository.recordSourceTrialScorecard({
+    runId: result.runId,
+    scorecardKey: "trial-result",
+    result: sourceTrialResultSchema.parse({
+      schemaVersion: "hirly.source-trial-result.v1",
+      ...result,
     }),
   });
-  return preview;
+}
+
+function classifyTrialFailure(error: unknown): {
+  status: SourceTrialResult["status"];
+  stopReason: string;
+} {
+  if (error instanceof AtsTrialTransportError) {
+    return {
+      status:
+        error.classification === "budget_exceeded"
+          ? "budget_exhausted"
+          : "failed",
+      stopReason: error.classification,
+    };
+  }
+  const message = error instanceof Error ? error.message : "";
+  if (message.startsWith("trial_budget_exceeded:")) {
+    return {
+      status: "budget_exhausted",
+      stopReason: message.slice("trial_".length),
+    };
+  }
+  if (message === "trial_policy_window_invalid") {
+    return { status: "policy_expired", stopReason: "policy_expired" };
+  }
+  return { status: "failed", stopReason: "unclassified_failure" };
 }
 
 async function fetchRows(

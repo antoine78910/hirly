@@ -88,6 +88,7 @@ describe("trial scorecard", () => {
     ["partial snapshot", { snapshot: { complete: false } }],
     ["blocked snapshot", { snapshot: { status: "BLOCKED_EXTERNAL" } }],
     ["sample snapshot", { snapshot: { sample: true } }],
+    ["zero-volume complete snapshot", { snapshot: { jobs: [] } }],
     ["mismatched control", { snapshot: { controlDigest: "other" } }],
   ];
 
