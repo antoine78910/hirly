@@ -11,7 +11,7 @@ jest.mock("posthog-js", () => ({
   },
 }));
 
-import posthog from "posthog-js";
+import posthog, { type CaptureResult, type PostHogConfig, type Properties } from "posthog-js";
 import {
   __resetPostHogForTests,
   buildPostHogConfig,
@@ -22,6 +22,7 @@ import {
   resetPostHog,
   sanitizeAnalyticsProperties,
   sanitizePostHogEvent,
+  syncPostHogReplay,
 } from "./posthogClient";
 
 const mockInit = posthog.init as jest.Mock;
@@ -32,6 +33,13 @@ const mockClient = {
   startSessionRecording: mockStartSessionRecording,
   stopSessionRecording: mockStopSessionRecording,
 };
+type BeforeSend = (event: CaptureResult | null) => CaptureResult | null;
+const getBeforeSend = (config: Partial<PostHogConfig>): BeforeSend => {
+  const configured = config.before_send;
+  const handler = Array.isArray(configured) ? configured[0] : configured;
+  if (!handler) throw new Error("before_send must be configured");
+  return handler as BeforeSend;
+};
 
 describe("posthog client", () => {
   beforeEach(() => {
@@ -40,6 +48,7 @@ describe("posthog client", () => {
     delete process.env.REACT_APP_POSTHOG_TOKEN;
     delete process.env.REACT_APP_POSTHOG_HOST;
     delete process.env.REACT_APP_POSTHOG_REPLAY_ENABLED;
+    delete process.env.REACT_APP_POSTHOG_REPLAY_HOSTILE_QA_APPROVED;
     mockInit.mockReturnValue(mockClient);
   });
 
@@ -77,6 +86,7 @@ describe("posthog client", () => {
     expect(profileA).not.toHaveProperty("advanced_disable_feature_flags");
 
     process.env.REACT_APP_POSTHOG_REPLAY_ENABLED = "true";
+    process.env.REACT_APP_POSTHOG_REPLAY_HOSTILE_QA_APPROVED = "true";
     const profileB = buildPostHogConfig();
     expect(profileB).toMatchObject({
       disable_session_recording: false,
@@ -139,8 +149,125 @@ describe("posthog client", () => {
     const snapshot = { event: "$snapshot", properties: { $snapshot_data: "opaque" } } as never;
     expect(sanitizePostHogEvent(snapshot)).toBeNull();
     process.env.REACT_APP_POSTHOG_REPLAY_ENABLED = "true";
+    expect(sanitizePostHogEvent(snapshot)).toBeNull();
+    process.env.REACT_APP_POSTHOG_REPLAY_HOSTILE_QA_APPROVED = "true";
     expect(sanitizePostHogEvent(snapshot)).toBe(snapshot);
     expect(sanitizePostHogEvent({ event: "$feature_flag_called", properties: {} } as never)).toBeNull();
+  });
+
+  it("keeps Profile A snapshot and flag traffic off when replay was requested but not approved", () => {
+    process.env.REACT_APP_POSTHOG_REPLAY_ENABLED = "true";
+    const config = buildPostHogConfig();
+    expect(config).toMatchObject({
+      disable_session_recording: true,
+      advanced_disable_flags: true,
+    });
+    const beforeSend = getBeforeSend(config);
+    expect(beforeSend({ event: "$snapshot", properties: {} } as never)).toBeNull();
+    expect(
+      beforeSend({ event: "$feature_flag_called", properties: {} } as never),
+    ).toBeNull();
+  });
+
+  it("starts replay only after the separate hostile-inspection approval gate", () => {
+    process.env.REACT_APP_POSTHOG_TOKEN = "phc_test";
+    process.env.REACT_APP_POSTHOG_HOST = "https://us.i.posthog.com";
+    process.env.REACT_APP_POSTHOG_REPLAY_ENABLED = "true";
+    initializePostHog();
+    syncPostHogReplay();
+    expect(mockStartSessionRecording).not.toHaveBeenCalled();
+    expect(mockStopSessionRecording).toHaveBeenCalledTimes(2);
+
+    __resetPostHogForTests();
+    jest.clearAllMocks();
+    mockInit.mockReturnValue(mockClient);
+    process.env.REACT_APP_POSTHOG_REPLAY_HOSTILE_QA_APPROVED = "true";
+    initializePostHog();
+    syncPostHogReplay();
+    expect(mockStartSessionRecording).toHaveBeenCalledTimes(1);
+    expect(mockStopSessionRecording).not.toHaveBeenCalled();
+  });
+
+  it("preserves SDK transport properties while rejecting caller-controlled secrets", () => {
+    const sanitizedCallerProperties = sanitizeAnalyticsProperties({
+      plan: "pro",
+      token: "caller-token",
+      session_id: "caller-session",
+      accessToken: "caller-access-token",
+    });
+    expect(sanitizedCallerProperties).toEqual({ plan: "pro" });
+
+    const event = sanitizePostHogEvent({
+      event: "checkout_started",
+      properties: {
+        ...(sanitizedCallerProperties as Properties),
+        token: "phc_sdk_project",
+        $session_id: "sdk-session",
+        $window_id: "sdk-window",
+      },
+    } as never);
+    expect(event?.properties).toMatchObject({
+      plan: "pro",
+      token: "phc_sdk_project",
+      $session_id: "sdk-session",
+      $window_id: "sdk-window",
+    });
+  });
+
+  it("does not drop initialized product, pageview, or identify events after SDK enrichment", () => {
+    process.env.REACT_APP_POSTHOG_TOKEN = "phc_test";
+    process.env.REACT_APP_POSTHOG_HOST = "https://us.i.posthog.com";
+    const delivered: Array<CaptureResult> = [];
+    let beforeSend: BeforeSend = (event) => event;
+
+    mockInit.mockImplementation((_token, config) => {
+      beforeSend = getBeforeSend(config);
+      mockCapture.mockImplementation((event, properties) => {
+        const result = beforeSend({
+          event,
+          properties: {
+            ...properties,
+            token: "phc_sdk_project",
+            $session_id: "sdk-session",
+            $window_id: "sdk-window",
+          },
+        } as never);
+        if (result) delivered.push(result);
+      });
+      mockIdentify.mockImplementation((distinctId) => {
+        const result = beforeSend({
+          event: "$identify",
+          properties: {
+            distinct_id: distinctId,
+            token: "phc_sdk_project",
+            $session_id: "sdk-session",
+            $window_id: "sdk-window",
+          },
+        } as never);
+        if (result) delivered.push(result);
+      });
+      return mockClient;
+    });
+
+    initializePostHog();
+    capturePostHogEvent("checkout_started", { plan: "pro", token: "caller-secret" });
+    capturePostHogPageview("/billing?checkout=secret");
+    identifyPostHogUser("user-123");
+
+    expect(delivered.map(({ event }) => event)).toEqual([
+      "checkout_started",
+      "$pageview",
+      "$identify",
+    ]);
+    for (const event of delivered) {
+      expect(event.properties).toMatchObject({
+        token: "phc_sdk_project",
+        $session_id: "sdk-session",
+        $window_id: "sdk-window",
+      });
+    }
+    expect(delivered[0].properties).not.toHaveProperty("accessToken");
+    expect(delivered[1].properties.$current_url).toBe("http://localhost/billing");
   });
 
   it("deduplicates strict-mode pageviews and resets before an identity switch", () => {

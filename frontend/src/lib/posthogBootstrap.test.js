@@ -15,6 +15,7 @@ describe("PostHog additive rollout seams", () => {
 
   it("pins the supported SDK and incremental TypeScript toolchain", () => {
     const packageJson = JSON.parse(readFrontendFile("package.json"));
+    const packageLock = JSON.parse(readFrontendFile("package-lock.json"));
     const tsconfig = JSON.parse(readFrontendFile("tsconfig.json"));
     expect(packageJson.dependencies).toMatchObject({
       "@posthog/react": "1.10.3",
@@ -29,6 +30,12 @@ describe("PostHog additive rollout seams", () => {
     expect(tsconfig.compilerOptions).toMatchObject({
       allowJs: true,
       noEmit: true,
+    });
+    expect(packageJson).not.toHaveProperty("packageManager");
+    expect(packageLock).toMatchObject({
+      name: packageJson.name,
+      version: packageJson.version,
+      lockfileVersion: 3,
     });
   });
 });
