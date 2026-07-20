@@ -6,9 +6,11 @@ import {
   materializeCoverage,
   reconcileFranceTravailPartition,
   reconcileFunnel,
-  validateFranceTravailCensusManifest,
+  reconcileFranceTravailPartition,
+  stableDigest,
   validatePaginationFixtures,
   validateCoverageManifest,
+  validateFranceTravailCensusManifest,
   validateRows,
   type FranceTravailCensusManifestInput,
   type PartitionFact,
@@ -16,8 +18,14 @@ import {
 } from "../src/audit";
 import {
   ExternalDependencyBlockedError,
+  parseContentRange,
   runFranceTravailLiveCensus,
 } from "../src/france-travail-census";
+import {
+  assertReadOnlyObservabilityQueries,
+  JOB_SUPPLY_OBSERVABILITY_QUERIES,
+  runJobSupplyObservabilityQueries,
+} from "../src/queries";
 import { readFileSync } from "node:fs";
 import {
   buildFranceTravailCensusManifest,
@@ -33,7 +41,7 @@ const coverageManifest = JSON.parse(readFileSync(
   new URL("../fixtures/coverage-manifest.json", import.meta.url),
   "utf8",
 )) as CoverageManifest;
-const franceTravailCensusInput = JSON.parse(readFileSync(
+const franceTravailManifestInput = JSON.parse(readFileSync(
   new URL("../fixtures/france-travail-census-manifest.json", import.meta.url),
   "utf8",
 )) as FranceTravailCensusManifestInput;
@@ -118,111 +126,192 @@ describe("job-ingestion audit invariants", () => {
     }
   });
 
-  test("computes paid-user coverage percentiles and exhaustion from aggregate snapshots", () => {
+  test("computes paid-user percentiles, median and exhaustion from aggregate snapshots", () => {
     expect(computePaidUserCoverageBaseline([
       {
-        userHash: "a".repeat(64), unseenActionableTotal: 0, actionableTotal: 2,
-        routeKnownTotal: 1, directEmployerTotal: 1, terminalReason: "exhausted",
+        userHash: "a", relevantTotal: 12, uniqueTotal: 14, actionableTotal: 10,
+        unseenActionableTotal: 0, routeKnownTotal: 8, directEmployerTotal: 4,
+        terminalReason: "exhausted",
       },
       {
-        userHash: "b".repeat(64), unseenActionableTotal: 5, actionableTotal: 5,
-        routeKnownTotal: 4, directEmployerTotal: 2, terminalReason: "results",
+        userHash: "b", relevantTotal: 12, uniqueTotal: 14, actionableTotal: 10,
+        unseenActionableTotal: 10, routeKnownTotal: 7, directEmployerTotal: 6,
+        terminalReason: "results",
       },
       {
-        userHash: "c".repeat(64), unseenActionableTotal: 10, actionableTotal: 10,
-        routeKnownTotal: 10, directEmployerTotal: 8, terminalReason: "results",
+        userHash: "c", relevantTotal: 12, uniqueTotal: 14, actionableTotal: 10,
+        unseenActionableTotal: 20, routeKnownTotal: 5, directEmployerTotal: 5,
+        terminalReason: "results",
       },
     ])).toEqual({
       cohortSize: 3,
-      p10: 1,
-      median: 5,
-      p90: 9,
+      p10: 2,
+      median: 10,
+      p90: 18,
       feedExhaustionRate: 1 / 3,
-      routeKnownRate: 15 / 17,
-      directEmployerRate: 11 / 17,
+      routeKnownRate: 2 / 3,
+      directEmployerRate: 0.5,
       terminalReasonCounts: { exhausted: 1, results: 2 },
+    });
+    expect(computePaidUserCoverageBaseline([])).toMatchObject({
+      cohortSize: 0,
+      median: null,
+      feedExhaustionRate: null,
     });
   });
 
-  test("freezes a deterministic, cohort-weighted France Travail census manifest", () => {
-    const manifest = freezeFranceTravailCensusManifest(franceTravailCensusInput);
-    expect(manifest.manifestDigest).toMatch(/^[a-f0-9]{64}$/);
+  test("freezes immutable census decision inputs with a canonical digest", () => {
+    const manifest = freezeFranceTravailCensusManifest(franceTravailManifestInput);
     expect(validateFranceTravailCensusManifest(manifest)).toEqual([]);
-    expect(manifest.paidCohortSnapshotHash).toMatch(/^[a-f0-9]{64}$/);
-    expect(manifest.samplingSeed).not.toHaveLength(0);
-    expect(
-      manifest.profileStrata.reduce(
-        (total, stratum) => total + Number(stratum.weight),
-        0,
-      ),
-    ).toBeCloseTo(1, 10);
-    expect(new Set(manifest.partitions.map(({ id }) => id)).size)
-      .toBe(manifest.partitions.length);
-    expect(
-      Date.parse(manifest.partitions[0].publishedBefore),
-    ).toBeLessThanOrEqual(Date.parse(manifest.partitions[1].publishedAfter));
+    expect(manifest.manifestDigest).toHaveLength(64);
+    expect(stableDigest({ b: 2, a: 1 })).toBe(stableDigest({ a: 1, b: 2 }));
+
+    const changed = structuredClone(manifest);
+    changed.samplingSeed = "changed-after-results";
+    expect(validateFranceTravailCensusManifest(changed)).toContain("manifest_digest_mismatch");
   });
 
-  test("reconciles every terminal France Travail partition through actionable supply", () => {
-    expect(reconcileFranceTravailPartition({
-      partitionId: "ft:test",
-      status: "complete",
-      sourceReportedTotal: 4,
-      httpRecords: 5,
-      uniqueExternalIds: 4,
+  test("rejects overlapping census windows for the same partition parameters", () => {
+    const manifest = freezeFranceTravailCensusManifest({
+      ...franceTravailManifestInput,
+      partitions: [
+        franceTravailManifestInput.partitions[0]!,
+        {
+          ...franceTravailManifestInput.partitions[1]!,
+          publishedAfter: "2026-07-12T00:00:00.000Z",
+        },
+      ],
+    });
+    expect(validateFranceTravailCensusManifest(manifest))
+      .toContain("overlapping_partition_windows:ft:2026-07-06:2026-07-13:all:ft:2026-07-13:2026-07-20:all");
+  });
+
+  test("reconciles the full France Travail census funnel and blocks unsafe terminal claims", () => {
+    const accounting = {
+      partitionId: "ft-1",
+      status: "complete" as const,
+      sourceReportedTotal: 10,
+      httpRecords: 11,
+      uniqueExternalIds: 10,
       duplicateRawRecords: 1,
-      normalized: 3,
+      normalized: 9,
       rejectedNormalization: 1,
-      occurrenceInserted: 1,
-      occurrenceUpdated: 1,
-      occurrenceDeduplicated: 1,
+      occurrenceInserted: 3,
+      occurrenceUpdated: 4,
+      occurrenceDeduplicated: 2,
       writeFailed: 0,
-      active: 3,
-      actionable: 2,
-      relevant: 2,
+      active: 8,
+      actionable: 7,
+      relevant: 6,
       namedResiduals: {},
-    })).toEqual([]);
-  });
-
-  test("persists Content-Range totals and fails closed when a partition exceeds the cap", async () => {
-    const input = {
-      ...franceTravailCensusInput,
-      capRules: {
-        ...franceTravailCensusInput.capRules,
-        maxRecordsPerPartition: 150,
-      },
-      partitions: [franceTravailCensusInput.partitions[0]],
     };
-    const result = await runFranceTravailLiveCensus(
-      freezeFranceTravailCensusManifest(input),
-      {
-        accessToken: "fixture-token",
-        fetcher: async () => new Response(JSON.stringify({
-          resultats: [{ id: "one" }, { id: "two" }],
-        }), {
-          status: 206,
-          headers: { "content-range": "offres 0-1/151" },
-        }),
-      },
-    );
-    expect(result.partitions).toEqual([{
-      partitionId: input.partitions[0].id,
+    expect(reconcileFranceTravailPartition(accounting)).toEqual([]);
+    expect(reconcileFranceTravailPartition({
+      ...accounting,
       status: "capped",
-      sourceReportedTotal: 151,
-      httpRecords: 2,
-      uniqueExternalIds: ["one", "two"],
-      duplicateRawRecords: 0,
-      requests: 1,
-      retries: 0,
-      terminalReason: "source_total_exceeds_partition_cap",
-    }]);
+      blockerReason: undefined,
+    })).toContain("capped_without_reason");
+    expect(reconcileFranceTravailPartition({
+      ...accounting,
+      sourceReportedTotal: 11,
+    })).toContain("source_total_accounting_mismatch");
   });
 
-  test("reports a truthful external blocker when live France Travail credentials are absent", async () => {
-    expect(
-      runFranceTravailLiveCensus(
-        freezeFranceTravailCensusManifest(franceTravailCensusInput),
-      ),
-    ).rejects.toBeInstanceOf(ExternalDependencyBlockedError);
+  test("pins every observability query as read-only and executes the complete bundle", async () => {
+    expect(assertReadOnlyObservabilityQueries()).toEqual([]);
+    expect(JOB_SUPPLY_OBSERVABILITY_QUERIES.atsHostCensus)
+      .toContain("regexp_replace");
+    const calls: Array<{ sql: string; parameters: readonly unknown[] }> = [];
+    const results = await runJobSupplyObservabilityQueries({
+      async query(sql, parameters = []) {
+        calls.push({ sql, parameters });
+        return [];
+      },
+    }, {
+      freshnessCutoff: "2026-07-13T00:00:00.000Z",
+      coverageRunId: "00000000-0000-0000-0000-000000000001",
+      freshnessWindowDays: 7,
+      manifestDigest: "a".repeat(64),
+    });
+    expect(calls).toHaveLength(Object.keys(JOB_SUPPLY_OBSERVABILITY_QUERIES).length);
+    expect(Object.keys(results).sort()).toEqual(
+      Object.keys(JOB_SUPPLY_OBSERVABILITY_QUERIES).sort(),
+    );
+  });
+
+  test("parses Content-Range totals and reconciles exact IDs over multiple pages", async () => {
+    expect(parseContentRange("offres 0-149/1729")).toBe(1729);
+    expect(parseContentRange("0-149/*")).toBeNull();
+    const manifest = freezeFranceTravailCensusManifest({
+      ...franceTravailManifestInput,
+      capRules: { pageSize: 2, maxRecordsPerPartition: 10, maxRetries: 1 },
+      partitions: [franceTravailManifestInput.partitions[0]!],
+    });
+    const ranges: string[] = [];
+    const result = await runFranceTravailLiveCensus(manifest, {
+      accessToken: "secret-token",
+      fetcher: async (input) => {
+        const url = new URL(String(input));
+        const range = url.searchParams.get("range")!;
+        ranges.push(range);
+        return range === "0-1"
+          ? Response.json({ resultats: [{ id: "a" }, { id: "b" }] }, {
+              status: 206,
+              headers: { "Content-Range": "offres 0-1/3" },
+            })
+          : Response.json({ resultats: [{ id: "b" }, { id: "c" }] }, {
+              status: 200,
+              headers: { "Content-Range": "offres 2-3/3" },
+            });
+      },
+      sleep: async () => {},
+    });
+    expect(ranges).toEqual(["0-1", "2-3"]);
+    expect(result.partitions[0]).toMatchObject({
+      status: "complete",
+      sourceReportedTotal: 3,
+      uniqueExternalIds: ["a", "b", "c"],
+      duplicateRawRecords: 1,
+      requests: 2,
+    });
+  });
+
+  test("retries transient responses and marks cap pressure explicitly", async () => {
+    const manifest = freezeFranceTravailCensusManifest({
+      ...franceTravailManifestInput,
+      capRules: { pageSize: 2, maxRecordsPerPartition: 2, maxRetries: 1 },
+      partitions: [franceTravailManifestInput.partitions[0]!],
+    });
+    let calls = 0;
+    const result = await runFranceTravailLiveCensus(manifest, {
+      accessToken: "secret-token",
+      fetcher: async () => {
+        calls += 1;
+        if (calls === 1) return new Response("", { status: 429 });
+        return Response.json({ resultats: [{ id: "a" }, { id: "b" }] }, {
+          status: 206,
+          headers: { "Content-Range": "offres 0-1/5" },
+        });
+      },
+      sleep: async () => {},
+    });
+    expect(result.partitions[0]).toMatchObject({
+      status: "capped",
+      terminalReason: "source_total_exceeds_partition_cap",
+      requests: 2,
+      retries: 1,
+    });
+  });
+
+  test("reports missing live credentials as an explicit external block without a secret", async () => {
+    const manifest = freezeFranceTravailCensusManifest(franceTravailManifestInput);
+    await expect(runFranceTravailLiveCensus(manifest)).rejects
+      .toBeInstanceOf(ExternalDependencyBlockedError);
+    try {
+      await runFranceTravailLiveCensus(manifest, { accessToken: "" });
+    } catch (error) {
+      expect(String(error)).not.toContain("secret");
+      expect(String(error)).toContain("BLOCKED_EXTERNAL");
+    }
   });
 });
