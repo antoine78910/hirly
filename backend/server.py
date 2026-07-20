@@ -34,7 +34,7 @@ from decimal import Decimal
 from pathlib import Path
 from urllib.parse import quote as url_quote, urlparse
 from pydantic import BaseModel, Field, ConfigDict, PrivateAttr
-from typing import Annotated, List, Optional, Dict, Any, Literal, Tuple
+from typing import List, Optional, Dict, Any, Literal, Tuple
 from datetime import datetime, timezone, timedelta
 import httpx
 import stripe
@@ -12167,11 +12167,14 @@ async def admin_user_analytics(admin: User = Depends(require_admin_user)):
 
 @api_router.get("/admin/users")
 async def admin_list_users(
-    page: Annotated[int, Query(ge=1, le=10000)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=500)] = 100,
-    window_days: Annotated[int, Query(ge=1, le=365)] = 30,
+    page: int = Query(1, ge=1, le=10000),
+    page_size: int = Query(100, ge=1, le=500),
+    window_days: int = Query(30, ge=1, le=365),
     admin: User = Depends(require_admin_user),
 ):
+    page = page if isinstance(page, int) else 1
+    page_size = page_size if isinstance(page_size, int) else 100
+    window_days = window_days if isinstance(window_days, int) else 30
     if _env_enabled("ADMIN_BOUNDED_RPC_ENABLED", "false"):
         page_reader = getattr(db, "admin_users_page", None)
         if not callable(page_reader):
@@ -13372,13 +13375,18 @@ async def admin_analytics(
 
 @api_router.get("/admin/applications")
 async def admin_list_applications(
-    status_filter: Annotated[Optional[str], Query(alias="filter")] = None,
-    status: Annotated[Optional[str], Query()] = None,
-    page: Annotated[int, Query(ge=1, le=10000)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=500)] = 100,
-    window_days: Annotated[int, Query(ge=1, le=365)] = 30,
+    status_filter: Optional[str] = Query(default=None, alias="filter"),
+    status: Optional[str] = Query(default=None),
+    page: int = Query(1, ge=1, le=10000),
+    page_size: int = Query(100, ge=1, le=500),
+    window_days: int = Query(30, ge=1, le=365),
     admin: User = Depends(require_admin_user),
 ):
+    status_filter = status_filter if isinstance(status_filter, str) else None
+    status = status if isinstance(status, str) else None
+    page = page if isinstance(page, int) else 1
+    page_size = page_size if isinstance(page_size, int) else 100
+    window_days = window_days if isinstance(window_days, int) else 30
     status_filter = status_filter or status
     if _env_enabled("ADMIN_BOUNDED_RPC_ENABLED", "false"):
         page_reader = getattr(db, "admin_applications_page", None)
