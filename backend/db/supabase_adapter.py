@@ -9,12 +9,16 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import re
 import socket
+import time
 import uuid
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import date, datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
 import httpx
 
@@ -278,6 +282,71 @@ JOB_FEED_LIGHT_SELECT = ",".join(
 )
 
 _shared_http_client: Optional[httpx.AsyncClient] = None
+logger = logging.getLogger(__name__)
+
+_db_journey_tag: ContextVar[str] = ContextVar("db_journey_tag", default="unattributed")
+_db_remote_request_count: ContextVar[int] = ContextVar("db_remote_request_count", default=0)
+_db_response_bytes: ContextVar[int] = ContextVar("db_response_bytes", default=0)
+_db_retry_count: ContextVar[int] = ContextVar("db_retry_count", default=0)
+
+
+@contextmanager
+def database_journey(tag: str) -> Iterator[None]:
+    """Attach a low-cardinality product journey tag to adapter metrics."""
+    token = _db_journey_tag.set((tag or "unattributed").strip() or "unattributed")
+    try:
+        yield
+    finally:
+        _db_journey_tag.reset(token)
+
+
+def _metric_snapshot() -> tuple[int, int, int]:
+    return (
+        _db_remote_request_count.get(),
+        _db_response_bytes.get(),
+        _db_retry_count.get(),
+    )
+
+
+def _response_byte_count(response: Any) -> int:
+    content = getattr(response, "content", None)
+    if isinstance(content, (bytes, bytearray)):
+        return len(content)
+    text = getattr(response, "text", "")
+    if isinstance(text, str):
+        return len(text.encode("utf-8"))
+    return 0
+
+
+def _record_remote_response(response: Any) -> None:
+    _db_remote_request_count.set(_db_remote_request_count.get() + 1)
+    _db_response_bytes.set(_db_response_bytes.get() + _response_byte_count(response))
+
+
+def _emit_adapter_metric(
+    *,
+    operation: str,
+    table: str,
+    started_at: float,
+    snapshot: tuple[int, int, int],
+    rows_returned: int = 0,
+    filter_status: str = "not_applicable",
+    status: str = "ok",
+) -> None:
+    requests_before, bytes_before, retries_before = snapshot
+    metric = {
+        "operation": operation,
+        "table": table,
+        "filter_status": filter_status,
+        "remote_request_count": max(0, _db_remote_request_count.get() - requests_before),
+        "rows_returned": max(0, int(rows_returned)),
+        "response_bytes": max(0, _db_response_bytes.get() - bytes_before),
+        "elapsed_ms": max(0, int((time.perf_counter() - started_at) * 1000)),
+        "retry_count": max(0, _db_retry_count.get() - retries_before),
+        "journey": _db_journey_tag.get(),
+        "status": status,
+    }
+    logger.info("db_adapter_metric %s", json.dumps(metric, separators=(",", ":"), sort_keys=True))
 
 
 def _get_shared_http_client(timeout: float = 30.0) -> httpx.AsyncClient:
@@ -306,14 +375,33 @@ async def _http_get_with_retries(
     headers: Dict[str, str],
     attempts: int = 3,
 ) -> httpx.Response:
+    started_at = time.perf_counter()
+    snapshot = _metric_snapshot()
     last_exc: Optional[BaseException] = None
     for attempt in range(max(1, attempts)):
         try:
-            return await client.get(url, params=params, headers=headers)
+            response = await client.get(url, params=params, headers=headers)
+            _record_remote_response(response)
+            _emit_adapter_metric(
+                operation="http_get",
+                table=url.rstrip("/").rsplit("/", 1)[-1],
+                started_at=started_at,
+                snapshot=snapshot,
+            )
+            return response
         except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.RemoteProtocolError) as exc:
+            _db_remote_request_count.set(_db_remote_request_count.get() + 1)
             last_exc = exc
             if attempt >= attempts - 1:
+                _emit_adapter_metric(
+                    operation="http_get",
+                    table=url.rstrip("/").rsplit("/", 1)[-1],
+                    started_at=started_at,
+                    snapshot=snapshot,
+                    status="error",
+                )
                 raise
+            _db_retry_count.set(_db_retry_count.get() + 1)
             await asyncio.sleep(0.35 * (attempt + 1))
     assert last_exc is not None
     raise last_exc
