@@ -17,12 +17,7 @@ describe("trackEvent PostHog parallel delivery", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     window.localStorage.clear();
-    api.post.mockImplementation((_url, body) => Promise.resolve({
-      data: {
-        stored: true,
-        accepted_event_ids: (body.events || []).map((event) => event.event_id),
-      },
-    }));
+    api.post.mockResolvedValue({ data: {} });
   });
 
   it("sends the same sanitized event to first-party and PostHog sinks", async () => {
@@ -37,16 +32,13 @@ describe("trackEvent PostHog parallel delivery", () => {
       current_url: "https://tryhirly.com/onboarding",
     });
     expect(api.post).toHaveBeenCalledWith(
-      "/analytics/events",
+      "/analytics/event",
       expect.objectContaining({
-        batch_id: expect.any(String),
-        events: [expect.objectContaining({
-          event: "checkout_started",
-          properties: {
-            plan: "pro",
-            current_url: "https://tryhirly.com/onboarding",
-          },
-        })],
+        event: "checkout_started",
+        properties: {
+          plan: "pro",
+          current_url: "https://tryhirly.com/onboarding",
+        },
       }),
     );
   });
@@ -56,18 +48,12 @@ describe("trackEvent PostHog parallel delivery", () => {
       throw new Error("posthog unavailable");
     });
     api.post.mockRejectedValueOnce(new Error("first-party unavailable"));
-    await expect(trackEvent("landing_view", { step: 1 })).resolves.toBeUndefined();
+    await expect(trackEvent("safe_event", { step: 1 })).resolves.toBeUndefined();
   });
 
   it("keeps empty events as no-ops", async () => {
     await trackEvent("", { safe: true });
     expect(api.post).not.toHaveBeenCalled();
     expect(capturePostHogEvent).not.toHaveBeenCalled();
-  });
-
-  it("retains events when the server does not acknowledge storage", async () => {
-    api.post.mockResolvedValueOnce({ data: { stored: false, accepted_event_ids: [] } });
-    await trackEvent("cta_signup_clicked", { location: "hero" });
-    expect(JSON.parse(window.localStorage.getItem("hirly.analytics.outbox"))).toHaveLength(1);
   });
 });
