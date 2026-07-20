@@ -14,6 +14,12 @@ import {
   type SourceAdapter,
   type SourceContext,
 } from "@hirly/ingestion";
+import {
+  fetchBoundedAtsJson,
+  parseAtsTrialOptions,
+  type AtsTrialTransportOptions,
+  type BoundAtsTrialTransport,
+} from "../ats-trial-transport";
 
 const optionalText = z.string().trim().min(1).nullable().optional();
 
@@ -42,6 +48,8 @@ export const leverRawJobSchema = z
   .passthrough();
 
 export type LeverRawJob = z.output<typeof leverRawJobSchema>;
+
+export type LeverTrialRegion = "global" | "eu";
 
 // This is a fixture safety ceiling, not a claim about a vendor quota.
 const rateLimit = { requestsPerMinute: 1, concurrency: 1 } as const;
@@ -163,4 +171,39 @@ export function createLeverFixtureSourceAdapter(
     rows,
     fixturePolicyId,
   );
+}
+
+export function createLeverTrialTransport(
+  options: AtsTrialTransportOptions & { readonly region: LeverTrialRegion },
+): BoundAtsTrialTransport & {
+  readonly region: LeverTrialRegion;
+  fetch(signal: AbortSignal): Promise<readonly LeverRawJob[]>;
+} {
+  const parsed = parseAtsTrialOptions(options);
+  const host =
+    options.region === "eu" ? "api.eu.lever.co" : "api.lever.co";
+  const url = new URL(
+    `https://${host}/v0/postings/${encodeURIComponent(parsed.approvedTenantId)}`,
+  );
+  url.searchParams.set("mode", "json");
+  return {
+    trialOnly: true,
+    manualInvocationOnly: true,
+    liveTransportReady: false,
+    canonicalWriteReady: false,
+    credentialsAccepted: false,
+    approvedTenantId: parsed.approvedTenantId,
+    budgets: parsed.budgets,
+    region: options.region,
+    async fetch(signal) {
+      return fetchBoundedAtsJson({
+        url,
+        allowedHost: host,
+        fetch: parsed.fetch,
+        budgets: parsed.budgets,
+        schema: z.array(leverRawJobSchema),
+        signal,
+      });
+    },
+  };
 }

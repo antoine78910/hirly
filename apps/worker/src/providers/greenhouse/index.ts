@@ -10,6 +10,12 @@ import {
   type AtsFixtureScope,
 } from "../ats-fixture";
 import type { SourceAdapter, SourceContext } from "@hirly/ingestion";
+import {
+  fetchBoundedAtsJson,
+  parseAtsTrialOptions,
+  type AtsTrialTransportOptions,
+  type BoundAtsTrialTransport,
+} from "../ats-trial-transport";
 
 const greenhouseIdSchema = z.union([z.string(), z.number()]).transform(String);
 
@@ -32,6 +38,12 @@ export const greenhouseRawJobSchema = z
   .passthrough();
 
 export type GreenhouseRawJob = z.output<typeof greenhouseRawJobSchema>;
+
+const greenhouseTrialResponseSchema = z
+  .object({
+    jobs: z.array(greenhouseRawJobSchema),
+  })
+  .passthrough();
 
 // This is a fixture safety ceiling, not a claim about a vendor quota.
 const rateLimit = { requestsPerMinute: 1, concurrency: 1 } as const;
@@ -131,4 +143,36 @@ export function createGreenhouseFixtureSourceAdapter(
     rows,
     fixturePolicyId,
   );
+}
+
+export function createGreenhouseTrialTransport(
+  options: AtsTrialTransportOptions,
+): BoundAtsTrialTransport & {
+  fetch(signal: AbortSignal): Promise<readonly GreenhouseRawJob[]>;
+} {
+  const parsed = parseAtsTrialOptions(options);
+  const url = new URL(
+    `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(parsed.approvedTenantId)}/jobs`,
+  );
+  url.searchParams.set("content", "true");
+  return {
+    trialOnly: true,
+    manualInvocationOnly: true,
+    liveTransportReady: false,
+    canonicalWriteReady: false,
+    credentialsAccepted: false,
+    approvedTenantId: parsed.approvedTenantId,
+    budgets: parsed.budgets,
+    async fetch(signal) {
+      const page = await fetchBoundedAtsJson({
+        url,
+        allowedHost: "boards-api.greenhouse.io",
+        fetch: parsed.fetch,
+        budgets: parsed.budgets,
+        schema: greenhouseTrialResponseSchema,
+        signal,
+      });
+      return page.jobs;
+    },
+  };
 }
