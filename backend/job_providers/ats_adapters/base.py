@@ -11,6 +11,23 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 
+class AtsJobBatch(list):
+    """List-compatible batch carrying explicit source completeness."""
+
+    def __init__(
+        self,
+        rows: List[Dict[str, Any]],
+        *,
+        completeness: str,
+        requested_limit: Optional[int],
+        observed_count: int,
+    ):
+        super().__init__(rows)
+        self.completeness = completeness
+        self.requested_limit = requested_limit
+        self.observed_count = observed_count
+
+
 class AtsJobAdapter(ABC):
     provider: str
 
@@ -33,6 +50,25 @@ class AtsJobAdapter(ABC):
     def internal_job_id(self, external_id: str) -> str:
         digest = hashlib.sha1(f"{self.provider}:{external_id}".encode("utf-8")).hexdigest()[:16]
         return f"job_{digest}"
+
+    def bounded_batch(
+        self,
+        rows: List[Dict[str, Any]],
+        *,
+        limit: Optional[int],
+        hard_cap: Optional[int] = None,
+    ) -> AtsJobBatch:
+        requested = int(limit) if limit else None
+        selected = rows[:requested] if requested else rows
+        capped = bool(requested and len(rows) > requested)
+        if hard_cap and requested and requested >= hard_cap and len(rows) >= hard_cap:
+            capped = True
+        return AtsJobBatch(
+            selected,
+            completeness="capped_needs_split" if capped else "complete_without_source_total",
+            requested_limit=requested,
+            observed_count=len(rows),
+        )
 
     def imported_at(self) -> str:
         return datetime.now(timezone.utc).isoformat()

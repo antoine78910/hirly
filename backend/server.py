@@ -3452,12 +3452,28 @@ _POSTHOG_ZERO_DECIMAL_CURRENCIES = {
     "UGX", "VND", "VUV", "XAF", "XOF", "XPF",
 }
 _POSTHOG_THREE_DECIMAL_CURRENCIES = {"BHD", "JOD", "KWD", "OMR", "TND"}
+_POSTHOG_TWO_DECIMAL_CURRENCIES = {
+    "AED", "AFN", "ALL", "AMD", "ANG", "AOA", "ARS", "AUD", "AWG", "AZN",
+    "BAM", "BBD", "BDT", "BGN", "BMD", "BND", "BOB", "BRL", "BSD", "BTN",
+    "BWP", "BYN", "BZD", "CAD", "CDF", "CHF", "CNY", "COP", "CRC", "CVE",
+    "CZK", "DKK", "DOP", "DZD", "EGP", "ETB", "EUR", "FJD", "FKP", "GBP",
+    "GEL", "GIP", "GMD", "GTQ", "GYD", "HKD", "HNL", "HRK", "HTG", "HUF",
+    "IDR", "ILS", "INR", "ISK", "JMD", "KES", "KGS", "KHR", "KYD", "KZT",
+    "LAK", "LBP", "LKR", "LRD", "LSL", "MAD", "MDL", "MKD", "MMK", "MNT",
+    "MOP", "MUR", "MVR", "MWK", "MXN", "MYR", "MZN", "NAD", "NGN", "NIO",
+    "NOK", "NPR", "NZD", "PAB", "PEN", "PGK", "PHP", "PKR", "PLN", "QAR",
+    "RON", "RSD", "SAR", "SBD", "SCR", "SEK", "SGD", "SHP", "SLE", "SOS",
+    "SRD", "STD", "SZL", "THB", "TJS", "TOP", "TRY", "TTD", "TWD", "TZS",
+    "UAH", "USD", "UYU", "UZS", "WST", "XCD", "YER", "ZAR", "ZMW",
+}
+_POSTHOG_ANALYTICS_TIMEOUT_SECONDS = 1.0
+_POSTHOG_STRIPE_ENRICHMENT_TIMEOUT_SECONDS = 0.20
 
 
 def _posthog_server_capture_configured() -> bool:
     return bool(
         os.environ.get("POSTHOG_SERVER_API_KEY", "").strip()
-        and os.environ.get("POSTHOG_HOST", "").strip()
+        and _posthog_capture_url()
     )
 
 
@@ -3477,10 +3493,45 @@ def _posthog_revenue_uuid(event_name: str, object_type: str, object_id: str) -> 
 
 def _posthog_major_amount(amount_minor: int, currency: str) -> Decimal:
     normalized_currency = str(currency or "").upper()
-    exponent = 0 if normalized_currency in _POSTHOG_ZERO_DECIMAL_CURRENCIES else (
-        3 if normalized_currency in _POSTHOG_THREE_DECIMAL_CURRENCIES else 2
-    )
+    if normalized_currency in _POSTHOG_ZERO_DECIMAL_CURRENCIES:
+        exponent = 0
+    elif normalized_currency in _POSTHOG_THREE_DECIMAL_CURRENCIES:
+        exponent = 3
+    elif normalized_currency in _POSTHOG_TWO_DECIMAL_CURRENCIES:
+        exponent = 2
+    else:
+        raise ValueError("unsupported currency for PostHog revenue conversion")
     return Decimal(int(amount_minor)).scaleb(-exponent)
+
+
+def _posthog_capture_url() -> Optional[str]:
+    host = os.environ.get("POSTHOG_HOST", "").strip()
+    if not host:
+        return None
+    try:
+        parsed = urlparse(host)
+    except ValueError:
+        return None
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+        or parsed.query
+        or parsed.fragment
+    ):
+        return None
+    hostname = parsed.hostname.lower()
+    configured_hosts = {
+        item.strip().lower()
+        for item in os.environ.get("POSTHOG_ALLOWED_HOSTS", "").split(",")
+        if item.strip()
+    }
+    canonical_host = hostname in {"us.i.posthog.com", "eu.i.posthog.com"}
+    if not canonical_host and hostname not in configured_hosts:
+        return None
+    base_path = parsed.path.rstrip("/")
+    return f"https://{parsed.netloc}{base_path}/capture/"
 
 
 def _posthog_stripe_timestamp(event: Dict[str, Any]) -> Optional[str]:
@@ -3558,8 +3609,9 @@ async def _capture_posthog_server_event(
     properties: Dict[str, Any],
 ) -> bool:
     api_key = os.environ.get("POSTHOG_SERVER_API_KEY", "").strip()
-    host = os.environ.get("POSTHOG_HOST", "").strip()
-    if not api_key or not host:
+    capture_url = _posthog_capture_url()
+    if not api_key or not capture_url:
+        logger.warning("posthog_server_capture_skipped_invalid_config event=%s", event_name)
         return False
 
     body = {
@@ -3575,7 +3627,7 @@ async def _capture_posthog_server_event(
     try:
         async def _send() -> int:
             async with httpx.AsyncClient(timeout=timeout) as client:
-                response = await client.post(f"{host.rstrip('/')}/capture/", json=body)
+                response = await client.post(capture_url, json=body)
                 response.raise_for_status()
                 return response.status_code
 
@@ -3662,6 +3714,17 @@ def _posthog_refund_success_confirmed(event: Dict[str, Any], refund: Dict[str, A
     return bool(previous_status and str(previous_status).lower() != "succeeded")
 
 
+async def _posthog_stripe_retrieve(resource: Any, object_id: Any) -> Dict[str, Any]:
+    normalized_id = _stripe_object_id(object_id)
+    if not normalized_id:
+        return {}
+    response = await asyncio.wait_for(
+        asyncio.to_thread(resource.retrieve, normalized_id),
+        timeout=_POSTHOG_STRIPE_ENRICHMENT_TIMEOUT_SECONDS,
+    )
+    return _stripe_to_dict(response)
+
+
 async def _posthog_refund_context(refund: Dict[str, Any]) -> Dict[str, Any]:
     charge = refund.get("charge")
     payment_intent = refund.get("payment_intent")
@@ -3673,21 +3736,21 @@ async def _posthog_refund_context(refund: Dict[str, Any]) -> Dict[str, Any]:
     if isinstance(charge, dict):
         charge_obj = charge
     elif charge:
-        charge_obj = _stripe_to_dict(stripe.Charge.retrieve(charge))
+        charge_obj = await _posthog_stripe_retrieve(stripe.Charge, charge)
     payment_intent = payment_intent or charge_obj.get("payment_intent")
     if isinstance(payment_intent, dict):
         payment_intent_obj = payment_intent
     elif payment_intent:
-        payment_intent_obj = _stripe_to_dict(stripe.PaymentIntent.retrieve(payment_intent))
+        payment_intent_obj = await _posthog_stripe_retrieve(stripe.PaymentIntent, payment_intent)
 
     invoice = charge_obj.get("invoice") or payment_intent_obj.get("invoice")
     if isinstance(invoice, dict):
         invoice_obj = invoice
     elif invoice:
-        invoice_obj = _stripe_to_dict(stripe.Invoice.retrieve(invoice))
+        invoice_obj = await _posthog_stripe_retrieve(stripe.Invoice, invoice)
     subscription_id = _stripe_object_id(invoice_obj.get("subscription"))
     if subscription_id:
-        subscription_obj = _stripe_to_dict(stripe.Subscription.retrieve(subscription_id))
+        subscription_obj = await _posthog_stripe_retrieve(stripe.Subscription, subscription_id)
     customer_id = (
         _stripe_object_id(invoice_obj.get("customer"))
         or _stripe_object_id(payment_intent_obj.get("customer"))
@@ -3727,22 +3790,11 @@ async def _capture_posthog_refund(event: Dict[str, Any], refund: Dict[str, Any])
     refund_id = str(refund.get("id") or "").strip()
     refund_status = str(refund.get("status") or "").lower()
     if refund_status not in {"succeeded", "pending", "requires_action", "failed", "canceled"}:
-        if refund_id:
-            try:
-                validated = _stripe_to_dict(stripe.Refund.retrieve(refund_id))
-                logger.warning(
-                    "posthog_refund_revenue_status_unconfirmed stripe_event_id=%s refund_id=%s retrieved_status=%s",
-                    event.get("id"),
-                    refund_id,
-                    str(validated.get("status") or "unknown").lower(),
-                )
-            except Exception as exc:
-                logger.warning(
-                    "posthog_refund_revenue_status_unconfirmed stripe_event_id=%s refund_id=%s error_type=%s",
-                    event.get("id"),
-                    refund_id,
-                    type(exc).__name__,
-                )
+        logger.warning(
+            "posthog_refund_revenue_status_unconfirmed stripe_event_id=%s refund_id=%s",
+            event.get("id"),
+            refund_id or None,
+        )
         return False
     if not _posthog_refund_success_confirmed(event, refund):
         logger.info(
@@ -3797,6 +3849,29 @@ async def _capture_posthog_refund(event: Dict[str, Any], refund: Dict[str, Any])
         semantic_uuid=_posthog_revenue_uuid("payment_refunded", "refund", refund_id),
         properties=properties,
     )
+
+
+async def _capture_posthog_revenue_fail_open(
+    capture: Any,
+    *args: Any,
+    event_id: Optional[str],
+    event_name: str,
+) -> bool:
+    try:
+        return bool(
+            await asyncio.wait_for(
+                capture(*args),
+                timeout=_POSTHOG_ANALYTICS_TIMEOUT_SECONDS,
+            )
+        )
+    except Exception as exc:
+        logger.warning(
+            "posthog_revenue_adapter_failed event=%s stripe_event_id=%s error_type=%s",
+            event_name,
+            event_id,
+            type(exc).__name__,
+        )
+        return False
 
 
 @api_router.post("/stripe/webhook")

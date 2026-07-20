@@ -45,7 +45,7 @@ class RecruiteeAtsAdapter(AtsJobAdapter):
             payload = response.json()
         offers = payload.get("offers") if isinstance(payload, dict) else None
         rows = [row for row in offers if isinstance(row, dict)] if isinstance(offers, list) else []
-        return rows[:limit] if limit else rows
+        return self.bounded_batch(rows, limit=limit)
 
     def normalize_job(self, raw_job: Dict[str, Any], *, source_key: str) -> Optional[Dict[str, Any]]:
         raw_id = raw_job.get("id")

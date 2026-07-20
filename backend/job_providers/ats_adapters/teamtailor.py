@@ -70,8 +70,9 @@ class TeamtailorAtsAdapter(AtsJobAdapter):
             listing = await client.get(f"{base_url}/jobs")
             listing.raise_for_status()
             job_urls = self.extract_job_urls(listing.text, base_url)
+            observed_job_urls = len(job_urls)
             if limit:
-                job_urls = job_urls[: int(limit)]
+                job_urls = job_urls[: int(limit) + 1]
             semaphore = asyncio.Semaphore(self.max_concurrency)
 
             async def _fetch_detail(job_url: str) -> Optional[Dict[str, Any]]:
@@ -84,7 +85,11 @@ class TeamtailorAtsAdapter(AtsJobAdapter):
                 return self.extract_job_posting(detail.text, job_url)
 
             results = await asyncio.gather(*(_fetch_detail(url) for url in job_urls))
-        return [row for row in results if row]
+        batch = self.bounded_batch([row for row in results if row], limit=limit)
+        if limit and observed_job_urls > int(limit):
+            batch.completeness = "capped_needs_split"
+            batch.observed_count = observed_job_urls
+        return batch
 
     def extract_job_urls(self, listing_html: str, base_url: str) -> List[str]:
         urls: List[str] = []

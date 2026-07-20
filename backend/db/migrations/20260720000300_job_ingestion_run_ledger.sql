@@ -183,7 +183,20 @@ SELECT
   CASE
     WHEN run.status = 'failed' THEN 'failed_run'
     WHEN run.status = 'running' AND run.heartbeat_at < clock_timestamp() - interval '15 minutes' THEN 'stale_running'
-    WHEN run.status = 'succeeded' AND run.raw_records = 0 THEN 'unexpected_zero_records'
+    WHEN run.status = 'succeeded' AND run.summary ? 'jobs_fetched' AND run.raw_records = 0 THEN 'unexpected_zero_records'
+    WHEN run.status = 'succeeded' AND run.raw_records > 0 AND run.raw_records < (
+      SELECT avg(previous.raw_records) * 0.5
+      FROM (
+        SELECT prior.raw_records
+        FROM public.worker_runs AS prior
+        WHERE prior.schedule_id = run.schedule_id
+          AND prior.status = 'succeeded'
+          AND prior.id <> run.id
+          AND prior.raw_records > 0
+        ORDER BY prior.finished_at DESC
+        LIMIT 5
+      ) AS previous
+    ) THEN 'material_coverage_drop'
     WHEN run.status IN ('succeeded', 'partially_succeeded') AND run.completeness_state <> 'complete_snapshot'
       THEN 'incomplete_success'
     ELSE NULL
@@ -194,7 +207,20 @@ SELECT
 FROM public.worker_runs AS run
 WHERE run.status = 'failed'
    OR (run.status = 'running' AND run.heartbeat_at < clock_timestamp() - interval '15 minutes')
-   OR (run.status = 'succeeded' AND run.raw_records = 0)
+   OR (run.status = 'succeeded' AND run.summary ? 'jobs_fetched' AND run.raw_records = 0)
+   OR (run.status = 'succeeded' AND run.raw_records > 0 AND run.raw_records < (
+     SELECT avg(previous.raw_records) * 0.5
+     FROM (
+       SELECT prior.raw_records
+       FROM public.worker_runs AS prior
+       WHERE prior.schedule_id = run.schedule_id
+         AND prior.status = 'succeeded'
+         AND prior.id <> run.id
+         AND prior.raw_records > 0
+       ORDER BY prior.finished_at DESC
+       LIMIT 5
+     ) AS previous
+   ))
    OR (run.status IN ('succeeded', 'partially_succeeded') AND run.completeness_state <> 'complete_snapshot')
 UNION ALL
 SELECT
@@ -206,7 +232,20 @@ SELECT
   NULL::timestamptz AS finished_at
 FROM public.worker_schedules AS schedule
 WHERE schedule.enabled
-  AND schedule.next_due_at < clock_timestamp() - interval '15 minutes';
+  AND schedule.next_due_at < clock_timestamp() - interval '15 minutes'
+UNION ALL
+SELECT
+  NULL::uuid AS run_id,
+  run.provider,
+  'repeated_partition_failure'::text AS alert_code,
+  max(run.requested_at) AS requested_at,
+  max(partition.heartbeat_at) AS heartbeat_at,
+  max(partition.completed_at) AS finished_at
+FROM public.worker_run_partitions AS partition
+JOIN public.worker_runs AS run ON run.id = partition.run_id
+WHERE partition.status = 'failed'
+GROUP BY run.provider, partition.partition_id
+HAVING count(*) >= 3;
 
 REVOKE ALL ON public.worker_run_partitions FROM PUBLIC;
 REVOKE ALL ON public.worker_ingestion_alerts FROM PUBLIC;

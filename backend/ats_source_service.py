@@ -160,7 +160,13 @@ async def refresh_ats_source(
     now = datetime.now(timezone.utc).isoformat()
     logger.info("ats_source_refresh_start provider=%s source_key=%s limit=%s dry_run=%s", provider, key, limit, dry_run)
     try:
-        raw_jobs = await adapter.fetch_jobs(key, limit=max(1, min(int(limit or env_int("JOBS_ATS_REFRESH_JOB_LIMIT", 200)), 500)))
+        requested_limit = max(1, min(int(limit or env_int("JOBS_ATS_REFRESH_JOB_LIMIT", 200)), 500))
+        probe_limit = min(requested_limit + 1, 501)
+        raw_jobs = await adapter.fetch_jobs(key, limit=probe_limit)
+        completeness = str(getattr(raw_jobs, "completeness", "unknown"))
+        if len(raw_jobs) > requested_limit:
+            completeness = "capped_needs_split"
+        raw_jobs = list(raw_jobs[:requested_limit])
         normalized = [adapter.normalize_job(row, source_key=key) for row in raw_jobs]
         jobs = [job for job in normalized if job]
         validated_jobs = [{**job, **cheap_validate_job_applyability(job)} for job in jobs]
@@ -168,8 +174,19 @@ async def refresh_ats_source(
         summary.update({
             "fetched_count": len(raw_jobs),
             "normalized_count": len(jobs),
+            "requested_limit": requested_limit,
+            "completeness": completeness,
+            "status": (
+                "capped"
+                if completeness == "capped_needs_split"
+                else ("completed" if completeness == "complete_without_source_total" else "failed")
+            ),
             **counts,
         })
+        if completeness == "capped_needs_split":
+            summary["errors"].append("source_cap_reached_needs_split")
+        elif completeness != "complete_without_source_total":
+            summary["errors"].append("adapter_completeness_missing")
         if not dry_run and jobs:
             import_stats = await upsert_imported_jobs(db, jobs)
             summary["imported_count"] = int(import_stats.get("total_imported") or 0)
@@ -185,6 +202,7 @@ async def refresh_ats_source(
                     "last_checked_at": now,
                     "last_success_at": now,
                     "last_error": None,
+                    "last_completeness_state": completeness,
                     "failure_count": 0,
                     "updated_at": now,
                 },
@@ -345,11 +363,50 @@ async def run_ats_direct_maintenance_loop(db) -> None:
     await asyncio.sleep(initial_delay)
     while True:
         global _last_maintenance_summary
+        ledger_run_id = None
         try:
             if ats_direct_maintenance_loop_enabled():
-                async with _maintenance_loop_lock:
-                    _last_maintenance_summary = await run_ats_direct_maintenance(db)
+                begin = getattr(db, "begin_python_ingestion_run", None)
+                claim = (
+                    await begin(
+                        schedule_id="python-ats-direct-maintenance",
+                        source="direct_ats",
+                        cadence_seconds=interval_minutes * 60,
+                    )
+                    if callable(begin)
+                    else {"acquired": True, "run_id": None}
+                )
+                if claim.get("acquired"):
+                    ledger_run_id = claim.get("run_id")
+                    async with _maintenance_loop_lock:
+                        _last_maintenance_summary = await run_ats_direct_maintenance(db)
+                    complete = getattr(db, "complete_python_ingestion_run", None)
+                    if ledger_run_id and callable(complete):
+                        maintenance_errors: List[Any] = []
+                        for section_name in ("discover", "refresh", "friendly_company_pages"):
+                            section = (_last_maintenance_summary or {}).get(section_name)
+                            if isinstance(section, dict):
+                                maintenance_errors.extend(section.get("errors") or [])
+                        await complete(
+                            run_id=ledger_run_id,
+                            status="partially_succeeded" if maintenance_errors else "succeeded",
+                            completeness_state="partial" if maintenance_errors else "complete_snapshot",
+                            summary=_last_maintenance_summary or {},
+                        )
+                else:
+                    logger.info("ats_direct_maintenance_overlap_skipped run_id=%s", claim.get("run_id"))
         except Exception as exc:
+            complete = getattr(db, "complete_python_ingestion_run", None)
+            if ledger_run_id and callable(complete):
+                try:
+                    await complete(
+                        run_id=ledger_run_id,
+                        status="failed",
+                        completeness_state="failed",
+                        summary={"terminal_error": f"{exc.__class__.__name__}: {str(exc)[:200]}"},
+                    )
+                except Exception as ledger_exc:
+                    logger.error("ats_direct_maintenance_ledger_completion_failed error=%s", str(ledger_exc)[:300])
             logger.warning("ats_direct_maintenance_loop_error error=%s", str(exc)[:300])
         await asyncio.sleep(interval_minutes * 60)
 
@@ -633,6 +690,9 @@ def _empty_refresh_summary(provider: str, source_key: str, dry_run: bool) -> Dic
         "fetched_count": 0,
         "normalized_count": 0,
         "imported_count": 0,
+        "requested_limit": 0,
+        "completeness": "unknown",
+        "status": "failed",
         "valid_count": 0,
         "unknown_count": 0,
         "invalid_count": 0,

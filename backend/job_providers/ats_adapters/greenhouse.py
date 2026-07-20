@@ -32,7 +32,7 @@ class GreenhouseAtsAdapter(AtsJobAdapter):
         rows = payload.get("jobs") if isinstance(payload, dict) else []
         if not isinstance(rows, list):
             return []
-        return rows[:limit] if limit else rows
+        return self.bounded_batch(rows, limit=limit)
 
     def normalize_job(self, raw_job: Dict[str, Any], *, source_key: str) -> Optional[Dict[str, Any]]:
         raw_id = raw_job.get("id")

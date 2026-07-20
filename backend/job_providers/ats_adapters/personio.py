@@ -56,7 +56,7 @@ class PersonioAtsAdapter(AtsJobAdapter):
                 rows = self.parse_positions(response.text, tld=tld)
                 if rows:
                     break
-        return rows[:limit] if limit else rows
+        return self.bounded_batch(rows, limit=limit)
 
     def parse_positions(self, xml_text: str, *, tld: str = "com") -> List[Dict[str, Any]]:
         try:

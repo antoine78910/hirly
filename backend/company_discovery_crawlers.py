@@ -315,10 +315,44 @@ async def run_company_discovery_loop(db) -> None:
     await asyncio.sleep(initial_delay)
     while True:
         global _last_discovery_summary
+        ledger_run_id = None
         try:
             if company_discovery_loop_enabled():
-                async with _discovery_loop_lock:
-                    _last_discovery_summary = await run_company_discovery(db)
+                begin = getattr(db, "begin_python_ingestion_run", None)
+                claim = (
+                    await begin(
+                        schedule_id="python-company-discovery",
+                        source="company_discovery",
+                        cadence_seconds=interval_minutes * 60,
+                    )
+                    if callable(begin)
+                    else {"acquired": True, "run_id": None}
+                )
+                if claim.get("acquired"):
+                    ledger_run_id = claim.get("run_id")
+                    async with _discovery_loop_lock:
+                        _last_discovery_summary = await run_company_discovery(db)
+                    complete = getattr(db, "complete_python_ingestion_run", None)
+                    if ledger_run_id and callable(complete):
+                        await complete(
+                            run_id=ledger_run_id,
+                            status="succeeded",
+                            completeness_state="complete_snapshot",
+                            summary=_last_discovery_summary or {},
+                        )
+                else:
+                    logger.info("company_discovery_overlap_skipped run_id=%s", claim.get("run_id"))
         except Exception as exc:
+            complete = getattr(db, "complete_python_ingestion_run", None)
+            if ledger_run_id and callable(complete):
+                try:
+                    await complete(
+                        run_id=ledger_run_id,
+                        status="failed",
+                        completeness_state="failed",
+                        summary={"terminal_error": f"{exc.__class__.__name__}: {str(exc)[:200]}"},
+                    )
+                except Exception as ledger_exc:
+                    logger.error("company_discovery_ledger_completion_failed error=%s", str(ledger_exc)[:300])
             logger.warning("company_discovery_loop_error error=%s", str(exc)[:300])
         await asyncio.sleep(interval_minutes * 60)

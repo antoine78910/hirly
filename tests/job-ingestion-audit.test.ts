@@ -16,10 +16,17 @@ describe("job ingestion run-ledger migration", () => {
     expect(migration).toContain("CREATE TABLE IF NOT EXISTS public.worker_run_partitions");
     expect(migration).toContain("complete_snapshot");
     expect(migration).not.toContain("UPDATE public.provider_registry SET writer_runtime");
+    expect(migration).toContain("public.python_ingestion_run_begin");
+    expect(migration).toContain("ON CONFLICT (kind, idempotency_key) DO NOTHING");
+    expect(migration).toContain("public.python_ingestion_run_complete");
   });
 
   test("exposes alertable failed, stale, zero and incomplete states", () => {
-    for (const alert of ["failed_run", "stale_running", "unexpected_zero_records", "incomplete_success", "missed_expected_run"]) {
+    for (const alert of [
+      "failed_run", "stale_running", "unexpected_zero_records",
+      "incomplete_success", "missed_expected_run", "material_coverage_drop",
+      "repeated_partition_failure",
+    ]) {
       expect(migration).toContain(alert);
     }
   });

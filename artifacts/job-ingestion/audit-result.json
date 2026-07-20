@@ -2,11 +2,9 @@
   "schemaVersion": 1,
   "datasetVersion": "job-ingestion-golden.v1",
   "generatedAt": "2026-07-20T00:00:00.000Z",
-  "verdict": "FAIL",
-  "invariantFailures": [
-    "SCHED-001:internal_failure"
-  ],
-  "digest": "26b647d76179ad5e6026ec05e7b3960da1fdc1ddb203f494e9b67cb617376d66",
+  "verdict": "PARTIAL",
+  "invariantFailures": [],
+  "digest": "49fa5c07c285a3ca3f9bd8879bc18ef2c413e664215769eb262bbe6c7c74f2cf",
   "funnel": {
     "rawReceived": 12,
     "normalized": 11,
@@ -104,6 +102,26 @@
         "capabilityCheck": "test -n \"$FRANCE_TRAVAIL_CLIENT_ID\" && test -n \"$RAPIDAPI_KEY\"",
         "unblockProcedure": "run the audit with read-only provider credentials and archive response total/range metadata"
       }
+    },
+    {
+      "risk_id": "CAP-DIRECT-ATS-001",
+      "suspected_failure": "Direct ATS adapters slice at a local limit without exposing whether more source rows exist.",
+      "affected_path": "Greenhouse, Lever, Ashby, Recruitee, Personio and Teamtailor adapters",
+      "file_and_symbol_references": [
+        "backend/job_providers/ats_adapters"
+      ],
+      "reproduction_command": ".venv/bin/python -m pytest -q backend/tests/test_ats_adapters.py backend/tests/test_ats_source_service.py",
+      "expected_behavior": "limit+1/cursor evidence produces complete or capped terminal status",
+      "actual_behavior": "list-compatible batches carry explicit completeness; limit+1 and SmartRecruiters hard-cap fixtures produce capped_needs_split",
+      "baseline_counts_or_latency": {
+        "silentlySlicingAdapterFamilies": 6
+      },
+      "root_cause": "adapter return type carries rows only and loses truncation state",
+      "status": "PASS",
+      "proposed_fix": "thread list-compatible batch completeness through source refresh; cap hits are terminal capped errors and never silent success",
+      "regression_test": "CAP-DIRECT-ATS-GOLDEN-001",
+      "final_verification_evidence": "backend/tests/test_ats_adapters.py",
+      "blocker": null
     },
     {
       "risk_id": "QUERY-PARTITION-001",
@@ -217,17 +235,17 @@
       "file_and_symbol_references": [
         "backend/db/migrations/20260720000300_job_ingestion_run_ledger.sql"
       ],
-      "reproduction_command": "bun test tests/g003-database-foundation.test.ts apps/worker/test/scheduler.test.ts",
+      "reproduction_command": ".venv/bin/python -m pytest -q backend/tests/test_ingestion_scheduler_ledger.py backend/tests/test_ats_source_service.py && bun test tests/job-ingestion-audit.test.ts apps/worker/test/scheduler.test.ts",
       "expected_behavior": "run/partition counters, missed/stale/zero/drop alerts and idempotency are durable",
-      "actual_behavior": "tasks are retained and an additive ledger exists, but current Python schedule occurrences do not yet emit durable run/partition facts or acquire a cross-process lease",
+      "actual_behavior": "authoritative Python loops claim deterministic durable occurrences, reject duplicate-process claims, persist terminal summaries, and expose alert predicates",
       "baseline_counts_or_latency": {
         "pythonProcessLocalLoops": true
       },
       "root_cause": "in-process loops had no durable stage/partition accounting",
-      "status": "FAIL",
-      "proposed_fix": "integrate current Python scheduler emission and cross-process occurrence/lease protection with the existing ledger before enabling absence mutation",
+      "status": "PASS",
+      "proposed_fix": "narrow service-role claim/complete RPCs over the existing ledger; no writer transfer",
       "regression_test": "SCHED-LEDGER-001",
-      "final_verification_evidence": "backend/db/migrations/20260720000300_job_ingestion_run_ledger.sql",
+      "final_verification_evidence": "backend/tests/test_ingestion_scheduler_ledger.py",
       "blocker": null
     },
     {

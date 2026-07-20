@@ -65,6 +65,21 @@
     }
   },
   {
+    "riskId": "CAP-DIRECT-ATS-001",
+    "suspectedFailure": "Direct ATS adapters slice at a local limit without exposing whether more source rows exist.",
+    "affectedPath": "Greenhouse, Lever, Ashby, Recruitee, Personio and Teamtailor adapters",
+    "references": ["backend/job_providers/ats_adapters"],
+    "reproductionCommand": ".venv/bin/python -m pytest -q backend/tests/test_ats_adapters.py backend/tests/test_ats_source_service.py",
+    "expected": "limit+1/cursor evidence produces complete or capped terminal status",
+    "actual": "list-compatible batches carry explicit completeness; limit+1 and SmartRecruiters hard-cap fixtures produce capped_needs_split",
+    "baseline": {"silentlySlicingAdapterFamilies": 6},
+    "rootCause": "adapter return type carries rows only and loses truncation state",
+    "status": "PASS",
+    "proposedFix": "thread list-compatible batch completeness through source refresh; cap hits are terminal capped errors and never silent success",
+    "regressionTest": "CAP-DIRECT-ATS-GOLDEN-001",
+    "finalEvidence": "backend/tests/test_ats_adapters.py"
+  },
+  {
     "riskId": "QUERY-PARTITION-001",
     "suspectedFailure": "Broad queries are silently truncated.",
     "affectedPath": "partition manifest",
@@ -149,15 +164,15 @@
     "suspectedFailure": "Scheduled ingestion can fail silently.",
     "affectedPath": "worker run ledger",
     "references": ["backend/db/migrations/20260720000300_job_ingestion_run_ledger.sql"],
-    "reproductionCommand": "bun test tests/g003-database-foundation.test.ts apps/worker/test/scheduler.test.ts",
+    "reproductionCommand": ".venv/bin/python -m pytest -q backend/tests/test_ingestion_scheduler_ledger.py backend/tests/test_ats_source_service.py && bun test tests/job-ingestion-audit.test.ts apps/worker/test/scheduler.test.ts",
     "expected": "run/partition counters, missed/stale/zero/drop alerts and idempotency are durable",
-    "actual": "tasks are retained and an additive ledger exists, but current Python schedule occurrences do not yet emit durable run/partition facts or acquire a cross-process lease",
+    "actual": "authoritative Python loops claim deterministic durable occurrences, reject duplicate-process claims, persist terminal summaries, and expose alert predicates",
     "baseline": {"pythonProcessLocalLoops": true},
     "rootCause": "in-process loops had no durable stage/partition accounting",
-    "status": "FAIL",
-    "proposedFix": "integrate current Python scheduler emission and cross-process occurrence/lease protection with the existing ledger before enabling absence mutation",
+    "status": "PASS",
+    "proposedFix": "narrow service-role claim/complete RPCs over the existing ledger; no writer transfer",
     "regressionTest": "SCHED-LEDGER-001",
-    "finalEvidence": "backend/db/migrations/20260720000300_job_ingestion_run_ledger.sql"
+    "finalEvidence": "backend/tests/test_ingestion_scheduler_ledger.py"
   },
   {
     "riskId": "SQL-FEED-001",
