@@ -17445,6 +17445,33 @@ def _python_ingestion_schedule_states(crons_paused: bool):
     )
 
 
+async def _sync_python_ingestion_schedules(crons_paused: bool) -> None:
+    sync_schedule = getattr(db, "sync_python_ingestion_schedule", None)
+    if not callable(sync_schedule):
+        return
+
+    for schedule_id, source, cadence_seconds, enabled in _python_ingestion_schedule_states(crons_paused):
+        try:
+            await sync_schedule(
+                schedule_id=schedule_id,
+                source=source,
+                cadence_seconds=cadence_seconds,
+                enabled=enabled,
+            )
+        except RuntimeError as exc:
+            message = str(exc)
+            ledger_rpc_missing = (
+                "python_ingestion_schedule_sync" in message
+                and "PGRST202" in message
+            )
+            if crons_paused and ledger_rpc_missing:
+                logger.warning(
+                    "python_ingestion_ledger_unavailable schedules_paused=true"
+                )
+                return
+            raise
+
+
 def _spawn_observed_startup_task(coro, *, name: str) -> asyncio.Task:
     """Retain startup tasks and make terminal failures visible."""
     task = asyncio.create_task(coro, name=name)
@@ -17516,21 +17543,7 @@ async def startup_seed():
     blitz = _env_bool("JOBS_INVENTORY_BLITZ", True)
     pause_default = not blitz
     crons_paused = _env_bool("PAUSE_JOB_MAINTENANCE_CRONS", pause_default)
-    sync_schedule = getattr(db, "sync_python_ingestion_schedule", None)
-    if callable(sync_schedule):
-        schedule_states = (
-            ("python-france-travail-harvest", "france_travail", max(300, _env_int("FT_HARVEST_INTERVAL_MINUTES", 5) * 60), not crons_paused and ft_harvest_enabled()),
-            ("python-jsearch-harvest", "jsearch", max(300, _env_int("JSEARCH_HARVEST_INTERVAL_MINUTES", 15) * 60), not crons_paused and jsearch_harvest_autostart_enabled()),
-            ("python-ats-direct-maintenance", "direct_ats", max(300, _env_int("ATS_DIRECT_MAINTENANCE_INTERVAL_MINUTES", 5) * 60), not crons_paused and ats_direct_maintenance_loop_enabled()),
-            ("python-company-discovery", "company_discovery", max(300, _env_int("COMPANY_DISCOVERY_LOOP_INTERVAL_MINUTES", 10) * 60), not crons_paused and company_discovery_loop_enabled()),
-        )
-        for schedule_id, source, cadence_seconds, enabled in schedule_states:
-            await sync_schedule(
-                schedule_id=schedule_id,
-                source=source,
-                cadence_seconds=cadence_seconds,
-                enabled=enabled,
-            )
+    await _sync_python_ingestion_schedules(crons_paused)
     if crons_paused:
         logger.warning(
             "job_maintenance_crons_paused blitz=%s hint=set_PAUSE_JOB_MAINTENANCE_CRONS_false_to_fill_inventory",

@@ -111,3 +111,54 @@ def test_provider_disabled_schedule_is_not_expected(monkeypatch):
         in server._python_ingestion_schedule_states(False)
     }
     assert states["jsearch"] is True
+
+
+def test_paused_startup_tolerates_missing_optional_ingestion_ledger(monkeypatch, caplog):
+    calls = []
+
+    async def missing_ledger(**kwargs):
+        calls.append(kwargs)
+        raise RuntimeError(
+            "Supabase ingestion ledger RPC python_ingestion_schedule_sync "
+            "returned HTTP 404: PGRST202"
+        )
+
+    monkeypatch.setattr(server.db, "sync_python_ingestion_schedule", missing_ledger)
+
+    asyncio.run(server._sync_python_ingestion_schedules(True))
+
+    assert len(calls) == 1
+    assert calls[0]["enabled"] is False
+    assert "python_ingestion_ledger_unavailable schedules_paused=true" in caplog.text
+
+
+def test_enabled_startup_requires_ingestion_ledger(monkeypatch):
+    async def missing_ledger(**_kwargs):
+        raise RuntimeError(
+            "Supabase ingestion ledger RPC python_ingestion_schedule_sync "
+            "returned HTTP 404: PGRST202"
+        )
+
+    monkeypatch.setattr(server.db, "sync_python_ingestion_schedule", missing_ledger)
+    monkeypatch.setattr(server, "ft_harvest_enabled", lambda: True)
+
+    try:
+        asyncio.run(server._sync_python_ingestion_schedules(False))
+    except RuntimeError as exc:
+        assert "PGRST202" in str(exc)
+    else:
+        raise AssertionError("enabled ingestion must require the ledger RPC")
+
+
+def test_paused_startup_does_not_hide_unrelated_schedule_errors(monkeypatch):
+    async def broken_schedule(**_kwargs):
+        raise RuntimeError("database authentication failed")
+
+    monkeypatch.setattr(server.db, "sync_python_ingestion_schedule", broken_schedule)
+
+    try:
+        asyncio.run(server._sync_python_ingestion_schedules(True))
+    except RuntimeError as exc:
+        assert str(exc) == "database authentication failed"
+    else:
+        raise AssertionError("unrelated schedule errors must remain fatal")
