@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import {
   buildOccurrencePreferenceDryRun,
   buildRouteReadinessReport,
+  buildSourceDiversificationGate,
   routeFailureReasons,
   type RouteReadinessAggregateInput,
 } from "../src/route-readiness";
@@ -94,11 +95,144 @@ describe("G018 route-readiness evidence", () => {
       groupsEvaluated: 2,
       groupsWithSelection: 2,
       selectionsChanged: 1,
+      currentVerifiedRuntimeSelections: 0,
       verifiedRuntimeSelections: 1,
+      verifiedRuntimeSelectionUplift: 1,
+      currentDirectSelections: 0,
       directSelections: 1,
+      directSelectionUplift: 1,
     });
     expect(JSON.stringify(report)).not.toContain("group-1");
     expect(JSON.stringify(report)).not.toContain("employer-ats");
+  });
+
+  test("gates aggregate source diversification without activating sources", () => {
+    const report = buildSourceDiversificationGate({
+      status: "COMPLETE",
+      sample: false,
+      generatedAt: "2026-07-20T19:00:00.000Z",
+      routeReadinessDigest: "a".repeat(64),
+      netNewMeasurementDigest: "b".repeat(64),
+      current: {
+        runtimeReadyJobs: 2_000,
+        franceTravailRuntimeReadyJobs: 800,
+        topProviderRuntimeReadyJobs: 1_000,
+        evaluatedPaidUsers: 100,
+        exhaustedPaidUsers: 20,
+        p10: 1,
+        p50: 5,
+        p90: 20,
+      },
+      projected: {
+        runtimeReadyJobs: 3_000,
+        franceTravailRuntimeReadyJobs: 800,
+        topProviderRuntimeReadyJobs: 1_100,
+        evaluatedPaidUsers: 100,
+        exhaustedPaidUsers: 10,
+        p10: 3,
+        p50: 8,
+        p90: 30,
+      },
+      proposedSources: [
+        {
+          sourceKey: "bpce-open-feed",
+          incrementalRuntimeReadyJobs: 600,
+          affectedPaidUsers: 70,
+        },
+        {
+          sourceKey: "greenhouse-authorized-tenants",
+          incrementalRuntimeReadyJobs: 400,
+          affectedPaidUsers: 50,
+        },
+      ],
+      thresholds: {
+        minRuntimeReadyUplift: 500,
+        maxFranceTravailShare: 0.3,
+        maxTopProviderShare: 0.4,
+        maxFeedExhaustionRate: 0.15,
+        minP10: 2,
+      },
+    });
+    expect(report).toMatchObject({
+      status: "GO",
+      runtimeReadyUplift: 1_000,
+      franceTravailShareDelta: -0.13333333,
+      failedGates: [],
+      safeguards: {
+        aggregateOnly: true,
+        applicationSubmissions: false,
+        sourceActivationChanges: false,
+        canonicalWrites: false,
+      },
+    });
+    expect(report.current.franceTravailShare).toBe(0.4);
+    expect(report.projected.franceTravailShare).toBe(0.26666667);
+    expect(report.digest).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  test("fails closed on blocked, unreconciled, or regressing diversification evidence", () => {
+    const base = {
+      status: "COMPLETE" as const,
+      sample: false,
+      generatedAt: "2026-07-20T19:00:00.000Z",
+      routeReadinessDigest: "a".repeat(64),
+      netNewMeasurementDigest: "b".repeat(64),
+      current: {
+        runtimeReadyJobs: 100,
+        franceTravailRuntimeReadyJobs: 60,
+        topProviderRuntimeReadyJobs: 60,
+        evaluatedPaidUsers: 10,
+        exhaustedPaidUsers: 2,
+        p10: 1,
+        p50: 3,
+        p90: 8,
+      },
+      projected: {
+        runtimeReadyJobs: 110,
+        franceTravailRuntimeReadyJobs: 60,
+        topProviderRuntimeReadyJobs: 60,
+        evaluatedPaidUsers: 10,
+        exhaustedPaidUsers: 3,
+        p10: 0,
+        p50: 2,
+        p90: 7,
+      },
+      proposedSources: [{
+        sourceKey: "bpce-open-feed",
+        incrementalRuntimeReadyJobs: 10,
+        affectedPaidUsers: 5,
+      }],
+      thresholds: {
+        minRuntimeReadyUplift: 20,
+        maxFranceTravailShare: 0.5,
+        maxTopProviderShare: 0.5,
+        maxFeedExhaustionRate: 0.2,
+        minP10: 1,
+      },
+    };
+    const noGo = buildSourceDiversificationGate(base);
+    expect(noGo.status).toBe("NO_GO");
+    expect(noGo.failedGates).toEqual([
+      "runtime_ready_uplift_below_minimum",
+      "france_travail_concentration_not_reduced",
+      "top_provider_concentration_above_maximum",
+      "feed_exhaustion_above_maximum",
+      "paid_user_p10_below_minimum",
+      "paid_user_coverage_regressed",
+    ]);
+    expect(() => buildSourceDiversificationGate({
+      ...base,
+      status: "BLOCKED_EXTERNAL",
+      blockerReason: "paid cohort unavailable",
+    })).toThrow("not scoreable");
+    expect(() => buildSourceDiversificationGate({
+      ...base,
+      proposedSources: [{
+        sourceKey: "bpce-open-feed",
+        incrementalRuntimeReadyJobs: 9,
+        affectedPaidUsers: 5,
+      }],
+    })).toThrow("does not reconcile");
   });
 
   test("pins the production census to aggregate-only read-only SQL", () => {

@@ -8,6 +8,7 @@
     "measure:net-new": "bun src/net-new-measurement-cli.ts",
     "measure:paid-cohort": "bun src/paid-cohort-coverage-cli.ts",
     "measure:route-readiness": "bun src/route-readiness-cli.ts",
+    "measure:source-diversification": "bun src/source-diversification-cli.ts",
     "rank:ats": "bun src/ats-ranking-cli.ts",
     "source-policy:persist": "bun src/source-policy-result-cli.ts",
     "source-trial:provision": "bun src/source-trial-provisioning-cli.ts",

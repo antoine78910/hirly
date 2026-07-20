@@ -95,6 +95,41 @@ Direct-employer authority, confidence, verification recency and a stable
 occurrence key break ties. The report emits aggregate counts and a digest only;
 it never emits source URLs, job IDs or group IDs.
 
+The dry-run also reports current versus proposed verified-runtime and direct
+selection counts plus their uplift. Current selections are counted only when
+the selected occurrence is still active and present in the evaluated group;
+the command never writes `preferred_job_id`.
+
+## Source-diversification gate
+
+`buildSourceDiversificationGate` combines only aggregate, digest-bound route
+readiness, G016 net-new and frozen paid-cohort evidence. It returns `GO` or
+`NO_GO` against operator-supplied release thresholds for:
+
+- incremental runtime-ready inventory;
+- France Travail runtime-ready share;
+- top-provider concentration;
+- feed-exhaustion rate;
+- paid-user P10 availability and non-regression across P10/P50/P90.
+
+Proposed source rows must be unique, non-France-Travail aggregates and must
+reconcile exactly to projected runtime-ready uplift. The evaluator refuses
+sample or `BLOCKED_EXTERNAL` inputs and emits no user, job, URL, tenant or
+application records. It cannot activate a source, submit an application or
+write canonical inventory.
+
+After the non-sample G016 and paid-cohort artifacts exist, run:
+
+```bash
+bun run --cwd apps/job-ingestion-audit measure:source-diversification -- \
+  --input artifacts/job-ingestion/g018-source-diversification-input.json \
+  --output artifacts/job-ingestion/g018-source-diversification.json
+```
+
+Thresholds are evidence gates, not activation instructions. A `GO` artifact
+still requires the source-policy, writer-ownership, rollout and rollback gates
+for each proposed source.
+
 ## Remaining external evidence
 
 The baseline is intentionally `BLOCKED_EXTERNAL` because no fresh paid-user

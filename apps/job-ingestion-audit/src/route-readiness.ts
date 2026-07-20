@@ -81,8 +81,73 @@ export interface OccurrencePreferenceReport {
   groupsEvaluated: number;
   groupsWithSelection: number;
   selectionsChanged: number;
+  currentVerifiedRuntimeSelections: number;
   verifiedRuntimeSelections: number;
+  verifiedRuntimeSelectionUplift: number;
+  currentDirectSelections: number;
   directSelections: number;
+  directSelectionUplift: number;
+  digest: string;
+}
+
+export interface DiversificationSnapshot {
+  runtimeReadyJobs: number;
+  franceTravailRuntimeReadyJobs: number;
+  topProviderRuntimeReadyJobs: number;
+  evaluatedPaidUsers: number;
+  exhaustedPaidUsers: number;
+  p10: number;
+  p50: number;
+  p90: number;
+}
+
+export interface SourceDiversificationGateInput {
+  status: "COMPLETE" | "BLOCKED_EXTERNAL";
+  blockerReason?: string;
+  sample: boolean;
+  generatedAt: string;
+  routeReadinessDigest: string;
+  netNewMeasurementDigest: string;
+  current: DiversificationSnapshot;
+  projected: DiversificationSnapshot;
+  proposedSources: Array<{
+    sourceKey: string;
+    incrementalRuntimeReadyJobs: number;
+    affectedPaidUsers: number;
+  }>;
+  thresholds: {
+    minRuntimeReadyUplift: number;
+    maxFranceTravailShare: number;
+    maxTopProviderShare: number;
+    maxFeedExhaustionRate: number;
+    minP10: number;
+  };
+}
+
+export interface SourceDiversificationGateReport {
+  schemaVersion: "hirly.source-diversification-gate.v1";
+  status: "GO" | "NO_GO";
+  generatedAt: string;
+  current: DiversificationSnapshot & {
+    franceTravailShare: number;
+    topProviderShare: number;
+    feedExhaustionRate: number;
+  };
+  projected: DiversificationSnapshot & {
+    franceTravailShare: number;
+    topProviderShare: number;
+    feedExhaustionRate: number;
+  };
+  runtimeReadyUplift: number;
+  franceTravailShareDelta: number;
+  proposedSources: SourceDiversificationGateInput["proposedSources"];
+  failedGates: string[];
+  safeguards: {
+    aggregateOnly: true;
+    applicationSubmissions: false;
+    sourceActivationChanges: false;
+    canonicalWrites: false;
+  };
   digest: string;
 }
 
@@ -240,6 +305,195 @@ export function buildRouteReadinessReport(
   return { ...unsigned, digest: digest(unsigned) };
 }
 
+const sha256Pattern = /^[a-f0-9]{64}$/;
+
+function diversificationSnapshot(
+  input: DiversificationSnapshot,
+  path: string,
+): DiversificationSnapshot {
+  const snapshot = {
+    runtimeReadyJobs: count(input.runtimeReadyJobs, `${path}.runtimeReadyJobs`),
+    franceTravailRuntimeReadyJobs: count(
+      input.franceTravailRuntimeReadyJobs,
+      `${path}.franceTravailRuntimeReadyJobs`,
+    ),
+    topProviderRuntimeReadyJobs: count(
+      input.topProviderRuntimeReadyJobs,
+      `${path}.topProviderRuntimeReadyJobs`,
+    ),
+    evaluatedPaidUsers: count(
+      input.evaluatedPaidUsers,
+      `${path}.evaluatedPaidUsers`,
+    ),
+    exhaustedPaidUsers: count(
+      input.exhaustedPaidUsers,
+      `${path}.exhaustedPaidUsers`,
+    ),
+    p10: count(input.p10, `${path}.p10`),
+    p50: count(input.p50, `${path}.p50`),
+    p90: count(input.p90, `${path}.p90`),
+  };
+  if (
+    snapshot.franceTravailRuntimeReadyJobs > snapshot.runtimeReadyJobs
+    || snapshot.topProviderRuntimeReadyJobs > snapshot.runtimeReadyJobs
+    || snapshot.exhaustedPaidUsers > snapshot.evaluatedPaidUsers
+    || snapshot.p10 > snapshot.p50
+    || snapshot.p50 > snapshot.p90
+  ) {
+    fail(`${path} counters are inconsistent`);
+  }
+  return snapshot;
+}
+
+export function buildSourceDiversificationGate(
+  input: SourceDiversificationGateInput,
+): SourceDiversificationGateReport {
+  if (input.status !== "COMPLETE") {
+    fail(`diversification status is not scoreable: ${input.blockerReason ?? "missing blocker reason"}`);
+  }
+  if (input.sample !== false) fail("diversification sample evidence is not scoreable");
+  const generatedAt = timestamp(input.generatedAt, "generatedAt");
+  if (
+    !sha256Pattern.test(input.routeReadinessDigest)
+    || !sha256Pattern.test(input.netNewMeasurementDigest)
+  ) {
+    fail("diversification evidence digests must be SHA-256 values");
+  }
+  const current = diversificationSnapshot(input.current, "current");
+  const projected = diversificationSnapshot(input.projected, "projected");
+  if (
+    current.evaluatedPaidUsers === 0
+    || projected.evaluatedPaidUsers !== current.evaluatedPaidUsers
+  ) {
+    fail("paid-user cohorts must be non-empty and identical");
+  }
+  if (
+    projected.runtimeReadyJobs < current.runtimeReadyJobs
+    || projected.franceTravailRuntimeReadyJobs > current.franceTravailRuntimeReadyJobs
+  ) {
+    fail("projected inventory cannot remove runtime-ready jobs or add France Travail jobs");
+  }
+
+  const sourceKeys = new Set<string>();
+  const proposedSources = input.proposedSources
+    .map((source, index) => {
+      const sourceKey = source.sourceKey.trim().toLowerCase();
+      if (!sourceKey || sourceKey === "france_travail" || sourceKeys.has(sourceKey)) {
+        fail(`proposedSources[${index}].sourceKey must be unique and non-France-Travail`);
+      }
+      sourceKeys.add(sourceKey);
+      const affectedPaidUsers = count(
+        source.affectedPaidUsers,
+        `proposedSources[${index}].affectedPaidUsers`,
+      );
+      if (affectedPaidUsers > current.evaluatedPaidUsers) {
+        fail(`proposedSources[${index}].affectedPaidUsers exceeds the paid cohort`);
+      }
+      return {
+        sourceKey,
+        incrementalRuntimeReadyJobs: count(
+          source.incrementalRuntimeReadyJobs,
+          `proposedSources[${index}].incrementalRuntimeReadyJobs`,
+        ),
+        affectedPaidUsers,
+      };
+    })
+    .sort((left, right) => left.sourceKey.localeCompare(right.sourceKey));
+  if (proposedSources.length === 0) fail("proposedSources must not be empty");
+
+  const runtimeReadyUplift = projected.runtimeReadyJobs - current.runtimeReadyJobs;
+  const reconciledUplift = proposedSources.reduce(
+    (sum, source) => sum + source.incrementalRuntimeReadyJobs,
+    0,
+  );
+  if (reconciledUplift !== runtimeReadyUplift) {
+    fail("proposed source uplift does not reconcile to projected inventory");
+  }
+
+  const threshold = {
+    minRuntimeReadyUplift: count(
+      input.thresholds.minRuntimeReadyUplift,
+      "thresholds.minRuntimeReadyUplift",
+    ),
+    maxFranceTravailShare: input.thresholds.maxFranceTravailShare,
+    maxTopProviderShare: input.thresholds.maxTopProviderShare,
+    maxFeedExhaustionRate: input.thresholds.maxFeedExhaustionRate,
+    minP10: count(input.thresholds.minP10, "thresholds.minP10"),
+  };
+  for (const [name, value] of Object.entries(threshold)) {
+    if (name.startsWith("max") && (!Number.isFinite(value) || value < 0 || value > 1)) {
+      fail(`thresholds.${name} must be between 0 and 1`);
+    }
+  }
+
+  const currentMetrics = {
+    ...current,
+    franceTravailShare: rate(
+      current.franceTravailRuntimeReadyJobs,
+      current.runtimeReadyJobs,
+    ),
+    topProviderShare: rate(current.topProviderRuntimeReadyJobs, current.runtimeReadyJobs),
+    feedExhaustionRate: rate(current.exhaustedPaidUsers, current.evaluatedPaidUsers),
+  };
+  const projectedMetrics = {
+    ...projected,
+    franceTravailShare: rate(
+      projected.franceTravailRuntimeReadyJobs,
+      projected.runtimeReadyJobs,
+    ),
+    topProviderShare: rate(projected.topProviderRuntimeReadyJobs, projected.runtimeReadyJobs),
+    feedExhaustionRate: rate(projected.exhaustedPaidUsers, projected.evaluatedPaidUsers),
+  };
+  const failedGates: string[] = [];
+  if (runtimeReadyUplift < threshold.minRuntimeReadyUplift) {
+    failedGates.push("runtime_ready_uplift_below_minimum");
+  }
+  if (
+    projectedMetrics.franceTravailShare >= currentMetrics.franceTravailShare
+    || projectedMetrics.franceTravailShare > threshold.maxFranceTravailShare
+  ) {
+    failedGates.push("france_travail_concentration_not_reduced");
+  }
+  if (projectedMetrics.topProviderShare > threshold.maxTopProviderShare) {
+    failedGates.push("top_provider_concentration_above_maximum");
+  }
+  if (projectedMetrics.feedExhaustionRate > threshold.maxFeedExhaustionRate) {
+    failedGates.push("feed_exhaustion_above_maximum");
+  }
+  if (projected.p10 < threshold.minP10) {
+    failedGates.push("paid_user_p10_below_minimum");
+  }
+  if (
+    projected.exhaustedPaidUsers > current.exhaustedPaidUsers
+    || projected.p10 < current.p10
+    || projected.p50 < current.p50
+    || projected.p90 < current.p90
+  ) {
+    failedGates.push("paid_user_coverage_regressed");
+  }
+
+  const unsigned = {
+    schemaVersion: "hirly.source-diversification-gate.v1" as const,
+    status: failedGates.length === 0 ? "GO" as const : "NO_GO" as const,
+    generatedAt,
+    current: currentMetrics,
+    projected: projectedMetrics,
+    runtimeReadyUplift,
+    franceTravailShareDelta: Number(
+      (projectedMetrics.franceTravailShare - currentMetrics.franceTravailShare).toFixed(8),
+    ),
+    proposedSources,
+    failedGates,
+    safeguards: {
+      aggregateOnly: true as const,
+      applicationSubmissions: false as const,
+      sourceActivationChanges: false as const,
+      canonicalWrites: false as const,
+    },
+  };
+  return { ...unsigned, digest: digest(unsigned) };
+}
+
 const routeRank: Record<OccurrenceRoute, number> = {
   verified_runtime_ats: 700,
   direct_ats: 600,
@@ -297,7 +551,9 @@ export function buildOccurrencePreferenceDryRun(
 
   let groupsWithSelection = 0;
   let selectionsChanged = 0;
+  let currentVerifiedRuntimeSelections = 0;
   let verifiedRuntimeSelections = 0;
+  let currentDirectSelections = 0;
   let directSelections = 0;
   const sealedSelections: Array<[string, string]> = [];
   for (const [groupKey, group] of [...groups].sort(([left], [right]) =>
@@ -315,6 +571,20 @@ export function buildOccurrencePreferenceDryRun(
     const selected = ranked[0]?.candidate;
     if (!selected) continue;
     groupsWithSelection += 1;
+    const current = group.find(
+      (candidate) => candidate.occurrenceKey === currentSelections[groupKey]
+        && candidate.active,
+    );
+    if (current?.route === "verified_runtime_ats") {
+      currentVerifiedRuntimeSelections += 1;
+    }
+    if (
+      current?.route === "verified_runtime_ats"
+      || current?.route === "direct_ats"
+      || current?.route === "direct_company"
+    ) {
+      currentDirectSelections += 1;
+    }
     if (currentSelections[groupKey] !== selected.occurrenceKey) {
       selectionsChanged += 1;
     }
@@ -335,8 +605,13 @@ export function buildOccurrencePreferenceDryRun(
     groupsEvaluated: groups.size,
     groupsWithSelection,
     selectionsChanged,
+    currentVerifiedRuntimeSelections,
     verifiedRuntimeSelections,
+    verifiedRuntimeSelectionUplift:
+      verifiedRuntimeSelections - currentVerifiedRuntimeSelections,
+    currentDirectSelections,
     directSelections,
+    directSelectionUplift: directSelections - currentDirectSelections,
   };
   return {
     ...unsigned,
