@@ -126,7 +126,7 @@ class _StubDriver(BrowserApplyDriver):
     version = "stub-1"
 
     def can_handle(self, job):
-        return True
+        return str(job.get("ats_provider") or "").lower() == self.provider
 
     async def inspect_application(self, job):
         raise NotImplementedError  # not needed for submit tests
@@ -664,7 +664,8 @@ def test_offer_expired_aborts_before_fills(monkeypatch):
     assert page.filled == []
 
 
-def test_registry_resolves_by_provider_only():
+def test_registry_resolves_by_provider_only(monkeypatch):
+    monkeypatch.setattr(DRIVER_REGISTRY, "_by_provider", {})
     DRIVER_REGISTRY.register(_StubDriver())
     assert DRIVER_REGISTRY.for_job({"ats_provider": "stub"}).provider == "stub"
     assert DRIVER_REGISTRY.for_job({"ats_provider": "nope"}) is None

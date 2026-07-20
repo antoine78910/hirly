@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "data-gouv-csp-fixture.v1",
+  "provenance": {
+    "kind": "synthetic_sanitized_qualification_fixture",
+    "source": "https://www.data.gouv.fr/datasets/les-offres-diffusees-sur-choisir-le-service-public",
+    "containsPersonalData": false,
+    "productionEligible": false,
+    "note": "The approved G012 plan records Licence Ouverte 2.0 attribution requirements, but the exact resource schema and policy evidence remain unapproved."
+  },
+  "datasetId": "les-offres-diffusees-sur-choisir-le-service-public",
+  "resourceId": "csp-qualification-fixture-v1",
+  "initialSnapshot": [
+    {
+      "datasetId": "les-offres-diffusees-sur-choisir-le-service-public",
+      "resourceId": "csp-qualification-fixture-v1",
+      "recordId": "csp-fixture-001",
+      "title": "Ingénieure plateforme",
+      "employer": "Administration Exemple",
+      "location": "Paris, France",
+      "countryCode": "France",
+      "description": "Fixture synthétique pour qualifier la normalisation CSP.",
+      "contractType": "CDI",
+      "status": "active",
+      "applyUrls": [
+        "https://www.data.gouv.fr/datasets/les-offres-diffusees-sur-choisir-le-service-public",
+        "https://boards.greenhouse.io/administrationexemple/jobs/csp-fixture-001"
+      ],
+      "sourceUrl": "https://www.data.gouv.fr/datasets/les-offres-diffusees-sur-choisir-le-service-public",
+      "publishedAt": "2026-07-18T08:00:00.000Z",
+      "expiresAt": "2026-08-18T08:00:00.000Z",
+      "sourceDocument": {
+        "reference": "csp-fixture-001",
+        "intitule": "Ingénieure plateforme",
+        "employeur": "Administration Exemple",
+        "qualification_fixture": true
+      }
+    },
+    {
+      "datasetId": "les-offres-diffusees-sur-choisir-le-service-public",
+      "resourceId": "csp-qualification-fixture-v1",
+      "recordId": "csp-fixture-002",
+      "title": "Analyste données",
+      "employer": "Administration Exemple",
+      "location": "Lyon, France",
+      "countryCode": "FR",
+      "description": "Fixture expirée pour qualifier le cycle de vie.",
+      "contractType": "CDD",
+      "status": "closed",
+      "applyUrls": [
+        "https://www.data.gouv.fr/datasets/les-offres-diffusees-sur-choisir-le-service-public"
+      ],
+      "sourceUrl": "https://www.data.gouv.fr/datasets/les-offres-diffusees-sur-choisir-le-service-public",
+      "publishedAt": "2026-06-18T08:00:00.000Z",
+      "expiresAt": "2026-07-18T08:00:00.000Z",
+      "sourceDocument": {
+        "reference": "csp-fixture-002",
+        "statut": "closed",
+        "qualification_fixture": true
+      }
+    }
+  ],
+  "afterRemovalSnapshot": [
+    {
+      "datasetId": "les-offres-diffusees-sur-choisir-le-service-public",
+      "resourceId": "csp-qualification-fixture-v1",
+      "recordId": "csp-fixture-001",
+      "title": "Ingénieure plateforme",
+      "employer": "Administration Exemple",
+      "location": "Paris, France",
+      "countryCode": "France",
+      "description": "Fixture synthétique pour qualifier la normalisation CSP.",
+      "contractType": "CDI",
+      "status": "active",
+      "applyUrls": [
+        "https://www.data.gouv.fr/datasets/les-offres-diffusees-sur-choisir-le-service-public",
+        "https://boards.greenhouse.io/administrationexemple/jobs/csp-fixture-001"
+      ],
+      "sourceUrl": "https://www.data.gouv.fr/datasets/les-offres-diffusees-sur-choisir-le-service-public",
+      "publishedAt": "2026-07-18T08:00:00.000Z",
+      "expiresAt": "2026-08-18T08:00:00.000Z",
+      "sourceDocument": {
+        "reference": "csp-fixture-001",
+        "intitule": "Ingénieure plateforme",
+        "employeur": "Administration Exemple",
+        "qualification_fixture": true
+      }
+    }
+  ]
+}

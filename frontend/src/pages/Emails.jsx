@@ -681,7 +681,7 @@ function SafeEmailHtml({ html }) {
       srcDoc={srcDoc}
       onLoad={resize}
       sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-      className="w-full border-0"
+      className="ph-no-capture w-full border-0"
       style={{ height: height ? `${height}px` : "200px" }}
       data-testid="inbox-message-html"
     />

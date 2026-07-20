@@ -126,7 +126,7 @@ async def refresh_workday_jobs_for_query(
         async with sem:
             try:
                 result = await provider.search_board(board, board_query)
-                return board, result.jobs
+                return board, result.jobs, None
             except Exception as exc:
                 logger.warning(
                     "workday_search_board_failed tenant=%s site=%s error=%s",
@@ -134,12 +134,12 @@ async def refresh_workday_jobs_for_query(
                     board.site,
                     exc,
                 )
-                return board, []
+                return board, [], f"{exc.__class__.__name__}: {str(exc)[:200]}"
 
     grouped = await asyncio.gather(*[_search_board(board) for board in selected_boards])
     normalized: List[Dict[str, Any]] = []
     seen_job_ids: set[str] = set()
-    for _board, rows in grouped:
+    for _board, rows, _error in grouped:
         for row in rows:
             job_id = row.get("job_id")
             if not job_id or job_id in seen_job_ids:
@@ -160,10 +160,23 @@ async def refresh_workday_jobs_for_query(
         len(normalized),
         imported_count,
     )
+    failures = [
+        {"board": f"{board.tenant}/{board.site}", "error": error}
+        for board, _rows, error in grouped
+        if error
+    ]
+    if failures and len(failures) == len(grouped):
+        reason = "failed"
+    elif failures:
+        reason = "partial_failure"
+    else:
+        reason = "imported" if imported_count else "no_results"
     return {
         "attempted": True,
-        "reason": "imported" if imported_count else "no_results",
-        "boards": [f"{board.tenant}/{board.site}" for board, _ in grouped],
+        "reason": reason,
+        "status": "failed" if reason == "failed" else ("partial" if failures else "completed"),
+        "boards": [f"{board.tenant}/{board.site}" for board, _rows, _error in grouped],
+        "errors": failures,
         "normalized_count": len(normalized),
         "imported_count": imported_count,
     }

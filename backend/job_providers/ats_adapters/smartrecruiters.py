@@ -93,7 +93,10 @@ class SmartRecruitersAtsAdapter(AtsJobAdapter):
         return payload if isinstance(payload, dict) else {}
 
     async def fetch_jobs(self, source_key: str, *, limit: Optional[int] = None) -> List[Dict[str, Any]]:
-        return await self.fetch_postings(source_key, limit=limit or 100)
+        requested = int(limit or 100)
+        probe_limit = min(requested + 1, 100)
+        rows = await self.fetch_postings(source_key, limit=probe_limit)
+        return self.bounded_batch(rows, limit=requested, hard_cap=100)
 
     def normalize_job(
         self,

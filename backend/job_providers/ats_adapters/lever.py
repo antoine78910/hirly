@@ -40,7 +40,7 @@ class LeverAtsAdapter(AtsJobAdapter):
                     response.raise_for_status()
                     payload = response.json()
                 if isinstance(payload, list):
-                    return payload[:limit] if limit else payload
+                    return self.bounded_batch(payload, limit=limit)
             except Exception as exc:
                 last_error = exc
         if last_error:

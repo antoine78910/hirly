@@ -10,6 +10,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from db.base import is_missing_database_contract_error
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -59,6 +61,16 @@ async def mark_notification_read(db, *, user_id: str, notification_id: str) -> b
 
 
 async def mark_all_notifications_read(db, *, user_id: str) -> int:
+    marker = getattr(db, "mark_all_notifications_read", None)
+    if marker is not None:
+        try:
+            return await marker(user_id, limit=500)
+        except Exception as error:
+            if not is_missing_database_contract_error(
+                error,
+                "mark_all_notifications_read",
+            ):
+                raise
     rows = await db.notifications.find({"user_id": user_id, "read": False}, {"_id": 0}).to_list(500)
     now = _now_iso()
     for row in rows:

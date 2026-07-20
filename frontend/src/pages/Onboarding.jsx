@@ -98,9 +98,6 @@ import { devBypassAuth } from "../lib/dev";
 import { splitFullName } from "../lib/personalInfoOptions";
 import { ob } from "../components/onboarding/onboardingTheme";
 import { trackEvent } from "../lib/analytics";
-import {
-  syncOnboardingSearchPreferences,
-} from "../lib/profileSearchPreferences";
 import { preloadOnboardingIntroImages, preloadOnboardingShowcaseImages } from "../lib/onboardingImagePreload";
 import { translateOnboardingCategoryLabel } from "../lib/onboardingJobLabelsFr";
 import { translateRoleLabel } from "../lib/localizedDisplay";
@@ -290,6 +287,7 @@ export default function Onboarding() {
   const [bootstrapping, setBootstrapping] = useState(true);
   const resumeAppliedRef = useRef(false);
   const inputRef = useRef();
+  const onboardingSaveRef = useRef({ pending: null, running: null });
 
   const handleContactPhoneCountryChange = ({ dial, iso2 }) => {
     setContactPhonePrefix(dial);
@@ -409,18 +407,51 @@ export default function Onboarding() {
     profile?.contact?.phone,
   ]);
 
+  const enqueueOnboardingPatch = useCallback(async (payload) => {
+    const state = onboardingSaveRef.current;
+    state.pending = payload;
+    while (state.pending || state.running) {
+      if (!state.running) {
+        state.running = (async () => {
+          while (state.pending) {
+            const latest = state.pending;
+            state.pending = null;
+            await api.patch("/profile/onboarding", latest);
+          }
+        })().finally(() => {
+          state.running = null;
+        });
+      }
+      try {
+        await state.running;
+      } catch (error) {
+        // A newer full snapshot may have arrived while an older request was
+        // failing. Drain that newer snapshot before returning to its caller.
+        if (!state.pending) throw error;
+      }
+    }
+  }, []);
+
   const persistOnboardingProgress = useCallback(async (nextStep, nextStepIndex) => {
     if (!user || ONBOARDING_TRANSIENT_STEPS.has(nextStep)) return;
     try {
-      await api.patch("/profile/extras", {
+      const roles = selectedRoles.map((role) => String(role || "").trim()).filter(Boolean);
+      const experienceLevel = EXPERIENCE_LEVELS.find((entry) => entry.id === experience);
+      await enqueueOnboardingPatch({
         onboarding: getOnboardingExtrasPayload(nextStep, nextStepIndex),
-      });
-      await syncOnboardingSearchPreferences({
-        selectedRoles,
-        onboardingLocation,
-        onboardingLocationData,
-        contractType,
-        experienceId: experience,
+        preferences: {
+          target_role: roles[0] || undefined,
+          target_roles: roles,
+          target_location: onboardingLocationData?.location_label || onboardingLocation || undefined,
+          target_location_data: onboardingLocationData || undefined,
+          contract_type: contractType || undefined,
+          seniority: experienceLevel?.backend,
+          remote_preference: "any",
+        },
+        contact: {
+          location: onboardingLocationData?.location_label || onboardingLocation || undefined,
+          location_data: onboardingLocationData || undefined,
+        },
       });
     } catch (e) {
       console.warn("onboarding progress save skipped", e);
@@ -433,6 +464,7 @@ export default function Onboarding() {
     onboardingLocationData,
     contractType,
     experience,
+    enqueueOnboardingPatch,
   ]);
 
   const goToStepIndex = useCallback((nextIndex) => {
@@ -919,16 +951,6 @@ export default function Onboarding() {
     }
   };
 
-  const persistOnboardingMeta = async () => {
-    try {
-      await api.patch("/profile/extras", {
-        onboarding: getOnboardingExtrasPayload(step, stepIndex),
-      });
-    } catch (e) {
-      console.warn("extras save skipped", e);
-    }
-  };
-
   const redeemAccessCodeIfPresent = async () => {
     const code = creatorAccessCode.trim();
     if (!isSixDigitAccessCode(code)) return true;
@@ -1021,24 +1043,29 @@ export default function Onboarding() {
         setSaving(false);
         return;
       }
-      await persistOnboardingMeta();
-      await syncOnboardingSearchPreferences({
-        selectedRoles,
-        onboardingLocation,
-        onboardingLocationData,
-        contractType,
-        experienceId: experience,
-      });
       const nameParts = splitFullName(user?.name || profile?.contact?.name || "");
       const formattedPhone = formatContactPhone(contactPhonePrefix, contactPhoneLocal, contactPhoneCountryIso2)
         || profile?.contact?.phone
         || undefined;
-      await api.put("/profile/contact", {
-        first_name: nameParts.first_name || undefined,
-        last_name: nameParts.last_name || undefined,
-        location: onboardingLocationData?.location_label || onboardingLocation || undefined,
-        location_data: onboardingLocationData || undefined,
-        phone: formattedPhone,
+      const experienceLevel = EXPERIENCE_LEVELS.find((entry) => entry.id === experience);
+      await enqueueOnboardingPatch({
+        onboarding: getOnboardingExtrasPayload(step, stepIndex),
+        preferences: {
+          target_role: selectedRoles[0] || undefined,
+          target_roles: selectedRoles,
+          target_location: onboardingLocationData?.location_label || onboardingLocation || undefined,
+          target_location_data: onboardingLocationData || undefined,
+          contract_type: contractType || undefined,
+          seniority: experienceLevel?.backend,
+          remote_preference: "any",
+        },
+        contact: {
+          first_name: nameParts.first_name || undefined,
+          last_name: nameParts.last_name || undefined,
+          location: onboardingLocationData?.location_label || onboardingLocation || undefined,
+          location_data: onboardingLocationData || undefined,
+          phone: formattedPhone,
+        },
       });
       if (checkAuth) await checkAuth();
       clearPendingInviteCode();

@@ -10,6 +10,11 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 from company_career_page_prober import probe_career_page_friendliness
+from ingestion_run_lease import (
+    accounting_summary,
+    await_with_ingestion_heartbeat,
+    persist_terminal_partitions,
+)
 from job_providers.ats_adapters import adapter_for_url, get_ats_adapter, supported_ats_providers
 from job_validation import cheap_validate_job_applyability
 from jobs_service import upsert_imported_jobs
@@ -160,7 +165,13 @@ async def refresh_ats_source(
     now = datetime.now(timezone.utc).isoformat()
     logger.info("ats_source_refresh_start provider=%s source_key=%s limit=%s dry_run=%s", provider, key, limit, dry_run)
     try:
-        raw_jobs = await adapter.fetch_jobs(key, limit=max(1, min(int(limit or env_int("JOBS_ATS_REFRESH_JOB_LIMIT", 200)), 500)))
+        requested_limit = max(1, min(int(limit or env_int("JOBS_ATS_REFRESH_JOB_LIMIT", 200)), 500))
+        probe_limit = min(requested_limit + 1, 501)
+        raw_jobs = await adapter.fetch_jobs(key, limit=probe_limit)
+        completeness = str(getattr(raw_jobs, "completeness", "unknown"))
+        if len(raw_jobs) > requested_limit:
+            completeness = "capped_needs_split"
+        raw_jobs = list(raw_jobs[:requested_limit])
         normalized = [adapter.normalize_job(row, source_key=key) for row in raw_jobs]
         jobs = [job for job in normalized if job]
         validated_jobs = [{**job, **cheap_validate_job_applyability(job)} for job in jobs]
@@ -168,12 +179,34 @@ async def refresh_ats_source(
         summary.update({
             "fetched_count": len(raw_jobs),
             "normalized_count": len(jobs),
+            "raw_records": len(raw_jobs),
+            "normalized_records": len(jobs),
+            "rejected_by_reason": {"normalization_failed": max(0, len(raw_jobs) - len(jobs))},
+            "requested_limit": requested_limit,
+            "completeness": completeness,
+            "status": (
+                "capped"
+                if completeness == "capped_needs_split"
+                else ("completed" if completeness == "complete_without_source_total" else "failed")
+            ),
             **counts,
         })
+        if completeness == "capped_needs_split":
+            summary["errors"].append("source_cap_reached_needs_split")
+        elif completeness != "complete_without_source_total":
+            summary["errors"].append("adapter_completeness_missing")
         if not dry_run and jobs:
             import_stats = await upsert_imported_jobs(db, jobs)
             summary["imported_count"] = int(import_stats.get("total_imported") or 0)
-        if not dry_run:
+            summary.update({
+                "jobs_inserted": int(import_stats.get("inserted") or 0),
+                "jobs_updated": int(import_stats.get("updated") or 0),
+                "jobs_reactivated": int(import_stats.get("reactivated") or 0),
+                "exact_duplicates": int(import_stats.get("exact_duplicate") or 0),
+                "fuzzy_duplicate_candidates": int(import_stats.get("fuzzy_duplicate_candidates") or 0),
+                "write_failed": int(import_stats.get("write_failed") or 0),
+            })
+        if not dry_run and completeness == "complete_without_source_total":
             await _update_source_status(
                 db,
                 source_id,
@@ -185,10 +218,23 @@ async def refresh_ats_source(
                     "last_checked_at": now,
                     "last_success_at": now,
                     "last_error": None,
+                    "last_completeness_state": completeness,
                     "failure_count": 0,
                     "updated_at": now,
                 },
                 success=True,
+            )
+        elif not dry_run:
+            await _record_source_failure(
+                db,
+                source_id,
+                provider,
+                key,
+                "source_cap_reached_needs_split"
+                if completeness == "capped_needs_split"
+                else "adapter_completeness_missing",
+                now,
+                completeness_state=completeness,
             )
         logger.info("ats_source_refresh_complete summary=%s", _compact_summary(summary))
         return summary
@@ -345,11 +391,84 @@ async def run_ats_direct_maintenance_loop(db) -> None:
     await asyncio.sleep(initial_delay)
     while True:
         global _last_maintenance_summary
+        ledger_run_id = None
         try:
             if ats_direct_maintenance_loop_enabled():
-                async with _maintenance_loop_lock:
-                    _last_maintenance_summary = await run_ats_direct_maintenance(db)
+                begin = getattr(db, "begin_python_ingestion_run", None)
+                claim = (
+                    await begin(
+                        schedule_id="python-ats-direct-maintenance",
+                        source="direct_ats",
+                        cadence_seconds=interval_minutes * 60,
+                    )
+                    if callable(begin)
+                    else {"acquired": True, "run_id": None}
+                )
+                if claim.get("acquired"):
+                    ledger_run_id = claim.get("run_id")
+                    async with _maintenance_loop_lock:
+                        _last_maintenance_summary = await await_with_ingestion_heartbeat(
+                            db, ledger_run_id, run_ats_direct_maintenance(db)
+                        )
+                    raw_summary = dict(_last_maintenance_summary or {})
+                    refresh_runs = ((raw_summary.get("refresh") or {}).get("runs") or [])
+                    raw_summary.update({
+                        "raw_records": sum(int(run.get("raw_records") or 0) for run in refresh_runs),
+                        "normalized_records": sum(int(run.get("normalized_records") or 0) for run in refresh_runs),
+                        "rejected_by_reason": {
+                            "normalization_failed": sum(
+                                int((run.get("rejected_by_reason") or {}).get("normalization_failed") or 0)
+                                for run in refresh_runs
+                            )
+                        },
+                        "jobs_inserted": sum(int(run.get("jobs_inserted") or 0) for run in refresh_runs),
+                        "jobs_updated": sum(int(run.get("jobs_updated") or 0) for run in refresh_runs),
+                        "jobs_reactivated": sum(int(run.get("jobs_reactivated") or 0) for run in refresh_runs),
+                        "exact_duplicates": sum(int(run.get("exact_duplicates") or 0) for run in refresh_runs),
+                        "fuzzy_duplicate_candidates": sum(
+                            int(run.get("fuzzy_duplicate_candidates") or 0) for run in refresh_runs
+                        ),
+                        "write_failed": sum(int(run.get("write_failed") or 0) for run in refresh_runs),
+                        "accounting_contract": {"state": "known"},
+                    })
+                    ledger_summary = accounting_summary(raw_summary)
+                    maintenance_errors: List[Any] = []
+                    for section_name in ("discover", "refresh", "friendly_company_pages"):
+                        section = (ledger_summary or {}).get(section_name)
+                        if isinstance(section, dict):
+                            maintenance_errors.extend(section.get("errors") or [])
+                    maintenance_fact = {
+                        "partition_id": "direct-ats-maintenance",
+                        "partition_status": (
+                            "failed" if maintenance_errors else "completed_with_results"
+                        ),
+                        "error": "; ".join(map(str, maintenance_errors[:3])) if maintenance_errors else None,
+                    }
+                    await persist_terminal_partitions(db, ledger_run_id, [maintenance_fact])
+                    complete = getattr(db, "complete_python_ingestion_run", None)
+                    if ledger_run_id and callable(complete):
+                        completed = await complete(
+                            run_id=ledger_run_id,
+                            status="partially_succeeded" if maintenance_errors else "succeeded",
+                            completeness_state="partial" if maintenance_errors else "complete_snapshot",
+                            summary=ledger_summary,
+                        )
+                        if completed is not True:
+                            raise RuntimeError("direct_ats fenced completion lost lease")
+                else:
+                    logger.info("ats_direct_maintenance_overlap_skipped run_id=%s", claim.get("run_id"))
         except Exception as exc:
+            complete = getattr(db, "complete_python_ingestion_run", None)
+            if ledger_run_id and callable(complete):
+                try:
+                    await complete(
+                        run_id=ledger_run_id,
+                        status="failed",
+                        completeness_state="failed",
+                        summary={"terminal_error": f"{exc.__class__.__name__}: {str(exc)[:200]}"},
+                    )
+                except Exception as ledger_exc:
+                    logger.error("ats_direct_maintenance_ledger_completion_failed error=%s", str(ledger_exc)[:300])
             logger.warning("ats_direct_maintenance_loop_error error=%s", str(exc)[:300])
         await asyncio.sleep(interval_minutes * 60)
 
@@ -577,7 +696,16 @@ async def _update_source_status(db, source_id: str, fields: Dict[str, Any], *, s
     await db.ats_company_sources.update_one({"id": source_id}, {"$set": merged}, upsert=True)
 
 
-async def _record_source_failure(db, source_id: str, provider: str, source_key: str, error: str, checked_at: str) -> None:
+async def _record_source_failure(
+    db,
+    source_id: str,
+    provider: str,
+    source_key: str,
+    error: str,
+    checked_at: str,
+    *,
+    completeness_state: str = "failed",
+) -> None:
     existing = await db.ats_company_sources.find_one({"id": source_id}, {"_id": 0}) or {}
     failure_count = int(existing.get("failure_count") or 0) + 1
     await db.ats_company_sources.update_one(
@@ -590,6 +718,7 @@ async def _record_source_failure(db, source_id: str, provider: str, source_key: 
             "is_active": existing.get("is_active", True),
             "last_checked_at": checked_at,
             "last_error": error[:500],
+            "last_completeness_state": completeness_state,
             "failure_count": failure_count,
             "updated_at": checked_at,
         }},
@@ -633,6 +762,9 @@ def _empty_refresh_summary(provider: str, source_key: str, dry_run: bool) -> Dic
         "fetched_count": 0,
         "normalized_count": 0,
         "imported_count": 0,
+        "requested_limit": 0,
+        "completeness": "unknown",
+        "status": "failed",
         "valid_count": 0,
         "unknown_count": 0,
         "invalid_count": 0,

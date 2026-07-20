@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "hirly.bpce-open-feed-fixture.v1",
+  "provenance": {
+    "kind": "synthetic_sanitized",
+    "source": "https://www.data.gouv.fr/datasets/groupe-bpce-offres-emploi-publiques",
+    "containsPersonalData": false,
+    "productionEligible": false
+  },
+  "datasetId": "groupe-bpce-offres-emploi-publiques",
+  "resourceId": "bpce-resource-fixture-v1",
+  "raw": [
+    {
+      "reference": "bpce-fixture-001",
+      "intitule": "Ingénieure plateforme",
+      "employeur": "Groupe BPCE",
+      "lieu": "Paris, France",
+      "pays": "France",
+      "description": "Fixture synthétique et assainie sans donnée personnelle.",
+      "typeContrat": "CDI",
+      "statut": "active",
+      "urlCandidature": "https://jobs.smartrecruiters.com/BPCESyntheticFixture/000000000000000001-ingenieure-plateforme",
+      "datePublication": "2026-07-18T08:00:00.000Z",
+      "dateExpiration": "2026-08-18T08:00:00.000Z"
+    },
+    {
+      "reference": "bpce-fixture-002",
+      "intitule": "Analyste risques",
+      "employeur": "Groupe BPCE",
+      "lieu": "Lyon, France",
+      "pays": "FR",
+      "description": "Fixture expirée pour vérifier le cycle de vie.",
+      "typeContrat": "CDD",
+      "statut": "closed",
+      "urlCandidature": "https://jobs.smartrecruiters.com/BPCESyntheticFixture/000000000000000002-analyste-risques",
+      "datePublication": "2026-06-18T08:00:00.000Z",
+      "dateExpiration": "2026-07-18T08:00:00.000Z"
+    }
+  ]
+}

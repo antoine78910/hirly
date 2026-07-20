@@ -122,6 +122,28 @@ def test_build_smartrecruiters_keyword():
     assert build_smartrecruiters_keyword("developer", "Paris") == "Paris developer"
 
 
+def test_greenhouse_bounded_batch_marks_over_limit_as_capped():
+    batch = GreenhouseAtsAdapter().bounded_batch(
+        [{"id": "1"}, {"id": "2"}, {"id": "3"}],
+        limit=2,
+    )
+    assert [row["id"] for row in batch] == ["1", "2"]
+    assert batch.completeness == "capped_needs_split"
+    assert batch.observed_count == 3
+
+
+def test_smartrecruiters_hard_cap_is_not_reported_complete(monkeypatch):
+    adapter = SmartRecruitersAtsAdapter()
+
+    async def fetch_postings(*_args, **_kwargs):
+        return [{"id": str(index)} for index in range(100)]
+
+    monkeypatch.setattr(adapter, "fetch_postings", fetch_postings)
+    batch = asyncio.run(adapter.fetch_jobs("acme", limit=200))
+    assert len(batch) == 100
+    assert batch.completeness == "capped_needs_split"
+
+
 # --- Personio -----------------------------------------------------------
 # Fixture modeled directly on a live https://<company>.jobs.personio.com/xml
 # response captured during development (fields, nesting, and CDATA usage
@@ -295,3 +317,4 @@ def test_teamtailor_normalize_job():
 def test_teamtailor_extract_job_posting_returns_none_without_ldjson():
     adapter = TeamtailorAtsAdapter()
     assert adapter.extract_job_posting("<html><body>no data here</body></html>", "https://acme.teamtailor.com/jobs/1-x") is None
+import asyncio

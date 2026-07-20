@@ -21,7 +21,12 @@ from profile_search_preferences import (
     resolve_profile_target_location_label,
     resolve_profile_target_role,
 )
-from job_normalization import sanitize_display_title
+from job_normalization import (
+    build_job_fingerprint,
+    canonicalize_apply_url,
+    classify_dedup_pair,
+    sanitize_display_title,
+)
 from job_providers import (
     get_board_provider,
     get_job_provider,
@@ -39,6 +44,7 @@ from role_query_terms import resolve_role_query_term
 logger = logging.getLogger(__name__)
 _PROVIDER_COOLDOWN_UNTIL: Dict[str, datetime] = {}
 _PROVIDER_RATE_LIMIT_COOLDOWN_MINUTES = 15
+FEED_COVERAGE_EVALUATOR_VERSION = "feed-coverage-v1"
 
 GREENHOUSE_SEED_BOARDS = [
     ("stripe", "Stripe"),
@@ -78,6 +84,101 @@ LEGACY_INVALID_LEVER_SEED_SITES = [
     "mercury",
     "headway",
 ]
+
+
+def hash_feed_coverage_user_id(user_id: str, *, salt: Optional[str] = None) -> str:
+    """Return a stable, non-reversible identifier for coverage audit output."""
+    hash_salt = salt or os.environ.get("COVERAGE_AUDIT_HASH_SALT") or os.environ.get("SESSION_SECRET")
+    if not hash_salt:
+        raise RuntimeError("COVERAGE_AUDIT_HASH_SALT or SESSION_SECRET is required")
+    return hashlib.sha256(f"{hash_salt}:{user_id}".encode("utf-8")).hexdigest()
+
+
+def build_feed_coverage_snapshot(
+    *,
+    user_id: str,
+    profile: Dict[str, Any],
+    feed_response: Dict[str, Any],
+    evaluated_at: Optional[datetime] = None,
+    freshness_window_days: int = 30,
+    hash_salt: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Summarize an already-evaluated no-refresh feed without mutating state."""
+    evaluated_at = evaluated_at or datetime.now(timezone.utc)
+    jobs = [job for job in (feed_response.get("jobs") or []) if isinstance(job, dict)]
+
+    def _identity(job: Dict[str, Any]) -> str:
+        return str(
+            job.get("canonical_group_id")
+            or (
+                f"{job.get('provider')}:{job.get('external_id')}"
+                if job.get("provider") and job.get("external_id")
+                else job.get("job_id")
+            )
+            or ""
+        )
+
+    def _is_actionable(job: Dict[str, Any]) -> bool:
+        return str(job.get("application_mode") or "").strip().lower() in {
+            "auto_apply",
+            "assisted",
+            "manual",
+        }
+
+    def _is_fresh(job: Dict[str, Any]) -> bool:
+        raw = job.get("posted_at") or job.get("first_seen_at") or job.get("imported_at")
+        if not raw:
+            return False
+        try:
+            parsed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        except ValueError:
+            return False
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed >= evaluated_at - timedelta(days=freshness_window_days)
+
+    actionable_jobs = [job for job in jobs if _is_actionable(job)]
+    unique_ids = {_identity(job) for job in jobs if _identity(job)}
+    source_set = sorted({str(job.get("provider")) for job in jobs if job.get("provider")})
+    empty_reason = feed_response.get("empty_reason")
+    terminal_reason = (
+        empty_reason.get("code")
+        if isinstance(empty_reason, dict) and empty_reason.get("code")
+        else feed_response.get("fallback_used")
+        or ("RESULTS_RETURNED" if jobs else "NO_RESULTS")
+    )
+    profile_location = profile.get("target_location_data") if isinstance(profile.get("target_location_data"), dict) else {}
+
+    return {
+        "user_id": hash_feed_coverage_user_id(user_id, salt=hash_salt),
+        "cohort_dimensions": {
+            "country_code": str(profile_location.get("country_code") or "").lower() or None,
+            "remote_preference": profile.get("remote_preference") or None,
+        },
+        "evaluated_at": evaluated_at.isoformat(),
+        "source_set": source_set,
+        "coverage_scope": "ordered_no_refresh_feed",
+        "freshness_window_days": freshness_window_days,
+        "relevant_total": len(jobs),
+        "fresh_relevant_total": sum(1 for job in jobs if _is_fresh(job)),
+        "unique_total": len(unique_ids),
+        "actionable_total": len(actionable_jobs),
+        "unseen_actionable_total": len(actionable_jobs),
+        "route_known_count": sum(
+            1
+            for job in jobs
+            if str(job.get("ats_provider") or "").strip().lower() not in {"", "unknown", "none"}
+        ),
+        "direct_employer_count": sum(
+            1
+            for job in jobs
+            if str(job.get("provider") or "").strip().lower()
+            in {"greenhouse", "lever", "ashby", "recruitee", "personio", "smartrecruiters", "teamtailor"}
+        ),
+        "ordered_eligible_job_ids": [str(job.get("job_id")) for job in jobs if job.get("job_id")],
+        "terminal_reason": terminal_reason,
+        "evaluator_version": FEED_COVERAGE_EVALUATOR_VERSION,
+    }
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -311,12 +412,54 @@ def _prepare_job_for_upsert(job: Dict[str, Any]) -> Dict[str, Any]:
     if sanitized_title:
         prepared["title"] = sanitized_title
     prepared = _with_cheap_validation(prepared)
+    prepared["fingerprint"] = prepared.get("fingerprint") or build_job_fingerprint(prepared)
+    prepared["canonical_apply_url"] = canonicalize_apply_url(
+        prepared.get("selected_apply_url") or prepared.get("external_url")
+    )
     return _ensure_job_id(prepared)
 
 
-async def _write_job_chunk(db, chunk: List[Dict[str, Any]]) -> None:
+def _candidate_key(classification: str, job: Dict[str, Any]) -> Optional[str]:
+    if classification == "canonical_url_candidate":
+        return job.get("canonical_apply_url") or canonicalize_apply_url(
+            job.get("selected_apply_url") or job.get("external_url")
+        )
+    if classification == "ats_id_candidate":
+        provider = str(job.get("ats_provider") or "").lower()
+        ats_job_id = str(job.get("ats_job_id") or "")
+        return f"{provider}:{ats_job_id}" if provider and ats_job_id else None
+    if classification == "fingerprint_candidate":
+        return job.get("fingerprint") or build_job_fingerprint(job)
+    return None
+
+
+async def _write_job_chunk(
+    db,
+    chunk: List[Dict[str, Any]],
+    *,
+    provider_claim: Optional[Dict[str, Any]] = None,
+) -> None:
     """Persist a chunk of jobs — prefer multi-row upsert, fall back to update_one."""
     if not chunk:
+        return
+    providers = {str(job.get("provider") or "") for job in chunk}
+    if "france_travail" in providers:
+        if not provider_claim:
+            raise RuntimeError("France Travail canonical writes require one provider claim")
+        other_jobs = [
+            job for job in chunk if str(job.get("provider") or "") != "france_travail"
+        ]
+        if other_jobs:
+            await _write_job_chunk(db, other_jobs)
+        chunk = [
+            job for job in chunk if str(job.get("provider") or "") == "france_travail"
+        ]
+        guarded_upsert = getattr(db, "upsert_python_provider_jobs", None)
+        if not callable(guarded_upsert):
+            raise RuntimeError("France Travail provider claim RPC is unavailable")
+        written = await guarded_upsert(provider_claim, chunk)
+        if written != len(chunk):
+            raise RuntimeError("France Travail provider claim write was incomplete")
         return
     insert_many = getattr(db.jobs, "insert_many", None)
     if callable(insert_many):
@@ -338,13 +481,44 @@ async def _write_job_chunk(db, chunk: List[Dict[str, Any]]) -> None:
 
 
 async def _import_provider_jobs(db, provider, query: JobSearchQuery) -> Dict[str, int]:
-    result = await provider.search(query)
-    prepared_jobs = [_prepare_job_for_upsert(job) for job in (result.jobs or [])]
-    batch_stats = await _upsert_job_batch(db, prepared_jobs, already_prepared=True)
-    return {
-        **batch_stats,
-        "jobs": prepared_jobs,
-    }
+    provider_claim = None
+    is_france_travail = is_france_travail_provider(getattr(provider, "name", ""))
+    if is_france_travail:
+        claim = getattr(db, "claim_python_provider_work", None)
+        if not callable(claim):
+            raise RuntimeError("France Travail provider ownership claim is unavailable")
+        provider_claim = await claim("france_travail")
+    try:
+        result = await provider.search(query)
+        prepared_jobs = [_prepare_job_for_upsert(job) for job in (result.jobs or [])]
+        if is_france_travail and prepared_jobs:
+            heartbeat = getattr(db, "heartbeat_python_provider_work", None)
+            if not callable(heartbeat) or not await heartbeat(provider_claim):
+                raise RuntimeError("France Travail provider ownership claim became stale")
+        batch_stats = await _upsert_job_batch(
+            db,
+            prepared_jobs,
+            already_prepared=True,
+            provider_claim=provider_claim,
+        )
+        response = {
+            **batch_stats,
+            "jobs": prepared_jobs,
+        }
+    except Exception:
+        if provider_claim is not None:
+            finish = getattr(db, "finish_python_provider_work", None)
+            if callable(finish):
+                try:
+                    await finish(provider_claim)
+                except Exception as exc:
+                    logger.warning("France Travail provider claim finish failed: %s", exc)
+        raise
+    if provider_claim is not None:
+        finish = getattr(db, "finish_python_provider_work", None)
+        if not callable(finish) or not await finish(provider_claim):
+            raise RuntimeError("France Travail provider ownership claim became stale")
+    return response
 
 
 async def _upsert_job_batch(
@@ -354,9 +528,17 @@ async def _upsert_job_batch(
     progress_base: int = 0,
     *,
     already_prepared: bool = False,
+    provider_claim: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, int]:
     stats = {
         "total_imported": 0,
+        "inserted": 0,
+        "updated": 0,
+        "reactivated": 0,
+        "exact_duplicate": 0,
+        "fuzzy_duplicate_candidates": 0,
+        "dedup_candidate_links": 0,
+        "write_failed": 0,
         "auto_apply_supported_imported": 0,
         "unknown_ats_imported": 0,
     }
@@ -364,6 +546,7 @@ async def _upsert_job_batch(
         return stats
 
     prepared: List[Dict[str, Any]] = []
+    seen_prepared_ids: set[str] = set()
     for job in jobs:
         row = job if already_prepared else _prepare_job_for_upsert(job)
         if not row.get("provider") or not row.get("external_id") or not row.get("job_id"):
@@ -374,26 +557,124 @@ async def _upsert_job_batch(
                 row.get("job_id"),
             )
             continue
+        stable_id = str(row["job_id"])
+        if stable_id in seen_prepared_ids:
+            stats["exact_duplicate"] += 1
+            continue
+        seen_prepared_ids.add(stable_id)
         prepared.append(row)
+
+    existing_rows = await db.jobs.find(
+        {"job_id": {"$in": [row["job_id"] for row in prepared]}},
+        {"_id": 0},
+    ).limit(len(prepared)).to_list(len(prepared))
+    existing_by_id = {str(row.get("job_id")): row for row in existing_rows if row.get("job_id")}
+    candidate_rows_by_id: Dict[str, Dict[str, Any]] = {}
+    candidate_filters = (
+        ("canonical_apply_url", {row.get("canonical_apply_url") for row in prepared if row.get("canonical_apply_url")}),
+        ("ats_job_id", {row.get("ats_job_id") for row in prepared if row.get("ats_job_id")}),
+        ("fingerprint", {row.get("fingerprint") for row in prepared if row.get("fingerprint")}),
+    )
+    for field, values in candidate_filters:
+        if not values:
+            continue
+        rows = await db.jobs.find(
+            {field: {"$in": sorted(values)}}, {"_id": 0}
+        ).limit(max(100, len(prepared) * 20)).to_list(max(100, len(prepared) * 20))
+        for row in rows:
+            if row.get("job_id"):
+                candidate_rows_by_id[str(row["job_id"])] = row
+
+    candidate_pairs: Dict[tuple[str, str, str], Dict[str, Any]] = {}
+    comparison_rows = [*candidate_rows_by_id.values(), *prepared]
+    for index, left in enumerate(comparison_rows):
+        for right in comparison_rows[index + 1:]:
+            left_id, right_id = str(left.get("job_id") or ""), str(right.get("job_id") or "")
+            if not left_id or not right_id or left_id == right_id:
+                continue
+            classification = classify_dedup_pair(left, right)["classification"]
+            if not classification.endswith("_candidate"):
+                continue
+            ordered = tuple(sorted((left_id, right_id)))
+            key = _candidate_key(classification, left) or _candidate_key(classification, right)
+            if not key:
+                continue
+            candidate_pairs[(ordered[0], ordered[1], classification)] = {
+                "left_job_id": ordered[0],
+                "right_job_id": ordered[1],
+                "candidate_type": classification,
+                "candidate_key": key,
+            }
+    stats["fuzzy_duplicate_candidates"] = len(candidate_pairs)
 
     chunk_size = max(10, min(_env_int("JOB_UPSERT_BATCH_SIZE", 75), 200))
     for offset in range(0, len(prepared), chunk_size):
         chunk = prepared[offset : offset + chunk_size]
-        await _write_job_chunk(db, chunk)
+        try:
+            await _write_job_chunk(db, chunk, provider_claim=provider_claim)
+        except Exception:
+            stats["write_failed"] += len(chunk)
+            raise
         stats["total_imported"] += len(chunk)
         if progress is not None:
             progress["jobs_upserted_so_far"] = progress_base + stats["total_imported"]
         for job in chunk:
+            existing = existing_by_id.get(str(job["job_id"]))
+            if existing is None:
+                stats["inserted"] += 1
+            elif (
+                existing.get("fingerprint") == job.get("fingerprint")
+                and existing.get("selected_apply_url") == job.get("selected_apply_url")
+            ):
+                stats["exact_duplicate"] += 1
+            else:
+                stats["updated"] += 1
+                if existing.get("validation_status") == "invalid" and job.get("validation_status") != "invalid":
+                    stats["reactivated"] += 1
             if job.get("auto_apply_supported") is True:
                 stats["auto_apply_supported_imported"] += 1
             if job.get("ats_provider") == "unknown":
                 stats["unknown_ats_imported"] += 1
+    candidate_collection = getattr(db, "job_dedup_candidates", None)
+    if candidate_pairs and candidate_collection is not None:
+        now = datetime.now(timezone.utc).isoformat()
+        links = []
+        for candidate in candidate_pairs.values():
+            digest = hashlib.sha256(
+                "|".join((
+                    candidate["left_job_id"],
+                    candidate["right_job_id"],
+                    candidate["candidate_type"],
+                    candidate["candidate_key"],
+                )).encode()
+            ).hexdigest()
+            links.append({
+                "candidate_id": digest,
+                **candidate,
+                "created_at": now,
+                "last_seen_at": now,
+            })
+        await candidate_collection.insert_many(links)
+        stats["dedup_candidate_links"] = len(links)
     return stats
 
 
-async def upsert_imported_jobs(db, jobs: List[Dict[str, Any]], progress: Optional[Dict[str, Any]] = None, progress_base: int = 0) -> Dict[str, int]:
+async def upsert_imported_jobs(
+    db,
+    jobs: List[Dict[str, Any]],
+    progress: Optional[Dict[str, Any]] = None,
+    progress_base: int = 0,
+    *,
+    provider_claim: Optional[Dict[str, Any]] = None,
+) -> Dict[str, int]:
     """Persist imported jobs through the shared validation/upsert path."""
-    return await _upsert_job_batch(db, jobs, progress=progress, progress_base=progress_base)
+    return await _upsert_job_batch(
+        db,
+        jobs,
+        progress=progress,
+        progress_base=progress_base,
+        provider_claim=provider_claim,
+    )
 
 
 def _with_cheap_validation(job: Dict[str, Any]) -> Dict[str, Any]:

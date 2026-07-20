@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "hirly.provider-fixture.v1",
+  "provenance": {
+    "kind": "synthetic_sanitized",
+    "approvalRef": ".omx/plans/prd-nextjs-bun-foundation.md#phase-4",
+    "containsPersonalData": false
+  },
+  "provider": "hellowork",
+  "externalId": "hellowork-001",
+  "title": "Data Engineer",
+  "company": "Données & Compagnie SARL",
+  "location": "Lyon, Auvergne-Rhône-Alpes",
+  "countryCode": "FR",
+  "description": "Industrialiser les pipelines de données.",
+  "contractType": "CDI",
+  "status": "open",
+  "applyUrls": [
+    "https://www.hellowork.com/fr-fr/emplois/001.html",
+    "https://jobs.lever.co/example/001"
+  ],
+  "sourceDocument": {
+    "fixture": "hellowork-approved-synthetic",
+    "remote": "hybrid"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "@hirly/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/main.ts",
+    "start": "bun src/main.ts",
+    "cli": "bun src/cli.ts",
+    "trial": "bun src/source-trial-cli.ts",
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "build": "bun build src/main.ts src/cli.ts --target=bun --outdir=dist",
+    "docker:build": "docker build -f Dockerfile -t hirly-worker:test ../.."
+  },
+  "dependencies": {
+    "@hirly/config": "workspace:*",
+    "@hirly/contracts": "workspace:*",
+    "@hirly/db": "workspace:*",
+    "@hirly/ingestion": "workspace:*",
+    "@hirly/observability": "workspace:*",
+    "zod": "4.1.12"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

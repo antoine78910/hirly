@@ -16,6 +16,26 @@ Projection = Optional[Dict[str, Any]]
 SortSpec = Sequence[Tuple[str, int]]
 
 
+def is_missing_database_contract_error(
+    error: BaseException,
+    contract_name: str | None = None,
+) -> bool:
+    """Recognize PostgREST's missing-RPC response during additive rollouts.
+
+    Application deploys and database migrations are not atomic. Callers may
+    safely use their bounded legacy path only when PostgREST explicitly says
+    the new function is absent; transport and execution failures still surface.
+    """
+    message = str(error).lower()
+    missing_from_schema_cache = (
+        "pgrst202" in message
+        or ("could not find the function" in message and "schema cache" in message)
+    )
+    return missing_from_schema_cache and (
+        not contract_name or contract_name.lower() in message
+    )
+
+
 class CursorPort(ABC):
     @abstractmethod
     def sort(self, key_or_list: Any, direction: Optional[int] = None) -> "CursorPort":
@@ -48,7 +68,7 @@ class CollectionPort(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def insert_many(self, documents: Iterable[Document]) -> Any:
+    async def insert_many(self, documents: Iterable[Document], *, ignore_duplicates: bool = False) -> Any:
         raise NotImplementedError
 
     @abstractmethod

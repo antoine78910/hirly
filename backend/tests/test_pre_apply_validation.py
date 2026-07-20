@@ -66,7 +66,11 @@ class _FakeDB:
         self.jobs = _Collection([job] if job else [], key="job_id")
         self.swipes = _Collection([], key="swipe_id")
         self.applications = _Collection([], key="application_id")
-        self.profiles = _Collection([{"user_id": "user_1", "cv_text": "CV"}], key="user_id")
+        self.profiles = _Collection([{
+            "user_id": "user_1",
+            "cv_text": "CV",
+            "contact": {"phone": "+33 6 12 34 56 78"},
+        }], key="user_id")
         self.users = _Collection([{"user_id": "user_1", "billing": {"credits_remaining": 10, "credits_total": 10}}], key="user_id")
 
 

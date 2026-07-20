@@ -16,6 +16,9 @@ The active adapter restores documents from `data`, so API response shapes remain
 - `backend/db/supabase_low_risk_schema.sql`: `jobs`, `company_boards`.
 - `backend/db/supabase_phase2_schema.sql`: `profiles`, `swipes`, `applications`, `browser_submission_runs`.
 - `backend/db/supabase_auth_schema.sql`: `users`, `user_sessions`.
+- `backend/db/migrations/20260720000100_typescript_worker_foundation.sql`:
+  additive TypeScript worker queue, attempt, schedule, and provider-control
+  objects. See `backend/db/TYPESCRIPT_WORKER_FOUNDATION.md` before applying it.
 
 ## Adapter Mapping
 
@@ -218,6 +221,44 @@ ATS providers:
 - `lever`
 - `ashby`
 - `unknown`
+
+## TypeScript Worker Foundation
+
+The TypeScript worker foundation is additive and must be installed in the same
+physical Postgres database as `jobs`. In a split deployment this is the
+inventory database selected by `JOBS_DATABASE_URL`; it is not the primary auth
+database.
+
+The migration adds:
+
+- `worker_runs`
+- `worker_tasks`
+- `worker_task_attempts`
+- `worker_schedules`
+- `provider_registry`
+- the aggregate `worker_capability_status` view
+- private, fenced queue and provider-control functions
+
+The migration seeds provider-control rows disabled and does not transfer writer
+ownership. Applying it is not authorization to enable a provider or perform a
+live fetch. Worker, operator, and reader roles are deliberately separate, and
+runtime roles do not receive direct table-mutation privileges.
+
+Use `backend/db/TYPESCRIPT_WORKER_FOUNDATION.md` for split/unsplit application,
+role, fencing, and rollback guidance. Its rollback file is destructive and is
+only for isolated test databases; production rollback disables work while
+retaining the additive tables for diagnosis.
+
+Run the concurrency, fencing, authorization, role, and rollback proof only
+against an isolated disposable Postgres database:
+
+```bash
+G002_TEST_DATABASE_URL=postgresql://... \
+  bun test tests/g002-postgres.integration.test.ts
+```
+
+The integration suite applies and rolls back the foundation objects. Never
+point this command at a shared, staging, or production database.
 
 ## company_boards
 

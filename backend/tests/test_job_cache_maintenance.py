@@ -1,4 +1,6 @@
 import asyncio
+import hashlib
+import json
 from datetime import datetime, timezone, timedelta
 
 import pytest
@@ -79,8 +81,53 @@ class _Collection:
 
 
 class _FakeDB:
-    def __init__(self, jobs=None):
+    def __init__(
+        self,
+        jobs=None,
+        *,
+        completeness="missing",
+        proof_scope="global",
+        proof_country=None,
+    ):
         self.jobs = _Collection(jobs or [])
+        providers = ["france_travail"] if proof_scope == "provider" else []
+        expected_partition_ids = ["p1"]
+        authoritative_manifest = {
+            "manifest_version": "test.v1",
+            "manifest_digest": hashlib.sha256(
+                json.dumps(expected_partition_ids, separators=(",", ":")).encode()
+            ).hexdigest(),
+            "expected_partition_count": 1,
+            "expected_partition_ids": expected_partition_ids,
+            "geography_scope": "country" if proof_country else "global",
+            "countries": [proof_country] if proof_country else ["*"],
+            "remote_scope": "included",
+        }
+        self.worker_runs = _Collection(
+            [{
+                "id": "run-complete",
+                "lease_generation": 2,
+                "source_id": "france_travail" if proof_scope == "provider" else "all_providers",
+                "status": "succeeded",
+                "completeness_state": completeness,
+                "finished_at": datetime.now(timezone.utc).isoformat(),
+                "summary": {"authoritative_manifest": authoritative_manifest, "proof_scope": {
+                    "scope_kind": proof_scope,
+                    "providers": providers,
+                    **authoritative_manifest,
+                }},
+            }]
+            if completeness != "missing" else []
+        )
+        self.worker_run_partitions = _Collection(
+            [{
+                "run_id": "run-complete",
+                "lease_generation": 2,
+                "partition_id": "p1",
+                "status": "completed_with_results",
+            }]
+            if completeness != "missing" else []
+        )
 
 
 def _matches(row, filter):
@@ -154,8 +201,10 @@ def test_revalidate_updates_unknown_jobs():
 
 def test_expire_stale_marks_invalid_without_deleting():
     stale = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
-    db = _FakeDB([_job(last_seen_at=stale, imported_at=stale)])
-    result = asyncio.run(maintenance.expire_stale_jobs(db, older_than_days=30, limit=10))
+    db = _FakeDB([_job(last_seen_at=stale, imported_at=stale)], completeness="complete_snapshot")
+    result = asyncio.run(maintenance.expire_stale_jobs(
+        db, older_than_days=30, limit=10, completeness_run_id="run-complete"
+    ))
     assert result["expired_count"] == 1
     assert len(db.jobs.rows) == 1
     assert db.jobs.rows[0]["validation_status"] == "invalid"
@@ -168,12 +217,137 @@ def test_expire_stale_targets_oldest_not_newest():
     db = _FakeDB([
         _job(1, last_seen_at=recent, imported_at=recent, validation_status="valid", applyability_tier="A"),
         _job(2, last_seen_at=stale, imported_at=stale, validation_status="valid", applyability_tier="A"),
-    ])
-    result = asyncio.run(maintenance.expire_stale_jobs(db, older_than_days=30, limit=1))
+    ], completeness="complete_snapshot")
+    result = asyncio.run(maintenance.expire_stale_jobs(
+        db, older_than_days=30, limit=1, completeness_run_id="run-complete"
+    ))
     assert result["expired_count"] == 1
     by_id = {row["job_id"]: row for row in db.jobs.rows}
     assert by_id["job_2"]["applyability_tier"] == "E"
     assert by_id["job_1"]["applyability_tier"] == "A"
+
+
+def test_partial_run_cannot_expire_or_purge_jobs():
+    stale = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
+    db = _FakeDB([_job(1, applyability_tier="E", last_seen_at=stale, imported_at=stale)])
+
+    expire = asyncio.run(maintenance.expire_stale_jobs(db, older_than_days=30))
+    purge = asyncio.run(maintenance.purge_invalid_jobs(db, older_than_days=30, expire_first=False))
+
+    assert expire["reason"] == "completed_run_partition_proof_required"
+    assert purge["reason"] == "completed_run_partition_proof_required"
+    assert len(db.jobs.rows) == 1
+
+
+def test_failed_partition_blocks_expiry_even_when_run_claims_complete():
+    stale = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
+    db = _FakeDB([_job(last_seen_at=stale, imported_at=stale)], completeness="complete_snapshot")
+    db.worker_run_partitions.rows[0]["status"] = "failed"
+
+    result = asyncio.run(maintenance.expire_stale_jobs(
+        db, older_than_days=30, completeness_run_id="run-complete"
+    ))
+
+    assert result["reason"] == "completed_run_partition_proof_required"
+    assert db.jobs.rows[0]["validation_status"] == "unknown"
+
+
+def test_provider_expiry_rejects_wrong_provider_global_and_stale_proofs():
+    stale = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
+    job = _job(last_seen_at=stale, imported_at=stale)
+
+    wrong_provider = _FakeDB([job], completeness="complete_snapshot", proof_scope="provider")
+    wrong = asyncio.run(maintenance.expire_stale_jobs(
+        wrong_provider,
+        provider="jsearch",
+        completeness_run_id="run-complete",
+    ))
+    assert wrong["skipped"] is True
+
+    stale_proof = _FakeDB([job], completeness="complete_snapshot", proof_scope="provider")
+    stale_proof.worker_runs.rows[0]["finished_at"] = (
+        datetime.now(timezone.utc) - timedelta(hours=25)
+    ).isoformat()
+    stale_result = asyncio.run(maintenance.expire_stale_jobs(
+        stale_proof,
+        provider="france_travail",
+        completeness_run_id="run-complete",
+    ))
+    assert stale_result["skipped"] is True
+
+
+def test_provider_expiry_accepts_exact_recent_provider_manifest():
+    stale = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
+    db = _FakeDB(
+        [_job(provider="france_travail", last_seen_at=stale, imported_at=stale)],
+        completeness="complete_snapshot",
+        proof_scope="provider",
+        proof_country="fr",
+    )
+    result = asyncio.run(maintenance.expire_stale_jobs(
+        db,
+        provider="france_travail",
+        country_code="fr",
+        completeness_run_id="run-complete",
+    ))
+    assert result["expired_count"] == 1
+
+
+def test_provider_expiry_rejects_wrong_or_missing_country_scope():
+    stale = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
+    for requested_country in (None, "gb"):
+        db = _FakeDB(
+            [_job(provider="jsearch", country_code="fr", last_seen_at=stale, imported_at=stale)],
+            completeness="complete_snapshot",
+            proof_scope="provider",
+            proof_country="fr",
+        )
+        db.worker_runs.rows[0]["source_id"] = "jsearch"
+        db.worker_runs.rows[0]["summary"]["proof_scope"]["providers"] = ["jsearch"]
+        result = asyncio.run(maintenance.expire_stale_jobs(
+            db,
+            provider="jsearch",
+            country_code=requested_country,
+            completeness_run_id="run-complete",
+        ))
+        assert result["skipped"] is True
+        assert len(db.jobs.rows) == 1
+
+
+def test_forged_or_missing_partition_manifest_cannot_authorize_global_purge():
+    stale = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
+    db = _FakeDB(
+        [_job(applyability_tier="E", last_seen_at=stale, imported_at=stale)],
+        completeness="complete_snapshot",
+    )
+    db.worker_runs.rows[0]["summary"]["proof_scope"]["expected_partition_ids"] = ["p1", "p2"]
+    db.worker_runs.rows[0]["summary"]["proof_scope"]["expected_partition_count"] = 2
+
+    result = asyncio.run(maintenance.purge_invalid_jobs(
+        db,
+        expire_first=False,
+        completeness_run_id="run-complete",
+    ))
+    assert result["skipped"] is True
+    assert len(db.jobs.rows) == 1
+
+
+def test_complete_snapshot_purge_has_no_cutoff_free_fallback():
+    recent = datetime.now(timezone.utc).isoformat()
+    db = _FakeDB(
+        [_job(1, applyability_tier="E", last_seen_at=recent, imported_at=recent)],
+        completeness="complete_snapshot",
+    )
+
+    result = asyncio.run(maintenance.purge_invalid_jobs(
+        db,
+        older_than_days=30,
+        expire_first=False,
+        completeness_run_id="run-complete",
+    ))
+
+    assert result["matched_count"] == 0
+    assert len(db.jobs.rows) == 1
 
 
 def test_purge_invalid_deletes_tier_e_jobs():
@@ -183,9 +357,12 @@ def test_purge_invalid_deletes_tier_e_jobs():
         _job(1, applyability_tier="E", last_seen_at=stale, imported_at=stale),
         _job(2, applyability_tier="A", last_seen_at=recent, imported_at=recent),
         _job(3, applyability_tier="D", last_seen_at=stale, imported_at=stale),
-    ])
+    ], completeness="complete_snapshot")
     result = asyncio.run(
-        maintenance.purge_invalid_jobs(db, older_than_days=30, expire_first=False, limit=10)
+        maintenance.purge_invalid_jobs(
+            db, older_than_days=30, expire_first=False, limit=10,
+            completeness_run_id="run-complete",
+        )
     )
     assert result["matched_count"] == 2
     assert result["deleted_count"] == 2
@@ -194,9 +371,15 @@ def test_purge_invalid_deletes_tier_e_jobs():
 
 def test_purge_invalid_dry_run_does_not_delete():
     stale = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
-    db = _FakeDB([_job(1, applyability_tier="E", last_seen_at=stale, imported_at=stale)])
+    db = _FakeDB(
+        [_job(1, applyability_tier="E", last_seen_at=stale, imported_at=stale)],
+        completeness="complete_snapshot",
+    )
     result = asyncio.run(
-        maintenance.purge_invalid_jobs(db, older_than_days=30, expire_first=False, dry_run=True)
+        maintenance.purge_invalid_jobs(
+            db, older_than_days=30, expire_first=False, dry_run=True,
+            completeness_run_id="run-complete",
+        )
     )
     assert result["matched_count"] == 1
     assert result["deleted_count"] == 0
@@ -293,6 +476,62 @@ def test_refresh_limits_are_respected(monkeypatch):
     monkeypatch.setattr(maintenance, "refresh_jobs_for_profile_if_needed", fake_refresh)
     asyncio.run(maintenance.refresh_jobs_for_query_or_filters(_FakeDB(), limit=9999))
     assert captured["target_auto_apply_count"] == 300
+
+
+def test_expanded_france_travail_refresh_uses_claim_aware_import(monkeypatch):
+    events = []
+
+    class _FranceTravailProvider:
+        name = "france_travail"
+
+    async def fake_expand(**kwargs):
+        return [{
+            "name": "Paris",
+            "ascii_name": "Paris",
+            "country_code": "fr",
+            "distance_km": 0.0,
+            "population": 2_000_000,
+            "is_origin": True,
+        }]
+
+    async def fake_import(db, provider, query):
+        events.append((provider.name, query.location))
+        return {
+            "total_imported": 1,
+            "jobs": [_job(provider="france_travail", external_id="ft-1")],
+        }
+
+    async def forbidden_upsert(*args, **kwargs):
+        raise AssertionError("France Travail must not bypass its provider claim")
+
+    monkeypatch.setattr(maintenance, "expand_location_radius", fake_expand)
+    monkeypatch.setattr(maintenance, "primary_job_provider_name", lambda: "france_travail")
+    monkeypatch.setattr(maintenance, "is_job_provider_configured", lambda name=None: True)
+    monkeypatch.setattr(
+        maintenance, "get_job_provider", lambda name, api_key="": _FranceTravailProvider()
+    )
+    monkeypatch.setattr(maintenance, "_import_provider_jobs", fake_import)
+    monkeypatch.setattr(maintenance, "upsert_imported_jobs", forbidden_upsert)
+
+    result = asyncio.run(maintenance._refresh_jobs_for_expanded_locations(
+        _FakeDB(),
+        role="marketing",
+        location_label="Paris",
+        country_code="fr",
+        lat=None,
+        lng=None,
+        radius_km=50,
+        include_cross_border=False,
+        refresh_limit=10,
+        dry_run=False,
+        discover_ats_sources=False,
+        refresh_discovered_ats_sources=False,
+        ats_refresh_limit=None,
+        remote=None,
+    ))
+
+    assert events == [("france_travail", "Paris")]
+    assert result["imported_count"] == 1
 
 
 def _expanded_basque_places():

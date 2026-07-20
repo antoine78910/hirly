@@ -32,6 +32,11 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
 
 import httpx
+from ingestion_run_lease import (
+    accounting_summary,
+    await_with_ingestion_heartbeat,
+    persist_terminal_partitions,
+)
 
 from ats_source_service import _careers_url, env_bool, env_int
 from job_providers.ats_adapters.registry import default_ats_adapters
@@ -315,10 +320,72 @@ async def run_company_discovery_loop(db) -> None:
     await asyncio.sleep(initial_delay)
     while True:
         global _last_discovery_summary
+        ledger_run_id = None
         try:
             if company_discovery_loop_enabled():
-                async with _discovery_loop_lock:
-                    _last_discovery_summary = await run_company_discovery(db)
+                begin = getattr(db, "begin_python_ingestion_run", None)
+                claim = (
+                    await begin(
+                        schedule_id="python-company-discovery",
+                        source="company_discovery",
+                        cadence_seconds=interval_minutes * 60,
+                    )
+                    if callable(begin)
+                    else {"acquired": True, "run_id": None}
+                )
+                if claim.get("acquired"):
+                    ledger_run_id = claim.get("run_id")
+                    async with _discovery_loop_lock:
+                        _last_discovery_summary = await await_with_ingestion_heartbeat(
+                            db, ledger_run_id, run_company_discovery(db)
+                        )
+                    ledger_summary = accounting_summary({
+                        **(_last_discovery_summary or {}),
+                        "raw_records": 0,
+                        "normalized_records": 0,
+                        "rejected_by_reason": {},
+                        "jobs_inserted": 0,
+                        "jobs_updated": 0,
+                        "jobs_reactivated": 0,
+                        "exact_duplicates": 0,
+                        "fuzzy_duplicate_candidates": 0,
+                        "write_failed": 0,
+                        "accounting_contract": {"state": "known", "path": "source_discovery_no_job_rows"},
+                    })
+                    discovery_errors = []
+                    for section in (ledger_summary or {}).values():
+                        if isinstance(section, dict):
+                            discovery_errors.extend(section.get("errors") or [])
+                    await persist_terminal_partitions(db, ledger_run_id, [{
+                        "partition_id": "company-discovery",
+                        "partition_status": (
+                            "failed" if discovery_errors else "completed_with_results"
+                        ),
+                        "error": "; ".join(map(str, discovery_errors[:3])) if discovery_errors else None,
+                    }])
+                    complete = getattr(db, "complete_python_ingestion_run", None)
+                    if ledger_run_id and callable(complete):
+                        completed = await complete(
+                            run_id=ledger_run_id,
+                            status="partially_succeeded" if discovery_errors else "succeeded",
+                            completeness_state="partial" if discovery_errors else "complete_snapshot",
+                            summary=ledger_summary,
+                        )
+                        if completed is not True:
+                            raise RuntimeError("company_discovery fenced completion lost lease")
+                else:
+                    logger.info("company_discovery_overlap_skipped run_id=%s", claim.get("run_id"))
         except Exception as exc:
+            complete = getattr(db, "complete_python_ingestion_run", None)
+            if ledger_run_id and callable(complete):
+                try:
+                    await complete(
+                        run_id=ledger_run_id,
+                        status="failed",
+                        completeness_state="failed",
+                        summary={"terminal_error": f"{exc.__class__.__name__}: {str(exc)[:200]}"},
+                    )
+                except Exception as ledger_exc:
+                    logger.error("company_discovery_ledger_completion_failed error=%s", str(ledger_exc)[:300])
             logger.warning("company_discovery_loop_error error=%s", str(exc)[:300])
         await asyncio.sleep(interval_minutes * 60)

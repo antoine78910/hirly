@@ -1,0 +1,24 @@
+[
+  {
+    "runId": "00000000-0000-4000-8000-000000000001",
+    "partitionId": "france_travail:75:M1805:CDI:2026-07-01/2026-07-07",
+    "status": "completed_with_results",
+    "sourceReportedTotal": 2,
+    "fetchedRecords": 2,
+    "normalizedRecords": 2,
+    "rejectedRecords": 0,
+    "actionableRecords": 2,
+    "capHit": false
+  },
+  {
+    "runId": "00000000-0000-4000-8000-000000000001",
+    "partitionId": "france_travail:75:M1805:CDI:2026-07-08/2026-07-14",
+    "status": "completed_zero_results",
+    "sourceReportedTotal": 0,
+    "fetchedRecords": 0,
+    "normalizedRecords": 0,
+    "rejectedRecords": 0,
+    "actionableRecords": 0,
+    "capHit": false
+  }
+]

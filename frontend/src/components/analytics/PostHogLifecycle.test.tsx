@@ -1,0 +1,81 @@
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+
+import PostHogLifecycle from "./PostHogLifecycle";
+import * as posthogBoundary from "../../lib/posthogClient";
+
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean })
+  .IS_REACT_ACT_ENVIRONMENT = true;
+
+let mockCurrentUser: { user_id: string } | null = null;
+let mockPathname = "/";
+
+jest.mock("react-router-dom", () => ({
+  useLocation: () => ({ pathname: mockPathname }),
+}), { virtual: true });
+
+jest.mock("../../context/AuthContext", () => ({
+  useAuth: () => ({ user: mockCurrentUser }),
+}));
+
+jest.mock("../../lib/posthogClient", () => ({
+  capturePostHogPageview: jest.fn(),
+  identifyPostHogUser: jest.fn(),
+  resetPostHog: jest.fn(),
+  syncPostHogReplay: jest.fn(),
+}));
+
+const mockCapturePostHogPageview = posthogBoundary.capturePostHogPageview as jest.Mock;
+const mockIdentifyPostHogUser = posthogBoundary.identifyPostHogUser as jest.Mock;
+const mockResetPostHog = posthogBoundary.resetPostHog as jest.Mock;
+const mockSyncPostHogReplay = posthogBoundary.syncPostHogReplay as jest.Mock;
+
+describe("PostHogLifecycle", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockCurrentUser = null;
+    mockPathname = "/";
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it("observes pathname-only navigation and replay lifecycle", () => {
+    mockPathname = "/onboarding";
+    act(() => {
+      root.render(<PostHogLifecycle />);
+    });
+    expect(mockCapturePostHogPageview).toHaveBeenLastCalledWith("/onboarding");
+    expect(mockSyncPostHogReplay).toHaveBeenCalledTimes(1);
+
+    act(() => root.render(<PostHogLifecycle />));
+    expect(mockCapturePostHogPageview).toHaveBeenCalledTimes(1);
+
+    mockPathname = "/swipe";
+    act(() => root.render(<PostHogLifecycle />));
+    expect(mockCapturePostHogPageview).toHaveBeenCalledTimes(2);
+    expect(mockCapturePostHogPageview).toHaveBeenLastCalledWith("/swipe");
+  });
+
+  it("forwards stable identities and anonymous resets to the safe client boundary", () => {
+    mockCurrentUser = { user_id: "user-a" };
+    act(() => {
+      root.render(<PostHogLifecycle />);
+    });
+    expect(mockIdentifyPostHogUser).toHaveBeenCalledWith("user-a");
+
+    mockCurrentUser = null;
+    act(() => {
+      root.render(<PostHogLifecycle />);
+    });
+    expect(mockResetPostHog).toHaveBeenCalled();
+  });
+});

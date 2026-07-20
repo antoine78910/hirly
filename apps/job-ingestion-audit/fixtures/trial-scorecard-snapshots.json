@@ -1,0 +1,129 @@
+[
+  {
+    "schemaVersion": 1,
+    "status": "COMPLETE",
+    "sample": false,
+    "snapshotId": "run-1",
+    "capturedAt": "2026-07-20T08:00:00.000Z",
+    "complete": true,
+    "cohortDigest": "cohort-2026-07-20",
+    "policyDigest": "policy-approved-1",
+    "controlDigest": "trial-controls-1",
+    "requests": 2,
+    "costMinor": 10,
+    "jobs": [
+      {
+        "provider": "greenhouse",
+        "tenant": "acme",
+        "externalId": "a",
+        "canonicalGroupId": "a",
+        "fingerprint": "fp-a",
+        "fresh": true,
+        "relevant": true,
+        "actionable": true,
+        "applyUrlKind": "canonical",
+        "knownApplicationRoute": true,
+        "available": true,
+        "matchedUserIds": ["u1", "u2"]
+      },
+      {
+        "provider": "greenhouse",
+        "tenant": "acme",
+        "externalId": "base-copy",
+        "fingerprint": "fp-existing",
+        "fresh": true,
+        "relevant": true,
+        "actionable": true,
+        "applyUrlKind": "canonical",
+        "knownApplicationRoute": true,
+        "available": true,
+        "matchedUserIds": ["u4"]
+      },
+      {
+        "provider": "greenhouse",
+        "tenant": "acme",
+        "externalId": "x",
+        "canonicalGroupId": "x",
+        "fingerprint": "fp-x",
+        "fresh": true,
+        "relevant": true,
+        "actionable": true,
+        "applyUrlKind": "missing",
+        "knownApplicationRoute": false,
+        "available": false,
+        "matchedUserIds": ["u3"]
+      },
+      {
+        "provider": "lever",
+        "tenant": "beta",
+        "externalId": "b",
+        "canonicalGroupId": "b",
+        "fingerprint": "fp-b",
+        "fresh": true,
+        "relevant": true,
+        "actionable": true,
+        "applyUrlKind": "redirect",
+        "knownApplicationRoute": true,
+        "available": true,
+        "matchedUserIds": ["u1"]
+      }
+    ]
+  },
+  {
+    "schemaVersion": 1,
+    "status": "COMPLETE",
+    "sample": false,
+    "snapshotId": "run-2",
+    "capturedAt": "2026-07-21T08:00:00.000Z",
+    "complete": true,
+    "cohortDigest": "cohort-2026-07-20",
+    "policyDigest": "policy-approved-1",
+    "controlDigest": "trial-controls-1",
+    "requests": 2,
+    "costMinor": 20,
+    "jobs": [
+      {
+        "provider": "greenhouse",
+        "tenant": "acme",
+        "externalId": "a",
+        "canonicalGroupId": "a",
+        "fingerprint": "fp-a",
+        "fresh": true,
+        "relevant": true,
+        "actionable": true,
+        "applyUrlKind": "canonical",
+        "knownApplicationRoute": true,
+        "available": true,
+        "matchedUserIds": ["u1", "u2"]
+      },
+      {
+        "provider": "greenhouse",
+        "tenant": "acme",
+        "externalId": "c",
+        "canonicalGroupId": "c",
+        "fingerprint": "fp-c",
+        "fresh": true,
+        "relevant": true,
+        "actionable": true,
+        "applyUrlKind": "canonical",
+        "knownApplicationRoute": false,
+        "available": true,
+        "matchedUserIds": ["u3"]
+      },
+      {
+        "provider": "lever",
+        "tenant": "beta",
+        "externalId": "d",
+        "canonicalGroupId": "d",
+        "fingerprint": "fp-d",
+        "fresh": true,
+        "relevant": true,
+        "actionable": true,
+        "applyUrlKind": "canonical",
+        "knownApplicationRoute": true,
+        "available": true,
+        "matchedUserIds": ["u4"]
+      }
+    ]
+  }
+]

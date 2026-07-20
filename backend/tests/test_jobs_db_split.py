@@ -1,6 +1,10 @@
 """Tests for optional JOBS_SUPABASE_* inventory split."""
 
+import base64
+import json
+
 import db as db_pkg
+import pytest
 from db.supabase_adapter import JOB_FEED_LIGHT_SELECT, _restore_document
 
 
@@ -70,6 +74,44 @@ def test_create_database_adapter_keeps_single_db_without_jobs_env(monkeypatch):
 
     db_pkg.create_database_adapter()
     assert created == ["https://primary.supabase.co"]
+
+
+def _jwt_for_role(role: str) -> str:
+    payload = base64.urlsafe_b64encode(json.dumps({"role": role}).encode()).decode().rstrip("=")
+    return f"header.{payload}.signature"
+
+
+@pytest.mark.parametrize(
+    "public_key",
+    [
+        "sb_publishable_example",
+        _jwt_for_role("anon"),
+        _jwt_for_role("authenticated"),
+    ],
+)
+def test_primary_database_rejects_public_supabase_credentials(monkeypatch, public_key):
+    monkeypatch.setenv("SUPABASE_URL", "https://primary.supabase.co")
+    monkeypatch.setenv("SUPABASE_SECRET_KEY", public_key)
+    with pytest.raises(RuntimeError, match="secret/service-role"):
+        db_pkg.create_database_adapter()
+
+
+def test_split_inventory_rejects_public_supabase_credentials(monkeypatch):
+    monkeypatch.setenv("SUPABASE_URL", "https://primary.supabase.co")
+    monkeypatch.setenv("SUPABASE_SECRET_KEY", "primary-secret")
+    monkeypatch.setenv("JOBS_SUPABASE_URL", "https://jobs.supabase.co")
+    monkeypatch.setenv("JOBS_SUPABASE_SECRET_KEY", "sb_publishable_example")
+    with pytest.raises(RuntimeError, match="JOBS_SUPABASE_SECRET_KEY"):
+        db_pkg.create_database_adapter()
+
+
+def test_unrecognized_legacy_secret_format_is_left_to_remote_auth(monkeypatch):
+    monkeypatch.setenv("SUPABASE_URL", "https://primary.supabase.co")
+    monkeypatch.setenv("SUPABASE_SECRET_KEY", "header.not-base64.signature")
+    monkeypatch.delenv("JOBS_SUPABASE_URL", raising=False)
+    monkeypatch.delenv("JOBS_SUPABASE_SECRET_KEY", raising=False)
+    monkeypatch.setattr(db_pkg, "SupabaseDatabaseAdapter", lambda **kwargs: object())
+    db_pkg.create_database_adapter()
 
 
 def test_job_feed_light_select_excludes_jsonb_data():

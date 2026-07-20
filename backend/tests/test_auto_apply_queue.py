@@ -185,6 +185,48 @@ def test_backfill_enqueues_ready_sr_apps(monkeypatch):
     assert db.applications.rows[0]["auto_apply_queue_status"] == "queued"
 
 
+def test_backfill_falls_back_when_additive_rpc_is_not_migrated(monkeypatch):
+    monkeypatch.setenv("AUTO_APPLY_QUEUE_ENABLED", "true")
+    db = _FakeDB()
+    db.applications.rows.append({
+        "application_id": "app_old",
+        "user_id": "u1",
+        "job_id": "j_sr",
+        "package_status": "generated",
+        "submission_status": "not_submitted",
+        "ats_provider": "smartrecruiters",
+        "created_at": "2026-01-01T00:00:00+00:00",
+    })
+    db.jobs.rows.append({"job_id": "j_sr", "ats_provider": "smartrecruiters"})
+    db.users.rows.append({"user_id": "u1", "require_review_before_send": False})
+
+    async def missing_rpc(_providers, *, limit):
+        raise RuntimeError(
+            "PostgREST RPC backfill_auto_apply_queue returned HTTP 404: "
+            "PGRST202 Could not find the function"
+        )
+
+    db.backfill_auto_apply_queue = missing_rpc
+    assert asyncio.run(q.backfill_pending_applications(db, limit=50)) == 1
+    assert db.applications.rows[0]["auto_apply_queue_status"] == "queued"
+
+
+def test_backfill_does_not_hide_rpc_execution_failure(monkeypatch):
+    monkeypatch.setenv("AUTO_APPLY_QUEUE_ENABLED", "true")
+    db = _FakeDB()
+
+    async def failed_rpc(_providers, *, limit):
+        raise RuntimeError("PostgREST RPC returned HTTP 500: statement timeout")
+
+    db.backfill_auto_apply_queue = failed_rpc
+    try:
+        asyncio.run(q.backfill_pending_applications(db, limit=50))
+    except RuntimeError as error:
+        assert "statement timeout" in str(error)
+    else:
+        raise AssertionError("non-migration RPC failures must surface")
+
+
 def test_list_queue_assigns_positions():
     db = _FakeDB()
     db.applications.rows.extend([

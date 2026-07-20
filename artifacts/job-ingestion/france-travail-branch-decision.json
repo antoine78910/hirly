@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "decidedAt": "2026-07-20T00:00:00.000Z",
+  "provider": "france_travail",
+  "selectedBranch": "FT-TS",
+  "classification": "TS_MIGRATION",
+  "definition": {
+    "path": "apps/job-ingestion-audit/fixtures/france-travail-census-manifest.json",
+    "digest": "7a4a9d9283029767e07f0a216c309ef63f7a95d8a3449554de2d6abd9d6af809"
+  },
+  "evidence": {
+    "path": "apps/job-ingestion-audit/fixtures/france-travail-census-partitions.json",
+    "digest": "65a7cb37100e003e1656321103c86d77f417d0d834e556ae3c2b1e5be1a78f17",
+    "terminalState": "complete",
+    "partitionCount": 2,
+    "capHit": false
+  },
+  "matchedDecisionCriteria": [
+    "representative coverage is partitioned by publication window and ROME",
+    "reconciled evidence is partitioned by geography, ROME occupation, contract, and publication window",
+    "safe reconciliation requires durable run and partition checkpoint integration"
+  ],
+  "unchosenBranch": "FT-PY",
+  "productionActivation": false
+}

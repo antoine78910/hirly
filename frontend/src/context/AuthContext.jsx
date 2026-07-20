@@ -8,6 +8,7 @@ import { goToMarketing } from "../lib/appDomains";
 import { supabase, supabaseConfigured } from "../lib/supabase";
 import { syncBillingStatus, resumePendingCheckoutSync } from "../lib/billingSync";
 import { captureCheckoutSessionFromSearch, peekCheckoutSessionId } from "../lib/pendingCheckout";
+import { resetPostHog } from "../lib/posthogClient";
 
 const AuthContext = createContext(null);
 
@@ -137,6 +138,9 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const logout = async () => {
+    // Clear the vendor identity synchronously. Waiting for auth requests here
+    // creates a race with the full-page cross-domain navigation below.
+    resetPostHog();
     const token = getSessionToken();
     try {
       if (token) await api.post("/auth/logout");

@@ -1,0 +1,64 @@
+{
+  "status": "BLOCKED_EXTERNAL",
+  "blockerReason": "Production inventory database and paid-user coverage_run_id are not available in this execution environment.",
+  "sampleEvidence": true,
+  "hostInventory": [
+    {
+      "applyHost": "boards.greenhouse.io",
+      "recordedProvider": "greenhouse",
+      "jobs": 12,
+      "companies": 3,
+      "franceJobs": 7,
+      "validJobs": 11
+    },
+    {
+      "applyHost": "acme.nicoka.com",
+      "recordedProvider": "unknown",
+      "jobs": 5,
+      "companies": 1,
+      "franceJobs": 5,
+      "validJobs": 5
+    }
+  ],
+  "paidImpact": [
+    {
+      "provider": "greenhouse",
+      "incrementalGroups": 4,
+      "paidUserGroupImpacts": 9
+    },
+    {
+      "provider": "nicoka",
+      "incrementalGroups": 3,
+      "paidUserGroupImpacts": 7
+    }
+  ],
+  "requestCosts": [],
+  "policy": [
+    {
+      "provider": "greenhouse",
+      "anyProductionEligible": false,
+      "allSourcesDisabled": true
+    },
+    {
+      "provider": "nicoka",
+      "anyProductionEligible": false,
+      "allSourcesDisabled": true
+    }
+  ],
+  "deliveryCosts": [
+    {
+      "provider": "greenhouse",
+      "engineeringPoints": 2,
+      "maintenancePoints": 2,
+      "policyPoints": 3,
+      "evidenceReference": "sample-only: approved-plan qualitative bakeoff"
+    },
+    {
+      "provider": "nicoka",
+      "engineeringPoints": 3,
+      "maintenancePoints": 3,
+      "policyPoints": 3,
+      "evidenceReference": "sample-only: approved-plan qualitative bakeoff"
+    }
+  ]
+}

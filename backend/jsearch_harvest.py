@@ -14,6 +14,8 @@ thin spot in the feed.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 import os
 import time
@@ -22,11 +24,35 @@ from typing import Any, Dict, List, Optional
 from job_providers import get_job_provider, is_job_provider_configured
 from job_providers.base import JobSearchQuery
 from job_providers.jsearch import JSearchProvider
+from ingestion_run_lease import (
+    accounting_summary,
+    await_with_ingestion_heartbeat,
+    persist_terminal_partitions,
+    partition_identity,
+)
 from jobs_service import upsert_imported_jobs
 from jobs_service import _cooldown_until, _is_rate_limit_error, _set_rate_limit_cooldown
 from location_intelligence import country_to_jsearch_language
 
 logger = logging.getLogger(__name__)
+
+
+def _combo_partition_id(role: str, city: str) -> str:
+    return f"{city}, France|{role}"
+
+
+def _authoritative_manifest(combos: List[tuple[str, str]]) -> Dict[str, Any]:
+    partition_ids = sorted({_combo_partition_id(role, city) for role, city in combos})
+    encoded = json.dumps(partition_ids, ensure_ascii=False, separators=(",", ":")).encode()
+    return {
+        "manifest_version": "jsearch-harvest.v2",
+        "manifest_digest": hashlib.sha256(encoded).hexdigest(),
+        "expected_partition_count": len(partition_ids),
+        "expected_partition_ids": partition_ids,
+        "geography_scope": "country",
+        "countries": ["fr"],
+        "remote_scope": "included",
+    }
 
 # Same top 10 French job markets as france_travail_harvest.py, kept in
 # lockstep deliberately -- both harvesters are prioritizing the same
@@ -93,6 +119,7 @@ AGGRESSIVE_HARVEST_ROLES = [
 ]
 
 _harvest_cursor = 0
+_harvest_retry_indices: set[int] = set()
 _harvest_cycle = 0
 _harvest_lock = asyncio.Lock()
 _last_run_summary: Optional[Dict[str, Any]] = None
@@ -201,6 +228,7 @@ async def harvest_jsearch(
     combos = [(role, city) for city in cities for role in roles]
     if not combos:
         return {"enabled": True, "reason": "no_queries_configured", "runs": []}
+    _harvest_retry_indices.intersection_update(range(len(combos)))
 
     queries = max(1, min(int(max_queries or _env_int("JSEARCH_HARVEST_QUERIES_PER_RUN", 6)), len(combos)))
     page_size = max(10, min(int(page_size if page_size is not None else _env_int("JSEARCH_HARVEST_PAGE_SIZE", 100)), 100))
@@ -237,8 +265,23 @@ async def harvest_jsearch(
             "freshness_window": freshness_window,
             "jobs_fetched": 0,
             "jobs_upserted": 0,
+            "pages_requested": 0,
+            "pages_completed": 0,
+            "retries": 0,
+            "raw_records": 0,
+            "normalized_records": 0,
+            "rejected_by_reason": {},
+            "exact_duplicates": 0,
+            "fuzzy_duplicate_candidates": 0,
+            "jobs_inserted": 0,
+            "jobs_updated": 0,
+            "jobs_reactivated": 0,
+            "jobs_marked_inactive": 0,
+            "write_failed": 0,
+            "accounting_contract": {"state": "known"},
             "errors": [],
             "runs": [],
+            "authoritative_manifest": _authoritative_manifest(combos),
         }
 
         if start_offset is not None:
@@ -252,12 +295,25 @@ async def harvest_jsearch(
                 return (backoff_gap, distance)
 
             selected_indices = sorted(range(len(combos)), key=_sort_key)[:queries]
+        retry_candidates = [
+            index for index in sorted(
+                _harvest_retry_indices,
+                key=lambda item: (item - cursor) % len(combos),
+            )
+            if index not in selected_indices
+        ]
+        if retry_candidates and queries > 1:
+            selected_indices[-1] = retry_candidates[0]
 
         consecutive_errors = 0
         for position, combo_index in enumerate(selected_indices):
             role, city = combos[combo_index]
             location_label = f"{city}, France"
-            run: Dict[str, Any] = {"role": role, "location": location_label}
+            run: Dict[str, Any] = {
+                "partition_id": _combo_partition_id(role, city),
+                "role": role,
+                "location": location_label,
+            }
             try:
                 result = await provider.search(JobSearchQuery(
                     role=role,
@@ -277,11 +333,36 @@ async def harvest_jsearch(
                 jobs = result.jobs or []
                 fetched = len(jobs)
                 run["fetched"] = fetched
+                raw_response = result.raw_response or {}
+                completeness = raw_response.get("completeness")
+                if completeness == "capped_unknown":
+                    run["cap_resolution"] = "blocked_no_disjoint_exhaustive_source_partition"
+                run["raw_records"] = int(raw_response.get("rows_seen") or fetched)
+                run["normalized"] = fetched
+                run["rejected_by_reason"] = {
+                    "normalization_failed": max(0, run["raw_records"] - fetched)
+                }
+                run["completeness"] = completeness or "unknown"
+                if completeness == "capped_unknown":
+                    run["status"] = "capped"
+                    run["partition_status"] = "blocked"
+                    summary["errors"].append({
+                        "role": role,
+                        "location": location_label,
+                        "error": "provider_result_cap_reached",
+                    })
                 summary["jobs_fetched"] += fetched
                 if jobs and not dry_run:
                     stats = await upsert_imported_jobs(db, jobs)
                     run["upserted"] = stats.get("total_imported", 0)
+                    run["write_stats"] = stats
                     summary["jobs_upserted"] += run["upserted"]
+                if "partition_status" not in run:
+                    run["partition_status"] = (
+                        "completed_with_results" if fetched else "completed_zero_results"
+                    )
+                run["pages_requested"] = 1
+                run["pages_completed"] = 1
                 consecutive_errors = 0
                 # Backoff state is indexed by position in the *default* combo
                 # list -- skip touching it when running against a custom
@@ -298,6 +379,7 @@ async def harvest_jsearch(
             except Exception as exc:
                 message = f"{exc.__class__.__name__}: {str(exc)[:200]}"
                 run["error"] = message
+                run["partition_status"] = "failed"
                 summary["errors"].append({"role": role, "location": location_label, "error": message})
                 logger.warning("jsearch_harvest_query_failed role=%s location=%s error=%s", role, location_label, message)
                 summary["runs"].append(run)
@@ -314,11 +396,49 @@ async def harvest_jsearch(
                 await asyncio.sleep(pause_seconds * 4)
                 continue
             summary["runs"].append(run)
+            summary["pages_requested"] += int(run.get("pages_requested") or 0)
+            summary["pages_completed"] += int(run.get("pages_completed") or 0)
+            summary["raw_records"] += int(run.get("raw_records") or 0)
+            summary["normalized_records"] += int(run.get("normalized") or 0)
+            for reason, count in (run.get("rejected_by_reason") or {}).items():
+                summary["rejected_by_reason"][reason] = (
+                    int(summary["rejected_by_reason"].get(reason) or 0) + int(count or 0)
+                )
+            write_stats = run.get("write_stats") or {}
+            summary["jobs_inserted"] += int(write_stats.get("inserted") or 0)
+            summary["jobs_updated"] += int(write_stats.get("updated") or 0)
+            summary["jobs_reactivated"] += int(write_stats.get("reactivated") or 0)
+            summary["exact_duplicates"] += int(write_stats.get("exact_duplicate") or 0)
+            summary["fuzzy_duplicate_candidates"] += int(write_stats.get("fuzzy_duplicate_candidates") or 0)
+            summary["write_failed"] += int(write_stats.get("write_failed") or 0)
             if position < len(selected_indices) - 1:
                 await asyncio.sleep(pause_seconds)
+        all_partitions_complete = not summary["errors"] and len(summary["runs"]) == queries
+        completed_count = 0
+        for combo_index, run in zip(selected_indices, summary["runs"]):
+            if str(run.get("partition_status", "")).startswith("completed_"):
+                completed_count += 1
+                _harvest_retry_indices.discard(combo_index)
+            else:
+                _harvest_retry_indices.add(combo_index)
+        cursor_next = (cursor + completed_count) % len(combos)
         if start_offset is None:
-            _harvest_cursor = (cursor + queries) % len(combos)
-        summary["cursor_next"] = (cursor + queries) % len(combos)
+            _harvest_cursor = cursor_next
+        summary["cursor_next"] = cursor_next
+        summary["retry_partition_ids"] = [
+            _combo_partition_id(*combos[index])
+            for index in sorted(_harvest_retry_indices)
+        ]
+        full_manifest_attempted = (
+            len(summary["runs"]) == len(combos)
+            and {str(run.get("partition_id")) for run in summary["runs"]}
+            == set(summary["authoritative_manifest"]["expected_partition_ids"])
+        )
+        summary["completeness"] = (
+            "complete_snapshot"
+            if all_partitions_complete and full_manifest_attempted
+            else "partial_snapshot"
+        )
         summary["combos_in_backoff"] = len(_combo_next_eligible_cycle)
         summary["elapsed_ms"] = int((time.perf_counter() - started) * 1000)
 
@@ -358,9 +478,77 @@ async def run_jsearch_harvest_loop(db) -> None:
     )
     await asyncio.sleep(initial_delay)
     while True:
+        ledger_run_id = None
         try:
             if harvest_autostart_enabled():
-                await harvest_jsearch(db)
+                begin = getattr(db, "begin_python_ingestion_run", None)
+                claim = (
+                    await begin(
+                        schedule_id="python-jsearch-harvest",
+                        source="jsearch",
+                        cadence_seconds=interval_minutes * 60,
+                        manifest=_authoritative_manifest([
+                            (role, city)
+                            for city in _harvest_cities()
+                            for role in _harvest_roles()
+                        ]),
+                    )
+                    if callable(begin)
+                    else {"acquired": True, "run_id": None}
+                )
+                if not claim.get("acquired"):
+                    logger.info(
+                        "jsearch_harvest_overlap_skipped run_id=%s scheduled_for=%s",
+                        claim.get("run_id"),
+                        claim.get("scheduled_for"),
+                    )
+                else:
+                    ledger_run_id = claim.get("run_id")
+                    summary = await await_with_ingestion_heartbeat(
+                        db, ledger_run_id, harvest_jsearch(db)
+                    )
+                    partition_runs = summary.get("runs") or []
+                    summary["proof_scope"] = {
+                        "scope_kind": "provider",
+                        "providers": ["jsearch"],
+                        **(summary.get("authoritative_manifest") or {}),
+                    }
+                    summary = accounting_summary(summary)
+                    await persist_terminal_partitions(db, ledger_run_id, partition_runs)
+                    complete = getattr(db, "complete_python_ingestion_run", None)
+                    if ledger_run_id and callable(complete):
+                        errors = summary.get("errors") or []
+                        completeness = summary.get("completeness")
+                        proof = summary.get("proof_scope") or {}
+                        full_cycle_proven = (
+                            completeness == "complete_snapshot"
+                            and bool(partition_runs)
+                            and {partition_identity(fact, index) for index, fact in enumerate(partition_runs)}
+                            == set(proof.get("expected_partition_ids") or [])
+                        )
+                        completed = await complete(
+                            run_id=ledger_run_id,
+                            status="succeeded" if not errors else "partially_succeeded",
+                            completeness_state=(
+                                "complete_snapshot"
+                                if not errors and full_cycle_proven
+                                else "partial"
+                            ),
+                            summary=summary,
+                        )
+                        if completed is not True:
+                            raise RuntimeError("jsearch fenced completion lost lease")
         except Exception as exc:
+            complete = getattr(db, "complete_python_ingestion_run", None)
+            if ledger_run_id and callable(complete):
+                try:
+                    await complete(
+                        run_id=ledger_run_id,
+                        status="failed",
+                        completeness_state="failed",
+                        summary={"terminal_error": f"{exc.__class__.__name__}: {str(exc)[:200]}"},
+                    )
+                except Exception as ledger_exc:
+                    logger.error("jsearch_harvest_ledger_completion_failed error=%s", str(ledger_exc)[:300])
             logger.warning("jsearch_harvest_loop_error error=%s", str(exc)[:300])
         await asyncio.sleep(interval_minutes * 60)

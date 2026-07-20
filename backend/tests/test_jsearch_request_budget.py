@@ -80,6 +80,32 @@ def test_multi_page_search_uses_one_bundled_http_request(monkeypatch):
     assert len(result.jobs) == 2
 
 
+def test_jsearch_cap_hit_is_explicitly_non_complete(monkeypatch):
+    calls = []
+    payload = {
+        "data": [
+            {"job_id": "job-1", "job_title": "Engineer", "employer_name": "Acme"},
+            {"job_id": "job-2", "job_title": "Engineer", "employer_name": "Acme"},
+        ]
+    }
+    monkeypatch.setattr(
+        "job_providers.jsearch.httpx.AsyncClient",
+        lambda **kwargs: _Client(calls, payload),
+    )
+
+    result = asyncio.run(JSearchProvider(api_key="test").search(JobSearchQuery(
+        role="engineer",
+        location="Paris",
+        country="fr",
+        limit=1,
+        max_pages=1,
+        page_size=1,
+    )))
+
+    assert result.raw_response["completeness"] == "capped_unknown"
+    assert result.raw_response["requested_cap"] == 1
+
+
 def test_background_harvest_is_opt_in(monkeypatch):
     monkeypatch.delenv("JSEARCH_HARVEST_ENABLED", raising=False)
     monkeypatch.setattr(jsearch_harvest, "is_job_provider_configured", lambda name=None: True)
@@ -99,3 +125,73 @@ def test_background_harvest_autostart_requires_separate_opt_in(monkeypatch):
 
     monkeypatch.setenv("JSEARCH_HARVEST_AUTOSTART_ENABLED", "true")
     assert jsearch_harvest.harvest_autostart_enabled() is True
+
+
+def test_failed_partition_does_not_advance_over_unattempted_queries(monkeypatch):
+    class _FailingProvider:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def search(self, _query):
+            raise RuntimeError("rate limited")
+
+    monkeypatch.setattr(jsearch_harvest, "is_job_provider_configured", lambda _name=None: True)
+    monkeypatch.setattr(jsearch_harvest, "JSearchProvider", _FailingProvider)
+    monkeypatch.setattr(jsearch_harvest, "_cooldown_until", lambda _name: None)
+    monkeypatch.setattr(jsearch_harvest, "_is_rate_limit_error", lambda _exc: True)
+    monkeypatch.setattr(jsearch_harvest, "_set_rate_limit_cooldown", lambda _name: None)
+    jsearch_harvest._harvest_cursor = 0
+
+    result = asyncio.run(jsearch_harvest.harvest_jsearch(
+        object(),
+        max_queries=2,
+        cities=["Paris"],
+        roles=["engineer", "designer"],
+        dry_run=True,
+    ))
+
+    assert result["aborted_reason"] == "rate_limited"
+    assert len(result["runs"]) == 1
+    assert result["cursor_next"] == 0
+    assert jsearch_harvest._harvest_cursor == 0
+
+
+def test_late_jsearch_failure_rotates_completed_partitions_and_retains_retry(monkeypatch):
+    class _Provider:
+        calls = 0
+        def __init__(self, **_kwargs):
+            pass
+        async def search(self, query):
+            _Provider.calls += 1
+            if _Provider.calls == 3:
+                raise RuntimeError("late failure")
+            return type("Result", (), {
+                "jobs": [{
+                    "job_id": f"job-{_Provider.calls}",
+                    "provider": "jsearch",
+                    "external_id": f"ext-{_Provider.calls}",
+                }],
+                "raw_response": {
+                    "completeness": "complete_without_source_total",
+                    "rows_seen": 1,
+                },
+            })()
+
+    monkeypatch.setattr(jsearch_harvest, "is_job_provider_configured", lambda _name=None: True)
+    monkeypatch.setattr(jsearch_harvest, "JSearchProvider", _Provider)
+    monkeypatch.setattr(jsearch_harvest, "_cooldown_until", lambda _name: None)
+    jsearch_harvest._harvest_cursor = 0
+    jsearch_harvest._harvest_retry_indices.clear()
+
+    result = asyncio.run(jsearch_harvest.harvest_jsearch(
+        object(),
+        max_queries=3,
+        cities=["Paris", "Lyon", "Nantes", "Lille"],
+        roles=["engineer"],
+        dry_run=True,
+        start_offset=0,
+    ))
+
+    assert result["cursor_next"] == 2
+    assert result["retry_partition_ids"] == ["Nantes, France|engineer"]
+    assert result["runs"][2]["partition_status"] == "failed"

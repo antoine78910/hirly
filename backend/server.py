@@ -30,13 +30,26 @@ import base64
 import time
 import hashlib
 import unicodedata
+from decimal import Decimal
 from pathlib import Path
 from urllib.parse import quote as url_quote, urlparse
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, PrivateAttr
 from typing import List, Optional, Dict, Any, Literal, Tuple
 from datetime import datetime, timezone, timedelta
+import atexit
 import httpx
 import stripe
+from posthog import Posthog, new_context, identify_context, capture as posthog_capture
+
+try:
+    from opentelemetry import trace as _otel_trace
+    from opentelemetry.sdk.trace import TracerProvider as _OtelTracerProvider
+    from opentelemetry.sdk.resources import Resource as _OtelResource, SERVICE_NAME as _OTEL_SERVICE_NAME
+    from posthog.ai.otel import PostHogSpanProcessor as _PostHogSpanProcessor
+    from opentelemetry.instrumentation.openai_v2 import OpenAIInstrumentor as _OpenAIInstrumentor
+    _OTEL_AVAILABLE = True
+except ImportError:
+    _OTEL_AVAILABLE = False
 
 # Optional file parsing libs
 from pypdf import PdfReader
@@ -82,7 +95,7 @@ from auto_apply.metrics import status_safe_attempt as auto_apply_status_safe_att
 from auto_apply.metrics import summary as auto_apply_metrics_summary
 from auto_apply import queue as auto_apply_queue
 from db import create_database_adapter
-from db.supabase_adapter import count_supabase_table, test_supabase_connection
+from db.supabase_adapter import count_supabase_table, database_journey, test_supabase_connection
 from influencer_store import create_influencer, get_influencer, list_influencers, update_influencer
 from creator_social_service import build_dashboard, refresh_all_creators, refresh_creator
 from creator_social_config import add_creator as add_tracked_creator
@@ -115,7 +128,10 @@ from creator_invite_store import (
     validate_invite,
 )
 from jobs_service import (
+    FEED_COVERAGE_EVALUATOR_VERSION,
+    build_feed_coverage_snapshot,
     build_profile_job_query,
+    hash_feed_coverage_user_id,
     refresh_greenhouse_boards,
     refresh_jobs_for_profile_if_needed,
     refresh_lever_boards,
@@ -127,6 +143,7 @@ from job_providers import (
     get_board_provider,
     get_configured_job_provider,
     get_job_provider,
+    is_france_travail_provider,
     is_job_provider_configured,
     is_job_provider_enabled,
     primary_job_provider_name,
@@ -160,6 +177,7 @@ from jsearch_harvest import (
 )
 from rome_profile_service import get_rome_profile, normalize_rome_code, rome_profile_enabled
 from ats_source_service import (
+    ats_direct_maintenance_loop_enabled,
     discover_ats_sources_from_cached_jobs,
     discover_friendly_company_career_pages,
     refresh_ats_source,
@@ -167,6 +185,7 @@ from ats_source_service import (
     run_ats_direct_maintenance_loop,
 )
 from company_discovery_crawlers import (
+    company_discovery_loop_enabled,
     last_discovery_summary as company_discovery_last_summary,
     run_company_discovery,
     run_company_discovery_loop,
@@ -183,7 +202,7 @@ from employment_kind import (
 from location_intelligence import COUNTRY_NAME_TO_CODE, country_to_jsearch_language, expand_location_radius, normalize_place_name
 from role_query_terms import ACADEMIC_LEVEL_STOPWORDS, resolve_role_match_tokens
 from location_search import search_locations
-from llm_client import LLMProviderNotConfigured, complete_json_text, extract_text_from_image_bytes
+from llm_client import LLMProviderNotConfigured, complete_json_text, extract_text_from_image_bytes, set_llm_user_context
 from openai import RateLimitError as LLMRateLimitError
 from onboarding_suggestions import suggest_categories, suggest_roles
 from profile_search_preferences import (
@@ -275,6 +294,8 @@ DATABASE_PROVIDER = "supabase"
 db = create_database_adapter()
 _application_generation_locks: Dict[str, asyncio.Lock] = {}
 _application_generation_tasks: Dict[str, asyncio.Task] = {}
+
+_posthog_client: Optional[Posthog] = None
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -411,7 +432,12 @@ async def _get_feed_job_candidates(base_query: Dict[str, Any], limit: int) -> Li
         from db.supabase_adapter import JOB_FEED_LIGHT_SELECT
 
         # Column-only select — never pull full JSONB for the candidate pool.
-        rows = await jobs_col.read_with_select(base_query, limit, select=JOB_FEED_LIGHT_SELECT)
+        rows = await jobs_col.read_with_select(
+            base_query,
+            limit,
+            select=JOB_FEED_LIGHT_SELECT,
+            require_pushed=True,
+        )
     else:
         rows = await jobs_col.find(base_query, {"_id": 0}).limit(limit).to_list(limit)
     _feed_job_pool_cache["query_key"] = cache_key
@@ -717,6 +743,7 @@ class User(BaseModel):
     require_review_before_send: bool = True
     language: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    _auth_flags: Dict[str, bool] = PrivateAttr(default_factory=dict)
 
 
 class Profile(BaseModel):
@@ -800,6 +827,7 @@ class AdminJobsExpireStaleRequest(BaseModel):
     country_code: Optional[str] = None
     limit: Optional[int] = None
     dry_run: bool = False
+    completeness_run_id: Optional[str] = None
 
 
 class AdminJobsPurgeInvalidRequest(BaseModel):
@@ -809,6 +837,7 @@ class AdminJobsPurgeInvalidRequest(BaseModel):
     expire_first: bool = True
     limit: Optional[int] = None
     dry_run: bool = False
+    completeness_run_id: Optional[str] = None
 
 
 class AdminJobsMaintenanceRequest(BaseModel):
@@ -823,6 +852,12 @@ class AdminJobsFeedDiagnosticRequest(BaseModel):
     search_radius: str = "worldwide"
     limit: int = 5
     dry_run: bool = True
+
+
+class AdminFeedCoverageAuditRequest(BaseModel):
+    user_ids: List[str]
+    limit: int = 25
+    freshness_window_days: Literal[1, 7, 30] = 30
 
 
 class AdminAtsDiscoverSourcesRequest(BaseModel):
@@ -884,9 +919,15 @@ class InviteEmailAuthRequest(BaseModel):
 class AnalyticsEventRequest(BaseModel):
     event: str
     properties: Dict[str, Any] = Field(default_factory=dict)
+    event_id: Optional[str] = None
     anonymous_id: Optional[str] = None
     page: Optional[str] = None
     source: Optional[str] = None
+
+
+class AnalyticsBatchRequest(BaseModel):
+    batch_id: str
+    events: List[AnalyticsEventRequest] = Field(default_factory=list)
 
 
 class BillingCheckoutRequest(BaseModel):
@@ -1050,6 +1091,12 @@ class StructuredProfileDataUpdate(BaseModel):
     application_defaults: Dict[str, Any] = Field(default_factory=dict)
 
 
+class OnboardingProfilePatch(BaseModel):
+    onboarding: Dict[str, Any] = Field(default_factory=dict)
+    preferences: Dict[str, Any] = Field(default_factory=dict)
+    contact: Dict[str, Any] = Field(default_factory=dict)
+
+
 class OnboardingCategoryItem(BaseModel):
     id: str
     label: str
@@ -1084,6 +1131,50 @@ class OnboardingSuggestRolesRequest(BaseModel):
 
 # ===================== Auth helpers =====================
 
+_supabase_auth_http_client: Optional[httpx.AsyncClient] = None
+
+
+def _get_supabase_auth_http_client() -> httpx.AsyncClient:
+    global _supabase_auth_http_client
+    if _supabase_auth_http_client is None or _supabase_auth_http_client.is_closed:
+        _supabase_auth_http_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=3.0, read=15.0, write=15.0, pool=3.0),
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+        )
+    return _supabase_auth_http_client
+
+
+async def _request_supabase_auth(
+    method: str,
+    url: str,
+    *,
+    headers: Dict[str, str],
+    json_body: Optional[Dict[str, Any]] = None,
+) -> httpx.Response:
+    """Use the shared auth client and retry only explicitly enabled idempotent reads."""
+    normalized_method = method.upper()
+    attempts = 2 if normalized_method == "GET" and _env_bool("AUTH_IDEMPOTENT_READ_RETRY_ENABLED") else 1
+    client = _get_supabase_auth_http_client()
+    for attempt in range(attempts):
+        try:
+            return await client.request(
+                normalized_method,
+                url,
+                headers=headers,
+                json=json_body,
+            )
+        except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.PoolTimeout, httpx.RemoteProtocolError):
+            if attempt >= attempts - 1:
+                raise
+            logger.warning(
+                "auth_http_retry method=%s attempt=%s max_attempts=%s",
+                normalized_method,
+                attempt + 2,
+                attempts,
+            )
+            await asyncio.sleep(0.05)
+    raise RuntimeError("Supabase auth request exhausted without a response")
+
 async def get_current_user(
     request: Request,
     response: Response,
@@ -1108,6 +1199,28 @@ async def get_current_user(
     last_failure = "Invalid session"
     for token_source, token in candidates:
         logger.debug("auth_me token_received source=%s path=%s", token_source, request.url.path)
+        if _env_bool("AUTH_JOINED_SESSION_LOOKUP_ENABLED"):
+            resolver = getattr(db, "resolve_auth_session", None)
+            if callable(resolver):
+                resolved = await resolver(token)
+                status = (resolved or {}).get("status")
+                if status == "ok":
+                    user = User(**((resolved or {}).get("user") or {}))
+                    user._auth_flags = {
+                        key: bool(value)
+                        for key, value in ((resolved or {}).get("flags") or {}).items()
+                        if key in {"is_training_creator", "has_training_access", "is_admin"}
+                    }
+                    _set_app_session_cookie(response, token)
+                    return user
+                if status == "expired":
+                    last_failure = "Session expired"
+                elif status == "user_not_found":
+                    last_failure = "User not found"
+                else:
+                    last_failure = "Invalid session"
+                continue
+
         session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
         if not session:
             logger.info("auth_me invalid_token reason=session_not_found source=%s", token_source)
@@ -1142,7 +1255,12 @@ async def get_current_user(
 
 # ===================== Auth routes =====================
 
-async def _upsert_auth_user(email: str, name: str, picture: Optional[str], extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+async def _upsert_auth_user_with_status(
+    email: str,
+    name: str,
+    picture: Optional[str],
+    extra: Optional[Dict[str, Any]] = None,
+) -> Tuple[Dict[str, Any], bool]:
     normalized_email = (email or "").strip().lower()
     existing = await _find_user_by_email(normalized_email)
     if existing:
@@ -1150,10 +1268,17 @@ async def _upsert_auth_user(email: str, name: str, picture: Optional[str], extra
         update = {"name": name, "picture": picture}
         if extra:
             update.update(extra)
+        patch_auth_user = getattr(db, "patch_auth_user", None)
+        if _env_bool("AUTH_RETURNED_USER_WRITE_ENABLED") and callable(patch_auth_user):
+            returned = await patch_auth_user(user_id, update)
+            if not returned:
+                raise RuntimeError("Auth user disappeared during returned patch")
+            return returned, False
         await db.users.update_one(
             {"user_id": user_id},
             {"$set": update},
         )
+        return {**existing, **update}, False
     else:
         user_id = f"user_{uuid.uuid4().hex[:12]}"
         user_doc = {
@@ -1166,7 +1291,16 @@ async def _upsert_auth_user(email: str, name: str, picture: Optional[str], extra
         if extra:
             user_doc.update(extra)
         await db.users.insert_one(user_doc)
-    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+        return user_doc, True
+
+
+async def _upsert_auth_user(
+    email: str,
+    name: str,
+    picture: Optional[str],
+    extra: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    user_doc, _ = await _upsert_auth_user_with_status(email, name, picture, extra)
     return user_doc
 
 
@@ -1227,13 +1361,12 @@ async def _supabase_admin_request(
         "Authorization": f"Bearer {supabase_secret}",
         "Content-Type": "application/json",
     }
-    async with httpx.AsyncClient(timeout=15.0) as http:
-        return await http.request(
-            method,
-            f"{supabase_url}{path}",
-            headers=headers,
-            json=json_body,
-        )
+    return await _request_supabase_auth(
+        method,
+        f"{supabase_url}{path}",
+        headers=headers,
+        json_body=json_body,
+    )
 
 
 async def _supabase_password_access_token(email: str, password: str) -> str:
@@ -1310,14 +1443,14 @@ async def _session_payload_from_supabase_token(
     provider_token_expires_at: Optional[Any] = None,
 ) -> Dict[str, Any]:
     supabase_url, supabase_secret = _supabase_admin_config()
-    async with httpx.AsyncClient(timeout=15.0) as http:
-        r = await http.get(
-            f"{supabase_url}/auth/v1/user",
-            headers={
-                "apikey": supabase_secret,
-                "Authorization": f"Bearer {access_token}",
-            },
-        )
+    r = await _request_supabase_auth(
+        "GET",
+        f"{supabase_url}/auth/v1/user",
+        headers={
+            "apikey": supabase_secret,
+            "Authorization": f"Bearer {access_token}",
+        },
+    )
     if r.status_code != 200:
         logger.info("supabase_session invalid_token status=%s body=%s", r.status_code, r.text[:200])
         raise HTTPException(status_code=401, detail="Invalid Supabase access token")
@@ -1337,7 +1470,7 @@ async def _session_payload_from_supabase_token(
         or email.split("@")[0]
     )
     picture = metadata.get("avatar_url") or metadata.get("picture") or identity_data.get("avatar_url") or identity_data.get("picture")
-    user_doc = await _upsert_auth_user(
+    user_doc, is_new_user = await _upsert_auth_user_with_status(
         email=email,
         name=name,
         picture=picture,
@@ -1349,6 +1482,18 @@ async def _session_payload_from_supabase_token(
     )
     session_token = await _create_app_session(user_doc["user_id"], source)
     _set_app_session_cookie(response, session_token)
+
+    if _posthog_client is not None:
+        event_name = "user_signed_up" if is_new_user else "user_logged_in"
+        with new_context():
+            identify_context(user_doc["user_id"])
+            posthog_capture(
+                event_name,
+                properties={
+                    "auth_source": source,
+                    "has_gmail_provider": bool(provider_token or provider_refresh_token),
+                },
+            )
 
     gmail_connection = {"connected": False, "email": None, "last_synced_at": None}
     if provider_token or provider_refresh_token:
@@ -1373,11 +1518,11 @@ async def _session_payload_from_supabase_token(
                 "last_sync_error": str(exc)[:200],
             }
 
-    profile = await db.profiles.find_one({"user_id": user_doc["user_id"]}, {"_id": 0, "cv_text": 1, "target_role": 1})
-    creator_flag, training_access = await asyncio.gather(
+    profile, creator_flag = await asyncio.gather(
+        db.profiles.find_one({"user_id": user_doc["user_id"]}, {"_id": 0, "cv_text": 1, "target_role": 1}),
         is_training_creator(db, user_doc["user_id"]),
-        _resolve_training_access_from_user_doc(user_doc),
     )
+    training_access = _training_access_from_user_and_creator(user_doc, creator_flag)
     logger.info("supabase_session success user_id=%s email=%s", user_doc["user_id"], email)
     return {
         "user": user_doc,
@@ -1391,6 +1536,11 @@ async def _session_payload_from_supabase_token(
 
 
 async def _resolve_training_access_from_user_doc(user_doc: Dict[str, Any]) -> bool:
+    creator = await is_training_creator(db, user_doc.get("user_id")) if user_doc.get("user_id") else False
+    return _training_access_from_user_and_creator(user_doc, creator)
+
+
+def _training_access_from_user_and_creator(user_doc: Dict[str, Any], creator: bool) -> bool:
     from training_access import training_open_access_enabled
 
     if training_open_access_enabled():
@@ -1404,7 +1554,7 @@ async def _resolve_training_access_from_user_doc(user_doc: Dict[str, Any]) -> bo
         return True
     if _is_admin_email(user_doc.get("email")):
         return True
-    return await is_training_creator(db, user_id)
+    return creator
 
 
 @api_router.post("/auth/supabase-session")
@@ -1647,11 +1797,26 @@ async def tutorial_session(response: Response):
 
 @api_router.get("/auth/me")
 async def auth_me(user: User = Depends(get_current_user)):
-    profile, creator, training_access = await asyncio.gather(
-        db.profiles.find_one({"user_id": user.user_id}, {"_id": 0}),
-        is_training_creator(db, user.user_id),
-        _resolve_training_access(user),
-    )
+    flags = user._auth_flags
+    if flags:
+        from training_access import training_open_access_enabled
+
+        profile = await db.profiles.find_one({"user_id": user.user_id}, {"_id": 0})
+        creator = flags.get("is_training_creator", False)
+        training_access = bool(
+            flags.get("has_training_access", False)
+            or training_open_access_enabled()
+            or user.training_access
+            or user.user_id == TUTORIAL_FILMING_USER_ID
+            or _is_admin_email(user.email)
+            or creator
+        )
+    else:
+        profile, creator, training_access = await asyncio.gather(
+            db.profiles.find_one({"user_id": user.user_id}, {"_id": 0}),
+            is_training_creator(db, user.user_id),
+            _resolve_training_access(user),
+        )
     logger.info(
         "auth_me cv_readiness user_id=%s profile_exists=%s has_cv_text=%s has_cv_filename=%s has_preferences=%s",
         user.user_id,
@@ -1666,7 +1831,7 @@ async def auth_me(user: User = Depends(get_current_user)):
         "has_preferences": profile is not None and bool(profile.get("target_role")),
         "is_training_creator": creator,
         "has_training_access": training_access,
-        "is_admin": _is_admin_email(user.email) or bool(getattr(user, "is_admin", False)),
+        "is_admin": _is_admin_email(user.email) or flags.get("is_admin", False) or bool(getattr(user, "is_admin", False)),
     }
 
 
@@ -1691,36 +1856,88 @@ def _hash_ip(request: Request) -> Optional[str]:
     return hashlib.sha256(f"{salt}:{raw_ip}".encode("utf-8")).hexdigest()[:24]
 
 
-@api_router.post("/analytics/event")
-async def track_analytics_event(
+def _analytics_event_document(
     body: AnalyticsEventRequest,
     request: Request,
-    user: Optional[User] = Depends(_optional_current_user),
-):
+    user: Optional[User],
+    *,
+    now: Optional[str] = None,
+    event_id: Optional[str] = None,
+    batch_id: Optional[str] = None,
+) -> Dict[str, Any]:
     event_name = (body.event or "").strip()
     if not event_name:
         raise HTTPException(status_code=400, detail="event required")
     if len(event_name) > 120:
         raise HTTPException(status_code=400, detail="event too long")
-    now = datetime.now(timezone.utc).isoformat()
-    event_doc = {
-        "event_id": f"evt_{uuid.uuid4().hex}",
+    canonical_event_id = (event_id or body.event_id or "").strip()[:160] or f"evt_{uuid.uuid4().hex}"
+    return {
+        "event_id": canonical_event_id,
+        "batch_id": batch_id,
         "user_id": user.user_id if user else None,
         "anonymous_id": (body.anonymous_id or "").strip()[:160] or None,
         "event": event_name,
         "properties": body.properties or {},
         "page": (body.page or "").strip()[:300] or None,
         "source": (body.source or "").strip()[:120] or None,
-        "created_at": now,
+        "created_at": now or datetime.now(timezone.utc).isoformat(),
         "user_agent": request.headers.get("user-agent"),
         "ip_hash": _hash_ip(request),
     }
+
+
+@api_router.post("/analytics/event")
+async def track_analytics_event(
+    body: AnalyticsEventRequest,
+    request: Request,
+    user: Optional[User] = Depends(_optional_current_user),
+):
+    event_doc = _analytics_event_document(body, request, user)
     try:
-        await db.analytics_events.insert_one(event_doc)
+        with database_journey("landing"):
+            await db.analytics_events.insert_one(event_doc)
     except Exception as exc:
-        logger.warning("analytics_event_store_failed event=%s error=%s", event_name, str(exc)[:200])
+        logger.warning("analytics_event_store_failed event=%s error=%s", event_doc["event"], str(exc)[:200])
         return {"ok": False, "stored": False}
     return {"ok": True, "stored": True, "event_id": event_doc["event_id"]}
+
+
+@api_router.post("/analytics/events")
+async def track_analytics_events(
+    body: AnalyticsBatchRequest,
+    request: Request,
+    user: Optional[User] = Depends(_optional_current_user),
+):
+    if not body.batch_id.strip() or len(body.batch_id) > 160:
+        raise HTTPException(status_code=400, detail="batch_id required")
+    if not body.events or len(body.events) > 20:
+        raise HTTPException(status_code=400, detail="events must contain 1 to 20 items")
+    documents = [
+        _analytics_event_document(
+            item,
+            request,
+            user,
+            event_id=f"evt_batch_{hashlib.sha256(f'{body.batch_id}:{index}'.encode()).hexdigest()[:48]}",
+            batch_id=body.batch_id,
+        )
+        for index, item in enumerate(body.events)
+    ]
+    payload_size = len(json.dumps(documents, separators=(",", ":"), default=str).encode("utf-8"))
+    if payload_size > 64 * 1024:
+        raise HTTPException(status_code=413, detail="analytics batch too large")
+    try:
+        accepted_event_ids = [item.event_id or doc["event_id"] for item, doc in zip(body.events, documents)]
+        with database_journey("landing"):
+            await db.analytics_events.insert_many(documents, ignore_duplicates=True)
+    except Exception as exc:
+        logger.warning("analytics_batch_store_failed batch=%s error=%s", body.batch_id[:32], str(exc)[:200])
+        return {"ok": False, "stored": False, "accepted_event_ids": []}
+    return {
+        "ok": True,
+        "stored": True,
+        "batch_id": body.batch_id,
+        "accepted_event_ids": accepted_event_ids,
+    }
 
 
 async def _store_friend_referral_analytics(
@@ -2342,7 +2559,7 @@ async def _update_user_billing_by_customer_id(customer_id: str, updates: Dict[st
 async def _resolve_user_id_for_stripe_customer(customer_id: str) -> Optional[str]:
     if not customer_id:
         return None
-    existing = await db.users.find_one({"billing.stripe_customer_id": customer_id}, {"_id": 0, "user_id": 1})
+    existing = await db.users.find_one({"stripe_customer_id": customer_id}, {"_id": 0, "user_id": 1})
     if existing:
         return existing.get("user_id")
     if not _stripe_configured():
@@ -2760,6 +2977,18 @@ async def create_billing_checkout_session(
     else:
         session_kwargs["allow_promotion_codes"] = True
     session = stripe.checkout.Session.create(**session_kwargs)
+    if _posthog_client is not None:
+        with new_context():
+            identify_context(user.user_id)
+            posthog_capture(
+                "checkout_started",
+                properties={
+                    "billing_plan": billing_plan,
+                    "billing_interval": billing_interval,
+                    "checkout_source": checkout_source,
+                    "has_referral_discount": signup_discount_eligible,
+                },
+            )
     return {"url": session["url"]}
 
 
@@ -3446,6 +3675,436 @@ async def _record_processed_stripe_event(event: Any) -> None:
         logger.info("stripe_event_record_duplicate_or_failed event_id=%s error=%s", event_id, str(exc)[:160])
 
 
+_POSTHOG_REVENUE_UUID_NAMESPACE = uuid.UUID("f637c7f8-e2ef-5ee7-a976-c3017843ab42")
+_POSTHOG_ZERO_DECIMAL_CURRENCIES = {
+    "BIF", "CLP", "DJF", "GNF", "JPY", "KMF", "KRW", "MGA", "PYG", "RWF",
+    "UGX", "VND", "VUV", "XAF", "XOF", "XPF",
+}
+_POSTHOG_THREE_DECIMAL_CURRENCIES = {"BHD", "JOD", "KWD", "OMR", "TND"}
+_POSTHOG_TWO_DECIMAL_CURRENCIES = {
+    "AED", "AFN", "ALL", "AMD", "ANG", "AOA", "ARS", "AUD", "AWG", "AZN",
+    "BAM", "BBD", "BDT", "BGN", "BMD", "BND", "BOB", "BRL", "BSD", "BTN",
+    "BWP", "BYN", "BZD", "CAD", "CDF", "CHF", "CNY", "COP", "CRC", "CVE",
+    "CZK", "DKK", "DOP", "DZD", "EGP", "ETB", "EUR", "FJD", "FKP", "GBP",
+    "GEL", "GIP", "GMD", "GTQ", "GYD", "HKD", "HNL", "HRK", "HTG", "HUF",
+    "IDR", "ILS", "INR", "ISK", "JMD", "KES", "KGS", "KHR", "KYD", "KZT",
+    "LAK", "LBP", "LKR", "LRD", "LSL", "MAD", "MDL", "MKD", "MMK", "MNT",
+    "MOP", "MUR", "MVR", "MWK", "MXN", "MYR", "MZN", "NAD", "NGN", "NIO",
+    "NOK", "NPR", "NZD", "PAB", "PEN", "PGK", "PHP", "PKR", "PLN", "QAR",
+    "RON", "RSD", "SAR", "SBD", "SCR", "SEK", "SGD", "SHP", "SLE", "SOS",
+    "SRD", "STD", "SZL", "THB", "TJS", "TOP", "TRY", "TTD", "TWD", "TZS",
+    "UAH", "USD", "UYU", "UZS", "WST", "XCD", "YER", "ZAR", "ZMW",
+}
+_POSTHOG_ANALYTICS_TIMEOUT_SECONDS = 1.0
+_POSTHOG_STRIPE_ENRICHMENT_TIMEOUT_SECONDS = 0.20
+
+
+def _posthog_server_capture_configured() -> bool:
+    return bool(
+        os.environ.get("POSTHOG_SERVER_API_KEY", "").strip()
+        and _posthog_capture_url()
+    )
+
+
+def _posthog_revenue_enabled(event_name: str) -> bool:
+    env_name = (
+        "POSTHOG_PAYMENT_REVENUE_ENABLED"
+        if event_name == "payment_succeeded"
+        else "POSTHOG_REFUND_REVENUE_ENABLED"
+    )
+    return _posthog_server_capture_configured() and os.environ.get(env_name, "").strip().lower() == "true"
+
+
+def _posthog_revenue_uuid(event_name: str, object_type: str, object_id: str) -> str:
+    semantic_key = f"{event_name}:{object_type}:{object_id}"
+    return str(uuid.uuid5(_POSTHOG_REVENUE_UUID_NAMESPACE, semantic_key))
+
+
+def _posthog_major_amount(amount_minor: int, currency: str) -> Decimal:
+    normalized_currency = str(currency or "").upper()
+    if normalized_currency in _POSTHOG_ZERO_DECIMAL_CURRENCIES:
+        exponent = 0
+    elif normalized_currency in _POSTHOG_THREE_DECIMAL_CURRENCIES:
+        exponent = 3
+    elif normalized_currency in _POSTHOG_TWO_DECIMAL_CURRENCIES:
+        exponent = 2
+    else:
+        raise ValueError("unsupported currency for PostHog revenue conversion")
+    return Decimal(int(amount_minor)).scaleb(-exponent)
+
+
+def _posthog_capture_url() -> Optional[str]:
+    host = os.environ.get("POSTHOG_HOST", "").strip()
+    if not host:
+        return None
+    try:
+        parsed = urlparse(host)
+        port = parsed.port
+    except ValueError:
+        return None
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or port is not None
+        or parsed.username
+        or parsed.password
+        or parsed.query
+        or parsed.fragment
+        or parsed.path.rstrip("/")
+    ):
+        return None
+    hostname = parsed.hostname.lower()
+    configured_hosts = {
+        item.strip().lower()
+        for item in os.environ.get("POSTHOG_ALLOWED_HOSTS", "").split(",")
+        if item.strip()
+    }
+    canonical_host = hostname in {"us.i.posthog.com", "eu.i.posthog.com"}
+    if not canonical_host and hostname not in configured_hosts:
+        return None
+    return f"https://{hostname}/capture/"
+
+
+def _posthog_stripe_timestamp(event: Dict[str, Any]) -> Optional[str]:
+    try:
+        created = int(event.get("created"))
+    except (TypeError, ValueError):
+        return None
+    return datetime.fromtimestamp(created, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _posthog_price_properties(source: Dict[str, Any]) -> Dict[str, Any]:
+    lines = ((source.get("lines") or {}).get("data") or [])
+    if not lines:
+        lines = ((source.get("items") or {}).get("data") or [])
+    line = lines[0] if lines else {}
+    price = line.get("price") or {}
+    if isinstance(price, str):
+        price = {"id": price}
+    product = price.get("product")
+    properties = {
+        "price_id": _stripe_object_id(price),
+        "product_id": _stripe_object_id(product),
+    }
+    metadata = source.get("metadata") or {}
+    plan = metadata.get("plan") if isinstance(metadata, dict) else None
+    if plan:
+        properties["plan"] = str(plan)
+    return {key: value for key, value in properties.items() if value}
+
+
+async def _posthog_existing_user_id(*candidate_ids: Any) -> Optional[str]:
+    for candidate in candidate_ids:
+        user_id = str(candidate or "").strip()
+        if not user_id:
+            continue
+        found = await db.users.find_one({"user_id": user_id}, {"_id": 0, "user_id": 1})
+        if found and found.get("user_id") == user_id:
+            return user_id
+    return None
+
+
+async def _posthog_resolve_billing_user_id(
+    *,
+    metadata: Optional[Dict[str, Any]] = None,
+    subscription_id: Optional[str] = None,
+    customer_id: Optional[str] = None,
+) -> Optional[str]:
+    metadata_user_id = (metadata or {}).get("user_id")
+    resolved = await _posthog_existing_user_id(metadata_user_id)
+    if resolved:
+        return resolved
+    if subscription_id:
+        found = await db.users.find_one(
+            {"stripe_subscription_id": subscription_id},
+            {"_id": 0, "user_id": 1},
+        )
+        if found and found.get("user_id"):
+            return str(found["user_id"])
+    if customer_id:
+        found = await db.users.find_one(
+            {"stripe_customer_id": customer_id},
+            {"_id": 0, "user_id": 1},
+        )
+        if found and found.get("user_id"):
+            return str(found["user_id"])
+    return None
+
+
+async def _capture_posthog_server_event(
+    *,
+    event_name: str,
+    distinct_id: str,
+    timestamp: str,
+    semantic_uuid: str,
+    properties: Dict[str, Any],
+) -> bool:
+    api_key = os.environ.get("POSTHOG_SERVER_API_KEY", "").strip()
+    capture_url = _posthog_capture_url()
+    if not api_key or not capture_url:
+        logger.warning("posthog_server_capture_skipped_invalid_config event=%s", event_name)
+        return False
+
+    body = {
+        "api_key": api_key,
+        "event": event_name,
+        "distinct_id": distinct_id,
+        "timestamp": timestamp,
+        "uuid": semantic_uuid,
+        "properties": properties,
+    }
+    timeout = httpx.Timeout(connect=0.25, read=0.50, write=0.50, pool=0.25)
+    started = time.monotonic()
+    try:
+        async def _send() -> int:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.post(capture_url, json=body)
+                response.raise_for_status()
+                return response.status_code
+
+        status_code = await asyncio.wait_for(_send(), timeout=0.75)
+        logger.info(
+            "posthog_server_capture_succeeded event=%s status_class=%s latency_ms=%s",
+            event_name,
+            f"{status_code // 100}xx",
+            int((time.monotonic() - started) * 1000),
+        )
+        return True
+    except Exception as exc:
+        logger.warning(
+            "posthog_server_capture_failed event=%s error_type=%s latency_ms=%s",
+            event_name,
+            type(exc).__name__,
+            int((time.monotonic() - started) * 1000),
+        )
+        return False
+
+
+async def _capture_posthog_invoice_payment(
+    event: Dict[str, Any],
+    invoice: Dict[str, Any],
+    subscription: Optional[Dict[str, Any]] = None,
+) -> bool:
+    if not _posthog_revenue_enabled("payment_succeeded"):
+        return False
+    invoice_id = str(invoice.get("id") or "").strip()
+    stripe_event_id = str(event.get("id") or "").strip()
+    amount_minor = invoice.get("amount_paid")
+    currency = str(invoice.get("currency") or "").upper()
+    timestamp = _posthog_stripe_timestamp(event)
+    subscription_id = _stripe_object_id(invoice.get("subscription"))
+    customer_id = _stripe_object_id(invoice.get("customer"))
+    metadata = {
+        **((subscription or {}).get("metadata") or {}),
+        **(invoice.get("metadata") or {}),
+    }
+    user_id = await _posthog_resolve_billing_user_id(
+        metadata=metadata,
+        subscription_id=subscription_id,
+        customer_id=customer_id,
+    )
+    if not all((stripe_event_id, invoice_id, user_id, timestamp, currency)) or not isinstance(amount_minor, int) or amount_minor <= 0:
+        logger.warning(
+            "posthog_revenue_skipped_invalid event=payment_succeeded stripe_event_id=%s invoice_id=%s",
+            event.get("id"),
+            invoice_id or None,
+        )
+        return False
+
+    properties = {
+        "revenue": float(_posthog_major_amount(amount_minor, currency)),
+        "currency": currency,
+        "amount_minor": amount_minor,
+        "stripe_event_id": stripe_event_id,
+        "invoice_id": invoice_id,
+        "subscription_id": subscription_id,
+        **_posthog_price_properties(invoice),
+        **(_posthog_price_properties(subscription or {}) if subscription else {}),
+        "source": "stripe_webhook",
+        "$process_person_profile": False,
+    }
+    properties = {key: value for key, value in properties.items() if value is not None}
+    return await _capture_posthog_server_event(
+        event_name="payment_succeeded",
+        distinct_id=user_id,
+        timestamp=timestamp,
+        semantic_uuid=_posthog_revenue_uuid("payment_succeeded", "invoice", invoice_id),
+        properties=properties,
+    )
+
+
+def _posthog_refund_success_confirmed(event: Dict[str, Any], refund: Dict[str, Any]) -> bool:
+    if str(refund.get("status") or "").lower() != "succeeded":
+        return False
+    event_type = event.get("type")
+    if event_type == "refund.created":
+        return True
+    if event_type != "refund.updated":
+        return False
+    previous_status = ((event.get("data") or {}).get("previous_attributes") or {}).get("status")
+    return bool(previous_status and str(previous_status).lower() != "succeeded")
+
+
+async def _posthog_stripe_retrieve(resource: Any, object_id: Any) -> Dict[str, Any]:
+    normalized_id = _stripe_object_id(object_id)
+    if not normalized_id:
+        return {}
+    response = await asyncio.wait_for(
+        asyncio.to_thread(resource.retrieve, normalized_id),
+        timeout=_POSTHOG_STRIPE_ENRICHMENT_TIMEOUT_SECONDS,
+    )
+    return _stripe_to_dict(response)
+
+
+async def _posthog_refund_context(refund: Dict[str, Any]) -> Dict[str, Any]:
+    charge = refund.get("charge")
+    payment_intent = refund.get("payment_intent")
+    charge_obj: Dict[str, Any] = {}
+    payment_intent_obj: Dict[str, Any] = {}
+    invoice_obj: Dict[str, Any] = {}
+    subscription_obj: Dict[str, Any] = {}
+
+    if isinstance(charge, dict):
+        charge_obj = charge
+    elif charge:
+        charge_obj = await _posthog_stripe_retrieve(stripe.Charge, charge)
+    payment_intent = payment_intent or charge_obj.get("payment_intent")
+    if isinstance(payment_intent, dict):
+        payment_intent_obj = payment_intent
+    elif payment_intent:
+        payment_intent_obj = await _posthog_stripe_retrieve(stripe.PaymentIntent, payment_intent)
+
+    invoice = charge_obj.get("invoice") or payment_intent_obj.get("invoice")
+    if isinstance(invoice, dict):
+        invoice_obj = invoice
+    elif invoice:
+        invoice_obj = await _posthog_stripe_retrieve(stripe.Invoice, invoice)
+    subscription_id = _stripe_object_id(invoice_obj.get("subscription"))
+    if subscription_id:
+        subscription_obj = await _posthog_stripe_retrieve(stripe.Subscription, subscription_id)
+    customer_id = (
+        _stripe_object_id(invoice_obj.get("customer"))
+        or _stripe_object_id(payment_intent_obj.get("customer"))
+        or _stripe_object_id(charge_obj.get("customer"))
+        or _stripe_object_id(subscription_obj.get("customer"))
+    )
+    metadata = {
+        **(subscription_obj.get("metadata") or {}),
+        **(invoice_obj.get("metadata") or {}),
+        **(payment_intent_obj.get("metadata") or {}),
+        **(charge_obj.get("metadata") or {}),
+        **(refund.get("metadata") or {}),
+    }
+    return {
+        "invoice": invoice_obj,
+        "subscription": subscription_obj,
+        "invoice_id": _stripe_object_id(invoice_obj),
+        "subscription_id": subscription_id,
+        "customer_id": customer_id,
+        "currency": str(
+            refund.get("currency")
+            or charge_obj.get("currency")
+            or invoice_obj.get("currency")
+            or ""
+        ).upper(),
+        "user_id": await _posthog_resolve_billing_user_id(
+            metadata=metadata,
+            subscription_id=subscription_id,
+            customer_id=customer_id,
+        ),
+    }
+
+
+async def _capture_posthog_refund(event: Dict[str, Any], refund: Dict[str, Any]) -> bool:
+    if not _posthog_revenue_enabled("payment_refunded"):
+        return False
+    refund_id = str(refund.get("id") or "").strip()
+    refund_status = str(refund.get("status") or "").lower()
+    if refund_status not in {"succeeded", "pending", "requires_action", "failed", "canceled"}:
+        logger.warning(
+            "posthog_refund_revenue_status_unconfirmed stripe_event_id=%s refund_id=%s",
+            event.get("id"),
+            refund_id or None,
+        )
+        return False
+    if not _posthog_refund_success_confirmed(event, refund):
+        logger.info(
+            "posthog_refund_revenue_nonterminal stripe_event_id=%s refund_id=%s status=%s",
+            event.get("id"),
+            refund.get("id"),
+            str(refund.get("status") or "unknown").lower(),
+        )
+        return False
+    stripe_event_id = str(event.get("id") or "").strip()
+    amount_minor = refund.get("amount")
+    timestamp = _posthog_stripe_timestamp(event)
+    try:
+        context = await _posthog_refund_context(refund)
+    except Exception as exc:
+        logger.warning(
+            "posthog_revenue_skipped_invalid event=payment_refunded stripe_event_id=%s refund_id=%s error_type=%s",
+            event.get("id"),
+            refund_id or None,
+            type(exc).__name__,
+        )
+        return False
+    currency = context.get("currency")
+    user_id = context.get("user_id")
+    invoice_id = context.get("invoice_id")
+    if not all((stripe_event_id, refund_id, user_id, invoice_id, timestamp, currency)) or not isinstance(amount_minor, int) or amount_minor <= 0:
+        logger.warning(
+            "posthog_revenue_skipped_invalid event=payment_refunded stripe_event_id=%s refund_id=%s",
+            event.get("id"),
+            refund_id or None,
+        )
+        return False
+
+    properties = {
+        "revenue": -float(_posthog_major_amount(amount_minor, currency)),
+        "currency": currency,
+        "amount_minor": amount_minor,
+        "stripe_event_id": stripe_event_id,
+        "refund_id": refund_id,
+        "invoice_id": invoice_id,
+        "subscription_id": context.get("subscription_id"),
+        **_posthog_price_properties(context.get("invoice") or {}),
+        **_posthog_price_properties(context.get("subscription") or {}),
+        "source": "stripe_webhook",
+        "$process_person_profile": False,
+    }
+    properties = {key: value for key, value in properties.items() if value is not None}
+    return await _capture_posthog_server_event(
+        event_name="payment_refunded",
+        distinct_id=user_id,
+        timestamp=timestamp,
+        semantic_uuid=_posthog_revenue_uuid("payment_refunded", "refund", refund_id),
+        properties=properties,
+    )
+
+
+async def _capture_posthog_revenue_fail_open(
+    capture: Any,
+    *args: Any,
+    event_id: Optional[str],
+    event_name: str,
+) -> bool:
+    try:
+        return bool(
+            await asyncio.wait_for(
+                capture(*args),
+                timeout=_POSTHOG_ANALYTICS_TIMEOUT_SECONDS,
+            )
+        )
+    except Exception as exc:
+        logger.warning(
+            "posthog_revenue_adapter_failed event=%s stripe_event_id=%s error_type=%s",
+            event_name,
+            event_id,
+            type(exc).__name__,
+        )
+        return False
+
+
 @api_router.post("/stripe/webhook")
 async def stripe_webhook(request: Request):
     _stripe_secret_key()
@@ -3474,6 +4133,7 @@ async def stripe_webhook(request: Request):
 
     obj = event["data"]["object"]
     try:
+        subscription = None
         if event_type in {"checkout.session.completed", "checkout.session.async_payment_succeeded"}:
             await _apply_checkout_session_billing(obj, event_id=event_id)
         elif event_type in {"customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted"}:
@@ -3495,6 +4155,23 @@ async def stripe_webhook(request: Request):
                 await _update_user_billing_by_customer_id(customer_id, {"last_payment_status": payment_status})
             else:
                 logger.warning("stripe_invoice_event_missing_subscription_customer event_id=%s type=%s", event_id, event_type)
+            if event_type == "invoice.payment_succeeded":
+                await _capture_posthog_revenue_fail_open(
+                    _capture_posthog_invoice_payment,
+                    event,
+                    obj,
+                    subscription,
+                    event_id=event_id,
+                    event_name="payment_succeeded",
+                )
+        elif event_type in {"refund.created", "refund.updated", "refund.failed"}:
+            await _capture_posthog_revenue_fail_open(
+                _capture_posthog_refund,
+                event,
+                obj,
+                event_id=event_id,
+                event_name="payment_refunded",
+            )
         else:
             logger.info("stripe_webhook ignored event_type=%s", event_type)
     except Exception:
@@ -4719,6 +5396,7 @@ def _merge_generated_resume_with_profile(
 
 
 async def _generate_application_doc(user: User, profile: Dict[str, Any], job: Dict[str, Any]) -> Dict[str, Any]:
+    set_llm_user_context(user.user_id)
     profile = prepare_profile_for_application_generation(profile, user)
     try:
         gen = await claude_generate_application(profile, job)
@@ -5251,6 +5929,7 @@ async def upload_cv(file: UploadFile = File(...), user: User = Depends(get_curre
             detail="Please upload a PDF, DOCX, RTF, TXT, or image (PNG/JPG/HEIC/WEBP) resume.",
         )
     photo_bytes, photo_mime = _extract_cv_photo(fmt, content)
+    set_llm_user_context(user.user_id)
     try:
         cv_text = await extract_cv_text_from_upload(filename, content, file.content_type)
     except LLMProviderNotConfigured:
@@ -5348,6 +6027,19 @@ async def upload_cv(file: UploadFile = File(...), user: User = Depends(get_curre
         {"$set": profile_doc},
         upsert=True,
     )
+    if _posthog_client is not None:
+        with new_context():
+            identify_context(user.user_id)
+            posthog_capture(
+                "cv_uploaded",
+                properties={
+                    "file_format": fmt,
+                    "has_photo": bool(photo_bytes),
+                    "skills_count": len(extracted.get("skills") or []),
+                    "experience_count": len(extracted.get("experience") or []),
+                    "used_ai_fallback": bool(extracted.get("extraction_fallback_reason")),
+                },
+            )
     # don't ship the heavy fields back
     profile_doc.pop("cv_text", None)
     profile_doc.pop("cv_original_b64", None)
@@ -5593,33 +6285,6 @@ async def get_profile(user: User = Depends(get_current_user)):
     return profile
 
 
-def _profile_completion(profile: Dict[str, Any]) -> Dict[str, Any]:
-    defaults = profile.get("application_defaults") or {}
-    contact = profile.get("contact") or {}
-    checks = [
-        ("cv_uploaded", bool(profile.get("cv_text") or profile.get("cv_filename"))),
-        ("target_roles", bool(profile.get("target_role") or profile.get("target_roles"))),
-        ("location", bool(profile.get("target_location") or profile.get("target_location_data"))),
-        ("linkedin_or_portfolio", bool(contact.get("linkedin") or contact.get("website") or contact.get("github"))),
-        ("application_defaults", all(
-            defaults.get(key) not in (None, "")
-            for key in (
-                "work_authorized_countries",
-                "requires_sponsorship",
-                "current_location_city",
-                "former_employer_restriction_or_noncompete",
-            )
-        ) or bool(defaults.get("prefer_not_to_say_demographics"))),
-    ]
-    completed = sum(1 for _, ok in checks if ok)
-    return {
-        "percentage": round((completed / len(checks)) * 100),
-        "completed": completed,
-        "total": len(checks),
-        "items": {key: ok for key, ok in checks},
-    }
-
-
 async def _cancel_stripe_subscription_for_user(user_doc: Dict[str, Any]) -> None:
     billing = user_doc.get("billing") or {}
     sub_id = billing.get("stripe_subscription_id")
@@ -5693,6 +6358,10 @@ async def delete_account(user: User = Depends(get_current_user)):
     """Wipe everything the user created. Sessions are revoked too."""
     user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0}) or {}
     logger.info("account_delete_start user_id=%s", user.user_id)
+    if _posthog_client is not None:
+        with new_context():
+            identify_context(user.user_id)
+            posthog_capture("account_deleted")
     await _cancel_stripe_subscription_for_user(user_doc)
     await _delete_all_user_data(user.user_id)
     await _delete_supabase_auth_user(user_doc)
@@ -5864,6 +6533,25 @@ async def patch_profile_extras(payload: Dict[str, Any], user: User = Depends(get
         upsert=True,
     )
     return {"ok": True, "extras": merged}
+
+
+@api_router.patch("/profile/onboarding")
+async def patch_onboarding_profile(body: OnboardingProfilePatch, user: User = Depends(get_current_user)):
+    """Atomically persist onboarding progress, search preferences, and contact."""
+    contact = {key: value for key, value in body.contact.items() if value is not None}
+    contact["email"] = user.email
+    preferences = {key: value for key, value in body.preferences.items() if value is not None}
+    preferences["updated_at"] = datetime.now(timezone.utc).isoformat()
+    patcher = getattr(db, "patch_onboarding_profile", None)
+    if patcher is None:
+        raise HTTPException(status_code=503, detail="Atomic onboarding persistence is unavailable")
+    profile = await patcher(
+        user.user_id,
+        extras={"onboarding": body.onboarding},
+        preferences=preferences,
+        contact=contact,
+    )
+    return {"ok": True, "profile": _sanitize_profile_for_client(profile)}
 
 
 @api_router.get("/locations/search")
@@ -6056,6 +6744,7 @@ async def get_feed(
     prefetch: bool = False,
     score: bool = False,                                  # opt-in AI scoring (slow); default off for snappy UX
     search_role: Optional[str] = None,                    # override profile target_role for this feed request
+    audit_mode: bool = False,
 ):
     started_at = time.perf_counter()
     logger.info(
@@ -6156,16 +6845,26 @@ async def get_feed(
         provider = get_job_provider(provider_name, api_key)
         jsearch_attempted = True
         jsearch_error = None
+        import_stats = None
         try:
-            result = await provider.search(query)
-            raw_jobs = result.jobs
+            if is_france_travail_provider(provider_name):
+                import_stats = await jobs_service_module._import_provider_jobs(
+                    db, provider, query
+                )
+                raw_jobs = import_stats.get("jobs", [])
+            else:
+                result = await provider.search(query)
+                raw_jobs = result.jobs
         except Exception as exc:
             raw_jobs = []
             jsearch_error = f"{exc.__class__.__name__}: {str(exc)[:160]}"
             logger.warning("jobs/feed legacy_jsearch provider_error=%s", jsearch_error)
         if raw_jobs:
             try:
-                import_stats = await jobs_service_module.upsert_imported_jobs(db, raw_jobs)
+                if import_stats is None:
+                    import_stats = await jobs_service_module.upsert_imported_jobs(
+                        db, raw_jobs
+                    )
                 logger.info(
                     "jobs/feed legacy_jsearch_upserted fetched=%s imported=%s auto_apply_supported=%s",
                     len(raw_jobs),
@@ -6254,7 +6953,7 @@ async def get_feed(
             response["debug"] = debug
         return response
 
-    if _env_bool("JOBS_FEED_LEGACY_JSEARCH_ONLY", False):
+    if _env_bool("JOBS_FEED_LEGACY_JSEARCH_ONLY", False) and not audit_mode:
         return await _legacy_jsearch_only_feed()
 
     # Raised alongside sync_refresh_max_seconds/total_seconds below (was 16.0
@@ -6562,7 +7261,7 @@ async def get_feed(
         db_min_good_results = max(1, _env_int("JOBS_DB_MIN_GOOD_RESULTS_BEFORE_JSEARCH", 30))
         db_weak_results_threshold = max(0, _env_int("JOBS_DB_WEAK_RESULTS_THRESHOLD", 10))
         allow_unknown_tier = _env_bool("JOBS_ALLOW_UNKNOWN_TIER_IN_FEED", False)
-        sync_refresh_enabled = _env_bool("JOBS_FEED_SYNC_REFRESH_ENABLED", True)
+        sync_refresh_enabled = not audit_mode and _env_bool("JOBS_FEED_SYNC_REFRESH_ENABLED", True)
         # Was 4s. Confirmed live that JSearch's own response time regularly
         # exceeds that for non-French markets (Marseille/Lyon: ~4-5s; London/
         # New York: 10-20s, reliably blowing a 4s budget before any answer
@@ -7687,6 +8386,10 @@ async def get_feed(
         elif prefetch:
             request_trace["prefetch"] = True
             request_trace["local_jsearch_skip_reason"] = "prefetch_db_only"
+        if audit_mode:
+            should_refresh = False
+            background_refresh_wanted = False
+            request_trace["local_jsearch_skip_reason"] = "coverage_audit_mode"
         request_trace["local_jsearch_discovery_should_run"] = bool(should_refresh and explicit_local_intent)
         if explicit_local_intent and not should_refresh:
             if not sync_refresh_enabled:
@@ -9135,6 +9838,16 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
             log_phase("response_build_done")
             phase = "swipe_complete"
             log_phase("swipe_complete")
+            if _posthog_client is not None and not existing:
+                with new_context():
+                    identify_context(user.user_id)
+                    posthog_capture(
+                        "job_dismissed",
+                        properties={
+                            "job_provider": job.get("provider"),
+                            "ats_provider": job.get("ats_provider"),
+                        },
+                    )
             return response
 
         profile = await db.profiles.find_one({"user_id": user.user_id}, {"_id": 0})
@@ -9288,6 +10001,18 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
             application_id=saved_doc.get("application_id"),
             status_returned_to_frontend=response.get("submission_status"),
         )
+        if _posthog_client is not None and not existing_app:
+            with new_context():
+                identify_context(user.user_id)
+                posthog_capture(
+                    "job_application_created",
+                    properties={
+                        "application_id": saved_doc.get("application_id"),
+                        "job_provider": job.get("provider"),
+                        "ats_provider": job.get("ats_provider"),
+                        "package_status": saved_doc.get("package_status"),
+                    },
+                )
         return response
     except LLMProviderNotConfigured as exc:
         phase = "application_generation_start"
@@ -9798,6 +10523,7 @@ async def admin_jobs_expire_stale(body: AdminJobsExpireStaleRequest, admin: User
         country_code=body.country_code,
         limit=body.limit,
         dry_run=body.dry_run,
+        completeness_run_id=body.completeness_run_id,
     )
 
 
@@ -9821,6 +10547,7 @@ async def admin_jobs_purge_invalid(body: AdminJobsPurgeInvalidRequest, admin: Us
         country_code=body.country_code,
         limit=body.limit,
         dry_run=body.dry_run,
+        completeness_run_id=body.completeness_run_id,
     )
 
 
@@ -10126,7 +10853,7 @@ async def admin_auto_apply_execute(body: AdminAutoApplyExecuteRequest, admin: Us
         try:
             from auto_apply.metrics import release_stale_in_flight as _release_stale
 
-            released = await _release_stale_in_flight(
+            released = await _release_stale(
                 db, target_user.user_id, body.job_id, max_age_s=120.0, force=False,
             )
             if released:
@@ -10459,6 +11186,119 @@ async def admin_jobs_feed_diagnostic(body: AdminJobsFeedDiagnosticRequest, admin
             "provider_cooldowns": list(getattr(jobs_service_module, "_PROVIDER_COOLDOWN_UNTIL", {}).keys()),
         },
         "timing_ms": int((time.perf_counter() - started) * 1000),
+    }
+
+
+@api_router.post("/admin/jobs/feed-coverage-audit")
+async def admin_jobs_feed_coverage_audit(
+    body: AdminFeedCoverageAuditRequest,
+    admin: User = Depends(require_admin_user),
+):
+    """Evaluate a fixed paid-user snapshot through the real feed with I/O disabled."""
+    requested_user_ids = list(dict.fromkeys(user_id.strip() for user_id in body.user_ids if user_id.strip()))
+    if not requested_user_ids:
+        raise HTTPException(status_code=400, detail="At least one user_id is required")
+    if len(requested_user_ids) > 100:
+        raise HTTPException(status_code=400, detail="Coverage audits are limited to 100 users")
+
+    evaluated_at = datetime.now(timezone.utc)
+    user_rows = await db.users.find(
+        {"user_id": {"$in": requested_user_ids}},
+        {"_id": 0},
+    ).limit(len(requested_user_ids)).to_list(len(requested_user_ids))
+    users_by_id = {str(row.get("user_id")): row for row in user_rows if row.get("user_id")}
+    snapshots: List[Dict[str, Any]] = []
+
+    for user_id in requested_user_ids:
+        user_doc = users_by_id.get(user_id)
+        if not user_doc:
+            snapshots.append({
+                "user_id": hash_feed_coverage_user_id(user_id),
+                "evaluated_at": evaluated_at.isoformat(),
+                "terminal_reason": "USER_NOT_FOUND",
+                "evaluator_version": FEED_COVERAGE_EVALUATOR_VERSION,
+            })
+            continue
+        data = user_doc.get("data") if isinstance(user_doc.get("data"), dict) else {}
+        billing = user_doc.get("billing") if isinstance(user_doc.get("billing"), dict) else data.get("billing") or {}
+        if str(billing.get("subscription_status") or "").lower() not in {"active", "trialing"}:
+            snapshots.append({
+                "user_id": hash_feed_coverage_user_id(user_id),
+                "evaluated_at": evaluated_at.isoformat(),
+                "terminal_reason": "NOT_PAID_COHORT",
+                "evaluator_version": FEED_COVERAGE_EVALUATOR_VERSION,
+            })
+            continue
+        profile = await db.profiles.find_one({"user_id": user_id}, {"_id": 0}) or {}
+        audit_user = User(
+            user_id=user_id,
+            email=str(user_doc.get("email") or f"{user_id}@coverage-audit.invalid"),
+            name=str(user_doc.get("name") or "Coverage audit"),
+            is_admin=False,
+        )
+        try:
+            feed_response = await get_feed(
+                user=audit_user,
+                limit=max(1, min(body.limit, 25)),
+                min_salary=0,
+                posted_within=None,
+                work_location=None,
+                job_type=None,
+                experience=None,
+                location=None,
+                only_company=None,
+                hide_company=None,
+                only_industry=None,
+                hide_industry=None,
+                include_unknown_location=True,
+                include_unknown_salary=True,
+                include_non_auto_apply=False,
+                search_radius="50km",
+                locations_json=None,
+                only_my_country=False,
+                location_label=None,
+                place_id=None,
+                country=None,
+                country_code=None,
+                lat=None,
+                lng=None,
+                force_provider_refresh=False,
+                prefetch=False,
+                score=False,
+                search_role=None,
+                audit_mode=True,
+            )
+        except HTTPException as exc:
+            snapshots.append({
+                "user_id": hash_feed_coverage_user_id(user_id),
+                "evaluated_at": evaluated_at.isoformat(),
+                "terminal_reason": f"PROFILE_NOT_READY_{exc.status_code}",
+                "evaluator_version": FEED_COVERAGE_EVALUATOR_VERSION,
+            })
+            continue
+        snapshots.append(build_feed_coverage_snapshot(
+            user_id=user_id,
+            profile=profile,
+            feed_response=feed_response,
+            evaluated_at=evaluated_at,
+            freshness_window_days=body.freshness_window_days,
+        ))
+
+    coverage_run_id = hashlib.sha256(
+        "|".join([
+            FEED_COVERAGE_EVALUATOR_VERSION,
+            evaluated_at.isoformat(),
+            *(snapshot["user_id"] for snapshot in snapshots),
+        ]).encode("utf-8")
+    ).hexdigest()[:24]
+    for snapshot in snapshots:
+        snapshot["coverage_run_id"] = coverage_run_id
+    return {
+        "coverage_run_id": coverage_run_id,
+        "evaluated_at": evaluated_at.isoformat(),
+        "evaluator_version": FEED_COVERAGE_EVALUATOR_VERSION,
+        "profile_count": len(snapshots),
+        "snapshots": snapshots,
     }
 
 
@@ -10810,8 +11650,8 @@ async def _admin_safe_find(
             cursor = cursor.limit(limit)
         return await cursor.to_list(limit)
     except Exception as exc:
-        logger.warning("admin_safe_find_failed collection=%s error=%s", name, str(exc)[:200])
-        return []
+        logger.exception("admin_safe_find_failed collection=%s", name)
+        raise HTTPException(status_code=503, detail=f"Admin database read failed: {name}") from exc
 
 
 async def _admin_safe_read(
@@ -10828,8 +11668,8 @@ async def _admin_safe_read(
         try:
             return await read_with_select(filter or {}, limit, select=select)
         except Exception as exc:
-            logger.warning("admin_safe_read_failed collection=%s error=%s", name, str(exc)[:200])
-            return []
+            logger.exception("admin_safe_read_failed collection=%s", name)
+            raise HTTPException(status_code=503, detail=f"Admin database read failed: {name}") from exc
     return await _admin_safe_find(collection, filter, limit=limit)
 
 
@@ -10838,8 +11678,8 @@ async def _admin_safe_find_one(collection, filter: Dict[str, Any]) -> Optional[D
     try:
         return await collection.find_one(filter, {"_id": 0})
     except Exception as exc:
-        logger.warning("admin_safe_find_one_failed collection=%s error=%s", name, str(exc)[:200])
-        return None
+        logger.exception("admin_safe_find_one_failed collection=%s", name)
+        raise HTTPException(status_code=503, detail=f"Admin database read failed: {name}") from exc
 
 
 async def _admin_jobs_for_ids(job_ids: List[str]) -> List[Dict[str, Any]]:
@@ -10930,7 +11770,15 @@ async def _find_user_by_email(email: str) -> Optional[Dict[str, Any]]:
     user_doc = await db.users.find_one({"email": normalized}, {"_id": 0})
     if user_doc:
         return user_doc
-    users = await _admin_safe_find(db.users)
+    find = getattr(db.users, "find", None)
+    if not callable(find):
+        return None
+    try:
+        cursor = find({}, {"_id": 0})
+        users = await cursor.to_list(10000)
+    except Exception:
+        logger.exception("auth_email_fallback_scan_failed")
+        return None
     for user_doc in users:
         if (user_doc.get("email") or "").strip().lower() == normalized:
             return user_doc
@@ -11341,6 +12189,11 @@ async def _admin_user_analytics_payload() -> Dict[str, Any]:
 
 @api_router.get("/admin/overview")
 async def admin_overview(admin: User = Depends(require_admin_user)):
+    if _env_enabled("ADMIN_BOUNDED_RPC_ENABLED", "false"):
+        snapshot = getattr(db, "admin_overview_snapshot", None)
+        if not callable(snapshot):
+            raise HTTPException(status_code=503, detail="Admin aggregate contract is unavailable")
+        return await snapshot()
     users, profiles, _swipes, applications, jobs = await _admin_base_data(include_swipes=False)
     normalized_apps = [_normalize_application_status_fields(app_doc) for app_doc in applications]
     user_map = {item.get("user_id"): item for item in users}
@@ -11397,7 +12250,20 @@ async def admin_user_analytics(admin: User = Depends(require_admin_user)):
 
 
 @api_router.get("/admin/users")
-async def admin_list_users(admin: User = Depends(require_admin_user)):
+async def admin_list_users(
+    page: int = Query(1, ge=1, le=10000),
+    page_size: int = Query(100, ge=1, le=500),
+    window_days: int = Query(30, ge=1, le=365),
+    admin: User = Depends(require_admin_user),
+):
+    page = page if isinstance(page, int) else 1
+    page_size = page_size if isinstance(page_size, int) else 100
+    window_days = window_days if isinstance(window_days, int) else 30
+    if _env_enabled("ADMIN_BOUNDED_RPC_ENABLED", "false"):
+        page_reader = getattr(db, "admin_users_page", None)
+        if not callable(page_reader):
+            raise HTTPException(status_code=503, detail="Admin user page contract is unavailable")
+        return await page_reader(page=page, page_size=page_size, window_days=window_days)
     users, profiles, swipes, applications, _jobs = await _admin_base_data(
         include_swipes=True,
         include_jobs=False,
@@ -11469,7 +12335,13 @@ async def admin_list_users(admin: User = Depends(require_admin_user)):
             "credits_remaining": billing.get("credits_remaining"),
         })
     rows.sort(key=lambda item: _parse_dt(item.get("last_active_at")) or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
-    return {"users": rows}
+    start = (page - 1) * page_size
+    return {
+        "users": rows[start:start + page_size],
+        "page": page,
+        "page_size": page_size,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @api_router.get("/admin/users/{user_id}")
@@ -11500,8 +12372,13 @@ async def admin_get_user(user_id: str, admin: User = Depends(require_admin_user)
         key=lambda value: _parse_dt(value) or datetime.min.replace(tzinfo=timezone.utc),
         default=None,
     )
-    login_sessions = await _admin_safe_find(
-        getattr(db, "user_sessions", None), {"user_id": user_id}, sort=[("created_at", -1)],
+    session_collection = getattr(db, "user_sessions", None)
+    login_sessions = (
+        await _admin_safe_find(
+            session_collection, {"user_id": user_id}, sort=[("created_at", -1)],
+        )
+        if session_collection is not None
+        else []
     )
 
     swipe_rows = await db.swipes.find(
@@ -12392,7 +13269,15 @@ async def admin_training_analytics_endpoint(
 
 
 @api_router.get("/admin/analytics")
-async def admin_analytics(admin: User = Depends(require_admin_user)):
+async def admin_analytics(
+    window_days: int = Query(30, ge=1, le=365),
+    admin: User = Depends(require_admin_user),
+):
+    if _env_enabled("ADMIN_BOUNDED_RPC_ENABLED", "false"):
+        snapshot = getattr(db, "admin_analytics_snapshot", None)
+        if not callable(snapshot):
+            raise HTTPException(status_code=503, detail="Admin analytics contract is unavailable")
+        return await snapshot(window_days)
     users, profiles, swipes, applications, jobs = await _admin_base_data(include_swipes=True)
     events = await _analytics_events()
     normalized_apps = [_normalize_application_status_fields(app_doc) for app_doc in applications]
@@ -12576,9 +13461,27 @@ async def admin_analytics(admin: User = Depends(require_admin_user)):
 async def admin_list_applications(
     status_filter: Optional[str] = Query(default=None, alias="filter"),
     status: Optional[str] = Query(default=None),
+    page: int = Query(1, ge=1, le=10000),
+    page_size: int = Query(100, ge=1, le=500),
+    window_days: int = Query(30, ge=1, le=365),
     admin: User = Depends(require_admin_user),
 ):
+    status_filter = status_filter if isinstance(status_filter, str) else None
+    status = status if isinstance(status, str) else None
+    page = page if isinstance(page, int) else 1
+    page_size = page_size if isinstance(page_size, int) else 100
+    window_days = window_days if isinstance(window_days, int) else 30
     status_filter = status_filter or status
+    if _env_enabled("ADMIN_BOUNDED_RPC_ENABLED", "false"):
+        page_reader = getattr(db, "admin_applications_page", None)
+        if not callable(page_reader):
+            raise HTTPException(status_code=503, detail="Admin application page contract is unavailable")
+        return await page_reader(
+            page=page,
+            page_size=page_size,
+            window_days=window_days,
+            status_filter=status_filter,
+        )
     apps = await _admin_safe_find(db.applications, sort=[("updated_at", -1)], limit=1000)
     allowed_statuses = _admin_status_filter(status_filter)
     if allowed_statuses is not None:
@@ -12613,6 +13516,9 @@ async def admin_list_applications(
             for app_doc in apps
         ],
         "filter": status_filter or "all",
+        "page": page,
+        "page_size": page_size,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -15012,6 +15918,14 @@ async def download_cover_letter(application_id: str, user: User = Depends(get_cu
 
 @api_router.patch("/applications/{application_id}/status")
 async def update_status(application_id: str, update: StatusUpdate, user: User = Depends(get_current_user)):
+    if _env_enabled("APPLICATION_TRACKER_RPC_ENABLED", "false"):
+        patch_status = getattr(db, "patch_user_application_status", None)
+        if not callable(patch_status):
+            raise HTTPException(status_code=503, detail="Application tracker contract is unavailable")
+        updated = await patch_status(application_id, user.user_id, update.status)
+        if not updated:
+            raise HTTPException(status_code=404, detail="Not found")
+        return {"ok": True}
     res = await db.applications.update_one(
         {"application_id": application_id, "user_id": user.user_id},
         {"$set": {"status": update.status}},
@@ -15357,6 +16271,9 @@ async def health():
                 "customer.subscription.deleted",
                 "invoice.payment_succeeded",
                 "invoice.payment_failed",
+                "refund.created",
+                "refund.updated",
+                "refund.failed",
             ],
         },
     }
@@ -16508,9 +17425,65 @@ async def _startup_seed_impl():
         logger.warning(f"Seed failed: {e}")
 
 
+_STARTUP_BACKGROUND_TASKS: set[asyncio.Task] = set()
+
+
+def _python_ingestion_schedule_states(crons_paused: bool):
+    return (
+        ("python-france-travail-harvest", "france_travail", max(300, _env_int("FT_HARVEST_INTERVAL_MINUTES", 5) * 60), not crons_paused and ft_harvest_enabled()),
+        ("python-jsearch-harvest", "jsearch", max(300, _env_int("JSEARCH_HARVEST_INTERVAL_MINUTES", 15) * 60), not crons_paused and jsearch_harvest_autostart_enabled()),
+        ("python-ats-direct-maintenance", "direct_ats", max(300, _env_int("ATS_DIRECT_MAINTENANCE_INTERVAL_MINUTES", 5) * 60), not crons_paused and ats_direct_maintenance_loop_enabled()),
+        ("python-company-discovery", "company_discovery", max(300, _env_int("COMPANY_DISCOVERY_LOOP_INTERVAL_MINUTES", 10) * 60), not crons_paused and company_discovery_loop_enabled()),
+    )
+
+
+def _spawn_observed_startup_task(coro, *, name: str) -> asyncio.Task:
+    """Retain startup tasks and make terminal failures visible."""
+    task = asyncio.create_task(coro, name=name)
+    _STARTUP_BACKGROUND_TASKS.add(task)
+
+    def _completed(completed: asyncio.Task) -> None:
+        _STARTUP_BACKGROUND_TASKS.discard(completed)
+        if completed.cancelled():
+            logger.warning("startup_background_task_cancelled task=%s", name)
+            return
+        error = completed.exception()
+        if error is not None:
+            logger.error(
+                "startup_background_task_failed task=%s error=%s",
+                name,
+                error,
+                exc_info=(type(error), error, error.__traceback__),
+            )
+
+    task.add_done_callback(_completed)
+    return task
+
+
 @app.on_event("startup")
 async def startup_seed():
     """Register routes immediately; run seeding in the background."""
+    global _posthog_client
+    _ph_api_key = os.environ.get("POSTHOG_SERVER_API_KEY", "").strip()
+    _ph_host = os.environ.get("POSTHOG_HOST", "").strip()
+    if _posthog_server_capture_configured():
+        _posthog_client = Posthog(
+            api_key=_ph_api_key,
+            host=_ph_host,
+            enable_exception_autocapture=True,
+        )
+        atexit.register(_posthog_client.shutdown)
+        logger.info("posthog_client_initialized host=%s", _ph_host)
+        if _OTEL_AVAILABLE:
+            _otel_provider = _OtelTracerProvider(
+                resource=_OtelResource(attributes={_OTEL_SERVICE_NAME: "hirly-backend"})
+            )
+            _otel_provider.add_span_processor(
+                _PostHogSpanProcessor(api_key=_ph_api_key, host=_ph_host)
+            )
+            _otel_trace.set_tracer_provider(_otel_provider)
+            _OpenAIInstrumentor().instrument()
+            logger.info("posthog_otel_ai_observability_initialized")
     # Register concrete ApplyDrivers once at startup. The executor never imports
     # concrete drivers itself -- this import is the single registration point.
     import auto_apply.drivers  # noqa: F401
@@ -16530,28 +17503,50 @@ async def startup_seed():
             "Register https://<your-backend>/api/stripe/webhook in the Stripe Dashboard."
         )
     if _env_bool("STRIPE_RECONCILIATION_ENABLED", True) and _stripe_configured():
-        asyncio.create_task(_run_stripe_subscription_reconcile_loop())
-    asyncio.create_task(_startup_seed_impl())
-    asyncio.create_task(_resume_pending_application_generation())
-    asyncio.create_task(auto_apply_queue.startup(db))
+        _spawn_observed_startup_task(_run_stripe_subscription_reconcile_loop(), name="stripe-reconcile")
+    _spawn_observed_startup_task(_startup_seed_impl(), name="startup-seed")
+    _spawn_observed_startup_task(_resume_pending_application_generation(), name="application-generation-resume")
+    _spawn_observed_startup_task(auto_apply_queue.startup(db), name="auto-apply-queue")
     # With JOBS_INVENTORY_BLITZ (default on), crons start unless explicitly paused.
     # Set PAUSE_JOB_MAINTENANCE_CRONS=true to stop background harvest under DB load.
     blitz = _env_bool("JOBS_INVENTORY_BLITZ", True)
     pause_default = not blitz
-    if _env_bool("PAUSE_JOB_MAINTENANCE_CRONS", pause_default):
+    crons_paused = _env_bool("PAUSE_JOB_MAINTENANCE_CRONS", pause_default)
+    sync_schedule = getattr(db, "sync_python_ingestion_schedule", None)
+    if callable(sync_schedule):
+        schedule_states = (
+            ("python-france-travail-harvest", "france_travail", max(300, _env_int("FT_HARVEST_INTERVAL_MINUTES", 5) * 60), not crons_paused and ft_harvest_enabled()),
+            ("python-jsearch-harvest", "jsearch", max(300, _env_int("JSEARCH_HARVEST_INTERVAL_MINUTES", 15) * 60), not crons_paused and jsearch_harvest_autostart_enabled()),
+            ("python-ats-direct-maintenance", "direct_ats", max(300, _env_int("ATS_DIRECT_MAINTENANCE_INTERVAL_MINUTES", 5) * 60), not crons_paused and ats_direct_maintenance_loop_enabled()),
+            ("python-company-discovery", "company_discovery", max(300, _env_int("COMPANY_DISCOVERY_LOOP_INTERVAL_MINUTES", 10) * 60), not crons_paused and company_discovery_loop_enabled()),
+        )
+        for schedule_id, source, cadence_seconds, enabled in schedule_states:
+            await sync_schedule(
+                schedule_id=schedule_id,
+                source=source,
+                cadence_seconds=cadence_seconds,
+                enabled=enabled,
+            )
+    if crons_paused:
         logger.warning(
             "job_maintenance_crons_paused blitz=%s hint=set_PAUSE_JOB_MAINTENANCE_CRONS_false_to_fill_inventory",
             blitz,
         )
     else:
         logger.info("job_maintenance_crons_starting blitz=%s target=500k_jobs_per_week", blitz)
-        asyncio.create_task(run_france_travail_harvest_loop(db))
-        asyncio.create_task(run_jsearch_harvest_loop(db))
-        asyncio.create_task(run_ats_direct_maintenance_loop(db))
-        asyncio.create_task(run_company_discovery_loop(db))
-    asyncio.create_task(run_creator_social_refresh_loop())
+        _spawn_observed_startup_task(run_france_travail_harvest_loop(db), name="france-travail-harvest")
+        _spawn_observed_startup_task(run_jsearch_harvest_loop(db), name="jsearch-harvest")
+        _spawn_observed_startup_task(run_ats_direct_maintenance_loop(db), name="ats-direct-maintenance")
+        _spawn_observed_startup_task(run_company_discovery_loop(db), name="company-discovery")
+    _spawn_observed_startup_task(run_creator_social_refresh_loop(), name="creator-social-refresh")
 
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    global _supabase_auth_http_client
+    if _posthog_client is not None:
+        _posthog_client.flush()
+    if _supabase_auth_http_client is not None and not _supabase_auth_http_client.is_closed:
+        await _supabase_auth_http_client.aclose()
+    _supabase_auth_http_client = None
     await db.close()

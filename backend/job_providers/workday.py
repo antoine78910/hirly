@@ -181,6 +181,7 @@ class WorkdayProvider:
         applied_facets: Dict[str, List[str]] = {}
         raw_pages: List[Dict[str, Any]] = []
         offset = 0
+        exhausted = False
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             discovery = await client.post(
@@ -223,12 +224,14 @@ class WorkdayProvider:
                     if isinstance(row, dict)
                 ]
                 if not page_rows:
+                    exhausted = True
                     break
                 listings.extend(page_rows)
                 offset += len(page_rows)
                 if len(listings) >= target_count:
                     break
                 if len(page_rows) < page_size:
+                    exhausted = True
                     break
 
             detail_limit = max(0, min(self._env_int("WORKDAY_DETAIL_FETCH_LIMIT", 12), target_count))
@@ -267,7 +270,17 @@ class WorkdayProvider:
 
         return ProviderResult(
             jobs=jobs[:target_count],
-            raw_response={"pages": raw_pages, "board": board.tenant, "site": board.site},
+            raw_response={
+                "pages": raw_pages,
+                "board": board.tenant,
+                "site": board.site,
+                "requested_cap": target_count,
+                "completeness": (
+                    "complete_without_source_total"
+                    if exhausted
+                    else "capped_unknown"
+                ),
+            },
         )
 
     def normalize_job(

@@ -1,0 +1,23 @@
+{
+  "name": "hirly",
+  "private": true,
+  "packageManager": "bun@1.3.14",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "audit:job-ingestion": "bun run --cwd apps/job-ingestion-audit audit",
+    "verify:job-supply-release": "node scripts/verify-job-supply-release.mjs",
+    "format": "bun run --workspaces --if-present format",
+    "lint": "bun run --workspaces --if-present lint",
+    "typecheck": "bun run --workspaces --if-present typecheck",
+    "test": "bun test ./tests && bun run --workspaces --if-present test",
+    "test:g003": "bun test ./tests/g003-worker-runtime.test.ts ./tests/g003-postgres-runtime.integration.test.ts && bun run --cwd apps/worker test",
+    "build": "bun run --workspaces --if-present build"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "typescript": "5.9.3"
+  }
+}

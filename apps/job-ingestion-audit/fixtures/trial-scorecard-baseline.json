@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "status": "COMPLETE",
+  "sample": false,
+  "cohortId": "paid-fr",
+  "cohortDigest": "cohort-2026-07-20",
+  "policyDigest": "policy-approved-1",
+  "controlDigest": "trial-controls-1",
+  "paidUserIds": ["u1", "u2", "u3", "u4"],
+  "currentJobs": [
+    {
+      "provider": "france-travail",
+      "tenant": "fr",
+      "externalId": "existing",
+      "canonicalGroupId": "existing",
+      "fingerprint": "fp-existing",
+      "fresh": true,
+      "relevant": true,
+      "actionable": true,
+      "applyUrlKind": "canonical",
+      "knownApplicationRoute": true,
+      "available": true,
+      "matchedUserIds": ["u4"]
+    }
+  ],
+  "expectedRequests": 4,
+  "expectedCostMinor": 30
+}

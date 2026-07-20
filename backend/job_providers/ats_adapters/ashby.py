@@ -30,7 +30,7 @@ class AshbyAtsAdapter(AtsJobAdapter):
             response.raise_for_status()
             payload = response.json()
         rows = self._job_rows(payload)
-        return rows[:limit] if limit else rows
+        return self.bounded_batch(rows, limit=limit)
 
     def normalize_job(self, raw_job: Dict[str, Any], *, source_key: str) -> Optional[Dict[str, Any]]:
         raw_id = raw_job.get("id") or raw_job.get("jobId")

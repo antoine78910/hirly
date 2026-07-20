@@ -7,6 +7,7 @@ from fastapi import HTTPException
 import ats_source_service as service
 import job_cache_maintenance
 import server
+from job_providers.ats_adapters.base import AtsJobBatch
 
 
 class _Cursor:
@@ -59,7 +60,12 @@ class _FakeAdapter:
     provider = "greenhouse"
 
     async def fetch_jobs(self, source_key, *, limit=None):
-        return [{"id": "1", "title": "Marketing Manager"}]
+        return AtsJobBatch(
+            [{"id": "1", "title": "Marketing Manager"}],
+            completeness="complete_without_source_total",
+            requested_limit=limit,
+            observed_count=1,
+        )
 
     def normalize_job(self, raw_job, *, source_key):
         return {
@@ -81,6 +87,14 @@ class _FakeAdapter:
 class _FailingAdapter(_FakeAdapter):
     async def fetch_jobs(self, source_key, *, limit=None):
         raise RuntimeError("board failed")
+
+
+class _CappedAdapter(_FakeAdapter):
+    async def fetch_jobs(self, source_key, *, limit=None):
+        return [
+            {"id": str(index), "title": f"Marketing Manager {index}"}
+            for index in range(limit or 0)
+        ]
 
 
 def _matches(row, filter):
@@ -124,6 +138,46 @@ def test_refresh_source_calls_adapter_and_upserts_jobs(monkeypatch):
     assert calls["jobs"] == 1
     assert result["imported_count"] == 1
     assert result["valid_count"] == 1
+
+
+def test_refresh_source_surfaces_cap_as_needs_split(monkeypatch):
+    db = _FakeDB()
+    monkeypatch.setattr(service, "get_ats_adapter", lambda _provider: _CappedAdapter())
+    result = asyncio.run(service.refresh_ats_source(
+        db,
+        ats_provider="greenhouse",
+        source_key="acme",
+        limit=2,
+        dry_run=True,
+    ))
+    assert result["fetched_count"] == 2
+    assert result["status"] == "capped"
+    assert result["completeness"] == "capped_needs_split"
+    assert result["errors"] == ["source_cap_reached_needs_split"]
+
+
+def test_capped_refresh_does_not_record_source_success_or_clear_error(monkeypatch):
+    db = _FakeDB(sources=[{
+        "id": "greenhouse:acme",
+        "last_success_at": "2026-07-19T00:00:00Z",
+        "last_error": "prior_error",
+        "failure_count": 2,
+    }])
+    monkeypatch.setattr(service, "get_ats_adapter", lambda _provider: _CappedAdapter())
+    async def fake_upsert(*_args, **_kwargs):
+        return {"total_imported": 2}
+    monkeypatch.setattr(service, "upsert_imported_jobs", fake_upsert)
+
+    result = asyncio.run(service.refresh_ats_source(
+        db, ats_provider="greenhouse", source_key="acme", limit=2
+    ))
+
+    source = db.ats_company_sources.rows[0]
+    assert result["status"] == "capped"
+    assert source["last_success_at"] == "2026-07-19T00:00:00Z"
+    assert source["last_error"] == "source_cap_reached_needs_split"
+    assert source["failure_count"] == 3
+    assert source["last_completeness_state"] == "capped_needs_split"
 
 
 def test_failed_source_refresh_records_failure(monkeypatch):

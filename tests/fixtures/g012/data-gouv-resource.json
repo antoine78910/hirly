@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "data-gouv-fixture.v1",
+  "provenance": {
+    "kind": "synthetic_sanitized",
+    "source": "approved G012 generic data.gouv adapter contract",
+    "containsPersonalData": false
+  },
+  "raw": [
+    {
+      "datasetId": "dataset-fixture",
+      "resourceId": "resource-fixture",
+      "recordId": "record-001",
+      "title": "Ingénieure plateforme",
+      "employer": "Employeur Public",
+      "location": "Paris, France",
+      "countryCode": "France",
+      "description": "Fixture synthétique sans donnée personnelle.",
+      "contractType": "CDI",
+      "status": "active",
+      "applyUrls": [
+        "https://apply.example.org/jobs/record-001"
+      ],
+      "sourceUrl": "https://www.data.gouv.fr/fr/datasets/dataset-fixture/",
+      "publishedAt": "2026-07-18T08:00:00.000Z",
+      "expiresAt": "2026-08-18T08:00:00.000Z",
+      "sourceDocument": {
+        "record_id": "record-001",
+        "title": "Ingénieure plateforme",
+        "apply_url": "https://apply.example.org/jobs/record-001"
+      }
+    },
+    {
+      "datasetId": "dataset-fixture",
+      "resourceId": "resource-fixture",
+      "recordId": "record-002",
+      "title": "Analyste données",
+      "employer": "Employeur Public",
+      "location": "Lyon, France",
+      "countryCode": "FR",
+      "description": "Fixture expirée pour le contrôle du cycle de vie.",
+      "contractType": "CDD",
+      "status": "closed",
+      "applyUrls": [
+        "https://apply.example.org/jobs/record-002"
+      ],
+      "sourceUrl": "https://www.data.gouv.fr/fr/datasets/dataset-fixture/",
+      "publishedAt": "2026-06-18T08:00:00.000Z",
+      "expiresAt": "2026-07-18T08:00:00.000Z",
+      "sourceDocument": {
+        "record_id": "record-002",
+        "status": "closed"
+      }
+    }
+  ]
+}

@@ -9,9 +9,16 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import os
 import re
+import socket
+import time
+import uuid
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import date, datetime, timezone
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
 import httpx
 
@@ -24,6 +31,7 @@ MIGRATED_TABLES = {
     "users",
     "user_sessions",
     "jobs",
+    "job_dedup_candidates",
     "ats_company_sources",
     "geo_places",
     "company_boards",
@@ -54,6 +62,7 @@ TABLE_PRIMARY_KEYS = {
     "users": "user_id",
     "user_sessions": "session_token",
     "jobs": "job_id",
+    "job_dedup_candidates": "candidate_id",
     "ats_company_sources": "id",
     "geo_places": "geoname_id",
     "company_boards": "board_id",
@@ -81,7 +90,14 @@ TABLE_PRIMARY_KEYS = {
     "creator_applications": "creator_application_id",
 }
 TABLE_FILTER_COLUMNS = {
-    "users": {"user_id", "email", "name", "created_at"},
+    "users": {
+        "user_id",
+        "email",
+        "name",
+        "created_at",
+        "stripe_customer_id",
+        "stripe_subscription_id",
+    },
     "user_sessions": {"session_token", "user_id", "expires_at", "created_at"},
     "jobs": {
         "job_id",
@@ -109,6 +125,8 @@ TABLE_FILTER_COLUMNS = {
         "apply_fulfillment_status",
         "apply_url_provider",
         "selected_apply_url",
+        "canonical_apply_url",
+        "ats_job_id",
         "validation_status",
         "validation_reason",
         "validation_checked_at",
@@ -192,7 +210,21 @@ TABLE_FILTER_COLUMNS = {
     "company_boards": {"board_id", "ats_provider", "company", "board_token", "enabled", "priority", "last_synced_at"},
     "profiles": {"user_id", "target_role", "target_location", "updated_at"},
     "swipes": {"swipe_id", "user_id", "job_id", "direction", "created_at"},
-    "applications": {"application_id", "user_id", "job_id", "status", "package_status", "submission_status", "created_at", "updated_at"},
+    "applications": {
+        "application_id",
+        "user_id",
+        "job_id",
+        "status",
+        "package_status",
+        "submission_status",
+        "generation_status",
+        "generation_started_at",
+        "generation_completed_at",
+        "submitted_at",
+        "status_updated_at",
+        "created_at",
+        "updated_at",
+    },
     "gmail_connections": {"user_id", "email", "connected", "last_synced_at", "updated_at"},
     "application_emails": {"email_id", "user_id", "application_id", "job_id", "provider", "gmail_message_id", "gmail_thread_id", "received_at", "classification"},
     "browser_submission_runs": {"run_id", "application_id", "job_id", "user_id", "provider", "status", "dry_run", "created_at"},
@@ -271,6 +303,96 @@ JOB_FEED_LIGHT_SELECT = ",".join(
 )
 
 _shared_http_client: Optional[httpx.AsyncClient] = None
+logger = logging.getLogger(__name__)
+
+_db_journey_tag: ContextVar[str] = ContextVar("db_journey_tag", default="unattributed")
+_db_remote_request_count: ContextVar[int] = ContextVar("db_remote_request_count", default=0)
+_db_response_bytes: ContextVar[int] = ContextVar("db_response_bytes", default=0)
+_db_retry_count: ContextVar[int] = ContextVar("db_retry_count", default=0)
+DATABASE_JOURNEY_TAGS = frozenset(
+    {
+        "admin",
+        "auth",
+        "feed",
+        "gmail_sync",
+        "job_ingestion",
+        "landing",
+        "notifications",
+        "onboarding",
+        "queue",
+        "training",
+        "unattributed",
+    }
+)
+
+
+@contextmanager
+def database_journey(tag: str) -> Iterator[None]:
+    """Attach a low-cardinality product journey tag to adapter metrics."""
+    normalized_tag = (tag or "").strip()
+    token = _db_journey_tag.set(normalized_tag if normalized_tag in DATABASE_JOURNEY_TAGS else "unattributed")
+    try:
+        yield
+    finally:
+        _db_journey_tag.reset(token)
+
+
+def _metric_snapshot() -> tuple[int, int, int]:
+    return (
+        _db_remote_request_count.get(),
+        _db_response_bytes.get(),
+        _db_retry_count.get(),
+    )
+
+
+def _response_byte_count(response: Any) -> int:
+    content = getattr(response, "content", None)
+    if isinstance(content, (bytes, bytearray)):
+        return len(content)
+    text = getattr(response, "text", "")
+    if isinstance(text, str):
+        return len(text.encode("utf-8"))
+    return 0
+
+
+def _record_remote_response(response: Any) -> None:
+    _db_remote_request_count.set(_db_remote_request_count.get() + 1)
+    _db_response_bytes.set(_db_response_bytes.get() + _response_byte_count(response))
+
+
+def _emit_adapter_metric(
+    *,
+    operation: str,
+    table: str,
+    started_at: float,
+    snapshot: tuple[int, int, int],
+    rows_fetched: int = 0,
+    rows_returned: int = 0,
+    filter_status: str = "not_applicable",
+    status: str = "ok",
+    transport_metric: bool = False,
+) -> None:
+    requests_before, bytes_before, retries_before = snapshot
+    request_count = max(0, _db_remote_request_count.get() - requests_before)
+    response_bytes = max(0, _db_response_bytes.get() - bytes_before)
+    retry_count = max(0, _db_retry_count.get() - retries_before)
+    metric = {
+        "operation": operation,
+        "table": table,
+        "filter_status": filter_status,
+        "remote_request_count": 0 if transport_metric else request_count,
+        "transport_request_count": request_count if transport_metric else 0,
+        "rows_fetched": max(0, int(rows_fetched)),
+        "rows_returned": max(0, int(rows_returned)),
+        "response_bytes": 0 if transport_metric else response_bytes,
+        "transport_response_bytes": response_bytes if transport_metric else 0,
+        "elapsed_ms": max(0, int((time.perf_counter() - started_at) * 1000)),
+        "retry_count": 0 if transport_metric else retry_count,
+        "transport_retry_count": retry_count if transport_metric else 0,
+        "journey": _db_journey_tag.get(),
+        "status": status,
+    }
+    logger.info("db_adapter_metric %s", json.dumps(metric, separators=(",", ":"), sort_keys=True))
 
 
 def _get_shared_http_client(timeout: float = 30.0) -> httpx.AsyncClient:
@@ -299,14 +421,36 @@ async def _http_get_with_retries(
     headers: Dict[str, str],
     attempts: int = 3,
 ) -> httpx.Response:
+    started_at = time.perf_counter()
+    snapshot = _metric_snapshot()
     last_exc: Optional[BaseException] = None
     for attempt in range(max(1, attempts)):
         try:
-            return await client.get(url, params=params, headers=headers)
+            response = await client.get(url, params=params, headers=headers)
+            _record_remote_response(response)
+            _emit_adapter_metric(
+                operation="http_get",
+                table=url.rstrip("/").rsplit("/", 1)[-1],
+                started_at=started_at,
+                snapshot=snapshot,
+                status="ok" if response.status_code in (200, 206) else "error",
+                transport_metric=True,
+            )
+            return response
         except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.RemoteProtocolError) as exc:
+            _db_remote_request_count.set(_db_remote_request_count.get() + 1)
             last_exc = exc
             if attempt >= attempts - 1:
+                _emit_adapter_metric(
+                    operation="http_get",
+                    table=url.rstrip("/").rsplit("/", 1)[-1],
+                    started_at=started_at,
+                    snapshot=snapshot,
+                    status="error",
+                    transport_metric=True,
+                )
                 raise
+            _db_retry_count.set(_db_retry_count.get() + 1)
             await asyncio.sleep(0.35 * (attempt + 1))
     assert last_exc is not None
     raise last_exc
@@ -352,11 +496,14 @@ def _document_key(table: str, doc: Document) -> str:
 def _supabase_row(table: str, document: Document) -> Dict[str, Any]:
     doc = _json_safe(document)
     if table == "users":
+        billing = doc.get("billing") if isinstance(doc.get("billing"), dict) else {}
         return {
             "user_id": _document_key(table, doc),
             "email": doc.get("email"),
             "name": doc.get("name"),
             "created_at": doc.get("created_at"),
+            "stripe_customer_id": billing.get("stripe_customer_id"),
+            "stripe_subscription_id": billing.get("stripe_subscription_id"),
             "data": doc,
         }
     if table == "user_sessions":
@@ -374,6 +521,17 @@ def _supabase_row(table: str, document: Document) -> Dict[str, Any]:
             "provider": doc.get("provider"),
             "external_id": doc.get("external_id"),
             **columns,
+            "data": doc,
+        }
+    if table == "job_dedup_candidates":
+        return {
+            "candidate_id": _document_key(table, doc),
+            "left_job_id": doc.get("left_job_id"),
+            "right_job_id": doc.get("right_job_id"),
+            "candidate_type": doc.get("candidate_type"),
+            "candidate_key": doc.get("candidate_key"),
+            "created_at": doc.get("created_at"),
+            "last_seen_at": doc.get("last_seen_at"),
             "data": doc,
         }
     if table == "ats_company_sources":
@@ -715,6 +873,19 @@ def _project_document(document: Document, projection: Projection) -> Document:
     return projected
 
 
+def _projection_select(table: str, projection: Projection) -> str:
+    """Push safe inclusion projections into PostgREST without fetching JSONB."""
+    if not projection:
+        return "data"
+    include_keys = {key for key, value in projection.items() if value and key != "_id"}
+    if not include_keys:
+        return "data"
+    columns = TABLE_FILTER_COLUMNS.get(table, set())
+    if any("." in key or key not in columns for key in include_keys):
+        return "data"
+    return ",".join(sorted(include_keys))
+
+
 def _comparable(value: Any) -> Any:
     if isinstance(value, str):
         try:
@@ -894,7 +1065,7 @@ class SupabaseCursorAdapter(CursorPort):
         """Convert sort spec to a PostgREST order clause when columns are pushable."""
         if not self._sort_spec:
             if self.collection.table_name == "jobs":
-                return "imported_at.desc.nullslast"
+                return "imported_at.desc.nullslast,job_id.desc.nullslast"
             return None
         parts: List[str] = []
         filter_columns = TABLE_FILTER_COLUMNS.get(self.collection.table_name) or set()
@@ -905,6 +1076,10 @@ class SupabaseCursorAdapter(CursorPort):
                 return None
             suffix = "desc" if direction < 0 else "asc"
             parts.append(f"{key}.{suffix}.nullslast")
+        if self.collection.table_name == "jobs" and not any(key == "job_id" for key, _direction in self._sort_spec):
+            direction = self._sort_spec[-1][1] if self._sort_spec else -1
+            suffix = "desc" if direction < 0 else "asc"
+            parts.append(f"job_id.{suffix}.nullslast")
         return ",".join(parts) if parts else None
 
     async def to_list(self, length: Optional[int]):
@@ -920,6 +1095,7 @@ class SupabaseCursorAdapter(CursorPort):
         rows = await self.collection._read_documents(
             self.filter,
             pushed_limit,
+            select=_projection_select(self.collection.table_name, self.projection),
             order=order,
         )
         if self._sort_spec and not order:
@@ -972,6 +1148,8 @@ class SupabaseCollectionAdapter(CollectionPort):
         assert self.supabase_url is not None
         assert self.secret_key is not None
 
+        started_at = time.perf_counter()
+        snapshot = _metric_snapshot()
         url = self.supabase_url.rstrip("/") + f"/rest/v1/{self.table_name}"
         headers = _supabase_headers(self.secret_key)
         documents: List[Document] = []
@@ -979,51 +1157,80 @@ class SupabaseCollectionAdapter(CollectionPort):
         remote_filter_params = _postgrest_filter_params(self.table_name, filter)
         can_push_filter = remote_filter_params is not None
         client = _get_shared_http_client()
-        default_order = "imported_at.desc.nullslast" if self.table_name == "jobs" else None
+        default_order = "imported_at.desc.nullslast,job_id.desc.nullslast" if self.table_name == "jobs" else None
         order_clause = order or default_order
-        while offset < MAX_READ_ROWS:
-            page_limit = READ_PAGE_SIZE
-            if read_limit is not None and can_push_filter:
-                remaining = max(0, read_limit - len(documents))
-                if remaining <= 0:
-                    break
-                page_limit = min(page_limit, remaining)
-            elif read_limit is not None and not can_push_filter:
-                # Still bound pages when filtering locally to avoid full-table reads.
-                remaining = max(0, max(read_limit * 3, READ_PAGE_SIZE) - len(documents))
-                if remaining <= 0:
-                    break
-                page_limit = min(page_limit, remaining)
-            request_params: Dict[str, str] = {
-                "select": select,
-                "limit": str(page_limit),
-                "offset": str(offset),
-            }
-            if order_clause:
-                request_params["order"] = order_clause
-            if remote_filter_params is not None:
-                request_params.update(remote_filter_params)
-            response = await _http_get_with_retries(
-                client,
-                url,
-                params=request_params,
-                headers=headers,
-            )
-            if response.status_code not in (200, 206):
-                raise RuntimeError(
-                    f"Supabase {self.table_name} read returned HTTP {response.status_code}: {response.text[:300]}"
+        try:
+            rows: List[Any] = []
+            while offset < MAX_READ_ROWS:
+                page_limit = READ_PAGE_SIZE
+                if read_limit is not None and can_push_filter:
+                    remaining = max(0, read_limit - len(documents))
+                    if remaining <= 0:
+                        break
+                    page_limit = min(page_limit, remaining)
+                elif read_limit is not None and not can_push_filter:
+                    # Still bound pages when filtering locally to avoid full-table reads.
+                    remaining = max(0, max(read_limit * 3, READ_PAGE_SIZE) - len(documents))
+                    if remaining <= 0:
+                        break
+                    page_limit = min(page_limit, remaining)
+                request_params: Dict[str, str] = {
+                    "select": select,
+                    "limit": str(page_limit),
+                    "offset": str(offset),
+                }
+                if order_clause:
+                    request_params["order"] = order_clause
+                if remote_filter_params is not None:
+                    request_params.update(remote_filter_params)
+                response = await _http_get_with_retries(
+                    client,
+                    url,
+                    params=request_params,
+                    headers=headers,
                 )
-            rows = response.json()
-            if not isinstance(rows, list) or not rows:
-                break
-            documents.extend(_restore_document(row) for row in rows)
-            if len(rows) < page_limit:
-                break
-            offset += page_limit
-        if can_push_filter:
-            return documents
-        filtered = [document for document in documents if _matches_filter(document, filter)]
-        return filtered[:read_limit] if read_limit is not None else filtered
+                if response.status_code not in (200, 206):
+                    raise RuntimeError(
+                        f"Supabase {self.table_name} read returned HTTP {response.status_code}: {response.text[:300]}"
+                    )
+                rows = response.json()
+                if not isinstance(rows, list) or not rows:
+                    break
+                documents.extend(_restore_document(row) for row in rows)
+                if len(rows) < page_limit:
+                    break
+                offset += page_limit
+            if offset >= MAX_READ_ROWS and len(rows) >= page_limit:
+                raise RuntimeError(
+                    f"Supabase {self.table_name} read reached MAX_READ_ROWS={MAX_READ_ROWS}; result is incomplete"
+                )
+            if can_push_filter:
+                result = documents
+            else:
+                filtered = [document for document in documents if _matches_filter(document, filter)]
+                result = filtered[:read_limit] if read_limit is not None else filtered
+            _emit_adapter_metric(
+                operation="read_documents",
+                table=self.table_name,
+                started_at=started_at,
+                snapshot=snapshot,
+                rows_fetched=len(documents),
+                rows_returned=len(result),
+                filter_status="pushed" if can_push_filter else "local",
+            )
+            return result
+        except Exception:
+            _emit_adapter_metric(
+                operation="read_documents",
+                table=self.table_name,
+                started_at=started_at,
+                snapshot=snapshot,
+                rows_fetched=len(documents),
+                rows_returned=len(documents),
+                filter_status="pushed" if can_push_filter else "local",
+                status="error",
+            )
+            raise
 
     async def find_one(self, filter: Filter, projection: Projection = None, sort: Optional[List[tuple[str, int]]] = None):
         cursor = SupabaseCursorAdapter(self, filter, projection)
@@ -1042,8 +1249,13 @@ class SupabaseCollectionAdapter(CollectionPort):
         limit: int,
         *,
         select: str = JOB_FEED_SELECT,
+        require_pushed: bool = False,
     ) -> List[Document]:
         """Read rows with an explicit PostgREST select list."""
+        if require_pushed and _postgrest_filter_params(self.table_name, filter) is None:
+            raise RuntimeError(
+                f"Supabase {self.table_name} critical read rejected an unsupported local filter"
+            )
         return await self._read_documents(filter, read_limit=limit, select=select)
 
     async def find_geo_places_by_bounding_box(
@@ -1092,57 +1304,149 @@ class SupabaseCollectionAdapter(CollectionPort):
         return [_restore_document(row) for row in rows]
 
     async def insert_one(self, document: Document):
-        result = await upsert_supabase_documents(self.supabase_url or "", self.secret_key or "", self.table_name, [document])
-        if not result.get("ok"):
-            raise RuntimeError(result.get("error") or f"Supabase {self.table_name} insert failed")
-        return SupabaseWriteResult(inserted_id=_document_key(self.table_name, _json_safe(document)))
+        started_at = time.perf_counter()
+        snapshot = _metric_snapshot()
+        try:
+            result = await upsert_supabase_documents(self.supabase_url or "", self.secret_key or "", self.table_name, [document])
+            if not result.get("ok"):
+                raise RuntimeError(result.get("error") or f"Supabase {self.table_name} insert failed")
+            _emit_adapter_metric(
+                operation="insert_one",
+                table=self.table_name,
+                started_at=started_at,
+                snapshot=snapshot,
+                rows_returned=1,
+            )
+            return SupabaseWriteResult(inserted_id=_document_key(self.table_name, _json_safe(document)))
+        except Exception:
+            _emit_adapter_metric(
+                operation="insert_one",
+                table=self.table_name,
+                started_at=started_at,
+                snapshot=snapshot,
+                status="error",
+            )
+            raise
 
-    async def insert_many(self, documents):
+    async def insert_many(self, documents, *, ignore_duplicates: bool = False):
+        started_at = time.perf_counter()
+        snapshot = _metric_snapshot()
         docs = list(documents)
-        result = await upsert_supabase_documents(self.supabase_url or "", self.secret_key or "", self.table_name, docs)
-        if not result.get("ok"):
-            raise RuntimeError(result.get("error") or f"Supabase {self.table_name} insert_many failed")
-        return SupabaseWriteResult(inserted_count=result.get("rows", 0))
+        try:
+            result = await upsert_supabase_documents(
+                self.supabase_url or "",
+                self.secret_key or "",
+                self.table_name,
+                docs,
+                ignore_duplicates=ignore_duplicates,
+            )
+            if not result.get("ok"):
+                raise RuntimeError(result.get("error") or f"Supabase {self.table_name} insert_many failed")
+            inserted_count = int(result.get("rows", 0))
+            _emit_adapter_metric(
+                operation="insert_many",
+                table=self.table_name,
+                started_at=started_at,
+                snapshot=snapshot,
+                rows_returned=inserted_count,
+            )
+            return SupabaseWriteResult(inserted_count=inserted_count)
+        except Exception:
+            _emit_adapter_metric(
+                operation="insert_many",
+                table=self.table_name,
+                started_at=started_at,
+                snapshot=snapshot,
+                status="error",
+            )
+            raise
 
     async def update_one(self, filter: Filter, update: Document, upsert: bool = False):
-        if upsert and self._can_fast_upsert(filter, update):
-            document: Document = {}
-            for key, value in filter.items():
-                if not key.startswith("$") and not isinstance(value, dict):
-                    _set_document_path(document, key, value)
-            if "$setOnInsert" in update:
-                for key, value in (update.get("$setOnInsert") or {}).items():
-                    _set_document_path(document, key, value)
+        started_at = time.perf_counter()
+        snapshot = _metric_snapshot()
+        try:
+            if upsert and self._can_fast_upsert(filter, update):
+                document: Document = {}
+                for key, value in filter.items():
+                    if not key.startswith("$") and not isinstance(value, dict):
+                        _set_document_path(document, key, value)
+                if "$setOnInsert" in update:
+                    for key, value in (update.get("$setOnInsert") or {}).items():
+                        _set_document_path(document, key, value)
+                if "$set" in update:
+                    for key, value in (update.get("$set") or {}).items():
+                        _set_document_path(document, key, value)
+                result = await upsert_supabase_documents(self.supabase_url or "", self.secret_key or "", self.table_name, [document])
+                if not result.get("ok"):
+                    raise RuntimeError(result.get("error") or f"Supabase {self.table_name} update failed")
+                write_result = SupabaseWriteResult(
+                    matched_count=0,
+                    modified_count=1,
+                    upserted_id=_document_key(self.table_name, _json_safe(document)),
+                )
+                _emit_adapter_metric(
+                    operation="update_one",
+                    table=self.table_name,
+                    started_at=started_at,
+                    snapshot=snapshot,
+                    rows_returned=1,
+                    filter_status="pushed",
+                )
+                return write_result
+
+            existing = await self.find_one(filter, {"_id": 0})
+            if not existing and not upsert:
+                write_result = SupabaseWriteResult(matched_count=0, modified_count=0, upserted_id=None)
+                _emit_adapter_metric(
+                    operation="update_one",
+                    table=self.table_name,
+                    started_at=started_at,
+                    snapshot=snapshot,
+                    filter_status="pushed" if _postgrest_filter_params(self.table_name, filter) is not None else "local",
+                )
+                return write_result
+            document = dict(existing or {})
             if "$set" in update:
                 for key, value in (update.get("$set") or {}).items():
                     _set_document_path(document, key, value)
+            if "$setOnInsert" in update and not existing:
+                for key, value in (update.get("$setOnInsert") or {}).items():
+                    _set_document_path(document, key, value)
+            if "$inc" in update:
+                for key, value in (update.get("$inc") or {}).items():
+                    document[key] = int(document.get(key) or 0) + int(value)
+            if not any(key.startswith("$") for key in update):
+                document.update(update)
+            for key, value in filter.items():
+                if not key.startswith("$") and not isinstance(value, dict):
+                    document.setdefault(key, value)
             result = await upsert_supabase_documents(self.supabase_url or "", self.secret_key or "", self.table_name, [document])
             if not result.get("ok"):
                 raise RuntimeError(result.get("error") or f"Supabase {self.table_name} update failed")
-            return SupabaseWriteResult(matched_count=0, modified_count=1, upserted_id=_document_key(self.table_name, _json_safe(document)))
-
-        existing = await self.find_one(filter, {"_id": 0})
-        if not existing and not upsert:
-            return SupabaseWriteResult(matched_count=0, modified_count=0, upserted_id=None)
-        document = dict(existing or {})
-        if "$set" in update:
-            for key, value in (update.get("$set") or {}).items():
-                _set_document_path(document, key, value)
-        if "$setOnInsert" in update and not existing:
-            for key, value in (update.get("$setOnInsert") or {}).items():
-                _set_document_path(document, key, value)
-        if "$inc" in update:
-            for key, value in (update.get("$inc") or {}).items():
-                document[key] = int(document.get(key) or 0) + int(value)
-        if not any(key.startswith("$") for key in update):
-            document.update(update)
-        for key, value in filter.items():
-            if not key.startswith("$") and not isinstance(value, dict):
-                document.setdefault(key, value)
-        result = await upsert_supabase_documents(self.supabase_url or "", self.secret_key or "", self.table_name, [document])
-        if not result.get("ok"):
-            raise RuntimeError(result.get("error") or f"Supabase {self.table_name} update failed")
-        return SupabaseWriteResult(matched_count=1 if existing else 0, modified_count=1, upserted_id=None if existing else _document_key(self.table_name, _json_safe(document)))
+            write_result = SupabaseWriteResult(
+                matched_count=1 if existing else 0,
+                modified_count=1,
+                upserted_id=None if existing else _document_key(self.table_name, _json_safe(document)),
+            )
+            _emit_adapter_metric(
+                operation="update_one",
+                table=self.table_name,
+                started_at=started_at,
+                snapshot=snapshot,
+                rows_returned=1,
+                filter_status="pushed" if _postgrest_filter_params(self.table_name, filter) is not None else "local",
+            )
+            return write_result
+        except Exception:
+            _emit_adapter_metric(
+                operation="update_one",
+                table=self.table_name,
+                started_at=started_at,
+                snapshot=snapshot,
+                filter_status="pushed" if _postgrest_filter_params(self.table_name, filter) is not None else "local",
+                status="error",
+            )
+            raise
 
     def _can_fast_upsert(self, filter: Filter, update: Document) -> bool:
         if self.table_name == "profiles":
@@ -1161,12 +1465,35 @@ class SupabaseCollectionAdapter(CollectionPort):
         return True
 
     async def update_many(self, filter: Filter, update: Document, upsert: bool = False):
-        docs = await self._read_documents(filter)
-        modified = 0
-        for doc in docs:
-            await self.update_one({TABLE_PRIMARY_KEYS[self.table_name]: _document_key(self.table_name, doc)}, update, upsert=False)
-            modified += 1
-        return SupabaseWriteResult(matched_count=len(docs), modified_count=modified)
+        started_at = time.perf_counter()
+        snapshot = _metric_snapshot()
+        docs: List[Document] = []
+        try:
+            docs = await self._read_documents(filter)
+            modified = 0
+            for doc in docs:
+                await self.update_one({TABLE_PRIMARY_KEYS[self.table_name]: _document_key(self.table_name, doc)}, update, upsert=False)
+                modified += 1
+            _emit_adapter_metric(
+                operation="update_many",
+                table=self.table_name,
+                started_at=started_at,
+                snapshot=snapshot,
+                rows_returned=modified,
+                filter_status="pushed" if _postgrest_filter_params(self.table_name, filter) is not None else "local",
+            )
+            return SupabaseWriteResult(matched_count=len(docs), modified_count=modified)
+        except Exception:
+            _emit_adapter_metric(
+                operation="update_many",
+                table=self.table_name,
+                started_at=started_at,
+                snapshot=snapshot,
+                rows_returned=len(docs),
+                filter_status="pushed" if _postgrest_filter_params(self.table_name, filter) is not None else "local",
+                status="error",
+            )
+            raise
 
     async def delete_one(self, filter: Filter):
         docs = await self._read_documents(filter)
@@ -1176,10 +1503,35 @@ class SupabaseCollectionAdapter(CollectionPort):
         return SupabaseWriteResult(deleted_count=1)
 
     async def delete_many(self, filter: Filter):
-        docs = await self._read_documents(filter)
-        for doc in docs:
-            await self._delete_by_key(_document_key(self.table_name, doc))
-        return SupabaseWriteResult(deleted_count=len(docs))
+        started_at = time.perf_counter()
+        snapshot = _metric_snapshot()
+        docs: List[Document] = []
+        deleted = 0
+        try:
+            docs = await self._read_documents(filter)
+            for doc in docs:
+                await self._delete_by_key(_document_key(self.table_name, doc))
+                deleted += 1
+            _emit_adapter_metric(
+                operation="delete_many",
+                table=self.table_name,
+                started_at=started_at,
+                snapshot=snapshot,
+                rows_returned=deleted,
+                filter_status="pushed" if _postgrest_filter_params(self.table_name, filter) is not None else "local",
+            )
+            return SupabaseWriteResult(deleted_count=deleted)
+        except Exception:
+            _emit_adapter_metric(
+                operation="delete_many",
+                table=self.table_name,
+                started_at=started_at,
+                snapshot=snapshot,
+                rows_returned=deleted,
+                filter_status="pushed" if _postgrest_filter_params(self.table_name, filter) is not None else "local",
+                status="error",
+            )
+            raise
 
     async def _delete_by_key(self, key_value: str) -> None:
         self._require_read_supported()
@@ -1191,6 +1543,7 @@ class SupabaseCollectionAdapter(CollectionPort):
             params={key: f"eq.{key_value}"},
             headers=_supabase_headers(self.secret_key or ""),
         )
+        _record_remote_response(response)
         if response.status_code not in (200, 202, 204):
             raise RuntimeError(f"Supabase {self.table_name} delete returned HTTP {response.status_code}: {response.text[:300]}")
 
@@ -1220,10 +1573,16 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
         self.supabase_url = supabase_url
         self.secret_key = secret_key
         self.db_url = db_url
+        self._python_ingestion_lease_owner = f"{socket.gethostname()}:{os.getpid()}"
+        self._python_ingestion_leases: Dict[str, Dict[str, Any]] = {}
+        self._jobs_inventory_rpc_adapter: SupabaseDatabaseAdapter = self
         self.users = SupabaseCollectionAdapter("users", supabase_url, secret_key)
         self.user_sessions = SupabaseCollectionAdapter("user_sessions", supabase_url, secret_key)
         self.profiles = SupabaseCollectionAdapter("profiles", supabase_url, secret_key)
         self.jobs = SupabaseCollectionAdapter("jobs", supabase_url, secret_key)
+        self.job_dedup_candidates = SupabaseCollectionAdapter("job_dedup_candidates", supabase_url, secret_key)
+        self.worker_runs = SupabaseCollectionAdapter("worker_runs", supabase_url, secret_key)
+        self.worker_run_partitions = SupabaseCollectionAdapter("worker_run_partitions", supabase_url, secret_key)
         self.ats_company_sources = SupabaseCollectionAdapter("ats_company_sources", supabase_url, secret_key)
         self.friendly_company_career_pages = SupabaseCollectionAdapter("friendly_company_career_pages", supabase_url, secret_key)
         self.auto_apply_attempts = SupabaseCollectionAdapter("auto_apply_attempts", supabase_url, secret_key)
@@ -1249,6 +1608,445 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
         self.friend_referral_redemptions = SupabaseCollectionAdapter("friend_referral_redemptions", supabase_url, secret_key)
         self.notifications = SupabaseCollectionAdapter("notifications", supabase_url, secret_key)
         self.creator_applications = SupabaseCollectionAdapter("creator_applications", supabase_url, secret_key)
+
+    async def _python_ingestion_rpc(self, function_name: str, payload: Dict[str, Any]) -> Any:
+        started_at = time.perf_counter()
+        snapshot = _metric_snapshot()
+        client = _get_shared_http_client()
+        try:
+            response = await client.post(
+                self.supabase_url.rstrip("/") + f"/rest/v1/rpc/{function_name}",
+                json=payload,
+                headers=_supabase_headers(self.secret_key),
+            )
+            _record_remote_response(response)
+            if response.status_code not in (200, 201, 204):
+                raise RuntimeError(
+                    f"Supabase ingestion ledger RPC {function_name} returned HTTP "
+                    f"{response.status_code}: {response.text[:300]}"
+                )
+            result = response.json() if response.content else None
+            rows_returned = len(result) if isinstance(result, list) else int(result is not None)
+            _emit_adapter_metric(
+                operation=f"rpc:{function_name}",
+                table="rpc",
+                started_at=started_at,
+                snapshot=snapshot,
+                rows_returned=rows_returned,
+            )
+            return result
+        except Exception:
+            _emit_adapter_metric(
+                operation=f"rpc:{function_name}",
+                table="rpc",
+                started_at=started_at,
+                snapshot=snapshot,
+                status="error",
+            )
+            raise
+
+    async def resolve_auth_session(self, session_token: str) -> Optional[Dict[str, Any]]:
+        """Resolve a session, user, and bounded role flags in one PostgREST RPC."""
+        started_at = time.perf_counter()
+        snapshot = _metric_snapshot()
+        client = _get_shared_http_client(timeout=1.5)
+        try:
+            attempts = 2 if os.environ.get("AUTH_IDEMPOTENT_READ_RETRY_ENABLED", "").lower() in {"1", "true", "yes", "on"} else 1
+            response: Optional[httpx.Response] = None
+            for attempt in range(attempts):
+                try:
+                    response = await client.post(
+                        self.supabase_url.rstrip("/") + "/rest/v1/rpc/resolve_auth_session",
+                        json={"p_session_token": session_token},
+                        headers={
+                            **_supabase_headers(self.secret_key),
+                            "Content-Type": "application/json",
+                        },
+                        timeout=httpx.Timeout(0.5),
+                    )
+                    _record_remote_response(response)
+                    break
+                except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.PoolTimeout, httpx.RemoteProtocolError):
+                    _db_remote_request_count.set(_db_remote_request_count.get() + 1)
+                    if attempt >= attempts - 1:
+                        raise
+                    _db_retry_count.set(_db_retry_count.get() + 1)
+                    await asyncio.sleep(0.05)
+            if response is None:
+                raise RuntimeError("Supabase auth RPC exhausted without a response")
+            if response.status_code not in (200, 201):
+                raise RuntimeError(
+                    "Supabase auth RPC resolve_auth_session returned HTTP "
+                    f"{response.status_code}: {response.text[:300]}"
+                )
+            payload = response.json() if response.content else None
+            if isinstance(payload, list):
+                payload = payload[0] if payload else None
+            if payload is not None and not isinstance(payload, dict):
+                raise RuntimeError("Supabase auth RPC returned an invalid payload")
+            _emit_adapter_metric(
+                operation="resolve_auth_session",
+                table="user_sessions",
+                started_at=started_at,
+                snapshot=snapshot,
+                rows_returned=1 if payload else 0,
+                filter_status="pushed",
+            )
+            return payload
+        except Exception:
+            _emit_adapter_metric(
+                operation="resolve_auth_session",
+                table="user_sessions",
+                started_at=started_at,
+                snapshot=snapshot,
+                filter_status="pushed",
+                status="error",
+            )
+            raise
+
+    async def patch_auth_user(self, user_id: str, patch: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Apply the bounded auth-owned user patch and return its representation."""
+        started_at = time.perf_counter()
+        snapshot = _metric_snapshot()
+        client = _get_shared_http_client(timeout=2.0)
+        try:
+            response = await client.post(
+                self.supabase_url.rstrip("/") + "/rest/v1/rpc/patch_auth_user",
+                json={"p_user_id": user_id, "p_patch": _json_safe(patch)},
+                headers={
+                    **_supabase_headers(self.secret_key),
+                    "Content-Type": "application/json",
+                },
+                timeout=httpx.Timeout(2.0),
+            )
+            _record_remote_response(response)
+            if response.status_code not in (200, 201):
+                raise RuntimeError(
+                    "Supabase auth RPC patch_auth_user returned HTTP "
+                    f"{response.status_code}: {response.text[:300]}"
+                )
+            payload = response.json() if response.content else None
+            if isinstance(payload, list):
+                payload = payload[0] if payload else None
+            if payload is not None and not isinstance(payload, dict):
+                raise RuntimeError("Supabase auth patch RPC returned an invalid payload")
+            _emit_adapter_metric(
+                operation="patch_auth_user",
+                table="users",
+                started_at=started_at,
+                snapshot=snapshot,
+                rows_returned=1 if payload else 0,
+                filter_status="pushed",
+            )
+            return payload
+        except Exception:
+            _emit_adapter_metric(
+                operation="patch_auth_user",
+                table="users",
+                started_at=started_at,
+                snapshot=snapshot,
+                filter_status="pushed",
+                status="error",
+            )
+            raise
+
+    async def patch_onboarding_profile(
+        self,
+        user_id: str,
+        *,
+        extras: Dict[str, Any],
+        preferences: Dict[str, Any],
+        contact: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """Atomically merge onboarding-owned profile sections and return the profile."""
+        return await self._python_ingestion_rpc(
+            "patch_onboarding_profile",
+            {
+                "p_user_id": user_id,
+                "p_extras": _json_safe(extras),
+                "p_preferences": _json_safe(preferences),
+                "p_contact": _json_safe(contact),
+            },
+        )
+
+    async def patch_user_application_status(
+        self,
+        application_id: str,
+        user_id: str,
+        status: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Atomically patch and return one user-owned tracker application."""
+        payload = await self._python_ingestion_rpc(
+            "patch_user_application_status",
+            {
+                "p_application_id": application_id,
+                "p_user_id": user_id,
+                "p_status": status,
+            },
+        )
+        if isinstance(payload, list):
+            payload = payload[0] if payload else None
+        if payload is not None and not isinstance(payload, dict):
+            raise RuntimeError("Application status RPC returned an invalid payload")
+        return payload
+
+    async def admin_overview_snapshot(self) -> Dict[str, Any]:
+        result = await self._python_ingestion_rpc("admin_overview_snapshot", {})
+        return result if isinstance(result, dict) else {}
+
+    async def admin_analytics_snapshot(self, window_days: int) -> Dict[str, Any]:
+        result = await self._python_ingestion_rpc(
+            "admin_analytics_snapshot",
+            {"p_window_days": min(max(int(window_days), 1), 365)},
+        )
+        return result if isinstance(result, dict) else {}
+
+    async def admin_users_page(self, *, page: int, page_size: int, window_days: int) -> Dict[str, Any]:
+        result = await self._python_ingestion_rpc(
+            "admin_users_page",
+            {
+                "p_limit": min(max(int(page_size), 1), 500),
+                "p_offset": max(int(page) - 1, 0) * min(max(int(page_size), 1), 500),
+                "p_window_days": min(max(int(window_days), 1), 365),
+            },
+        )
+        return result if isinstance(result, dict) else {}
+
+    async def admin_applications_page(
+        self,
+        *,
+        page: int,
+        page_size: int,
+        window_days: int,
+        status_filter: Optional[str],
+    ) -> Dict[str, Any]:
+        result = await self._python_ingestion_rpc(
+            "admin_applications_page",
+            {
+                "p_limit": min(max(int(page_size), 1), 500),
+                "p_offset": max(int(page) - 1, 0) * min(max(int(page_size), 1), 500),
+                "p_window_days": min(max(int(window_days), 1), 365),
+                "p_status": status_filter,
+            },
+        )
+        return result if isinstance(result, dict) else {}
+
+    async def backfill_auto_apply_queue(self, providers: List[str], *, limit: int = 200) -> int:
+        result = await self._python_ingestion_rpc(
+            "backfill_auto_apply_queue",
+            {"p_providers": providers, "p_limit": min(max(limit, 1), 200)},
+        )
+        return int(result or 0)
+
+    async def apply_gmail_application_outcomes(
+        self,
+        user_id: str,
+        updates: List[Dict[str, Any]],
+    ) -> int:
+        result = await self._python_ingestion_rpc(
+            "apply_gmail_application_outcomes",
+            {"p_user_id": user_id, "p_updates": updates[:100]},
+        )
+        return int(result or 0)
+
+    async def _python_provider_rpc(self, function_name: str, payload: Dict[str, Any]) -> Any:
+        adapter = self._jobs_inventory_rpc_adapter
+        return await adapter._python_ingestion_rpc(function_name, payload)
+
+    async def claim_python_provider_work(
+        self,
+        provider: str,
+        *,
+        lease_seconds: int = 3600,
+    ) -> Dict[str, Any]:
+        lease_owner = (
+            f"{self._python_ingestion_lease_owner}:provider:"
+            f"{provider}:{uuid.uuid4()}"
+        )
+        result = await self._python_provider_rpc(
+            "python_provider_work_claim",
+            {
+                "p_provider": provider,
+                "p_lease_owner": lease_owner,
+                "p_lease_seconds": lease_seconds,
+            },
+        )
+        required = {
+            "claim_id",
+            "provider",
+            "writer_runtime",
+            "ownership_epoch",
+            "expires_at",
+        }
+        if not isinstance(result, dict) or not required.issubset(result):
+            raise RuntimeError("python_provider_work_claim returned an invalid result")
+        if result["provider"] != provider or result["writer_runtime"] != "python":
+            raise RuntimeError("python_provider_work_claim returned the wrong owner")
+        return {**result, "lease_owner": lease_owner}
+
+    async def heartbeat_python_provider_work(
+        self,
+        claim: Dict[str, Any],
+        *,
+        lease_seconds: int = 3600,
+    ) -> bool:
+        result = await self._python_provider_rpc(
+            "python_provider_work_heartbeat",
+            {
+                "p_claim_id": claim["claim_id"],
+                "p_lease_owner": claim["lease_owner"],
+                "p_lease_seconds": lease_seconds,
+            },
+        )
+        return result is True
+
+    async def upsert_python_provider_jobs(
+        self,
+        claim: Dict[str, Any],
+        jobs: List[Dict[str, Any]],
+    ) -> int:
+        result = await self._python_provider_rpc(
+            "python_provider_jobs_upsert",
+            {
+                "p_claim_id": claim["claim_id"],
+                "p_lease_owner": claim["lease_owner"],
+                "p_jobs": [_supabase_row("jobs", job) for job in jobs],
+            },
+        )
+        if isinstance(result, bool) or not isinstance(result, int):
+            raise RuntimeError("python_provider_jobs_upsert returned an invalid result")
+        if result != len(jobs):
+            raise RuntimeError(
+                f"python_provider_jobs_upsert wrote {result} of {len(jobs)} jobs"
+            )
+        return result
+
+    async def finish_python_provider_work(self, claim: Dict[str, Any]) -> bool:
+        result = await self._python_provider_rpc(
+            "python_provider_work_finish",
+            {
+                "p_claim_id": claim["claim_id"],
+                "p_lease_owner": claim["lease_owner"],
+            },
+        )
+        return result is True
+
+    async def begin_python_ingestion_run(
+        self,
+        *,
+        schedule_id: str,
+        source: str,
+        cadence_seconds: int,
+        manifest: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        result = await self._python_ingestion_rpc(
+            "python_ingestion_run_begin",
+            {
+                "p_schedule_id": schedule_id,
+                "p_source": source,
+                "p_cadence_seconds": cadence_seconds,
+                "p_lease_owner": self._python_ingestion_lease_owner,
+                "p_lease_seconds": 300,
+                "p_manifest": manifest,
+            },
+        )
+        if not isinstance(result, dict) or "acquired" not in result:
+            raise RuntimeError("python_ingestion_run_begin returned an invalid result")
+        if result.get("acquired") and result.get("run_id"):
+            required = ("lease_token", "lease_generation", "lease_owner")
+            if any(not result.get(field) for field in required):
+                raise RuntimeError("python_ingestion_run_begin returned an unfenced lease")
+            self._python_ingestion_leases[str(result["run_id"])] = result
+        return result
+
+    async def sync_python_ingestion_schedule(
+        self,
+        *,
+        schedule_id: str,
+        source: str,
+        cadence_seconds: int,
+        enabled: bool,
+    ) -> bool:
+        result = await self._python_ingestion_rpc(
+            "python_ingestion_schedule_sync",
+            {
+                "p_schedule_id": schedule_id,
+                "p_source": source,
+                "p_cadence_seconds": cadence_seconds,
+                "p_enabled": enabled,
+            },
+        )
+        return result is True
+
+    async def heartbeat_python_ingestion_run(self, run_id: str) -> bool:
+        lease = self._python_ingestion_leases.get(str(run_id))
+        if not lease:
+            return False
+        result = await self._python_ingestion_rpc(
+            "python_ingestion_run_heartbeat",
+            {
+                "p_run_id": run_id,
+                "p_lease_token": lease["lease_token"],
+                "p_lease_generation": lease["lease_generation"],
+                "p_lease_owner": lease["lease_owner"],
+                "p_lease_seconds": 300,
+            },
+        )
+        return result is True
+
+    async def record_python_ingestion_partition(
+        self,
+        *,
+        run_id: str,
+        partition_id: str,
+        status: str,
+        counters: Dict[str, Any],
+        terminal_error: Optional[str] = None,
+    ) -> bool:
+        lease = self._python_ingestion_leases.get(str(run_id))
+        if not lease:
+            return False
+        result = await self._python_ingestion_rpc(
+            "python_ingestion_partition_record",
+            {
+                "p_run_id": run_id,
+                "p_lease_token": lease["lease_token"],
+                "p_lease_generation": lease["lease_generation"],
+                "p_lease_owner": lease["lease_owner"],
+                "p_partition_id": partition_id,
+                "p_status": status,
+                "p_counters": counters,
+                "p_terminal_error": terminal_error,
+            },
+        )
+        return result is True
+
+    async def complete_python_ingestion_run(
+        self,
+        *,
+        run_id: str,
+        status: str,
+        completeness_state: str,
+        summary: Dict[str, Any],
+    ) -> bool:
+        lease = self._python_ingestion_leases.get(str(run_id))
+        if not lease:
+            return False
+        result = await self._python_ingestion_rpc(
+            "python_ingestion_run_complete",
+            {
+                "p_run_id": run_id,
+                "p_lease_token": lease["lease_token"],
+                "p_lease_generation": lease["lease_generation"],
+                "p_lease_owner": lease["lease_owner"],
+                "p_status": status,
+                "p_completeness_state": completeness_state,
+                "p_summary": summary,
+            },
+        )
+        if result is True:
+            self._python_ingestion_leases.pop(str(run_id), None)
+        return result is True
 
     async def close(self) -> None:
         return None
@@ -1324,8 +2122,10 @@ async def upsert_supabase_documents(
     table: str,
     documents: List[Document],
     timeout: float = 30.0,
+    *,
+    ignore_duplicates: bool = False,
 ) -> Dict[str, Any]:
-    """Upsert application documents into Supabase jsonb-backed tables."""
+    """Insert application documents, merging conflicts unless explicitly ignored."""
     if table not in MIGRATED_TABLES:
         raise ValueError(f"Unsupported Supabase migration table: {table}")
     if not documents:
@@ -1339,7 +2139,7 @@ async def upsert_supabase_documents(
     headers = {
         **_supabase_headers(secret_key),
         "Content-Type": "application/json",
-        "Prefer": "resolution=merge-duplicates",
+        "Prefer": f"resolution={'ignore' if ignore_duplicates else 'merge'}-duplicates",
     }
     try:
         client = _get_shared_http_client(timeout=timeout)
@@ -1349,6 +2149,7 @@ async def upsert_supabase_documents(
             headers=headers,
             content=json.dumps(rows),
         )
+        _record_remote_response(response)
         if response.status_code not in (200, 201, 204):
             return {
                 "ok": False,

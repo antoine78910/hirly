@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "hirly.provider-fixture.v1",
+  "provenance": {
+    "kind": "synthetic_sanitized",
+    "approvalRef": ".omx/plans/prd-nextjs-bun-foundation.md#phase-4",
+    "containsPersonalData": false
+  },
+  "provider": "wttj",
+  "externalId": "wttj-001",
+  "title": "Product Manager",
+  "company": "Produit Exemple SA",
+  "location": "Bordeaux, Nouvelle-Aquitaine",
+  "countryCode": "fr",
+  "description": "Piloter un produit B2C.",
+  "contractType": "CDI",
+  "status": "open",
+  "applyUrls": [
+    "https://www.welcometothejungle.com/fr/companies/example/jobs/product-manager"
+  ],
+  "sourceDocument": {
+    "fixture": "wttj-approved-synthetic",
+    "team": "product"
+  }
+}

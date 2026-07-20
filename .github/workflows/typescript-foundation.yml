@@ -1,0 +1,102 @@
+name: TypeScript foundation
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  bun-workspaces:
+    name: Bun workspaces
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: hirly_test
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d hirly_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # This is a connection template only. The hardened release verifier creates
+      # and later drops one unique empty database per destructive PostgreSQL suite.
+      G015_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hirly_test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install release verification system dependencies
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client zsh
+      - name: Install backend compatibility dependencies
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --disable-pip-version-check -r backend/requirements.txt
+          .venv/bin/python -m pip install --disable-pip-version-check pytest==9.1.1
+      - run: bun install --frozen-lockfile
+      - run: bun run format
+      - name: Run G003 worker adversarial matrix
+        run: bun run test:g003
+      - name: Verify repository and isolated PostgreSQL release matrix
+        run: >-
+          bun run verify:job-supply-release --
+          --profile repository
+          --allow-disposable-database
+          --expected-head "$(git rev-parse HEAD)"
+          --output
+          ".omx/verification/job-supply-release-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
+
+  legacy-frontend:
+    name: Legacy frontend smoke build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install runbook contract dependencies
+        run: sudo apt-get update && sudo apt-get install -y zsh
+      - run: npm ci --legacy-peer-deps
+      - run: npm audit --omit=dev --audit-level=critical
+      - run: npm run test -- --watchAll=false --runInBand
+        env:
+          CI: "true"
+      - run: npm run build
+        env:
+          CI: "false"
+
+  stack-policy:
+    name: Stack policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Stage the checked revision range
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: git reset --soft "$BASE_SHA"
+      - run: node scripts/check-stack-policy.mjs
