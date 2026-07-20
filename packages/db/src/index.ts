@@ -1,4 +1,10 @@
-import type { CanonicalJob, EnqueueRun } from "@hirly/contracts";
+import {
+  runViewSchema,
+  type CanonicalJob,
+  type EnqueueRun,
+  type Provider,
+  type RunView,
+} from "@hirly/contracts";
 import postgres, { type Sql } from "postgres";
 
 export type Database = Sql<Record<string, postgres.PostgresType>>;
@@ -19,6 +25,15 @@ export interface ClaimedTask extends Lease {
   attempts: number;
   maxAttempts: number;
   leaseUntil: Date;
+}
+
+export interface DueSchedule {
+  id: string;
+  cronExpression: string;
+  timezone: string;
+  nextDueAt: Date;
+  maxCatchUp: number;
+  databaseNow: Date;
 }
 
 interface WorkerTaskRow {
@@ -62,6 +77,72 @@ export class WorkerRepository {
   async ping(): Promise<boolean> {
     const [row] = await this.sql<{ ok: number }[]>`SELECT 1 AS ok`;
     return row?.ok === 1;
+  }
+
+  async assertProviderRunnable(provider: Provider): Promise<void> {
+    const [row] = await this.sql<{ provider_runnable: boolean }[]>`
+      SELECT worker_private.provider_runnable(${provider})
+    `;
+    if (row?.provider_runnable !== true) {
+      throw new Error("authorization_blocked");
+    }
+  }
+
+  async listDueSchedules(limit: number): Promise<DueSchedule[]> {
+    const rows = await this.sql<
+      {
+        id: string;
+        cron_expression: string;
+        timezone: string;
+        next_due_at: Date;
+        max_catch_up: number;
+        database_now: Date;
+      }[]
+    >`
+      SELECT *
+      FROM worker_private.list_due_schedules(${limit})
+    `;
+    return rows.map((row) => ({
+      id: row.id,
+      cronExpression: row.cron_expression,
+      timezone: row.timezone,
+      nextDueAt: row.next_due_at,
+      maxCatchUp: row.max_catch_up,
+      databaseNow: row.database_now,
+    }));
+  }
+
+  async getRun(runId: string): Promise<RunView | null> {
+    const [row] = await this.sql<
+      {
+        id: string;
+        kind: string;
+        provider: string | null;
+        trigger_source: string;
+        status: string;
+        requested_at: Date;
+        started_at: Date | null;
+        finished_at: Date | null;
+        summary: Record<string, unknown>;
+        error_code: string | null;
+      }[]
+    >`
+      SELECT *
+      FROM worker_private.get_run(${runId}::uuid)
+    `;
+    if (!row) return null;
+    return runViewSchema.parse({
+      id: row.id,
+      kind: row.kind,
+      provider: row.provider,
+      triggerSource: row.trigger_source,
+      status: row.status,
+      requestedAt: row.requested_at.toISOString(),
+      startedAt: row.started_at?.toISOString() ?? null,
+      finishedAt: row.finished_at?.toISOString() ?? null,
+      summary: row.summary,
+      errorCode: row.error_code,
+    });
   }
 
   async enqueue(input: EnqueueRun): Promise<string> {

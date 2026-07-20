@@ -37,6 +37,6 @@ export function parseRuntimeConfig(
     ...runtime,
     WORKER_INSTANCE_ID:
       runtime.WORKER_INSTANCE_ID ??
-      `${process.env.RAILWAY_REPLICA_ID ?? "local"}-${crypto.randomUUID()}`,
+      `${environment.RAILWAY_REPLICA_ID ?? "local"}-${crypto.randomUUID()}`,
   };
 }

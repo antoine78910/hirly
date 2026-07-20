@@ -60,6 +60,31 @@ export function nextCronOccurrence(
   throw new Error("cron has no occurrence within one year");
 }
 
+export async function runSchedulerTick(
+  store: RuntimeStore,
+  options: SchedulerTickOptions = {},
+): Promise<number> {
+  const schedules = await store.dueSchedules(options.limit ?? 25);
+  let enqueued = 0;
+  for (const schedule of schedules) {
+    const now = options.now ?? schedule.databaseNow;
+    let occurrence = schedule.nextDueAt;
+    const catchUpLimit = Math.max(1, schedule.maxCatchUp);
+    for (let index = 0; index < catchUpLimit && occurrence <= now; index += 1) {
+      const successor = nextCronOccurrence(
+        schedule.cronExpression,
+        schedule.timezone,
+        occurrence,
+      );
+      const runId = await store.enqueueDueSchedule(schedule.id, successor);
+      if (!runId) break;
+      enqueued += 1;
+      occurrence = successor;
+    }
+  }
+  return enqueued;
+}
+
 export class Scheduler {
   private readonly controller = new AbortController();
   private promise: Promise<void> | null = null;

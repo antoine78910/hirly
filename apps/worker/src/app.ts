@@ -15,7 +15,7 @@ export async function startApplication(
     max: Math.max(4, config.WORKER_CONCURRENCY + 2),
   });
   const repository = new WorkerRepository(sql);
-  const store = new PostgresRuntimeStore(sql, repository);
+  const store = new PostgresRuntimeStore(repository);
   const logger = createJsonLogger();
   const health = { ready: false };
   const consumer = new Consumer(

@@ -33,6 +33,7 @@ const sleep = (ms: number, signal: AbortSignal) =>
 export class Consumer {
   private readonly controller = new AbortController();
   private readonly active = new Set<Promise<void>>();
+  private readonly taskControllers = new Set<AbortController>();
   private runPromise: Promise<void> | null = null;
 
   constructor(
@@ -96,6 +97,7 @@ export class Consumer {
     }
 
     const taskController = new AbortController();
+    this.taskControllers.add(taskController);
     const heartbeat = setInterval(async () => {
       try {
         const current = await this.repository.heartbeat(
@@ -133,6 +135,7 @@ export class Consumer {
       });
     } finally {
       clearInterval(heartbeat);
+      this.taskControllers.delete(taskController);
       this.logger.emit({
         service: "hirly-worker",
         version: this.options.serviceVersion,
@@ -159,13 +162,28 @@ export class Consumer {
     }
   }
 
-  async stop(timeoutMs: number): Promise<void> {
+  stopClaiming(): void {
     this.controller.abort();
-    const wait = Promise.allSettled([...this.active, this.runPromise].filter(Boolean));
-    await Promise.race([
-      wait,
-      new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
+  }
+
+  async stop(timeoutMs: number): Promise<void> {
+    this.stopClaiming();
+    const active = () =>
+      Promise.allSettled(
+        [...this.active, this.runPromise].filter(
+          (promise): promise is Promise<void> => Boolean(promise),
+        ),
+      );
+    const drained = await Promise.race([
+      active().then(() => true),
+      new Promise<false>((resolve) => setTimeout(() => resolve(false), timeoutMs)),
     ]);
+    if (!drained) {
+      for (const controller of this.taskControllers) {
+        controller.abort(new Error("shutdown_deadline"));
+      }
+      await active();
+    }
   }
 
   get activeCount(): number {

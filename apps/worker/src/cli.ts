@@ -2,6 +2,8 @@ import { enqueueRunSchema, providerSchema } from "@hirly/contracts";
 import { createDatabase, WorkerRepository } from "@hirly/db";
 import { parseRuntimeConfig } from "./runtime/config";
 import { PostgresRuntimeStore } from "./runtime/store";
+import type { Enqueuer, RuntimeStore } from "./runtime/types";
+import { assertProviderTransportActive } from "./providers";
 
 function usage(): never {
   throw new Error(
@@ -9,14 +11,16 @@ function usage(): never {
   );
 }
 
-const config = parseRuntimeConfig(process.env);
-const sql = createDatabase(config.JOBS_DATABASE_URL);
-const repository = new WorkerRepository(sql);
-const store = new PostgresRuntimeStore(sql, repository);
-
-try {
-  const [command, first, second] = process.argv.slice(2);
-  if (command === "enqueue-maintenance" && first) {
+export async function runCli(
+  command: CliCommand,
+  dependencies: { queue: Enqueuer; store: RuntimeStore },
+): Promise<Record<string, unknown>> {
+  if (command.type === "run-status") {
+    return { run: await dependencies.store.getRun(command.runId) };
+  }
+  if (command.type === "enqueue-provider") {
+    await dependencies.store.assertProviderRunnable(command.provider);
+    assertProviderTransportActive(command.provider);
     const input = enqueueRunSchema.parse({
       kind: "inventory_maintenance",
       provider: null,
@@ -53,6 +57,41 @@ try {
   } else {
     usage();
   }
-} finally {
-  await repository.close();
+  const input = enqueueRunSchema.parse({
+    kind: "inventory_maintenance",
+    provider: null,
+    idempotencyKey: command.idempotencyKey,
+    triggerSource: "cli",
+    tasks: [
+      {
+        taskKey: "inventory-maintenance",
+        taskType: "inventory.maintenance",
+        payload: {},
+      },
+    ],
+  });
+  return { runId: await dependencies.queue.enqueue(input) };
+}
+
+async function main(): Promise<void> {
+  const config = parseRuntimeConfig(process.env);
+  const sql = createDatabase(config.JOBS_DATABASE_URL);
+  const repository = new WorkerRepository(sql);
+  const store = new PostgresRuntimeStore(repository);
+  try {
+    console.log(
+      JSON.stringify(
+        await runCli(parseCliArgs(process.argv.slice(2)), {
+          queue: repository,
+          store,
+        }),
+      ),
+    );
+  } finally {
+    await repository.close();
+  }
+}
+
+if (import.meta.main) {
+  await main();
 }

@@ -18,5 +18,7 @@ export function retryDelayMs(
 
 export function safeErrorMessage(error: unknown): string {
   if (!(error instanceof Error)) return "unknown task failure";
-  return error.message.slice(0, 512);
+  const redacted = redact(error.message);
+  return String(redacted).slice(0, 512);
 }
+import { redact } from "@hirly/observability";

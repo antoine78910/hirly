@@ -1,5 +1,7 @@
 import type { TaskHandlers, RuntimeStore } from "./types";
 import { PermanentTaskError } from "./retry";
+import { providerSchema } from "@hirly/contracts";
+import { assertProviderTransportActive } from "../providers";
 
 export function createTaskHandlers(store: RuntimeStore): TaskHandlers {
   return {
@@ -14,13 +16,9 @@ export function createTaskHandlers(store: RuntimeStore): TaskHandlers {
           "provider task is missing provider",
         );
       }
-      await store.assertProviderRunnable(
-        task.provider as "apec" | "hellowork" | "wttj" | "indeed",
-      );
-      throw new PermanentTaskError(
-        "authorization_blocked",
-        "provider transport is not activated in this milestone",
-      );
+      const provider = providerSchema.parse(task.provider);
+      await store.assertProviderRunnable(provider);
+      assertProviderTransportActive(provider);
     },
   };
 }
