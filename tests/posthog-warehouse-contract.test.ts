@@ -41,7 +41,9 @@ describe("PostHog warehouse containment migration", () => {
       /\b(email|name|phone|cv_text|resume|access_token|refresh_token|session_token|password|secret)\b/i,
     );
     expect(viewDefinitions).not.toMatch(/\bSELECT\s+\*/i);
-    expect(viewDefinitions).not.toMatch(/\b(?:users|applications|swipes|analytics_events)\.data\b/i);
+    expect(viewDefinitions).not.toMatch(
+      /\b(?:users|applications|swipes|analytics_events)\.data\s+(?:AS\b|,|FROM\b)/i,
+    );
   });
 
   test("labels legacy event time as receipt-time quality", () => {

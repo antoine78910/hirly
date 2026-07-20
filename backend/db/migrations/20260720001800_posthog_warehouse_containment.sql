@@ -84,7 +84,7 @@ FROM public.analytics_events;
 CREATE OR REPLACE VIEW analytics_public.object_manifest_v1
 WITH (security_barrier = true)
 AS
-SELECT *
+SELECT object_name, purpose, expected_column_count
 FROM (
   VALUES
     ('user_identity_v1', 'canonical identity and allowlisted current person properties', 8),
