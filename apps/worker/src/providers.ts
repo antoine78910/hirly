@@ -1,5 +1,6 @@
 import type { Provider } from "@hirly/contracts";
 import type { ProviderCore } from "./providers/core";
+import { PermanentTaskError } from "./runtime/retry";
 import { apecProvider } from "./providers/apec";
 import { helloWorkProvider } from "./providers/hellowork";
 import { wttjProvider } from "./providers/wttj";
@@ -14,6 +15,16 @@ export const providerModules = {
 
 export function getProviderModule(provider: Provider): ProviderCore<unknown> {
   return providerModules[provider];
+}
+
+export function assertProviderTransportActive(provider: Provider): void {
+  const module = getProviderModule(provider);
+  if (!module.liveTransportReady) {
+    throw new PermanentTaskError(
+      "authorization_blocked",
+      `provider transport is inactive: ${provider}`,
+    );
+  }
 }
 
 export {

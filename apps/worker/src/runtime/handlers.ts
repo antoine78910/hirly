@@ -8,7 +8,6 @@ import {
 import type { Logger } from "@hirly/observability";
 import {
   IngestionError,
-  ProviderRateGate,
   runIngestion,
 } from "@hirly/ingestion";
 import {
@@ -22,7 +21,6 @@ export function createTaskHandlers(
   logger?: Logger,
   modules: Record<Provider, ProviderCore<unknown>> = providerModules,
 ): TaskHandlers {
-  const rateGates = new Map<Provider, ProviderRateGate>();
   return {
     "inventory.maintenance": async (_task, signal) => {
       signal.throwIfAborted();
@@ -39,11 +37,6 @@ export function createTaskHandlers(
       try {
         await store.assertProviderRunnable(provider);
         const module = modules[provider] ?? getProviderModule(provider);
-        let rateGate = rateGates.get(provider);
-        if (!rateGate) {
-          rateGate = new ProviderRateGate(module.rateLimit);
-          rateGates.set(provider, rateGate);
-        }
         const request = providerSearchRequestSchema.parse({
           provider,
           ...task.payload,
@@ -73,7 +66,6 @@ export function createTaskHandlers(
           },
           request,
           rateLimit: module.rateLimit,
-          rateGate,
           signal,
           onMetrics(metrics) {
             logger?.emit({

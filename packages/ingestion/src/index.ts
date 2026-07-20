@@ -524,6 +524,8 @@ export async function runIngestion<RawJob>(input: {
   const identities = new Set<string>();
   const cursors = new Set<string>();
   let cursor = input.request.cursor;
+  if (cursor) cursors.add(cursor);
+  let terminalPageReached = false;
 
   for (let pageNumber = 0; pageNumber < input.request.maxPages; pageNumber += 1) {
     signal.throwIfAborted();
@@ -564,7 +566,10 @@ export async function runIngestion<RawJob>(input: {
       }
     }
 
-    if (!page.nextCursor) break;
+    if (!page.nextCursor) {
+      terminalPageReached = true;
+      break;
+    }
     if (cursors.has(page.nextCursor) || page.nextCursor === cursor) {
       throw new IngestionError(
         "provider_permanent",
@@ -575,6 +580,12 @@ export async function runIngestion<RawJob>(input: {
     cursor = page.nextCursor;
   }
 
+  if (!terminalPageReached) {
+    throw new IngestionError(
+      "provider_permanent",
+      "provider pagination reached maxPages before exhaustion",
+    );
+  }
   if (jobs.length > 500) {
     throw new IngestionError(
       "invalid_input",
