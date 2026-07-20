@@ -23,6 +23,7 @@ from ingestion_run_lease import (
     accounting_summary,
     await_with_ingestion_heartbeat,
     persist_terminal_partitions,
+    partition_identity,
 )
 from jobs_service import upsert_imported_jobs
 
@@ -227,19 +228,14 @@ async def harvest_france_travail(
             "raw_records": 0,
             "normalized_records": 0,
             "rejected_by_reason": {},
-            "exact_duplicates": None,
-            "fuzzy_duplicate_candidates": None,
-            "jobs_inserted": None,
-            "jobs_updated": None,
-            "jobs_reactivated": None,
+            "exact_duplicates": 0,
+            "fuzzy_duplicate_candidates": 0,
+            "jobs_inserted": 0,
+            "jobs_updated": 0,
+            "jobs_reactivated": 0,
+            "write_failed": 0,
             "jobs_marked_inactive": 0,
-            "accounting_contract": {
-                "exact_duplicates": "unknown_upsert_contract",
-                "fuzzy_duplicate_candidates": "unknown_not_computed",
-                "jobs_inserted": "unknown_upsert_contract",
-                "jobs_updated": "unknown_upsert_contract",
-                "jobs_reactivated": "unknown_upsert_contract",
-            },
+            "accounting_contract": {"state": "known"},
             "errors": [],
             "runs": [],
         }
@@ -270,6 +266,11 @@ async def harvest_france_travail(
                     jobs = result.jobs or []
                     run["fetched"] = len(jobs)
                     raw = result.raw_response if isinstance(result.raw_response, dict) else {}
+                    run["raw_records"] = int(raw.get("rows_seen") or len(jobs))
+                    run["normalized"] = len(jobs)
+                    run["rejected_by_reason"] = {
+                        "normalization_failed": max(0, run["raw_records"] - len(jobs))
+                    }
                     states = raw.get("pagination_states") or []
                     run["pages_requested"] = sum(int(state.get("pages_completed") or 0) for state in states)
                     run["pages_completed"] = run["pages_requested"]
@@ -288,6 +289,7 @@ async def harvest_france_travail(
                     if jobs and not dry_run:
                         stats = await upsert_imported_jobs(db, jobs)
                         run["upserted"] = stats.get("total_imported", 0)
+                        run["write_stats"] = stats
                 except Exception as exc:
                     message = f"{exc.__class__.__name__}: {str(exc)[:200]}"
                     run["error"] = message
@@ -309,8 +311,19 @@ async def harvest_france_travail(
             summary["jobs_upserted"] += int(run.get("upserted") or 0)
             summary["pages_requested"] += int(run.get("pages_requested") or 0)
             summary["pages_completed"] += int(run.get("pages_completed") or 0)
-            summary["raw_records"] += int(run.get("fetched") or 0)
-            summary["normalized_records"] += int(run.get("fetched") or 0)
+            summary["raw_records"] += int(run.get("raw_records") or 0)
+            summary["normalized_records"] += int(run.get("normalized") or 0)
+            for reason, count in (run.get("rejected_by_reason") or {}).items():
+                summary["rejected_by_reason"][reason] = (
+                    int(summary["rejected_by_reason"].get(reason) or 0) + int(count or 0)
+                )
+            write_stats = run.get("write_stats") or {}
+            summary["jobs_inserted"] += int(write_stats.get("inserted") or 0)
+            summary["jobs_updated"] += int(write_stats.get("updated") or 0)
+            summary["jobs_reactivated"] += int(write_stats.get("reactivated") or 0)
+            summary["exact_duplicates"] += int(write_stats.get("exact_duplicate") or 0)
+            summary["fuzzy_duplicate_candidates"] += int(write_stats.get("fuzzy_duplicate_candidates") or 0)
+            summary["write_failed"] += int(write_stats.get("write_failed") or 0)
             if run.get("error"):
                 summary["errors"].append({
                     "city": run.get("city"),
@@ -392,12 +405,23 @@ async def run_france_travail_harvest_loop(db) -> None:
                     summary = await await_with_ingestion_heartbeat(
                         db, ledger_run_id, harvest_france_travail(db)
                     )
+                    partition_runs = summary.get("runs") or []
+                    summary["proof_scope"] = {
+                        "scope_kind": "provider",
+                        "providers": ["france_travail"],
+                        "manifest_version": "france-travail-harvest.v1",
+                        "expected_partition_count": len(partition_runs),
+                        "expected_partition_ids": [
+                            partition_identity(fact, index)
+                            for index, fact in enumerate(partition_runs)
+                        ],
+                    }
                     summary = accounting_summary(summary)
-                    await persist_terminal_partitions(db, ledger_run_id, summary.get("runs") or [])
+                    await persist_terminal_partitions(db, ledger_run_id, partition_runs)
                     complete = getattr(db, "complete_python_ingestion_run", None)
                     if ledger_run_id and callable(complete):
                         errors = summary.get("errors") or []
-                        await complete(
+                        completed = await complete(
                             run_id=ledger_run_id,
                             status="succeeded" if not errors else "partially_succeeded",
                             completeness_state=(
@@ -407,6 +431,8 @@ async def run_france_travail_harvest_loop(db) -> None:
                             ),
                             summary=summary,
                         )
+                        if completed is not True:
+                            raise RuntimeError("france_travail fenced completion lost lease")
         except Exception as exc:
             complete = getattr(db, "complete_python_ingestion_run", None)
             if ledger_run_id and callable(complete):

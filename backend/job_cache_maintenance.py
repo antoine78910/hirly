@@ -34,6 +34,7 @@ async def _has_complete_snapshot_proof(
     run_id: Optional[str],
     *,
     provider: Optional[str] = None,
+    require_global: bool = False,
 ) -> bool:
     if not run_id:
         return False
@@ -46,16 +47,55 @@ async def _has_complete_snapshot_proof(
         "status": "succeeded",
         "completeness_state": "complete_snapshot",
     }
-    if provider:
-        run_query["source_id"] = provider
     runs = await worker_runs.find(run_query, {"_id": 0}).limit(1).to_list(1)
     if not runs:
         return False
+    run = runs[0]
+    finished_at = _parse_datetime(run.get("finished_at"))
+    max_age_hours = max(1, env_int("JOBS_COMPLETENESS_PROOF_MAX_AGE_HOURS", 24))
+    if not finished_at or finished_at < datetime.now(timezone.utc) - timedelta(hours=max_age_hours):
+        return False
+    proof = (run.get("summary") or {}).get("proof_scope")
+    if not isinstance(proof, dict) or not proof.get("manifest_version"):
+        return False
+    scope_kind = proof.get("scope_kind")
+    providers = {str(item).strip().lower() for item in (proof.get("providers") or []) if item}
+    if require_global:
+        if scope_kind != "global":
+            return False
+    elif provider:
+        normalized_provider = provider.strip().lower()
+        if scope_kind != "provider" or providers != {normalized_provider}:
+            return False
+        if run.get("source_id") != normalized_provider:
+            return False
+    else:
+        return False
+    expected_ids = proof.get("expected_partition_ids")
+    if not isinstance(expected_ids, list) or not expected_ids or len(expected_ids) != len(set(expected_ids)):
+        return False
+    if int(proof.get("expected_partition_count") or -1) != len(expected_ids):
+        return False
     facts = await partitions.find({"run_id": run_id}, {"_id": 0}).limit(10000).to_list(10000)
-    return bool(facts) and all(
+    actual_ids = [fact.get("partition_id") for fact in facts]
+    return (
+        len(actual_ids) == len(set(actual_ids))
+        and set(actual_ids) == set(expected_ids)
+        and all(
         fact.get("status") in {"completed_with_results", "completed_zero_results"}
         for fact in facts
+        )
     )
+
+
+def _parse_datetime(value: Any) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
 def env_bool(name: str, default: bool = False) -> bool:
@@ -424,7 +464,12 @@ async def expire_stale_jobs(
     dry_run: bool = False,
     completeness_run_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    if not await _has_complete_snapshot_proof(db, completeness_run_id, provider=provider):
+    if not await _has_complete_snapshot_proof(
+        db,
+        completeness_run_id,
+        provider=provider,
+        require_global=provider is None,
+    ):
         return {
             "dry_run": dry_run,
             "skipped": True,
@@ -564,7 +609,7 @@ async def purge_invalid_jobs(
 
     Default: soft-expire stale rows first, then delete tier E / invalid jobs.
     """
-    if not await _has_complete_snapshot_proof(db, completeness_run_id):
+    if not await _has_complete_snapshot_proof(db, completeness_run_id, require_global=True):
         return {
             "dry_run": dry_run,
             "skipped": True,

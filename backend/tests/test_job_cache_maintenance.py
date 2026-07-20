@@ -79,10 +79,24 @@ class _Collection:
 
 
 class _FakeDB:
-    def __init__(self, jobs=None, *, completeness="missing"):
+    def __init__(self, jobs=None, *, completeness="missing", proof_scope="global"):
         self.jobs = _Collection(jobs or [])
+        providers = ["france_travail"] if proof_scope == "provider" else []
         self.worker_runs = _Collection(
-            [{"id": "run-complete", "status": "succeeded", "completeness_state": completeness}]
+            [{
+                "id": "run-complete",
+                "source_id": "france_travail" if proof_scope == "provider" else "all_providers",
+                "status": "succeeded",
+                "completeness_state": completeness,
+                "finished_at": datetime.now(timezone.utc).isoformat(),
+                "summary": {"proof_scope": {
+                    "scope_kind": proof_scope,
+                    "providers": providers,
+                    "manifest_version": "test.v1",
+                    "expected_partition_count": 1,
+                    "expected_partition_ids": ["p1"],
+                }},
+            }]
             if completeness != "missing" else []
         )
         self.worker_run_partitions = _Collection(
@@ -211,6 +225,63 @@ def test_failed_partition_blocks_expiry_even_when_run_claims_complete():
 
     assert result["reason"] == "completed_run_partition_proof_required"
     assert db.jobs.rows[0]["validation_status"] == "unknown"
+
+
+def test_provider_expiry_rejects_wrong_provider_global_and_stale_proofs():
+    stale = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
+    job = _job(last_seen_at=stale, imported_at=stale)
+
+    wrong_provider = _FakeDB([job], completeness="complete_snapshot", proof_scope="provider")
+    wrong = asyncio.run(maintenance.expire_stale_jobs(
+        wrong_provider,
+        provider="jsearch",
+        completeness_run_id="run-complete",
+    ))
+    assert wrong["skipped"] is True
+
+    stale_proof = _FakeDB([job], completeness="complete_snapshot", proof_scope="provider")
+    stale_proof.worker_runs.rows[0]["finished_at"] = (
+        datetime.now(timezone.utc) - timedelta(hours=25)
+    ).isoformat()
+    stale_result = asyncio.run(maintenance.expire_stale_jobs(
+        stale_proof,
+        provider="france_travail",
+        completeness_run_id="run-complete",
+    ))
+    assert stale_result["skipped"] is True
+
+
+def test_provider_expiry_accepts_exact_recent_provider_manifest():
+    stale = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
+    db = _FakeDB(
+        [_job(last_seen_at=stale, imported_at=stale)],
+        completeness="complete_snapshot",
+        proof_scope="provider",
+    )
+    result = asyncio.run(maintenance.expire_stale_jobs(
+        db,
+        provider="france_travail",
+        completeness_run_id="run-complete",
+    ))
+    assert result["expired_count"] == 1
+
+
+def test_forged_or_missing_partition_manifest_cannot_authorize_global_purge():
+    stale = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
+    db = _FakeDB(
+        [_job(applyability_tier="E", last_seen_at=stale, imported_at=stale)],
+        completeness="complete_snapshot",
+    )
+    db.worker_runs.rows[0]["summary"]["proof_scope"]["expected_partition_ids"] = ["p1", "p2"]
+    db.worker_runs.rows[0]["summary"]["proof_scope"]["expected_partition_count"] = 2
+
+    result = asyncio.run(maintenance.purge_invalid_jobs(
+        db,
+        expire_first=False,
+        completeness_run_id="run-complete",
+    ))
+    assert result["skipped"] is True
+    assert len(db.jobs.rows) == 1
 
 
 def test_complete_snapshot_purge_has_no_cutoff_free_fallback():

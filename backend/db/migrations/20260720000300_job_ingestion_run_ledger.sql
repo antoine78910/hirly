@@ -43,6 +43,16 @@ CREATE TABLE IF NOT EXISTS public.python_ingestion_schedules (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
 
+-- Cold-start expectations exist before any in-process loop reaches its initial
+-- delay or attempts a claim, so a never-started loop is observable.
+INSERT INTO public.python_ingestion_schedules (id, source_id, cadence_seconds, enabled, next_expected_at)
+VALUES
+  ('python-france-travail-harvest', 'france_travail', 300, true, clock_timestamp() + interval '5 minutes'),
+  ('python-jsearch-harvest', 'jsearch', 900, true, clock_timestamp() + interval '15 minutes'),
+  ('python-ats-direct-maintenance', 'direct_ats', 300, true, clock_timestamp() + interval '5 minutes'),
+  ('python-company-discovery', 'company_discovery', 600, true, clock_timestamp() + interval '10 minutes')
+ON CONFLICT (id) DO NOTHING;
+
 CREATE TABLE IF NOT EXISTS public.worker_run_partitions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   run_id uuid NOT NULL REFERENCES public.worker_runs(id) ON DELETE RESTRICT,
@@ -271,19 +281,16 @@ BEGIN
     CASE WHEN p_status IN ('failed', 'blocked') THEN coalesce(p_counters->>'error_code', p_status) END,
     left(p_terminal_error, 1000)
   )
-  ON CONFLICT (run_id, partition_id) DO UPDATE SET
-    status = EXCLUDED.status,
-    heartbeat_at = EXCLUDED.heartbeat_at,
-    completed_at = EXCLUDED.completed_at,
-    pages_requested = EXCLUDED.pages_requested,
-    pages_completed = EXCLUDED.pages_completed,
-    retries = EXCLUDED.retries,
-    source_reported_total = EXCLUDED.source_reported_total,
-    counters = EXCLUDED.counters,
-    terminal_error_code = EXCLUDED.terminal_error_code,
-    terminal_error_reason = EXCLUDED.terminal_error_reason,
-    updated_at = clock_timestamp();
-  RETURN true;
+  ON CONFLICT (run_id, partition_id) DO NOTHING;
+  RETURN EXISTS (
+    SELECT 1
+    FROM public.worker_run_partitions
+    WHERE run_id = p_run_id
+      AND partition_id = p_partition_id
+      AND status = p_status
+      AND counters = coalesce(p_counters, '{}'::jsonb)
+      AND coalesce(terminal_error_reason, '') = coalesce(left(p_terminal_error, 1000), '')
+  );
 END
 $$;
 
@@ -406,6 +413,19 @@ FROM public.worker_runs AS run
 WHERE run.status = 'failed'
    OR (run.status = 'running' AND run.lease_expires_at <= clock_timestamp())
    OR (run.status = 'succeeded' AND run.summary ? 'raw_records' AND run.raw_records = 0)
+   OR (run.status = 'succeeded' AND run.raw_records > 0 AND run.raw_records < (
+     SELECT avg(previous.raw_records) * 0.5
+     FROM (
+       SELECT prior.raw_records
+       FROM public.worker_runs AS prior
+       WHERE prior.source_id = run.source_id
+         AND prior.status = 'succeeded'
+         AND prior.id <> run.id
+         AND prior.raw_records > 0
+       ORDER BY prior.finished_at DESC
+       LIMIT 5
+     ) AS previous
+   ))
    OR (run.status IN ('succeeded', 'partially_succeeded') AND run.completeness_state <> 'complete_snapshot')
 UNION ALL
 SELECT NULL::uuid, NULL::text, 'missed_expected_run'::text,
@@ -419,7 +439,9 @@ SELECT NULL::uuid, run.provider, 'repeated_partition_failure'::text,
 FROM public.worker_run_partitions AS partition
 JOIN public.worker_runs AS run ON run.id = partition.run_id
 WHERE partition.status = 'failed'
-GROUP BY run.provider, partition.partition_id
+  AND run.source_id IS NOT NULL
+  AND partition.partition_id IS NOT NULL
+GROUP BY run.source_id, run.provider, partition.partition_id
 HAVING count(*) >= 3;
 
 REVOKE ALL ON public.python_ingestion_schedules FROM PUBLIC;
@@ -427,6 +449,6 @@ REVOKE ALL ON public.worker_run_partitions FROM PUBLIC;
 REVOKE ALL ON public.worker_ingestion_alerts FROM PUBLIC;
 GRANT SELECT ON public.python_ingestion_schedules, public.worker_run_partitions, public.worker_ingestion_alerts
   TO hirly_inventory_reader, hirly_inventory_operator;
-GRANT SELECT, INSERT, UPDATE ON public.worker_run_partitions TO hirly_inventory_worker;
+-- Proof partitions are writable only through the fenced service-role RPC.
 
 COMMIT;

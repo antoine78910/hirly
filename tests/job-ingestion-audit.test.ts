@@ -30,6 +30,9 @@ describe("job ingestion run-ledger migration", () => {
     expect(migration).toContain("CREATE TABLE IF NOT EXISTS public.python_ingestion_schedules");
     expect(migration).not.toContain("python-interval:");
     expect(migration).not.toContain("INSERT INTO public.worker_schedules");
+    expect(migration).toContain("('python-france-travail-harvest', 'france_travail', 300");
+    expect(migration).toContain("('python-company-discovery', 'company_discovery', 600");
+    expect(migration).toContain("ON CONFLICT (id) DO NOTHING");
   });
 
   test("exposes alertable failed, stale, zero and incomplete states", () => {
@@ -40,6 +43,17 @@ describe("job ingestion run-ledger migration", () => {
     ]) {
       expect(migration).toContain(alert);
     }
+    expect(migration.match(/material_coverage_drop/g)?.length).toBeGreaterThanOrEqual(1);
+    expect(migration).toContain("OR (run.status = 'succeeded' AND run.raw_records > 0");
+    expect(migration).toContain("GROUP BY run.source_id, run.provider, partition.partition_id");
+  });
+
+  test("keeps terminal proof facts immutable and behind fenced RPCs", () => {
+    expect(migration).toContain("ON CONFLICT (run_id, partition_id) DO NOTHING");
+    expect(migration).not.toContain(
+      "GRANT SELECT, INSERT, UPDATE ON public.worker_run_partitions TO hirly_inventory_worker",
+    );
+    expect(migration).toContain("AND lease_token = p_lease_token");
   });
 
   test("has a reversible rollback", () => {

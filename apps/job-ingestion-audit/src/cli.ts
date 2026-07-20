@@ -2,6 +2,7 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import {
   reconcileFunnel,
+  materializeCoverage,
   stableDigest,
   validateCoverageManifest,
   validatePaginationFixtures,
@@ -54,9 +55,16 @@ const runResultsPath = resolve(root, args.runResults);
 const rows = JSON.parse(await readFile(resolve(fixtureDir, "audit-rows.json"), "utf8")) as AuditRow[];
 const partitions = JSON.parse(await readFile(resolve(fixtureDir, "pagination-golden.json"), "utf8")) as PartitionFact[];
 const funnel = JSON.parse(await readFile(resolve(fixtureDir, "funnel.json"), "utf8")) as Funnel;
-const coverage = JSON.parse(
-  await readFile(resolve(root, "artifacts/job-ingestion/coverage-matrix.json"), "utf8"),
+const coverageManifest = JSON.parse(
+  await readFile(resolve(fixtureDir, "coverage-manifest.json"), "utf8"),
 ) as CoverageManifest;
+const coverage = materializeCoverage(coverageManifest);
+const terminalCounts = Object.fromEntries(
+  ["completed_with_results", "completed_zero_results", "failed", "blocked"].map((status) => [
+    status,
+    coverage.records.filter((record) => record.status === status).length,
+  ]),
+);
 
 const evidenceFailures: string[] = [];
 for (const row of rows) {
@@ -110,7 +118,7 @@ const invariantFailures = [
   ...validateRows(rows),
   ...reconcileFunnel(funnel),
   ...validatePaginationFixtures(partitions),
-  ...validateCoverageManifest(coverage),
+  ...validateCoverageManifest(coverageManifest, coverage),
   ...evidenceFailures,
 ];
 const machineRows = rows.map((row) => ({
@@ -151,8 +159,9 @@ const result = {
   digest: stableDigest(digestInput),
   funnel,
   coverage: {
-    expandedPartitionCount: coverage.expandedPartitionCount,
-    terminalCounts: coverage.terminalCounts,
+    expandedPartitionCount: coverage.records.length,
+    terminalCounts,
+    digest: stableDigest(coverage.records),
   },
   commandResults,
   rows: machineRows,
@@ -207,7 +216,7 @@ const summary = [
   "",
   "## Coverage improvements",
   "",
-  `The manifest expands to ${coverage.expandedPartitionCount} explicit provider × contract × geography × occupation combinations; every combination is terminal and all live observations are honestly blocked pending read-only evidence.`,
+  `The manifest materializes ${coverage.records.length} unique provider × contract × geography × occupation records; every record is terminal and every blocked record carries a reproducible blocker.`,
   "",
   "## Remaining risks",
   "",
@@ -232,6 +241,10 @@ const summary = [
 await mkdir(dirname(jsonPath), { recursive: true });
 await mkdir(dirname(summaryPath), { recursive: true });
 await mkdir(dirname(runResultsPath), { recursive: true });
+await writeFile(
+  resolve(root, "artifacts/job-ingestion/coverage-matrix.json"),
+  `${JSON.stringify({ ...coverage, terminalCounts, digest: stableDigest(coverage.records) }, null, 2)}\n`,
+);
 await writeFile(jsonPath, `${JSON.stringify(result, null, 2)}\n`);
 await writeFile(summaryPath, summary);
 await writeFile(runResultsPath, `${JSON.stringify({

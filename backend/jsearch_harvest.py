@@ -26,6 +26,7 @@ from ingestion_run_lease import (
     accounting_summary,
     await_with_ingestion_heartbeat,
     persist_terminal_partitions,
+    partition_identity,
 )
 from jobs_service import upsert_imported_jobs
 from jobs_service import _cooldown_until, _is_rate_limit_error, _set_rate_limit_cooldown
@@ -237,6 +238,20 @@ async def harvest_jsearch(
             "freshness_window": freshness_window,
             "jobs_fetched": 0,
             "jobs_upserted": 0,
+            "pages_requested": 0,
+            "pages_completed": 0,
+            "retries": 0,
+            "raw_records": 0,
+            "normalized_records": 0,
+            "rejected_by_reason": {},
+            "exact_duplicates": 0,
+            "fuzzy_duplicate_candidates": 0,
+            "jobs_inserted": 0,
+            "jobs_updated": 0,
+            "jobs_reactivated": 0,
+            "jobs_marked_inactive": 0,
+            "write_failed": 0,
+            "accounting_contract": {"state": "known"},
             "errors": [],
             "runs": [],
         }
@@ -277,7 +292,13 @@ async def harvest_jsearch(
                 jobs = result.jobs or []
                 fetched = len(jobs)
                 run["fetched"] = fetched
-                completeness = (result.raw_response or {}).get("completeness")
+                raw_response = result.raw_response or {}
+                completeness = raw_response.get("completeness")
+                run["raw_records"] = int(raw_response.get("rows_seen") or fetched)
+                run["normalized"] = fetched
+                run["rejected_by_reason"] = {
+                    "normalization_failed": max(0, run["raw_records"] - fetched)
+                }
                 run["completeness"] = completeness or "unknown"
                 if completeness == "capped_unknown":
                     run["status"] = "capped"
@@ -291,6 +312,7 @@ async def harvest_jsearch(
                 if jobs and not dry_run:
                     stats = await upsert_imported_jobs(db, jobs)
                     run["upserted"] = stats.get("total_imported", 0)
+                    run["write_stats"] = stats
                     summary["jobs_upserted"] += run["upserted"]
                 if "partition_status" not in run:
                     run["partition_status"] = (
@@ -331,6 +353,21 @@ async def harvest_jsearch(
                 await asyncio.sleep(pause_seconds * 4)
                 continue
             summary["runs"].append(run)
+            summary["pages_requested"] += int(run.get("pages_requested") or 0)
+            summary["pages_completed"] += int(run.get("pages_completed") or 0)
+            summary["raw_records"] += int(run.get("raw_records") or 0)
+            summary["normalized_records"] += int(run.get("normalized") or 0)
+            for reason, count in (run.get("rejected_by_reason") or {}).items():
+                summary["rejected_by_reason"][reason] = (
+                    int(summary["rejected_by_reason"].get(reason) or 0) + int(count or 0)
+                )
+            write_stats = run.get("write_stats") or {}
+            summary["jobs_inserted"] += int(write_stats.get("inserted") or 0)
+            summary["jobs_updated"] += int(write_stats.get("updated") or 0)
+            summary["jobs_reactivated"] += int(write_stats.get("reactivated") or 0)
+            summary["exact_duplicates"] += int(write_stats.get("exact_duplicate") or 0)
+            summary["fuzzy_duplicate_candidates"] += int(write_stats.get("fuzzy_duplicate_candidates") or 0)
+            summary["write_failed"] += int(write_stats.get("write_failed") or 0)
             if position < len(selected_indices) - 1:
                 await asyncio.sleep(pause_seconds)
         all_partitions_complete = not summary["errors"] and len(summary["runs"]) == queries
@@ -402,13 +439,24 @@ async def run_jsearch_harvest_loop(db) -> None:
                     summary = await await_with_ingestion_heartbeat(
                         db, ledger_run_id, harvest_jsearch(db)
                     )
+                    partition_runs = summary.get("runs") or []
+                    summary["proof_scope"] = {
+                        "scope_kind": "provider",
+                        "providers": ["jsearch"],
+                        "manifest_version": "jsearch-harvest.v1",
+                        "expected_partition_count": len(partition_runs),
+                        "expected_partition_ids": [
+                            partition_identity(fact, index)
+                            for index, fact in enumerate(partition_runs)
+                        ],
+                    }
                     summary = accounting_summary(summary)
-                    await persist_terminal_partitions(db, ledger_run_id, summary.get("runs") or [])
+                    await persist_terminal_partitions(db, ledger_run_id, partition_runs)
                     complete = getattr(db, "complete_python_ingestion_run", None)
                     if ledger_run_id and callable(complete):
                         errors = summary.get("errors") or []
                         completeness = summary.get("completeness")
-                        await complete(
+                        completed = await complete(
                             run_id=ledger_run_id,
                             status="succeeded" if not errors else "partially_succeeded",
                             completeness_state=(
@@ -418,6 +466,8 @@ async def run_jsearch_harvest_loop(db) -> None:
                             ),
                             summary=summary,
                         )
+                        if completed is not True:
+                            raise RuntimeError("jsearch fenced completion lost lease")
         except Exception as exc:
             complete = getattr(db, "complete_python_ingestion_run", None)
             if ledger_run_id and callable(complete):

@@ -59,9 +59,32 @@ export interface Funnel {
 
 export interface CoverageManifest {
   dimensions: Record<"provider" | "contractType" | "geography" | "occupation", string[]>;
-  terminalRules: Array<{ providers: string[]; state: string; reason: string }>;
-  expandedPartitionCount: number;
-  terminalCounts: Record<string, number>;
+  terminalRules: Array<{
+    providers: string[];
+    state: "completed_with_results" | "completed_zero_results" | "failed" | "blocked";
+    dependency: string;
+    capabilityCheck: string;
+    unblockProcedure: string;
+  }>;
+}
+
+export interface CoverageRecord {
+  partitionId: string;
+  provider: string;
+  contractType: string;
+  geography: string;
+  occupation: string;
+  status: "completed_with_results" | "completed_zero_results" | "failed" | "blocked";
+  blocker: null | {
+    dependency: string;
+    capabilityCheck: string;
+    unblockProcedure: string;
+  };
+}
+
+export interface MaterializedCoverage {
+  schemaVersion: 3;
+  records: CoverageRecord[];
 }
 
 export function stableDigest(value: unknown): string {
@@ -168,31 +191,62 @@ export function validatePaginationFixtures(partitions: PartitionFact[]): string[
   return failures;
 }
 
-export function validateCoverageManifest(manifest: CoverageManifest): string[] {
+export function materializeCoverage(manifest: CoverageManifest): MaterializedCoverage {
+  const records: CoverageRecord[] = [];
+  for (const provider of manifest.dimensions.provider) {
+    const rules = manifest.terminalRules.filter((rule) => rule.providers.includes(provider));
+    if (rules.length !== 1) continue;
+    const rule = rules[0];
+    for (const contractType of manifest.dimensions.contractType) {
+      for (const geography of manifest.dimensions.geography) {
+        for (const occupation of manifest.dimensions.occupation) {
+          records.push({
+            partitionId: [provider, contractType, geography, occupation].join(":"),
+            provider,
+            contractType,
+            geography,
+            occupation,
+            status: rule.state,
+            blocker: rule.state === "blocked" ? {
+              dependency: rule.dependency,
+              capabilityCheck: rule.capabilityCheck,
+              unblockProcedure: rule.unblockProcedure,
+            } : null,
+          });
+        }
+      }
+    }
+  }
+  return { schemaVersion: 3, records };
+}
+
+export function validateCoverageManifest(
+  manifest: CoverageManifest,
+  materialized = materializeCoverage(manifest),
+): string[] {
   const failures: string[] = [];
   const { provider, contractType, geography, occupation } = manifest.dimensions;
   const expectedCount = provider.length * contractType.length * geography.length * occupation.length;
-  if (manifest.expandedPartitionCount !== expectedCount) {
-    failures.push(`coverage_partition_count:${manifest.expandedPartitionCount}/${expectedCount}`);
+  if (materialized.records.length !== expectedCount) {
+    failures.push(`coverage_partition_count:${materialized.records.length}/${expectedCount}`);
   }
   const allowedTerminal = new Set(["completed_with_results", "completed_zero_results", "failed", "blocked"]);
-  const providerMatches = new Map(provider.map((name) => [name, 0]));
-  for (const rule of manifest.terminalRules) {
-    if (!allowedTerminal.has(rule.state)) failures.push(`coverage_nonterminal_rule:${rule.state}`);
-    if (!rule.reason.trim()) failures.push("coverage_rule_missing_reason");
-    for (const name of rule.providers) {
-      if (!providerMatches.has(name)) failures.push(`coverage_unknown_provider:${name}`);
-      else providerMatches.set(name, (providerMatches.get(name) ?? 0) + 1);
-    }
+  const ids = new Set<string>();
+  const expectedIds = new Set(
+    provider.flatMap((p) => contractType.flatMap((c) =>
+      geography.flatMap((g) => occupation.map((o) => [p, c, g, o].join(":"))),
+    )),
+  );
+  for (const record of materialized.records) {
+    if (ids.has(record.partitionId)) failures.push(`coverage_duplicate:${record.partitionId}`);
+    ids.add(record.partitionId);
+    if (!allowedTerminal.has(record.status)) failures.push(`coverage_nonterminal:${record.partitionId}`);
+    if (record.status === "blocked" && (
+      !record.blocker?.dependency || !record.blocker.capabilityCheck || !record.blocker.unblockProcedure
+    )) failures.push(`coverage_unjustified_block:${record.partitionId}`);
   }
-  for (const [name, matches] of providerMatches) {
-    if (matches !== 1) failures.push(`coverage_provider_rule_count:${name}:${matches}`);
-  }
-  const terminalTotal = Object.entries(manifest.terminalCounts)
-    .filter(([status]) => status !== "nonterminal")
-    .reduce((sum, [, count]) => sum + count, 0);
-  if (terminalTotal !== expectedCount) failures.push(`coverage_terminal_count:${terminalTotal}/${expectedCount}`);
-  if ((manifest.terminalCounts.nonterminal ?? 0) !== 0) failures.push("coverage_has_nonterminal_partitions");
+  for (const id of expectedIds) if (!ids.has(id)) failures.push(`coverage_missing:${id}`);
+  for (const id of ids) if (!expectedIds.has(id)) failures.push(`coverage_unexpected:${id}`);
   return failures;
 }
 

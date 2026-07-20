@@ -339,7 +339,19 @@ async def run_company_discovery_loop(db) -> None:
                         _last_discovery_summary = await await_with_ingestion_heartbeat(
                             db, ledger_run_id, run_company_discovery(db)
                         )
-                    ledger_summary = accounting_summary(_last_discovery_summary or {})
+                    ledger_summary = accounting_summary({
+                        **(_last_discovery_summary or {}),
+                        "raw_records": 0,
+                        "normalized_records": 0,
+                        "rejected_by_reason": {},
+                        "jobs_inserted": 0,
+                        "jobs_updated": 0,
+                        "jobs_reactivated": 0,
+                        "exact_duplicates": 0,
+                        "fuzzy_duplicate_candidates": 0,
+                        "write_failed": 0,
+                        "accounting_contract": {"state": "known", "path": "source_discovery_no_job_rows"},
+                    })
                     discovery_errors = []
                     for section in (ledger_summary or {}).values():
                         if isinstance(section, dict):
@@ -353,12 +365,14 @@ async def run_company_discovery_loop(db) -> None:
                     }])
                     complete = getattr(db, "complete_python_ingestion_run", None)
                     if ledger_run_id and callable(complete):
-                        await complete(
+                        completed = await complete(
                             run_id=ledger_run_id,
                             status="partially_succeeded" if discovery_errors else "succeeded",
                             completeness_state="partial" if discovery_errors else "complete_snapshot",
                             summary=ledger_summary,
                         )
+                        if completed is not True:
+                            raise RuntimeError("company_discovery fenced completion lost lease")
                 else:
                     logger.info("company_discovery_overlap_skipped run_id=%s", claim.get("run_id"))
         except Exception as exc:

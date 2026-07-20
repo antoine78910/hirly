@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   evaluatePartition,
+  materializeCoverage,
   reconcileFunnel,
   validatePaginationFixtures,
   validateCoverageManifest,
@@ -14,8 +15,8 @@ const partitions = JSON.parse(readFileSync(
   new URL("../fixtures/pagination-golden.json", import.meta.url),
   "utf8",
 )) as PartitionFact[];
-const coverage = JSON.parse(readFileSync(
-  new URL("../../../artifacts/job-ingestion/coverage-matrix.json", import.meta.url),
+const coverageManifest = JSON.parse(readFileSync(
+  new URL("../fixtures/coverage-manifest.json", import.meta.url),
   "utf8",
 )) as CoverageManifest;
 
@@ -53,8 +54,11 @@ describe("job-ingestion audit invariants", () => {
   });
 
   test("expands every coverage combination to exactly one terminal rule", () => {
-    expect(coverage.expandedPartitionCount).toBe(1470);
-    expect(validateCoverageManifest(coverage)).toEqual([]);
+    const coverage = materializeCoverage(coverageManifest);
+    expect(coverage.records).toHaveLength(1470);
+    expect(new Set(coverage.records.map((record) => record.partitionId)).size).toBe(1470);
+    expect(coverage.records.every((record) => record.status !== "blocked" || record.blocker)).toBe(true);
+    expect(validateCoverageManifest(coverageManifest, coverage)).toEqual([]);
   });
 
   test("reconciles stage accounting", () => {

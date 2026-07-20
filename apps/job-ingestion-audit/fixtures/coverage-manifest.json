@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "dimensions": {
+    "provider": ["france_travail", "jsearch", "workday", "greenhouse", "lever", "ashby", "recruitee", "personio", "smartrecruiters", "teamtailor"],
+    "contractType": ["permanent", "fixed_term", "temporary", "internship", "apprenticeship", "freelance", "unknown_preserved"],
+    "geography": ["france_departments", "european_priority", "remote"],
+    "occupation": ["engineering", "sales", "marketing", "operations", "healthcare", "hospitality", "other_preserved"]
+  },
+  "terminalRules": [
+    {"providers":["france_travail"],"state":"blocked","dependency":"FRANCE_TRAVAIL_CLIENT_ID+FRANCE_TRAVAIL_CLIENT_SECRET","capabilityCheck":"test -n \"$FRANCE_TRAVAIL_CLIENT_ID\" && test -n \"$FRANCE_TRAVAIL_CLIENT_SECRET\"","unblockProcedure":"run read-only exact-ID coverage collection for every manifest combination"},
+    {"providers":["jsearch"],"state":"blocked","dependency":"JSEARCH_API_KEY and active plan metadata","capabilityCheck":"test -n \"$JSEARCH_API_KEY\"","unblockProcedure":"run read-only exact-ID coverage collection for every manifest combination"},
+    {"providers":["workday"],"state":"blocked","dependency":"WORKDAY_AUDIT_BOARD_MANIFEST","capabilityCheck":"test -n \"$WORKDAY_AUDIT_BOARD_MANIFEST\"","unblockProcedure":"provide sanitized board manifest and run exact-ID coverage collection"},
+    {"providers":["greenhouse","lever","ashby","recruitee","personio","smartrecruiters","teamtailor"],"state":"blocked","dependency":"DIRECT_ATS_AUDIT_SOURCE","capabilityCheck":"test -n \"$DIRECT_ATS_AUDIT_SOURCE\"","unblockProcedure":"provide sanitized board manifest and run exact-ID coverage collection"}
+  ]
+}

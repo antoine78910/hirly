@@ -78,6 +78,16 @@ def accounting_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
     ):
         if result[field] is None:
             result["accounting_contract"].setdefault(field, "unknown")
+    if result["accounting_contract"].get("state") == "known":
+        if raw != normalized + known_rejections:
+            raise ValueError("raw records do not reconcile to normalized plus rejected")
+        identity_total = sum(int(result.get(field) or 0) for field in (
+            "jobs_inserted", "jobs_updated", "exact_duplicates", "write_failed",
+        ))
+        if normalized != identity_total:
+            raise ValueError("normalized records do not reconcile to terminal write outcomes")
+        if int(result.get("jobs_reactivated") or 0) > int(result.get("jobs_updated") or 0):
+            raise ValueError("reactivated records must be a subset of updated records")
     return result
 
 
@@ -100,13 +110,7 @@ async def persist_terminal_partitions(
             "completed_with_results", "completed_zero_results", "failed", "blocked",
         }:
             status = "failed"
-        partition_id = str(
-            fact.get("partition_id")
-            or fact.get("city")
-            or fact.get("query")
-            or fact.get("source_key")
-            or f"partition-{index}"
-        )
+        partition_id = partition_identity(fact, index)
         counters = {
             "pages_requested": int(fact.get("pages_requested", 0) or 0),
             "pages_completed": int(fact.get("pages_completed", 0) or 0),
@@ -125,3 +129,13 @@ async def persist_terminal_partitions(
         )
         if saved is not True:
             raise RuntimeError(f"failed to persist terminal partition {partition_id}")
+
+
+def partition_identity(fact: Dict[str, Any], index: int) -> str:
+    return str(
+        fact.get("partition_id")
+        or fact.get("city")
+        or fact.get("query")
+        or fact.get("source_key")
+        or f"partition-{index}"
+    )

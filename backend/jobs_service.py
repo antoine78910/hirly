@@ -21,7 +21,7 @@ from profile_search_preferences import (
     resolve_profile_target_location_label,
     resolve_profile_target_role,
 )
-from job_normalization import sanitize_display_title
+from job_normalization import classify_dedup_pair, sanitize_display_title
 from job_providers import (
     get_board_provider,
     get_job_provider,
@@ -456,6 +456,12 @@ async def _upsert_job_batch(
 ) -> Dict[str, int]:
     stats = {
         "total_imported": 0,
+        "inserted": 0,
+        "updated": 0,
+        "reactivated": 0,
+        "exact_duplicate": 0,
+        "fuzzy_duplicate_candidates": 0,
+        "write_failed": 0,
         "auto_apply_supported_imported": 0,
         "unknown_ats_imported": 0,
     }
@@ -463,6 +469,7 @@ async def _upsert_job_batch(
         return stats
 
     prepared: List[Dict[str, Any]] = []
+    seen_prepared_ids: set[str] = set()
     for job in jobs:
         row = job if already_prepared else _prepare_job_for_upsert(job)
         if not row.get("provider") or not row.get("external_id") or not row.get("job_id"):
@@ -473,16 +480,47 @@ async def _upsert_job_batch(
                 row.get("job_id"),
             )
             continue
+        stable_id = str(row["job_id"])
+        if stable_id in seen_prepared_ids:
+            stats["exact_duplicate"] += 1
+            continue
+        seen_prepared_ids.add(stable_id)
         prepared.append(row)
+
+    existing_rows = await db.jobs.find(
+        {"job_id": {"$in": [row["job_id"] for row in prepared]}},
+        {"_id": 0},
+    ).limit(len(prepared)).to_list(len(prepared))
+    existing_by_id = {str(row.get("job_id")): row for row in existing_rows if row.get("job_id")}
+    for index, left in enumerate(prepared):
+        for right in prepared[index + 1:]:
+            if classify_dedup_pair(left, right)["classification"].endswith("_candidate"):
+                stats["fuzzy_duplicate_candidates"] += 1
 
     chunk_size = max(10, min(_env_int("JOB_UPSERT_BATCH_SIZE", 75), 200))
     for offset in range(0, len(prepared), chunk_size):
         chunk = prepared[offset : offset + chunk_size]
-        await _write_job_chunk(db, chunk)
+        try:
+            await _write_job_chunk(db, chunk)
+        except Exception:
+            stats["write_failed"] += len(chunk)
+            raise
         stats["total_imported"] += len(chunk)
         if progress is not None:
             progress["jobs_upserted_so_far"] = progress_base + stats["total_imported"]
         for job in chunk:
+            existing = existing_by_id.get(str(job["job_id"]))
+            if existing is None:
+                stats["inserted"] += 1
+            elif (
+                existing.get("fingerprint") == job.get("fingerprint")
+                and existing.get("selected_apply_url") == job.get("selected_apply_url")
+            ):
+                stats["exact_duplicate"] += 1
+            else:
+                stats["updated"] += 1
+                if existing.get("validation_status") == "invalid" and job.get("validation_status") != "invalid":
+                    stats["reactivated"] += 1
             if job.get("auto_apply_supported") is True:
                 stats["auto_apply_supported_imported"] += 1
             if job.get("ats_provider") == "unknown":

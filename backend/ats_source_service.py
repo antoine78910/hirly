@@ -179,6 +179,9 @@ async def refresh_ats_source(
         summary.update({
             "fetched_count": len(raw_jobs),
             "normalized_count": len(jobs),
+            "raw_records": len(raw_jobs),
+            "normalized_records": len(jobs),
+            "rejected_by_reason": {"normalization_failed": max(0, len(raw_jobs) - len(jobs))},
             "requested_limit": requested_limit,
             "completeness": completeness,
             "status": (
@@ -195,6 +198,14 @@ async def refresh_ats_source(
         if not dry_run and jobs:
             import_stats = await upsert_imported_jobs(db, jobs)
             summary["imported_count"] = int(import_stats.get("total_imported") or 0)
+            summary.update({
+                "jobs_inserted": int(import_stats.get("inserted") or 0),
+                "jobs_updated": int(import_stats.get("updated") or 0),
+                "jobs_reactivated": int(import_stats.get("reactivated") or 0),
+                "exact_duplicates": int(import_stats.get("exact_duplicate") or 0),
+                "fuzzy_duplicate_candidates": int(import_stats.get("fuzzy_duplicate_candidates") or 0),
+                "write_failed": int(import_stats.get("write_failed") or 0),
+            })
         if not dry_run and completeness == "complete_without_source_total":
             await _update_source_status(
                 db,
@@ -399,7 +410,28 @@ async def run_ats_direct_maintenance_loop(db) -> None:
                         _last_maintenance_summary = await await_with_ingestion_heartbeat(
                             db, ledger_run_id, run_ats_direct_maintenance(db)
                         )
-                    ledger_summary = accounting_summary(_last_maintenance_summary or {})
+                    raw_summary = dict(_last_maintenance_summary or {})
+                    refresh_runs = ((raw_summary.get("refresh") or {}).get("runs") or [])
+                    raw_summary.update({
+                        "raw_records": sum(int(run.get("raw_records") or 0) for run in refresh_runs),
+                        "normalized_records": sum(int(run.get("normalized_records") or 0) for run in refresh_runs),
+                        "rejected_by_reason": {
+                            "normalization_failed": sum(
+                                int((run.get("rejected_by_reason") or {}).get("normalization_failed") or 0)
+                                for run in refresh_runs
+                            )
+                        },
+                        "jobs_inserted": sum(int(run.get("jobs_inserted") or 0) for run in refresh_runs),
+                        "jobs_updated": sum(int(run.get("jobs_updated") or 0) for run in refresh_runs),
+                        "jobs_reactivated": sum(int(run.get("jobs_reactivated") or 0) for run in refresh_runs),
+                        "exact_duplicates": sum(int(run.get("exact_duplicates") or 0) for run in refresh_runs),
+                        "fuzzy_duplicate_candidates": sum(
+                            int(run.get("fuzzy_duplicate_candidates") or 0) for run in refresh_runs
+                        ),
+                        "write_failed": sum(int(run.get("write_failed") or 0) for run in refresh_runs),
+                        "accounting_contract": {"state": "known"},
+                    })
+                    ledger_summary = accounting_summary(raw_summary)
                     maintenance_errors: List[Any] = []
                     for section_name in ("discover", "refresh", "friendly_company_pages"):
                         section = (ledger_summary or {}).get(section_name)
@@ -415,12 +447,14 @@ async def run_ats_direct_maintenance_loop(db) -> None:
                     await persist_terminal_partitions(db, ledger_run_id, [maintenance_fact])
                     complete = getattr(db, "complete_python_ingestion_run", None)
                     if ledger_run_id and callable(complete):
-                        await complete(
+                        completed = await complete(
                             run_id=ledger_run_id,
                             status="partially_succeeded" if maintenance_errors else "succeeded",
                             completeness_state="partial" if maintenance_errors else "complete_snapshot",
                             summary=ledger_summary,
                         )
+                        if completed is not True:
+                            raise RuntimeError("direct_ats fenced completion lost lease")
                 else:
                     logger.info("ats_direct_maintenance_overlap_skipped run_id=%s", claim.get("run_id"))
         except Exception as exc:
