@@ -468,7 +468,7 @@ BEGIN
 END
 $$;
 
-REVOKE ALL ON FUNCTION public.python_ingestion_run_begin(text, text, integer, text, integer, jsonb) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.python_ingestion_run_begin(text, text, integer, text, integer) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.python_ingestion_schedule_sync(text, text, integer, boolean) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.python_ingestion_run_heartbeat(uuid, uuid, bigint, text, integer) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.python_ingestion_partition_record(uuid, uuid, bigint, text, text, text, jsonb, text) FROM PUBLIC;
@@ -477,7 +477,7 @@ DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
     GRANT EXECUTE ON FUNCTION public.python_ingestion_schedule_sync(text, text, integer, boolean) TO service_role;
-    GRANT EXECUTE ON FUNCTION public.python_ingestion_run_begin(text, text, integer, text, integer, jsonb) TO service_role;
+    GRANT EXECUTE ON FUNCTION public.python_ingestion_run_begin(text, text, integer, text, integer) TO service_role;
     GRANT EXECUTE ON FUNCTION public.python_ingestion_run_heartbeat(uuid, uuid, bigint, text, integer) TO service_role;
     GRANT EXECUTE ON FUNCTION public.python_ingestion_partition_record(uuid, uuid, bigint, text, text, text, jsonb, text) TO service_role;
     GRANT EXECUTE ON FUNCTION public.python_ingestion_run_complete(uuid, uuid, bigint, text, text, text, jsonb) TO service_role;
@@ -556,13 +556,13 @@ REVOKE ALL ON public.worker_ingestion_alerts FROM PUBLIC;
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
-    REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.python_ingestion_schedules, public.worker_run_partitions, public.worker_runs FROM service_role;
+    REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.python_ingestion_schedules, public.worker_run_partitions FROM service_role;
   END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'hirly_inventory_worker') THEN
-    REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.python_ingestion_schedules, public.worker_run_partitions, public.worker_runs FROM hirly_inventory_worker;
+    REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.python_ingestion_schedules, public.worker_run_partitions FROM hirly_inventory_worker;
   END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'hirly_inventory_operator') THEN
-    REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.python_ingestion_schedules, public.worker_run_partitions, public.worker_runs FROM hirly_inventory_operator;
+    REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.python_ingestion_schedules, public.worker_run_partitions FROM hirly_inventory_operator;
   END IF;
 END
 $$;
