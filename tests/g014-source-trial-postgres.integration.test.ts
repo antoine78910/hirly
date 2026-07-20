@@ -102,7 +102,7 @@ describe("G014 real-Postgres source trial isolation", () => {
             "sourceKey": "greenhouse:g014-foundation",
             "tenantKey": "g014-foundation",
             "permittedAccessMethod": "tenant_feed",
-            "environments": ["test"],
+            "environments": ["development", "test"],
             "rights": [
               "commercial_use", "redisplay", "retention", "access_method"
             ]
@@ -133,7 +133,7 @@ describe("G014 real-Postgres source trial isolation", () => {
             "sourceKey": "greenhouse:g014-foundation",
             "tenantKey": "g014-foundation",
             "permittedAccessMethod": "tenant_feed",
-            "environments": ["test"],
+            "environments": ["development", "test"],
             "rights": [
               "commercial_use", "redisplay", "retention", "access_method"
             ]
@@ -383,6 +383,64 @@ describe("G014 real-Postgres source trial isolation", () => {
         END
         $empty_completed$;
 
+        DO $premature_expiry$
+        BEGIN
+          BEGIN
+            PERFORM worker_private.record_source_trial_scorecard(
+              current_setting('g014.empty_run_id')::uuid,
+              'trial-result',
+              jsonb_build_object(
+                'schemaVersion', 'hirly.source-trial-result.v1',
+                'runId', current_setting('g014.empty_run_id'),
+                'trialKey', current_setting('g014.empty_run_key'),
+                'status', 'policy_expired',
+                'startedAt', to_jsonb(
+                  current_setting(
+                    'g014.empty_run_requested_at'
+                  )::timestamptz
+                ),
+                'finishedAt', to_jsonb(clock_timestamp()),
+                'pagesFetched', 0,
+                'candidatesObserved', 0,
+                'bytesStored', 0,
+                'stopReason', 'policy_expired'
+              )
+            );
+            RAISE EXCEPTION 'pre-expiry policy_expired unexpectedly accepted';
+          EXCEPTION WHEN insufficient_privilege THEN NULL;
+          END;
+        END
+        $premature_expiry$;
+
+        DO $status_reason_mismatch$
+        BEGIN
+          BEGIN
+            PERFORM worker_private.record_source_trial_scorecard(
+              current_setting('g014.empty_run_id')::uuid,
+              'trial-result',
+              jsonb_build_object(
+                'schemaVersion', 'hirly.source-trial-result.v1',
+                'runId', current_setting('g014.empty_run_id'),
+                'trialKey', current_setting('g014.empty_run_key'),
+                'status', 'failed',
+                'startedAt', to_jsonb(
+                  current_setting(
+                    'g014.empty_run_requested_at'
+                  )::timestamptz
+                ),
+                'finishedAt', to_jsonb(clock_timestamp()),
+                'pagesFetched', 0,
+                'candidatesObserved', 0,
+                'bytesStored', 0,
+                'stopReason', 'policy_expired'
+              )
+            );
+            RAISE EXCEPTION 'status/stopReason mismatch unexpectedly accepted';
+          EXCEPTION WHEN insufficient_privilege THEN NULL;
+          END;
+        END
+        $status_reason_mismatch$;
+
         SELECT worker_private.record_source_trial_scorecard(
           current_setting('g014.empty_run_id')::uuid,
           'trial-result',
@@ -619,6 +677,96 @@ describe("G014 real-Postgres source trial isolation", () => {
           END;
         END
         $completed_terminal_fence$;
+
+        RESET ROLE;
+        INSERT INTO public.source_trial_policies (
+          source_id, provider, tenant_key, policy_evidence_id,
+          permitted_access_method, environment, starts_at, expires_at,
+          max_total_runs, max_pages_per_run, max_candidates_per_run,
+          max_bytes_per_run, trial_enabled, approved_by, approval_reference
+        ) VALUES (
+          current_setting('g014.source_id')::uuid,
+          'greenhouse', 'g014-foundation',
+          current_setting('g014.evidence_id')::uuid,
+          'tenant_feed', 'development',
+          clock_timestamp() - interval '1 minute',
+          clock_timestamp() + interval '2 seconds',
+          1, 1, 1, 4096, true, 'g014-test', 'expiry-fixture'
+        );
+        SET LOCAL ROLE hirly_source_trial_worker;
+        SELECT set_config(
+          'g014.expiry_run_key',
+          'greenhouse:g014:expiry:' || gen_random_uuid()::text,
+          true
+        );
+        SELECT set_config(
+          'g014.expiry_run_requested_at',
+          clock_timestamp()::text,
+          true
+        );
+        SELECT set_config(
+          'g014.expiry_run_id',
+          worker_private.begin_source_trial(jsonb_build_object(
+            'schemaVersion', 'hirly.source-trial-manifest.v1',
+            'trialKey', current_setting('g014.expiry_run_key'),
+            'sourceId', current_setting('g014.source_id'),
+            'provider', 'greenhouse',
+            'tenantKey', 'g014-foundation',
+            'environment', 'development',
+            'countryCodes', jsonb_build_array('FR'),
+            'policyEvidenceId', current_setting('g014.evidence_id'),
+            'requestedAt', to_jsonb(
+              current_setting('g014.expiry_run_requested_at')::timestamptz
+            ),
+            'expiresAt', to_jsonb(
+              clock_timestamp() + interval '500 milliseconds'
+            ),
+            'budget', jsonb_build_object(
+              'maxPages', 1, 'maxCandidates', 1, 'maxBytes', 4096
+            )
+          ))::text,
+          true
+        );
+        SELECT pg_sleep(0.6);
+
+        DO $expired_page_fence$
+        BEGIN
+          BEGIN
+            PERFORM worker_private.record_source_trial_page(
+              current_setting('g014.expiry_run_id')::uuid,
+              1,
+              clock_timestamp(),
+              '{"items":[]}',
+              encode(
+                digest(convert_to('{"items":[]}', 'UTF8'), 'sha256'),
+                'hex'
+              ),
+              octet_length(convert_to('{"items":[]}', 'UTF8'))
+            );
+            RAISE EXCEPTION 'post-expiry page unexpectedly accepted';
+          EXCEPTION WHEN insufficient_privilege THEN NULL;
+          END;
+        END
+        $expired_page_fence$;
+
+        SELECT worker_private.record_source_trial_scorecard(
+          current_setting('g014.expiry_run_id')::uuid,
+          'trial-result',
+          jsonb_build_object(
+            'schemaVersion', 'hirly.source-trial-result.v1',
+            'runId', current_setting('g014.expiry_run_id'),
+            'trialKey', current_setting('g014.expiry_run_key'),
+            'status', 'policy_expired',
+            'startedAt', to_jsonb(
+              current_setting('g014.expiry_run_requested_at')::timestamptz
+            ),
+            'finishedAt', to_jsonb(clock_timestamp()),
+            'pagesFetched', 0,
+            'candidatesObserved', 0,
+            'bytesStored', 0,
+            'stopReason', 'policy_expired'
+          )
+        );
         RESET ROLE;
 
         DO $immutable$
@@ -694,10 +842,10 @@ describe("G014 real-Postgres source trial isolation", () => {
 
       const proof = JSON.parse(result.split("\n").at(-1) ?? "{}");
       expect(proof).toEqual({
-        runs: 2,
+        runs: 3,
         pages: 1,
         candidates: 1,
-        scorecards: 2,
+        scorecards: 3,
         canonicalPrivileges: false,
         canonicalRpcPrivileges: false,
         executableRpcs: [

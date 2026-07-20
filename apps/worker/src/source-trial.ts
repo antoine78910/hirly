@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
+  sourceTrialBudgetStopReasonSchema,
   sourceTrialManifestSchema,
   sourceTrialResultSchema,
   type CanonicalJob,
@@ -216,14 +217,15 @@ export async function persistAtsSourceTrial(input: {
     });
     return preview;
   } catch (error) {
-    const failure = classifyTrialFailure(error);
+    const finishedAt = input.now?.() ?? new Date();
+    const failure = classifyTrialFailure(error, manifest, finishedAt);
     try {
       await recordTrialResult(input.repository, {
         runId,
         trialKey: manifest.trialKey,
         status: failure.status,
         startedAt: manifest.requestedAt,
-        finishedAt: (input.now?.() ?? new Date()).toISOString(),
+        finishedAt: finishedAt.toISOString(),
         pagesFetched,
         candidatesObserved,
         bytesStored,
@@ -253,10 +255,17 @@ async function recordTrialResult(
   });
 }
 
-function classifyTrialFailure(error: unknown): {
+function classifyTrialFailure(
+  error: unknown,
+  manifest: SourceTrialManifest,
+  finishedAt: Date,
+): {
   status: SourceTrialResult["status"];
-  stopReason: string;
+  stopReason: SourceTrialResult["stopReason"];
 } {
+  if (finishedAt >= new Date(manifest.expiresAt)) {
+    return { status: "policy_expired", stopReason: "policy_expired" };
+  }
   if (error instanceof AtsTrialTransportError) {
     return {
       status:
@@ -270,10 +279,18 @@ function classifyTrialFailure(error: unknown): {
   if (message.startsWith("trial_budget_exceeded:")) {
     return {
       status: "budget_exhausted",
-      stopReason: message.slice("trial_".length),
+      stopReason: sourceTrialBudgetStopReasonSchema.parse(
+        message.slice("trial_".length),
+      ),
     };
   }
   if (message === "trial_policy_window_invalid") {
+    return { status: "failed", stopReason: "unclassified_failure" };
+  }
+  if (message === "trial_policy_not_started") {
+    return { status: "failed", stopReason: "policy_not_started" };
+  }
+  if (message === "trial_policy_expired") {
     return { status: "policy_expired", stopReason: "policy_expired" };
   }
   return { status: "failed", stopReason: "unclassified_failure" };
@@ -329,9 +346,8 @@ function assertTrialIsCurrent(
 ): void {
   const requestedAt = new Date(manifest.requestedAt);
   const expiresAt = new Date(manifest.expiresAt);
-  if (requestedAt > now || expiresAt <= now) {
-    throw new Error("trial_policy_window_invalid");
-  }
+  if (requestedAt > now) throw new Error("trial_policy_not_started");
+  if (expiresAt <= now) throw new Error("trial_policy_expired");
   if (manifest.budget.maxPages < 1) {
     throw new Error("trial_budget_exceeded:maxPages");
   }

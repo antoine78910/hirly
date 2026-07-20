@@ -130,6 +130,38 @@ describe("shared contracts", () => {
         stopReason: null,
       }).status,
     ).toBe("completed");
+    for (const invalidResult of [
+      {
+        status: "policy_expired",
+        stopReason: "rate_limited",
+      },
+      {
+        status: "failed",
+        stopReason: "policy_expired",
+      },
+      {
+        status: "budget_exhausted",
+        stopReason: "retryable",
+      },
+      {
+        status: "completed",
+        stopReason: "unclassified_failure",
+      },
+    ]) {
+      expect(() =>
+        sourceTrialResultSchema.parse({
+          schemaVersion: "hirly.source-trial-result.v1",
+          runId: "018f02d8-a8b8-7f1d-a419-bf38eaf22a92",
+          trialKey: manifest.trialKey,
+          startedAt: manifest.requestedAt,
+          finishedAt: "2026-07-20T12:05:00+00:00",
+          pagesFetched: 0,
+          candidatesObserved: 0,
+          bytesStored: 0,
+          ...invalidResult,
+        }),
+      ).toThrow();
+    }
 
     for (const invalid of [
       { ...manifest, environment: "production" },

@@ -39,6 +39,9 @@ DROP FUNCTION IF EXISTS worker_private.record_source_trial_page(
 );
 DROP FUNCTION IF EXISTS worker_private.begin_source_trial(jsonb);
 DROP FUNCTION IF EXISTS worker_private.source_trial_run_is_writable(uuid);
+DROP FUNCTION IF EXISTS worker_private.source_trial_terminal_is_eligible(
+  uuid, text, timestamptz
+);
 
 DROP TRIGGER IF EXISTS source_trial_scorecards_immutable
   ON public.source_trial_scorecards;

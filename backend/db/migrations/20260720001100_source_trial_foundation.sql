@@ -312,6 +312,75 @@ AS $$
   )
 $$;
 
+CREATE OR REPLACE FUNCTION worker_private.source_trial_terminal_is_eligible(
+  p_run_id uuid,
+  p_status text,
+  p_finished_at timestamptz
+)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, public, worker_private
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.source_trial_runs AS run
+    JOIN public.source_trial_policies AS policy
+      ON policy.id = run.policy_id
+     AND policy.source_id = run.source_id
+     AND policy.provider = run.provider
+    JOIN public.career_sources AS source
+      ON source.id = run.source_id
+     AND source.provider = run.provider
+    JOIN public.source_policy_evidence AS evidence
+      ON evidence.id = run.policy_evidence_id
+    WHERE run.id = p_run_id
+      AND p_finished_at IS NOT NULL
+      AND policy.trial_enabled
+      AND policy.policy_evidence_id = run.policy_evidence_id
+      AND policy.tenant_key = run.tenant_key
+      AND policy.permitted_access_method = source.access_type
+      AND policy.environment = run.environment
+      AND policy.starts_at <= run.requested_at
+      AND run.expires_at <= policy.expires_at
+      AND source.tenant_key = run.tenant_key
+      AND source.discovery_state IN ('validated', 'approved')
+      AND NOT source.enabled
+      AND NOT source.transport_enabled
+      AND NOT source.incremental_enabled
+      AND NOT source.backfill_enabled
+      AND worker_private.source_policy_evidence_allows_trial(
+        evidence.id,
+        source.source_key,
+        run.provider,
+        run.tenant_key,
+        policy.permitted_access_method,
+        run.environment
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.source_trial_scorecards AS terminal
+        WHERE terminal.run_id = run.id
+      )
+      AND (
+        (
+          p_status = 'policy_expired'
+          AND clock_timestamp() >= run.expires_at
+          AND clock_timestamp() <= run.expires_at + interval '5 minutes'
+          AND p_finished_at >= run.expires_at
+          AND p_finished_at <= clock_timestamp() + interval '5 minutes'
+        )
+        OR (
+          p_status IN ('completed', 'budget_exhausted', 'failed')
+          AND clock_timestamp() < run.expires_at
+          AND clock_timestamp() < policy.expires_at
+          AND p_finished_at < run.expires_at
+          AND p_finished_at <= clock_timestamp() + interval '5 minutes'
+        )
+      )
+  )
+$$;
+
 CREATE OR REPLACE FUNCTION worker_private.begin_source_trial(
   p_manifest jsonb
 )
@@ -636,7 +705,6 @@ BEGIN
   WHERE id = p_run_id;
 
   IF v_run.id IS NULL
-    OR NOT worker_private.source_trial_run_is_writable(p_run_id)
     OR p_scorecard_key IS DISTINCT FROM 'trial-result'
     OR p_result IS NULL OR jsonb_typeof(p_result) <> 'object'
   THEN
@@ -701,8 +769,12 @@ BEGIN
   WHERE candidate.run_id = p_run_id;
 
   IF v_started_at <> v_run.requested_at
+    OR NOT worker_private.source_trial_terminal_is_eligible(
+      p_run_id,
+      v_status,
+      v_finished_at
+    )
     OR v_finished_at < v_started_at
-    OR v_finished_at > v_run.expires_at
     OR v_finished_at > clock_timestamp() + interval '5 minutes'
     OR v_pages_fetched < 0
     OR v_candidates_observed < 0
@@ -712,6 +784,32 @@ BEGIN
     OR v_bytes_stored <> v_persisted_bytes
     OR (v_status = 'completed' AND v_persisted_pages = 0)
     OR (v_status = 'completed' AND v_stop_reason IS NOT NULL)
+    OR (
+      v_status = 'policy_expired'
+      AND v_stop_reason IS DISTINCT FROM 'policy_expired'
+    )
+    OR (
+      v_status = 'budget_exhausted'
+      AND v_stop_reason NOT IN (
+        'budget_exceeded',
+        'budget_exceeded:maxPages',
+        'budget_exceeded:maxCandidates',
+        'budget_exceeded:maxBytes'
+      )
+    )
+    OR (
+      v_status = 'failed'
+      AND v_stop_reason NOT IN (
+        'cancelled',
+        'malformed',
+        'not_found',
+        'permanent',
+        'policy_not_started',
+        'rate_limited',
+        'retryable',
+        'unclassified_failure'
+      )
+    )
     OR (
       v_status <> 'completed'
       AND (
@@ -742,6 +840,9 @@ REVOKE CREATE ON SCHEMA public FROM hirly_source_trial_worker;
 
 REVOKE ALL ON FUNCTION worker_private.source_trial_run_is_writable(uuid)
   FROM PUBLIC;
+REVOKE ALL ON FUNCTION worker_private.source_trial_terminal_is_eligible(
+  uuid, text, timestamptz
+) FROM PUBLIC;
 REVOKE ALL ON FUNCTION worker_private.begin_source_trial(jsonb) FROM PUBLIC;
 REVOKE ALL ON FUNCTION worker_private.record_source_trial_page(
   uuid, integer, timestamptz, text, text, bigint

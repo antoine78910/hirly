@@ -111,6 +111,12 @@ describe("G014 source trial foundation", () => {
       /record_source_trial_scorecard[\s\S]*pg_advisory_xact_lock\(hashtextextended\(p_run_id::text, 0\)\)/i,
     );
     expect(migration).toMatch(
+      /source_trial_terminal_is_eligible[\s\S]*p_status = 'policy_expired'[\s\S]*clock_timestamp\(\) >= run\.expires_at[\s\S]*run\.expires_at \+ interval '5 minutes'/i,
+    );
+    expect(migration).toMatch(
+      /p_status IN \('completed', 'budget_exhausted', 'failed'\)[\s\S]*clock_timestamp\(\) < run\.expires_at/i,
+    );
+    expect(migration).toMatch(
       /p_result \?& ARRAY\[[\s\S]*'stopReason'[\s\S]*\]/i,
     );
     expect(migration).toMatch(
@@ -124,6 +130,12 @@ describe("G014 source trial foundation", () => {
     );
     expect(migration).toMatch(
       /v_status = 'completed' AND v_persisted_pages = 0/i,
+    );
+    expect(migration).toMatch(
+      /v_status = 'policy_expired'[\s\S]*v_stop_reason IS DISTINCT FROM 'policy_expired'/i,
+    );
+    expect(migration).toMatch(
+      /v_status = 'budget_exhausted'[\s\S]*'budget_exceeded:maxCandidates'/i,
     );
     expect(migration).toContain(
       "p_result->>'pagesFetched' !~ '^(0|[1-9][0-9]*)$'",
@@ -151,7 +163,7 @@ describe("G014 source trial foundation", () => {
       "record_source_trial_candidate",
       "record_source_trial_scorecard",
     ]);
-    expect(migration.match(/SECURITY DEFINER/g)?.length).toBe(5);
+    expect(migration.match(/SECURITY DEFINER/g)?.length).toBe(6);
     expect(migration).toMatch(
       /SECURITY DEFINER\s+SET search_path = pg_catalog, public, worker_private/gi,
     );
