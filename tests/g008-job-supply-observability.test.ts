@@ -20,6 +20,9 @@ const queries = readFileSync(
 const careerSourcesDefinition = migration.match(
   /CREATE TABLE IF NOT EXISTS public\.career_sources \([\s\S]*?\n\);/,
 )?.[0] ?? "";
+const censusManifestDefinition = migration.match(
+  /CREATE TABLE IF NOT EXISTS public\.france_travail_census_manifests \([\s\S]*?\n\);/,
+)?.[0] ?? "";
 
 describe("G008 job-supply observability contract", () => {
   test("extends the existing run ledger and adds the required baselines", () => {
@@ -119,9 +122,7 @@ describe("G008 job-supply observability contract", () => {
   });
 
   test("makes reconciled France Travail census manifests immutable", () => {
-    expect(migration).toContain(
-      "source_run_ids uuid[] NOT NULL CHECK (cardinality(source_run_ids) > 0)",
-    );
+    expect(censusManifestDefinition).not.toContain("coverage_run_id");
     expect(migration).toContain(
       "CREATE TABLE IF NOT EXISTS public.france_travail_census_manifest_runs",
     );
