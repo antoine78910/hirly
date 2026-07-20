@@ -3706,6 +3706,14 @@ def _posthog_server_capture_configured() -> bool:
     )
 
 
+def _build_posthog_client(api_key: str, host: str):
+    return Posthog(
+        api_key,
+        host=host,
+        enable_exception_autocapture=True,
+    )
+
+
 def _posthog_revenue_enabled(event_name: str) -> bool:
     env_name = (
         "POSTHOG_PAYMENT_REVENUE_ENABLED"
@@ -17467,11 +17475,7 @@ async def startup_seed():
     _ph_api_key = os.environ.get("POSTHOG_SERVER_API_KEY", "").strip()
     _ph_host = os.environ.get("POSTHOG_HOST", "").strip()
     if _posthog_server_capture_configured():
-        _posthog_client = Posthog(
-            api_key=_ph_api_key,
-            host=_ph_host,
-            enable_exception_autocapture=True,
-        )
+        _posthog_client = _build_posthog_client(_ph_api_key, _ph_host)
         atexit.register(_posthog_client.shutdown)
         logger.info("posthog_client_initialized host=%s", _ph_host)
         if _OTEL_AVAILABLE:

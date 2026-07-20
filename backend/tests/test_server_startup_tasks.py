@@ -30,6 +30,32 @@ def test_startup_observability_rejects_unapproved_host(monkeypatch):
     assert server._posthog_server_capture_configured() is False
 
 
+def test_posthog_client_uses_7x_positional_project_key(monkeypatch):
+    constructor_call = {}
+    sentinel = object()
+
+    def fake_posthog(*args, **kwargs):
+        constructor_call["args"] = args
+        constructor_call["kwargs"] = kwargs
+        return sentinel
+
+    monkeypatch.setattr(server, "Posthog", fake_posthog)
+
+    client = server._build_posthog_client(
+        "phc_test",
+        "https://eu.i.posthog.com",
+    )
+
+    assert client is sentinel
+    assert constructor_call == {
+        "args": ("phc_test",),
+        "kwargs": {
+            "host": "https://eu.i.posthog.com",
+            "enable_exception_autocapture": True,
+        },
+    }
+
+
 def test_startup_task_is_retained_until_completion():
     async def _run():
         gate = asyncio.Event()
