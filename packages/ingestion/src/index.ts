@@ -180,6 +180,7 @@ export class IngestionError extends Error {
 
 export type SourceActivationBlockReason =
   | "provider_disabled"
+  | "provider_not_authorized"
   | "writer_not_typescript"
   | "source_disabled"
   | "transport_disabled"
@@ -188,6 +189,8 @@ export type SourceActivationBlockReason =
   | "provider_country_killed"
   | "source_country_killed"
   | "policy_not_approved"
+  | "policy_environment_blocked"
+  | "policy_access_blocked"
   | "policy_expired";
 
 export function sourceActivationBlockReason(
@@ -198,6 +201,9 @@ export function sourceActivationBlockReason(
 ): SourceActivationBlockReason | null {
   const country = countryCode.toUpperCase();
   if (!input.providerEnabled) return "provider_disabled";
+  if (input.providerAuthorizationStatus !== "authorized") {
+    return "provider_not_authorized";
+  }
   if (input.writerRuntime !== "typescript") return "writer_not_typescript";
   if (!input.source.enabled) return "source_disabled";
   if (!input.source.transportEnabled) return "transport_disabled";
@@ -220,9 +226,16 @@ export function sourceActivationBlockReason(
     !input.policy.enabled ||
     input.policy.approvalStatus !== "approved" ||
     !input.policy.commercialUseAllowed ||
-    !input.policy.redisplayAllowed
+    !input.policy.redisplayAllowed ||
+    !input.policy.fullTextRetentionAllowed
   ) {
     return "policy_not_approved";
+  }
+  if (!input.policy.enabledEnvironments.includes("production")) {
+    return "policy_environment_blocked";
+  }
+  if (!input.policy.permittedAccessMethods.includes(input.source.accessType)) {
+    return "policy_access_blocked";
   }
   if (
     !input.policy.expiresAt ||

@@ -125,6 +125,11 @@ export const sourcePolicyStateSchema = z
     enabled: z.boolean(),
     commercialUseAllowed: z.boolean(),
     redisplayAllowed: z.boolean(),
+    fullTextRetentionAllowed: z.boolean(),
+    enabledEnvironments: z.array(
+      z.enum(["development", "test", "staging", "production"]),
+    ),
+    permittedAccessMethods: z.array(sourceAccessTypeSchema),
     expiresAt: z.iso.datetime({ offset: true }).nullable(),
   })
   .strict();
@@ -132,6 +137,7 @@ export const sourcePolicyStateSchema = z
 export const sourceRuntimePolicySchema = z
   .object({
     providerEnabled: z.boolean(),
+    providerAuthorizationStatus: authorizationStatusSchema,
     writerRuntime: writerRuntimeSchema,
     providerCountryKillSwitches: countryKillSwitchesSchema,
     sourceCountryKillSwitches: countryKillSwitchesSchema,
