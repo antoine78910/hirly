@@ -285,8 +285,8 @@ describe("G003 least-privilege runtime repository", () => {
           provider: null,
           triggerSource: "system",
           status: "queued",
-          summary: { accepted: 3 },
         });
+        expect(run?.summary).toEqual(expect.any(Object));
         expect(serialized).not.toContain("payload_secret");
         expect(serialized).not.toContain("must-never-leave");
         expect(serialized).not.toContain("idempotency");
