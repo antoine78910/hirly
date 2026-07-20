@@ -192,7 +192,7 @@ CREATE INDEX IF NOT EXISTS worker_schedules_due_idx
   WHERE enabled;
 
 CREATE OR REPLACE VIEW public.worker_capability_status
-WITH (security_invoker = true)
+WITH (security_barrier = true)
 AS
 SELECT
   'worker-foundation.v1'::text AS contract_version,
@@ -737,12 +737,12 @@ BEGIN
 END
 $$;
 
-CREATE OR REPLACE FUNCTION worker_private.write_job_and_complete(
+CREATE OR REPLACE FUNCTION worker_private.write_jobs_and_complete(
   p_task_id uuid,
   p_lease_token uuid,
   p_claim_generation bigint,
   p_lease_owner text,
-  p_job jsonb
+  p_jobs jsonb
 )
 RETURNS boolean
 LANGUAGE plpgsql
@@ -751,9 +751,18 @@ SET search_path = pg_catalog, public, worker_private
 AS $$
 DECLARE
   v_task public.worker_tasks;
+  p_job jsonb;
   v_expected_job_id text;
   v_existing_job_id text;
+  v_existing_provider text;
+  v_existing_external_id text;
 BEGIN
+  IF jsonb_typeof(p_jobs) <> 'array' OR jsonb_array_length(p_jobs) = 0
+    OR jsonb_array_length(p_jobs) > 500 THEN
+    RAISE EXCEPTION 'canonical batch must contain between 1 and 500 jobs'
+      USING ERRCODE = '22023';
+  END IF;
+
   SELECT * INTO v_task
   FROM public.worker_tasks
   WHERE id = p_task_id
@@ -780,77 +789,135 @@ BEGIN
       USING ERRCODE = '42501';
   END IF;
 
-  IF p_job->>'provider' IS DISTINCT FROM v_task.provider
-    OR coalesce(p_job->>'external_id', '') = '' THEN
-    RAISE EXCEPTION 'job identity does not match leased provider task'
-      USING ERRCODE = '22023';
-  END IF;
+  FOR p_job IN SELECT value FROM jsonb_array_elements(p_jobs)
+  LOOP
+    IF p_job->>'provider' IS DISTINCT FROM v_task.provider
+      OR coalesce(p_job->>'external_id', '') = '' THEN
+      RAISE EXCEPTION 'job identity does not match leased provider task'
+        USING ERRCODE = '22023';
+    END IF;
 
-  v_expected_job_id := 'job_' || substr(
-    encode(digest((p_job->>'provider') || ':' || (p_job->>'external_id'), 'sha1'), 'hex'),
-    1,
-    16
-  );
-  IF p_job->>'job_id' IS DISTINCT FROM v_expected_job_id THEN
-    RAISE EXCEPTION 'deterministic job id mismatch' USING ERRCODE = '23000';
-  END IF;
+    v_expected_job_id := 'job_' || substr(
+      encode(digest((p_job->>'provider') || ':' || (p_job->>'external_id'), 'sha1'), 'hex'),
+      1,
+      16
+    );
+    IF p_job->>'job_id' IS DISTINCT FROM v_expected_job_id THEN
+      RAISE EXCEPTION 'deterministic job id mismatch' USING ERRCODE = '23000';
+    END IF;
 
-  SELECT job_id INTO v_existing_job_id
-  FROM public.jobs
-  WHERE provider = p_job->>'provider'
-    AND external_id = p_job->>'external_id'
-  FOR UPDATE;
-  IF FOUND AND v_existing_job_id <> v_expected_job_id THEN
-    RAISE EXCEPTION 'existing provider identity maps to another job id'
-      USING ERRCODE = '23000';
-  END IF;
+    SELECT job_id INTO v_existing_job_id
+    FROM public.jobs
+    WHERE provider = p_job->>'provider'
+      AND external_id = p_job->>'external_id'
+    FOR UPDATE;
+    IF FOUND AND v_existing_job_id <> v_expected_job_id THEN
+      RAISE EXCEPTION 'existing provider identity maps to another job id'
+        USING ERRCODE = '23000';
+    END IF;
 
-  INSERT INTO public.jobs (
-    job_id, provider, external_id, title, normalized_title, company,
-    normalized_company, location, country_code, selected_apply_url,
-    validation_status, applyability_tier, manual_fulfillment_ready,
-    auto_apply_supported, fingerprint, data, imported_at, last_seen_at
-  )
-  VALUES (
-    v_expected_job_id,
-    p_job->>'provider',
-    p_job->>'external_id',
-    p_job->>'title',
-    p_job->>'normalized_title',
-    p_job->>'company',
-    p_job->>'normalized_company',
-    p_job->>'location',
-    p_job->>'country_code',
-    p_job->>'selected_apply_url',
-    p_job->>'validation_status',
-    p_job->>'applyability_tier',
-    coalesce((p_job->>'manual_fulfillment_ready')::boolean, false),
-    coalesce((p_job->>'auto_apply_supported')::boolean, false),
-    p_job->>'fingerprint',
-    coalesce(p_job->'data', '{}'::jsonb),
-    clock_timestamp(),
-    clock_timestamp()
-  )
-  ON CONFLICT (job_id) DO UPDATE SET
-    title = EXCLUDED.title,
-    normalized_title = EXCLUDED.normalized_title,
-    company = EXCLUDED.company,
-    normalized_company = EXCLUDED.normalized_company,
-    location = EXCLUDED.location,
-    country_code = EXCLUDED.country_code,
-    selected_apply_url = EXCLUDED.selected_apply_url,
-    validation_status = EXCLUDED.validation_status,
-    applyability_tier = EXCLUDED.applyability_tier,
-    manual_fulfillment_ready = EXCLUDED.manual_fulfillment_ready,
-    auto_apply_supported = EXCLUDED.auto_apply_supported,
-    fingerprint = EXCLUDED.fingerprint,
-    data = EXCLUDED.data,
-    last_seen_at = EXCLUDED.last_seen_at;
+    SELECT provider, external_id
+    INTO v_existing_provider, v_existing_external_id
+    FROM public.jobs
+    WHERE job_id = v_expected_job_id
+    FOR UPDATE;
+    IF FOUND AND (
+      v_existing_provider IS DISTINCT FROM p_job->>'provider'
+      OR v_existing_external_id IS DISTINCT FROM p_job->>'external_id'
+    ) THEN
+      RAISE EXCEPTION 'deterministic job id collision with another provider identity'
+        USING ERRCODE = '23000';
+    END IF;
+
+    INSERT INTO public.jobs (
+      job_id, provider, external_id, title, normalized_title, company,
+      normalized_company, location, country_code, selected_apply_url,
+      validation_status, validation_reason, validation_checked_at,
+      applyability_tier, applyability_score, apply_fulfillment_status,
+      apply_url_provider, ats_provider, requires_login,
+      requires_account_creation, captcha_detected, manual_fulfillment_ready,
+      auto_apply_supported, rejection_reason, fingerprint, data,
+      imported_at, last_seen_at
+    )
+    VALUES (
+      v_expected_job_id,
+      p_job->>'provider',
+      p_job->>'external_id',
+      p_job->>'title',
+      p_job->>'normalized_title',
+      p_job->>'company',
+      p_job->>'normalized_company',
+      p_job->>'location',
+      p_job->>'country_code',
+      p_job->>'selected_apply_url',
+      p_job->>'validation_status',
+      p_job->>'validation_reason',
+      (p_job->>'validation_checked_at')::timestamptz,
+      p_job->>'applyability_tier',
+      (p_job->>'applyability_score')::numeric,
+      p_job->>'apply_fulfillment_status',
+      p_job->>'apply_url_provider',
+      p_job->>'ats_provider',
+      coalesce((p_job->>'requires_login')::boolean, false),
+      coalesce((p_job->>'requires_account_creation')::boolean, false),
+      coalesce((p_job->>'captcha_detected')::boolean, false),
+      coalesce((p_job->>'manual_fulfillment_ready')::boolean, false),
+      coalesce((p_job->>'auto_apply_supported')::boolean, false),
+      p_job->>'rejection_reason',
+      p_job->>'fingerprint',
+      coalesce(p_job->'data', '{}'::jsonb),
+      clock_timestamp(),
+      clock_timestamp()
+    )
+    ON CONFLICT (job_id) DO UPDATE SET
+      title = EXCLUDED.title,
+      normalized_title = EXCLUDED.normalized_title,
+      company = EXCLUDED.company,
+      normalized_company = EXCLUDED.normalized_company,
+      location = EXCLUDED.location,
+      country_code = EXCLUDED.country_code,
+      selected_apply_url = EXCLUDED.selected_apply_url,
+      validation_status = EXCLUDED.validation_status,
+      validation_reason = EXCLUDED.validation_reason,
+      validation_checked_at = EXCLUDED.validation_checked_at,
+      applyability_tier = EXCLUDED.applyability_tier,
+      applyability_score = EXCLUDED.applyability_score,
+      apply_fulfillment_status = EXCLUDED.apply_fulfillment_status,
+      apply_url_provider = EXCLUDED.apply_url_provider,
+      ats_provider = EXCLUDED.ats_provider,
+      requires_login = EXCLUDED.requires_login,
+      requires_account_creation = EXCLUDED.requires_account_creation,
+      captcha_detected = EXCLUDED.captcha_detected,
+      manual_fulfillment_ready = EXCLUDED.manual_fulfillment_ready,
+      auto_apply_supported = EXCLUDED.auto_apply_supported,
+      rejection_reason = EXCLUDED.rejection_reason,
+      fingerprint = EXCLUDED.fingerprint,
+      data = EXCLUDED.data,
+      last_seen_at = EXCLUDED.last_seen_at;
+  END LOOP;
 
   RETURN worker_private.finish_task(
     p_task_id, p_lease_token, p_claim_generation, p_lease_owner, 'succeeded'
   );
 END
+$$;
+
+CREATE OR REPLACE FUNCTION worker_private.write_job_and_complete(
+  p_task_id uuid,
+  p_lease_token uuid,
+  p_claim_generation bigint,
+  p_lease_owner text,
+  p_job jsonb
+)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, public, worker_private
+AS $$
+  SELECT worker_private.write_jobs_and_complete(
+    p_task_id, p_lease_token, p_claim_generation, p_lease_owner,
+    jsonb_build_array(p_job)
+  )
 $$;
 
 REVOKE ALL ON public.provider_registry, public.worker_runs, public.worker_tasks,
@@ -882,6 +949,9 @@ GRANT EXECUTE ON FUNCTION worker_private.finish_task(
   uuid, uuid, bigint, text, text, text, text, timestamptz
 ) TO hirly_inventory_worker;
 GRANT EXECUTE ON FUNCTION worker_private.write_job_and_complete(
+  uuid, uuid, bigint, text, jsonb
+) TO hirly_inventory_worker;
+GRANT EXECUTE ON FUNCTION worker_private.write_jobs_and_complete(
   uuid, uuid, bigint, text, jsonb
 ) TO hirly_inventory_worker;
 GRANT EXECUTE ON FUNCTION worker_private.set_provider_authorization(

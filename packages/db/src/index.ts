@@ -1,0 +1,257 @@
+import type { CanonicalJob, EnqueueRun } from "@hirly/contracts";
+import postgres, { type Sql } from "postgres";
+
+export type Database = Sql<Record<string, postgres.PostgresType>>;
+
+export interface Lease {
+  taskId: string;
+  leaseToken: string;
+  claimGeneration: bigint;
+  leaseOwner: string;
+}
+
+export interface ClaimedTask extends Lease {
+  runId: string;
+  taskKey: string;
+  taskType: string;
+  provider: string | null;
+  payload: Record<string, unknown>;
+  attempts: number;
+  maxAttempts: number;
+  leaseUntil: Date;
+}
+
+interface WorkerTaskRow {
+  id: string;
+  run_id: string;
+  task_key: string;
+  task_type: string;
+  provider: string | null;
+  payload: Record<string, unknown>;
+  lease_token: string;
+  claim_generation: string;
+  lease_owner: string;
+  attempts: number;
+  max_attempts: number;
+  lease_until: Date;
+}
+
+export function createDatabase(
+  url: string,
+  options: postgres.Options<Record<string, postgres.PostgresType>> = {},
+): Database {
+  return postgres(url, {
+    max: 10,
+    idle_timeout: 20,
+    connect_timeout: 10,
+    ...options,
+  });
+}
+
+export class WorkerRepository {
+  constructor(private readonly sql: Database) {}
+
+  async close(): Promise<void> {
+    await this.sql.end({ timeout: 5 });
+  }
+
+  async ping(): Promise<boolean> {
+    const [row] = await this.sql<{ ok: number }[]>`SELECT 1 AS ok`;
+    return row?.ok === 1;
+  }
+
+  async enqueue(input: EnqueueRun): Promise<string> {
+    return this.sql.begin(async (transaction) => {
+      let runId: string | undefined;
+      for (const [index, task] of input.tasks.entries()) {
+        const [run] = await transaction<{ id: string }[]>`
+          SELECT id
+          FROM worker_private.enqueue_run(
+            ${input.kind},
+            ${input.provider},
+            ${input.idempotencyKey},
+            ${input.triggerSource},
+            ${task.taskKey},
+            ${task.taskType},
+            ${transaction.json(task.payload)},
+            ${task.maxAttempts},
+            ${task.availableAt ? new Date(task.availableAt) : new Date()},
+            ${input.scheduleId},
+            ${input.scheduledFor ? new Date(input.scheduledFor) : null}
+          )
+        `;
+        if (!run) throw new Error("enqueue_run returned no row");
+        if (index > 0 && runId !== run.id) {
+          throw new Error("enqueue_run returned inconsistent run identity");
+        }
+        runId = run.id;
+      }
+      if (!runId) throw new Error("run must contain at least one task");
+      return runId;
+    });
+  }
+
+  async claim(
+    leaseOwner: string,
+    limit: number,
+    leaseSeconds: number,
+  ): Promise<ClaimedTask[]> {
+    const rows = await this.sql<WorkerTaskRow[]>`
+      SELECT *
+      FROM worker_private.claim_tasks(${leaseOwner}, ${limit}, ${leaseSeconds})
+    `;
+    return rows.map((row) => ({
+      taskId: row.id,
+      runId: row.run_id,
+      taskKey: row.task_key,
+      taskType: row.task_type,
+      provider: row.provider,
+      payload: row.payload,
+      leaseToken: row.lease_token,
+      claimGeneration: BigInt(row.claim_generation),
+      leaseOwner: row.lease_owner,
+      attempts: row.attempts,
+      maxAttempts: row.max_attempts,
+      leaseUntil: row.lease_until,
+    }));
+  }
+
+  async heartbeat(lease: Lease, leaseSeconds: number): Promise<boolean> {
+    const [row] = await this.sql<{ heartbeat_task: boolean }[]>`
+      SELECT worker_private.heartbeat_task(
+        ${lease.taskId}::uuid,
+        ${lease.leaseToken}::uuid,
+        ${lease.claimGeneration.toString()}::bigint,
+        ${lease.leaseOwner},
+        ${leaseSeconds}
+      )
+    `;
+    return row?.heartbeat_task === true;
+  }
+
+  async finish(
+    lease: Lease,
+    outcome: "succeeded" | "retryable" | "failed" | "cancelled",
+    options: {
+      errorCode?: string;
+      errorMessage?: string;
+      retryAt?: Date;
+    } = {},
+  ): Promise<boolean> {
+    const [row] = await this.sql<{ finish_task: boolean }[]>`
+      SELECT worker_private.finish_task(
+        ${lease.taskId}::uuid,
+        ${lease.leaseToken}::uuid,
+        ${lease.claimGeneration.toString()}::bigint,
+        ${lease.leaseOwner},
+        ${outcome},
+        ${options.errorCode ?? null},
+        ${options.errorMessage ?? null},
+        ${options.retryAt ?? null}
+      )
+    `;
+    return row?.finish_task === true;
+  }
+
+  async writeJobAndComplete(
+    lease: Lease,
+    job: CanonicalJob,
+  ): Promise<boolean> {
+    return this.writeJobsAndComplete(lease, [job]);
+  }
+
+  async writeJobsAndComplete(
+    lease: Lease,
+    jobs: CanonicalJob[],
+  ): Promise<boolean> {
+    const databaseJobs = jobs.map((job) => ({
+      job_id: job.jobId,
+      provider: job.provider,
+      external_id: job.externalId,
+      title: job.title,
+      normalized_title: job.normalizedTitle,
+      company: job.company,
+      normalized_company: job.normalizedCompany,
+      location: job.location,
+      country_code: job.countryCode,
+      selected_apply_url: job.selectedApplyUrl,
+      validation_status: job.validationStatus,
+      validation_reason: job.validationReason,
+      validation_checked_at: job.validationCheckedAt,
+      applyability_tier: job.applyabilityTier,
+      applyability_score: job.applyabilityScore,
+      apply_fulfillment_status: job.applyFulfillmentStatus,
+      apply_url_provider: job.applyUrlProvider,
+      ats_provider: job.atsProvider,
+      requires_login: job.requiresLogin,
+      requires_account_creation: job.requiresAccountCreation,
+      captcha_detected: job.captchaDetected,
+      manual_fulfillment_ready: job.manualFulfillmentReady,
+      auto_apply_supported: job.autoApplySupported,
+      rejection_reason: job.rejectionReason,
+      fingerprint: job.fingerprint,
+      data: job.data,
+    }));
+    const [row] = await this.sql<{ write_jobs_and_complete: boolean }[]>`
+      SELECT worker_private.write_jobs_and_complete(
+        ${lease.taskId}::uuid,
+        ${lease.leaseToken}::uuid,
+        ${lease.claimGeneration.toString()}::bigint,
+        ${lease.leaseOwner},
+        ${this.sql.json(databaseJobs)}
+      )
+    `;
+    return row?.write_jobs_and_complete === true;
+  }
+
+  async setProviderAuthorization(input: {
+    provider: string;
+    status: "unverified" | "authorized" | "blocked";
+    evidenceRef: string | null;
+    reviewedAt: Date;
+  }): Promise<void> {
+    await this.sql`
+      SELECT worker_private.set_provider_authorization(
+        ${input.provider}, ${input.status}, ${input.evidenceRef}, ${input.reviewedAt}
+      )
+    `;
+  }
+
+  async setProviderWriter(
+    provider: string,
+    writer: "none" | "python" | "typescript",
+  ): Promise<void> {
+    await this.sql`
+      SELECT worker_private.set_provider_writer(${provider}, ${writer})
+    `;
+  }
+
+  async setProviderEnabled(provider: string, enabled: boolean): Promise<void> {
+    await this.sql`
+      SELECT worker_private.set_provider_enabled(${provider}, ${enabled})
+    `;
+  }
+
+  async setScheduleEnabled(
+    scheduleId: string,
+    enabled: boolean,
+    nextDueAt: Date | null = null,
+  ): Promise<void> {
+    await this.sql`
+      SELECT worker_private.set_schedule_enabled(
+        ${scheduleId}, ${enabled}, ${nextDueAt}
+      )
+    `;
+  }
+
+  async enqueueDueSchedule(
+    scheduleId: string,
+    nextDueAt: Date,
+  ): Promise<string | null> {
+    const [row] = await this.sql<{ id: string }[]>`
+      SELECT id
+      FROM worker_private.enqueue_due_schedule(${scheduleId}, ${nextDueAt})
+    `;
+    return row?.id ?? null;
+  }
+}

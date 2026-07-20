@@ -14,7 +14,7 @@ export const workerConfigSchema = z
       .enum(["true", "false"])
       .default("false")
       .transform((value) => value === "true"),
-    WORKER_CONTROL_TOKEN: z.string().min(32).optional(),
+    WORKER_CONTROL_TOKEN: z.string().trim().min(32).optional(),
   })
   .strict()
   .superRefine((value, context) => {
@@ -32,6 +32,18 @@ export const workerConfigSchema = z
         message: "control token is required when the control plane is enabled",
       });
     }
+    if (value.NODE_ENV === "production") {
+      const databaseUrl = new URL(value.JOBS_DATABASE_URL);
+      const sslMode = databaseUrl.searchParams.get("sslmode");
+      if (!["require", "verify-ca", "verify-full"].includes(sslMode ?? "")) {
+        context.addIssue({
+          code: "custom",
+          path: ["JOBS_DATABASE_URL"],
+          message:
+            "production inventory database URL must require TLS with sslmode",
+        });
+      }
+    }
   });
 
 export type WorkerConfig = z.infer<typeof workerConfigSchema>;
@@ -39,7 +51,15 @@ export type WorkerConfig = z.infer<typeof workerConfigSchema>;
 export function parseWorkerConfig(
   environment: Record<string, string | undefined>,
 ): WorkerConfig {
-  return workerConfigSchema.parse(environment);
+  return workerConfigSchema.parse({
+    NODE_ENV: environment.NODE_ENV,
+    JOBS_DATABASE_URL: environment.JOBS_DATABASE_URL,
+    WORKER_CONCURRENCY: environment.WORKER_CONCURRENCY,
+    WORKER_LEASE_SECONDS: environment.WORKER_LEASE_SECONDS,
+    WORKER_HEARTBEAT_SECONDS: environment.WORKER_HEARTBEAT_SECONDS,
+    WORKER_CONTROL_ENABLED: environment.WORKER_CONTROL_ENABLED,
+    WORKER_CONTROL_TOKEN: environment.WORKER_CONTROL_TOKEN,
+  });
 }
 
 export const clientConfigSchema = z.object({}).strict();

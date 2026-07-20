@@ -33,4 +33,14 @@ describe("server configuration", () => {
     ).toThrow();
     expect(parseClientConfig({ JOBS_DATABASE_URL: databaseUrl })).toEqual({});
   });
+
+  test("accepts a complete process environment without weakening schema strictness", () => {
+    expect(
+      parseWorkerConfig({
+        PATH: "/usr/bin",
+        HOME: "/tmp",
+        JOBS_DATABASE_URL: databaseUrl,
+      }).JOBS_DATABASE_URL,
+    ).toBe(databaseUrl);
+  });
 });

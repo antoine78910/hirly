@@ -60,6 +60,16 @@ export const providerRegistrySchema = z
         path: ["enabled"],
       });
     }
+    if (
+      value.enabled &&
+      (!value.authorizationEvidenceRef || !value.authorizationReviewedAt)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "enabled providers require reviewed authorization evidence",
+        path: ["authorizationEvidenceRef"],
+      });
+    }
   });
 
 export const taskTypeSchema = z.enum(["provider.fetch_page", "inventory.maintenance"]);
@@ -87,7 +97,41 @@ export const enqueueRunSchema = z
       .min(1)
       .max(1_000),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    const scheduled = value.triggerSource === "schedule";
+    if (scheduled !== Boolean(value.scheduleId && value.scheduledFor)) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "schedule triggers require scheduleId and scheduledFor; other triggers must omit them",
+        path: ["triggerSource"],
+      });
+    }
+    if (
+      (value.kind === "provider_ingestion") !== Boolean(value.provider)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "provider ingestion requires a provider; inventory maintenance must be provider-neutral",
+        path: ["provider"],
+      });
+    }
+    const expectedTaskType =
+      value.kind === "provider_ingestion"
+        ? "provider.fetch_page"
+        : "inventory.maintenance";
+    value.tasks.forEach((task, index) => {
+      if (task.taskType !== expectedTaskType) {
+        context.addIssue({
+          code: "custom",
+          message: `run kind requires ${expectedTaskType} tasks`,
+          path: ["tasks", index, "taskType"],
+        });
+      }
+    });
+  });
 
 export const runViewSchema = z
   .object({
@@ -123,10 +167,29 @@ export const canonicalJobSchema = z
     location: z.string().min(1),
     countryCode: z.string().regex(/^[A-Z]{2}$/),
     selectedApplyUrl: z.url().nullable(),
-    validationStatus: z.string().min(1),
-    applyabilityTier: z.string().min(1),
+    validationStatus: z.enum(["valid", "invalid", "unknown"]),
+    validationReason: z.string().min(1),
+    validationCheckedAt: z.iso.datetime({ offset: true }),
+    applyabilityTier: z.enum(["A", "B", "C", "D", "E"]),
+    applyabilityScore: z.number().min(0).max(1),
+    applyFulfillmentStatus: z.enum([
+      "manual_ready",
+      "needs_validation",
+      "validation_unknown",
+      "blocked_missing_apply_url",
+      "blocked_expired",
+      "blocked_captcha",
+      "blocked_user_account_required",
+      "discovery_only",
+    ]),
+    applyUrlProvider: z.string().min(1),
+    atsProvider: z.string().min(1),
+    requiresLogin: z.boolean(),
+    requiresAccountCreation: z.boolean(),
+    captchaDetected: z.boolean(),
     manualFulfillmentReady: z.boolean(),
     autoApplySupported: z.boolean(),
+    rejectionReason: z.string().min(1).nullable(),
     fingerprint: z.string().min(1),
     data: z.record(z.string(), z.unknown()),
   })

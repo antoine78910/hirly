@@ -5,6 +5,10 @@ const sensitiveKey =
 const piiKey = /(^|_)(email|phone|first.?name|last.?name|full.?name)($|_)/i;
 const credentialUrl = /\b(?:postgres(?:ql)?|https?):\/\/[^/\s:@]+:[^@\s]+@/gi;
 const bearer = /\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi;
+const email = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
+const phone = /(?:\+\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)[\s.-]?)?\d[\d\s.-]{7,}\d/g;
+const querySecret =
+  /([?&](?:access_token|api_key|apikey|authorization|password|secret|token)=)[^&#\s]*/gi;
 
 export const eventSchema = z
   .object({
@@ -53,7 +57,11 @@ function redactString(value: string): string {
   return value.replace(credentialUrl, (match) => {
     const schemeEnd = match.indexOf("://") + 3;
     return `${match.slice(0, schemeEnd)}[REDACTED]@`;
-  }).replace(bearer, "Bearer [REDACTED]");
+  })
+    .replace(bearer, "Bearer [REDACTED]")
+    .replace(querySecret, "$1[REDACTED]")
+    .replace(email, "[REDACTED_EMAIL]")
+    .replace(phone, "[REDACTED_PHONE]");
 }
 
 export function redact(value: unknown, key = ""): unknown {
