@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./ats": "./src/ats.ts"
+    "./ats": "./src/ats.ts",
+    "./ats-discovery": "./src/ats-discovery.ts"
   },
   "scripts": {
     "lint": "tsc --noEmit",
