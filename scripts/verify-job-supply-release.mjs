@@ -46,16 +46,31 @@ const SAFE_INHERITED_ENV = new Set([
 ]);
 const RELEASE_ARTIFACTS = [
   ".dockerignore",
+  ".github/workflows/typescript-foundation.yml",
   "apps/worker/Dockerfile",
   "apps/worker/railway.toml",
   "backend/railway.toml",
+  "backend/requirements.txt",
   "bun.lock",
   "frontend/package-lock.json",
+  "frontend/package.json",
   "frontend/vercel.json",
   "package.json",
   "scripts/verify-job-supply-release.mjs",
   "tests/g015-release-readiness.test.ts",
   "vercel.json",
+];
+const BACKEND_COMPATIBILITY_TESTS = [
+  "backend/tests/test_france_travail_provider.py",
+  "backend/tests/test_france_travail_harvest.py",
+  "backend/tests/test_ats_adapters.py",
+  "backend/tests/test_ats_detection.py",
+  "backend/tests/test_ats_source_service.py",
+  "backend/tests/test_job_normalization.py",
+  "backend/tests/test_job_validation.py",
+  "backend/tests/test_jobs_upsert_batch.py",
+  "backend/tests/test_job_cache_maintenance.py",
+  "backend/tests/test_feed_db_first.py",
 ];
 
 export function assertDisposableDatabase(databaseUrl, explicitlyAllowed) {
@@ -112,6 +127,12 @@ export function buildReleaseVerificationPlan(options = {}) {
     command("lint", "bun", ["run", "lint"]),
     command("tests", "bun", ["run", "test"]),
     command("build", "bun", ["run", "build"]),
+    command(
+      "backend-python-compatibility",
+      ".venv/bin/python",
+      ["-m", "pytest", "-q", ...BACKEND_COMPATIBILITY_TESTS],
+      { env: { PYTHONPATH: "backend" } },
+    ),
     command("release-contracts", "bun", ["test", "tests/g015-release-readiness.test.ts"]),
     command("stack-policy-revision", "node", ["scripts/verify-job-supply-release.mjs", "--internal-stack-policy-revision"]),
     command("deployment-default-safety", "node", ["scripts/verify-job-supply-release.mjs", "--internal-deployment-default-safety"]),
@@ -121,6 +142,18 @@ export function buildReleaseVerificationPlan(options = {}) {
   if (includeFrontend) {
     commands.push(
       command("legacy-frontend-frozen-install", "npm", ["ci", "--legacy-peer-deps"], { cwd: "frontend" }),
+      command(
+        "legacy-frontend-security-audit",
+        "npm",
+        ["audit", "--omit=dev", "--audit-level=critical"],
+        { cwd: "frontend" },
+      ),
+      command(
+        "legacy-frontend-tests",
+        "npm",
+        ["run", "test", "--", "--watchAll=false", "--runInBand"],
+        { cwd: "frontend", env: { CI: "true" } },
+      ),
       command("legacy-frontend-build", "npm", ["run", "build"], { cwd: "frontend", env: { CI: "false" } }),
     );
   }

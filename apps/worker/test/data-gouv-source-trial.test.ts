@@ -400,6 +400,63 @@ describe("G014 qualified data.gouv evidence-only trial", () => {
     ]);
   });
 
+  test("records policy_expired when a data.gouv failure crosses manifest expiry", async () => {
+    const sealed = sealDataGouvTrialResourceManifest(resourceManifestInput());
+    const expiry = "2026-07-20T12:00:01.000Z";
+    let currentTime = "2026-07-20T12:00:00.000Z";
+    const calls: string[] = [];
+    const results: SourceTrialResult[] = [];
+    const repository: SourceTrialEvidenceRepository = {
+      async beginSourceTrial() {
+        calls.push("begin");
+        return "018f02d8-a8b8-7f1d-a419-bf38eaf22a92";
+      },
+      async recordSourceTrialPage() {
+        calls.push("page");
+        throw new Error("expired trials must not append pages");
+      },
+      async recordSourceTrialCandidate() {
+        calls.push("candidate");
+        throw new Error("expired trials must not append candidates");
+      },
+      async recordSourceTrialScorecard(input) {
+        calls.push("scorecard");
+        results.push(input.result);
+      },
+    };
+
+    await expect(
+      persistDataGouvSourceTrial({
+        manifest: {
+          ...manifest,
+          trialKey: `${manifest.trialKey}:expiry-crossing`,
+          requestedAt: "2026-07-20T11:59:00.000Z",
+          expiresAt: expiry,
+        },
+        resourceManifest: sealed,
+        approvedManifestDigests: [sealed.manifestDigest],
+        repository,
+        fetch: async () => {
+          currentTime = "2026-07-20T12:00:01.100Z";
+          return new Response("", { status: 429 });
+        },
+        now: () => new Date(currentTime),
+      }),
+    ).rejects.toMatchObject({ classification: "rate_limited" });
+
+    expect(calls).toEqual(["begin", "scorecard"]);
+    expect(results).toEqual([
+      expect.objectContaining({
+        status: "policy_expired",
+        stopReason: "policy_expired",
+        finishedAt: "2026-07-20T12:00:01.100Z",
+        pagesFetched: 0,
+        candidatesObserved: 0,
+        bytesStored: 0,
+      }),
+    ]);
+  });
+
   test("keeps the manifest digest content-addressed", () => {
     const sealed = sealDataGouvTrialResourceManifest(resourceManifestInput());
     const { manifestDigest, ...unsigned } = sealed;

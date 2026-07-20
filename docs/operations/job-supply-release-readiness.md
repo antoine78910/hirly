@@ -52,7 +52,14 @@ represented as a passing live check.
 
 The full profile builds a unique Docker tag, records the image ID, layer digests and a
 digest of the inspected runtime configuration, then removes the tag in the verifier cleanup
-path. After the seven PostgreSQL suites, the verifier queries the migrated G014 database
+path. It also runs a critical-severity production-dependency audit, the legacy
+frontend test suite and the ingestion/feed-critical Python
+compatibility suite from the repository `.venv`; install `backend/requirements.txt` into
+that environment before running the command. Existing CRA lint warnings and
+non-critical legacy toolchain advisories remain visible and must stay in the
+dependency-remediation backlog; the release gate rejects critical advisories.
+The production build does not suppress its warning output. After the seven
+PostgreSQL suites, the verifier queries the migrated G014 database
 and requires zero enabled providers, TypeScript writers, worker/Python schedules, career
 source transports, production policies, and production-eligible policy evidence. Static
 migration inspection separately rejects top-level provider, source, policy, evidence, or
@@ -92,6 +99,24 @@ Apply in this order with `psql -v ON_ERROR_STOP=1`:
 10. `20260720001000_open_source_policy_evidence.sql`
 11. `20260720001100_source_trial_foundation.sql`
 
+The following same-day migrations belong to the **primary application
+database**, not the split inventory database. They are documented here so a
+release operator does not accidentally treat the repository-wide timestamp
+prefix as an inventory placement rule:
+
+1. `20260720001100_auth_session_lookup.sql`
+2. `20260720001200_onboarding_profile_patch.sql`
+3. `20260720001300_application_tracker_contracts.sql`
+4. `20260720001300_notification_mark_all.sql`
+5. `20260720001400_auto_apply_backfill.sql`
+6. `20260720001500_gmail_outcome_batch.sql`
+7. `20260720001600_admin_bounded_contracts.sql`
+
+Apply these only through the application-database release process after their
+own compatibility and rollback gates. They are not prerequisites for the
+evidence-only source trial and must never be applied to a split inventory
+database merely to satisfy filename ordering.
+
 Use a single transaction only when the target environment and migration have
 been proven compatible with it. Otherwise stop on the first error and inspect
 the additive state; do not continue out of order.
@@ -104,7 +129,9 @@ Apply the list to the primary database containing `public.jobs`.
 
 Bootstrap `backend/db/jobs_inventory_schema.sql` on the inventory database,
 then apply the ordered list there using `JOBS_DATABASE_URL`. Keep auth, billing,
-profiles and user application state on the primary application database.
+profiles and user application state on the primary application database. In
+this topology, “the ordered list” means the eleven inventory migrations above,
+not the separately listed application-database migrations.
 
 ## Deployment configuration validation
 

@@ -95,7 +95,7 @@ describe("G014 real-Postgres source trial isolation", () => {
           'greenhouse:g014-foundation', 'g014-approved-fixture',
           'written_permission', 'g014-test-approval',
           'tests/fixtures/g014-policy.json',
-          repeat('a', 64), clock_timestamp(), 'requires_legal_review', false,
+          repeat('a', 64), clock_timestamp(), 'trial_approved', false,
           '{
             "trialEligible": true,
             "provider": "greenhouse",
@@ -126,7 +126,7 @@ describe("G014 real-Postgres source trial isolation", () => {
           'greenhouse:g014-foundation', 'g014-replacement-fixture',
           'written_permission', 'g014-test-replacement-approval',
           'tests/fixtures/g014-policy-replacement.json',
-          repeat('b', 64), clock_timestamp(), 'requires_legal_review', false,
+          repeat('b', 64), clock_timestamp(), 'trial_approved', false,
           '{
             "trialEligible": true,
             "provider": "greenhouse",
@@ -169,6 +169,83 @@ describe("G014 real-Postgres source trial isolation", () => {
           ),
           true
         );
+
+        INSERT INTO public.source_policy_evidence (
+          source_key, evidence_key, evidence_type, evidence_reference,
+          artifact_path, artifact_sha256, captured_at, qualification_status,
+          production_eligible, claim_scope
+        ) VALUES
+        (
+          'greenhouse:g014-foundation', 'g014-unqualified-fixture',
+          'written_permission', 'g014-unreviewed-permission',
+          'tests/fixtures/g014-unqualified-policy.json',
+          repeat('d', 64), clock_timestamp(), 'requires_legal_review', false,
+          '{
+            "trialEligible": true,
+            "provider": "greenhouse",
+            "sourceKey": "greenhouse:g014-foundation",
+            "tenantKey": "g014-foundation",
+            "permittedAccessMethod": "tenant_feed",
+            "environments": ["staging"],
+            "rights": [
+              "commercial_use", "redisplay", "retention", "access_method"
+            ]
+          }'::jsonb
+        ),
+        (
+          'greenhouse:g014-foundation', 'g014-blocked-fixture',
+          'written_permission', 'g014-blocked-permission',
+          'tests/fixtures/g014-blocked-policy.json',
+          repeat('e', 64), clock_timestamp(), 'blocked', false,
+          '{
+            "trialEligible": true,
+            "provider": "greenhouse",
+            "sourceKey": "greenhouse:g014-foundation",
+            "tenantKey": "g014-foundation",
+            "permittedAccessMethod": "tenant_feed",
+            "environments": ["staging"],
+            "rights": [
+              "commercial_use", "redisplay", "retention", "access_method"
+            ]
+          }'::jsonb
+        );
+
+        DO $unqualified_evidence$
+        DECLARE
+          v_evidence_id uuid;
+        BEGIN
+          FOR v_evidence_id IN
+            SELECT id
+            FROM public.source_policy_evidence
+            WHERE evidence_key IN (
+              'g014-unqualified-fixture',
+              'g014-blocked-fixture'
+            )
+            ORDER BY evidence_key
+          LOOP
+            BEGIN
+              INSERT INTO public.source_trial_policies (
+                source_id, provider, tenant_key, policy_evidence_id,
+                permitted_access_method, environment, starts_at, expires_at,
+                max_total_runs, max_pages_per_run, max_candidates_per_run,
+                max_bytes_per_run, trial_enabled, approved_by,
+                approval_reference
+              ) VALUES (
+                current_setting('g014.source_id')::uuid,
+                'greenhouse', 'g014-foundation', v_evidence_id,
+                'tenant_feed', 'staging',
+                clock_timestamp() - interval '1 minute',
+                clock_timestamp() + interval '1 hour',
+                1, 1, 1, 4096, true, 'g014-test',
+                'unqualified-evidence'
+              );
+              RAISE EXCEPTION
+                'unqualified source evidence unexpectedly authorized a trial';
+            EXCEPTION WHEN check_violation THEN NULL;
+            END;
+          END LOOP;
+        END
+        $unqualified_evidence$;
 
         DO $public_is_not_permission$
         BEGIN

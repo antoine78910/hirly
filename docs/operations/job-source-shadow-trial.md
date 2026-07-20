@@ -12,11 +12,23 @@ Classification: `TS_NEW`.
 | --- | --- | --- | --- |
 | Greenhouse | Bounded, exact allowlisted tenant, one complete board request | Disabled | Existing Python canonical ownership is unchanged |
 | Lever | Bounded, exact allowlisted tenant and global/EU host, one complete postings request | Disabled | Existing Python canonical ownership is unchanged |
+| Choisir le Service Public | Bounded evidence-only CSV transport for one exact dataset/resource/content digest | Disabled | Fixed qualified snapshot only; no canonical apply route, production readiness or canonical writer |
+| Qualified data.gouv resource | Generic evidence-only transport bound to one separately approved dataset/resource/manifest digest | Disabled | Conditional per-resource capability; the catalogue is not an allowlist |
+| BPCE via data.gouv | Not ready for persistence | Disabled | Current export is mutable; require a fresh digest and recruiter-PII redaction adapter |
 | Ashby | Not ready | Disabled | URL classification exists, but the shared provider contract has no Ashby TS provider |
 
-The transport accepts no arbitrary URL or credentials. It constructs a fixed
-official HTTPS endpoint from the policy-bound tenant key, rejects redirects,
-and enforces one request/page plus byte/time limits.
+ATS transports accept no arbitrary URL or credentials. They construct a fixed
+official HTTPS endpoint from the policy-bound tenant key and reject redirects.
+Open-data transports accept only an exact reviewed resource manifest whose
+dataset, resource, URL, content digest, policy evidence and attribution match
+the trial manifest. Every transport enforces request/page, byte and time limits.
+
+The CSP resource is only `qualified_evidence_only`: its sealed snapshot can
+measure volume, freshness and duplicates, but it cannot demonstrate an
+actionable application route. Generic data.gouv support does not qualify any
+dataset automatically. BPCE remains `BLOCKED_EXTERNAL` until a fresh mutable
+capture is digest-bound and recruiter personal data is removed before
+persistence or logging.
 
 ## Policy precondition
 
@@ -30,18 +42,20 @@ An operator must create a disabled `career_sources` row and a current
 - start/expiry window;
 - total-run, page, candidate and byte budgets;
 - a matching immutable `licence_text` or `written_permission` evidence record
-  whose reviewed claim scope explicitly covers trial eligibility, provider,
-  source, tenant, access method, environment, commercial use, redisplay and
-  retention.
+  with `qualification_status=trial_approved` whose reviewed claim scope explicitly
+  covers trial eligibility, provider, source, tenant, access method,
+  environment, commercial use, redisplay and retention.
 
 Public readability, an unauthenticated endpoint, a dataset catalogue page, or a
-`requires_legal_review` qualification status is not permission and cannot
-satisfy the trial gate. When the required reviewed evidence is unavailable,
-persist a typed `BLOCKED_EXTERNAL` source-policy result instead of starting a
-trial.
+`requires_legal_review`, `dataset_specific_evidence_required`, `approved`, or `blocked`
+qualification status is not permission and cannot satisfy the trial gate, even
+when its claim JSON says `trialEligible=true`. When the required reviewed
+evidence is unavailable, persist a typed `BLOCKED_EXTERNAL` source-policy result
+instead of starting a trial.
 
-The trial policy is separate from production eligibility. It neither requires
-nor changes `production_eligible`, provider authorization, canonical writer
+`trial_approved` is deliberately separate from the existing production
+`approved` status and does not require or change `production_eligible`. The
+trial policy also does not change provider authorization, canonical writer
 ownership, source enablement, transport enablement or schedules.
 
 Use a dedicated database credential mapped only to

@@ -42,11 +42,14 @@ describe("G015 release verification contract", () => {
       "lint",
       "tests",
       "build",
+      "backend-python-compatibility",
       "release-contracts",
       "stack-policy-revision",
       "deployment-default-safety",
       "diff-check",
       "legacy-frontend-frozen-install",
+      "legacy-frontend-security-audit",
+      "legacy-frontend-tests",
       "legacy-frontend-build",
       "worker-docker-build",
       "worker-docker-proof",
@@ -55,6 +58,15 @@ describe("G015 release verification contract", () => {
       "postgres-disabled-state-proof",
     ]);
     expect(plan.commands.find((entry) => entry.id === "legacy-frontend-frozen-install")?.args).toEqual(["ci", "--legacy-peer-deps"]);
+    expect(plan.commands.find((entry) => entry.id === "legacy-frontend-security-audit")?.args).toEqual([
+      "audit",
+      "--omit=dev",
+      "--audit-level=critical",
+    ]);
+    expect(plan.commands.find((entry) => entry.id === "legacy-frontend-tests")?.env).toEqual({ CI: "true" });
+    expect(plan.commands.find((entry) => entry.id === "backend-python-compatibility")?.args).toContain(
+      "backend/tests/test_feed_db_first.py",
+    );
     expect(plan.commands.find((entry) => entry.id === "postgres-release-matrix")?.redactEnvironment).toBe(true);
     expect(plan.blockedExternal.every((entry) => entry.status === "BLOCKED_EXTERNAL")).toBe(true);
     expect(plan.blockedExternal.map((entry) => entry.code)).toEqual([
@@ -233,7 +245,14 @@ describe("G015 release verification contract", () => {
 
     const guide = await readFile(resolve(root, "docs/operations/job-supply-release-readiness.md"), "utf8");
     const documented = [...guide.matchAll(/^\d+\. `([^`]+\.sql)`$/gm)].map((match) => match[1]);
-    expect(documented).toEqual(ups);
+    expect(new Set(documented)).toEqual(new Set(ups));
+    expect(documented).toHaveLength(ups.length);
+    expect(guide).toContain(
+      "not the split inventory database",
+    );
+    expect(guide).toContain(
+      "not the separately listed application-database migrations",
+    );
     expect(guide.toLowerCase()).toContain("reverse order");
     expect(guide.toLowerCase()).toContain("operational rollback");
     expect(guide.toLowerCase()).toContain("destructive rollback");
@@ -249,5 +268,52 @@ describe("G015 release verification contract", () => {
     expect(matrix).toContain("Trial ready");
     expect(matrix).toContain("Production ready");
     expect(matrix).toContain("Canonical writer");
+    expect(matrix).toContain("digest-sealed evidence-only CSV trial transport");
+    expect(matrix).toContain("recruiter-PII redaction adapter");
+    expect(matrix).toContain("catalogue membership is insufficient");
+  });
+
+  test("isolates destructive PostgreSQL suites in CI through the hardened verifier", async () => {
+    const workflow = await readFile(
+      resolve(root, ".github/workflows/typescript-foundation.yml"),
+      "utf8",
+    );
+    expect(workflow).toContain(
+      "G015_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hirly_test",
+    );
+    expect(workflow).toContain("bun run verify:job-supply-release --");
+    expect(workflow).toContain("--allow-disposable-database");
+    expect(workflow).toContain('--expected-head "$(git rev-parse HEAD)"');
+    for (const sharedSuiteVariable of [
+      "G002_TEST_DATABASE_URL:",
+      "G003_TEST_DATABASE_URL:",
+      "G004_TEST_DATABASE_URL:",
+      "G010_TEST_DATABASE_URL:",
+      "G011_TEST_DATABASE_URL:",
+      "JOB_INGESTION_LEDGER_TEST_DATABASE_URL:",
+      "G014_TEST_DATABASE_URL:",
+    ]) {
+      expect(workflow).not.toContain(sharedSuiteVariable);
+    }
+  });
+
+  test("documents all current evidence-only trial surfaces without implying activation", async () => {
+    const runbook = await readFile(
+      resolve(root, "docs/operations/job-source-shadow-trial.md"),
+      "utf8",
+    );
+    for (const source of [
+      "Greenhouse",
+      "Lever",
+      "Choisir le Service Public",
+      "Qualified data.gouv resource",
+      "BPCE via data.gouv",
+      "Ashby",
+    ]) {
+      expect(runbook).toContain(source);
+    }
+    expect(runbook).toContain("qualified_evidence_only");
+    expect(runbook).toContain("BLOCKED_EXTERNAL");
+    expect(runbook).toContain("production readiness or canonical writer");
   });
 });

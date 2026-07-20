@@ -66,6 +66,11 @@ DROP FUNCTION IF EXISTS worker_private.source_policy_evidence_allows_trial(
   uuid, text, text, text, text, text
 );
 
+-- Keep the additive `trial_approved` qualification value. Trial-policy
+-- rollback must not invalidate immutable source-policy evidence that remains
+-- owned by the preceding policy-evidence migration; its own down migration
+-- removes the table when a separately approved destructive rollback is used.
+
 -- Cluster roles are intentionally not dropped by schema rollback. Credentials
 -- or memberships may exist outside this migration's transactional ownership.
 COMMIT;

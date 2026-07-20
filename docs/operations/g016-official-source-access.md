@@ -73,6 +73,23 @@ later response.
   scopes and redisplay permission, the only valid result is
   `provider_contract_missing`.
 
+## Partnership outreach status
+
+The founder confirmed that partnership or integration requests were submitted
+to Greenhouse, Lever, SmartRecruiters and Taleez on 2026-07-20. The outbound
+request task is complete for all four providers.
+
+| Provider | Request status | Access/policy status | Next evidence required |
+| --- | --- | --- | --- |
+| Greenhouse | Submitted 2026-07-20 | Awaiting provider response; no new rights granted | Written partner/tenant terms, mutual-customer or sandbox requirements, permitted listing and application scopes |
+| Lever | Submitted 2026-07-20 | Awaiting provider response; no new rights granted | Written partner/tenant terms, regional feed scope, redisplay/retention rights and sandbox credentials |
+| SmartRecruiters | Submitted 2026-07-20 | `provider_contract_missing` until accepted terms are recorded | Job Board API agreement, tenant coverage, redistribution/retention terms, quota and sandbox |
+| Taleez | Submitted 2026-07-20 | `provider_contract_missing` until accepted terms are recorded | Partner or tenant authorization, API scopes/keys, employer redisplay permission, quota and sandbox |
+
+An application submission is not an approval. No source-policy decision,
+trial-readiness flag, production-readiness flag, writer ownership or kill switch
+may change until the response is reviewed and immutable evidence is recorded.
+
 ## Downstream boundary
 
 G016 transports must consume only the two exact approved candidates above,

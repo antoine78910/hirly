@@ -469,13 +469,14 @@ export async function persistCspSourceTrial(input: {
     });
     return preview;
   } catch (error) {
-    const failure = classifyFailure(error);
+    const finishedAt = input.now?.() ?? new Date();
+    const failure = classifyFailure(error, manifest, finishedAt);
     await recordResult(input.repository, {
       runId,
       trialKey: manifest.trialKey,
       status: failure.status,
       startedAt: manifest.requestedAt,
-      finishedAt: (input.now?.() ?? new Date()).toISOString(),
+      finishedAt: finishedAt.toISOString(),
       pagesFetched,
       candidatesObserved,
       bytesStored,
@@ -928,10 +929,17 @@ async function recordResult(
   });
 }
 
-function classifyFailure(error: unknown): {
+function classifyFailure(
+  error: unknown,
+  manifest: SourceTrialManifest,
+  finishedAt: Date,
+): {
   status: SourceTrialResult["status"];
   stopReason: SourceTrialResult["stopReason"];
 } {
+  if (finishedAt.getTime() >= new Date(manifest.expiresAt).getTime()) {
+    return { status: "policy_expired", stopReason: "policy_expired" };
+  }
   if (error instanceof CspTrialTransportError) {
     return {
       status:

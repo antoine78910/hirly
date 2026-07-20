@@ -4,6 +4,22 @@
 -- ownership, or grant any path to canonical jobs or fulfillment state.
 BEGIN;
 
+-- Trial authorization is deliberately distinct from production eligibility.
+-- Existing installations may already have the G01000 constraint, so widen it
+-- here without mutating or reclassifying any existing evidence row.
+ALTER TABLE public.source_policy_evidence
+  DROP CONSTRAINT IF EXISTS source_policy_evidence_qualification_status_check;
+ALTER TABLE public.source_policy_evidence
+  ADD CONSTRAINT source_policy_evidence_qualification_status_check CHECK (
+    qualification_status IN (
+      'requires_legal_review',
+      'dataset_specific_evidence_required',
+      'trial_approved',
+      'approved',
+      'blocked'
+    )
+  );
+
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -79,6 +95,7 @@ AS $$
     FROM public.source_policy_evidence AS evidence
     WHERE evidence.id = p_evidence_id
       AND evidence.source_key = p_source_key
+      AND evidence.qualification_status = 'trial_approved'
       AND evidence.evidence_type IN ('licence_text', 'written_permission')
       AND evidence.claim_scope @> jsonb_build_object(
         'trialEligible', true,

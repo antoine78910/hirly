@@ -47,8 +47,8 @@ describe("G014 source trial foundation", () => {
     expect(migration).toMatch(
       /source_policy_evidence_allows_trial\([\s\S]*'trialEligible', true[\s\S]*'commercial_use'[\s\S]*'redisplay'[\s\S]*'retention'[\s\S]*'access_method'/i,
     );
-    expect(migration).not.toMatch(
-      /evidence\.qualification_status <> 'blocked'/i,
+    expect(migration).toMatch(
+      /evidence\.qualification_status = 'trial_approved'/i,
     );
     expect(migration).toMatch(
       /evidence\.evidence_type IN \('licence_text', 'written_permission'\)/i,
