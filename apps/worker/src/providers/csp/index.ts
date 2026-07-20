@@ -20,7 +20,7 @@ export const cspRawJobSchema = z
     resourceId: z.literal(CSP_QUALIFICATION_RESOURCE_ID),
     recordId: z.string().trim().min(1).max(512),
     title: z.string().trim().min(1).max(512),
-    company: z.string().trim().min(1).max(512),
+    employer: z.string().trim().min(1).max(512),
     location: z.string().trim().min(1).max(512),
     countryCode: z.union([z.literal("FR"), z.literal("France")]),
     description: z.string().max(100_000).default(""),
