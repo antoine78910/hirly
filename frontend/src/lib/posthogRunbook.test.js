@@ -29,6 +29,7 @@ describe("PostHog production-gate runbook contract", () => {
     expect(runbook).toContain("refund-recognition-ledger.jsonl");
     expect(runbook).toContain("append-only");
     expect(runbook).toContain("growth/analytics cofounder");
-    expect(runbook).toContain('export POSTHOG_REFUND_REVENUE_ENABLED="false"'.replaceAll('"', "'"));
+    expect(runbook).toContain("export POSTHOG_PAYMENT_REVENUE_ENABLED='false'");
+    expect(runbook).toContain("export POSTHOG_REFUND_REVENUE_ENABLED='false'");
   });
 });
