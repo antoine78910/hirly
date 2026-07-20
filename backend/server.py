@@ -416,7 +416,12 @@ async def _get_feed_job_candidates(base_query: Dict[str, Any], limit: int) -> Li
         from db.supabase_adapter import JOB_FEED_LIGHT_SELECT
 
         # Column-only select — never pull full JSONB for the candidate pool.
-        rows = await jobs_col.read_with_select(base_query, limit, select=JOB_FEED_LIGHT_SELECT)
+        rows = await jobs_col.read_with_select(
+            base_query,
+            limit,
+            select=JOB_FEED_LIGHT_SELECT,
+            require_pushed=True,
+        )
     else:
         rows = await jobs_col.find(base_query, {"_id": 0}).limit(limit).to_list(limit)
     _feed_job_pool_cache["query_key"] = cache_key
@@ -15763,6 +15768,14 @@ async def download_cover_letter(application_id: str, user: User = Depends(get_cu
 
 @api_router.patch("/applications/{application_id}/status")
 async def update_status(application_id: str, update: StatusUpdate, user: User = Depends(get_current_user)):
+    if _env_enabled("APPLICATION_TRACKER_RPC_ENABLED", "false"):
+        patch_status = getattr(db, "patch_user_application_status", None)
+        if not callable(patch_status):
+            raise HTTPException(status_code=503, detail="Application tracker contract is unavailable")
+        updated = await patch_status(application_id, user.user_id, update.status)
+        if not updated:
+            raise HTTPException(status_code=404, detail="Not found")
+        return {"ok": True}
     res = await db.applications.update_one(
         {"application_id": application_id, "user_id": user.user_id},
         {"$set": {"status": update.status}},
