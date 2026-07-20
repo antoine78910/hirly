@@ -160,6 +160,7 @@ def _run_feed(
         # Keep sync-path tests deterministic: background continuation tasks
         # would otherwise add extra provider refresh calls after the response.
         "JOBS_FEED_BACKGROUND_REFRESH_ENABLED": "false",
+        "JOBS_FEED_EMPTY_LOCAL_BACKGROUND_REFRESH_ENABLED": "false",
         "JOBS_FEED_EXPLICIT_LOCAL_SYNC_ENABLED": "true",
         **env,
     }.items():
@@ -334,7 +335,10 @@ def test_prefetch_schedules_provider_discovery_without_blocking_when_cache_is_em
     response, calls = _run_feed(
         monkeypatch,
         [],
-        env={"JOBS_FEED_BACKGROUND_REFRESH_ENABLED": "true"},
+        env={
+            "JOBS_FEED_BACKGROUND_REFRESH_ENABLED": "false",
+            "JOBS_FEED_EMPTY_LOCAL_BACKGROUND_REFRESH_ENABLED": "true",
+        },
         locations_json=_location_payload("Paris"),
         prefetch=True,
     )
@@ -394,6 +398,31 @@ def test_background_refresh_reports_an_existing_task_as_pending(monkeypatch):
         page_size=12,
         attempts_per_city=1,
     ) is True
+
+
+def test_empty_background_refresh_does_not_leave_success_cooldown(monkeypatch):
+    signature = "explicit_local|fullstack engineer|52km|paris:fr"
+    monkeypatch.setattr(server, "_feed_background_refresh_tasks", {})
+    monkeypatch.setattr(server, "_feed_background_refresh_last_run", {})
+
+    async def run_refresh():
+        assert server.schedule_feed_background_refresh(
+            signature,
+            _profile(),
+            [],
+            search_radius="52km",
+            role_override="Fullstack Engineer",
+            requested_limit=12,
+            max_results=12,
+            max_pages=1,
+            page_size=12,
+            attempts_per_city=1,
+        ) is True
+        await server._feed_background_refresh_tasks[signature]
+
+    asyncio.run(run_refresh())
+
+    assert signature not in server._feed_background_refresh_last_run
 
 
 def test_prefetch_returns_cached_manual_role_match_without_provider(monkeypatch):

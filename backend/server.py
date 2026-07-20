@@ -724,6 +724,7 @@ def schedule_feed_background_refresh(
 
     async def _runner() -> None:
         imported_total = 0
+        relevant_imported_total = 0
         started = time.perf_counter()
         try:
             for loc_data in refresh_locations:
@@ -752,23 +753,30 @@ def schedule_feed_background_refresh(
                     )
                     continue
                 imported = int(result.get("jobs_imported", result.get("count") or 0) or 0)
+                relevant_imported = int(result.get("relevant_imported", imported) or 0)
                 imported_total += imported
+                relevant_imported_total += relevant_imported
                 if result.get("provider_rate_limited"):
                     logger.info("feed_background_refresh_rate_limited signature=%s", signature)
                     break
             if imported_total > 0:
                 _clear_feed_job_pool_cache()
             logger.info(
-                "feed_background_refresh_complete signature=%s user_id=%s imported=%s elapsed_ms=%s",
+                "feed_background_refresh_complete signature=%s user_id=%s imported=%s relevant_imported=%s elapsed_ms=%s",
                 signature,
                 user_id,
                 imported_total,
+                relevant_imported_total,
                 int((time.perf_counter() - started) * 1000),
             )
         except Exception as exc:
             logger.warning("feed_background_refresh_failed signature=%s error=%s", signature, str(exc)[:200])
         finally:
             _feed_background_refresh_tasks.pop(signature, None)
+            if relevant_imported_total <= 0:
+                # An empty/failed attempt must not strand the feed behind the
+                # success cooldown. The bounded frontend poll may safely retry.
+                _feed_background_refresh_last_run.pop(signature, None)
 
     task = asyncio.create_task(_runner())
     _feed_background_refresh_tasks[signature] = task
@@ -8646,6 +8654,17 @@ async def get_feed(
             and not cooldown_active
             and ((force_provider_refresh and explicit_local_intent) or inventory_is_weak)
         )
+        general_background_refresh_enabled = _env_bool("JOBS_FEED_BACKGROUND_REFRESH_ENABLED", True)
+        empty_local_background_refresh_override = (
+            explicit_local_empty_inventory
+            and _env_bool("JOBS_FEED_EMPTY_LOCAL_BACKGROUND_REFRESH_ENABLED", True)
+        )
+        background_refresh_enabled = (
+            general_background_refresh_enabled
+            or empty_local_background_refresh_override
+        )
+        request_trace["background_refresh_enabled"] = background_refresh_enabled
+        request_trace["empty_local_background_refresh_override"] = empty_local_background_refresh_override
         # Keep provider latency out of normal explicit-location requests. Operators
         # can opt back into the legacy synchronous behavior, and forced diagnostic
         # refreshes remain blocking by design.
@@ -8669,14 +8688,14 @@ async def get_feed(
             needs_provider_refresh
             and not should_refresh
             and not force_provider_refresh
-            and _env_bool("JOBS_FEED_BACKGROUND_REFRESH_ENABLED", True)
+            and background_refresh_enabled
         )
         if prefetch:
             should_refresh = False
             background_refresh_wanted = (
                 needs_provider_refresh
                 and not force_provider_refresh
-                and _env_bool("JOBS_FEED_BACKGROUND_REFRESH_ENABLED", True)
+                and background_refresh_enabled
             )
             request_trace["prefetch"] = True
             request_trace["local_jsearch_skip_reason"] = "prefetch_db_only"
