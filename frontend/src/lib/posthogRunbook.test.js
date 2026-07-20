@@ -7,6 +7,20 @@ const runbook = fs.readFileSync(
 );
 
 describe("PostHog production-gate runbook contract", () => {
+  it("keeps every fenced procedure structurally closed", () => {
+    let openFence = null;
+    for (const match of runbook.matchAll(/^```([^\n]*)$/gm)) {
+      const language = match[1];
+      if (openFence === null) {
+        openFence = language;
+      } else {
+        expect(language).toBe("");
+        openFence = null;
+      }
+    }
+    expect(openFence).toBeNull();
+  });
+
   it("pins the fail-closed Stripe CLI pagination and evidence manifest", () => {
     expect(runbook).toContain("Stripe CLI **1.42.8**");
     expect(runbook).toContain('-d "created[gte]=$START_EPOCH"');

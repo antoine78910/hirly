@@ -507,6 +507,7 @@ jq '
 jq -e '.complete_utc_days == 7
        and ([.baseline[]] | all(. != null))' \
   "$EVIDENCE_DIR/calculations/datafast.json" >/dev/null
+```
 
 Calculate each six-hour observation against that baseline, preserving sample
 sizes and the fixed 80% boundary:
@@ -537,7 +538,6 @@ jq --slurpfile calculated "$EVIDENCE_DIR/calculations/datafast.json" '
   }
 ' "$EVIDENCE_DIR/raw-redacted/datafast-canary.json" \
   > "$EVIDENCE_DIR/calculations/datafast-canary-calculated.json"
-```
 ```
 
 The current value is a complete rolling 24-hour ratio. With at least 100 upstream
