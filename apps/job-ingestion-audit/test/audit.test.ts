@@ -23,7 +23,6 @@ import {
 } from "../src/france-travail-census";
 import {
   assertReadOnlyObservabilityQueries,
-  JOB_SUPPLY_OBSERVABILITY_QUERIES,
   runJobSupplyObservabilityQueries,
 } from "../src/queries";
 import { readFileSync } from "node:fs";
@@ -149,8 +148,8 @@ describe("job-ingestion audit invariants", () => {
       median: 10,
       p90: 18,
       feedExhaustionRate: 1 / 3,
-      routeKnownRate: 2 / 3,
-      directEmployerRate: 0.5,
+      routeKnownRate: 15 / 21,
+      directEmployerRate: 11 / 21,
       terminalReasonCounts: { exhausted: 1, results: 2 },
     });
     expect(computePaidUserCoverageBaseline([])).toMatchObject({
@@ -160,8 +159,53 @@ describe("job-ingestion audit invariants", () => {
     });
   });
 
-  test("freezes immutable census decision inputs with a canonical digest", () => {
-    const manifest = freezeFranceTravailCensusManifest(franceTravailManifestInput);
+  test("rejects PII and unhashed identities from aggregate coverage inputs", () => {
+    expect(() => computePaidUserCoverageBaseline([{
+      userHash: "person@example.com",
+      relevantTotal: 1,
+      uniqueTotal: 1,
+      actionableTotal: 1,
+      unseenActionableTotal: 1,
+      routeKnownTotal: 1,
+      directEmployerTotal: 1,
+      terminalReason: "results",
+    }])).toThrow("lowercase SHA-256 digest");
+    expect(() => freezeFranceTravailCensusManifest({
+      ...franceTravailCensusInput,
+      profileStrata: [{ email: "person@example.com", weight: 1 }],
+    })).toThrow("unsafe France Travail profile strata");
+  });
+
+  test("executes only the pinned read-only observability query set", async () => {
+    const calls: Array<{ sql: string; parameters: readonly unknown[] }> = [];
+    const results = await runJobSupplyObservabilityQueries({
+      query: async (sql, parameters = []) => {
+        calls.push({ sql, parameters });
+        return [];
+      },
+    }, {
+      freshnessCutoff: "2026-07-13T00:00:00.000Z",
+      coverageRunId: "00000000-0000-4000-8000-000000000001",
+      freshnessWindowDays: 7,
+      manifestDigest: "a".repeat(64),
+    });
+    expect(assertReadOnlyObservabilityQueries()).toEqual([]);
+    expect(Object.keys(results).sort()).toEqual([
+      "atsHostCensus",
+      "franceTravailPartitions",
+      "paidUserCoverage",
+      "providerConcentration",
+      "routeQuality",
+      "runCompleteness",
+      "sourceInventory",
+      "topology",
+    ]);
+    expect(calls).toHaveLength(8);
+  });
+
+  test("freezes a deterministic, cohort-weighted France Travail census manifest", () => {
+    const manifest = freezeFranceTravailCensusManifest(franceTravailCensusInput);
+    expect(manifest.manifestDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(validateFranceTravailCensusManifest(manifest)).toEqual([]);
     expect(manifest.manifestDigest).toHaveLength(64);
     expect(stableDigest({ b: 2, a: 1 })).toBe(stableDigest({ a: 1, b: 2 }));

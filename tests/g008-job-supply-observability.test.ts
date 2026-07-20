@@ -77,6 +77,7 @@ describe("G008 job-supply observability contract", () => {
     expect(migration).toContain("CREATE TABLE IF NOT EXISTS public.paid_user_source_contributions");
     expect(migration).toContain("affected_paid_users");
     expect(migration).toContain("incremental boolean NOT NULL");
+    expect(migration).toContain("unique_total <= relevant_total");
   });
 
   test("records source, ATS-host, freshness, route and duplicate baselines read-only", () => {
