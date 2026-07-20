@@ -48,7 +48,7 @@ def test_analytics_batch_is_bounded_and_server_idempotent(monkeypatch):
 
     assert first_result["accepted_event_ids"] == ["client-1"]
     assert second_result["accepted_event_ids"] == ["client-replay"]
-    assert db.analytics_events.batches[0][0]["event_id"] == db.analytics_events.batches[1][0]["event_id"]
+    assert len(db.analytics_events.batches) == 1
     assert db.analytics_events.batches[0][0]["batch_id"] == "batch-fixed"
     assert db.analytics_events.batches[0][0]["user_id"] is None
 
