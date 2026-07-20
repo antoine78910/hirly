@@ -27,6 +27,27 @@ export const authorizationStatusSchema = z.enum([
   "blocked",
 ]);
 export const writerRuntimeSchema = z.enum(["none", "python", "typescript"]);
+export const sourceRunModeSchema = z.enum([
+  "incremental",
+  "full_snapshot",
+  "census",
+  "shadow",
+  "dry_run",
+  "backfill",
+]);
+export const sourceAccessTypeSchema = z.enum([
+  "public_api",
+  "open_data",
+  "tenant_feed",
+  "partner_feed",
+]);
+export const sourceLifecycleStateSchema = z.enum([
+  "active",
+  "stale",
+  "removed",
+  "expired",
+  "blocked",
+]);
 
 export const rateLimitConfigSchema = z
   .object({
@@ -52,6 +73,65 @@ export const rawProviderJobEnvelopeSchema = z
     provider: providerSchema,
     externalId: z.string().trim().min(1).max(512),
     payload: z.record(z.string(), z.unknown()),
+  })
+  .strict();
+
+export const sourceCheckpointSchema = z
+  .object({
+    version: z.string().trim().min(1).max(64),
+    cursor: z.string().min(1).max(2_048).nullable(),
+    partition: z.string().trim().min(1).max(512).nullable(),
+    watermark: z.iso.datetime({ offset: true }).nullable(),
+  })
+  .strict();
+
+export const sourceFetchRequestSchema = z
+  .object({
+    provider: providerSchema,
+    sourceId: z.uuid(),
+    sourceKey: z.string().trim().min(1).max(512),
+    tenantKey: z.string().trim().min(1).max(512).nullable(),
+    countryCode: z.string().regex(/^[A-Z]{2}$/),
+    mode: sourceRunModeSchema,
+    checkpoint: sourceCheckpointSchema.nullable(),
+    pageSize: z.number().int().positive().max(500),
+  })
+  .strict();
+
+export const sourceRegistryEntrySchema = z
+  .object({
+    id: z.uuid(),
+    provider: providerSchema,
+    sourceKey: z.string().trim().min(1).max(512),
+    tenantKey: z.string().trim().min(1).max(512).nullable(),
+    countryCodes: z.array(z.string().regex(/^[A-Z]{2}$/)).max(250),
+    accessType: sourceAccessTypeSchema,
+    policyId: z.uuid().nullable(),
+    enabled: z.boolean(),
+    incrementalEnabled: z.boolean(),
+    backfillEnabled: z.boolean(),
+    checkpoint: sourceCheckpointSchema.nullable(),
+  })
+  .strict();
+
+export const sourcePolicyStateSchema = z
+  .object({
+    approvalStatus: z.enum(["unverified", "approved", "blocked", "expired"]),
+    enabled: z.boolean(),
+    commercialUseAllowed: z.boolean(),
+    redisplayAllowed: z.boolean(),
+    expiresAt: z.iso.datetime({ offset: true }).nullable(),
+  })
+  .strict();
+
+export const sourceRuntimePolicySchema = z
+  .object({
+    providerEnabled: z.boolean(),
+    writerRuntime: writerRuntimeSchema,
+    providerCountryKillSwitches: z.record(z.string(), z.boolean()),
+    sourceCountryKillSwitches: z.record(z.string(), z.boolean()),
+    source: sourceRegistryEntrySchema,
+    policy: sourcePolicyStateSchema,
   })
   .strict();
 
@@ -245,6 +325,14 @@ export const stableErrorCodeSchema = z.enum([
 ]);
 
 export type Provider = z.infer<typeof providerSchema>;
+export type SourceRunMode = z.infer<typeof sourceRunModeSchema>;
+export type SourceAccessType = z.infer<typeof sourceAccessTypeSchema>;
+export type SourceLifecycleState = z.infer<typeof sourceLifecycleStateSchema>;
+export type SourceCheckpoint = z.infer<typeof sourceCheckpointSchema>;
+export type SourceFetchRequest = z.infer<typeof sourceFetchRequestSchema>;
+export type SourceRegistryEntry = z.infer<typeof sourceRegistryEntrySchema>;
+export type SourcePolicyState = z.infer<typeof sourcePolicyStateSchema>;
+export type SourceRuntimePolicy = z.infer<typeof sourceRuntimePolicySchema>;
 export type RateLimitConfig = z.infer<typeof rateLimitConfigSchema>;
 export type AuthorizationStatus = z.infer<typeof authorizationStatusSchema>;
 export type ProviderRegistry = z.infer<typeof providerRegistrySchema>;
