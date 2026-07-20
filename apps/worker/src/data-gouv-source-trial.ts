@@ -225,16 +225,18 @@ export interface DataGouvSourceTrialPreview {
 
 export const cspDataGouvTrialReadiness = Object.freeze({
   source: "choisir-le-service-public",
-  state: "BLOCKED_EXTERNAL",
-  trialTransportReady: false,
+  state: "qualified_evidence_only",
+  trialTransportReady: true,
   productionReady: false,
-  reasonCodes: Object.freeze([
-    "exact_resource_identity_missing",
-    "source_policy_requires_legal_review",
-    "live_access_not_approved",
+  canonicalWriteReady: false,
+  blockers: Object.freeze([
+    "no_canonical_apply_route",
+    "freshness_expiry_and_duplicate_gates_unproven",
+    "production_attribution_and_lifecycle_gates_unproven",
   ]),
   policyArtifact:
-    "artifacts/job-ingestion/source-policy/choisir-le-service-public.json",
+    "artifacts/job-ingestion/source-policy/g016-official-access-2026-07-20.json",
+  transportModule: "./csp-source-trial",
 } as const);
 
 export function sealDataGouvTrialResourceManifest(

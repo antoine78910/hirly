@@ -283,14 +283,11 @@ describe("G014 qualified data.gouv evidence-only trial", () => {
 
   test("fails closed on absent policy/resource evidence, tampering and budgets", async () => {
     expect(cspDataGouvTrialReadiness).toMatchObject({
-      state: "BLOCKED_EXTERNAL",
-      trialTransportReady: false,
+      state: "qualified_evidence_only",
+      trialTransportReady: true,
       productionReady: false,
-      reasonCodes: [
-        "exact_resource_identity_missing",
-        "source_policy_requires_legal_review",
-        "live_access_not_approved",
-      ],
+      canonicalWriteReady: false,
+      transportModule: "./csp-source-trial",
     });
     expect(() =>
       sealDataGouvTrialResourceManifest(
