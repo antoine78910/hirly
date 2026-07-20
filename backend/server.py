@@ -8068,6 +8068,40 @@ async def get_feed(
                         db_good_count,
                         len(candidates),
                     )
+            # Prefetch is DB-only, but it must still return the same cached
+            # role-compatible manual inventory that a blocking request would
+            # expose after its provider attempt. A generic local-visible query
+            # can miss those jobs when the bounded country pool is crowded.
+            if (
+                prefetch
+                and explicit_local_intent
+                and db_good_count < requested_limit
+                and not allow_unknown_tier
+            ):
+                (
+                    cached_fallback,
+                    fallback_query,
+                    fallback_unfiltered,
+                    fallback_applyable,
+                    fallback_rejected,
+                ) = await _load_db_candidates(include_unknown=True)
+                seen_ids = {job.get("job_id") for job in candidates}
+                additions = [job for job in cached_fallback if job.get("job_id") not in seen_ids]
+                candidates.extend(additions)
+                pre_filter_candidates = list(candidates)
+                unfiltered_count += fallback_unfiltered
+                applyable_count += fallback_applyable
+                db_rejected_count += fallback_rejected
+                db_good_count = sum(1 for job in candidates if _role_compatible_for_threshold(job))
+                if additions:
+                    base_query = fallback_query
+                    feed_source = f"{feed_source}+prefetch_cached_fallback"
+                logger.info(
+                    "jobs/feed prefetch_cached_fallback: user_id=%s role_compatible_count=%s added=%s",
+                    user.user_id,
+                    db_good_count,
+                    len(additions),
+                )
             if explicit_local_intent and len(candidates) < requested_limit:
                 visible_candidates, visible_query, visible_unfiltered, visible_applyable, visible_rejected = await _load_local_visible_candidates()
                 seen_ids = {job.get("job_id") for job in candidates}
@@ -8248,7 +8282,7 @@ async def get_feed(
             background_refresh_wanted = False
             request_trace["local_jsearch_skip_reason"] = "coverage_audit_mode"
         request_trace["local_jsearch_discovery_should_run"] = bool(should_refresh and explicit_local_intent)
-        if explicit_local_intent and not should_refresh:
+        if explicit_local_intent and not should_refresh and not (prefetch or audit_mode):
             if not sync_refresh_enabled:
                 request_trace["local_jsearch_skip_reason"] = "sync_refresh_disabled"
             elif _timed_out() and not explicit_local_after_budget_refresh:

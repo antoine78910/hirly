@@ -335,6 +335,29 @@ def test_prefetch_never_blocks_on_provider_when_cached_inventory_is_empty(monkey
     assert response["refresh_results"] == []
 
 
+def test_prefetch_returns_cached_manual_role_match_without_provider(monkeypatch):
+    jobs = [
+        _job(index, tier="C", status="unknown", title="Accountant")
+        for index in range(150)
+    ]
+    jobs.append(_job(999, tier="C", status="unknown", title="Fullstack Engineer"))
+
+    response, calls = _run_feed(
+        monkeypatch,
+        jobs,
+        env={"JOBS_FEED_DEBUG_DIAGNOSTICS": "true"},
+        search_role="Fullstack Engineer",
+        locations_json=_location_payload("Paris"),
+        prefetch=True,
+    )
+
+    assert [job["job_id"] for job in response["jobs"]] == ["job_999"]
+    assert response["jobs"][0]["application_mode"] == "manual"
+    assert calls["refresh"] == 0
+    assert response["refresh_results"] == []
+    assert response["request_trace"]["local_jsearch_skip_reason"] == "prefetch_db_only"
+
+
 def test_feed_audit_mode_matches_no_refresh_order_and_terminal_reason(monkeypatch):
     monkeypatch.setenv("COVERAGE_AUDIT_HASH_SALT", "test-only-salt")
     jobs = [_job(1), _job(2), _job(3, tier="D", status="invalid")]
