@@ -1849,6 +1849,13 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
         )
         return int(result or 0)
 
+    async def backfill_auto_apply_queue(self, providers: List[str], *, limit: int = 200) -> int:
+        result = await self._python_ingestion_rpc(
+            "backfill_auto_apply_queue",
+            {"p_providers": providers, "p_limit": min(max(limit, 1), 200)},
+        )
+        return int(result or 0)
+
     async def _python_provider_rpc(self, function_name: str, payload: Dict[str, Any]) -> Any:
         adapter = self._jobs_inventory_rpc_adapter
         return await adapter._python_ingestion_rpc(function_name, payload)
