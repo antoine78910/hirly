@@ -5,6 +5,7 @@ import {
 } from "../core";
 import {
   FixtureOnlyAtsSourceAdapter,
+  requireBoundAtsUrl,
   type AtsFixtureCursor,
   type AtsFixtureScope,
 } from "../ats-fixture";
@@ -41,6 +42,17 @@ function normalized(
   countryCode: string,
 ) {
   const raw = greenhouseRawJobSchema.parse(rawValue);
+  const absoluteUrl = requireBoundAtsUrl({
+    value: raw.absolute_url,
+    provider: "greenhouse",
+    allowedHosts: [
+      "boards.greenhouse.io",
+      "job-boards.greenhouse.io",
+    ],
+    tenantKey,
+    postingId: raw.id,
+    pathKind: "greenhouse_job",
+  });
   return {
     envelope: {
       provider: "greenhouse" as const,
@@ -54,7 +66,7 @@ function normalized(
     description: raw.content,
     contractType: null,
     status: "published",
-    applyUrls: [raw.absolute_url],
+    applyUrls: [absoluteUrl],
   };
 }
 
@@ -98,8 +110,8 @@ class GreenhouseFixtureSourceAdapter extends FixtureOnlyAtsSourceAdapter<Greenho
     return {
       job,
       externalId: job.envelope.externalId,
-      canonicalSourceUrl: raw.absolute_url,
-      canonicalApplyUrl: raw.absolute_url,
+      canonicalSourceUrl: job.applyUrls[0],
+      canonicalApplyUrl: job.applyUrls[0],
       atsPostingId: raw.id,
     };
   }

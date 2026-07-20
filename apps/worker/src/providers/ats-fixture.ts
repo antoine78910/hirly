@@ -46,6 +46,52 @@ export function classifyAtsSourceError(error: unknown): SourceErrorClass {
   return "permanent";
 }
 
+export function requireBoundAtsUrl(input: {
+  value: string;
+  provider: Provider;
+  allowedHosts: readonly string[];
+  tenantKey: string;
+  postingId: string;
+  pathKind: "greenhouse_job" | "lever_job" | "lever_apply";
+}): string {
+  const url = new URL(input.value);
+  if (
+    url.protocol !== "https:" ||
+    url.username.length > 0 ||
+    url.password.length > 0 ||
+    (url.port.length > 0 && url.port !== "443") ||
+    url.hash.length > 0 ||
+    !input.allowedHosts.includes(url.hostname.toLowerCase())
+  ) {
+    throw new IngestionError(
+      "invalid_input",
+      `${input.provider} canonical URL failed transport or host policy`,
+    );
+  }
+  const parts = url.pathname
+    .split("/")
+    .filter(Boolean)
+    .map((part) => decodeURIComponent(part).toLowerCase());
+  const tenant = input.tenantKey.toLowerCase();
+  const posting = input.postingId.toLowerCase();
+  const expected =
+    input.pathKind === "greenhouse_job"
+      ? [tenant, "jobs", posting]
+      : input.pathKind === "lever_apply"
+        ? [tenant, posting, "apply"]
+        : [tenant, posting];
+  if (
+    parts.length !== expected.length ||
+    parts.some((part, index) => part !== expected[index])
+  ) {
+    throw new IngestionError(
+      "invalid_input",
+      `${input.provider} canonical URL is not bound to the source tenant and posting`,
+    );
+  }
+  return url.href;
+}
+
 export abstract class FixtureOnlyAtsSourceAdapter<RawJob>
   implements SourceAdapter<RawJob, AtsFixtureCursor, AtsFixtureScope>
 {

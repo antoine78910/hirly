@@ -5,10 +5,12 @@ import {
 } from "../core";
 import {
   FixtureOnlyAtsSourceAdapter,
+  requireBoundAtsUrl,
   type AtsFixtureCursor,
   type AtsFixtureScope,
 } from "../ats-fixture";
 import type { SourceAdapter, SourceContext } from "@hirly/ingestion";
+import { IngestionError } from "@hirly/ingestion";
 
 const optionalText = z.string().trim().min(1).nullable().optional();
 
@@ -47,6 +49,29 @@ function normalized(
   fallbackCountryCode: string,
 ) {
   const raw = leverRawJobSchema.parse(rawValue);
+  const allowedHosts = ["jobs.lever.co", "jobs.eu.lever.co"] as const;
+  const hostedUrl = requireBoundAtsUrl({
+    value: raw.hostedUrl,
+    provider: "lever",
+    allowedHosts,
+    tenantKey,
+    postingId: raw.id,
+    pathKind: "lever_job",
+  });
+  const applyUrl = requireBoundAtsUrl({
+    value: raw.applyUrl,
+    provider: "lever",
+    allowedHosts,
+    tenantKey,
+    postingId: raw.id,
+    pathKind: "lever_apply",
+  });
+  if (new URL(hostedUrl).hostname !== new URL(applyUrl).hostname) {
+    throw new IngestionError(
+      "invalid_input",
+      "Lever hosted and apply URLs must use the same regional host",
+    );
+  }
   const countryCode = raw.country?.toUpperCase() ?? fallbackCountryCode;
   const location =
     raw.categories.location ??
@@ -70,7 +95,7 @@ function normalized(
     status: "published",
     // Preserve the existing Python canonical-row precedence. The occurrence
     // below records the direct application URL separately.
-    applyUrls: [raw.hostedUrl, raw.applyUrl],
+    applyUrls: [hostedUrl, applyUrl],
   };
 }
 
@@ -114,8 +139,8 @@ class LeverFixtureSourceAdapter extends FixtureOnlyAtsSourceAdapter<LeverRawJob>
     return {
       job,
       externalId: job.envelope.externalId,
-      canonicalSourceUrl: raw.hostedUrl,
-      canonicalApplyUrl: raw.applyUrl,
+      canonicalSourceUrl: job.applyUrls[0],
+      canonicalApplyUrl: job.applyUrls[1],
       atsPostingId: raw.id,
     };
   }
