@@ -42,6 +42,7 @@ describe("posthog client", () => {
     delete process.env.REACT_APP_POSTHOG_TOKEN;
     delete process.env.REACT_APP_POSTHOG_HOST;
     delete process.env.REACT_APP_POSTHOG_REPLAY_ENABLED;
+    delete process.env.REACT_APP_POSTHOG_REPLAY_HOSTILE_QA_APPROVED;
     mockInit.mockReturnValue(mockClient);
   });
 
@@ -79,6 +80,7 @@ describe("posthog client", () => {
     expect(profileA).not.toHaveProperty("advanced_disable_feature_flags");
 
     process.env.REACT_APP_POSTHOG_REPLAY_ENABLED = "true";
+    process.env.REACT_APP_POSTHOG_REPLAY_HOSTILE_QA_APPROVED = "true";
     const profileB = buildPostHogConfig();
     expect(profileB).toMatchObject({
       disable_session_recording: false,
@@ -141,8 +143,30 @@ describe("posthog client", () => {
     const snapshot = { event: "$snapshot", properties: { $snapshot_data: "opaque" } } as never;
     expect(sanitizePostHogEvent(snapshot)).toBeNull();
     process.env.REACT_APP_POSTHOG_REPLAY_ENABLED = "true";
+    expect(sanitizePostHogEvent(snapshot)).toBeNull();
+    process.env.REACT_APP_POSTHOG_REPLAY_HOSTILE_QA_APPROVED = "true";
     expect(sanitizePostHogEvent(snapshot)).toBe(snapshot);
     expect(sanitizePostHogEvent({ event: "$feature_flag_called", properties: {} } as never)).toBeNull();
+  });
+
+  it("preserves SDK transport properties while rejecting caller secrets", () => {
+    const event = sanitizePostHogEvent({
+      event: "checkout_started",
+      properties: {
+        plan: "pro",
+        token: "phc_sdk_project",
+        $session_id: "sdk-session",
+        $window_id: "sdk-window",
+        accessToken: "caller-secret",
+      },
+    } as never);
+    expect(event?.properties).toMatchObject({
+      plan: "pro",
+      token: "phc_sdk_project",
+      $session_id: "sdk-session",
+      $window_id: "sdk-window",
+    });
+    expect(event?.properties).not.toHaveProperty("accessToken");
   });
 
   it("deduplicates strict-mode pageviews and isolates persisted identities before identify", () => {
