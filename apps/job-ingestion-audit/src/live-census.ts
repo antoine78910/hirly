@@ -48,6 +48,7 @@ export async function collectLiveJobSupplyReport(
   sql: Database,
   generatedAt = new Date().toISOString(),
   persistManifest = false,
+  coverageRunId?: string,
 ): Promise<LiveJobSupplyReport> {
   const partitions = await sql<PartitionRow[]>`
     SELECT
@@ -78,16 +79,19 @@ export async function collectLiveJobSupplyReport(
     generatedAt,
   );
   if (persistManifest) {
+    if (!coverageRunId) {
+      throw new Error("coverage_run_id_required_for_manifest_persistence");
+    }
     await sql.begin(async (transaction) => {
       const [inserted] = await transaction<{ id: string }[]>`
         INSERT INTO public.france_travail_census_manifests (
-          schema_version, manifest_digest, generated_at, source_run_ids,
+          coverage_run_id, schema_version, manifest_digest, generated_at,
           partition_count, terminal_state, source_reported_total, fetched_records,
           normalized_records, rejected_records, actionable_records, manifest
         )
         VALUES (
-          ${census.schemaVersion}, ${census.digest}, ${new Date(census.generatedAt)},
-          ${transaction.array(census.sourceRunIds)}::uuid[], ${census.partitionCount},
+          ${coverageRunId}::uuid, ${census.schemaVersion}, ${census.digest},
+          ${new Date(census.generatedAt)}, ${census.partitionCount},
           ${census.terminalState}, ${census.sourceReportedTotal}, ${census.fetchedRecords},
           ${census.normalizedRecords}, ${census.rejectedRecords},
           ${census.actionableRecords},

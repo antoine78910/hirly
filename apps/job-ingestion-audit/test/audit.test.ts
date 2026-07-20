@@ -266,6 +266,23 @@ describe("job-ingestion audit invariants", () => {
     expect(first.digest).toBe(second.digest);
   });
 
+  test("does not claim a complete census without every source-reported total", () => {
+    const manifest = buildFranceTravailCensusManifest([{
+      runId: "00000000-0000-0000-0000-000000000001",
+      partitionId: "ft-window-1",
+      status: "completed_zero_results",
+      sourceReportedTotal: null,
+      fetchedRecords: 0,
+      normalizedRecords: 0,
+      rejectedRecords: 0,
+      actionableRecords: 0,
+      capHit: false,
+    }], "2026-07-20T00:00:00.000Z");
+
+    expect(manifest.terminalState).toBe("blocked");
+    expect(manifest.sourceReportedTotal).toBeNull();
+  });
+
   test("reconciles the full France Travail census funnel and blocks unsafe terminal claims", () => {
     const accounting = {
       partitionId: "ft-1",

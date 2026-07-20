@@ -185,10 +185,24 @@ unchanged definition, ordered partition evidence, aggregate counts,
 `terminalState`, and `definitionDigest`. Canonicalize and SHA-256 the complete
 object as `evidenceDigest`.
 
-Persist it only through the audit app's immutable-manifest boundary. A repeated
-identical digest is idempotent; update/delete is forbidden. Export the same JSON
-under `artifacts/job-ingestion/` for review. The FT-PY versus FT-TS decision
-must cite both digests and may not redefine the cohort or partitions.
+The frozen API-request definition and the reconciled database evidence are two
+different versioned artifacts:
+
+- `census-cli.ts` consumes the frozen definition (`manifestDigest`) and writes
+  provider-response evidence without mutating the database.
+- `collectLiveJobSupplyReport` builds the reconciled ledger evidence (`digest`)
+  and is the only application boundary that may persist it.
+
+Persist reconciled evidence with the PR1 `coverage_run_id` that fixed the paid
+cohort. The manifest row stores that foreign key; each included France Travail
+run is stored in `france_travail_census_manifest_runs`. There is no
+`source_run_ids` array column. A repeated identical digest is idempotent, and
+update/delete is forbidden. A missing source-reported total is `blocked`, not a
+complete zero-result census.
+
+Export the same JSON under `artifacts/job-ingestion/` for review. The FT-PY
+versus FT-TS decision must cite both definition and evidence digests and may not
+redefine the cohort or partitions.
 
 ## Live-run gate
 
