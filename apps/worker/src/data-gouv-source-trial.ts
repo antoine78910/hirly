@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
+  sourceTrialBudgetStopReasonSchema,
   sourceTrialManifestSchema,
   sourceTrialResultSchema,
   type CanonicalJob,
@@ -555,7 +556,7 @@ async function recordResult(
 
 function classifyFailure(error: unknown): {
   status: SourceTrialResult["status"];
-  stopReason: string;
+  stopReason: SourceTrialResult["stopReason"];
 } {
   if (error instanceof AtsTrialTransportError) {
     return {
@@ -570,7 +571,9 @@ function classifyFailure(error: unknown): {
   if (message.startsWith("trial_budget_exceeded:")) {
     return {
       status: "budget_exhausted",
-      stopReason: message.slice("trial_".length),
+      stopReason: sourceTrialBudgetStopReasonSchema.parse(
+        message.slice("trial_".length),
+      ),
     };
   }
   if (message === "trial_policy_window_invalid") {

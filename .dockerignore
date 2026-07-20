@@ -1,0 +1,15 @@
+.git
+.omx
+.env
+.env.*
+*.env
+**/node_modules
+**/.env
+**/.env.*
+**/secrets
+**/*secret*
+**/*credential*
+browser
+frontend/.next
+dist
+build
