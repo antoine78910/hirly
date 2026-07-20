@@ -214,6 +214,9 @@ describe("G009 source persistence contract", () => {
     expect(migration).toMatch(
       /raw_snapshot_id uuid NOT NULL REFERENCES public\.raw_job_snapshots\(id\) ON DELETE RESTRICT/i,
     );
+    expect(migration).toMatch(
+      /UNIQUE\s*\(\s*id\s*,\s*source_id\s*,\s*external_id\s*\)[\s\S]*FOREIGN KEY\s*\(\s*raw_snapshot_id\s*,\s*source_id\s*,\s*external_id\s*\)\s*REFERENCES public\.raw_job_snapshots\s*\(\s*id\s*,\s*source_id\s*,\s*external_id\s*\)/i,
+    );
     expect(migration).not.toMatch(
       /\b(?:DROP|RENAME)\s+(?:COLUMN\s+)?(?:public\.)?jobs?\b|\bALTER\s+COLUMN\s+job_id\b/i,
     );
