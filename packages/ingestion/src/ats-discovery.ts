@@ -48,15 +48,26 @@ export class AtsDiscoveryRejectedError extends Error {
 
 export interface AtsDiscoveryHopInput {
   url: string;
+  /**
+   * Complete DNS answer set resolved immediately before a future connection.
+   * A future transport must not resolve the hostname again after validation.
+   */
   resolvedAddresses: string[];
 }
 
+/**
+ * Preparatory connection contract only; this module intentionally has no
+ * transport. A future transport must connect directly to pinnedAddress while
+ * using tlsServerName for TLS SNI and hostHeader for the HTTP Host header.
+ */
 export interface ValidatedAtsDiscoveryHop {
   url: string;
   provider: AtsProvider;
   tenantKey: string;
   asciiHostname: string;
   pinnedAddress: string;
+  tlsServerName: string;
+  hostHeader: string;
 }
 
 export interface ValidatedAtsDiscoveryChain {
@@ -143,27 +154,46 @@ function ipv6ToBigInt(address: string): bigint | null {
   );
 }
 
+function isInIpv6Prefix(
+  value: bigint,
+  prefix: bigint,
+  prefixLength: number,
+): boolean {
+  const shift = BigInt(128 - prefixLength);
+  return value >> shift === prefix >> shift;
+}
+
+const DENIED_IPV6_SPECIAL_PREFIXES = [
+  // IANA protocol assignments, including benchmarking 2001:2::/48,
+  // deprecated ORCHID, ORCHIDv2 2001:20::/28, DETs, and protocol anycast.
+  ["2001::", 23],
+  ["2001:db8::", 32],
+  ["2002::", 16],
+  ["2620:4f:8000::", 48],
+  ["3fff::", 20],
+] as const;
+
 function isPublicIpv6(address: string): boolean {
   const value = ipv6ToBigInt(address);
   if (value === null || value === 0n || value === 1n) return false;
+  // IPv4-mapped addresses are special-purpose, not globally reachable IPv6
+  // destinations. DNS A records must be validated as IPv4 instead.
   if (value >> 32n === 0xffffn) {
-    const ipv4 = Number(value & 0xffffffffn);
-    return isPublicIpv4(
-      [
-        (ipv4 >>> 24) & 255,
-        (ipv4 >>> 16) & 255,
-        (ipv4 >>> 8) & 255,
-        ipv4 & 255,
-      ].join("."),
-    );
+    return false;
   }
-  // Current globally routable unicast space is 2000::/3. Special transition
-  // and documentation prefixes inside it remain denied below.
+  // Current globally routable unicast space is 2000::/3. Every IANA
+  // special-purpose prefix inside it remains denied even when a special
+  // protocol marks some forwarding properties true.
   if (value >> 125n !== 1n) return false;
-  if (value >> 96n === 0x20010db8n) return false;
-  if (value >> 112n === 0x2002n) return false;
-  if (value >> 96n === 0x20010000n) return false;
-  if (value >> 32n === 0x64ff9b000000000000000000n) return false;
+  for (const [prefix, prefixLength] of DENIED_IPV6_SPECIAL_PREFIXES) {
+    const parsedPrefix = ipv6ToBigInt(prefix);
+    if (
+      parsedPrefix !== null &&
+      isInIpv6Prefix(value, parsedPrefix, prefixLength)
+    ) {
+      return false;
+    }
+  }
   return true;
 }
 
@@ -288,6 +318,8 @@ function validateAtsDiscoveryHop(
     tenantKey: classification.tenantKey,
     asciiHostname,
     pinnedAddress: addresses[0] as string,
+    tlsServerName: asciiHostname,
+    hostHeader: asciiHostname,
   };
 }
 

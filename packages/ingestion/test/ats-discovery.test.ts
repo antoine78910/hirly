@@ -142,11 +142,17 @@ describe("G011 SSRF-safe ATS tenant discovery", () => {
     "::",
     "::1",
     "::ffff:127.0.0.1",
+    "::ffff:8.8.8.8",
     "fc00::1",
     "fe80::1",
     "ff02::1",
     "2001:db8::1",
+    "2001:2::1",
+    "2001:20::1",
+    "2001:30::1",
     "2002:7f00:1::",
+    "2620:4f:8000::1",
+    "3fff::1",
   ])("rejects non-public DNS address %s", (address) => {
     expect(isPublicDiscoveryAddress(address)).toBe(false);
     expect(() =>
@@ -247,6 +253,10 @@ describe("G011 SSRF-safe ATS tenant discovery", () => {
       "93.184.216.34",
       "1.1.1.1",
     ]);
+    expect(chain.hops[0]).toMatchObject({
+      tlsServerName: "job-boards.greenhouse.io",
+      hostHeader: "job-boards.greenhouse.io",
+    });
   });
 
   test("enforces redirect, URL, and DNS answer bounds", () => {
