@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { franceTravailProvider } from "../apps/worker/src/providers/france-travail";
 import {
-  freezeFranceTravailCensusManifest,
   parseContentRange,
   runFranceTravailLiveCensus,
   type FranceTravailCensusManifest,
 } from "../apps/job-ingestion-audit/src/france-travail-census";
+import { freezeFranceTravailCensusManifest } from "../apps/job-ingestion-audit/src/audit";
 
 const manifest: FranceTravailCensusManifest = freezeFranceTravailCensusManifest({
   schemaVersion: 1,
