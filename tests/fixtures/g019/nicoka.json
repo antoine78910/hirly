@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "hirly.ats-fixture.v1",
+  "provenance": {
+    "kind": "sanitized_official_documentation_example",
+    "source": "https://api.nicoka.com/page_ATS/",
+    "capturedAt": "2026-07-21T00:00:00.000Z",
+    "containsPersonalData": false
+  },
+  "provider": "nicoka",
+  "tenantKey": "acme",
+  "countryCodes": ["FR"],
+  "raw": [
+    {
+      "id": 76,
+      "jobid": 76,
+      "uid": "1-sanitized-php",
+      "label": "Développeur PHP",
+      "description": "Concevoir et maintenir des applications web.",
+      "requirements": "Maîtrise de PHP et des tests automatisés.",
+      "benefits": "Environnement collaboratif.",
+      "city": "Angers",
+      "address_state": "Pays de la Loire",
+      "country": "FR",
+      "contract_type": 1,
+      "published": 1,
+      "active": 1,
+      "published_on": "2025-09-10 09:21:46",
+      "udate": "2025-09-16 15:12:54",
+      "applicationUrl": "https://acme.nicoka.com/public/jobs/1-sanitized-php/apply"
+    },
+    {
+      "id": 77,
+      "jobid": 77,
+      "uid": "1-sanitized-data",
+      "label": "Ingénieur Data",
+      "description": "Construire des pipelines de données fiables.",
+      "requirements": "Expérience TypeScript et SQL.",
+      "benefits": null,
+      "city": "Paris",
+      "address_state": "Île-de-France",
+      "country": "FR",
+      "contract_type": "CDI",
+      "published": 1,
+      "active": 1,
+      "published_on": "2025-09-11 09:21:46",
+      "udate": "2025-09-17 15:12:54",
+      "applicationUrl": "https://acme.nicoka.com/public/jobs/1-sanitized-data/apply"
+    }
+  ]
+}

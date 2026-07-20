@@ -111,12 +111,13 @@ describe("G011 disabled ATS fixture connectors", () => {
       expect(provider.authorizationStatus).toBe("unverified");
       expect(provider.liveTransportReady).toBe(false);
       expect(provider.canonicalWriteReady).toBe(false);
-      expect(provider.shadowModeReady).toBe(false);
       expect(provider.rateLimit).toEqual({
         requestsPerMinute: 1,
         concurrency: 1,
       });
     }
+    expect(greenhouseProvider.shadowModeReady).toBe(true);
+    expect(leverProvider.shadowModeReady).toBe(false);
     expect(getProviderModule("greenhouse")).toBe(greenhouseProvider);
     expect(getProviderModule("lever")).toBe(leverProvider);
     expect(() => assertProviderTransportActive("greenhouse")).toThrow(
