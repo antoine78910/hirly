@@ -57,6 +57,15 @@ describe("job ingestion run-ledger migration", () => {
     expect(migration).toContain("AND lease_token = p_lease_token");
   });
 
+  test("uses the manifest-aware run-begin signature for privileges and rollback", () => {
+    const signature =
+      "public.python_ingestion_run_begin(text, text, integer, text, integer, jsonb)";
+
+    expect(migration).toContain(`REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC`);
+    expect(migration).toContain(`GRANT EXECUTE ON FUNCTION ${signature} TO service_role`);
+    expect(rollback).toContain(`DROP FUNCTION IF EXISTS ${signature}`);
+  });
+
   test("has a reversible rollback", () => {
     expect(rollback).toContain("DROP VIEW IF EXISTS public.worker_ingestion_alerts");
     expect(rollback).toContain("DROP TABLE IF EXISTS public.worker_run_partitions");

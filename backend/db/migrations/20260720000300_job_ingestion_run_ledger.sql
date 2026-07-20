@@ -468,7 +468,7 @@ BEGIN
 END
 $$;
 
-REVOKE ALL ON FUNCTION public.python_ingestion_run_begin(text, text, integer, text, integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.python_ingestion_run_begin(text, text, integer, text, integer, jsonb) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.python_ingestion_schedule_sync(text, text, integer, boolean) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.python_ingestion_run_heartbeat(uuid, uuid, bigint, text, integer) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.python_ingestion_partition_record(uuid, uuid, bigint, text, text, text, jsonb, text) FROM PUBLIC;
@@ -477,7 +477,7 @@ DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
     GRANT EXECUTE ON FUNCTION public.python_ingestion_schedule_sync(text, text, integer, boolean) TO service_role;
-    GRANT EXECUTE ON FUNCTION public.python_ingestion_run_begin(text, text, integer, text, integer) TO service_role;
+    GRANT EXECUTE ON FUNCTION public.python_ingestion_run_begin(text, text, integer, text, integer, jsonb) TO service_role;
     GRANT EXECUTE ON FUNCTION public.python_ingestion_run_heartbeat(uuid, uuid, bigint, text, integer) TO service_role;
     GRANT EXECUTE ON FUNCTION public.python_ingestion_partition_record(uuid, uuid, bigint, text, text, text, jsonb, text) TO service_role;
     GRANT EXECUTE ON FUNCTION public.python_ingestion_run_complete(uuid, uuid, bigint, text, text, text, jsonb) TO service_role;
