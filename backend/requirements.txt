@@ -1,4 +1,7 @@
 # Core API runtime
+posthog[otel]>=3.0.0
+opentelemetry-sdk>=1.0.0
+opentelemetry-instrumentation-openai-v2>=0.1.0
 fastapi==0.110.1
 starlette==0.37.2
 uvicorn==0.25.0
