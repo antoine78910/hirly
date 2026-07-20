@@ -14,7 +14,7 @@ import re
 import socket
 import uuid
 from datetime import date, datetime, timezone
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import httpx
 

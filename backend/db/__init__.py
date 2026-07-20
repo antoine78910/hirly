@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Optional
 
 from .base import DatabaseAdapter
 from .supabase_adapter import SupabaseDatabaseAdapter
