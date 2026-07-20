@@ -6,8 +6,18 @@ const workflow = readFileSync(
   resolve(import.meta.dir, "../.github/workflows/typescript-foundation.yml"),
   "utf8",
 );
+const workerDockerfile = readFileSync(
+  resolve(import.meta.dir, "../apps/worker/Dockerfile"),
+  "utf8",
+);
 
 describe("main production release workflow", () => {
+  test("copies every app manifest required by the frozen worker install", () => {
+    expect(workerDockerfile).toContain(
+      "COPY apps/analytics-backfill/package.json apps/analytics-backfill/package.json",
+    );
+  });
+
   test("serializes migration, backend readiness, and frontend promotion", () => {
     expect(workflow).toContain("production-migrations:");
     expect(workflow).toContain("deploy-railway:");
