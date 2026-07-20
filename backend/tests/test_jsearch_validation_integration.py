@@ -150,5 +150,5 @@ def test_adapter_normalize_validate_filter_dedup_canonical_integration_branches(
     assert stats["inserted"] == len(raw_records)
     assert stats["write_failed"] == 0
     assert all(row.get("validation_status") for row in db.jobs.rows)
-    assert any(row.get("remote") is True for row in db.jobs.rows)
+    assert any(row.get("remote") == "remote" for row in db.jobs.rows)
     assert any(row.get("contract_type") == "NEW_ENUM" for row in db.jobs.rows)
