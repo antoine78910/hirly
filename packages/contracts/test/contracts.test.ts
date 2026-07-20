@@ -73,7 +73,6 @@ describe("shared contracts", () => {
       countryCodes: ["FR"],
       baseUrl: "https://boards.greenhouse.io/hirly",
       accessType: "tenant_feed" as const,
-      policyId: null,
       syncFrequencySeconds: 3600,
       checkpoint: { version: "ats-discovery.v1" },
     };

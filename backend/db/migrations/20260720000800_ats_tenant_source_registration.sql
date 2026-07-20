@@ -12,7 +12,6 @@ CREATE OR REPLACE FUNCTION worker_private.register_career_source_candidate(
   p_country_codes text[],
   p_base_url text,
   p_access_type text,
-  p_policy_id uuid,
   p_sync_frequency_seconds integer,
   p_checkpoint jsonb
 )
@@ -107,7 +106,7 @@ BEGIN
       ),
       p_base_url,
       p_access_type,
-      p_policy_id,
+      NULL,
       make_interval(secs => p_sync_frequency_seconds),
       p_checkpoint,
       false,
@@ -144,7 +143,6 @@ BEGIN
     ),
     base_url = p_base_url,
     access_type = p_access_type,
-    policy_id = coalesce(policy_id, p_policy_id),
     sync_frequency = coalesce(
       make_interval(secs => p_sync_frequency_seconds),
       sync_frequency
@@ -158,10 +156,10 @@ END
 $$;
 
 REVOKE ALL ON FUNCTION worker_private.register_career_source_candidate(
-  text, text, text, text, text, text[], text, text, uuid, integer, jsonb
+  text, text, text, text, text, text[], text, text, integer, jsonb
 ) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION worker_private.register_career_source_candidate(
-  text, text, text, text, text, text[], text, text, uuid, integer, jsonb
+  text, text, text, text, text, text[], text, text, integer, jsonb
 ) TO hirly_inventory_worker, hirly_inventory_operator;
 
 COMMIT;

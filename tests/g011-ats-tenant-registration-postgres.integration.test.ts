@@ -61,7 +61,6 @@ describe("G011 real-Postgres disabled ATS tenant registration", () => {
             ARRAY['FR'],
             'https://boards.greenhouse.io/hirly',
             'tenant_feed',
-            NULL,
             3600,
             '{"version":"ats-discovery.v1","cursor":"initial"}'::jsonb
           );
@@ -81,7 +80,6 @@ describe("G011 real-Postgres disabled ATS tenant registration", () => {
             ARRAY['BE', 'FR', 'FR'],
             'https://boards.greenhouse.io/hirly',
             'tenant_feed',
-            NULL,
             7200,
             '{"version":"ats-discovery.v1","cursor":"must-not-overwrite"}'::jsonb
           );
@@ -128,7 +126,7 @@ describe("G011 real-Postgres disabled ATS tenant registration", () => {
             ),
             'register', has_function_privilege(
               'hirly_inventory_worker',
-              'worker_private.register_career_source_candidate(text,text,text,text,text,text[],text,text,uuid,integer,jsonb)',
+              'worker_private.register_career_source_candidate(text,text,text,text,text,text[],text,text,integer,jsonb)',
               'EXECUTE'
             )
           )
@@ -146,7 +144,7 @@ describe("G011 real-Postgres disabled ATS tenant registration", () => {
       expect(
         await psql(["-A", "-t", "-q", "-c", `
           SELECT to_regprocedure(
-            'worker_private.register_career_source_candidate(text,text,text,text,text,text[],text,text,uuid,integer,jsonb)'
+            'worker_private.register_career_source_candidate(text,text,text,text,text,text[],text,text,integer,jsonb)'
           ) IS NULL
         `]),
       ).toBe("t");

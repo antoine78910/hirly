@@ -164,7 +164,6 @@ export const careerSourceCandidateRegistrationSchema = z
       .max(250),
     baseUrl: httpsBaseUrlSchema,
     accessType: sourceAccessTypeSchema,
-    policyId: z.uuid().nullable(),
     syncFrequencySeconds: z.number().int().positive().nullable(),
     checkpoint: sourceCheckpointSchema,
   })
@@ -173,6 +172,7 @@ export const careerSourceCandidateRegistrationSchema = z
 export const careerSourceCandidateSchema = careerSourceCandidateRegistrationSchema
   .extend({
     id: z.uuid(),
+    policyId: z.uuid().nullable(),
     lastAttemptAt: z.iso.datetime({ offset: true }).nullable(),
     lastSuccessAt: z.iso.datetime({ offset: true }).nullable(),
     lastCompleteRunId: z.uuid().nullable(),

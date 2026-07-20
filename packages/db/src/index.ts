@@ -427,7 +427,6 @@ export class WorkerRepository {
         ${input.countryCodes},
         ${input.baseUrl},
         ${input.accessType},
-        ${input.policyId}::uuid,
         ${input.syncFrequencySeconds},
         ${this.sql.json(asJson(input.checkpoint))}
       ) AS source

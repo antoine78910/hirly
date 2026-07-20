@@ -60,7 +60,6 @@ describe("database repository boundary", () => {
       countryCodes: ["FR"],
       baseUrl: "https://boards.greenhouse.io/hirly",
       accessType: "tenant_feed",
-      policyId: null,
       syncFrequencySeconds: 3600,
       checkpoint: { version: "ats-discovery.v1" },
     });
