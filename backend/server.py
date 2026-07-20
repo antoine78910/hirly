@@ -711,12 +711,12 @@ def schedule_feed_background_refresh(
 ) -> bool:
     """Run provider discovery in the background (non-blocking) with dedup + cooldown.
 
-    Returns True when a new background task was scheduled.
+    Returns True while a matching background refresh is scheduled or running.
     """
     now = time.monotonic()
     _prune_background_refresh_state(now)
     if signature in _feed_background_refresh_tasks:
-        return False
+        return True
     last_run = _feed_background_refresh_last_run.get(signature, 0.0)
     if (now - last_run) < _FEED_BACKGROUND_REFRESH_COOLDOWN_SECONDS:
         return False
@@ -8629,7 +8629,9 @@ async def get_feed(
             or (explicit_local_intent and local_inventory_count < requested_limit)
         )
         explicit_local_empty_inventory = bool(explicit_local_intent and local_inventory_count == 0)
-        if explicit_local_empty_inventory and not force_provider_refresh:
+        explicit_local_sync_enabled = _env_bool("JOBS_FEED_EXPLICIT_LOCAL_SYNC_ENABLED", False)
+        request_trace["explicit_local_sync_enabled"] = explicit_local_sync_enabled
+        if explicit_local_empty_inventory and not force_provider_refresh and explicit_local_sync_enabled:
             # A brand-new location with zero cached jobs relies entirely on
             # this one live call succeeding -- same JSearch latency reality
             # as the general sync_refresh budget above, so it gets the same
@@ -8644,17 +8646,18 @@ async def get_feed(
             and not cooldown_active
             and ((force_provider_refresh and explicit_local_intent) or inventory_is_weak)
         )
-        # Blocking (sync) refresh when worldwide DB is empty, client forced refresh,
-        # explicit local search has zero local inventory (quick API lookup, ~5s cap),
-        # or (per product decision) local A/B-tier inventory is merely thin -- the
-        # user should see a real live-refresh attempt in this same response instead
-        # of a "check back later" background task, since that background task's
-        # own results were getting silently discarded by the same tier filter
-        # anyway (confirmed live: it was importing relevant jobs, just all tier C).
+        # Keep provider latency out of normal explicit-location requests. Operators
+        # can opt back into the legacy synchronous behavior, and forced diagnostic
+        # refreshes remain blocking by design.
         should_refresh = (
             not prefetch
             and needs_provider_refresh
             and (refresh_budget_available or (force_provider_refresh and explicit_local_intent))
+            and (
+                not explicit_local_intent
+                or explicit_local_sync_enabled
+                or force_provider_refresh
+            )
             and (
                 (force_provider_refresh and explicit_local_intent)
                 or (not has_showable_cards and not explicit_local_intent)
@@ -8666,12 +8669,15 @@ async def get_feed(
             needs_provider_refresh
             and not should_refresh
             and not force_provider_refresh
-            and not explicit_local_empty_inventory
             and _env_bool("JOBS_FEED_BACKGROUND_REFRESH_ENABLED", True)
         )
         if prefetch:
             should_refresh = False
-            background_refresh_wanted = False
+            background_refresh_wanted = (
+                needs_provider_refresh
+                and not force_provider_refresh
+                and _env_bool("JOBS_FEED_BACKGROUND_REFRESH_ENABLED", True)
+            )
             request_trace["prefetch"] = True
             request_trace["local_jsearch_skip_reason"] = "prefetch_db_only"
         if audit_mode:

@@ -1110,6 +1110,7 @@ export default function Swipe() {
       });
       return data;
     };
+    let keepLoadingForBackgroundRefresh = false;
     try {
       let data;
       try {
@@ -1204,6 +1205,7 @@ export default function Swipe() {
       // Backend started a provider refresh in the background: silently poll a
       // couple of times to merge freshly imported jobs into the stack.
       if (data?.background_refresh_scheduled && backgroundPollCountRef.current < 3) {
+        keepLoadingForBackgroundRefresh = safeJobs.length === 0;
         backgroundPollCountRef.current += 1;
         const attempt = backgroundPollCountRef.current;
         const pollDelays = { 1: 3000, 2: 8000, 3: 15000 };
@@ -1282,7 +1284,7 @@ export default function Swipe() {
       toast.error(typeof detail === "string" ? detail : t("toasts.loadJobsError"));
     } finally {
       if (requestId === feedRequestIdRef.current) {
-        if (!stackPrefetch && !silentRefresh) setLoading(false);
+        if (!stackPrefetch && !silentRefresh && !keepLoadingForBackgroundRefresh) setLoading(false);
         fetchingRef.current = false;
         if (feedAbortRef.current === controller) feedAbortRef.current = null;
       }

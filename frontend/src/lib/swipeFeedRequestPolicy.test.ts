@@ -6,8 +6,9 @@ describe("shouldPrefetchSwipeFeed", () => {
     "initial_profile_defaults",
     "initial_empty_after_swipe_filter",
     "filters_applied",
-  ])("does not use DB-only prefetch for an empty stack (%s)", (reason) => {
-    expect(shouldPrefetchSwipeFeed({ replace: true, currentJobCount: 0, reason })).toBe(false);
+    "background_poll_1",
+  ])("keeps slow provider discovery out of the foreground request (%s)", (reason) => {
+    expect(shouldPrefetchSwipeFeed({ replace: true, currentJobCount: 0, reason })).toBe(true);
   });
 
   it("uses prefetch when appending to an existing stack", () => {
@@ -24,5 +25,13 @@ describe("shouldPrefetchSwipeFeed", () => {
       currentJobCount: 4,
       reason: "background_refresh_cache",
     })).toBe(true);
+  });
+
+  it("uses the normal non-blocking feed path for an explicit empty-state refresh", () => {
+    expect(shouldPrefetchSwipeFeed({
+      replace: true,
+      currentJobCount: 0,
+      reason: "empty_refresh",
+    })).toBe(false);
   });
 });

@@ -160,6 +160,7 @@ def _run_feed(
         # Keep sync-path tests deterministic: background continuation tasks
         # would otherwise add extra provider refresh calls after the response.
         "JOBS_FEED_BACKGROUND_REFRESH_ENABLED": "false",
+        "JOBS_FEED_EXPLICIT_LOCAL_SYNC_ENABLED": "true",
         **env,
     }.items():
         monkeypatch.setenv(key, value)
@@ -322,10 +323,18 @@ def test_db_first_queries_for_role_before_bounding_candidate_pool(monkeypatch):
     assert response["refresh_results"] == []
 
 
-def test_prefetch_never_blocks_on_provider_when_cached_inventory_is_empty(monkeypatch):
+def test_prefetch_schedules_provider_discovery_without_blocking_when_cache_is_empty(monkeypatch):
+    scheduled = {"count": 0}
+
+    def fake_schedule(*_args, **_kwargs):
+        scheduled["count"] += 1
+        return True
+
+    monkeypatch.setattr(server, "schedule_feed_background_refresh", fake_schedule)
     response, calls = _run_feed(
         monkeypatch,
         [],
+        env={"JOBS_FEED_BACKGROUND_REFRESH_ENABLED": "true"},
         locations_json=_location_payload("Paris"),
         prefetch=True,
     )
@@ -333,6 +342,58 @@ def test_prefetch_never_blocks_on_provider_when_cached_inventory_is_empty(monkey
     assert response["jobs"] == []
     assert calls["refresh"] == 0
     assert response["refresh_results"] == []
+    assert scheduled["count"] == 1
+    assert response["background_refresh_scheduled"] is True
+
+
+def test_explicit_local_empty_feed_schedules_discovery_without_blocking(monkeypatch):
+    scheduled = {"count": 0}
+
+    def fake_schedule(*_args, **_kwargs):
+        scheduled["count"] += 1
+        return True
+
+    monkeypatch.setattr(server, "schedule_feed_background_refresh", fake_schedule)
+    response, calls = _run_feed(
+        monkeypatch,
+        [],
+        env={
+            "JOBS_FEED_BACKGROUND_REFRESH_ENABLED": "true",
+            "JOBS_FEED_DEBUG_DIAGNOSTICS": "true",
+            "JOBS_FEED_EXPLICIT_LOCAL_SYNC_ENABLED": "false",
+        },
+        locations_json=_location_payload("Paris"),
+    )
+
+    assert response["jobs"] == []
+    assert calls["refresh"] == 0
+    assert scheduled["count"] == 1
+    assert response["background_refresh_scheduled"] is True
+    assert response["request_trace"]["explicit_local_sync_enabled"] is False
+
+
+def test_background_refresh_reports_an_existing_task_as_pending(monkeypatch):
+    class PendingTask:
+        @staticmethod
+        def done():
+            return False
+
+    signature = "explicit_local|fullstack engineer|204km|paris:fr"
+    monkeypatch.setattr(server, "_feed_background_refresh_tasks", {signature: PendingTask()})
+    monkeypatch.setattr(server, "_feed_background_refresh_last_run", {})
+
+    assert server.schedule_feed_background_refresh(
+        signature,
+        _profile(),
+        [],
+        search_radius="204km",
+        role_override="Fullstack Engineer",
+        requested_limit=12,
+        max_results=12,
+        max_pages=1,
+        page_size=12,
+        attempts_per_city=1,
+    ) is True
 
 
 def test_prefetch_returns_cached_manual_role_match_without_provider(monkeypatch):
