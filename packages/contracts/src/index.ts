@@ -246,7 +246,6 @@ export const stableErrorCodeSchema = z.enum([
 
 export type Provider = z.infer<typeof providerSchema>;
 export type RateLimitConfig = z.infer<typeof rateLimitConfigSchema>;
-export type AuthorizationStatus = z.infer<typeof authorizationStatusSchema>;
 export type ProviderRegistry = z.infer<typeof providerRegistrySchema>;
 export type ProviderSearchRequest = z.infer<typeof providerSearchRequestSchema>;
 export type RawProviderJobEnvelope = z.infer<
