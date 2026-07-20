@@ -8,7 +8,10 @@ import {
   nextCronOccurrence,
   runSchedulerTick,
 } from "../apps/worker/src/runtime/scheduler";
-import { startHttpServer } from "../apps/worker/src/http/server";
+import {
+  createHttpHandler,
+  startHttpServer,
+} from "../apps/worker/src/http/server";
 import type { RuntimeConfig } from "../apps/worker/src/runtime/config";
 import type {
   ConsumerRepository,
@@ -255,6 +258,7 @@ describe("G003 persisted scheduler identity", () => {
             timezone: "UTC",
             nextDueAt: new Date("2026-07-20T10:00:00.000Z"),
             maxCatchUp: 2,
+            databaseNow: new Date("2026-07-20T10:05:00.000Z"),
           },
         ];
       },
@@ -265,9 +269,7 @@ describe("G003 persisted scheduler identity", () => {
     } as RuntimeStore;
 
     expect(
-      await runSchedulerTick(store, {
-        now: new Date("2026-07-20T10:05:00.000Z"),
-      }),
+      await runSchedulerTick(store),
     ).toBe(2);
     expect(successors).toEqual([
       "2026-07-20T10:01:00.000Z",
@@ -286,6 +288,7 @@ describe("G003 persisted scheduler identity", () => {
             timezone: "UTC",
             nextDueAt: new Date("2026-07-20T10:00:00.000Z"),
             maxCatchUp: 10,
+            databaseNow: new Date("2026-07-20T10:30:00.000Z"),
           },
         ];
       },
@@ -296,9 +299,7 @@ describe("G003 persisted scheduler identity", () => {
     } as RuntimeStore;
 
     expect(
-      await runSchedulerTick(store, {
-        now: new Date("2026-07-20T10:30:00.000Z"),
-      }),
+      await runSchedulerTick(store),
     ).toBe(0);
     expect(attempts).toBe(1);
   });
@@ -476,6 +477,96 @@ describe("G003 HTTP health and control-plane hardening", () => {
     } finally {
       server.stop(true);
     }
+  });
+
+  test("caps chunked bodies even when Content-Length is absent", async () => {
+    const fixture = fixtures();
+    const handler = createHttpHandler({
+      config,
+      queue: fixture.queue,
+      store: fixture.store,
+      logger: createJsonLogger(() => {}),
+      health: { ready: true },
+    });
+    const encoded = new TextEncoder().encode(
+      JSON.stringify({
+        kind: "inventory_maintenance",
+        provider: null,
+        idempotencyKey: "x".repeat(70_000),
+        triggerSource: "http",
+        tasks: [
+          {
+            taskKey: "inventory-maintenance",
+            taskType: "inventory.maintenance",
+            payload: {},
+          },
+        ],
+      }),
+    );
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (let offset = 0; offset < encoded.length; offset += 4_096) {
+          controller.enqueue(encoded.slice(offset, offset + 4_096));
+        }
+        controller.close();
+      },
+    });
+    const response = await handler(
+      new Request("http://worker.test/control/enqueue", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body,
+      }),
+    );
+
+    expect(response.status).toBe(413);
+    expect(fixture.enqueueCalls).toBe(0);
+  });
+
+  test("bounds readiness checks and redacts unexpected dependency failures", async () => {
+    const fixture = fixtures();
+    const neverReadyQueue = {
+      ...fixture.queue,
+      async ping(): Promise<boolean> {
+        return new Promise<boolean>(() => {});
+      },
+    };
+    const dependencyFailureStore = {
+      ...fixture.store,
+      async getRun() {
+        throw new Error(
+          "postgresql://worker:super-secret@db.internal/jobs failed",
+        );
+      },
+    };
+    const handler = createHttpHandler({
+      config,
+      queue: neverReadyQueue,
+      store: dependencyFailureStore,
+      logger: createJsonLogger(() => {}),
+      health: { ready: true },
+    });
+
+    const readiness = await Promise.race([
+      handler(new Request("http://worker.test/health/ready")),
+      Bun.sleep(1_500).then(() => "timed_out" as const),
+    ]);
+    expect(readiness).not.toBe("timed_out");
+    expect((readiness as Response).status).toBe(503);
+
+    const failure = await handler(
+      new Request(
+        "http://worker.test/control/runs/00000000-0000-4000-8000-000000000002",
+        { headers: { authorization: `Bearer ${token}` } },
+      ),
+    );
+    const failureBody = JSON.stringify(await failure.json());
+    expect(failureBody).not.toContain("super-secret");
+    expect(failureBody).not.toContain("db.internal");
+    expect(failureBody).not.toContain("postgresql://");
   });
 
   test("returns only the redacted run view", async () => {
