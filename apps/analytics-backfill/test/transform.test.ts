@@ -92,6 +92,17 @@ describe("analytics historical transform", () => {
       status: "quarantined",
       reason: "invalid_source_created_at",
     });
+    expect(
+      transformLegacyAnalyticsRow({
+        ...exactRow,
+        userId: "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA",
+        anonymousId: "must-not-be-used-as-fallback",
+      }),
+    ).toMatchObject({
+      status: "quarantined",
+      reason: "invalid_known_identity",
+      identityQuality: "unknown",
+    });
   });
 
   test("resumes keyset ordering without gaps and dry-run has no side effects", async () => {
@@ -141,6 +152,48 @@ describe("analytics historical transform", () => {
         "2025-01-03T00:00:00.000Z",
       ).digest,
     ).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  test("accounts for invalid source timestamps and rejects unsafe execution bounds", async () => {
+    const manifest = await runBackfill({
+      rows: [{ ...exactRow, eventId: "invalid-time", createdAt: "not-a-time" }],
+      sourceCutoffAt: "2025-01-03T00:00:00.000Z",
+      dryRun: true,
+    });
+    expect(manifest.counts).toEqual({
+      pending: 0,
+      excluded: 0,
+      quarantined: 1,
+    });
+    expect(manifest.reasonCounts).toEqual({
+      invalid_source_created_at: 1,
+    });
+
+    for (const rateLimitPerSecond of [
+      0,
+      -1,
+      Number.POSITIVE_INFINITY,
+      1_001,
+    ]) {
+      await expect(
+        runBackfill({
+          rows: [exactRow],
+          sourceCutoffAt: "2025-01-03T00:00:00.000Z",
+          dryRun: true,
+          rateLimitPerSecond,
+        }),
+      ).rejects.toThrow("invalid_rate_limit");
+    }
+    for (const batchSize of [0, -1, 1.5, 1_001]) {
+      await expect(
+        runBackfill({
+          rows: [exactRow],
+          sourceCutoffAt: "2025-01-03T00:00:00.000Z",
+          dryRun: true,
+          batchSize,
+        }),
+      ).rejects.toThrow("invalid_batch_size");
+    }
   });
 
   test("separates transport acceptance from read-side observation", async () => {
@@ -194,7 +247,7 @@ describe("analytics historical transform", () => {
           return { outcome: "accepted", metadata: { status: 200 } };
         },
       },
-      rateLimitPerSecond: Number.POSITIVE_INFINITY,
+      rateLimitPerSecond: 1_000,
     });
     expect(calls).toEqual([
       "seed",
@@ -246,7 +299,7 @@ describe("analytics historical transform", () => {
           metadata: { timeout: true },
         }),
       },
-      rateLimitPerSecond: Number.POSITIVE_INFINITY,
+      rateLimitPerSecond: 1_000,
     });
     expect(calls).toEqual(["claim", "uncertain"]);
   });

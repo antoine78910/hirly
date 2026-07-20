@@ -250,6 +250,45 @@ describePostgres("PostHog migrations on disposable PostgreSQL", () => {
       view_name: "analytics_public.user_identity_v1",
       table_name: "posthog_migration_ledger",
     });
+
+    await sql.unsafe(ledgerDown);
+    await sql.unsafe(warehouseDown);
+    await sql.unsafe(`
+      CREATE ROLE posthog_warehouse_reader NOLOGIN;
+      COMMENT ON ROLE posthog_warehouse_reader IS 'pre-existing-fixture-role';
+      GRANT SELECT ON public.users TO posthog_warehouse_reader;
+    `);
+    await sql.unsafe(warehouseUp);
+    await sql.unsafe(warehouseDown);
+    const [preservedRole] = await sql<
+      { role_exists: boolean; unrelated_select: boolean; role_comment: string }[]
+    >`
+      SELECT
+        EXISTS (
+          SELECT 1 FROM pg_roles WHERE rolname = 'posthog_warehouse_reader'
+        ) AS role_exists,
+        has_table_privilege(
+          'posthog_warehouse_reader',
+          'public.users',
+          'SELECT'
+        ) AS unrelated_select,
+        (
+          SELECT pg_catalog.shobj_description(oid, 'pg_authid')
+          FROM pg_roles
+          WHERE rolname = 'posthog_warehouse_reader'
+        ) AS role_comment
+    `;
+    expect(preservedRole).toEqual({
+      role_exists: true,
+      unrelated_select: true,
+      role_comment: "pre-existing-fixture-role",
+    });
+    await sql.unsafe(`
+      REVOKE SELECT ON public.users FROM posthog_warehouse_reader;
+      DROP ROLE posthog_warehouse_reader;
+    `);
+    await sql.unsafe(warehouseUp);
+    await sql.unsafe(ledgerUp);
   });
 });
 

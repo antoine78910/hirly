@@ -107,9 +107,27 @@ export async function runBackfill(
 ): Promise<BackfillManifest> {
   const cutoff = new Date(options.sourceCutoffAt);
   if (!Number.isFinite(cutoff.valueOf())) throw new Error("invalid_source_cutoff");
+  const batchSize = options.batchSize ?? 100;
+  if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 1_000) {
+    throw new Error("invalid_batch_size");
+  }
+  const rateLimitPerSecond = options.rateLimitPerSecond ?? 10;
+  if (
+    !Number.isFinite(rateLimitPerSecond) ||
+    rateLimitPerSecond <= 0 ||
+    rateLimitPerSecond > 1_000
+  ) {
+    throw new Error("invalid_rate_limit");
+  }
   const rows = orderLegacyRows(options.rows)
     .filter((row) => afterCheckpoint(row, options.checkpoint ?? null))
-    .filter((row) => new Date(row.createdAt) <= cutoff);
+    .filter((row) => {
+      const sourceCreatedAt = new Date(row.createdAt).valueOf();
+      return (
+        !Number.isFinite(sourceCreatedAt) ||
+        sourceCreatedAt <= cutoff.valueOf()
+      );
+    });
   const dispositions = rows.map(transformLegacyAnalyticsRow);
   const manifest = buildBackfillManifest(dispositions, cutoff.toISOString());
   if (options.dryRun) return manifest;
@@ -123,8 +141,7 @@ export async function runBackfill(
   }
 
   await options.repository.seed(options.runId, dispositions.map(asSeed));
-  const batchSize = options.batchSize ?? 100;
-  const delayMs = 1000 / (options.rateLimitPerSecond ?? 10);
+  const delayMs = 1000 / rateLimitPerSecond;
   while (!(await options.stopRequested?.())) {
     const claimed = await options.repository.claim(
       options.runId,

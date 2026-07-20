@@ -78,6 +78,7 @@ function identity(row: LegacyAnalyticsRow): {
   distinctId: string | null;
   quality: IdentityQuality;
   personless: boolean;
+  invalidKnownIdentity: boolean;
 } {
   const known = canonicalAnalyticsUserIdSchema.safeParse(row.userId);
   if (known.success) {
@@ -85,10 +86,24 @@ function identity(row: LegacyAnalyticsRow): {
       distinctId: known.data,
       quality: "identified_at_ingest",
       personless: false,
+      invalidKnownIdentity: false,
+    };
+  }
+  if (row.userId !== null && row.userId !== undefined) {
+    return {
+      distinctId: null,
+      quality: "unknown",
+      personless: false,
+      invalidKnownIdentity: true,
     };
   }
   if (!row.anonymousId?.trim()) {
-    return { distinctId: null, quality: "unknown", personless: true };
+    return {
+      distinctId: null,
+      quality: "unknown",
+      personless: true,
+      invalidKnownIdentity: false,
+    };
   }
   const attribution = row.anonymousAttribution ?? "unlinked";
   return {
@@ -97,6 +112,7 @@ function identity(row: LegacyAnalyticsRow): {
     distinctId: `legacy-anonymous:${stablePayloadHash(row.anonymousId).slice(0, 32)}`,
     quality: `legacy_anonymous_${attribution}`,
     personless: true,
+    invalidKnownIdentity: false,
   };
 }
 
@@ -134,6 +150,9 @@ export function transformLegacyAnalyticsRow(
   if (!row.eventId.trim()) return quarantine("missing_source_event_id");
   if (!sourceCreatedAt) return quarantine("invalid_source_created_at");
   if (!canonicalEventName) return quarantine("unknown_event");
+  if (resolvedIdentity.invalidKnownIdentity) {
+    return quarantine("invalid_known_identity");
+  }
   if (!resolvedIdentity.distinctId) return quarantine("missing_identity");
   if (Object.keys(row.properties).some((key) => denylistedProperty.test(key))) {
     return quarantine("denylisted_property");
