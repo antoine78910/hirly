@@ -56,6 +56,7 @@ DROP TABLE IF EXISTS worker_private.provider_write_transactions;
 DROP TABLE IF EXISTS public.provider_work_claims;
 ALTER TABLE public.provider_registry
   DROP CONSTRAINT IF EXISTS provider_registry_ownership_epoch_guard,
+  DROP COLUMN IF EXISTS lifecycle_claims_ready,
   DROP COLUMN IF EXISTS claims_required,
   DROP COLUMN IF EXISTS ownership_epoch;
 

@@ -71,6 +71,17 @@ describe("G010 real-Postgres whole-provider fencing", () => {
             v_new jsonb;
             v_job_id text;
           BEGIN
+            BEGIN
+              PERFORM worker_private.transition_provider_writer(
+                'france_travail', 'python', 'none', 0
+              );
+              RAISE EXCEPTION 'transition bypassed lifecycle readiness gate';
+            EXCEPTION WHEN object_not_in_prerequisite_state THEN NULL;
+            END;
+            UPDATE public.provider_registry
+            SET lifecycle_claims_ready = true
+            WHERE provider = 'france_travail';
+
             v_old := public.python_provider_work_claim(
               'france_travail', 'g010-old-operation', 300
             );

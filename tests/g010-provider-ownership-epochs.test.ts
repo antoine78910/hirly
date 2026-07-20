@@ -71,6 +71,12 @@ describe("G010 whole-provider ownership epoch migration", () => {
       "ADD COLUMN IF NOT EXISTS claims_required boolean NOT NULL DEFAULT false",
     );
     expect(migration).toContain(
+      "ADD COLUMN IF NOT EXISTS lifecycle_claims_ready boolean NOT NULL DEFAULT false",
+    );
+    expect(migration).toContain(
+      "provider lifecycle claim boundary is not ready",
+    );
+    expect(migration).toContain(
       "worker_private.enable_provider_claim_enforcement",
     );
     expect(migration).toContain("BEFORE INSERT OR UPDATE OR DELETE ON public.jobs");
@@ -113,6 +119,7 @@ describe("G010 whole-provider ownership epoch migration", () => {
   test("rolls back every additive object and restores legacy grants", () => {
     expect(rollback).toContain("DROP TABLE IF EXISTS public.provider_work_claims");
     expect(rollback).toContain("DROP COLUMN IF EXISTS ownership_epoch");
+    expect(rollback).toContain("DROP COLUMN IF EXISTS lifecycle_claims_ready");
     expect(rollback).toContain(
       "GRANT EXECUTE ON FUNCTION worker_private.set_provider_writer",
     );

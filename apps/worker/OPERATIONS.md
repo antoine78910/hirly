@@ -116,9 +116,13 @@ This is deliberately staged:
    rewriting it during migration.
 2. Verify every France Travail scheduler, fallback, harvest, and canonical
    write uses the Python claim/heartbeat/guarded-write/finish boundary.
-3. Only then call
+3. Keep `lifecycle_claims_ready=false` until validation, soft-expiry, purge,
+   and other lifecycle mutations have scoped claim-aware RPC coverage. The
+   database rejects ownership transitions and claim enforcement while this
+   gate is false.
+4. Only after that separate lifecycle migration, call
    `worker_private.enable_provider_claim_enforcement('france_travail')`.
-4. Keep TypeScript provider/source/mode flags disabled until a separate
+5. Keep TypeScript provider/source/mode flags disabled until a separate
    transition through `writer_runtime=none` is approved and drained.
 
 Other Python providers remain non-claim-aware and unchanged. Do not enable

@@ -478,6 +478,62 @@ def test_refresh_limits_are_respected(monkeypatch):
     assert captured["target_auto_apply_count"] == 300
 
 
+def test_expanded_france_travail_refresh_uses_claim_aware_import(monkeypatch):
+    events = []
+
+    class _FranceTravailProvider:
+        name = "france_travail"
+
+    async def fake_expand(**kwargs):
+        return [{
+            "name": "Paris",
+            "ascii_name": "Paris",
+            "country_code": "fr",
+            "distance_km": 0.0,
+            "population": 2_000_000,
+            "is_origin": True,
+        }]
+
+    async def fake_import(db, provider, query):
+        events.append((provider.name, query.location))
+        return {
+            "total_imported": 1,
+            "jobs": [_job(provider="france_travail", external_id="ft-1")],
+        }
+
+    async def forbidden_upsert(*args, **kwargs):
+        raise AssertionError("France Travail must not bypass its provider claim")
+
+    monkeypatch.setattr(maintenance, "expand_location_radius", fake_expand)
+    monkeypatch.setattr(maintenance, "primary_job_provider_name", lambda: "france_travail")
+    monkeypatch.setattr(maintenance, "is_job_provider_configured", lambda name=None: True)
+    monkeypatch.setattr(
+        maintenance, "get_job_provider", lambda name, api_key="": _FranceTravailProvider()
+    )
+    monkeypatch.setattr(maintenance, "_import_provider_jobs", fake_import)
+    monkeypatch.setattr(maintenance, "upsert_imported_jobs", forbidden_upsert)
+
+    result = asyncio.run(maintenance._refresh_jobs_for_expanded_locations(
+        _FakeDB(),
+        role="marketing",
+        location_label="Paris",
+        country_code="fr",
+        lat=None,
+        lng=None,
+        radius_km=50,
+        include_cross_border=False,
+        refresh_limit=10,
+        dry_run=False,
+        discover_ats_sources=False,
+        refresh_discovered_ats_sources=False,
+        ats_refresh_limit=None,
+        remote=None,
+    ))
+
+    assert events == [("france_travail", "Paris")]
+    assert result["imported_count"] == 1
+
+
 def _expanded_basque_places():
     return [
         {"name": "Ciboure", "ascii_name": "Ciboure", "country_code": "fr", "distance_km": 0.0, "population": 6814, "is_origin": True},

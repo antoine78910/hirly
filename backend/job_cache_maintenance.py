@@ -21,10 +21,19 @@ from ats_source_service import (
     refresh_known_ats_sources,
     run_ats_direct_maintenance,
 )
-from job_providers import get_job_provider, is_job_provider_configured, primary_job_provider_name
+from job_providers import (
+    get_job_provider,
+    is_france_travail_provider,
+    is_job_provider_configured,
+    primary_job_provider_name,
+)
 from job_providers.base import JobSearchQuery
 from job_validation import cheap_validate_job_applyability
-from jobs_service import refresh_jobs_for_profile_if_needed, upsert_imported_jobs
+from jobs_service import (
+    _import_provider_jobs,
+    refresh_jobs_for_profile_if_needed,
+    upsert_imported_jobs,
+)
 from location_intelligence import country_to_jsearch_language, expand_location_radius
 
 
@@ -379,9 +388,16 @@ async def _refresh_jobs_for_expanded_locations(
         summary["provider_queries_attempted"] += 1
         key = f"{place.get('name')}|{place_country}"
         try:
-            result = await provider.search(query)
-            jobs = [job for job in result.jobs if isinstance(job, dict)]
-            import_stats = await upsert_imported_jobs(db, jobs)
+            if is_france_travail_provider(provider_name):
+                imported = await _import_provider_jobs(db, provider, query)
+                jobs = [
+                    job for job in imported.get("jobs", []) if isinstance(job, dict)
+                ]
+                import_stats = imported
+            else:
+                result = await provider.search(query)
+                jobs = [job for job in result.jobs if isinstance(job, dict)]
+                import_stats = await upsert_imported_jobs(db, jobs)
             imported_jobs = [job for job in jobs if job.get("job_id") not in imported_job_ids]
             imported_job_ids.update(job.get("job_id") for job in imported_jobs if job.get("job_id"))
             all_imported_jobs.extend(imported_jobs)

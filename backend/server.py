@@ -131,6 +131,7 @@ from job_providers import (
     get_board_provider,
     get_configured_job_provider,
     get_job_provider,
+    is_france_travail_provider,
     is_job_provider_configured,
     is_job_provider_enabled,
     primary_job_provider_name,
@@ -6618,16 +6619,26 @@ async def get_feed(
         provider = get_job_provider(provider_name, api_key)
         jsearch_attempted = True
         jsearch_error = None
+        import_stats = None
         try:
-            result = await provider.search(query)
-            raw_jobs = result.jobs
+            if is_france_travail_provider(provider_name):
+                import_stats = await jobs_service_module._import_provider_jobs(
+                    db, provider, query
+                )
+                raw_jobs = import_stats.get("jobs", [])
+            else:
+                result = await provider.search(query)
+                raw_jobs = result.jobs
         except Exception as exc:
             raw_jobs = []
             jsearch_error = f"{exc.__class__.__name__}: {str(exc)[:160]}"
             logger.warning("jobs/feed legacy_jsearch provider_error=%s", jsearch_error)
         if raw_jobs:
             try:
-                import_stats = await jobs_service_module.upsert_imported_jobs(db, raw_jobs)
+                if import_stats is None:
+                    import_stats = await jobs_service_module.upsert_imported_jobs(
+                        db, raw_jobs
+                    )
                 logger.info(
                     "jobs/feed legacy_jsearch_upserted fetched=%s imported=%s auto_apply_supported=%s",
                     len(raw_jobs),

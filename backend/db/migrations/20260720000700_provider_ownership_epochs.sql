@@ -7,6 +7,7 @@ BEGIN;
 ALTER TABLE public.provider_registry
   ADD COLUMN IF NOT EXISTS ownership_epoch bigint NOT NULL DEFAULT 0,
   ADD COLUMN IF NOT EXISTS claims_required boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS lifecycle_claims_ready boolean NOT NULL DEFAULT false,
   ADD CONSTRAINT provider_registry_ownership_epoch_guard
     CHECK (ownership_epoch >= 0);
 
@@ -220,6 +221,10 @@ BEGIN
   THEN
     RAISE EXCEPTION 'stale provider writer transition' USING ERRCODE = '40001';
   END IF;
+  IF NOT v_provider.lifecycle_claims_ready THEN
+    RAISE EXCEPTION 'provider lifecycle claim boundary is not ready'
+      USING ERRCODE = '55000';
+  END IF;
   IF p_expected_runtime <> 'none' AND p_new_runtime <> 'none' THEN
     RAISE EXCEPTION 'provider writer must transition through none'
       USING ERRCODE = '22023';
@@ -248,6 +253,15 @@ AS $$
 DECLARE
   v_provider public.provider_registry;
 BEGIN
+  PERFORM 1
+  FROM public.provider_registry
+  WHERE provider = p_provider
+    AND lifecycle_claims_ready
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'provider lifecycle claim boundary is not ready'
+      USING ERRCODE = '55000';
+  END IF;
   UPDATE public.provider_registry
   SET claims_required = true,
       updated_at = clock_timestamp()
