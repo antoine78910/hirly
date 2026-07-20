@@ -5,6 +5,7 @@ BEGIN;
 
 ALTER TABLE public.provider_registry
   ADD COLUMN IF NOT EXISTS ownership_epoch bigint NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS claims_required boolean NOT NULL DEFAULT false,
   ADD CONSTRAINT provider_registry_ownership_epoch_guard
     CHECK (ownership_epoch >= 0);
 
@@ -37,14 +38,15 @@ CREATE TABLE IF NOT EXISTS public.provider_work_claims (
   CONSTRAINT provider_work_claims_finish_guard CHECK (
     finished_at IS NULL OR finished_at >= created_at
   ),
-  CONSTRAINT provider_work_claims_operation_unique
-    UNIQUE (provider, captured_runtime, lease_owner),
   CONSTRAINT provider_work_claims_task_attempt_unique
     UNIQUE (task_id, task_lease_token, task_claim_generation, provider)
 );
 
 CREATE INDEX IF NOT EXISTS provider_work_claims_live_provider_idx
   ON public.provider_work_claims(provider, ownership_epoch, expires_at)
+  WHERE finished_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS provider_work_claims_live_operation_unique
+  ON public.provider_work_claims(provider, captured_runtime, lease_owner)
   WHERE finished_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS worker_private.provider_write_transactions (
@@ -94,12 +96,16 @@ SECURITY DEFINER
 SET search_path = pg_catalog
 AS $$
 DECLARE
-  v_provider text := coalesce(NEW.provider, OLD.provider);
+  v_provider text := CASE
+    WHEN TG_OP = 'DELETE' THEN OLD.provider
+    ELSE NEW.provider
+  END;
 BEGIN
   IF EXISTS (
     SELECT 1
-    FROM public.provider_work_claims
+    FROM public.provider_registry
     WHERE provider = v_provider
+      AND claims_required
   ) AND NOT EXISTS (
     SELECT 1
     FROM worker_private.provider_write_transactions AS transaction_claim
@@ -118,13 +124,13 @@ BEGIN
     RAISE EXCEPTION 'claimed provider jobs require guarded RPC'
       USING ERRCODE = '42501';
   END IF;
-  RETURN NEW;
+  RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
 END
 $$;
 
 DROP TRIGGER IF EXISTS jobs_claimed_provider_write_guard ON public.jobs;
 CREATE TRIGGER jobs_claimed_provider_write_guard
-BEFORE INSERT OR UPDATE ON public.jobs
+BEFORE INSERT OR UPDATE OR DELETE ON public.jobs
 FOR EACH ROW EXECUTE FUNCTION worker_private.enforce_claimed_provider_job_write();
 
 CREATE OR REPLACE FUNCTION worker_private.provider_claim_is_current(
@@ -194,10 +200,34 @@ BEGIN
   UPDATE public.provider_registry
   SET enabled = false,
       writer_runtime = p_new_runtime,
+      claims_required = claims_required OR p_new_runtime = 'none',
       ownership_epoch = ownership_epoch + 1,
       updated_at = clock_timestamp()
   WHERE provider = p_provider
   RETURNING * INTO v_provider;
+  RETURN v_provider;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION worker_private.require_provider_claims(
+  p_provider text
+)
+RETURNS public.provider_registry
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+DECLARE
+  v_provider public.provider_registry;
+BEGIN
+  UPDATE public.provider_registry
+  SET claims_required = true,
+      updated_at = clock_timestamp()
+  WHERE provider = p_provider
+  RETURNING * INTO v_provider;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'unknown provider' USING ERRCODE = '23503';
+  END IF;
   RETURN v_provider;
 END
 $$;
@@ -726,6 +756,8 @@ REVOKE ALL ON FUNCTION worker_private.provider_claim_is_current(uuid, text, text
   FROM PUBLIC;
 REVOKE ALL ON FUNCTION worker_private.transition_provider_writer(text, text, text, bigint)
   FROM PUBLIC;
+REVOKE ALL ON FUNCTION worker_private.require_provider_claims(text)
+  FROM PUBLIC;
 REVOKE ALL ON FUNCTION worker_private.claim_provider_work(uuid, uuid, bigint, text, text, integer)
   FROM PUBLIC;
 REVOKE ALL ON FUNCTION worker_private.write_jobs_and_complete(uuid, uuid, bigint, text, uuid, jsonb)
@@ -755,6 +787,8 @@ GRANT EXECUTE ON FUNCTION worker_private.finish_provider_work(
 GRANT EXECUTE ON FUNCTION worker_private.transition_provider_writer(
   text, text, text, bigint
 ) TO hirly_inventory_operator;
+GRANT EXECUTE ON FUNCTION worker_private.require_provider_claims(text)
+  TO hirly_inventory_operator;
 
 REVOKE ALL ON FUNCTION public.python_provider_work_claim(text, text, integer)
   FROM PUBLIC;

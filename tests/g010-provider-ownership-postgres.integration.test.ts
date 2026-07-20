@@ -47,7 +47,17 @@ describe("G010 real-Postgres whole-provider fencing", () => {
             'test-fixture', clock_timestamp(), false, 'python'
           ) ON CONFLICT (provider) DO UPDATE SET
             enabled = false, writer_runtime = 'python',
-            ownership_epoch = 0;
+            ownership_epoch = 0, claims_required = false;
+
+          INSERT INTO public.jobs (job_id, provider, external_id, data)
+          VALUES (
+            'g010-pre-activation', 'france_travail',
+            'g010-pre-activation', '{}'::jsonb
+          );
+          DELETE FROM public.jobs WHERE job_id = 'g010-pre-activation';
+
+          INSERT INTO public.jobs (job_id, provider, external_id, data)
+          VALUES ('g010-other-provider', 'apec', 'g010-other-provider', '{}'::jsonb);
 
           DO $proof$
           DECLARE
@@ -94,6 +104,18 @@ describe("G010 real-Postgres whole-provider fencing", () => {
             v_new := public.python_provider_work_claim(
               'france_travail', 'g010-new-operation', 300
             );
+            BEGIN
+              INSERT INTO public.jobs (job_id, provider, external_id, data)
+              VALUES (
+                'g010-direct-bypass', 'france_travail',
+                'g010-direct-bypass', '{}'::jsonb
+              );
+              RAISE EXCEPTION 'direct claimed-provider DML unexpectedly succeeded';
+            EXCEPTION WHEN insufficient_privilege THEN NULL;
+            END;
+            UPDATE public.jobs
+            SET title = 'Other provider remains backward compatible'
+            WHERE job_id = 'g010-other-provider';
             v_job_id := 'job_' || substr(encode(
               public.digest('france_travail:g010-1', 'sha1'), 'hex'
             ), 1, 16);
@@ -127,6 +149,11 @@ describe("G010 real-Postgres whole-provider fencing", () => {
           WHERE provider = 'france_travail' AND external_id = 'g010-1'
         `]);
         expect(count).toBe("1");
+        expect(
+          await psql(["-A", "-t", "-q", "-c", `
+            SELECT title FROM public.jobs WHERE job_id = 'g010-other-provider'
+          `]),
+        ).toBe("Other provider remains backward compatible");
       } finally {
         await apply(
           "backend/db/migrations/20260720000700_provider_ownership_epochs.down.sql",

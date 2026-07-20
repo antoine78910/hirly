@@ -47,10 +47,15 @@ describe("G010 whole-provider ownership epoch migration", () => {
     ]) {
       expect(migration).toContain(contract);
     }
-    expect(migration).toContain("provider_work_claims_operation_unique");
+    expect(migration).toContain("provider_work_claims_live_operation_unique");
     expect(migration).toContain("provider_work_claims_task_attempt_unique");
     expect(migration).toContain("provider work claim history is immutable");
     expect(migration).toContain("provider writer must transition through none");
+    expect(migration).toContain(
+      "ADD COLUMN IF NOT EXISTS claims_required boolean NOT NULL DEFAULT false",
+    );
+    expect(migration).toContain("worker_private.require_provider_claims");
+    expect(migration).toContain("BEFORE INSERT OR UPDATE OR DELETE ON public.jobs");
     expect(migration).toContain(
       "registry.ownership_epoch = claim.ownership_epoch",
     );

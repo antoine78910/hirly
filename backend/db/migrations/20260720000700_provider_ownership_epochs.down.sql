@@ -35,6 +35,7 @@ DROP FUNCTION IF EXISTS worker_private.claim_provider_work(
 DROP FUNCTION IF EXISTS worker_private.transition_provider_writer(
   text, text, text, bigint
 );
+DROP FUNCTION IF EXISTS worker_private.require_provider_claims(text);
 DROP FUNCTION IF EXISTS worker_private.provider_claim_is_current(uuid, text, text);
 DROP TRIGGER IF EXISTS jobs_claimed_provider_write_guard ON public.jobs;
 DROP FUNCTION IF EXISTS worker_private.enforce_claimed_provider_job_write();
@@ -52,6 +53,7 @@ DROP TABLE IF EXISTS worker_private.provider_write_transactions;
 DROP TABLE IF EXISTS public.provider_work_claims;
 ALTER TABLE public.provider_registry
   DROP CONSTRAINT IF EXISTS provider_registry_ownership_epoch_guard,
+  DROP COLUMN IF EXISTS claims_required,
   DROP COLUMN IF EXISTS ownership_epoch;
 
 COMMIT;
