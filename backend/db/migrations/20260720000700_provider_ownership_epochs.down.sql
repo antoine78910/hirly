@@ -23,6 +23,12 @@ DROP FUNCTION IF EXISTS public.python_provider_work_claim(text, text, integer);
 DROP FUNCTION IF EXISTS worker_private.write_jobs_and_complete(
   uuid, uuid, bigint, text, uuid, jsonb
 );
+DROP FUNCTION IF EXISTS worker_private.finish_provider_work(
+  uuid, uuid, bigint, text, uuid, text, text, text, timestamptz
+);
+DROP FUNCTION IF EXISTS worker_private.heartbeat_provider_work(
+  uuid, uuid, bigint, text, uuid, integer
+);
 DROP FUNCTION IF EXISTS worker_private.claim_provider_work(
   uuid, uuid, bigint, text, text, integer
 );
@@ -30,10 +36,15 @@ DROP FUNCTION IF EXISTS worker_private.transition_provider_writer(
   text, text, text, bigint
 );
 DROP FUNCTION IF EXISTS worker_private.provider_claim_is_current(uuid, text, text);
+DROP TRIGGER IF EXISTS provider_work_claims_immutable
+  ON public.provider_work_claims;
+DROP FUNCTION IF EXISTS public.enforce_provider_work_claim_history();
 
 GRANT EXECUTE ON FUNCTION worker_private.write_jobs_and_complete(
   uuid, uuid, bigint, text, jsonb
 ) TO hirly_inventory_worker;
+GRANT EXECUTE ON FUNCTION worker_private.set_provider_writer(text, text)
+  TO hirly_inventory_operator;
 
 DROP TABLE IF EXISTS public.provider_work_claims;
 ALTER TABLE public.provider_registry

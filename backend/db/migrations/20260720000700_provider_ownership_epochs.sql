@@ -326,9 +326,19 @@ BEGIN
   IF p_lease_seconds NOT BETWEEN 1 AND 3600 THEN
     RAISE EXCEPTION 'invalid provider claim duration' USING ERRCODE = '22023';
   END IF;
-  IF NOT worker_private.provider_claim_is_current(
-    p_claim_id, 'python', p_lease_owner
-  ) THEN
+  PERFORM 1
+  FROM public.provider_work_claims AS claim
+  JOIN public.provider_registry AS registry
+    ON registry.provider = claim.provider
+  WHERE claim.id = p_claim_id
+    AND claim.writer_runtime = 'python'
+    AND claim.lease_owner = p_lease_owner
+    AND claim.finished_at IS NULL
+    AND claim.expires_at > clock_timestamp()
+    AND registry.writer_runtime = 'python'
+    AND registry.ownership_epoch = claim.ownership_epoch
+  FOR UPDATE OF claim, registry;
+  IF NOT FOUND THEN
     RETURN false;
   END IF;
   UPDATE public.provider_work_claims
@@ -350,9 +360,19 @@ SECURITY DEFINER
 SET search_path = pg_catalog
 AS $$
 BEGIN
-  IF NOT worker_private.provider_claim_is_current(
-    p_claim_id, 'python', p_lease_owner
-  ) THEN
+  PERFORM 1
+  FROM public.provider_work_claims AS claim
+  JOIN public.provider_registry AS registry
+    ON registry.provider = claim.provider
+  WHERE claim.id = p_claim_id
+    AND claim.writer_runtime = 'python'
+    AND claim.lease_owner = p_lease_owner
+    AND claim.finished_at IS NULL
+    AND claim.expires_at > clock_timestamp()
+    AND registry.writer_runtime = 'python'
+    AND registry.ownership_epoch = claim.ownership_epoch
+  FOR UPDATE OF claim, registry;
+  IF NOT FOUND THEN
     RETURN false;
   END IF;
   UPDATE public.provider_work_claims
@@ -379,6 +399,9 @@ DECLARE
   v_written integer := 0;
   p_job jsonb;
   v_expected_job_id text;
+  v_existing_job_id text;
+  v_existing_provider text;
+  v_existing_external_id text;
 BEGIN
   SELECT claim.provider INTO v_provider
   FROM public.provider_work_claims AS claim
@@ -412,7 +435,7 @@ BEGIN
         USING ERRCODE = '22023';
     END IF;
     v_expected_job_id := 'job_' || substr(
-      encode(digest(v_provider || ':' || (p_job->>'external_id'), 'sha1'), 'hex'),
+      encode(public.digest(v_provider || ':' || (p_job->>'external_id'), 'sha1'), 'hex'),
       1,
       16
     );
@@ -420,21 +443,52 @@ BEGIN
       RAISE EXCEPTION 'deterministic job id mismatch' USING ERRCODE = '23000';
     END IF;
 
+    SELECT job_id INTO v_existing_job_id
+    FROM public.jobs
+    WHERE provider = v_provider
+      AND external_id = p_job->>'external_id'
+    FOR UPDATE;
+    IF FOUND AND v_existing_job_id <> v_expected_job_id THEN
+      RAISE EXCEPTION 'existing provider identity maps to another job id'
+        USING ERRCODE = '23000';
+    END IF;
+
+    SELECT provider, external_id
+    INTO v_existing_provider, v_existing_external_id
+    FROM public.jobs
+    WHERE job_id = v_expected_job_id
+    FOR UPDATE;
+    IF FOUND AND (
+      v_existing_provider IS DISTINCT FROM v_provider
+      OR v_existing_external_id IS DISTINCT FROM p_job->>'external_id'
+    ) THEN
+      RAISE EXCEPTION 'deterministic job id collision'
+        USING ERRCODE = '23000';
+    END IF;
+
     INSERT INTO public.jobs (
       job_id, provider, external_id, title, normalized_title, company,
-      normalized_company, location, country_code, selected_apply_url,
+      normalized_company, location, city, region, country_code, remote,
+      salary_min, salary_max, currency, posted_at, provider_search_key,
+      selected_apply_url, canonical_apply_url, ats_job_id,
       validation_status, validation_reason, validation_checked_at,
       applyability_tier, applyability_score, apply_fulfillment_status,
       apply_url_provider, ats_provider, requires_login,
       requires_account_creation, captcha_detected, manual_fulfillment_ready,
-      auto_apply_supported, rejection_reason, fingerprint, data,
+      auto_apply_supported, has_cv_upload, has_cover_letter,
+      has_custom_questions, rejection_reason, fingerprint, data,
       imported_at, last_seen_at
     )
     VALUES (
       v_expected_job_id, v_provider, p_job->>'external_id', p_job->>'title',
       p_job->>'normalized_title', p_job->>'company',
       p_job->>'normalized_company', p_job->>'location',
-      p_job->>'country_code', p_job->>'selected_apply_url',
+      p_job->>'city', p_job->>'region', p_job->>'country_code',
+      (p_job->>'remote')::boolean,
+      (p_job->>'salary_min')::numeric, (p_job->>'salary_max')::numeric,
+      p_job->>'currency', (p_job->>'posted_at')::timestamptz,
+      p_job->>'provider_search_key', p_job->>'selected_apply_url',
+      p_job->>'canonical_apply_url', p_job->>'ats_job_id',
       p_job->>'validation_status', p_job->>'validation_reason',
       (p_job->>'validation_checked_at')::timestamptz,
       p_job->>'applyability_tier',
@@ -446,6 +500,9 @@ BEGIN
       coalesce((p_job->>'captcha_detected')::boolean, false),
       coalesce((p_job->>'manual_fulfillment_ready')::boolean, false),
       coalesce((p_job->>'auto_apply_supported')::boolean, false),
+      coalesce((p_job->>'has_cv_upload')::boolean, false),
+      coalesce((p_job->>'has_cover_letter')::boolean, false),
+      coalesce((p_job->>'has_custom_questions')::boolean, false),
       p_job->>'rejection_reason', p_job->>'fingerprint',
       coalesce(p_job->'data', '{}'::jsonb),
       clock_timestamp(), clock_timestamp()
@@ -456,8 +513,18 @@ BEGIN
       company = EXCLUDED.company,
       normalized_company = EXCLUDED.normalized_company,
       location = EXCLUDED.location,
+      city = EXCLUDED.city,
+      region = EXCLUDED.region,
       country_code = EXCLUDED.country_code,
+      remote = EXCLUDED.remote,
+      salary_min = EXCLUDED.salary_min,
+      salary_max = EXCLUDED.salary_max,
+      currency = EXCLUDED.currency,
+      posted_at = EXCLUDED.posted_at,
+      provider_search_key = EXCLUDED.provider_search_key,
       selected_apply_url = EXCLUDED.selected_apply_url,
+      canonical_apply_url = EXCLUDED.canonical_apply_url,
+      ats_job_id = EXCLUDED.ats_job_id,
       validation_status = EXCLUDED.validation_status,
       validation_reason = EXCLUDED.validation_reason,
       validation_checked_at = EXCLUDED.validation_checked_at,
@@ -471,6 +538,9 @@ BEGIN
       captcha_detected = EXCLUDED.captcha_detected,
       manual_fulfillment_ready = EXCLUDED.manual_fulfillment_ready,
       auto_apply_supported = EXCLUDED.auto_apply_supported,
+      has_cv_upload = EXCLUDED.has_cv_upload,
+      has_cover_letter = EXCLUDED.has_cover_letter,
+      has_custom_questions = EXCLUDED.has_custom_questions,
       rejection_reason = EXCLUDED.rejection_reason,
       fingerprint = EXCLUDED.fingerprint,
       data = EXCLUDED.data,
@@ -481,7 +551,123 @@ BEGIN
 END
 $$;
 
+CREATE OR REPLACE FUNCTION worker_private.heartbeat_provider_work(
+  p_task_id uuid,
+  p_lease_token uuid,
+  p_claim_generation bigint,
+  p_lease_owner text,
+  p_claim_id uuid,
+  p_lease_seconds integer
+)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+BEGIN
+  IF p_lease_seconds NOT BETWEEN 1 AND 3600 THEN
+    RAISE EXCEPTION 'invalid provider claim duration' USING ERRCODE = '22023';
+  END IF;
+  PERFORM 1
+  FROM public.provider_work_claims AS claim
+  JOIN public.provider_registry AS registry
+    ON registry.provider = claim.provider
+  JOIN public.worker_tasks AS task
+    ON task.id = claim.task_id
+  WHERE claim.id = p_claim_id
+    AND claim.writer_runtime = 'typescript'
+    AND claim.task_id = p_task_id
+    AND claim.task_lease_token = p_lease_token
+    AND claim.task_claim_generation = p_claim_generation
+    AND claim.lease_owner = p_lease_owner
+    AND claim.finished_at IS NULL
+    AND claim.expires_at > clock_timestamp()
+    AND task.status = 'running'
+    AND task.lease_token = p_lease_token
+    AND task.claim_generation = p_claim_generation
+    AND task.lease_owner = p_lease_owner
+    AND task.lease_until > clock_timestamp()
+    AND registry.writer_runtime = 'typescript'
+    AND registry.ownership_epoch = claim.ownership_epoch
+  FOR UPDATE OF claim, registry, task;
+  IF NOT FOUND THEN
+    RETURN false;
+  END IF;
+  UPDATE public.provider_work_claims
+  SET expires_at = clock_timestamp() + make_interval(secs => p_lease_seconds)
+  WHERE id = p_claim_id AND finished_at IS NULL;
+  RETURN FOUND;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION worker_private.finish_provider_work(
+  p_task_id uuid,
+  p_lease_token uuid,
+  p_claim_generation bigint,
+  p_lease_owner text,
+  p_claim_id uuid,
+  p_outcome text,
+  p_error_code text DEFAULT NULL,
+  p_error_message text DEFAULT NULL,
+  p_retry_at timestamptz DEFAULT NULL
+)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+BEGIN
+  PERFORM 1
+  FROM public.provider_work_claims AS claim
+  JOIN public.provider_registry AS registry
+    ON registry.provider = claim.provider
+  WHERE claim.id = p_claim_id
+    AND claim.writer_runtime = 'typescript'
+    AND claim.task_id = p_task_id
+    AND claim.task_lease_token = p_lease_token
+    AND claim.task_claim_generation = p_claim_generation
+    AND claim.lease_owner = p_lease_owner
+    AND claim.finished_at IS NULL
+    AND claim.expires_at > clock_timestamp()
+    AND registry.writer_runtime = 'typescript'
+    AND registry.ownership_epoch = claim.ownership_epoch
+  FOR UPDATE OF claim, registry;
+  IF NOT FOUND THEN
+    RETURN false;
+  END IF;
+  IF NOT worker_private.finish_task(
+    p_task_id, p_lease_token, p_claim_generation, p_lease_owner,
+    p_outcome, p_error_code, p_error_message, p_retry_at
+  ) THEN
+    RETURN false;
+  END IF;
+  UPDATE public.provider_work_claims
+  SET finished_at = clock_timestamp()
+  WHERE id = p_claim_id AND finished_at IS NULL;
+  RETURN FOUND;
+END
+$$;
+
 REVOKE ALL ON public.provider_work_claims FROM PUBLIC;
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.provider_work_claims
+  FROM hirly_inventory_worker, hirly_inventory_operator;
+REVOKE ALL ON FUNCTION public.enforce_provider_work_claim_history()
+  FROM PUBLIC;
+REVOKE ALL ON FUNCTION worker_private.provider_claim_is_current(uuid, text, text)
+  FROM PUBLIC;
+REVOKE ALL ON FUNCTION worker_private.transition_provider_writer(text, text, text, bigint)
+  FROM PUBLIC;
+REVOKE ALL ON FUNCTION worker_private.claim_provider_work(uuid, uuid, bigint, text, text, integer)
+  FROM PUBLIC;
+REVOKE ALL ON FUNCTION worker_private.write_jobs_and_complete(uuid, uuid, bigint, text, uuid, jsonb)
+  FROM PUBLIC;
+REVOKE ALL ON FUNCTION worker_private.heartbeat_provider_work(uuid, uuid, bigint, text, uuid, integer)
+  FROM PUBLIC;
+REVOKE ALL ON FUNCTION worker_private.finish_provider_work(
+  uuid, uuid, bigint, text, uuid, text, text, text, timestamptz
+) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION worker_private.set_provider_writer(text, text)
+  FROM hirly_inventory_operator;
 REVOKE EXECUTE ON FUNCTION worker_private.write_jobs_and_complete(
   uuid, uuid, bigint, text, jsonb
 ) FROM hirly_inventory_worker;
@@ -490,6 +676,12 @@ GRANT EXECUTE ON FUNCTION worker_private.claim_provider_work(
 ) TO hirly_inventory_worker;
 GRANT EXECUTE ON FUNCTION worker_private.write_jobs_and_complete(
   uuid, uuid, bigint, text, uuid, jsonb
+) TO hirly_inventory_worker;
+GRANT EXECUTE ON FUNCTION worker_private.heartbeat_provider_work(
+  uuid, uuid, bigint, text, uuid, integer
+) TO hirly_inventory_worker;
+GRANT EXECUTE ON FUNCTION worker_private.finish_provider_work(
+  uuid, uuid, bigint, text, uuid, text, text, text, timestamptz
 ) TO hirly_inventory_worker;
 GRANT EXECUTE ON FUNCTION worker_private.transition_provider_writer(
   text, text, text, bigint
@@ -514,7 +706,7 @@ BEGIN
       TO service_role;
     GRANT EXECUTE ON FUNCTION public.python_provider_jobs_upsert(uuid, text, jsonb)
       TO service_role;
-    REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.jobs
+    REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.provider_work_claims
       FROM service_role;
   END IF;
 END
