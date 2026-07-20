@@ -336,7 +336,13 @@ describe("G009 source persistence contract", () => {
       /GRANT SELECT ON[\s\S]*public\.job_occurrences[\s\S]*public\.canonical_job_groups[\s\S]*TO hirly_inventory_operator/i,
     );
     expect(migration).toMatch(
-      /CREATE OR REPLACE FUNCTION worker_private\.career_source_runnable[\s\S]*SECURITY DEFINER[\s\S]*SET search_path = pg_catalog, public/i,
+      /CREATE OR REPLACE FUNCTION worker_private\.career_source_runnable[\s\S]*SECURITY DEFINER[\s\S]*SET search_path = pg_catalog/i,
+    );
+    expect(migration).not.toMatch(
+      /ALTER FUNCTION worker_private\.career_source_runnable[\s\S]*OWNER TO/i,
+    );
+    expect(migration).not.toMatch(
+      /GRANT SELECT ON public\.raw_job_snapshots/i,
     );
     expect(migration).toMatch(
       /REVOKE ALL ON FUNCTION worker_private\.career_source_runnable[\s\S]*FROM PUBLIC/i,
