@@ -30,6 +30,8 @@ command arguments, or logs.
 | `WORKER_CONCURRENCY` | Start conservatively and increase only after queue and provider limits are observed. |
 | `WORKER_LEASE_SECONDS` | Must exceed the heartbeat interval and expected shutdown handoff time. |
 | `WORKER_HEARTBEAT_SECONDS` | Must be shorter than the lease duration. |
+| `WORKER_SHUTDOWN_MS` | Must be shorter than Railway's configured drain window. |
+| `WORKER_INSTANCE_ID` | Use a non-sensitive, per-replica identifier. |
 
 Do not print parsed configuration or validation input. Configuration errors may
 name invalid variables but must not include their values.
@@ -109,6 +111,8 @@ Before any external action:
 - `bun run build`
 - build the worker Docker image from the repository root
 - verify the image runs as a non-root user and contains no `.env` or credentials
+- configure Railway `drainingSeconds` above `WORKER_SHUTDOWN_MS` so SIGKILL is
+  not the normal drain path
 - run migration, lease-race, restart, scheduler, HTTP authorization, and shutdown
   tests against disposable Postgres
 - confirm `backend/railway.toml`, live CRA routing, auth, and billing are unchanged
