@@ -189,7 +189,11 @@ def _function_sql(sql: str, name: str) -> str:
 
 
 def _left_width(sql: str, expression: str) -> int:
-    match = re.search(rf"left\(\s*{re.escape(expression)}\s*,\s*(\d+)\s*\)", sql, re.IGNORECASE)
+    match = re.search(
+        rf"left\(\s*{re.escape(expression)}(?:\s*::\s*text)?\s*,\s*(\d+)\s*\)",
+        sql,
+        re.IGNORECASE,
+    )
     assert match, f"{expression} must have an explicit response-width bound"
     return int(match.group(1))
 
