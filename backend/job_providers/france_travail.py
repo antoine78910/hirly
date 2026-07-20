@@ -296,6 +296,7 @@ class FranceTravailProvider:
                         max_pages=max_pages,
                         target_count=target_count - len(rows),
                         seen_ids=seen_ids,
+                        start_page=max(0, int(query.page_start or 0)),
                     )
                 except httpx.HTTPStatusError as exc:
                     body = ""
@@ -364,6 +365,7 @@ class FranceTravailProvider:
         max_pages: int,
         target_count: int,
         seen_ids: set,
+        start_page: int = 0,
     ) -> Tuple[List[Dict[str, Any]], List[Any], Dict[str, Any]]:
         payloads: List[Any] = []
         rows: List[Dict[str, Any]] = []
@@ -372,7 +374,7 @@ class FranceTravailProvider:
         for page_index in range(max_pages):
             if len(rows) >= target_count:
                 break
-            start = page_index * page_size
+            start = (start_page + page_index) * page_size
             end = start + page_size - 1
             page_params = dict(params)
             page_params["range"] = f"{start}-{end}"
@@ -424,13 +426,16 @@ class FranceTravailProvider:
             if len(rows) >= target_count:
                 # A full page with no reliable source total is not proof of
                 # exhaustion. Preserve the rows, but require a narrower split.
-                exhausted = source_total is not None and len(seen_ids) >= source_total
+                exhausted = (
+                    source_total is not None
+                    and start_page * page_size + len(rows) >= source_total
+                )
                 break
             if not has_more:
                 exhausted = True
                 break
         capped_reason: Optional[str] = None
-        if source_total is not None and len(seen_ids) < source_total:
+        if source_total is not None and start_page * page_size + len(rows) < source_total:
             capped_reason = "source_total_not_reached"
         elif not exhausted:
             capped_reason = "local_max_pages_reached"
@@ -440,6 +445,7 @@ class FranceTravailProvider:
             "source_total": source_total,
             "unique_external_ids": len(rows),
             "pages_completed": len(payloads),
+            "next_page": start_page + len(payloads),
         }
 
     async def _search_param_variants(self, query: JobSearchQuery) -> List[Dict[str, Any]]:

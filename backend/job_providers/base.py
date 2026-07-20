@@ -18,6 +18,7 @@ class JobSearchQuery:
     contract_hint: Optional[str] = None
     radius_km: Optional[int] = None
     date_posted: Optional[str] = None
+    page_start: int = 0
 
 
 @dataclass(frozen=True)

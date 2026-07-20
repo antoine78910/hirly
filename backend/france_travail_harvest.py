@@ -263,9 +263,38 @@ async def harvest_france_travail(
                         page_size=page_size,
                         max_pages=max_pages,
                     ))
-                    jobs = result.jobs or []
-                    run["fetched"] = len(jobs)
+                    jobs = list(result.jobs or [])
                     raw = result.raw_response if isinstance(result.raw_response, dict) else {}
+                    split_depth = 0
+                    max_split_depth = max(0, min(_env_int("FT_HARVEST_MAX_SPLIT_DEPTH", 3), 8))
+                    child_states = []
+                    while raw.get("completeness") == "capped_needs_split" and split_depth < max_split_depth:
+                        states = raw.get("pagination_states") or []
+                        next_page = max(
+                            (int(state.get("next_page") or 0) for state in states),
+                            default=(split_depth + 1) * max_pages,
+                        )
+                        child = await provider.search(JobSearchQuery(
+                            role=role,
+                            location=location_label,
+                            country="fr",
+                            limit=page_size * max_pages,
+                            page_size=page_size,
+                            max_pages=max_pages,
+                            page_start=next_page,
+                        ))
+                        child_jobs = child.jobs or []
+                        by_id = {str(job.get("job_id")): job for job in jobs if job.get("job_id")}
+                        for job in child_jobs:
+                            if job.get("job_id"):
+                                by_id[str(job["job_id"])] = job
+                        jobs = list(by_id.values())
+                        raw = child.raw_response if isinstance(child.raw_response, dict) else {}
+                        child_states.append(raw.get("pagination_states") or [])
+                        split_depth += 1
+                    run["fetched"] = len(jobs)
+                    run["split_depth"] = split_depth
+                    run["child_pagination_states"] = child_states
                     run["raw_records"] = int(raw.get("rows_seen") or len(jobs))
                     run["normalized"] = len(jobs)
                     run["rejected_by_reason"] = {
@@ -335,9 +364,10 @@ async def harvest_france_travail(
             run and str(run.get("partition_status", "")).startswith("completed_")
             for run in runs
         )
-        if start_offset is None and all_partitions_complete:
+        all_partitions_attempted = all(run is not None for run in runs)
+        if start_offset is None and all_partitions_attempted:
             _harvest_cursor = (cursor + queries) % len(targets)
-        summary["cursor_next"] = (cursor + queries) % len(targets) if all_partitions_complete else cursor
+        summary["cursor_next"] = (cursor + queries) % len(targets) if all_partitions_attempted else cursor
         summary["completeness"] = "complete_snapshot" if all_partitions_complete else "partial"
         summary["elapsed_ms"] = int((time.perf_counter() - started) * 1000)
 
