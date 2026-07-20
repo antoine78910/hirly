@@ -44,8 +44,71 @@ const franceTravailManifestInput = JSON.parse(readFileSync(
   new URL("../fixtures/france-travail-census-manifest.json", import.meta.url),
   "utf8",
 )) as FranceTravailCensusManifestInput;
+const trackedAuditResult = JSON.parse(readFileSync(
+  new URL("../../../artifacts/job-ingestion/audit-result.json", import.meta.url),
+  "utf8",
+));
+const trackedRunResult = JSON.parse(readFileSync(
+  new URL("../../../artifacts/job-ingestion/audit-run-results.json", import.meta.url),
+  "utf8",
+));
+
+function auditRunChecksum(artifact: {
+  runId: string;
+  generatedAt: string;
+  datasetDigest: string;
+  verdict: string;
+  invariantFailures: unknown[];
+  commandResults: unknown[];
+  evidenceDigests: Record<string, string>;
+}): string {
+  return stableDigest({
+    runId: artifact.runId,
+    generatedAt: artifact.generatedAt,
+    datasetDigest: artifact.datasetDigest,
+    verdict: artifact.verdict,
+    invariantFailures: artifact.invariantFailures,
+    commandResults: artifact.commandResults,
+    evidenceDigests: artifact.evidenceDigests,
+  });
+}
 
 describe("job-ingestion audit invariants", () => {
+  test("cryptographically binds both tracked artifacts to one audit run", () => {
+    expect(trackedAuditResult.rows).toHaveLength(18);
+    expect(trackedRunResult.commandResults).toHaveLength(18);
+    for (const command of trackedRunResult.commandResults) {
+      expect(typeof command.stdout).toBe("string");
+      expect(typeof command.stderr).toBe("string");
+      expect(command.checksum).toBe(stableDigest({
+        command: command.command,
+        exitCode: command.exitCode,
+        rows: command.rows,
+        executedAt: command.executedAt,
+        stdout: command.stdout,
+        stderr: command.stderr,
+      }));
+    }
+    for (const field of [
+      "runId", "runChecksum", "generatedAt", "datasetDigest",
+      "commandResults", "evidenceDigests",
+    ]) {
+      expect(trackedAuditResult[field]).toEqual(trackedRunResult[field]);
+    }
+    expect(trackedAuditResult.runId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(trackedAuditResult.runChecksum).toBe(auditRunChecksum(trackedAuditResult));
+    expect(trackedRunResult.runChecksum).toBe(auditRunChecksum(trackedRunResult));
+    expect(trackedRunResult.resultChecksum).toBe(trackedRunResult.runChecksum);
+    expect(trackedRunResult.executedAt).toBe(trackedRunResult.generatedAt);
+
+    const tamperedAudit = structuredClone(trackedAuditResult);
+    tamperedAudit.evidenceDigests[Object.keys(tamperedAudit.evidenceDigests)[0]] = "0".repeat(64);
+    expect(auditRunChecksum(tamperedAudit)).not.toBe(tamperedAudit.runChecksum);
+
+    const staleRun = structuredClone(trackedRunResult);
+    staleRun.runId = "00000000-0000-4000-8000-000000000000";
+    expect(auditRunChecksum(staleRun)).not.toBe(staleRun.runChecksum);
+  });
   test("requires exact external-ID set equality", () => {
     expect(evaluatePartition({
       id: "PAG-SET",

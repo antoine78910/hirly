@@ -36,6 +36,7 @@ async def _has_complete_snapshot_proof(
     run_id: Optional[str],
     *,
     provider: Optional[str] = None,
+    country_code: Optional[str] = None,
     require_global: bool = False,
 ) -> bool:
     if not run_id:
@@ -53,6 +54,9 @@ async def _has_complete_snapshot_proof(
     if not runs:
         return False
     run = runs[0]
+    lease_generation = run.get("lease_generation")
+    if not isinstance(lease_generation, int) or lease_generation <= 0:
+        return False
     finished_at = _parse_datetime(run.get("finished_at"))
     max_age_hours = max(1, env_int("JOBS_COMPLETENESS_PROOF_MAX_AGE_HOURS", 24))
     if not finished_at or finished_at < datetime.now(timezone.utc) - timedelta(hours=max_age_hours):
@@ -83,6 +87,20 @@ async def _has_complete_snapshot_proof(
             return False
     else:
         return False
+    geography_scope = str(proof.get("geography_scope") or "")
+    countries = {
+        str(item).strip().lower()
+        for item in (proof.get("countries") or [])
+        if item
+    }
+    normalized_country = str(country_code or "").strip().lower()
+    if normalized_country:
+        if geography_scope != "country" or countries != {normalized_country}:
+            return False
+    elif geography_scope != "global" or countries != {"*"}:
+        return False
+    if proof.get("remote_scope") != "included":
+        return False
     expected_ids = proof.get("expected_partition_ids")
     if not isinstance(expected_ids, list) or not expected_ids or len(expected_ids) != len(set(expected_ids)):
         return False
@@ -93,7 +111,10 @@ async def _has_complete_snapshot_proof(
     ).hexdigest()
     if proof.get("manifest_digest") != calculated_digest:
         return False
-    facts = await partitions.find({"run_id": run_id}, {"_id": 0}).limit(10000).to_list(10000)
+    facts = await partitions.find(
+        {"run_id": run_id, "lease_generation": lease_generation},
+        {"_id": 0},
+    ).limit(10000).to_list(10000)
     actual_ids = [fact.get("partition_id") for fact in facts]
     return (
         len(actual_ids) == len(set(actual_ids))
@@ -485,6 +506,7 @@ async def expire_stale_jobs(
         db,
         completeness_run_id,
         provider=provider,
+        country_code=country_code,
         require_global=provider is None,
     ):
         return {
@@ -626,7 +648,12 @@ async def purge_invalid_jobs(
 
     Default: soft-expire stale rows first, then delete tier E / invalid jobs.
     """
-    if not await _has_complete_snapshot_proof(db, completeness_run_id, require_global=True):
+    if not await _has_complete_snapshot_proof(
+        db,
+        completeness_run_id,
+        country_code=country_code,
+        require_global=True,
+    ):
         return {
             "dry_run": dry_run,
             "skipped": True,

@@ -24,6 +24,9 @@ describe("job ingestion run-ledger migration", () => {
     expect(migration).toContain("lease_expires_at > clock_timestamp()");
     expect(migration).toContain("status = 'queued'");
     expect(migration).toContain("error_code = 'lease_expired'");
+    expect(migration).toContain("AND status = 'queued'");
+    expect(migration).toContain("AND error_code = 'lease_expired'");
+    expect(migration).toContain("lease_generation = lease_generation + 1");
   });
 
   test("keeps Python interval metadata out of the Bun cron scheduler", () => {
@@ -38,7 +41,7 @@ describe("job ingestion run-ledger migration", () => {
 
   test("exposes alertable failed, stale, zero and incomplete states", () => {
     for (const alert of [
-      "failed_run", "stale_running", "unexpected_zero_records",
+      "failed_run", "stale_running", "abandoned_partial", "unexpected_zero_records",
       "incomplete_success", "missed_expected_run", "material_coverage_drop",
       "repeated_partition_failure",
     ]) {
@@ -50,7 +53,15 @@ describe("job ingestion run-ledger migration", () => {
   });
 
   test("keeps terminal proof facts immutable and behind fenced RPCs", () => {
-    expect(migration).toContain("ON CONFLICT (run_id, partition_id) DO NOTHING");
+    expect(migration).toContain(
+      "UNIQUE (run_id, partition_id, lease_generation)",
+    );
+    expect(migration).toContain(
+      "ON CONFLICT (run_id, partition_id, lease_generation) DO NOTHING",
+    );
+    expect(migration).toContain(
+      "actual.lease_generation = p_lease_generation",
+    );
     expect(migration).not.toContain(
       "GRANT SELECT, INSERT, UPDATE ON public.worker_run_partitions TO hirly_inventory_worker",
     );

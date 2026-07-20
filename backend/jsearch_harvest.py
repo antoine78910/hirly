@@ -49,6 +49,9 @@ def _authoritative_manifest(combos: List[tuple[str, str]]) -> Dict[str, Any]:
         "manifest_digest": hashlib.sha256(encoded).hexdigest(),
         "expected_partition_count": len(partition_ids),
         "expected_partition_ids": partition_ids,
+        "geography_scope": "country",
+        "countries": ["fr"],
+        "remote_scope": "included",
     }
 
 # Same top 10 French job markets as france_travail_harvest.py, kept in
@@ -116,6 +119,7 @@ AGGRESSIVE_HARVEST_ROLES = [
 ]
 
 _harvest_cursor = 0
+_harvest_retry_indices: set[int] = set()
 _harvest_cycle = 0
 _harvest_lock = asyncio.Lock()
 _last_run_summary: Optional[Dict[str, Any]] = None
@@ -219,6 +223,7 @@ async def harvest_jsearch(
     combos = [(role, city) for city in cities for role in roles]
     if not combos:
         return {"enabled": True, "reason": "no_queries_configured", "runs": []}
+    _harvest_retry_indices.intersection_update(range(len(combos)))
 
     queries = max(1, min(int(max_queries or _env_int("JSEARCH_HARVEST_QUERIES_PER_RUN", 6)), len(combos)))
     page_size = max(10, min(int(page_size if page_size is not None else _env_int("JSEARCH_HARVEST_PAGE_SIZE", 100)), 100))
@@ -285,6 +290,15 @@ async def harvest_jsearch(
                 return (backoff_gap, distance)
 
             selected_indices = sorted(range(len(combos)), key=_sort_key)[:queries]
+        retry_candidates = [
+            index for index in sorted(
+                _harvest_retry_indices,
+                key=lambda item: (item - cursor) % len(combos),
+            )
+            if index not in selected_indices
+        ]
+        if retry_candidates and queries > 1:
+            selected_indices[-1] = retry_candidates[0]
 
         consecutive_errors = 0
         for position, combo_index in enumerate(selected_indices):
@@ -395,11 +409,21 @@ async def harvest_jsearch(
             if position < len(selected_indices) - 1:
                 await asyncio.sleep(pause_seconds)
         all_partitions_complete = not summary["errors"] and len(summary["runs"]) == queries
-        all_partitions_attempted = len(summary["runs"]) == queries
-        cursor_next = (cursor + queries) % len(combos) if all_partitions_attempted else cursor
+        completed_count = 0
+        for combo_index, run in zip(selected_indices, summary["runs"]):
+            if str(run.get("partition_status", "")).startswith("completed_"):
+                completed_count += 1
+                _harvest_retry_indices.discard(combo_index)
+            else:
+                _harvest_retry_indices.add(combo_index)
+        cursor_next = (cursor + completed_count) % len(combos)
         if start_offset is None:
             _harvest_cursor = cursor_next
         summary["cursor_next"] = cursor_next
+        summary["retry_partition_ids"] = [
+            _combo_partition_id(*combos[index])
+            for index in sorted(_harvest_retry_indices)
+        ]
         full_manifest_attempted = (
             len(summary["runs"]) == len(combos)
             and {str(run.get("partition_id")) for run in summary["runs"]}

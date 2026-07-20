@@ -81,7 +81,14 @@ class _Collection:
 
 
 class _FakeDB:
-    def __init__(self, jobs=None, *, completeness="missing", proof_scope="global"):
+    def __init__(
+        self,
+        jobs=None,
+        *,
+        completeness="missing",
+        proof_scope="global",
+        proof_country=None,
+    ):
         self.jobs = _Collection(jobs or [])
         providers = ["france_travail"] if proof_scope == "provider" else []
         expected_partition_ids = ["p1"]
@@ -92,10 +99,14 @@ class _FakeDB:
             ).hexdigest(),
             "expected_partition_count": 1,
             "expected_partition_ids": expected_partition_ids,
+            "geography_scope": "country" if proof_country else "global",
+            "countries": [proof_country] if proof_country else ["*"],
+            "remote_scope": "included",
         }
         self.worker_runs = _Collection(
             [{
                 "id": "run-complete",
+                "lease_generation": 2,
                 "source_id": "france_travail" if proof_scope == "provider" else "all_providers",
                 "status": "succeeded",
                 "completeness_state": completeness,
@@ -109,7 +120,12 @@ class _FakeDB:
             if completeness != "missing" else []
         )
         self.worker_run_partitions = _Collection(
-            [{"run_id": "run-complete", "partition_id": "p1", "status": "completed_with_results"}]
+            [{
+                "run_id": "run-complete",
+                "lease_generation": 2,
+                "partition_id": "p1",
+                "status": "completed_with_results",
+            }]
             if completeness != "missing" else []
         )
 
@@ -266,13 +282,36 @@ def test_provider_expiry_accepts_exact_recent_provider_manifest():
         [_job(provider="france_travail", last_seen_at=stale, imported_at=stale)],
         completeness="complete_snapshot",
         proof_scope="provider",
+        proof_country="fr",
     )
     result = asyncio.run(maintenance.expire_stale_jobs(
         db,
         provider="france_travail",
+        country_code="fr",
         completeness_run_id="run-complete",
     ))
     assert result["expired_count"] == 1
+
+
+def test_provider_expiry_rejects_wrong_or_missing_country_scope():
+    stale = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
+    for requested_country in (None, "gb"):
+        db = _FakeDB(
+            [_job(provider="jsearch", country_code="fr", last_seen_at=stale, imported_at=stale)],
+            completeness="complete_snapshot",
+            proof_scope="provider",
+            proof_country="fr",
+        )
+        db.worker_runs.rows[0]["source_id"] = "jsearch"
+        db.worker_runs.rows[0]["summary"]["proof_scope"]["providers"] = ["jsearch"]
+        result = asyncio.run(maintenance.expire_stale_jobs(
+            db,
+            provider="jsearch",
+            country_code=requested_country,
+            completeness_run_id="run-complete",
+        ))
+        assert result["skipped"] is True
+        assert len(db.jobs.rows) == 1
 
 
 def test_forged_or_missing_partition_manifest_cannot_authorize_global_purge():

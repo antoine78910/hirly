@@ -143,3 +143,44 @@ def test_failed_partition_does_not_advance_over_unattempted_queries(monkeypatch)
     assert len(result["runs"]) == 1
     assert result["cursor_next"] == 0
     assert jsearch_harvest._harvest_cursor == 0
+
+
+def test_late_jsearch_failure_rotates_completed_partitions_and_retains_retry(monkeypatch):
+    class _Provider:
+        calls = 0
+        def __init__(self, **_kwargs):
+            pass
+        async def search(self, query):
+            _Provider.calls += 1
+            if _Provider.calls == 3:
+                raise RuntimeError("late failure")
+            return type("Result", (), {
+                "jobs": [{
+                    "job_id": f"job-{_Provider.calls}",
+                    "provider": "jsearch",
+                    "external_id": f"ext-{_Provider.calls}",
+                }],
+                "raw_response": {
+                    "completeness": "complete_without_source_total",
+                    "rows_seen": 1,
+                },
+            })()
+
+    monkeypatch.setattr(jsearch_harvest, "is_job_provider_configured", lambda _name=None: True)
+    monkeypatch.setattr(jsearch_harvest, "JSearchProvider", _Provider)
+    monkeypatch.setattr(jsearch_harvest, "_cooldown_until", lambda _name: None)
+    jsearch_harvest._harvest_cursor = 0
+    jsearch_harvest._harvest_retry_indices.clear()
+
+    result = asyncio.run(jsearch_harvest.harvest_jsearch(
+        object(),
+        max_queries=3,
+        cities=["Paris", "Lyon", "Nantes", "Lille"],
+        roles=["engineer"],
+        dry_run=True,
+        start_offset=0,
+    ))
+
+    assert result["cursor_next"] == 2
+    assert result["retry_partition_ids"] == ["Nantes, France|engineer"]
+    assert result["runs"][2]["partition_status"] == "failed"

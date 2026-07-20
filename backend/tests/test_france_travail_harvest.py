@@ -199,8 +199,41 @@ def test_split_harvest_accumulates_parent_and_child_accounting(monkeypatch):
 
     assert summary["raw_records"] == 5
     assert summary["normalized_records"] == 3
-    assert summary["rejected_by_reason"] == {"normalization_failed": 2}
+    assert summary["source_exact_duplicates"] == 1
+    assert summary["exact_duplicates"] == 1
+    assert summary["rejected_by_reason"] == {"normalization_failed": 1}
     assert summary["pages_requested"] == 3
     assert summary["pages_completed"] == 3
     assert summary["retries"] == 3
     assert reconciled["accounting_contract"]["state"] == "known"
+
+
+def test_late_failed_partition_is_retried_without_blocking_later_rotation(monkeypatch):
+    class _LateFailureProvider(_FakeProvider):
+        async def search(self, query):
+            if len(self.queries) == 2:
+                self.queries.append(query)
+                raise RuntimeError("late failure")
+            result = await super().search(query)
+            result.raw_response = {
+                "completeness": "complete",
+                "rows_seen": len(result.jobs),
+                "pagination_states": [{"pages_requested": 1, "pages_completed": 1}],
+            }
+            return result
+
+    provider = _LateFailureProvider()
+    monkeypatch.setattr(harvest_module, "is_job_provider_configured", lambda name=None: True)
+    monkeypatch.setattr(harvest_module, "get_job_provider", lambda name, key="": provider)
+    monkeypatch.setenv("FT_HARVEST_CITIES", "Paris,Lyon,Marseille,Nantes")
+    monkeypatch.setenv("FT_HARVEST_QUERY_PAUSE_SECONDS", "0")
+    monkeypatch.setenv("FT_HARVEST_CONCURRENCY", "1")
+    harvest_module._harvest_retry_indices.clear()
+
+    summary = asyncio.run(harvest_france_travail(
+        _FakeDb(), max_queries=3, dry_run=True, start_offset=0,
+    ))
+
+    assert summary["cursor_next"] == 2
+    assert summary["retry_partition_ids"] == ["Marseille, France|"]
+    assert summary["runs"][2]["partition_status"] == "failed"

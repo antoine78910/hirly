@@ -79,11 +79,20 @@ def accounting_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
         if result[field] is None:
             result["accounting_contract"].setdefault(field, "unknown")
     if result["accounting_contract"].get("state") == "known":
-        if raw != normalized + known_rejections:
-            raise ValueError("raw records do not reconcile to normalized plus rejected")
+        source_duplicates = int(result.get("source_exact_duplicates") or 0)
+        write_duplicates = int(
+            result.get(
+                "write_exact_duplicates",
+                max(0, int(result.get("exact_duplicates") or 0) - source_duplicates),
+            ) or 0
+        )
+        if raw != normalized + known_rejections + source_duplicates:
+            raise ValueError(
+                "raw records do not reconcile to normalized plus rejected plus source duplicates"
+            )
         identity_total = sum(int(result.get(field) or 0) for field in (
-            "jobs_inserted", "jobs_updated", "exact_duplicates", "write_failed",
-        ))
+            "jobs_inserted", "jobs_updated", "write_failed",
+        )) + write_duplicates
         if normalized != identity_total:
             raise ValueError("normalized records do not reconcile to terminal write outcomes")
         if int(result.get("jobs_reactivated") or 0) > int(result.get("jobs_updated") or 0):

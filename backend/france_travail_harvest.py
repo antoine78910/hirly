@@ -44,6 +44,9 @@ def _authoritative_manifest(targets: List[Dict[str, Any]]) -> Dict[str, Any]:
         "manifest_digest": hashlib.sha256(encoded).hexdigest(),
         "expected_partition_count": len(partition_ids),
         "expected_partition_ids": partition_ids,
+        "geography_scope": "country",
+        "countries": ["fr"],
+        "remote_scope": "included",
     }
 
 # Broader FR coverage when not in département-blitz mode.
@@ -108,6 +111,7 @@ BLITZ_HARVEST_ROLES = [
 ]
 
 _harvest_cursor = 0
+_harvest_retry_indices: set[int] = set()
 _harvest_lock = asyncio.Lock()
 _last_run_summary: Optional[Dict[str, Any]] = None
 
@@ -212,6 +216,7 @@ async def harvest_france_travail(
     targets = _harvest_targets()
     if not targets:
         return {"enabled": True, "reason": "no_targets_configured", "runs": []}
+    _harvest_retry_indices.intersection_update(range(len(targets)))
 
     default_queries, default_page, default_pages, default_conc, _ = _blitz_defaults()
     queries = max(1, min(int(max_queries or _env_int("FT_HARVEST_QUERIES_PER_RUN", default_queries)), len(targets)))
@@ -259,9 +264,18 @@ async def harvest_france_travail(
         }
         semaphore = asyncio.Semaphore(concurrency)
         runs: List[Optional[Dict[str, Any]]] = [None] * queries
+        fresh_indices = [(cursor + index) % len(targets) for index in range(queries)]
+        retry_indices = sorted(
+            (index for index in _harvest_retry_indices if index not in fresh_indices),
+            key=lambda index: (index - cursor) % len(targets),
+        )
+        selected_indices = list(fresh_indices)
+        if retry_indices and queries > 1:
+            selected_indices[-1] = retry_indices[0]
 
         async def _harvest_one(index: int) -> None:
-            target = targets[(cursor + index) % len(targets)]
+            target_index = selected_indices[index]
+            target = targets[target_index]
             location_label = target["location"]
             role = target.get("role") or ""
             run: Dict[str, Any] = {
@@ -283,6 +297,7 @@ async def harvest_france_travail(
                         max_pages=max_pages,
                     ))
                     jobs = list(result.jobs or [])
+                    normalized_occurrences = len(jobs)
                     raw = result.raw_response if isinstance(result.raw_response, dict) else {}
                     page_responses = [raw]
                     split_depth = 0
@@ -304,6 +319,7 @@ async def harvest_france_travail(
                             page_start=next_page,
                         ))
                         child_jobs = child.jobs or []
+                        normalized_occurrences += len(child_jobs)
                         by_id = {str(job.get("job_id")): job for job in jobs if job.get("job_id")}
                         for job in child_jobs:
                             if job.get("job_id"):
@@ -319,9 +335,14 @@ async def harvest_france_travail(
                     run["raw_records"] = sum(
                         int(response.get("rows_seen") or 0) for response in page_responses
                     ) or len(jobs)
+                    run["source_exact_duplicates"] = max(
+                        0, normalized_occurrences - len(jobs)
+                    )
                     run["normalized"] = len(jobs)
                     run["rejected_by_reason"] = {
-                        "normalization_failed": max(0, run["raw_records"] - len(jobs))
+                        "normalization_failed": max(
+                            0, run["raw_records"] - normalized_occurrences
+                        )
                     }
                     all_states = [
                         state
@@ -355,6 +376,7 @@ async def harvest_france_travail(
                 except Exception as exc:
                     message = f"{exc.__class__.__name__}: {str(exc)[:200]}"
                     run["error"] = message
+                    run["partition_status"] = "failed"
                     logger.warning(
                         "ft_harvest_query_failed target=%s error=%s",
                         target.get("label"),
@@ -376,6 +398,10 @@ async def harvest_france_travail(
             summary["retries"] += int(run.get("retries") or 0)
             summary["raw_records"] += int(run.get("raw_records") or 0)
             summary["normalized_records"] += int(run.get("normalized") or 0)
+            summary["source_exact_duplicates"] = (
+                int(summary.get("source_exact_duplicates") or 0)
+                + int(run.get("source_exact_duplicates") or 0)
+            )
             for reason, count in (run.get("rejected_by_reason") or {}).items():
                 summary["rejected_by_reason"][reason] = (
                     int(summary["rejected_by_reason"].get(reason) or 0) + int(count or 0)
@@ -385,6 +411,10 @@ async def harvest_france_travail(
             summary["jobs_updated"] += int(write_stats.get("updated") or 0)
             summary["jobs_reactivated"] += int(write_stats.get("reactivated") or 0)
             summary["exact_duplicates"] += int(write_stats.get("exact_duplicate") or 0)
+            summary["write_exact_duplicates"] = (
+                int(summary.get("write_exact_duplicates") or 0)
+                + int(write_stats.get("exact_duplicate") or 0)
+            )
             summary["fuzzy_duplicate_candidates"] += int(write_stats.get("fuzzy_duplicate_candidates") or 0)
             summary["write_failed"] += int(write_stats.get("write_failed") or 0)
             if run.get("error"):
@@ -393,15 +423,26 @@ async def harvest_france_travail(
                     "location": run.get("location"),
                     "error": run["error"],
                 })
+        summary["exact_duplicates"] += int(summary.get("source_exact_duplicates") or 0)
 
         all_partitions_complete = all(
             run and str(run.get("partition_status", "")).startswith("completed_")
             for run in runs
         )
-        all_partitions_attempted = all(run is not None for run in runs)
-        if start_offset is None and all_partitions_attempted:
-            _harvest_cursor = (cursor + queries) % len(targets)
-        summary["cursor_next"] = (cursor + queries) % len(targets) if all_partitions_attempted else cursor
+        completed_count = 0
+        for target_index, run in zip(selected_indices, runs):
+            if run and str(run.get("partition_status", "")).startswith("completed_"):
+                completed_count += 1
+                _harvest_retry_indices.discard(target_index)
+            else:
+                _harvest_retry_indices.add(target_index)
+        cursor_next = (cursor + completed_count) % len(targets)
+        if start_offset is None:
+            _harvest_cursor = cursor_next
+        summary["cursor_next"] = cursor_next
+        summary["retry_partition_ids"] = [
+            _partition_id(targets[index]) for index in sorted(_harvest_retry_indices)
+        ]
         full_manifest_attempted = (
             len(runs) == len(targets)
             and {str(run.get("partition_id")) for run in runs if run}

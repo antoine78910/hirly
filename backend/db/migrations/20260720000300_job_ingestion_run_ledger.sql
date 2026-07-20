@@ -85,6 +85,7 @@ $$;
 CREATE TABLE IF NOT EXISTS public.worker_run_partitions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   run_id uuid NOT NULL REFERENCES public.worker_runs(id) ON DELETE RESTRICT,
+  lease_generation bigint NOT NULL CHECK (lease_generation > 0),
   partition_id text NOT NULL CHECK (length(btrim(partition_id)) > 0),
   status text NOT NULL CHECK (
     status IN ('planned', 'running', 'completed_with_results', 'completed_zero_results', 'failed', 'blocked')
@@ -101,7 +102,7 @@ CREATE TABLE IF NOT EXISTS public.worker_run_partitions (
   terminal_error_reason text,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  CONSTRAINT worker_run_partitions_unique UNIQUE (run_id, partition_id),
+  CONSTRAINT worker_run_partitions_unique UNIQUE (run_id, partition_id, lease_generation),
   CONSTRAINT worker_run_partitions_page_guard CHECK (pages_completed <= pages_requested),
   CONSTRAINT worker_run_partitions_terminal_shape CHECK (
     (status IN ('completed_with_results', 'completed_zero_results', 'failed', 'blocked')) = (completed_at IS NOT NULL)
@@ -175,13 +176,26 @@ BEGIN
   SELECT * INTO v_run
   FROM public.worker_runs
   WHERE kind = 'inventory_maintenance'
-    AND idempotency_key = 'python:' || p_schedule_id || ':' ||
-      to_char(v_scheduled_for AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+    AND (
+      idempotency_key = 'python:' || p_schedule_id || ':' ||
+        to_char(v_scheduled_for AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+      OR (
+        source_id = p_source
+        AND status = 'queued'
+        AND error_code = 'lease_expired'
+      )
+    )
+  ORDER BY
+    (status = 'queued' AND error_code = 'lease_expired') DESC,
+    (idempotency_key = 'python:' || p_schedule_id || ':' ||
+      to_char(v_scheduled_for AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')) DESC,
+    scheduled_for ASC
+  LIMIT 1
   FOR UPDATE;
 
   IF FOUND AND v_run.status NOT IN ('queued') THEN
     RETURN jsonb_build_object(
-      'acquired', false, 'run_id', v_run.id, 'scheduled_for', v_scheduled_for,
+      'acquired', false, 'run_id', v_run.id, 'scheduled_for', v_run.scheduled_for,
       'status', v_run.status
     );
   END IF;
@@ -236,7 +250,7 @@ BEGIN
   RETURN jsonb_build_object(
     'acquired', true,
     'run_id', v_run.id,
-    'scheduled_for', v_scheduled_for,
+    'scheduled_for', v_run.scheduled_for,
     'lease_token', v_run.lease_token,
     'lease_generation', v_run.lease_generation,
     'lease_owner', v_run.lease_owner,
@@ -301,12 +315,13 @@ BEGIN
     RETURN false;
   END IF;
   INSERT INTO public.worker_run_partitions (
-    run_id, partition_id, status, started_at, heartbeat_at, completed_at,
+    run_id, lease_generation, partition_id, status, started_at, heartbeat_at, completed_at,
     pages_requested, pages_completed, retries, source_reported_total,
     counters, terminal_error_code, terminal_error_reason
   )
   VALUES (
-    p_run_id, p_partition_id, p_status, clock_timestamp(), clock_timestamp(), clock_timestamp(),
+    p_run_id, p_lease_generation, p_partition_id, p_status,
+    clock_timestamp(), clock_timestamp(), clock_timestamp(),
     coalesce((p_counters->>'pages_requested')::integer, 0),
     coalesce((p_counters->>'pages_completed')::integer, 0),
     coalesce((p_counters->>'retries')::integer, 0),
@@ -315,11 +330,12 @@ BEGIN
     CASE WHEN p_status IN ('failed', 'blocked') THEN coalesce(p_counters->>'error_code', p_status) END,
     left(p_terminal_error, 1000)
   )
-  ON CONFLICT (run_id, partition_id) DO NOTHING;
+  ON CONFLICT (run_id, partition_id, lease_generation) DO NOTHING;
   RETURN EXISTS (
     SELECT 1
     FROM public.worker_run_partitions
     WHERE run_id = p_run_id
+      AND lease_generation = p_lease_generation
       AND partition_id = p_partition_id
       AND status = p_status
       AND counters = coalesce(p_counters, '{}'::jsonb)
@@ -361,10 +377,15 @@ BEGIN
     RAISE EXCEPTION 'invalid Python ingestion terminal state' USING ERRCODE = '22023';
   END IF;
   IF p_completeness_state = 'complete_snapshot' AND (
-    NOT EXISTS (SELECT 1 FROM public.worker_run_partitions WHERE run_id = p_run_id)
+    NOT EXISTS (
+      SELECT 1 FROM public.worker_run_partitions
+      WHERE run_id = p_run_id
+        AND lease_generation = p_lease_generation
+    )
     OR EXISTS (
       SELECT 1 FROM public.worker_run_partitions
       WHERE run_id = p_run_id
+        AND lease_generation = p_lease_generation
         AND status NOT IN ('completed_with_results', 'completed_zero_results')
     )
   ) THEN
@@ -394,6 +415,7 @@ BEGIN
       WHERE NOT EXISTS (
         SELECT 1 FROM public.worker_run_partitions AS actual
         WHERE actual.run_id = p_run_id
+          AND actual.lease_generation = p_lease_generation
           AND actual.partition_id = expected.partition_id
           AND actual.status IN ('completed_with_results', 'completed_zero_results')
       )
@@ -401,6 +423,7 @@ BEGIN
     OR EXISTS (
       SELECT 1 FROM public.worker_run_partitions AS actual
       WHERE actual.run_id = p_run_id
+        AND actual.lease_generation = p_lease_generation
         AND NOT EXISTS (
           SELECT 1
           FROM jsonb_array_elements_text(
@@ -417,6 +440,7 @@ BEGIN
     p_summary->'accounting_contract'->>'state' IS DISTINCT FROM 'known'
     OR (p_summary->>'raw_records')::integer IS DISTINCT FROM (
       (p_summary->>'normalized_records')::integer
+      + coalesce((p_summary->>'source_exact_duplicates')::integer, 0)
       + coalesce((
           SELECT sum(value::integer)
           FROM jsonb_each_text(coalesce(p_summary->'rejected_by_reason', '{}'::jsonb))
@@ -425,7 +449,11 @@ BEGIN
     OR (p_summary->>'normalized_records')::integer IS DISTINCT FROM (
       (p_summary->>'jobs_inserted')::integer
       + (p_summary->>'jobs_updated')::integer
-      + (p_summary->>'exact_duplicates')::integer
+      + coalesce(
+          (p_summary->>'write_exact_duplicates')::integer,
+          (p_summary->>'exact_duplicates')::integer
+            - coalesce((p_summary->>'source_exact_duplicates')::integer, 0)
+        )
       + (p_summary->>'write_failed')::integer
     )
   ) THEN
@@ -494,6 +522,7 @@ SELECT
   CASE
     WHEN run.status = 'failed' THEN 'failed_run'
     WHEN run.status = 'running' AND run.lease_expires_at <= clock_timestamp() THEN 'stale_running'
+    WHEN run.status = 'queued' AND run.error_code = 'lease_expired' THEN 'abandoned_partial'
     WHEN run.status = 'succeeded' AND run.summary ? 'raw_records' AND run.raw_records = 0 THEN 'unexpected_zero_records'
     WHEN run.status = 'succeeded' AND run.raw_records > 0 AND run.raw_records < (
       SELECT avg(previous.raw_records) * 0.5
@@ -518,6 +547,7 @@ SELECT
 FROM public.worker_runs AS run
 WHERE run.status = 'failed'
    OR (run.status = 'running' AND run.lease_expires_at <= clock_timestamp())
+   OR (run.status = 'queued' AND run.error_code = 'lease_expired')
    OR (run.status = 'succeeded' AND run.summary ? 'raw_records' AND run.raw_records = 0)
    OR (run.status = 'succeeded' AND run.raw_records > 0 AND run.raw_records < (
      SELECT avg(previous.raw_records) * 0.5

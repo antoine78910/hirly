@@ -148,24 +148,34 @@ def test_supabase_ledger_claim_uses_narrow_rpc(monkeypatch):
 
 
 def test_long_run_heartbeats_until_completion():
+    completed = None
+
     class _HeartbeatDB:
         def __init__(self):
             self.heartbeats = 0
 
         async def heartbeat_python_ingestion_run(self, _run_id):
             self.heartbeats += 1
+            if self.heartbeats == 3:
+                completed.set()
             return True
 
     async def operation():
-        await asyncio.sleep(0.015)
+        await completed.wait()
         return "done"
 
-    db = _HeartbeatDB()
-    result = asyncio.run(await_with_ingestion_heartbeat(
-        db, "run-1", operation(), interval_seconds=0.002
-    ))
+    async def scenario():
+        nonlocal completed
+        completed = asyncio.Event()
+        db = _HeartbeatDB()
+        result = await await_with_ingestion_heartbeat(
+            db, "run-1", operation(), interval_seconds=0,
+        )
+        return db, result
+
+    db, result = asyncio.run(scenario())
     assert result == "done"
-    assert db.heartbeats >= 2
+    assert db.heartbeats == 3
 
 
 @pytest.mark.parametrize("failure_mode", ["stale_lock", "database_outage", "timeout", "rate_limit"])

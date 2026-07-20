@@ -97,7 +97,7 @@
     "finalEvidence": "artifacts/job-ingestion/coverage-matrix.json",
     "blocker": {
       "dependency": "read-only JSearch/RapidAPI credentials and plan metadata",
-      "capabilityCheck": "test -n \"$RAPIDAPI_KEY\"",
+      "capabilityCheck": "test -n \"$JSEARCH_API_KEY\"",
       "unblockProcedure": "run capped queries with a read-only key and archive plan-specific totals/cap metadata"
     }
   },

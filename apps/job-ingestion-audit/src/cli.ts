@@ -1,4 +1,5 @@
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import {
   reconcileFunnel,
@@ -176,17 +177,32 @@ const digestInput = {
   funnel,
 };
 const generatedAt = new Date().toISOString();
+const runId = randomUUID();
+const datasetDigest = stableDigest(digestInput);
+const verdict = invariantFailures.length
+  ? "FAIL"
+  : rows.some((row) => row.status === "BLOCKED_EXTERNAL")
+    ? "PARTIAL"
+    : "PASS";
+const runChecksum = stableDigest({
+  runId,
+  generatedAt,
+  datasetDigest,
+  verdict,
+  invariantFailures,
+  commandResults,
+  evidenceDigests,
+});
 const result = {
   schemaVersion: 1,
   datasetVersion: "job-ingestion-golden.v1",
+  runId,
+  runChecksum,
   generatedAt,
-  verdict: invariantFailures.length
-    ? "FAIL"
-    : rows.some((row) => row.status === "BLOCKED_EXTERNAL")
-      ? "PARTIAL"
-      : "PASS",
+  verdict,
   invariantFailures,
-  digest: stableDigest(digestInput),
+  datasetDigest,
+  digest: datasetDigest,
   funnel,
   coverage: {
     expandedPartitionCount: coverage.records.length,
@@ -257,13 +273,13 @@ const summary = [
   "",
   "## Rollback procedure",
   "",
-  "1. Revert the Python paging/maintenance/task-retention/ledger-call changes if operational regression is observed; no canonical writer was transferred.",
-  "2. Apply `backend/db/migrations/20260720000300_job_ingestion_run_ledger.down.sql` for the additive ledger fields.",
+  "1. For a normal production rollback, disable ledger-backed feature routing and revert the Python ledger callers while retaining the additive run ledger and its evidence.",
+  "2. Use `backend/db/migrations/20260720000300_job_ingestion_run_ledger.down.sql` only for pre-production teardown or an explicitly authorized destructive rollback after exporting required evidence.",
   "3. No provider or canonical writer ownership was transferred.",
   "",
   "## Final verifier verdict",
   "",
-  "Pending independent verifier and code-review passes.",
+  `Local executable verdict: ${result.verdict}; ${invariantFailures.length} invariant failures. Independent verifier and code-review outcomes are reported by the orchestration layer.`,
   "",
   "A PARTIAL verdict means every local executable invariant passes while listed provider/production measurements remain externally blocked.",
   "",
@@ -278,15 +294,12 @@ await writeFile(
 );
 await writeFile(jsonPath, `${JSON.stringify(result, null, 2)}\n`);
 await writeFile(summaryPath, summary);
-const runChecksum = stableDigest({
-  generatedAt,
-  verdict: result.verdict,
-  invariantFailures,
-  commandResults,
-  evidenceDigests,
-});
 await writeFile(runResultsPath, `${JSON.stringify({
   schemaVersion: 1,
+  runId,
+  runChecksum,
+  generatedAt,
+  datasetDigest,
   executedAt: generatedAt,
   fixtureMode: args.fixtureMode,
   verdict: result.verdict,
