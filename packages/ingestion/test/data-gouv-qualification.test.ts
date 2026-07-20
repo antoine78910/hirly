@@ -241,6 +241,15 @@ describe("data.gouv dataset qualification", () => {
     expect(
       dataGouvProductionBlockReason(
         qualified,
+        runtimePolicy({ sourceCountryKillSwitches: { FR: true } }),
+        "FR",
+        "incremental",
+        now,
+      ),
+    ).toBe("source_country_killed");
+    expect(
+      dataGouvProductionBlockReason(
+        qualified,
         runtimePolicy({
           source: {
             ...runtimePolicy().source,
@@ -261,5 +270,19 @@ describe("data.gouv dataset qualification", () => {
         now,
       ),
     ).toBe("mode_disabled");
+    expect(
+      dataGouvProductionBlockReason(
+        qualified,
+        runtimePolicy({
+          policy: {
+            ...runtimePolicy().policy,
+            expiresAt: "2026-07-19T00:00:00.000Z",
+          },
+        }),
+        "FR",
+        "incremental",
+        now,
+      ),
+    ).toBe("policy_expired");
   });
 });
