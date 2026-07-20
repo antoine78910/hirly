@@ -36,10 +36,6 @@ interface WorkerTaskRow {
   lease_until: Date;
 }
 
-function asJson(value: unknown): postgres.JSONValue {
-  return JSON.parse(JSON.stringify(value)) as postgres.JSONValue;
-}
-
 export function createDatabase(
   url: string,
   options: postgres.Options<Record<string, postgres.PostgresType>> = {},
@@ -77,7 +73,7 @@ export class WorkerRepository {
             ${input.triggerSource},
             ${task.taskKey},
             ${task.taskType},
-            ${transaction.json(asJson(task.payload))},
+            ${transaction.json(task.payload)},
             ${task.maxAttempts},
             ${task.availableAt ? new Date(task.availableAt) : new Date()},
             ${input.scheduleId},
@@ -202,7 +198,7 @@ export class WorkerRepository {
         ${lease.leaseToken}::uuid,
         ${lease.claimGeneration.toString()}::bigint,
         ${lease.leaseOwner},
-        ${this.sql.json(asJson(databaseJobs))}
+        ${this.sql.json(databaseJobs)}
       )
     `;
     return row?.write_jobs_and_complete === true;
@@ -244,30 +240,6 @@ export class WorkerRepository {
     await this.sql`
       SELECT worker_private.set_schedule_enabled(
         ${scheduleId}, ${enabled}, ${nextDueAt}
-      )
-    `;
-  }
-
-  async upsertSchedule(input: {
-    id: string;
-    taskType: "provider.fetch_page" | "inventory.maintenance";
-    provider: string | null;
-    cronExpression: string;
-    timezone: string;
-    payload: Record<string, unknown>;
-    nextDueAt: Date;
-    maxCatchUp?: number;
-  }): Promise<void> {
-    await this.sql`
-      SELECT worker_private.upsert_schedule(
-        ${input.id},
-        ${input.taskType},
-        ${input.provider},
-        ${input.cronExpression},
-        ${input.timezone},
-        ${this.sql.json(asJson(input.payload))},
-        ${input.nextDueAt},
-        ${input.maxCatchUp ?? 1}
       )
     `;
   }
