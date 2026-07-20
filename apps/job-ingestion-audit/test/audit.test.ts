@@ -23,6 +23,8 @@ import {
 import {
   JOB_SUPPLY_OBSERVABILITY_QUERIES,
   assertReadOnlyObservabilityQueries,
+  JOB_SUPPLY_OBSERVABILITY_QUERIES,
+  assertReadOnlyObservabilityQueries,
   runJobSupplyObservabilityQueries,
 } from "../src/queries";
 import { readFileSync } from "node:fs";
