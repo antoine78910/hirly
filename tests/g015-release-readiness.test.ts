@@ -99,7 +99,15 @@ describe("G015 release verification contract", () => {
     const parsed = new URL(isolated);
     expect(decodeURIComponent(parsed.pathname.slice(1)).length).toBeLessThanOrEqual(63);
     expect(parsed.password).toBe("super-secret");
+    expect(parsed.pathname).toContain("_test_");
     expect(parsed.pathname).toEndWith("_20260720120000_123_deadbeef_g014");
+
+    const productionAudit = isolatedDatabaseUrl(
+      "postgresql://release:super-secret@localhost/hirly_prod_audit_disposable",
+      "20260720161314_32192_6ead51c4_g014",
+    );
+    expect(new URL(productionAudit).pathname).toContain("_disposable_");
+    expect(() => assertDisposableDatabase(productionAudit, true)).not.toThrow();
   });
 
   test("redacts credentials emitted by an actual child process", () => {

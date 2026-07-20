@@ -245,7 +245,16 @@ export function isolatedDatabaseUrl(databaseUrl, suite) {
   const name = decodeURIComponent(parsed.pathname.replace(/^\//, ""));
   const suffix = String(suite).replace(/[^a-zA-Z0-9_]/g, "_");
   const maximumPrefixLength = Math.max(1, 63 - suffix.length - 1);
-  parsed.pathname = `/${name.slice(0, maximumPrefixLength)}_${suffix}`;
+  let prefix = name.slice(0, maximumPrefixLength);
+  if (!DISPOSABLE_DB_RE.test(prefix)) {
+    const marker = name.match(/(?:^|_)(test|disposable)(?:_|$)/i)?.[1]?.toLowerCase();
+    if (!marker) {
+      throw new Error("isolated database name lost its disposable marker");
+    }
+    const headLength = Math.max(1, maximumPrefixLength - marker.length - 1);
+    prefix = `${name.slice(0, headLength).replace(/_+$/, "")}_${marker}`;
+  }
+  parsed.pathname = `/${prefix}_${suffix}`;
   return parsed.toString();
 }
 
