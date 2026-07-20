@@ -136,6 +136,10 @@ ALTER TABLE public.jobs
   ADD COLUMN IF NOT EXISTS first_seen_at timestamptz,
   ADD COLUMN IF NOT EXISTS expires_at timestamptz,
   ADD COLUMN IF NOT EXISTS removed_at timestamptz,
+  ADD COLUMN IF NOT EXISTS lifecycle_state text CHECK (
+    lifecycle_state IS NULL
+    OR lifecycle_state IN ('active', 'stale', 'removed', 'expired', 'blocked')
+  ),
   ADD COLUMN IF NOT EXISTS lifecycle_checked_at timestamptz,
   ADD COLUMN IF NOT EXISTS route_classification text,
   ADD COLUMN IF NOT EXISTS route_confidence numeric CHECK (
