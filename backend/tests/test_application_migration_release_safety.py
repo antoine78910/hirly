@@ -11,6 +11,7 @@ ORDERED = [
     "20260720001400_auto_apply_backfill.sql",
     "20260720001500_gmail_outcome_batch.sql",
     "20260720001600_admin_bounded_contracts.sql",
+    "20260720001700_service_only_rls.sql",
 ]
 
 
@@ -63,6 +64,16 @@ def test_mutation_contracts_are_bounded_concurrency_safe_and_fail_closed():
     assert "left(row.sender, 320)" in gmail
 
 
+def test_null_batch_inputs_remain_bounded_or_fail_closed():
+    notifications = _sql(ORDERED[3])
+    auto_apply = _sql(ORDERED[4])
+    gmail = _sql(ORDERED[5])
+
+    assert "GREATEST(COALESCE(p_limit, 500), 1)" in notifications
+    assert "GREATEST(COALESCE(p_limit, 200), 1)" in auto_apply
+    assert "p_updates IS NULL" in gmail
+
+
 def test_security_definers_pin_catalog_and_gate_role_grants():
     for name in ORDERED:
         sql = _sql(name)
@@ -78,3 +89,18 @@ def test_tracker_rollback_preserves_additive_evidence_columns():
     assert "DROP COLUMN IF EXISTS" not in down
     assert "DROP INDEX CONCURRENTLY" in down
     assert "intentionally retained" in down
+
+
+def test_service_only_tables_enable_non_forced_policyless_rls():
+    up = _sql("20260720001700_service_only_rls.sql")
+    down = _sql("20260720001700_service_only_rls.down.sql")
+    for table in (
+        "browser_submission_runs",
+        "notifications",
+        "creator_applications",
+    ):
+        assert f"ALTER TABLE public.{table} ENABLE ROW LEVEL SECURITY" in up
+        assert f"ALTER TABLE public.{table} DISABLE ROW LEVEL SECURITY" in down
+    assert "FORCE ROW LEVEL SECURITY" not in up
+    assert "CREATE POLICY" not in up
+    assert "REVOKE" not in up

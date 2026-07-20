@@ -512,7 +512,10 @@ async def sync_gmail_application_emails(
                     await outcome_writer(user_id, pending_app_updates[start:start + 100])
                 pending_app_updates = []
             except Exception as error:
-                if not is_missing_database_contract_error(error):
+                if not is_missing_database_contract_error(
+                    error,
+                    "apply_gmail_application_outcomes",
+                ):
                     raise
         if pending_app_updates:
             for update in pending_app_updates:

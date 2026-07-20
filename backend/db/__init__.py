@@ -8,6 +8,9 @@ the primary SUPABASE_URL.
 
 from __future__ import annotations
 
+import base64
+import binascii
+import json
 import logging
 import os
 
@@ -34,6 +37,23 @@ def _normalize_supabase_url(value: str | None) -> str:
     return url
 
 
+def _reject_public_supabase_key(name: str, value: str | None) -> None:
+    """Fail closed when a server credential is recognizably public."""
+    key = (value or "").strip()
+    if key.startswith("sb_publishable_"):
+        raise RuntimeError(f"{name} must be a Supabase secret/service-role key")
+    if key.count(".") != 2:
+        return
+    try:
+        payload = key.split(".", 2)[1]
+        payload += "=" * (-len(payload) % 4)
+        role = json.loads(base64.urlsafe_b64decode(payload)).get("role")
+    except (ValueError, TypeError, UnicodeDecodeError, binascii.Error):
+        return
+    if role in {"anon", "authenticated"}:
+        raise RuntimeError(f"{name} must be a Supabase secret/service-role key")
+
+
 def attach_jobs_inventory(primary: SupabaseDatabaseAdapter, jobs_db: SupabaseDatabaseAdapter) -> SupabaseDatabaseAdapter:
     """Point inventory collections on `primary` at `jobs_db` collections."""
     for name in JOBS_INVENTORY_COLLECTIONS:
@@ -45,15 +65,18 @@ def attach_jobs_inventory(primary: SupabaseDatabaseAdapter, jobs_db: SupabaseDat
 
 
 def create_database_adapter() -> DatabaseAdapter:
+    primary_key = os.environ.get("SUPABASE_SECRET_KEY")
+    _reject_public_supabase_key("SUPABASE_SECRET_KEY", primary_key)
     primary = SupabaseDatabaseAdapter(
         supabase_url=_normalize_supabase_url(os.environ.get("SUPABASE_URL")),
-        secret_key=os.environ.get("SUPABASE_SECRET_KEY"),
+        secret_key=primary_key,
         db_url=os.environ.get("SUPABASE_DB_URL") or os.environ.get("DATABASE_URL"),
     )
 
     jobs_url = _normalize_supabase_url(os.environ.get("JOBS_SUPABASE_URL"))
     jobs_key = (os.environ.get("JOBS_SUPABASE_SECRET_KEY") or "").strip()
     if jobs_url and jobs_key:
+        _reject_public_supabase_key("JOBS_SUPABASE_SECRET_KEY", jobs_key)
         jobs_db = SupabaseDatabaseAdapter(
             supabase_url=jobs_url,
             secret_key=jobs_key,

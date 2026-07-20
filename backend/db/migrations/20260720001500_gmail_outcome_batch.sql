@@ -15,6 +15,7 @@ DECLARE
   v_requested integer;
 BEGIN
   IF p_user_id IS NULL OR length(btrim(p_user_id)) = 0
+    OR p_updates IS NULL
     OR jsonb_typeof(p_updates) <> 'array'
     OR jsonb_array_length(p_updates) > 100
     OR EXISTS (

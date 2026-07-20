@@ -120,7 +120,9 @@ def test_notification_mark_all_falls_back_only_for_missing_rpc():
             self.notifications = _Notifications()
 
         async def mark_all_notifications_read(self, _user_id, *, limit):
-            raise RuntimeError("PGRST202 Could not find the function")
+            raise RuntimeError(
+                "PGRST202 Could not find the function mark_all_notifications_read"
+            )
 
     db = _Db()
     assert asyncio.run(mark_all_notifications_read(db, user_id="u1")) == 1
@@ -139,7 +141,21 @@ def test_gmail_sync_preloads_existing_messages_and_batches_writes():
 
 def test_missing_database_contract_classifier_is_narrow():
     assert is_missing_database_contract_error(
-        RuntimeError("HTTP 404 PGRST202 Could not find the function")
+        RuntimeError("HTTP 404 PGRST202 Could not find the function"),
+    )
+    assert is_missing_database_contract_error(
+        RuntimeError(
+            "HTTP 404 PGRST202 Could not find the function mark_all_notifications_read"
+        ),
+        "mark_all_notifications_read",
+    )
+    assert not is_missing_database_contract_error(
+        RuntimeError("undefined_function: dependency inside the RPC does not exist"),
+        "mark_all_notifications_read",
+    )
+    assert not is_missing_database_contract_error(
+        RuntimeError("HTTP 404 PGRST202 Could not find the function another_rpc"),
+        "mark_all_notifications_read",
     )
     assert not is_missing_database_contract_error(
         RuntimeError("HTTP 500 statement timeout")

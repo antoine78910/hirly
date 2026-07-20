@@ -66,7 +66,10 @@ async def mark_all_notifications_read(db, *, user_id: str) -> int:
         try:
             return await marker(user_id, limit=500)
         except Exception as error:
-            if not is_missing_database_contract_error(error):
+            if not is_missing_database_contract_error(
+                error,
+                "mark_all_notifications_read",
+            ):
                 raise
     rows = await db.notifications.find({"user_id": user_id, "read": False}, {"_id": 0}).to_list(500)
     now = _now_iso()

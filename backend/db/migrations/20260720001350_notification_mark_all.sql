@@ -17,7 +17,7 @@ AS $$
       AND lower(COALESCE(data ->> 'read', 'false'))
         NOT IN ('true', 't', '1', 'yes', 'on')
     ORDER BY notification_id
-    LIMIT LEAST(GREATEST(p_limit, 1), 500)
+    LIMIT LEAST(GREATEST(COALESCE(p_limit, 500), 1), 500)
     FOR UPDATE SKIP LOCKED
   ),
   updated AS (

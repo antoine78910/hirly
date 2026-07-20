@@ -294,7 +294,7 @@ async def backfill_pending_applications(db, *, limit: int = 200) -> int:
         try:
             return await set_based_backfill(providers, limit=limit)
         except Exception as error:
-            if not is_missing_database_contract_error(error):
+            if not is_missing_database_contract_error(error, "backfill_auto_apply_queue"):
                 raise
             logger.warning(
                 "auto_apply_queue_backfill_rpc_unavailable fallback=legacy error=%s",

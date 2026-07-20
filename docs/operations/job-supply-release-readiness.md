@@ -111,6 +111,7 @@ prefix as an inventory placement rule:
 5. `20260720001400_auto_apply_backfill.sql`
 6. `20260720001500_gmail_outcome_batch.sql`
 7. `20260720001600_admin_bounded_contracts.sql`
+8. `20260720001700_service_only_rls.sql`
 
 Apply these only through the
 [application-database release process](application-database-migration-runbook.md)

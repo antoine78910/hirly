@@ -33,7 +33,7 @@ AS $$
       AND COALESCE(a.data ->> 'ats_provider', j.data ->> 'ats_provider')
         = ANY(COALESCE(p_providers, ARRAY[]::text[]))
     ORDER BY a.created_at NULLS LAST, a.application_id
-    LIMIT LEAST(GREATEST(p_limit, 1), 200)
+    LIMIT LEAST(GREATEST(COALESCE(p_limit, 200), 1), 200)
     FOR UPDATE OF a SKIP LOCKED
   ),
   fenced AS (

@@ -16,7 +16,10 @@ Projection = Optional[Dict[str, Any]]
 SortSpec = Sequence[Tuple[str, int]]
 
 
-def is_missing_database_contract_error(error: BaseException) -> bool:
+def is_missing_database_contract_error(
+    error: BaseException,
+    contract_name: str | None = None,
+) -> bool:
     """Recognize PostgREST's missing-RPC response during additive rollouts.
 
     Application deploys and database migrations are not atomic. Callers may
@@ -24,16 +27,12 @@ def is_missing_database_contract_error(error: BaseException) -> bool:
     the new function is absent; transport and execution failures still surface.
     """
     message = str(error).lower()
-    return (
-        ("function" in message and "does not exist" in message)
-        or any(
-            marker in message
-            for marker in (
-                "pgrst202",
-                "could not find the function",
-                "undefined_function",
-            )
-        )
+    missing_from_schema_cache = (
+        "pgrst202" in message
+        or ("could not find the function" in message and "schema cache" in message)
+    )
+    return missing_from_schema_cache and (
+        not contract_name or contract_name.lower() in message
     )
 
 

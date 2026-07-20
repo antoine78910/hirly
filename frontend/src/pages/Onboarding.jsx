@@ -410,18 +410,26 @@ export default function Onboarding() {
   const enqueueOnboardingPatch = useCallback(async (payload) => {
     const state = onboardingSaveRef.current;
     state.pending = payload;
-    if (!state.running) {
-      state.running = (async () => {
-        while (state.pending) {
-          const latest = state.pending;
-          state.pending = null;
-          await api.patch("/profile/onboarding", latest);
-        }
-      })().finally(() => {
-        state.running = null;
-      });
+    while (state.pending || state.running) {
+      if (!state.running) {
+        state.running = (async () => {
+          while (state.pending) {
+            const latest = state.pending;
+            state.pending = null;
+            await api.patch("/profile/onboarding", latest);
+          }
+        })().finally(() => {
+          state.running = null;
+        });
+      }
+      try {
+        await state.running;
+      } catch (error) {
+        // A newer full snapshot may have arrived while an older request was
+        // failing. Drain that newer snapshot before returning to its caller.
+        if (!state.pending) throw error;
+      }
     }
-    return state.running;
   }, []);
 
   const persistOnboardingProgress = useCallback(async (nextStep, nextStepIndex) => {
