@@ -1,0 +1,237 @@
+{
+  "schemaVersion": "g016-official-source-access.v1",
+  "classification": "TS_NEW",
+  "capturedAt": "2026-07-20T12:56:16Z",
+  "scope": "evidence_only",
+  "productionEligible": false,
+  "canonicalWritesAllowed": false,
+  "sources": [
+    {
+      "sourceKey": "choisir-le-service-public",
+      "displayName": "Choisir le Service Public",
+      "officialEvidence": [
+        {
+          "kind": "dataset_page",
+          "url": "https://www.data.gouv.fr/datasets/les-offres-diffusees-sur-choisir-le-service-public"
+        },
+        {
+          "kind": "licence_text",
+          "url": "https://www.data.gouv.fr/pages/legal/licences/etalab-2.0"
+        },
+        {
+          "kind": "dataset_metadata",
+          "url": "https://www.data.gouv.fr/api/1/datasets/les-offres-diffusees-sur-choisir-le-service-public/"
+        }
+      ],
+      "accessFinding": "The publisher exposes a weekly CSV resource without credentials.",
+      "rightsFinding": "Open Licence 2.0 permits commercial reuse and redisplay with source and last-update attribution.",
+      "representativeFeedFinding": "A complete fixed CSV snapshot is available, but it has no description or apply-URL column and contains duplicate references and historical rows.",
+      "decision": "qualified_evidence_only",
+      "evidenceOnlyTransportEligible": true,
+      "productionEligible": false,
+      "blockers": [
+        "No canonical application route is present in the resource.",
+        "Freshness, expiry, duplicate-reference and missing-window handling require scorecard evidence.",
+        "Production attribution and lifecycle behavior have not passed release gates."
+      ],
+      "sampleManifest": {
+        "datasetId": "6322e99e12175f7eb26ff465",
+        "resourceId": "867034a2-2fa1-41b4-bd39-c84691ea618f",
+        "resourceUrl": "https://static.data.gouv.fr/resources/les-offres-diffusees-sur-choisir-le-service-public/20260720-060055/offres-datagouv-20260628.csv",
+        "resourceLastModified": "2026-07-20T08:01:04.711Z",
+        "contentSha256": "a4c34e24156138e89e83a9a98a296214a81f39b4bdf3f89aff83e62069fb1e5b",
+        "byteLength": 84407563,
+        "parsedRows": 183467,
+        "uniqueReferences": 181643,
+        "activeAtSnapshotRows": 42660,
+        "activeAtSnapshotUniqueReferences": 42321,
+        "snapshotDate": "2026-06-28",
+        "activeAtCaptureRows": 18409,
+        "activeAtCaptureUniqueReferences": 18242,
+        "captureDate": "2026-07-20"
+      }
+    },
+    {
+      "sourceKey": "bpce-open-feed",
+      "displayName": "Groupe BPCE via data.gouv",
+      "officialEvidence": [
+        {
+          "kind": "dataset_page",
+          "url": "https://www.data.gouv.fr/datasets/groupe-bpce-offres-emploi-publiques"
+        },
+        {
+          "kind": "licence_text",
+          "url": "https://www.data.gouv.fr/pages/legal/licences/etalab-2.0"
+        },
+        {
+          "kind": "dataset_metadata",
+          "url": "https://www.data.gouv.fr/api/1/datasets/groupe-bpce-offres-emploi-publiques/"
+        }
+      ],
+      "accessFinding": "The publisher exposes credential-free CSV and JSON exports and states that the data may be displayed on job platforms.",
+      "rightsFinding": "Open Licence 2.0 permits commercial reuse and redisplay with attribution; the dataset page expressly supports platform display.",
+      "representativeFeedFinding": "The current JSON export contains stable references, descriptions and direct apply URLs and is suitable for a bounded evidence-only snapshot.",
+      "decision": "qualified_evidence_only",
+      "evidenceOnlyTransportEligible": true,
+      "productionEligible": false,
+      "blockers": [
+        "The upstream export URL is mutable, so every bakeoff capture must bind a fresh content digest.",
+        "Recruiter names and email fields must be dropped before persistence or logging.",
+        "Lifecycle, paid-cohort value and canonical-writer release gates remain unproven."
+      ],
+      "sampleManifest": {
+        "datasetId": "60f0cca15543e9c0c9decb05",
+        "resourceId": "dc0d68bd-993f-48c1-b645-dbc91c6745b1",
+        "resourceUrl": "https://bpce.opendatasoft.com/api/explore/v2.1/catalog/datasets/groupe-bpce-offres-emploi/exports/json",
+        "resourceLastModified": "2026-07-19T18:01:14Z",
+        "contentSha256": "88812357b8bc48fe23d276f041af70798c42453797a84c937929dd8c981434a4",
+        "byteLength": 11687583,
+        "parsedRows": 2070,
+        "containsDirectApplyUrl": true,
+        "containsRecruiterPersonalData": true
+      }
+    },
+    {
+      "sourceKey": "data-gouv-generic",
+      "displayName": "Other data.gouv employment datasets",
+      "officialEvidence": [
+        {
+          "kind": "catalogue",
+          "url": "https://www.data.gouv.fr/datasets/catalogue-des-donnees-de-data-gouv-fr"
+        },
+        {
+          "kind": "licence_text",
+          "url": "https://www.data.gouv.fr/pages/legal/licences/etalab-2.0"
+        }
+      ],
+      "accessFinding": "The catalogue is public, but resource access varies by dataset.",
+      "rightsFinding": "Catalogue membership is not dataset-specific rights evidence.",
+      "representativeFeedFinding": "No generic representative feed exists; each dataset and exact resource must be separately qualified.",
+      "decision": "dataset_specific_evidence_required",
+      "evidenceOnlyTransportEligible": false,
+      "productionEligible": false,
+      "blockers": [
+        "An exact dataset and resource allowlist is required.",
+        "Licence, attribution, stable identity, direct route, freshness and removal semantics must be reviewed per resource."
+      ]
+    },
+    {
+      "sourceKey": "apec",
+      "displayName": "Apec",
+      "officialEvidence": [
+        {
+          "kind": "partnership_terms",
+          "url": "https://corporate.apec.fr/devenir-partenaire"
+        },
+        {
+          "kind": "site_terms",
+          "url": "https://www.apec.fr/infos-legales/infos-cgu.html"
+        },
+        {
+          "kind": "diffusion_terms",
+          "url": "https://www.apec.fr/files/live/sites/www/files/conditions-generales-de-diffusion-des-offres-d-emploi-et-de-stage.pdf"
+        }
+      ],
+      "accessFinding": "Outbound XML excerpts require a partnership convention; the public site prohibits automated capture and robots.",
+      "rightsFinding": "Public terms do not authorize commercial Hirly redisplay and forbid reproducing offers without express authorization.",
+      "representativeFeedFinding": "A representative or complete feed is not publicly available or guaranteed.",
+      "decision": "provider_contract_missing",
+      "evidenceOnlyTransportEligible": false,
+      "productionEligible": false,
+      "blockers": [
+        "A written Apec partnership convention is required.",
+        "Commercial model, coverage, fields, retention, refresh and removal terms are unpublished."
+      ]
+    },
+    {
+      "sourceKey": "la-bonne-alternance",
+      "displayName": "La Bonne Alternance",
+      "officialEvidence": [
+        {
+          "kind": "api_documentation",
+          "url": "https://api.apprentissage.beta.gouv.fr/fr/explorer/recherche-offre"
+        },
+        {
+          "kind": "api_terms",
+          "url": "https://api.apprentissage.beta.gouv.fr/fr/cgu"
+        },
+        {
+          "kind": "developer_page",
+          "url": "https://labonnealternance.apprentissage.beta.gouv.fr/espace-developpeurs"
+        }
+      ],
+      "accessFinding": "Registration provides an API token and the official search route documents a complete JSON download.",
+      "rightsFinding": "The route is reserved for non-profit use; the API terms prohibit commercialization and third-party communication absent authorization.",
+      "representativeFeedFinding": "The feed is technically representative for alternance if actual offers are separated from potential-employer records.",
+      "decision": "provider_contract_missing",
+      "evidenceOnlyTransportEligible": false,
+      "productionEligible": false,
+      "blockers": [
+        "Written authorization is required for Hirly's commercial use and redisplay.",
+        "Partner-specific rights, retention, caching, rate limits and SLA require confirmation."
+      ]
+    },
+    {
+      "sourceKey": "smartrecruiters",
+      "displayName": "SmartRecruiters",
+      "officialEvidence": [
+        {
+          "kind": "posting_api",
+          "url": "https://developers.smartrecruiters.com/docs/posting-api"
+        },
+        {
+          "kind": "authentication",
+          "url": "https://developers.smartrecruiters.com/docs/authentication"
+        },
+        {
+          "kind": "job_board_partner_api",
+          "url": "https://developers.smartrecruiters.com/docs/partners-job-board-api"
+        },
+        {
+          "kind": "customer_terms",
+          "url": "https://www.smartrecruiters.com/legal/terms-and-conditions/"
+        }
+      ],
+      "accessFinding": "Company-scoped public postings are technically readable, but official authentication pages conflict on whether an API key is required.",
+      "rightsFinding": "Career-site and widget use is documented; unrestricted commercial multi-tenant aggregation and redisplay is not granted.",
+      "representativeFeedFinding": "Fixed known tenant identifiers can form an allowlisted sample, but there is no global all-company discovery feed.",
+      "decision": "provider_contract_missing",
+      "evidenceOnlyTransportEligible": false,
+      "productionEligible": false,
+      "blockers": [
+        "Exact tenant authorization or SmartRecruiters job-board partner terms are required.",
+        "The authentication conflict must be handled fail-closed.",
+        "No global completeness guarantee exists."
+      ]
+    },
+    {
+      "sourceKey": "taleez",
+      "displayName": "Taleez",
+      "officialEvidence": [
+        {
+          "kind": "openapi",
+          "url": "https://api.taleez.com/"
+        },
+        {
+          "kind": "machine_openapi",
+          "url": "https://api.taleez.com/openapi.json"
+        },
+        {
+          "kind": "legal_notice",
+          "url": "https://taleez.com/legales/mentions-legales"
+        }
+      ],
+      "accessFinding": "Each tenant must generate a public or secret API key; the jobs list is company-scoped and rate limited to 100 requests per minute.",
+      "rightsFinding": "A client-exposable public key is not an open-data licence; public terms do not grant commercial multi-tenant redisplay.",
+      "representativeFeedFinding": "No provider-wide feed exists; a sample requires authorized participating tenant keys and scopes.",
+      "decision": "provider_contract_missing",
+      "evidenceOnlyTransportEligible": false,
+      "productionEligible": false,
+      "blockers": [
+        "Authorized tenant keys and jobs.list/job.get scopes are required.",
+        "Taleez and employer redisplay authorization is not established.",
+        "A free trial does not prove API access or representative coverage."
+      ]
+    }
+  ]
+}
