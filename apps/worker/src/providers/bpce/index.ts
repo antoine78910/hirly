@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  dataGouvHttpsUrlIssue,
   FixtureOnlyDataGouvSourceAdapter,
   type DataGouvAttribution,
   type DataGouvRawJob,
@@ -10,15 +11,11 @@ export const BPCE_DATASET_URL =
   "https://www.data.gouv.fr/datasets/groupe-bpce-offres-emploi-publiques";
 
 const httpsUrlSchema = z.url().superRefine((value, context) => {
-  const url = new URL(value);
-  if (
-    url.protocol !== "https:" ||
-    url.username.length > 0 ||
-    url.password.length > 0
-  ) {
+  const issue = dataGouvHttpsUrlIssue(value);
+  if (issue) {
     context.addIssue({
       code: "custom",
-      message: "BPCE fixture URLs must use HTTPS without credentials",
+      message: `BPCE fixture URLs ${issue}`,
     });
   }
 });

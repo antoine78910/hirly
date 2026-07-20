@@ -229,17 +229,23 @@ describe("G012 BPCE disabled fixture adapter", () => {
 
   test("rejects malformed URLs and source identity collisions", async () => {
     const data = await fixture();
-    expect(() =>
-      bpceOpenFeedFixtureSchema.parse({
-        ...data,
-        raw: [
-          {
-            ...data.raw[0],
-            urlCandidature: "http://example.test/apply",
-          },
-        ],
-      }),
-    ).toThrow("BPCE fixture URLs must use HTTPS without credentials");
+    for (const unsafeUrl of [
+      "http://example.test/apply",
+      "https://user:pass@example.test/apply",
+      "ftp://example.test/apply",
+    ]) {
+      expect(() =>
+        bpceOpenFeedFixtureSchema.parse({
+          ...data,
+          raw: [
+            {
+              ...data.raw[0],
+              urlCandidature: unsafeUrl,
+            },
+          ],
+        }),
+      ).toThrow(/BPCE fixture URLs/);
+    }
     expect(
       () =>
         new BpceFixtureSourceAdapter(

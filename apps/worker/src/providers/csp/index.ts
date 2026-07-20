@@ -1,11 +1,22 @@
 import { z } from "zod";
 import {
+  dataGouvHttpsUrlIssue,
   FixtureOnlyDataGouvSourceAdapter,
   type DataGouvFixtureCursor,
   type DataGouvFixtureScope,
   type DataGouvRawJob,
 } from "@hirly/ingestion/data-gouv";
 import type { SourceAdapter } from "@hirly/ingestion";
+
+const safeHttpsUrlSchema = z.url().superRefine((value, context) => {
+  const issue = dataGouvHttpsUrlIssue(value);
+  if (issue) {
+    context.addIssue({
+      code: "custom",
+      message: `CSP fixture apply URLs ${issue}`,
+    });
+  }
+});
 
 export const CSP_DATASET_ID =
   "les-offres-diffusees-sur-choisir-le-service-public" as const;
@@ -26,7 +37,7 @@ export const cspRawJobSchema = z
     description: z.string().max(100_000).default(""),
     contractType: z.string().trim().min(1).max(128).nullable(),
     status: z.string().trim().min(1).max(64).nullable(),
-    applyUrls: z.array(z.url()).min(1).max(10),
+    applyUrls: z.array(safeHttpsUrlSchema).min(1).max(10),
     sourceUrl: z.literal(CSP_DATASET_URL),
     publishedAt: z.iso.datetime({ offset: true }).nullable(),
     expiresAt: z.iso.datetime({ offset: true }).nullable(),
