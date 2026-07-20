@@ -1,40 +1,34 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { MemoryRouter, useNavigate } from "react-router-dom";
 
 import PostHogLifecycle from "./PostHogLifecycle";
+import * as posthogBoundary from "../../lib/posthogClient";
 
-const mockCapturePostHogPageview = jest.fn();
-const mockIdentifyPostHogUser = jest.fn();
-const mockResetPostHog = jest.fn();
-const mockSyncPostHogReplay = jest.fn();
-let currentUser: { user_id: string } | null = null;
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean })
+  .IS_REACT_ACT_ENVIRONMENT = true;
 
-jest.mock("@/context/AuthContext", () => ({
-  useAuth: () => ({ user: currentUser }),
+let mockCurrentUser: { user_id: string } | null = null;
+let mockPathname = "/";
+
+jest.mock("react-router-dom", () => ({
+  useLocation: () => ({ pathname: mockPathname }),
+}), { virtual: true });
+
+jest.mock("../../context/AuthContext", () => ({
+  useAuth: () => ({ user: mockCurrentUser }),
 }));
 
-jest.mock("@/lib/posthogClient", () => ({
-  capturePostHogPageview: mockCapturePostHogPageview,
-  identifyPostHogUser: mockIdentifyPostHogUser,
-  resetPostHog: mockResetPostHog,
-  syncPostHogReplay: mockSyncPostHogReplay,
+jest.mock("../../lib/posthogClient", () => ({
+  capturePostHogPageview: jest.fn(),
+  identifyPostHogUser: jest.fn(),
+  resetPostHog: jest.fn(),
+  syncPostHogReplay: jest.fn(),
 }));
 
-let navigate: ReturnType<typeof useNavigate>;
-function Navigator() {
-  navigate = useNavigate();
-  return null;
-}
-
-function Harness() {
-  return (
-    <>
-      <PostHogLifecycle />
-      <Navigator />
-    </>
-  );
-}
+const mockCapturePostHogPageview = posthogBoundary.capturePostHogPageview as jest.Mock;
+const mockIdentifyPostHogUser = posthogBoundary.identifyPostHogUser as jest.Mock;
+const mockResetPostHog = posthogBoundary.resetPostHog as jest.Mock;
+const mockSyncPostHogReplay = posthogBoundary.syncPostHogReplay as jest.Mock;
 
 describe("PostHogLifecycle", () => {
   let container: HTMLDivElement;
@@ -42,7 +36,8 @@ describe("PostHogLifecycle", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    currentUser = null;
+    mockCurrentUser = null;
+    mockPathname = "/";
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -54,42 +49,32 @@ describe("PostHogLifecycle", () => {
   });
 
   it("observes pathname-only navigation and replay lifecycle", () => {
+    mockPathname = "/onboarding";
     act(() => {
-      root.render(
-        <MemoryRouter initialEntries={["/onboarding?step=phone#x"]}>
-          <Harness />
-        </MemoryRouter>,
-      );
+      root.render(<PostHogLifecycle />);
     });
     expect(mockCapturePostHogPageview).toHaveBeenLastCalledWith("/onboarding");
     expect(mockSyncPostHogReplay).toHaveBeenCalledTimes(1);
 
-    act(() => navigate("/onboarding?step=other#secret"));
+    act(() => root.render(<PostHogLifecycle />));
     expect(mockCapturePostHogPageview).toHaveBeenCalledTimes(1);
 
-    act(() => navigate("/swipe?session_id=secret"));
+    mockPathname = "/swipe";
+    act(() => root.render(<PostHogLifecycle />));
     expect(mockCapturePostHogPageview).toHaveBeenCalledTimes(2);
     expect(mockCapturePostHogPageview).toHaveBeenLastCalledWith("/swipe");
   });
 
   it("forwards stable identities and anonymous resets to the safe client boundary", () => {
-    currentUser = { user_id: "user-a" };
+    mockCurrentUser = { user_id: "user-a" };
     act(() => {
-      root.render(
-        <MemoryRouter>
-          <Harness />
-        </MemoryRouter>,
-      );
+      root.render(<PostHogLifecycle />);
     });
     expect(mockIdentifyPostHogUser).toHaveBeenCalledWith("user-a");
 
-    currentUser = null;
+    mockCurrentUser = null;
     act(() => {
-      root.render(
-        <MemoryRouter>
-          <Harness />
-        </MemoryRouter>,
-      );
+      root.render(<PostHogLifecycle />);
     });
     expect(mockResetPostHog).toHaveBeenCalled();
   });

@@ -6,7 +6,7 @@ const MAX_OBJECT_KEYS = 50;
 const MAX_STRING_LENGTH = 500;
 const URL_KEY_PATTERN = /(^|[_-])(url|uri|href|referrer|page|path)([_-]|$)/i;
 const SENSITIVE_KEY_PATTERN =
-  /(^|[_-])(access|auth|bearer|card|code|cover[_-]?letter|cv|document|email|linkedin|message|name|password|phone|refresh|resume|secret|session|token)([_-]|$)/i;
+  /(access|auth|bearer|card|code|coverletter|cv|document|email|linkedin|message|name|password|phone|refresh|resume|secret|session|token)/;
 const ALLOWED_CUSTOM_EVENTS = new Set([
   "action_required_answer_saved",
   "admin_application_assigned",
@@ -93,7 +93,7 @@ export const sanitizeAnalyticsProperties = (
   const sanitized: Record<string, unknown> = {};
   for (const [key, item] of Object.entries(value).slice(0, MAX_OBJECT_KEYS)) {
     const normalizedKey = key.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
-    if (SENSITIVE_KEY_PATTERN.test(normalizedKey)) continue;
+    if (SENSITIVE_KEY_PATTERN.test(normalizedKey.replace(/[^a-z0-9]/g, ""))) continue;
     const safeValue =
       typeof item === "string" && URL_KEY_PATTERN.test(normalizedKey)
         ? stripUrlSecrets(item)

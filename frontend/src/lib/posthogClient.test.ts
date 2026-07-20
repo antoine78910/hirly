@@ -1,4 +1,3 @@
-const mockInit = jest.fn();
 const mockCapture = jest.fn();
 const mockIdentify = jest.fn();
 const mockReset = jest.fn();
@@ -8,10 +7,11 @@ const mockStopSessionRecording = jest.fn();
 jest.mock("posthog-js", () => ({
   __esModule: true,
   default: {
-    init: mockInit,
+    init: jest.fn(),
   },
 }));
 
+import posthog from "posthog-js";
 import {
   __resetPostHogForTests,
   buildPostHogConfig,
@@ -24,6 +24,7 @@ import {
   sanitizePostHogEvent,
 } from "./posthogClient";
 
+const mockInit = posthog.init as jest.Mock;
 const mockClient = {
   capture: mockCapture,
   identify: mockIdentify,

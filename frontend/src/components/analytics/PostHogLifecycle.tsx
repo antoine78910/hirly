@@ -1,17 +1,17 @@
 import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
 
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "../../context/AuthContext";
 import {
   capturePostHogPageview,
   identifyPostHogUser,
   resetPostHog,
   syncPostHogReplay,
-} from "@/lib/posthogClient";
+} from "../../lib/posthogClient";
 
 export default function PostHogLifecycle() {
   const { pathname } = useLocation();
-  const { user } = useAuth();
+  const { user } = useAuth() as unknown as { user?: { user_id?: unknown } | null };
 
   useEffect(() => {
     capturePostHogPageview(pathname);
