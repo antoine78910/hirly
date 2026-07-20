@@ -7,6 +7,7 @@
     "dev": "bun --watch src/main.ts",
     "start": "bun src/main.ts",
     "cli": "bun src/cli.ts",
+    "trial": "bun src/source-trial-cli.ts",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
