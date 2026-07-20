@@ -1,7 +1,6 @@
 BEGIN;
 
 DROP FUNCTION IF EXISTS worker_private.career_source_runnable(uuid, text, text);
-REVOKE SELECT ON public.provider_registry FROM hirly_inventory_operator;
 DROP VIEW IF EXISTS public.career_source_runtime_status;
 DROP VIEW IF EXISTS public.raw_job_snapshot_metadata;
 
