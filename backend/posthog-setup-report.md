@@ -32,8 +32,34 @@ We've built a dashboard and five insights to track key user behaviour:
 - [ ] Add `POSTHOG_SERVER_API_KEY=` and `POSTHOG_HOST=` to any monorepo/bootstrap or CI secrets documentation so collaborators know what to set (they are already in `.env.example`).
 - [ ] Confirm the returning-visitor path also calls `identify` — the `user_logged_in` capture in `_session_payload_from_supabase_token` runs on every Supabase token exchange, which is the primary auth path; verify any alternate auth flows (e.g. `auth_invite_email`) also result in an identify call.
 
+## AI Observability
+
+PostHog AI Observability has been wired into the project's OpenAI adapter (`llm_client.py`) using the OpenTelemetry auto-instrumentation approach. Every call to `complete_json_text` and `extract_text_from_image_bytes` now emits a `$ai_generation` event in PostHog carrying model name, token counts (input/output), latency, and estimated cost.
+
+**How it works:**
+- At startup, `server.py` initialises an OTel `TracerProvider` backed by `PostHogSpanProcessor` using the same `POSTHOG_SERVER_API_KEY` / `POSTHOG_HOST` env vars as the analytics client.
+- `OpenAIInstrumentor().instrument()` is called once, patching `AsyncOpenAI` globally so all LLM calls are traced automatically — no changes to call sites were needed.
+- A `ContextVar` (`_llm_user_ctx`) in `llm_client.py` carries the authenticated user's `distinct_id` through the async call chain. It is set in two route handlers: `upload_cv` (CV parsing + profile extraction) and `_generate_application_doc` (application generation). The tag is attached to the current OTel span so `$ai_generation` events are attributed to the correct person in PostHog AI Observability.
+
+**New dependencies added to `requirements.txt`:**
+```
+posthog[otel]>=3.0.0
+opentelemetry-sdk>=1.0.0
+opentelemetry-instrumentation-openai-v2>=0.1.0
+```
+
+**Files changed:**
+- `requirements.txt` — updated `posthog` to `posthog[otel]`, added OTel packages
+- `server.py` — OTel initialisation in `startup_seed`; `set_llm_user_context` called in `upload_cv` and `_generate_application_doc`
+- `llm_client.py` — added `set_llm_user_context`, `_tag_otel_span_with_user`, and `_llm_user_ctx`
+
+**Verify AI Observability is working:**
+- [ ] Install the new packages: `pip install -r requirements.txt`
+- [ ] Trigger a CV upload or job application; check **AI Observability → Generations** in PostHog — you should see `$ai_generation` events with model, token counts, and latency within seconds.
+- [ ] `claude_score_jobs` (job-feed scoring) and `transcribe_audio_bytes` are also auto-instrumented but run without a user context. They appear in PostHog as anonymous generations.
+
 ### Agent skill
 
-We've left an agent skill folder in your project at `.claude/skills/integration-fastapi/`. You can use this context for further agent development when using Claude Code. This will help ensure the model provides the most up-to-date approaches for integrating PostHog.
+We've left agent skill folders in your project at `.claude/skills/integration-fastapi/` and `.claude/skills/llm-analytics-setup/`. You can use this context for further agent development when using Claude Code. This will help ensure the model provides the most up-to-date approaches for integrating PostHog.
 
 </wizard-report>

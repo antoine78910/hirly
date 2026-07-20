@@ -201,7 +201,7 @@ from employment_kind import (
 from location_intelligence import COUNTRY_NAME_TO_CODE, country_to_jsearch_language, expand_location_radius, normalize_place_name
 from role_query_terms import ACADEMIC_LEVEL_STOPWORDS, resolve_role_match_tokens
 from location_search import search_locations
-from llm_client import LLMProviderNotConfigured, complete_json_text, extract_text_from_image_bytes
+from llm_client import LLMProviderNotConfigured, complete_json_text, extract_text_from_image_bytes, set_llm_user_context
 from openai import RateLimitError as LLMRateLimitError
 from onboarding_suggestions import suggest_categories, suggest_roles
 from profile_search_preferences import (
@@ -5221,6 +5221,7 @@ def _merge_generated_resume_with_profile(
 
 
 async def _generate_application_doc(user: User, profile: Dict[str, Any], job: Dict[str, Any]) -> Dict[str, Any]:
+    set_llm_user_context(user.user_id)
     profile = prepare_profile_for_application_generation(profile, user)
     try:
         gen = await claude_generate_application(profile, job)
@@ -5753,6 +5754,7 @@ async def upload_cv(file: UploadFile = File(...), user: User = Depends(get_curre
             detail="Please upload a PDF, DOCX, RTF, TXT, or image (PNG/JPG/HEIC/WEBP) resume.",
         )
     photo_bytes, photo_mime = _extract_cv_photo(fmt, content)
+    set_llm_user_context(user.user_id)
     try:
         cv_text = await extract_cv_text_from_upload(filename, content, file.content_type)
     except LLMProviderNotConfigured:

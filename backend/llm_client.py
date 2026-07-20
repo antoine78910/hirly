@@ -1,10 +1,35 @@
 """Internal OpenAI LLM adapter for structured JSON responses."""
 
+import contextvars
 import io
 import os
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from openai import AsyncOpenAI
+
+# Set this before any LLM call in a request context so PostHog AI observability
+# can associate $ai_generation events with the correct user.
+_llm_user_ctx: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "llm_user_ctx", default=None
+)
+
+
+def set_llm_user_context(distinct_id: str) -> None:
+    """Tag the current async context with a user ID for PostHog AI tracing."""
+    _llm_user_ctx.set(distinct_id)
+
+
+def _tag_otel_span_with_user() -> None:
+    distinct_id = _llm_user_ctx.get()
+    if not distinct_id:
+        return
+    try:
+        from opentelemetry import trace as otel_trace  # noqa: PLC0415
+        span = otel_trace.get_current_span()
+        if span.is_recording():
+            span.set_attribute("posthog.distinct_id", distinct_id)
+    except Exception:
+        pass
 
 
 class LLMProviderNotConfigured(RuntimeError):
@@ -19,6 +44,7 @@ def _client() -> AsyncOpenAI:
 
 
 async def complete_json_text(system_message: str, prompt: str) -> str:
+    _tag_otel_span_with_user()
     client = _client()
     response = await client.chat.completions.create(
         model=os.environ.get("OPENAI_MODEL", "gpt-4.1-mini"),
@@ -40,6 +66,7 @@ async def extract_text_from_image_bytes(content: bytes, mime: str = "image/png")
     """OCR-style plain-text extraction from a resume image via vision."""
     import base64
 
+    _tag_otel_span_with_user()
     client = _client()
     b64 = base64.b64encode(content).decode("ascii")
     data_url = f"data:{mime};base64,{b64}"
