@@ -17,11 +17,11 @@ ALTER TABLE public.worker_runs
   ADD COLUMN IF NOT EXISTS raw_records integer NOT NULL DEFAULT 0 CHECK (raw_records >= 0),
   ADD COLUMN IF NOT EXISTS normalized_records integer NOT NULL DEFAULT 0 CHECK (normalized_records >= 0),
   ADD COLUMN IF NOT EXISTS rejected_by_reason jsonb NOT NULL DEFAULT '{}'::jsonb,
-  ADD COLUMN IF NOT EXISTS exact_duplicates integer NOT NULL DEFAULT 0 CHECK (exact_duplicates >= 0),
-  ADD COLUMN IF NOT EXISTS fuzzy_duplicate_candidates integer NOT NULL DEFAULT 0 CHECK (fuzzy_duplicate_candidates >= 0),
-  ADD COLUMN IF NOT EXISTS jobs_inserted integer NOT NULL DEFAULT 0 CHECK (jobs_inserted >= 0),
-  ADD COLUMN IF NOT EXISTS jobs_updated integer NOT NULL DEFAULT 0 CHECK (jobs_updated >= 0),
-  ADD COLUMN IF NOT EXISTS jobs_reactivated integer NOT NULL DEFAULT 0 CHECK (jobs_reactivated >= 0),
+  ADD COLUMN IF NOT EXISTS exact_duplicates integer CHECK (exact_duplicates IS NULL OR exact_duplicates >= 0),
+  ADD COLUMN IF NOT EXISTS fuzzy_duplicate_candidates integer CHECK (fuzzy_duplicate_candidates IS NULL OR fuzzy_duplicate_candidates >= 0),
+  ADD COLUMN IF NOT EXISTS jobs_inserted integer CHECK (jobs_inserted IS NULL OR jobs_inserted >= 0),
+  ADD COLUMN IF NOT EXISTS jobs_updated integer CHECK (jobs_updated IS NULL OR jobs_updated >= 0),
+  ADD COLUMN IF NOT EXISTS jobs_reactivated integer CHECK (jobs_reactivated IS NULL OR jobs_reactivated >= 0),
   ADD COLUMN IF NOT EXISTS jobs_marked_inactive integer NOT NULL DEFAULT 0 CHECK (jobs_marked_inactive >= 0),
   ADD COLUMN IF NOT EXISTS completeness_state text NOT NULL DEFAULT 'unknown'
     CHECK (completeness_state IN ('unknown', 'complete_snapshot', 'partial', 'capped', 'failed', 'blocked')),
@@ -328,6 +328,25 @@ BEGIN
     RAISE EXCEPTION 'complete snapshot requires terminal complete partition proof'
       USING ERRCODE = '22023';
   END IF;
+  IF p_completeness_state = 'complete_snapshot' AND (
+    p_summary->'accounting_contract'->>'state' IS DISTINCT FROM 'known'
+    OR (p_summary->>'raw_records')::integer IS DISTINCT FROM (
+      (p_summary->>'normalized_records')::integer
+      + coalesce((
+          SELECT sum(value::integer)
+          FROM jsonb_each_text(coalesce(p_summary->'rejected_by_reason', '{}'::jsonb))
+        ), 0)
+    )
+    OR (p_summary->>'normalized_records')::integer IS DISTINCT FROM (
+      (p_summary->>'jobs_inserted')::integer
+      + (p_summary->>'jobs_updated')::integer
+      + (p_summary->>'exact_duplicates')::integer
+      + (p_summary->>'write_failed')::integer
+    )
+  ) THEN
+    RAISE EXCEPTION 'complete snapshot requires reconciled known accounting'
+      USING ERRCODE = '22023';
+  END IF;
 
   UPDATE public.worker_runs
   SET status = p_status,
@@ -343,11 +362,11 @@ BEGIN
       raw_records = coalesce((p_summary->>'raw_records')::integer, (p_summary->>'jobs_fetched')::integer, 0),
       normalized_records = coalesce((p_summary->>'normalized_records')::integer, (p_summary->>'jobs_fetched')::integer, 0),
       rejected_by_reason = v_rejected,
-      exact_duplicates = coalesce((p_summary->>'exact_duplicates')::integer, 0),
-      fuzzy_duplicate_candidates = coalesce((p_summary->>'fuzzy_duplicate_candidates')::integer, 0),
-      jobs_inserted = coalesce((p_summary->>'jobs_inserted')::integer, (p_summary->>'jobs_upserted')::integer, 0),
-      jobs_updated = coalesce((p_summary->>'jobs_updated')::integer, 0),
-      jobs_reactivated = coalesce((p_summary->>'jobs_reactivated')::integer, 0),
+      exact_duplicates = nullif(p_summary->>'exact_duplicates', '')::integer,
+      fuzzy_duplicate_candidates = nullif(p_summary->>'fuzzy_duplicate_candidates', '')::integer,
+      jobs_inserted = nullif(p_summary->>'jobs_inserted', '')::integer,
+      jobs_updated = nullif(p_summary->>'jobs_updated', '')::integer,
+      jobs_reactivated = nullif(p_summary->>'jobs_reactivated', '')::integer,
       jobs_marked_inactive = coalesce((p_summary->>'jobs_marked_inactive')::integer, 0),
       error_code = CASE WHEN p_status = 'failed'
         THEN coalesce(p_summary->>'terminal_error_code', 'python_ingestion_failed') ELSE NULL END,
