@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "hirly.france-travail-parity.v1",
+  "provenance": {
+    "kind": "synthetic_sanitized",
+    "pythonBoundary": "backend/job_providers/france_travail.py::normalize_job",
+    "containsPersonalData": false
+  },
+  "raw": {
+    "id": "123ABC",
+    "intitule": "Développeur / Développeuse logiciel",
+    "romeLibelle": "Études et développement informatique",
+    "description": "Développer et maintenir des services fiables.",
+    "entreprise": {
+      "nom": "Hirly SAS"
+    },
+    "lieuTravail": {
+      "libelle": "75 - Paris",
+      "commune": "Paris"
+    },
+    "typeContrat": "CDI",
+    "typeContratLibelle": "Contrat à durée indéterminée",
+    "contact": {},
+    "origineOffre": {},
+    "dateActualisation": "2026-07-19T12:00:00+00:00",
+    "etat": "active"
+  },
+  "expected": {
+    "provider": "france_travail",
+    "externalId": "123ABC",
+    "title": "Développeur / Développeuse logiciel",
+    "company": "Hirly SAS",
+    "location": "75 - Paris",
+    "countryCode": "FR",
+    "selectedApplyUrl": "https://candidat.francetravail.fr/offres/recherche/detail/123ABC",
+    "validationStatus": "valid",
+    "applyabilityTier": "B",
+    "applyFulfillmentStatus": "manual_ready",
+    "applyUrlProvider": "francetravail",
+    "atsProvider": "francetravail",
+    "manualFulfillmentReady": true,
+    "autoApplySupported": false
+  }
+}

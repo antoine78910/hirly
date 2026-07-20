@@ -470,6 +470,7 @@ const directAtsDomains: Record<string, string> = {
   "flatchr.io": "flatchr",
 };
 const primaryAutoApplyAts = new Set(["greenhouse", "lever", "ashby"]);
+const franceTravailApplyDomain = "candidat.francetravail.fr";
 const accountRequiredDomains = [
   "apec.fr",
   "hellowork.com",
@@ -587,6 +588,24 @@ export function validateApplyability(
   }
 
   const host = hostname(selectedApplyUrl);
+  if (
+    job.envelope.provider === "france_travail" &&
+    host === franceTravailApplyDomain
+  ) {
+    return {
+      ...common,
+      validationStatus: "valid",
+      validationReason:
+        "France Travail listing — apply on France Travail with guided manual fulfillment.",
+      applyabilityTier: "B",
+      applyabilityScore: 0.7,
+      applyFulfillmentStatus: "manual_ready",
+      applyUrlProvider: "francetravail",
+      atsProvider: "francetravail",
+      manualFulfillmentReady: true,
+      rejectionReason: null,
+    };
+  }
   const directDomain = host
     ? findDomainMatch(host, Object.keys(directAtsDomains))
     : null;

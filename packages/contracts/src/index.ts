@@ -2,7 +2,13 @@ import { z } from "zod";
 
 export const CONTRACT_VERSION = "worker-foundation.v1" as const;
 
-export const providerSchema = z.enum(["apec", "hellowork", "wttj", "indeed"]);
+export const providerSchema = z.enum([
+  "apec",
+  "hellowork",
+  "wttj",
+  "indeed",
+  "france_travail",
+]);
 export const triggerSourceSchema = z.enum(["schedule", "cli", "http", "system"]);
 export const runKindSchema = z.enum(["provider_ingestion", "inventory_maintenance"]);
 export const runStatusSchema = z.enum([
@@ -63,8 +69,8 @@ export const providerSearchRequestSchema = z
     location: z.string().trim().min(1).max(256).nullable().default(null),
     countryCode: z.string().regex(/^[A-Z]{2}$/).nullable().default(null),
     cursor: z.string().min(1).max(512).nullable().default(null),
-    pageSize: z.number().int().positive().max(100).default(50),
-    maxPages: z.number().int().positive().max(5).default(5),
+    pageSize: z.number().int().positive().max(150).default(50),
+    maxPages: z.number().int().positive().max(20).default(5),
   })
   .strict();
 

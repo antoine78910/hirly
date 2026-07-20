@@ -56,6 +56,8 @@ export interface ProviderCore<RawJob> {
   rateLimit: RateLimitConfig;
   coreReady: true;
   liveTransportReady: false;
+  shadowModeReady: boolean;
+  canonicalWriteReady: false;
   activationRequirements: readonly string[];
   adapter: ProviderAdapter<RawJob>;
   transport: ProviderTransport<RawJob>;
@@ -97,6 +99,7 @@ export function defineProviderCore<
   authorizationStatus: AuthorizationStatus;
   accessMethod: string;
   rateLimit: RateLimitConfig;
+  shadowModeReady?: boolean;
 }): ProviderCore<RawJob> {
   return {
     provider: input.provider,
@@ -105,6 +108,8 @@ export function defineProviderCore<
     rateLimit: input.rateLimit,
     coreReady: true,
     liveTransportReady: false,
+    shadowModeReady: input.shadowModeReady ?? false,
+    canonicalWriteReady: false,
     activationRequirements: [
       "record reviewed authorization evidence",
       "assign exactly one TypeScript canonical writer",
