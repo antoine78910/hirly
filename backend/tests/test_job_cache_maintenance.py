@@ -254,7 +254,7 @@ def test_provider_expiry_rejects_wrong_provider_global_and_stale_proofs():
 def test_provider_expiry_accepts_exact_recent_provider_manifest():
     stale = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
     db = _FakeDB(
-        [_job(last_seen_at=stale, imported_at=stale)],
+        [_job(provider="france_travail", last_seen_at=stale, imported_at=stale)],
         completeness="complete_snapshot",
         proof_scope="provider",
     )
