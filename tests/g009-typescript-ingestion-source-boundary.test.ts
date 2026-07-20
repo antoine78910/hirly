@@ -31,6 +31,7 @@ function policy(
 ): SourceRuntimePolicy {
   return sourceRuntimePolicySchema.parse({
     providerEnabled: true,
+    providerAuthorizationStatus: "authorized",
     writerRuntime: "typescript",
     providerCountryKillSwitches: {},
     sourceCountryKillSwitches: {},
@@ -53,6 +54,9 @@ function policy(
       enabled: true,
       commercialUseAllowed: true,
       redisplayAllowed: true,
+      fullTextRetentionAllowed: true,
+      enabledEnvironments: ["production"],
+      permittedAccessMethods: ["open_data"],
       expiresAt: "2026-08-20T00:00:00.000Z",
     },
     ...overrides,
@@ -100,6 +104,14 @@ describe("G009 disabled TypeScript source contract", () => {
       .toBeNull();
     expect(
       sourceActivationBlockReason(
+        policy({ providerAuthorizationStatus: "unverified" }),
+        "FR",
+        "incremental",
+        now,
+      ),
+    ).toBe("provider_not_authorized");
+    expect(
+      sourceActivationBlockReason(
         policy({ writerRuntime: "python" }),
         "FR",
         "incremental",
@@ -116,6 +128,45 @@ describe("G009 disabled TypeScript source contract", () => {
     ).toBe("provider_country_killed");
     expect(sourceActivationBlockReason(policy(), "FR", "backfill", now))
       .toBe("mode_disabled");
+    expect(
+      sourceActivationBlockReason(
+        policy({
+          policy: {
+            ...policy().policy,
+            fullTextRetentionAllowed: false,
+          },
+        }),
+        "FR",
+        "incremental",
+        now,
+      ),
+    ).toBe("policy_not_approved");
+    expect(
+      sourceActivationBlockReason(
+        policy({
+          policy: {
+            ...policy().policy,
+            enabledEnvironments: ["staging"],
+          },
+        }),
+        "FR",
+        "incremental",
+        now,
+      ),
+    ).toBe("policy_environment_blocked");
+    expect(
+      sourceActivationBlockReason(
+        policy({
+          policy: {
+            ...policy().policy,
+            permittedAccessMethods: ["partner_feed"],
+          },
+        }),
+        "FR",
+        "incremental",
+        now,
+      ),
+    ).toBe("policy_access_blocked");
     expect(
       sourceActivationBlockReason(
         policy({
@@ -193,6 +244,11 @@ describe("G009 additive database boundary", () => {
       expect(migration).toContain(disabledDefault);
     }
     expect(migration).toContain("registry.writer_runtime = 'typescript'");
+    expect(migration).toContain("policy.full_text_retention_allowed");
+    expect(migration).toContain("'production' = ANY(policy.enabled_environments)");
+    expect(migration).toContain(
+      "source.access_type = ANY(policy.permitted_access_methods)",
+    );
     expect(migration).not.toMatch(
       /\b(?:INSERT\s+INTO|UPDATE)\s+(?:public\.)?provider_registry\b/i,
     );
