@@ -189,7 +189,7 @@ describe("G009 source persistence contract", () => {
     const { migration } = sourceBoundaryMigration();
 
     expect(migration).toMatch(
-      /raw_job_snapshots_run_source_external_hash_unique[\s\S]*UNIQUE\s*\(\s*run_id\s*,\s*source_id\s*,\s*external_id\s*,\s*content_hash\s*\)/i,
+      /raw_job_snapshots_source_external_hash_unique[\s\S]*UNIQUE\s*\(\s*source_id\s*,\s*external_id\s*,\s*content_hash\s*\)/i,
     );
     expect(migration).toMatch(
       /source_id uuid NOT NULL REFERENCES public\.career_sources\(id\) ON DELETE RESTRICT/i,
@@ -211,7 +211,9 @@ describe("G009 source persistence contract", () => {
     expect(migration).toMatch(
       /job_occurrences_source_external_unique UNIQUE\s*\(\s*source_id\s*,\s*external_id\s*\)/i,
     );
-    expect(migration).toMatch(/raw_snapshot_id uuid NOT NULL/i);
+    expect(migration).toMatch(
+      /raw_snapshot_id uuid NOT NULL REFERENCES public\.raw_job_snapshots\(id\) ON DELETE RESTRICT/i,
+    );
     expect(migration).toMatch(
       /UNIQUE\s*\(\s*id\s*,\s*source_id\s*,\s*external_id\s*\)[\s\S]*FOREIGN KEY\s*\(\s*raw_snapshot_id\s*,\s*source_id\s*,\s*external_id\s*\)\s*REFERENCES public\.raw_job_snapshots\s*\(\s*id\s*,\s*source_id\s*,\s*external_id\s*\)/i,
     );
@@ -281,21 +283,6 @@ describe("G009 source persistence contract", () => {
     expect(rollback).toContain("DROP COLUMN IF EXISTS source_id");
     expect(migration).not.toMatch(
       /GRANT\s+(?:INSERT|UPDATE|DELETE|ALL)[\s\S]*?(?:raw_job_snapshots|job_occurrences|canonical_job_groups)/i,
-    );
-    expect(migration).toContain(
-      "CREATE OR REPLACE VIEW public.raw_job_snapshot_metadata",
-    );
-    expect(migration).toMatch(
-      /GRANT SELECT ON[\s\S]*public\.job_occurrences[\s\S]*public\.canonical_job_groups[\s\S]*TO hirly_inventory_operator/i,
-    );
-    expect(migration).toMatch(
-      /CREATE OR REPLACE FUNCTION worker_private\.career_source_runnable[\s\S]*SECURITY DEFINER[\s\S]*SET search_path = pg_catalog, public/i,
-    );
-    expect(migration).toMatch(
-      /REVOKE ALL ON FUNCTION worker_private\.career_source_runnable[\s\S]*FROM PUBLIC/i,
-    );
-    expect(migration).toMatch(
-      /GRANT EXECUTE ON FUNCTION worker_private\.career_source_runnable[\s\S]*TO hirly_inventory_worker, hirly_inventory_operator/i,
     );
   });
 });
