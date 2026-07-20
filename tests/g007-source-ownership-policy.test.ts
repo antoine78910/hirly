@@ -29,10 +29,17 @@ describe("G007 source ownership and policy invariants", () => {
 
     expect(registry.schemaVersion).toBe(1);
     expect(registry.stages.length).toBeGreaterThan(0);
-    for (const { authoritativeWriter } of registry.stages) {
-      expect(authoritativeWriter).toMatch(/^python(?:$| via [a-z0-9 -]+$)/i);
-      expect(authoritativeWriter).not.toMatch(/typescript|dual/i);
-    }
+    expect(
+      registry.stages.map(({ stage, authoritativeWriter }) => ({
+        stage,
+        authoritativeWriter,
+      })),
+    ).toEqual(
+      registry.stages.map(({ stage }) => ({
+        stage,
+        authoritativeWriter: "python",
+      })),
+    );
 
     for (const requiredStage of [
       "source_request",
