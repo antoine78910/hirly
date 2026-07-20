@@ -1,0 +1,159 @@
+import posthog, { type CaptureResult, type PostHog, type PostHogConfig, type Properties } from "posthog-js";
+
+const MAX_DEPTH = 6;
+const MAX_ARRAY_LENGTH = 50;
+const MAX_OBJECT_KEYS = 50;
+const MAX_STRING_LENGTH = 500;
+const URL_KEY_PATTERN = /(^|[_-])(url|uri|href|referrer|page|path)([_-]|$)/i;
+const SENSITIVE_KEY_PATTERN =
+  /(^|[_-])(access|auth|bearer|card|cover[_-]?letter|cv|email|linkedin|name|password|phone|refresh|resume|secret|session|token)([_-]|$)/i;
+
+let client: PostHog | null = null;
+let initialized = false;
+
+const stripUrlSecrets = (value: string): string => {
+  try {
+    const parsed = new URL(value, typeof window !== "undefined" ? window.location.origin : "https://invalid.local");
+    return `${parsed.origin === "https://invalid.local" ? "" : parsed.origin}${parsed.pathname}`;
+  } catch {
+    return value.split(/[?#]/, 1)[0];
+  }
+};
+
+export const sanitizeAnalyticsProperties = (
+  value: unknown,
+  depth = 0,
+  seen: WeakSet<object> = new WeakSet(),
+): unknown => {
+  if (value == null || typeof value === "boolean" || typeof value === "number") return value;
+  if (typeof value === "string") return value.slice(0, MAX_STRING_LENGTH);
+  if (typeof value !== "object" || depth >= MAX_DEPTH) return undefined;
+  if (typeof Node !== "undefined" && value instanceof Node) return undefined;
+  if (seen.has(value)) return undefined;
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    return value
+      .slice(0, MAX_ARRAY_LENGTH)
+      .map((item) => sanitizeAnalyticsProperties(item, depth + 1, seen))
+      .filter((item) => item !== undefined);
+  }
+
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value).slice(0, MAX_OBJECT_KEYS)) {
+    const normalizedKey = key.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
+    if (SENSITIVE_KEY_PATTERN.test(normalizedKey)) continue;
+    const safeValue =
+      typeof item === "string" && URL_KEY_PATTERN.test(normalizedKey)
+        ? stripUrlSecrets(item)
+        : sanitizeAnalyticsProperties(item, depth + 1, seen);
+    if (safeValue !== undefined) sanitized[key] = safeValue;
+  }
+  return sanitized;
+};
+
+export const sanitizePostHogEvent = (event: CaptureResult | null): CaptureResult | null => {
+  if (!event || event.event === "$snapshot") return null;
+  const properties = sanitizeAnalyticsProperties(event.properties) as Properties | undefined;
+  if (!properties) return null;
+  for (const key of ["$current_url", "$referrer", "$pathname", "current_url", "referrer", "url", "path"]) {
+    if (typeof properties[key] === "string") properties[key] = stripUrlSecrets(properties[key] as string);
+  }
+  return { ...event, properties };
+};
+
+export const isReplayEnabled = (): boolean => process.env.REACT_APP_POSTHOG_REPLAY_ENABLED === "true";
+
+export const buildPostHogConfig = (): Partial<PostHogConfig> => {
+  const replayEnabled = isReplayEnabled();
+  return {
+    api_host: process.env.REACT_APP_POSTHOG_HOST?.trim(),
+    person_profiles: "identified_only",
+    autocapture: false,
+    capture_pageview: false,
+    capture_pageleave: false,
+    capture_exceptions: false,
+    capture_dead_clicks: false,
+    capture_heatmaps: false,
+    disable_surveys: true,
+    disable_session_recording: !replayEnabled,
+    advanced_disable_flags: replayEnabled ? false : true,
+    advanced_disable_feature_flags: replayEnabled,
+    enable_recording_console_log: false,
+    capture_performance: false,
+    session_recording: {
+      maskAllInputs: true,
+      maskTextSelector: "*",
+      recordCrossOriginIframes: false,
+      recordCanvas: false,
+      networkPayloadCapture: {
+        recordHeaders: false,
+        recordBody: false,
+      },
+    },
+    before_send: sanitizePostHogEvent,
+    get_current_url: (url) => stripUrlSecrets(url),
+  };
+};
+
+export const initializePostHog = (): PostHog | null => {
+  if (initialized) return client;
+  initialized = true;
+  const token = process.env.REACT_APP_POSTHOG_TOKEN?.trim();
+  const host = process.env.REACT_APP_POSTHOG_HOST?.trim();
+  if (!token || !host || !/^https:\/\//i.test(host)) return null;
+  try {
+    client = posthog.init(token, buildPostHogConfig()) || null;
+    if (!isReplayEnabled()) client?.stopSessionRecording();
+    return client;
+  } catch {
+    client = null;
+    return null;
+  }
+};
+
+export const getPostHogClient = (): PostHog | null => client;
+
+export const capturePostHogEvent = (event: string, properties: Properties = {}): void => {
+  if (!event || !client) return;
+  try {
+    client.capture(event, sanitizeAnalyticsProperties(properties) as Properties);
+  } catch {
+    // Analytics must never block product flows.
+  }
+};
+
+export const capturePostHogPageview = (pathname: string): void => {
+  if (!client || typeof window === "undefined") return;
+  const canonicalPathname = pathname.startsWith("/") ? pathname : `/${pathname}`;
+  capturePostHogEvent("$pageview", {
+    $current_url: `${window.location.origin}${canonicalPathname}`,
+  });
+};
+
+export const identifyPostHogUser = (userId: string): void => {
+  if (!client || !userId) return;
+  try {
+    client.identify(userId);
+  } catch {}
+};
+
+export const resetPostHog = (): void => {
+  if (!client) return;
+  try {
+    client.reset();
+  } catch {}
+};
+
+export const syncPostHogReplay = (): void => {
+  if (!client) return;
+  try {
+    if (isReplayEnabled()) client.startSessionRecording();
+    else client.stopSessionRecording();
+  } catch {}
+};
+
+export const __resetPostHogForTests = (): void => {
+  client = null;
+  initialized = false;
+};

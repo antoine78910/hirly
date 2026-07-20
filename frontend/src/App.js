@@ -70,6 +70,7 @@ import RecordTools from "@/pages/RecordTools";
 import { devBypassAuth } from "@/lib/dev";
 import { isTrainingRoute } from "@/lib/trainingRoutes";
 import { needsOAuthCallbackRedirect } from "@/lib/oauthCallback";
+import PostHogLifecycle from "@/components/analytics/PostHogLifecycle";
 
 import PasswordReset from '@/pages/PasswordReset';
 
@@ -239,6 +240,7 @@ function App() {
     <div className="App">
       <AuthProvider>
         <BrowserRouter>
+          <PostHogLifecycle />
           <AppLocaleProvider>
             <MobileThemeProvider>
             <UpgradeModalProvider>
