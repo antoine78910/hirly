@@ -68,35 +68,40 @@ export function createTaskHandlers(
           rateLimit: module.rateLimit,
           signal,
           onMetrics(metrics) {
-            logger?.emit({
-              service: "hirly-worker",
-              version: "0.1.0",
-              environment: process.env.NODE_ENV ?? "development",
-              event: "provider.ingestion_batch",
-              severity: "info",
-              runId: task.runId,
-              taskId: task.taskId,
-              taskType: task.taskType,
-              provider,
-              attempt: task.attempts,
-              maxAttempts: task.maxAttempts,
-              durationsMs: {
-                queueWait: 0,
-                fetch: metrics.durationsMs.fetch,
-                normalization: metrics.durationsMs.normalization,
-                validation: metrics.durationsMs.validation,
-                database: metrics.durationsMs.database,
-                total: metrics.durationsMs.total,
-              },
-              counts: {
-                fetched: metrics.fetched,
-                accepted: metrics.accepted,
-                rejected: metrics.rejected,
-                deduplicated: metrics.deduplicated,
-                upserted: metrics.upserted,
-              },
-              outcome: "succeeded",
-            });
+            try {
+              logger?.emit({
+                service: "hirly-worker",
+                version: "0.1.0",
+                environment: process.env.NODE_ENV ?? "development",
+                event: "provider.ingestion_batch",
+                severity: "info",
+                runId: task.runId,
+                taskId: task.taskId,
+                taskType: task.taskType,
+                provider,
+                attempt: task.attempts,
+                maxAttempts: task.maxAttempts,
+                durationsMs: {
+                  queueWait: 0,
+                  fetch: metrics.durationsMs.fetch,
+                  normalization: metrics.durationsMs.normalization,
+                  validation: metrics.durationsMs.validation,
+                  database: metrics.durationsMs.database,
+                  total: metrics.durationsMs.total,
+                },
+                counts: {
+                  fetched: metrics.fetched,
+                  accepted: metrics.accepted,
+                  rejected: metrics.rejected,
+                  deduplicated: metrics.deduplicated,
+                  upserted: metrics.upserted,
+                },
+                outcome: "succeeded",
+              });
+            } catch {
+              // The canonical write completed atomically with the task. A
+              // metrics sink failure must not turn that success into a retry.
+            }
           },
         });
         if (result.jobs.length > 0) return { taskCompleted: true };
