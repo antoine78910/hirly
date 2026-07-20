@@ -106,6 +106,7 @@ def test_gmail_sync_preloads_existing_messages_and_batches_writes():
     assert "application_emails.find_one" not in source
     assert "application_emails.insert_many" in source
     assert "range(0, len(pending_email_writes), 100)" in source
+    assert "apply_gmail_application_outcomes" in source
 
 
 def test_auto_apply_backfill_uses_one_bounded_contract(monkeypatch):

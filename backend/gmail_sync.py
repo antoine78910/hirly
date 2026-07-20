@@ -436,6 +436,7 @@ async def sync_gmail_application_emails(
         ).to_list(max_apps * per_app)
         existing_by_id = {row.get("email_id"): row for row in existing_rows if row.get("email_id")}
         pending_email_writes: List[Dict[str, Any]] = []
+        pending_app_updates: List[Dict[str, Any]] = []
 
         stored = 0
         checked_messages = 0
@@ -492,18 +493,31 @@ async def sync_gmail_application_emails(
                     best_message = document
 
             if best_classification and best_classification != app.get("email_confirmed_outcome"):
-                await db.applications.update_one(
-                    {"application_id": app.get("application_id"), "user_id": user_id},
-                    {"$set": {
-                        "email_confirmed_outcome": best_classification,
-                        "email_confirmed_at": _now_iso(),
-                        "email_confirmed_subject": best_message.get("subject"),
-                        "email_confirmed_from": best_message.get("from"),
-                    }},
-                )
+                pending_app_updates.append({
+                    "application_id": app.get("application_id"),
+                    "classification": best_classification,
+                    "confirmed_at": _now_iso(),
+                    "subject": best_message.get("subject"),
+                    "sender": best_message.get("from"),
+                })
 
         for start in range(0, len(pending_email_writes), 100):
             await db.application_emails.insert_many(pending_email_writes[start:start + 100])
+        outcome_writer = getattr(db, "apply_gmail_application_outcomes", None)
+        if outcome_writer is not None:
+            for start in range(0, len(pending_app_updates), 100):
+                await outcome_writer(user_id, pending_app_updates[start:start + 100])
+        else:
+            for update in pending_app_updates:
+                await db.applications.update_one(
+                    {"application_id": update["application_id"], "user_id": user_id},
+                    {"$set": {
+                        "email_confirmed_outcome": update["classification"],
+                        "email_confirmed_at": update["confirmed_at"],
+                        "email_confirmed_subject": update["subject"],
+                        "email_confirmed_from": update["sender"],
+                    }},
+                )
 
         await db.gmail_connections.update_one(
             {"user_id": user_id},
