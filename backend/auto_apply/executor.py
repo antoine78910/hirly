@@ -31,6 +31,7 @@ from .debug_report import build_debug_report, data_availability, format_run_erro
 from .driver import DRIVER_REGISTRY
 from .models import SubmissionContext
 from .planner import plan as build_plan
+from .queue import answer_set_digest, submission_policy_failure
 from .resolver import resolve
 from .verification import verify
 
@@ -44,25 +45,29 @@ def _now() -> str:
 def _full_evidence(ev) -> Optional[Dict[str, Any]]:
     if ev is None:
         return None
+    raw = getattr(ev, "raw", None) or {}
+    step_log = raw.get("step_log") or []
     return {
         "submit_performed": ev.submit_performed,
-        "confirmation_text": ev.confirmation_text,
+        "confirmation_present": bool(ev.confirmation_text),
         "submit_control_gone": ev.submit_control_gone,
         "url_changed": ev.url_changed,
         "network_ok": ev.network_ok,
-        "validation_errors": ev.validation_errors,
+        "validation_error_count": len(ev.validation_errors or []),
         "blocked_reason": ev.blocked_reason,
-        "final_url": ev.final_url,
-        "screenshot_b64": ev.screenshot_b64,
-        "raw": ev.raw,
+        "step_log": [
+            {
+                "action": str(step.get("action") or "")[:64],
+                "status": str(step.get("status") or "")[:32],
+            }
+            for step in step_log[:100]
+            if isinstance(step, dict)
+        ],
     }
 
 
 def _safe_evidence(ev) -> Dict[str, Any]:
-    # Persisted variant: everything except the (large) screenshot.
-    full = _full_evidence(ev) or {}
-    full.pop("screenshot_b64", None)
-    return full
+    return _full_evidence(ev) or {}
 
 
 def _report(
@@ -72,7 +77,6 @@ def _report(
     debug: Optional[Dict[str, Any]] = None, error: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     now = _now()
-    screenshot = getattr(evidence, "screenshot_b64", None)
     return {
         "stage_reached": stage,
         "status": status,
@@ -82,7 +86,8 @@ def _report(
         "blueprint_signature": blueprint_signature,
         "driver_version": driver_version,
         "submission_evidence": _full_evidence(evidence),
-        "screenshots": [screenshot] if screenshot else [],
+        # Ordinary execution reports are not an approved PII evidence store.
+        "screenshots": [],
         "debug": debug,
         "error": error,
         "timestamps": {
@@ -147,6 +152,25 @@ async def execute_application(
         return _report(started=started, stage="claim", status=status,
                        reason="active_claim_exists", driver_version=driver_version)
 
+    if not dry_run:
+        policy_failure = submission_policy_failure(app_doc, job, user_id=user_id)
+        if policy_failure:
+            await metrics.record_terminal(
+                db,
+                claim,
+                status="policy_denied",
+                reason=policy_failure,
+                stage_reached="claim",
+            )
+            return _report(
+                started=started,
+                stage="claim",
+                status="policy_denied",
+                reason=policy_failure,
+                driver_version=driver_version,
+                claim=claim,
+            )
+
     checkpoint = "driver"
     blueprint = None
     signature = None
@@ -189,6 +213,12 @@ async def execute_application(
 
         checkpoint = "resolve"
         candidate_context = build_candidate_context(profile, app_doc, user)
+        mandate = app_doc.get("candidate_mandate") or {}
+        consent_answers = mandate.get("consent_answers") or {}
+        if isinstance(consent_answers, dict):
+            for field_key, accepted in consent_answers.items():
+                if accepted is True:
+                    candidate_context[f"candidate_mandate.consent.{field_key}"] = True
         answers, unresolved = resolve(blueprint, candidate_context, profile)
         if unresolved:
             missing = [f.key for f in unresolved]
@@ -219,6 +249,7 @@ async def execute_application(
 
         checkpoint = "plan"
         application_plan = build_plan(blueprint, answers)
+        resolved_digest = answer_set_digest(answers)
         debug = build_debug_report(
             job=job, profile=profile, app_doc=app_doc, blueprint=blueprint, decision=decision,
             answers=answers, plan=application_plan, candidate_context=candidate_context,
@@ -231,10 +262,57 @@ async def execute_application(
                            reason="ready_not_submitted", debug=debug, **report_common)
 
         checkpoint = "submit"
+        latest_app = app_doc
+        applications = getattr(db, "applications", None)
+        if applications is not None and app_doc.get("application_id"):
+            latest_app = await applications.find_one(
+                {"application_id": app_doc["application_id"]},
+                {"_id": 0},
+            ) or app_doc
+        policy_failure = submission_policy_failure(
+            latest_app,
+            job,
+            user_id=user_id,
+            blueprint_signature=signature,
+            resolved_answer_digest=resolved_digest,
+        )
+        if policy_failure:
+            await metrics.record_terminal(
+                db,
+                claim,
+                status="policy_denied",
+                reason=policy_failure,
+                stage_reached="submit",
+                **base,
+            )
+            return _report(
+                started=started,
+                stage="submit",
+                status="policy_denied",
+                reason=policy_failure,
+                debug=debug,
+                **report_common,
+            )
         with tempfile.TemporaryDirectory(prefix="auto_apply_") as tmp:
+            async def pre_submit_check():
+                current_app = latest_app
+                if applications is not None and app_doc.get("application_id"):
+                    current_app = await applications.find_one(
+                        {"application_id": app_doc["application_id"]},
+                        {"_id": 0},
+                    ) or latest_app
+                return submission_policy_failure(
+                    current_app,
+                    job,
+                    user_id=user_id,
+                    blueprint_signature=signature,
+                    resolved_answer_digest=resolved_digest,
+                )
+
             documents = {
                 "resume_path": write_resume_file(app_doc, tmp, profile=profile),
                 "cover_letter_path": write_cover_letter_file(app_doc, tmp),
+                "_pre_submit_check": pre_submit_check,
             }
             ctx = SubmissionContext(job=job, blueprint=blueprint, plan=application_plan,
                                     documents=documents, dry_run=False, headless=headless)
@@ -245,8 +323,12 @@ async def execute_application(
         # A runtime login wall / CAPTCHA means Hirly can't complete it -> unsupported.
         # Offer-expired is different: stop immediately and refund via expiry flow.
         if evidence.blocked_reason:
-            reason = f"blocked:{evidence.blocked_reason}"
-            status = "unsupported"
+            if evidence.blocked_reason.startswith("policy:"):
+                reason = evidence.blocked_reason.removeprefix("policy:")
+                status = "policy_denied"
+            else:
+                reason = f"blocked:{evidence.blocked_reason}"
+                status = "unsupported"
             if evidence.blocked_reason == "offer_expired":
                 reason = "offer_expired"
                 status = "submit_failed"
@@ -300,7 +382,11 @@ async def execute_application(
 
         checkpoint = "verify"
         verdict = verify(evidence)
-        db_status = "submitted_success" if verdict.status == "verified_success" else "verification_failed"
+        db_status = (
+            "submitted_success"
+            if verdict.status == "verified_success"
+            else "reconciliation_required"
+        )
         debug = build_debug_report(
             job=job, profile=profile, app_doc=app_doc, blueprint=blueprint, decision=decision,
             answers=answers, plan=application_plan, candidate_context=candidate_context,
@@ -352,13 +438,17 @@ async def execute_application(
                 }],
             }
         reason = error_detail.get("message") or exc.__class__.__name__
+        ambiguous_submit = checkpoint == "submit" and error_detail.get("phase") not in (
+            "open_browser", "open_page",
+        )
+        terminal_status = "reconciliation_required" if ambiguous_submit else "error"
         await metrics.record_terminal(
-            db, claim, status="error", reason=reason[:500], stage_reached=stage,
+            db, claim, status=terminal_status, reason=reason[:500], stage_reached=stage,
         )
         return _report(
             started=started,
             stage=stage,
-            status="error",
+            status=terminal_status,
             reason=reason,
             error=error_detail,
             debug=debug,

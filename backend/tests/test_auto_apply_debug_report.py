@@ -50,7 +50,7 @@ def test_format_run_error_from_apply_agent_error():
     detail = format_run_error(exc, checkpoint="submit")
     assert detail["phase"] == "open_browser"
     assert detail["message"] == "Playwright is not installed."
-    assert detail["target_url"] == "https://example.com"
+    assert detail["target_url"] is None
     assert detail["hint"]
 
 

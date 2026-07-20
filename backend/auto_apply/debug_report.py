@@ -1,8 +1,9 @@
 """Structured debug payload for admin auto-apply runs."""
 from __future__ import annotations
 
-import traceback
+import re
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlsplit
 
 from application_blueprint import NormalizedField
 
@@ -32,6 +33,22 @@ _PROXY_HINT = (
 )
 
 
+def _sanitize_text(value: Any, *, fallback: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return fallback
+    text = re.sub(r"https?://\S+", "[url]", text, flags=re.I)
+    text = re.sub(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", "[email]", text)
+    text = re.sub(r"(?<!\w)\+?\d[\d .()-]{7,}\d(?!\w)", "[phone]", text)
+    text = re.sub(
+        r"(?i)\b(token|secret|password|authorization|api[_-]?key)\b\s*[:=]\s*\S+",
+        r"\1=[redacted]",
+        text,
+    )
+    text = re.sub(r"(?i)\b[^\s/\\]+\.(pdf|docx?|rtf)\b", "[file]", text)
+    return text[:300]
+
+
 def error_hint(*, phase: str = "", message: str = "") -> Optional[str]:
     lowered = (message or "").lower()
     if any(token in lowered for token in (
@@ -50,23 +67,24 @@ def error_hint(*, phase: str = "", message: str = "") -> Optional[str]:
 
 
 def format_run_error(exc: BaseException, *, checkpoint: str = "") -> Dict[str, Any]:
-    """Normalize any exception into a console-friendly error payload."""
+    """Normalize exceptions without copying candidate/route payloads."""
     from apply_agent.models import ApplyAgentError
 
     if isinstance(exc, ApplyAgentError):
         detail = exc.safe_detail()
-        message = str(detail.get("message") or exc).strip()
         phase = str(detail.get("phase") or checkpoint or "execute")
+        message = _sanitize_text(detail.get("message") or exc, fallback=f"{phase}_failed")
         return {
-            **detail,
-            "message": message or "Apply agent run failed",
+            "message": message,
             "phase": phase,
             "checkpoint": checkpoint or phase,
+            "exception_class": detail.get("exception_class") or exc.__class__.__name__,
+            "target_url": None,
             "hint": error_hint(phase=phase, message=message),
         }
 
-    message = str(exc).strip() or exc.__class__.__name__
     phase = checkpoint or "execute"
+    message = _sanitize_text(exc, fallback=f"{phase}_failed")
     return {
         "phase": phase,
         "checkpoint": phase,
@@ -74,7 +92,6 @@ def format_run_error(exc: BaseException, *, checkpoint: str = "") -> Dict[str, A
         "message": message,
         "target_url": None,
         "hint": error_hint(phase=phase, message=message),
-        "traceback": traceback.format_exc()[-1200:],
     }
 
 
@@ -90,20 +107,20 @@ def transport_error_report(
 ) -> Dict[str, Any]:
     """Build a minimal ExecutionReport when the HTTP transport fails before a pipeline result exists."""
     error: Dict[str, Any] = {
-        "message": message,
+        "message": _sanitize_text(message, fallback=f"{phase}_failed"),
         "phase": phase,
         "checkpoint": phase,
         "exception_class": exception_class or None,
         "http_status": http_status,
         "timed_out": timed_out,
-        "hint": error_hint(phase=phase, message=message),
+        "hint": error_hint(phase=phase, message=_sanitize_text(message, fallback="")),
     }
     if extra:
         error.update({k: v for k, v in extra.items() if v is not None})
     return {
         "stage_reached": stage,
         "status": "error",
-        "reason": message,
+        "reason": _sanitize_text(message, fallback=f"{phase}_failed"),
         "verdict": None,
         "missing_fields": [],
         "error": error,
@@ -112,7 +129,7 @@ def transport_error_report(
             "timeline": [{
                 "stage": stage,
                 "status": "error",
-                "detail": message,
+                "detail": _sanitize_text(message, fallback=f"{phase}_failed"),
             }],
         },
         "duration_ms": None,
@@ -123,10 +140,17 @@ def transport_error_report(
 def _preview(value: Any, *, is_file: bool = False) -> str:
     if is_file:
         return "(file attachment)"
-    text = str(value or "")
-    if len(text) > 100:
-        return text[:97] + "..."
-    return text
+    return "[redacted]" if value not in (None, "") else ""
+
+
+def _safe_url(value: Any) -> str:
+    try:
+        parsed = urlsplit(str(value or ""))
+    except ValueError:
+        return ""
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        return ""
+    return f"{parsed.scheme}://{parsed.hostname}"
 
 
 def _field_row(field: NormalizedField) -> Dict[str, Any]:
@@ -145,7 +169,7 @@ def data_availability(profile: Dict[str, Any], app_doc: Dict[str, Any]) -> Dict[
     contact = profile.get("contact") or {}
     return {
         "tailored_cv_file": bool(app_doc.get("tailored_cv_file_b64")),
-        "tailored_cv_filename": app_doc.get("tailored_cv_filename"),
+        "tailored_cv_filename": bool(app_doc.get("tailored_cv_filename")),
         "profile_cv_text": bool(profile.get("cv_text")),
         "profile_cv_original": bool(profile.get("cv_original_b64")),
         "cover_letter": bool(app_doc.get("cover_letter") or app_doc.get("tailored_cover_letter")),
@@ -208,7 +232,14 @@ def build_debug_report(
         })
 
     raw = getattr(evidence, "raw", None) or {}
-    step_log = raw.get("step_log") or []
+    step_log = [
+        {
+            "action": str(step.get("action") or "")[:64],
+            "status": str(step.get("status") or "")[:32],
+        }
+        for step in (raw.get("step_log") or [])[:100]
+        if isinstance(step, dict)
+    ]
 
     timeline = _build_timeline(
         blueprint=blueprint,
@@ -222,7 +253,7 @@ def build_debug_report(
     )
 
     return {
-        "application_url": application_url or raw.get("application_url") or "",
+        "application_url": _safe_url(application_url or raw.get("application_url") or ""),
         "job_id": job.get("job_id"),
         "ats_provider": job.get("ats_provider") or job.get("provider"),
         "data_availability": data_availability(profile, app_doc),
@@ -250,14 +281,14 @@ def build_debug_report(
         "execution": {
             "submit_performed": getattr(evidence, "submit_performed", None),
             "blocked_reason": getattr(evidence, "blocked_reason", None),
-            "confirmation_text": getattr(evidence, "confirmation_text", None),
-            "validation_errors": getattr(evidence, "validation_errors", None) or [],
-            "final_url": getattr(evidence, "final_url", None),
+            "confirmation_present": bool(getattr(evidence, "confirmation_text", None)),
+            "validation_error_count": len(getattr(evidence, "validation_errors", None) or []),
+            "final_url": _safe_url(getattr(evidence, "final_url", None)),
             "url_changed": getattr(evidence, "url_changed", None),
             "network_ok": getattr(evidence, "network_ok", None),
             "step_log": step_log,
-            "unmatched_steps": raw.get("unmatched_steps") or [],
-            "step_errors": raw.get("step_errors") or [],
+            "unmatched_step_count": len(raw.get("unmatched_steps") or []),
+            "step_error_count": len(raw.get("step_errors") or []),
             "submit_detail": raw.get("submit") or raw.get("submit_error"),
         } if evidence is not None else None,
     }
@@ -362,13 +393,13 @@ def _build_timeline(
                 entries.append(_timeline_entry(
                     "verify",
                     status="ok",
-                    detail=f"Confirmation: {evidence.confirmation_text}",
+                    detail="Provider confirmation detected",
                 ))
             elif evidence.validation_errors:
                 entries.append(_timeline_entry(
                     "verify",
                     status="error",
-                    detail="; ".join(evidence.validation_errors[:3]),
+                    detail=f"{len(evidence.validation_errors)} validation error(s)",
                 ))
 
     return entries

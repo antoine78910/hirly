@@ -9,6 +9,8 @@ Idempotency for the actual ATS submit still lives in auto_apply_attempts.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 import os
 from datetime import datetime, timezone
@@ -65,7 +67,11 @@ def max_concurrent() -> int:
 
 def queue_providers() -> Set[str]:
     raw = (os.environ.get("AUTO_APPLY_QUEUE_PROVIDERS") or ",".join(DEFAULT_PROVIDERS)).strip()
-    return {part.strip().lower() for part in raw.split(",") if part.strip()}
+    requested = {part.strip().lower() for part in raw.split(",") if part.strip()}
+    # Environment configuration is a narrowing control, never an authority
+    # source.  A typo, stale deploy variable, or newly registered driver must
+    # not widen the reviewed static capability catalogue.
+    return requested.intersection(DEFAULT_PROVIDERS)
 
 
 def normalize_provider(value: Any) -> str:
@@ -108,18 +114,120 @@ def is_already_submitted(app_doc: Dict[str, Any]) -> bool:
 
 
 def _needs_document_review(app_doc: Dict[str, Any], user_doc: Optional[Dict[str, Any]]) -> bool:
-    # Production auto-apply defaults to submit without the Review-tab gate.
-    # Flip AUTO_APPLY_REQUIRE_DOCUMENT_REVIEW=true to honor require_review_before_send.
-    if not _env_bool("AUTO_APPLY_REQUIRE_DOCUMENT_REVIEW", False):
-        return False
-    if not user_doc:
-        return False
-    if not bool(user_doc.get("require_review_before_send", True)):
-        return False
-    review = app_doc.get("document_review_status")
-    if review is None:
-        return False
-    return review != "approved"
+    # Candidate review is fail-closed. Operators may narrow further, but a
+    # missing variable must never silently authorize an irreversible submit.
+    if not _env_bool("AUTO_APPLY_REQUIRE_DOCUMENT_REVIEW", True):
+        return True
+    # Submission needs an explicit, persisted approval. Missing user settings
+    # or document state are not authorization.
+    return app_doc.get("document_review_status") != "approved"
+
+
+_ROUTE_FIELDS = (
+    "provider", "tenant", "route_id", "transport", "schema_version",
+    "country", "policy_version",
+)
+
+
+def _parse_expiry(value: Any) -> Optional[datetime]:
+    try:
+        parsed = datetime.fromisoformat(str(value or "").replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def answer_set_digest(answers: Any) -> str:
+    """Hash exact resolved answers without persisting or logging their PII."""
+    rows = []
+    for answer in answers or []:
+        rows.append({
+            "field_key": str(getattr(answer, "field_key", "")),
+            "source": str(getattr(answer, "source", "")),
+            "value": getattr(answer, "value", None),
+            "is_file": bool(getattr(answer, "is_file", False)),
+        })
+    encoded = json.dumps(rows, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def submission_policy_failure(
+    app_doc: Dict[str, Any],
+    job: Optional[Dict[str, Any]],
+    *,
+    user_id: str = "",
+    blueprint_signature: Optional[str] = None,
+    resolved_answer_digest: Optional[str] = None,
+    now: Optional[datetime] = None,
+) -> Optional[str]:
+    """Return a stable fail-closed reason for the exact route + mandate gate.
+
+    The application document is the runtime handoff boundary.  It must carry
+    three immutable snapshots: ``submission_route``, ``submission_policy``,
+    and ``candidate_mandate``.  No environment variable can synthesize them.
+    """
+    now = now or datetime.now(timezone.utc)
+    provider = normalize_provider(
+        (job or {}).get("ats_provider")
+        or (job or {}).get("provider")
+        or app_doc.get("ats_provider")
+        or app_doc.get("submission_provider")
+    )
+    capability = APPLICATION_CAPABILITIES.get(provider) or {}
+    if not (
+        capability.get("driverRegistered")
+        and capability.get("queuePermitted")
+        and capability.get("noSubmitVerified")
+    ):
+        return "static_capability_denied"
+
+    route = app_doc.get("submission_route")
+    policy = app_doc.get("submission_policy")
+    mandate = app_doc.get("candidate_mandate")
+    if not isinstance(route, dict):
+        return "submission_route_missing"
+    if not isinstance(policy, dict):
+        return "submission_policy_missing"
+    if not isinstance(mandate, dict):
+        return "candidate_mandate_missing"
+    if any(not str(route.get(key) or "").strip() for key in _ROUTE_FIELDS):
+        return "submission_route_incomplete"
+    if normalize_provider(route.get("provider")) != provider:
+        return "submission_route_provider_mismatch"
+    if policy.get("enabled") is not True or policy.get("revoked") is True:
+        return "submission_policy_inactive"
+    if any(str(policy.get(key) or "") != str(route.get(key) or "") for key in _ROUTE_FIELDS):
+        return "submission_policy_route_mismatch"
+    policy_expiry = _parse_expiry(policy.get("expires_at"))
+    if policy_expiry is None or policy_expiry <= now:
+        return "submission_policy_expired"
+
+    if mandate.get("revoked") is True or mandate.get("active") is not True:
+        return "candidate_mandate_inactive"
+    mandate_expiry = _parse_expiry(mandate.get("expires_at"))
+    if mandate_expiry is None or mandate_expiry <= now:
+        return "candidate_mandate_expired"
+    if str(mandate.get("user_id") or "") != str(user_id or app_doc.get("user_id") or ""):
+        return "candidate_mandate_user_mismatch"
+    if str(mandate.get("job_id") or "") != str(app_doc.get("job_id") or (job or {}).get("job_id") or ""):
+        return "candidate_mandate_job_mismatch"
+    if str(mandate.get("scope") or "") != "submit_application":
+        return "candidate_mandate_scope_mismatch"
+    if str(mandate.get("policy_version") or "") != str(route.get("policy_version") or ""):
+        return "candidate_mandate_policy_mismatch"
+    if not str(mandate.get("consent_version") or "").strip():
+        return "candidate_mandate_consent_missing"
+    if not str(mandate.get("blueprint_signature") or "").strip():
+        return "candidate_mandate_blueprint_missing"
+    if not str(mandate.get("answer_set_digest") or "").strip():
+        return "candidate_mandate_answers_missing"
+    if blueprint_signature is not None and str(mandate.get("blueprint_signature")) != blueprint_signature:
+        return "candidate_mandate_blueprint_mismatch"
+    if resolved_answer_digest is not None and str(mandate.get("answer_set_digest")) != resolved_answer_digest:
+        return "candidate_mandate_answers_mismatch"
+    return None
 
 
 async def enqueue_application(
@@ -138,6 +246,20 @@ async def enqueue_application(
 
     provider = provider_for_application(app_doc, job)
     if not provider:
+        return None
+
+    policy_failure = submission_policy_failure(
+        app_doc,
+        job,
+        user_id=str(app_doc.get("user_id") or ""),
+    )
+    if policy_failure:
+        logger.warning(
+            "auto_apply_enqueue_denied application_id=%s provider=%s reason=%s",
+            app_doc.get("application_id"),
+            provider,
+            policy_failure,
+        )
         return None
 
     current = app_doc.get("auto_apply_queue_status")
@@ -185,6 +307,26 @@ async def release_after_document_approval(db, app_doc: Dict[str, Any]) -> Option
         return await enqueue_application(db, app_doc, job)
     if is_already_submitted(app_doc):
         return None
+    job = await db.jobs.find_one({"job_id": app_doc.get("job_id")}, {"_id": 0})
+    policy_failure = submission_policy_failure(
+        app_doc,
+        job,
+        user_id=str(app_doc.get("user_id") or ""),
+    )
+    if policy_failure:
+        update = {
+            "auto_apply_queue_status": "failed",
+            "auto_apply_queue_reason": policy_failure,
+            "auto_apply_finished_at": _now(),
+            "submission_status": "blocked",
+            "submission_error": policy_failure,
+            "updated_at": _now(),
+        }
+        await db.applications.update_one(
+            {"application_id": app_doc["application_id"]},
+            {"$set": update},
+        )
+        return {"application_id": app_doc.get("application_id"), **update}
     now = _now()
     update = {
         "auto_apply_queue_status": "queued",
@@ -258,14 +400,29 @@ def map_execution_to_queue(report: Dict[str, Any]) -> Dict[str, Any]:
 
     if status == "already_in_flight":
         return {
-            "auto_apply_queue_status": "queued",
-            "auto_apply_queue_reason": "retry_after_in_flight",
-            "auto_apply_started_at": None,
+            "auto_apply_queue_status": "failed",
+            "auto_apply_queue_reason": "reconciliation_required",
+            "auto_apply_finished_at": now,
+            "submission_status": "blocked",
+            "manual_status": "reconciliation_required",
+            "submission_error": "reconciliation_required",
         }
 
-    if status in {"unsupported", "submit_failed", "verification_failed", "error", "prepared"}:
+    if status == "reconciliation_required":
+        return {
+            "auto_apply_queue_status": "failed",
+            "auto_apply_queue_reason": reason or "reconciliation_required",
+            "auto_apply_finished_at": now,
+            "submission_status": "blocked",
+            "manual_status": "reconciliation_required",
+            "submission_error": (reason or "reconciliation_required")[:500],
+        }
+
+    if status in {"unsupported", "submit_failed", "verification_failed", "error", "prepared", "policy_denied"}:
         submission = "blocked_captcha" if "captcha" in reason.lower() else "failed"
         if status == "unsupported" and "login" in reason.lower():
+            submission = "blocked"
+        if status == "policy_denied":
             submission = "blocked"
         return {
             "auto_apply_queue_status": "failed" if status != "prepared" else "skipped",
@@ -368,6 +525,28 @@ async def _claim_next(db) -> Optional[Dict[str, Any]]:
         )
         if not row:
             return None
+        policy_failure = submission_policy_failure(
+            row,
+            None,
+            user_id=str(row.get("user_id") or ""),
+        )
+        if policy_failure:
+            now = _now()
+            await db.applications.update_one(
+                {
+                    "application_id": row["application_id"],
+                    "auto_apply_queue_status": "queued",
+                },
+                {"$set": {
+                    "auto_apply_queue_status": "failed",
+                    "auto_apply_queue_reason": policy_failure,
+                    "auto_apply_finished_at": now,
+                    "submission_status": "blocked",
+                    "submission_error": policy_failure,
+                    "updated_at": now,
+                }},
+            )
+            return None
         now = _now()
         result = await db.applications.update_one(
             {
@@ -437,6 +616,19 @@ async def process_application(db, app_doc: Dict[str, Any], *, headless: bool = T
             "auto_apply_queue_status": "awaiting_review",
             "auto_apply_queue_reason": "awaiting_document_review",
             "auto_apply_started_at": None,
+            "updated_at": _now(),
+        }
+        await db.applications.update_one({"application_id": application_id}, {"$set": update})
+        return update
+
+    policy_failure = submission_policy_failure(latest, job, user_id=str(user_id or ""))
+    if policy_failure:
+        update = {
+            "auto_apply_queue_status": "failed",
+            "auto_apply_queue_reason": policy_failure,
+            "auto_apply_finished_at": _now(),
+            "submission_status": "blocked",
+            "submission_error": policy_failure,
             "updated_at": _now(),
         }
         await db.applications.update_one({"application_id": application_id}, {"$set": update})

@@ -357,10 +357,14 @@ async def run_fallback_supervisor(
     from apply_agent.browser import screenshot_b64
 
     shot = ""
-    try:
-        shot = await screenshot_b64(page) or ""
-    except Exception:
-        shot = ""
+    capture = os.environ.get(
+        "AUTO_APPLY_CAPTURE_SCREENSHOTS", "false",
+    ).strip().lower() in ("1", "true", "yes", "on")
+    if capture:
+        try:
+            shot = await screenshot_b64(page) or ""
+        except Exception:
+            shot = ""
     if evidence is not None and shot and not evidence.screenshot_b64:
         evidence.screenshot_b64 = shot
 

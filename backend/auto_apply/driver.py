@@ -16,7 +16,6 @@ import logging
 import os
 import random
 import time
-import asyncio
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
@@ -38,7 +37,7 @@ from apply_agent.browser import (
 from apply_agent.guardrails import canonical
 from apply_agent.human_browser import (
     human_check, human_click, human_mouse_wander, human_pause, human_scroll,
-    human_select, human_type, human_upload, try_pass_datadome_slider,
+    human_select, human_type, human_upload,
 )
 from apply_agent.models import ApplyAgentError
 from apply_agent.recovery import recover_stuck_page
@@ -57,6 +56,19 @@ def driver_submit_deadline_s() -> float:
     if raw and raw.replace(".", "", 1).isdigit():
         return max(60.0, float(raw))
     return 180.0
+
+
+def screenshots_enabled() -> bool:
+    """Screenshots require an explicitly approved isolated PII evidence store."""
+    return os.environ.get("AUTO_APPLY_CAPTURE_SCREENSHOTS", "false").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+
+
+async def _maybe_screenshot(page: Any) -> Optional[str]:
+    if not screenshots_enabled():
+        return None
+    return await screenshot_b64(page)
 
 
 async def _goto_apply_page(page: Any, nav_url: str):
@@ -151,7 +163,7 @@ class BrowserApplyDriver(ApplyDriver):
             or is_proxy_connect_failure_text(body_preview)
         ):
             return
-        evidence.screenshot_b64 = await screenshot_b64(page)
+        evidence.screenshot_b64 = await _maybe_screenshot(page)
         detail = (
             f"Proxy could not reach target host "
             f"(HTTP {http_status or 'page'})."
@@ -171,18 +183,6 @@ class BrowserApplyDriver(ApplyDriver):
             exception_class="ProxyConnectFailure",
         )
 
-    async def _wait_for_manual_captcha_clear(self, page: Any, *, timeout_ms: int = 180_000) -> bool:
-        """Headed runs: give the operator time to solve DataDome in the real Chrome window."""
-        deadline = time.monotonic() + (timeout_ms / 1000.0)
-        while time.monotonic() < deadline:
-            if not captcha_active(await detect_captcha(page)):
-                return True
-            try:
-                await page.wait_for_timeout(2000)
-            except Exception:
-                await asyncio.sleep(2)
-        return not captcha_active(await detect_captcha(page))
-
     async def _abort_if_blocked(
         self,
         page: Any,
@@ -190,12 +190,10 @@ class BrowserApplyDriver(ApplyDriver):
         *,
         http_status: Optional[int] = None,
         stage: str = "bot_wall",
-        allow_manual_captcha: bool = False,
     ) -> bool:
         """Return True when the run should stop (bot wall / login / captcha)."""
         if await detect_offer_expired(page):
             evidence.blocked_reason = "offer_expired"
-            evidence.screenshot_b64 = await screenshot_b64(page)
             await self._log_step(
                 evidence,
                 action="offer_expired",
@@ -206,68 +204,15 @@ class BrowserApplyDriver(ApplyDriver):
             return True
         if await detect_login_wall(page):
             evidence.blocked_reason = "login_wall"
-            evidence.screenshot_b64 = await screenshot_b64(page)
             await self._log_step(evidence, action="login_wall", locators=["body"], status="blocked")
             return True
 
-        # DataDome shows FR "Accès temporairement restreint" + a slider. That
-        # copy used to trip bot_wall and close the browser before we dragged.
         captcha_dbg = await detect_captcha(page)
         wall_hit = await detect_bot_wall(page, http_status=http_status)
         if captcha_active(captcha_dbg) or wall_hit:
-            wait_ms = 15000 if captcha_active(captcha_dbg) else 6000
-            await self._log_step(
-                evidence,
-                action="datadome_slider_attempt",
-                locators=["iframe[src*=captcha-delivery]"],
-                status="retry",
-                value_preview=f"wait_frame_ms={wait_ms}",
-            )
-            try:
-                passed = await try_pass_datadome_slider(
-                    page, attempts=4, wait_for_frame_ms=wait_ms,
-                )
-            except Exception as exc:
-                passed = False
-                await self._log_step(
-                    evidence,
-                    action="datadome_slider_attempt",
-                    locators=["body"],
-                    status="error",
-                    error=str(exc)[:200],
-                )
-            # Re-check from DOM only — navigation may still be HTTP 403.
-            captcha_dbg = await detect_captcha(page)
-            wall_hit = await detect_bot_wall(page, http_status=None)
-            if passed or (not captcha_active(captcha_dbg) and not wall_hit):
-                await self._log_step(
-                    evidence,
-                    action="captcha",
-                    locators=["body"],
-                    status="ok",
-                    value_preview="datadome_slider_passed",
-                )
-                return False
-            # Only wait for a human when the slider/captcha UI is still up —
-            # a hard bot wall without challenge must abort immediately.
-            if allow_manual_captcha and captcha_active(captcha_dbg):
-                await self._log_step(
-                    evidence,
-                    action="captcha_wait_manual",
-                    locators=["body"],
-                    status="retry",
-                    value_preview="Solve the captcha in the Chrome window (up to 3 min)",
-                )
-                if await self._wait_for_manual_captcha_clear(page, timeout_ms=180_000):
-                    await self._log_step(
-                        evidence, action="captcha", locators=["body"], status="ok",
-                        value_preview="manual_solve",
-                    )
-                    return False
             evidence.blocked_reason = (
                 "captcha" if captcha_active(captcha_dbg) else "bot_protection"
             )
-            evidence.screenshot_b64 = await screenshot_b64(page)
             await self._log_step(
                 evidence,
                 action="captcha" if evidence.blocked_reason == "captcha" else stage,
@@ -385,8 +330,6 @@ class BrowserApplyDriver(ApplyDriver):
             warm = warm_session_configured()
             # Blank/slow oneclick is often a bad remote session — retry once.
             retry_blockers = {
-                "bot_protection",
-                "captcha",
                 "oneclick_form_not_loaded",
                 "oneclick_nav_timeout",
             }
@@ -416,7 +359,7 @@ class BrowserApplyDriver(ApplyDriver):
                     retry_label = "new_proxy_sid"
                 await self._log_step(
                     evidence,
-                    action="bot_wall_retry",
+                    action="route_session_retry",
                     locators=[nav_url],
                     status="retry",
                     error=(
@@ -425,7 +368,7 @@ class BrowserApplyDriver(ApplyDriver):
                     ),
                 )
                 logger.warning(
-                    "apply_bot_wall_retry provider=%s attempt=%s/%s next=%s reason=%s",
+                    "apply_route_session_retry provider=%s attempt=%s/%s next=%s reason=%s",
                     self.provider,
                     attempt,
                     max_attempts,
@@ -532,19 +475,7 @@ class BrowserApplyDriver(ApplyDriver):
                     evidence,
                     http_status=http_status,
                     stage="bot_wall",
-                    # Bright Data solves captchas server-side — never block 3 min for a human.
-                    allow_manual_captcha=(not ctx.headless) and not prefer_remote,
                 ):
-                    # Still capture a recovery screenshot for debugging popups / walls.
-                    try:
-                        recovery = await recover_stuck_page(page, reason="bot_wall", use_vision=False)
-                        evidence.raw["recovery_on_abort"] = {
-                            k: recovery.get(k) for k in ("actions", "stuck")
-                        }
-                        if recovery.get("screenshot_b64"):
-                            evidence.screenshot_b64 = recovery["screenshot_b64"]
-                    except Exception:
-                        pass
                     return evidence
 
                 await self.after_navigation(page, evidence)
@@ -553,7 +484,7 @@ class BrowserApplyDriver(ApplyDriver):
                 if evidence.blocked_reason:
                     if not evidence.screenshot_b64:
                         try:
-                            evidence.screenshot_b64 = await screenshot_b64(page)
+                            evidence.screenshot_b64 = await _maybe_screenshot(page)
                         except Exception:
                             pass
                     return evidence
@@ -587,8 +518,6 @@ class BrowserApplyDriver(ApplyDriver):
                     page,
                     evidence,
                     stage="bot_wall_after_reveal",
-                    # Bright Data solves captchas server-side — never block 3 min for a human.
-                    allow_manual_captcha=(not ctx.headless) and not prefer_remote,
                 ):
                     return evidence
 
@@ -605,13 +534,35 @@ class BrowserApplyDriver(ApplyDriver):
                         evidence.raw.setdefault("recovery", []).append(
                             {k: recovery.get(k) for k in ("reason", "actions", "notes", "stuck")}
                         )
-                        if recovery.get("screenshot_b64"):
+                        if screenshots_enabled() and recovery.get("screenshot_b64"):
                             evidence.screenshot_b64 = recovery["screenshot_b64"]
                         if not remote_session:
                             await human_scroll(page, direction="up")
                             await human_mouse_wander(page)
                         await human_pause(page, 300, 700)
                         await dismiss_cookie_banner(page)
+                        # Recovery/navigation can expose a late CAPTCHA or login
+                        # wall.  The final blocker and authorization checks must
+                        # be adjacent to the irreversible click.
+                        if await self._abort_if_blocked(
+                            page,
+                            evidence,
+                            stage="blocked_immediately_before_submit",
+                        ):
+                            return evidence
+                        pre_submit_check = ctx.documents.get("_pre_submit_check")
+                        if callable(pre_submit_check):
+                            policy_failure = await pre_submit_check()
+                            if policy_failure:
+                                evidence.blocked_reason = f"policy:{policy_failure}"
+                                await self._log_step(
+                                    evidence,
+                                    action="submission_policy",
+                                    locators=[],
+                                    status="blocked",
+                                    error=str(policy_failure)[:100],
+                                )
+                                return evidence
                         await self._click_submit(page, evidence)
                         continue
                     try:
@@ -632,7 +583,7 @@ class BrowserApplyDriver(ApplyDriver):
                                 "stuck": recovery.get("stuck"),
                             }
                         )
-                        if recovery.get("screenshot_b64"):
+                        if screenshots_enabled() and recovery.get("screenshot_b64"):
                             evidence.screenshot_b64 = recovery["screenshot_b64"]
                         try:
                             await self._apply_step(page, step, ctx.documents, evidence)
@@ -656,8 +607,8 @@ class BrowserApplyDriver(ApplyDriver):
                             await human_mouse_wander(page)
 
                 await self._gather_evidence(page, evidence, starting_url)
-                # Retry once when the application form is clearly still open
-                # (false "Envoyer gone" / consent toggle / dead click).
+                # A second click after an ambiguous first response can create a
+                # duplicate ATS-side application. Reconciliation must resolve it.
                 form_still_open = bool((evidence.raw or {}).get("form_still_open"))
                 submit_looks_done = bool(evidence.confirmation_text) or (
                     evidence.submit_control_gone is True and not form_still_open
@@ -665,33 +616,14 @@ class BrowserApplyDriver(ApplyDriver):
                 if evidence.submit_performed and not submit_looks_done and (
                     form_still_open or evidence.validation_errors
                 ):
-                    stuck_check = await recover_stuck_page(
-                        page,
-                        reason="submit_validation",
-                        use_vision=not remote_session,
+                    evidence.raw["reconciliation_required"] = True
+                    await self._log_step(
+                        evidence,
+                        action="submit_ambiguous",
+                        locators=[],
+                        status="blocked",
+                        error="reconciliation_required",
                     )
-                    evidence.raw.setdefault("recovery", []).append(
-                        {k: stuck_check.get(k) for k in ("reason", "actions", "notes", "stuck", "stuck_after")}
-                    )
-                    if stuck_check.get("screenshot_b64"):
-                        evidence.screenshot_b64 = stuck_check["screenshot_b64"]
-                    empty = (stuck_check.get("stuck_after") or stuck_check.get("stuck") or {}).get(
-                        "required_empty"
-                    ) or []
-                    if empty:
-                        evidence.raw["required_empty_after_submit"] = empty[:12]
-                        await self._log_step(
-                            evidence,
-                            action="recovery_refill_needed",
-                            locators=empty[:5],
-                            status="blocked",
-                            error="required_fields_empty",
-                        )
-                    else:
-                        await self._click_submit(page, evidence)
-                        await self._gather_evidence(page, evidence, starting_url)
-                if not evidence.screenshot_b64:
-                    evidence.screenshot_b64 = await screenshot_b64(page)
         except ApplyAgentError:
             raise
         except Exception as exc:
@@ -720,17 +652,16 @@ class BrowserApplyDriver(ApplyDriver):
                         status: str, value_preview: str = "", error: str = "") -> None:
         evidence.raw.setdefault("step_log", []).append({
             "action": action,
-            "locator": locators[0] if locators else "",
+            "locator_present": bool(locators),
             "status": status,
-            "value_preview": value_preview,
-            "error": error[:200] if error else "",
+            "error": "operation_failed" if error else "",
         })
 
     async def _apply_step(self, page: Any, step, documents: Dict[str, Any], evidence: SubmissionEvidence) -> None:
-        preview = "(file)" if step.action == "upload" else str(step.value or "")[:100]
+        preview = "(file)" if step.action == "upload" else "[redacted]"
         loc = await self._first_locator(page, step.locators)
         if loc is None:
-            evidence.raw.setdefault("unmatched_steps", []).append(step.locators[:1])
+            evidence.raw.setdefault("unmatched_steps", []).append(step.action)
             await self._log_step(evidence, action=step.action, locators=step.locators,
                                  status="not_found", value_preview=preview)
             return
@@ -740,7 +671,7 @@ class BrowserApplyDriver(ApplyDriver):
                 if path:
                     await human_upload(loc, page, path)
                     await self._log_step(evidence, action="upload", locators=step.locators,
-                                         status="ok", value_preview=path.split("/")[-1] if path else "(file)")
+                                         status="ok", value_preview="(file)")
                 else:
                     await self._log_step(evidence, action="upload", locators=step.locators,
                                          status="error", value_preview=preview, error="file_path_missing")
@@ -758,7 +689,7 @@ class BrowserApplyDriver(ApplyDriver):
                 await self._log_step(evidence, action="fill", locators=step.locators,
                                      status="ok", value_preview=preview)
         except Exception as exc:
-            evidence.raw.setdefault("step_errors", []).append(f"{exc.__class__.__name__}:{step.locators[:1]}")
+            evidence.raw.setdefault("step_errors", []).append(exc.__class__.__name__)
             await self._log_step(evidence, action=step.action, locators=step.locators,
                                  status="error", value_preview=preview, error=str(exc))
 
@@ -778,15 +709,18 @@ class BrowserApplyDriver(ApplyDriver):
             evidence.submit_performed = True
             await self._log_step(evidence, action="submit", locators=[_SUBMIT_SELECTOR], status="ok")
         except Exception:
-            try:
-                await loc.click(timeout=5000, force=True)
-                evidence.submit_performed = True
-                await self._log_step(evidence, action="submit", locators=[_SUBMIT_SELECTOR],
-                                     status="ok", error="forced_click")
-            except Exception as exc:
-                evidence.raw["submit_error"] = str(exc)[:200]
-                await self._log_step(evidence, action="submit", locators=[_SUBMIT_SELECTOR],
-                                     status="error", error=str(exc))
+            # The click may have reached the browser before the transport
+            # raised. Never issue a second click; reconcile the ATS outcome.
+            evidence.submit_performed = True
+            evidence.raw["submit_error"] = "click_outcome_ambiguous"
+            evidence.raw["reconciliation_required"] = True
+            await self._log_step(
+                evidence,
+                action="submit",
+                locators=[_SUBMIT_SELECTOR],
+                status="blocked",
+                error="reconciliation_required",
+            )
 
     async def _application_form_still_open(self, page: Any, body_text: str = "") -> bool:
         """True when the apply form is still on screen (submit did not leave)."""
@@ -856,7 +790,7 @@ class BrowserApplyDriver(ApplyDriver):
         form_open = bool(evidence.raw.get("form_still_open"))
         if evidence.confirmation_text or (evidence.submit_control_gone and not form_open):
             evidence.validation_errors = []
-        evidence.raw["post_submit_body_preview"] = (raw_text or "")[:500]
+        evidence.raw["post_submit_body_present"] = bool(raw_text)
 
 
 class _Registry:

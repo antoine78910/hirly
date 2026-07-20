@@ -222,6 +222,22 @@ def test_submit_executes_each_step_by_binding(monkeypatch):
     assert ev.confirmation_text == "thank you for applying"
 
 
+def test_ambiguous_submit_click_is_never_clicked_twice(monkeypatch):
+    page = _FakePage(known_selectors={driver_mod._SUBMIT_SELECTOR})
+    calls = {"count": 0}
+
+    async def ambiguous_click(locator, page):
+        calls["count"] += 1
+        raise RuntimeError("transport closed after click")
+
+    monkeypatch.setattr(driver_mod, "human_click", ambiguous_click)
+    evidence = SubmissionEvidence(raw={})
+    asyncio.run(_StubDriver()._click_submit(page, evidence))
+    assert calls["count"] == 1
+    assert evidence.submit_performed is True
+    assert evidence.raw["reconciliation_required"] is True
+
+
 def test_login_wall_aborts_with_blocked_reason(monkeypatch):
     page = _FakePage(known_selectors=set())
     _install_fake_page(monkeypatch, page)
@@ -251,10 +267,12 @@ def test_bot_wall_aborts_with_blocked_reason(monkeypatch):
 
     async def yes_bot(p, http_status=None):
         return True
+    slider_calls = {"count": 0}
     async def no_slider(p, attempts=4, wait_for_frame_ms=0):
+        slider_calls["count"] += 1
         return False
     monkeypatch.setattr(driver_mod, "detect_bot_wall", yes_bot)
-    monkeypatch.setattr(driver_mod, "try_pass_datadome_slider", no_slider)
+    monkeypatch.setattr(driver_mod, "try_pass_datadome_slider", no_slider, raising=False)
 
     plan = ApplicationPlan(steps=[PlanStep(action="submit", locators=[])])
     ctx = SubmissionContext(
@@ -266,6 +284,7 @@ def test_bot_wall_aborts_with_blocked_reason(monkeypatch):
     )
     ev = asyncio.run(_StubDriver().submit(ctx))
     assert ev.blocked_reason == "bot_protection" and ev.submit_performed is False
+    assert slider_calls["count"] == 0
 
 
 def _install_proxy_retry_fakes(monkeypatch):
@@ -447,6 +466,31 @@ def test_proxy_572_then_direct_fallback_succeeds(monkeypatch):
     assert pages[-1].filled[-1] == ('[name="email"]', "a@b.co")
 
 
+def test_policy_is_rechecked_immediately_before_submit(monkeypatch):
+    page = _FakePage(known_selectors={'button[type="submit"]'})
+    _install_fake_page(monkeypatch, page)
+    _install_proxy_retry_fakes(monkeypatch)
+    calls = {"count": 0}
+
+    async def deny_submit():
+        calls["count"] += 1
+        return "submission_policy_expired"
+
+    plan = ApplicationPlan(steps=[PlanStep(action="submit", locators=[])])
+    ctx = SubmissionContext(
+        job={"external_url": "https://x/y"},
+        blueprint=None,
+        plan=plan,
+        documents={"_pre_submit_check": deny_submit},
+    )
+
+    ev = asyncio.run(_StubDriver().submit(ctx))
+
+    assert calls["count"] == 1
+    assert ev.submit_performed is False
+    assert ev.blocked_reason == "policy:submission_policy_expired"
+
+
 def test_proxy_retries_stop_when_driver_deadline_exceeded(monkeypatch):
     """Dead exits must not burn minutes — abort after the wall-clock budget."""
     from apply_agent.models import ApplyAgentError
@@ -618,11 +662,13 @@ def test_bot_wall_after_reveal_aborts_before_fills(monkeypatch):
         calls["n"] += 1
         return calls["n"] >= 2
 
+    slider_calls = {"count": 0}
     async def no_slider(p, attempts=4, wait_for_frame_ms=0):
+        slider_calls["count"] += 1
         return False
 
     monkeypatch.setattr(driver_mod, "detect_bot_wall", bot_after_first)
-    monkeypatch.setattr(driver_mod, "try_pass_datadome_slider", no_slider)
+    monkeypatch.setattr(driver_mod, "try_pass_datadome_slider", no_slider, raising=False)
 
     plan = ApplicationPlan(steps=[
         PlanStep(action="fill", locators=['[name="email"]'], value="a@b.co"),
@@ -638,6 +684,7 @@ def test_bot_wall_after_reveal_aborts_before_fills(monkeypatch):
     ev = asyncio.run(_StubDriver().submit(ctx))
     assert ev.blocked_reason == "bot_protection"
     assert ev.submit_performed is False
+    assert slider_calls["count"] == 0
     assert page.filled == []
     assert any(
         step.get("action") == "bot_wall_after_reveal" for step in (ev.raw or {}).get("step_log", [])

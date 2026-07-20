@@ -286,10 +286,20 @@ def resolve(blueprint, candidate_context: Dict[str, Any], profile: Dict[str, Any
 
     for field in blueprint.fields:
         if field.type == FieldType.CONSENT:
-            answers.append(ResolvedAnswer(
-                field_key=field.key, field_type=field.type, value="true",
-                source="auto_apply.consent", is_file=False,
-            ))
+            # Consent is an irreversible candidate choice. It must be supplied
+            # by an exact, versioned candidate mandate rather than inferred by
+            # the resolver from the mere presence of a checkbox.
+            consent_key = f"candidate_mandate.consent.{field.key}"
+            if candidate_context.get(consent_key) is True:
+                answers.append(ResolvedAnswer(
+                    field_key=field.key,
+                    field_type=field.type,
+                    value="true",
+                    source="candidate_mandate.consent",
+                    is_file=False,
+                ))
+            else:
+                unresolved.append(field)
             continue
 
         source_keys = list(_TYPE_SOURCES.get(field.type, []))

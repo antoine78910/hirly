@@ -65,13 +65,21 @@ def test_email_confirm_reuses_primary_email():
     assert unresolved == []
 
 
-def test_consent_checkbox_auto_resolves():
+def test_consent_checkbox_requires_exact_candidate_mandate():
     fields = [
         NormalizedField("consent", FieldType.CONSENT, required=True, supported=True),
     ]
     answers, unresolved = resolve(_bp(fields), {}, profile={})
+    assert answers == []
+    assert unresolved == fields
+
+    answers, unresolved = resolve(
+        _bp(fields),
+        {"candidate_mandate.consent.consent": True},
+        profile={},
+    )
     assert len(answers) == 1
-    assert answers[0].value == "true"
+    assert answers[0].source == "candidate_mandate.consent"
     assert unresolved == []
 
 

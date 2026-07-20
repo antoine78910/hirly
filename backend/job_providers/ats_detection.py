@@ -115,13 +115,24 @@ def _parse_application_capabilities(path: Path) -> Dict[str, Dict[str, bool]]:
 def _load_application_capabilities(
     paths: tuple[Path, ...] = _CAPABILITY_CATALOGUE_PATHS,
 ) -> Dict[str, Dict[str, bool]]:
-    """Load the reviewed source or its verified backend bundle, fail-closed."""
+    """Load reviewed capabilities without reviving stale true flags.
 
-    for path in paths:
-        capabilities = _parse_application_capabilities(path)
-        if capabilities:
-            return capabilities
-    return {}
+    In a repository checkout the canonical file and deploy snapshot must match
+    exactly. A malformed/revoked canonical file therefore fails closed instead
+    of silently falling through to an older permissive snapshot. Packaged
+    backend-only deployments may use the bundled snapshot when the canonical
+    repository path is genuinely absent.
+    """
+    if len(paths) == 1:
+        return _parse_application_capabilities(paths[0])
+    canonical_path, bundled_path = paths
+    bundled = _parse_application_capabilities(bundled_path)
+    if canonical_path.exists():
+        canonical = _parse_application_capabilities(canonical_path)
+        if not canonical or canonical != bundled:
+            return {}
+        return canonical
+    return bundled
 
 
 APPLICATION_CAPABILITIES = _load_application_capabilities()

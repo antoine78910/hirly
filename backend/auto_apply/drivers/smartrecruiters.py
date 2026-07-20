@@ -9,6 +9,7 @@ screening questions when the oneclick configuration API responds.
 from __future__ import annotations
 
 import logging
+import os
 import random
 import re
 from typing import Any, Dict, List, Optional, Tuple
@@ -24,7 +25,7 @@ from application_blueprint import (
     estimate_compatibility_score,
 )
 from application_failure import text_indicates_offer_expired
-from apply_agent.blockers import detect_offer_expired
+from apply_agent.blockers import captcha_active, detect_captcha, detect_offer_expired
 from apply_agent.guardrails import canonical
 from apply_agent.browser import (
     is_proxy_connect_failure_status,
@@ -35,7 +36,6 @@ from apply_agent.human_browser import (
     human_mouse_wander,
     human_pause,
     human_scroll,
-    try_pass_datadome_slider,
 )
 from job_providers.ats_adapters.smartrecruiters import SmartRecruitersAtsAdapter
 
@@ -340,7 +340,6 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
         """Oneclick SPA can take a while after Apply; wait for real inputs."""
         deadline = timeout_ms
         elapsed = 0
-        slider_attempts = 0
         while elapsed < deadline:
             try:
                 body = await page.locator("body").inner_text(timeout=1500)
@@ -373,11 +372,9 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
             except Exception:
                 body_l = ""
             wants_slider = has_dd_frame or ("faites glisser" in body_l) or ("glisser vers la droite" in body_l)
-            if slider_attempts < 4 and wants_slider:
-                slider_attempts += 1
-                logger.info("sr_datadome_slider_attempt n=%s", slider_attempts)
-                await try_pass_datadome_slider(page, attempts=4, wait_for_frame_ms=8000)
-                continue
+            if wants_slider:
+                logger.info("sr_captcha_manual_fallback")
+                return False
             await human_pause(page, 400, 700)
             elapsed += 550
         return False
@@ -433,8 +430,11 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
         })
         try:
             from apply_agent.browser import screenshot_b64
-
-            evidence.screenshot_b64 = await screenshot_b64(page)
+            capture = os.environ.get(
+                "AUTO_APPLY_CAPTURE_SCREENSHOTS", "false",
+            ).strip().lower() in ("1", "true", "yes", "on")
+            if capture:
+                evidence.screenshot_b64 = await screenshot_b64(page)
         except Exception:
             pass
 
@@ -504,6 +504,15 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
             return False
         if await self._wait_for_oneclick_form(page, timeout_ms=timeout_ms):
             return True
+        if captcha_active(await detect_captcha(page)):
+            await self._mark_reveal_blocked(
+                page,
+                evidence,
+                reason="captcha",
+                preview="manual_fallback",
+                error="challenge_detected",
+            )
+            return False
         if "oneclick-ui" not in (page.url or ""):
             return False
         if self._oneclick_url_looks_expired(page.url or ""):

@@ -35,8 +35,17 @@ class _NoFramePage:
 
 
 def test_try_pass_datadome_slider_returns_false_without_iframe():
-    """Missing iframe must not report success (old bug closed the browser early)."""
+    """Compatibility shim always fails closed."""
     assert asyncio.run(try_pass_datadome_slider(_NoFramePage(), wait_for_frame_ms=0)) is False
+
+
+def test_try_pass_datadome_slider_never_interacts_with_challenge_page():
+    class _ChallengePage:
+        @property
+        def frames(self):
+            raise AssertionError("challenge DOM must not be inspected or manipulated")
+
+    assert asyncio.run(try_pass_datadome_slider(_ChallengePage())) is False
 
 
 def test_browser_pace_scale_faster_with_brightdata(monkeypatch):

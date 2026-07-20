@@ -1,4 +1,5 @@
 import asyncio
+import json
 
 import pytest
 
@@ -98,6 +99,7 @@ def _patch_common(monkeypatch):
     })
     monkeypatch.setattr(ex, "write_resume_file", lambda app_doc, tmp, profile=None: "/tmp/cv.pdf")
     monkeypatch.setattr(ex, "write_cover_letter_file", lambda app_doc, tmp: None)
+    monkeypatch.setattr(ex, "submission_policy_failure", lambda *args, **kwargs: None)
 
 
 def _register(monkeypatch, driver):
@@ -162,10 +164,10 @@ def test_verification_failure_is_persisted(monkeypatch):
     _register(monkeypatch, driver)
     db = _FakeDB()
     out = asyncio.run(ex.execute_application(db, JOB, {}, {}, USER))
-    assert out["status"] == "verification_failed"
+    assert out["status"] == "reconciliation_required"
     assert driver.submits == 1
     row = db.auto_apply_attempts.rows[0]
-    assert row["status"] == "verification_failed"
+    assert row["status"] == "reconciliation_required"
     assert row["verdict"] == "verified_failure"
     assert row["submitted_at"] is not None
 
@@ -214,15 +216,15 @@ def test_report_has_standard_debug_fields_on_success(monkeypatch):
     assert out["submission_evidence"]["submit_performed"] is True
 
 
-def test_report_exposes_screenshot_when_present(monkeypatch):
+def test_report_omits_screenshot_when_present(monkeypatch):
     ev = SubmissionEvidence(submit_performed=True, confirmation_text="thank you for applying",
                             submit_control_gone=True, url_changed=True, network_ok=True,
                             screenshot_b64="ZmFrZQ==")
     driver = _FakeDriver(_trivial_blueprint(), ev)
     _register(monkeypatch, driver)
     out = asyncio.run(ex.execute_application(_FakeDB(), JOB, {}, {}, USER))
-    assert out["screenshots"] == ["ZmFrZQ=="]
-    assert out["submission_evidence"]["screenshot_b64"] == "ZmFrZQ=="
+    assert out["screenshots"] == []
+    assert "screenshot_b64" not in out["submission_evidence"]
 
 
 def test_dry_run_prepares_without_submitting(monkeypatch):
@@ -252,3 +254,43 @@ def test_executor_surfaces_apply_agent_error_with_debug(monkeypatch):
     assert out["debug"]["error"]["message"]
     assert out["debug"]["timeline"][-1]["status"] == "error"
     assert db.auto_apply_attempts.rows[0]["reason"].startswith("Failed to launch browser")
+
+
+def test_midflight_policy_revocation_aborts_before_driver_submit(monkeypatch):
+    calls = {"count": 0}
+
+    def gate(*args, **kwargs):
+        calls["count"] += 1
+        return None if calls["count"] == 1 else "submission_policy_inactive"
+
+    monkeypatch.setattr(ex, "submission_policy_failure", gate)
+    driver = _FakeDriver(_trivial_blueprint(), _SUCCESS_EV)
+    _register(monkeypatch, driver)
+    out = asyncio.run(ex.execute_application(_FakeDB(), JOB, {}, {}, USER))
+    assert out["status"] == "policy_denied"
+    assert out["reason"] == "submission_policy_inactive"
+    assert driver.submits == 0
+
+
+def test_execution_report_redacts_candidate_pii_and_raw_evidence(monkeypatch):
+    canaries = ["ada+pii@example.com", "+33612345678", "secret-cv-name.pdf", "token-123"]
+    ev = SubmissionEvidence(
+        submit_performed=True,
+        confirmation_text=f"Thanks {canaries[0]}",
+        validation_errors=[canaries[1]],
+        final_url=f"https://boards.greenhouse.io/thanks?token={canaries[3]}",
+        screenshot_b64=canaries[3],
+        raw={
+            "step_log": [{
+                "action": "fill",
+                "status": "ok",
+                "value_preview": canaries[0],
+                "filename": canaries[2],
+            }],
+        },
+    )
+    driver = _FakeDriver(_trivial_blueprint(), ev)
+    _register(monkeypatch, driver)
+    out = asyncio.run(ex.execute_application(_FakeDB(), JOB, {}, {}, USER))
+    encoded = json.dumps(out, sort_keys=True)
+    assert all(canary not in encoded for canary in canaries)

@@ -194,7 +194,7 @@ def test_known_signatures_and_summary():
     assert summ["verified_success"] == 1 and summ["submit_attempts"] == 2
 
 
-def test_release_stale_in_flight_unblocks_claim():
+def test_stale_in_flight_requires_explicit_reconciliation_before_reclaim():
     db = _FakeDB()
 
     async def run():
@@ -209,9 +209,13 @@ def test_release_stale_in_flight_unblocks_claim():
         second = await metrics.claim_attempt(
             db, user_id="u1", job_id="j1", provider="smartrecruiters", driver="smartrecruiters",
         )
-        # Without release, insert would conflict — release_stale runs inside claim_attempt.
-        assert second is not None
-        assert second["id"] != first["id"]
+        assert second is None
+        assert await metrics.release_stale_in_flight(db, "u1", "j1") == 0
+        assert await metrics.release_stale_in_flight(db, "u1", "j1", force=True) == 1
+        second = await metrics.claim_attempt(
+            db, user_id="u1", job_id="j1", provider="smartrecruiters", driver="smartrecruiters",
+        )
+        assert second is not None and second["id"] != first["id"]
         assert stored["status"] == "error"
         assert stored["reason"] == "stale_in_flight_released"
         return True

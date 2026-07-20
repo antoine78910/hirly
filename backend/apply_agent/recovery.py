@@ -7,17 +7,15 @@ vision model what to click (Close / Fermer) when heuristics are not enough.
 
 from __future__ import annotations
 
-import base64
 import json
 import logging
 import os
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from .browser import screenshot_b64
 from .blockers import dismiss_cookie_banner
-from .human_browser import human_click, human_pause, try_pass_datadome_slider
-from .blockers import captcha_active, detect_captcha
+from .human_browser import human_click, human_pause
 
 logger = logging.getLogger(__name__)
 
@@ -127,10 +125,6 @@ async def dismiss_blocking_overlays(page: Any) -> List[str]:
         actions.append("cookie_banner")
     except Exception:
         pass
-
-    if captcha_active(await detect_captcha(page)):
-        if await try_pass_datadome_slider(page, attempts=2):
-            actions.append("datadome_slider")
 
     for sel in _CLOSE_SELECTORS:
         try:
@@ -296,7 +290,10 @@ async def recover_stuck_page(
         "screenshot_b64": "",
         "stuck": {},
     }
-    shot = await screenshot_b64(page)
+    capture_screenshots = os.environ.get(
+        "AUTO_APPLY_CAPTURE_SCREENSHOTS", "false",
+    ).strip().lower() in ("1", "true", "yes", "on")
+    shot = await screenshot_b64(page) if capture_screenshots else ""
     report["screenshot_b64"] = shot
     stuck = await inspect_stuck_state(page)
     report["stuck"] = stuck
@@ -311,7 +308,7 @@ async def recover_stuck_page(
     dismissed = await dismiss_blocking_overlays(page)
     report["actions"].extend(dismissed)
 
-    if use_vision and (
+    if capture_screenshots and use_vision and (
         stuck.get("dialogs")
         or stuck.get("errors")
         or reason in {"submit_validation", "click_intercepted", "pre_submit"}
@@ -327,7 +324,9 @@ async def recover_stuck_page(
 
     # Re-inspect after recovery attempts.
     report["stuck_after"] = await inspect_stuck_state(page)
-    report["screenshot_b64"] = await screenshot_b64(page) or shot
+    report["screenshot_b64"] = (
+        (await screenshot_b64(page) or shot) if capture_screenshots else ""
+    )
     logger.info(
         "apply_recovery_done reason=%s actions=%s notes=%s empty_after=%s",
         reason,

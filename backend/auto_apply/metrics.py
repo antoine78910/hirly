@@ -18,12 +18,39 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-_SUBMIT_STATUSES = {"submitted_success", "submit_failed", "verification_failed"}
-_ACTIVE_STATUSES = ("in_flight", "submitted_success")
+_SUBMIT_STATUSES = {
+    "submitted_success", "submit_failed", "verification_failed",
+    "reconciliation_required",
+}
+_ACTIVE_STATUSES = ("in_flight", "submitted_success", "reconciliation_required")
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _sanitize_attempt_evidence(evidence: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Allowlist non-PII evidence at the persistence boundary."""
+    source = evidence if isinstance(evidence, dict) else {}
+    safe: Dict[str, Any] = {}
+    for key in (
+        "submit_performed", "confirmation_present", "submit_control_gone",
+        "url_changed", "network_ok", "validation_error_count", "blocked_reason",
+    ):
+        value = source.get(key)
+        if isinstance(value, (bool, int)) or value is None:
+            safe[key] = value
+        elif key == "blocked_reason":
+            safe[key] = str(value)[:64]
+    safe["step_log"] = [
+        {
+            "action": str(step.get("action") or "")[:64],
+            "status": str(step.get("status") or "")[:32],
+        }
+        for step in (source.get("step_log") or [])[:100]
+        if isinstance(step, dict)
+    ]
+    return safe
 
 
 async def release_stale_in_flight(
@@ -39,6 +66,12 @@ async def release_stale_in_flight(
     Railway deploys / killed workers leave orphan in_flight rows that block
     claim_attempt via the partial unique index.
     """
+    # Age cannot prove that the ATS did not receive a submission. Automatic
+    # stale-claim release can therefore create duplicates after a timeout or
+    # worker restart. Only an explicit reconciliation/admin action may force
+    # release.
+    if not force:
+        return 0
     rows = await db.auto_apply_attempts.find(
         {"user_id": user_id, "job_id": job_id, "status": "in_flight"},
     ).limit(20).to_list(20)
@@ -74,8 +107,8 @@ async def release_stale_in_flight(
 async def claim_attempt(
     db, *, user_id: str, job_id: str, provider: str, driver: str, driver_version: str = "unknown",
 ) -> Optional[Dict[str, Any]]:
-    # Auto-clear orphans from killed Railway workers before inserting.
-    await release_stale_in_flight(db, user_id, job_id, max_age_s=180.0)
+    if await active_attempt_status(db, user_id, job_id) is not None:
+        return None
     row = {
         "id": uuid.uuid4().hex,
         "user_id": user_id,
@@ -121,7 +154,7 @@ async def record_terminal(
             "compatibility_score": compatibility_score,
             "blueprint_signature": blueprint_signature,
             "missing_fields": list(missing_fields or []),
-            "evidence": evidence or {},
+            "evidence": _sanitize_attempt_evidence(evidence),
             "submitted_at": submitted_at,
             "verified_at": verified_at,
             "updated_at": now,
@@ -152,42 +185,41 @@ async def latest_attempt(db, user_id: str, job_id: str) -> Optional[Dict[str, An
     return sorted(rows, key=lambda r: r.get("created_at") or "", reverse=True)[0]
 
 
-# Base64 screenshots larger than this blow up Supabase/Railway JSON responses
-# (admin /status polls) and surface as opaque HTTP 500 Internal Server Error.
+# Retained only for compatibility with callers/tests; ordinary persistence does
+# not accept screenshots regardless of size.
 _MAX_STORED_SCREENSHOT_CHARS = 120_000
 
 
 def _compact_execution_report(report: Dict[str, Any]) -> Dict[str, Any]:
-    """Store a console-ready report without huge binary payloads."""
+    """Store a structural report in the ordinary non-PII attempt record."""
     compact = dict(report or {})
-    screenshots = compact.get("screenshots") or []
-    safe_shots: List[str] = []
-    omitted = False
-    for shot in screenshots[:1]:
-        if isinstance(shot, str) and 0 < len(shot) <= _MAX_STORED_SCREENSHOT_CHARS:
-            safe_shots.append(shot)
-        elif isinstance(shot, str) and shot:
-            omitted = True
-            compact["screenshot_omitted"] = True
-            compact["screenshot_chars"] = len(shot)
-    compact["screenshots"] = safe_shots
-    if omitted and not safe_shots:
-        compact.setdefault("screenshot_omitted", True)
+    if compact.get("screenshots"):
+        compact["screenshot_omitted"] = True
+    compact["screenshots"] = []
 
     evidence = compact.get("submission_evidence")
-    if isinstance(evidence, dict) and evidence.get("screenshot_b64"):
+    if isinstance(evidence, dict):
         evidence = dict(evidence)
-        # Screenshot already mirrored on report.screenshots (when small enough).
         evidence.pop("screenshot_b64", None)
+        evidence.pop("raw", None)
+        evidence.pop("confirmation_text", None)
+        evidence.pop("validation_errors", None)
+        evidence.pop("final_url", None)
         compact["submission_evidence"] = evidence
 
     raw = compact.get("debug")
     if isinstance(raw, dict):
         raw = dict(raw)
+        raw.pop("field_status", None)
+        raw.pop("plan_steps", None)
         nested = raw.get("execution")
-        if isinstance(nested, dict) and nested.get("screenshot_b64"):
+        if isinstance(nested, dict):
             nested = dict(nested)
-            nested.pop("screenshot_b64", None)
+            for key in (
+                "screenshot_b64", "confirmation_text", "validation_errors",
+                "final_url", "step_log", "step_errors",
+            ):
+                nested.pop(key, None)
             raw["execution"] = nested
         compact["debug"] = raw
     return compact

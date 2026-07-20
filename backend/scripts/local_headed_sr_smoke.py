@@ -36,8 +36,6 @@ from apply_agent.browser import (  # noqa: E402
     proxy_configured,
     warm_session_configured,
 )
-from apply_agent.human_browser import try_pass_datadome_slider  # noqa: E402
-
 DEFAULT_URL = (
     "https://jobs.smartrecruiters.com/Accor/"
     "744000134455765-chef-de-reception-h-f-"
@@ -93,11 +91,7 @@ async def main() -> None:
             await page.wait_for_timeout(1000)
 
         if captcha_active(await detect_captcha(page)):
-            print("CAPTCHA detected — trying slider, then waiting for you (3 min)…")
-            try:
-                await try_pass_datadome_slider(page, attempts=2)
-            except Exception as exc:
-                print("slider failed:", exc)
+            print("CAPTCHA detected — no automated interaction; waiting for manual resolution (3 min)…")
             deadline = asyncio.get_event_loop().time() + 180
             while asyncio.get_event_loop().time() < deadline:
                 if not captcha_active(await detect_captcha(page)):
