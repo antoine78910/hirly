@@ -11,11 +11,15 @@ import {
 } from "../packages/ingestion/src/index";
 import { providerModules } from "../apps/worker/src/providers";
 import type { ProviderCore } from "../apps/worker/src/providers/core";
+import { createTaskHandlers } from "../apps/worker/src/runtime/handlers";
+import type { RuntimeStore } from "../apps/worker/src/runtime/types";
 import type {
   CanonicalJob,
   Provider,
   ProviderSearchRequest,
 } from "../packages/contracts/src/index";
+import type { ClaimedTask } from "../packages/db/src/index";
+import { createJsonLogger } from "../packages/observability/src/index";
 
 const providers = ["apec", "hellowork", "wttj", "indeed"] as const;
 const fixtureRoot = new URL("./fixtures/g004/", import.meta.url);
@@ -134,6 +138,30 @@ describe("G004 stable canonical identity and normalization", () => {
     ).toBe(
       toCanonicalJob(adapter.normalizeRaw(reordered), fixedNow).fingerprint,
     );
+  });
+
+  test("redacts secrets and personal data before retaining the source document", async () => {
+    const fixture = await loadFixture("apec");
+    const sensitive = {
+      ...fixture,
+      sourceDocument: {
+        apiToken: "provider-secret",
+        recruiterEmail: "person@example.test",
+        nested: {
+          authorization: "Bearer abc.def.ghi",
+          databaseUrl: "postgres://worker:password@db.example.test/jobs",
+        },
+      },
+    };
+    const normalized = providerModules.apec.adapter.normalizeRaw(sensitive);
+    const serialized = JSON.stringify(toCanonicalJob(normalized, fixedNow).data);
+
+    expect(serialized).not.toContain("provider-secret");
+    expect(serialized).not.toContain("person@example.test");
+    expect(serialized).not.toContain("abc.def.ghi");
+    expect(serialized).not.toContain("worker:password");
+    expect(serialized).toContain("[REDACTED]");
+    expect(serialized).toContain("[REDACTED_EMAIL]");
   });
 });
 
@@ -335,6 +363,31 @@ describe("G004 provider-neutral ingestion behavior", () => {
     expect(repository.calls).toBe(0);
   });
 
+  test("fails closed when maxPages is reached before source exhaustion", async () => {
+    const fixture = await loadFixture("apec");
+    const repository = new MemoryRepository();
+    await expect(
+      runIngestion({
+        provider: "apec",
+        transport: {
+          async fetch() {
+            return { items: [fixture], nextCursor: "still-more" };
+          },
+        },
+        adapter: providerModules.apec.adapter,
+        repository,
+        request: { ...request("apec"), maxPages: 1 },
+        rateLimit: { requestsPerMinute: 60_000, concurrency: 1 },
+        now: () => fixedNow,
+      }),
+    ).rejects.toMatchObject({
+      code: "provider_permanent",
+      message: "provider pagination reached maxPages before exhaustion",
+    });
+    expect(repository.calls).toBe(0);
+    expect(repository.rows.size).toBe(0);
+  });
+
   test("classifies missing, expired, CAPTCHA, account-required, and unknown URLs", async () => {
     const fixture = await loadFixture("indeed");
     const adapter = providerModules.indeed.adapter;
@@ -397,5 +450,111 @@ describe("G004 rate control", () => {
     await gate.run(async () => "second", signal);
 
     expect(sleeps).toEqual([1_000]);
+  });
+
+  test("spaces aggregate starts even when concurrency permits overlap", async () => {
+    let now = 0;
+    const starts: number[] = [];
+    const gate = new ProviderRateGate(
+      { requestsPerMinute: 60, concurrency: 3 },
+      () => now,
+      async (milliseconds) => {
+        now += milliseconds;
+      },
+    );
+    const signal = new AbortController().signal;
+
+    await Promise.all(
+      Array.from({ length: 3 }, () =>
+        gate.run(async () => {
+          starts.push(now);
+        }, signal),
+      ),
+    );
+
+    expect(starts).toEqual([0, 1_000, 2_000]);
+  });
+});
+
+describe("G004 Bun runtime dispatch", () => {
+  test("dispatches fixture ingestion through the fenced writer and emits stage metrics", async () => {
+    const fixture = await loadFixture("apec");
+    const task: ClaimedTask = {
+      taskId: "00000000-0000-4000-8000-000000000041",
+      runId: "00000000-0000-4000-8000-000000000042",
+      taskKey: "g004-apec",
+      taskType: "provider.fetch_page",
+      provider: "apec",
+      payload: {
+        query: "engineering",
+        location: "France",
+        countryCode: "FR",
+        cursor: null,
+        pageSize: 50,
+        maxPages: 1,
+      },
+      leaseToken: "00000000-0000-4000-8000-000000000043",
+      claimGeneration: 1n,
+      leaseOwner: "g004-test-worker",
+      attempts: 1,
+      maxAttempts: 3,
+      leaseUntil: new Date("2026-07-20T00:01:00.000Z"),
+    };
+    const writes: CanonicalJob[][] = [];
+    const store = {
+      async assertProviderRunnable() {},
+      async writeJobsAndComplete(_lease, jobs) {
+        writes.push(jobs);
+        return true;
+      },
+      async dueSchedules() {
+        return [];
+      },
+      async enqueueDueSchedule() {
+        return null;
+      },
+      async getRun() {
+        return null;
+      },
+    } satisfies RuntimeStore;
+    const lines: string[] = [];
+    const logger = createJsonLogger((line) => lines.push(line));
+    const modules = {
+      ...providerModules,
+      apec: {
+        ...providerModules.apec,
+        rateLimit: { requestsPerMinute: 60_000, concurrency: 1 },
+        transport: {
+          async fetch() {
+            return { items: [fixture], nextCursor: null };
+          },
+        },
+      },
+    } as unknown as Record<Provider, ProviderCore<unknown>>;
+    const handler = createTaskHandlers(store, logger, modules)[
+      "provider.fetch_page"
+    ];
+
+    const result = await handler?.(task, new AbortController().signal);
+
+    expect(result).toEqual({ taskCompleted: true });
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).toHaveLength(1);
+    expect(writes[0]?.[0]?.jobId).toBe(
+      stableJobId("apec", fixture.externalId),
+    );
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0] ?? "{}")).toMatchObject({
+      event: "provider.ingestion_batch",
+      provider: "apec",
+      outcome: "succeeded",
+      counts: {
+        fetched: 1,
+        accepted: 1,
+        rejected: 0,
+        deduplicated: 0,
+        upserted: 1,
+      },
+    });
   });
 });
