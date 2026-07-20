@@ -238,7 +238,7 @@ const summary = [
   "## Tests and commands run",
   "",
   `- This audit executed ${commandResults.length} pinned reproduction/capability commands; all required PASS commands exited zero.`,
-  "- Focused accounting/dedup/refresh suite: 110 passed.",
+  "- Re-run evidence is compared by deterministic dataset digest; volatile timestamps and bound run checksums are expected to differ.",
   "- `bun run audit:job-ingestion --fixtures` emits machine JSON, human Markdown, and command-run JSON.",
   "",
   "## SQL performance evidence",
