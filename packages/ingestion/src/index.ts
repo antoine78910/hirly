@@ -96,7 +96,8 @@ const defaultSleep: Sleep = (milliseconds, signal) =>
 
 export class ProviderRateGate {
   private active = 0;
-  private nextStartAt = Number.NEGATIVE_INFINITY;
+  private lastStartedAt = Number.NEGATIVE_INFINITY;
+  private startQueue: Promise<void> = Promise.resolve();
   private readonly waiters: Array<() => void> = [];
 
   constructor(
@@ -111,18 +112,38 @@ export class ProviderRateGate {
   ): Promise<T> {
     await this.acquire(signal);
     try {
-      const minimumInterval = 60_000 / this.config.requestsPerMinute;
-      const currentTime = this.clock();
-      const reservedStartAt = Math.max(currentTime, this.nextStartAt);
-      this.nextStartAt = reservedStartAt + minimumInterval;
-      const delay = Math.max(0, reservedStartAt - currentTime);
-      if (delay > 0) await this.sleep(delay, signal);
-      signal.throwIfAborted();
-      return await operation();
+      return await this.startOperation(operation, signal);
     } finally {
       this.active -= 1;
       this.waiters.shift()?.();
     }
+  }
+
+  private async startOperation<T>(
+    operation: () => Promise<T>,
+    signal: AbortSignal,
+  ): Promise<T> {
+    let releaseStart!: () => void;
+    const previousStart = this.startQueue;
+    this.startQueue = new Promise<void>((resolve) => {
+      releaseStart = resolve;
+    });
+    await previousStart;
+    let result: Promise<T>;
+    try {
+      const minimumInterval = 60_000 / this.config.requestsPerMinute;
+      const delay = Math.max(
+        0,
+        this.lastStartedAt + minimumInterval - this.clock(),
+      );
+      if (delay > 0) await this.sleep(delay, signal);
+      signal.throwIfAborted();
+      this.lastStartedAt = this.clock();
+      result = operation();
+    } finally {
+      releaseStart();
+    }
+    return await result;
   }
 
   private async acquire(signal: AbortSignal): Promise<void> {
