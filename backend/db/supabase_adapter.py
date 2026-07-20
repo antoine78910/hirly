@@ -12,6 +12,7 @@ import json
 import os
 import re
 import socket
+import uuid
 from datetime import date, datetime, timezone
 from typing import Any, AsyncIterator, Dict, List, Optional
 
@@ -1247,6 +1248,7 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
         self.db_url = db_url
         self._python_ingestion_lease_owner = f"{socket.gethostname()}:{os.getpid()}"
         self._python_ingestion_leases: Dict[str, Dict[str, Any]] = {}
+        self._jobs_inventory_rpc_adapter: SupabaseDatabaseAdapter = self
         self.users = SupabaseCollectionAdapter("users", supabase_url, secret_key)
         self.user_sessions = SupabaseCollectionAdapter("user_sessions", supabase_url, secret_key)
         self.profiles = SupabaseCollectionAdapter("profiles", supabase_url, secret_key)
@@ -1293,6 +1295,88 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
                 f"{response.status_code}: {response.text[:300]}"
             )
         return response.json() if response.content else None
+
+    async def _python_provider_rpc(self, function_name: str, payload: Dict[str, Any]) -> Any:
+        adapter = self._jobs_inventory_rpc_adapter
+        return await adapter._python_ingestion_rpc(function_name, payload)
+
+    async def claim_python_provider_work(
+        self,
+        provider: str,
+        *,
+        lease_seconds: int = 3600,
+    ) -> Dict[str, Any]:
+        lease_owner = (
+            f"{self._python_ingestion_lease_owner}:provider:"
+            f"{provider}:{uuid.uuid4()}"
+        )
+        result = await self._python_provider_rpc(
+            "python_provider_work_claim",
+            {
+                "p_provider": provider,
+                "p_lease_owner": lease_owner,
+                "p_lease_seconds": lease_seconds,
+            },
+        )
+        required = {
+            "claim_id",
+            "provider",
+            "writer_runtime",
+            "ownership_epoch",
+            "expires_at",
+        }
+        if not isinstance(result, dict) or not required.issubset(result):
+            raise RuntimeError("python_provider_work_claim returned an invalid result")
+        if result["provider"] != provider or result["writer_runtime"] != "python":
+            raise RuntimeError("python_provider_work_claim returned the wrong owner")
+        return {**result, "lease_owner": lease_owner}
+
+    async def heartbeat_python_provider_work(
+        self,
+        claim: Dict[str, Any],
+        *,
+        lease_seconds: int = 3600,
+    ) -> bool:
+        result = await self._python_provider_rpc(
+            "python_provider_work_heartbeat",
+            {
+                "p_claim_id": claim["claim_id"],
+                "p_lease_owner": claim["lease_owner"],
+                "p_lease_seconds": lease_seconds,
+            },
+        )
+        return result is True
+
+    async def upsert_python_provider_jobs(
+        self,
+        claim: Dict[str, Any],
+        jobs: List[Dict[str, Any]],
+    ) -> int:
+        result = await self._python_provider_rpc(
+            "python_provider_jobs_upsert",
+            {
+                "p_claim_id": claim["claim_id"],
+                "p_lease_owner": claim["lease_owner"],
+                "p_jobs": [_supabase_row("jobs", job) for job in jobs],
+            },
+        )
+        if isinstance(result, bool) or not isinstance(result, int):
+            raise RuntimeError("python_provider_jobs_upsert returned an invalid result")
+        if result != len(jobs):
+            raise RuntimeError(
+                f"python_provider_jobs_upsert wrote {result} of {len(jobs)} jobs"
+            )
+        return result
+
+    async def finish_python_provider_work(self, claim: Dict[str, Any]) -> bool:
+        result = await self._python_provider_rpc(
+            "python_provider_work_finish",
+            {
+                "p_claim_id": claim["claim_id"],
+                "p_lease_owner": claim["lease_owner"],
+            },
+        )
+        return result is True
 
     async def begin_python_ingestion_run(
         self,

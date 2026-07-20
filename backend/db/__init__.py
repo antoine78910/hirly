@@ -41,6 +41,7 @@ def attach_jobs_inventory(primary: SupabaseDatabaseAdapter, jobs_db: SupabaseDat
         if hasattr(jobs_db, name):
             setattr(primary, name, getattr(jobs_db, name))
     primary.jobs_inventory_url = jobs_db.supabase_url  # type: ignore[attr-defined]
+    primary._jobs_inventory_rpc_adapter = jobs_db  # type: ignore[attr-defined]
     return primary
 
 

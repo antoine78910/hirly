@@ -285,9 +285,17 @@ async def harvest_france_travail(
                 "role": role or "(all)",
             }
             async with semaphore:
+                provider_claim = None
                 try:
                     if concurrency == 1 and index > 0 and pause_seconds > 0:
                         await asyncio.sleep(pause_seconds)
+                    if not dry_run:
+                        claim = getattr(db, "claim_python_provider_work", None)
+                        if not callable(claim):
+                            raise RuntimeError(
+                                "France Travail provider ownership claim is unavailable"
+                            )
+                        provider_claim = await claim("france_travail")
                     result = await provider.search(JobSearchQuery(
                         role=role,
                         location=location_label,
@@ -304,6 +312,12 @@ async def harvest_france_travail(
                     max_split_depth = max(0, min(_env_int("FT_HARVEST_MAX_SPLIT_DEPTH", 3), 8))
                     child_states = []
                     while raw.get("completeness") == "capped_needs_split" and split_depth < max_split_depth:
+                        if provider_claim is not None:
+                            heartbeat = getattr(db, "heartbeat_python_provider_work", None)
+                            if not callable(heartbeat) or not await heartbeat(provider_claim):
+                                raise RuntimeError(
+                                    "France Travail provider ownership claim became stale"
+                                )
                         states = raw.get("pagination_states") or []
                         next_page = max(
                             (int(state.get("next_page") or 0) for state in states),
@@ -370,7 +384,16 @@ async def harvest_france_travail(
                     if run["completeness"] == "capped_needs_split":
                         run["error"] = "source_cap_reached_needs_split"
                     if jobs and not dry_run:
-                        stats = await upsert_imported_jobs(db, jobs)
+                        heartbeat = getattr(db, "heartbeat_python_provider_work", None)
+                        if not callable(heartbeat) or not await heartbeat(provider_claim):
+                            raise RuntimeError(
+                                "France Travail provider ownership claim became stale"
+                            )
+                        stats = await upsert_imported_jobs(
+                            db,
+                            jobs,
+                            provider_claim=provider_claim,
+                        )
                         run["upserted"] = stats.get("total_imported", 0)
                         run["write_stats"] = stats
                 except Exception as exc:
@@ -383,6 +406,17 @@ async def harvest_france_travail(
                         message,
                     )
                     await asyncio.sleep(max(pause_seconds, 0.2) * 4)
+                finally:
+                    if provider_claim is not None:
+                        finish = getattr(db, "finish_python_provider_work", None)
+                        if callable(finish):
+                            try:
+                                await finish(provider_claim)
+                            except Exception as exc:
+                                logger.warning(
+                                    "ft_harvest_provider_claim_finish_failed error=%s",
+                                    str(exc)[:200],
+                                )
             runs[index] = run
 
         await asyncio.gather(*(_harvest_one(index) for index in range(queries)))

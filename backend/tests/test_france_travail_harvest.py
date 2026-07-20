@@ -46,6 +46,25 @@ class _FakeCollection:
 class _FakeDb:
     def __init__(self):
         self.jobs = _FakeCollection()
+        self.claims = []
+
+    async def claim_python_provider_work(self, provider):
+        claim = {
+            "claim_id": f"claim-{len(self.claims) + 1}",
+            "provider": provider,
+            "writer_runtime": "python",
+            "ownership_epoch": 0,
+            "expires_at": "2099-01-01T00:00:00Z",
+            "lease_owner": f"test-{len(self.claims) + 1}",
+        }
+        self.claims.append(claim)
+        return claim
+
+    async def heartbeat_python_provider_work(self, claim):
+        return claim in self.claims
+
+    async def finish_python_provider_work(self, claim):
+        return claim in self.claims
 
 
 def test_harvest_cities_default_covers_secondary_markets(monkeypatch):

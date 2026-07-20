@@ -433,9 +433,33 @@ def _candidate_key(classification: str, job: Dict[str, Any]) -> Optional[str]:
     return None
 
 
-async def _write_job_chunk(db, chunk: List[Dict[str, Any]]) -> None:
+async def _write_job_chunk(
+    db,
+    chunk: List[Dict[str, Any]],
+    *,
+    provider_claim: Optional[Dict[str, Any]] = None,
+) -> None:
     """Persist a chunk of jobs — prefer multi-row upsert, fall back to update_one."""
     if not chunk:
+        return
+    providers = {str(job.get("provider") or "") for job in chunk}
+    if "france_travail" in providers:
+        if not provider_claim:
+            raise RuntimeError("France Travail canonical writes require one provider claim")
+        other_jobs = [
+            job for job in chunk if str(job.get("provider") or "") != "france_travail"
+        ]
+        if other_jobs:
+            await _write_job_chunk(db, other_jobs)
+        chunk = [
+            job for job in chunk if str(job.get("provider") or "") == "france_travail"
+        ]
+        guarded_upsert = getattr(db, "upsert_python_provider_jobs", None)
+        if not callable(guarded_upsert):
+            raise RuntimeError("France Travail provider claim RPC is unavailable")
+        written = await guarded_upsert(provider_claim, chunk)
+        if written != len(chunk):
+            raise RuntimeError("France Travail provider claim write was incomplete")
         return
     insert_many = getattr(db.jobs, "insert_many", None)
     if callable(insert_many):
@@ -457,13 +481,38 @@ async def _write_job_chunk(db, chunk: List[Dict[str, Any]]) -> None:
 
 
 async def _import_provider_jobs(db, provider, query: JobSearchQuery) -> Dict[str, int]:
-    result = await provider.search(query)
-    prepared_jobs = [_prepare_job_for_upsert(job) for job in (result.jobs or [])]
-    batch_stats = await _upsert_job_batch(db, prepared_jobs, already_prepared=True)
-    return {
-        **batch_stats,
-        "jobs": prepared_jobs,
-    }
+    provider_claim = None
+    is_france_travail = is_france_travail_provider(getattr(provider, "name", ""))
+    if is_france_travail:
+        claim = getattr(db, "claim_python_provider_work", None)
+        if not callable(claim):
+            raise RuntimeError("France Travail provider ownership claim is unavailable")
+        provider_claim = await claim("france_travail")
+    try:
+        result = await provider.search(query)
+        prepared_jobs = [_prepare_job_for_upsert(job) for job in (result.jobs or [])]
+        if is_france_travail and prepared_jobs:
+            heartbeat = getattr(db, "heartbeat_python_provider_work", None)
+            if not callable(heartbeat) or not await heartbeat(provider_claim):
+                raise RuntimeError("France Travail provider ownership claim became stale")
+        batch_stats = await _upsert_job_batch(
+            db,
+            prepared_jobs,
+            already_prepared=True,
+            provider_claim=provider_claim,
+        )
+        return {
+            **batch_stats,
+            "jobs": prepared_jobs,
+        }
+    finally:
+        if provider_claim is not None:
+            finish = getattr(db, "finish_python_provider_work", None)
+            if callable(finish):
+                try:
+                    await finish(provider_claim)
+                except Exception as exc:
+                    logger.warning("France Travail provider claim finish failed: %s", exc)
 
 
 async def _upsert_job_batch(
@@ -473,6 +522,7 @@ async def _upsert_job_batch(
     progress_base: int = 0,
     *,
     already_prepared: bool = False,
+    provider_claim: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, int]:
     stats = {
         "total_imported": 0,
@@ -555,7 +605,7 @@ async def _upsert_job_batch(
     for offset in range(0, len(prepared), chunk_size):
         chunk = prepared[offset : offset + chunk_size]
         try:
-            await _write_job_chunk(db, chunk)
+            await _write_job_chunk(db, chunk, provider_claim=provider_claim)
         except Exception:
             stats["write_failed"] += len(chunk)
             raise
@@ -603,9 +653,22 @@ async def _upsert_job_batch(
     return stats
 
 
-async def upsert_imported_jobs(db, jobs: List[Dict[str, Any]], progress: Optional[Dict[str, Any]] = None, progress_base: int = 0) -> Dict[str, int]:
+async def upsert_imported_jobs(
+    db,
+    jobs: List[Dict[str, Any]],
+    progress: Optional[Dict[str, Any]] = None,
+    progress_base: int = 0,
+    *,
+    provider_claim: Optional[Dict[str, Any]] = None,
+) -> Dict[str, int]:
     """Persist imported jobs through the shared validation/upsert path."""
-    return await _upsert_job_batch(db, jobs, progress=progress, progress_base=progress_base)
+    return await _upsert_job_batch(
+        db,
+        jobs,
+        progress=progress,
+        progress_base=progress_base,
+        provider_claim=provider_claim,
+    )
 
 
 def _with_cheap_validation(job: Dict[str, Any]) -> Dict[str, Any]:

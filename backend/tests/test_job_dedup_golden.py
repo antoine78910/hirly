@@ -92,7 +92,9 @@ def test_golden_corpus_runs_through_real_upsert_without_false_merges():
                 "source_document": {"fixture": case["id"], "side": side},
             }
             jobs.append(job)
-        stats = asyncio.run(upsert_imported_jobs(db, jobs))
+        stats = asyncio.run(
+            upsert_imported_jobs(db, jobs, provider_claim={"claim_id": "golden"})
+        )
         expected_rows = 1 if case["expected"] == "exact_occurrence" else 2
         assert len(db.jobs.rows) == expected_rows, case["id"]
         assert len({
@@ -123,7 +125,13 @@ def test_independent_provider_runs_persist_review_only_candidate_linkage():
     }
 
     first_stats = asyncio.run(upsert_imported_jobs(db, [first]))
-    second_stats = asyncio.run(upsert_imported_jobs(db, [second]))
+    second_stats = asyncio.run(
+        upsert_imported_jobs(
+            db,
+            [second],
+            provider_claim={"claim_id": "golden-second"},
+        )
+    )
 
     assert first_stats["fuzzy_duplicate_candidates"] == 0
     assert second_stats["fuzzy_duplicate_candidates"] == 1
