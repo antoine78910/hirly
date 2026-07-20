@@ -2,8 +2,6 @@ import { z } from "zod";
 import {
   FixtureOnlyDataGouvSourceAdapter,
   type DataGouvAttribution,
-  type DataGouvFixtureCursor,
-  type DataGouvFixtureScope,
   type DataGouvRawJob,
   type DisabledDataGouvSourceAdapter,
 } from "@hirly/ingestion/data-gouv";
