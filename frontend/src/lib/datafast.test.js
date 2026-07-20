@@ -9,6 +9,8 @@ import {
   onboardingSkipGoalName,
   onboardingStepNumber,
 } from "./datafast";
+import fs from "fs";
+import path from "path";
 
 describe("datafast onboarding funnel", () => {
   it("maps step ids to stable step numbers for goal params", () => {
@@ -43,5 +45,15 @@ describe("datafast onboarding funnel", () => {
   it("keeps the full app goal catalog under a safe limit", () => {
     expect(new Set(DATAFAST_GOAL_CATALOG).size).toBe(DATAFAST_GOAL_CATALOG.length);
     expect(DATAFAST_GOAL_CATALOG.length).toBeLessThanOrEqual(12);
+  });
+
+  it("keeps the DataFast bootstrap while removing the raw PostHog snippet", () => {
+    const html = fs.readFileSync(path.join(process.cwd(), "public/index.html"), "utf8");
+    expect(html).toContain('id="datafast-queue"');
+    expect(html).toContain('data-website-id="dfid_bXTlZtOnIRPFlYqkgsEvm"');
+    expect(html).toContain('data-domain="tryhirly.com"');
+    expect(html).toContain('src="https://datafa.st/js/script.js"');
+    expect(html).not.toContain("phc_xAvL2Iq4tFmANRE7kzbKwaSqp1HJjN7x48s3vr0CMjs");
+    expect(html).not.toContain("posthog.init(");
   });
 });

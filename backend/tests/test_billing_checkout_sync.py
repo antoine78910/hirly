@@ -357,6 +357,72 @@ def test_build_posthog_refund_capture_uses_partial_amount_and_confirmation_time(
     )
 
 
+def test_posthog_capture_exact_schema_timeout_and_fail_open(monkeypatch):
+    monkeypatch.setenv("POSTHOG_PROJECT_API_KEY", "phc_test")
+    monkeypatch.setenv("POSTHOG_HOST", "https://us.i.posthog.com")
+    calls = []
+
+    class _Response:
+        def raise_for_status(self):
+            return None
+
+    class _Client:
+        def __init__(self, timeout):
+            self.timeout = timeout
+            calls.append(("timeout", timeout))
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url, json):
+            calls.append(("post", url, json))
+            return _Response()
+
+    monkeypatch.setattr(server.httpx, "AsyncClient", _Client)
+    capture = {
+        "event": "payment_succeeded",
+        "distinct_id": "user_1",
+        "timestamp": "2023-11-14T22:13:20+00:00",
+        "uuid": "semantic-uuid",
+        "properties": {
+            "revenue": 29.99,
+            "currency": "EUR",
+            "amount_minor": 2999,
+            "stripe_event_id": "evt_1",
+            "invoice_id": "in_1",
+            "source": "stripe_webhook",
+            "$process_person_profile": False,
+        },
+    }
+    asyncio.run(server._capture_posthog_server_event(capture))
+    timeout = calls[0][1]
+    assert (timeout.connect, timeout.read, timeout.write, timeout.pool) == (
+        0.25,
+        0.50,
+        0.50,
+        0.25,
+    )
+    assert calls[1][1] == "https://us.i.posthog.com/capture/"
+    assert set(calls[1][2]) == {
+        "api_key",
+        "event",
+        "distinct_id",
+        "timestamp",
+        "uuid",
+        "properties",
+    }
+
+    class _FailingClient(_Client):
+        async def post(self, url, json):
+            raise server.httpx.ConnectError("blocked")
+
+    monkeypatch.setattr(server.httpx, "AsyncClient", _FailingClient)
+    asyncio.run(server._capture_posthog_server_event(capture))
+
+
 def test_repair_premium_credits_grants_missing_allowance(monkeypatch):
     user_rows = _Collection([
         {
