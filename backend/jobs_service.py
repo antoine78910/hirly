@@ -39,6 +39,7 @@ from role_query_terms import resolve_role_query_term
 logger = logging.getLogger(__name__)
 _PROVIDER_COOLDOWN_UNTIL: Dict[str, datetime] = {}
 _PROVIDER_RATE_LIMIT_COOLDOWN_MINUTES = 15
+FEED_COVERAGE_EVALUATOR_VERSION = "feed-coverage-v1"
 
 GREENHOUSE_SEED_BOARDS = [
     ("stripe", "Stripe"),
@@ -78,6 +79,104 @@ LEGACY_INVALID_LEVER_SEED_SITES = [
     "mercury",
     "headway",
 ]
+
+
+def hash_feed_coverage_user_id(user_id: str, *, salt: Optional[str] = None) -> str:
+    """Return a stable, non-reversible identifier for coverage audit output."""
+    hash_salt = salt or os.environ.get("COVERAGE_AUDIT_HASH_SALT") or os.environ.get("SESSION_SECRET")
+    if not hash_salt:
+        raise RuntimeError("COVERAGE_AUDIT_HASH_SALT or SESSION_SECRET is required")
+    return hashlib.sha256(f"{hash_salt}:{user_id}".encode("utf-8")).hexdigest()
+
+
+def build_feed_coverage_snapshot(
+    *,
+    user_id: str,
+    profile: Dict[str, Any],
+    feed_response: Dict[str, Any],
+    evaluated_at: Optional[datetime] = None,
+    freshness_window_days: int = 30,
+    hash_salt: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Summarize an already-evaluated no-refresh feed without mutating state."""
+    evaluated_at = evaluated_at or datetime.now(timezone.utc)
+    jobs = [job for job in (feed_response.get("jobs") or []) if isinstance(job, dict)]
+
+    def _identity(job: Dict[str, Any]) -> str:
+        return str(
+            job.get("canonical_group_id")
+            or (
+                f"{job.get('provider')}:{job.get('external_id')}"
+                if job.get("provider") and job.get("external_id")
+                else job.get("job_id")
+            )
+            or ""
+        )
+
+    def _is_actionable(job: Dict[str, Any]) -> bool:
+        status = str(job.get("apply_fulfillment_status") or "").strip().lower()
+        blocked = status.startswith("blocked") or status in {"expired", "discovery_only"}
+        has_url = bool(
+            job.get("selected_apply_url")
+            or job.get("external_url")
+            or job.get("apply_url")
+            or job.get("hosted_url")
+        )
+        return not blocked and has_url and str(job.get("application_mode") or "").lower() != "blocked"
+
+    def _is_fresh(job: Dict[str, Any]) -> bool:
+        raw = job.get("posted_at") or job.get("first_seen_at") or job.get("imported_at")
+        if not raw:
+            return False
+        try:
+            parsed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        except ValueError:
+            return False
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed >= evaluated_at - timedelta(days=freshness_window_days)
+
+    actionable_jobs = [job for job in jobs if _is_actionable(job)]
+    unique_ids = {_identity(job) for job in jobs if _identity(job)}
+    source_set = sorted({str(job.get("provider")) for job in jobs if job.get("provider")})
+    empty_reason = feed_response.get("empty_reason")
+    terminal_reason = (
+        empty_reason.get("code")
+        if isinstance(empty_reason, dict) and empty_reason.get("code")
+        else feed_response.get("fallback_used")
+        or ("RESULTS_RETURNED" if jobs else "NO_RESULTS")
+    )
+    profile_location = profile.get("target_location_data") if isinstance(profile.get("target_location_data"), dict) else {}
+
+    return {
+        "user_id": hash_feed_coverage_user_id(user_id, salt=hash_salt),
+        "cohort_dimensions": {
+            "country_code": str(profile_location.get("country_code") or "").lower() or None,
+            "remote_preference": profile.get("remote_preference") or None,
+        },
+        "evaluated_at": evaluated_at.isoformat(),
+        "source_set": source_set,
+        "freshness_window_days": freshness_window_days,
+        "relevant_total": len(jobs),
+        "fresh_relevant_total": sum(1 for job in jobs if _is_fresh(job)),
+        "unique_total": len(unique_ids),
+        "actionable_total": len(actionable_jobs),
+        "unseen_actionable_total": len(actionable_jobs),
+        "route_known_count": sum(
+            1
+            for job in jobs
+            if str(job.get("ats_provider") or "").strip().lower() not in {"", "unknown", "none"}
+        ),
+        "direct_employer_count": sum(
+            1
+            for job in jobs
+            if str(job.get("provider") or "").strip().lower()
+            in {"greenhouse", "lever", "ashby", "recruitee", "personio", "smartrecruiters", "teamtailor"}
+        ),
+        "ordered_eligible_job_ids": [str(job.get("job_id")) for job in jobs if job.get("job_id")],
+        "terminal_reason": terminal_reason,
+        "evaluator_version": FEED_COVERAGE_EVALUATOR_VERSION,
+    }
 
 
 def _env_bool(name: str, default: bool = False) -> bool:

@@ -116,6 +116,8 @@ from creator_invite_store import (
     validate_invite,
 )
 from jobs_service import (
+    FEED_COVERAGE_EVALUATOR_VERSION,
+    build_feed_coverage_snapshot,
     build_profile_job_query,
     refresh_greenhouse_boards,
     refresh_jobs_for_profile_if_needed,
@@ -825,6 +827,12 @@ class AdminJobsFeedDiagnosticRequest(BaseModel):
     search_radius: str = "worldwide"
     limit: int = 5
     dry_run: bool = True
+
+
+class AdminFeedCoverageAuditRequest(BaseModel):
+    user_ids: List[str]
+    limit: int = 25
+    freshness_window_days: Literal[1, 7, 30] = 30
 
 
 class AdminAtsDiscoverSourcesRequest(BaseModel):
@@ -6506,6 +6514,7 @@ async def get_feed(
     prefetch: bool = False,
     score: bool = False,                                  # opt-in AI scoring (slow); default off for snappy UX
     search_role: Optional[str] = None,                    # override profile target_role for this feed request
+    audit_mode: bool = Query(False, include_in_schema=False),
 ):
     started_at = time.perf_counter()
     logger.info(
@@ -6704,7 +6713,7 @@ async def get_feed(
             response["debug"] = debug
         return response
 
-    if _env_bool("JOBS_FEED_LEGACY_JSEARCH_ONLY", False):
+    if _env_bool("JOBS_FEED_LEGACY_JSEARCH_ONLY", False) and not audit_mode:
         return await _legacy_jsearch_only_feed()
 
     # Raised alongside sync_refresh_max_seconds/total_seconds below (was 16.0
@@ -7012,7 +7021,7 @@ async def get_feed(
         db_min_good_results = max(1, _env_int("JOBS_DB_MIN_GOOD_RESULTS_BEFORE_JSEARCH", 30))
         db_weak_results_threshold = max(0, _env_int("JOBS_DB_WEAK_RESULTS_THRESHOLD", 10))
         allow_unknown_tier = _env_bool("JOBS_ALLOW_UNKNOWN_TIER_IN_FEED", False)
-        sync_refresh_enabled = _env_bool("JOBS_FEED_SYNC_REFRESH_ENABLED", True)
+        sync_refresh_enabled = not audit_mode and _env_bool("JOBS_FEED_SYNC_REFRESH_ENABLED", True)
         # Was 4s. Confirmed live that JSearch's own response time regularly
         # exceeds that for non-French markets (Marseille/Lyon: ~4-5s; London/
         # New York: 10-20s, reliably blowing a 4s budget before any answer
