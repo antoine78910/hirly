@@ -1244,44 +1244,91 @@ class SupabaseCollectionAdapter(CollectionPort):
         return SupabaseWriteResult(inserted_count=result.get("rows", 0))
 
     async def update_one(self, filter: Filter, update: Document, upsert: bool = False):
-        if upsert and self._can_fast_upsert(filter, update):
-            document: Document = {}
-            for key, value in filter.items():
-                if not key.startswith("$") and not isinstance(value, dict):
-                    _set_document_path(document, key, value)
-            if "$setOnInsert" in update:
-                for key, value in (update.get("$setOnInsert") or {}).items():
-                    _set_document_path(document, key, value)
+        started_at = time.perf_counter()
+        snapshot = _metric_snapshot()
+        try:
+            if upsert and self._can_fast_upsert(filter, update):
+                document: Document = {}
+                for key, value in filter.items():
+                    if not key.startswith("$") and not isinstance(value, dict):
+                        _set_document_path(document, key, value)
+                if "$setOnInsert" in update:
+                    for key, value in (update.get("$setOnInsert") or {}).items():
+                        _set_document_path(document, key, value)
+                if "$set" in update:
+                    for key, value in (update.get("$set") or {}).items():
+                        _set_document_path(document, key, value)
+                result = await upsert_supabase_documents(self.supabase_url or "", self.secret_key or "", self.table_name, [document])
+                if not result.get("ok"):
+                    raise RuntimeError(result.get("error") or f"Supabase {self.table_name} update failed")
+                write_result = SupabaseWriteResult(
+                    matched_count=0,
+                    modified_count=1,
+                    upserted_id=_document_key(self.table_name, _json_safe(document)),
+                )
+                _emit_adapter_metric(
+                    operation="update_one",
+                    table=self.table_name,
+                    started_at=started_at,
+                    snapshot=snapshot,
+                    rows_returned=1,
+                    filter_status="pushed",
+                )
+                return write_result
+
+            existing = await self.find_one(filter, {"_id": 0})
+            if not existing and not upsert:
+                write_result = SupabaseWriteResult(matched_count=0, modified_count=0, upserted_id=None)
+                _emit_adapter_metric(
+                    operation="update_one",
+                    table=self.table_name,
+                    started_at=started_at,
+                    snapshot=snapshot,
+                    filter_status="pushed" if _postgrest_filter_params(self.table_name, filter) is not None else "local",
+                )
+                return write_result
+            document = dict(existing or {})
             if "$set" in update:
                 for key, value in (update.get("$set") or {}).items():
                     _set_document_path(document, key, value)
+            if "$setOnInsert" in update and not existing:
+                for key, value in (update.get("$setOnInsert") or {}).items():
+                    _set_document_path(document, key, value)
+            if "$inc" in update:
+                for key, value in (update.get("$inc") or {}).items():
+                    document[key] = int(document.get(key) or 0) + int(value)
+            if not any(key.startswith("$") for key in update):
+                document.update(update)
+            for key, value in filter.items():
+                if not key.startswith("$") and not isinstance(value, dict):
+                    document.setdefault(key, value)
             result = await upsert_supabase_documents(self.supabase_url or "", self.secret_key or "", self.table_name, [document])
             if not result.get("ok"):
                 raise RuntimeError(result.get("error") or f"Supabase {self.table_name} update failed")
-            return SupabaseWriteResult(matched_count=0, modified_count=1, upserted_id=_document_key(self.table_name, _json_safe(document)))
-
-        existing = await self.find_one(filter, {"_id": 0})
-        if not existing and not upsert:
-            return SupabaseWriteResult(matched_count=0, modified_count=0, upserted_id=None)
-        document = dict(existing or {})
-        if "$set" in update:
-            for key, value in (update.get("$set") or {}).items():
-                _set_document_path(document, key, value)
-        if "$setOnInsert" in update and not existing:
-            for key, value in (update.get("$setOnInsert") or {}).items():
-                _set_document_path(document, key, value)
-        if "$inc" in update:
-            for key, value in (update.get("$inc") or {}).items():
-                document[key] = int(document.get(key) or 0) + int(value)
-        if not any(key.startswith("$") for key in update):
-            document.update(update)
-        for key, value in filter.items():
-            if not key.startswith("$") and not isinstance(value, dict):
-                document.setdefault(key, value)
-        result = await upsert_supabase_documents(self.supabase_url or "", self.secret_key or "", self.table_name, [document])
-        if not result.get("ok"):
-            raise RuntimeError(result.get("error") or f"Supabase {self.table_name} update failed")
-        return SupabaseWriteResult(matched_count=1 if existing else 0, modified_count=1, upserted_id=None if existing else _document_key(self.table_name, _json_safe(document)))
+            write_result = SupabaseWriteResult(
+                matched_count=1 if existing else 0,
+                modified_count=1,
+                upserted_id=None if existing else _document_key(self.table_name, _json_safe(document)),
+            )
+            _emit_adapter_metric(
+                operation="update_one",
+                table=self.table_name,
+                started_at=started_at,
+                snapshot=snapshot,
+                rows_returned=1,
+                filter_status="pushed" if _postgrest_filter_params(self.table_name, filter) is not None else "local",
+            )
+            return write_result
+        except Exception:
+            _emit_adapter_metric(
+                operation="update_one",
+                table=self.table_name,
+                started_at=started_at,
+                snapshot=snapshot,
+                filter_status="pushed" if _postgrest_filter_params(self.table_name, filter) is not None else "local",
+                status="error",
+            )
+            raise
 
     def _can_fast_upsert(self, filter: Filter, update: Document) -> bool:
         if self.table_name == "profiles":
@@ -1300,12 +1347,35 @@ class SupabaseCollectionAdapter(CollectionPort):
         return True
 
     async def update_many(self, filter: Filter, update: Document, upsert: bool = False):
-        docs = await self._read_documents(filter)
-        modified = 0
-        for doc in docs:
-            await self.update_one({TABLE_PRIMARY_KEYS[self.table_name]: _document_key(self.table_name, doc)}, update, upsert=False)
-            modified += 1
-        return SupabaseWriteResult(matched_count=len(docs), modified_count=modified)
+        started_at = time.perf_counter()
+        snapshot = _metric_snapshot()
+        docs: List[Document] = []
+        try:
+            docs = await self._read_documents(filter)
+            modified = 0
+            for doc in docs:
+                await self.update_one({TABLE_PRIMARY_KEYS[self.table_name]: _document_key(self.table_name, doc)}, update, upsert=False)
+                modified += 1
+            _emit_adapter_metric(
+                operation="update_many",
+                table=self.table_name,
+                started_at=started_at,
+                snapshot=snapshot,
+                rows_returned=modified,
+                filter_status="pushed" if _postgrest_filter_params(self.table_name, filter) is not None else "local",
+            )
+            return SupabaseWriteResult(matched_count=len(docs), modified_count=modified)
+        except Exception:
+            _emit_adapter_metric(
+                operation="update_many",
+                table=self.table_name,
+                started_at=started_at,
+                snapshot=snapshot,
+                rows_returned=len(docs),
+                filter_status="pushed" if _postgrest_filter_params(self.table_name, filter) is not None else "local",
+                status="error",
+            )
+            raise
 
     async def delete_one(self, filter: Filter):
         docs = await self._read_documents(filter)
@@ -1315,10 +1385,35 @@ class SupabaseCollectionAdapter(CollectionPort):
         return SupabaseWriteResult(deleted_count=1)
 
     async def delete_many(self, filter: Filter):
-        docs = await self._read_documents(filter)
-        for doc in docs:
-            await self._delete_by_key(_document_key(self.table_name, doc))
-        return SupabaseWriteResult(deleted_count=len(docs))
+        started_at = time.perf_counter()
+        snapshot = _metric_snapshot()
+        docs: List[Document] = []
+        deleted = 0
+        try:
+            docs = await self._read_documents(filter)
+            for doc in docs:
+                await self._delete_by_key(_document_key(self.table_name, doc))
+                deleted += 1
+            _emit_adapter_metric(
+                operation="delete_many",
+                table=self.table_name,
+                started_at=started_at,
+                snapshot=snapshot,
+                rows_returned=deleted,
+                filter_status="pushed" if _postgrest_filter_params(self.table_name, filter) is not None else "local",
+            )
+            return SupabaseWriteResult(deleted_count=deleted)
+        except Exception:
+            _emit_adapter_metric(
+                operation="delete_many",
+                table=self.table_name,
+                started_at=started_at,
+                snapshot=snapshot,
+                rows_returned=deleted,
+                filter_status="pushed" if _postgrest_filter_params(self.table_name, filter) is not None else "local",
+                status="error",
+            )
+            raise
 
     async def _delete_by_key(self, key_value: str) -> None:
         self._require_read_supported()
@@ -1330,6 +1425,7 @@ class SupabaseCollectionAdapter(CollectionPort):
             params={key: f"eq.{key_value}"},
             headers=_supabase_headers(self.secret_key or ""),
         )
+        _record_remote_response(response)
         if response.status_code not in (200, 202, 204):
             raise RuntimeError(f"Supabase {self.table_name} delete returned HTTP {response.status_code}: {response.text[:300]}")
 
@@ -1396,18 +1492,40 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
         self.creator_applications = SupabaseCollectionAdapter("creator_applications", supabase_url, secret_key)
 
     async def _python_ingestion_rpc(self, function_name: str, payload: Dict[str, Any]) -> Any:
+        started_at = time.perf_counter()
+        snapshot = _metric_snapshot()
         client = _get_shared_http_client()
-        response = await client.post(
-            self.supabase_url.rstrip("/") + f"/rest/v1/rpc/{function_name}",
-            json=payload,
-            headers=_supabase_headers(self.secret_key),
-        )
-        if response.status_code not in (200, 201, 204):
-            raise RuntimeError(
-                f"Supabase ingestion ledger RPC {function_name} returned HTTP "
-                f"{response.status_code}: {response.text[:300]}"
+        try:
+            response = await client.post(
+                self.supabase_url.rstrip("/") + f"/rest/v1/rpc/{function_name}",
+                json=payload,
+                headers=_supabase_headers(self.secret_key),
             )
-        return response.json() if response.content else None
+            _record_remote_response(response)
+            if response.status_code not in (200, 201, 204):
+                raise RuntimeError(
+                    f"Supabase ingestion ledger RPC {function_name} returned HTTP "
+                    f"{response.status_code}: {response.text[:300]}"
+                )
+            result = response.json() if response.content else None
+            rows_returned = len(result) if isinstance(result, list) else int(result is not None)
+            _emit_adapter_metric(
+                operation=f"rpc:{function_name}",
+                table="rpc",
+                started_at=started_at,
+                snapshot=snapshot,
+                rows_returned=rows_returned,
+            )
+            return result
+        except Exception:
+            _emit_adapter_metric(
+                operation=f"rpc:{function_name}",
+                table="rpc",
+                started_at=started_at,
+                snapshot=snapshot,
+                status="error",
+            )
+            raise
 
     async def _python_provider_rpc(self, function_name: str, payload: Dict[str, Any]) -> Any:
         adapter = self._jobs_inventory_rpc_adapter
@@ -1707,6 +1825,7 @@ async def upsert_supabase_documents(
             headers=headers,
             content=json.dumps(rows),
         )
+        _record_remote_response(response)
         if response.status_code not in (200, 201, 204):
             return {
                 "ok": False,
