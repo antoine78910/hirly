@@ -2,12 +2,16 @@ import {
   careerSourceCandidateRegistrationSchema,
   careerSourceCandidateSchema,
   runViewSchema,
+  sourcePageCommitResultSchema,
+  sourcePageCommitSchema,
   type CanonicalJob,
   type CareerSourceCandidate,
   type CareerSourceCandidateRegistration,
   type EnqueueRun,
   type Provider,
   type RunView,
+  type SourcePageCommit,
+  type SourcePageCommitResult,
 } from "@hirly/contracts";
 import postgres, { type Sql } from "postgres";
 
@@ -274,7 +278,16 @@ export class WorkerRepository {
       company: job.company,
       normalized_company: job.normalizedCompany,
       location: job.location,
+      city: job.city ?? null,
+      region: job.region ?? null,
       country_code: job.countryCode,
+      remote: job.remote ?? null,
+      salary_min: job.salaryMin ?? null,
+      salary_max: job.salaryMax ?? null,
+      currency: job.currency ?? null,
+      posted_at: job.postedAt ?? null,
+      imported_at: job.importedAt ?? null,
+      last_seen_at: job.lastSeenAt ?? null,
       selected_apply_url: job.selectedApplyUrl,
       validation_status: job.validationStatus,
       validation_reason: job.validationReason,
@@ -304,6 +317,85 @@ export class WorkerRepository {
       )
     `;
     return row?.write_jobs_and_complete === true;
+  }
+
+  async commitSproutSourcePage(
+    lease: Lease,
+    providerClaim: ProviderWorkClaim,
+    commit: SourcePageCommit,
+  ): Promise<SourcePageCommitResult> {
+    if (providerClaim.provider !== "sprout") {
+      throw new Error("Sprout source commits require a Sprout ownership claim");
+    }
+    const input = sourcePageCommitSchema.parse(commit);
+    const entries = input.entries.map((entry) => ({
+      canonical: {
+        job_id: entry.canonical.jobId,
+        provider: entry.canonical.provider,
+        external_id: entry.canonical.externalId,
+        title: entry.canonical.title,
+        normalized_title: entry.canonical.normalizedTitle,
+        company: entry.canonical.company,
+        normalized_company: entry.canonical.normalizedCompany,
+        location: entry.canonical.location,
+        city: entry.canonical.city ?? null,
+        region: entry.canonical.region ?? null,
+        country_code: entry.canonical.countryCode,
+        remote: entry.canonical.remote ?? null,
+        salary_min: entry.canonical.salaryMin ?? null,
+        salary_max: entry.canonical.salaryMax ?? null,
+        currency: entry.canonical.currency ?? null,
+        posted_at: entry.canonical.postedAt ?? null,
+        imported_at: entry.canonical.importedAt ?? null,
+        last_seen_at: entry.canonical.lastSeenAt ?? null,
+        selected_apply_url: entry.canonical.selectedApplyUrl,
+        validation_status: entry.canonical.validationStatus,
+        validation_reason: entry.canonical.validationReason,
+        validation_checked_at: entry.canonical.validationCheckedAt,
+        applyability_tier: entry.canonical.applyabilityTier,
+        applyability_score: entry.canonical.applyabilityScore,
+        apply_fulfillment_status: entry.canonical.applyFulfillmentStatus,
+        apply_url_provider: entry.canonical.applyUrlProvider,
+        ats_provider: entry.canonical.atsProvider,
+        requires_login: entry.canonical.requiresLogin,
+        requires_account_creation: entry.canonical.requiresAccountCreation,
+        captcha_detected: entry.canonical.captchaDetected,
+        manual_fulfillment_ready: entry.canonical.manualFulfillmentReady,
+        auto_apply_supported: entry.canonical.autoApplySupported,
+        rejection_reason: entry.canonical.rejectionReason,
+        fingerprint: entry.canonical.fingerprint,
+        data: entry.canonical.data,
+      },
+      content_hash: entry.contentHash,
+      fetched_at: entry.fetchedAt,
+      source_document: entry.sourceDocument,
+      canonical_source_url: entry.canonicalSourceUrl,
+      canonical_apply_url: entry.canonicalApplyUrl,
+      ats_posting_id: entry.atsPostingId,
+      published_at: entry.publishedAt,
+      expires_at: entry.expiresAt,
+      lifecycle_state: entry.lifecycleState,
+      attribution: entry.attribution,
+      policy_id: entry.policyId,
+    }));
+    const [row] = await this.sql<{ commit_sprout_source_page: unknown }[]>`
+      SELECT worker_private.commit_sprout_source_page(
+        ${lease.taskId}::uuid,
+        ${lease.leaseToken}::uuid,
+        ${lease.claimGeneration.toString()}::bigint,
+        ${lease.leaseOwner},
+        ${providerClaim.claimId}::uuid,
+        ${input.sourceId}::uuid,
+        ${input.countryCode},
+        ${input.mode},
+        ${this.sql.json(asJson(input.checkpointIn))},
+        ${this.sql.json(asJson(input.checkpointOut))},
+        ${input.complete},
+        ${this.sql.json(asJson(entries))}
+      )
+    `;
+    if (!row) throw new Error("commit_sprout_source_page returned no row");
+    return sourcePageCommitResultSchema.parse(row.commit_sprout_source_page);
   }
 
   async claimProviderWork(
