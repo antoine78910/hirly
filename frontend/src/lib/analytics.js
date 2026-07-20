@@ -135,7 +135,8 @@ const pruneOutbox = (events, now = Date.now()) => {
 const enqueueEvent = (event) => {
   const existing = pruneOutbox(readAnalyticsOutbox());
   const next = pruneOutbox([...existing, event]);
-  if (byteLength(next) > ANALYTICS_OUTBOX_MAX_BYTES && next.every((item) => item.critical)) {
+  if ((next.length > ANALYTICS_OUTBOX_MAX_EVENTS || byteLength(next) > ANALYTICS_OUTBOX_MAX_BYTES)
+    && next.every((item) => item.critical)) {
     console.warn("analytics_outbox_critical_overflow");
     return false;
   }
@@ -174,7 +175,7 @@ export const flushAnalyticsOutbox = async () => {
       retryAttempt = Math.min(retryAttempt + 1, 6);
       if (typeof window !== "undefined" && !retryTimer) {
         const baseDelay = [1000, 2000, 4000, 8000, 16000, 60000][retryAttempt - 1];
-        const delay = Math.round(baseDelay * (0.8 + Math.random() * 0.4));
+        const delay = Math.min(60000, Math.round(baseDelay * (0.8 + Math.random() * 0.4)));
         retryTimer = window.setTimeout(() => {
           retryTimer = null;
           flushAnalyticsOutbox();
@@ -213,7 +214,10 @@ export const trackEvent = (event, properties = {}) => {
     return api.post("/analytics/events", {
       batch_id: payload.batch_id,
       events: [payload],
-    }).catch(() => {});
+    }).catch(() => {
+      // Critical overflow is delivered immediately; retain it if that attempt fails.
+      writeAnalyticsOutbox([...readAnalyticsOutbox(), payload]);
+    });
   }
   return flushAnalyticsOutbox();
 };
