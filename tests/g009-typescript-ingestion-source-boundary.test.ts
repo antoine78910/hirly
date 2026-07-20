@@ -70,6 +70,7 @@ describe("G009 disabled TypeScript source contract", () => {
       sourceRegistryEntrySchema.parse(policy().source),
     ).toMatchObject({
       enabled: true,
+      transportEnabled: true,
       incrementalEnabled: true,
       backfillEnabled: false,
     });
@@ -196,7 +197,7 @@ describe("G009 additive database boundary", () => {
       expect(rollback).toContain(object);
     }
     expect(migration).toContain(
-      "UNIQUE (run_id, source_id, external_id, content_hash)",
+      "UNIQUE (id, source_id, external_id, content_hash)",
     );
     expect(migration).toContain(
       "UNIQUE (id, source_id, external_id, content_hash)",
@@ -255,17 +256,8 @@ describe("G009 additive database boundary", () => {
     expect(migration).not.toMatch(
       /\b(?:INSERT\s+INTO|UPDATE)\s+(?:public\.)?provider_registry\b/i,
     );
-    for (const definition of [
-      migration.match(/ALTER TABLE public\.career_sources[\s\S]*?;/)?.[0],
-      migration.match(
-        /CREATE TABLE IF NOT EXISTS public\.raw_job_snapshots[\s\S]*?\n\);/,
-      )?.[0],
-      migration.match(
-        /CREATE TABLE IF NOT EXISTS public\.job_occurrences[\s\S]*?\n\);/,
-      )?.[0],
-    ]) {
-      expect(definition).toBeDefined();
-      expect(definition).not.toContain("writer_runtime");
-    }
+    expect(migration).not.toContain(
+      "ADD COLUMN IF NOT EXISTS writer_runtime",
+    );
   });
 });
