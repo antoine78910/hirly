@@ -14,14 +14,14 @@ export default function PostHogLifecycle() {
   const { user } = useAuth() as unknown as { user?: { user_id?: unknown } | null };
 
   useEffect(() => {
-    capturePostHogPageview(pathname);
-  }, [pathname]);
-
-  useEffect(() => {
     const nextUserId = typeof user?.user_id === "string" ? user.user_id : null;
     if (nextUserId) identifyPostHogUser(nextUserId);
     else resetPostHog();
   }, [user?.user_id]);
+
+  useEffect(() => {
+    capturePostHogPageview(pathname);
+  }, [pathname, user?.user_id]);
 
   useEffect(() => {
     syncPostHogReplay();

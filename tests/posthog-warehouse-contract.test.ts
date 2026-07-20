@@ -58,5 +58,9 @@ describe("PostHog warehouse containment migration", () => {
   test("provides an explicit rollback", () => {
     expect(rollback).toContain("DROP SCHEMA IF EXISTS analytics_public CASCADE");
     expect(rollback).toContain("DROP ROLE posthog_warehouse_reader");
+    expect(rollback).toContain(
+      "managed-by-hirly-migration-20260720001800",
+    );
+    expect(rollback).not.toContain("DROP OWNED BY posthog_warehouse_reader");
   });
 });
