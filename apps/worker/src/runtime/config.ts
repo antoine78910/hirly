@@ -14,7 +14,7 @@ const runtimeConfigSchema = z.object({
     .number()
     .int()
     .min(100)
-    .max(120_000)
+    .max(25_000)
     .default(25_000),
   WORKER_INSTANCE_ID: z.string().trim().min(1).max(128).optional(),
 });

@@ -1,3 +1,5 @@
+import { redact } from "@hirly/observability";
+
 export class PermanentTaskError extends Error {
   readonly code: string;
 
@@ -21,4 +23,3 @@ export function safeErrorMessage(error: unknown): string {
   const redacted = redact(error.message);
   return String(redacted).slice(0, 512);
 }
-import { redact } from "@hirly/observability";

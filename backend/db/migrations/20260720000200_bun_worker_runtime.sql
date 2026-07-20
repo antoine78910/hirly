@@ -80,7 +80,7 @@ AS $$
     run.requested_at,
     run.started_at,
     run.finished_at,
-    run.summary,
+    '{}'::jsonb,
     run.error_code
   FROM public.worker_runs AS run
   WHERE run.id = p_run_id
