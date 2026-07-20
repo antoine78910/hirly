@@ -118,13 +118,22 @@ const writeAnalyticsOutbox = (events) => {
   }
 };
 
+const emitCriticalOverflowMetric = () => {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("hirly:analytics_outbox_overflow", { detail: { critical: true } }));
+    window.__hirlyAnalyticsMetrics = window.__hirlyAnalyticsMetrics || {};
+    window.__hirlyAnalyticsMetrics.criticalOverflow = (window.__hirlyAnalyticsMetrics.criticalOverflow || 0) + 1;
+  }
+  console.warn("analytics_outbox_critical_overflow");
+};
+
 const pruneOutbox = (events, now = Date.now()) => {
   const live = events.filter((item) => now - Number(item.created_at || 0) <= OUTBOX_TTL_MS);
   live.sort((a, b) => Number(a.created_at || 0) - Number(b.created_at || 0));
   while (live.length > ANALYTICS_OUTBOX_MAX_EVENTS || byteLength(live) > ANALYTICS_OUTBOX_MAX_BYTES) {
     const bestEffortIndex = live.findIndex((item) => !item.critical);
     if (bestEffortIndex < 0) {
-      console.warn("analytics_outbox_critical_overflow");
+      emitCriticalOverflowMetric();
       break;
     }
     live.splice(bestEffortIndex, 1);
@@ -137,7 +146,7 @@ const enqueueEvent = (event) => {
   const next = pruneOutbox([...existing, event]);
   if ((next.length > ANALYTICS_OUTBOX_MAX_EVENTS || byteLength(next) > ANALYTICS_OUTBOX_MAX_BYTES)
     && next.every((item) => item.critical)) {
-    console.warn("analytics_outbox_critical_overflow");
+    emitCriticalOverflowMetric();
     return false;
   }
   return writeAnalyticsOutbox(next);
@@ -216,7 +225,7 @@ export const trackEvent = (event, properties = {}) => {
       events: [payload],
     }).catch(() => {
       // Critical overflow is delivered immediately; retain it if that attempt fails.
-      writeAnalyticsOutbox([...readAnalyticsOutbox(), payload]);
+      writeAnalyticsOutbox([...readAnalyticsOutbox(), payload].slice(-ANALYTICS_OUTBOX_MAX_EVENTS));
     });
   }
   return flushAnalyticsOutbox();
