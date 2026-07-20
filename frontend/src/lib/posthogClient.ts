@@ -1,5 +1,7 @@
 import posthog, { type CaptureResult, type PostHog, type PostHogConfig, type Properties } from "posthog-js";
 
+import { resolveAnalyticsEvent } from "./analyticsRegistry";
+
 const MAX_DEPTH = 6;
 const MAX_ARRAY_LENGTH = 50;
 const MAX_OBJECT_KEYS = 50;
@@ -7,54 +9,6 @@ const MAX_STRING_LENGTH = 500;
 const URL_KEY_PATTERN = /(^|[_-])(url|uri|href|referrer|page|path)([_-]|$)/i;
 const SENSITIVE_KEY_PATTERN =
   /(access|auth|bearer|card|code|coverletter|cv|document|email|linkedin|message|name|password|phone|refresh|resume|secret|session|token)/;
-const ALLOWED_CUSTOM_EVENTS = new Set([
-  "action_required_answer_saved",
-  "admin_application_assigned",
-  "admin_application_email_sent",
-  "admin_application_opened",
-  "admin_status_updated",
-  "admin_view",
-  "application_action_required",
-  "application_blocked",
-  "application_defaults_updated",
-  "application_generated",
-  "application_generation_started",
-  "application_prepare_failed",
-  "application_prepared",
-  "application_submitted",
-  "auth_success",
-  "checkout_started",
-  "cta_login_clicked",
-  "cta_signup_clicked",
-  "cta_start_swiping_clicked",
-  "cv_upload_completed",
-  "cv_upload_failed",
-  "cv_upload_started",
-  "filters_applied",
-  "friend_referral_enrolled",
-  "friend_referral_progress",
-  "friend_referral_redeemed",
-  "friend_referral_shared",
-  "job_card_viewed",
-  "job_swiped_left",
-  "job_swiped_right",
-  "landing_account_logout",
-  "landing_view",
-  "login_email_submitted",
-  "onboarding_completed",
-  "onboarding_started",
-  "onboarding_step_completed",
-  "password_reset_completed",
-  "password_reset_page_view",
-  "password_reset_requested",
-  "prepare_again_clicked",
-  "profile_updated",
-  "profile_view",
-  "signin_google_clicked",
-  "signin_page_view",
-  "swipe_page_view",
-  "tracker_view",
-]);
 const ALLOWED_SYSTEM_EVENTS = new Set(["$identify", "$pageview"]);
 
 let client: PostHog | null = null;
@@ -106,7 +60,12 @@ export const sanitizeAnalyticsProperties = (
 export const sanitizePostHogEvent = (event: CaptureResult | null): CaptureResult | null => {
   if (!event) return null;
   if (event.event === "$snapshot") return isReplayEnabled() ? event : null;
-  if (!ALLOWED_SYSTEM_EVENTS.has(event.event) && !ALLOWED_CUSTOM_EVENTS.has(event.event)) return null;
+  if (
+    !ALLOWED_SYSTEM_EVENTS.has(event.event) &&
+    !resolveAnalyticsEvent(event.event)
+  ) {
+    return null;
+  }
   const properties = sanitizeAnalyticsProperties(event.properties) as Properties | undefined;
   if (!properties) return null;
   for (const key of ["$current_url", "$referrer", "$pathname", "current_url", "referrer", "url", "path"]) {
@@ -166,10 +125,18 @@ export const initializePostHog = (): PostHog | null => {
 
 export const getPostHogClient = (): PostHog | null => client;
 
-export const capturePostHogEvent = (event: string, properties: Properties = {}): void => {
+export const capturePostHogEvent = (
+  event: string,
+  properties: Properties = {},
+  occurredAt?: string,
+): void => {
   if (!event || !client) return;
   try {
-    client.capture(event, sanitizeAnalyticsProperties(properties) as Properties);
+    client.capture(
+      event,
+      sanitizeAnalyticsProperties(properties) as Properties,
+      occurredAt ? { timestamp: new Date(occurredAt) } : undefined,
+    );
   } catch {
     // Analytics must never block product flows.
   }
