@@ -686,6 +686,9 @@ describe("G003 CLI and graceful lifecycle test seams", () => {
     expect(mainSource).toMatch(
       /await application\.stop\(\);[\s\S]*process\.exit\(0\)/,
     );
+    expect(mainSource).toMatch(
+      /catch[\s\S]*worker\.shutdown_failed[\s\S]*process\.exit\(1\)/,
+    );
 
     const child = Bun.spawn(
       [
