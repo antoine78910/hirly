@@ -147,7 +147,8 @@ describe("G012 BPCE disabled fixture adapter", () => {
         "https://jobs.smartrecruiters.com/BPCESyntheticFixture/000000000000000001-ingenieure-plateforme",
       validationStatus: "valid",
       atsProvider: "smartrecruiters",
-      applyabilityTier: "B",
+      applyabilityTier: "A",
+      autoApplySupported: true,
       applyFulfillmentStatus: "manual_ready",
       manualFulfillmentReady: true,
     });

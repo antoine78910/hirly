@@ -21,18 +21,20 @@ def test_valid_greenhouse_job_is_tier_a():
     assert result["auto_apply_supported"] is True
 
 
-def test_valid_lever_job_is_tier_a():
+def test_valid_lever_job_is_tier_b_without_registered_driver():
     result = cheap_validate_job_applyability(_job("https://jobs.lever.co/acme/123"))
     assert result["validation_status"] == "valid"
-    assert result["applyability_tier"] == "A"
+    assert result["applyability_tier"] == "B"
     assert result["ats_provider"] == "lever"
+    assert result["auto_apply_supported"] is False
 
 
-def test_valid_ashby_job_is_tier_a():
+def test_valid_ashby_job_is_tier_b_without_registered_driver():
     result = cheap_validate_job_applyability(_job("https://jobs.ashbyhq.com/acme/123"))
     assert result["validation_status"] == "valid"
-    assert result["applyability_tier"] == "A"
+    assert result["applyability_tier"] == "B"
     assert result["ats_provider"] == "ashby"
+    assert result["auto_apply_supported"] is False
 
 
 def test_linkedin_apply_url_is_tier_d():
