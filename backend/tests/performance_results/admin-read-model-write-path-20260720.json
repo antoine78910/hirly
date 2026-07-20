@@ -1,0 +1,152 @@
+{
+  "batch": {
+    "added_p95_ms": 31.022,
+    "baseline_p95_ms": 2.976,
+    "pass": true,
+    "projected_p95_ms": 33.998
+  },
+  "counter_lock": {
+    "bucket_distribution": {
+      "0": 16,
+      "1": 9,
+      "10": 16,
+      "11": 14,
+      "12": 14,
+      "13": 10,
+      "14": 12,
+      "15": 18,
+      "16": 24,
+      "17": 12,
+      "18": 13,
+      "19": 3,
+      "2": 11,
+      "20": 11,
+      "21": 12,
+      "22": 17,
+      "23": 10,
+      "24": 15,
+      "25": 16,
+      "26": 19,
+      "27": 14,
+      "28": 11,
+      "29": 11,
+      "3": 12,
+      "30": 10,
+      "31": 14,
+      "32": 15,
+      "33": 7,
+      "34": 16,
+      "35": 10,
+      "36": 8,
+      "37": 7,
+      "38": 14,
+      "39": 10,
+      "4": 6,
+      "40": 10,
+      "41": 12,
+      "42": 11,
+      "43": 14,
+      "44": 10,
+      "45": 14,
+      "46": 9,
+      "47": 9,
+      "48": 12,
+      "49": 11,
+      "5": 13,
+      "50": 11,
+      "51": 11,
+      "52": 14,
+      "53": 12,
+      "54": 15,
+      "55": 14,
+      "56": 14,
+      "57": 9,
+      "58": 13,
+      "59": 11,
+      "6": 20,
+      "60": 12,
+      "61": 13,
+      "62": 15,
+      "63": 14,
+      "7": 14,
+      "8": 8,
+      "9": 18
+    },
+    "counter_path_max_ms": 6.331920623779297,
+    "counter_path_p95_ms": 0.9582042694091797,
+    "measurement": "fixture-only before/after triggers bound read-model row insertion plus the counter trigger; the measured interval is an upper bound on counter lock wait",
+    "pass": true,
+    "samples": 800,
+    "statement_p95_ms": 7.656
+  },
+  "database": "admin_write_test",
+  "gates": {
+    "batch_added_p95_ms": 75,
+    "counter_lock_wait_upper_bound_p95_ms": 10,
+    "mixed_writes": 10000,
+    "single_row_added_p95_ms": 25
+  },
+  "mixed_writes": {
+    "completed": 10000,
+    "deadlocks": 0,
+    "pass": true,
+    "requested": 10000,
+    "workers": [
+      {
+        "elapsed_seconds": 11.60533375000523,
+        "pass": true,
+        "worker": 0,
+        "writes": 1250
+      },
+      {
+        "elapsed_seconds": 11.47216025000671,
+        "pass": true,
+        "worker": 1,
+        "writes": 1250
+      },
+      {
+        "elapsed_seconds": 11.664963374991203,
+        "pass": true,
+        "worker": 2,
+        "writes": 1250
+      },
+      {
+        "elapsed_seconds": 11.426364874991123,
+        "pass": true,
+        "worker": 3,
+        "writes": 1250
+      },
+      {
+        "elapsed_seconds": 11.46132029099681,
+        "pass": true,
+        "worker": 4,
+        "writes": 1250
+      },
+      {
+        "elapsed_seconds": 11.638667999999598,
+        "pass": true,
+        "worker": 5,
+        "writes": 1250
+      },
+      {
+        "elapsed_seconds": 11.501762665997376,
+        "pass": true,
+        "worker": 6,
+        "writes": 1250
+      },
+      {
+        "elapsed_seconds": 11.636620999997831,
+        "pass": true,
+        "worker": 7,
+        "writes": 1250
+      }
+    ]
+  },
+  "pass": true,
+  "single_row": {
+    "added_p95_ms": 18.524,
+    "baseline_p95_ms": 6.798,
+    "pass": true,
+    "projected_p95_ms": 25.322
+  }
+}

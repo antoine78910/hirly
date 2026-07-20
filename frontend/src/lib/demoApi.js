@@ -31,6 +31,115 @@ function clone(data) {
   return JSON.parse(JSON.stringify(data));
 }
 
+function demoCursorError() {
+  const error = new Error("Invalid admin cursor");
+  error.response = { status: 422, data: { detail: "Invalid admin cursor" } };
+  return error;
+}
+
+function demoCursorSignature(value) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function demoBase64Url(value) {
+  return btoa(value).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/g, "");
+}
+
+function demoBase64UrlDecode(value) {
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) throw demoCursorError();
+  const base64 = value.replaceAll("-", "+").replaceAll("_", "/");
+  return atob(base64 + "=".repeat((4 - (base64.length % 4)) % 4));
+}
+
+function demoScopeHash(value) {
+  return demoCursorSignature(JSON.stringify(value));
+}
+
+function encodeDemoCursor(payload) {
+  const body = JSON.stringify(payload);
+  return `${demoBase64Url(body)}.${demoCursorSignature(body)}`;
+}
+
+function decodeDemoCursor(cursor, resource, scopeHash) {
+  if (!cursor) return null;
+  try {
+    const [encoded, signature, ...extra] = String(cursor).split(".");
+    if (!encoded || !signature || extra.length) throw demoCursorError();
+    const body = demoBase64UrlDecode(encoded);
+    if (signature !== demoCursorSignature(body)) throw demoCursorError();
+    const payload = JSON.parse(body);
+    if (
+      payload?.v !== 1
+      || payload?.resource !== resource
+      || !["next", "previous"].includes(payload?.direction)
+      || payload?.scope_hash !== scopeHash
+      || typeof payload?.sort_at !== "string"
+      || typeof payload?.id !== "string"
+    ) throw demoCursorError();
+    return payload;
+  } catch (error) {
+    if (error?.response?.status === 422) throw error;
+    throw demoCursorError();
+  }
+}
+
+function compareDemoAdminRows(left, right, sortField, idField) {
+  const leftTime = String(left?.[sortField] || "-infinity");
+  const rightTime = String(right?.[sortField] || "-infinity");
+  if (leftTime !== rightTime) return leftTime > rightTime ? -1 : 1;
+  return String(left?.[idField] || "").localeCompare(String(right?.[idField] || ""));
+}
+
+function cursorAdminRows(rows, params, { resource, sortField, idField, scope }) {
+  const limit = Math.min(200, Math.max(1, Number.parseInt(params.limit || "100", 10) || 100));
+  const scopeHash = demoScopeHash({ resource, limit, ...scope });
+  const cursor = decodeDemoCursor(params.cursor, resource, scopeHash);
+  const sorted = [...rows].sort((left, right) => compareDemoAdminRows(left, right, sortField, idField));
+  let start = 0;
+  if (cursor) {
+    const anchor = { [sortField]: cursor.sort_at, [idField]: cursor.id };
+    const insertion = sorted.findIndex((row) => compareDemoAdminRows(row, anchor, sortField, idField) >= 0);
+    const anchorIndex = sorted.findIndex((row) => (
+      String(row?.[sortField] || "-infinity") === cursor.sort_at
+      && String(row?.[idField] || "") === cursor.id
+    ));
+    const boundary = anchorIndex >= 0 ? anchorIndex : (insertion >= 0 ? insertion : sorted.length);
+    start = cursor.direction === "previous"
+      ? Math.max(0, boundary - limit)
+      : Math.min(sorted.length, boundary + (anchorIndex >= 0 ? 1 : 0));
+  }
+  const pageRows = sorted.slice(start, start + limit);
+  const hasPrevious = start > 0;
+  const hasNext = start + pageRows.length < sorted.length;
+  const makeCursor = (row, direction) => row ? encodeDemoCursor({
+    v: 1,
+    resource,
+    direction,
+    sort_at: String(row?.[sortField] || "-infinity"),
+    id: String(row?.[idField] || ""),
+    scope_hash: scopeHash,
+  }) : null;
+  const now = new Date().toISOString();
+  return {
+    rows: pageRows,
+    total: sorted.length,
+    has_previous: hasPrevious,
+    has_next: hasNext,
+    previous_cursor: hasPrevious ? makeCursor(pageRows[0], "previous") : null,
+    next_cursor: hasNext ? makeCursor(pageRows.at(-1), "next") : null,
+    generated_at: now,
+    model_updated_at: now,
+    canonical_changed_at: now,
+    freshness_lag_seconds: 0,
+    read_model_version: 3,
+  };
+}
+
 function findJob(jobId) {
   return (
     state.feedJobs.find((j) => j.job_id === jobId)
@@ -287,7 +396,55 @@ export function getDemoResponse(config) {
   }
 
   if (method === "get" && path === "/admin/users") {
-    return { users: [] };
+    const query = String(params.q || "").trim().toLowerCase();
+    const payingOnly = ["1", "true", "yes"].includes(String(params.paying_only || "").toLowerCase());
+    const allUsers = [{
+      user_id: "demo-user", email: "demo@hirly.app", name: "Demo User",
+      is_premium: true, plan: "pro", credits_total: 100, credits_remaining: 84,
+      profile_completion: 100, cv_uploaded: true, total_applications: state.applications.length,
+      total_swipes: state.historyRight.length + state.historyLeft.length,
+      right_swipes: state.historyRight.length, left_swipes: state.historyLeft.length,
+      last_active_at: "2026-07-20T12:00:00+00:00",
+    }];
+    const matching = allUsers.filter((user) => {
+      const searchMatches = !query || [user.user_id, user.email, user.name].join(" ").toLowerCase().includes(query);
+      return searchMatches && (!payingOnly || user.is_premium);
+    });
+    const paged = cursorAdminRows(matching, params, {
+      resource: "users",
+      sortField: "last_active_at",
+      idField: "user_id",
+      scope: { q: query || null, paying_only: payingOnly },
+    });
+    const { rows, ...metadata } = paged;
+    return {
+      contract_version: "admin-users-cursor/v3",
+      users: rows,
+      ...metadata,
+      aggregates: { matching_paying: matching.filter((user) => user.is_premium).length },
+    };
+  }
+
+  if (method === "get" && path === "/admin/user-analytics") {
+    const paged = cursorAdminRows([], params, {
+      resource: "user-analytics",
+      sortField: "last_active_at",
+      idField: "user_id",
+      scope: { q: String(params.q || "").trim().toLowerCase() || null },
+    });
+    const { rows, ...metadata } = paged;
+    return {
+      contract_version: "admin-user-analytics-cursor/v2",
+      users: rows,
+      ...metadata,
+      summary: {
+        total_users: 0, onboarding_completed: 0, onboarding_in_progress: 0,
+        onboarding_never_started: 0, avg_time_spent_minutes: 0,
+        total_swipes: 0, total_applications: 0,
+      },
+      onboarding_dropoff: { by_step: [], never_started: 0, in_progress: 0, completed: 0 },
+      answer_distributions: [],
+    };
   }
 
   if (method === "get" && path === "/admin/creators") {
@@ -312,7 +469,32 @@ export function getDemoResponse(config) {
   }
 
   if (method === "get" && path.startsWith("/admin/applications")) {
-    return { applications: [], filter: params.filter || "all" };
+    const filter = params.filter || params.status || "all";
+    const normalized = clone(state.applications);
+    const matching = filter === "all"
+      ? normalized
+      : normalized.filter((application) => (
+        application.submission_status === filter
+        || application.manual_status === filter
+        || (filter === "prepared" && ["ready", "prepared"].includes(application.submission_status))
+      ));
+    const activeQueue = normalized
+      .filter((application) => ["queued", "running", "awaiting_review"].includes(application.auto_apply_queue_status));
+    const queueItems = activeQueue.slice(0, 20);
+    const paged = cursorAdminRows(matching, params, {
+      resource: "applications",
+      sortField: "sort_at",
+      idField: "application_id",
+      scope: { filter: filter === "all" ? null : filter },
+    });
+    const { rows, ...metadata } = paged;
+    return {
+      contract_version: "admin-applications-cursor/v3",
+      applications: rows,
+      ...metadata,
+      filter,
+      queue: { active_count: activeQueue.length, items: queueItems },
+    };
   }
 
   if (method === "get" && path === "/admin/training/invites") {

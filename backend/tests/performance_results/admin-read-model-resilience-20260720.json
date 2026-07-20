@@ -1,0 +1,192 @@
+{
+  "checks": {
+    "application_backfill_kill_restart": {
+      "detail": {
+        "concurrent_worker": {
+          "cursor_ignored": true,
+          "next_application_id": "a-0600",
+          "processed": 100,
+          "remaining": true
+        },
+        "killed_worker": {
+          "killed": true,
+          "returncode": 2,
+          "terminated_backends": 1
+        },
+        "recovery": {
+          "cursor_ignored": true,
+          "next_application_id": null,
+          "processed": 500,
+          "remaining": false
+        },
+        "state": {
+          "canonical": 600,
+          "counter": 600,
+          "model": 600
+        }
+      },
+      "pass": true
+    },
+    "corruption_reconcile_repair": {
+      "detail": {
+        "mismatch": {
+          "canonical_applications": 600,
+          "canonical_users": 20,
+          "clean_reconciliation_count": 0,
+          "counter_applications": 599,
+          "intervening_normal_write": true,
+          "model_applications": 600,
+          "model_users": 20,
+          "ok": false,
+          "ready": false
+        },
+        "repaired": {
+          "canonical_applications": 600,
+          "canonical_users": 20,
+          "clean_reconciliation_count": 2,
+          "counter_applications": 600,
+          "intervening_normal_write": true,
+          "model_applications": 600,
+          "model_users": 20,
+          "ok": true,
+          "ready": true
+        }
+      },
+      "pass": true
+    },
+    "full_cursor_traversal": {
+      "detail": {
+        "backward": {
+          "direction": "previous",
+          "first_id": "a-0037",
+          "last_id": "a-0593",
+          "pages": 17,
+          "unique": 600,
+          "visited": 600
+        },
+        "forward": {
+          "direction": "next",
+          "first_id": "a-0600",
+          "last_id": "a-0001",
+          "pages": 17,
+          "unique": 600,
+          "visited": 600
+        }
+      },
+      "pass": true
+    },
+    "rollback_reapply": {
+      "detail": {
+        "applications": {
+          "cursor_ignored": false,
+          "next_application_id": null,
+          "processed": 600,
+          "remaining": false
+        },
+        "first": {
+          "canonical_applications": 600,
+          "canonical_users": 20,
+          "clean_reconciliation_count": 1,
+          "counter_applications": 600,
+          "intervening_normal_write": false,
+          "model_applications": 600,
+          "model_users": 20,
+          "ok": true,
+          "ready": false
+        },
+        "rollback": {
+          "applications": 600,
+          "jobs": 1,
+          "read_model": null,
+          "users": 20
+        },
+        "rpc": {
+          "applications": 200,
+          "total": 600
+        },
+        "second": {
+          "canonical_applications": 600,
+          "canonical_users": 20,
+          "clean_reconciliation_count": 2,
+          "counter_applications": 600,
+          "intervening_normal_write": true,
+          "model_applications": 600,
+          "model_users": 20,
+          "ok": true,
+          "ready": true
+        },
+        "users": {
+          "cursor_ignored": false,
+          "next_user_id": null,
+          "processed": 20,
+          "remaining": false
+        }
+      },
+      "pass": true
+    },
+    "shadow_parity": {
+      "detail": {
+        "display_mismatches": 0,
+        "missing": 0,
+        "stale_job_leaks": 0
+      },
+      "pass": true
+    },
+    "two_pass_ready_after_bootstrap": {
+      "detail": {
+        "first": {
+          "canonical_applications": 600,
+          "canonical_users": 20,
+          "clean_reconciliation_count": 1,
+          "counter_applications": 600,
+          "intervening_normal_write": false,
+          "model_applications": 600,
+          "model_users": 20,
+          "ok": true,
+          "ready": false
+        },
+        "second": {
+          "canonical_applications": 600,
+          "canonical_users": 20,
+          "clean_reconciliation_count": 2,
+          "counter_applications": 600,
+          "intervening_normal_write": true,
+          "model_applications": 600,
+          "model_users": 20,
+          "ok": true,
+          "ready": true
+        }
+      },
+      "pass": true
+    },
+    "user_backfill_kill_restart": {
+      "detail": {
+        "concurrent_worker": {
+          "cursor_ignored": true,
+          "next_user_id": "u-020",
+          "processed": 10,
+          "remaining": true
+        },
+        "killed_worker": {
+          "killed": true,
+          "returncode": 2,
+          "terminated_backends": 1
+        },
+        "recovery": {
+          "cursor_ignored": true,
+          "next_user_id": null,
+          "processed": 10,
+          "remaining": false
+        },
+        "state": {
+          "canonical": 20,
+          "model": 20
+        }
+      },
+      "pass": true
+    }
+  },
+  "database": "hirly_task7_disposable",
+  "generated_at": "2026-07-20T20:33:20.086749+00:00",
+  "pass": true
+}

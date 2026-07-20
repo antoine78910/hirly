@@ -1,10 +1,9 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, Loader2, RefreshCw } from "lucide-react";
 import { api } from "../lib/api";
 import { adminApiErrorMessage, autoApplyApiUrl } from "../lib/adminApi";
 import {
   ONBOARDING_ANSWER_LABELS,
-  buildOnboardingAnswerDistribution,
   fmtDate,
   fmtDuration,
   formatOnboardingAnswerValue,
@@ -77,15 +76,24 @@ export default function AdminUserAnalytics() {
   const [accessDenied, setAccessDenied] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [cursor, setCursor] = useState(null);
+  const requestId = useRef(0);
 
   const load = useCallback(async () => {
+    const currentRequest = ++requestId.current;
     setLoading(true);
     setError("");
     setAccessDenied(false);
     try {
-      const { data: payload } = await api.get(autoApplyApiUrl("/admin/user-analytics"), { timeout: 60000 });
+      const { data: payload } = await api.get(autoApplyApiUrl("/admin/user-analytics"), {
+        timeout: 60000,
+        params: { limit: 100, cursor: cursor || undefined, q: debouncedSearch || undefined },
+      });
+      if (currentRequest !== requestId.current) return;
       setData(payload);
     } catch (err) {
+      if (currentRequest !== requestId.current) return;
       setData(null);
       if (err?.response?.status === 403) {
         setAccessDenied(true);
@@ -94,42 +102,31 @@ export default function AdminUserAnalytics() {
         setError(adminApiErrorMessage(err, "Could not load user analytics"));
       }
     } finally {
-      setLoading(false);
+      if (currentRequest === requestId.current) setLoading(false);
     }
-  }, []);
+  }, [cursor, debouncedSearch]);
 
   useEffect(() => {
     load();
   }, [load]);
 
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setCursor(null);
+      setDebouncedSearch(search.trim());
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [search]);
+
   const summary = data?.summary || {};
   const dropoff = data?.onboarding_dropoff || {};
   const dropoffSteps = dropoff.by_step || [];
-  const answerDistribution = useMemo(
-    () => buildOnboardingAnswerDistribution(data?.users || []),
-    [data],
-  );
+  const answerDistribution = data?.answer_distributions || [];
+  const users = useMemo(() => data?.users || [], [data]);
 
-  const users = useMemo(() => {
-    const rows = data?.users || [];
-    const query = search.trim().toLowerCase();
-    if (!query) return rows;
-    return rows.filter((user) => {
-      const answers = user.onboarding_answers || {};
-      const haystack = [
-        user.email,
-        user.name,
-        answers.onboarding_location,
-        answers.job_search_status,
-        ...(answers.selected_roles || []),
-        ...(answers.categories || []).map((item) => (typeof item === "object" ? item.label : item)),
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(query);
-    });
-  }, [data, search]);
+  useEffect(() => {
+    if (expandedId && !users.some((user) => user.user_id === expandedId)) setExpandedId(null);
+  }, [expandedId, users]);
 
   const toggleExpanded = (userId) => {
     setExpandedId((current) => (current === userId ? null : userId));
@@ -340,6 +337,25 @@ export default function AdminUserAnalytics() {
               </table>
             </div>
           </section>
+          <div className="flex items-center justify-between gap-3 text-sm text-zinc-600">
+            <span>{data?.total ? `${users.length} shown of ${data.total}` : "0 users"}</span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setCursor(data?.previous_cursor || null)}
+                disabled={loading || !data?.has_previous || !data?.previous_cursor}
+              >
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setCursor(data?.next_cursor || null)}
+                disabled={loading || !data?.has_next || !data?.next_cursor}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
         </div>
       ) : null}
     </AdminShell>

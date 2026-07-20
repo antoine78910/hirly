@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -39,19 +39,51 @@ export default function AdminUsers() {
   const [accessDenied, setAccessDenied] = useState(false);
   const [payingOnly, setPayingOnly] = useState(false);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [cursor, setCursor] = useState(null);
+  const [pagination, setPagination] = useState({
+    total: 0,
+    has_previous: false,
+    has_next: false,
+    previous_cursor: null,
+    next_cursor: null,
+  });
+  const [payingCount, setPayingCount] = useState(0);
   const [paymentIntentId, setPaymentIntentId] = useState("");
   const [reconcileEmail, setReconcileEmail] = useState("");
   const [reconciling, setReconciling] = useState(false);
+  const requestId = useRef(0);
 
   const load = useCallback(async () => {
+    const currentRequest = ++requestId.current;
     setLoading(true);
     setError("");
     setAccessDenied(false);
     try {
-      const { data } = await api.get(autoApplyApiUrl("/admin/users"), { timeout: 60000 });
+      const { data } = await api.get(autoApplyApiUrl("/admin/users"), {
+        timeout: 60000,
+        params: {
+          limit: 100,
+          cursor: cursor || undefined,
+          q: debouncedSearch || undefined,
+          paying_only: payingOnly || undefined,
+        },
+      });
+      if (currentRequest !== requestId.current) return;
       setUsers(data.users || []);
+      setPagination(data);
+      setPayingCount(data.aggregates?.matching_paying || 0);
     } catch (err) {
+      if (currentRequest !== requestId.current) return;
       setUsers([]);
+      setPagination({
+        total: 0,
+        has_previous: false,
+        has_next: false,
+        previous_cursor: null,
+        next_cursor: null,
+      });
+      setPayingCount(0);
       if (err?.response?.status === 403) {
         setAccessDenied(true);
         setError("Admin access denied");
@@ -59,26 +91,21 @@ export default function AdminUsers() {
         setError(adminApiErrorMessage(err, "Could not load users"));
       }
     } finally {
-      setLoading(false);
+      if (currentRequest === requestId.current) setLoading(false);
     }
-  }, []);
+  }, [cursor, debouncedSearch, payingOnly]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const payingCount = useMemo(() => users.filter((user) => user.is_premium).length, [users]);
-  const visibleUsers = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    let rows = payingOnly ? users.filter((user) => user.is_premium) : users;
-    if (query) {
-      rows = rows.filter((user) => {
-        const haystack = [user.email, user.name, user.user_id].filter(Boolean).join(" ").toLowerCase();
-        return haystack.includes(query);
-      });
-    }
-    return rows;
-  }, [users, payingOnly, search]);
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setCursor(null);
+      setDebouncedSearch(search.trim());
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [search]);
 
   const repairBillingByEmail = async () => {
     const email = reconcileEmail.trim();
@@ -140,7 +167,10 @@ export default function AdminUsers() {
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => setPayingOnly((value) => !value)}
+            onClick={() => {
+              setCursor(null);
+              setPayingOnly((value) => !value);
+            }}
             className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
               payingOnly
                 ? "border-emerald-300 bg-emerald-50 text-emerald-700"
@@ -167,7 +197,7 @@ export default function AdminUsers() {
               placeholder="Search by email, name, or user ID…"
               className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none ring-violet-200 focus:ring-2 sm:max-w-sm"
             />
-            <p className="text-xs text-zinc-500 sm:ml-auto">{visibleUsers.length} user(s) shown</p>
+            <p className="text-xs text-zinc-500 sm:ml-auto">{pagination.total || 0} user(s) match</p>
           </div>
 
           <div className="rounded-lg border border-violet-200 bg-violet-50 p-4 shadow-sm">
@@ -236,7 +266,7 @@ export default function AdminUsers() {
             <tbody className="divide-y divide-zinc-100">
               {loading ? (
                 <tr><td className="px-4 py-8 text-center text-zinc-500" colSpan={10}><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>
-              ) : visibleUsers.length ? visibleUsers.map((user) => (
+              ) : users.length ? users.map((user) => (
                 <tr key={user.user_id} className="hover:bg-zinc-50">
                   <td className="px-4 py-3">
                     <Link className="font-semibold text-linkedin hover:underline" to={`/admin/users/${user.user_id}`}>{user.email || user.user_id}</Link>
@@ -262,6 +292,29 @@ export default function AdminUsers() {
               )}
             </tbody>
           </table>
+        </div>
+      ) : null}
+      {!accessDenied && !error ? (
+        <div className="mt-4 flex items-center justify-between gap-3 text-sm text-zinc-600">
+          <span>
+            {pagination.total ? `${users.length} shown of ${pagination.total}` : "0 users"}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setCursor(pagination.previous_cursor)}
+              disabled={loading || !pagination.has_previous || !pagination.previous_cursor}
+            >
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setCursor(pagination.next_cursor)}
+              disabled={loading || !pagination.has_next || !pagination.next_cursor}
+            >
+              Next
+            </Button>
+          </div>
         </div>
       ) : null}
     </AdminShell>

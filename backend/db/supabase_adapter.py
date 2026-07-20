@@ -1829,35 +1829,222 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
         )
         return result if isinstance(result, dict) else {}
 
-    async def admin_users_page(self, *, page: int, page_size: int, window_days: int) -> Dict[str, Any]:
-        result = await self._python_ingestion_rpc(
-            "admin_users_page",
-            {
-                "p_limit": min(max(int(page_size), 1), 500),
-                "p_offset": max(int(page) - 1, 0) * min(max(int(page_size), 1), 500),
-                "p_window_days": min(max(int(window_days), 1), 365),
-            },
-        )
-        return result if isinstance(result, dict) else {}
+    @staticmethod
+    def _validate_admin_cursor(
+        result: Any,
+        *,
+        version: str,
+        rows_key: str,
+        expected_limit: int,
+        required_objects: tuple[str, ...] = (),
+        required_arrays: tuple[str, ...] = (),
+    ) -> Dict[str, Any]:
+        if not isinstance(result, dict) or result.get("contract_version") != version:
+            raise RuntimeError(f"Admin cursor contract {version} returned an invalid payload")
+        total = result.get("total")
+        if not isinstance(total, int) or isinstance(total, bool) or total < 0:
+            raise RuntimeError(f"Admin cursor contract {version} has invalid total")
+        for key in ("has_previous", "has_next"):
+            if not isinstance(result.get(key), bool):
+                raise RuntimeError(f"Admin cursor contract {version} has invalid {key}")
+        for key in ("generated_at", "model_updated_at", "canonical_changed_at"):
+            value = result.get(key)
+            if not isinstance(value, str):
+                raise RuntimeError(f"Admin cursor contract {version} is missing {key}")
+            try:
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise RuntimeError(f"Admin cursor contract {version} has invalid {key}") from exc
+            if parsed.tzinfo is None:
+                raise RuntimeError(f"Admin cursor contract {version} has naive {key}")
+        freshness_lag = result.get("freshness_lag_seconds")
+        if (
+            not isinstance(freshness_lag, (int, float))
+            or isinstance(freshness_lag, bool)
+            or freshness_lag < 0
+        ):
+            raise RuntimeError(f"Admin cursor contract {version} has invalid freshness")
+        read_model_version = result.get("read_model_version")
+        if (
+            not isinstance(read_model_version, int)
+            or isinstance(read_model_version, bool)
+            or read_model_version < 1
+        ):
+            raise RuntimeError(f"Admin cursor contract {version} has invalid read model version")
+        rows = result.get(rows_key)
+        if not isinstance(rows, list) or len(rows) > expected_limit or len(rows) > total:
+            raise RuntimeError(f"Admin cursor contract {version} has invalid row count")
+        if total == 0 and (rows or result["has_previous"] or result["has_next"]):
+            raise RuntimeError(f"Admin cursor contract {version} has invalid empty metadata")
+        for key in required_objects:
+            if not isinstance(result.get(key), dict):
+                raise RuntimeError(f"Admin cursor contract {version} has invalid {key}")
+        for key in required_arrays:
+            if not isinstance(result.get(key), list):
+                raise RuntimeError(f"Admin cursor contract {version} has invalid {key}")
+        return result
 
-    async def admin_applications_page(
+    @staticmethod
+    def _admin_cursor_bounds(
+        limit: int,
+        cursor_time: Optional[str],
+        cursor_id: Optional[str],
+        direction: str,
+    ) -> tuple[int, Optional[str], Optional[str], str]:
+        limit = int(limit)
+        if not 1 <= limit <= 200:
+            raise ValueError("Invalid admin cursor limit")
+        if direction not in {"next", "previous"}:
+            raise ValueError("Invalid admin cursor direction")
+        if (cursor_time is None) != (cursor_id is None):
+            raise ValueError("Incomplete admin cursor anchor")
+        return limit, cursor_time, cursor_id, direction
+
+    async def admin_users_cursor(
         self,
         *,
-        page: int,
-        page_size: int,
-        window_days: int,
-        status_filter: Optional[str],
+        limit: int,
+        cursor_time: Optional[str],
+        cursor_id: Optional[str],
+        direction: str,
+        q: Optional[str],
+        paying_only: bool,
     ) -> Dict[str, Any]:
+        limit, cursor_time, cursor_id, direction = SupabaseDatabaseAdapter._admin_cursor_bounds(
+            limit, cursor_time, cursor_id, direction,
+        )
         result = await self._python_ingestion_rpc(
-            "admin_applications_page",
+            "admin_users_cursor_v3",
             {
-                "p_limit": min(max(int(page_size), 1), 500),
-                "p_offset": max(int(page) - 1, 0) * min(max(int(page_size), 1), 500),
-                "p_window_days": min(max(int(window_days), 1), 365),
-                "p_status": status_filter,
+                "p_limit": limit,
+                "p_cursor_time": cursor_time,
+                "p_cursor_id": cursor_id,
+                "p_direction": direction,
+                "p_q": q,
+                "p_paying_only": bool(paying_only),
             },
         )
-        return result if isinstance(result, dict) else {}
+        payload = SupabaseDatabaseAdapter._validate_admin_cursor(
+            result,
+            version="admin-users-cursor/v3",
+            rows_key="users",
+            expected_limit=limit,
+            required_objects=("aggregates",),
+        )
+        matching_paying = payload["aggregates"].get("matching_paying")
+        if (
+            not isinstance(matching_paying, int)
+            or isinstance(matching_paying, bool)
+            or matching_paying < 0
+            or matching_paying > payload["total"]
+        ):
+            raise RuntimeError("Admin users cursor contract has invalid matching_paying")
+        return payload
+
+    async def admin_user_analytics_cursor(
+        self,
+        *,
+        limit: int,
+        cursor_time: Optional[str],
+        cursor_id: Optional[str],
+        direction: str,
+        q: Optional[str],
+    ) -> Dict[str, Any]:
+        limit, cursor_time, cursor_id, direction = SupabaseDatabaseAdapter._admin_cursor_bounds(
+            limit, cursor_time, cursor_id, direction,
+        )
+        result = await self._python_ingestion_rpc(
+            "admin_user_analytics_cursor_v2",
+            {
+                "p_limit": limit,
+                "p_cursor_time": cursor_time,
+                "p_cursor_id": cursor_id,
+                "p_direction": direction,
+                "p_q": q,
+            },
+        )
+        payload = SupabaseDatabaseAdapter._validate_admin_cursor(
+            result,
+            version="admin-user-analytics-cursor/v2",
+            rows_key="users",
+            expected_limit=limit,
+            required_objects=("summary", "onboarding_dropoff"),
+            required_arrays=("answer_distributions",),
+        )
+        summary = payload["summary"]
+        required_summary = (
+            "total_users", "onboarding_completed", "onboarding_in_progress",
+            "onboarding_never_started", "total_swipes", "total_applications",
+        )
+        if any(
+            not isinstance(summary.get(key), int)
+            or isinstance(summary[key], bool)
+            or summary[key] < 0
+            for key in required_summary
+        ):
+            raise RuntimeError("Admin analytics cursor contract has invalid summary")
+        if summary["total_users"] != payload["total"]:
+            raise RuntimeError("Admin analytics cursor contract has inconsistent total_users")
+        average = summary.get("avg_time_spent_minutes")
+        if not isinstance(average, (int, float)) or isinstance(average, bool) or average < 0:
+            raise RuntimeError("Admin analytics cursor contract has invalid average time")
+        dropoff = payload["onboarding_dropoff"]
+        for key in ("never_started", "in_progress", "completed"):
+            if (
+                not isinstance(dropoff.get(key), int)
+                or isinstance(dropoff[key], bool)
+                or dropoff[key] < 0
+            ):
+                raise RuntimeError("Admin analytics cursor contract has invalid onboarding_dropoff")
+        if not isinstance(dropoff.get("by_step"), list):
+            raise RuntimeError("Admin analytics cursor contract has invalid onboarding_dropoff")
+        return payload
+
+    async def admin_applications_cursor(
+        self,
+        *,
+        limit: int,
+        cursor_time: Optional[str],
+        cursor_id: Optional[str],
+        direction: str,
+        status_filter: Optional[str],
+    ) -> Dict[str, Any]:
+        limit, cursor_time, cursor_id, direction = SupabaseDatabaseAdapter._admin_cursor_bounds(
+            limit, cursor_time, cursor_id, direction,
+        )
+        result = await self._python_ingestion_rpc(
+            "admin_applications_cursor_v3",
+            {
+                "p_limit": limit,
+                "p_cursor_time": cursor_time,
+                "p_cursor_id": cursor_id,
+                "p_direction": direction,
+                "p_filter": status_filter,
+            },
+        )
+        payload = SupabaseDatabaseAdapter._validate_admin_cursor(
+            result,
+            version="admin-applications-cursor/v3",
+            rows_key="applications",
+            expected_limit=limit,
+            required_objects=("queue",),
+        )
+        queue = payload["queue"]
+        items = queue.get("items")
+        if (
+            not isinstance(queue.get("active_count"), int)
+            or isinstance(queue["active_count"], bool)
+            or queue["active_count"] < 0
+            or not isinstance(items, list)
+            or len(items) > 20
+            or any(
+                not isinstance(item, dict)
+                or item.get("auto_apply_queue_status") not in {"queued", "running", "awaiting_review"}
+                for item in items
+            )
+        ):
+            raise RuntimeError("Admin applications cursor contract has invalid queue")
+        return payload
 
     async def backfill_auto_apply_queue(self, providers: List[str], *, limit: int = 200) -> int:
         result = await self._python_ingestion_rpc(

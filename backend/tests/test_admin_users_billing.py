@@ -93,7 +93,19 @@ def _fake_db():
 
 
 def test_admin_list_exposes_paid_plan_and_swipes_without_applications(monkeypatch):
-    monkeypatch.setattr(server, "db", _fake_db())
+    fake_db = _fake_db()
+    expected_user = {
+        "user_id": "paid-user", "plan": "monthly", "subscription_status": "active",
+        "is_premium": True, "credits_remaining": 77, "total_applications": 0,
+        "total_swipes": 2, "left_swipes": 1, "right_swipes": 1,
+        "last_active_at": "2026-07-11T10:00:00+00:00",
+    }
+
+    async def _cursor(**_kwargs):
+        return {"users": [expected_user]}
+
+    fake_db.admin_users_cursor = _cursor
+    monkeypatch.setattr(server, "db", fake_db)
 
     reconcile_calls = 0
 
@@ -104,7 +116,7 @@ def test_admin_list_exposes_paid_plan_and_swipes_without_applications(monkeypatc
 
     monkeypatch.setattr(server, "_reconcile_stripe_subscriptions_once", _reconcile)
 
-    response = asyncio.run(server.admin_list_users(admin=object()))
+    response = asyncio.run(server.admin_list_users(100, None, None, False, object()))
 
     assert len(response["users"]) == 1
     user = response["users"][0]

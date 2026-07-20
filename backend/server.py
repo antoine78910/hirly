@@ -29,6 +29,7 @@ import re
 import base64
 import time
 import hashlib
+import hmac
 import unicodedata
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -5741,6 +5742,8 @@ def _build_generated_application_doc(
         "application_id": f"app_{uuid.uuid4().hex[:12]}",
         "user_id": user.user_id,
         "job_id": job["job_id"],
+        "company": job.get("company"),
+        "title": job.get("title"),
         "status": "applied",
         "admin_status": "manual_review_needed",
         "manual_status": "manual_review_needed",
@@ -5770,7 +5773,7 @@ def _build_generated_application_doc(
         "match_score": gen.get("match_score", 75),
         "match_reasons": gen.get("match_reasons", []),
         "interview_prep": gen.get("interview_prep", []),
-        "ats_provider": gen.get("ats_provider") or job.get("ats_provider") or None,
+        "ats_provider": job.get("ats_provider") or gen.get("ats_provider") or None,
         "ats_analysis": gen.get("ats_analysis") or {},
         "ats_score_before": gen.get("ats_score_before"),
         "ats_score_after": gen.get("ats_score_after"),
@@ -5797,6 +5800,9 @@ def _pending_application_doc(user: User, job: Dict[str, Any], error: Optional[Ex
         "application_id": f"app_{uuid.uuid4().hex[:12]}",
         "user_id": user.user_id,
         "job_id": job["job_id"],
+        "company": job.get("company"),
+        "title": job.get("title"),
+        "ats_provider": job.get("ats_provider"),
         "status": "applied",
         "admin_status": "manual_review_needed",
         "manual_status": "manual_review_needed",
@@ -5834,7 +5840,9 @@ def _normalize_application_status_fields(app_doc: Dict[str, Any]) -> Dict[str, A
     if not app.get("package_status"):
         has_package = any([
             app.get("tailored_resume_structured"),
+            app.get("tailored_resume"),
             app.get("tailored_cover_letter"),
+            app.get("cover_letter"),
             app.get("tailored_cv_file_b64"),
         ])
         app["package_status"] = "generated" if has_package else "not_generated"
@@ -12528,104 +12536,270 @@ async def admin_overview(admin: User = Depends(require_admin_user)):
     }
 
 
+def _admin_normalize_search(value: Optional[str]) -> Optional[str]:
+    normalized = " ".join((value or "").split()).casefold()
+    return normalized or None
+
+
+def _admin_cursor_secret() -> bytes:
+    secret = (
+        os.environ.get("ADMIN_CURSOR_SECRET")
+        or os.environ.get("SESSION_SECRET")
+        or os.environ.get("SUPABASE_SECRET_KEY")
+        or ""
+    ).strip()
+    if not secret:
+        raise HTTPException(status_code=503, detail="Admin cursor signing is unavailable")
+    return secret.encode("utf-8")
+
+
+def _admin_cursor_scope_hash(resource: str, limit: int, **scope: Any) -> str:
+    normalized = {
+        "resource": resource,
+        "limit": int(limit),
+        **{key: value for key, value in sorted(scope.items())},
+    }
+    serialized = json.dumps(normalized, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _admin_base64url_encode(value: bytes) -> str:
+    return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
+
+
+def _admin_base64url_decode(value: str) -> bytes:
+    if not value or not re.fullmatch(r"[A-Za-z0-9_-]+", value):
+        raise ValueError("invalid base64url")
+    return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+
+
+def _admin_validate_cursor_time(value: Any) -> str:
+    if value == "-infinity":
+        return value
+    if not isinstance(value, str) or not value or len(value) > 64:
+        raise ValueError("invalid cursor timestamp")
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        raise ValueError("cursor timestamp must include a timezone")
+    return value
+
+
+def _admin_encode_cursor(
+    *,
+    resource: str,
+    direction: str,
+    sort_field: str,
+    sort_at: Any,
+    row_id: Any,
+    scope_hash: str,
+) -> str:
+    if direction not in {"next", "previous"}:
+        raise RuntimeError("Invalid admin cursor direction")
+    cursor_time = _admin_validate_cursor_time(sort_at)
+    if not isinstance(row_id, str) or not row_id or len(row_id) > 512:
+        raise RuntimeError("Admin cursor row has an invalid ID")
+    payload = {
+        "v": 1,
+        "resource": resource,
+        "direction": direction,
+        sort_field: cursor_time,
+        "id": row_id,
+        "scope_hash": scope_hash,
+    }
+    unsigned = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    payload["sig"] = _admin_base64url_encode(
+        hmac.new(_admin_cursor_secret(), unsigned, hashlib.sha256).digest()
+    )
+    return _admin_base64url_encode(
+        json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    )
+
+
+def _admin_decode_cursor(
+    cursor: Optional[str],
+    *,
+    resource: str,
+    sort_field: str,
+    scope_hash: str,
+) -> tuple[Optional[str], Optional[str], str]:
+    if not cursor:
+        return None, None, "next"
+    if not isinstance(cursor, str) or len(cursor) > 2048:
+        raise HTTPException(status_code=422, detail="Invalid admin cursor")
+    try:
+        payload = json.loads(_admin_base64url_decode(cursor))
+        expected_keys = {"v", "resource", "direction", sort_field, "id", "scope_hash", "sig"}
+        if not isinstance(payload, dict) or set(payload) != expected_keys:
+            raise ValueError("invalid cursor fields")
+        signature = payload.pop("sig")
+        if not isinstance(signature, str):
+            raise ValueError("invalid signature")
+        unsigned = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+        expected_signature = _admin_base64url_encode(
+            hmac.new(_admin_cursor_secret(), unsigned, hashlib.sha256).digest()
+        )
+        if not hmac.compare_digest(signature, expected_signature):
+            raise ValueError("invalid signature")
+        if (
+            payload["v"] != 1
+            or payload["resource"] != resource
+            or payload["direction"] not in {"next", "previous"}
+            or payload["scope_hash"] != scope_hash
+        ):
+            raise ValueError("invalid cursor scope")
+        cursor_time = _admin_validate_cursor_time(payload[sort_field])
+        cursor_id = payload["id"]
+        if not isinstance(cursor_id, str) or not cursor_id or len(cursor_id) > 512:
+            raise ValueError("invalid cursor id")
+        return cursor_time, cursor_id, payload["direction"]
+    except HTTPException:
+        raise
+    except (ValueError, TypeError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise HTTPException(status_code=422, detail="Invalid admin cursor") from exc
+
+
+def _admin_attach_cursors(
+    payload: Dict[str, Any],
+    *,
+    resource: str,
+    rows_key: str,
+    sort_field: str,
+    row_id_field: str,
+    scope_hash: str,
+) -> Dict[str, Any]:
+    result = dict(payload)
+    rows = result.get(rows_key)
+    if not isinstance(rows, list):
+        raise RuntimeError("Admin cursor response has invalid rows")
+    if not rows:
+        if result.get("has_previous") or result.get("has_next"):
+            raise RuntimeError("Admin cursor response has navigation without rows")
+        result["previous_cursor"] = None
+        result["next_cursor"] = None
+        return result
+    first, last = rows[0], rows[-1]
+    if not isinstance(first, dict) or not isinstance(last, dict):
+        raise RuntimeError("Admin cursor response has invalid row objects")
+    result["previous_cursor"] = (
+        _admin_encode_cursor(
+            resource=resource,
+            direction="previous",
+            sort_field=sort_field,
+            sort_at=first.get(sort_field),
+            row_id=first.get(row_id_field),
+            scope_hash=scope_hash,
+        )
+        if result.get("has_previous")
+        else None
+    )
+    result["next_cursor"] = (
+        _admin_encode_cursor(
+            resource=resource,
+            direction="next",
+            sort_field=sort_field,
+            sort_at=last.get(sort_field),
+            row_id=last.get(row_id_field),
+            scope_hash=scope_hash,
+        )
+        if result.get("has_next")
+        else None
+    )
+    return result
+
+
+async def _admin_bounded_read(reader_name: str, **kwargs):
+    reader = getattr(db, reader_name, None)
+    if not callable(reader):
+        raise HTTPException(status_code=503, detail="Admin cursor contract is unavailable")
+    try:
+        return await reader(**kwargs)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        message = str(exc) or exc.__class__.__name__
+        unavailable_markers = (
+            "contract",
+            "schema cache",
+            "pgrst",
+            "statement timeout",
+            "admin read model unavailable",
+            "55000",
+            "57014",
+            "42883",
+        )
+        status_code = 503 if any(marker in message.casefold() for marker in unavailable_markers) else 500
+        raise HTTPException(status_code=status_code, detail=f"Admin cursor read failed: {message}") from exc
+
+
 @api_router.get("/admin/user-analytics")
-async def admin_user_analytics(admin: User = Depends(require_admin_user)):
-    return await _admin_user_analytics_payload()
+async def admin_user_analytics(
+    limit: int = Query(100, ge=1, le=200),
+    cursor: Optional[str] = Query(default=None, max_length=2048),
+    q: Optional[str] = Query(default=None, max_length=128),
+    admin: User = Depends(require_admin_user),
+):
+    limit = limit if isinstance(limit, int) else 100
+    cursor = cursor if isinstance(cursor, str) else None
+    q = q if isinstance(q, str) else None
+    normalized_q = _admin_normalize_search(q)
+    scope_hash = _admin_cursor_scope_hash("user-analytics", limit, q=normalized_q)
+    cursor_time, cursor_id, direction = _admin_decode_cursor(
+        cursor, resource="user-analytics", sort_field="last_active_at", scope_hash=scope_hash,
+    )
+    payload = await _admin_bounded_read(
+        "admin_user_analytics_cursor",
+        limit=limit,
+        cursor_time=cursor_time,
+        cursor_id=cursor_id,
+        direction=direction,
+        q=normalized_q,
+    )
+    return _admin_attach_cursors(
+        payload,
+        resource="user-analytics",
+        rows_key="users",
+        sort_field="last_active_at",
+        row_id_field="user_id",
+        scope_hash=scope_hash,
+    )
 
 
 @api_router.get("/admin/users")
 async def admin_list_users(
-    page: int = Query(1, ge=1, le=10000),
-    page_size: int = Query(100, ge=1, le=500),
-    window_days: int = Query(30, ge=1, le=365),
+    limit: int = Query(100, ge=1, le=200),
+    cursor: Optional[str] = Query(default=None, max_length=2048),
+    q: Optional[str] = Query(default=None, max_length=128),
+    paying_only: bool = Query(False),
     admin: User = Depends(require_admin_user),
 ):
-    page = page if isinstance(page, int) else 1
-    page_size = page_size if isinstance(page_size, int) else 100
-    window_days = window_days if isinstance(window_days, int) else 30
-    if _env_enabled("ADMIN_BOUNDED_RPC_ENABLED", "false"):
-        page_reader = getattr(db, "admin_users_page", None)
-        if not callable(page_reader):
-            raise HTTPException(status_code=503, detail="Admin user page contract is unavailable")
-        return await page_reader(page=page, page_size=page_size, window_days=window_days)
-    users, profiles, swipes, applications, _jobs = await _admin_base_data(
-        include_swipes=True,
-        include_jobs=False,
+    limit = limit if isinstance(limit, int) else 100
+    cursor = cursor if isinstance(cursor, str) else None
+    q = q if isinstance(q, str) else None
+    paying_only = paying_only if isinstance(paying_only, bool) else False
+    normalized_q = _admin_normalize_search(q)
+    scope_hash = _admin_cursor_scope_hash(
+        "users", limit, q=normalized_q, paying_only=paying_only,
     )
-    profile_map = {item.get("user_id"): item for item in profiles}
-    app_counts: Dict[str, int] = {}
-    last_app_at: Dict[str, Any] = {}
-    for app_doc in applications:
-        uid = app_doc.get("user_id")
-        if not uid:
-            continue
-        app_counts[uid] = app_counts.get(uid, 0) + 1
-        candidate = app_doc.get("updated_at") or app_doc.get("created_at")
-        if not last_app_at.get(uid) or (_parse_dt(candidate) or datetime.min.replace(tzinfo=timezone.utc)) > (_parse_dt(last_app_at[uid]) or datetime.min.replace(tzinfo=timezone.utc)):
-            last_app_at[uid] = candidate
-
-    swipe_counts: Dict[str, int] = {}
-    right_swipe_counts: Dict[str, int] = {}
-    left_swipe_counts: Dict[str, int] = {}
-    last_swipe_at: Dict[str, Any] = {}
-    for swipe_doc in swipes:
-        uid = swipe_doc.get("user_id")
-        if not uid:
-            continue
-        swipe_counts[uid] = swipe_counts.get(uid, 0) + 1
-        if swipe_doc.get("direction") == "right":
-            right_swipe_counts[uid] = right_swipe_counts.get(uid, 0) + 1
-        elif swipe_doc.get("direction") == "left":
-            left_swipe_counts[uid] = left_swipe_counts.get(uid, 0) + 1
-        candidate = swipe_doc.get("updated_at") or swipe_doc.get("created_at")
-        if not last_swipe_at.get(uid) or (_parse_dt(candidate) or datetime.min.replace(tzinfo=timezone.utc)) > (_parse_dt(last_swipe_at[uid]) or datetime.min.replace(tzinfo=timezone.utc)):
-            last_swipe_at[uid] = candidate
-
-    rows = []
-    for user_doc in users:
-        uid = user_doc.get("user_id")
-        profile = profile_map.get(uid)
-        billing = _billing_status_payload(user_doc)
-        activity_candidates = [
-            last_app_at.get(uid),
-            last_swipe_at.get(uid),
-            (profile or {}).get("updated_at"),
-            user_doc.get("updated_at"),
-            user_doc.get("created_at"),
-        ]
-        last_active_at = max(
-            (value for value in activity_candidates if value),
-            key=lambda value: _parse_dt(value) or datetime.min.replace(tzinfo=timezone.utc),
-            default=None,
-        )
-        rows.append({
-            "user_id": uid,
-            "email": user_doc.get("email"),
-            "name": user_doc.get("name"),
-            "demo_account": bool(user_doc.get("demo_account")),
-            "profile_completion": _profile_completion(profile),
-            "cv_uploaded": _admin_profile_has_cv(profile),
-            "total_applications": app_counts.get(uid, 0),
-            "total_swipes": swipe_counts.get(uid, 0),
-            "right_swipes": right_swipe_counts.get(uid, 0),
-            "left_swipes": left_swipe_counts.get(uid, 0),
-            "last_swipe_at": last_swipe_at.get(uid),
-            "last_active_at": last_active_at,
-            "created_at": user_doc.get("created_at"),
-            "plan": billing.get("plan"),
-            "is_premium": billing.get("is_premium"),
-            "subscription_status": billing.get("subscription_status"),
-            "credits_total": billing.get("credits_total"),
-            "credits_remaining": billing.get("credits_remaining"),
-        })
-    rows.sort(key=lambda item: _parse_dt(item.get("last_active_at")) or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
-    start = (page - 1) * page_size
-    return {
-        "users": rows[start:start + page_size],
-        "page": page,
-        "page_size": page_size,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-    }
+    cursor_time, cursor_id, direction = _admin_decode_cursor(
+        cursor, resource="users", sort_field="last_active_at", scope_hash=scope_hash,
+    )
+    payload = await _admin_bounded_read(
+        "admin_users_cursor",
+        limit=limit,
+        cursor_time=cursor_time,
+        cursor_id=cursor_id,
+        direction=direction,
+        q=normalized_q,
+        paying_only=paying_only,
+    )
+    return _admin_attach_cursors(
+        payload,
+        resource="users",
+        rows_key="users",
+        sort_field="last_active_at",
+        row_id_field="user_id",
+        scope_hash=scope_hash,
+    )
 
 
 @api_router.get("/admin/users/{user_id}")
@@ -13743,67 +13917,47 @@ async def admin_analytics(
 
 @api_router.get("/admin/applications")
 async def admin_list_applications(
-    status_filter: Optional[str] = Query(default=None, alias="filter"),
-    status: Optional[str] = Query(default=None),
-    page: int = Query(1, ge=1, le=10000),
-    page_size: int = Query(100, ge=1, le=500),
-    window_days: int = Query(30, ge=1, le=365),
+    status_filter: Optional[str] = Query(default=None, alias="filter", max_length=64),
+    status: Optional[str] = Query(default=None, max_length=64),
+    limit: int = Query(100, ge=1, le=200),
+    cursor: Optional[str] = Query(default=None, max_length=2048),
     admin: User = Depends(require_admin_user),
 ):
     status_filter = status_filter if isinstance(status_filter, str) else None
     status = status if isinstance(status, str) else None
-    page = page if isinstance(page, int) else 1
-    page_size = page_size if isinstance(page_size, int) else 100
-    window_days = window_days if isinstance(window_days, int) else 30
-    status_filter = status_filter or status
-    if _env_enabled("ADMIN_BOUNDED_RPC_ENABLED", "false"):
-        page_reader = getattr(db, "admin_applications_page", None)
-        if not callable(page_reader):
-            raise HTTPException(status_code=503, detail="Admin application page contract is unavailable")
-        return await page_reader(
-            page=page,
-            page_size=page_size,
-            window_days=window_days,
-            status_filter=status_filter,
-        )
-    apps = await _admin_safe_find(db.applications, sort=[("updated_at", -1)], limit=1000)
-    allowed_statuses = _admin_status_filter(status_filter)
-    if allowed_statuses is not None:
-        apps = [
-            app_doc
-            for app_doc in apps
-            if _normalize_application_status_fields(app_doc).get("submission_status") in allowed_statuses
-        ]
-    elif status_filter == "offer_expired":
-        apps = [
-            app_doc
-            for app_doc in apps
-            if _user_facing_submission_status(_normalize_application_status_fields(app_doc)) == "expired"
-        ]
-    elif status_filter in {"manual_review_needed", "manual_in_progress", "manually_submitted", "manual_blocked", "needs_user_input"}:
-        apps = [
-            app_doc
-            for app_doc in apps
-            if _effective_manual_status(_normalize_application_status_fields(app_doc)) == status_filter
-        ]
-    apps = _sort_applications_newest_first(apps)
-
-    user_ids = list({app.get("user_id") for app in apps if app.get("user_id")})
-    job_ids = list({app.get("job_id") for app in apps if app.get("job_id")})
-    users = await _admin_safe_find(db.users, {"user_id": {"$in": user_ids}}, limit=len(user_ids)) if user_ids else []
-    jobs = await _admin_jobs_for_ids(job_ids) if job_ids else []
-    user_map = {item.get("user_id"): item for item in users}
-    job_map = {item.get("job_id"): item for item in jobs}
-    return {
-        "applications": [
-            _admin_application_row(app_doc, user_map.get(app_doc.get("user_id")), job_map.get(app_doc.get("job_id")))
-            for app_doc in apps
-        ],
-        "filter": status_filter or "all",
-        "page": page,
-        "page_size": page_size,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+    limit = limit if isinstance(limit, int) else 100
+    cursor = cursor if isinstance(cursor, str) else None
+    selected_filter = " ".join((status_filter or status or "").split()).casefold() or None
+    allowed_filters = {
+        None, "all", "action_required", "blocked", "blocked_captcha", "prepare_failed",
+        "prepared", "ready", "submitted", "failed", "manual_review_needed",
+        "manual_in_progress", "manually_submitted", "manual_blocked", "needs_user_input",
+        "offer_expired",
     }
+    if selected_filter not in allowed_filters:
+        raise HTTPException(status_code=422, detail="Unknown admin application filter")
+    if selected_filter == "all":
+        selected_filter = None
+    scope_hash = _admin_cursor_scope_hash("applications", limit, filter=selected_filter)
+    cursor_time, cursor_id, direction = _admin_decode_cursor(
+        cursor, resource="applications", sort_field="sort_at", scope_hash=scope_hash,
+    )
+    payload = await _admin_bounded_read(
+        "admin_applications_cursor",
+        limit=limit,
+        cursor_time=cursor_time,
+        cursor_id=cursor_id,
+        direction=direction,
+        status_filter=selected_filter,
+    )
+    return _admin_attach_cursors(
+        payload,
+        resource="applications",
+        rows_key="applications",
+        sort_field="sort_at",
+        row_id_field="application_id",
+        scope_hash=scope_hash,
+    )
 
 
 @api_router.post("/admin/ats-lab/generate")
@@ -14408,6 +14562,9 @@ async def _load_or_create_agent_application(
                     "application_id": f"app_{uuid.uuid4().hex[:12]}",
                     "user_id": user.user_id,
                     "job_id": job_id,
+                    "company": job.get("company"),
+                    "title": job.get("title"),
+                    "ats_provider": job.get("ats_provider"),
                     "status": "applied",
                     "created_at": now,
                     "updated_at": now,

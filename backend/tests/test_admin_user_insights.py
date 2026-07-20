@@ -87,6 +87,21 @@ def test_estimate_time_spent_splits_sessions_on_large_gaps():
 
 def test_admin_user_analytics_exposes_onboarding_and_activity(monkeypatch):
     fake_db = _fake_db_with_activity()
+    expected = {
+        "summary": {"total_users": 1},
+        "users": [{
+            "user_id": "user-1",
+            "onboarding_answers": {"job_search_status": "actively_looking"},
+            "onboarding_progress": {"drop_off_step": "compare2x"},
+            "time_spent_minutes": 6,
+        }],
+        "onboarding_dropoff": {"in_progress": 1},
+    }
+
+    async def _cursor(**_kwargs):
+        return expected
+
+    fake_db.admin_user_analytics_cursor = _cursor
     monkeypatch.setattr(server, "db", fake_db)
 
     async def fake_events():
@@ -94,7 +109,7 @@ def test_admin_user_analytics_exposes_onboarding_and_activity(monkeypatch):
 
     monkeypatch.setattr(server, "_analytics_events", fake_events)
 
-    response = asyncio.run(server.admin_user_analytics(admin=object()))
+    response = asyncio.run(server.admin_user_analytics(100, None, None, object()))
 
     assert response["summary"]["total_users"] == 1
     user = response["users"][0]
@@ -105,9 +120,15 @@ def test_admin_user_analytics_exposes_onboarding_and_activity(monkeypatch):
 
 
 def test_admin_list_users_no_longer_includes_analytics_fields(monkeypatch):
-    monkeypatch.setattr(server, "db", _fake_db_with_activity())
+    fake_db = _fake_db_with_activity()
 
-    response = asyncio.run(server.admin_list_users(admin=object()))
+    async def _cursor(**_kwargs):
+        return {"users": [{"user_id": "user-1"}]}
+
+    fake_db.admin_users_cursor = _cursor
+    monkeypatch.setattr(server, "db", fake_db)
+
+    response = asyncio.run(server.admin_list_users(100, None, None, False, object()))
     user = response["users"][0]
     assert "time_spent_minutes" not in user
     assert "onboarding_completed" not in user

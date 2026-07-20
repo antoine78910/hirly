@@ -1,8 +1,5 @@
 import asyncio
 import inspect
-import json
-import re
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -11,279 +8,241 @@ import server
 from db.supabase_adapter import SupabaseDatabaseAdapter
 
 
-AGGREGATE_RESPONSE_LIMIT = 512 * 1024
-LIST_RESPONSE_LIMIT = 2 * 1024 * 1024
-MAX_PAGE_SIZE = 500
-MAX_WINDOW_DAYS = 365
-MIGRATION = Path(__file__).parents[1] / "db/migrations/20260720001600_admin_bounded_contracts.sql"
-DOWN_MIGRATION = Path(__file__).parents[1] / "db/migrations/20260720001600_admin_bounded_contracts.down.sql"
+MIGRATION = Path(__file__).parents[1] / "db/migrations/20260720001800_admin_read_models.sql"
+DOWN_MIGRATION = Path(__file__).parents[1] / "db/migrations/20260720001800_admin_read_models.down.sql"
+NOW = "2026-07-20T00:00:00+00:00"
 
 
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-def _json_size(payload) -> int:
-    return len(json.dumps(payload, separators=(",", ":"), default=str).encode())
-
-
-def _assert_current_generated_at(payload, *, max_age_seconds: float) -> None:
-    generated_at = datetime.fromisoformat(str(payload["generated_at"]).replace("Z", "+00:00"))
-    assert generated_at.tzinfo is not None
-    age = (datetime.now(timezone.utc) - generated_at.astimezone(timezone.utc)).total_seconds()
-    assert 0 <= age <= max_age_seconds
-
-
-class _BoundedAdminDb:
-    def __init__(self):
+class _RpcRecorder:
+    def __init__(self, payload):
+        self.payload = payload
         self.calls = []
 
-    async def admin_overview_snapshot(self):
-        self.calls.append(("overview", {}))
-        return {"metrics": {}, "top_blockers": [], "latest_attention": [], "generated_at": _utc_now()}
-
-    async def admin_analytics_snapshot(self, window_days):
-        self.calls.append(("analytics", {"window_days": window_days}))
-        return {"metrics": {}, "generated_at": _utc_now(), "window_days": window_days}
-
-    async def admin_users_page(self, **kwargs):
-        self.calls.append(("users", kwargs))
-        return {"users": [], "generated_at": _utc_now(), **kwargs}
-
-    async def admin_applications_page(self, **kwargs):
-        self.calls.append(("applications", kwargs))
-        return {"applications": [], "generated_at": _utc_now(), **kwargs}
+    async def _python_ingestion_rpc(self, name, payload):
+        self.calls.append((name, payload))
+        return self.payload
 
 
-def test_admin_routes_use_one_bounded_operation_and_emit_fresh_small_payloads(monkeypatch):
-    bounded_db = _BoundedAdminDb()
-    monkeypatch.setattr(server, "db", bounded_db)
-    monkeypatch.setenv("ADMIN_BOUNDED_RPC_ENABLED", "true")
-    admin = server.User(user_id="admin", email="admin@example.com", name="Admin")
+def _cursor(version, rows_key, **extra):
+    return {
+        "contract_version": version,
+        rows_key: [],
+        "total": 0,
+        "has_previous": False,
+        "has_next": False,
+        "generated_at": NOW,
+        "model_updated_at": NOW,
+        "canonical_changed_at": NOW,
+        "freshness_lag_seconds": 0,
+        "read_model_version": 3,
+        **extra,
+    }
 
-    overview = asyncio.run(server.admin_overview(admin))
-    analytics = asyncio.run(server.admin_analytics(30, admin))
-    users = asyncio.run(server.admin_list_users(2, 100, 30, admin))
-    applications = asyncio.run(server.admin_list_applications(None, None, 2, 100, 30, admin))
 
-    assert bounded_db.calls == [
-        ("overview", {}),
-        ("analytics", {"window_days": 30}),
-        ("users", {"page": 2, "page_size": 100, "window_days": 30}),
-        (
-            "applications",
-            {"page": 2, "page_size": 100, "window_days": 30, "status_filter": None},
-        ),
+def test_admin_adapter_calls_exact_versioned_rpcs_once():
+    users = _RpcRecorder(_cursor("admin-users-cursor/v3", "users", aggregates={"matching_paying": 0}))
+    analytics = _RpcRecorder(_cursor(
+        "admin-user-analytics-cursor/v2",
+        "users",
+        summary={
+            "total_users": 0,
+            "onboarding_completed": 0,
+            "onboarding_in_progress": 0,
+            "onboarding_never_started": 0,
+            "avg_time_spent_minutes": 0,
+            "total_swipes": 0,
+            "total_applications": 0,
+        },
+        onboarding_dropoff={"by_step": [], "never_started": 0, "in_progress": 0, "completed": 0},
+        answer_distributions=[],
+    ))
+    applications = _RpcRecorder(_cursor(
+        "admin-applications-cursor/v3",
+        "applications",
+        filter="submitted",
+        queue={"active_count": 0, "items": []},
+    ))
+    bounds = {
+        "limit": 100,
+        "cursor_time": None,
+        "cursor_id": None,
+        "direction": "next",
+    }
+    asyncio.run(SupabaseDatabaseAdapter.admin_users_cursor(
+        users, **bounds, q="alice", paying_only=True,
+    ))
+    asyncio.run(SupabaseDatabaseAdapter.admin_user_analytics_cursor(
+        analytics, **bounds, q=None,
+    ))
+    asyncio.run(SupabaseDatabaseAdapter.admin_applications_cursor(
+        applications, **bounds, status_filter="submitted",
+    ))
+    assert users.calls == [("admin_users_cursor_v3", {
+        "p_limit": 100, "p_cursor_time": None, "p_cursor_id": None,
+        "p_direction": "next", "p_q": "alice", "p_paying_only": True,
+    })]
+    assert analytics.calls == [("admin_user_analytics_cursor_v2", {
+        "p_limit": 100, "p_cursor_time": None, "p_cursor_id": None,
+        "p_direction": "next", "p_q": None,
+    })]
+    assert applications.calls == [("admin_applications_cursor_v3", {
+        "p_limit": 100, "p_cursor_time": None, "p_cursor_id": None,
+        "p_direction": "next", "p_filter": "submitted",
+    })]
+
+
+@pytest.mark.parametrize("payload", [{}, [], {"contract_version": "wrong"}])
+def test_admin_adapter_rejects_malformed_contracts(payload):
+    with pytest.raises(RuntimeError, match="contract"):
+        asyncio.run(SupabaseDatabaseAdapter.admin_users_cursor(
+            _RpcRecorder(payload), limit=100, cursor_time=None, cursor_id=None,
+            direction="next", q=None, paying_only=False,
+        ))
+
+
+@pytest.mark.parametrize(
+    ("limit", "cursor_time", "cursor_id", "direction"),
+    [(0, None, None, "next"), (201, None, None, "next"),
+     (100, NOW, None, "next"), (100, None, None, "sideways")],
+)
+def test_admin_adapter_rejects_cursor_bounds_instead_of_clamping(
+    limit, cursor_time, cursor_id, direction,
+):
+    recorder = _RpcRecorder({})
+    with pytest.raises(ValueError):
+        asyncio.run(SupabaseDatabaseAdapter.admin_users_cursor(
+            recorder, limit=limit, cursor_time=cursor_time, cursor_id=cursor_id,
+            direction=direction, q=None, paying_only=False,
+        ))
+    assert recorder.calls == []
+
+
+def test_admin_adapter_rejects_inconsistent_empty_cursor_metadata():
+    empty = _cursor("admin-users-cursor/v3", "users", aggregates={"matching_paying": 0})
+    invalid_payloads = [
+        {**empty, "aggregates": {"matching_paying": -1}},
+        {**empty, "generated_at": "not-a-timestamp"},
+        {**empty, "read_model_version": 0},
     ]
-    assert _json_size(overview) <= AGGREGATE_RESPONSE_LIMIT
-    assert _json_size(analytics) <= AGGREGATE_RESPONSE_LIMIT
-    assert _json_size(users) <= LIST_RESPONSE_LIMIT
-    assert _json_size(applications) <= LIST_RESPONSE_LIMIT
-    for payload in (overview, analytics):
-        _assert_current_generated_at(payload, max_age_seconds=300)
-    for payload in (users, applications):
-        _assert_current_generated_at(payload, max_age_seconds=5)
+    for payload in invalid_payloads:
+        with pytest.raises(RuntimeError):
+            asyncio.run(SupabaseDatabaseAdapter.admin_users_cursor(
+                _RpcRecorder(payload), limit=100, cursor_time=None, cursor_id=None,
+                direction="next", q=None, paying_only=False,
+            ))
+
+
+def test_admin_adapter_rejects_partial_analytics_and_invalid_queue_items():
+    partial_analytics = _cursor(
+        "admin-user-analytics-cursor/v2",
+        "users",
+        summary={},
+        onboarding_dropoff={},
+        answer_distributions=[],
+    )
+    with pytest.raises(RuntimeError):
+        asyncio.run(SupabaseDatabaseAdapter.admin_user_analytics_cursor(
+            _RpcRecorder(partial_analytics), limit=100, cursor_time=None,
+            cursor_id=None, direction="next", q=None,
+        ))
+    invalid_queue = _cursor(
+        "admin-applications-cursor/v3",
+        "applications",
+        filter="all",
+        queue={"active_count": 1, "items": [{"auto_apply_queue_status": "succeeded"}]},
+    )
+    with pytest.raises(RuntimeError):
+        asyncio.run(SupabaseDatabaseAdapter.admin_applications_cursor(
+            _RpcRecorder(invalid_queue), limit=100, cursor_time=None,
+            cursor_id=None, direction="next", status_filter=None,
+        ))
 
 
 def test_admin_routes_keep_admin_authorization_dependency():
     protected_paths = {
-        "/api/admin/overview",
-        "/api/admin/analytics",
         "/api/admin/users",
+        "/api/admin/user-analytics",
         "/api/admin/applications",
     }
     routes = {route.path: route for route in server.api_router.routes if route.path in protected_paths}
     assert routes.keys() == protected_paths
     for path, route in routes.items():
-        dependency_calls = {dependency.call for dependency in route.dependant.dependencies}
-        assert server.require_admin_user in dependency_calls, path
+        assert server.require_admin_user in {dependency.call for dependency in route.dependant.dependencies}, path
 
 
-class _RpcRecorder:
-    def __init__(self):
-        self.calls = []
-
-    async def _python_ingestion_rpc(self, name, payload):
-        self.calls.append((name, payload))
-        return {}
-
-
-def test_admin_adapter_clamps_page_and_window_inputs_before_rpc():
-    recorder = _RpcRecorder()
-    asyncio.run(
-        SupabaseDatabaseAdapter.admin_users_page(
-            recorder,
-            page=0,
-            page_size=50_000,
-            window_days=50_000,
-        )
-    )
-    asyncio.run(
-        SupabaseDatabaseAdapter.admin_applications_page(
-            recorder,
-            page=2,
-            page_size=50_000,
-            window_days=50_000,
-            status_filter="submitted",
-        )
-    )
-
-    assert recorder.calls == [
-        (
-            "admin_users_page",
-            {"p_limit": MAX_PAGE_SIZE, "p_offset": 0, "p_window_days": MAX_WINDOW_DAYS},
-        ),
-        (
-            "admin_applications_page",
-            {
-                "p_limit": MAX_PAGE_SIZE,
-                "p_offset": MAX_PAGE_SIZE,
-                "p_window_days": MAX_WINDOW_DAYS,
-                "p_status": "submitted",
-            },
-        ),
-    ]
+def test_admin_route_contract_bounds_and_all_history_signature():
+    expected = {
+        server.admin_list_users: {"limit": 200, "cursor": 2048, "q": 128},
+        server.admin_user_analytics: {"limit": 200, "cursor": 2048, "q": 128},
+        server.admin_list_applications: {"limit": 200, "cursor": 2048},
+    }
+    for endpoint, fields in expected.items():
+        signature = inspect.signature(endpoint)
+        assert "window_days" not in signature.parameters
+        assert "page" not in signature.parameters
+        for name, maximum in fields.items():
+            query = signature.parameters[name].default
+            key = "max_length" if name in {"cursor", "q"} else "le"
+            assert any(getattr(item, key, None) == maximum for item in query.metadata)
 
 
-class _Cursor:
-    def __init__(self, rows):
-        self.rows = rows
-
-    def limit(self, _limit):
-        return self
-
-    async def to_list(self, limit):
-        return self.rows[:limit]
-
-
-class _EmptyCollection:
-    table_name = "applications"
-
-    def find(self, *_args):
-        return _Cursor([])
-
-
-class _BrokenCollection:
-    table_name = "applications"
-
-    def find(self, *_args):
-        raise RuntimeError("database unavailable")
-
-
-def test_admin_database_error_is_distinct_from_genuine_empty():
-    assert asyncio.run(server._admin_safe_find(_EmptyCollection())) == []
-    with pytest.raises(server.HTTPException) as exc:
-        asyncio.run(server._admin_safe_find(_BrokenCollection()))
-    assert exc.value.status_code == 503
-    assert "applications" in str(exc.value.detail)
-
-
-def _function_sql(sql: str, name: str) -> str:
-    match = re.search(
-        rf"CREATE OR REPLACE FUNCTION public\.{name}\b(?P<body>.*?)(?=\nCREATE OR REPLACE FUNCTION|\nDO \$\$)",
-        sql,
-        re.DOTALL,
-    )
-    assert match, name
-    return match.group("body")
-
-
-def _left_width(sql: str, expression: str) -> int:
-    match = re.search(
-        rf"left\(\s*{re.escape(expression)}(?:\s*::\s*text)?\s*,\s*(\d+)\s*\)",
-        sql,
-        re.IGNORECASE,
-    )
-    assert match, f"{expression} must have an explicit response-width bound"
-    return int(match.group(1))
-
-
-def test_admin_sql_contracts_bound_rows_windows_payload_widths_and_privileges():
+def test_admin_sql_contracts_are_bounded_atomic_and_fail_closed():
     sql = MIGRATION.read_text()
     down = DOWN_MIGRATION.read_text()
-    overview_sql = _function_sql(sql, "admin_overview_snapshot")
-    analytics_sql = _function_sql(sql, "admin_analytics_snapshot")
-    users_sql = _function_sql(sql, "admin_users_page")
-    applications_sql = _function_sql(sql, "admin_applications_page")
-
-    for function_sql in (overview_sql, analytics_sql, users_sql, applications_sql):
-        assert "SECURITY DEFINER" in function_sql
-        assert "SET search_path = pg_catalog, public" in function_sql
-        assert "SET statement_timeout = '10s'" in function_sql
-        assert "'generated_at'" in function_sql
-    assert "LEAST(GREATEST(COALESCE(p_limit,100),1),500)" in users_sql
-    assert "LEAST(GREATEST(COALESCE(p_limit,100),1),500)" in applications_sql
-    assert "LEAST(GREATEST(COALESCE(p_offset,0),0),50000)" in users_sql
-    assert "LEAST(GREATEST(COALESCE(p_offset,0),0),50000)" in applications_sql
-    assert "application_counts AS" in users_sql
-    assert "swipe_counts AS" in users_sql
-    assert "(SELECT count(*) FROM public.applications a" not in users_sql
-    window_bound = r"LEAST\(\s*COALESCE\(\s*p_window_days\s*,\s*30\s*\)\s*,\s*365\s*\)"
-    assert re.search(window_bound, analytics_sql)
-    assert re.search(window_bound, users_sql)
-    assert re.search(window_bound, applications_sql)
-
-    compact_forbidden = (
-        "cv_",
-        "source_document",
-        "description",
-        "cover_letter",
-        "tailored_resume",
-        "data->",
-    )
-    for function_sql in (users_sql, applications_sql):
-        lowered = function_sql.lower()
-        assert not any(field in lowered for field in compact_forbidden)
-
-    user_widths = {
-        "user_id": _left_width(users_sql, "u.user_id"),
-        "email": _left_width(users_sql, "u.email"),
-        "name": _left_width(users_sql, "u.name"),
-    }
-    application_widths = {
-        "application_id": _left_width(applications_sql, "a.application_id"),
-        "user_id": _left_width(applications_sql, "a.user_id"),
-        "user_email": _left_width(applications_sql, "u.email"),
-        "job_id": _left_width(applications_sql, "a.job_id"),
-        "company": _left_width(applications_sql, "j.company"),
-        "title": _left_width(applications_sql, "j.title"),
-        "ats_provider": _left_width(applications_sql, "j.ats_provider"),
-        "submission_status": _left_width(applications_sql, "a.submission_status"),
-        "package_status": _left_width(applications_sql, "a.package_status"),
-        "status": _left_width(applications_sql, "a.status"),
-    }
-    user_row = {field: "x" * width for field, width in user_widths.items()}
-    user_row.update(total_applications=1_000_000, total_swipes=1_000_000, created_at=_utc_now())
-    application_row = {field: "x" * width for field, width in application_widths.items()}
-    application_row.update(created_at=_utc_now(), updated_at=_utc_now(), submitted_at=_utc_now())
-    assert _json_size({"users": [user_row] * MAX_PAGE_SIZE, "generated_at": _utc_now()}) <= LIST_RESPONSE_LIMIT
-    assert (
-        _json_size({"applications": [application_row] * MAX_PAGE_SIZE, "generated_at": _utc_now()})
-        <= LIST_RESPONSE_LIMIT
-    )
-
-    assert "REVOKE ALL" in sql
-    assert "FROM anon" in sql
-    assert "FROM authenticated" in sql
-    assert "TO service_role" in sql
-    for name in (
-        "admin_overview_snapshot",
-        "admin_analytics_snapshot",
-        "admin_users_page",
-        "admin_applications_page",
+    assert "p_window_days" not in sql
+    for name, version in (
+        ("admin_users_cursor_v3", "admin-users-cursor/v3"),
+        ("admin_user_analytics_cursor_v2", "admin-user-analytics-cursor/v2"),
+        ("admin_applications_cursor_v3", "admin-applications-cursor/v3"),
     ):
-        assert f"DROP FUNCTION IF EXISTS public.{name}" in down
+        assert f"FUNCTION public.{name}" in sql
+        assert version in sql
+        assert f"FUNCTION IF EXISTS public.{name}" in down
+    assert " OFFSET " not in sql.upper()
+    assert "LIMIT 20" in sql
+    assert "bootstrap_state<>'ready'" in sql
+    assert "admin_assert_read_model_ready" in sql
+    assert sql.count(" TO service_role;") == 3
+    assert "admin_user_rm_search_trgm_idx" in sql
+    assert "admin_application_scope_count" in sql
 
 
-def test_admin_route_defaults_and_maxima_are_declared_in_fastapi_contract():
-    expected = {
-        server.admin_analytics: {"window_days": (30, 365)},
-        server.admin_list_users: {"page_size": (100, 500), "window_days": (30, 365)},
-        server.admin_list_applications: {"page_size": (100, 500), "window_days": (30, 365)},
-    }
-    for endpoint, parameters in expected.items():
-        signature = inspect.signature(endpoint)
-        for name, (default, maximum) in parameters.items():
-            query = signature.parameters[name].default
-            assert query.default == default
-            assert any(getattr(item, "le", None) == maximum for item in query.metadata)
+def test_cursor_rpcs_never_visit_canonical_fact_relations():
+    sql = MIGRATION.read_text()
+    cursor_sql = sql.split("CREATE OR REPLACE FUNCTION public.admin_users_cursor_v3", 1)[1]
+    cursor_sql = cursor_sql.split("CREATE OR REPLACE FUNCTION public.admin_backfill_applications", 1)[0]
+    for canonical in (
+        "public.users", "public.profiles", "public.applications",
+        "public.swipes", "public.analytics_events",
+    ):
+        assert canonical not in cursor_sql
+    assert "public.admin_user_read_model" in cursor_sql
+    assert "public.admin_application_read_model" in cursor_sql
+    assert "public.admin_application_scope_count" in cursor_sql
+
+
+def test_analytics_uses_safe_timestamps_grouped_events_and_bounded_distributions():
+    sql = MIGRATION.read_text()
+    assert "public.admin_try_timestamptz(s.data->>'updated_at')" in sql
+    assert "lag(e.created_at) OVER(PARTITION BY e.user_id" in sql
+    assert "SELECT e.user_id,max(e.created_at) last_event" in sql
+    assert "row_number() OVER(" in sql
+    assert "WHERE c.option_rank<=6" in sql
+    assert "public.admin_onboarding_answer_title(answer_key)" in sql
+
+
+def test_admin_sql_rpcs_validate_cursor_inputs_instead_of_clamping():
+    sql = MIGRATION.read_text()
+    cursor_sql = sql.split("CREATE OR REPLACE FUNCTION public.admin_users_cursor_v3", 1)[1]
+    cursor_sql = cursor_sql.split("CREATE OR REPLACE FUNCTION public.admin_backfill_applications", 1)[0]
+    assert "LEAST(GREATEST(COALESCE(p_limit" not in cursor_sql
+    assert cursor_sql.count("MESSAGE='invalid admin cursor input'") == 2
+    assert "f IS NOT NULL AND f NOT IN" in cursor_sql
+
+
+def test_scale_harness_uses_transparent_read_model_plans():
+    harness = (Path(__file__).parent / "run_admin_read_model_scale_harness.py").read_text()
+    assert "EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON)" in harness
+    assert '"expected_matrix_cells": 66' in harness
+    assert "admin_user_read_model" in harness
+    assert "admin_application_read_model" in harness

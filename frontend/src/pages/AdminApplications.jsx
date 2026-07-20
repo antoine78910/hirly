@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Loader2, RefreshCw } from "lucide-react";
 import { api } from "../lib/api";
@@ -86,6 +86,16 @@ export default function AdminApplications() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [accessDenied, setAccessDenied] = useState(false);
+  const cursor = searchParams.get("cursor") || null;
+  const [pagination, setPagination] = useState({
+    total: 0,
+    has_previous: false,
+    has_next: false,
+    previous_cursor: null,
+    next_cursor: null,
+  });
+  const [queue, setQueue] = useState({ active_count: 0, items: [] });
+  const requestId = useRef(0);
 
   const queryFilter = useMemo(
     () => FILTERS.some((item) => item.key === activeFilter) ? activeFilter : "all",
@@ -93,15 +103,33 @@ export default function AdminApplications() {
   );
 
   const load = useCallback(async () => {
+    const currentRequest = ++requestId.current;
     setLoading(true);
     setError("");
     setAccessDenied(false);
     try {
-      const params = queryFilter === "all" ? "" : `?filter=${encodeURIComponent(queryFilter)}`;
-      const { data } = await api.get(`/admin/applications${params}`);
+      const { data } = await api.get("/admin/applications", {
+        params: {
+          limit: 100,
+          cursor: cursor || undefined,
+          filter: queryFilter === "all" ? undefined : queryFilter,
+        },
+      });
+      if (currentRequest !== requestId.current) return;
       setApplications(data.applications || []);
+      setPagination(data);
+      setQueue(data.queue || { active_count: 0, items: [] });
     } catch (err) {
+      if (currentRequest !== requestId.current) return;
       setApplications([]);
+      setPagination({
+        total: 0,
+        has_previous: false,
+        has_next: false,
+        previous_cursor: null,
+        next_cursor: null,
+      });
+      setQueue({ active_count: 0, items: [] });
       if (err?.response?.status === 403) {
         setAccessDenied(true);
         setError("Admin access denied");
@@ -109,9 +137,9 @@ export default function AdminApplications() {
         setError(adminApiErrorMessage(err, "Could not load admin applications"));
       }
     } finally {
-      setLoading(false);
+      if (currentRequest === requestId.current) setLoading(false);
     }
-  }, [queryFilter]);
+  }, [queryFilter, cursor]);
 
   useEffect(() => {
     load();
@@ -120,6 +148,13 @@ export default function AdminApplications() {
   const setFilter = (key) => {
     if (key === "all") setSearchParams({});
     else setSearchParams({ filter: key });
+  };
+
+  const setCursor = (nextCursor) => {
+    const next = {};
+    if (queryFilter !== "all") next.filter = queryFilter;
+    if (nextCursor) next.cursor = nextCursor;
+    setSearchParams(next);
   };
 
   return (
@@ -163,19 +198,16 @@ export default function AdminApplications() {
                 </p>
               </div>
               <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-xs font-semibold text-zinc-700">
-                {applications.filter((a) => ["queued", "running", "awaiting_review"].includes(a.auto_apply_queue_status)).length} active
+                {queue.active_count || 0} active
               </span>
             </div>
-            {applications.filter((a) => ["queued", "running", "awaiting_review"].includes(a.auto_apply_queue_status)).length === 0 ? (
+            {(queue.items || []).length === 0 ? (
               <p className="mt-3 text-sm text-zinc-500" data-testid="admin-auto-apply-queue-empty">
                 Queue is empty — no applications waiting for auto-apply right now.
               </p>
             ) : (
               <ul className="mt-3 space-y-2">
-                {applications
-                  .filter((a) => ["queued", "running", "awaiting_review"].includes(a.auto_apply_queue_status))
-                  .slice(0, 20)
-                  .map((app) => (
+                {(queue.items || []).map((app) => (
                     <li key={app.application_id} className="flex items-center justify-between gap-3 rounded-md bg-zinc-50 px-3 py-2 text-sm">
                       <Link className="min-w-0 font-semibold text-linkedin hover:underline" to={`/admin/applications/${app.application_id}`}>
                         <span className="truncate">{app.company || "Unknown"} · {app.title || "Role"}</span>
@@ -261,6 +293,27 @@ export default function AdminApplications() {
             </tbody>
           </table>
         </div> : null}
+        {!accessDenied && !error ? (
+          <div className="mt-4 flex items-center justify-between gap-3 text-sm text-zinc-600">
+            <span>{pagination.total ? `${applications.length} shown of ${pagination.total}` : "0 applications"}</span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setCursor(pagination.previous_cursor)}
+                disabled={loading || !pagination.has_previous || !pagination.previous_cursor}
+              >
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setCursor(pagination.next_cursor)}
+                disabled={loading || !pagination.has_next || !pagination.next_cursor}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        ) : null}
     </AdminShell>
   );
 }

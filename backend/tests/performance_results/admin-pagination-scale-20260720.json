@@ -1,0 +1,71 @@
+{
+  "budgets": {
+    "aggregate_payload_bytes": 524288,
+    "list_payload_bytes": 2097152,
+    "shared_blocks": 150000,
+    "temp_blocks": 0,
+    "warm_common_ms": 1500,
+    "warm_max_ms": 2500
+  },
+  "cardinalities": {
+    "analytics_events": 5000000,
+    "applications": 5000000,
+    "swipes": 5000000,
+    "users": 100200
+  },
+  "cardinality_gate": true,
+  "executed_matrix_cells": 3,
+  "expected_matrix_cells": 66,
+  "failed_scenarios": [
+    "users_unfiltered_first",
+    "analytics_unfiltered_first",
+    "applications_all_first"
+  ],
+  "generated_at": "2026-07-20T17:13:18.168910+00:00",
+  "matrix_complete": false,
+  "minimums": {
+    "analytics_events": 5000000,
+    "applications": 5000000,
+    "swipes": 5000000,
+    "users": 100200
+  },
+  "pass": false,
+  "payload_error": "ERROR:  canceling statement due to statement timeout\nCONTEXT:  SQL function \"admin_user_analytics_page_v1\" statement 1",
+  "payload_gate": false,
+  "scenarios": {
+    "analytics_unfiltered_first": {
+      "error": "ERROR:  canceling statement due to statement timeout",
+      "function": "admin_user_analytics_page_v1",
+      "parameters": {
+        "p_limit": 200,
+        "p_offset": 0,
+        "p_q": null
+      },
+      "pass": false,
+      "tier": "common"
+    },
+    "applications_all_first": {
+      "error": "ERROR:  canceling statement due to statement timeout",
+      "function": "admin_applications_page_v2",
+      "parameters": {
+        "p_filter": null,
+        "p_limit": 200,
+        "p_offset": 0
+      },
+      "pass": false,
+      "tier": "common"
+    },
+    "users_unfiltered_first": {
+      "error": "ERROR:  canceling statement due to statement timeout",
+      "function": "admin_users_page_v2",
+      "parameters": {
+        "p_limit": 200,
+        "p_offset": 0,
+        "p_paying_only": false,
+        "p_q": null
+      },
+      "pass": false,
+      "tier": "common"
+    }
+  }
+}
