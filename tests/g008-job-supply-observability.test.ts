@@ -120,7 +120,13 @@ describe("G008 job-supply observability contract", () => {
 
   test("makes reconciled France Travail census manifests immutable", () => {
     expect(migration).toContain(
-      "coverage_run_id uuid NOT NULL REFERENCES public.worker_runs(id) ON DELETE RESTRICT",
+      "source_run_ids uuid[] NOT NULL CHECK (cardinality(source_run_ids) > 0)",
+    );
+    expect(migration).toContain(
+      "CREATE TABLE IF NOT EXISTS public.france_travail_census_manifest_runs",
+    );
+    expect(migration).toContain(
+      "run_id uuid NOT NULL REFERENCES public.worker_runs(id) ON DELETE RESTRICT",
     );
     expect(migration).toContain("manifest_digest text NOT NULL UNIQUE");
     expect(migration).toContain("BEFORE UPDATE OR DELETE");
