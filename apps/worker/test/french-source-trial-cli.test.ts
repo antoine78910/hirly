@@ -4,13 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
 import type { SourceTrialManifest } from "@hirly/contracts";
-import {
-  BPCE_DATASET_ID,
-  BPCE_RESOURCE_ID,
-  BPCE_RESOURCE_URL,
-  sanitizedBpceSnapshotDigest,
-  sealBpceTrialResourceManifest,
-} from "../src/bpce-source-trial";
 import { sealCspTrialResourceManifest } from "../src/csp-source-trial";
 import { sealDataGouvTrialResourceManifest } from "../src/data-gouv-source-trial";
 import {
@@ -283,86 +276,6 @@ describe("G014 French source trial operator CLI", () => {
         "result.json",
       ]),
     ).toThrow("exact approved SHA-256 digest");
-  });
-
-  test("previews a digest-bound BPCE snapshot with production writes disabled", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "hirly-bpce-trial-"));
-    try {
-      const rows = [{
-        title: "Ingénieure plateforme",
-        lastmodifieddate: "20/07/2026 4:10:08 PM",
-        referencenumber: "BPCE-CLI-001",
-        apply_url: "https://jobs.smartrecruiters.com/BPCE/744000123456789-role",
-        url: "https://recrutement.bpce.fr/offre/role",
-        company: "BPCE",
-        city: "Paris",
-        state: "Île-de-France",
-        country: "France",
-        description: "Construire des services.",
-        jobtype: "CDI",
-        nom_recruteur_principal: "Ne pas persister",
-        email_recruteur_principal: "secret@example.com",
-      }];
-      const fixture = JSON.stringify(rows);
-      const resource = sealBpceTrialResourceManifest({
-        schemaVersion: "hirly.bpce-evidence-trial-resource.v1",
-        sourceId,
-        policyEvidenceId,
-        datasetId: BPCE_DATASET_ID,
-        resourceId: BPCE_RESOURCE_ID,
-        resourceUrl: BPCE_RESOURCE_URL,
-        countryCodes: ["FR"],
-        sanitizedContentSha256: sanitizedBpceSnapshotDigest(rows),
-        expectedRecords: 1,
-        policyArtifactDigest: "a".repeat(64),
-        attribution: {
-          licenceName: "Licence Ouverte 2.0",
-          attributionText: "Source: Groupe BPCE via data.gouv.fr",
-          sourceUrl:
-            "https://www.data.gouv.fr/datasets/groupe-bpce-offres-emploi-publiques",
-        },
-        budgets: {
-          maxRequests: 1,
-          maxPages: 1,
-          maxBytes: 100_000,
-          timeoutMs: 1_000,
-        },
-      });
-      const trial = trialManifest({
-        tenantKey: `${BPCE_DATASET_ID}:${BPCE_RESOURCE_ID}`,
-        maxCandidates: 10,
-        maxBytes: 100_000,
-      });
-      const paths = await writeTrialInputs(directory, trial, resource, fixture);
-      const command = parseFrenchSourceTrialArgs([
-        "bpce",
-        "preview",
-        "--manifest",
-        paths.manifest,
-        "--resource-manifest",
-        paths.resource,
-        "--approved-manifest-digest",
-        resource.manifestDigest,
-        "--response",
-        paths.response,
-        "--output",
-        paths.output,
-      ]);
-      const result = await runFrenchSourceTrialCli(command, {});
-      expect(result).toMatchObject({
-        normalized: 1,
-        actionable: 1,
-        safeguards: {
-          canonicalWrites: false,
-          sourceActivationChanges: false,
-        },
-      });
-      expect(await readFile(paths.output, "utf8")).not.toContain(
-        "secret@example.com",
-      );
-    } finally {
-      await rm(directory, { recursive: true, force: true });
-    }
   });
 });
 

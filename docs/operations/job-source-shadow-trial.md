@@ -104,43 +104,12 @@ bun run --cwd apps/worker trial:french -- \
   --approved-manifest-digest '<reviewed-resource-manifest-sha256>' \
   --response artifacts/job-ingestion/trials/data-gouv-response.json \
   --output artifacts/job-ingestion/trials/data-gouv-preview.json
-
-# BPCE mutable official export, after sealing this capture's sanitized digest
-bun run --cwd apps/worker trial:french -- \
-  bpce preview \
-  --manifest artifacts/job-ingestion/trials/bpce-source-trial.json \
-  --resource-manifest artifacts/job-ingestion/trials/bpce-resource.json \
-  --approved-manifest-digest '<reviewed-resource-manifest-sha256>' \
-  --response artifacts/job-ingestion/trials/bpce-response.json \
-  --output artifacts/job-ingestion/trials/bpce-preview.json
 ```
 
 The output records `canonicalWrites=false` and
 `sourceActivationChanges=false`. A digest mismatch, resource/policy binding
 mismatch, expired policy, budget excess, unqualified data.gouv resource, or
 unexpected response shape fails closed.
-
-### BPCE capture and review
-
-BPCE uses the fixed credential-free official export:
-`https://bpce.opendatasoft.com/api/explore/v2.1/catalog/datasets/groupe-bpce-offres-emploi/exports/json`.
-Do not place an unreviewed download in the trial database. For each capture:
-
-1. Download once with redirects disabled and record the capture timestamp.
-2. Parse with `bpceUpstreamRecordSchema`; unknown fields, including
-   `nom_recruteur_principal` and `email_recruteur_principal`, are stripped.
-3. Compute `sanitizedContentSha256` over the stable serialized
-   `hirly.bpce-sanitized-snapshot.v1` value and record its exact row count.
-4. Seal and review the resource manifest; pass only its exact
-   `manifestDigest` to preview/run.
-5. Inspect the preview's stable external IDs, selected apply URLs, ATS
-   classifications, actionable count and duplicate contribution before any
-   repeated bakeoff.
-
-The transport rejects redirects, credentials, non-JSON responses, oversized or
-timed-out bodies, record-count drift and sanitized-digest drift. Its readiness,
-preview and persisted evidence all keep `productionEligible=false`,
-`canonicalWrites=false`, and `sourceActivationChanges=false`.
 
 ## Policy-gated evidence run
 
@@ -169,8 +138,7 @@ bun run --cwd apps/worker trial:french -- \
   --output artifacts/job-ingestion/trials/csp-run.json
 ```
 
-Use `data-gouv run` or `bpce run` with the corresponding qualified resource
-files. The run
+Use `data-gouv run` with the corresponding qualified resource files. The run
 subcommand rejects fixture input. It performs at most the single request
 allowed by the sealed resource manifest and persists through the same
 least-privilege evidence repository as ATS trials. It does not expose a
