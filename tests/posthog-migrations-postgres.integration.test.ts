@@ -1,6 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { createDatabase, type Database } from "@hirly/db";
+import {
+  createDatabase,
+  type Database,
+} from "../packages/db/src";
 
 const databaseUrl = process.env.POSTHOG_MIGRATION_TEST_DATABASE_URL;
 const describePostgres = databaseUrl ? describe : describe.skip;
