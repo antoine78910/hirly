@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import {
   buildOccurrencePreferenceDryRun,
+  buildOccurrencePreferenceStructuralBlocker,
   buildRouteReadinessReport,
   buildSourceDiversificationGate,
   routeFailureReasons,
@@ -104,6 +105,43 @@ describe("G018 route-readiness evidence", () => {
     });
     expect(JSON.stringify(report)).not.toContain("group-1");
     expect(JSON.stringify(report)).not.toContain("employer-ats");
+  });
+
+  test("records absent occurrence tables as typed non-scoreable evidence", () => {
+    const input = JSON.parse(readFileSync(
+      new URL(
+        "../../../artifacts/job-ingestion/g018-occurrence-preference-blocked-2026-07-20.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ));
+    const { schemaVersion: _schemaVersion, scoreable: _scoreable,
+      preferredDirectOccurrenceUplift: _uplift, unlockCondition: _unlock,
+      safeguards: _safeguards, digest: _digest, ...builderInput } = input;
+    const report = buildOccurrencePreferenceStructuralBlocker(builderInput);
+    expect(report).toEqual(input);
+    expect(report).toMatchObject({
+      status: "BLOCKED_STRUCTURAL",
+      scoreable: false,
+      missingRelations: [
+        "job_occurrences",
+        "canonical_job_groups",
+        "canonical_job_group_members",
+      ],
+      preferredDirectOccurrenceUplift: null,
+      safeguards: {
+        readOnly: true,
+        aggregateOnly: true,
+        canonicalWrites: false,
+        applicationSubmissions: false,
+        sourceActivationChanges: false,
+        writerTransfer: false,
+      },
+    });
+    expect(() => buildOccurrencePreferenceStructuralBlocker({
+      ...builderInput,
+      missingRelations: [],
+    })).toThrow("requires at least one missing relation");
   });
 
   test("gates aggregate source diversification without activating sources", () => {
@@ -258,26 +296,5 @@ describe("G018 route-readiness evidence", () => {
     expect(sql).not.toContain("'userId'");
     expect(sql).not.toMatch(/jsonb_agg\s*\(/i);
 
-    const occurrenceSql = readFileSync(
-      new URL(
-        "../../../docs/operations/sql/french-occurrence-preference-census.sql",
-        import.meta.url,
-      ),
-      "utf8",
-    );
-    const normalizedOccurrenceSql = occurrenceSql
-      .replace(/--.*$/gm, " ")
-      .toLowerCase();
-    expect(normalizedOccurrenceSql.trimStart().startsWith("\\set")).toBe(true);
-    expect(normalizedOccurrenceSql).not.toMatch(
-      /\b(insert|update|delete|merge|truncate|alter|drop|create|grant|revoke)\b/,
-    );
-    expect(occurrenceSql).toContain("'verifiedRuntimeSelectionUplift'");
-    expect(occurrenceSql).toContain("'directSelectionUplift'");
-    expect(occurrenceSql).toContain("'canonicalWrites', false");
-    expect(occurrenceSql).toContain("'applicationSubmissions', false");
-    expect(occurrenceSql).not.toContain("'occurrenceKey'");
-    expect(occurrenceSql).not.toContain("'groupKey'");
-    expect(occurrenceSql).not.toMatch(/jsonb_agg\s*\(/i);
   });
 });

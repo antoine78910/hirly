@@ -43,13 +43,13 @@ The aggregate-only read performed on 2026-07-20 used:
 - country: `FR`;
 - no user, job, URL or profile rows in the output.
 
-The immutable aggregate is
-`artifacts/job-ingestion/g018-route-readiness-baseline-2026-07-20.json`.
+The refreshed immutable aggregate is
+`artifacts/job-ingestion/g018-route-readiness-2026-07-20.json`.
 
 | Measure | Count | Share of fresh French inventory |
 | --- | ---: | ---: |
 | Fresh layered French jobs | 70,492 | 100% |
-| Actionable, including manual routes | 68,991 | 97.87% |
+| Actionable, including manual routes | 68,988 | 97.87% |
 | Static known-ATS candidates | 17,686 | 25.09% |
 | Strict current-runtime candidates | 1,923 | 2.73% |
 
@@ -59,8 +59,9 @@ is direct SmartRecruiters inventory with 962 jobs. France Travail occurrences
 contribute 801 strict candidates, or 41.65% of the strict set, mostly through
 Taleez.
 
-These are route-capability candidates, not verified submissions. G018 still
-requires bounded no-submit route inspection and paid-user coverage evidence.
+These are route-capability candidates, not verified submissions. The bounded
+no-submit inspector below validates driver inspection without making an
+application attempt or submitting an application.
 
 ## Failure census
 
@@ -70,14 +71,45 @@ Every non-runtime-ready job is assigned to exactly one ordered bucket:
 | --- | ---: |
 | Known ATS without current runtime driver | 58,549 |
 | Unknown ATS | 5,739 |
-| Aggregator or discovery route | 2,780 |
-| Expired or unavailable | 1,346 |
+| Aggregator or discovery route | 2,777 |
+| Expired or unavailable | 1,349 |
 | Missing URL | 155 |
 
 The remaining defined buckets were zero in this aggregate because the earlier
 ordered classification captured them in a more fundamental blocker. A bounded
-live no-submit inspection may refine those buckets without mutating attempts or
-submitting an application.
+authorized no-submit inspection may refine those buckets without mutating
+attempts or submitting an application.
+
+## Bounded no-submit inspection
+
+`backend/tests/run_no_submit_route_inspection.py` is an operator harness over
+the existing Python driver registry. It accepts at most 100 jobs, permits four
+concurrent inspections, enforces a 20-second per-route timeout, requires HTTPS
+provider-host alignment and rejects DNS answers that are not globally routable.
+It imports neither the executor, attempt metrics nor queue and calls only
+`inspect_application`.
+
+The output contains aggregate provider/outcome/failure counts and a digest. It
+never emits input URLs, job IDs, application IDs, profile data or exception
+details. Its safeguards explicitly report zero application submissions,
+attempt writes, canonical writes, activation changes and writer transfers.
+
+The committed
+`artifacts/job-ingestion/g018-no-submit-inspection-contract-2026-07-20.json`
+is fixture-contract evidence against the real registered JobAffinity driver; it
+is not represented as a live inventory census. For an authorized bounded live
+sample, prepare a local JSON array of jobs and run:
+
+```bash
+PYTHONPATH=backend:backend/tests .venv/bin/python \
+  backend/tests/run_no_submit_route_inspection.py \
+  --input /tmp/authorized-route-sample.json \
+  --output /tmp/authorized-route-aggregate.json \
+  --allow-network
+```
+
+Do not use `execute_application(..., dry_run=True)` for this audit: that path
+claims and persists an application attempt before inspection.
 
 ## Dry-run preferred occurrence
 
@@ -130,24 +162,30 @@ Thresholds are evidence gates, not activation instructions. A `GO` artifact
 still requires the source-policy, writer-ownership, rollout and rollback gates
 for each proposed source.
 
-The current-versus-preferred occurrence aggregate is produced separately with
-`docs/operations/sql/french-occurrence-preference-census.sql`. Execute it in an
-explicit read-only transaction with the same `generated_at` and
-`freshness_cutoff` values as the route census. It compares the current freshest
-occurrence with the direct-route ordering, but outputs counts only and never
-emits or updates group, occurrence or job identifiers.
+The production schema audit found no `job_occurrences`,
+`canonical_job_groups`, or `canonical_job_group_members` relations. The legacy
+`jobs.fingerprint` field is not an occurrence ledger and must not be used to
+fabricate preferred-direct-occurrence uplift. The committed typed evidence is
+`artifacts/job-ingestion/g018-occurrence-preference-blocked-2026-07-20.json`.
+It is explicitly non-scoreable, reports a `null` uplift, and records the exact
+unlock condition: apply an approved backward-compatible occurrence schema,
+populate it through the single-writer ingestion boundary, and then run the
+aggregate read-only preference census.
 
 ## Remaining external evidence
 
-The baseline is intentionally `BLOCKED_EXTERNAL` because no fresh paid-user
-strict-auto coverage run exists. Completion requires:
+The refreshed non-sample artifact evaluates 74 paid users: P10/P50/P90 are
+0/38/133, eight users are exhausted (10.810811%), France Travail supplies
+41.653666% of strict runtime-ready inventory and the top provider supplies
+50.026001%. These values reconcile the current paid-cohort and concentration
+baseline without user identifiers.
 
-- P10/P50/P90 strict runtime-ready jobs per paid user;
-- strict-auto feed-exhaustion rate;
-- affected paid users by provider;
-- bounded no-submit inspection outcomes;
-- preferred-occurrence uplift;
-- France Travail and top-provider concentration gates.
+Projected source-diversification remains unscoreable until G016 supplies an
+authorized non-sample net-new measurement, affected-user contribution counts,
+and a completed repeated-sync observation window. Preferred-occurrence uplift
+also remains structurally unknown until the occurrence schema is deployed and
+populated. Neither blocker authorizes a migration, source activation, writer
+transfer or application submission.
 
 Run `docs/operations/sql/french-route-readiness-census.sql` with explicit fixed
 timestamps for a fresh aggregate, then use:

@@ -90,6 +90,44 @@ export interface OccurrencePreferenceReport {
   digest: string;
 }
 
+export const occurrencePreferenceRelations = [
+  "job_occurrences",
+  "canonical_job_groups",
+  "canonical_job_group_members",
+] as const;
+
+export type OccurrencePreferenceRelation =
+  (typeof occurrencePreferenceRelations)[number];
+
+export interface OccurrencePreferenceStructuralBlockerInput {
+  status: "BLOCKED_STRUCTURAL";
+  generatedAt: string;
+  schemaAuditVersion: string;
+  missingRelations: OccurrencePreferenceRelation[];
+  blockerReason: string;
+}
+
+export interface OccurrencePreferenceStructuralBlocker {
+  schemaVersion: "hirly.occurrence-preference-structural-blocker.v1";
+  status: "BLOCKED_STRUCTURAL";
+  scoreable: false;
+  generatedAt: string;
+  schemaAuditVersion: string;
+  missingRelations: OccurrencePreferenceRelation[];
+  blockerReason: string;
+  preferredDirectOccurrenceUplift: null;
+  unlockCondition: string;
+  safeguards: {
+    readOnly: true;
+    aggregateOnly: true;
+    canonicalWrites: false;
+    applicationSubmissions: false;
+    sourceActivationChanges: false;
+    writerTransfer: false;
+  };
+  digest: string;
+}
+
 export interface DiversificationSnapshot {
   runtimeReadyJobs: number;
   franceTravailRuntimeReadyJobs: number;
@@ -617,4 +655,53 @@ export function buildOccurrencePreferenceDryRun(
     ...unsigned,
     digest: digest({ ...unsigned, selections: sealedSelections }),
   };
+}
+
+export function buildOccurrencePreferenceStructuralBlocker(
+  input: OccurrencePreferenceStructuralBlockerInput,
+): OccurrencePreferenceStructuralBlocker {
+  if (input.status !== "BLOCKED_STRUCTURAL") {
+    fail("occurrence structural evidence must remain blocked");
+  }
+  const generatedAt = timestamp(input.generatedAt, "generatedAt");
+  if (!/^g018-occurrence-schema-audit-v\d+$/.test(input.schemaAuditVersion)) {
+    fail("occurrence schemaAuditVersion is not recognized");
+  }
+  const blockerReason = input.blockerReason.trim();
+  if (!blockerReason) fail("occurrence blockerReason is required");
+
+  const relationSet = new Set(input.missingRelations);
+  if (relationSet.size !== input.missingRelations.length) {
+    fail("occurrence missingRelations must be unique");
+  }
+  const missingRelations = occurrencePreferenceRelations.filter((relation) =>
+    relationSet.has(relation));
+  if (missingRelations.length === 0) {
+    fail("occurrence evidence requires at least one missing relation");
+  }
+  if (missingRelations.length !== relationSet.size) {
+    fail("occurrence evidence contains an unrecognized relation");
+  }
+
+  const unsigned = {
+    schemaVersion: "hirly.occurrence-preference-structural-blocker.v1" as const,
+    status: "BLOCKED_STRUCTURAL" as const,
+    scoreable: false as const,
+    generatedAt,
+    schemaAuditVersion: input.schemaAuditVersion,
+    missingRelations,
+    blockerReason,
+    preferredDirectOccurrenceUplift: null,
+    unlockCondition:
+      "Apply an approved backward-compatible occurrence schema, populate source occurrences through the single-writer ingestion boundary, then rerun the aggregate read-only preference census.",
+    safeguards: {
+      readOnly: true as const,
+      aggregateOnly: true as const,
+      canonicalWrites: false as const,
+      applicationSubmissions: false as const,
+      sourceActivationChanges: false as const,
+      writerTransfer: false as const,
+    },
+  };
+  return { ...unsigned, digest: digest(unsigned) };
 }

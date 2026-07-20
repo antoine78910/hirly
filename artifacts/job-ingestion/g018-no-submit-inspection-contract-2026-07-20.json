@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "hirly.no-submit-route-inspection.v1",
+  "generatedAt": "2026-07-20T21:30:00Z",
+  "evidenceMode": "fixture_contract",
+  "jobsReceived": 1,
+  "jobsInspected": 1,
+  "outcomes": {
+    "eligible": 0,
+    "needs_user_input": 1,
+    "unsupported": 0,
+    "failed": 0
+  },
+  "providers": {
+    "jobaffinity": {
+      "eligible": 0,
+      "needs_user_input": 1,
+      "unsupported": 0,
+      "failed": 0
+    }
+  },
+  "failureBuckets": {
+    "unsupported_provider": 0,
+    "unsafe_url": 0,
+    "dns_resolution_failed": 0,
+    "route_unresolved": 0,
+    "timeout": 0,
+    "provider_http_error": 0,
+    "inspection_error": 0
+  },
+  "safeguards": {
+    "aggregateOnly": true,
+    "applicationSubmissions": false,
+    "applicationAttemptWrites": false,
+    "canonicalWrites": false,
+    "sourceActivationChanges": false,
+    "writerTransfer": false,
+    "maxJobs": 100,
+    "maxConcurrency": 4,
+    "timeoutSeconds": 20.0,
+    "allowlistedProviders": [
+      "greenhouse",
+      "jobaffinity",
+      "smartrecruiters",
+      "taleez",
+      "teamtailor"
+    ]
+  },
+  "digest": "dc231d89e459f83fb9f2064ecd8b732c452c23d5fbca819b3e1fc106e1659956"
+}
