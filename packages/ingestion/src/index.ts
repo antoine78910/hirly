@@ -7,6 +7,9 @@ import {
   type ProviderSearchRequest,
   type RateLimitConfig,
   type RawProviderJobEnvelope,
+  type SourceCheckpoint,
+  type SourceFetchRequest,
+  type SourceRuntimePolicy,
   type ValidationResult,
 } from "@hirly/contracts";
 
@@ -37,6 +40,45 @@ export interface NormalizedProviderJob {
 export interface ProviderAdapter<RawJob> {
   readonly provider: Provider;
   normalizeRaw(raw: RawJob): NormalizedProviderJob;
+}
+
+export interface SourcePage<RawJob> {
+  items: RawJob[];
+  nextCheckpoint: SourceCheckpoint | null;
+  sourceReportedTotal: number | null;
+  complete: boolean;
+}
+
+export interface SourceTransport<RawJob> {
+  readonly liveTransportReady: false;
+  fetch(
+    request: SourceFetchRequest,
+    signal: AbortSignal,
+  ): Promise<SourcePage<RawJob>>;
+}
+
+export interface SourceAdapter<RawJob> {
+  readonly provider: Provider;
+  readonly sourceKey: string;
+  readonly enabled: false;
+  readonly liveTransportReady: false;
+  normalizeRaw(raw: RawJob): NormalizedProviderJob;
+}
+
+export class DisabledSourceTransport<RawJob>
+  implements SourceTransport<RawJob>
+{
+  readonly liveTransportReady = false as const;
+
+  async fetch(
+    _request: SourceFetchRequest,
+    _signal: AbortSignal,
+  ): Promise<SourcePage<RawJob>> {
+    throw new IngestionError(
+      "authorization_blocked",
+      "source transport is disabled until policy approval and provider writer ownership are granted",
+    );
+  }
 }
 
 export interface CanonicalJobRepository {
@@ -76,6 +118,59 @@ export class IngestionError extends Error {
     super(message);
     this.name = "IngestionError";
   }
+}
+
+export type SourceActivationBlockReason =
+  | "provider_disabled"
+  | "writer_not_typescript"
+  | "source_disabled"
+  | "mode_disabled"
+  | "country_not_declared"
+  | "provider_country_killed"
+  | "source_country_killed"
+  | "policy_not_approved"
+  | "policy_expired";
+
+export function sourceActivationBlockReason(
+  input: SourceRuntimePolicy,
+  countryCode: string,
+  mode: "incremental" | "backfill",
+  now: Date,
+): SourceActivationBlockReason | null {
+  const country = countryCode.toUpperCase();
+  if (!input.providerEnabled) return "provider_disabled";
+  if (input.writerRuntime !== "typescript") return "writer_not_typescript";
+  if (!input.source.enabled) return "source_disabled";
+  if (
+    (mode === "incremental" && !input.source.incrementalEnabled) ||
+    (mode === "backfill" && !input.source.backfillEnabled)
+  ) {
+    return "mode_disabled";
+  }
+  if (!input.source.countryCodes.includes(country)) {
+    return "country_not_declared";
+  }
+  if (input.providerCountryKillSwitches[country] === true) {
+    return "provider_country_killed";
+  }
+  if (input.sourceCountryKillSwitches[country] === true) {
+    return "source_country_killed";
+  }
+  if (
+    !input.policy.enabled ||
+    input.policy.approvalStatus !== "approved" ||
+    !input.policy.commercialUseAllowed ||
+    !input.policy.redisplayAllowed
+  ) {
+    return "policy_not_approved";
+  }
+  if (
+    !input.policy.expiresAt ||
+    new Date(input.policy.expiresAt).getTime() <= now.getTime()
+  ) {
+    return "policy_expired";
+  }
+  return null;
 }
 
 type Clock = () => number;
