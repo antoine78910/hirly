@@ -129,19 +129,19 @@ describe("job-ingestion audit invariants", () => {
   test("computes paid-user percentiles, median and exhaustion from aggregate snapshots", () => {
     expect(computePaidUserCoverageBaseline([
       {
-        userHash: "a", relevantTotal: 12, uniqueTotal: 14, actionableTotal: 10,
-        unseenActionableTotal: 0, routeKnownTotal: 8, directEmployerTotal: 4,
-        terminalReason: "exhausted",
+        userHash: "a".repeat(64), uniqueTotal: 3, relevantTotal: 3,
+        unseenActionableTotal: 0, actionableTotal: 2,
+        routeKnownTotal: 1, directEmployerTotal: 1, terminalReason: "exhausted",
       },
       {
-        userHash: "b", relevantTotal: 12, uniqueTotal: 14, actionableTotal: 10,
-        unseenActionableTotal: 10, routeKnownTotal: 7, directEmployerTotal: 6,
-        terminalReason: "results",
+        userHash: "b".repeat(64), uniqueTotal: 6, relevantTotal: 6,
+        unseenActionableTotal: 5, actionableTotal: 5,
+        routeKnownTotal: 4, directEmployerTotal: 2, terminalReason: "results",
       },
       {
-        userHash: "c", relevantTotal: 12, uniqueTotal: 14, actionableTotal: 10,
-        unseenActionableTotal: 20, routeKnownTotal: 5, directEmployerTotal: 5,
-        terminalReason: "results",
+        userHash: "c".repeat(64), uniqueTotal: 12, relevantTotal: 12,
+        unseenActionableTotal: 10, actionableTotal: 10,
+        routeKnownTotal: 10, directEmployerTotal: 8, terminalReason: "results",
       },
     ])).toEqual({
       cohortSize: 3,
