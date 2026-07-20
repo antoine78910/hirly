@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 import type {
   SourceTrialManifest,
@@ -111,6 +112,19 @@ function csvResponse(body = csv, status = 200): Response {
 }
 
 describe("G014 qualified CSP CSV evidence-only trial", () => {
+  test("binds the CSP manifest to the complete G016 source-policy artifact", () => {
+    const artifact = readFileSync(
+      new URL(
+        "../../../artifacts/job-ingestion/source-policy/g016-official-access-2026-07-20.json",
+        import.meta.url,
+      ),
+    );
+
+    expect(createHash("sha256").update(artifact).digest("hex")).toBe(
+      G016_SOURCE_POLICY_ARTIFACT_SHA256,
+    );
+  });
+
   test("binds the exact b3f661d CSP resource and keeps BPCE blocked", () => {
     const sealed = sealQualifiedCspTrialResourceManifest({
       sourceId,

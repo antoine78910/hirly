@@ -17,6 +17,8 @@ Machine-readable evidence and captured sample digests live in
 | Other data.gouv datasets | Public catalogue; resource access varies | Catalogue membership is not source-specific rights evidence | No generic feed | `dataset_specific_evidence_required` |
 | Apec | XML excerpts only by partnership convention; robots prohibited | Commercial Hirly redisplay is not publicly authorized | No anonymous representative feed | `provider_contract_missing` |
 | La Bonne Alternance | Token-gated API and complete JSON download | Published API terms reserve use to non-profit purposes and prohibit commercialization | Technically representative for alternance, but not commercially cleared | `provider_contract_missing` |
+| Greenhouse | Company-scoped Job Board API for a known board token | Public readability does not grant commercial multi-tenant aggregation or redisplay | Authorized tenants can form a sample; no provider-wide feed | `provider_contract_missing` |
+| Lever | Company-scoped Postings API for a known site name | Published visibility does not grant commercial multi-tenant aggregation or redisplay | Authorized tenants can form a sample; no provider-wide feed | `provider_contract_missing` |
 | SmartRecruiters | Company-scoped Posting API; official auth guidance conflicts | Career-site/widget use exists, but unrestricted commercial multi-tenant redisplay is not granted | Allowlisted tenants can form a technical sample; no global feed | `provider_contract_missing` |
 | Taleez | Tenant public/secret key with scopes; 100 requests/minute | A public key is authentication, not an open-data licence | Company-scoped only; no provider-wide feed | `provider_contract_missing` |
 
@@ -68,6 +70,17 @@ production activation.
   is technically suitable, but its [terms](https://api.apprentissage.beta.gouv.fr/fr/cgu)
   restrict the route to non-profit use and prohibit commercialization. Hirly
   requires written authorization before any live evidence capture.
+- **Greenhouse:** the [Job Board API](https://developers.greenhouse.io/job-board.html)
+  exposes one organization's published jobs for a known board token. The
+  [partner resources](https://www.greenhouse.com/api) describe a separate
+  integration relationship. Neither public readability nor a discovered board
+  token authorizes Hirly to aggregate, retain or redisplay a representative
+  tenant sample.
+- **Lever:** the official [Postings API](https://github.com/lever/postings-api)
+  is designed for a company's own custom job site and is namespaced by that
+  company's site name. [Partner support](https://hire.lever.co/developer/support)
+  uses a separate sandbox process. Hirly requires written partner or
+  participating-employer authorization before an evidence capture.
 - **SmartRecruiters:** the [Posting API](https://developers.smartrecruiters.com/docs/posting-api)
   is company-scoped. The separate [Job Board API](https://developers.smartrecruiters.com/docs/partners-job-board-api)
   is partner/contract based. Public readability is not a general aggregation or

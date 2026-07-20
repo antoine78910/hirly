@@ -1,7 +1,7 @@
 {
   "schemaVersion": "g016-official-source-access.v1",
   "classification": "TS_NEW",
-  "capturedAt": "2026-07-20T12:56:16Z",
+  "capturedAt": "2026-07-20T20:37:35Z",
   "scope": "evidence_only",
   "productionEligible": false,
   "canonicalWritesAllowed": false,
@@ -169,6 +169,60 @@
       "blockers": [
         "Written authorization is required for Hirly's commercial use and redisplay.",
         "Partner-specific rights, retention, caching, rate limits and SLA require confirmation."
+      ]
+    },
+    {
+      "sourceKey": "greenhouse",
+      "displayName": "Greenhouse",
+      "officialEvidence": [
+        {
+          "kind": "job_board_api",
+          "url": "https://developers.greenhouse.io/job-board.html"
+        },
+        {
+          "kind": "partner_api",
+          "url": "https://developers.greenhouse.io/candidate-ingestion.html"
+        },
+        {
+          "kind": "partner_resources",
+          "url": "https://www.greenhouse.com/api"
+        }
+      ],
+      "accessFinding": "The Job Board API exposes company-scoped published jobs for a known board token; partner APIs require scoped credentials and an approved integration relationship.",
+      "rightsFinding": "Public technical readability does not grant Hirly commercial multi-tenant aggregation, retention or redisplay rights.",
+      "representativeFeedFinding": "A fixed authorized board token can form a representative tenant sample, but there is no provider-wide discovery or completeness feed.",
+      "decision": "provider_contract_missing",
+      "evidenceOnlyTransportEligible": false,
+      "productionEligible": false,
+      "blockers": [
+        "Written Greenhouse partner or participating-employer authorization is required.",
+        "The approved board scope, redisplay and retention rights, quotas and sandbox conditions must be recorded.",
+        "A public board token does not prove authorization for a Hirly bakeoff."
+      ]
+    },
+    {
+      "sourceKey": "lever",
+      "displayName": "Lever",
+      "officialEvidence": [
+        {
+          "kind": "postings_api",
+          "url": "https://github.com/lever/postings-api"
+        },
+        {
+          "kind": "partner_support",
+          "url": "https://hire.lever.co/developer/support"
+        }
+      ],
+      "accessFinding": "The Postings API exposes a company's published jobs for a known site name and is intended for that company's custom job site; partner integrations follow a separate sandbox process.",
+      "rightsFinding": "Public job visibility does not establish Hirly's commercial multi-tenant aggregation, retention or redisplay rights.",
+      "representativeFeedFinding": "A fixed authorized site name can form a representative tenant sample, but the API provides no cross-company discovery or global completeness guarantee.",
+      "decision": "provider_contract_missing",
+      "evidenceOnlyTransportEligible": false,
+      "productionEligible": false,
+      "blockers": [
+        "Written Lever partner or participating-employer authorization is required.",
+        "The approved regional site scope, redisplay and retention rights, quotas and sandbox conditions must be recorded.",
+        "A publicly visible posting does not prove authorization for a Hirly bakeoff."
       ]
     },
     {

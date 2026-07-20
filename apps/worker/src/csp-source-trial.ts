@@ -24,7 +24,7 @@ export const QUALIFIED_CSP_CONTENT_SHA256 =
   "a4c34e24156138e89e83a9a98a296214a81f39b4bdf3f89aff83e62069fb1e5b" as const;
 export const QUALIFIED_CSP_BYTE_LENGTH = 84_407_563 as const;
 export const G016_SOURCE_POLICY_ARTIFACT_SHA256 =
-  "633a45895aa1b7092234904e73c1a8cd34840052016843b3b8942235e1f66ec2" as const;
+  "e027e21f14809ea33ab3dd7eec79bfd7f33928c5646ea188adc2e1a2bada8aad" as const;
 
 export const cspQualifiedEvidenceReadiness = Object.freeze({
   source: "choisir-le-service-public",

@@ -79,7 +79,14 @@ describe("G016 official source access evidence", () => {
   });
 
   test("keeps every source without written commercial rights contract-gated", () => {
-    const contractGated = ["apec", "la-bonne-alternance", "smartrecruiters", "taleez"];
+    const contractGated = [
+      "apec",
+      "la-bonne-alternance",
+      "greenhouse",
+      "lever",
+      "smartrecruiters",
+      "taleez",
+    ];
     for (const sourceKey of contractGated) {
       const source = manifest.sources.find((candidate) => candidate.sourceKey === sourceKey);
       expect(source?.decision).toBe("provider_contract_missing");
