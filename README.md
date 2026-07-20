@@ -66,7 +66,8 @@ bun run typecheck
 bun run test
 bun run build
 bun test tests/workspace-isolation.test.ts
-bun run verify:job-supply-release
+bun run verify:job-supply-release -- --expected-head "$(git rev-parse HEAD)" \
+  --output ".omx/verification/repository-$(git rev-parse HEAD).json"
 ```
 
 Run the legacy frontend from its own directory with its existing npm install

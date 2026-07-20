@@ -9,44 +9,52 @@ source. External production actions require a separate operator approval.
 Repository-only verification:
 
 ```bash
-bun run verify:job-supply-release
+HEAD_SHA="$(git rev-parse HEAD)"
+bun run verify:job-supply-release -- --expected-head "$HEAD_SHA" \
+  --output ".omx/verification/repository-$HEAD_SHA.json"
 ```
 
 Full local verification, including the legacy frontend and worker image:
 
 ```bash
-bun run verify:job-supply-release -- --profile full
+HEAD_SHA="$(git rev-parse HEAD)"
+bun run verify:job-supply-release -- --profile full \
+  --expected-head "$HEAD_SHA" \
+  --output ".omx/verification/full-$HEAD_SHA.json"
 ```
 
 Add the complete disposable-Postgres matrix:
 
 ```bash
+HEAD_SHA="$(git rev-parse HEAD)"
 G015_TEST_DATABASE_URL='postgresql://user:password@localhost/hirly_release_test' \
-  bun run verify:job-supply-release -- \
-    --profile full \
-    --allow-disposable-database \
-    --expected-head "$(git rev-parse HEAD)" \
-    --output ".omx/verification/job-supply-release-$(git rev-parse --short HEAD).json"
+  bun run verify:job-supply-release -- --profile full \
+  --allow-disposable-database \
+  --expected-head "$HEAD_SHA" \
+  --output ".omx/verification/full-postgres-$HEAD_SHA.json"
 ```
 
 The command refuses database verification unless both conditions hold: the URL targets
 loopback with a database name containing `test` or `disposable`, and the operator passes
 `--allow-disposable-database` (or sets `G015_ALLOW_DISPOSABLE_DATABASE=true`).
-The supplied URL is a connection template, not a suite target. The verifier derives seven
-unique run-scoped names, proves each database did not exist, creates each from `template0`,
-proves it is empty, assigns exactly one database to each PostgreSQL suite, and drops all
-seven in a final cleanup path even after a failed check. Existing databases are never
-reused. The PostgreSQL suites are destructive and must never target staging or production.
+The URL is a naming template, not a shared suite database. The verifier derives seven
+distinct suite database names plus one activation-proof database, requires every one to
+already exist and contain zero user schemas/relations, and never reuses a database across
+suites. Generate a `--plan` manifest first to obtain the exact names, create those empty
+local databases with a disposable owner, and drop them after verification. A pre-existing
+sentinel table or other user object is a hard failure. The PostgreSQL suites are
+destructive and must never target staging or production.
 
-The command also requires a clean working tree, records the exact HEAD plus a content
-digest before and after verification, and fails if repository content changes during the
-run. Use `--expected-head` to bind the run to the reviewed 40-character commit SHA. Output
-must be a new, non-symlinked path below `.omx/verification` and is written via an atomic
-rename. Stack-policy validation covers newly added production Python modules over
+The command also requires a clean working tree and a full 40-character
+`--expected-head`, records that exact HEAD plus a content digest before and after
+verification, and fails before child execution if the SHA differs or if repository
+content changes during the run. Child commands receive an allowlisted environment;
+database URLs are supplied only to their matching isolated suite and their output is
+redacted. Stack-policy validation covers newly added production Python modules over
 `G015_BASE_SHA..HEAD`, or the merge-base with `origin/main` when that variable is
-unset. The manifest records SHA-256 hashes for the verifier, lockfiles, Docker inputs,
-deployment configuration, every migration, and every invoked tool binary. Missing database,
-Docker, credentials, or external deployment authority is recorded as typed
+unset. Manifest output must be a new, Git-ignored path below `.omx/verification`; it is
+written atomically and cannot overwrite prior evidence. Missing database, Docker,
+credentials, or external deployment authority is recorded as typed
 `blockedExternal` entries with `readinessStatus: BLOCKED_EXTERNAL`; it must never be
 represented as a passing live check.
 
@@ -114,12 +122,19 @@ Repository checks must prove:
   `npm ci --legacy-peer-deps`;
 - `apps/worker/Dockerfile` builds from the repository root, uses an exec-form
   command, runs as `USER bun`, and does not copy `.env` files;
+- the root `.dockerignore` excludes Git/OMX metadata, dependency trees,
+  environment files, credentials, tokens, browser profiles and storage state;
+- the Docker proof uses a unique expected-HEAD-scoped tag, records the image ID
+  and runtime config, and removes the verification image in a `finally` path;
 - `apps/worker/railway.toml` uses `/health/ready` and a drain window longer than
   `WORKER_SHUTDOWN_MS`;
 - the root and frontend Vercel configurations retain the existing CRA and
   FastAPI routing and contain no worker route;
 - `backend/railway.toml` remains the current FastAPI deployment configuration;
 - no provider/source/schedule is enabled by a migration;
+- a fresh post-migration database has zero enabled providers, worker/Python
+  schedules, source policies, career transports, trial policies or TypeScript
+  writer transfers;
 - `WORKER_CONTROL_ENABLED=false` unless a separately protected operator control
   plane is approved.
 

@@ -1,19 +1,24 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir, readFile, readdir, rm, symlink } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { readFile, readdir, rm } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { resolve } from "node:path";
 import {
   assertDisposableDatabase,
+  assertExpectedHead,
+  buildChildEnvironment,
   buildReleaseVerificationPlan,
-  collectArtifactEvidence,
-  collectToolEvidence,
+  collectArtifactAttestation,
+  collectToolAttestations,
+  deriveIsolatedDatabaseUrls,
   executeCommand,
-  findMigrationActivationStatements,
-  isolatedDatabaseUrl,
+  findUnsafeActivationStatements,
+  parseFreshnessProof,
   redactSensitiveText,
   resolveManifestOutput,
-  sanitizedEnvironment,
+  runReleaseVerification,
   verifyDeploymentDefaults,
+  verifyDockerContext,
+  writeManifestAtomic,
 } from "../scripts/verify-job-supply-release.mjs";
 
 const root = resolve(import.meta.dir, "..");
@@ -29,13 +34,14 @@ describe("G015 release verification contract", () => {
 
   test("builds deterministic checks with reproducible installs and typed blockers", () => {
     const databaseUrl = "postgresql://release:super-secret@localhost/hirly_release_test";
+    const expectedHead = "a".repeat(40);
     const plan = buildReleaseVerificationPlan({
       profile: "full",
       databaseUrl,
       allowDisposableDatabase: true,
-      verificationId: "20260720120000-123-deadbeef",
+      expectedHead,
     });
-    expect(plan.commands.map((entry) => entry.id)).toEqual([
+    expect(plan.commands.map((entry) => entry.id).slice(0, 14)).toEqual([
       "repository-attestation",
       "frozen-install",
       "typecheck",
@@ -48,14 +54,21 @@ describe("G015 release verification contract", () => {
       "diff-check",
       "legacy-frontend-frozen-install",
       "legacy-frontend-build",
-      "worker-docker-build",
+      "legacy-frontend-artifact-proof",
       "worker-docker-proof",
-      "postgres-provision",
-      "postgres-release-matrix",
-      "postgres-disabled-state-proof",
     ]);
     expect(plan.commands.find((entry) => entry.id === "legacy-frontend-frozen-install")?.args).toEqual(["ci", "--legacy-peer-deps"]);
-    expect(plan.commands.find((entry) => entry.id === "postgres-release-matrix")?.redactEnvironment).toBe(true);
+    expect(plan.commands.filter((entry) => /^postgres-.+-freshness$/.test(entry.id))).toHaveLength(8);
+    expect(plan.commands.filter((entry) => /^postgres-(?:g\d+|ledger)$/.test(entry.id))).toHaveLength(7);
+    expect(plan.commands.find((entry) => entry.id === "postgres-g002")?.redactEnvironment).toBe(true);
+    expect(plan.commands.find((entry) => entry.id === "postgres-g002")?.args).toEqual([
+      "test",
+      "--timeout",
+      "30000",
+      "tests/g002-postgres.integration.test.ts",
+    ]);
+    expect(plan.expectedHead).toBe(expectedHead);
+    expect(new Set(Object.values(plan.databaseUrls ?? {}))).toHaveLength(8);
     expect(plan.blockedExternal.every((entry) => entry.status === "BLOCKED_EXTERNAL")).toBe(true);
     expect(plan.blockedExternal.map((entry) => entry.code)).toEqual([
       "DEPLOYMENT_NOT_PERFORMED",
@@ -88,6 +101,78 @@ describe("G015 release verification contract", () => {
     expect(decodeURIComponent(parsed.pathname.slice(1)).length).toBeLessThanOrEqual(63);
     expect(parsed.password).toBe("super-secret");
     expect(parsed.pathname).toEndWith("_20260720120000_123_deadbeef_g014");
+  });
+
+  test("pins expected HEAD before running any child command", () => {
+    const expectedHead = "a".repeat(40);
+    expect(() => assertExpectedHead(expectedHead, "b".repeat(40))).toThrow("expected HEAD");
+    expect(() => assertExpectedHead("short", "short")).toThrow("40-character");
+
+    let executed = 0;
+    const attestation = {
+      head: "b".repeat(40),
+      clean: true,
+      status: "",
+      contentDigest: "digest",
+    };
+    const manifest = runReleaseVerification(
+      {
+        profile: "full",
+        expectedHead,
+        commands: [{ id: "must-not-run", executable: "false", args: [], cwd: ".", env: {} }],
+        blockedExternal: [],
+        databaseUrls: null,
+      },
+      {
+        attest: () => attestation,
+        execute: () => {
+          executed += 1;
+          return { status: 0 };
+        },
+        collectArtifacts: () => ({}),
+        collectTools: () => [],
+      },
+    );
+    expect(executed).toBe(0);
+    expect(manifest.results).toEqual([]);
+    expect(manifest.overallStatus).toBe("failed");
+    expect(manifest.preflightError).toContain("expected HEAD");
+  });
+
+  test("allowlists child environment and never exposes production sentinels", () => {
+    const environment = buildChildEnvironment(
+      { EXPLICIT_SAFE_VALUE: "present" },
+      {
+        PATH: process.env.PATH,
+        HOME: process.env.HOME,
+        DATABASE_URL: "postgresql://production-secret",
+        SUPABASE_SERVICE_ROLE_KEY: "production-secret",
+        POSTHOG_API_KEY: "production-secret",
+      },
+    );
+    expect(environment.DATABASE_URL).toBeUndefined();
+    expect(environment.SUPABASE_SERVICE_ROLE_KEY).toBeUndefined();
+    expect(environment.POSTHOG_API_KEY).toBeUndefined();
+    expect(environment.EXPLICIT_SAFE_VALUE).toBe("present");
+
+    process.env.G015_PRODUCTION_SENTINEL = "must-not-leak";
+    try {
+      const result = executeCommand(
+        {
+          id: "environment-probe",
+          executable: process.execPath,
+          args: ["-e", "console.log(JSON.stringify({sentinel: process.env.G015_PRODUCTION_SENTINEL ?? 'absent'}))"],
+          cwd: ".",
+          env: {},
+          captureJson: true,
+        },
+        { stdout: () => {}, stderr: () => {} },
+      );
+      expect(result.status).toBe(0);
+      expect(result.evidence).toEqual({ sentinel: "absent" });
+    } finally {
+      delete process.env.G015_PRODUCTION_SENTINEL;
+    }
   });
 
   test("redacts credentials emitted by an actual child process", () => {
@@ -220,6 +305,100 @@ describe("G015 release verification contract", () => {
     expect(result.migrations.length).toBeGreaterThan(0);
     expect(result.workerDockerValidated).toBe(true);
     expect(result.backendRailwayValidated).toBe(true);
+    expect(result.dockerContext.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(verifyDockerContext(root).requiredRules).toContain("**/node_modules");
+  });
+
+  test("rejects literal activation bypasses across every authoritative surface", () => {
+    for (const table of [
+      "provider_registry",
+      "worker_schedules",
+      "python_ingestion_schedules",
+      "source_policy",
+      "career_sources",
+      "source_trial_policies",
+    ]) {
+      expect(findUnsafeActivationStatements(`UPDATE public.${table} SET enabled = true;`)).toContain(
+        "literal_update_enablement",
+      );
+      expect(findUnsafeActivationStatements(`INSERT INTO public.${table} (id, enabled) VALUES ('x', true);`)).toContain(
+        "literal_insert_enablement",
+      );
+    }
+    expect(findUnsafeActivationStatements("UPDATE public.career_sources SET transport_enabled = true;")).toContain(
+      "literal_update_enablement",
+    );
+    expect(findUnsafeActivationStatements("SELECT worker_private.set_provider_enabled('greenhouse', true);")).toContain(
+      "activation_rpc",
+    );
+    expect(findUnsafeActivationStatements("UPDATE public.provider_registry SET writer_runtime = 'typescript';")).toContain(
+      "writer_transfer",
+    );
+    expect(findUnsafeActivationStatements("DO $$ BEGIN UPDATE public.provider_registry SET enabled = true; END $$;")).toContain(
+      "literal_update_enablement",
+    );
+    expect(findUnsafeActivationStatements("UPDATE public.provider_registry SET enabled = false, writer_runtime = 'none';")).toEqual([]);
+  });
+
+  test("requires eight distinct fresh local databases and rejects nonempty proofs", () => {
+    const urls = deriveIsolatedDatabaseUrls("postgresql://release:secret@localhost/hirly_release_test");
+    expect(Object.keys(urls)).toEqual(["g002", "g003", "g004", "g010", "g011", "ledger", "g014", "activation"]);
+    expect(new Set(Object.values(urls))).toHaveLength(8);
+    for (const value of Object.values(urls)) {
+      expect(new URL(value).hostname).toBe("localhost");
+      expect(new URL(value).pathname).toContain("test");
+    }
+    expect(parseFreshnessProof({ database: "hirly_release_test_g002", userSchemas: 0, userRelations: 0 })).toEqual({
+      database: "hirly_release_test_g002",
+      userSchemas: 0,
+      userRelations: 0,
+    });
+    expect(() => parseFreshnessProof({
+      database: "hirly_release_test_g002",
+      userSchemas: 0,
+      userRelations: 1,
+    })).toThrow("not fresh/empty");
+  });
+
+  test("contains manifest output, writes atomically, and preserves Git status", async () => {
+    expect(() => resolveManifestOutput("/tmp/escape.json", root)).toThrow("relative path");
+    expect(() => resolveManifestOutput("../escape.json", root)).toThrow("stay under");
+    expect(() => resolveManifestOutput(".omx/verification/../escape.json", root)).toThrow("stay under");
+
+    const path = `.omx/verification/g015-test-${crypto.randomUUID()}.json`;
+    const statusBefore = spawnSync("git", ["status", "--porcelain=v1", "--untracked-files=all"], {
+      cwd: root,
+      encoding: "utf8",
+    }).stdout;
+    try {
+      const output = writeManifestAtomic(path, { status: "proof" }, root);
+      expect(resolve(output)).toBe(resolve(root, path));
+      expect(() => writeManifestAtomic(path, { status: "overwrite" }, root)).toThrow("new file");
+      const statusAfter = spawnSync("git", ["status", "--porcelain=v1", "--untracked-files=all"], {
+        cwd: root,
+        encoding: "utf8",
+      }).stdout;
+      expect(statusAfter).toBe(statusBefore);
+    } finally {
+      await rm(resolve(root, path), { force: true });
+    }
+  });
+
+  test("publishes reproducible artifact, migration, and frontend lock hashes", () => {
+    const attestation = collectArtifactAttestation(root);
+    expect(attestation.files["scripts/verify-job-supply-release.mjs"].sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(attestation.files["bun.lock"].sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(attestation.files["frontend/package-lock.json"].sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(attestation.migrations.length).toBeGreaterThan(0);
+    expect(attestation.migrations.every((entry) => /^[0-9a-f]{64}$/.test(entry.sha256))).toBe(true);
+    expect(attestation.migrations.every((entry) => /^[0-9a-f]{64}$/.test(entry.downSha256))).toBe(true);
+
+    const tools = collectToolAttestations([
+      { id: "worker-docker-proof", executable: "node" },
+      { id: "postgres-g002", executable: "bun" },
+    ]);
+    expect(tools.map((entry) => entry.executable)).toEqual(["bun", "docker", "node", "psql"]);
+    expect(tools.every((entry) => entry.available && /^[0-9a-f]{64}$/.test(entry.sha256 ?? ""))).toBe(true);
   });
 
   test("documents every migration in exact application order with matching down coverage", async () => {
