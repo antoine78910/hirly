@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "audit": "bun src/cli.ts",
-    "census": "bun src/census-cli.ts",
+    "census:france-travail": "bun src/census-cli.ts",
     "test": "bun test",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
