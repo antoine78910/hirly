@@ -12,6 +12,10 @@
     "apps/job-ingestion-audit": {
       "name": "@hirly/job-ingestion-audit",
       "version": "0.1.0",
+      "dependencies": {
+        "@hirly/db": "workspace:*",
+        "postgres": "3.4.7",
+      },
       "devDependencies": {
         "@types/bun": "1.3.14",
         "typescript": "5.9.3",
