@@ -4,7 +4,7 @@
   "generatedAt": "2026-07-20T00:00:00.000Z",
   "verdict": "PARTIAL",
   "invariantFailures": [],
-  "digest": "49fa5c07c285a3ca3f9bd8879bc18ef2c413e664215769eb262bbe6c7c74f2cf",
+  "digest": "037fcefffa34985b51a7d6448bfadd163485af5583c644b1fcc84061288fc3e3",
   "funnel": {
     "rawReceived": 12,
     "normalized": 11,
@@ -20,6 +20,103 @@
     "duplicateOccurrence": 1,
     "fuzzyCandidateOnly": 1
   },
+  "coverage": {
+    "expandedPartitionCount": 1470,
+    "terminalCounts": {
+      "completed_with_results": 0,
+      "completed_zero_results": 0,
+      "failed": 0,
+      "blocked": 1470,
+      "nonterminal": 0
+    }
+  },
+  "commandResults": [
+    {
+      "command": ".venv/bin/python -m pytest -q backend/tests/test_jsearch_request_budget.py",
+      "exitCode": 0,
+      "rows": [
+        "PAG-JSEARCH-001"
+      ]
+    },
+    {
+      "command": ".venv/bin/python -m pytest -q backend/tests/test_workday_search.py",
+      "exitCode": 0,
+      "rows": [
+        "WORKDAY-FAILURE-001"
+      ]
+    },
+    {
+      "command": ".venv/bin/python -m pytest -q backend/tests/test_france_travail_provider.py",
+      "exitCode": 0,
+      "rows": [
+        "PAG-FT-001"
+      ]
+    },
+    {
+      "command": ".venv/bin/python -m pytest -q backend/tests/test_ats_adapters.py backend/tests/test_ats_source_service.py",
+      "exitCode": 0,
+      "rows": [
+        "CAP-DIRECT-ATS-001"
+      ]
+    },
+    {
+      "command": "bun test apps/job-ingestion-audit/test/audit.test.ts",
+      "exitCode": 0,
+      "rows": [
+        "QUERY-PARTITION-001",
+        "FILTER-001"
+      ]
+    },
+    {
+      "command": ".venv/bin/python -m pytest -q backend/tests/test_job_cache_maintenance.py",
+      "exitCode": 0,
+      "rows": [
+        "REFRESH-001"
+      ]
+    },
+    {
+      "command": ".venv/bin/python -m pytest -q backend/tests/test_job_dedup_golden.py",
+      "exitCode": 0,
+      "rows": [
+        "DEDUP-001"
+      ]
+    },
+    {
+      "command": ".venv/bin/python -m pytest -q backend/tests/test_ingestion_scheduler_ledger.py backend/tests/test_ats_source_service.py && bun test tests/job-ingestion-audit.test.ts apps/worker/test/scheduler.test.ts",
+      "exitCode": 0,
+      "rows": [
+        "SCHED-001"
+      ]
+    },
+    {
+      "command": ".venv/bin/python -m pytest -q backend/tests/test_supabase_cursor_limit.py backend/tests/test_feed_db_first.py",
+      "exitCode": 0,
+      "rows": [
+        "FEED-PAG-001"
+      ]
+    },
+    {
+      "command": "test -n \"$FRANCE_TRAVAIL_CLIENT_ID\" && test -n \"$RAPIDAPI_KEY\"",
+      "exitCode": 1,
+      "rows": [
+        "CAP-LIVE-001"
+      ]
+    },
+    {
+      "command": "test -n \"$DATABASE_URL\"",
+      "exitCode": 1,
+      "rows": [
+        "COVERAGE-001"
+      ]
+    },
+    {
+      "command": "test -n \"$DATABASE_URL\"",
+      "exitCode": 1,
+      "rows": [
+        "SQL-FEED-001"
+      ]
+    }
+  ],
   "rows": [
     {
       "risk_id": "PAG-JSEARCH-001",
@@ -88,7 +185,7 @@
       "file_and_symbol_references": [
         "backend/job_providers"
       ],
-      "reproduction_command": "bun run audit:job-ingestion --fixtures",
+      "reproduction_command": "bun test apps/job-ingestion-audit/test/audit.test.ts",
       "expected_behavior": "live accessible totals reconcile to exact IDs",
       "actual_behavior": "credentials and plan-specific contracts unavailable",
       "baseline_counts_or_latency": {},
@@ -130,7 +227,7 @@
       "file_and_symbol_references": [
         "artifacts/job-ingestion/coverage-matrix.json"
       ],
-      "reproduction_command": "bun run audit:job-ingestion --fixtures",
+      "reproduction_command": "bun test apps/job-ingestion-audit/test/audit.test.ts",
       "expected_behavior": "every partition has a distinct terminal state",
       "actual_behavior": "fixture manifest terminal states validate",
       "baseline_counts_or_latency": {
@@ -150,7 +247,7 @@
       "file_and_symbol_references": [
         "apps/job-ingestion-audit/fixtures/funnel.json"
       ],
-      "reproduction_command": "bun test apps/job-ingestion-audit",
+      "reproduction_command": "bun test apps/job-ingestion-audit/test/audit.test.ts",
       "expected_behavior": "stage counts reconcile by stable reason",
       "actual_behavior": "accounting equations pass",
       "baseline_counts_or_latency": {
@@ -212,12 +309,12 @@
       "suspected_failure": "Fuzzy deduplication can destroy distinct openings.",
       "affected_path": "canonical identity",
       "file_and_symbol_references": [
-        "backend/jobs_service.py",
+        "backend/job_normalization.py:classify_dedup_pair",
         "apps/job-ingestion-audit/fixtures/dedup-golden.json"
       ],
-      "reproduction_command": "bun test apps/job-ingestion-audit",
+      "reproduction_command": ".venv/bin/python -m pytest -q backend/tests/test_job_dedup_golden.py",
       "expected_behavior": "provider+external ID stays canonical; fuzzy matches are review-only",
-      "actual_behavior": "golden corpus contains protected distinct cases; no auto fuzzy merge",
+      "actual_behavior": "production occurrence, canonical URL, ATS ID and fingerprint classifiers pass with zero false merges and zero missed candidates",
       "baseline_counts_or_latency": {
         "automaticFuzzyMerges": 0
       },

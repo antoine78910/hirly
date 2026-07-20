@@ -399,10 +399,10 @@ async def run_ats_direct_maintenance_loop(db) -> None:
                         _last_maintenance_summary = await await_with_ingestion_heartbeat(
                             db, ledger_run_id, run_ats_direct_maintenance(db)
                         )
-                    _last_maintenance_summary = accounting_summary(_last_maintenance_summary or {})
+                    ledger_summary = accounting_summary(_last_maintenance_summary or {})
                     maintenance_errors: List[Any] = []
                     for section_name in ("discover", "refresh", "friendly_company_pages"):
-                        section = (_last_maintenance_summary or {}).get(section_name)
+                        section = (ledger_summary or {}).get(section_name)
                         if isinstance(section, dict):
                             maintenance_errors.extend(section.get("errors") or [])
                     maintenance_fact = {
@@ -419,7 +419,7 @@ async def run_ats_direct_maintenance_loop(db) -> None:
                             run_id=ledger_run_id,
                             status="partially_succeeded" if maintenance_errors else "succeeded",
                             completeness_state="partial" if maintenance_errors else "complete_snapshot",
-                            summary=_last_maintenance_summary or {},
+                            summary=ledger_summary,
                         )
                 else:
                     logger.info("ats_direct_maintenance_overlap_skipped run_id=%s", claim.get("run_id"))

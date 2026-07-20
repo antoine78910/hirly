@@ -38,11 +38,14 @@ describe("PostHog Profile A real SDK network seam", () => {
     process.env.REACT_APP_POSTHOG_REPLAY_HOSTILE_QA_APPROVED = "false";
 
     let posthog;
+    let posthogVersion;
     let buildPostHogConfig;
     jest.isolateModules(() => {
       posthog = require("posthog-js").default;
+      posthogVersion = require("posthog-js/package.json").version;
       ({ buildPostHogConfig } = require("./posthogClient"));
     });
+    expect(posthogVersion).toBe("1.404.1");
 
     const client = posthog.init(
       "phc_profile_a_network_test",

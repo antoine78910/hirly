@@ -74,10 +74,15 @@
     "actual": "list-compatible batches carry explicit completeness; limit+1 and SmartRecruiters hard-cap fixtures produce capped_needs_split",
     "baseline": {"silentlySlicingAdapterFamilies": 6},
     "rootCause": "adapter return type carries rows only and loses truncation state",
-    "status": "PASS",
+    "status": "BLOCKED_EXTERNAL",
     "proposedFix": "thread list-compatible batch completeness through source refresh; cap hits are terminal capped errors and never silent success",
     "regressionTest": "CAP-DIRECT-ATS-GOLDEN-001",
-    "finalEvidence": "backend/tests/test_ats_adapters.py"
+    "finalEvidence": "backend/tests/test_ats_adapters.py",
+    "blocker": {
+      "dependency": "read-only live board inventory with a source-reported total or independently enumerable board",
+      "capabilityCheck": "test -n \"$DIRECT_ATS_AUDIT_SOURCE\"",
+      "unblockProcedure": "provide a read-only board key in DIRECT_ATS_AUDIT_SOURCE, run the adapter beyond its cap, and archive exact external-ID reconciliation"
+    }
   },
   {
     "riskId": "QUERY-PARTITION-001",

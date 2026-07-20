@@ -3,8 +3,10 @@ import {
   evaluatePartition,
   reconcileFunnel,
   validatePaginationFixtures,
+  validateCoverageManifest,
   validateRows,
   type PartitionFact,
+  type CoverageManifest,
 } from "../src/audit";
 import { readFileSync } from "node:fs";
 
@@ -12,6 +14,10 @@ const partitions = JSON.parse(readFileSync(
   new URL("../fixtures/pagination-golden.json", import.meta.url),
   "utf8",
 )) as PartitionFact[];
+const coverage = JSON.parse(readFileSync(
+  new URL("../../../artifacts/job-ingestion/coverage-matrix.json", import.meta.url),
+  "utf8",
+)) as CoverageManifest;
 
 describe("job-ingestion audit invariants", () => {
   test("requires exact external-ID set equality", () => {
@@ -44,6 +50,11 @@ describe("job-ingestion audit invariants", () => {
     const permanentFailure = partitions.find((partition) => partition.id.endsWith("permanent-page-failure"));
     expect(permanentFailure).toBeDefined();
     expect(evaluatePartition(permanentFailure!)).toContain("permanent_page_failure");
+  });
+
+  test("expands every coverage combination to exactly one terminal rule", () => {
+    expect(coverage.expandedPartitionCount).toBe(1470);
+    expect(validateCoverageManifest(coverage)).toEqual([]);
   });
 
   test("reconciles stage accounting", () => {

@@ -339,9 +339,9 @@ async def run_company_discovery_loop(db) -> None:
                         _last_discovery_summary = await await_with_ingestion_heartbeat(
                             db, ledger_run_id, run_company_discovery(db)
                         )
-                    _last_discovery_summary = accounting_summary(_last_discovery_summary or {})
+                    ledger_summary = accounting_summary(_last_discovery_summary or {})
                     discovery_errors = []
-                    for section in (_last_discovery_summary or {}).values():
+                    for section in (ledger_summary or {}).values():
                         if isinstance(section, dict):
                             discovery_errors.extend(section.get("errors") or [])
                     await persist_terminal_partitions(db, ledger_run_id, [{
@@ -357,7 +357,7 @@ async def run_company_discovery_loop(db) -> None:
                             run_id=ledger_run_id,
                             status="partially_succeeded" if discovery_errors else "succeeded",
                             completeness_state="partial" if discovery_errors else "complete_snapshot",
-                            summary=_last_discovery_summary or {},
+                            summary=ledger_summary,
                         )
                 else:
                     logger.info("company_discovery_overlap_skipped run_id=%s", claim.get("run_id"))

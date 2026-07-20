@@ -72,17 +72,15 @@ def test_jsearch_completed_occurrence_writes_terminal_counters(monkeypatch):
     with pytest.raises(asyncio.CancelledError):
         asyncio.run(jsearch_harvest.run_jsearch_harvest_loop(db))
 
-    assert db.completions == [{
-        "run_id": "run-1",
-        "status": "succeeded",
-        "completeness_state": "complete_snapshot",
-        "summary": {
-            "jobs_fetched": 4,
-            "jobs_upserted": 3,
-            "errors": [],
-            "completeness": "complete_snapshot",
-        },
-    }]
+    assert len(db.completions) == 1
+    completion = db.completions[0]
+    assert completion["run_id"] == "run-1"
+    assert completion["status"] == "succeeded"
+    assert completion["completeness_state"] == "complete_snapshot"
+    assert completion["summary"]["jobs_fetched"] == 4
+    assert completion["summary"]["raw_records"] == 4
+    assert completion["summary"]["normalized_records"] == 4
+    assert completion["summary"]["accounting_contract"]["jobs_inserted"] == "unknown"
 
 
 def test_jsearch_terminal_failure_is_persisted(monkeypatch):

@@ -1,7 +1,7 @@
 import asyncio
 
 import server
-from tests.test_admin_users_billing import _Collection
+from test_admin_users_billing import _Collection
 
 
 def _fake_db_with_activity():

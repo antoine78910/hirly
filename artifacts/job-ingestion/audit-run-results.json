@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "executedAt": "2026-07-20T02:12:09.973Z",
+  "fixtureMode": true,
+  "verdict": "PARTIAL",
+  "invariantFailures": [],
+  "commandResults": [
+    {
+      "command": ".venv/bin/python -m pytest -q backend/tests/test_jsearch_request_budget.py",
+      "exitCode": 0,
+      "rows": [
+        "PAG-JSEARCH-001"
+      ]
+    },
+    {
+      "command": ".venv/bin/python -m pytest -q backend/tests/test_workday_search.py",
+      "exitCode": 0,
+      "rows": [
+        "WORKDAY-FAILURE-001"
+      ]
+    },
+    {
+      "command": ".venv/bin/python -m pytest -q backend/tests/test_france_travail_provider.py",
+      "exitCode": 0,
+      "rows": [
+        "PAG-FT-001"
+      ]
+    },
+    {
+      "command": ".venv/bin/python -m pytest -q backend/tests/test_ats_adapters.py backend/tests/test_ats_source_service.py",
+      "exitCode": 0,
+      "rows": [
+        "CAP-DIRECT-ATS-001"
+      ]
+    },
+    {
+      "command": "bun test apps/job-ingestion-audit/test/audit.test.ts",
+      "exitCode": 0,
+      "rows": [
+        "QUERY-PARTITION-001",
+        "FILTER-001"
+      ]
+    },
+    {
+      "command": ".venv/bin/python -m pytest -q backend/tests/test_job_cache_maintenance.py",
+      "exitCode": 0,
+      "rows": [
+        "REFRESH-001"
+      ]
+    },
+    {
+      "command": ".venv/bin/python -m pytest -q backend/tests/test_job_dedup_golden.py",
+      "exitCode": 0,
+      "rows": [
+        "DEDUP-001"
+      ]
+    },
+    {
+      "command": ".venv/bin/python -m pytest -q backend/tests/test_ingestion_scheduler_ledger.py backend/tests/test_ats_source_service.py && bun test tests/job-ingestion-audit.test.ts apps/worker/test/scheduler.test.ts",
+      "exitCode": 0,
+      "rows": [
+        "SCHED-001"
+      ]
+    },
+    {
+      "command": ".venv/bin/python -m pytest -q backend/tests/test_supabase_cursor_limit.py backend/tests/test_feed_db_first.py",
+      "exitCode": 0,
+      "rows": [
+        "FEED-PAG-001"
+      ]
+    },
+    {
+      "command": "test -n \"$FRANCE_TRAVAIL_CLIENT_ID\" && test -n \"$RAPIDAPI_KEY\"",
+      "exitCode": 1,
+      "rows": [
+        "CAP-LIVE-001"
+      ]
+    },
+    {
+      "command": "test -n \"$DATABASE_URL\"",
+      "exitCode": 1,
+      "rows": [
+        "COVERAGE-001"
+      ]
+    },
+    {
+      "command": "test -n \"$DATABASE_URL\"",
+      "exitCode": 1,
+      "rows": [
+        "SQL-FEED-001"
+      ]
+    }
+  ]
+}
