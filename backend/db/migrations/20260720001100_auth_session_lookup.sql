@@ -84,17 +84,41 @@ AS $$
     ON u.user_id = s.user_id;
 $$;
 
+CREATE OR REPLACE FUNCTION public.patch_auth_user(p_user_id text, p_patch jsonb)
+RETURNS jsonb
+LANGUAGE sql
+VOLATILE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+SET statement_timeout = '2s'
+AS $$
+  UPDATE public.users
+  SET data = data || COALESCE(p_patch, '{}'::jsonb)
+  WHERE user_id = p_user_id
+    AND jsonb_typeof(COALESCE(p_patch, '{}'::jsonb)) = 'object'
+  RETURNING data || jsonb_strip_nulls(jsonb_build_object(
+    'user_id', user_id,
+    'email', email,
+    'name', name,
+    'created_at', created_at
+  ));
+$$;
+
 REVOKE ALL ON FUNCTION public.resolve_auth_session(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.patch_auth_user(text, jsonb) FROM PUBLIC;
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
     REVOKE ALL ON FUNCTION public.resolve_auth_session(text) FROM anon;
+    REVOKE ALL ON FUNCTION public.patch_auth_user(text, jsonb) FROM anon;
   END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
     REVOKE ALL ON FUNCTION public.resolve_auth_session(text) FROM authenticated;
+    REVOKE ALL ON FUNCTION public.patch_auth_user(text, jsonb) FROM authenticated;
   END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
     GRANT EXECUTE ON FUNCTION public.resolve_auth_session(text) TO service_role;
+    GRANT EXECUTE ON FUNCTION public.patch_auth_user(text, jsonb) TO service_role;
   END IF;
 END
 $$;

@@ -64,6 +64,40 @@ def test_upsert_new_auth_user_returns_inserted_document_without_read(monkeypatch
     assert result["user_id"].startswith("user_")
 
 
+def test_upsert_existing_auth_user_uses_one_returned_patch_when_enabled(monkeypatch):
+    users = _Collection(
+        {
+            "user_id": "user_1",
+            "email": "person@example.com",
+            "name": "Old",
+        }
+    )
+    patches = []
+
+    async def _patch(user_id, patch):
+        patches.append((user_id, patch))
+        return {
+            "user_id": user_id,
+            "email": "person@example.com",
+            **patch,
+        }
+
+    monkeypatch.setenv("AUTH_RETURNED_USER_WRITE_ENABLED", "true")
+    monkeypatch.setattr(
+        server,
+        "db",
+        SimpleNamespace(users=users, patch_auth_user=_patch),
+    )
+    monkeypatch.setattr(server, "_find_user_by_email", users.find_one)
+
+    result = asyncio.run(server._upsert_auth_user("person@example.com", "New", None))
+
+    assert users.find_calls == 1
+    assert users.update_calls == 0
+    assert patches == [("user_1", {"name": "New", "picture": None})]
+    assert result["name"] == "New"
+
+
 def test_joined_auth_lookup_uses_one_database_operation_and_reissues_cookie(monkeypatch):
     calls = []
 
@@ -272,3 +306,64 @@ def test_joined_auth_invalid_bearer_falls_back_to_cookie_in_two_operations(monke
 
     assert calls == ["bad-bearer", "good-cookie"]
     assert user.user_id == "user_1"
+
+
+def test_joined_auth_rpc_retries_one_enabled_idempotent_read(monkeypatch):
+    calls = []
+
+    class _Response:
+        status_code = 200
+        content = b'{"status":"ok","user":{"user_id":"user_1"}}'
+        text = content.decode()
+
+        def json(self):
+            return {"status": "ok", "user": {"user_id": "user_1"}}
+
+    class _Client:
+        async def post(self, *_args, **_kwargs):
+            calls.append(_kwargs)
+            if len(calls) == 1:
+                raise server.httpx.ReadTimeout("transient")
+            return _Response()
+
+    async def _no_sleep(_delay):
+        return None
+
+    monkeypatch.setenv("AUTH_IDEMPOTENT_READ_RETRY_ENABLED", "true")
+    monkeypatch.setattr(supabase_adapter, "_get_shared_http_client", lambda **_kwargs: _Client())
+    monkeypatch.setattr(supabase_adapter.asyncio, "sleep", _no_sleep)
+    adapter = supabase_adapter.SupabaseDatabaseAdapter("https://example.supabase.co", "secret")
+
+    result = asyncio.run(adapter.resolve_auth_session("token"))
+
+    assert result["status"] == "ok"
+    assert len(calls) == 2
+    assert calls[0]["timeout"].read == 0.5
+
+
+def test_auth_migration_declares_indexes_sync_and_rpc_security():
+    migration = (
+        server.Path(server.__file__).parent
+        / "db"
+        / "migrations"
+        / "20260720001100_auth_session_lookup.sql"
+    ).read_text()
+
+    assert "idx_users_stripe_customer_id" in migration
+    assert "trg_sync_user_promoted_auth_fields" in migration
+    assert "SECURITY DEFINER" in migration
+    assert "SET search_path = pg_catalog, public" in migration
+    assert "SET statement_timeout = '1s'" in migration
+    assert "REVOKE ALL ON FUNCTION public.resolve_auth_session(text) FROM PUBLIC" in migration
+    assert "public.patch_auth_user(p_user_id text, p_patch jsonb)" in migration
+    assert "SET statement_timeout = '2s'" in migration
+    assert "AUTH_JOINED_SESSION_LOOKUP_ENABLED" in migration
+
+
+def test_training_access_reuses_joined_creator_flag(monkeypatch):
+    monkeypatch.setattr("training_access.training_open_access_enabled", lambda: False)
+
+    assert server._training_access_from_user_and_creator(
+        {"user_id": "user_1", "email": "person@example.com"},
+        True,
+    ) is True

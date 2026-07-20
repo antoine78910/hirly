@@ -1618,15 +1618,29 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
         snapshot = _metric_snapshot()
         client = _get_shared_http_client(timeout=1.5)
         try:
-            response = await client.post(
-                self.supabase_url.rstrip("/") + "/rest/v1/rpc/resolve_auth_session",
-                json={"p_session_token": session_token},
-                headers={
-                    **_supabase_headers(self.secret_key),
-                    "Content-Type": "application/json",
-                },
-            )
-            _record_remote_response(response)
+            attempts = 2 if os.environ.get("AUTH_IDEMPOTENT_READ_RETRY_ENABLED", "").lower() in {"1", "true", "yes", "on"} else 1
+            response: Optional[httpx.Response] = None
+            for attempt in range(attempts):
+                try:
+                    response = await client.post(
+                        self.supabase_url.rstrip("/") + "/rest/v1/rpc/resolve_auth_session",
+                        json={"p_session_token": session_token},
+                        headers={
+                            **_supabase_headers(self.secret_key),
+                            "Content-Type": "application/json",
+                        },
+                        timeout=httpx.Timeout(0.5),
+                    )
+                    _record_remote_response(response)
+                    break
+                except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.PoolTimeout, httpx.RemoteProtocolError):
+                    _db_remote_request_count.set(_db_remote_request_count.get() + 1)
+                    if attempt >= attempts - 1:
+                        raise
+                    _db_retry_count.set(_db_retry_count.get() + 1)
+                    await asyncio.sleep(0.05)
+            if response is None:
+                raise RuntimeError("Supabase auth RPC exhausted without a response")
             if response.status_code not in (200, 201):
                 raise RuntimeError(
                     "Supabase auth RPC resolve_auth_session returned HTTP "
@@ -1650,6 +1664,52 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
             _emit_adapter_metric(
                 operation="resolve_auth_session",
                 table="user_sessions",
+                started_at=started_at,
+                snapshot=snapshot,
+                filter_status="pushed",
+                status="error",
+            )
+            raise
+
+    async def patch_auth_user(self, user_id: str, patch: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Apply the bounded auth-owned user patch and return its representation."""
+        started_at = time.perf_counter()
+        snapshot = _metric_snapshot()
+        client = _get_shared_http_client(timeout=2.0)
+        try:
+            response = await client.post(
+                self.supabase_url.rstrip("/") + "/rest/v1/rpc/patch_auth_user",
+                json={"p_user_id": user_id, "p_patch": _json_safe(patch)},
+                headers={
+                    **_supabase_headers(self.secret_key),
+                    "Content-Type": "application/json",
+                },
+                timeout=httpx.Timeout(2.0),
+            )
+            _record_remote_response(response)
+            if response.status_code not in (200, 201):
+                raise RuntimeError(
+                    "Supabase auth RPC patch_auth_user returned HTTP "
+                    f"{response.status_code}: {response.text[:300]}"
+                )
+            payload = response.json() if response.content else None
+            if isinstance(payload, list):
+                payload = payload[0] if payload else None
+            if payload is not None and not isinstance(payload, dict):
+                raise RuntimeError("Supabase auth patch RPC returned an invalid payload")
+            _emit_adapter_metric(
+                operation="patch_auth_user",
+                table="users",
+                started_at=started_at,
+                snapshot=snapshot,
+                rows_returned=1 if payload else 0,
+                filter_status="pushed",
+            )
+            return payload
+        except Exception:
+            _emit_adapter_metric(
+                operation="patch_auth_user",
+                table="users",
                 started_at=started_at,
                 snapshot=snapshot,
                 filter_status="pushed",

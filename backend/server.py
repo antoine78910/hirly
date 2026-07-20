@@ -1236,6 +1236,12 @@ async def _upsert_auth_user(email: str, name: str, picture: Optional[str], extra
         update = {"name": name, "picture": picture}
         if extra:
             update.update(extra)
+        patch_auth_user = getattr(db, "patch_auth_user", None)
+        if _env_bool("AUTH_RETURNED_USER_WRITE_ENABLED") and callable(patch_auth_user):
+            returned = await patch_auth_user(user_id, update)
+            if not returned:
+                raise RuntimeError("Auth user disappeared during returned patch")
+            return returned
         await db.users.update_one(
             {"user_id": user_id},
             {"$set": update},
@@ -1458,11 +1464,11 @@ async def _session_payload_from_supabase_token(
                 "last_sync_error": str(exc)[:200],
             }
 
-    profile = await db.profiles.find_one({"user_id": user_doc["user_id"]}, {"_id": 0, "cv_text": 1, "target_role": 1})
-    creator_flag, training_access = await asyncio.gather(
+    profile, creator_flag = await asyncio.gather(
+        db.profiles.find_one({"user_id": user_doc["user_id"]}, {"_id": 0, "cv_text": 1, "target_role": 1}),
         is_training_creator(db, user_doc["user_id"]),
-        _resolve_training_access_from_user_doc(user_doc),
     )
+    training_access = _training_access_from_user_and_creator(user_doc, creator_flag)
     logger.info("supabase_session success user_id=%s email=%s", user_doc["user_id"], email)
     return {
         "user": user_doc,
@@ -1476,6 +1482,11 @@ async def _session_payload_from_supabase_token(
 
 
 async def _resolve_training_access_from_user_doc(user_doc: Dict[str, Any]) -> bool:
+    creator = await is_training_creator(db, user_doc.get("user_id")) if user_doc.get("user_id") else False
+    return _training_access_from_user_and_creator(user_doc, creator)
+
+
+def _training_access_from_user_and_creator(user_doc: Dict[str, Any], creator: bool) -> bool:
     from training_access import training_open_access_enabled
 
     if training_open_access_enabled():
@@ -1489,7 +1500,7 @@ async def _resolve_training_access_from_user_doc(user_doc: Dict[str, Any]) -> bo
         return True
     if _is_admin_email(user_doc.get("email")):
         return True
-    return await is_training_creator(db, user_id)
+    return creator
 
 
 @api_router.post("/auth/supabase-session")
