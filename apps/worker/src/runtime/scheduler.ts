@@ -8,6 +8,11 @@ interface SchedulerOptions {
   serviceVersion: string;
 }
 
+export interface SchedulerTickOptions {
+  now?: Date;
+  limit?: number;
+}
+
 function fieldMatches(field: string, value: number): boolean {
   return field.split(",").some((part) => {
     if (part === "*") return true;
@@ -64,10 +69,10 @@ export async function runSchedulerTick(
   store: RuntimeStore,
   options: SchedulerTickOptions = {},
 ): Promise<number> {
+  const now = options.now ?? new Date();
   const schedules = await store.dueSchedules(options.limit ?? 25);
   let enqueued = 0;
   for (const schedule of schedules) {
-    const now = options.now ?? schedule.databaseNow;
     let occurrence = schedule.nextDueAt;
     const catchUpLimit = Math.max(1, schedule.maxCatchUp);
     for (let index = 0; index < catchUpLimit && occurrence <= now; index += 1) {
@@ -102,14 +107,7 @@ export class Scheduler {
   private async run(): Promise<void> {
     while (!this.controller.signal.aborted) {
       try {
-        for (const schedule of await this.store.dueSchedules(25)) {
-          const nextDueAt = nextCronOccurrence(
-            schedule.cronExpression,
-            schedule.timezone,
-            schedule.nextDueAt,
-          );
-          await this.store.enqueueDueSchedule(schedule.id, nextDueAt);
-        }
+        await runSchedulerTick(this.store);
       } catch (error) {
         this.logger.emit({
           service: "hirly-worker",
@@ -121,7 +119,17 @@ export class Scheduler {
           details: { message: safeErrorMessage(error) },
         });
       }
-      await Bun.sleep(this.options.pollMs);
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, this.options.pollMs);
+        this.controller.signal.addEventListener(
+          "abort",
+          () => {
+            clearTimeout(timer);
+            resolve();
+          },
+          { once: true },
+        );
+      });
     }
   }
 

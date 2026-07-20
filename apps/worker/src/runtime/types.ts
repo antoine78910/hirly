@@ -23,7 +23,6 @@ export interface DueSchedule {
   timezone: string;
   nextDueAt: Date;
   maxCatchUp: number;
-  databaseNow: Date;
 }
 
 export interface TaskHandler {

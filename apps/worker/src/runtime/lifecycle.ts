@@ -1,6 +1,5 @@
 export interface ConsumerComponent {
   start(): void;
-  stopClaiming(): void;
   stop(timeoutMs: number): Promise<void>;
 }
 
@@ -10,7 +9,7 @@ export interface SchedulerComponent {
 }
 
 export interface HttpComponent {
-  stop(closeActiveConnections?: boolean): Promise<void>;
+  stop(closeActiveConnections?: boolean): void;
 }
 
 export interface ClosableRepository {
@@ -35,8 +34,8 @@ export function createWorkerRuntime(input: {
     stop() {
       return (stopping ??= (async () => {
         input.health.ready = false;
-        input.consumer.stopClaiming();
-        await Promise.all([input.server.stop(false), input.scheduler.stop()]);
+        input.server.stop(false);
+        await input.scheduler.stop();
         await input.consumer.stop(input.shutdownMs);
         await input.repository.close();
       })());

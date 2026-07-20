@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { nextCronOccurrence } from "../src/runtime/scheduler";
+import {
+  nextCronOccurrence,
+  runSchedulerTick,
+} from "../src/runtime/scheduler";
 
 describe("persisted scheduler cron policy", () => {
   test("computes the next UTC occurrence after the persisted identity", () => {
@@ -34,7 +37,6 @@ describe("persisted scheduler cron policy", () => {
               timezone: "UTC",
               nextDueAt: new Date("2026-07-20T08:00:00Z"),
               maxCatchUp: 2,
-              databaseNow: new Date("2026-07-20T12:30:00Z"),
             },
           ];
         },
