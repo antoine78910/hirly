@@ -17,6 +17,7 @@ ALTER TABLE public.jobs
   DROP COLUMN IF EXISTS route_confidence,
   DROP COLUMN IF EXISTS route_classification,
   DROP COLUMN IF EXISTS lifecycle_checked_at,
+  DROP COLUMN IF EXISTS lifecycle_state,
   DROP COLUMN IF EXISTS removed_at,
   DROP COLUMN IF EXISTS expires_at,
   DROP COLUMN IF EXISTS first_seen_at,
@@ -28,6 +29,11 @@ DROP TABLE IF EXISTS public.canonical_job_groups;
 DROP TRIGGER IF EXISTS raw_job_snapshots_immutable ON public.raw_job_snapshots;
 DROP TABLE IF EXISTS public.raw_job_snapshots;
 DROP FUNCTION IF EXISTS worker_private.reject_immutable_source_evidence();
+
+ALTER TABLE public.jobs
+  DROP CONSTRAINT IF EXISTS jobs_occurrence_identity_unique;
+ALTER TABLE public.worker_runs
+  DROP CONSTRAINT IF EXISTS worker_runs_source_identity_unique;
 
 ALTER TABLE public.career_sources
   DROP CONSTRAINT IF EXISTS career_sources_country_kill_switches_guard,
