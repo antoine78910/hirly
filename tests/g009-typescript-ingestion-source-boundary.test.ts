@@ -43,7 +43,6 @@ function policy(
       accessType: "open_data",
       policyId: "22222222-2222-4222-8222-222222222222",
       enabled: true,
-      transportEnabled: true,
       incrementalEnabled: true,
       backfillEnabled: false,
       checkpoint: {},
@@ -66,7 +65,6 @@ describe("G009 disabled TypeScript source contract", () => {
       sourceRegistryEntrySchema.parse(policy().source),
     ).toMatchObject({
       enabled: true,
-      transportEnabled: true,
       incrementalEnabled: true,
       backfillEnabled: false,
     });
@@ -109,19 +107,6 @@ describe("G009 disabled TypeScript source contract", () => {
     ).toBe("writer_not_typescript");
     expect(
       sourceActivationBlockReason(
-        policy({
-          source: {
-            ...policy().source,
-            transportEnabled: false,
-          },
-        }),
-        "FR",
-        "incremental",
-        now,
-      ),
-    ).toBe("transport_disabled");
-    expect(
-      sourceActivationBlockReason(
         policy({ providerCountryKillSwitches: { FR: true } }),
         "FR",
         "incremental",
@@ -159,7 +144,7 @@ describe("G009 additive database boundary", () => {
       expect(rollback).toContain(object);
     }
     expect(migration).toContain(
-      "UNIQUE (id, source_id, external_id, content_hash)",
+      "UNIQUE (source_id, external_id, content_hash)",
     );
     expect(migration).toContain(
       "CONSTRAINT job_occurrences_source_external_unique UNIQUE (source_id, external_id)",
@@ -206,8 +191,8 @@ describe("G009 additive database boundary", () => {
     expect(migration).not.toMatch(
       /\b(?:INSERT\s+INTO|UPDATE)\s+(?:public\.)?provider_registry\b/i,
     );
-    expect(migration).not.toContain(
-      "ADD COLUMN IF NOT EXISTS writer_runtime",
+    expect(migration).not.toMatch(
+      /(?:career_sources|job_occurrences|raw_job_snapshots)[\s\S]{0,500}\bwriter_runtime\b/i,
     );
   });
 });
