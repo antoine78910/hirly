@@ -33,6 +33,15 @@ cross the transport boundary. Do not add guessed endpoints, credentials,
 browser automation, login/CAPTCHA bypasses, or scraping fallbacks. A blocked or
 unverified transport must fail before any network call.
 
+The implementation boundaries are:
+
+- `packages/ingestion` for provider-neutral normalization, validation, identity,
+  deduplication, rate control, metrics, and repository orchestration;
+- `apps/worker/src/providers/` for the four provider cores and disabled
+  transports;
+- `packages/contracts` for the shared runtime schemas;
+- `packages/db` for the lease- and provider-fenced canonical write.
+
 Provider modules own only raw schemas, access/pagination boundaries, rate
 policy, and provider-to-canonical mapping. They must not import a database
 client or write canonical rows. All accepted records use the shared pipeline:
@@ -52,7 +61,8 @@ overwritten.
 
 Before describing a provider core as ready, retain evidence for:
 
-- approved, sanitized fixture provenance and raw-schema validation;
+- approved, sanitized fixture provenance under `tests/fixtures/g004/` and
+  raw-schema validation;
 - pagination/cursor termination, duplicate-page handling, and stable failures;
 - normalized identity, country/location, apply URL, ATS, validation tier, and
   manual/automatic fulfillment readiness;
