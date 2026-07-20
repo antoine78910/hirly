@@ -73,7 +73,7 @@ export async function collectLiveJobSupplyReport(
   );
   if (persistManifest) {
     await sql.begin(async (transaction) => {
-      const [manifest] = await transaction<{ id: string }[]>`
+      const [inserted] = await transaction<{ id: string }[]>`
         INSERT INTO public.france_travail_census_manifests (
           schema_version, manifest_digest, generated_at, source_run_ids,
           partition_count, terminal_state, source_reported_total, fetched_records,
@@ -86,10 +86,15 @@ export async function collectLiveJobSupplyReport(
           ${census.normalizedRecords}, ${census.rejectedRecords},
           ${census.actionableRecords}, ${transaction.json(census)}
         )
-        ON CONFLICT (manifest_digest) DO UPDATE
-          SET manifest_digest = EXCLUDED.manifest_digest
+        ON CONFLICT (manifest_digest) DO NOTHING
         RETURNING id
       `;
+      const [existing] = inserted ? [] : await transaction<{ id: string }[]>`
+        SELECT id
+        FROM public.france_travail_census_manifests
+        WHERE manifest_digest = ${census.digest}
+      `;
+      const manifest = inserted ?? existing;
       if (!manifest) throw new Error("france_travail_manifest_insert_failed");
       for (const runId of census.sourceRunIds) {
         await transaction`
