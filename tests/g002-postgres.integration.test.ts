@@ -78,6 +78,10 @@ function migrationPath(): string {
   return join("backend", "db", "migrations", migration);
 }
 
+function rollbackPath(): string {
+  return `${migrationPath().replace(/\.sql$/, "")}.down.sql`;
+}
+
 async function assertSql(sql: string): Promise<string> {
   const result = await psql(sql);
   expect(result.exitCode, result.stderr).toBe(0);
@@ -202,6 +206,32 @@ describe("G002 real-Postgres durability and security", () => {
     ).toBe("f");
   });
 
+  runIntegration("terminalizes an expired lease at max attempts", async () => {
+    await resetFixtureState();
+    await assertSql(`
+      SELECT worker_private.enqueue_run(
+        'inventory_maintenance', NULL, 'g002:exhausted', 'system',
+        'exhausted-task', 'inventory.maintenance', '{}'::jsonb, 1
+      );
+      SELECT count(*) FROM worker_private.claim_tasks('last-worker', 1, 30);
+      UPDATE public.worker_tasks
+      SET lease_until = clock_timestamp() - interval '1 second'
+      WHERE task_key = 'exhausted-task';
+      SELECT count(*) FROM worker_private.claim_tasks('too-late', 1, 30);
+    `);
+
+    expect(
+      await assertSql(`
+        SELECT task.status, run.status, attempt.outcome,
+          attempt.finished_at IS NOT NULL
+        FROM public.worker_tasks AS task
+        JOIN public.worker_runs AS run ON run.id = task.run_id
+        JOIN public.worker_task_attempts AS attempt ON attempt.task_id = task.id
+        WHERE task.task_key = 'exhausted-task';
+      `),
+    ).toBe("failed|failed|lease_expired|t");
+  });
+
   runIntegration("blocks stale or unauthorized canonical writes", async () => {
     await resetFixtureState();
     await assertSql(`
@@ -252,8 +282,93 @@ describe("G002 real-Postgres durability and security", () => {
     ).toBe("0");
   });
 
-  runIntegration("denies client/read roles and direct queue mutation", async () => {
+  runIntegration("rejects a provider identity collision without overwriting", async () => {
     await resetFixtureState();
+    await assertSql(`
+      INSERT INTO public.jobs (
+        job_id, provider, external_id, title, normalized_title, company,
+        normalized_company, location, country_code, data
+      )
+      VALUES (
+        'job_ffffffffffffffff', 'apec', 'g002-collision', 'Original',
+        'original', 'Original Co', 'original co', 'Paris', 'FR', '{}'::jsonb
+      );
+      SELECT worker_private.enqueue_run(
+        'provider_ingestion', 'apec', 'g002:collision', 'system',
+        'collision-task', 'provider.fetch_page', '{}'::jsonb
+      );
+      SELECT count(*) FROM worker_private.claim_tasks('collision-worker', 1, 30);
+    `);
+
+    const collision = await psql(`
+      SELECT worker_private.write_job_and_complete(
+        task.id, task.lease_token, task.claim_generation, task.lease_owner,
+        jsonb_build_object(
+          'job_id', 'job_e7d8baba11672b9c',
+          'provider', 'apec',
+          'external_id', 'g002-collision',
+          'title', 'Replacement',
+          'normalized_title', 'replacement',
+          'company', 'Replacement Co',
+          'normalized_company', 'replacement co',
+          'location', 'Paris',
+          'country_code', 'FR',
+          'selected_apply_url', 'https://example.com/apply',
+          'validation_status', 'valid',
+          'applyability_tier', 'direct_ats',
+          'manual_fulfillment_ready', true,
+          'auto_apply_supported', true,
+          'fingerprint', 'g002-collision',
+          'data', '{}'::jsonb
+        )
+      )
+      FROM public.worker_tasks AS task
+      WHERE task.task_key = 'collision-task';
+    `);
+    expect(collision.exitCode).not.toBe(0);
+    expect(collision.stderr).toContain(
+      "existing provider identity maps to another job id",
+    );
+    expect(
+      await assertSql(`
+        SELECT job_id, title FROM public.jobs
+        WHERE provider = 'apec' AND external_id = 'g002-collision';
+      `),
+    ).toBe("job_ffffffffffffffff|Original");
+    expect(
+      await assertSql(`
+        SELECT status FROM public.worker_tasks
+        WHERE task_key = 'collision-task';
+      `),
+    ).toBe("running");
+  });
+
+  runIntegration("locks down security-definer functions and direct tables", async () => {
+    await resetFixtureState();
+
+    expect(
+      await assertSql(`
+        SELECT count(*)
+        FROM pg_proc AS procedure
+        JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+        WHERE namespace.nspname = 'worker_private'
+          AND procedure.prosecdef
+          AND NOT EXISTS (
+            SELECT 1
+            FROM unnest(coalesce(procedure.proconfig, ARRAY[]::text[])) AS setting
+            WHERE setting LIKE 'search_path=%'
+          );
+      `),
+    ).toBe("0");
+    expect(
+      await assertSql(`
+        SELECT count(*)
+        FROM pg_proc AS procedure
+        JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+        WHERE namespace.nspname = 'worker_private'
+          AND procedure.prosecdef;
+      `),
+    ).not.toBe("0");
 
     const readerClaim = await psql(`
       SET ROLE hirly_inventory_reader;
@@ -269,6 +384,19 @@ describe("G002 real-Postgres durability and security", () => {
     expect(workerMutation.exitCode).not.toBe(0);
     expect(workerMutation.stderr).toContain("permission denied");
 
+    expect(
+      await assertSql(`
+        SET ROLE hirly_inventory_reader;
+        SELECT contract_version FROM public.worker_capability_status;
+      `),
+    ).toBe("worker-foundation.v1");
+    const readerRegistry = await psql(`
+      SET ROLE hirly_inventory_reader;
+      SELECT count(*) FROM public.provider_registry;
+    `);
+    expect(readerRegistry.exitCode).not.toBe(0);
+    expect(readerRegistry.stderr).toContain("permission denied");
+
     for (const role of ["anon", "authenticated"]) {
       const roleExists = await assertSql(
         `SELECT count(*) FROM pg_roles WHERE rolname = '${role}';`,
@@ -282,6 +410,41 @@ describe("G002 real-Postgres durability and security", () => {
         expect(clientClaim.stderr).toContain("permission denied");
       }
     }
+  });
+
+  runIntegration("rolls back only foundation objects and reapplies cleanly", async () => {
+    await resetFixtureState();
+    await applyFile(rollbackPath());
+    expect(await assertSql(`SELECT to_regclass('public.jobs') IS NOT NULL;`)).toBe(
+      "t",
+    );
+    expect(
+      await assertSql(`
+        SELECT count(*) FROM (
+          VALUES
+            (to_regclass('public.worker_runs')),
+            (to_regclass('public.worker_tasks')),
+            (to_regclass('public.worker_task_attempts')),
+            (to_regclass('public.worker_schedules')),
+            (to_regclass('public.provider_registry'))
+        ) AS objects(object_name)
+        WHERE object_name IS NOT NULL;
+      `),
+    ).toBe("0");
+    await applyFile(migrationPath());
+    expect(
+      await assertSql(`
+        SELECT count(*) FROM (
+          VALUES
+            (to_regclass('public.worker_runs')),
+            (to_regclass('public.worker_tasks')),
+            (to_regclass('public.worker_task_attempts')),
+            (to_regclass('public.worker_schedules')),
+            (to_regclass('public.provider_registry'))
+        ) AS objects(object_name)
+        WHERE object_name IS NOT NULL;
+      `),
+    ).toBe("5");
   });
 });
 
