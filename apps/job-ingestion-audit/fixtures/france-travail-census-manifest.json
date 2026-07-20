@@ -2,14 +2,22 @@
   "schemaVersion": 1,
   "manifestVersion": "france-travail-census.v1",
   "paidCohortSnapshotAt": "2026-07-20T00:00:00.000Z",
-  "paidCohortSnapshotHash": "3e96277b2d3badeb6b5685c73a079ace2a636c4f8d6e924486d774be6f7372c1",
+  "paidCohortSnapshotHash": "0d1b66404bcf29403658e6a0bde14c708ea684dd5e2b87d63c6f72b2d6ff5476",
   "profileStrata": [
     {
-      "id": "paid-france-all",
-      "weight": 1
+      "id": "cadres-ile-de-france",
+      "weight": 0.55
+    },
+    {
+      "id": "tech-regions",
+      "weight": 0.3
+    },
+    {
+      "id": "alternance-national",
+      "weight": 0.15
     }
   ],
-  "samplingSeed": "hirly-ft-census-2026-07-20",
+  "samplingSeed": "hirly-ft-census-v1",
   "capRules": {
     "pageSize": 150,
     "maxRecordsPerPartition": 3000,
@@ -21,16 +29,20 @@
   },
   "partitions": [
     {
-      "id": "ft:2026-07-06:2026-07-13:all",
+      "id": "ft:2026-07-06:2026-07-13:rome-M18",
       "publishedAfter": "2026-07-06T00:00:00.000Z",
       "publishedBefore": "2026-07-13T00:00:00.000Z",
-      "parameters": {}
+      "parameters": {
+        "rome": "M18"
+      }
     },
     {
-      "id": "ft:2026-07-13:2026-07-20:all",
+      "id": "ft:2026-07-13:2026-07-20:rome-M18",
       "publishedAfter": "2026-07-13T00:00:00.000Z",
       "publishedBefore": "2026-07-20T00:00:00.000Z",
-      "parameters": {}
+      "parameters": {
+        "rome": "M18"
+      }
     }
   ]
 }
