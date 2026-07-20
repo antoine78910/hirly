@@ -122,12 +122,13 @@ def test_concurrent_replay_shape_uses_atomic_insert_ignore_without_reads(monkeyp
         events=[server.AnalyticsEventRequest(event="cta_signup_clicked", event_id="client-event")],
     )
 
-    results = asyncio.run(
-        asyncio.gather(
+    async def run_concurrent_replays():
+        return await asyncio.gather(
             server.track_analytics_events(body, _Request(), None),
             server.track_analytics_events(body, _Request(), None),
         )
-    )
+
+    results = asyncio.run(run_concurrent_replays())
 
     assert [result["accepted_event_ids"] for result in results] == [["client-event"], ["client-event"]]
     assert len(db.analytics_events.rows) == 1
