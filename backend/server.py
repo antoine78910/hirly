@@ -1716,15 +1716,19 @@ def _analytics_event_document(
     user: Optional[User],
     *,
     now: Optional[str] = None,
+    event_id: Optional[str] = None,
+    batch_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     event_name = (body.event or "").strip()
     if not event_name:
         raise HTTPException(status_code=400, detail="event required")
     if len(event_name) > 120:
         raise HTTPException(status_code=400, detail="event too long")
-    event_id = (body.event_id or "").strip()[:160] or f"evt_{uuid.uuid4().hex}"
+    canonical_event_id = (event_id or body.event_id or "").strip()[:160] or f"evt_{uuid.uuid4().hex}"
     return {
-        "event_id": event_id,
+        "event_id": canonical_event_id,
+        "client_event_id": (body.event_id or "").strip()[:160] or None,
+        "batch_id": batch_id,
         "user_id": user.user_id if user else None,
         "anonymous_id": (body.anonymous_id or "").strip()[:160] or None,
         "event": event_name,
@@ -1763,7 +1767,16 @@ async def track_analytics_events(
         raise HTTPException(status_code=400, detail="batch_id required")
     if not body.events or len(body.events) > 20:
         raise HTTPException(status_code=400, detail="events must contain 1 to 20 items")
-    documents = [_analytics_event_document(item, request, user) for item in body.events]
+    documents = [
+        _analytics_event_document(
+            item,
+            request,
+            user,
+            event_id=f"evt_batch_{hashlib.sha256(f'{body.batch_id}:{index}'.encode()).hexdigest()[:48]}",
+            batch_id=body.batch_id,
+        )
+        for index, item in enumerate(body.events)
+    ]
     payload_size = len(json.dumps(documents, separators=(",", ":"), default=str).encode("utf-8"))
     if payload_size > 64 * 1024:
         raise HTTPException(status_code=413, detail="analytics batch too large")
@@ -1777,7 +1790,7 @@ async def track_analytics_events(
         "ok": True,
         "stored": True,
         "batch_id": body.batch_id,
-        "accepted_event_ids": [document["event_id"] for document in documents],
+        "accepted_event_ids": [document["client_event_id"] or document["event_id"] for document in documents],
     }
 
 
