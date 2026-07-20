@@ -22,6 +22,7 @@ import {
 } from "../src/france-travail-census";
 import {
   assertReadOnlyObservabilityQueries,
+  JOB_SUPPLY_OBSERVABILITY_QUERIES,
   runJobSupplyObservabilityQueries,
 } from "../src/queries";
 import { readFileSync } from "node:fs";
@@ -170,7 +171,7 @@ describe("job-ingestion audit invariants", () => {
       terminalReason: "results",
     }])).toThrow("lowercase SHA-256 digest");
     expect(() => freezeFranceTravailCensusManifest({
-      ...franceTravailCensusInput,
+      ...franceTravailManifestInput,
       profileStrata: [{ email: "person@example.com", weight: 1 }],
     })).toThrow("unsafe France Travail profile strata");
   });
@@ -203,7 +204,7 @@ describe("job-ingestion audit invariants", () => {
   });
 
   test("freezes a deterministic, cohort-weighted France Travail census manifest", () => {
-    const manifest = freezeFranceTravailCensusManifest(franceTravailCensusInput);
+    const manifest = freezeFranceTravailCensusManifest(franceTravailManifestInput);
     expect(manifest.manifestDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(validateFranceTravailCensusManifest(manifest)).toEqual([]);
     expect(manifest.manifestDigest).toHaveLength(64);
