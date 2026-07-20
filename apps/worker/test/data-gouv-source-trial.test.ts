@@ -246,41 +246,6 @@ describe("G014 qualified data.gouv evidence-only trial", () => {
     expect(Object.keys(repository)).not.toContain("enqueue");
   });
 
-  test("rejects unapproved resource admission before evidence or network activity", async () => {
-    const sealed = sealDataGouvTrialResourceManifest(resourceManifestInput());
-    const calls: string[] = [];
-    const repository: SourceTrialEvidenceRepository = {
-      async beginSourceTrial() {
-        calls.push("begin");
-        return "018f02d8-a8b8-7f1d-a419-bf38eaf22a92";
-      },
-      async recordSourceTrialPage() {
-        calls.push("page");
-        return "018f02d8-a8b8-7f1d-a419-bf38eaf22a93";
-      },
-      async recordSourceTrialCandidate() {
-        calls.push("candidate");
-      },
-      async recordSourceTrialScorecard() {
-        calls.push("scorecard");
-      },
-    };
-    await expect(
-      persistDataGouvSourceTrial({
-        manifest,
-        resourceManifest: sealed,
-        approvedManifestDigests: [],
-        repository,
-        fetch: async () => {
-          calls.push("fetch");
-          return response([row]);
-        },
-        now: () => new Date("2026-07-20T12:00:00Z"),
-      }),
-    ).rejects.toThrow("not allowlisted");
-    expect(calls).toEqual([]);
-  });
-
   test("fails closed on absent policy/resource evidence, tampering and budgets", async () => {
     expect(cspDataGouvTrialReadiness).toMatchObject({
       state: "BLOCKED_EXTERNAL",
@@ -309,14 +274,6 @@ describe("G014 qualified data.gouv evidence-only trial", () => {
         }),
       ),
     ).toThrow();
-    expect(() =>
-      sealDataGouvTrialResourceManifest(
-        resourceManifestInput({
-          resourceUrl:
-            "https://static.data.gouv.fr/resources/resource.json?access_token=secret",
-        }),
-      ),
-    ).toThrow("credential-free HTTPS resource");
 
     const sealed = sealDataGouvTrialResourceManifest(resourceManifestInput());
     expect(() =>

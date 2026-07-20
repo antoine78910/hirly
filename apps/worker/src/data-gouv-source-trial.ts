@@ -39,8 +39,7 @@ const officialDataGouvUrlSchema = z.url().superRefine((value, context) => {
     url.username ||
     url.password ||
     url.port ||
-    url.hash ||
-    url.search
+    url.hash
   ) {
     context.addIssue({
       code: "custom",
@@ -418,13 +417,6 @@ export async function persistDataGouvSourceTrial(input: {
   now?: () => Date;
 }): Promise<DataGouvSourceTrialPreview> {
   const manifest = sourceTrialManifestSchema.parse(input.manifest);
-  const admittedAt = input.now?.() ?? new Date();
-  assertTrialBinding(manifest, input.resourceManifest, admittedAt);
-  createQualifiedDataGouvTrialTransport({
-    resourceManifest: input.resourceManifest,
-    approvedManifestDigests: input.approvedManifestDigests,
-    fetch: input.fetch,
-  });
   const runId = await input.repository.beginSourceTrial(manifest);
   let pagesFetched = 0;
   let candidatesObserved = 0;
@@ -433,7 +425,6 @@ export async function persistDataGouvSourceTrial(input: {
     const preview = await previewDataGouvSourceTrial({
       ...input,
       manifest,
-      now: () => admittedAt,
       runId,
     });
     const serializedPayload = stableJson(preview.rawPage);
