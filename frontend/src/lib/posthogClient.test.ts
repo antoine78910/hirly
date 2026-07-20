@@ -19,6 +19,7 @@ import {
   capturePostHogPageview,
   identifyPostHogUser,
   initializePostHog,
+  isCanonicalAnalyticsUserId,
   resetPostHog,
   sanitizeAnalyticsProperties,
   sanitizePostHogEvent,
@@ -160,15 +161,30 @@ describe("posthog client", () => {
       undefined,
     );
 
-    identifyPostHogUser("user-a");
-    identifyPostHogUser("user-a");
-    identifyPostHogUser("user-b");
+    identifyPostHogUser("123e4567-e89b-12d3-a456-426614174000");
+    identifyPostHogUser("123e4567-e89b-12d3-a456-426614174000");
+    identifyPostHogUser("123e4567-e89b-12d3-a456-426614174001");
     expect(mockIdentify).toHaveBeenCalledTimes(2);
     expect(mockReset.mock.invocationCallOrder[0]).toBeLessThan(
       mockIdentify.mock.invocationCallOrder[1],
     );
     resetPostHog();
     expect(mockReset).toHaveBeenCalledTimes(2);
+  });
+
+  it("accepts only canonical lowercase UUID identities", () => {
+    expect(
+      isCanonicalAnalyticsUserId("123e4567-e89b-12d3-a456-426614174000"),
+    ).toBe(true);
+    for (const invalid of [
+      "",
+      "anonymous",
+      "user-a",
+      "123E4567-E89B-12D3-A456-426614174000",
+      "123e4567-e89b-02d3-a456-426614174000",
+    ]) {
+      expect(isCanonicalAnalyticsUserId(invalid)).toBe(false);
+    }
   });
 
   it("keeps capture best-effort", () => {
