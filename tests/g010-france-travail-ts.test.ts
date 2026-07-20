@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFile } from "node:fs/promises";
 import { franceTravailProvider } from "../apps/worker/src/providers/france-travail";
 import {
   parseContentRange,
@@ -6,6 +7,10 @@ import {
   type FranceTravailCensusManifest,
 } from "../apps/job-ingestion-audit/src/france-travail-census";
 import { freezeFranceTravailCensusManifest } from "../apps/job-ingestion-audit/src/audit";
+import {
+  stableJobId,
+  toCanonicalJob,
+} from "../packages/ingestion/src";
 
 const manifest: FranceTravailCensusManifest = freezeFranceTravailCensusManifest({
   schemaVersion: 1,
@@ -26,6 +31,33 @@ const manifest: FranceTravailCensusManifest = freezeFranceTravailCensusManifest(
 });
 
 describe("France Travail TS migration boundary", () => {
+  test("matches the frozen Python parity fixture for identity and fulfillment-critical fields", async () => {
+    const fixture = JSON.parse(
+      await readFile(
+        new URL("./fixtures/g010/france-travail.json", import.meta.url),
+        "utf8",
+      ),
+    ) as {
+      raw: unknown;
+      expected: Record<string, unknown> & {
+        provider: "france_travail";
+        externalId: string;
+      };
+    };
+    const job = toCanonicalJob(
+      franceTravailProvider.adapter.normalizeRaw(fixture.raw),
+      new Date("2026-07-20T00:00:00.000Z"),
+    );
+
+    expect(job).toMatchObject({
+      ...fixture.expected,
+      jobId: stableJobId(
+        fixture.expected.provider,
+        fixture.expected.externalId,
+      ),
+    });
+  });
+
   test("normalizes stable identity, FR country and deterministic apply fallback", () => {
     const normalized = franceTravailProvider.adapter.normalizeRaw({
       id: "abc-1", intitule: "Développeur", description: "desc",
