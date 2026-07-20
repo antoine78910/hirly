@@ -56,6 +56,10 @@ const ALLOWED_CUSTOM_EVENTS = new Set([
   "tracker_view",
 ]);
 const ALLOWED_SYSTEM_EVENTS = new Set(["$identify", "$pageview"]);
+// These fields are added by posthog-js after our caller-controlled payload has
+// already crossed the sanitizing capture boundary. Removing them in before_send
+// makes otherwise valid events disappear at ingestion time.
+const TRUSTED_SDK_PROPERTY_KEYS = new Set(["token", "$session_id", "$window_id"]);
 
 let client: PostHog | null = null;
 let initialized = false;
@@ -107,15 +111,28 @@ export const sanitizePostHogEvent = (event: CaptureResult | null): CaptureResult
   if (!event) return null;
   if (event.event === "$snapshot") return isReplayEnabled() ? event : null;
   if (!ALLOWED_SYSTEM_EVENTS.has(event.event) && !ALLOWED_CUSTOM_EVENTS.has(event.event)) return null;
-  const properties = sanitizeAnalyticsProperties(event.properties) as Properties | undefined;
+  const sdkProperties: Properties = {};
+  const callerProperties: Properties = {};
+  for (const [key, value] of Object.entries(event.properties || {})) {
+    if (TRUSTED_SDK_PROPERTY_KEYS.has(key)) {
+      if (typeof value === "string") sdkProperties[key] = value.slice(0, MAX_STRING_LENGTH);
+      else if (typeof value === "number" || typeof value === "boolean") sdkProperties[key] = value;
+    } else {
+      callerProperties[key] = value;
+    }
+  }
+  const properties = sanitizeAnalyticsProperties(callerProperties) as Properties | undefined;
   if (!properties) return null;
+  Object.assign(properties, sdkProperties);
   for (const key of ["$current_url", "$referrer", "$pathname", "current_url", "referrer", "url", "path"]) {
     if (typeof properties[key] === "string") properties[key] = stripUrlSecrets(properties[key] as string);
   }
   return { ...event, properties };
 };
 
-export const isReplayEnabled = (): boolean => process.env.REACT_APP_POSTHOG_REPLAY_ENABLED === "true";
+export const isReplayEnabled = (): boolean =>
+  process.env.REACT_APP_POSTHOG_REPLAY_ENABLED === "true"
+  && process.env.REACT_APP_POSTHOG_REPLAY_HOSTILE_QA_APPROVED === "true";
 
 export const buildPostHogConfig = (): Partial<PostHogConfig> => {
   const replayEnabled = isReplayEnabled();
