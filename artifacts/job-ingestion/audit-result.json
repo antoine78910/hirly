@@ -4,7 +4,7 @@
   "generatedAt": "2026-07-20T00:00:00.000Z",
   "verdict": "PARTIAL",
   "invariantFailures": [],
-  "digest": "037fcefffa34985b51a7d6448bfadd163485af5583c644b1fcc84061288fc3e3",
+  "digest": "9b61e88c258a2d18dc58598cdcd057611ec16e43120946c61850bd9df5425987",
   "funnel": {
     "rawReceived": 12,
     "normalized": 11,
@@ -53,13 +53,6 @@
       ]
     },
     {
-      "command": ".venv/bin/python -m pytest -q backend/tests/test_ats_adapters.py backend/tests/test_ats_source_service.py",
-      "exitCode": 0,
-      "rows": [
-        "CAP-DIRECT-ATS-001"
-      ]
-    },
-    {
       "command": "bun test apps/job-ingestion-audit/test/audit.test.ts",
       "exitCode": 0,
       "rows": [
@@ -100,6 +93,13 @@
       "exitCode": 1,
       "rows": [
         "CAP-LIVE-001"
+      ]
+    },
+    {
+      "command": "test -n \"$DIRECT_ATS_AUDIT_SOURCE\"",
+      "exitCode": 1,
+      "rows": [
+        "CAP-DIRECT-ATS-001"
       ]
     },
     {
@@ -214,11 +214,15 @@
         "silentlySlicingAdapterFamilies": 6
       },
       "root_cause": "adapter return type carries rows only and loses truncation state",
-      "status": "PASS",
+      "status": "BLOCKED_EXTERNAL",
       "proposed_fix": "thread list-compatible batch completeness through source refresh; cap hits are terminal capped errors and never silent success",
       "regression_test": "CAP-DIRECT-ATS-GOLDEN-001",
       "final_verification_evidence": "backend/tests/test_ats_adapters.py",
-      "blocker": null
+      "blocker": {
+        "dependency": "read-only live board inventory with a source-reported total or independently enumerable board",
+        "capabilityCheck": "test -n \"$DIRECT_ATS_AUDIT_SOURCE\"",
+        "unblockProcedure": "provide a read-only board key in DIRECT_ATS_AUDIT_SOURCE, run the adapter beyond its cap, and archive exact external-ID reconciliation"
+      }
     },
     {
       "risk_id": "QUERY-PARTITION-001",

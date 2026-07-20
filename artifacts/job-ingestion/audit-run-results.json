@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "executedAt": "2026-07-20T02:12:09.973Z",
+  "executedAt": "2026-07-20T02:17:20.989Z",
   "fixtureMode": true,
   "verdict": "PARTIAL",
   "invariantFailures": [],
@@ -24,13 +24,6 @@
       "exitCode": 0,
       "rows": [
         "PAG-FT-001"
-      ]
-    },
-    {
-      "command": ".venv/bin/python -m pytest -q backend/tests/test_ats_adapters.py backend/tests/test_ats_source_service.py",
-      "exitCode": 0,
-      "rows": [
-        "CAP-DIRECT-ATS-001"
       ]
     },
     {
@@ -74,6 +67,13 @@
       "exitCode": 1,
       "rows": [
         "CAP-LIVE-001"
+      ]
+    },
+    {
+      "command": "test -n \"$DIRECT_ATS_AUDIT_SOURCE\"",
+      "exitCode": 1,
+      "rows": [
+        "CAP-DIRECT-ATS-001"
       ]
     },
     {
