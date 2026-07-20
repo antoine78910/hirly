@@ -52,7 +52,6 @@ ALTER TABLE public.career_sources
   ),
   ADD CONSTRAINT career_sources_policy_identity_unique
     UNIQUE (id, provider, policy_id);
-  );
 
 ALTER TABLE public.provider_registry
   ADD CONSTRAINT provider_registry_country_kill_switch_values_guard CHECK (
