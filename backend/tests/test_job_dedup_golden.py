@@ -50,8 +50,9 @@ class _Jobs:
     def __init__(self):
         self.rows = []
     def find(self, query, _projection=None):
-        ids = set((query.get("job_id") or {}).get("$in") or [])
-        return _Cursor([dict(row) for row in self.rows if row.get("job_id") in ids])
+        field, condition = next(iter(query.items()))
+        values = set((condition or {}).get("$in") or [])
+        return _Cursor([dict(row) for row in self.rows if row.get(field) in values])
     async def insert_many(self, documents):
         for document in documents:
             key = (document["provider"], document["external_id"])
@@ -62,9 +63,22 @@ class _Jobs:
             self.rows.append(dict(document))
 
 
+class _Candidates:
+    def __init__(self):
+        self.rows = []
+    async def insert_many(self, documents):
+        for document in documents:
+            self.rows = [
+                row for row in self.rows
+                if row["candidate_id"] != document["candidate_id"]
+            ]
+            self.rows.append(dict(document))
+
+
 class _DB:
     def __init__(self):
         self.jobs = _Jobs()
+        self.job_dedup_candidates = _Candidates()
 
 
 def test_golden_corpus_runs_through_real_upsert_without_false_merges():
@@ -89,3 +103,35 @@ def test_golden_corpus_runs_through_real_upsert_without_false_merges():
             assert stats["fuzzy_duplicate_candidates"] == 1, case["id"]
         elif case["expected"] == "distinct":
             assert stats["fuzzy_duplicate_candidates"] == 0, case["id"]
+
+
+def test_independent_provider_runs_persist_review_only_candidate_linkage():
+    case = next(
+        item for item in json.loads(FIXTURE.read_text())
+        if item["expected"] == "canonical_url_candidate"
+    )
+    db = _DB()
+    first = {
+        **case["left"],
+        "description": "First provider occurrence",
+        "source_document": {"provider_run": 1},
+    }
+    second = {
+        **case["right"],
+        "description": "Second provider occurrence",
+        "source_document": {"provider_run": 2},
+    }
+
+    first_stats = asyncio.run(upsert_imported_jobs(db, [first]))
+    second_stats = asyncio.run(upsert_imported_jobs(db, [second]))
+
+    assert first_stats["fuzzy_duplicate_candidates"] == 0
+    assert second_stats["fuzzy_duplicate_candidates"] == 1
+    assert second_stats["dedup_candidate_links"] == 1
+    assert len(db.jobs.rows) == 2
+    assert len(db.job_dedup_candidates.rows) == 1
+    link = db.job_dedup_candidates.rows[0]
+    assert link["candidate_type"] == "canonical_url_candidate"
+    assert {link["left_job_id"], link["right_job_id"]} == {
+        row["job_id"] for row in db.jobs.rows
+    }

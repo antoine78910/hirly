@@ -21,7 +21,12 @@ from profile_search_preferences import (
     resolve_profile_target_location_label,
     resolve_profile_target_role,
 )
-from job_normalization import build_job_fingerprint, classify_dedup_pair, sanitize_display_title
+from job_normalization import (
+    build_job_fingerprint,
+    canonicalize_apply_url,
+    classify_dedup_pair,
+    sanitize_display_title,
+)
 from job_providers import (
     get_board_provider,
     get_job_provider,
@@ -408,7 +413,24 @@ def _prepare_job_for_upsert(job: Dict[str, Any]) -> Dict[str, Any]:
         prepared["title"] = sanitized_title
     prepared = _with_cheap_validation(prepared)
     prepared["fingerprint"] = prepared.get("fingerprint") or build_job_fingerprint(prepared)
+    prepared["canonical_apply_url"] = canonicalize_apply_url(
+        prepared.get("selected_apply_url") or prepared.get("external_url")
+    )
     return _ensure_job_id(prepared)
+
+
+def _candidate_key(classification: str, job: Dict[str, Any]) -> Optional[str]:
+    if classification == "canonical_url_candidate":
+        return job.get("canonical_apply_url") or canonicalize_apply_url(
+            job.get("selected_apply_url") or job.get("external_url")
+        )
+    if classification == "ats_id_candidate":
+        provider = str(job.get("ats_provider") or "").lower()
+        ats_job_id = str(job.get("ats_job_id") or "")
+        return f"{provider}:{ats_job_id}" if provider and ats_job_id else None
+    if classification == "fingerprint_candidate":
+        return job.get("fingerprint") or build_job_fingerprint(job)
+    return None
 
 
 async def _write_job_chunk(db, chunk: List[Dict[str, Any]]) -> None:
@@ -459,6 +481,7 @@ async def _upsert_job_batch(
         "reactivated": 0,
         "exact_duplicate": 0,
         "fuzzy_duplicate_candidates": 0,
+        "dedup_candidate_links": 0,
         "write_failed": 0,
         "auto_apply_supported_imported": 0,
         "unknown_ats_imported": 0,
@@ -490,10 +513,43 @@ async def _upsert_job_batch(
         {"_id": 0},
     ).limit(len(prepared)).to_list(len(prepared))
     existing_by_id = {str(row.get("job_id")): row for row in existing_rows if row.get("job_id")}
-    for index, left in enumerate(prepared):
-        for right in prepared[index + 1:]:
-            if classify_dedup_pair(left, right)["classification"].endswith("_candidate"):
-                stats["fuzzy_duplicate_candidates"] += 1
+    candidate_rows_by_id: Dict[str, Dict[str, Any]] = {}
+    candidate_filters = (
+        ("canonical_apply_url", {row.get("canonical_apply_url") for row in prepared if row.get("canonical_apply_url")}),
+        ("ats_job_id", {row.get("ats_job_id") for row in prepared if row.get("ats_job_id")}),
+        ("fingerprint", {row.get("fingerprint") for row in prepared if row.get("fingerprint")}),
+    )
+    for field, values in candidate_filters:
+        if not values:
+            continue
+        rows = await db.jobs.find(
+            {field: {"$in": sorted(values)}}, {"_id": 0}
+        ).limit(max(100, len(prepared) * 20)).to_list(max(100, len(prepared) * 20))
+        for row in rows:
+            if row.get("job_id"):
+                candidate_rows_by_id[str(row["job_id"])] = row
+
+    candidate_pairs: Dict[tuple[str, str, str], Dict[str, Any]] = {}
+    comparison_rows = [*candidate_rows_by_id.values(), *prepared]
+    for index, left in enumerate(comparison_rows):
+        for right in comparison_rows[index + 1:]:
+            left_id, right_id = str(left.get("job_id") or ""), str(right.get("job_id") or "")
+            if not left_id or not right_id or left_id == right_id:
+                continue
+            classification = classify_dedup_pair(left, right)["classification"]
+            if not classification.endswith("_candidate"):
+                continue
+            ordered = tuple(sorted((left_id, right_id)))
+            key = _candidate_key(classification, left) or _candidate_key(classification, right)
+            if not key:
+                continue
+            candidate_pairs[(ordered[0], ordered[1], classification)] = {
+                "left_job_id": ordered[0],
+                "right_job_id": ordered[1],
+                "candidate_type": classification,
+                "candidate_key": key,
+            }
+    stats["fuzzy_duplicate_candidates"] = len(candidate_pairs)
 
     chunk_size = max(10, min(_env_int("JOB_UPSERT_BATCH_SIZE", 75), 200))
     for offset in range(0, len(prepared), chunk_size):
@@ -523,6 +579,27 @@ async def _upsert_job_batch(
                 stats["auto_apply_supported_imported"] += 1
             if job.get("ats_provider") == "unknown":
                 stats["unknown_ats_imported"] += 1
+    candidate_collection = getattr(db, "job_dedup_candidates", None)
+    if candidate_pairs and candidate_collection is not None:
+        now = datetime.now(timezone.utc).isoformat()
+        links = []
+        for candidate in candidate_pairs.values():
+            digest = hashlib.sha256(
+                "|".join((
+                    candidate["left_job_id"],
+                    candidate["right_job_id"],
+                    candidate["candidate_type"],
+                    candidate["candidate_key"],
+                )).encode()
+            ).hexdigest()
+            links.append({
+                "candidate_id": digest,
+                **candidate,
+                "created_at": now,
+                "last_seen_at": now,
+            })
+        await candidate_collection.insert_many(links)
+        stats["dedup_candidate_links"] = len(links)
     return stats
 
 

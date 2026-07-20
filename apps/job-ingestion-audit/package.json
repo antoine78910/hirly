@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "audit": "bun src/cli.ts",
+    "sql-evaluate": "bun src/sql-evaluator.ts",
     "census:france-travail": "bun src/census-cli.ts",
     "test": "bun test",
     "lint": "tsc --noEmit",
