@@ -633,6 +633,9 @@ describe("G003 CLI and graceful lifecycle test seams", () => {
         start() {
           events.push("consumer:start");
         },
+        stopClaiming() {
+          events.push("consumer:stop-claiming");
+        },
         async stop(timeoutMs) {
           events.push(`consumer:stop:${timeoutMs}`);
         },
@@ -646,7 +649,7 @@ describe("G003 CLI and graceful lifecycle test seams", () => {
         },
       },
       server: {
-        stop(force) {
+        async stop(force) {
           events.push(`server:stop:${force}`);
         },
       },
@@ -668,6 +671,7 @@ describe("G003 CLI and graceful lifecycle test seams", () => {
       "scheduler:start",
       "ready:true",
       "ready:false",
+      "consumer:stop-claiming",
       "server:stop:false",
       "scheduler:stop",
       "consumer:stop:250",

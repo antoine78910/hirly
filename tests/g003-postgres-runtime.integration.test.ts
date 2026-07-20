@@ -228,21 +228,23 @@ describe("G003 least-privilege runtime repository", () => {
         const repository = new WorkerRepository(sql);
         const [schedule] = await repository.listDueSchedules(10);
         expect(schedule).toBeDefined();
-        const successor = new Date(schedule!.nextDueAt.getTime() + 60_000);
+        const successor = new Date(schedule!.nextDueAt);
+        successor.setUTCSeconds(0, 0);
+        successor.setUTCMinutes(successor.getUTCMinutes() + 1);
 
         const first = await repository.enqueueDueSchedule(
           schedule!.id,
           successor,
         );
-        const replay = await repository.enqueueDueSchedule(
-          schedule!.id,
-          successor,
+        await expect(
+          repository.enqueueDueSchedule(schedule!.id, successor),
+        ).rejects.toThrow(
+          "next due time must advance",
         );
 
         expect(first).toMatch(
           /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
         );
-        expect(replay).toBeNull();
         expect(
           await assertSql(`
             SELECT count(*)
