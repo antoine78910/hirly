@@ -1,0 +1,37 @@
+BEGIN;
+
+DROP VIEW IF EXISTS public.career_source_runtime_status;
+
+DROP TRIGGER IF EXISTS canonical_job_group_events_immutable
+  ON public.canonical_job_group_events;
+DROP TABLE IF EXISTS public.canonical_job_group_events;
+DROP TABLE IF EXISTS public.canonical_job_group_members;
+DROP TABLE IF EXISTS public.job_occurrences;
+
+DROP INDEX IF EXISTS public.jobs_source_active_idx;
+DROP INDEX IF EXISTS public.jobs_canonical_group_feed_idx;
+ALTER TABLE public.jobs
+  DROP COLUMN IF EXISTS route_verified_at,
+  DROP COLUMN IF EXISTS route_confidence,
+  DROP COLUMN IF EXISTS route_classification,
+  DROP COLUMN IF EXISTS lifecycle_checked_at,
+  DROP COLUMN IF EXISTS removed_at,
+  DROP COLUMN IF EXISTS expires_at,
+  DROP COLUMN IF EXISTS first_seen_at,
+  DROP COLUMN IF EXISTS canonical_group_id,
+  DROP COLUMN IF EXISTS source_id;
+
+DROP TABLE IF EXISTS public.canonical_job_groups;
+
+DROP TRIGGER IF EXISTS raw_job_snapshots_immutable ON public.raw_job_snapshots;
+DROP TABLE IF EXISTS public.raw_job_snapshots;
+DROP FUNCTION IF EXISTS worker_private.reject_immutable_source_evidence();
+
+ALTER TABLE public.career_sources
+  DROP CONSTRAINT IF EXISTS career_sources_country_kill_switches_guard,
+  DROP COLUMN IF EXISTS country_kill_switches,
+  DROP COLUMN IF EXISTS backfill_enabled,
+  DROP COLUMN IF EXISTS incremental_enabled,
+  DROP COLUMN IF EXISTS transport_enabled;
+
+COMMIT;
