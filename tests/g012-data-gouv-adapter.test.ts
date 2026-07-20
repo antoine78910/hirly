@@ -186,6 +186,20 @@ describe("G012 generic data.gouv fixture boundary", () => {
         // Checkpoint validation happens before a page is emitted.
       }
     }).toThrow("invalid or stale data.gouv fixture checkpoint");
+
+    const changedRows = structuredClone(data.raw);
+    changedRows[0]!.title = "Changed outside sourceDocument";
+    const changedAdapter = adapter(changedRows);
+    await expect(async () => {
+      for await (const _page of changedAdapter.discover({
+        source: source(),
+        mode: "full",
+        cursor: first.value!.nextCursor,
+        signal: new AbortController().signal,
+      })) {
+        // A complete-row change must invalidate the old snapshot cursor.
+      }
+    }).toThrow("invalid or stale data.gouv fixture checkpoint");
   });
 
   test("classifies lifecycle and retry states without removal on failure", async () => {
@@ -229,6 +243,28 @@ describe("G012 generic data.gouv fixture boundary", () => {
       })) {
         // Source validation happens before a page is emitted.
       }
-    }).toThrow("every disabled mode");
+    }).toThrow("every mode disabled");
+    await expect(async () => {
+      for await (const _page of sourceAdapter.discover({
+        source: {
+          ...source(),
+          sourceKey: "other-dataset:other-resource",
+        },
+        mode: "full",
+        cursor: null,
+        signal: new AbortController().signal,
+      })) {
+        // Source/resource binding is checked before page emission.
+      }
+    }).toThrow("match the bound resource and policy");
+    expect(() =>
+      sourceAdapter.normalize(
+        {
+          ...data.raw[0]!,
+          resourceId: "other-resource",
+        },
+        context(source()),
+      ),
+    ).toThrow("does not match the bound dataset resource");
   });
 });

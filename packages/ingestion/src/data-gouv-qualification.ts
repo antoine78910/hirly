@@ -95,6 +95,7 @@ export interface DataGouvQualificationArtifact {
 
 export type DataGouvProductionBlockReason =
   | "qualification_rejected"
+  | "qualification_source_mismatch"
   | SourceActivationBlockReason;
 
 function hasText(value: string): boolean {
@@ -243,6 +244,13 @@ export function dataGouvProductionBlockReason(
 ): DataGouvProductionBlockReason | null {
   if (qualification.decision !== "qualified") {
     return "qualification_rejected";
+  }
+  if (
+    runtimePolicy.source.provider !== "data_gouv" ||
+    runtimePolicy.source.sourceKey !==
+      `${qualification.datasetId}:${qualification.resourceId}`
+  ) {
+    return "qualification_source_mismatch";
   }
   return sourceActivationBlockReason(runtimePolicy, countryCode, mode, now);
 }

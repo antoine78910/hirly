@@ -105,7 +105,7 @@ describe("G012 disabled CSP fixture adapter", () => {
       })) {
         // Source validation happens before a page is emitted.
       }
-    }).toThrow("every disabled mode");
+    }).toThrow("every mode disabled");
   });
 
   test("normalizes stable identity, France, direct apply URL and fulfillment", async () => {
