@@ -50,6 +50,7 @@ import AdminTraining from "@/pages/AdminTraining";
 import AdminFeatures from "@/pages/AdminFeatures";
 import AdminAtsLab from "@/pages/AdminAtsLab";
 import AdminAutoApplyLab from "@/pages/AdminAutoApplyLab";
+import AdminAnalyticsBoundary from "@/components/admin/AdminAnalyticsBoundary";
 import InviteLanding from "@/pages/InviteLanding";
 import Training from "@/pages/Training";
 import TrainingCourse from "@/pages/TrainingCourse";
@@ -201,7 +202,16 @@ function AppRouter() {
         <Route path="/admin/features" element={<AdminPage><AdminFeatures /></AdminPage>} />
         <Route path="/admin/ats-lab" element={<AdminPage><AdminAtsLab /></AdminPage>} />
         <Route path="/admin/auto-apply-lab" element={<AdminPage><AdminAutoApplyLab /></AdminPage>} />
-        <Route path="/admin/analytics" element={<AdminPage><AdminAnalytics /></AdminPage>} />
+        <Route
+          path="/admin/analytics"
+          element={(
+            <AdminPage>
+              <AdminAnalyticsBoundary>
+                <AdminAnalytics />
+              </AdminAnalyticsBoundary>
+            </AdminPage>
+          )}
+        />
         <Route path="/onboarding" element={<Onboarding />} />
         <Route element={<AppLayout />}>
         <Route path="/app" element={<AppRoute requireProfile><Swipe /></AppRoute>} />
