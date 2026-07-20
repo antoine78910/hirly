@@ -79,6 +79,8 @@ CREATE TABLE IF NOT EXISTS public.raw_job_snapshots (
   CONSTRAINT raw_job_snapshots_run_source_external_hash_unique
     UNIQUE (run_id, source_id, external_id, content_hash),
   CONSTRAINT raw_job_snapshots_identity_unique
+    UNIQUE (id, source_id, external_id),
+  CONSTRAINT raw_job_snapshots_content_identity_unique
     UNIQUE (id, source_id, external_id, content_hash),
   CONSTRAINT raw_job_snapshots_source_provider_fk
     FOREIGN KEY (source_id, provider)
@@ -183,6 +185,10 @@ CREATE TABLE IF NOT EXISTS public.job_occurrences (
     REFERENCES public.career_sources(id, provider)
     ON DELETE RESTRICT,
   CONSTRAINT job_occurrences_snapshot_identity_fk
+    FOREIGN KEY (raw_snapshot_id, source_id, external_id)
+    REFERENCES public.raw_job_snapshots(id, source_id, external_id)
+    ON DELETE RESTRICT,
+  CONSTRAINT job_occurrences_snapshot_content_fk
     FOREIGN KEY (raw_snapshot_id, source_id, external_id, content_hash)
     REFERENCES public.raw_job_snapshots(id, source_id, external_id, content_hash)
     ON DELETE RESTRICT,
@@ -320,6 +326,9 @@ AS $$
   )
 $$;
 
+ALTER FUNCTION worker_private.career_source_runnable(uuid, text, text)
+  OWNER TO hirly_inventory_operator;
+
 REVOKE ALL ON public.raw_job_snapshots, public.job_occurrences,
   public.canonical_job_groups, public.canonical_job_group_members,
   public.canonical_job_group_events FROM PUBLIC;
@@ -332,6 +341,7 @@ GRANT SELECT ON public.job_occurrences, public.canonical_job_groups,
   public.canonical_job_group_members, public.canonical_job_group_events,
   public.raw_job_snapshot_metadata, public.career_source_runtime_status
   TO hirly_inventory_operator;
+GRANT SELECT ON public.provider_registry TO hirly_inventory_operator;
 GRANT EXECUTE ON FUNCTION worker_private.career_source_runnable(uuid, text, text)
   TO hirly_inventory_worker, hirly_inventory_operator;
 
