@@ -215,7 +215,13 @@ run_stripe_page() {
     command stripe "$@" >"$stdout_file" 2>"$stderr_file" &
     stripe_pid=$!
     (
-      sleep "$timeout_seconds"
+      local tick=0
+      local max_ticks=$(( timeout_seconds * 10 ))
+      while (( tick < max_ticks )); do
+        sleep 0.1
+        kill -0 "$stripe_pid" 2>/dev/null || exit 0
+        tick=$(( tick + 1 ))
+      done
       if kill -0 "$stripe_pid" 2>/dev/null; then
         : > "$timeout_marker"
         kill -TERM "$stripe_pid" 2>/dev/null || true

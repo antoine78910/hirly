@@ -88,9 +88,14 @@ describe("PostHog production-gate runbook contract", () => {
     const result = runExporterScenario(
       'print -r -- "$$" > "$TEST_ROOT/stripe.pid"\nsleep 60',
       `
-run_stripe_page events list
+export START_EPOCH=100
+export END_EPOCH=200
+output="$TEST_ROOT/hung.jsonl"
+print -r -- '{"pagination_complete":true}' > "$output.manifest.json"
+export_stripe_events refund.updated "$output"
 exit_code=$?
 [[ "$exit_code" -eq 124 ]] || exit 90
+[[ ! -e "$output.manifest.json" ]] || exit 98
 pid="$(cat "$TEST_ROOT/stripe.pid")"
 kill -0 "$pid" 2>/dev/null && exit 91
 exit 0`,
@@ -106,10 +111,15 @@ exit 0`,
     const result = runExporterScenario(
       'print -r -- \'{"object":"list","data":[],"has_more":false}\'\nexit 9',
       `
-response="$(run_stripe_page events list)"
+export START_EPOCH=100
+export END_EPOCH=200
+output="$TEST_ROOT/nonzero.jsonl"
+print -r -- '{"pagination_complete":true}' > "$output.manifest.json"
+export_stripe_events refund.updated "$output"
 exit_code=$?
 [[ "$exit_code" -eq 9 ]] || exit 92
-[[ -z "$response" ]] || exit 93
+[[ ! -e "$output.manifest.json" ]] || exit 93
+[[ ! -s "$output" ]] || exit 99
 exit 0`,
     );
     expect(result.error).toBeUndefined();
