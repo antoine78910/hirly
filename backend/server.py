@@ -1691,9 +1691,18 @@ async def tutorial_session(response: Response):
 async def auth_me(user: User = Depends(get_current_user)):
     flags = user._auth_flags
     if flags:
+        from training_access import training_open_access_enabled
+
         profile = await db.profiles.find_one({"user_id": user.user_id}, {"_id": 0})
         creator = flags.get("is_training_creator", False)
-        training_access = flags.get("has_training_access", False) or await _resolve_training_access(user)
+        training_access = bool(
+            flags.get("has_training_access", False)
+            or training_open_access_enabled()
+            or user.training_access
+            or user.user_id == TUTORIAL_FILMING_USER_ID
+            or _is_admin_email(user.email)
+            or creator
+        )
     else:
         profile, creator, training_access = await asyncio.gather(
             db.profiles.find_one({"user_id": user.user_id}, {"_id": 0}),
@@ -2442,7 +2451,7 @@ async def _update_user_billing_by_customer_id(customer_id: str, updates: Dict[st
 async def _resolve_user_id_for_stripe_customer(customer_id: str) -> Optional[str]:
     if not customer_id:
         return None
-    existing = await db.users.find_one({"billing.stripe_customer_id": customer_id}, {"_id": 0, "user_id": 1})
+    existing = await db.users.find_one({"stripe_customer_id": customer_id}, {"_id": 0, "user_id": 1})
     if existing:
         return existing.get("user_id")
     if not _stripe_configured():
@@ -3687,14 +3696,14 @@ async def _posthog_resolve_billing_user_id(
         return resolved
     if subscription_id:
         found = await db.users.find_one(
-            {"billing.stripe_subscription_id": subscription_id},
+            {"stripe_subscription_id": subscription_id},
             {"_id": 0, "user_id": 1},
         )
         if found and found.get("user_id"):
             return str(found["user_id"])
     if customer_id:
         found = await db.users.find_one(
-            {"billing.stripe_customer_id": customer_id},
+            {"stripe_customer_id": customer_id},
             {"_id": 0, "user_id": 1},
         )
         if found and found.get("user_id"):

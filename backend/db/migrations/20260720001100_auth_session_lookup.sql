@@ -88,6 +88,16 @@ AS $$
 $$;
 
 REVOKE ALL ON FUNCTION public.resolve_auth_session(text) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.resolve_auth_session(text) FROM anon;
-REVOKE ALL ON FUNCTION public.resolve_auth_session(text) FROM authenticated;
-GRANT EXECUTE ON FUNCTION public.resolve_auth_session(text) TO service_role;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+    REVOKE ALL ON FUNCTION public.resolve_auth_session(text) FROM anon;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+    REVOKE ALL ON FUNCTION public.resolve_auth_session(text) FROM authenticated;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
+    GRANT EXECUTE ON FUNCTION public.resolve_auth_session(text) TO service_role;
+  END IF;
+END
+$$;
