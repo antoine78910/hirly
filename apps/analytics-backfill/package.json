@@ -1,0 +1,20 @@
+{
+  "name": "@hirly/analytics-backfill",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "backfill": "bun run src/cli.ts",
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hirly/contracts": "workspace:*",
+    "@hirly/db": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}
