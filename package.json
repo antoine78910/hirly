@@ -10,7 +10,8 @@
     "format": "bun run --workspaces --if-present format",
     "lint": "bun run --workspaces --if-present lint",
     "typecheck": "bun run --workspaces --if-present typecheck",
-    "test": "bun test ./tests/workspace-isolation.test.ts ./tests/g002-contracts.test.ts ./tests/g002-database-foundation.test.ts ./tests/g002-postgres.integration.test.ts && bun run --workspaces --if-present test",
+    "test": "bun test ./tests && bun run --workspaces --if-present test",
+    "test:g003": "bun test ./tests/g003-worker-runtime.test.ts && bun run --cwd apps/worker test",
     "build": "bun run --workspaces --if-present build"
   },
   "devDependencies": {
