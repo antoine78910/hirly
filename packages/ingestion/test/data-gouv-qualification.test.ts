@@ -31,6 +31,7 @@ function evidence(
       evidenceRef: "evidence/licence.json",
       commercialUseAllowed: true,
       redisplayAllowed: true,
+      fullTextRetentionAllowed: true,
       attributionText: "Source: publisher via data.gouv.fr",
     },
     identity: {
@@ -130,6 +131,18 @@ describe("data.gouv dataset qualification", () => {
     expect(result.blockReasons).toContain("keyword_only_discovery");
   });
 
+  test("requires resource identity and discovery evidence", () => {
+    const result = qualifyDataGouvDataset(
+      evidence({
+        datasetId: " ",
+        resourceId: "",
+        discovery: { keywordOnly: false, evidenceRef: "" },
+      }),
+    );
+    expect(result.blockReasons).toContain("missing_dataset_identity");
+    expect(result.blockReasons).toContain("missing_discovery_evidence");
+  });
+
   test("requires freshness, rights, stable IDs, employer, apply route, relevance, and lifecycle evidence", () => {
     const result = qualifyDataGouvDataset(
       evidence({
@@ -144,6 +157,7 @@ describe("data.gouv dataset qualification", () => {
           evidenceRef: "",
           commercialUseAllowed: false,
           redisplayAllowed: false,
+          fullTextRetentionAllowed: false,
           attributionText: "",
         },
         identity: {
@@ -173,6 +187,7 @@ describe("data.gouv dataset qualification", () => {
     expect(result.decision).toBe("rejected");
     expect(result.blockReasons).toEqual([
       "commercial_use_not_allowed",
+      "full_text_retention_not_allowed",
       "missing_apply_route_evidence",
       "missing_attribution",
       "missing_employer_evidence",
@@ -248,4 +263,3 @@ describe("data.gouv dataset qualification", () => {
     ).toBe("mode_disabled");
   });
 });
-

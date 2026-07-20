@@ -9,11 +9,14 @@ export const DATA_GOUV_QUALIFICATION_SCHEMA_VERSION =
   "data-gouv-qualification.v1" as const;
 
 export type DataGouvQualificationBlockReason =
+  | "missing_dataset_identity"
+  | "missing_discovery_evidence"
   | "keyword_only_discovery"
   | "stale_resource"
   | "missing_licence_evidence"
   | "commercial_use_not_allowed"
   | "redisplay_not_allowed"
+  | "full_text_retention_not_allowed"
   | "missing_attribution"
   | "missing_stable_external_id"
   | "missing_employer_evidence"
@@ -41,6 +44,7 @@ export interface DataGouvQualificationEvidence {
     evidenceRef: string;
     commercialUseAllowed: boolean;
     redisplayAllowed: boolean;
+    fullTextRetentionAllowed: boolean;
     attributionText: string;
   };
   identity: {
@@ -132,6 +136,12 @@ export function qualifyDataGouvDataset(
   const maximumAgeMs =
     evidence.freshness.maximumAgeDays * 24 * 60 * 60 * 1_000;
 
+  if (!hasText(evidence.datasetId) || !hasText(evidence.resourceId)) {
+    reasons.add("missing_dataset_identity");
+  }
+  if (!hasText(evidence.discovery.evidenceRef)) {
+    reasons.add("missing_discovery_evidence");
+  }
   if (evidence.discovery.keywordOnly) reasons.add("keyword_only_discovery");
   if (
     !Number.isFinite(evaluatedAt.getTime()) ||
@@ -155,6 +165,9 @@ export function qualifyDataGouvDataset(
   }
   if (!evidence.licence.redisplayAllowed) {
     reasons.add("redisplay_not_allowed");
+  }
+  if (!evidence.licence.fullTextRetentionAllowed) {
+    reasons.add("full_text_retention_not_allowed");
   }
   if (!hasText(evidence.licence.attributionText)) {
     reasons.add("missing_attribution");
@@ -233,4 +246,3 @@ export function dataGouvProductionBlockReason(
   }
   return sourceActivationBlockReason(runtimePolicy, countryCode, mode, now);
 }
-
