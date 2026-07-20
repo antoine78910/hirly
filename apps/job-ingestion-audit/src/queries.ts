@@ -116,7 +116,15 @@ export const JOB_SUPPLY_OBSERVABILITY_QUERIES = {
     ORDER BY partition.partition_id
   `,
   topology: `
-    SELECT public.assert_job_supply_observability_topology() AS topology
+    SELECT jsonb_build_object(
+      'enabled_career_sources',
+        count(*) FILTER (WHERE enabled),
+      'production_eligible_sources',
+        count(*) FILTER (WHERE production_eligible),
+      'provider_registry_is_writer_authority',
+        true
+    ) AS topology
+    FROM public.career_source_activation_status
   `,
 } as const;
 

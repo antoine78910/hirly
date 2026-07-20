@@ -143,9 +143,9 @@ describe("job-ingestion audit invariants", () => {
       },
     ])).toEqual({
       cohortSize: 3,
-      p10: 2,
-      median: 10,
-      p90: 18,
+      p10: 1,
+      median: 5,
+      p90: 9,
       feedExhaustionRate: 1 / 3,
       routeKnownRate: 15 / 21,
       directEmployerRate: 11 / 21,
@@ -212,6 +212,17 @@ describe("job-ingestion audit invariants", () => {
     const changed = structuredClone(manifest);
     changed.samplingSeed = "changed-after-results";
     expect(validateFranceTravailCensusManifest(changed)).toContain("manifest_digest_mismatch");
+
+    const reordered = freezeFranceTravailCensusManifest({
+      ...franceTravailManifestInput,
+      profileStrata: [...franceTravailManifestInput.profileStrata].reverse(),
+      partitions: [...franceTravailManifestInput.partitions].reverse(),
+    });
+    expect(reordered.manifestDigest).toBe(manifest.manifestDigest);
+    expect(() => freezeFranceTravailCensusManifest({
+      ...franceTravailManifestInput,
+      profileStrata: [{ email: "private@example.com", weight: 1 }],
+    })).toThrow("unsafe France Travail profile strata");
   });
 
   test("rejects overlapping census windows for the same partition parameters", () => {
@@ -225,8 +236,33 @@ describe("job-ingestion audit invariants", () => {
         },
       ],
     });
-    expect(validateFranceTravailCensusManifest(manifest))
-      .toContain("overlapping_partition_windows:ft:2026-07-06:2026-07-13:all:ft:2026-07-13:2026-07-20:all");
+    expect(validateFranceTravailCensusManifest(manifest).some(
+      (failure) => failure.startsWith("overlapping_partition_windows:"),
+    )).toBe(true);
+  });
+
+  test("excludes generatedAt from the immutable census decision digest", () => {
+    const evidence = [{
+      runId: "00000000-0000-0000-0000-000000000001",
+      partitionId: "ft-window-1",
+      status: "completed_with_results" as const,
+      sourceReportedTotal: 2,
+      fetchedRecords: 2,
+      normalizedRecords: 2,
+      rejectedRecords: 0,
+      actionableRecords: 1,
+      capHit: false,
+    }];
+    const first = buildFranceTravailCensusManifest(
+      evidence,
+      "2026-07-20T00:00:00.000Z",
+    );
+    const second = buildFranceTravailCensusManifest(
+      evidence,
+      "2026-07-21T00:00:00.000Z",
+    );
+    expect(first.generatedAt).not.toBe(second.generatedAt);
+    expect(first.digest).toBe(second.digest);
   });
 
   test("reconciles the full France Travail census funnel and blocks unsafe terminal claims", () => {

@@ -22,11 +22,14 @@ export interface LiveJobSupplyReport {
   paidUserBaseline: Record<string, unknown>[];
   sourceEnablement: Array<{
     provider: string;
-    provider_enabled: boolean;
-    writer_runtime: string;
     source_key: string;
-    collection_enabled: boolean;
-    production_enabled: boolean;
+    tenant_key: string | null;
+    enabled: boolean;
+    authorization_status: string;
+    writer_runtime: string;
+    policy_status: string | null;
+    policy_expires_at: Date | null;
+    production_eligible: boolean;
   }>;
 }
 
@@ -121,16 +124,17 @@ export async function collectLiveJobSupplyReport(
     `,
     sql<LiveJobSupplyReport["sourceEnablement"]>`
       SELECT
-        registry.provider,
-        registry.enabled AS provider_enabled,
-        registry.writer_runtime,
-        source.source_key,
-        source.collection_enabled,
-        policy.production_enabled
-      FROM public.career_sources AS source
-      JOIN public.provider_registry AS registry ON registry.provider = source.provider
-      JOIN public.source_policies AS policy ON policy.source_id = source.id
-      ORDER BY registry.provider, source.source_key
+        provider,
+        source_key,
+        tenant_key,
+        enabled,
+        authorization_status,
+        writer_runtime,
+        policy_status,
+        policy_expires_at,
+        production_eligible
+      FROM public.career_source_activation_status
+      ORDER BY provider, source_key
     `,
   ]);
   return {
