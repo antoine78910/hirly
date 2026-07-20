@@ -18,6 +18,7 @@ function candidate(
 ): CareerSourceCandidate {
   return {
     ...input,
+    policyId: null,
     id: "00000000-0000-4000-8000-000000000001",
     lastAttemptAt: null,
     lastSuccessAt: null,
@@ -62,7 +63,6 @@ describe("G011 SSRF-safe ATS tenant discovery", () => {
         countryCodes: ["FR"],
         baseUrl: "https://boards.greenhouse.io/acme",
         accessType: "tenant_feed",
-        policyId: null,
         syncFrequencySeconds: null,
         checkpoint: {
           version: "ats-discovery.v1",

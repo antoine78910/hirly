@@ -389,7 +389,6 @@ export async function registerDiscoveredAtsTenant(
     ].sort(),
     baseUrl: candidateBaseUrl(final),
     accessType: "tenant_feed",
-    policyId: null,
     syncFrequencySeconds: null,
     checkpoint: {
       version: "ats-discovery.v1",
