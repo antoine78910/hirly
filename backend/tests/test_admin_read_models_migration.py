@@ -93,9 +93,23 @@ def test_application_backfill_uses_durable_missing_rows_not_external_cursors():
     assert "FOR UPDATE OF a SKIP LOCKED" in applications
     assert "set_config('hirly.admin_backfill','on',true)" in applications
     assert "admin_rebuild_application_scope_counts()" in applications
-    assert "admin_rebuild_users(affected_user_ids)" in applications
+    assert "application_facts_generation=GREATEST(application_facts_generation,1)" in applications
+    assert "admin_rebuild_users(affected_user_ids)" not in applications
     assert "'cursor_ignored',p_after_application_id IS NOT NULL" in applications
     assert "current_setting('hirly.admin_backfill',true)='on'" in sql
+
+
+def test_user_fact_finalization_is_generation_fenced_and_bounded():
+    sql = UP.read_text()
+    users = sql.split(
+        "CREATE OR REPLACE FUNCTION public.admin_backfill_users", 1
+    )[1].split("CREATE OR REPLACE FUNCTION public.admin_reconcile_read_models", 1)[0]
+    assert "r.application_facts_generation<target_generation" in users
+    assert "LIMIT LEAST(GREATEST(COALESCE(p_limit,500),1),500)" in users
+    assert "FOR UPDATE OF u SKIP LOCKED" in users
+    assert "SET application_facts_generation=target_generation" in users
+    assert "v_stale_user_application_facts" in sql
+    assert "SET statement_timeout='10min'" in sql
 
 def test_semantic_parity_helpers_and_hostile_fixture_cover_review_boundaries():
     sql = UP.read_text()

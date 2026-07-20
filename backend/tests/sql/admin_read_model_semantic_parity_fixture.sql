@@ -36,6 +36,10 @@ INSERT INTO public.applications(application_id,user_id,job_id,data) VALUES
       "prepared_missing_information":"Sponsorship"}');
 
 SELECT public.admin_reconcile_read_models(true);
+INSERT INTO users(user_id,email,data)
+VALUES ('semantic-readiness-probe','semantic-probe@example.com','{}');
+DELETE FROM users WHERE user_id='semantic-readiness-probe';
+SELECT public.admin_reconcile_read_models(true);
 
 DO $$
 DECLARE payload jsonb; distribution jsonb; answers jsonb;

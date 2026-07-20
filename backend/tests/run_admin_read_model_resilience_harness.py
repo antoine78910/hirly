@@ -251,6 +251,10 @@ def main() -> int:
         args.database_url,
         "SELECT public.admin_backfill_applications('a-0600',500);",
     )
+    app_user_recovery = query_json(
+        args.database_url,
+        "SELECT public.admin_backfill_users(NULL,500);",
+    )
     apps_state = query_json(
         args.database_url,
         """
@@ -268,11 +272,14 @@ def main() -> int:
         and app_kill["killed"]
         and app_recovery["processed"] == 500
         and app_recovery["remaining"] is False
+        and app_user_recovery["processed"] == 20
+        and app_user_recovery["remaining"] is False
         and apps_state == {"canonical": 600, "model": 600, "counter": 600},
         {
             "concurrent_worker": app_b,
             "killed_worker": app_kill,
             "recovery": app_recovery,
+            "user_fact_recovery": app_user_recovery,
             "state": apps_state,
         },
     )
@@ -398,6 +405,10 @@ def main() -> int:
         args.database_url,
         "SELECT public.admin_backfill_applications(NULL,1000);",
     )
+    reapplied_user_facts = query_json(
+        args.database_url,
+        "SELECT public.admin_backfill_users(NULL,500);",
+    )
     reapply_first = query_json(
         args.database_url,
         "SELECT public.admin_reconcile_read_models(false);",
@@ -430,6 +441,8 @@ def main() -> int:
         == {"users": 20, "applications": 600, "read_model": None, "jobs": 1}
         and reapplied_users["processed"] == 20
         and reapplied_apps["processed"] == 600
+        and reapplied_user_facts["processed"] == 20
+        and reapplied_user_facts["remaining"] is False
         and reapply_first["ok"] is True
         and reapply_second["ready"] is True
         and reapply_rpc == {"applications": 200, "total": 600},
@@ -437,6 +450,7 @@ def main() -> int:
             "rollback": rollback,
             "users": reapplied_users,
             "applications": reapplied_apps,
+            "user_facts": reapplied_user_facts,
             "first": reapply_first,
             "second": reapply_second,
             "rpc": reapply_rpc,
