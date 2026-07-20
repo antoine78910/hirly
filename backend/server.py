@@ -119,6 +119,7 @@ from jobs_service import (
     FEED_COVERAGE_EVALUATOR_VERSION,
     build_feed_coverage_snapshot,
     build_profile_job_query,
+    hash_feed_coverage_user_id,
     refresh_greenhouse_boards,
     refresh_jobs_for_profile_if_needed,
     refresh_lever_boards,
@@ -10919,6 +10920,117 @@ async def admin_jobs_feed_diagnostic(body: AdminJobsFeedDiagnosticRequest, admin
             "provider_cooldowns": list(getattr(jobs_service_module, "_PROVIDER_COOLDOWN_UNTIL", {}).keys()),
         },
         "timing_ms": int((time.perf_counter() - started) * 1000),
+    }
+
+
+@api_router.post("/admin/jobs/feed-coverage-audit")
+async def admin_jobs_feed_coverage_audit(
+    body: AdminFeedCoverageAuditRequest,
+    admin: User = Depends(require_admin_user),
+):
+    """Evaluate a fixed paid-user snapshot through the real feed with I/O disabled."""
+    requested_user_ids = list(dict.fromkeys(user_id.strip() for user_id in body.user_ids if user_id.strip()))
+    if not requested_user_ids:
+        raise HTTPException(status_code=400, detail="At least one user_id is required")
+    if len(requested_user_ids) > 100:
+        raise HTTPException(status_code=400, detail="Coverage audits are limited to 100 users")
+
+    evaluated_at = datetime.now(timezone.utc)
+    user_rows = await db.users.find(
+        {"user_id": {"$in": requested_user_ids}},
+        {"_id": 0},
+    ).limit(len(requested_user_ids)).to_list(len(requested_user_ids))
+    users_by_id = {str(row.get("user_id")): row for row in user_rows if row.get("user_id")}
+    snapshots: List[Dict[str, Any]] = []
+
+    for user_id in requested_user_ids:
+        user_doc = users_by_id.get(user_id)
+        if not user_doc:
+            snapshots.append({
+                "user_id": hash_feed_coverage_user_id(user_id),
+                "evaluated_at": evaluated_at.isoformat(),
+                "terminal_reason": "USER_NOT_FOUND",
+                "evaluator_version": FEED_COVERAGE_EVALUATOR_VERSION,
+            })
+            continue
+        data = user_doc.get("data") if isinstance(user_doc.get("data"), dict) else {}
+        billing = user_doc.get("billing") if isinstance(user_doc.get("billing"), dict) else data.get("billing") or {}
+        if str(billing.get("subscription_status") or "").lower() not in {"active", "trialing"}:
+            snapshots.append({
+                "user_id": hash_feed_coverage_user_id(user_id),
+                "evaluated_at": evaluated_at.isoformat(),
+                "terminal_reason": "NOT_PAID_COHORT",
+                "evaluator_version": FEED_COVERAGE_EVALUATOR_VERSION,
+            })
+            continue
+        profile = await db.profiles.find_one({"user_id": user_id}, {"_id": 0}) or {}
+        audit_user = User(
+            user_id=user_id,
+            email=str(user_doc.get("email") or f"{user_id}@coverage-audit.invalid"),
+            name=str(user_doc.get("name") or "Coverage audit"),
+            is_admin=False,
+        )
+        try:
+            feed_response = await get_feed(
+                user=audit_user,
+                limit=max(1, min(body.limit, 25)),
+                min_salary=0,
+                posted_within=None,
+                work_location=None,
+                job_type=None,
+                experience=None,
+                location=None,
+                only_company=None,
+                hide_company=None,
+                only_industry=None,
+                hide_industry=None,
+                include_unknown_location=True,
+                include_unknown_salary=True,
+                include_non_auto_apply=False,
+                search_radius="50km",
+                locations_json=None,
+                only_my_country=False,
+                location_label=None,
+                place_id=None,
+                country=None,
+                country_code=None,
+                lat=None,
+                lng=None,
+                force_provider_refresh=False,
+                prefetch=False,
+                score=False,
+                search_role=None,
+                audit_mode=True,
+            )
+        except HTTPException as exc:
+            snapshots.append({
+                "user_id": hash_feed_coverage_user_id(user_id),
+                "evaluated_at": evaluated_at.isoformat(),
+                "terminal_reason": f"PROFILE_NOT_READY_{exc.status_code}",
+                "evaluator_version": FEED_COVERAGE_EVALUATOR_VERSION,
+            })
+            continue
+        snapshots.append(build_feed_coverage_snapshot(
+            user_id=user_id,
+            profile=profile,
+            feed_response=feed_response,
+            evaluated_at=evaluated_at,
+            freshness_window_days=body.freshness_window_days,
+        ))
+
+    coverage_run_id = hashlib.sha256(
+        "|".join([
+            FEED_COVERAGE_EVALUATOR_VERSION,
+            evaluated_at.isoformat(),
+            *(snapshot["user_id"] for snapshot in snapshots),
+        ]).encode("utf-8")
+    ).hexdigest()[:24]
+    return {
+        "coverage_run_id": coverage_run_id,
+        "evaluated_at": evaluated_at.isoformat(),
+        "evaluator_version": FEED_COVERAGE_EVALUATOR_VERSION,
+        "profile_count": len(snapshots),
+        "snapshots": snapshots,
     }
 
 
