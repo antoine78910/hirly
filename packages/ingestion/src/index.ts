@@ -308,6 +308,13 @@ const accountRequiredDomains = [
   "welcometothejungle.com",
   "indeed.com",
 ];
+const discoveryOnlyDomains: Record<string, string> = {
+  "simplyhired.com": "simplyhired",
+  "talent.com": "talent",
+  "adzuna.com": "adzuna",
+  "jooble.org": "jooble",
+  "jooble.com": "jooble",
+};
 
 function hostname(url: string): string | null {
   try {
@@ -336,7 +343,11 @@ export function selectApplyUrl(urls: string[]): string | null {
     }) ??
     valid.find((url) => {
       const host = hostname(url);
-      return Boolean(host && !findDomainMatch(host, accountRequiredDomains));
+      return Boolean(
+        host &&
+          !findDomainMatch(host, accountRequiredDomains) &&
+          !findDomainMatch(host, Object.keys(discoveryOnlyDomains)),
+      );
     }) ??
     valid[0] ??
     null
@@ -444,6 +455,24 @@ export function validateApplyability(
       requiresLogin: true,
       requiresAccountCreation: true,
       rejectionReason: "login_or_account_required",
+    };
+  }
+
+  const discoveryDomain = host
+    ? findDomainMatch(host, Object.keys(discoveryOnlyDomains))
+    : null;
+  if (discoveryDomain) {
+    const discoveryProvider =
+      discoveryOnlyDomains[discoveryDomain] ?? discoveryDomain;
+    return {
+      ...common,
+      validationStatus: "invalid",
+      validationReason: `${discoveryProvider} is a discovery or aggregator destination, not a direct apply form.`,
+      applyabilityTier: "D",
+      applyabilityScore: 0.25,
+      applyFulfillmentStatus: "discovery_only",
+      applyUrlProvider: discoveryProvider,
+      rejectionReason: "discovery_only",
     };
   }
 
