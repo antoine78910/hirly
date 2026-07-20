@@ -128,8 +128,6 @@ prefix as an inventory placement rule:
 6. `20260720001500_gmail_outcome_batch.sql`
 7. `20260720001600_admin_bounded_contracts.sql`
 8. `20260720001700_service_only_rls.sql`
-9. `20260720001800_posthog_warehouse_containment.sql`
-9. `20260720001800_posthog_warehouse_containment.sql`
 
 Apply these only through the
 [application-database release process](application-database-migration-runbook.md)
