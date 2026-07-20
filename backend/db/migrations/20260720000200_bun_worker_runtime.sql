@@ -80,7 +80,28 @@ AS $$
     run.requested_at,
     run.started_at,
     run.finished_at,
-    '{}'::jsonb,
+    jsonb_strip_nulls(jsonb_build_object(
+      'fetched', CASE
+        WHEN jsonb_typeof(run.summary->'fetched') = 'number'
+          THEN run.summary->'fetched'
+      END,
+      'accepted', CASE
+        WHEN jsonb_typeof(run.summary->'accepted') = 'number'
+          THEN run.summary->'accepted'
+      END,
+      'rejected', CASE
+        WHEN jsonb_typeof(run.summary->'rejected') = 'number'
+          THEN run.summary->'rejected'
+      END,
+      'deduplicated', CASE
+        WHEN jsonb_typeof(run.summary->'deduplicated') = 'number'
+          THEN run.summary->'deduplicated'
+      END,
+      'upserted', CASE
+        WHEN jsonb_typeof(run.summary->'upserted') = 'number'
+          THEN run.summary->'upserted'
+      END
+    )),
     run.error_code
   FROM public.worker_runs AS run
   WHERE run.id = p_run_id
