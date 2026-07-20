@@ -33,7 +33,7 @@ import unicodedata
 from decimal import Decimal
 from pathlib import Path
 from urllib.parse import quote as url_quote, urlparse
-from pydantic import BaseModel, Field, ConfigDict, PrivateAttr
+from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Dict, Any, Literal, Tuple
 from datetime import datetime, timezone, timedelta
 import httpx
@@ -722,7 +722,6 @@ class User(BaseModel):
     require_review_before_send: bool = True
     language: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    _auth_flags: Dict[str, bool] = PrivateAttr(default_factory=dict)
 
 
 class Profile(BaseModel):
@@ -1128,28 +1127,6 @@ async def get_current_user(
     last_failure = "Invalid session"
     for token_source, token in candidates:
         logger.debug("auth_me token_received source=%s path=%s", token_source, request.url.path)
-        if _env_bool("AUTH_JOINED_SESSION_LOOKUP_ENABLED"):
-            resolver = getattr(db, "resolve_auth_session", None)
-            if callable(resolver):
-                resolved = await resolver(token)
-                status = (resolved or {}).get("status")
-                if status == "ok":
-                    user = User(**((resolved or {}).get("user") or {}))
-                    user._auth_flags = {
-                        key: bool(value)
-                        for key, value in ((resolved or {}).get("flags") or {}).items()
-                        if key in {"is_training_creator", "has_training_access", "is_admin"}
-                    }
-                    _set_app_session_cookie(response, token)
-                    return user
-                if status == "expired":
-                    last_failure = "Session expired"
-                elif status == "user_not_found":
-                    last_failure = "User not found"
-                else:
-                    last_failure = "Invalid session"
-                continue
-
         session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
         if not session:
             logger.info("auth_me invalid_token reason=session_not_found source=%s", token_source)
@@ -1196,7 +1173,6 @@ async def _upsert_auth_user(email: str, name: str, picture: Optional[str], extra
             {"user_id": user_id},
             {"$set": update},
         )
-        return {**existing, **update}
     else:
         user_id = f"user_{uuid.uuid4().hex[:12]}"
         user_doc = {
@@ -1209,7 +1185,8 @@ async def _upsert_auth_user(email: str, name: str, picture: Optional[str], extra
         if extra:
             user_doc.update(extra)
         await db.users.insert_one(user_doc)
-        return user_doc
+    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    return user_doc
 
 
 async def _create_app_session(user_id: str, source: str, session_token: Optional[str] = None) -> str:
@@ -1689,26 +1666,11 @@ async def tutorial_session(response: Response):
 
 @api_router.get("/auth/me")
 async def auth_me(user: User = Depends(get_current_user)):
-    flags = user._auth_flags
-    if flags:
-        from training_access import training_open_access_enabled
-
-        profile = await db.profiles.find_one({"user_id": user.user_id}, {"_id": 0})
-        creator = flags.get("is_training_creator", False)
-        training_access = bool(
-            flags.get("has_training_access", False)
-            or training_open_access_enabled()
-            or user.training_access
-            or user.user_id == TUTORIAL_FILMING_USER_ID
-            or _is_admin_email(user.email)
-            or creator
-        )
-    else:
-        profile, creator, training_access = await asyncio.gather(
-            db.profiles.find_one({"user_id": user.user_id}, {"_id": 0}),
-            is_training_creator(db, user.user_id),
-            _resolve_training_access(user),
-        )
+    profile, creator, training_access = await asyncio.gather(
+        db.profiles.find_one({"user_id": user.user_id}, {"_id": 0}),
+        is_training_creator(db, user.user_id),
+        _resolve_training_access(user),
+    )
     logger.info(
         "auth_me cv_readiness user_id=%s profile_exists=%s has_cv_text=%s has_cv_filename=%s has_preferences=%s",
         user.user_id,
@@ -1723,7 +1685,7 @@ async def auth_me(user: User = Depends(get_current_user)):
         "has_preferences": profile is not None and bool(profile.get("target_role")),
         "is_training_creator": creator,
         "has_training_access": training_access,
-        "is_admin": _is_admin_email(user.email) or flags.get("is_admin", False) or bool(getattr(user, "is_admin", False)),
+        "is_admin": _is_admin_email(user.email) or bool(getattr(user, "is_admin", False)),
     }
 
 
@@ -2451,7 +2413,7 @@ async def _update_user_billing_by_customer_id(customer_id: str, updates: Dict[st
 async def _resolve_user_id_for_stripe_customer(customer_id: str) -> Optional[str]:
     if not customer_id:
         return None
-    existing = await db.users.find_one({"stripe_customer_id": customer_id}, {"_id": 0, "user_id": 1})
+    existing = await db.users.find_one({"billing.stripe_customer_id": customer_id}, {"_id": 0, "user_id": 1})
     if existing:
         return existing.get("user_id")
     if not _stripe_configured():
@@ -3696,14 +3658,14 @@ async def _posthog_resolve_billing_user_id(
         return resolved
     if subscription_id:
         found = await db.users.find_one(
-            {"stripe_subscription_id": subscription_id},
+            {"billing.stripe_subscription_id": subscription_id},
             {"_id": 0, "user_id": 1},
         )
         if found and found.get("user_id"):
             return str(found["user_id"])
     if customer_id:
         found = await db.users.find_one(
-            {"stripe_customer_id": customer_id},
+            {"billing.stripe_customer_id": customer_id},
             {"_id": 0, "user_id": 1},
         )
         if found and found.get("user_id"):
