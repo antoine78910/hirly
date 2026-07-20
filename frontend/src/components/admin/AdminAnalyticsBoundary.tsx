@@ -39,7 +39,7 @@ export function validatedAdminPostHogUrl(
     ) {
       return null;
     }
-    for (const key of url.searchParams.keys()) {
+    for (const key of Array.from(url.searchParams.keys())) {
       if (/(?:api[_-]?)?(?:key|token)|secret|password|authorization/i.test(key)) {
         return null;
       }
