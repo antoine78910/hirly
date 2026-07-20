@@ -6068,19 +6068,17 @@ async def upload_cv(file: UploadFile = File(...), user: User = Depends(get_curre
         {"$set": profile_doc},
         upsert=True,
     )
-    if _posthog_client is not None:
-        with new_context():
-            identify_context(user.user_id)
-            posthog_capture(
-                "cv_uploaded",
-                properties={
-                    "file_format": fmt,
-                    "has_photo": bool(photo_bytes),
-                    "skills_count": len(extracted.get("skills") or []),
-                    "experience_count": len(extracted.get("experience") or []),
-                    "used_ai_fallback": bool(extracted.get("extraction_fallback_reason")),
-                },
-            )
+    _capture_posthog_registry_event(
+        "cv_uploaded",
+        user.user_id,
+        {
+            "file_format": fmt,
+            "has_photo": bool(photo_bytes),
+            "skills_count": len(extracted.get("skills") or []),
+            "experience_count": len(extracted.get("experience") or []),
+            "used_ai_fallback": bool(extracted.get("extraction_fallback_reason")),
+        },
+    )
     # don't ship the heavy fields back
     profile_doc.pop("cv_text", None)
     profile_doc.pop("cv_original_b64", None)
@@ -6399,10 +6397,7 @@ async def delete_account(user: User = Depends(get_current_user)):
     """Wipe everything the user created. Sessions are revoked too."""
     user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0}) or {}
     logger.info("account_delete_start user_id=%s", user.user_id)
-    if _posthog_client is not None:
-        with new_context():
-            identify_context(user.user_id)
-            posthog_capture("account_deleted")
+    _capture_posthog_registry_event("account_deleted", user.user_id)
     await _cancel_stripe_subscription_for_user(user_doc)
     await _delete_all_user_data(user.user_id)
     await _delete_supabase_auth_user(user_doc)
@@ -9906,16 +9901,15 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
             log_phase("response_build_done")
             phase = "swipe_complete"
             log_phase("swipe_complete")
-            if _posthog_client is not None and not existing:
-                with new_context():
-                    identify_context(user.user_id)
-                    posthog_capture(
-                        "job_dismissed",
-                        properties={
-                            "job_provider": job.get("provider"),
-                            "ats_provider": job.get("ats_provider"),
-                        },
-                    )
+            if not existing:
+                _capture_posthog_registry_event(
+                    "job_dismissed",
+                    user.user_id,
+                    {
+                        "job_provider": job.get("provider"),
+                        "ats_provider": job.get("ats_provider"),
+                    },
+                )
             return response
 
         profile = await db.profiles.find_one({"user_id": user.user_id}, {"_id": 0})
@@ -10069,18 +10063,17 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
             application_id=saved_doc.get("application_id"),
             status_returned_to_frontend=response.get("submission_status"),
         )
-        if _posthog_client is not None and not existing_app:
-            with new_context():
-                identify_context(user.user_id)
-                posthog_capture(
-                    "job_application_created",
-                    properties={
-                        "application_id": saved_doc.get("application_id"),
-                        "job_provider": job.get("provider"),
-                        "ats_provider": job.get("ats_provider"),
-                        "package_status": saved_doc.get("package_status"),
-                    },
-                )
+        if not existing_app:
+            _capture_posthog_registry_event(
+                "job_application_created",
+                user.user_id,
+                {
+                    "application_id": saved_doc.get("application_id"),
+                    "job_provider": job.get("provider"),
+                    "ats_provider": job.get("ats_provider"),
+                    "package_status": saved_doc.get("package_status"),
+                },
+            )
         return response
     except LLMProviderNotConfigured as exc:
         phase = "application_generation_start"
