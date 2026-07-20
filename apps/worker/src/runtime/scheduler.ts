@@ -8,11 +8,6 @@ interface SchedulerOptions {
   serviceVersion: string;
 }
 
-export interface SchedulerTickOptions {
-  now?: Date;
-  limit?: number;
-}
-
 function fieldMatches(field: string, value: number): boolean {
   return field.split(",").some((part) => {
     if (part === "*") return true;
@@ -65,31 +60,6 @@ export function nextCronOccurrence(
   throw new Error("cron has no occurrence within one year");
 }
 
-export async function runSchedulerTick(
-  store: RuntimeStore,
-  options: SchedulerTickOptions = {},
-): Promise<number> {
-  const now = options.now ?? new Date();
-  const schedules = await store.dueSchedules(options.limit ?? 25);
-  let enqueued = 0;
-  for (const schedule of schedules) {
-    let occurrence = schedule.nextDueAt;
-    const catchUpLimit = Math.max(1, schedule.maxCatchUp);
-    for (let index = 0; index < catchUpLimit && occurrence <= now; index += 1) {
-      const successor = nextCronOccurrence(
-        schedule.cronExpression,
-        schedule.timezone,
-        occurrence,
-      );
-      const runId = await store.enqueueDueSchedule(schedule.id, successor);
-      if (!runId) break;
-      enqueued += 1;
-      occurrence = successor;
-    }
-  }
-  return enqueued;
-}
-
 export class Scheduler {
   private readonly controller = new AbortController();
   private promise: Promise<void> | null = null;
@@ -107,7 +77,14 @@ export class Scheduler {
   private async run(): Promise<void> {
     while (!this.controller.signal.aborted) {
       try {
-        await runSchedulerTick(this.store);
+        for (const schedule of await this.store.dueSchedules(25)) {
+          const nextDueAt = nextCronOccurrence(
+            schedule.cronExpression,
+            schedule.timezone,
+            schedule.nextDueAt,
+          );
+          await this.store.enqueueDueSchedule(schedule.id, nextDueAt);
+        }
       } catch (error) {
         this.logger.emit({
           service: "hirly-worker",
@@ -119,17 +96,7 @@ export class Scheduler {
           details: { message: safeErrorMessage(error) },
         });
       }
-      await new Promise<void>((resolve) => {
-        const timer = setTimeout(resolve, this.options.pollMs);
-        this.controller.signal.addEventListener(
-          "abort",
-          () => {
-            clearTimeout(timer);
-            resolve();
-          },
-          { once: true },
-        );
-      });
+      await Bun.sleep(this.options.pollMs);
     }
   }
 
