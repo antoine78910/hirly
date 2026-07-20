@@ -198,6 +198,9 @@ describe("G009 additive database boundary", () => {
     expect(migration).toContain(
       "UNIQUE (run_id, source_id, external_id, content_hash)",
     );
+    expect(migration).toContain(
+      "UNIQUE (id, source_id, external_id, content_hash)",
+    );
     expect(migration).toContain("UNIQUE (id, source_id, external_id)");
     expect(migration).toContain(
       "CONSTRAINT job_occurrences_source_external_unique UNIQUE (source_id, external_id)",
