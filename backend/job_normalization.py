@@ -325,6 +325,8 @@ def extract_normalized_job_columns(job_dict: Dict[str, Any]) -> Dict[str, Any]:
         "apply_fulfillment_status": job_dict.get("apply_fulfillment_status"),
         "apply_url_provider": job_dict.get("apply_url_provider"),
         "selected_apply_url": selected_apply_url,
+        "canonical_apply_url": canonicalize_apply_url(selected_apply_url),
+        "ats_job_id": job_dict.get("ats_job_id"),
         "validation_status": job_dict.get("validation_status"),
         "validation_reason": job_dict.get("validation_reason"),
         "validation_checked_at": job_dict.get("validation_checked_at"),

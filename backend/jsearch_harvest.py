@@ -14,6 +14,8 @@ thin spot in the feed.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 import os
 import time
@@ -33,6 +35,21 @@ from jobs_service import _cooldown_until, _is_rate_limit_error, _set_rate_limit_
 from location_intelligence import country_to_jsearch_language
 
 logger = logging.getLogger(__name__)
+
+
+def _combo_partition_id(role: str, city: str) -> str:
+    return f"{city}, France|{role}"
+
+
+def _authoritative_manifest(combos: List[tuple[str, str]]) -> Dict[str, Any]:
+    partition_ids = sorted({_combo_partition_id(role, city) for role, city in combos})
+    encoded = json.dumps(partition_ids, ensure_ascii=False, separators=(",", ":")).encode()
+    return {
+        "manifest_version": "jsearch-harvest.v2",
+        "manifest_digest": hashlib.sha256(encoded).hexdigest(),
+        "expected_partition_count": len(partition_ids),
+        "expected_partition_ids": partition_ids,
+    }
 
 # Same top 10 French job markets as france_travail_harvest.py, kept in
 # lockstep deliberately -- both harvesters are prioritizing the same
@@ -254,6 +271,7 @@ async def harvest_jsearch(
             "accounting_contract": {"state": "known"},
             "errors": [],
             "runs": [],
+            "authoritative_manifest": _authoritative_manifest(combos),
         }
 
         if start_offset is not None:
@@ -272,7 +290,11 @@ async def harvest_jsearch(
         for position, combo_index in enumerate(selected_indices):
             role, city = combos[combo_index]
             location_label = f"{city}, France"
-            run: Dict[str, Any] = {"role": role, "location": location_label}
+            run: Dict[str, Any] = {
+                "partition_id": _combo_partition_id(role, city),
+                "role": role,
+                "location": location_label,
+            }
             try:
                 result = await provider.search(JobSearchQuery(
                     role=role,
@@ -295,40 +317,8 @@ async def harvest_jsearch(
                 raw_response = result.raw_response or {}
                 completeness = raw_response.get("completeness")
                 if completeness == "capped_unknown":
-                    child_results = []
-                    child_raw_total = 0
-                    child_jobs_by_id = {
-                        str(job.get("job_id")): job for job in jobs if job.get("job_id")
-                    }
-                    for contract_hint in ("fulltime", "parttime", "contract", "internship"):
-                        child = await provider.search(JobSearchQuery(
-                            role=role,
-                            location=location_label,
-                            country="fr",
-                            language=country_to_jsearch_language("fr"),
-                            limit=page_size * max_pages,
-                            page_size=page_size,
-                            max_pages=max_pages,
-                            date_posted=freshness_window,
-                            contract_hint=contract_hint,
-                        ))
-                        child_results.append((child.raw_response or {}).get("completeness"))
-                        child_raw_total += int((child.raw_response or {}).get("rows_seen") or len(child.jobs or []))
-                        for child_job in child.jobs or []:
-                            if child_job.get("job_id"):
-                                child_jobs_by_id[str(child_job["job_id"])] = child_job
-                    jobs = list(child_jobs_by_id.values())
-                    fetched = len(jobs)
-                    run["fetched"] = fetched
-                    run["split_children"] = child_results
-                    completeness = (
-                        "complete_partition_split"
-                        if all(state == "complete_without_source_total" for state in child_results)
-                        else "capped_unknown"
-                    )
-                else:
-                    child_raw_total = 0
-                run["raw_records"] = int(raw_response.get("rows_seen") or fetched) + child_raw_total
+                    run["cap_resolution"] = "blocked_no_disjoint_exhaustive_source_partition"
+                run["raw_records"] = int(raw_response.get("rows_seen") or fetched)
                 run["normalized"] = fetched
                 run["rejected_by_reason"] = {
                     "normalization_failed": max(0, run["raw_records"] - fetched)
@@ -410,7 +400,16 @@ async def harvest_jsearch(
         if start_offset is None:
             _harvest_cursor = cursor_next
         summary["cursor_next"] = cursor_next
-        summary["completeness"] = "complete_snapshot" if all_partitions_complete else "partial"
+        full_manifest_attempted = (
+            len(summary["runs"]) == len(combos)
+            and {str(run.get("partition_id")) for run in summary["runs"]}
+            == set(summary["authoritative_manifest"]["expected_partition_ids"])
+        )
+        summary["completeness"] = (
+            "complete_snapshot"
+            if all_partitions_complete and full_manifest_attempted
+            else "partial_snapshot"
+        )
         summary["combos_in_backoff"] = len(_combo_next_eligible_cycle)
         summary["elapsed_ms"] = int((time.perf_counter() - started) * 1000)
 
@@ -478,12 +477,7 @@ async def run_jsearch_harvest_loop(db) -> None:
                     summary["proof_scope"] = {
                         "scope_kind": "provider",
                         "providers": ["jsearch"],
-                        "manifest_version": "jsearch-harvest.v1",
-                        "expected_partition_count": len(partition_runs),
-                        "expected_partition_ids": [
-                            partition_identity(fact, index)
-                            for index, fact in enumerate(partition_runs)
-                        ],
+                        **(summary.get("authoritative_manifest") or {}),
                     }
                     summary = accounting_summary(summary)
                     await persist_terminal_partitions(db, ledger_run_id, partition_runs)

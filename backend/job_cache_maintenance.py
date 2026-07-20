@@ -10,6 +10,8 @@ from __future__ import annotations
 import logging
 import os
 import re
+import hashlib
+import json
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
 
@@ -56,7 +58,17 @@ async def _has_complete_snapshot_proof(
     if not finished_at or finished_at < datetime.now(timezone.utc) - timedelta(hours=max_age_hours):
         return False
     proof = (run.get("summary") or {}).get("proof_scope")
-    if not isinstance(proof, dict) or not proof.get("manifest_version"):
+    authoritative = (run.get("summary") or {}).get("authoritative_manifest")
+    if (
+        not isinstance(proof, dict)
+        or not isinstance(authoritative, dict)
+        or not proof.get("manifest_version")
+        or proof != {
+            "scope_kind": proof.get("scope_kind"),
+            "providers": proof.get("providers"),
+            **authoritative,
+        }
+    ):
         return False
     scope_kind = proof.get("scope_kind")
     providers = {str(item).strip().lower() for item in (proof.get("providers") or []) if item}
@@ -75,6 +87,11 @@ async def _has_complete_snapshot_proof(
     if not isinstance(expected_ids, list) or not expected_ids or len(expected_ids) != len(set(expected_ids)):
         return False
     if int(proof.get("expected_partition_count") or -1) != len(expected_ids):
+        return False
+    calculated_digest = hashlib.sha256(
+        json.dumps(sorted(expected_ids), ensure_ascii=False, separators=(",", ":")).encode()
+    ).hexdigest()
+    if proof.get("manifest_digest") != calculated_digest:
         return False
     facts = await partitions.find({"run_id": run_id}, {"_id": 0}).limit(10000).to_list(10000)
     actual_ids = [fact.get("partition_id") for fact in facts]

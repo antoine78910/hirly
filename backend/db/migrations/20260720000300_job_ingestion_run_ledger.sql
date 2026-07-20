@@ -43,15 +43,44 @@ CREATE TABLE IF NOT EXISTS public.python_ingestion_schedules (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
 
--- Cold-start expectations exist before any in-process loop reaches its initial
--- delay or attempts a claim, so a never-started loop is observable.
-INSERT INTO public.python_ingestion_schedules (id, source_id, cadence_seconds, enabled, next_expected_at)
-VALUES
-  ('python-france-travail-harvest', 'france_travail', 300, true, clock_timestamp() + interval '5 minutes'),
-  ('python-jsearch-harvest', 'jsearch', 900, true, clock_timestamp() + interval '15 minutes'),
-  ('python-ats-direct-maintenance', 'direct_ats', 300, true, clock_timestamp() + interval '5 minutes'),
-  ('python-company-discovery', 'company_discovery', 600, true, clock_timestamp() + interval '10 minutes')
-ON CONFLICT (id) DO NOTHING;
+CREATE OR REPLACE FUNCTION public.python_ingestion_schedule_sync(
+  p_schedule_id text,
+  p_source text,
+  p_cadence_seconds integer,
+  p_enabled boolean
+)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF length(btrim(p_schedule_id)) = 0
+    OR length(btrim(p_source)) = 0
+    OR p_cadence_seconds NOT BETWEEN 60 AND 86400
+  THEN
+    RAISE EXCEPTION 'invalid Python ingestion schedule registration' USING ERRCODE = '22023';
+  END IF;
+  INSERT INTO public.python_ingestion_schedules (
+    id, source_id, cadence_seconds, enabled, next_expected_at
+  )
+  VALUES (
+    p_schedule_id, p_source, p_cadence_seconds, p_enabled,
+    clock_timestamp() + make_interval(secs => p_cadence_seconds)
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    source_id = EXCLUDED.source_id,
+    cadence_seconds = EXCLUDED.cadence_seconds,
+    enabled = EXCLUDED.enabled,
+    next_expected_at = CASE
+      WHEN public.python_ingestion_schedules.enabled IS DISTINCT FROM EXCLUDED.enabled
+        THEN EXCLUDED.next_expected_at
+      ELSE public.python_ingestion_schedules.next_expected_at
+    END,
+    updated_at = clock_timestamp();
+  RETURN true;
+END
+$$;
 
 CREATE TABLE IF NOT EXISTS public.worker_run_partitions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -384,12 +413,14 @@ END
 $$;
 
 REVOKE ALL ON FUNCTION public.python_ingestion_run_begin(text, text, integer, text, integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.python_ingestion_schedule_sync(text, text, integer, boolean) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.python_ingestion_run_heartbeat(uuid, uuid, bigint, text, integer) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.python_ingestion_partition_record(uuid, uuid, bigint, text, text, text, jsonb, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.python_ingestion_run_complete(uuid, uuid, bigint, text, text, text, jsonb) FROM PUBLIC;
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
+    GRANT EXECUTE ON FUNCTION public.python_ingestion_schedule_sync(text, text, integer, boolean) TO service_role;
     GRANT EXECUTE ON FUNCTION public.python_ingestion_run_begin(text, text, integer, text, integer) TO service_role;
     GRANT EXECUTE ON FUNCTION public.python_ingestion_run_heartbeat(uuid, uuid, bigint, text, integer) TO service_role;
     GRANT EXECUTE ON FUNCTION public.python_ingestion_partition_record(uuid, uuid, bigint, text, text, text, jsonb, text) TO service_role;
@@ -466,6 +497,19 @@ HAVING count(*) >= 3;
 REVOKE ALL ON public.python_ingestion_schedules FROM PUBLIC;
 REVOKE ALL ON public.worker_run_partitions FROM PUBLIC;
 REVOKE ALL ON public.worker_ingestion_alerts FROM PUBLIC;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
+    REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.python_ingestion_schedules, public.worker_run_partitions FROM service_role;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'hirly_inventory_worker') THEN
+    REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.python_ingestion_schedules, public.worker_run_partitions FROM hirly_inventory_worker;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'hirly_inventory_operator') THEN
+    REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.python_ingestion_schedules, public.worker_run_partitions FROM hirly_inventory_operator;
+  END IF;
+END
+$$;
 GRANT SELECT ON public.python_ingestion_schedules, public.worker_run_partitions, public.worker_ingestion_alerts
   TO hirly_inventory_reader, hirly_inventory_operator;
 -- Proof partitions are writable only through the fenced service-role RPC.

@@ -163,6 +163,7 @@ from jsearch_harvest import (
 )
 from rome_profile_service import get_rome_profile, normalize_rome_code, rome_profile_enabled
 from ats_source_service import (
+    ats_direct_maintenance_loop_enabled,
     discover_ats_sources_from_cached_jobs,
     discover_friendly_company_career_pages,
     refresh_ats_source,
@@ -170,6 +171,7 @@ from ats_source_service import (
     run_ats_direct_maintenance_loop,
 )
 from company_discovery_crawlers import (
+    company_discovery_loop_enabled,
     last_discovery_summary as company_discovery_last_summary,
     run_company_discovery,
     run_company_discovery_loop,
@@ -17141,7 +17143,23 @@ async def startup_seed():
     # Set PAUSE_JOB_MAINTENANCE_CRONS=true to stop background harvest under DB load.
     blitz = _env_bool("JOBS_INVENTORY_BLITZ", True)
     pause_default = not blitz
-    if _env_bool("PAUSE_JOB_MAINTENANCE_CRONS", pause_default):
+    crons_paused = _env_bool("PAUSE_JOB_MAINTENANCE_CRONS", pause_default)
+    sync_schedule = getattr(db, "sync_python_ingestion_schedule", None)
+    if callable(sync_schedule):
+        schedule_states = (
+            ("python-france-travail-harvest", "france_travail", max(300, _env_int("FT_HARVEST_INTERVAL_MINUTES", 5) * 60), not crons_paused and ft_harvest_enabled()),
+            ("python-jsearch-harvest", "jsearch", max(300, _env_int("JSEARCH_HARVEST_INTERVAL_MINUTES", 15) * 60), not crons_paused and jsearch_harvest_enabled()),
+            ("python-ats-direct-maintenance", "direct_ats", max(300, _env_int("ATS_DIRECT_MAINTENANCE_INTERVAL_MINUTES", 5) * 60), not crons_paused and ats_direct_maintenance_loop_enabled()),
+            ("python-company-discovery", "company_discovery", max(300, _env_int("COMPANY_DISCOVERY_LOOP_INTERVAL_MINUTES", 10) * 60), not crons_paused and company_discovery_loop_enabled()),
+        )
+        for schedule_id, source, cadence_seconds, enabled in schedule_states:
+            await sync_schedule(
+                schedule_id=schedule_id,
+                source=source,
+                cadence_seconds=cadence_seconds,
+                enabled=enabled,
+            )
+    if crons_paused:
         logger.warning(
             "job_maintenance_crons_paused blitz=%s hint=set_PAUSE_JOB_MAINTENANCE_CRONS_false_to_fill_inventory",
             blitz,

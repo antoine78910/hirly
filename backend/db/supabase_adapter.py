@@ -26,6 +26,7 @@ MIGRATED_TABLES = {
     "users",
     "user_sessions",
     "jobs",
+    "job_dedup_candidates",
     "ats_company_sources",
     "geo_places",
     "company_boards",
@@ -56,6 +57,7 @@ TABLE_PRIMARY_KEYS = {
     "users": "user_id",
     "user_sessions": "session_token",
     "jobs": "job_id",
+    "job_dedup_candidates": "candidate_id",
     "ats_company_sources": "id",
     "geo_places": "geoname_id",
     "company_boards": "board_id",
@@ -111,6 +113,8 @@ TABLE_FILTER_COLUMNS = {
         "apply_fulfillment_status",
         "apply_url_provider",
         "selected_apply_url",
+        "canonical_apply_url",
+        "ats_job_id",
         "validation_status",
         "validation_reason",
         "validation_checked_at",
@@ -376,6 +380,17 @@ def _supabase_row(table: str, document: Document) -> Dict[str, Any]:
             "provider": doc.get("provider"),
             "external_id": doc.get("external_id"),
             **columns,
+            "data": doc,
+        }
+    if table == "job_dedup_candidates":
+        return {
+            "candidate_id": _document_key(table, doc),
+            "left_job_id": doc.get("left_job_id"),
+            "right_job_id": doc.get("right_job_id"),
+            "candidate_type": doc.get("candidate_type"),
+            "candidate_key": doc.get("candidate_key"),
+            "created_at": doc.get("created_at"),
+            "last_seen_at": doc.get("last_seen_at"),
             "data": doc,
         }
     if table == "ats_company_sources":
@@ -1236,6 +1251,7 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
         self.user_sessions = SupabaseCollectionAdapter("user_sessions", supabase_url, secret_key)
         self.profiles = SupabaseCollectionAdapter("profiles", supabase_url, secret_key)
         self.jobs = SupabaseCollectionAdapter("jobs", supabase_url, secret_key)
+        self.job_dedup_candidates = SupabaseCollectionAdapter("job_dedup_candidates", supabase_url, secret_key)
         self.worker_runs = SupabaseCollectionAdapter("worker_runs", supabase_url, secret_key)
         self.worker_run_partitions = SupabaseCollectionAdapter("worker_run_partitions", supabase_url, secret_key)
         self.ats_company_sources = SupabaseCollectionAdapter("ats_company_sources", supabase_url, secret_key)
@@ -1303,6 +1319,25 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
                 raise RuntimeError("python_ingestion_run_begin returned an unfenced lease")
             self._python_ingestion_leases[str(result["run_id"])] = result
         return result
+
+    async def sync_python_ingestion_schedule(
+        self,
+        *,
+        schedule_id: str,
+        source: str,
+        cadence_seconds: int,
+        enabled: bool,
+    ) -> bool:
+        result = await self._python_ingestion_rpc(
+            "python_ingestion_schedule_sync",
+            {
+                "p_schedule_id": schedule_id,
+                "p_source": source,
+                "p_cadence_seconds": cadence_seconds,
+                "p_enabled": enabled,
+            },
+        )
+        return result is True
 
     async def heartbeat_python_ingestion_run(self, run_id: str) -> bool:
         lease = self._python_ingestion_leases.get(str(run_id))

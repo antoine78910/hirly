@@ -12,6 +12,8 @@ Legacy city-only mode remains available when blitz is disabled.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 import os
 import time
@@ -28,6 +30,21 @@ from ingestion_run_lease import (
 from jobs_service import upsert_imported_jobs
 
 logger = logging.getLogger(__name__)
+
+
+def _partition_id(target: Dict[str, Any]) -> str:
+    return f"{target.get('location') or ''}|{target.get('role') or ''}"
+
+
+def _authoritative_manifest(targets: List[Dict[str, Any]]) -> Dict[str, Any]:
+    partition_ids = sorted({_partition_id(target) for target in targets})
+    encoded = json.dumps(partition_ids, ensure_ascii=False, separators=(",", ":")).encode()
+    return {
+        "manifest_version": "france-travail-harvest.v2",
+        "manifest_digest": hashlib.sha256(encoded).hexdigest(),
+        "expected_partition_count": len(partition_ids),
+        "expected_partition_ids": partition_ids,
+    }
 
 # Broader FR coverage when not in département-blitz mode.
 DEFAULT_HARVEST_CITIES = [
@@ -238,6 +255,7 @@ async def harvest_france_travail(
             "accounting_contract": {"state": "known"},
             "errors": [],
             "runs": [],
+            "authoritative_manifest": _authoritative_manifest(targets),
         }
         semaphore = asyncio.Semaphore(concurrency)
         runs: List[Optional[Dict[str, Any]]] = [None] * queries
@@ -247,6 +265,7 @@ async def harvest_france_travail(
             location_label = target["location"]
             role = target.get("role") or ""
             run: Dict[str, Any] = {
+                "partition_id": _partition_id(target),
                 "city": target.get("label") or location_label,
                 "location": location_label,
                 "role": role or "(all)",
@@ -265,6 +284,7 @@ async def harvest_france_travail(
                     ))
                     jobs = list(result.jobs or [])
                     raw = result.raw_response if isinstance(result.raw_response, dict) else {}
+                    page_responses = [raw]
                     split_depth = 0
                     max_split_depth = max(0, min(_env_int("FT_HARVEST_MAX_SPLIT_DEPTH", 3), 8))
                     child_states = []
@@ -290,19 +310,32 @@ async def harvest_france_travail(
                                 by_id[str(job["job_id"])] = job
                         jobs = list(by_id.values())
                         raw = child.raw_response if isinstance(child.raw_response, dict) else {}
+                        page_responses.append(raw)
                         child_states.append(raw.get("pagination_states") or [])
                         split_depth += 1
                     run["fetched"] = len(jobs)
                     run["split_depth"] = split_depth
                     run["child_pagination_states"] = child_states
-                    run["raw_records"] = int(raw.get("rows_seen") or len(jobs))
+                    run["raw_records"] = sum(
+                        int(response.get("rows_seen") or 0) for response in page_responses
+                    ) or len(jobs)
                     run["normalized"] = len(jobs)
                     run["rejected_by_reason"] = {
                         "normalization_failed": max(0, run["raw_records"] - len(jobs))
                     }
-                    states = raw.get("pagination_states") or []
-                    run["pages_requested"] = sum(int(state.get("pages_completed") or 0) for state in states)
-                    run["pages_completed"] = run["pages_requested"]
+                    all_states = [
+                        state
+                        for response in page_responses
+                        for state in (response.get("pagination_states") or [])
+                    ]
+                    run["pages_requested"] = sum(
+                        int(state.get("pages_requested", state.get("pages_completed", 0)) or 0)
+                        for state in all_states
+                    )
+                    run["pages_completed"] = sum(
+                        int(state.get("pages_completed") or 0) for state in all_states
+                    )
+                    run["retries"] = sum(int(state.get("retries") or 0) for state in all_states)
                     run["completeness"] = raw.get("completeness") or "unknown"
                     run["partition_status"] = (
                         "completed_with_results"
@@ -340,6 +373,7 @@ async def harvest_france_travail(
             summary["jobs_upserted"] += int(run.get("upserted") or 0)
             summary["pages_requested"] += int(run.get("pages_requested") or 0)
             summary["pages_completed"] += int(run.get("pages_completed") or 0)
+            summary["retries"] += int(run.get("retries") or 0)
             summary["raw_records"] += int(run.get("raw_records") or 0)
             summary["normalized_records"] += int(run.get("normalized") or 0)
             for reason, count in (run.get("rejected_by_reason") or {}).items():
@@ -368,7 +402,16 @@ async def harvest_france_travail(
         if start_offset is None and all_partitions_attempted:
             _harvest_cursor = (cursor + queries) % len(targets)
         summary["cursor_next"] = (cursor + queries) % len(targets) if all_partitions_attempted else cursor
-        summary["completeness"] = "complete_snapshot" if all_partitions_complete else "partial"
+        full_manifest_attempted = (
+            len(runs) == len(targets)
+            and {str(run.get("partition_id")) for run in runs if run}
+            == set(summary["authoritative_manifest"]["expected_partition_ids"])
+        )
+        summary["completeness"] = (
+            "complete_snapshot"
+            if all_partitions_complete and full_manifest_attempted
+            else "partial_snapshot"
+        )
         summary["elapsed_ms"] = int((time.perf_counter() - started) * 1000)
 
     global _last_run_summary
@@ -439,12 +482,7 @@ async def run_france_travail_harvest_loop(db) -> None:
                     summary["proof_scope"] = {
                         "scope_kind": "provider",
                         "providers": ["france_travail"],
-                        "manifest_version": "france-travail-harvest.v1",
-                        "expected_partition_count": len(partition_runs),
-                        "expected_partition_ids": [
-                            partition_identity(fact, index)
-                            for index, fact in enumerate(partition_runs)
-                        ],
+                        **(summary.get("authoritative_manifest") or {}),
                     }
                     summary = accounting_summary(summary)
                     await persist_terminal_partitions(db, ledger_run_id, partition_runs)

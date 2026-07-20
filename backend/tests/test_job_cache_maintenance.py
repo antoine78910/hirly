@@ -1,4 +1,6 @@
 import asyncio
+import hashlib
+import json
 from datetime import datetime, timezone, timedelta
 
 import pytest
@@ -82,6 +84,15 @@ class _FakeDB:
     def __init__(self, jobs=None, *, completeness="missing", proof_scope="global"):
         self.jobs = _Collection(jobs or [])
         providers = ["france_travail"] if proof_scope == "provider" else []
+        expected_partition_ids = ["p1"]
+        authoritative_manifest = {
+            "manifest_version": "test.v1",
+            "manifest_digest": hashlib.sha256(
+                json.dumps(expected_partition_ids, separators=(",", ":")).encode()
+            ).hexdigest(),
+            "expected_partition_count": 1,
+            "expected_partition_ids": expected_partition_ids,
+        }
         self.worker_runs = _Collection(
             [{
                 "id": "run-complete",
@@ -89,12 +100,10 @@ class _FakeDB:
                 "status": "succeeded",
                 "completeness_state": completeness,
                 "finished_at": datetime.now(timezone.utc).isoformat(),
-                "summary": {"proof_scope": {
+                "summary": {"authoritative_manifest": authoritative_manifest, "proof_scope": {
                     "scope_kind": proof_scope,
                     "providers": providers,
-                    "manifest_version": "test.v1",
-                    "expected_partition_count": 1,
-                    "expected_partition_ids": ["p1"],
+                    **authoritative_manifest,
                 }},
             }]
             if completeness != "missing" else []
