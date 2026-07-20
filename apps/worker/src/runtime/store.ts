@@ -1,5 +1,5 @@
-import type { Provider, RunView } from "@hirly/contracts";
-import type { WorkerRepository } from "@hirly/db";
+import type { CanonicalJob, Provider, RunView } from "@hirly/contracts";
+import type { Lease, WorkerRepository } from "@hirly/db";
 import type { DueSchedule, RuntimeStore } from "./types";
 
 export class PostgresRuntimeStore implements RuntimeStore {
@@ -24,5 +24,12 @@ export class PostgresRuntimeStore implements RuntimeStore {
 
   async getRun(runId: string): Promise<RunView | null> {
     return this.repository.getRun(runId);
+  }
+
+  writeJobsAndComplete(
+    lease: Lease,
+    jobs: CanonicalJob[],
+  ): Promise<boolean> {
+    return this.repository.writeJobsAndComplete(lease, jobs);
   }
 }

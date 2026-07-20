@@ -16,6 +16,7 @@
         "@hirly/config": "workspace:*",
         "@hirly/contracts": "workspace:*",
         "@hirly/db": "workspace:*",
+        "@hirly/ingestion": "workspace:*",
         "@hirly/observability": "workspace:*",
         "zod": "4.1.12",
       },
@@ -54,6 +55,16 @@
         "typescript": "5.9.3",
       },
     },
+    "packages/ingestion": {
+      "name": "@hirly/ingestion",
+      "version": "0.1.0",
+      "dependencies": {
+        "@hirly/contracts": "workspace:*",
+      },
+      "devDependencies": {
+        "typescript": "5.9.3",
+      },
+    },
     "packages/observability": {
       "name": "@hirly/observability",
       "version": "0.1.0",
@@ -71,6 +82,8 @@
     "@hirly/contracts": ["@hirly/contracts@workspace:packages/contracts"],
 
     "@hirly/db": ["@hirly/db@workspace:packages/db"],
+
+    "@hirly/ingestion": ["@hirly/ingestion@workspace:packages/ingestion"],
 
     "@hirly/observability": ["@hirly/observability@workspace:packages/observability"],
 

@@ -3,7 +3,12 @@ import type {
   Lease,
   WorkerRepository,
 } from "@hirly/db";
-import type { EnqueueRun, Provider, RunView } from "@hirly/contracts";
+import type {
+  CanonicalJob,
+  EnqueueRun,
+  Provider,
+  RunView,
+} from "@hirly/contracts";
 
 export type QueueRepository = Pick<
   WorkerRepository,
@@ -15,6 +20,10 @@ export interface RuntimeStore {
   dueSchedules(limit: number): Promise<DueSchedule[]>;
   enqueueDueSchedule(scheduleId: string, nextDueAt: Date): Promise<string | null>;
   getRun(runId: string): Promise<RunView | null>;
+  writeJobsAndComplete?(
+    lease: Lease,
+    jobs: CanonicalJob[],
+  ): Promise<boolean>;
 }
 
 export interface DueSchedule {
@@ -27,7 +36,14 @@ export interface DueSchedule {
 }
 
 export interface TaskHandler {
-  (task: ClaimedTask, signal: AbortSignal): Promise<void>;
+  (
+    task: ClaimedTask,
+    signal: AbortSignal,
+  ): Promise<TaskHandlerResult | void>;
+}
+
+export interface TaskHandlerResult {
+  taskCompleted: true;
 }
 
 export interface TaskHandlers {

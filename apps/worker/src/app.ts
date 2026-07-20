@@ -21,7 +21,7 @@ export async function startApplication(
   const health = { ready: false };
   const consumer = new Consumer(
     repository,
-    createTaskHandlers(store),
+    createTaskHandlers(store, logger),
     logger,
     {
       concurrency: config.WORKER_CONCURRENCY,

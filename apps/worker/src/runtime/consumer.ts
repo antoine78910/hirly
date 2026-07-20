@@ -113,9 +113,11 @@ export class Consumer {
     let outcome: "succeeded" | "retryable" | "failed" = "succeeded";
     let reasonCode: string | undefined;
     try {
-      await handler(task, taskController.signal);
-      const current = await this.repository.finish(task, "succeeded");
-      if (!current) throw new PermanentTaskError("lease_lost", "lease lost");
+      const result = await handler(task, taskController.signal);
+      if (!result?.taskCompleted) {
+        const current = await this.repository.finish(task, "succeeded");
+        if (!current) throw new PermanentTaskError("lease_lost", "lease lost");
+      }
     } catch (error) {
       const permanent = error instanceof PermanentTaskError;
       const exhausted = task.attempts >= task.maxAttempts;
