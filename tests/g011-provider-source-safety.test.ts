@@ -44,6 +44,13 @@ function withoutRoutineBodies(sql: string): string {
   return sql.replace(/(\$[A-Za-z_]*\$)[\s\S]*?\1/g, "");
 }
 
+function withoutFreshFranceTravailOwnerSeed(sql: string): string {
+  return sql.replace(
+    /INSERT INTO public\.provider_registry \([\s\S]*?'france_travail'[\s\S]*?ON CONFLICT \(provider\) DO NOTHING;/,
+    "",
+  );
+}
+
 describe("G011 provider and source safety contract", () => {
   test("retains provider_registry as the only writer ownership authority", () => {
     const sourceBoundary = read(
@@ -52,7 +59,9 @@ describe("G011 provider and source safety contract", () => {
     expect(sourceBoundary).toContain("registry.writer_runtime = 'typescript'");
 
     for (const { name, sql } of forwardMigrations()) {
-      const migrationCommands = withoutRoutineBodies(sql);
+      const migrationCommands = withoutFreshFranceTravailOwnerSeed(
+        withoutRoutineBodies(sql),
+      );
       expect(
         migrationCommands,
         `${name} must not transfer provider ownership while applying`,
@@ -79,6 +88,14 @@ describe("G011 provider and source safety contract", () => {
         );
       }
     }
+    const ownershipMigration = read(
+      `backend/db/migrations/${ownershipEpochMigrationName}`,
+    );
+    expect(ownershipMigration).toMatch(
+      /'france_travail', 'official-api', 'unverified', NULL,\s*false, 'python'/,
+    );
+    expect(ownershipMigration).toContain("0, false");
+    expect(ownershipMigration).toContain("ON CONFLICT (provider) DO NOTHING");
   });
 
   test("retains the complete source-policy activation gate", () => {

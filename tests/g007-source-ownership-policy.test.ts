@@ -22,6 +22,13 @@ function stripDollarQuotedRoutineBodies(sql: string): string {
   );
 }
 
+function stripFreshFranceTravailOwnerSeed(sql: string): string {
+  return sql.replace(
+    /INSERT INTO public\.provider_registry \([\s\S]*?'france_travail'[\s\S]*?ON CONFLICT \(provider\) DO NOTHING;/,
+    "",
+  );
+}
+
 describe("G007 source ownership and policy invariants", () => {
   test("keeps every characterized ingestion and feed stage Python-owned", () => {
     const registry = JSON.parse(
@@ -78,7 +85,9 @@ describe("G007 source ownership and policy invariants", () => {
       )
       .map((name) => read(`backend/db/migrations/${name}`))
       .join("\n");
-    const applyTimeSql = stripDollarQuotedRoutineBodies(laterMigrations);
+    const applyTimeSql = stripFreshFranceTravailOwnerSeed(
+      stripDollarQuotedRoutineBodies(laterMigrations),
+    );
 
     expect(foundation).toMatch(
       /NOT enabled OR \(\s*authorization_status = 'authorized'\s*AND writer_runtime = 'typescript'/,
@@ -92,6 +101,11 @@ describe("G007 source ownership and policy invariants", () => {
     expect(applyTimeSql).not.toMatch(
       /(?:insert\s+into|update|delete\s+from)\s+(?:public\.)?provider_registry\b/i,
     );
+    expect(laterMigrations).toMatch(
+      /'france_travail', 'official-api', 'unverified', NULL,\s*false, 'python'/,
+    );
+    expect(laterMigrations).toContain("0, false");
+    expect(laterMigrations).toContain("ON CONFLICT (provider) DO NOTHING");
 
     expect(laterMigrations).toMatch(
       /CREATE OR REPLACE FUNCTION worker_private\.transition_provider_writer\([\s\S]*?SECURITY DEFINER\s+SET search_path = pg_catalog\s+AS \$\$/i,
