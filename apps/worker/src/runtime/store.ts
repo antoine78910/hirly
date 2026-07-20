@@ -37,4 +37,30 @@ export class PostgresRuntimeStore implements RuntimeStore {
   claimProviderWork(lease: Lease, provider: Provider, leaseSeconds: number) {
     return this.repository.claimProviderWork(lease, provider, leaseSeconds);
   }
+
+  heartbeatProviderWork(
+    lease: Lease,
+    providerClaim: ProviderWorkClaim,
+    leaseSeconds: number,
+  ) {
+    return this.repository.heartbeatProviderWork(
+      lease,
+      providerClaim,
+      leaseSeconds,
+    );
+  }
+
+  finishProviderWork(
+    lease: Lease,
+    providerClaim: ProviderWorkClaim,
+  ) {
+    return this.repository.finishProviderWork(lease, providerClaim);
+  }
+
+  releaseProviderWork(
+    lease: Lease,
+    providerClaim: ProviderWorkClaim,
+  ) {
+    return this.repository.releaseProviderWork(lease, providerClaim);
+  }
 }

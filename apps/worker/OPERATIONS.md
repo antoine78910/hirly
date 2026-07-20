@@ -101,6 +101,30 @@ Downgrading authorization, changing writer ownership, or disabling a provider
 must fence fetch and canonical write on the same provider-registry boundary.
 Fetched results may not write after a downgrade commits.
 
+### France Travail Python-owner precondition
+
+Apply `20260720000700_provider_ownership_epochs.sql` before deploying the
+claim-aware Python France Travail callers. On a fresh schema it creates only a
+disabled, unverified `france_travail` registry row with
+`writer_runtime=python`, `ownership_epoch=0`, and `claims_required=false`.
+`ON CONFLICT DO NOTHING` preserves any existing operator-managed owner.
+
+This is deliberately staged:
+
+1. Confirm the registry row is Python-owned before deploying the Python claim
+   callers; if an existing row says `none` or `typescript`, stop rather than
+   rewriting it during migration.
+2. Verify every France Travail scheduler, fallback, harvest, and canonical
+   write uses the Python claim/heartbeat/guarded-write/finish boundary.
+3. Only then call
+   `worker_private.enable_provider_claim_enforcement('france_travail')`.
+4. Keep TypeScript provider/source/mode flags disabled until a separate
+   transition through `writer_runtime=none` is approved and drained.
+
+Other Python providers remain non-claim-aware and unchanged. Do not enable
+claim enforcement globally or for a provider whose writers have not been
+characterized and migrated.
+
 ## Required configuration
 
 Configure secrets in the deployment platform, not in source, image layers,

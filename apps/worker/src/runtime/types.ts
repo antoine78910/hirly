@@ -26,6 +26,19 @@ export interface RuntimeStore {
     provider: Provider,
     leaseSeconds: number,
   ): Promise<ProviderWorkClaim>;
+  heartbeatProviderWork?(
+    lease: Lease,
+    providerClaim: ProviderWorkClaim,
+    leaseSeconds: number,
+  ): Promise<boolean>;
+  finishProviderWork?(
+    lease: Lease,
+    providerClaim: ProviderWorkClaim,
+  ): Promise<boolean>;
+  releaseProviderWork?(
+    lease: Lease,
+    providerClaim: ProviderWorkClaim,
+  ): Promise<boolean>;
   writeJobsAndComplete?(
     lease: Lease,
     providerClaim: ProviderWorkClaim,

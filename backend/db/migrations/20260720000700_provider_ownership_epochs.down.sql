@@ -26,6 +26,9 @@ DROP FUNCTION IF EXISTS worker_private.write_jobs_and_complete(
 DROP FUNCTION IF EXISTS worker_private.finish_provider_work(
   uuid, uuid, bigint, text, uuid, text, text, text, timestamptz
 );
+DROP FUNCTION IF EXISTS worker_private.release_provider_work(
+  uuid, uuid, bigint, text, uuid
+);
 DROP FUNCTION IF EXISTS worker_private.heartbeat_provider_work(
   uuid, uuid, bigint, text, uuid, integer
 );

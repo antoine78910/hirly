@@ -24,9 +24,18 @@ describe("G010 whole-provider ownership epoch migration", () => {
     expect(migration).toContain(
       "registry.ownership_epoch = claim.ownership_epoch",
     );
-    expect(migration).not.toMatch(
+    const migrationWithoutFreshFranceTravailSeed = migration.replace(
+      /INSERT INTO public\.provider_registry \([\s\S]*?'france_travail'[\s\S]*?ON CONFLICT \(provider\) DO NOTHING;/,
+      "",
+    );
+    expect(migrationWithoutFreshFranceTravailSeed).not.toMatch(
       /^(?:INSERT\s+INTO|UPDATE)\s+(?:public\.)?provider_registry\b/im,
     );
+    expect(migration).toMatch(
+      /'france_travail', 'official-api', 'unverified', NULL,\s*false, 'python'/,
+    );
+    expect(migration).toContain("0, false");
+    expect(migration).toContain("ON CONFLICT (provider) DO NOTHING");
     expect(migration).not.toMatch(
       /^(?:INSERT\s+INTO|UPDATE)\s+(?:public\.)?(?:career_sources|worker_schedules)\b/im,
     );
@@ -39,6 +48,7 @@ describe("G010 whole-provider ownership epoch migration", () => {
       "worker_private.claim_provider_work",
       "worker_private.heartbeat_provider_work",
       "worker_private.finish_provider_work",
+      "worker_private.release_provider_work",
       "worker_private.write_jobs_and_complete",
       "public.python_provider_work_claim",
       "public.python_provider_work_heartbeat",

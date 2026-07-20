@@ -50,9 +50,13 @@ describe("G010 France Travail production safety contract", () => {
 
     for (const { name, sql } of guardedForwardMigrations()) {
       const migrationCommands = withoutRoutineBodies(sql);
+      const commandsWithoutFreshFranceTravailSeed = migrationCommands.replace(
+        /INSERT INTO public\.provider_registry \([\s\S]*?'france_travail'[\s\S]*?ON CONFLICT \(provider\) DO NOTHING;/,
+        "",
+      );
       expect(
-        migrationCommands,
-        `${name} must not transfer provider writer ownership while applying`,
+        commandsWithoutFreshFranceTravailSeed,
+        `${name} must not transfer existing provider writer ownership while applying`,
       ).not.toMatch(
         /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+(?:public\.)?provider_registry\b/i,
       );
@@ -79,6 +83,14 @@ describe("G010 France Travail production safety contract", () => {
       `backend/db/migrations/${sourceBoundaryMigrationName}`,
     );
     expect(sourceBoundary).toContain("registry.writer_runtime = 'typescript'");
+    const ownershipMigration = read(
+      "backend/db/migrations/20260720000700_provider_ownership_epochs.sql",
+    );
+    expect(ownershipMigration).toMatch(
+      /'france_travail', 'official-api', 'unverified', NULL,\s*false, 'python'/,
+    );
+    expect(ownershipMigration).toContain("0, false");
+    expect(ownershipMigration).toContain("ON CONFLICT (provider) DO NOTHING");
   });
 
   test("keeps all TypeScript source transports and modes disabled by default", async () => {

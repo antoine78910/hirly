@@ -669,6 +669,15 @@ describe("G004 Bun runtime dispatch", () => {
           expiresAt: task.leaseUntil,
         };
       },
+      async heartbeatProviderWork() {
+        return true;
+      },
+      async finishProviderWork() {
+        return true;
+      },
+      async releaseProviderWork() {
+        return true;
+      },
       async writeJobsAndComplete(_lease, _providerClaim, jobs) {
         writes.push(jobs);
         return true;
@@ -784,6 +793,15 @@ describe("G004 Bun runtime dispatch", () => {
           expiresAt: new Date("2026-07-20T00:05:00.000Z"),
         };
       },
+      async heartbeatProviderWork() {
+        return true;
+      },
+      async finishProviderWork() {
+        return true;
+      },
+      async releaseProviderWork() {
+        return true;
+      },
       async writeJobsAndComplete() {
         return false;
       },
@@ -819,6 +837,191 @@ describe("G004 Bun runtime dispatch", () => {
       name: "PermanentTaskError",
       code: "integrity_error",
     });
+  });
+
+  test("heartbeats a long provider fetch before completing its canonical write", async () => {
+    const fixture = await loadFixture("apec");
+    const task = claimedProviderTask();
+    let heartbeats = 0;
+    let writes = 0;
+    const store = {
+      async assertProviderRunnable() {},
+      async claimProviderWork() {
+        return {
+          claimId: "11111111-1111-4111-8111-111111111111",
+          provider: "apec" as const,
+          runtime: "typescript" as const,
+          ownershipEpoch: 1n,
+          expiresAt: task.leaseUntil,
+        };
+      },
+      async heartbeatProviderWork() {
+        heartbeats += 1;
+        return true;
+      },
+      async finishProviderWork() {
+        return true;
+      },
+      async releaseProviderWork() {
+        return true;
+      },
+      async writeJobsAndComplete() {
+        writes += 1;
+        return true;
+      },
+      async dueSchedules() {
+        return [];
+      },
+      async enqueueDueSchedule() {
+        return null;
+      },
+      async getRun() {
+        return null;
+      },
+    } satisfies RuntimeStore;
+    const modules = {
+      ...providerModules,
+      apec: {
+        ...providerModules.apec,
+        rateLimit: { requestsPerMinute: 60_000, concurrency: 1 },
+        transport: {
+          async fetch() {
+            await Bun.sleep(20);
+            return { items: [fixture], nextCursor: null };
+          },
+        },
+      },
+    } as unknown as Record<Provider, ProviderCore<unknown>>;
+
+    const result = await createTaskHandlers(
+      store,
+      undefined,
+      modules,
+      { providerClaimHeartbeatMs: 5 },
+    )["provider.fetch_page"]?.(task, new AbortController().signal);
+
+    expect(result).toEqual({ taskCompleted: true });
+    expect(heartbeats).toBeGreaterThan(0);
+    expect(writes).toBe(1);
+  });
+
+  test("atomically finishes an empty provider run", async () => {
+    const task = claimedProviderTask();
+    let finishes = 0;
+    let releases = 0;
+    const store = {
+      async assertProviderRunnable() {},
+      async claimProviderWork() {
+        return {
+          claimId: "11111111-1111-4111-8111-111111111111",
+          provider: "apec" as const,
+          runtime: "typescript" as const,
+          ownershipEpoch: 1n,
+          expiresAt: task.leaseUntil,
+        };
+      },
+      async heartbeatProviderWork() {
+        return true;
+      },
+      async finishProviderWork() {
+        finishes += 1;
+        return true;
+      },
+      async releaseProviderWork() {
+        releases += 1;
+        return true;
+      },
+      async writeJobsAndComplete() {
+        throw new Error("empty runs must not call the canonical writer");
+      },
+      async dueSchedules() {
+        return [];
+      },
+      async enqueueDueSchedule() {
+        return null;
+      },
+      async getRun() {
+        return null;
+      },
+    } satisfies RuntimeStore;
+    const modules = {
+      ...providerModules,
+      apec: {
+        ...providerModules.apec,
+        rateLimit: { requestsPerMinute: 60_000, concurrency: 1 },
+        transport: {
+          async fetch() {
+            return { items: [], nextCursor: null };
+          },
+        },
+      },
+    } as unknown as Record<Provider, ProviderCore<unknown>>;
+
+    const result = await createTaskHandlers(store, undefined, modules)[
+      "provider.fetch_page"
+    ]?.(task, new AbortController().signal);
+
+    expect(result).toEqual({ taskCompleted: true });
+    expect(finishes).toBe(1);
+    expect(releases).toBe(0);
+  });
+
+  test("releases a provider claim after a fetch error", async () => {
+    const task = claimedProviderTask();
+    let releases = 0;
+    const store = {
+      async assertProviderRunnable() {},
+      async claimProviderWork() {
+        return {
+          claimId: "11111111-1111-4111-8111-111111111111",
+          provider: "apec" as const,
+          runtime: "typescript" as const,
+          ownershipEpoch: 1n,
+          expiresAt: task.leaseUntil,
+        };
+      },
+      async heartbeatProviderWork() {
+        return true;
+      },
+      async finishProviderWork() {
+        return true;
+      },
+      async releaseProviderWork() {
+        releases += 1;
+        return true;
+      },
+      async writeJobsAndComplete() {
+        return true;
+      },
+      async dueSchedules() {
+        return [];
+      },
+      async enqueueDueSchedule() {
+        return null;
+      },
+      async getRun() {
+        return null;
+      },
+    } satisfies RuntimeStore;
+    const modules = {
+      ...providerModules,
+      apec: {
+        ...providerModules.apec,
+        rateLimit: { requestsPerMinute: 60_000, concurrency: 1 },
+        transport: {
+          async fetch() {
+            throw new Error("provider unavailable");
+          },
+        },
+      },
+    } as unknown as Record<Provider, ProviderCore<unknown>>;
+
+    await expect(
+      createTaskHandlers(store, undefined, modules)[
+        "provider.fetch_page"
+      ]?.(task, new AbortController().signal),
+    ).rejects.toThrow("provider unavailable");
+    expect(releases).toBe(1);
   });
 
   test("emits schema-validated terminal failure fields through the consumer", async () => {

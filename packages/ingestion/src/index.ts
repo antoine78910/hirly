@@ -792,16 +792,17 @@ export async function runIngestion<RawJob>(input: {
             "normalized provider identity mismatch",
           );
         }
+        const validationStartedAt = performance.now();
+        const canonicalJob = toCanonicalJob(normalized, now());
+        metrics.durationsMs.validation +=
+          performance.now() - validationStartedAt;
         const identity = `${normalized.envelope.provider}:${normalized.envelope.externalId}`;
         if (identities.has(identity)) {
           metrics.deduplicated += 1;
           continue;
         }
         identities.add(identity);
-        const validationStartedAt = performance.now();
-        jobs.push(toCanonicalJob(normalized, now()));
-        metrics.durationsMs.validation +=
-          performance.now() - validationStartedAt;
+        jobs.push(canonicalJob);
         metrics.accepted += 1;
       } catch (error) {
         metrics.durationsMs.normalization +=

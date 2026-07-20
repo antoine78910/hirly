@@ -211,6 +211,69 @@ describe("G009 source adapter contract", () => {
     });
   });
 
+  test("validates duplicate identities before choosing the occurrence to write", async () => {
+    const raw = [
+      {
+        externalId: "duplicate-with-invalid-first-occurrence",
+        countryCode: "not-a-country",
+        applyUrls: [] as string[],
+      },
+      {
+        externalId: "duplicate-with-invalid-first-occurrence",
+        countryCode: "FR",
+        applyUrls: ["https://boards.greenhouse.io/hirly/jobs/valid"],
+      },
+    ];
+    let writtenApplyUrls: Array<string | null> = [];
+
+    const result = await runIngestion({
+      provider: "apec",
+      transport: {
+        async fetch() {
+          return { items: raw, nextCursor: null };
+        },
+      },
+      adapter: {
+        provider: "apec",
+        normalizeRaw(item: (typeof raw)[number]) {
+          return {
+            ...normalizedJob(item.externalId),
+            countryCode: item.countryCode,
+            applyUrls: item.applyUrls,
+          };
+        },
+      },
+      repository: {
+        async upsertCanonicalBatch(jobs) {
+          writtenApplyUrls = jobs.map(({ selectedApplyUrl }) => selectedApplyUrl);
+          return jobs.length;
+        },
+      },
+      request: {
+        provider: "apec",
+        query: null,
+        location: null,
+        countryCode: "FR",
+        cursor: null,
+        pageSize: 50,
+        maxPages: 1,
+      },
+      rateLimit: { requestsPerMinute: 60_000, concurrency: 1 },
+      now: () => new Date("2026-07-20T00:00:00Z"),
+    });
+
+    expect(writtenApplyUrls).toEqual([
+      "https://boards.greenhouse.io/hirly/jobs/valid",
+    ]);
+    expect(result.metrics).toMatchObject({
+      fetched: 2,
+      accepted: 1,
+      rejected: 1,
+      deduplicated: 0,
+      upserted: 1,
+    });
+  });
+
   test("keeps every existing and future transport disabled by default", () => {
     const providerCore = readFileSync(
       new URL("../apps/worker/src/providers/core.ts", import.meta.url),

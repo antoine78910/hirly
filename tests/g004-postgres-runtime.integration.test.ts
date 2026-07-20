@@ -93,6 +93,17 @@ function runtimeMigrationPath(): string {
   return join("backend", "db", "migrations", migration);
 }
 
+function providerOwnershipMigrationPath(): string {
+  const directory = join(repoRoot, "backend", "db", "migrations");
+  const migration = readdirSync(directory).find(
+    (name) =>
+      name.endsWith("_provider_ownership_epochs.sql") &&
+      !name.endsWith(".down.sql"),
+  );
+  if (!migration) throw new Error("provider ownership migration is missing");
+  return join("backend", "db", "migrations", migration);
+}
+
 async function resetFixtures(): Promise<void> {
   await psql(`
     SET session_replication_role = replica;
@@ -135,6 +146,10 @@ if (databaseUrl) {
     `);
     await applyFile(foundationMigrationPath());
     await applyFile(runtimeMigrationPath());
+    await applyFile(
+      "backend/db/migrations/20260720000500_job_dedup_linkage.sql",
+    );
+    await applyFile(providerOwnershipMigrationPath());
     await resetFixtures();
   });
 
@@ -216,10 +231,12 @@ describe("G004 real-Postgres Consumer/runtime boundary", () => {
           },
         },
       } as unknown as Record<Provider, ProviderCore<unknown>>;
+      const logLines: string[] = [];
+      const logger = createJsonLogger((line) => logLines.push(line));
       const consumer = new Consumer(
         repository,
-        createTaskHandlers(store, createJsonLogger(() => {}), modules),
-        createJsonLogger(() => {}),
+        createTaskHandlers(store, logger, modules),
+        logger,
         {
           concurrency: 2,
           leaseSeconds: 30,
@@ -244,7 +261,9 @@ describe("G004 real-Postgres Consumer/runtime boundary", () => {
           `),
         ) < 2
       ) {
-        if (Date.now() >= deadline) throw new Error("consumer timed out");
+        if (Date.now() >= deadline) {
+          throw new Error(`consumer timed out: ${logLines.join("\n")}`);
+        }
         await Bun.sleep(20);
       }
       await consumer.stop(500);

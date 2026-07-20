@@ -1,6 +1,7 @@
 -- TS_MIGRATION: additive whole-provider ownership epochs and pre-fetch claims.
--- Applying this migration does not transfer provider ownership or enable a
--- provider, source, or schedule.
+-- Applying this migration does not transfer ownership of an existing provider
+-- or enable a provider, source, or schedule. It establishes the disabled
+-- Python-owner precondition for France Travail only when that row is absent.
 BEGIN;
 
 ALTER TABLE public.provider_registry
@@ -8,6 +9,21 @@ ALTER TABLE public.provider_registry
   ADD COLUMN IF NOT EXISTS claims_required boolean NOT NULL DEFAULT false,
   ADD CONSTRAINT provider_registry_ownership_epoch_guard
     CHECK (ownership_epoch >= 0);
+
+-- Establish the owner required by the claim-aware Python France Travail paths
+-- on a fresh schema. Keep both provider enablement and claim enforcement off:
+-- provider_registry remains the ownership authority, while existing direct
+-- Python writes are not broken until operators explicitly enable fencing after
+-- verifying every France Travail writer uses the guarded RPC.
+INSERT INTO public.provider_registry (
+  provider, access_method, authorization_status, authorization_evidence_ref,
+  enabled, writer_runtime, rate_limit_config, ownership_epoch, claims_required
+)
+VALUES (
+  'france_travail', 'official-api', 'unverified', NULL,
+  false, 'python', '{"requestsPerMinute":1,"concurrency":1}', 0, false
+)
+ON CONFLICT (provider) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS public.provider_work_claims (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -294,6 +310,14 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'provider is not owned by TypeScript' USING ERRCODE = '42501';
   END IF;
+
+  UPDATE public.provider_work_claims
+  SET finished_at = clock_timestamp()
+  WHERE provider = p_provider
+    AND captured_runtime = 'typescript'
+    AND lease_owner = p_lease_owner
+    AND finished_at IS NULL
+    AND expires_at <= clock_timestamp();
 
   RETURN QUERY
   INSERT INTO public.provider_work_claims (
@@ -753,6 +777,32 @@ BEGIN
 END
 $$;
 
+CREATE OR REPLACE FUNCTION worker_private.release_provider_work(
+  p_task_id uuid,
+  p_lease_token uuid,
+  p_claim_generation bigint,
+  p_lease_owner text,
+  p_claim_id uuid
+)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+BEGIN
+  UPDATE public.provider_work_claims
+  SET finished_at = clock_timestamp()
+  WHERE id = p_claim_id
+    AND captured_runtime = 'typescript'
+    AND task_id = p_task_id
+    AND task_lease_token = p_lease_token
+    AND task_claim_generation = p_claim_generation
+    AND lease_owner = p_lease_owner
+    AND finished_at IS NULL;
+  RETURN FOUND;
+END
+$$;
+
 REVOKE ALL ON public.provider_work_claims FROM PUBLIC;
 REVOKE ALL ON worker_private.provider_write_transactions FROM PUBLIC;
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.provider_work_claims
@@ -779,6 +829,9 @@ REVOKE ALL ON FUNCTION worker_private.heartbeat_provider_work(uuid, uuid, bigint
 REVOKE ALL ON FUNCTION worker_private.finish_provider_work(
   uuid, uuid, bigint, text, uuid, text, text, text, timestamptz
 ) FROM PUBLIC;
+REVOKE ALL ON FUNCTION worker_private.release_provider_work(
+  uuid, uuid, bigint, text, uuid
+) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION worker_private.set_provider_writer(text, text)
   FROM hirly_inventory_operator;
 REVOKE EXECUTE ON FUNCTION worker_private.write_jobs_and_complete(
@@ -795,6 +848,9 @@ GRANT EXECUTE ON FUNCTION worker_private.heartbeat_provider_work(
 ) TO hirly_inventory_worker;
 GRANT EXECUTE ON FUNCTION worker_private.finish_provider_work(
   uuid, uuid, bigint, text, uuid, text, text, text, timestamptz
+) TO hirly_inventory_worker;
+GRANT EXECUTE ON FUNCTION worker_private.release_provider_work(
+  uuid, uuid, bigint, text, uuid
 ) TO hirly_inventory_worker;
 GRANT EXECUTE ON FUNCTION worker_private.transition_provider_writer(
   text, text, text, bigint

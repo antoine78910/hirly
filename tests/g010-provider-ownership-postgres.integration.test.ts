@@ -38,16 +38,21 @@ describe("G010 real-Postgres whole-provider fencing", () => {
       );
       try {
         await psql(["-q", "-c", `
-          INSERT INTO public.provider_registry (
-            provider, access_method, authorization_status,
-            authorization_evidence_ref, authorization_reviewed_at,
-            enabled, writer_runtime
-          ) VALUES (
-            'france_travail', 'official-api', 'authorized',
-            'test-fixture', clock_timestamp(), false, 'python'
-          ) ON CONFLICT (provider) DO UPDATE SET
-            enabled = false, writer_runtime = 'python',
-            ownership_epoch = 0, claims_required = false;
+          DO $precondition$
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1
+              FROM public.provider_registry
+              WHERE provider = 'france_travail'
+                AND enabled = false
+                AND writer_runtime = 'python'
+                AND ownership_epoch = 0
+                AND claims_required = false
+            ) THEN
+              RAISE EXCEPTION 'fresh schema lacks the safe France Travail Python-owner precondition';
+            END IF;
+          END
+          $precondition$;
 
           INSERT INTO public.jobs (job_id, provider, external_id, data)
           VALUES (

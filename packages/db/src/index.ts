@@ -338,6 +338,60 @@ export class WorkerRepository {
     };
   }
 
+  async heartbeatProviderWork(
+    lease: Lease,
+    providerClaim: ProviderWorkClaim,
+    leaseSeconds: number,
+  ): Promise<boolean> {
+    const [row] = await this.sql<{ heartbeat_provider_work: boolean }[]>`
+      SELECT worker_private.heartbeat_provider_work(
+        ${lease.taskId}::uuid,
+        ${lease.leaseToken}::uuid,
+        ${lease.claimGeneration.toString()}::bigint,
+        ${lease.leaseOwner},
+        ${providerClaim.claimId}::uuid,
+        ${leaseSeconds}
+      )
+    `;
+    return row?.heartbeat_provider_work === true;
+  }
+
+  async finishProviderWork(
+    lease: Lease,
+    providerClaim: ProviderWorkClaim,
+  ): Promise<boolean> {
+    const [row] = await this.sql<{ finish_provider_work: boolean }[]>`
+      SELECT worker_private.finish_provider_work(
+        ${lease.taskId}::uuid,
+        ${lease.leaseToken}::uuid,
+        ${lease.claimGeneration.toString()}::bigint,
+        ${lease.leaseOwner},
+        ${providerClaim.claimId}::uuid,
+        'succeeded',
+        NULL,
+        NULL,
+        NULL
+      )
+    `;
+    return row?.finish_provider_work === true;
+  }
+
+  async releaseProviderWork(
+    lease: Lease,
+    providerClaim: ProviderWorkClaim,
+  ): Promise<boolean> {
+    const [row] = await this.sql<{ release_provider_work: boolean }[]>`
+      SELECT worker_private.release_provider_work(
+        ${lease.taskId}::uuid,
+        ${lease.leaseToken}::uuid,
+        ${lease.claimGeneration.toString()}::bigint,
+        ${lease.leaseOwner},
+        ${providerClaim.claimId}::uuid
+      )
+    `;
+    return row?.release_provider_work === true;
+  }
+
   async setProviderAuthorization(input: {
     provider: string;
     status: "unverified" | "authorized" | "blocked";
