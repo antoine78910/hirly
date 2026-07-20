@@ -104,6 +104,54 @@ describe("G009 source adapter contract", () => {
     expect(fetched).toBeFalse();
   });
 
+  test("rejects a normalized cross-provider envelope before canonical writes", async () => {
+    let writes = 0;
+
+    await expect(
+      runIngestion({
+        provider: "apec",
+        transport: {
+          async fetch() {
+            return {
+              items: [{ externalId: "cross-provider" }],
+              nextCursor: null,
+            };
+          },
+        },
+        adapter: {
+          provider: "apec",
+          normalizeRaw() {
+            return {
+              ...normalizedJob("cross-provider"),
+              envelope: {
+                provider: "indeed",
+                externalId: "cross-provider",
+                payload: { source: "contract-fixture" },
+              },
+            };
+          },
+        },
+        repository: {
+          async upsertCanonicalBatch() {
+            writes += 1;
+            return 1;
+          },
+        },
+        request: {
+          provider: "apec",
+          query: null,
+          location: null,
+          countryCode: "FR",
+          cursor: null,
+          pageSize: 50,
+          maxPages: 1,
+        },
+        rateLimit: { requestsPerMinute: 60_000, concurrency: 1 },
+      }),
+    ).rejects.toMatchObject({ code: "integrity_error" });
+    expect(writes).toBe(0);
+  });
+
   test("keeps stable IDs and deduplicates repeated source occurrences before one write", async () => {
     const raw = [
       { externalId: "same-source-id" },
