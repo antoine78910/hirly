@@ -249,6 +249,17 @@ role, fencing, and rollback guidance. Its rollback file is destructive and is
 only for isolated test databases; production rollback disables work while
 retaining the additive tables for diagnosis.
 
+Run the concurrency, fencing, authorization, role, and rollback proof only
+against an isolated disposable Postgres database:
+
+```bash
+G002_TEST_DATABASE_URL=postgresql://... \
+  bun test tests/g002-postgres.integration.test.ts
+```
+
+The integration suite applies and rolls back the foundation objects. Never
+point this command at a shared, staging, or production database.
+
 ## company_boards
 
 Purpose: ATS board registry for direct imports.
