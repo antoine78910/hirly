@@ -92,6 +92,41 @@ describe("Sprout activation and bounded page runtime", () => {
     ).toThrow("sprout_activation_blocked");
   });
 
+  test("blocks before transport or repository access when authorization is absent", async () => {
+    let fetches = 0;
+    let commits = 0;
+    const promise = runSproutPageTask({
+      activation: {
+        ...SPROUT_FRANCE_DISABLED_REGISTRATION,
+        policyEvidenceRef: null,
+        redisplayAllowed: false,
+        fullTextRetentionAllowed: false,
+        credentialRef: "secret://sprout/france-api",
+      },
+      mode: "backfill",
+      checkpoint: initialSproutCheckpoint({ approvedPageSize: 1 }),
+      transport: {
+        async fetchPage() {
+          fetches += 1;
+          throw new Error("unexpected live API call");
+        },
+      },
+      repository: {
+        async commitPage(input) {
+          commits += 1;
+          return { committedCheckpoint: input.checkpointOut };
+        },
+      },
+      hasFranceLocation: () => true,
+      signal: new AbortController().signal,
+      maxResponseBytes: 1_024,
+    });
+
+    await expect(promise).rejects.toThrow("sprout_activation_blocked");
+    expect(fetches).toBe(0);
+    expect(commits).toBe(0);
+  });
+
   test("commits one bounded FR page and advances the checkpoint atomically", async () => {
     const commits: unknown[] = [];
     const result = await runSproutPageTask({

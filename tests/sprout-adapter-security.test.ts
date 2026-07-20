@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { stableJobId } from "@hirly/ingestion";
+import { stableJobId } from "../packages/ingestion/src/index";
 import { getProviderModule } from "../apps/worker/src/providers";
 import {
   buildSproutFranceQuery,
@@ -159,6 +159,7 @@ describe("Sprout adapter security and inventory contract", () => {
       expect(getProviderModule("sprout")).toBe(sproutProvider);
       expect(sproutProvider).toMatchObject({
         authorizationStatus: "unverified",
+        rateLimit: { requestsPerMinute: 1, concurrency: 1 },
         liveTransportReady: false,
         canonicalWriteReady: false,
       });
