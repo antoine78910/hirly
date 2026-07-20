@@ -832,7 +832,7 @@ class AdminJobsFeedDiagnosticRequest(BaseModel):
 
 class AdminFeedCoverageAuditRequest(BaseModel):
     user_ids: List[str]
-    limit: int = 1000
+    limit: int = 25
     freshness_window_days: Literal[1, 7, 30] = 30
 
 
@@ -7017,7 +7017,7 @@ async def get_feed(
 
     async def _fast_cached_feed() -> Dict[str, Any]:
         global _feed_sync_refresh_cooldown_until, _feed_sync_refresh_cooldowns
-        requested_limit = max(1, min(int(limit or 5), 1000 if audit_mode else 25))
+        requested_limit = max(1, min(int(limit or 5), 25))
         db_first_enabled = _env_bool("JOBS_DB_FIRST_ENABLED", True)
         db_min_good_results = max(1, _env_int("JOBS_DB_MIN_GOOD_RESULTS_BEFORE_JSEARCH", 30))
         db_weak_results_threshold = max(0, _env_int("JOBS_DB_WEAK_RESULTS_THRESHOLD", 10))
@@ -10977,7 +10977,7 @@ async def admin_jobs_feed_coverage_audit(
         try:
             feed_response = await get_feed(
                 user=audit_user,
-                limit=max(1, min(body.limit, 1000)),
+                limit=max(1, min(body.limit, 25)),
                 min_salary=0,
                 posted_within=None,
                 work_location=None,
