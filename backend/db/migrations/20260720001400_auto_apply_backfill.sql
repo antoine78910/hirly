@@ -8,6 +8,7 @@ VOLATILE
 SECURITY DEFINER
 SET search_path = pg_catalog, public
 SET statement_timeout = '5s'
+SET lock_timeout = '1s'
 AS $$
   WITH candidates AS (
     SELECT
@@ -29,9 +30,11 @@ AS $$
       AND COALESCE(a.data ->> 'manual_status', '') NOT IN ('manually_submitted', 'offer_expired')
       AND COALESCE(a.data ->> 'auto_apply_queue_status', '') NOT IN
         ('queued', 'awaiting_review', 'running', 'succeeded')
-      AND COALESCE(a.data ->> 'ats_provider', j.data ->> 'ats_provider') = ANY(p_providers)
-    ORDER BY NULLIF(a.data ->> 'created_at', '')::timestamptz NULLS LAST
+      AND COALESCE(a.data ->> 'ats_provider', j.data ->> 'ats_provider')
+        = ANY(COALESCE(p_providers, ARRAY[]::text[]))
+    ORDER BY a.created_at NULLS LAST, a.application_id
     LIMIT LEAST(GREATEST(p_limit, 1), 200)
+    FOR UPDATE OF a SKIP LOCKED
   ),
   fenced AS (
     UPDATE public.applications a

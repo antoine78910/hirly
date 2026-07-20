@@ -81,7 +81,7 @@ describe("root Bun workspace isolation", () => {
 });
 
 describe("legacy frontend install and deployment contract", () => {
-  test("preserves the existing package manager, scripts, and lockfile", () => {
+  test("keeps the legacy frontend on its explicit npm deployment contract", () => {
     const frontendPackage = readJson<PackageJson>("frontend/package.json");
     const frontendLock = readJson<{
       name?: string;
@@ -93,9 +93,9 @@ describe("legacy frontend install and deployment contract", () => {
     expect(frontendPackage.name).toBe("frontend");
     expect(frontendPackage.version).toBe("0.1.0");
     expect(frontendPackage.private).toBe(true);
-    expect(frontendPackage.packageManager).toBe(
-      "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e",
-    );
+    // Do not advertise Yarn here: Vercel and local release verification both
+    // install this isolated CRA app with npm and its package-lock.json.
+    expect(frontendPackage.packageManager).toBeUndefined();
     expect(frontendPackage.scripts).toEqual({
       start: "craco start",
       build: "craco build",

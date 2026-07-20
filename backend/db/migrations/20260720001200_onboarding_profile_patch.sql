@@ -5,16 +5,31 @@ CREATE OR REPLACE FUNCTION public.patch_onboarding_profile(
   p_contact jsonb DEFAULT '{}'::jsonb
 )
 RETURNS jsonb
-LANGUAGE sql
+LANGUAGE plpgsql
 VOLATILE
 SECURITY DEFINER
 SET search_path = pg_catalog, public
 SET statement_timeout = '2s'
+SET lock_timeout = '1s'
 AS $$
+DECLARE
+  v_result jsonb;
+BEGIN
+  IF p_user_id IS NULL OR length(btrim(p_user_id)) = 0
+    OR jsonb_typeof(COALESCE(p_extras, '{}'::jsonb)) <> 'object'
+    OR jsonb_typeof(COALESCE(p_preferences, '{}'::jsonb)) <> 'object'
+    OR jsonb_typeof(COALESCE(p_contact, '{}'::jsonb)) <> 'object'
+    OR COALESCE(p_preferences, '{}'::jsonb)
+      ?| ARRAY['user_id', 'extras', 'contact']
+  THEN
+    RAISE EXCEPTION 'invalid onboarding profile patch'
+      USING ERRCODE = '22023';
+  END IF;
+
   INSERT INTO public.profiles (user_id, data)
   VALUES (
-    p_user_id,
-    jsonb_build_object('user_id', p_user_id)
+    btrim(p_user_id),
+    jsonb_build_object('user_id', btrim(p_user_id))
       || COALESCE(p_preferences, '{}'::jsonb)
       || jsonb_build_object('extras', COALESCE(p_extras, '{}'::jsonb))
       || jsonb_build_object('contact', COALESCE(p_contact, '{}'::jsonb))
@@ -33,7 +48,10 @@ AS $$
       COALESCE(public.profiles.data -> 'contact', '{}'::jsonb)
         || COALESCE(p_contact, '{}'::jsonb)
     )
-  RETURNING data;
+  RETURNING data INTO v_result;
+
+  RETURN v_result;
+END;
 $$;
 
 REVOKE ALL ON FUNCTION public.patch_onboarding_profile(text, jsonb, jsonb, jsonb) FROM PUBLIC;

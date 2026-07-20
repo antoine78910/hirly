@@ -192,13 +192,17 @@ def test_tracker_migration_syncs_old_writes_and_is_service_role_only():
 
     assert "BEFORE INSERT OR UPDATE OF data" in sql
     assert "NEW.generation_status := NULLIF(NEW.data ->> 'generation_status', '')" in sql
-    assert "UPDATE public.applications SET data = data" in sql
+    assert "UPDATE public.applications SET data = data" not in sql
+    assert "backfill_application_tracker_columns" in sql
+    assert "FOR UPDATE SKIP LOCKED" in sql
     assert "applications_user_status_updated_idx" in sql
     assert "applications_generation_queue_idx" in sql
+    assert sql.count("CREATE INDEX CONCURRENTLY") == 2
     assert "SET statement_timeout = '2s'" in sql
     assert "REVOKE ALL" in sql
     assert "GRANT EXECUTE" in sql and "service_role" in sql
     assert "DROP FUNCTION IF EXISTS public.patch_user_application_status" in down
+    assert "DROP COLUMN IF EXISTS" not in down
 
 
 def test_tracker_rollout_defaults_off():

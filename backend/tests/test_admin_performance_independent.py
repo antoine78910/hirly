@@ -208,11 +208,16 @@ def test_admin_sql_contracts_bound_rows_windows_payload_widths_and_privileges():
 
     for function_sql in (overview_sql, analytics_sql, users_sql, applications_sql):
         assert "SECURITY DEFINER" in function_sql
-        assert "SET search_path = public, pg_temp" in function_sql
+        assert "SET search_path = pg_catalog, public" in function_sql
         assert "SET statement_timeout = '10s'" in function_sql
         assert "'generated_at'" in function_sql
     assert "LEAST(GREATEST(COALESCE(p_limit,100),1),500)" in users_sql
     assert "LEAST(GREATEST(COALESCE(p_limit,100),1),500)" in applications_sql
+    assert "LEAST(GREATEST(COALESCE(p_offset,0),0),50000)" in users_sql
+    assert "LEAST(GREATEST(COALESCE(p_offset,0),0),50000)" in applications_sql
+    assert "application_counts AS" in users_sql
+    assert "swipe_counts AS" in users_sql
+    assert "(SELECT count(*) FROM public.applications a" not in users_sql
     window_bound = r"LEAST\(\s*COALESCE\(\s*p_window_days\s*,\s*30\s*\)\s*,\s*365\s*\)"
     assert re.search(window_bound, analytics_sql)
     assert re.search(window_bound, users_sql)

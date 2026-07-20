@@ -17460,7 +17460,7 @@ async def startup_seed():
     global _posthog_client
     _ph_api_key = os.environ.get("POSTHOG_SERVER_API_KEY", "").strip()
     _ph_host = os.environ.get("POSTHOG_HOST", "").strip()
-    if _ph_api_key and _ph_host:
+    if _posthog_server_capture_configured():
         _posthog_client = Posthog(
             api_key=_ph_api_key,
             host=_ph_host,

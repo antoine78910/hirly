@@ -351,13 +351,17 @@ def test_auth_migration_declares_indexes_sync_and_rpc_security():
     ).read_text()
 
     assert "idx_users_stripe_customer_id" in migration
+    assert "CREATE UNIQUE INDEX CONCURRENTLY" in migration
     assert "trg_sync_user_promoted_auth_fields" in migration
+    assert "backfill_user_promoted_auth_fields" in migration
+    assert "UPDATE public.users\nSET data = data" not in migration
     assert "SECURITY DEFINER" in migration
     assert "SET search_path = pg_catalog, public" in migration
     assert "SET statement_timeout = '1s'" in migration
     assert "REVOKE ALL ON FUNCTION public.resolve_auth_session(text) FROM PUBLIC" in migration
     assert "public.patch_auth_user(p_user_id text, p_patch jsonb)" in migration
     assert "SET statement_timeout = '2s'" in migration
+    assert "SET lock_timeout = '1s'" in migration
     assert "AUTH_JOINED_SESSION_LOOKUP_ENABLED" in migration
 
 

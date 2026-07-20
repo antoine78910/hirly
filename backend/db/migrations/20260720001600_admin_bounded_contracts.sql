@@ -4,7 +4,7 @@ RETURNS jsonb
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = pg_catalog, public
 SET statement_timeout = '10s'
 AS $$
   SELECT jsonb_build_object(
@@ -28,7 +28,7 @@ RETURNS jsonb
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = pg_catalog, public
 SET statement_timeout = '10s'
 AS $$
   WITH bounded AS (
@@ -64,24 +64,45 @@ RETURNS jsonb
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = pg_catalog, public
 SET statement_timeout = '10s'
 AS $$
   WITH bounds AS (
     SELECT LEAST(GREATEST(COALESCE(p_limit,100),1),500) lim,
-           GREATEST(COALESCE(p_offset,0),0) off,
+           LEAST(GREATEST(COALESCE(p_offset,0),0),50000) off,
            GREATEST(1,LEAST(COALESCE(p_window_days,30),365)) days
-  ), page AS (
-    SELECT left(u.user_id::text,128) user_id,
+  ), page_base AS (
+    SELECT u.user_id raw_user_id,
+           left(u.user_id::text,128) user_id,
            left(u.email::text,320) email,
            left(u.name::text,256) name,
-           u.created_at,
-           COALESCE((SELECT count(*) FROM public.applications a WHERE a.user_id=u.user_id),0) total_applications,
-           COALESCE((SELECT count(*) FROM public.swipes s WHERE s.user_id=u.user_id),0) total_swipes
+           u.created_at
     FROM public.users u, bounds
     WHERE u.created_at >= clock_timestamp() - make_interval(days => bounds.days)
     ORDER BY u.created_at DESC, u.user_id
     LIMIT (SELECT lim FROM bounds) OFFSET (SELECT off FROM bounds)
+  ), application_counts AS (
+    SELECT application.user_id, count(*)::bigint AS total_applications
+    FROM public.applications AS application
+    JOIN page_base ON page_base.raw_user_id = application.user_id
+    GROUP BY application.user_id
+  ), swipe_counts AS (
+    SELECT swipe.user_id, count(*)::bigint AS total_swipes
+    FROM public.swipes AS swipe
+    JOIN page_base ON page_base.raw_user_id = swipe.user_id
+    GROUP BY swipe.user_id
+  ), page AS (
+    SELECT
+      page_base.user_id,
+      page_base.email,
+      page_base.name,
+      page_base.created_at,
+      COALESCE(application_counts.total_applications, 0) total_applications,
+      COALESCE(swipe_counts.total_swipes, 0) total_swipes
+    FROM page_base
+    LEFT JOIN application_counts USING (user_id)
+    LEFT JOIN swipe_counts USING (user_id)
+    ORDER BY page_base.created_at DESC, page_base.user_id
   )
   SELECT jsonb_build_object(
     'users', COALESCE(jsonb_agg(to_jsonb(page)), '[]'::jsonb),
@@ -101,12 +122,12 @@ RETURNS jsonb
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = pg_catalog, public
 SET statement_timeout = '10s'
 AS $$
   WITH bounds AS (
     SELECT LEAST(GREATEST(COALESCE(p_limit,100),1),500) lim,
-           GREATEST(COALESCE(p_offset,0),0) off,
+           LEAST(GREATEST(COALESCE(p_offset,0),0),50000) off,
            GREATEST(1,LEAST(COALESCE(p_window_days,30),365)) days
   ), page AS (
     SELECT left(a.application_id::text,128) application_id,
@@ -148,8 +169,17 @@ BEGIN
     'admin_applications_page(integer,integer,integer,text)'
   ] LOOP
     EXECUTE 'REVOKE ALL ON FUNCTION public.' || fn || ' FROM PUBLIC';
-    EXECUTE 'REVOKE ALL ON FUNCTION public.' || fn || ' FROM anon';
-    EXECUTE 'REVOKE ALL ON FUNCTION public.' || fn || ' FROM authenticated';
-    EXECUTE 'GRANT EXECUTE ON FUNCTION public.' || fn || ' TO service_role';
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+      EXECUTE 'REVOKE ALL ON FUNCTION public.' || fn || ' FROM anon';
+    END IF;
+    IF EXISTS (
+      SELECT 1 FROM pg_roles WHERE rolname = 'authenticated'
+    ) THEN
+      EXECUTE
+        'REVOKE ALL ON FUNCTION public.' || fn || ' FROM authenticated';
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
+      EXECUTE 'GRANT EXECUTE ON FUNCTION public.' || fn || ' TO service_role';
+    END IF;
   END LOOP;
 END $$;

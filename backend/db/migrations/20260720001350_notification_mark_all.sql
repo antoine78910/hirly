@@ -8,14 +8,17 @@ VOLATILE
 SECURITY DEFINER
 SET search_path = pg_catalog, public
 SET statement_timeout = '2s'
+SET lock_timeout = '1s'
 AS $$
   WITH selected AS (
     SELECT notification_id
     FROM public.notifications
     WHERE user_id = p_user_id
-      AND COALESCE((data ->> 'read')::boolean, false) = false
-    ORDER BY created_at
+      AND lower(COALESCE(data ->> 'read', 'false'))
+        NOT IN ('true', 't', '1', 'yes', 'on')
+    ORDER BY notification_id
     LIMIT LEAST(GREATEST(p_limit, 1), 500)
+    FOR UPDATE SKIP LOCKED
   ),
   updated AS (
     UPDATE public.notifications n

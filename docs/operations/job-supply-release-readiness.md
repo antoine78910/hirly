@@ -107,13 +107,14 @@ prefix as an inventory placement rule:
 1. `20260720001100_auth_session_lookup.sql`
 2. `20260720001200_onboarding_profile_patch.sql`
 3. `20260720001300_application_tracker_contracts.sql`
-4. `20260720001300_notification_mark_all.sql`
+4. `20260720001350_notification_mark_all.sql`
 5. `20260720001400_auto_apply_backfill.sql`
 6. `20260720001500_gmail_outcome_batch.sql`
 7. `20260720001600_admin_bounded_contracts.sql`
 
-Apply these only through the application-database release process after their
-own compatibility and rollback gates. They are not prerequisites for the
+Apply these only through the
+[application-database release process](application-database-migration-runbook.md)
+after its compatibility, bounded-backfill and rollback gates. They are not prerequisites for the
 evidence-only source trial and must never be applied to a split inventory
 database merely to satisfy filename ordering.
 

@@ -3,6 +3,7 @@ import inspect
 
 import gmail_sync
 from auto_apply import queue
+from db.base import is_missing_database_contract_error
 from notifications_service import mark_all_notifications_read
 from training_service import (
     list_creator_students,
@@ -99,6 +100,33 @@ def test_notification_mark_all_uses_one_bounded_mutation():
     assert db.calls == [("u1", 500)]
 
 
+def test_notification_mark_all_falls_back_only_for_missing_rpc():
+    class _Cursor:
+        async def to_list(self, _limit):
+            return [{"notification_id": "n1"}]
+
+    class _Notifications:
+        def __init__(self):
+            self.updated = []
+
+        def find(self, _filter, _projection):
+            return _Cursor()
+
+        async def update_one(self, filter, update):
+            self.updated.append((filter, update))
+
+    class _Db:
+        def __init__(self):
+            self.notifications = _Notifications()
+
+        async def mark_all_notifications_read(self, _user_id, *, limit):
+            raise RuntimeError("PGRST202 Could not find the function")
+
+    db = _Db()
+    assert asyncio.run(mark_all_notifications_read(db, user_id="u1")) == 1
+    assert len(db.notifications.updated) == 1
+
+
 def test_gmail_sync_preloads_existing_messages_and_batches_writes():
     source = inspect.getsource(gmail_sync.sync_gmail_application_emails)
 
@@ -107,6 +135,18 @@ def test_gmail_sync_preloads_existing_messages_and_batches_writes():
     assert "application_emails.insert_many" in source
     assert "range(0, len(pending_email_writes), 100)" in source
     assert "apply_gmail_application_outcomes" in source
+
+
+def test_missing_database_contract_classifier_is_narrow():
+    assert is_missing_database_contract_error(
+        RuntimeError("HTTP 404 PGRST202 Could not find the function")
+    )
+    assert not is_missing_database_contract_error(
+        RuntimeError("HTTP 500 statement timeout")
+    )
+    assert not is_missing_database_contract_error(
+        RuntimeError("HTTP 503 connection refused")
+    )
 
 
 def test_auto_apply_backfill_uses_one_bounded_contract(monkeypatch):

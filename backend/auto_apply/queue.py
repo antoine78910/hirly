@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Set
 
 from .driver import DRIVER_REGISTRY
+from db.base import is_missing_database_contract_error
 
 logger = logging.getLogger(__name__)
 
@@ -290,7 +291,15 @@ async def backfill_pending_applications(db, *, limit: int = 200) -> int:
         return 0
     set_based_backfill = getattr(db, "backfill_auto_apply_queue", None)
     if set_based_backfill is not None:
-        return await set_based_backfill(providers, limit=limit)
+        try:
+            return await set_based_backfill(providers, limit=limit)
+        except Exception as error:
+            if not is_missing_database_contract_error(error):
+                raise
+            logger.warning(
+                "auto_apply_queue_backfill_rpc_unavailable fallback=legacy error=%s",
+                str(error)[:300],
+            )
 
     # Prefer app.ats_provider (denormalized). Also scan recent not_submitted packages.
     candidates = await db.applications.find(

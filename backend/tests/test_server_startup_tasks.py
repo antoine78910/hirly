@@ -1,6 +1,33 @@
 import asyncio
+from importlib.metadata import version
+from pathlib import Path
 
 import server
+
+
+def test_observability_dependencies_are_release_pinned_and_importable():
+    requirements = (
+        Path(__file__).resolve().parents[1] / "requirements.txt"
+    ).read_text(encoding="utf-8")
+    expected = {
+        "posthog": ("posthog[otel]", "7.27.0"),
+        "opentelemetry-sdk": ("opentelemetry-sdk", "1.44.0"),
+        "opentelemetry-instrumentation-openai-v2": (
+            "opentelemetry-instrumentation-openai-v2",
+            "2.4b0",
+        ),
+    }
+    for package, (requirement_name, pinned_version) in expected.items():
+        assert f"{requirement_name}=={pinned_version}" in requirements
+        assert version(package) == pinned_version
+    assert server._OTEL_AVAILABLE is True
+
+
+def test_startup_observability_rejects_unapproved_host(monkeypatch):
+    monkeypatch.setenv("POSTHOG_SERVER_API_KEY", "phc_test")
+    monkeypatch.setenv("POSTHOG_HOST", "https://collector.invalid")
+    monkeypatch.delenv("POSTHOG_ALLOWED_HOSTS", raising=False)
+    assert server._posthog_server_capture_configured() is False
 
 
 def test_startup_task_is_retained_until_completion():

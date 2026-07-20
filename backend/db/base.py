@@ -16,6 +16,27 @@ Projection = Optional[Dict[str, Any]]
 SortSpec = Sequence[Tuple[str, int]]
 
 
+def is_missing_database_contract_error(error: BaseException) -> bool:
+    """Recognize PostgREST's missing-RPC response during additive rollouts.
+
+    Application deploys and database migrations are not atomic. Callers may
+    safely use their bounded legacy path only when PostgREST explicitly says
+    the new function is absent; transport and execution failures still surface.
+    """
+    message = str(error).lower()
+    return (
+        ("function" in message and "does not exist" in message)
+        or any(
+            marker in message
+            for marker in (
+                "pgrst202",
+                "could not find the function",
+                "undefined_function",
+            )
+        )
+    )
+
+
 class CursorPort(ABC):
     @abstractmethod
     def sort(self, key_or_list: Any, direction: Optional[int] = None) -> "CursorPort":

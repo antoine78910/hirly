@@ -21,6 +21,8 @@ from urllib.parse import urlparse
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
 
+from db.base import is_missing_database_contract_error
+
 
 GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1/users/me"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -505,9 +507,14 @@ async def sync_gmail_application_emails(
             await db.application_emails.insert_many(pending_email_writes[start:start + 100])
         outcome_writer = getattr(db, "apply_gmail_application_outcomes", None)
         if outcome_writer is not None:
-            for start in range(0, len(pending_app_updates), 100):
-                await outcome_writer(user_id, pending_app_updates[start:start + 100])
-        else:
+            try:
+                for start in range(0, len(pending_app_updates), 100):
+                    await outcome_writer(user_id, pending_app_updates[start:start + 100])
+                pending_app_updates = []
+            except Exception as error:
+                if not is_missing_database_contract_error(error):
+                    raise
+        if pending_app_updates:
             for update in pending_app_updates:
                 await db.applications.update_one(
                     {"application_id": update["application_id"], "user_id": user_id},
