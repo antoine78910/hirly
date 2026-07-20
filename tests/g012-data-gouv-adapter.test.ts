@@ -280,4 +280,30 @@ describe("G012 generic data.gouv fixture boundary", () => {
       ),
     ).toThrow("does not match the bound dataset resource");
   });
+
+  test("rejects unsafe generic fixture source and apply URLs", async () => {
+    const data = await fixture();
+    for (const unsafeUrl of [
+      "http://apply.example.org/jobs/record-001",
+      "https://user:pass@apply.example.org/jobs/record-001",
+      "javascript:alert(1)",
+    ]) {
+      expect(() =>
+        adapter([
+          {
+            ...data.raw[0]!,
+            applyUrls: [unsafeUrl],
+          },
+        ]),
+      ).toThrow("data.gouv apply URL");
+    }
+    expect(() =>
+      adapter([
+        {
+          ...data.raw[0]!,
+          sourceUrl: "http://www.data.gouv.fr/datasets/dataset-fixture",
+        },
+      ]),
+    ).toThrow("data.gouv source URL must use HTTPS");
+  });
 });

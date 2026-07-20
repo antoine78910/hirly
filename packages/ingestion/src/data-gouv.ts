@@ -64,6 +64,34 @@ export class DataGouvFixtureHttpError extends Error {
   }
 }
 
+export function dataGouvHttpsUrlIssue(value: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return "must be an absolute URL";
+  }
+  if (url.protocol !== "https:") return "must use HTTPS";
+  if (url.username.length > 0 || url.password.length > 0) {
+    return "must not contain credentials";
+  }
+  return null;
+}
+
+export function requireSafeDataGouvHttpsUrl(
+  value: string,
+  label: string,
+): string {
+  const issue = dataGouvHttpsUrlIssue(value);
+  if (issue) {
+    throw new IngestionError(
+      "invalid_input",
+      `${label} ${issue}`,
+    );
+  }
+  return value;
+}
+
 type SourceErrorClass = ReturnType<
   SourceAdapter<
     DataGouvRawJob,
@@ -191,6 +219,13 @@ export class FixtureOnlyDataGouvSourceAdapter<
         );
       }
       stableDataGouvExternalId(row.datasetId, row.resourceId, row.recordId);
+      requireSafeDataGouvHttpsUrl(row.sourceUrl, "data.gouv source URL");
+      for (const applyUrl of row.applyUrls) {
+        requireSafeDataGouvHttpsUrl(
+          applyUrl,
+          "data.gouv apply URL",
+        );
+      }
     }
     this.snapshotDigest = stableSnapshotDigest(rows);
   }
