@@ -55,8 +55,6 @@ function policy(
       commercialUseAllowed: true,
       redisplayAllowed: true,
       fullTextRetentionAllowed: true,
-      enabledEnvironments: ["production"],
-      permittedAccessMethods: ["open_data"],
       expiresAt: "2026-08-20T00:00:00.000Z",
     },
     ...overrides,
@@ -127,6 +125,29 @@ describe("G009 disabled TypeScript source contract", () => {
         now,
       ),
     ).toBe("provider_country_killed");
+    expect(
+      sourceActivationBlockReason(
+        policy({ sourceCountryKillSwitches: { FR: true } }),
+        "FR",
+        "incremental",
+        now,
+      ),
+    ).toBe("source_country_killed");
+    expect(sourceActivationBlockReason(policy(), "", "incremental", now))
+      .toBe("country_not_declared");
+    expect(
+      sourceActivationBlockReason(
+        policy({
+          policy: {
+            ...policy().policy,
+            fullTextRetentionAllowed: false,
+          },
+        }),
+        "FR",
+        "incremental",
+        now,
+      ),
+    ).toBe("policy_not_approved");
     expect(sourceActivationBlockReason(policy(), "FR", "backfill", now))
       .toBe("mode_disabled");
     expect(
@@ -182,6 +203,27 @@ describe("G009 disabled TypeScript source contract", () => {
       ),
     ).toBe("policy_expired");
   });
+
+  test("rejects empty source countries and malformed kill-switch keys", () => {
+    expect(
+      sourceRegistryEntrySchema.safeParse({
+        ...policy().source,
+        countryCodes: [],
+      }).success,
+    ).toBeFalse();
+    expect(
+      sourceRuntimePolicySchema.safeParse({
+        ...policy(),
+        providerCountryKillSwitches: { fr: true },
+      }).success,
+    ).toBeFalse();
+    expect(
+      sourceRuntimePolicySchema.safeParse({
+        ...policy(),
+        sourceCountryKillSwitches: { FRA: true },
+      }).success,
+    ).toBeFalse();
+  });
 });
 
 describe("G009 additive database boundary", () => {
@@ -207,7 +249,7 @@ describe("G009 additive database boundary", () => {
       "CONSTRAINT job_occurrences_source_external_unique UNIQUE (source_id, external_id)",
     );
     expect(migration).toContain(
-      "FOREIGN KEY (raw_snapshot_id, source_id, external_id)",
+      "FOREIGN KEY (raw_snapshot_id, source_id, external_id, content_hash)",
     );
     expect(migration).toContain(
       "job_id text NOT NULL UNIQUE REFERENCES public.jobs(job_id)",
@@ -256,8 +298,18 @@ describe("G009 additive database boundary", () => {
     expect(migration).not.toMatch(
       /\b(?:INSERT\s+INTO|UPDATE)\s+(?:public\.)?provider_registry\b/i,
     );
-    expect(migration).not.toContain(
-      "ADD COLUMN IF NOT EXISTS writer_runtime",
-    );
+    expect(migration).toContain("policy.full_text_retention_allowed");
+    for (const definition of [
+      migration.match(/ALTER TABLE public\.career_sources[\s\S]*?;/)?.[0],
+      migration.match(
+        /CREATE TABLE IF NOT EXISTS public\.raw_job_snapshots[\s\S]*?\n\);/,
+      )?.[0],
+      migration.match(
+        /CREATE TABLE IF NOT EXISTS public\.job_occurrences[\s\S]*?\n\);/,
+      )?.[0],
+    ]) {
+      expect(definition).toBeDefined();
+      expect(definition).not.toContain("writer_runtime");
+    }
   });
 });

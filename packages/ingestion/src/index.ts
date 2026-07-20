@@ -227,7 +227,9 @@ export function sourceActivationBlockReason(
     input.policy.approvalStatus !== "approved" ||
     !input.policy.commercialUseAllowed ||
     !input.policy.redisplayAllowed ||
-    !input.policy.fullTextRetentionAllowed
+    !input.policy.fullTextRetentionAllowed ||
+    !input.policy.enabledEnvironments.includes("production") ||
+    !input.policy.permittedAccessMethods.includes(input.source.accessType)
   ) {
     return "policy_not_approved";
   }
@@ -767,6 +769,12 @@ export async function runIngestion<RawJob>(input: {
         const normalized = input.adapter.normalizeRaw(raw);
         metrics.durationsMs.normalization +=
           performance.now() - normalizationStartedAt;
+        if (normalized.envelope.provider !== input.provider) {
+          throw new IngestionError(
+            "integrity_error",
+            "normalized provider identity mismatch",
+          );
+        }
         const identity = `${normalized.envelope.provider}:${normalized.envelope.externalId}`;
         if (identities.has(identity)) {
           metrics.deduplicated += 1;
