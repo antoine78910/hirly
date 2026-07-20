@@ -1300,6 +1300,7 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
         schedule_id: str,
         source: str,
         cadence_seconds: int,
+        manifest: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         result = await self._python_ingestion_rpc(
             "python_ingestion_run_begin",
@@ -1309,6 +1310,7 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
                 "p_cadence_seconds": cadence_seconds,
                 "p_lease_owner": self._python_ingestion_lease_owner,
                 "p_lease_seconds": 300,
+                "p_manifest": manifest,
             },
         )
         if not isinstance(result, dict) or "acquired" not in result:

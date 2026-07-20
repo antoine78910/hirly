@@ -116,7 +116,8 @@ CREATE OR REPLACE FUNCTION public.python_ingestion_run_begin(
   p_source text,
   p_cadence_seconds integer,
   p_lease_owner text,
-  p_lease_seconds integer
+  p_lease_seconds integer,
+  p_manifest jsonb DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -212,7 +213,11 @@ BEGIN
           to_char(v_scheduled_for AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
         'schedule', 'running', p_schedule_id, v_scheduled_for, v_scheduled_for,
         v_now, v_now, p_lease_owner, v_token, 1,
-        v_now + make_interval(secs => p_lease_seconds), jsonb_build_object('source', p_source)
+        v_now + make_interval(secs => p_lease_seconds),
+        jsonb_strip_nulls(jsonb_build_object(
+          'source', p_source,
+          'authoritative_manifest', p_manifest
+        ))
       )
       RETURNING * INTO v_run;
     EXCEPTION WHEN unique_violation THEN
@@ -339,7 +344,16 @@ SET search_path = pg_catalog, public
 AS $$
 DECLARE
   v_rejected jsonb := coalesce(p_summary->'rejected_by_reason', '{}'::jsonb);
+  v_registered_manifest jsonb;
 BEGIN
+  SELECT summary->'authoritative_manifest'
+  INTO v_registered_manifest
+  FROM public.worker_runs
+  WHERE id = p_run_id
+    AND status = 'running'
+    AND lease_token = p_lease_token
+    AND lease_generation = p_lease_generation
+    AND lease_owner = p_lease_owner;
   IF p_status NOT IN ('succeeded', 'partially_succeeded', 'failed')
     OR p_completeness_state NOT IN ('complete_snapshot', 'partial', 'capped', 'failed', 'blocked')
     OR jsonb_typeof(v_rejected) <> 'object'
@@ -355,6 +369,48 @@ BEGIN
     )
   ) THEN
     RAISE EXCEPTION 'complete snapshot requires terminal complete partition proof'
+      USING ERRCODE = '22023';
+  END IF;
+  IF p_completeness_state = 'complete_snapshot' AND (
+    v_registered_manifest IS NULL
+    OR v_registered_manifest IS DISTINCT FROM p_summary->'authoritative_manifest'
+    OR
+    p_summary->'proof_scope' IS NULL
+    OR p_summary->'authoritative_manifest' IS NULL
+    OR (p_summary->'proof_scope') - 'scope_kind' - 'providers'
+      IS DISTINCT FROM p_summary->'authoritative_manifest'
+    OR jsonb_array_length(coalesce(
+      p_summary->'authoritative_manifest'->'expected_partition_ids', '[]'::jsonb
+    )) = 0
+    OR (p_summary->'authoritative_manifest'->>'expected_partition_count')::integer
+      IS DISTINCT FROM jsonb_array_length(
+        p_summary->'authoritative_manifest'->'expected_partition_ids'
+      )
+    OR EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements_text(
+        p_summary->'authoritative_manifest'->'expected_partition_ids'
+      ) AS expected(partition_id)
+      WHERE NOT EXISTS (
+        SELECT 1 FROM public.worker_run_partitions AS actual
+        WHERE actual.run_id = p_run_id
+          AND actual.partition_id = expected.partition_id
+          AND actual.status IN ('completed_with_results', 'completed_zero_results')
+      )
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.worker_run_partitions AS actual
+      WHERE actual.run_id = p_run_id
+        AND NOT EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements_text(
+            p_summary->'authoritative_manifest'->'expected_partition_ids'
+          ) AS expected(partition_id)
+          WHERE expected.partition_id = actual.partition_id
+        )
+    )
+  ) THEN
+    RAISE EXCEPTION 'complete snapshot requires exact authoritative manifest proof'
       USING ERRCODE = '22023';
   END IF;
   IF p_completeness_state = 'complete_snapshot' AND (
@@ -412,7 +468,7 @@ BEGIN
 END
 $$;
 
-REVOKE ALL ON FUNCTION public.python_ingestion_run_begin(text, text, integer, text, integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.python_ingestion_run_begin(text, text, integer, text, integer, jsonb) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.python_ingestion_schedule_sync(text, text, integer, boolean) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.python_ingestion_run_heartbeat(uuid, uuid, bigint, text, integer) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.python_ingestion_partition_record(uuid, uuid, bigint, text, text, text, jsonb, text) FROM PUBLIC;
@@ -421,7 +477,7 @@ DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
     GRANT EXECUTE ON FUNCTION public.python_ingestion_schedule_sync(text, text, integer, boolean) TO service_role;
-    GRANT EXECUTE ON FUNCTION public.python_ingestion_run_begin(text, text, integer, text, integer) TO service_role;
+    GRANT EXECUTE ON FUNCTION public.python_ingestion_run_begin(text, text, integer, text, integer, jsonb) TO service_role;
     GRANT EXECUTE ON FUNCTION public.python_ingestion_run_heartbeat(uuid, uuid, bigint, text, integer) TO service_role;
     GRANT EXECUTE ON FUNCTION public.python_ingestion_partition_record(uuid, uuid, bigint, text, text, text, jsonb, text) TO service_role;
     GRANT EXECUTE ON FUNCTION public.python_ingestion_run_complete(uuid, uuid, bigint, text, text, text, jsonb) TO service_role;
@@ -500,13 +556,13 @@ REVOKE ALL ON public.worker_ingestion_alerts FROM PUBLIC;
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
-    REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.python_ingestion_schedules, public.worker_run_partitions FROM service_role;
+    REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.python_ingestion_schedules, public.worker_run_partitions, public.worker_runs FROM service_role;
   END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'hirly_inventory_worker') THEN
-    REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.python_ingestion_schedules, public.worker_run_partitions FROM hirly_inventory_worker;
+    REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.python_ingestion_schedules, public.worker_run_partitions, public.worker_runs FROM hirly_inventory_worker;
   END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'hirly_inventory_operator') THEN
-    REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.python_ingestion_schedules, public.worker_run_partitions FROM hirly_inventory_operator;
+    REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.python_ingestion_schedules, public.worker_run_partitions, public.worker_runs FROM hirly_inventory_operator;
   END IF;
 END
 $$;

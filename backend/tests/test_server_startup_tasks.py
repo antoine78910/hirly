@@ -31,3 +31,21 @@ def test_startup_task_terminal_failure_is_logged(caplog):
 
     asyncio.run(_run())
     assert "startup_background_task_failed task=test-failure" in caplog.text
+
+
+def test_paused_ingestion_schedules_are_registered_disabled(monkeypatch):
+    states = server._python_ingestion_schedule_states(True)
+    assert len(states) == 4
+    assert all(enabled is False for *_rest, enabled in states)
+
+
+def test_provider_disabled_schedule_is_not_expected(monkeypatch):
+    monkeypatch.setattr(server, "ft_harvest_enabled", lambda: False)
+    monkeypatch.setattr(server, "jsearch_harvest_enabled", lambda: True)
+    states = {
+        source: enabled
+        for _schedule, source, _cadence, enabled
+        in server._python_ingestion_schedule_states(False)
+    }
+    assert states["france_travail"] is False
+    assert states["jsearch"] is True

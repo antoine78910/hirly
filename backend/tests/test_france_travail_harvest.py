@@ -1,6 +1,7 @@
 import asyncio
 import sys
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -12,6 +13,7 @@ from france_travail_harvest import (
     inventory_blitz_enabled,
 )
 from job_providers.base import ProviderResult
+from ingestion_run_lease import accounting_summary
 
 
 class _FakeProvider:
@@ -146,3 +148,59 @@ def test_harvest_runs_cities_concurrently(monkeypatch):
     assert summary["concurrency"] == 3
     assert summary["jobs_fetched"] == 4
     assert in_flight["max"] >= 2
+
+
+def test_split_harvest_accumulates_parent_and_child_accounting(monkeypatch):
+    class _SplitProvider:
+        def __init__(self):
+            self.calls = 0
+        async def search(self, query):
+            self.calls += 1
+            if self.calls == 1:
+                return ProviderResult(jobs=[
+                    {"job_id": "ft_1", "provider": "france_travail", "external_id": "1"},
+                    {"job_id": "ft_2", "provider": "france_travail", "external_id": "2"},
+                ], raw_response={
+                    "completeness": "capped_needs_split",
+                    "rows_seen": 3,
+                    "pagination_states": [{
+                        "pages_requested": 2, "pages_completed": 2, "retries": 1, "next_page": 2,
+                    }],
+                })
+            return ProviderResult(jobs=[
+                {"job_id": "ft_2", "provider": "france_travail", "external_id": "2"},
+                {"job_id": "ft_3", "provider": "france_travail", "external_id": "3"},
+            ], raw_response={
+                "completeness": "complete",
+                "rows_seen": 2,
+                "pagination_states": [{
+                    "pages_requested": 1, "pages_completed": 1, "retries": 2,
+                }],
+            })
+
+    provider = _SplitProvider()
+    monkeypatch.setattr(harvest_module, "is_job_provider_configured", lambda name=None: True)
+    monkeypatch.setattr(harvest_module, "get_job_provider", lambda name, key="": provider)
+    monkeypatch.setattr(harvest_module, "upsert_imported_jobs", AsyncMock(return_value={
+        "total_imported": 3,
+        "inserted": 3,
+        "updated": 0,
+        "reactivated": 0,
+        "exact_duplicate": 0,
+        "fuzzy_duplicate_candidates": 0,
+        "write_failed": 0,
+    }))
+    monkeypatch.setenv("FT_HARVEST_CITIES", "Paris")
+    monkeypatch.setenv("FT_HARVEST_QUERY_PAUSE_SECONDS", "0")
+    monkeypatch.setenv("FT_HARVEST_MAX_SPLIT_DEPTH", "3")
+
+    summary = asyncio.run(harvest_france_travail(_FakeDb(), max_queries=1, start_offset=0))
+    reconciled = accounting_summary(summary)
+
+    assert summary["raw_records"] == 5
+    assert summary["normalized_records"] == 3
+    assert summary["rejected_by_reason"] == {"normalization_failed": 2}
+    assert summary["pages_requested"] == 3
+    assert summary["pages_completed"] == 3
+    assert summary["retries"] == 3
+    assert reconciled["accounting_contract"]["state"] == "known"

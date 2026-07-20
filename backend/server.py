@@ -17090,6 +17090,15 @@ async def _startup_seed_impl():
 _STARTUP_BACKGROUND_TASKS: set[asyncio.Task] = set()
 
 
+def _python_ingestion_schedule_states(crons_paused: bool):
+    return (
+        ("python-france-travail-harvest", "france_travail", max(300, _env_int("FT_HARVEST_INTERVAL_MINUTES", 5) * 60), not crons_paused and ft_harvest_enabled()),
+        ("python-jsearch-harvest", "jsearch", max(300, _env_int("JSEARCH_HARVEST_INTERVAL_MINUTES", 15) * 60), not crons_paused and jsearch_harvest_enabled()),
+        ("python-ats-direct-maintenance", "direct_ats", max(300, _env_int("ATS_DIRECT_MAINTENANCE_INTERVAL_MINUTES", 5) * 60), not crons_paused and ats_direct_maintenance_loop_enabled()),
+        ("python-company-discovery", "company_discovery", max(300, _env_int("COMPANY_DISCOVERY_LOOP_INTERVAL_MINUTES", 10) * 60), not crons_paused and company_discovery_loop_enabled()),
+    )
+
+
 def _spawn_observed_startup_task(coro, *, name: str) -> asyncio.Task:
     """Retain startup tasks and make terminal failures visible."""
     task = asyncio.create_task(coro, name=name)
@@ -17146,13 +17155,7 @@ async def startup_seed():
     crons_paused = _env_bool("PAUSE_JOB_MAINTENANCE_CRONS", pause_default)
     sync_schedule = getattr(db, "sync_python_ingestion_schedule", None)
     if callable(sync_schedule):
-        schedule_states = (
-            ("python-france-travail-harvest", "france_travail", max(300, _env_int("FT_HARVEST_INTERVAL_MINUTES", 5) * 60), not crons_paused and ft_harvest_enabled()),
-            ("python-jsearch-harvest", "jsearch", max(300, _env_int("JSEARCH_HARVEST_INTERVAL_MINUTES", 15) * 60), not crons_paused and jsearch_harvest_enabled()),
-            ("python-ats-direct-maintenance", "direct_ats", max(300, _env_int("ATS_DIRECT_MAINTENANCE_INTERVAL_MINUTES", 5) * 60), not crons_paused and ats_direct_maintenance_loop_enabled()),
-            ("python-company-discovery", "company_discovery", max(300, _env_int("COMPANY_DISCOVERY_LOOP_INTERVAL_MINUTES", 10) * 60), not crons_paused and company_discovery_loop_enabled()),
-        )
-        for schedule_id, source, cadence_seconds, enabled in schedule_states:
+        for schedule_id, source, cadence_seconds, enabled in _python_ingestion_schedule_states(crons_paused):
             await sync_schedule(
                 schedule_id=schedule_id,
                 source=source,

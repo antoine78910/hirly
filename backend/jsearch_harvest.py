@@ -458,6 +458,11 @@ async def run_jsearch_harvest_loop(db) -> None:
                         schedule_id="python-jsearch-harvest",
                         source="jsearch",
                         cadence_seconds=interval_minutes * 60,
+                        manifest=_authoritative_manifest([
+                            (role, city)
+                            for city in _harvest_cities()
+                            for role in _harvest_roles()
+                        ]),
                     )
                     if callable(begin)
                     else {"acquired": True, "run_id": None}
@@ -485,12 +490,19 @@ async def run_jsearch_harvest_loop(db) -> None:
                     if ledger_run_id and callable(complete):
                         errors = summary.get("errors") or []
                         completeness = summary.get("completeness")
+                        proof = summary.get("proof_scope") or {}
+                        full_cycle_proven = (
+                            completeness == "complete_snapshot"
+                            and bool(partition_runs)
+                            and {partition_identity(fact, index) for index, fact in enumerate(partition_runs)}
+                            == set(proof.get("expected_partition_ids") or [])
+                        )
                         completed = await complete(
                             run_id=ledger_run_id,
                             status="succeeded" if not errors else "partially_succeeded",
                             completeness_state=(
                                 "complete_snapshot"
-                                if not errors and completeness == "complete_snapshot"
+                                if not errors and full_cycle_proven
                                 else "partial"
                             ),
                             summary=summary,

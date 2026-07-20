@@ -76,7 +76,7 @@ def test_jsearch_completed_occurrence_writes_terminal_counters(monkeypatch):
     completion = db.completions[0]
     assert completion["run_id"] == "run-1"
     assert completion["status"] == "succeeded"
-    assert completion["completeness_state"] == "complete_snapshot"
+    assert completion["completeness_state"] == "partial"
     assert completion["summary"]["jobs_fetched"] == 4
     assert completion["summary"]["raw_records"] == 4
     assert completion["summary"]["normalized_records"] == 4
@@ -143,6 +143,7 @@ def test_supabase_ledger_claim_uses_narrow_rpc(monkeypatch):
         "p_cadence_seconds": 900,
         "p_lease_owner": db._python_ingestion_lease_owner,
         "p_lease_seconds": 300,
+        "p_manifest": None,
     }
 
 

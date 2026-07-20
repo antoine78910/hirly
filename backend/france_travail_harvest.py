@@ -463,6 +463,7 @@ async def run_france_travail_harvest_loop(db) -> None:
                         schedule_id="python-france-travail-harvest",
                         source="france_travail",
                         cadence_seconds=interval_minutes * 60,
+                        manifest=_authoritative_manifest(_harvest_targets()),
                     )
                     if callable(begin)
                     else {"acquired": True, "run_id": None}
@@ -489,12 +490,19 @@ async def run_france_travail_harvest_loop(db) -> None:
                     complete = getattr(db, "complete_python_ingestion_run", None)
                     if ledger_run_id and callable(complete):
                         errors = summary.get("errors") or []
+                        proof = summary.get("proof_scope") or {}
+                        full_cycle_proven = (
+                            summary.get("completeness") == "complete_snapshot"
+                            and bool(partition_runs)
+                            and {partition_identity(fact, index) for index, fact in enumerate(partition_runs)}
+                            == set(proof.get("expected_partition_ids") or [])
+                        )
                         completed = await complete(
                             run_id=ledger_run_id,
                             status="succeeded" if not errors else "partially_succeeded",
                             completeness_state=(
                                 "complete_snapshot"
-                                if not errors and summary.get("completeness") == "complete_snapshot"
+                                if not errors and full_cycle_proven
                                 else "partial"
                             ),
                             summary=summary,
