@@ -60,6 +60,8 @@ coverage_evidence AS (
     AND coverage.provider IS NULL
     AND coverage.status = 'succeeded'
     AND coverage.requested_at <= parameters.generated_at
+    AND coverage.created_at <= parameters.generated_at
+    AND coverage.updated_at <= parameters.generated_at
     AND coverage.started_at IS NOT NULL
     AND coverage.started_at <= parameters.generated_at
     AND coverage.finished_at IS NOT NULL

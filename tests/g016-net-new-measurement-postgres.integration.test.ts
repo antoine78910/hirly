@@ -239,6 +239,14 @@ describe("G016 PostgreSQL measurement provenance", () => {
         '2026-07-20T12:10:00Z',
         '{"schemaVersion":"hirly.paid-user-inventory-coverage.v1","scope":"paid_user_inventory","coverageRunId":"00000000-0000-4000-8000-000000000033","freshnessWindowDays":30,"freshnessCutoff":"2026-06-20T14:00:00.000Z"}'::jsonb,
         '2026-07-20T12:00:00Z', '2026-07-20T12:10:00Z'
+      ),
+      (
+        '00000000-0000-4000-8000-000000000034',
+        'inventory_maintenance', NULL, 'g016:future-coverage-write', 'system',
+        'succeeded', '2026-07-20T12:00:00Z', '2026-07-20T12:01:00Z',
+        '2026-07-20T12:10:00Z',
+        '{"schemaVersion":"hirly.paid-user-inventory-coverage.v1","scope":"paid_user_inventory","coverageRunId":"00000000-0000-4000-8000-000000000034","freshnessWindowDays":30,"freshnessCutoff":"2026-06-20T14:00:00.000Z"}'::jsonb,
+        '2026-07-20T15:00:00Z', '2026-07-20T15:00:00Z'
       );
 
       INSERT INTO public.paid_user_inventory_snapshots (
@@ -255,7 +263,8 @@ describe("G016 PostgreSQL measurement provenance", () => {
         '00000000-0000-4000-8000-000000000030'::uuid,
         '00000000-0000-4000-8000-000000000031'::uuid,
         '00000000-0000-4000-8000-000000000032'::uuid,
-        '00000000-0000-4000-8000-000000000033'::uuid
+        '00000000-0000-4000-8000-000000000033'::uuid,
+        '00000000-0000-4000-8000-000000000034'::uuid
       ]) AS run_id;
 
       INSERT INTO public.paid_user_source_contributions (
@@ -274,7 +283,8 @@ describe("G016 PostgreSQL measurement provenance", () => {
         '00000000-0000-4000-8000-000000000030'::uuid,
         '00000000-0000-4000-8000-000000000031'::uuid,
         '00000000-0000-4000-8000-000000000032'::uuid,
-        '00000000-0000-4000-8000-000000000033'::uuid
+        '00000000-0000-4000-8000-000000000033'::uuid,
+        '00000000-0000-4000-8000-000000000034'::uuid
       ]) AS run_id;
     `]);
   });
@@ -286,6 +296,7 @@ describe("G016 PostgreSQL measurement provenance", () => {
       "00000000-0000-4000-8000-000000000030",
       "00000000-0000-4000-8000-000000000032",
       "00000000-0000-4000-8000-000000000033",
+      "00000000-0000-4000-8000-000000000034",
       "00000000-0000-4000-8000-000000000099",
     ]) {
       expect((await measure(coverageRunId)).status).toBe("BLOCKED_EXTERNAL");
