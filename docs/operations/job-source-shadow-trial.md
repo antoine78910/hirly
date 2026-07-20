@@ -29,7 +29,16 @@ An operator must create a disabled `career_sources` row and a current
 - explicit reviewer and approval reference;
 - start/expiry window;
 - total-run, page, candidate and byte budgets;
-- a matching non-blocked immutable policy evidence record.
+- a matching immutable `licence_text` or `written_permission` evidence record
+  whose reviewed claim scope explicitly covers trial eligibility, provider,
+  source, tenant, access method, environment, commercial use, redisplay and
+  retention.
+
+Public readability, an unauthenticated endpoint, a dataset catalogue page, or a
+`requires_legal_review` qualification status is not permission and cannot
+satisfy the trial gate. When the required reviewed evidence is unavailable,
+persist a typed `BLOCKED_EXTERNAL` source-policy result instead of starting a
+trial.
 
 The trial policy is separate from production eligibility. It neither requires
 nor changes `production_eligible`, provider authorization, canonical writer
