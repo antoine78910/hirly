@@ -57,6 +57,96 @@ export const sourceLifecycleStateSchema = z.enum([
   "expired",
   "blocked",
 ]);
+export const sourceTrialEnvironmentSchema = z.enum([
+  "development",
+  "test",
+  "staging",
+]);
+export const sourceTrialStatusSchema = z.enum([
+  "completed",
+  "budget_exhausted",
+  "policy_expired",
+  "failed",
+]);
+
+export const sourceTrialBudgetSchema = z
+  .object({
+    maxPages: z.number().int().positive().max(10_000),
+    maxCandidates: z.number().int().positive().max(1_000_000),
+    maxBytes: z.number().int().positive().max(1_073_741_824),
+  })
+  .strict();
+
+export const sourceTrialManifestSchema = z
+  .object({
+    schemaVersion: z.literal("hirly.source-trial-manifest.v1"),
+    trialKey: z
+      .string()
+      .trim()
+      .min(1)
+      .max(256)
+      .regex(/^[a-z0-9]+(?:[a-z0-9._:-]*[a-z0-9])?$/),
+    sourceId: z.uuid(),
+    provider: providerSchema,
+    tenantKey: z.string().trim().min(1).max(512),
+    environment: sourceTrialEnvironmentSchema,
+    countryCodes: z
+      .array(z.string().regex(/^[A-Z]{2}$/))
+      .min(1)
+      .max(250),
+    policyEvidenceId: z.uuid(),
+    requestedAt: z.iso.datetime({ offset: true }),
+    expiresAt: z.iso.datetime({ offset: true }),
+    budget: sourceTrialBudgetSchema,
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (new Date(value.expiresAt) <= new Date(value.requestedAt)) {
+      context.addIssue({
+        code: "custom",
+        message: "trial expiry must be after its request time",
+        path: ["expiresAt"],
+      });
+    }
+    if (new Set(value.countryCodes).size !== value.countryCodes.length) {
+      context.addIssue({
+        code: "custom",
+        message: "trial country codes must be unique",
+        path: ["countryCodes"],
+      });
+    }
+  });
+
+export const sourceTrialResultSchema = z
+  .object({
+    schemaVersion: z.literal("hirly.source-trial-result.v1"),
+    runId: z.uuid(),
+    trialKey: z.string().trim().min(1).max(256),
+    status: sourceTrialStatusSchema,
+    startedAt: z.iso.datetime({ offset: true }),
+    finishedAt: z.iso.datetime({ offset: true }),
+    pagesFetched: z.number().int().nonnegative(),
+    candidatesObserved: z.number().int().nonnegative(),
+    bytesStored: z.number().int().nonnegative(),
+    stopReason: z.string().trim().min(1).max(512).nullable(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (new Date(value.finishedAt) < new Date(value.startedAt)) {
+      context.addIssue({
+        code: "custom",
+        message: "trial result cannot finish before it started",
+        path: ["finishedAt"],
+      });
+    }
+    if (value.status !== "completed" && value.stopReason === null) {
+      context.addIssue({
+        code: "custom",
+        message: "non-completed trials require a stop reason",
+        path: ["stopReason"],
+      });
+    }
+  });
 
 export const rateLimitConfigSchema = z
   .object({
@@ -412,6 +502,13 @@ export type Provider = z.infer<typeof providerSchema>;
 export type SourceRunMode = z.infer<typeof sourceRunModeSchema>;
 export type SourceAccessType = z.infer<typeof sourceAccessTypeSchema>;
 export type SourceLifecycleState = z.infer<typeof sourceLifecycleStateSchema>;
+export type SourceTrialEnvironment = z.infer<
+  typeof sourceTrialEnvironmentSchema
+>;
+export type SourceTrialStatus = z.infer<typeof sourceTrialStatusSchema>;
+export type SourceTrialBudget = z.infer<typeof sourceTrialBudgetSchema>;
+export type SourceTrialManifest = z.infer<typeof sourceTrialManifestSchema>;
+export type SourceTrialResult = z.infer<typeof sourceTrialResultSchema>;
 export type SourceCheckpoint = z.infer<typeof sourceCheckpointSchema>;
 export type SourceFetchRequest = z.infer<typeof sourceFetchRequestSchema>;
 export type SourceRegistryEntry = z.infer<typeof sourceRegistryEntrySchema>;

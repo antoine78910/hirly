@@ -5,6 +5,8 @@ import {
   enqueueRunSchema,
   healthSchema,
   providerRegistrySchema,
+  sourceTrialManifestSchema,
+  sourceTrialResultSchema,
 } from "../src";
 
 describe("shared contracts", () => {
@@ -92,6 +94,56 @@ describe("shared contracts", () => {
           baseUrl,
         }),
       ).toThrow();
+    }
+  });
+
+  test("validates bounded non-production source trial manifests and results", () => {
+    const manifest = {
+      schemaVersion: "hirly.source-trial-manifest.v1" as const,
+      trialKey: "greenhouse:hirly:2026-07-20",
+      sourceId: "018f02d8-a8b8-7f1d-a419-bf38eaf22a90",
+      provider: "greenhouse" as const,
+      tenantKey: "hirly",
+      environment: "staging" as const,
+      countryCodes: ["FR"],
+      policyEvidenceId: "018f02d8-a8b8-7f1d-a419-bf38eaf22a91",
+      requestedAt: "2026-07-20T12:00:00+00:00",
+      expiresAt: "2026-07-21T12:00:00+00:00",
+      budget: {
+        maxPages: 25,
+        maxCandidates: 2_500,
+        maxBytes: 50_000_000,
+      },
+    };
+    expect(sourceTrialManifestSchema.parse(manifest)).toEqual(manifest);
+    expect(
+      sourceTrialResultSchema.parse({
+        schemaVersion: "hirly.source-trial-result.v1",
+        runId: "018f02d8-a8b8-7f1d-a419-bf38eaf22a92",
+        trialKey: manifest.trialKey,
+        status: "completed",
+        startedAt: manifest.requestedAt,
+        finishedAt: "2026-07-20T12:05:00+00:00",
+        pagesFetched: 3,
+        candidatesObserved: 120,
+        bytesStored: 45_000,
+        stopReason: null,
+      }).status,
+    ).toBe("completed");
+
+    for (const invalid of [
+      { ...manifest, environment: "production" },
+      { ...manifest, countryCodes: ["FR", "FR"] },
+      {
+        ...manifest,
+        budget: { ...manifest.budget, maxBytes: 1_073_741_825 },
+      },
+      {
+        ...manifest,
+        requestedAt: manifest.expiresAt,
+      },
+    ]) {
+      expect(() => sourceTrialManifestSchema.parse(invalid)).toThrow();
     }
   });
 });
