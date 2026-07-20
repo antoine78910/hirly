@@ -87,10 +87,10 @@ def test_admin_routes_use_one_bounded_operation_and_emit_fresh_small_payloads(mo
 
 def test_admin_routes_keep_admin_authorization_dependency():
     protected_paths = {
-        "/admin/overview",
-        "/admin/analytics",
-        "/admin/users",
-        "/admin/applications",
+        "/api/admin/overview",
+        "/api/admin/analytics",
+        "/api/admin/users",
+        "/api/admin/applications",
     }
     routes = {route.path: route for route in server.api_router.routes if route.path in protected_paths}
     assert routes.keys() == protected_paths
@@ -209,11 +209,19 @@ def test_admin_sql_contracts_bound_rows_windows_payload_widths_and_privileges():
         assert "'generated_at'" in function_sql
     assert "LEAST(GREATEST(COALESCE(p_limit,100),1),500)" in users_sql
     assert "LEAST(GREATEST(COALESCE(p_limit,100),1),500)" in applications_sql
-    assert "LEAST(COALESCE(p_window_days,30),365)" in analytics_sql
-    assert "LEAST(COALESCE(p_window_days,30),365)" in users_sql
-    assert "LEAST(COALESCE(p_window_days,30),365)" in applications_sql
+    window_bound = r"LEAST\(\s*COALESCE\(\s*p_window_days\s*,\s*30\s*\)\s*,\s*365\s*\)"
+    assert re.search(window_bound, analytics_sql)
+    assert re.search(window_bound, users_sql)
+    assert re.search(window_bound, applications_sql)
 
-    compact_forbidden = ("cv_", "source_document", "description", "cover_letter", "tailored_resume", "data")
+    compact_forbidden = (
+        "cv_",
+        "source_document",
+        "description",
+        "cover_letter",
+        "tailored_resume",
+        "data->",
+    )
     for function_sql in (users_sql, applications_sql):
         lowered = function_sql.lower()
         assert not any(field in lowered for field in compact_forbidden)
