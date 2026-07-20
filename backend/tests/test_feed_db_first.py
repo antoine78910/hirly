@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import server
+from jobs_service import FEED_COVERAGE_EVALUATOR_VERSION, build_feed_coverage_snapshot
 
 
 class _Cursor:
@@ -128,6 +129,7 @@ def _run_feed(
     geo_places=None,
     force_provider_refresh=False,
     search_role=None,
+    audit_mode=False,
 ):
     env = env or {}
     for key, value in {
@@ -190,6 +192,7 @@ def _run_feed(
         force_provider_refresh=force_provider_refresh,
         score=False,
         search_role=search_role,
+        audit_mode=audit_mode,
     ))
     return response, calls
 
@@ -273,6 +276,63 @@ def _legacy_direct_job(index, *, country_code="gb", location="London, United Kin
 def test_db_first_enough_jobs_does_not_call_jsearch(monkeypatch):
     response, calls = _run_feed(monkeypatch, [_job(i) for i in range(35)])
     assert calls["refresh"] == 0
+
+
+def test_feed_audit_mode_matches_no_refresh_order_and_terminal_reason(monkeypatch):
+    jobs = [_job(1), _job(2), _job(3, tier="D", status="invalid")]
+    normal, normal_calls = _run_feed(
+        monkeypatch,
+        jobs,
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+    )
+    audited, audit_calls = _run_feed(
+        monkeypatch,
+        jobs,
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "true"},
+        audit_mode=True,
+    )
+
+    assert [job["job_id"] for job in audited["jobs"]] == [job["job_id"] for job in normal["jobs"]]
+    assert audited["empty_reason"] == normal["empty_reason"]
+    assert audit_calls["refresh"] == normal_calls["refresh"] == 0
+
+
+def test_feed_audit_mode_never_refreshes_empty_inventory(monkeypatch):
+    response, calls = _run_feed(
+        monkeypatch,
+        [],
+        env={
+            "JOBS_FEED_SYNC_REFRESH_ENABLED": "true",
+            "JOBS_FEED_BACKGROUND_REFRESH_ENABLED": "true",
+        },
+        audit_mode=True,
+    )
+
+    assert response["jobs"] == []
+    assert calls["refresh"] == 0
+
+
+def test_feed_coverage_snapshot_is_hashed_versioned_and_ordered(monkeypatch):
+    monkeypatch.setenv("COVERAGE_AUDIT_HASH_SALT", "test-only-salt")
+    jobs = [_job(1), _job(2)]
+    response, _ = _run_feed(
+        monkeypatch,
+        jobs,
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+    )
+
+    snapshot = build_feed_coverage_snapshot(
+        user_id="user_1",
+        profile=_profile(),
+        feed_response=response,
+    )
+
+    assert snapshot["user_id"] != "user_1"
+    assert snapshot["ordered_eligible_job_ids"] == [job["job_id"] for job in response["jobs"]]
+    assert snapshot["terminal_reason"] == (response["fallback_used"] or "RESULTS_RETURNED")
+    assert snapshot["evaluator_version"] == FEED_COVERAGE_EVALUATOR_VERSION
+    assert snapshot["relevant_total"] == len(response["jobs"])
+    assert snapshot["unseen_actionable_total"] == len(response["jobs"])
     assert response["jobs"]
     assert response["total"] <= 5
     assert response["filters_applied"]["manual_fulfillment_ready"] is True
