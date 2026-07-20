@@ -1717,6 +1717,25 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
             )
             raise
 
+    async def patch_onboarding_profile(
+        self,
+        user_id: str,
+        *,
+        extras: Dict[str, Any],
+        preferences: Dict[str, Any],
+        contact: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """Atomically merge onboarding-owned profile sections and return the profile."""
+        return await self._python_ingestion_rpc(
+            "patch_onboarding_profile",
+            {
+                "p_user_id": user_id,
+                "p_extras": _json_safe(extras),
+                "p_preferences": _json_safe(preferences),
+                "p_contact": _json_safe(contact),
+            },
+        )
+
     async def _python_provider_rpc(self, function_name: str, payload: Dict[str, Any]) -> Any:
         adapter = self._jobs_inventory_rpc_adapter
         return await adapter._python_ingestion_rpc(function_name, payload)

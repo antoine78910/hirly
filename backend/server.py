@@ -1070,6 +1070,12 @@ class StructuredProfileDataUpdate(BaseModel):
     application_defaults: Dict[str, Any] = Field(default_factory=dict)
 
 
+class OnboardingProfilePatch(BaseModel):
+    onboarding: Dict[str, Any] = Field(default_factory=dict)
+    preferences: Dict[str, Any] = Field(default_factory=dict)
+    contact: Dict[str, Any] = Field(default_factory=dict)
+
+
 class OnboardingCategoryItem(BaseModel):
     id: str
     label: str
@@ -6475,6 +6481,25 @@ async def patch_profile_extras(payload: Dict[str, Any], user: User = Depends(get
         upsert=True,
     )
     return {"ok": True, "extras": merged}
+
+
+@api_router.patch("/profile/onboarding")
+async def patch_onboarding_profile(body: OnboardingProfilePatch, user: User = Depends(get_current_user)):
+    """Atomically persist onboarding progress, search preferences, and contact."""
+    contact = {key: value for key, value in body.contact.items() if value is not None}
+    contact["email"] = user.email
+    preferences = {key: value for key, value in body.preferences.items() if value is not None}
+    preferences["updated_at"] = datetime.now(timezone.utc).isoformat()
+    patcher = getattr(db, "patch_onboarding_profile", None)
+    if patcher is None:
+        raise HTTPException(status_code=503, detail="Atomic onboarding persistence is unavailable")
+    profile = await patcher(
+        user.user_id,
+        extras={"onboarding": body.onboarding},
+        preferences=preferences,
+        contact=contact,
+    )
+    return {"ok": True, "profile": _sanitize_profile_for_client(profile)}
 
 
 @api_router.get("/locations/search")
