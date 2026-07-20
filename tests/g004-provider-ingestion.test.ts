@@ -12,13 +12,18 @@ import {
 import { providerModules } from "../apps/worker/src/providers";
 import type { ProviderCore } from "../apps/worker/src/providers/core";
 import { createTaskHandlers } from "../apps/worker/src/runtime/handlers";
-import type { RuntimeStore } from "../apps/worker/src/runtime/types";
+import { Consumer } from "../apps/worker/src/runtime/consumer";
+import { PermanentTaskError } from "../apps/worker/src/runtime/retry";
+import type {
+  ConsumerRepository,
+  RuntimeStore,
+} from "../apps/worker/src/runtime/types";
 import type {
   CanonicalJob,
   Provider,
   ProviderSearchRequest,
 } from "../packages/contracts/src/index";
-import type { ClaimedTask } from "../packages/db/src/index";
+import type { ClaimedTask, Lease } from "../packages/db/src/index";
 import { createJsonLogger } from "../packages/observability/src/index";
 
 const providers = ["apec", "hellowork", "wttj", "indeed"] as const;
@@ -60,6 +65,30 @@ function request(provider: Provider): ProviderSearchRequest {
     cursor: null,
     pageSize: 50,
     maxPages: 5,
+  };
+}
+
+function claimedProviderTask(provider: Provider = "apec"): ClaimedTask {
+  return {
+    taskId: "00000000-0000-4000-8000-000000000041",
+    runId: "00000000-0000-4000-8000-000000000042",
+    taskKey: `g004-${provider}`,
+    taskType: "provider.fetch_page",
+    provider,
+    payload: {
+      query: "engineering",
+      location: "France",
+      countryCode: "FR",
+      cursor: null,
+      pageSize: 50,
+      maxPages: 1,
+    },
+    leaseToken: "00000000-0000-4000-8000-000000000043",
+    claimGeneration: 1n,
+    leaseOwner: "g004-test-worker",
+    attempts: 1,
+    maxAttempts: 3,
+    leaseUntil: new Date("2026-07-20T00:01:00.000Z"),
   };
 }
 
@@ -140,6 +169,21 @@ describe("G004 stable canonical identity and normalization", () => {
     );
   });
 
+  test("changes fingerprints when identity-relevant content changes", async () => {
+    const fixture = await loadFixture("hellowork");
+    const adapter = providerModules.hellowork.adapter;
+    const baseline = toCanonicalJob(adapter.normalizeRaw(fixture), fixedNow);
+    const changed = toCanonicalJob(
+      adapter.normalizeRaw({
+        ...fixture,
+        title: "Principal Data Engineer",
+      }),
+      fixedNow,
+    );
+
+    expect(changed.fingerprint).not.toBe(baseline.fingerprint);
+  });
+
   test("redacts secrets and personal data before retaining the source document", async () => {
     const fixture = await loadFixture("apec");
     const sensitive = {
@@ -196,20 +240,84 @@ describe("G004 provider core authorization and fixture contracts", () => {
     }
   });
 
-  test("rejects malformed and cross-provider fixture payloads", async () => {
+  test("requires approved, sanitized fixture provenance for every provider", async () => {
+    for (const provider of providers) {
+      const fixture = await loadFixture(provider);
+      expect(fixture.provenance).toEqual({
+        kind: "synthetic_sanitized",
+        approvalRef: ".omx/plans/prd-nextjs-bun-foundation.md#phase-4",
+        containsPersonalData: false,
+      });
+      expect(JSON.stringify(fixture)).not.toMatch(
+        /@(?:gmail|outlook|yahoo)\.|Bearer\s|password/i,
+      );
+    }
+  });
+
+  test("accepts optional defaults and rejects malformed input for every provider", async () => {
+    for (const provider of providers) {
+      const fixture = await loadFixture(provider);
+      const core = providerModules[provider] as ProviderCore<Fixture>;
+      expect(() =>
+        core.adapter.normalizeRaw({
+          ...fixture,
+          title: "",
+        }),
+      ).toThrow();
+
+      const optional = { ...fixture } as Partial<Fixture>;
+      delete optional.description;
+      delete optional.contractType;
+      delete optional.status;
+      delete optional.applyUrls;
+      delete optional.sourceDocument;
+      const normalized = core.adapter.normalizeRaw(optional as Fixture);
+      expect(normalized.description).toBe("");
+      expect(normalized.contractType).toBeNull();
+      expect(normalized.status).toBeNull();
+      expect(normalized.applyUrls).toEqual([]);
+    }
+  });
+
+  test("rejects cross-provider fixture payloads", async () => {
     const fixture = await loadFixture("apec");
-    expect(() =>
-      providerModules.apec.adapter.normalizeRaw({
-        ...fixture,
-        title: "",
-      }),
-    ).toThrow();
     expect(() =>
       providerModules.apec.adapter.normalizeRaw({
         ...fixture,
         provider: "indeed",
       }),
     ).toThrow();
+  });
+
+  test("paginates and deduplicates fixtures for each provider core", async () => {
+    for (const provider of providers) {
+      const fixture = await loadFixture(provider);
+      const repository = new MemoryRepository();
+      const core = providerModules[provider] as ProviderCore<Fixture>;
+      const result = await runIngestion({
+        provider,
+        transport: {
+          async fetch(pageRequest) {
+            return pageRequest.cursor
+              ? { items: [structuredClone(fixture)], nextCursor: null }
+              : { items: [fixture], nextCursor: "page-2" };
+          },
+        },
+        adapter: core.adapter,
+        repository,
+        request: request(provider),
+        rateLimit: { requestsPerMinute: 60_000, concurrency: 1 },
+        now: () => fixedNow,
+      });
+      expect(result.metrics).toMatchObject({
+        pages: 2,
+        fetched: 2,
+        accepted: 1,
+        deduplicated: 1,
+        upserted: 1,
+      });
+      expect(repository.rows.size).toBe(1);
+    }
   });
 
   test("provider-specific modules have no database import", async () => {
@@ -415,6 +523,13 @@ describe("G004 provider-neutral ingestion behavior", () => {
       {
         raw: {
           ...fixture,
+          applyUrls: ["https://www.talent.com/view?id=fixture"],
+        },
+        expected: ["discovery_only", "D", "invalid"],
+      },
+      {
+        raw: {
+          ...fixture,
           applyUrls: ["https://careers.example.test/jobs/1"],
         },
         expected: ["needs_validation", "C", "unknown"],
@@ -455,16 +570,21 @@ describe("G004 rate control", () => {
   test("spaces aggregate starts even when concurrency permits overlap", async () => {
     let now = 0;
     const starts: number[] = [];
+    const pendingSleeps: Array<{
+      wakeAt: number;
+      resolve: () => void;
+    }> = [];
     const gate = new ProviderRateGate(
       { requestsPerMinute: 60, concurrency: 3 },
       () => now,
-      async (milliseconds) => {
-        now += milliseconds;
-      },
+      (milliseconds) =>
+        new Promise<void>((resolve) => {
+          pendingSleeps.push({ wakeAt: now + milliseconds, resolve });
+        }),
     );
     const signal = new AbortController().signal;
 
-    await Promise.all(
+    const runs = Promise.all(
       Array.from({ length: 3 }, () =>
         gate.run(async () => {
           starts.push(now);
@@ -472,34 +592,71 @@ describe("G004 rate control", () => {
       ),
     );
 
+    await Bun.sleep(0);
+    expect(starts).toEqual([0]);
+
+    const firstSleep = pendingSleeps.shift();
+    expect(firstSleep?.wakeAt).toBe(1_000);
+    now = firstSleep?.wakeAt ?? now;
+    firstSleep?.resolve();
+    await Bun.sleep(0);
+    expect(starts).toEqual([0, 1_000]);
+
+    const secondSleep = pendingSleeps.shift();
+    expect(secondSleep?.wakeAt).toBe(2_000);
+    now = secondSleep?.wakeAt ?? now;
+    secondSleep?.resolve();
+    await runs;
     expect(starts).toEqual([0, 1_000, 2_000]);
+  });
+
+  test("caps true in-flight concurrency and removes an aborted waiter", async () => {
+    let active = 0;
+    let maxActive = 0;
+    const releases: Array<() => void> = [];
+    const gate = new ProviderRateGate(
+      { requestsPerMinute: 60_000, concurrency: 2 },
+      () => 0,
+      async () => {},
+    );
+    const run = (signal: AbortSignal) =>
+      gate.run(
+        () =>
+          new Promise<void>((resolve) => {
+            active += 1;
+            maxActive = Math.max(maxActive, active);
+            releases.push(() => {
+              active -= 1;
+              resolve();
+            });
+          }),
+        signal,
+      );
+    const first = run(new AbortController().signal);
+    const second = run(new AbortController().signal);
+    const queuedController = new AbortController();
+    let queuedStarted = false;
+    const queued = gate.run(async () => {
+      queuedStarted = true;
+    }, queuedController.signal);
+
+    await Bun.sleep(0);
+    expect(maxActive).toBe(2);
+    expect(queuedStarted).toBeFalse();
+    queuedController.abort(new Error("cancelled"));
+    await expect(queued).rejects.toThrow("cancelled");
+
+    releases.splice(0).forEach((release) => release());
+    await Promise.all([first, second]);
+    expect(queuedStarted).toBeFalse();
+    expect(maxActive).toBe(2);
   });
 });
 
 describe("G004 Bun runtime dispatch", () => {
   test("dispatches fixture ingestion through the fenced writer and emits stage metrics", async () => {
     const fixture = await loadFixture("apec");
-    const task: ClaimedTask = {
-      taskId: "00000000-0000-4000-8000-000000000041",
-      runId: "00000000-0000-4000-8000-000000000042",
-      taskKey: "g004-apec",
-      taskType: "provider.fetch_page",
-      provider: "apec",
-      payload: {
-        query: "engineering",
-        location: "France",
-        countryCode: "FR",
-        cursor: null,
-        pageSize: 50,
-        maxPages: 1,
-      },
-      leaseToken: "00000000-0000-4000-8000-000000000043",
-      claimGeneration: 1n,
-      leaseOwner: "g004-test-worker",
-      attempts: 1,
-      maxAttempts: 3,
-      leaseUntil: new Date("2026-07-20T00:01:00.000Z"),
-    };
+    const task = claimedProviderTask();
     const writes: CanonicalJob[][] = [];
     const store = {
       async assertProviderRunnable() {},
@@ -555,6 +712,162 @@ describe("G004 Bun runtime dispatch", () => {
         deduplicated: 0,
         upserted: 1,
       },
+    });
+  });
+
+  test("blocks registry-refused providers before fetch or canonical write", async () => {
+    let fetches = 0;
+    let writes = 0;
+    const store = {
+      async assertProviderRunnable() {
+        throw new Error("authorization_blocked");
+      },
+      async writeJobsAndComplete() {
+        writes += 1;
+        return true;
+      },
+      async dueSchedules() {
+        return [];
+      },
+      async enqueueDueSchedule() {
+        return null;
+      },
+      async getRun() {
+        return null;
+      },
+    } satisfies RuntimeStore;
+    const modules = {
+      ...providerModules,
+      apec: {
+        ...providerModules.apec,
+        transport: {
+          async fetch() {
+            fetches += 1;
+            return { items: [], nextCursor: null };
+          },
+        },
+      },
+    } as unknown as Record<Provider, ProviderCore<unknown>>;
+    const handler = createTaskHandlers(store, undefined, modules)[
+      "provider.fetch_page"
+    ];
+
+    await expect(
+      handler?.(claimedProviderTask(), new AbortController().signal),
+    ).rejects.toMatchObject({
+      name: "PermanentTaskError",
+      code: "authorization_blocked",
+    });
+    expect(fetches).toBe(0);
+    expect(writes).toBe(0);
+  });
+
+  test("turns a lost writer fence into a stable integrity failure", async () => {
+    const fixture = await loadFixture("apec");
+    const store = {
+      async assertProviderRunnable() {},
+      async writeJobsAndComplete() {
+        return false;
+      },
+      async dueSchedules() {
+        return [];
+      },
+      async enqueueDueSchedule() {
+        return null;
+      },
+      async getRun() {
+        return null;
+      },
+    } satisfies RuntimeStore;
+    const modules = {
+      ...providerModules,
+      apec: {
+        ...providerModules.apec,
+        rateLimit: { requestsPerMinute: 60_000, concurrency: 1 },
+        transport: {
+          async fetch() {
+            return { items: [fixture], nextCursor: null };
+          },
+        },
+      },
+    } as unknown as Record<Provider, ProviderCore<unknown>>;
+    const handler = createTaskHandlers(store, undefined, modules)[
+      "provider.fetch_page"
+    ];
+
+    await expect(
+      handler?.(claimedProviderTask(), new AbortController().signal),
+    ).rejects.toMatchObject({
+      name: "PermanentTaskError",
+      code: "integrity_error",
+    });
+  });
+
+  test("emits schema-validated terminal failure fields through the consumer", async () => {
+    const task = claimedProviderTask("wttj");
+    const claims = [[task], []] as ClaimedTask[][];
+    const finishes: Array<{ outcome: string; errorCode?: string }> = [];
+    const repository = {
+      async claim() {
+        return claims.shift() ?? [];
+      },
+      async heartbeat() {
+        return true;
+      },
+      async finish(
+        _lease: Lease,
+        outcome: "succeeded" | "retryable" | "failed" | "cancelled",
+        options?: { errorCode?: string },
+      ) {
+        finishes.push({ outcome, errorCode: options?.errorCode });
+        return true;
+      },
+      async enqueue() {
+        return task.runId;
+      },
+      async ping() {
+        return true;
+      },
+      async close() {},
+    } satisfies ConsumerRepository;
+    const lines: string[] = [];
+    const consumer = new Consumer(
+      repository,
+      {
+        "provider.fetch_page": async () => {
+          throw new PermanentTaskError(
+            "authorization_blocked",
+            "provider disabled",
+          );
+        },
+      },
+      createJsonLogger((line) => lines.push(line)),
+      {
+        concurrency: 1,
+        leaseSeconds: 30,
+        heartbeatSeconds: 5,
+        pollMs: 5,
+        instanceId: "g004-test-worker",
+        serviceVersion: "test",
+        environment: "test",
+      },
+    );
+
+    consumer.start();
+    await Bun.sleep(20);
+    await consumer.stop(100);
+
+    expect(finishes).toEqual([
+      { outcome: "failed", errorCode: "authorization_blocked" },
+    ]);
+    const terminal = lines
+      .map((line) => JSON.parse(line))
+      .find((event) => event.event === "worker.task_terminal");
+    expect(terminal).toMatchObject({
+      event: "worker.task_terminal",
+      provider: "wttj",
+      outcome: "failed",
+      reasonCode: "authorization_blocked",
     });
   });
 });
