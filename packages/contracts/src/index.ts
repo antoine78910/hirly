@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export * from "./analytics";
+
 export const CONTRACT_VERSION = "worker-foundation.v1" as const;
 
 export const providerSchema = z.enum([
