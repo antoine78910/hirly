@@ -61,6 +61,31 @@ function percentile(sorted: number[], fraction: number): number {
 export function summarizePaidUserCoverage(
   snapshots: PaidUserCoverageSnapshot[],
 ): CoverageBaseline {
+  for (const snapshot of snapshots) {
+    if (!/^[0-9a-f]{64}$/.test(snapshot.hashedUserId)) {
+      throw new Error("paid_user_coverage_requires_sha256_user_hash");
+    }
+    const counters = [
+      snapshot.relevantTotal,
+      snapshot.uniqueTotal,
+      snapshot.actionableTotal,
+      snapshot.unseenActionableTotal,
+      snapshot.routeKnownTotal,
+      snapshot.directEmployerTotal,
+    ];
+    if (counters.some((counter) => !Number.isSafeInteger(counter) || counter < 0)) {
+      throw new Error("paid_user_coverage_requires_non_negative_integer_counters");
+    }
+    if (
+      snapshot.unseenActionableTotal > snapshot.actionableTotal
+      || snapshot.actionableTotal > snapshot.uniqueTotal
+      || snapshot.uniqueTotal > snapshot.relevantTotal
+      || snapshot.routeKnownTotal > snapshot.relevantTotal
+      || snapshot.directEmployerTotal > snapshot.relevantTotal
+    ) {
+      throw new Error("paid_user_coverage_counter_order");
+    }
+  }
   const unseen = snapshots
     .map(({ unseenActionableTotal }) => unseenActionableTotal)
     .sort((left, right) => left - right);
@@ -136,8 +161,10 @@ export function buildFranceTravailCensusManifest(
     ...totals,
     partitions,
   };
+  const { generatedAt: _generatedAt, ...immutableDecisionInputs } =
+    manifestWithoutDigest;
   return {
     ...manifestWithoutDigest,
-    digest: stableDigest(manifestWithoutDigest),
+    digest: stableDigest(immutableDecisionInputs),
   };
 }

@@ -30,10 +30,14 @@ export interface LiveJobSupplyReport {
   }>;
 }
 
-function counter(counters: Record<string, unknown>, key: string): number {
-  const value = counters[key];
-  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) return value;
-  if (typeof value === "string" && /^\d+$/.test(value)) return Number(value);
+function counter(counters: Record<string, unknown>, ...keys: string[]): number {
+  for (const key of keys) {
+    if (!Object.hasOwn(counters, key)) continue;
+    const value = counters[key];
+    if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) return value;
+    if (typeof value === "string" && /^\d+$/.test(value)) return Number(value);
+    return 0;
+  }
   return 0;
 }
 
@@ -62,8 +66,7 @@ export async function collectLiveJobSupplyReport(
       partitionId: row.partition_id,
       status: row.status,
       sourceReportedTotal: row.source_reported_total,
-      fetchedRecords: counter(row.counters, "raw_records")
-        || counter(row.counters, "fetched_records"),
+      fetchedRecords: counter(row.counters, "raw_records", "fetched_records"),
       normalizedRecords: counter(row.counters, "normalized_records"),
       rejectedRecords: counter(row.counters, "rejected_records"),
       actionableRecords: counter(row.counters, "actionable_records"),

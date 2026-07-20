@@ -159,6 +159,54 @@ export interface FranceTravailPartitionAccounting {
   blockerReason?: string;
 }
 
+const SENSITIVE_DIMENSION_KEY =
+  /(?:^|_)(?:user|email|name|cv|resume|application|phone|address|search|keyword|raw)(?:_|$)/i;
+const EMAIL_LIKE_VALUE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function validateAggregateDimensions(
+  value: unknown,
+  path = "dimensions",
+): string[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) =>
+      validateAggregateDimensions(item, `${path}[${index}]`));
+  }
+  if (!value || typeof value !== "object") {
+    if (
+      typeof value === "string"
+      && (value.length > 128 || EMAIL_LIKE_VALUE.test(value))
+    ) {
+      return [`${path}:sensitive_or_unbounded_value`];
+    }
+    return [];
+  }
+  return Object.entries(value as Record<string, unknown>).flatMap(([key, nested]) => {
+    if (SENSITIVE_DIMENSION_KEY.test(key)) return [`${path}.${key}:sensitive_key`];
+    return validateAggregateDimensions(nested, `${path}.${key}`);
+  });
+}
+
+export function redactAggregateDimensions(
+  value: Record<string, unknown>,
+): Record<string, unknown> {
+  const redact = (input: unknown): unknown => {
+    if (Array.isArray(input)) return input.map(redact);
+    if (!input || typeof input !== "object") {
+      if (
+        typeof input === "string"
+        && (input.length > 128 || EMAIL_LIKE_VALUE.test(input))
+      ) return "[REDACTED]";
+      return input;
+    }
+    return Object.fromEntries(
+      Object.entries(input as Record<string, unknown>)
+        .filter(([key]) => !SENSITIVE_DIMENSION_KEY.test(key))
+        .map(([key, nested]) => [key, redact(nested)]),
+    );
+  };
+  return redact(value) as Record<string, unknown>;
+}
+
 export function stableDigest(value: unknown): string {
   const canonicalize = (input: unknown): unknown => {
     if (Array.isArray(input)) return input.map(canonicalize);
@@ -190,6 +238,31 @@ function percentile(values: number[], fraction: number): number | null {
 export function computePaidUserCoverageBaseline(
   snapshots: PaidUserInventorySnapshot[],
 ): PaidUserCoverageBaseline {
+  for (const snapshot of snapshots) {
+    if (!/^[0-9a-f]{64}$/.test(snapshot.userHash)) {
+      throw new Error("paid-user snapshot userHash must be a lowercase SHA-256 digest");
+    }
+    const counters = [
+      snapshot.relevantTotal,
+      snapshot.uniqueTotal,
+      snapshot.actionableTotal,
+      snapshot.unseenActionableTotal,
+      snapshot.routeKnownTotal,
+      snapshot.directEmployerTotal,
+    ];
+    if (counters.some((counter) => !Number.isSafeInteger(counter) || counter < 0)) {
+      throw new Error("paid-user snapshot counters must be non-negative safe integers");
+    }
+    if (
+      snapshot.unseenActionableTotal > snapshot.actionableTotal
+      || snapshot.actionableTotal > snapshot.uniqueTotal
+      || snapshot.uniqueTotal > snapshot.relevantTotal
+      || snapshot.routeKnownTotal > snapshot.relevantTotal
+      || snapshot.directEmployerTotal > snapshot.relevantTotal
+    ) {
+      throw new Error("paid-user snapshot counters violate aggregate monotonicity");
+    }
+  }
   if (!snapshots.length) {
     return {
       cohortSize: 0,
@@ -203,7 +276,7 @@ export function computePaidUserCoverageBaseline(
     };
   }
   const unseen = snapshots.map((snapshot) => snapshot.unseenActionableTotal);
-  const actionable = snapshots.reduce((sum, snapshot) => sum + snapshot.actionableTotal, 0);
+  const relevant = snapshots.reduce((sum, snapshot) => sum + snapshot.relevantTotal, 0);
   const terminalReasonCounts: Record<string, number> = {};
   for (const snapshot of snapshots) {
     terminalReasonCounts[snapshot.terminalReason] =
@@ -217,12 +290,12 @@ export function computePaidUserCoverageBaseline(
     feedExhaustionRate:
       snapshots.filter((snapshot) => snapshot.unseenActionableTotal === 0).length
       / snapshots.length,
-    routeKnownRate: actionable === 0
+    routeKnownRate: relevant === 0
       ? null
-      : snapshots.reduce((sum, snapshot) => sum + snapshot.routeKnownTotal, 0) / actionable,
-    directEmployerRate: actionable === 0
+      : snapshots.reduce((sum, snapshot) => sum + snapshot.routeKnownTotal, 0) / relevant,
+    directEmployerRate: relevant === 0
       ? null
-      : snapshots.reduce((sum, snapshot) => sum + snapshot.directEmployerTotal, 0) / actionable,
+      : snapshots.reduce((sum, snapshot) => sum + snapshot.directEmployerTotal, 0) / relevant,
     terminalReasonCounts: Object.fromEntries(
       Object.entries(terminalReasonCounts).sort(([left], [right]) => left.localeCompare(right)),
     ),
@@ -240,7 +313,27 @@ function manifestInput(
 export function freezeFranceTravailCensusManifest(
   input: FranceTravailCensusManifestInput,
 ): FranceTravailCensusManifest {
-  const frozen = structuredClone(input);
+  const privacyFailures = validateAggregateDimensions(
+    input.profileStrata,
+    "profileStrata",
+  );
+  if (privacyFailures.length) {
+    throw new Error(`unsafe France Travail profile strata: ${privacyFailures.join(",")}`);
+  }
+  const frozen = structuredClone({
+    ...input,
+    profileStrata: [...input.profileStrata]
+      .sort((left, right) => stableDigest(left).localeCompare(stableDigest(right))),
+    partitions: [...input.partitions]
+      .map((partition) => ({
+        ...partition,
+        parameters: Object.fromEntries(
+          Object.entries(partition.parameters)
+            .sort(([left], [right]) => left.localeCompare(right)),
+        ),
+      }))
+      .sort((left, right) => left.id.localeCompare(right.id)),
+  });
   return {
     ...frozen,
     manifestDigest: stableDigest(frozen),
@@ -257,6 +350,7 @@ export function validateFranceTravailCensusManifest(
     failures.push("invalid_paid_cohort_snapshot_hash");
   }
   if (!manifest.samplingSeed.trim()) failures.push("missing_sampling_seed");
+  failures.push(...validateAggregateDimensions(manifest.profileStrata, "profileStrata"));
   if (manifest.capRules.pageSize < 1 || manifest.capRules.pageSize > 150) {
     failures.push("invalid_page_size");
   }
