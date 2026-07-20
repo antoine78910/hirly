@@ -2,6 +2,7 @@
 BEGIN;
 DROP VIEW IF EXISTS public.worker_capability_status;
 DROP SCHEMA IF EXISTS worker_private CASCADE;
+DROP FUNCTION IF EXISTS public.worker_private_enforce_attempt_history();
 DROP TABLE IF EXISTS public.worker_schedules;
 DROP TABLE IF EXISTS public.worker_task_attempts;
 DROP TABLE IF EXISTS public.worker_tasks;

@@ -6,7 +6,12 @@ const positiveInteger = (fallback: number) =>
 export const workerConfigSchema = z
   .object({
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-    JOBS_DATABASE_URL: z.url({ protocol: /^postgres(ql)?:$/ }),
+    JOBS_DATABASE_URL: z
+      .url()
+      .refine(
+        (value) => ["postgres:", "postgresql:"].includes(new URL(value).protocol),
+        "inventory database URL must use postgres or postgresql",
+      ),
     WORKER_CONCURRENCY: positiveInteger(4).pipe(z.number().max(100)),
     WORKER_LEASE_SECONDS: positiveInteger(120).pipe(z.number().min(5).max(3_600)),
     WORKER_HEARTBEAT_SECONDS: positiveInteger(30).pipe(z.number().min(1).max(1_800)),

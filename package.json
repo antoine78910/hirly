@@ -14,6 +14,7 @@
     "build": "bun run --workspaces --if-present build"
   },
   "devDependencies": {
+    "@types/bun": "1.3.14",
     "typescript": "5.9.3"
   }
 }

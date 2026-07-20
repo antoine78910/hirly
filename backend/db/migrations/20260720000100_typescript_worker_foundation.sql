@@ -37,6 +37,15 @@ CREATE TABLE IF NOT EXISTS public.provider_registry (
     NOT enabled OR (
       authorization_status = 'authorized'
       AND writer_runtime = 'typescript'
+      AND authorization_evidence_ref IS NOT NULL
+      AND authorization_reviewed_at IS NOT NULL
+    )
+  ),
+  CONSTRAINT provider_registry_authorization_evidence_guard CHECK (
+    authorization_status <> 'authorized'
+    OR (
+      authorization_evidence_ref IS NOT NULL
+      AND authorization_reviewed_at IS NOT NULL
     )
   ),
   CONSTRAINT provider_registry_rate_limit_guard CHECK (
@@ -304,6 +313,8 @@ SET search_path = pg_catalog, public, worker_private
 AS $$
 DECLARE
   v_reaped integer;
+  v_reaped_run_ids uuid[];
+  v_reaped_run_id uuid;
 BEGIN
   IF length(btrim(p_lease_owner)) = 0 OR p_limit NOT BETWEEN 1 AND 100 OR p_lease_seconds NOT BETWEEN 5 AND 3600 THEN
     RAISE EXCEPTION 'invalid claim parameters' USING ERRCODE = '22023';
@@ -337,14 +348,14 @@ BEGIN
       AND attempt.finished_at IS NULL
     RETURNING exhausted.run_id
   )
-  SELECT count(*) INTO v_reaped FROM finished_attempts;
+  SELECT count(*), array_agg(DISTINCT run_id)
+  INTO v_reaped, v_reaped_run_ids
+  FROM finished_attempts;
 
-  PERFORM worker_private.refresh_run_status(run_id)
-  FROM (
-    SELECT DISTINCT run_id
-    FROM public.worker_tasks
-    WHERE status = 'failed' AND last_error_code = 'retry_exhausted'
-  ) AS exhausted_runs;
+  FOREACH v_reaped_run_id IN ARRAY coalesce(v_reaped_run_ids, ARRAY[]::uuid[])
+  LOOP
+    PERFORM worker_private.refresh_run_status(v_reaped_run_id);
+  END LOOP;
 
   RETURN QUERY
   WITH candidates AS (
@@ -529,6 +540,9 @@ AS $$
 DECLARE
   v_updated integer;
 BEGIN
+  IF p_lease_seconds NOT BETWEEN 5 AND 3600 THEN
+    RAISE EXCEPTION 'invalid heartbeat lease duration' USING ERRCODE = '22023';
+  END IF;
   UPDATE public.worker_tasks
   SET lease_until = clock_timestamp() + make_interval(secs => p_lease_seconds),
       updated_at = clock_timestamp()
@@ -548,6 +562,60 @@ BEGIN
       AND claim_generation = p_claim_generation;
   END IF;
   RETURN v_updated = 1;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION worker_private.upsert_schedule(
+  p_id text,
+  p_task_type text,
+  p_provider text,
+  p_cron_expression text,
+  p_timezone text,
+  p_payload jsonb,
+  p_next_due_at timestamptz,
+  p_max_catch_up integer DEFAULT 1
+)
+RETURNS public.worker_schedules
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public, worker_private
+AS $$
+DECLARE
+  v_schedule public.worker_schedules;
+BEGIN
+  IF length(btrim(p_id)) = 0
+    OR p_task_type NOT IN ('provider.fetch_page', 'inventory.maintenance')
+    OR cardinality(regexp_split_to_array(btrim(p_cron_expression), '\s+')) <> 5
+    OR p_max_catch_up NOT BETWEEN 0 AND 10
+  THEN
+    RAISE EXCEPTION 'invalid schedule configuration' USING ERRCODE = '22023';
+  END IF;
+  IF (p_task_type = 'provider.fetch_page') <> (p_provider IS NOT NULL) THEN
+    RAISE EXCEPTION 'provider task schedule/provider mismatch' USING ERRCODE = '22023';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_timezone_names WHERE name = p_timezone) THEN
+    RAISE EXCEPTION 'unknown IANA timezone' USING ERRCODE = '22023';
+  END IF;
+
+  INSERT INTO public.worker_schedules (
+    id, task_type, provider, cron_expression, timezone, payload,
+    enabled, next_due_at, max_catch_up
+  )
+  VALUES (
+    p_id, p_task_type, p_provider, p_cron_expression, p_timezone,
+    coalesce(p_payload, '{}'::jsonb), false, p_next_due_at, p_max_catch_up
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    task_type = EXCLUDED.task_type,
+    provider = EXCLUDED.provider,
+    cron_expression = EXCLUDED.cron_expression,
+    timezone = EXCLUDED.timezone,
+    payload = EXCLUDED.payload,
+    next_due_at = EXCLUDED.next_due_at,
+    max_catch_up = EXCLUDED.max_catch_up,
+    updated_at = clock_timestamp()
+  RETURNING * INTO v_schedule;
+  RETURN v_schedule;
 END
 $$;
 
@@ -963,6 +1031,9 @@ GRANT EXECUTE ON FUNCTION worker_private.set_provider_enabled(text, boolean)
   TO hirly_inventory_operator;
 GRANT EXECUTE ON FUNCTION worker_private.set_schedule_enabled(text, boolean, timestamptz)
   TO hirly_inventory_operator;
+GRANT EXECUTE ON FUNCTION worker_private.upsert_schedule(
+  text, text, text, text, text, jsonb, timestamptz, integer
+) TO hirly_inventory_operator;
 GRANT EXECUTE ON FUNCTION worker_private.enqueue_due_schedule(text, timestamptz)
   TO hirly_inventory_worker;
 
