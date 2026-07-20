@@ -781,7 +781,7 @@ describe("G004 Bun runtime dispatch", () => {
           provider: "apec" as const,
           runtime: "typescript" as const,
           ownershipEpoch: 1n,
-          expiresAt: _lease.leaseUntil,
+          expiresAt: new Date("2026-07-20T00:05:00.000Z"),
         };
       },
       async writeJobsAndComplete() {
