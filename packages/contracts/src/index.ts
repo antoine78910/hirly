@@ -78,16 +78,12 @@ export const rawProviderJobEnvelopeSchema = z
 
 export const sourceCheckpointSchema = z
   .object({
-    version: z.string().trim().min(1).max(64).optional(),
-    cursor: z.string().min(1).max(2_048).nullable().optional(),
-    partition: z.string().trim().min(1).max(512).nullable().optional(),
-    watermark: z.iso.datetime({ offset: true }).nullable().optional(),
+    version: z.string().trim().min(1).max(64),
+    cursor: z.string().min(1).max(2_048).nullable(),
+    partition: z.string().trim().min(1).max(512).nullable(),
+    watermark: z.iso.datetime({ offset: true }).nullable(),
   })
-  .catchall(z.unknown());
-
-const countryKillSwitchesSchema = z
-  .record(z.string().regex(/^[A-Z]{2}$/), z.boolean())
-  .default({});
+  .strict();
 
 export const sourceFetchRequestSchema = z
   .object({
@@ -112,7 +108,6 @@ export const sourceRegistryEntrySchema = z
     accessType: sourceAccessTypeSchema,
     policyId: z.uuid().nullable(),
     enabled: z.boolean(),
-    transportEnabled: z.boolean(),
     incrementalEnabled: z.boolean(),
     backfillEnabled: z.boolean(),
     checkpoint: sourceCheckpointSchema.nullable(),
@@ -133,8 +128,8 @@ export const sourceRuntimePolicySchema = z
   .object({
     providerEnabled: z.boolean(),
     writerRuntime: writerRuntimeSchema,
-    providerCountryKillSwitches: countryKillSwitchesSchema,
-    sourceCountryKillSwitches: countryKillSwitchesSchema,
+    providerCountryKillSwitches: z.record(z.string(), z.boolean()),
+    sourceCountryKillSwitches: z.record(z.string(), z.boolean()),
     source: sourceRegistryEntrySchema,
     policy: sourcePolicyStateSchema,
   })

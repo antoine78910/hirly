@@ -7,11 +7,8 @@ import {
   type ProviderSearchRequest,
   type RateLimitConfig,
   type RawProviderJobEnvelope,
-  type SourceAccessType,
   type SourceCheckpoint,
   type SourceFetchRequest,
-  type SourceLifecycleState,
-  type SourceRegistryEntry,
   type SourceRuntimePolicy,
   type ValidationResult,
 } from "@hirly/contracts";
@@ -45,14 +42,11 @@ export interface ProviderAdapter<RawJob> {
   normalizeRaw(raw: RawJob): NormalizedProviderJob;
 }
 
-export interface SourcePage<RawJob, Cursor, Scope> {
-  scope: Scope;
+export interface SourcePage<RawJob> {
   items: RawJob[];
-  nextCursor: Cursor | null;
+  nextCheckpoint: SourceCheckpoint | null;
   sourceReportedTotal: number | null;
   complete: boolean;
-  requestCount: number;
-  costMinor: number | null;
 }
 
 export interface SourceTransport<RawJob> {
@@ -60,67 +54,15 @@ export interface SourceTransport<RawJob> {
   fetch(
     request: SourceFetchRequest,
     signal: AbortSignal,
-  ): Promise<SourcePage<RawJob, SourceCheckpoint, Record<string, unknown>>>;
+  ): Promise<SourcePage<RawJob>>;
 }
 
-export interface SourceContext {
-  source: SourceRegistryEntry;
-  runId: string;
-  fetchedAt: Date;
-}
-
-export interface NormalizedOccurrence {
-  job: NormalizedProviderJob;
-  externalId: string;
-  canonicalSourceUrl: string | null;
-  canonicalApplyUrl: string | null;
-  atsPostingId: string | null;
-}
-
-export interface SourceLifecycleEvidence {
-  state: SourceLifecycleState;
-  observedAt: Date;
-  expiresAt: Date | null;
-  reason: string;
-}
-
-export interface AttributionMetadata {
-  policyId: string;
-  licenceName: string | null;
-  attributionText: string | null;
-  sourceUrl: string | null;
-}
-
-export interface SourceAdapter<RawJob, Cursor, Scope> {
+export interface SourceAdapter<RawJob> {
   readonly provider: Provider;
+  readonly sourceKey: string;
   readonly enabled: false;
   readonly liveTransportReady: false;
-  readonly access: SourceAccessType;
-  sourceIdentity(source: SourceRegistryEntry): {
-    sourceId: string;
-    datasetOrFeedId: string;
-  };
-  tenantIdentity(source: SourceRegistryEntry): {
-    tenantKey: string | null;
-    boardKey: string | null;
-  };
-  discover(input: {
-    source: SourceRegistryEntry;
-    mode: "full" | "incremental";
-    cursor: Cursor | null;
-    signal: AbortSignal;
-  }): AsyncIterable<SourcePage<RawJob, Cursor, Scope>>;
-  normalize(raw: RawJob, context: SourceContext): NormalizedOccurrence;
-  validateActive(raw: RawJob, now: Date): SourceLifecycleEvidence;
-  classifyError(
-    error: unknown,
-  ):
-    | "retryable"
-    | "rate_limited"
-    | "authorization"
-    | "permanent"
-    | "malformed";
-  attribution(raw: RawJob): AttributionMetadata;
+  normalizeRaw(raw: RawJob): NormalizedProviderJob;
 }
 
 export class DisabledSourceTransport<RawJob>
@@ -131,7 +73,7 @@ export class DisabledSourceTransport<RawJob>
   async fetch(
     _request: SourceFetchRequest,
     _signal: AbortSignal,
-  ): Promise<SourcePage<RawJob, SourceCheckpoint, Record<string, unknown>>> {
+  ): Promise<SourcePage<RawJob>> {
     throw new IngestionError(
       "authorization_blocked",
       "source transport is disabled until policy approval and provider writer ownership are granted",
@@ -182,7 +124,6 @@ export type SourceActivationBlockReason =
   | "provider_disabled"
   | "writer_not_typescript"
   | "source_disabled"
-  | "transport_disabled"
   | "mode_disabled"
   | "country_not_declared"
   | "provider_country_killed"
@@ -200,7 +141,6 @@ export function sourceActivationBlockReason(
   if (!input.providerEnabled) return "provider_disabled";
   if (input.writerRuntime !== "typescript") return "writer_not_typescript";
   if (!input.source.enabled) return "source_disabled";
-  if (!input.source.transportEnabled) return "transport_disabled";
   if (
     (mode === "incremental" && !input.source.incrementalEnabled) ||
     (mode === "backfill" && !input.source.backfillEnabled)
