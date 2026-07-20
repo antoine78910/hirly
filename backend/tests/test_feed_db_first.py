@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -391,6 +392,25 @@ def test_background_refresh_reports_an_existing_task_as_pending(monkeypatch):
         _profile(),
         [],
         search_radius="204km",
+        role_override="Fullstack Engineer",
+        requested_limit=12,
+        max_results=12,
+        max_pages=1,
+        page_size=12,
+        attempts_per_city=1,
+    ) is True
+
+
+def test_background_refresh_reports_recent_completion_as_pending(monkeypatch):
+    signature = "explicit_local|fullstack engineer|52km|paris:fr"
+    monkeypatch.setattr(server, "_feed_background_refresh_tasks", {})
+    monkeypatch.setattr(server, "_feed_background_refresh_last_run", {signature: time.monotonic()})
+
+    assert server.schedule_feed_background_refresh(
+        signature,
+        _profile(),
+        [],
+        search_radius="52km",
         role_override="Fullstack Engineer",
         requested_limit=12,
         max_results=12,

@@ -1,4 +1,7 @@
-import { shouldPrefetchSwipeFeed } from "./swipeFeedRequestPolicy";
+import {
+  shouldPrefetchSwipeFeed,
+  SWIPE_BACKGROUND_POLL_DELAYS_MS,
+} from "./swipeFeedRequestPolicy";
 
 describe("shouldPrefetchSwipeFeed", () => {
   it.each([
@@ -33,5 +36,11 @@ describe("shouldPrefetchSwipeFeed", () => {
       currentJobCount: 0,
       reason: "empty_refresh",
     })).toBe(false);
+  });
+
+  it("polls beyond the backend discovery budget", () => {
+    const totalDelay = SWIPE_BACKGROUND_POLL_DELAYS_MS.reduce((sum, delay) => sum + delay, 0);
+    expect(SWIPE_BACKGROUND_POLL_DELAYS_MS).toHaveLength(5);
+    expect(totalDelay).toBeGreaterThan(45000);
   });
 });

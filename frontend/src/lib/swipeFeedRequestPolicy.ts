@@ -4,6 +4,10 @@ type SwipeFeedRequestContext = {
   reason?: string;
 };
 
+// Long enough to outlive the backend's bounded 45-second discovery attempt,
+// while keeping the number of DB-only reconciliation reads small.
+export const SWIPE_BACKGROUND_POLL_DELAYS_MS = [3000, 7000, 12000, 18000, 25000] as const;
+
 /**
  * Initial searches and background polls stay DB-only so the UI never blocks
  * on the provider's slow path. The backend schedules discovery for an empty

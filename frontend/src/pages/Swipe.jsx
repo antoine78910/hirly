@@ -75,7 +75,10 @@ import {
   unrecordSwipedJobId,
   writeSwipeFeedCache,
 } from "../lib/swipeFeedCache";
-import { shouldPrefetchSwipeFeed } from "../lib/swipeFeedRequestPolicy";
+import {
+  shouldPrefetchSwipeFeed,
+  SWIPE_BACKGROUND_POLL_DELAYS_MS,
+} from "../lib/swipeFeedRequestPolicy";
 
 const DEFAULT_SEARCH_RADIUS = "50km";
 const FEED_BATCH_SIZE = 12;
@@ -1204,17 +1207,19 @@ export default function Swipe() {
       });
       // Backend started a provider refresh in the background: silently poll a
       // couple of times to merge freshly imported jobs into the stack.
-      if (data?.background_refresh_scheduled && backgroundPollCountRef.current < 3) {
+      if (
+        data?.background_refresh_scheduled
+        && backgroundPollCountRef.current < SWIPE_BACKGROUND_POLL_DELAYS_MS.length
+      ) {
         keepLoadingForBackgroundRefresh = safeJobs.length === 0;
         backgroundPollCountRef.current += 1;
         const attempt = backgroundPollCountRef.current;
-        const pollDelays = { 1: 3000, 2: 8000, 3: 15000 };
         backgroundPollTimerRef.current = setTimeout(() => {
           backgroundPollTimerRef.current = null;
           if (!fetchingRef.current) {
             loadFeedRef.current?.(false, filtersRef.current, `background_poll_${attempt}`);
           }
-        }, pollDelays[attempt] || 15000);
+        }, SWIPE_BACKGROUND_POLL_DELAYS_MS[attempt - 1]);
       } else if (!data?.background_refresh_scheduled) {
         backgroundPollCountRef.current = 0;
       }

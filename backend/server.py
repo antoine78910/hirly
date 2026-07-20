@@ -711,7 +711,8 @@ def schedule_feed_background_refresh(
 ) -> bool:
     """Run provider discovery in the background (non-blocking) with dedup + cooldown.
 
-    Returns True while a matching background refresh is scheduled or running.
+    Returns True while a matching refresh is running or its recent completion
+    still needs to be reconciled by a follow-up feed read.
     """
     now = time.monotonic()
     _prune_background_refresh_state(now)
@@ -719,7 +720,7 @@ def schedule_feed_background_refresh(
         return True
     last_run = _feed_background_refresh_last_run.get(signature, 0.0)
     if (now - last_run) < _FEED_BACKGROUND_REFRESH_COOLDOWN_SECONDS:
-        return False
+        return True
     _feed_background_refresh_last_run[signature] = now
 
     async def _runner() -> None:
@@ -730,21 +731,24 @@ def schedule_feed_background_refresh(
             for loc_data in refresh_locations:
                 loc_label = loc_data.get("location_label") if isinstance(loc_data, dict) else None
                 try:
-                    result = await refresh_jobs_for_profile_if_needed(
-                        db,
-                        profile_for_refresh,
-                        require_auto_apply=False,
-                        target_auto_apply_count=min(max_results, max(requested_limit, 1)),
-                        location_override=loc_label,
-                        location_data_override=loc_data if isinstance(loc_data, dict) else None,
-                        search_radius=search_radius,
-                        role_override=role_override,
-                        force_provider_refresh=True,
-                        query_limit_override=max_results,
-                        provider_max_pages=max_pages,
-                        provider_page_size=page_size,
-                        max_provider_requests_override=attempts_per_city,
-                        max_direct_apply_requests_override=0,
+                    result = await asyncio.wait_for(
+                        refresh_jobs_for_profile_if_needed(
+                            db,
+                            profile_for_refresh,
+                            require_auto_apply=False,
+                            target_auto_apply_count=min(max_results, max(requested_limit, 1)),
+                            location_override=loc_label,
+                            location_data_override=loc_data if isinstance(loc_data, dict) else None,
+                            search_radius=search_radius,
+                            role_override=role_override,
+                            force_provider_refresh=True,
+                            query_limit_override=max_results,
+                            provider_max_pages=max_pages,
+                            provider_page_size=page_size,
+                            max_provider_requests_override=attempts_per_city,
+                            max_direct_apply_requests_override=0,
+                        ),
+                        timeout=max(10, min(_env_int("JOBS_FEED_BACKGROUND_REFRESH_MAX_SECONDS", 45), 90)),
                     )
                 except Exception as exc:
                     logger.warning(
