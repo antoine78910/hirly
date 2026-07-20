@@ -85,6 +85,8 @@ const commandResults: Array<{
   exitCode: number;
   rows: string[];
   executedAt: string;
+  stdout: string;
+  stderr: string;
   checksum: string;
 }> = [];
 const auditStartedAt = new Date();
@@ -103,9 +105,13 @@ for (const [command, riskIds] of passCommands) {
     env: Bun.env,
   });
   const executedAt = new Date().toISOString();
+  const stdout = spawned.stdout.toString();
+  const stderr = spawned.stderr.toString();
   commandResults.push({
-    command, exitCode: spawned.exitCode, rows: riskIds, executedAt,
-    checksum: stableDigest({ command, exitCode: spawned.exitCode, rows: riskIds }),
+    command, exitCode: spawned.exitCode, rows: riskIds, executedAt, stdout, stderr,
+    checksum: stableDigest({
+      command, exitCode: spawned.exitCode, rows: riskIds, executedAt, stdout, stderr,
+    }),
   });
   if (spawned.exitCode !== 0) {
     evidenceFailures.push(`${riskIds.join(",")}:reproduction_failed:${spawned.exitCode}`);
@@ -121,9 +127,13 @@ for (const row of rows.filter((candidate) => candidate.status === "BLOCKED_EXTER
     env: Bun.env,
   });
   const executedAt = new Date().toISOString();
+  const stdout = spawned.stdout.toString();
+  const stderr = spawned.stderr.toString();
   commandResults.push({
-    command: check, exitCode: spawned.exitCode, rows: [row.riskId], executedAt,
-    checksum: stableDigest({ command: check, exitCode: spawned.exitCode, rows: [row.riskId] }),
+    command: check, exitCode: spawned.exitCode, rows: [row.riskId], executedAt, stdout, stderr,
+    checksum: stableDigest({
+      command: check, exitCode: spawned.exitCode, rows: [row.riskId], executedAt, stdout, stderr,
+    }),
   });
   if (spawned.exitCode === 0) {
     evidenceFailures.push(`${row.riskId}:external_dependency_available_block_must_be_resolved`);
@@ -165,10 +175,11 @@ const digestInput = {
   })).sort((a, b) => a.id.localeCompare(b.id)),
   funnel,
 };
+const generatedAt = new Date().toISOString();
 const result = {
   schemaVersion: 1,
   datasetVersion: "job-ingestion-golden.v1",
-  generatedAt: "2026-07-20T00:00:00.000Z",
+  generatedAt,
   verdict: invariantFailures.length
     ? "FAIL"
     : rows.some((row) => row.status === "BLOCKED_EXTERNAL")
@@ -267,22 +278,22 @@ await writeFile(
 );
 await writeFile(jsonPath, `${JSON.stringify(result, null, 2)}\n`);
 await writeFile(summaryPath, summary);
+const runChecksum = stableDigest({
+  generatedAt,
+  verdict: result.verdict,
+  invariantFailures,
+  commandResults,
+  evidenceDigests,
+});
 await writeFile(runResultsPath, `${JSON.stringify({
   schemaVersion: 1,
-  executedAt: new Date().toISOString(),
+  executedAt: generatedAt,
   fixtureMode: args.fixtureMode,
   verdict: result.verdict,
   invariantFailures,
   commandResults,
   evidenceDigests,
-  resultChecksum: stableDigest({
-    verdict: result.verdict,
-    invariantFailures,
-    commandResults: commandResults.map(({ command, exitCode, rows, checksum }) => ({
-      command, exitCode, rows, checksum,
-    })),
-    evidenceDigests,
-  }),
+  resultChecksum: runChecksum,
 }, null, 2)}\n`);
 console.log(summary);
 if (invariantFailures.length) process.exitCode = 1;
