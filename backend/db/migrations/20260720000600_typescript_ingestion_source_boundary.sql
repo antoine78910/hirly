@@ -4,13 +4,35 @@
 -- remains the sole canonical-writer authority.
 BEGIN;
 
+CREATE OR REPLACE FUNCTION worker_private.kill_switch_map_is_valid(
+  p_switches jsonb
+)
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+SET search_path = pg_catalog
+AS $$
+  SELECT
+    jsonb_typeof(p_switches) = 'object'
+    AND NOT EXISTS (
+      SELECT 1
+      FROM jsonb_each(p_switches) AS switch(key, value)
+      WHERE jsonb_typeof(value) <> 'boolean'
+    )
+$$;
+
 ALTER TABLE public.career_sources
   ADD COLUMN IF NOT EXISTS transport_enabled boolean NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS incremental_enabled boolean NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS backfill_enabled boolean NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS country_kill_switches jsonb NOT NULL DEFAULT '{}'::jsonb,
   ADD CONSTRAINT career_sources_country_kill_switches_guard CHECK (
-    jsonb_typeof(country_kill_switches) = 'object'
+    worker_private.kill_switch_map_is_valid(country_kill_switches)
+  );
+
+ALTER TABLE public.provider_registry
+  ADD CONSTRAINT provider_registry_country_kill_switch_values_guard CHECK (
+    worker_private.kill_switch_map_is_valid(country_kill_switches)
   );
 
 CREATE TABLE IF NOT EXISTS public.raw_job_snapshots (
@@ -22,12 +44,16 @@ CREATE TABLE IF NOT EXISTS public.raw_job_snapshots (
   payload jsonb NOT NULL CHECK (jsonb_typeof(payload) = 'object'),
   run_id uuid NOT NULL REFERENCES public.worker_runs(id) ON DELETE RESTRICT,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  CONSTRAINT raw_job_snapshots_source_external_hash_unique
-    UNIQUE (source_id, external_id, content_hash)
+  CONSTRAINT raw_job_snapshots_run_source_external_hash_unique
+    UNIQUE (run_id, source_id, external_id, content_hash),
+  CONSTRAINT raw_job_snapshots_identity_unique
+    UNIQUE (id, source_id, external_id)
 );
 
 CREATE INDEX IF NOT EXISTS raw_job_snapshots_source_fetched_idx
   ON public.raw_job_snapshots (source_id, fetched_at DESC);
+CREATE INDEX IF NOT EXISTS raw_job_snapshots_source_external_hash_idx
+  ON public.raw_job_snapshots (source_id, external_id, content_hash);
 CREATE INDEX IF NOT EXISTS raw_job_snapshots_run_idx
   ON public.raw_job_snapshots (run_id);
 
@@ -70,9 +96,6 @@ ALTER TABLE public.jobs
   ADD COLUMN IF NOT EXISTS first_seen_at timestamptz,
   ADD COLUMN IF NOT EXISTS expires_at timestamptz,
   ADD COLUMN IF NOT EXISTS removed_at timestamptz,
-  ADD COLUMN IF NOT EXISTS lifecycle_state text CHECK (
-    lifecycle_state IS NULL OR lifecycle_state IN ('active', 'stale', 'removed', 'expired', 'blocked')
-  ),
   ADD COLUMN IF NOT EXISTS lifecycle_checked_at timestamptz,
   ADD COLUMN IF NOT EXISTS route_classification text,
   ADD COLUMN IF NOT EXISTS route_confidence numeric CHECK (
@@ -105,7 +128,7 @@ CREATE TABLE IF NOT EXISTS public.job_occurrences (
   lifecycle_state text NOT NULL DEFAULT 'active'
     CHECK (lifecycle_state IN ('active', 'stale', 'removed', 'expired', 'blocked')),
   content_hash text NOT NULL CHECK (content_hash ~ '^[0-9a-f]{64}$'),
-  raw_snapshot_id uuid NOT NULL REFERENCES public.raw_job_snapshots(id) ON DELETE RESTRICT,
+  raw_snapshot_id uuid NOT NULL,
   attribution jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(attribution) = 'object'),
   policy_id uuid NOT NULL,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -114,6 +137,10 @@ CREATE TABLE IF NOT EXISTS public.job_occurrences (
   CONSTRAINT job_occurrences_source_provider_fk
     FOREIGN KEY (source_id, provider)
     REFERENCES public.career_sources(id, provider)
+    ON DELETE RESTRICT,
+  CONSTRAINT job_occurrences_snapshot_identity_fk
+    FOREIGN KEY (raw_snapshot_id, source_id, external_id)
+    REFERENCES public.raw_job_snapshots(id, source_id, external_id)
     ON DELETE RESTRICT,
   CONSTRAINT job_occurrences_policy_provider_fk
     FOREIGN KEY (policy_id, provider)
@@ -164,8 +191,14 @@ CREATE TRIGGER canonical_job_group_events_immutable
 BEFORE UPDATE OR DELETE ON public.canonical_job_group_events
 FOR EACH ROW EXECUTE FUNCTION worker_private.reject_immutable_source_evidence();
 
+CREATE OR REPLACE VIEW public.raw_job_snapshot_metadata
+WITH (security_barrier = true)
+AS
+SELECT id, source_id, external_id, content_hash, fetched_at, run_id, created_at
+FROM public.raw_job_snapshots;
+
 CREATE OR REPLACE VIEW public.career_source_runtime_status
-WITH (security_invoker = true)
+WITH (security_barrier = true)
 AS
 SELECT
   source.id,
@@ -178,38 +211,96 @@ SELECT
   source.incremental_enabled,
   source.backfill_enabled,
   source.country_kill_switches,
-  source.checkpoint,
-  source.policy_id,
   registry.country_kill_switches AS provider_country_kill_switches,
-  registry.enabled AS provider_enabled,
   registry.writer_runtime,
-  policy.approval_status,
-  coalesce((
-    source.enabled
-    AND source.transport_enabled
-    AND registry.enabled
-    AND registry.writer_runtime = 'typescript'
-    AND policy.enabled
-    AND policy.approval_status = 'approved'
-    AND policy.commercial_use_allowed
-    AND policy.redisplay_allowed
-    AND policy.expires_at > clock_timestamp()
-  ), false) AS runnable
+  policy.approval_status
 FROM public.career_sources AS source
 JOIN public.provider_registry AS registry ON registry.provider = source.provider
 LEFT JOIN public.source_policy AS policy
-  ON policy.id = source.policy_id
+ ON policy.id = source.policy_id
  AND policy.provider = source.provider;
+
+CREATE OR REPLACE FUNCTION worker_private.career_source_runnable(
+  p_source_id uuid,
+  p_country_code text,
+  p_mode text
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.career_sources AS source
+    JOIN public.provider_registry AS registry
+      ON registry.provider = source.provider
+    JOIN public.source_policy AS policy
+      ON policy.id = source.policy_id
+     AND policy.provider = source.provider
+    WHERE source.id = p_source_id
+      AND p_country_code ~ '^[A-Za-z]{2}$'
+      AND (
+        cardinality(source.country_codes) = 0
+        OR upper(p_country_code) = ANY(source.country_codes)
+      )
+      AND p_mode IN ('incremental', 'backfill')
+      AND source.enabled
+      AND source.transport_enabled
+      AND CASE p_mode
+        WHEN 'incremental' THEN source.incremental_enabled
+        WHEN 'backfill' THEN source.backfill_enabled
+        ELSE false
+      END
+      AND NOT coalesce(
+        (source.country_kill_switches ->> upper(p_country_code))::boolean,
+        false
+      )
+      AND NOT coalesce(
+        (registry.country_kill_switches ->> upper(p_country_code))::boolean,
+        false
+      )
+      AND registry.enabled
+      AND registry.authorization_status = 'authorized'
+      AND registry.writer_runtime = 'typescript'
+      AND policy.enabled
+      AND policy.approval_status = 'approved'
+      AND policy.commercial_use_allowed
+      AND policy.redisplay_allowed
+      AND policy.expires_at > clock_timestamp()
+  )
+$$;
 
 REVOKE ALL ON public.raw_job_snapshots, public.job_occurrences,
   public.canonical_job_groups, public.canonical_job_group_members,
   public.canonical_job_group_events FROM PUBLIC;
-REVOKE ALL ON public.career_source_runtime_status FROM PUBLIC;
+REVOKE ALL ON public.raw_job_snapshot_metadata,
+  public.career_source_runtime_status FROM PUBLIC;
+REVOKE ALL ON FUNCTION worker_private.career_source_runnable(uuid, text, text)
+  FROM PUBLIC;
 
-GRANT SELECT ON public.raw_job_snapshots, public.job_occurrences,
-  public.canonical_job_groups, public.canonical_job_group_members,
-  public.canonical_job_group_events, public.career_source_runtime_status
+GRANT SELECT ON public.job_occurrences, public.canonical_job_groups,
+  public.canonical_job_group_members, public.canonical_job_group_events
   TO hirly_inventory_reader;
-GRANT SELECT ON public.career_source_runtime_status TO hirly_inventory_worker;
+GRANT SELECT ON public.job_occurrences, public.canonical_job_groups,
+  public.canonical_job_group_members, public.canonical_job_group_events,
+  public.raw_job_snapshot_metadata, public.career_source_runtime_status
+  TO hirly_inventory_operator;
+GRANT EXECUTE ON FUNCTION worker_private.career_source_runnable(uuid, text, text)
+  TO hirly_inventory_worker, hirly_inventory_operator;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+    REVOKE ALL ON FUNCTION worker_private.career_source_runnable(uuid, text, text)
+      FROM anon;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+    REVOKE ALL ON FUNCTION worker_private.career_source_runnable(uuid, text, text)
+      FROM authenticated;
+  END IF;
+END
+$$;
 
 COMMIT;

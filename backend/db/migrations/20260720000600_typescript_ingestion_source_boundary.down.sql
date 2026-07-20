@@ -1,6 +1,8 @@
 BEGIN;
 
+DROP FUNCTION IF EXISTS worker_private.career_source_runnable(uuid, text, text);
 DROP VIEW IF EXISTS public.career_source_runtime_status;
+DROP VIEW IF EXISTS public.raw_job_snapshot_metadata;
 
 DROP TRIGGER IF EXISTS canonical_job_group_events_immutable
   ON public.canonical_job_group_events;
@@ -34,5 +36,10 @@ ALTER TABLE public.career_sources
   DROP COLUMN IF EXISTS backfill_enabled,
   DROP COLUMN IF EXISTS incremental_enabled,
   DROP COLUMN IF EXISTS transport_enabled;
+
+ALTER TABLE public.provider_registry
+  DROP CONSTRAINT IF EXISTS provider_registry_country_kill_switch_values_guard;
+
+DROP FUNCTION IF EXISTS worker_private.kill_switch_map_is_valid(jsonb);
 
 COMMIT;
