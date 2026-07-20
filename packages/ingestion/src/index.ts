@@ -182,6 +182,7 @@ export type SourceActivationBlockReason =
   | "provider_disabled"
   | "writer_not_typescript"
   | "source_disabled"
+  | "transport_disabled"
   | "mode_disabled"
   | "country_not_declared"
   | "provider_country_killed"
@@ -199,6 +200,7 @@ export function sourceActivationBlockReason(
   if (!input.providerEnabled) return "provider_disabled";
   if (input.writerRuntime !== "typescript") return "writer_not_typescript";
   if (!input.source.enabled) return "source_disabled";
+  if (!input.source.transportEnabled) return "transport_disabled";
   if (
     (mode === "incremental" && !input.source.incrementalEnabled) ||
     (mode === "backfill" && !input.source.backfillEnabled)
