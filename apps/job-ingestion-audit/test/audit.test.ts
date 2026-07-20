@@ -167,7 +167,7 @@ describe("job-ingestion audit invariants", () => {
     expect(reconcileFranceTravailPartition({
       partitionId: "ft:test",
       status: "complete",
-      sourceReportedTotal: 5,
+      sourceReportedTotal: 4,
       httpRecords: 5,
       uniqueExternalIds: 4,
       duplicateRawRecords: 1,
