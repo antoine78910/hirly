@@ -637,6 +637,47 @@ def test_posthog_capture_exact_schema_and_timeouts(monkeypatch):
     assert request["timeout"].pool == 0.25
 
 
+@pytest.mark.parametrize(
+    "host",
+    [
+        "http://eu.i.posthog.com",
+        "https://evil.example",
+        "https://eu.i.posthog.com?redirect=evil",
+        "https://user:pass@eu.i.posthog.com",
+        "https://eu.i.posthog.com:444",
+        "https://eu.i.posthog.com/unapproved-path",
+    ],
+)
+def test_posthog_capture_rejects_unapproved_or_unsafe_hosts(monkeypatch, host):
+    monkeypatch.setenv("POSTHOG_SERVER_API_KEY", "phc_test")
+    monkeypatch.setenv("POSTHOG_HOST", host)
+    monkeypatch.delenv("POSTHOG_ALLOWED_HOSTS", raising=False)
+
+    class _UnexpectedClient:
+        def __init__(self, **kwargs):
+            raise AssertionError("invalid PostHog host must not create an HTTP client")
+
+    monkeypatch.setattr(server.httpx, "AsyncClient", _UnexpectedClient)
+    assert server._posthog_server_capture_configured() is False
+    assert asyncio.run(
+        server._capture_posthog_server_event(
+            event_name="payment_succeeded",
+            distinct_id="user_1",
+            timestamp="2026-01-01T00:00:00Z",
+            semantic_uuid="uuid",
+            properties={"source": "stripe_webhook"},
+        )
+    ) is False
+
+
+def test_posthog_capture_allows_explicit_self_hosted_https_hostname(monkeypatch):
+    monkeypatch.setenv("POSTHOG_SERVER_API_KEY", "phc_test")
+    monkeypatch.setenv("POSTHOG_HOST", "https://analytics.tryhirly.com")
+    monkeypatch.setenv("POSTHOG_ALLOWED_HOSTS", "analytics.tryhirly.com")
+    assert server._posthog_server_capture_configured() is True
+    assert server._posthog_capture_url() == "https://analytics.tryhirly.com/capture/"
+
+
 def test_posthog_revenue_uuid_and_currency_conversion_are_semantic():
     payment_a = server._posthog_revenue_uuid("payment_succeeded", "invoice", "in_123")
     payment_b = server._posthog_revenue_uuid("payment_succeeded", "invoice", "in_123")
@@ -649,6 +690,8 @@ def test_posthog_revenue_uuid_and_currency_conversion_are_semantic():
     assert str(server._posthog_major_amount(1234, "EUR")) == "12.34"
     assert str(server._posthog_major_amount(1234, "JPY")) == "1234"
     assert str(server._posthog_major_amount(1234, "BHD")) == "1.234"
+    with pytest.raises(ValueError, match="unsupported currency"):
+        server._posthog_major_amount(1234, "ZZZ")
 
 
 def test_posthog_invoice_payment_uses_stable_user_and_allowlist(monkeypatch):
@@ -768,7 +811,7 @@ def test_posthog_refund_uses_partial_amount_and_negative_revenue(monkeypatch):
     )
 
 
-def test_posthog_refund_unknown_status_retrieves_only_for_validation(monkeypatch):
+def test_posthog_refund_unknown_status_does_not_block_on_stripe_retrieve(monkeypatch):
     _enable_posthog_revenue(monkeypatch, refunds=True)
     retrieved = []
     captures = []
@@ -790,7 +833,7 @@ def test_posthog_refund_unknown_status_retrieves_only_for_validation(monkeypatch
     }
 
     assert asyncio.run(server._capture_posthog_refund(event, {"id": "re_unknown"})) is False
-    assert retrieved == ["re_unknown"]
+    assert retrieved == []
     assert captures == []
 
 
@@ -838,3 +881,146 @@ def test_stripe_webhook_records_event_when_posthog_capture_fails(monkeypatch):
     result = asyncio.run(server.stripe_webhook(_WebhookRequest()))
     assert result == {"received": True}
     assert order == ["billing", "capture_failed", "record"]
+
+
+@pytest.mark.parametrize("failure_kind", ["identity_db", "property_mapping"])
+def test_stripe_invoice_webhook_acks_when_posthog_adapter_preparation_fails(
+    monkeypatch, failure_kind
+):
+    _enable_posthog_revenue(monkeypatch)
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test")
+    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
+    invoice = {
+        "id": "in_analytics_failure",
+        "customer": "cus_123",
+        "subscription": None,
+        "amount_paid": 2999,
+        "currency": "eur",
+        "metadata": {"user_id": "user_1"},
+    }
+    if failure_kind == "property_mapping":
+        invoice["metadata"] = "not-a-mapping"
+    event = {
+        "id": f"evt_{failure_kind}",
+        "type": "invoice.payment_succeeded",
+        "created": 1_700_000_000,
+        "data": {"object": invoice},
+    }
+    monkeypatch.setattr(server.stripe.Webhook, "construct_event", lambda *args: event)
+    monkeypatch.setattr(server, "_stripe_event_already_processed", lambda event_id: _async_return(False))
+    monkeypatch.setattr(
+        server,
+        "_update_user_billing_by_customer_id",
+        lambda *args, **kwargs: _async_return(None),
+    )
+    if failure_kind == "identity_db":
+        async def _identity_failure(**kwargs):
+            raise RuntimeError("database unavailable")
+
+        monkeypatch.setattr(server, "_posthog_resolve_billing_user_id", _identity_failure)
+    recorded = []
+    monkeypatch.setattr(
+        server,
+        "_record_processed_stripe_event",
+        lambda processed_event: recorded.append(processed_event["id"]) or _async_return(None),
+    )
+
+    class _WebhookRequest:
+        headers = {"Stripe-Signature": "signature"}
+
+        async def body(self):
+            return b"{}"
+
+    assert asyncio.run(server.stripe_webhook(_WebhookRequest())) == {"received": True}
+    assert recorded == [f"evt_{failure_kind}"]
+
+
+def test_stripe_refund_webhook_acks_when_posthog_enrichment_times_out(monkeypatch):
+    _enable_posthog_revenue(monkeypatch, refunds=True)
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test")
+    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
+    event = {
+        "id": "evt_refund_timeout",
+        "type": "refund.updated",
+        "created": 1_700_000_000,
+        "data": {
+            "object": {
+                "id": "re_timeout",
+                "status": "succeeded",
+                "amount": 500,
+                "charge": "ch_slow",
+            },
+            "previous_attributes": {"status": "pending"},
+        },
+    }
+    monkeypatch.setattr(server.stripe.Webhook, "construct_event", lambda *args: event)
+    monkeypatch.setattr(server, "_stripe_event_already_processed", lambda event_id: _async_return(False))
+
+    async def _slow_to_thread(*args, **kwargs):
+        await asyncio.sleep(server._POSTHOG_STRIPE_ENRICHMENT_TIMEOUT_SECONDS * 2)
+
+    monkeypatch.setattr(server.asyncio, "to_thread", _slow_to_thread)
+    recorded = []
+    monkeypatch.setattr(
+        server,
+        "_record_processed_stripe_event",
+        lambda processed_event: recorded.append(processed_event["id"]) or _async_return(None),
+    )
+
+    class _WebhookRequest:
+        headers = {"Stripe-Signature": "signature"}
+
+        async def body(self):
+            return b"{}"
+
+    assert asyncio.run(server.stripe_webhook(_WebhookRequest())) == {"received": True}
+    assert recorded == ["evt_refund_timeout"]
+
+
+def test_stripe_invoice_webhook_acks_with_invalid_posthog_host(monkeypatch):
+    _enable_posthog_revenue(monkeypatch)
+    monkeypatch.setenv("POSTHOG_HOST", "http://attacker.invalid")
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test")
+    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
+    event = {
+        "id": "evt_invalid_posthog_host",
+        "type": "invoice.payment_succeeded",
+        "created": 1_700_000_000,
+        "data": {
+            "object": {
+                "id": "in_123",
+                "customer": "cus_123",
+                "subscription": None,
+                "amount_paid": 2999,
+                "currency": "eur",
+            }
+        },
+    }
+    monkeypatch.setattr(server.stripe.Webhook, "construct_event", lambda *args: event)
+    monkeypatch.setattr(server, "_stripe_event_already_processed", lambda event_id: _async_return(False))
+    monkeypatch.setattr(
+        server,
+        "_update_user_billing_by_customer_id",
+        lambda *args, **kwargs: _async_return(None),
+    )
+    recorded = []
+    monkeypatch.setattr(
+        server,
+        "_record_processed_stripe_event",
+        lambda processed_event: recorded.append(processed_event["id"]) or _async_return(None),
+    )
+
+    class _UnexpectedClient:
+        def __init__(self, **kwargs):
+            raise AssertionError("invalid host must not create PostHog client")
+
+    monkeypatch.setattr(server.httpx, "AsyncClient", _UnexpectedClient)
+
+    class _WebhookRequest:
+        headers = {"Stripe-Signature": "signature"}
+
+        async def body(self):
+            return b"{}"
+
+    assert asyncio.run(server.stripe_webhook(_WebhookRequest())) == {"received": True}
+    assert recorded == ["evt_invalid_posthog_host"]

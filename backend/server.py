@@ -3510,15 +3510,18 @@ def _posthog_capture_url() -> Optional[str]:
         return None
     try:
         parsed = urlparse(host)
+        port = parsed.port
     except ValueError:
         return None
     if (
         parsed.scheme != "https"
         or not parsed.hostname
+        or port is not None
         or parsed.username
         or parsed.password
         or parsed.query
         or parsed.fragment
+        or parsed.path.rstrip("/")
     ):
         return None
     hostname = parsed.hostname.lower()
@@ -3530,8 +3533,7 @@ def _posthog_capture_url() -> Optional[str]:
     canonical_host = hostname in {"us.i.posthog.com", "eu.i.posthog.com"}
     if not canonical_host and hostname not in configured_hosts:
         return None
-    base_path = parsed.path.rstrip("/")
-    return f"https://{parsed.netloc}{base_path}/capture/"
+    return f"https://{hostname}/capture/"
 
 
 def _posthog_stripe_timestamp(event: Dict[str, Any]) -> Optional[str]:
