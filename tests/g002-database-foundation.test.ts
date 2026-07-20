@@ -7,7 +7,7 @@ const migrationsDirectory = join(repoRoot, "backend", "db", "migrations");
 
 function foundationMigration(): { path: string; sql: string } {
   const matches = readdirSync(migrationsDirectory)
-    .filter((name) => name.endsWith(".sql"))
+    .filter((name) => name.endsWith(".sql") && !name.endsWith(".down.sql"))
     .map((name) => ({
       path: join(migrationsDirectory, name),
       sql: readFileSync(join(migrationsDirectory, name), "utf8"),
@@ -82,8 +82,10 @@ describe("G002 additive inventory migration", () => {
     );
     expect(sql).toContain("lease_token");
     expect(sql).toContain("claim_generation");
-    expect(sql).toContain("for update skip locked");
-    expect(sql).toMatch(/attempts\s*<\s*max_attempts/);
+    expect(sql).toMatch(/for update(?: of [a-z_]+)? skip locked/);
+    expect(sql).toMatch(
+      /(?:[a-z_]+\.)?attempts\s*<\s*(?:[a-z_]+\.)?max_attempts/,
+    );
     expect(sql).toMatch(/worker_task_attempts[\s\S]*on delete restrict/);
     expect(sql).toMatch(
       /(?:revoke|trigger)[\s\S]*worker_task_attempts|worker_task_attempts[\s\S]*(?:revoke|trigger)/,
@@ -122,7 +124,7 @@ describe("G002 additive inventory migration", () => {
     expect(scheduleFunction?.body).toMatch(
       /from public\.worker_schedules[\s\S]*for (?:no key )?update/,
     );
-    expect(scheduleFunction?.body).toContain("insert into public.worker_runs");
+    expect(scheduleFunction?.body).toContain("worker_private.enqueue_run");
     expect(canonicalWriteFunction).toBeDefined();
     expect(canonicalWriteFunction?.body).toMatch(
       /from public\.provider_registry[\s\S]*for (?:no key )?update/,
