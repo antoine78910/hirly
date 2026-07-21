@@ -67,7 +67,7 @@ describe("job search-document projection", () => {
     expect(second.row.skill_codes).toEqual(["react", "typescript"]);
   });
 
-  test("changes version only for projected material and preserves group identity", async () => {
+  test("uses the authoritative version even when projected content changes", async () => {
     const first = await projectJobSearchDocument(source(), now);
     const preferred = await projectJobSearchDocument(
       source({ preferredJobId: "job_fedcba9876543210" }),
@@ -82,10 +82,19 @@ describe("job search-document projection", () => {
     expect(route.action).toBe("upsert");
     if (first.action !== "upsert" || preferred.action !== "upsert" || route.action !== "upsert") return;
     expect(preferred.canonicalGroupId).toBe(first.canonicalGroupId);
-    expect(preferred.row.job_version).not.toBe(first.row.job_version);
+    expect(preferred.sourceContentHash).not.toBe(first.sourceContentHash);
+    expect(preferred.row.job_version).toBe(first.row.job_version);
     expect(route.row.fulfillment_route).toBe("auto");
     expect(route.row.lifecycle_status).toBe("active");
-    expect(route.row.job_version).not.toBe(first.row.job_version);
+    expect(route.sourceContentHash).not.toBe(first.sourceContentHash);
+    expect(route.row.job_version).toBe(first.row.job_version);
+  });
+
+  test("persists the supplied authoritative version as job version", async () => {
+    const result = await projectJobSearchDocument(source({ authoritativeVersion: "42" }), now);
+    expect(result.action).toBe("upsert");
+    if (result.action !== "upsert") return;
+    expect(result.row.job_version).toBe("42");
   });
 
   test("keeps lifecycle, validation, freshness, and fulfillment independent", async () => {

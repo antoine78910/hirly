@@ -246,7 +246,7 @@ export async function projectJobSearchDocument(
       .slice(0, 8_192),
   };
   const sourceContentHash = await sha256(content);
-  const jobVersion = (BigInt(`0x${sourceContentHash.slice(0, 15)}`) + 1n).toString();
+  const jobVersion = source.authoritativeVersion;
   const row = toJobSearchDocumentPersistenceRow(
     {
       schemaVersion: MATCHING_CONTRACT_VERSION,
