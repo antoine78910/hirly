@@ -546,6 +546,205 @@ def test_provider_boundary_is_rechecked_immediately_before_submit(monkeypatch):
     assert ev.submit_performed is False
 
 
+class _ScopedLocatorRoot:
+    def __init__(self, page, known_selectors):
+        self.page = page
+        self.known = set(known_selectors)
+        self.queried = []
+
+    def locator(self, selector):
+        self.queried.append(selector)
+        return _FakeLocator(
+            self.page,
+            f"scoped:{selector}",
+            exists=selector in self.known,
+        )
+
+
+def _install_recording_operations(monkeypatch):
+    async def record_type(locator, page, value):
+        page.filled.append((locator._selector, value))
+
+    async def record_upload(locator, page, path):
+        page.uploaded.append((locator._selector, path))
+
+    async def record_click(locator, page):
+        page.clicked.append(locator._selector)
+
+    monkeypatch.setattr(driver_mod, "human_type", record_type)
+    monkeypatch.setattr(driver_mod, "human_upload", record_upload)
+    monkeypatch.setattr(driver_mod, "human_click", record_click)
+
+
+def test_scoped_root_excludes_decoy_global_pii_inputs_and_submit(monkeypatch):
+    email = '[name="job_application[email]"]'
+    resume = '[name="job_application[resume]"]'
+    page = _FakePage(known_selectors={email, resume, driver_mod._SUBMIT_SELECTOR})
+    root = _ScopedLocatorRoot(page, {email, resume, driver_mod._SUBMIT_SELECTOR})
+    _install_fake_page(monkeypatch, page)
+    _install_recording_operations(monkeypatch)
+
+    class _FormBoundDriver(_StubDriver):
+        async def submission_locator_root(self, page, job):
+            return root, None
+
+    plan = ApplicationPlan(steps=[
+        PlanStep(action="fill", locators=[email], value="private@example.test"),
+        PlanStep(
+            action="upload",
+            locators=[resume],
+            value="__resume_file__",
+            file_role="resume",
+        ),
+        PlanStep(action="submit", locators=[]),
+    ])
+    ctx = SubmissionContext(
+        job={"external_url": "https://boards.greenhouse.io/acme/jobs/1"},
+        blueprint=None,
+        plan=plan,
+        documents={"resume_path": "/tmp/private-cv.pdf"},
+    )
+
+    evidence = asyncio.run(_FormBoundDriver().submit(ctx))
+
+    assert page.filled == [(f"scoped:{email}", "private@example.test")]
+    assert page.uploaded == [(f"scoped:{resume}", "/tmp/private-cv.pdf")]
+    assert f"scoped:{driver_mod._SUBMIT_SELECTOR}" in page.clicked
+    assert email not in page.queried
+    assert resume not in page.queried
+    assert evidence.submit_performed is True
+
+
+def test_action_mutation_between_pii_operations_blocks_remaining_data(monkeypatch):
+    email = '[name="job_application[email]"]'
+    resume = '[name="job_application[resume]"]'
+    page = _FakePage(known_selectors={email, resume, driver_mod._SUBMIT_SELECTOR})
+    root = _ScopedLocatorRoot(page, {email, resume, driver_mod._SUBMIT_SELECTOR})
+    _install_fake_page(monkeypatch, page)
+    _install_recording_operations(monkeypatch)
+    calls = {"count": 0}
+
+    class _MutatingFormDriver(_StubDriver):
+        async def submission_locator_root(self, page, job):
+            calls["count"] += 1
+            if calls["count"] == 1:
+                return root, None
+            return None, "greenhouse_form_action_mismatch"
+
+    plan = ApplicationPlan(steps=[
+        PlanStep(action="fill", locators=[email], value="private@example.test"),
+        PlanStep(
+            action="upload",
+            locators=[resume],
+            value="__resume_file__",
+            file_role="resume",
+        ),
+        PlanStep(action="submit", locators=[]),
+    ])
+    ctx = SubmissionContext(
+        job={"external_url": "https://boards.greenhouse.io/acme/jobs/1"},
+        blueprint=None,
+        plan=plan,
+        documents={"resume_path": "/tmp/private-cv.pdf"},
+    )
+
+    evidence = asyncio.run(_MutatingFormDriver().submit(ctx))
+
+    assert page.filled == [(f"scoped:{email}", "private@example.test")]
+    assert page.uploaded == []
+    assert page.clicked == []
+    assert evidence.blocked_reason == "route:greenhouse_form_action_mismatch"
+    assert evidence.submit_performed is False
+
+
+def test_form_mutation_immediately_before_submit_blocks_click(monkeypatch):
+    email = '[name="job_application[email]"]'
+    page = _FakePage(known_selectors={email, driver_mod._SUBMIT_SELECTOR})
+    root = _ScopedLocatorRoot(page, {email, driver_mod._SUBMIT_SELECTOR})
+    _install_fake_page(monkeypatch, page)
+    _install_recording_operations(monkeypatch)
+    mutated = {"form": False}
+
+    async def mutate_during_pre_submit_recovery(page, reason="", use_vision=False):
+        assert reason == "pre_submit"
+        mutated["form"] = True
+        return {"actions": [], "stuck": False}
+
+    monkeypatch.setattr(
+        driver_mod,
+        "recover_stuck_page",
+        mutate_during_pre_submit_recovery,
+    )
+
+    class _MutatingFormDriver(_StubDriver):
+        async def submission_locator_root(self, page, job):
+            if not mutated["form"]:
+                return root, None
+            return None, "greenhouse_submit_form_ambiguous"
+
+    plan = ApplicationPlan(steps=[
+        PlanStep(action="fill", locators=[email], value="private@example.test"),
+        PlanStep(action="submit", locators=[]),
+    ])
+    ctx = SubmissionContext(
+        job={"external_url": "https://boards.greenhouse.io/acme/jobs/1"},
+        blueprint=None,
+        plan=plan,
+        documents={},
+    )
+
+    evidence = asyncio.run(_MutatingFormDriver().submit(ctx))
+
+    assert page.filled == [(f"scoped:{email}", "private@example.test")]
+    assert page.clicked == []
+    assert evidence.blocked_reason == "route:greenhouse_submit_form_ambiguous"
+    assert evidence.submit_performed is False
+
+
+def test_boundary_is_revalidated_before_recovery_retry(monkeypatch):
+    page = _FakePage(known_selectors={'[name="email"]'})
+    _install_fake_page(monkeypatch, page)
+    _install_proxy_retry_fakes(monkeypatch)
+    calls = {"boundary": 0, "operation": 0}
+    mutated = {"url": False}
+
+    async def mutate_during_recovery(page, reason="", use_vision=False):
+        assert reason == "click_intercepted"
+        mutated["url"] = True
+        return {"actions": [], "stuck": False}
+
+    monkeypatch.setattr(driver_mod, "recover_stuck_page", mutate_during_recovery)
+
+    class _MutationDuringRecoveryDriver(_StubDriver):
+        async def submission_locator_root(self, page, job):
+            calls["boundary"] += 1
+            if not mutated["url"]:
+                return page, None
+            return None, "greenhouse_browser_route_mismatch"
+
+        async def _apply_step(self, page, step, documents, evidence):
+            calls["operation"] += 1
+            raise RuntimeError("overlay triggered recovery")
+
+    plan = ApplicationPlan(steps=[
+        PlanStep(action="fill", locators=['[name="email"]'], value="private@example.test"),
+        PlanStep(action="submit", locators=[]),
+    ])
+    ctx = SubmissionContext(
+        job={"external_url": "https://boards.greenhouse.io/acme/jobs/1"},
+        blueprint=None,
+        plan=plan,
+        documents={},
+    )
+
+    evidence = asyncio.run(_MutationDuringRecoveryDriver().submit(ctx))
+
+    assert calls == {"boundary": 2, "operation": 1}
+    assert page.filled == []
+    assert evidence.blocked_reason == "route:greenhouse_browser_route_mismatch"
+    assert evidence.submit_performed is False
+
+
 def test_proxy_retries_stop_when_driver_deadline_exceeded(monkeypatch):
     """Dead exits must not burn minutes — abort after the wall-clock budget."""
     from apply_agent.models import ApplyAgentError

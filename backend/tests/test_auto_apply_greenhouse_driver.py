@@ -210,6 +210,9 @@ def test_final_browser_url_and_form_action_remain_bound_to_same_job():
         "https://boards.greenhouse.io/acme/jobs/123#app",
         "/acme/jobs/123",
     )
+    root, failure = asyncio.run(driver.submission_locator_root(safe, job))
+    assert root is safe._form
+    assert failure is None
     assert asyncio.run(driver.submission_boundary_failure(safe, job)) is None
 
     redirected = _BoundaryPage(
