@@ -1,7 +1,0 @@
-[
-  {
-    "event_name": "checkout_started",
-    "event_description": "Fired when the user initiates a paid checkout or plan upgrade from the in-app upgrade modal.",
-    "file": "src/components/upgrade/DesktopUpgradeModal.jsx"
-  }
-]
