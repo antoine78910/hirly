@@ -2,7 +2,6 @@
   "services": {
     "frontend": {
       "root": "frontend",
-      "routePrefix": "/",
       "framework": "create-react-app",
       "installCommand": "npm install --legacy-peer-deps",
       "buildCommand": "CI=false npm run build",
@@ -14,7 +13,7 @@
       "source": "/api/:path*",
       "destination": "https://hirly-production.up.railway.app/api/:path*"
     },
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/(.*)", "destination": { "service": "frontend" } }
   ],
   "redirects": [
     { "source": "/en", "destination": "/", "permanent": true },
