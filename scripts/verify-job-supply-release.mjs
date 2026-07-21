@@ -606,13 +606,19 @@ export function verifyDeploymentDefaults(root = process.cwd()) {
 
   const rootVercel = JSON.parse(readFileSync(resolve(root, "vercel.json"), "utf8"));
   const frontendVercel = JSON.parse(readFileSync(resolve(root, "frontend/vercel.json"), "utf8"));
-  const rootApiRewrite = rootVercel.rewrites?.find((rewrite) => rewrite.source === "/api/:path*");
+  const rootApiRewriteIndex = rootVercel.rewrites?.findIndex((rewrite) => rewrite.source === "/api/:path*");
+  const rootFrontendRewriteIndex = rootVercel.rewrites?.findIndex((rewrite) => rewrite.source === "/(.*)");
+  const rootApiRewrite = rootVercel.rewrites?.[rootApiRewriteIndex];
   const frontendApiRewrite = frontendVercel.rewrites?.find((rewrite) => rewrite.source === "/api/:path*");
-  const rootFrontendRewrite = rootVercel.rewrites?.find((rewrite) => rewrite.source === "/(.*)");
+  const rootFrontendRewrite = rootVercel.rewrites?.[rootFrontendRewriteIndex];
   if (
     JSON.stringify(rootVercel).includes("apps/worker")
+    || rootVercel.$schema !== "https://openapi.vercel.sh/vercel.json"
     || JSON.stringify(rootApiRewrite) !== JSON.stringify(frontendApiRewrite)
+    || rootApiRewriteIndex < 0
+    || rootApiRewriteIndex >= rootFrontendRewriteIndex
     || rootFrontendRewrite?.destination?.service !== "frontend"
+    || JSON.stringify(rootVercel.redirects) !== JSON.stringify(frontendVercel.redirects)
   ) {
     throw new Error("Vercel routing would expose or diverge onto the worker");
   }

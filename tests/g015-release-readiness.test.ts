@@ -313,6 +313,7 @@ describe("G015 release verification contract", () => {
   test("reserves Vercel production deployment ownership for the staged workflow", async () => {
     const rootConfig = JSON.parse(await readFile(resolve(root, "vercel.json"), "utf8"));
     const frontendConfig = JSON.parse(await readFile(resolve(root, "frontend/vercel.json"), "utf8"));
+    expect(rootConfig.$schema).toBe("https://openapi.vercel.sh/vercel.json");
     expect(rootConfig.git?.deploymentEnabled).toBe(false);
     expect(frontendConfig.git?.deploymentEnabled).toBe(false);
     expect(rootConfig.services?.frontend).toMatchObject({
@@ -327,6 +328,10 @@ describe("G015 release verification contract", () => {
       source: "/(.*)",
       destination: { service: "frontend" },
     });
+    expect(rootConfig.rewrites.findIndex(({ source }: { source: string }) => source === "/api/:path*")).toBeLessThan(
+      rootConfig.rewrites.findIndex(({ source }: { source: string }) => source === "/(.*)"),
+    );
+    expect(rootConfig.redirects).toEqual(frontendConfig.redirects);
     expect(() => verifyDeploymentDefaults(root)).not.toThrow();
   });
 
