@@ -12,6 +12,8 @@ ORDERED = [
     "20260720001500_gmail_outcome_batch.sql",
     "20260720001600_admin_bounded_contracts.sql",
     "20260720001700_service_only_rls.sql",
+    "20260721002600_auto_apply_queue_claim_index.sql",
+    "20260721002700_auto_apply_queue_claim_rpc.sql",
 ]
 
 
@@ -104,3 +106,39 @@ def test_service_only_tables_enable_non_forced_policyless_rls():
     assert "FORCE ROW LEVEL SECURITY" not in up
     assert "CREATE POLICY" not in up
     assert "REVOKE" not in up
+
+
+def test_auto_apply_claim_contract_is_atomic_bounded_and_service_role_only():
+    index = _sql("20260721002600_auto_apply_queue_claim_index.sql")
+    rpc = _sql("20260721002700_auto_apply_queue_claim_rpc.sql")
+    index_order = """(data ->> 'auto_apply_queued_at') ASC NULLS LAST,\n  created_at ASC NULLS LAST,\n  application_id ASC"""
+    rpc_order = """a.data ->> 'auto_apply_queued_at' ASC NULLS LAST,\n      a.created_at ASC NULLS LAST,\n      a.application_id ASC"""
+
+    assert "CREATE INDEX CONCURRENTLY IF NOT EXISTS" in index
+    assert index_order in index
+    assert "WHERE data ->> 'auto_apply_queue_status' = 'queued'" in index
+    assert "BEGIN;" not in index
+    assert rpc.startswith("BEGIN;") and rpc.rstrip().endswith("COMMIT;")
+    assert "RETURNS jsonb" in rpc
+    assert "SECURITY DEFINER" in rpc
+    assert "SET search_path = pg_catalog, public" in rpc
+    assert "SET statement_timeout = '2s'" in rpc
+    assert "SET lock_timeout = '1s'" in rpc
+    assert "FOR UPDATE SKIP LOCKED" in rpc
+    assert "LIMIT 1" in rpc
+    assert rpc_order in rpc
+    assert rpc.count("data ->> 'auto_apply_queue_status' = 'queued'") >= 2
+    assert "updated_at = clock.claimed_at" in rpc
+    assert "RETURNING a.data, a.application_id, a.user_id, a.job_id" in rpc
+    assert "updated.data || jsonb_build_object" in rpc
+    assert "aclexplode(" in rpc and "acl.grantee NOT IN" in rpc
+    assert "FROM PUBLIC" in rpc and "FROM anon" in rpc and "FROM authenticated" in rpc
+    assert "TO service_role" in rpc
+    assert "CREATE INDEX CONCURRENTLY" not in rpc
+
+    assert _sql("20260721002700_auto_apply_queue_claim_rpc.down.sql").find(
+        "DROP FUNCTION IF EXISTS public.claim_auto_apply_queue()"
+    ) >= 0
+    assert _sql("20260721002600_auto_apply_queue_claim_index.down.sql").strip() == (
+        "DROP INDEX CONCURRENTLY IF EXISTS public.applications_auto_apply_queue_claim_idx;"
+    )

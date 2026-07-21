@@ -2,9 +2,11 @@ import asyncio
 import json
 
 import httpx
+import pytest
 
 import db.supabase_adapter as adapter
 from db.supabase_adapter import (
+    SupabaseDatabaseAdapter,
     SupabaseCollectionAdapter,
     SupabaseCursorAdapter,
     _http_get_with_retries,
@@ -261,3 +263,122 @@ def test_insert_many_can_atomically_ignore_conflicts_without_changing_default(mo
     assert ignored["ok"] is True
     assert merged["ok"] is True
     assert prefers == ["resolution=ignore-duplicates", "resolution=merge-duplicates"]
+
+
+def test_auto_apply_claim_rpc_is_post_only_and_validates_payload(monkeypatch):
+    class _Client:
+        def __init__(self, payload):
+            self.payload = payload
+            self.calls = []
+
+        async def post(self, url, **kwargs):
+            self.calls.append(("POST", url, kwargs.get("json")))
+            return _Response(self.payload)
+
+        async def get(self, *_args, **_kwargs):
+            raise AssertionError("queue claim must never issue a GET")
+
+    db = SupabaseDatabaseAdapter("https://example.supabase.co", "secret")
+    for payload, expected in (
+        (None, None),
+        ({"application_id": "app_1", "auto_apply_queue_status": "running"}, "app_1"),
+    ):
+        client = _Client(payload)
+        monkeypatch.setattr(adapter, "_get_shared_http_client", lambda *_a, **_k: client)
+        result = asyncio.run(db.claim_auto_apply_queue())
+        assert (result or {}).get("application_id") == expected
+        assert client.calls == [
+            ("POST", "https://example.supabase.co/rest/v1/rpc/claim_auto_apply_queue", {})
+        ]
+
+    for malformed in ([], "bad", 3, {}, {"application_id": ""}, {
+        "application_id": "app_1", "auto_apply_queue_status": "queued",
+    }):
+        client = _Client(malformed)
+        monkeypatch.setattr(adapter, "_get_shared_http_client", lambda *_a, **_k: client)
+        try:
+            asyncio.run(db.claim_auto_apply_queue())
+        except RuntimeError as error:
+            assert "malformed payload" in str(error)
+        else:
+            raise AssertionError("malformed claims must fail closed")
+        assert len(client.calls) == 1
+
+
+def test_auto_apply_claim_and_backfill_rpc_failures_are_post_only(monkeypatch):
+    class _FailureResponse(_Response):
+        status_code = 404
+        text = "PGRST202 missing function"
+
+    class _Client:
+        def __init__(self, timeout=False):
+            self.timeout = timeout
+            self.calls = []
+
+        async def post(self, url, **kwargs):
+            self.calls.append(("POST", url))
+            if self.timeout:
+                raise httpx.ReadTimeout("slow")
+            return _FailureResponse({"code": "PGRST202"})
+
+        async def get(self, *_args, **_kwargs):
+            raise AssertionError("queue RPC failures must never issue a GET")
+
+    db = SupabaseDatabaseAdapter("https://example.supabase.co", "secret")
+    for timeout in (False, True):
+        for call in (
+            db.claim_auto_apply_queue,
+            lambda: db.backfill_auto_apply_queue(["smartrecruiters"], limit=10),
+        ):
+            client = _Client(timeout=timeout)
+            monkeypatch.setattr(adapter, "_get_shared_http_client", lambda *_a, **_k: client)
+            try:
+                asyncio.run(call())
+            except (RuntimeError, httpx.ReadTimeout):
+                pass
+            else:
+                raise AssertionError("RPC transport failures must propagate")
+            assert len(client.calls) == 1
+            assert client.calls[0][0] == "POST"
+
+
+def test_auto_apply_backfill_success_is_post_only(monkeypatch):
+    class _Client:
+        def __init__(self):
+            self.calls = []
+
+        async def post(self, url, **kwargs):
+            self.calls.append((url, kwargs.get("json")))
+            return _Response(4)
+
+        async def get(self, *_args, **_kwargs):
+            raise AssertionError("queue backfill must never issue a GET")
+
+    client = _Client()
+    monkeypatch.setattr(adapter, "_get_shared_http_client", lambda *_a, **_k: client)
+    db = SupabaseDatabaseAdapter("https://example.supabase.co", "secret")
+    assert asyncio.run(db.backfill_auto_apply_queue(["smartrecruiters"], limit=500)) == 4
+    assert client.calls == [(
+        "https://example.supabase.co/rest/v1/rpc/backfill_auto_apply_queue",
+        {"p_providers": ["smartrecruiters"], "p_limit": 200},
+    )]
+
+
+def test_auto_apply_backfill_malformed_payload_is_post_only(monkeypatch):
+    class _Client:
+        def __init__(self):
+            self.calls = 0
+
+        async def post(self, *_args, **_kwargs):
+            self.calls += 1
+            return _Response({})
+
+        async def get(self, *_args, **_kwargs):
+            raise AssertionError("malformed backfill must never issue a GET")
+
+    client = _Client()
+    monkeypatch.setattr(adapter, "_get_shared_http_client", lambda *_a, **_k: client)
+    db = SupabaseDatabaseAdapter("https://example.supabase.co", "secret")
+    with pytest.raises(RuntimeError, match="malformed payload"):
+        asyncio.run(db.backfill_auto_apply_queue(["smartrecruiters"]))
+    assert client.calls == 1

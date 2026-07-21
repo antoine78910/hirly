@@ -54,6 +54,22 @@ class _FakeCollection:
         return {"inserted_id": doc.get("id") or doc.get("application_id")}
 
 
+class _NoReadCollection(_FakeCollection):
+    def __init__(self):
+        super().__init__()
+        self.update_calls = []
+
+    async def find_one(self, *args, **kwargs):
+        raise AssertionError("atomic queue paths must not read the applications collection")
+
+    def find(self, *args, **kwargs):
+        raise AssertionError("atomic queue paths must not read the applications collection")
+
+    async def update_one(self, filter, update, upsert=False):
+        self.update_calls.append((filter, update, upsert))
+        return type("R", (), {"matched_count": 1, "modified_count": 1})()
+
+
 def _match(doc, filter):
     for key, expected in filter.items():
         value = doc.get(key)
@@ -415,6 +431,86 @@ def test_claim_next_rechecks_policy_before_running():
     assert db.applications.rows[0]["submission_error"] == "candidate_mandate_inactive"
 
 
+def test_atomic_claim_empty_performs_no_application_read_or_write():
+    db = _FakeDB()
+    db.applications = _NoReadCollection()
+    calls = []
+
+    async def claim():
+        calls.append(True)
+        return None
+
+    db.claim_auto_apply_queue = claim
+    assert asyncio.run(q._claim_next(db)) is None
+    assert calls == [True]
+    assert db.applications.update_calls == []
+
+
+def test_atomic_claim_returns_valid_running_document_without_rewrite():
+    db = _FakeDB()
+    db.applications = _NoReadCollection()
+    app = _authorized({
+        "application_id": "app_atomic",
+        "user_id": "u1",
+        "job_id": "j1",
+        "auto_apply_queue_status": "running",
+        "ats_provider": "smartrecruiters",
+    })
+
+    async def claim():
+        return app
+
+    db.claim_auto_apply_queue = claim
+    assert asyncio.run(q._claim_next(db)) == app
+    assert db.applications.update_calls == []
+
+
+def test_atomic_claim_revoked_policy_fails_closed_by_physical_id_only():
+    db = _FakeDB()
+    db.applications = _NoReadCollection()
+    app = _authorized({
+        "application_id": "app_revoked",
+        "user_id": "u1",
+        "job_id": "j1",
+        "auto_apply_queue_status": "running",
+        "ats_provider": "smartrecruiters",
+    })
+    app["submission_policy"]["revoked"] = True
+
+    async def claim():
+        return app
+
+    db.claim_auto_apply_queue = claim
+    assert asyncio.run(q._claim_next(db)) is None
+    assert len(db.applications.update_calls) == 1
+    filter, update, _ = db.applications.update_calls[0]
+    assert filter == {"application_id": "app_revoked"}
+    assert update["$set"]["auto_apply_queue_status"] == "failed"
+    assert update["$set"]["submission_status"] == "blocked"
+    assert update["$set"]["submission_error"] == "submission_policy_inactive"
+
+
+def test_atomic_claim_errors_propagate_without_application_scan():
+    for error in (
+        RuntimeError("HTTP 404 PGRST202"),
+        TimeoutError("claim timeout"),
+        RuntimeError("malformed claim payload"),
+    ):
+        db = _FakeDB()
+        db.applications = _NoReadCollection()
+
+        async def claim(error=error):
+            raise error
+
+        db.claim_auto_apply_queue = claim
+        try:
+            asyncio.run(q._claim_next(db))
+        except Exception as raised:
+            assert raised is error
+        else:
+            raise AssertionError("atomic claim errors must propagate")
+
+
 def test_backfill_enqueues_ready_sr_apps(monkeypatch):
     monkeypatch.setenv("AUTO_APPLY_QUEUE_ENABLED", "true")
     db = _FakeDB()
@@ -436,30 +532,51 @@ def test_backfill_enqueues_ready_sr_apps(monkeypatch):
     assert db.applications.rows[0]["auto_apply_queue_status"] == "queued"
 
 
-def test_backfill_falls_back_when_additive_rpc_is_not_migrated(monkeypatch):
+def test_backfill_rpc_errors_never_fall_back_to_global_scan(monkeypatch):
+    monkeypatch.setenv("AUTO_APPLY_QUEUE_ENABLED", "true")
+    for error in (
+        RuntimeError("HTTP 404 PGRST202 Could not find the function"),
+        TimeoutError("backfill timeout"),
+        RuntimeError("malformed backfill payload"),
+        RuntimeError("HTTP 500 statement timeout"),
+    ):
+        db = _FakeDB()
+        db.applications = _NoReadCollection()
+
+        async def failed_rpc(_providers, *, limit, error=error):
+            raise error
+
+        db.backfill_auto_apply_queue = failed_rpc
+        try:
+            asyncio.run(q.backfill_pending_applications(db, limit=50))
+        except Exception as raised:
+            assert raised is error
+        else:
+            raise AssertionError("backfill RPC errors must propagate")
+
+
+def test_startup_absorbs_backfill_failure_without_enabling_legacy_scans(monkeypatch):
     monkeypatch.setenv("AUTO_APPLY_QUEUE_ENABLED", "true")
     db = _FakeDB()
-    db.applications.rows.append(_authorized({
-        "application_id": "app_old",
-        "user_id": "u1",
-        "job_id": "j_sr",
-        "package_status": "generated",
-        "submission_status": "not_submitted",
-        "ats_provider": "smartrecruiters",
-        "created_at": "2026-01-01T00:00:00+00:00",
-    }))
-    db.jobs.rows.append({"job_id": "j_sr", "ats_provider": "smartrecruiters"})
-    db.users.rows.append({"user_id": "u1", "require_review_before_send": False})
+    db.applications = _NoReadCollection()
+    started = []
+    claim_calls = []
 
-    async def missing_rpc(_providers, *, limit):
-        raise RuntimeError(
-            "PostgREST RPC backfill_auto_apply_queue returned HTTP 404: "
-            "PGRST202 Could not find the function"
-        )
+    async def failed_backfill(_providers, *, limit):
+        raise RuntimeError("HTTP 404 PGRST202")
 
-    db.backfill_auto_apply_queue = missing_rpc
-    assert asyncio.run(q.backfill_pending_applications(db, limit=50)) == 1
-    assert db.applications.rows[0]["auto_apply_queue_status"] == "queued"
+    async def empty_claim():
+        claim_calls.append(True)
+        return None
+
+    db.backfill_auto_apply_queue = failed_backfill
+    db.claim_auto_apply_queue = empty_claim
+    monkeypatch.setattr(q, "start_worker", lambda worker_db: started.append(worker_db))
+
+    asyncio.run(q.startup(db))
+    assert started == [db]
+    assert asyncio.run(q._claim_next(db)) is None
+    assert claim_calls == [True]
 
 
 def test_backfill_does_not_hide_rpc_execution_failure(monkeypatch):

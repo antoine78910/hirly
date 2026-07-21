@@ -17,7 +17,6 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Set
 
 from .driver import DRIVER_REGISTRY
-from db.base import is_missing_database_contract_error
 from job_providers.ats_detection import APPLICATION_CAPABILITIES
 
 logger = logging.getLogger(__name__)

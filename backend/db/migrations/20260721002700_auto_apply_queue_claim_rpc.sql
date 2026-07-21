@@ -63,12 +63,12 @@ BEGIN
 
   FOR execute_grant IN
     SELECT DISTINCT acl.grantee, role.rolname
-    FROM pg_proc function
+    FROM pg_proc p
     CROSS JOIN LATERAL aclexplode(
-      COALESCE(function.proacl, acldefault('f', function.proowner))
+      COALESCE(p.proacl, acldefault('f', p.proowner))
     ) acl
     LEFT JOIN pg_roles role ON role.oid = acl.grantee
-    WHERE function.oid = target_oid
+    WHERE p.oid = target_oid
       AND acl.privilege_type = 'EXECUTE'
       AND acl.grantee NOT IN (target_owner, service_role_oid)
   LOOP
@@ -82,12 +82,12 @@ BEGIN
     END IF;
   END LOOP;
 
-  REVOKE EXECUTE ON FUNCTION public.claim_auto_apply_queue() FROM PUBLIC;
+  REVOKE ALL ON FUNCTION public.claim_auto_apply_queue() FROM PUBLIC;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
-    REVOKE EXECUTE ON FUNCTION public.claim_auto_apply_queue() FROM anon;
+    REVOKE ALL ON FUNCTION public.claim_auto_apply_queue() FROM anon;
   END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
-    REVOKE EXECUTE ON FUNCTION public.claim_auto_apply_queue() FROM authenticated;
+    REVOKE ALL ON FUNCTION public.claim_auto_apply_queue() FROM authenticated;
   END IF;
   GRANT EXECUTE ON FUNCTION public.claim_auto_apply_queue() TO service_role;
 END

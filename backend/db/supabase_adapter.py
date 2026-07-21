@@ -2051,7 +2051,9 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
             "backfill_auto_apply_queue",
             {"p_providers": providers, "p_limit": min(max(limit, 1), 200)},
         )
-        return int(result or 0)
+        if not isinstance(result, int) or isinstance(result, bool) or result < 0:
+            raise RuntimeError("Auto-apply queue backfill RPC returned malformed payload")
+        return result
 
     async def claim_auto_apply_queue(self) -> Optional[Dict[str, Any]]:
         result = await self._python_ingestion_rpc("claim_auto_apply_queue", {})
