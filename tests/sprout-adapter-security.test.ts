@@ -3,6 +3,7 @@ import { stableJobId } from "../packages/ingestion/src/index";
 import { getProviderModule } from "../apps/worker/src/providers";
 import {
   buildSproutFranceQuery,
+  buildSproutCommitEntry,
   parseSproutResponse,
   sproutProvider,
   sproutRawJobSchema,
@@ -186,5 +187,70 @@ describe("Sprout adapter security and inventory contract", () => {
         previous: null,
       }),
     ).toThrow();
+  });
+
+  test("accepts only the bounded observed Sprout drift and preserves it", () => {
+    const location = rawJob().locations[0]!;
+    const parsed = parseSproutResponse({
+      jobs: [
+        {
+          ...rawJob(),
+          sourceId: 101,
+          socMajorGroup: "15-0000",
+          socMinorGroup: "15-1200",
+          socBroadOccupation: "15-1250",
+          socDetailedOccupation: "15-1252",
+          locations: [
+            {
+              ...location,
+              id: 701,
+              jobId: 42,
+              createdAt: "2026-07-18T10:00:00.000Z",
+              stateCode: "IDF",
+            },
+          ],
+        },
+      ],
+      count: 1,
+      next: null,
+      previous: null,
+    });
+    const raw = parsed.jobs[0]!;
+    const entry = buildSproutCommitEntry({
+      raw,
+      policyId: "22222222-2222-4222-8222-222222222222",
+      fetchedAt: new Date("2026-07-21T00:00:00.000Z"),
+    });
+
+    expect(raw.sourceId).toBe(101);
+    expect(raw.locations[0]).toMatchObject({
+      id: 701,
+      jobId: 42,
+      createdAt: "2026-07-18T10:00:00.000Z",
+      stateCode: "IDF",
+    });
+    expect(raw).toMatchObject({
+      socMajorGroup: "15-0000",
+      socMinorGroup: "15-1200",
+      socBroadOccupation: "15-1250",
+      socDetailedOccupation: "15-1252",
+    });
+    expect(entry.sourceDocument).toEqual(raw);
+    expect(entry.attribution.sourceId).toBe("101");
+
+    for (const incompatible of [
+      { ...raw, sourceId: { unsafe: true } },
+      { ...raw, socMajorGroup: ["15-0000"] },
+      { ...raw, locations: [{ ...raw.locations[0]!, stateCode: 75 }] },
+    ]) {
+      expect(() =>
+        parseSproutResponse({
+          jobs: [incompatible],
+          count: 1,
+          next: null,
+          previous: null,
+        }),
+      ).toThrow();
+    }
   });
 });

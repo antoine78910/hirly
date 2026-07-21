@@ -15,14 +15,14 @@ import {
 const sourceId = "11111111-1111-4111-8111-111111111111";
 const policyId = "22222222-2222-4222-8222-222222222222";
 
-function task() {
+function task(mode: "canary" | "backfill" | "incremental" = "backfill") {
   return {
     taskId: "33333333-3333-4333-8333-333333333333",
     runId: "44444444-4444-4444-8444-444444444444",
     taskKey: "sprout:france:0",
     taskType: "provider.fetch_page",
     provider: "sprout",
-    payload: { sourceId, mode: "backfill", maxResponseBytes: 1_000_000 },
+    payload: { sourceId, mode, maxResponseBytes: 1_000_000 },
     leaseToken: "55555555-5555-4555-8555-555555555555",
     claimGeneration: 1n,
     leaseOwner: "test-worker",
@@ -158,7 +158,7 @@ describe("Sprout source commit pipeline", () => {
     expect(entry.sourceDocument).toEqual(raw);
   });
 
-  test("runs fetch-to-atomic-source-commit through the production task handler", async () => {
+  test("runs one initial canary page through the production task handler", async () => {
     const commits: unknown[] = [];
     let released = 0;
     const store = {
@@ -186,14 +186,14 @@ describe("Sprout source commit pipeline", () => {
           checkpoint: initialSproutCheckpoint({ approvedPageSize: 2 }),
           policyEvidenceRef: "reviewed-policy",
           canaryEvidence: {
-            status: "passed" as const,
-            evidenceRef: "canary-read-back",
-            pagesCommitted: 1 as const,
-            identityReadBack: true,
-            rawSnapshotLinked: true,
-            occurrenceLinked: true,
-            checkpointReadBack: true,
-            singleWriterVerified: true,
+            status: "pending" as const,
+            evidenceRef: null,
+            pagesCommitted: 0 as const,
+            identityReadBack: false,
+            rawSnapshotLinked: false,
+            occurrenceLinked: false,
+            checkpointReadBack: false,
+            singleWriterVerified: false,
           },
           rollbackEvidence: {
             status: "passed" as const,
@@ -226,9 +226,10 @@ describe("Sprout source commit pipeline", () => {
       providerClaimHeartbeatMs: 10_000,
     })["provider.fetch_page"]!;
 
-    await expect(handler(task(), new AbortController().signal)).resolves.toEqual({ taskCompleted: true });
+    await expect(handler(task("canary"), new AbortController().signal)).resolves.toEqual({ taskCompleted: true });
     expect(commits).toHaveLength(1);
     const commit = sourcePageCommitSchema.parse(commits[0]);
+    expect(commit.mode).toBe("canary");
     expect(commit.entries).toHaveLength(2);
     expect(commit.checkpointOut).toMatchObject({ offset: 2, pageSize: 2, observedTotal: 3 });
     expect(released).toBe(0);

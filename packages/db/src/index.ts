@@ -412,7 +412,7 @@ export class WorkerRepository {
 
   async getSproutSourceRuntime(
     sourceId: string,
-    mode: "incremental" | "backfill",
+    mode: "canary" | "incremental" | "backfill",
   ): Promise<SproutSourceRuntime | null> {
     const [row] = await this.sql<
       {
@@ -423,6 +423,8 @@ export class WorkerRepository {
         approved_page_size: number;
         checkpoint: Record<string, unknown>;
         policy_evidence_ref: string;
+        canary_evidence: Record<string, unknown>;
+        rollback_evidence: Record<string, unknown>;
       }[]
     >`
       SELECT *
@@ -440,6 +442,8 @@ export class WorkerRepository {
       approvedPageSize: row.approved_page_size,
       checkpoint: row.checkpoint,
       policyEvidenceRef: row.policy_evidence_ref,
+      canaryEvidence: row.canary_evidence,
+      rollbackEvidence: row.rollback_evidence,
     });
   }
 

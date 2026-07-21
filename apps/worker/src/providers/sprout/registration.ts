@@ -83,7 +83,7 @@ export const sproutActivationSchema = sproutFranceRegistrationSchema.extend({
 export const sproutTaskPayloadSchema = z
   .object({
     sourceId: z.uuid(),
-    mode: z.enum(["backfill", "incremental"]),
+    mode: z.enum(["canary", "backfill", "incremental"]),
     maxResponseBytes: z.number().int().positive().max(50_000_000),
   })
   .strict();
@@ -119,6 +119,13 @@ export function assertSproutActivationReady(
   }
   if (mode !== "canary" && !releaseEvidencePassed(activation)) {
     throw new Error("sprout_release_evidence_incomplete");
+  }
+  if (
+    mode === "canary" &&
+    (activation.canaryEvidence.status !== "pending" ||
+      activation.canaryEvidence.pagesCommitted !== 0)
+  ) {
+    throw new Error("sprout_canary_already_committed");
   }
   return activation;
 }

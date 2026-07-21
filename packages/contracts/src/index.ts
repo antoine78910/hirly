@@ -561,7 +561,7 @@ export const sourcePageCommitSchema = z
   .object({
     sourceId: z.uuid(),
     countryCode: z.literal("FR"),
-    mode: z.enum(["incremental", "backfill"]),
+    mode: z.enum(["canary", "incremental", "backfill"]),
     checkpointIn: sourceCheckpointSchema,
     checkpointOut: sourceCheckpointSchema,
     complete: z.boolean(),
@@ -579,6 +579,32 @@ export const sourcePageCommitResultSchema = z
   })
   .strict();
 
+export const sproutCanaryEvidenceSchema = z
+  .object({
+    status: z.enum(["pending", "failed", "passed"]),
+    evidenceRef: z.string().trim().min(1).max(512).nullable(),
+    pagesCommitted: z.union([z.literal(0), z.literal(1)]),
+    identityReadBack: z.boolean(),
+    rawSnapshotLinked: z.boolean(),
+    occurrenceLinked: z.boolean(),
+    checkpointReadBack: z.boolean(),
+    singleWriterVerified: z.boolean(),
+  })
+  .strict();
+
+export const sproutRollbackEvidenceSchema = z
+  .object({
+    status: z.enum(["pending", "failed", "passed"]),
+    evidenceRef: z.string().trim().min(1).max(512).nullable(),
+    providerKillSwitchVerified: z.boolean(),
+    sourceKillSwitchVerified: z.boolean(),
+    scheduleDisableVerified: z.boolean(),
+    transportDisableVerified: z.boolean(),
+    outstandingTasksStopVerified: z.boolean(),
+    writerClaimReleaseVerified: z.boolean(),
+  })
+  .strict();
+
 export const sproutSourceRuntimeSchema = z
   .object({
     sourceId: z.uuid(),
@@ -590,6 +616,8 @@ export const sproutSourceRuntimeSchema = z
     approvedPageSize: z.number().int().positive().max(500),
     checkpoint: sourceCheckpointSchema,
     policyEvidenceRef: z.string().trim().min(1).max(2_048),
+    canaryEvidence: sproutCanaryEvidenceSchema,
+    rollbackEvidence: sproutRollbackEvidenceSchema,
   })
   .strict();
 

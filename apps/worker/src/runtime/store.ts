@@ -36,7 +36,7 @@ export class PostgresRuntimeStore implements RuntimeStore {
 
   getSproutSourceRuntime(
     sourceId: string,
-    mode: "backfill" | "incremental",
+    mode: "canary" | "backfill" | "incremental",
   ) {
     return this.repository.getSproutSourceRuntime(sourceId, mode);
   }

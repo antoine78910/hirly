@@ -15,6 +15,20 @@ const rollback = readFileSync(
   ),
   "utf8",
 );
+const canaryMigration = readFileSync(
+  new URL(
+    "../backend/db/migrations/20260720002100_sprout_canary_gate.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const canaryRollback = readFileSync(
+  new URL(
+    "../backend/db/migrations/20260720002100_sprout_canary_gate.down.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const databaseRepository = readFileSync(
   new URL("../packages/db/src/index.ts", import.meta.url),
   "utf8",
@@ -136,10 +150,68 @@ describe("Sprout source persistence boundary", () => {
   });
 
   test("contains no live credential or authorization header material", () => {
-    for (const body of [migration, rollback, databaseRepository]) {
+    for (const body of [
+      migration,
+      rollback,
+      canaryMigration,
+      canaryRollback,
+      databaseRepository,
+    ]) {
       expect(body).not.toMatch(/Authorization:\s*Bearer/i);
       expect(body).not.toMatch(/refresh[_-]?token/i);
       expect(body).not.toMatch(/cookie:/i);
     }
+  });
+
+  test("adds a default-off DB-backed one-page canary gate", () => {
+    expect(canaryMigration).toContain(
+      "ADD COLUMN canary_enabled boolean NOT NULL DEFAULT false",
+    );
+    expect(canaryMigration).toContain("ADD COLUMN canary_evidence jsonb NOT NULL");
+    expect(canaryMigration).toContain("ADD COLUMN rollback_evidence jsonb NOT NULL");
+    expect(canaryMigration).toContain(
+      "p_mode IN ('canary', 'incremental', 'backfill')",
+    );
+    expect(canaryMigration).toContain(
+      "WHEN 'canary' THEN source.provider = 'sprout' AND source.canary_enabled",
+    );
+    expect(canaryMigration).toContain("coalesce(p_checkpoint_in->>'offset', '') <> '0'");
+    expect(canaryMigration).toContain(
+      "source.canary_evidence->>'pagesCommitted' = '0'",
+    );
+    expect(canaryMigration).toContain(
+      "canary_evidence = CASE",
+    );
+    expect(canaryMigration).toContain(
+      "canary_evidence, '{pagesCommitted}', '1'::jsonb, true",
+    );
+    expect(canaryMigration).not.toMatch(
+      /UPDATE\s+public\.career_sources[\s\S]{0,300}SET[\s\S]{0,100}canary_enabled\s*=\s*true/i,
+    );
+  });
+
+  test("blocks production modes until canary read-back and rollback pass", () => {
+    for (const gate of [
+      "source.canary_evidence->>'status' = 'passed'",
+      "(source.canary_evidence->>'pagesCommitted')::integer = 1",
+      "(source.canary_evidence->>'identityReadBack')::boolean",
+      "(source.canary_evidence->>'rawSnapshotLinked')::boolean",
+      "(source.canary_evidence->>'occurrenceLinked')::boolean",
+      "(source.canary_evidence->>'checkpointReadBack')::boolean",
+      "(source.canary_evidence->>'singleWriterVerified')::boolean",
+      "source.rollback_evidence->>'status' = 'passed'",
+      "(source.rollback_evidence->>'providerKillSwitchVerified')::boolean",
+      "(source.rollback_evidence->>'sourceKillSwitchVerified')::boolean",
+      "(source.rollback_evidence->>'scheduleDisableVerified')::boolean",
+      "(source.rollback_evidence->>'transportDisableVerified')::boolean",
+      "(source.rollback_evidence->>'outstandingTasksStopVerified')::boolean",
+      "(source.rollback_evidence->>'writerClaimReleaseVerified')::boolean",
+    ]) {
+      expect(canaryMigration).toContain(gate);
+    }
+    expect(canaryRollback).toContain(
+      "refusing to roll back Sprout canary activation or evidence state",
+    );
+    expect(canaryRollback).toContain("DROP COLUMN canary_enabled");
   });
 });

@@ -29,6 +29,13 @@ const sproutIdSchema = z.union([
   z.string().trim().min(1).max(512),
   z.number().int().nonnegative(),
 ]).transform(String);
+const optionalSproutSourceIdSchema = z
+  .union([
+    z.string().trim().min(1).max(512),
+    z.number().int().nonnegative(),
+  ])
+  .nullable()
+  .optional();
 
 export const sproutCoordinatesSchema = z.union([
   z
@@ -42,12 +49,16 @@ export const sproutCoordinatesSchema = z.union([
 
 export const sproutLocationSchema = z
   .object({
+    id: optionalSproutSourceIdSchema,
+    jobId: optionalSproutSourceIdSchema,
+    createdAt: optionalShortText,
     address: optionalShortText,
     country: optionalShortText,
     countryCode: optionalShortText,
     city: optionalShortText,
     region: optionalShortText,
     state: optionalShortText,
+    stateCode: optionalShortText,
     code: optionalShortText,
     latitude: optionalNumber,
     longitude: optionalNumber,
@@ -96,7 +107,7 @@ export const sproutRawJobSchema = z
     workLocation: optionalShortText,
     postingUrl: optionalShortText,
     source: optionalShortText,
-    sourceId: optionalShortText,
+    sourceId: optionalSproutSourceIdSchema,
     desiredQualifications: optionalBoundedValue,
     requiredQualifications: optionalBoundedValue,
     restrictions: optionalBoundedValue,
@@ -113,6 +124,10 @@ export const sproutRawJobSchema = z
     soc: optionalBoundedValue,
     socCode: optionalShortText,
     socTitle: optionalShortText,
+    socMajorGroup: optionalShortText,
+    socMinorGroup: optionalShortText,
+    socBroadOccupation: optionalShortText,
+    socDetailedOccupation: optionalShortText,
     onet: optionalBoundedValue,
     onetCode: optionalShortText,
     onetTitle: optionalShortText,

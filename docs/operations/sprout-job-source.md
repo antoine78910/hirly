@@ -179,6 +179,45 @@ country leak, abort or lease loss leaves the input checkpoint unchanged.
 6. Stop immediately on authorization/policy expiry, auth failure, repeated rate
    limiting, drift, leakage, duplicate regression or fulfillment degradation.
 
+### Exact one-page canary/read-back/rollback sequence
+
+Apply `20260720002100_sprout_canary_gate.sql` before using this sequence. It adds
+only default-off state. Keep `incremental_enabled=false` and
+`backfill_enabled=false` throughout the canary and rollback drill.
+
+1. In one operator transaction, verify the reviewed authorization, current
+   production policy, TypeScript writer epoch, approved page size, initial
+   checkpoint (`offset=0`), and pending canary evidence (`pagesCommitted=0`).
+   Set only the provider/source base enablement, transport, `canary_enabled`,
+   and the two exact `FR` kill switches required for the bounded canary. Store
+   only the `secret://...` reference; never place credential material in SQL,
+   task payloads, logs, or evidence.
+2. Enqueue exactly one `provider.fetch_page` task with
+   `{sourceId, mode:"canary", maxResponseBytes}`. Do not enqueue a schedule.
+   The database rejects a non-initial checkpoint, a second canary, a stale task
+   lease/writer claim, or any mode other than the explicit canary.
+3. After the task succeeds, read back all of the following under the exact run,
+   source and checkpoint: one committed page in `canary_evidence`, stable job
+   identity, linked `raw_job_snapshots`, linked `job_occurrences`, the advanced
+   checkpoint, and the current TypeScript writer epoch. If any check fails, set
+   canary status to `failed` and start rollback; do not retry from the advanced
+   checkpoint.
+4. Record `canary_evidence.status=passed`, an immutable evidence reference,
+   `pagesCommitted=1`, and all five read-back booleans only after those queries
+   pass. Backfill/incremental remain database-blocked because rollback evidence
+   is still pending.
+5. Exercise rollback in this order: arm provider `FR` kill switch, arm source
+   `FR` kill switch, disable schedules, disable transport and canary, stop or
+   cancel outstanding tasks, and confirm/release the provider writer claim.
+   Preserve canonical rows, raw snapshots, occurrences and the last checkpoint.
+6. Record `rollback_evidence.status=passed`, its immutable evidence reference,
+   and all six rollback booleans only after read-back proves each control. Any
+   false/missing field keeps backfill and incremental non-runnable.
+7. A later production-mode change is a separate reviewed transaction: re-check
+   authorization/policy/ownership, selectively re-enable transport and the
+   intended mode, then disarm only the scoped `FR` kill switches. Never enable
+   backfill and incremental together for the first post-canary run.
+
 Rollback order is: set the provider and source `FR` kill switches, disable the
 schedule and transport, stop outstanding tasks, preserve raw evidence and the
 last checkpoint, confirm there is no writer claim, then remove Sprout from any

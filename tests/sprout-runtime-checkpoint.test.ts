@@ -234,7 +234,15 @@ describe("Sprout activation and bounded page runtime", () => {
     const transportInputs: unknown[] = [];
     const commits: unknown[] = [];
     const result = await runSproutPageTask({
-      activation: activeRegistration(),
+      activation: {
+        ...activeRegistration(),
+        canaryEvidence: {
+          ...activeRegistration().canaryEvidence,
+          status: "pending",
+          evidenceRef: null,
+          pagesCommitted: 0,
+        },
+      },
       mode: "canary",
       checkpoint: initialSproutCheckpoint({ approvedPageSize: 2 }),
       transport: {
@@ -318,6 +326,10 @@ describe("Sprout activation and bounded page runtime", () => {
       "sprout_canary_must_start_at_initial_checkpoint",
     );
     expect(fetches).toBe(0);
+
+    expect(() => assertSproutActivationReady(activeRegistration(), "canary")).toThrow(
+      "sprout_canary_already_committed",
+    );
   });
 
   test("does not commit or advance on country leak, body breach, or cursor drift", async () => {

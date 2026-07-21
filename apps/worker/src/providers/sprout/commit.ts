@@ -59,7 +59,10 @@ export function buildSproutCommitEntry(input: {
     attribution: {
       provider: "sprout",
       source: input.raw.source ?? null,
-      sourceId: input.raw.sourceId ?? null,
+      sourceId:
+        input.raw.sourceId === null || input.raw.sourceId === undefined
+          ? null
+          : String(input.raw.sourceId),
     },
     policyId: input.policyId,
   };
@@ -69,7 +72,7 @@ export function createSproutCommitRepository(input: {
   sourceId: string;
   policyId: string;
   countryCode: "FR";
-  mode: "backfill" | "incremental";
+  mode: "canary" | "backfill" | "incremental";
   commit(commit: SourcePageCommit): Promise<SourcePageCommitResult>;
 }) {
   return {

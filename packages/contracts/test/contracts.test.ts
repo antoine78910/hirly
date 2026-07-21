@@ -202,7 +202,27 @@ describe("shared contracts", () => {
         watermark: null,
       },
       policyEvidenceRef: "policy/sprout/france/2026-07-21",
-    };
+      canaryEvidence: {
+        status: "pending",
+        evidenceRef: null,
+        pagesCommitted: 0,
+        identityReadBack: false,
+        rawSnapshotLinked: false,
+        occurrenceLinked: false,
+        checkpointReadBack: false,
+        singleWriterVerified: false,
+      },
+      rollbackEvidence: {
+        status: "pending",
+        evidenceRef: null,
+        providerKillSwitchVerified: false,
+        sourceKillSwitchVerified: false,
+        scheduleDisableVerified: false,
+        transportDisableVerified: false,
+        outstandingTasksStopVerified: false,
+        writerClaimReleaseVerified: false,
+      },
+    } as const;
     expect(sproutSourceRuntimeSchema.parse(runtime)).toEqual(runtime);
     for (const credentialRef of [
       "Bearer token",
