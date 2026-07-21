@@ -389,6 +389,9 @@ def _build_posthog_client(api_key: str, host: str):
         api_key,
         host=host,
         enable_exception_autocapture=True,
+        # Feed routing must not wait on a remote flag decision. A failed or
+        # slow evaluation remains fail-closed in _feed_v2_rollout_enabled_for.
+        feature_flags_request_timeout_seconds=0.25,
     )
 
 
@@ -7439,7 +7442,29 @@ def _feed_v2_base64url(value: bytes) -> str:
     return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
 
 
-def _feed_v2_enabled_for(user_id: str) -> bool:
+FEED_V2_ROLLOUT_FLAG = "feed_v2_rollout"
+
+
+async def _feed_v2_rollout_enabled_for(distinct_id: Optional[str]) -> bool:
+    """Return the PostHog rollout decision without ever opening the v2 path on error."""
+    if not distinct_id or _posthog_client is None:
+        return False
+    try:
+        flags = await asyncio.to_thread(
+            _posthog_client.evaluate_flags,
+            distinct_id,
+            flag_keys=[FEED_V2_ROLLOUT_FLAG],
+        )
+        return flags.is_enabled(FEED_V2_ROLLOUT_FLAG) is True
+    except Exception as exc:
+        logger.warning(
+            "jobs/feed v2_rollout_unavailable reason=%s",
+            type(exc).__name__,
+        )
+        return False
+
+
+async def _feed_v2_enabled_for(user_id: str, analytics_user_id: Optional[str] = None) -> bool:
     if not _env_bool("FEED_V2_DELEGATION_ENABLED"):
         return False
     cohort = {
@@ -7447,7 +7472,9 @@ def _feed_v2_enabled_for(user_id: str) -> bool:
         for value in os.environ.get("FEED_V2_COHORT_USER_IDS", "").split(",")
         if value.strip()
     }
-    return not cohort or user_id in cohort
+    if cohort and user_id not in cohort:
+        return False
+    return await _feed_v2_rollout_enabled_for(analytics_user_id or user_id)
 
 
 def _feed_v2_request_is_profile_equivalent(filters: Dict[str, Any]) -> bool:
@@ -7619,10 +7646,11 @@ def _feed_v2_effective_query(filters: Dict[str, Any]) -> Optional[Dict[str, Any]
 async def _try_feed_v2(
     *,
     user_id: str,
+    analytics_user_id: Optional[str] = None,
     limit: int,
     filters: Dict[str, Any],
 ) -> Optional[Dict[str, Any]]:
-    if not _feed_v2_enabled_for(user_id):
+    if not await _feed_v2_enabled_for(user_id, analytics_user_id):
         return None
     try:
         effective_query = _feed_v2_effective_query(filters)
@@ -7796,6 +7824,7 @@ async def get_feed(
     }
     feed_v2_response = await _try_feed_v2(
         user_id=user.user_id,
+        analytics_user_id=user.analytics_user_id,
         limit=limit,
         filters=feed_v2_filters,
     )
