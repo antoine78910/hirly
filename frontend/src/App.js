@@ -69,12 +69,12 @@ import BottomNav from "@/components/BottomNav";
 import AppLayout from "@/components/desktop/AppLayout";
 import ScrollManager from "@/components/app/ScrollManager";
 import AppErrorBoundary from "@/components/app/AppErrorBoundary";
+import FrontendVersionChecker from "@/components/app/FrontendVersionChecker";
 import RecordTools from "@/pages/RecordTools";
 import { devBypassAuth } from "@/lib/dev";
 import { isTrainingRoute } from "@/lib/trainingRoutes";
 import { needsOAuthCallbackRedirect } from "@/lib/oauthCallback";
 import PostHogLifecycle from "@/components/analytics/PostHogLifecycle";
-import MaintenanceBanner from "@/components/maintenance/MaintenanceBanner";
 
 import PasswordReset from '@/pages/PasswordReset';
 
@@ -256,7 +256,7 @@ function App() {
           <BrowserRouter>
             <PostHogLifecycle />
             <AppLocaleProvider>
-              <MaintenanceBanner />
+              <FrontendVersionChecker />
               <MobileThemeProvider>
               <UpgradeModalProvider>
                 <AppErrorBoundary>

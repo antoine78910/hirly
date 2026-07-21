@@ -1,6 +1,27 @@
 // craco.config.js
 const path = require("path");
+const { execFileSync } = require("child_process");
+const webpack = require("webpack");
 require("dotenv").config();
+
+function resolveFrontendVersion() {
+  const environmentVersion = [
+    process.env.REACT_APP_GIT_SHA,
+    process.env.VERCEL_GIT_COMMIT_SHA,
+    process.env.GITHUB_SHA,
+  ].find((value) => typeof value === "string" && value.trim());
+  if (environmentVersion) return environmentVersion.trim();
+
+  try {
+    return execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: path.resolve(__dirname, ".."),
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return "unknown";
+  }
+}
 
 // Environment variable overrides
 const config = {
@@ -33,6 +54,12 @@ let webpackConfig = {
       '@': path.resolve(__dirname, 'src'),
     },
     configure: (webpackConfig) => {
+
+      webpackConfig.plugins.push(
+        new webpack.DefinePlugin({
+          __HIRLY_FRONTEND_VERSION__: JSON.stringify(resolveFrontendVersion()),
+        }),
+      );
 
       // Add ignored patterns to reduce watched directories
         webpackConfig.watchOptions = {
