@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { createColumnHelper } from "@tanstack/react-table";
 import { Loader2, RefreshCw } from "lucide-react";
 import { api } from "../lib/api";
 import { adminApiErrorMessage, autoApplyApiUrl } from "../lib/adminApi";
 import { Button } from "../components/ui/button";
 import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
+import AdminDataTable from "../components/admin/AdminDataTable";
 
 const KPI_CARDS = [
   ["visitors", "Visitors"],
@@ -66,13 +68,7 @@ function Section({ title, subtitle, children }) {
   );
 }
 
-function EmptyRow({ colSpan, label = "No analytics data yet." }) {
-  return (
-    <tr>
-      <td colSpan={colSpan} className="px-4 py-8 text-center text-sm text-zinc-500">{label}</td>
-    </tr>
-  );
-}
+const columnHelper = createColumnHelper();
 
 export default function AdminAnalytics() {
   const [data, setData] = useState(null);
@@ -107,10 +103,82 @@ export default function AdminAnalytics() {
   const metrics = data?.metrics || {};
   const funnel = data?.conversion_funnel || [];
   const ctas = data?.cta_analytics || [];
-  const applicationFunnel = data?.application_funnel || {};
-  const atsPerformance = data?.ats_performance || data?.by_ats || {};
   const trend7 = mergeTrendSeries(data?.time_series?.last_7_days || {});
-  const adminOps = data?.admin_ops || {};
+  const applicationFunnel = useMemo(() => data?.application_funnel || {}, [data]);
+  const atsPerformance = useMemo(() => data?.ats_performance || data?.by_ats || {}, [data]);
+  const adminOps = useMemo(() => data?.admin_ops || {}, [data]);
+
+  const applicationFunnelRows = useMemo(
+    () => Object.entries(applicationFunnel).map(([key, value]) => ({ key, value })),
+    [applicationFunnel],
+  );
+
+  const adminOpsRows = useMemo(() => [
+    { key: "open_action_required", label: "Open action required", value: fmt(adminOps.open_action_required) },
+    { key: "open_blocked", label: "Open blocked", value: fmt(adminOps.open_blocked) },
+    { key: "assigned_applications", label: "Assigned applications", value: fmt(adminOps.assigned_applications) },
+    { key: "unassigned_applications", label: "Unassigned applications", value: fmt(adminOps.unassigned_applications) },
+    {
+      key: "average_unresolved_age",
+      label: "Average unresolved age",
+      value: adminOps.average_unresolved_age_hours == null ? "-" : `${fmt(adminOps.average_unresolved_age_hours)}h`,
+    },
+  ], [adminOps]);
+
+  const atsPerformanceRows = useMemo(
+    () => Object.keys(ATS_LABELS).map((key) => ({ key, label: ATS_LABELS[key], ...(atsPerformance[key] || {}) })),
+    [atsPerformance],
+  );
+
+  const funnelColumns = useMemo(() => [
+    columnHelper.accessor("label", { header: "Step", cell: (info) => <span className="font-semibold">{info.getValue()}</span> }),
+    columnHelper.accessor("count", { header: "Count", cell: (info) => fmt(info.getValue()) }),
+    columnHelper.accessor("previous_rate", {
+      header: "Previous step conversion",
+      cell: (info) => (info.getValue() == null ? "-" : pct(info.getValue())),
+    }),
+  ], []);
+
+  const ctaColumns = useMemo(() => [
+    columnHelper.accessor("label", { header: "CTA", cell: (info) => <span className="font-semibold">{info.getValue()}</span> }),
+    columnHelper.accessor("clicks", { header: "Clicks", cell: (info) => fmt(info.getValue()) }),
+    columnHelper.accessor("conversion_to_signup", { header: "To signup", cell: (info) => pct(info.getValue()) }),
+    columnHelper.accessor("conversion_to_onboarding", { header: "To onboarding", cell: (info) => pct(info.getValue()) }),
+    columnHelper.accessor("conversion_to_first_swipe", { header: "To first swipe", cell: (info) => pct(info.getValue()) }),
+  ], []);
+
+  const applicationFunnelColumns = useMemo(() => [
+    columnHelper.accessor("key", {
+      header: "Status",
+      cell: (info) => <span className="font-semibold capitalize">{info.getValue().replaceAll("_", " ")}</span>,
+    }),
+    columnHelper.accessor("value", { header: "Count", cell: (info) => fmt(info.getValue()) }),
+  ], []);
+
+  const adminOpsColumns = useMemo(() => [
+    columnHelper.accessor("label", { header: "Metric", cell: (info) => <span className="font-semibold">{info.getValue()}</span> }),
+    columnHelper.accessor("value", { header: "Value", cell: (info) => info.getValue() }),
+  ], []);
+
+  const atsPerformanceColumns = useMemo(() => [
+    columnHelper.accessor("label", { header: "ATS", cell: (info) => <span className="font-semibold">{info.getValue()}</span> }),
+    columnHelper.accessor((row) => row.generated || row.applications_generated, { id: "generated", header: "Generated", cell: (info) => fmt(info.getValue()) }),
+    columnHelper.accessor("prepared", { header: "Prepared", cell: (info) => fmt(info.getValue()) }),
+    columnHelper.accessor("action_required", { header: "Action Required", cell: (info) => fmt(info.getValue()) }),
+    columnHelper.accessor("submitted", { header: "Submitted", cell: (info) => fmt(info.getValue()) }),
+    columnHelper.accessor("failed_blocked", { header: "Failed / Blocked", cell: (info) => fmt(info.getValue()) }),
+    columnHelper.accessor("prepare_rate", { header: "Prepare rate", cell: (info) => pct(info.getValue()) }),
+    columnHelper.accessor("failure_rate", { header: "Failure rate", cell: (info) => pct(info.getValue()) }),
+  ], []);
+
+  const trendColumns = useMemo(() => [
+    columnHelper.accessor("date", { header: "Date", cell: (info) => <span className="font-semibold">{info.getValue()}</span> }),
+    columnHelper.accessor("signups", { header: "Signups", cell: (info) => fmt(info.getValue()) }),
+    columnHelper.accessor("swipes", { header: "Swipes", cell: (info) => fmt(info.getValue()) }),
+    columnHelper.accessor("applications", { header: "Applications", cell: (info) => fmt(info.getValue()) }),
+    columnHelper.accessor("prepared", { header: "Prepared", cell: (info) => fmt(info.getValue()) }),
+    columnHelper.accessor("submitted", { header: "Submitted", cell: (info) => fmt(info.getValue()) }),
+  ], []);
 
   return (
     <AdminShell
@@ -134,137 +202,66 @@ export default function AdminAnalytics() {
           </div>
 
           <Section title="Conversion Funnel" subtitle="Unique actors where available; application stages also include application records.">
-            <table className="w-full min-w-[720px] text-left text-sm">
-              <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
-                <tr>
-                  <th className="px-4 py-3">Step</th>
-                  <th className="px-4 py-3">Count</th>
-                  <th className="px-4 py-3">Previous step conversion</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100">
-                {funnel.length ? funnel.map((row) => (
-                  <tr key={row.key}>
-                    <td className="px-4 py-3 font-semibold">{row.label}</td>
-                    <td className="px-4 py-3">{fmt(row.count)}</td>
-                    <td className="px-4 py-3">{row.previous_rate == null ? "-" : pct(row.previous_rate)}</td>
-                  </tr>
-                )) : <EmptyRow colSpan={3} />}
-              </tbody>
-            </table>
+            <AdminDataTable
+              columns={funnelColumns}
+              data={funnel}
+              getRowId={(row) => row.key}
+              searchPlaceholder="Search funnel steps…"
+              emptyMessage="No analytics data yet."
+            />
           </Section>
 
           <Section title="CTA Performance" subtitle="Click counts and downstream conversion from clicked CTA users.">
-            <table className="w-full min-w-[860px] text-left text-sm">
-              <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
-                <tr>
-                  <th className="px-4 py-3">CTA</th>
-                  <th className="px-4 py-3">Clicks</th>
-                  <th className="px-4 py-3">To signup</th>
-                  <th className="px-4 py-3">To onboarding</th>
-                  <th className="px-4 py-3">To first swipe</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100">
-                {ctas.length ? ctas.map((row) => (
-                  <tr key={row.event}>
-                    <td className="px-4 py-3 font-semibold">{row.label}</td>
-                    <td className="px-4 py-3">{fmt(row.clicks)}</td>
-                    <td className="px-4 py-3">{pct(row.conversion_to_signup)}</td>
-                    <td className="px-4 py-3">{pct(row.conversion_to_onboarding)}</td>
-                    <td className="px-4 py-3">{pct(row.conversion_to_first_swipe)}</td>
-                  </tr>
-                )) : <EmptyRow colSpan={5} />}
-              </tbody>
-            </table>
+            <AdminDataTable
+              columns={ctaColumns}
+              data={ctas}
+              getRowId={(row) => row.event}
+              searchPlaceholder="Search CTAs…"
+              emptyMessage="No analytics data yet."
+            />
           </Section>
 
           <div className="grid gap-6 lg:grid-cols-2">
             <Section title="Application Status Breakdown">
-              <table className="w-full text-left text-sm">
-                <tbody className="divide-y divide-zinc-100">
-                  {Object.entries(applicationFunnel).length ? Object.entries(applicationFunnel).map(([key, value]) => (
-                    <tr key={key}>
-                      <td className="px-4 py-3 font-semibold capitalize">{key.replaceAll("_", " ")}</td>
-                      <td className="px-4 py-3 text-right">{fmt(value)}</td>
-                    </tr>
-                  )) : <EmptyRow colSpan={2} />}
-                </tbody>
-              </table>
+              <AdminDataTable
+                columns={applicationFunnelColumns}
+                data={applicationFunnelRows}
+                getRowId={(row) => row.key}
+                searchPlaceholder="Search statuses…"
+                emptyMessage="No analytics data yet."
+              />
             </Section>
 
             <Section title="Admin Operations">
-              <table className="w-full text-left text-sm">
-                <tbody className="divide-y divide-zinc-100">
-                  <tr><td className="px-4 py-3 font-semibold">Open action required</td><td className="px-4 py-3 text-right">{fmt(adminOps.open_action_required)}</td></tr>
-                  <tr><td className="px-4 py-3 font-semibold">Open blocked</td><td className="px-4 py-3 text-right">{fmt(adminOps.open_blocked)}</td></tr>
-                  <tr><td className="px-4 py-3 font-semibold">Assigned applications</td><td className="px-4 py-3 text-right">{fmt(adminOps.assigned_applications)}</td></tr>
-                  <tr><td className="px-4 py-3 font-semibold">Unassigned applications</td><td className="px-4 py-3 text-right">{fmt(adminOps.unassigned_applications)}</td></tr>
-                  <tr><td className="px-4 py-3 font-semibold">Average unresolved age</td><td className="px-4 py-3 text-right">{adminOps.average_unresolved_age_hours == null ? "-" : `${fmt(adminOps.average_unresolved_age_hours)}h`}</td></tr>
-                </tbody>
-              </table>
+              <AdminDataTable
+                columns={adminOpsColumns}
+                data={adminOpsRows}
+                getRowId={(row) => row.key}
+                searchPlaceholder="Search metrics…"
+                emptyMessage="No analytics data yet."
+              />
             </Section>
           </div>
 
           <Section title="ATS Performance">
-            <table className="w-full min-w-[900px] text-left text-sm">
-              <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
-                <tr>
-                  <th className="px-4 py-3">ATS</th>
-                  <th className="px-4 py-3">Generated</th>
-                  <th className="px-4 py-3">Prepared</th>
-                  <th className="px-4 py-3">Action Required</th>
-                  <th className="px-4 py-3">Submitted</th>
-                  <th className="px-4 py-3">Failed / Blocked</th>
-                  <th className="px-4 py-3">Prepare rate</th>
-                  <th className="px-4 py-3">Failure rate</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100">
-                {Object.keys(ATS_LABELS).map((key) => {
-                  const row = atsPerformance[key] || {};
-                  return (
-                    <tr key={key}>
-                      <td className="px-4 py-3 font-semibold">{ATS_LABELS[key]}</td>
-                      <td className="px-4 py-3">{fmt(row.generated || row.applications_generated)}</td>
-                      <td className="px-4 py-3">{fmt(row.prepared)}</td>
-                      <td className="px-4 py-3">{fmt(row.action_required)}</td>
-                      <td className="px-4 py-3">{fmt(row.submitted)}</td>
-                      <td className="px-4 py-3">{fmt(row.failed_blocked)}</td>
-                      <td className="px-4 py-3">{pct(row.prepare_rate)}</td>
-                      <td className="px-4 py-3">{pct(row.failure_rate)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <AdminDataTable
+              columns={atsPerformanceColumns}
+              data={atsPerformanceRows}
+              getRowId={(row) => row.key}
+              searchPlaceholder="Search ATS providers…"
+              emptyMessage="No analytics data yet."
+            />
           </Section>
 
           <Section title="Daily Trend" subtitle="Last 7 days. Full 30-day data is returned by the API.">
-            <table className="w-full min-w-[760px] text-left text-sm">
-              <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
-                <tr>
-                  <th className="px-4 py-3">Date</th>
-                  <th className="px-4 py-3">Signups</th>
-                  <th className="px-4 py-3">Swipes</th>
-                  <th className="px-4 py-3">Applications</th>
-                  <th className="px-4 py-3">Prepared</th>
-                  <th className="px-4 py-3">Submitted</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100">
-                {trend7.length ? trend7.map((row) => (
-                  <tr key={row.date}>
-                    <td className="px-4 py-3 font-semibold">{row.date}</td>
-                    <td className="px-4 py-3">{fmt(row.signups)}</td>
-                    <td className="px-4 py-3">{fmt(row.swipes)}</td>
-                    <td className="px-4 py-3">{fmt(row.applications)}</td>
-                    <td className="px-4 py-3">{fmt(row.prepared)}</td>
-                    <td className="px-4 py-3">{fmt(row.submitted)}</td>
-                  </tr>
-                )) : <EmptyRow colSpan={6} />}
-              </tbody>
-            </table>
+            <AdminDataTable
+              columns={trendColumns}
+              data={trend7}
+              getRowId={(row) => row.date}
+              searchPlaceholder="Search by date…"
+              emptyMessage="No analytics data yet."
+              initialSorting={[{ id: "date", desc: true }]}
+            />
           </Section>
         </div>
       )}

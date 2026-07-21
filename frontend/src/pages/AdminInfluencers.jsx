@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Copy, Link2, Loader2, MonitorPlay, Plus, RefreshCw, Sparkles } from "lucide-react";
+import { createColumnHelper } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import { adminApiErrorMessage } from "../lib/adminApi";
@@ -7,6 +8,7 @@ import { buildInviteUrl } from "../lib/creatorInvite";
 import { formatInviteClicked, formatInviteConnectedAccount, formatInviteStatus } from "../lib/adminInviteTracking";
 import { Button } from "../components/ui/button";
 import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
+import AdminDataTable from "../components/admin/AdminDataTable";
 
 const PLATFORMS = ["instagram", "tiktok", "youtube", "linkedin", "twitter", "other"];
 
@@ -24,6 +26,8 @@ const emptyForm = {
   handle: "",
   notes: "",
 };
+
+const columnHelper = createColumnHelper();
 
 async function copyText(label, value) {
   try {
@@ -178,7 +182,7 @@ export default function AdminInfluencers() {
     }
   };
 
-  const grantDemo = async (influencerId) => {
+  const grantDemo = useCallback(async (influencerId) => {
     setGrantingId(influencerId);
     try {
       const { data } = await api.post(`/admin/influencers/${influencerId}/grant-demo`);
@@ -189,14 +193,14 @@ export default function AdminInfluencers() {
     } finally {
       setGrantingId(null);
     }
-  };
+  }, [load]);
 
-  const openInviteModal = (row, variant = "training") => {
+  const openInviteModal = useCallback((row, variant = "training") => {
     setInviteTarget(row);
     setInviteVariant(variant);
     const code = variant === "demo" ? row.latest_demo_invite_code : row.latest_invite_code;
     setInviteData(code ? { code } : null);
-  };
+  }, []);
 
   const createInvite = async () => {
     if (!inviteTarget?.influencer_id) return;
@@ -238,6 +242,119 @@ export default function AdminInfluencers() {
 
   const demoCode = latestDemoInvite?.code || "";
   const demoInviteUrl = demoCode ? buildInviteUrl(demoCode) : "";
+
+  const demoInviteColumns = useMemo(() => [
+    columnHelper.accessor("code", {
+      header: "Code",
+      cell: (info) => <span className="font-mono text-xs">{info.getValue()}</span>,
+    }),
+    columnHelper.accessor((row) => row.label || row.email_hint || "—", {
+      id: "label",
+      header: "Label",
+    }),
+    columnHelper.accessor((row) => (row.created_at ? new Date(row.created_at).getTime() : 0), {
+      id: "created_at",
+      header: "Created",
+      cell: (info) => fmtDate(info.row.original.created_at),
+    }),
+    columnHelper.accessor((row) => formatInviteClicked(row, fmtDate), {
+      id: "clicked",
+      header: "Link opened",
+      enableSorting: false,
+    }),
+    columnHelper.accessor((row) => formatInviteConnectedAccount(row), {
+      id: "connected_account",
+      header: "Connected account",
+      enableSorting: false,
+    }),
+    columnHelper.accessor((row) => formatInviteStatus(row), {
+      id: "status",
+      header: "Status",
+      enableSorting: false,
+    }),
+  ], []);
+
+  const columns = useMemo(() => [
+    columnHelper.accessor((row) => `${row.name || ""} ${row.notes || ""}`, {
+      id: "creator",
+      header: "Creator",
+      cell: (info) => {
+        const row = info.row.original;
+        return (
+          <>
+            <p className="font-semibold">{row.name}</p>
+            {row.notes ? <p className="mt-0.5 text-xs text-zinc-500">{row.notes}</p> : null}
+          </>
+        );
+      },
+    }),
+    columnHelper.accessor((row) => `${row.platform || ""} ${row.handle || ""}`, {
+      id: "platform",
+      header: "Platform",
+      cell: (info) => {
+        const row = info.row.original;
+        return <span className="capitalize">{row.platform}{row.handle ? ` · ${row.handle}` : ""}</span>;
+      },
+    }),
+    columnHelper.accessor((row) => row.linked_email || row.email || "—", {
+      id: "hirly_account",
+      header: "Hirly account",
+    }),
+    columnHelper.accessor((row) => (row.linked_demo_account || row.demo_granted ? "Active" : "Not granted"), {
+      id: "demo",
+      header: "Demo",
+      meta: {
+        filterVariant: "select",
+        filterOptions: [
+          { value: "Active", label: "Active" },
+          { value: "Not granted", label: "Not granted" },
+        ],
+      },
+      cell: (info) => (
+        info.getValue() === "Active" ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+            <Sparkles className="h-3 w-3" />
+            Active
+          </span>
+        ) : (
+          <span className="text-zinc-400">Not granted</span>
+        )
+      ),
+    }),
+    columnHelper.accessor((row) => (row.updated_at ? new Date(row.updated_at).getTime() : 0), {
+      id: "updated_at",
+      header: "Updated",
+      cell: (info) => fmtDate(info.row.original.updated_at),
+    }),
+    columnHelper.display({
+      id: "actions",
+      header: "Actions",
+      enableSorting: false,
+      cell: (info) => {
+        const row = info.row.original;
+        return (
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="default" onClick={() => openInviteModal(row, "training")}>
+              <Link2 className="h-4 w-4" />
+              Training link
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => openInviteModal(row, "demo")}>
+              <MonitorPlay className="h-4 w-4" />
+              Demo link
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={grantingId === row.influencer_id || row.linked_demo_account}
+              onClick={() => grantDemo(row.influencer_id)}
+            >
+              {grantingId === row.influencer_id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Grant demo"}
+            </Button>
+          </div>
+        );
+      },
+    }),
+  ], [grantingId, openInviteModal, grantDemo]);
 
   return (
     <AdminShell
@@ -339,99 +456,28 @@ export default function AdminInfluencers() {
                 </div>
               </div>
             ) : null}
-            {demoInviteLoading ? (
-              <p className="mt-3 text-sm text-zinc-500">Loading recent demo links…</p>
-            ) : demoInvites.length > 0 ? (
-              <div className="mt-4 overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-zinc-100 text-left text-xs uppercase tracking-wide text-zinc-500">
-                      <th className="py-2 pr-4">Code</th>
-                      <th className="py-2 pr-4">Label</th>
-                      <th className="py-2 pr-4">Created</th>
-                      <th className="py-2 pr-4">Link opened</th>
-                      <th className="py-2 pr-4">Connected account</th>
-                      <th className="py-2">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {demoInvites.slice(0, 8).map((row) => (
-                      <tr key={row.invite_id || row.code} className="border-b border-zinc-50">
-                        <td className="py-2 pr-4 font-mono text-xs">{row.code}</td>
-                        <td className="py-2 pr-4 text-zinc-600">{row.label || row.email_hint || "—"}</td>
-                        <td className="py-2 pr-4 text-zinc-500">{fmtDate(row.created_at)}</td>
-                        <td className="py-2 pr-4 text-zinc-600">{formatInviteClicked(row, fmtDate)}</td>
-                        <td className="py-2 pr-4 text-zinc-700">{formatInviteConnectedAccount(row)}</td>
-                        <td className="py-2 text-zinc-600">{formatInviteStatus(row)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : null}
+            <div className="mt-4">
+              <AdminDataTable
+                columns={demoInviteColumns}
+                data={demoInvites}
+                loading={demoInviteLoading}
+                getRowId={(row) => row.invite_id || row.code}
+                searchPlaceholder="Search demo links…"
+                emptyMessage="No demo links yet."
+                initialSorting={[{ id: "created_at", desc: true }]}
+              />
+            </div>
           </section>
 
-          <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
-            <table className="w-full min-w-[1080px] text-left text-sm">
-              <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
-                <tr>
-                  <th className="px-4 py-3">Creator</th>
-                  <th className="px-4 py-3">Platform</th>
-                  <th className="px-4 py-3">Hirly account</th>
-                  <th className="px-4 py-3">Demo</th>
-                  <th className="px-4 py-3">Updated</th>
-                  <th className="px-4 py-3">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100">
-                {loading ? (
-                  <tr><td className="px-4 py-8 text-center text-zinc-500" colSpan={6}><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>
-                ) : rows.length ? rows.map((row) => (
-                  <tr key={row.influencer_id} className="hover:bg-zinc-50">
-                    <td className="px-4 py-3">
-                      <p className="font-semibold">{row.name}</p>
-                      {row.notes ? <p className="mt-0.5 text-xs text-zinc-500">{row.notes}</p> : null}
-                    </td>
-                    <td className="px-4 py-3 capitalize">{row.platform}{row.handle ? ` · ${row.handle}` : ""}</td>
-                    <td className="px-4 py-3">{row.linked_email || row.email || "—"}</td>
-                    <td className="px-4 py-3">
-                      {row.linked_demo_account || row.demo_granted ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-                          <Sparkles className="h-3 w-3" />
-                          Active
-                        </span>
-                      ) : (
-                        <span className="text-zinc-400">Not granted</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-zinc-500">{fmtDate(row.updated_at)}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-2">
-                        <Button size="sm" variant="default" onClick={() => openInviteModal(row, "training")}>
-                          <Link2 className="h-4 w-4" />
-                          Training link
-                        </Button>
-                        <Button size="sm" variant="outline" onClick={() => openInviteModal(row, "demo")}>
-                          <MonitorPlay className="h-4 w-4" />
-                          Demo link
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={grantingId === row.influencer_id || row.linked_demo_account}
-                          onClick={() => grantDemo(row.influencer_id)}
-                        >
-                          {grantingId === row.influencer_id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Grant demo"}
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                )) : (
-                  <tr><td className="px-4 py-8 text-center text-zinc-500" colSpan={6}>No influencers tracked yet.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <AdminDataTable
+            columns={columns}
+            data={rows}
+            loading={loading}
+            getRowId={(row) => row.influencer_id}
+            searchPlaceholder="Search by creator, platform, or account…"
+            emptyMessage="No influencers tracked yet."
+            initialSorting={[{ id: "updated_at", desc: true }]}
+          />
         </div>
       )}
 

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { createColumnHelper } from "@tanstack/react-table";
 import { Download, FlaskConical, Loader2, RefreshCw, Save } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import { adminApiErrorMessage } from "../lib/adminApi";
 import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
+import AdminDataTable from "../components/admin/AdminDataTable";
 import { Button } from "../components/ui/button";
 import { Switch } from "../components/ui/switch";
 import { Label } from "../components/ui/label";
@@ -32,33 +34,36 @@ function ScorePill({ label, value }) {
   );
 }
 
+const keywordColumnHelper = createColumnHelper();
+
+const KEYWORD_TABLE_COLUMNS = [
+  keywordColumnHelper.accessor("keyword", {
+    header: "Keyword",
+    cell: (info) => <span className="font-medium text-zinc-900">{info.getValue()}</span>,
+  }),
+  keywordColumnHelper.accessor("importance", {
+    header: "Importance",
+    cell: (info) => info.getValue() || "—",
+  }),
+  keywordColumnHelper.accessor("present_in_cv", {
+    header: "In CV",
+    cell: (info) => info.getValue() || "—",
+  }),
+  keywordColumnHelper.accessor("integration_recommendation", {
+    header: "Recommendation",
+    cell: (info) => info.getValue() || "—",
+  }),
+];
+
 function KeywordTable({ rows = [] }) {
-  if (!rows.length) {
-    return <p className="text-sm text-zinc-500">No keyword analysis returned.</p>;
-  }
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full text-left text-sm">
-        <thead>
-          <tr className="border-b border-zinc-200 text-xs uppercase tracking-wide text-zinc-500">
-            <th className="px-3 py-2">Keyword</th>
-            <th className="px-3 py-2">Importance</th>
-            <th className="px-3 py-2">In CV</th>
-            <th className="px-3 py-2">Recommendation</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, index) => (
-            <tr key={`${row.keyword}-${index}`} className="border-b border-zinc-100 align-top">
-              <td className="px-3 py-2 font-medium text-zinc-900">{row.keyword}</td>
-              <td className="px-3 py-2 text-zinc-600">{row.importance || "—"}</td>
-              <td className="px-3 py-2 text-zinc-600">{row.present_in_cv || "—"}</td>
-              <td className="px-3 py-2 text-zinc-600">{row.integration_recommendation || "—"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <AdminDataTable
+      columns={KEYWORD_TABLE_COLUMNS}
+      data={rows}
+      getRowId={(row, index) => `${row.keyword}-${index}`}
+      searchPlaceholder="Search keywords…"
+      emptyMessage="No keyword analysis returned."
+    />
   );
 }
 

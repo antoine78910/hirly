@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, MessageSquare, Sparkles, Star } from "lucide-react";
+import { createColumnHelper } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import { adminApiErrorMessage } from "../lib/adminApi";
 import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
 import { Button } from "../components/ui/button";
+import AdminDataTable from "../components/admin/AdminDataTable";
 
 const TABS = [
   { id: "users", label: "App users" },
@@ -70,84 +72,116 @@ function FeedbackDetailPanel({ submission, onClose }) {
   );
 }
 
+const columnHelper = createColumnHelper();
+
 function SuggestionTable({ rows, onSelect, emptyLabel }) {
-  if (!rows.length) {
-    return <p className="py-8 text-center text-sm text-zinc-500">{emptyLabel}</p>;
-  }
+  const columns = useMemo(() => [
+    columnHelper.accessor((row) => (row.created_at ? new Date(row.created_at).getTime() : 0), {
+      id: "created_at",
+      header: "Date",
+      cell: (info) => fmtDate(info.row.original.created_at),
+    }),
+    columnHelper.accessor((row) => `${row.user_name || ""} ${row.user_email || ""} ${row.user_id || ""}`, {
+      id: "user",
+      header: "User",
+      cell: (info) => {
+        const row = info.row.original;
+        return (
+          <button type="button" onClick={() => onSelect(row.id)} className="text-left font-medium text-linkedin hover:underline">
+            {row.user_name || "—"}
+            <span className="block text-xs font-normal text-zinc-500">{row.user_email || row.user_id}</span>
+          </button>
+        );
+      },
+    }),
+    columnHelper.accessor((row) => categoryLabel(row.category), {
+      id: "category",
+      header: "Category",
+      meta: {
+        filterVariant: "select",
+        filterOptions: [
+          { value: "Feature idea", label: "Feature idea" },
+          { value: "Problem / bug", label: "Problem / bug" },
+          { value: "Other", label: "Other" },
+        ],
+      },
+    }),
+    columnHelper.accessor("message_preview", {
+      header: "Preview",
+      enableSorting: false,
+      cell: (info) => info.getValue() || "—",
+    }),
+  ], [onSelect]);
+
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full text-sm">
-        <thead>
-          <tr className="border-b border-zinc-100 text-left text-xs uppercase tracking-wide text-zinc-500">
-            <th className="py-2 pr-4">Date</th>
-            <th className="py-2 pr-4">User</th>
-            <th className="py-2 pr-4">Category</th>
-            <th className="py-2">Preview</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr
-              key={row.id}
-              className="cursor-pointer border-b border-zinc-50 hover:bg-zinc-50"
-              onClick={() => onSelect(row.id)}
-            >
-              <td className="py-2 pr-4 text-zinc-500">{fmtDate(row.created_at)}</td>
-              <td className="py-2 pr-4">
-                <p className="font-medium text-zinc-900">{row.user_name || "—"}</p>
-                <p className="text-xs text-zinc-500">{row.user_email || row.user_id}</p>
-              </td>
-              <td className="py-2 pr-4">{categoryLabel(row.category)}</td>
-              <td className="py-2 text-zinc-600">{row.message_preview || "—"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <AdminDataTable
+      columns={columns}
+      data={rows}
+      getRowId={(row) => row.id}
+      searchPlaceholder="Search by user or preview…"
+      emptyMessage={emptyLabel}
+      initialSorting={[{ id: "created_at", desc: true }]}
+    />
   );
 }
 
 function TrainingFeedbackTable({ rows, onSelect }) {
-  if (!rows.length) {
-    return <p className="py-8 text-center text-sm text-zinc-500">No training completion feedback yet.</p>;
-  }
+  const columns = useMemo(() => [
+    columnHelper.accessor((row) => (row.created_at ? new Date(row.created_at).getTime() : 0), {
+      id: "created_at",
+      header: "Date",
+      cell: (info) => fmtDate(info.row.original.created_at),
+    }),
+    columnHelper.accessor((row) => `${row.user_name || ""} ${row.user_email || ""} ${row.user_id || ""}`, {
+      id: "creator",
+      header: "Creator",
+      cell: (info) => {
+        const row = info.row.original;
+        return (
+          <button type="button" onClick={() => onSelect(row.id)} className="text-left font-medium text-linkedin hover:underline">
+            {row.user_name || "—"}
+            <span className="block text-xs font-normal text-zinc-500">{row.user_email || row.user_id}</span>
+          </button>
+        );
+      },
+    }),
+    columnHelper.accessor((row) => beneficialLabel(row.beneficial), {
+      id: "beneficial",
+      header: "Helpful",
+      meta: {
+        filterVariant: "select",
+        filterOptions: [
+          { value: "Very helpful", label: "Very helpful" },
+          { value: "Somewhat helpful", label: "Somewhat helpful" },
+          { value: "Not really", label: "Not really" },
+        ],
+      },
+    }),
+    columnHelper.accessor("rating", {
+      header: "Rating",
+      cell: (info) => (
+        <span className="inline-flex items-center gap-1 font-semibold text-amber-600">
+          <Star className="h-3.5 w-3.5 fill-current" />
+          {info.getValue() || "—"}/5
+        </span>
+      ),
+    }),
+    columnHelper.accessor("message_preview", {
+      header: "Comment",
+      enableSorting: false,
+      cell: (info) => info.getValue() || "—",
+    }),
+  ], [onSelect]);
+
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full text-sm">
-        <thead>
-          <tr className="border-b border-zinc-100 text-left text-xs uppercase tracking-wide text-zinc-500">
-            <th className="py-2 pr-4">Date</th>
-            <th className="py-2 pr-4">Creator</th>
-            <th className="py-2 pr-4">Helpful</th>
-            <th className="py-2 pr-4">Rating</th>
-            <th className="py-2">Comment</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr
-              key={row.id}
-              className="cursor-pointer border-b border-zinc-50 hover:bg-zinc-50"
-              onClick={() => onSelect(row.id)}
-            >
-              <td className="py-2 pr-4 text-zinc-500">{fmtDate(row.created_at)}</td>
-              <td className="py-2 pr-4">
-                <p className="font-medium text-zinc-900">{row.user_name || "—"}</p>
-                <p className="text-xs text-zinc-500">{row.user_email || row.user_id}</p>
-              </td>
-              <td className="py-2 pr-4">{beneficialLabel(row.beneficial)}</td>
-              <td className="py-2 pr-4">
-                <span className="inline-flex items-center gap-1 font-semibold text-amber-600">
-                  <Star className="h-3.5 w-3.5 fill-current" />
-                  {row.rating || "—"}/5
-                </span>
-              </td>
-              <td className="py-2 text-zinc-600">{row.message_preview || "—"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <AdminDataTable
+      columns={columns}
+      data={rows}
+      getRowId={(row) => row.id}
+      searchPlaceholder="Search by creator or comment…"
+      emptyMessage="No training completion feedback yet."
+      initialSorting={[{ id: "created_at", desc: true }]}
+    />
   );
 }
 
