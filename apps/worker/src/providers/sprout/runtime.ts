@@ -62,6 +62,7 @@ export async function runSproutPageTask<RawJob>(input: {
   signal: AbortSignal;
   maxResponseBytes: number;
   includeQualifiedRadius?: boolean;
+  includeUnknownWorkLocation?: boolean;
   now?: () => Date;
 }): Promise<SproutPageTaskResult> {
   const activation = assertSproutActivationReady(input.activation, input.mode);
@@ -84,6 +85,7 @@ export async function runSproutPageTask<RawJob>(input: {
       pageSize: checkpointIn.pageSize,
       credentialRef: activation.credentialRef,
       includeQualifiedRadius: input.includeQualifiedRadius,
+      includeUnknownWorkLocation: input.includeUnknownWorkLocation,
     },
     input.signal,
   );

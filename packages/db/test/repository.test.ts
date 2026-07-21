@@ -23,6 +23,7 @@ describe("database repository boundary", () => {
       return Promise.resolve([
         {
           source_id: "11111111-1111-4111-8111-111111111111",
+          source_key: "sprout:france",
           policy_id: "22222222-2222-4222-8222-222222222222",
           endpoint: "https://api.example.test/jobs",
           credential_ref: "secret://sprout/france-api",
@@ -64,13 +65,14 @@ describe("database repository boundary", () => {
     );
 
     expect(statements[0]).toContain(
-      "worker_private.get_sprout_source_runtime",
+      "worker_private.get_sprout_source_runtime_v2",
     );
     expect(values[0]).toEqual([
       "11111111-1111-4111-8111-111111111111",
       "backfill",
     ]);
     expect(runtime).toMatchObject({
+      sourceKey: "sprout:france",
       credentialRef: "secret://sprout/france-api",
       approvedPageSize: 100,
     });

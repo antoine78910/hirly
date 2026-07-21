@@ -609,6 +609,7 @@ export const sproutRollbackEvidenceSchema = z
 export const sproutSourceRuntimeSchema = z
   .object({
     sourceId: z.uuid(),
+    sourceKey: z.string().trim().min(1).max(512),
     policyId: z.uuid(),
     endpoint: httpsBaseUrlSchema,
     credentialRef: z

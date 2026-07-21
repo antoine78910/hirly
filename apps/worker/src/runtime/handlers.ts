@@ -102,6 +102,20 @@ function environmentSproutTokenRefresher() {
   };
 }
 
+export function sproutDiscoveryProfile(sourceKey: string): {
+  filterVariant: "qualified_radius" | "country_only";
+  includeUnknownWorkLocation: boolean;
+} {
+  switch (sourceKey) {
+    case "sprout:france":
+      return { filterVariant: "qualified_radius", includeUnknownWorkLocation: false };
+    case "sprout:france:country-only":
+      return { filterVariant: "country_only", includeUnknownWorkLocation: false };
+    default:
+      throw new IngestionError("integrity_error", "sprout_unknown_discovery_lane");
+  }
+}
+
 export function createTaskHandlers(
   store: RuntimeStore,
   logger?: Logger,
@@ -235,14 +249,15 @@ export function createTaskHandlers(
               );
             }
             const checkpoint = sproutCheckpointSchema.parse(runtime.checkpoint);
+            const discoveryProfile = sproutDiscoveryProfile(runtime.sourceKey);
             sproutRequestDocument = {
               countryCode: "FR",
               mode: payload.mode,
               offset: checkpoint.offset,
               pageSize: checkpoint.pageSize,
-              filterVariant: payload.filterVariant,
-              includeQualifiedRadius: payload.filterVariant === "qualified_radius",
-              includeUnknownWorkLocation: false,
+              filterVariant: discoveryProfile.filterVariant,
+              includeQualifiedRadius: discoveryProfile.filterVariant === "qualified_radius",
+              includeUnknownWorkLocation: discoveryProfile.includeUnknownWorkLocation,
             };
             const configuredOrigins =
               options.sproutAllowedOrigins ??
@@ -341,10 +356,11 @@ export function createTaskHandlers(
               details: {
                 mode: payload.mode,
                 countryCode: "FR",
+                sourceKey: runtime.sourceKey,
                 checkpointOffset: checkpoint.offset,
                 pageSize: checkpoint.pageSize,
-                filterVariant: payload.filterVariant,
-                emptyInsertStreak: payload.emptyInsertStreak,
+                filterVariant: discoveryProfile.filterVariant,
+                includeUnknownWorkLocation: discoveryProfile.includeUnknownWorkLocation,
               },
             });
             const result = await runSproutPageTask<SproutRawJob>({
@@ -381,51 +397,28 @@ export function createTaskHandlers(
               hasFranceLocation: hasSproutFranceLocation,
               signal: claimAbort.signal,
               maxResponseBytes: payload.maxResponseBytes,
-              includeQualifiedRadius: payload.filterVariant === "qualified_radius",
+              includeQualifiedRadius: discoveryProfile.filterVariant === "qualified_radius",
+              includeUnknownWorkLocation: discoveryProfile.includeUnknownWorkLocation,
             });
-            const switchToCountryOnly =
-              result.complete &&
-              result.fetched === 0 &&
-              payload.mode !== "canary" &&
-              payload.filterVariant === "qualified_radius";
-            if ((!result.complete || switchToCountryOnly) && payload.mode !== "canary") {
+            if (!result.complete && payload.mode !== "canary") {
               const nextOffset = result.checkpoint.offset;
-              const nextEmptyInsertStreak = switchToCountryOnly
-                ? 0
-                : result.inserted === 0
+              const nextEmptyInsertStreak = result.inserted === 0
                 ? payload.emptyInsertStreak + 1
                 : 0;
-              const rotateFilters = switchToCountryOnly || nextEmptyInsertStreak >= 2;
               const nextPayload = {
                 ...payload,
-                filterVariant: rotateFilters
-                  ? payload.filterVariant === "qualified_radius"
-                    ? "country_only"
-                    : "qualified_radius"
-                  : payload.filterVariant,
-                emptyInsertStreak: rotateFilters ? 0 : nextEmptyInsertStreak,
+                // The source key, not a mutable task payload, selects the
+                // discovery query. Each lane owns its checkpoint so retries
+                // and chained pages cannot silently switch query semantics.
+                emptyInsertStreak: nextEmptyInsertStreak,
               };
-              if (switchToCountryOnly) {
-                emitSproutOperation(logger, task, {
-                  event: "sprout.filter_fallback",
-                  severity: "info",
-                  outcome: "queued",
-                  details: {
-                    from: payload.filterVariant,
-                    to: nextPayload.filterVariant,
-                    checkpointOffset: nextOffset,
-                    reason: "empty_terminal_page_before_reported_total",
-                    observedTotal: result.checkpoint.observedTotal,
-                  },
-                });
-              }
               const nextRunId = await store.enqueue(enqueueRunSchema.parse({
                 kind: "provider_ingestion",
                 provider: "sprout",
-                idempotencyKey: `sprout:${payload.sourceId}:${payload.mode}:${nextPayload.filterVariant}:${nextOffset}`,
+                idempotencyKey: `sprout:${payload.sourceId}:${payload.mode}:${nextOffset}`,
                 triggerSource: "cli",
                 tasks: [{
-                  taskKey: `sprout:france:${payload.mode}:${payload.sourceId}:${nextPayload.filterVariant}:${nextOffset}`,
+                  taskKey: `sprout:page:${payload.mode}:${payload.sourceId}:${nextOffset}`,
                   taskType: "provider.fetch_page",
                   payload: nextPayload,
                 }],
@@ -444,7 +437,9 @@ export function createTaskHandlers(
                 checkpointOffset: result.checkpoint.offset,
                 pageSize: result.checkpoint.pageSize,
                 observedTotal: result.checkpoint.observedTotal,
-                filterVariant: payload.filterVariant,
+                sourceKey: runtime.sourceKey,
+                filterVariant: discoveryProfile.filterVariant,
+                includeUnknownWorkLocation: discoveryProfile.includeUnknownWorkLocation,
                 emptyInsertStreak: payload.emptyInsertStreak,
                 listingCounts: {
                   fetched: result.fetched,

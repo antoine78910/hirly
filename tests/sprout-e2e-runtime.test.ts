@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test";
 import fixture from "./fixtures/sprout/france-page.sanitized.json";
 import { sourcePageCommitSchema } from "../packages/contracts/src/index";
 import type { RuntimeStore } from "../apps/worker/src/runtime/types";
-import { createTaskHandlers } from "../apps/worker/src/runtime/handlers";
+import {
+  createTaskHandlers,
+  sproutDiscoveryProfile,
+} from "../apps/worker/src/runtime/handlers";
 import { createJsonLogger } from "../packages/observability/src/index";
 import {
   SproutHttpTransport,
@@ -34,6 +37,20 @@ function task(mode: "canary" | "backfill" | "incremental" = "backfill") {
 }
 
 describe("Sprout authenticated transport", () => {
+  test("uses an immutable query profile for each checkpoint lane", () => {
+    expect(sproutDiscoveryProfile("sprout:france")).toEqual({
+      filterVariant: "qualified_radius",
+      includeUnknownWorkLocation: false,
+    });
+    expect(sproutDiscoveryProfile("sprout:france:country-only")).toEqual({
+      filterVariant: "country_only",
+      includeUnknownWorkLocation: false,
+    });
+    expect(() => sproutDiscoveryProfile("sprout:france:unapproved")).toThrow(
+      "sprout_unknown_discovery_lane",
+    );
+  });
+
   test("uses only the allowlisted HTTPS origin, omits cookies, and consumes jobs once", async () => {
     const calls: Array<{ url: URL; init: RequestInit }> = [];
     const transport = new SproutHttpTransport({
@@ -324,6 +341,7 @@ describe("Sprout source commit pipeline", () => {
       async getSproutSourceRuntime(_sourceId: string, mode: "canary" | "backfill" | "incremental") {
         return {
           sourceId,
+          sourceKey: "sprout:france",
           policyId,
           endpoint: "https://api.sprout.invalid/jobs",
           credentialRef: "secret://sprout/france-api",
@@ -505,16 +523,11 @@ describe("Sprout source commit pipeline", () => {
     await expect(
       fallbackHandler(task("backfill"), new AbortController().signal),
     ).resolves.toEqual({ taskCompleted: true });
-    expect(enqueued).toHaveLength(1);
-    expect(enqueued[0]).toMatchObject({
-      tasks: [{
-        payload: {
-          filterVariant: "country_only",
-          emptyInsertStreak: 0,
-        },
-      }],
-    });
-    expect(fallbackLines.map((line) => JSON.parse(line).event)).toContain(
+    // An empty terminal page ends this lane. A distinct source owns the broad
+    // country-only query, so a completed radius scan never reuses this
+    // source's checkpoint with different query semantics.
+    expect(enqueued).toHaveLength(0);
+    expect(fallbackLines.map((line) => JSON.parse(line).event)).not.toContain(
       "sprout.filter_fallback",
     );
   });

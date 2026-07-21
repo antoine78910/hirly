@@ -437,6 +437,7 @@ export class WorkerRepository {
     const [row] = await this.sql<
       {
         source_id: string;
+        source_key: string;
         policy_id: string;
         endpoint: string;
         credential_ref: string;
@@ -448,7 +449,7 @@ export class WorkerRepository {
       }[]
     >`
       SELECT *
-      FROM worker_private.get_sprout_source_runtime(
+      FROM worker_private.get_sprout_source_runtime_v2(
         ${sourceId}::uuid,
         ${mode}
       )
@@ -456,6 +457,7 @@ export class WorkerRepository {
     if (!row) return null;
     return sproutSourceRuntimeSchema.parse({
       sourceId: row.source_id,
+      sourceKey: row.source_key,
       policyId: row.policy_id,
       endpoint: row.endpoint,
       credentialRef: row.credential_ref,
