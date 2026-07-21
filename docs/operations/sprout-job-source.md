@@ -2,25 +2,32 @@
 
 ## Status and non-activation boundary
 
-Sprout is an authenticated aggregator source and is **not authorized for live
-production use** by this repository. The checked-in registration is
-`unverified`, writer `none`, disabled for transport, incremental refresh and
-backfill, and protected by both provider and source `FR` kill switches.
+On 2026-07-21 the operator attested that Hirly is authorized to access and use
+the Sprout API. Sprout does not provide a service credential, so the approved
+credential shape is a dedicated dummy-account session stored only in runtime
+secret storage. No bearer, refresh token, cookie or account identity is stored
+in this repository.
+
+That attestation does not activate production ingestion by itself. The
+checked-in registration remains `unverified`, writer `none`, disabled for
+transport, incremental refresh and backfill, and protected by both provider and
+source `FR` kill switches until the policy reference, secret reference, writer,
+page size and canary are configured together.
 
 Do not make a live request, retain a live response, or enable a write until a
 review records all of the following without secrets:
 
 - permission for API access, commercial use, redisplay and full-text retention;
 - deletion, expiry and lifecycle obligations;
-- a supported service-account credential flow and contractual rate limit;
+- an approved dedicated-account credential flow, refresh procedure and rate limit;
 - one TypeScript writer owner, an approved page size and a canary rollback;
 - provider and source policy approval for `FR`.
 
 Credentials belong only in runtime secret storage. Tasks carry a reference such
 as `secret://sprout/france-api`, never a bearer, refresh token, cookie,
-authorization header, account email or token-shaped value. Credentials used for
-the bounded discovery on 2026-07-20 must be revoked or rotated before any future
-qualification.
+authorization header, account email or token-shaped value. Credentials pasted
+into interactive sessions are ephemeral qualification credentials and must
+never be copied into code, fixtures, logs or task payloads.
 
 ## Redacted observed API contract
 
@@ -85,7 +92,7 @@ observed `location[radius]`. A plain `location=France` failed validation.
 | `offset` | numeric offset | checkpoint-owned, monotonic |
 | `limit` | default observed as 10 | use only a manually qualified persisted page size |
 | nested `location[...]` | required country object | send the characterized `FR` country object |
-| `jobTitle`, `jobCategory` | explicit empty values produced the same count | omit |
+| `jobTitle`, `jobCategory` | the validated browser shape sends explicit empty values | send explicit empty values; do not enumerate titles/categories |
 | `types[]` | accepted values included `FULL_TIME`, `PART_TIME`, `INTERNSHIP` | omit; list is not exhaustive |
 | `experienceLevels[]` | accepted `ENTRY`, `MID`, `SENIOR`, `EXECUTIVE`; `MID` reduced the observed count from 69,108 to 17,721 | omit |
 | `workLocations[]` | accepted `IN_PERSON`, `HYBRID`, `REMOTE` | omit; list is not exhaustive |
@@ -93,11 +100,24 @@ observed `location[radius]`. A plain `location=France` failed validation.
 | `location[radius]=50` | accepted with country mode | semantics unverified; retain until bounded equivalence proves omission safe |
 | `includeUnknownWorkLocation` | accepted | semantics unverified; unknown-only rows cannot enter France inventory |
 | `minimumSalary=0` / unknown salary switch | accepted | zero/unknown inclusion semantics unverified |
-| `additionalRequirements[]` | accepted empty encoding | semantics unverified; omit for full coverage |
+| `additionalRequirements=[]` | required scalar empty-list encoding in the validated request; the similarly named array-key encoding failed validation | preserve the scalar `[]` value |
 | company/industry filters | visible/accepted inputs | omit; semantics and union behavior unverified |
 
 Never enumerate every currently visible filter value to simulate “all”; future
 enum values would be silently excluded.
+
+### Bounded live qualification — 2026-07-21
+
+One repository-generated `limit=1`, `offset=0` request using the France country
+object returned HTTP 200. It reported `count=69,944`, returned one job whose
+location country code was `FR`, and exposed equal-length `jobs` and `results`
+wrappers. The request used the bearer and refresh headers only; browser cookies
+were not required. No response body was retained and no database write ran.
+
+The count is a point-in-time provider report, not a completeness guarantee. The
+qualification proves the serialized query shape, not page-size stability,
+pagination stability, credential refresh, corpus-wide country containment or
+permission expiry behavior. Those remain activation gates.
 
 ## Pagination and checkpoint safety
 

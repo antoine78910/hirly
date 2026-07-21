@@ -41,6 +41,11 @@ export function buildSproutFranceQuery(
   const location = SPROUT_FRANCE_LOCATION;
   const query = new URLSearchParams();
 
+  // Sprout currently validates these default search fields even though they do
+  // not narrow the result set. Preserve the browser request shape rather than
+  // omitting them.
+  query.set("jobTitle", "");
+  query.set("jobCategory", "");
   query.set("location[address]", location.address);
   query.set("location[countryCode]", location.countryCode);
   query.set("location[isCountry]", String(location.isCountry));
@@ -49,12 +54,14 @@ export function buildSproutFranceQuery(
   if (options.includeQualifiedRadius !== false) {
     query.set("location[radius]", String(location.radius));
   }
+  query.set("minimumSalary", "0");
   query.set("postedDate", "any");
   query.set("includeUnknownSalaryRange", "true");
   query.set(
     "includeUnknownWorkLocation",
     String(options.includeUnknownWorkLocation ?? false),
   );
+  query.set("additionalRequirements", "[]");
   query.set("offset", String(offset));
   query.set("limit", String(limit));
 

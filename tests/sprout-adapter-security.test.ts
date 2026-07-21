@@ -39,7 +39,7 @@ function rawJob(overrides: Partial<SproutRawJob> = {}): SproutRawJob {
 }
 
 describe("Sprout adapter security and inventory contract", () => {
-  test("builds the bounded France query without narrowing inventory filters", () => {
+  test("builds the validated France request shape without narrowing filters", () => {
     const query = buildSproutFranceQuery({ offset: 20, limit: 100 });
 
     expect(Object.fromEntries(query)).toMatchObject({
@@ -47,15 +47,17 @@ describe("Sprout adapter security and inventory contract", () => {
       "location[countryCode]": "FR",
       "location[isCountry]": "true",
       "location[radius]": "50",
+      jobTitle: "",
+      jobCategory: "",
+      minimumSalary: "0",
       postedDate: "any",
       includeUnknownSalaryRange: "true",
       includeUnknownWorkLocation: "false",
+      additionalRequirements: "[]",
       offset: "20",
       limit: "100",
     });
     for (const forbidden of [
-      "jobTitle",
-      "jobCategory",
       "types",
       "experienceLevels",
       "workLocations",
