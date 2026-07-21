@@ -244,6 +244,108 @@ export const jobSearchDocumentSchema = z
     }
   });
 
+const jobSearchDocumentDerivedFieldsSchema = z
+  .object({
+    normalizedTitle: normalizedTokenSchema,
+    searchText: z.string().trim().min(1).max(8_192),
+  })
+  .strict();
+
+export const jobSearchDocumentPersistenceRowSchema = z
+  .object({
+    schema_version: z.literal(MATCHING_CONTRACT_VERSION),
+    canonical_group_id: z.uuid(),
+    preferred_job_id: z.string().min(1).max(256),
+    job_version: monotonicVersionSchema,
+    lifecycle_status: jobLifecycleStatusSchema,
+    normalized_title: normalizedTokenSchema,
+    role_family_codes: uniqueArray(normalizedTokenSchema, 32),
+    rome_codes: uniqueArray(z.string().regex(/^[A-Z]\d{4}$/), 32),
+    skill_codes: uniqueArray(normalizedTokenSchema, 256),
+    seniority_min: z.number().int().min(0).max(20).nullable(),
+    seniority_max: z.number().int().min(0).max(20).nullable(),
+    contract_families: uniqueArray(normalizedTokenSchema, 16),
+    work_modes: uniqueArray(workModeSchema, 3),
+    country_codes: uniqueArray(countryCodeSchema, 1),
+    latitude: z.number().min(-90).max(90).nullable(),
+    longitude: z.number().min(-180).max(180).nullable(),
+    location_confidence: z.number().min(0).max(1),
+    location_unknown: z.boolean(),
+    salary_min: z.null(),
+    salary_max: z.null(),
+    currency: z.null(),
+    posted_at: z.iso.datetime({ offset: true }),
+    last_seen_at: z.iso.datetime({ offset: true }),
+    expires_at: z.iso.datetime({ offset: true }).nullable(),
+    validation_status: jobValidationStatusSchema,
+    applyability_tier: z.enum(["A", "B", "C", "D", "blocked"]),
+    fulfillment_route: fulfillmentRouteSchema,
+    source_eligible: z.boolean(),
+    policy_eligible: z.boolean(),
+    feature_schema_version: z.string().min(1).max(64),
+    search_text: z.string().trim().min(1).max(8_192),
+    source_updated_at: z.iso.datetime({ offset: true }),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if ((value.latitude === null) !== (value.longitude === null)) {
+      context.addIssue({
+        code: "custom",
+        path: ["latitude"],
+        message: "latitude and longitude must be provided together",
+      });
+    }
+    if (value.location_unknown && value.latitude !== null) {
+      context.addIssue({
+        code: "custom",
+        path: ["location_unknown"],
+        message: "unknown locations cannot contain coordinates",
+      });
+    }
+  });
+
+export function toJobSearchDocumentPersistenceRow(
+  document: z.input<typeof jobSearchDocumentSchema>,
+  derivedFields: z.input<typeof jobSearchDocumentDerivedFieldsSchema>,
+): JobSearchDocumentPersistenceRow {
+  const value = jobSearchDocumentSchema.parse(document);
+  const derived = jobSearchDocumentDerivedFieldsSchema.parse(derivedFields);
+  return jobSearchDocumentPersistenceRowSchema.parse({
+    schema_version: value.schemaVersion,
+    canonical_group_id: value.canonicalGroupId,
+    preferred_job_id: value.preferredJobId,
+    job_version: value.jobVersion,
+    lifecycle_status: value.lifecycleStatus,
+    normalized_title: derived.normalizedTitle,
+    role_family_codes: value.roleFamilyIds,
+    rome_codes: value.romeCodes,
+    skill_codes: value.skillIds,
+    seniority_min: value.seniorityMin,
+    seniority_max: value.seniorityMax,
+    contract_families: value.contractTypes,
+    work_modes: value.workModes,
+    country_codes: value.countryCode === null ? [] : [value.countryCode],
+    latitude: value.latitude,
+    longitude: value.longitude,
+    location_confidence: value.locationConfidence,
+    location_unknown: value.locationUnknown,
+    salary_min: null,
+    salary_max: null,
+    currency: null,
+    posted_at: value.publishedAt,
+    last_seen_at: value.lastSeenAt,
+    expires_at: value.expiresAt,
+    validation_status: value.validationStatus,
+    applyability_tier: value.applyabilityTier,
+    fulfillment_route: value.fulfillmentRoute,
+    source_eligible: value.sourceEligible,
+    policy_eligible: value.policyEligible,
+    feature_schema_version: value.featureSchemaVersion,
+    search_text: derived.searchText,
+    source_updated_at: value.projectedAt,
+  });
+}
+
 export const matchExplanationCodeSchema = z.enum([
   "role_match",
   "skill_match",
@@ -387,6 +489,9 @@ export type CandidateActionProjection = z.infer<
   typeof candidateActionProjectionSchema
 >;
 export type JobSearchDocument = z.infer<typeof jobSearchDocumentSchema>;
+export type JobSearchDocumentPersistenceRow = z.infer<
+  typeof jobSearchDocumentPersistenceRowSchema
+>;
 export type OnlineMatchRequest = z.infer<typeof onlineMatchRequestSchema>;
 export type OnlineMatchResponse = z.infer<typeof onlineMatchResponseSchema>;
 export type CandidateProjectionOutboxEvent = z.infer<

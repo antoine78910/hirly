@@ -6,8 +6,9 @@ BEGIN;
 INSERT INTO public.job_search_documents (
   canonical_group_id, preferred_job_id, job_version, lifecycle_status,
   normalized_title, role_family_codes, contract_families, work_modes,
-  country_codes, fresh_until, fulfillment_route, source_eligible,
-  policy_eligible, feature_schema_version, search_vector, source_updated_at
+  country_codes, location_confidence, location_unknown, posted_at, last_seen_at,
+  validation_status, applyability_tier, fulfillment_route, source_eligible,
+  policy_eligible, feature_schema_version, search_text, source_updated_at
 )
 SELECT
   md5('pr1-group-' || n::text)::uuid,
@@ -19,12 +20,17 @@ SELECT
   ARRAY['permanent'],
   CASE WHEN n % 3 = 0 THEN ARRAY['remote'] ELSE ARRAY['onsite'] END,
   CASE WHEN n % 5 = 0 THEN ARRAY['FR'] ELSE ARRAY['DE'] END,
-  clock_timestamp() + interval '30 days',
+  1,
+  true,
+  clock_timestamp() - interval '7 days',
+  clock_timestamp(),
+  'valid',
+  'B',
   'manual',
   true,
   true,
-  1,
-  to_tsvector('simple', CASE WHEN n % 10 = 0 THEN 'fullstack engineer' ELSE 'account manager' END),
+  'matching-features.v1',
+  CASE WHEN n % 10 = 0 THEN 'fullstack engineer' ELSE 'account manager' END,
   clock_timestamp()
 FROM generate_series(1, 300000) AS fixture(n)
 ON CONFLICT (canonical_group_id) DO NOTHING;
@@ -37,12 +43,13 @@ FROM public.job_search_documents
 WHERE lifecycle_status = 'active'
   AND source_eligible
   AND policy_eligible
-  AND fresh_until > clock_timestamp()
+  AND last_seen_at > clock_timestamp() - interval '30 days'
+  AND (expires_at IS NULL OR expires_at > clock_timestamp())
   AND country_codes && ARRAY['FR']::text[]
   AND role_family_codes && ARRAY['software-engineering']::text[]
   AND work_modes && ARRAY['remote', 'onsite']::text[]
   AND contract_families && ARRAY['permanent']::text[]
-ORDER BY fresh_until DESC, canonical_group_id
+ORDER BY last_seen_at DESC, canonical_group_id
 LIMIT 200;
 
 ROLLBACK;

@@ -6,6 +6,7 @@ import {
   candidateProjectionOutboxEventSchema,
   candidateSearchProfileSchema,
   jobSearchDocumentSchema,
+  toJobSearchDocumentPersistenceRow,
   matchingRollbackControlsSchema,
   monotonicVersionSchema,
   onlineMatchRequestSchema,
@@ -281,6 +282,33 @@ describe("matching v1 contracts", () => {
         workModes: "hybrid",
       }),
     ).toThrow();
+
+    expect(
+      toJobSearchDocumentPersistenceRow(document, {
+        normalizedTitle: "fullstack engineer",
+        searchText: "fullstack engineer typescript",
+      }),
+    ).toMatchObject({
+      schema_version: MATCHING_CONTRACT_VERSION,
+      canonical_group_id: groupId,
+      job_version: "2",
+      role_family_codes: ["software-engineering"],
+      skill_codes: ["typescript"],
+      seniority_min: 2,
+      seniority_max: 5,
+      contract_families: ["permanent"],
+      country_codes: ["FR"],
+      location_confidence: 0.99,
+      location_unknown: false,
+      posted_at: now,
+      last_seen_at: now,
+      expires_at: null,
+      validation_status: "valid",
+      applyability_tier: "B",
+      feature_schema_version: "matching-features.v1",
+      search_text: "fullstack engineer typescript",
+      source_updated_at: now,
+    });
   });
 
   test("enforces bounded deterministic online matcher contracts", () => {
