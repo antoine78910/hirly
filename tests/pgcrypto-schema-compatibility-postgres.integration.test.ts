@@ -85,13 +85,13 @@ describePostgres("pgcrypto compatibility on disposable PostgreSQL", () => {
     if (!/(?:^|_)(?:test|disposable)(?:$|_)/i.test(databaseName)) {
       throw new Error("PGCRYPTO_COMPAT_TEST_DATABASE_URL must target a disposable database");
     }
-  });
+  }, 20_000);
 
   afterAll(async () => {
     await psql(down).catch(() => undefined);
     await psql("DROP EXTENSION IF EXISTS pgcrypto CASCADE").catch(() => undefined);
     await psql("DROP SCHEMA IF EXISTS extensions CASCADE").catch(() => undefined);
-  });
+  }, 20_000);
 
   test("is a no-op for public pgcrypto across repeated up/down/up", async () => {
     await resetPgcrypto("public");
@@ -104,7 +104,7 @@ describePostgres("pgcrypto compatibility on disposable PostgreSQL", () => {
     expect(await topology()).toBe("public|digest(text,text)|digest(bytea,text)||");
     await psql(up);
     await expectStableVectors();
-  });
+  }, 20_000);
 
   test("owns only missing wrappers for non-public pgcrypto across up/down/up", async () => {
     await resetPgcrypto("extensions");
@@ -124,7 +124,7 @@ describePostgres("pgcrypto compatibility on disposable PostgreSQL", () => {
 
     await psql(up);
     await expectStableVectors();
-  });
+  }, 20_000);
 
   test("preserves an unmarked pre-existing overload", async () => {
     await resetPgcrypto("extensions");
@@ -142,7 +142,7 @@ describePostgres("pgcrypto compatibility on disposable PostgreSQL", () => {
     expect(await topology()).toBe(
       "extensions|digest(text,text)||fixture:foreign-owner|",
     );
-  });
+  }, 20_000);
 });
 
 if (!databaseUrl) {
