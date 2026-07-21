@@ -147,13 +147,15 @@ describe("Sprout activation and bounded page runtime", () => {
   });
 
   test("commits one bounded FR page and advances the checkpoint atomically", async () => {
+    const transportInputs: unknown[] = [];
     const commits: unknown[] = [];
     const result = await runSproutPageTask({
       activation: activeRegistration(),
       mode: "backfill",
       checkpoint: initialSproutCheckpoint({ approvedPageSize: 2 }),
       transport: {
-        async fetchPage() {
+        async fetchPage(input) {
+          transportInputs.push(input);
           return {
             items: [{ id: "1", countries: ["FR"] }, { id: "2", countries: ["FR"] }],
             next: "?offset=2&limit=2",
@@ -176,7 +178,17 @@ describe("Sprout activation and bounded page runtime", () => {
     });
     expect(result).toMatchObject({ fetched: 2, complete: false });
     expect(result.checkpoint.offset).toBe(2);
+    expect(transportInputs).toEqual([
+      {
+        countryCode: "FR",
+        offset: 0,
+        pageSize: 2,
+        credentialRef: "secret://sprout/france-api",
+      },
+    ]);
     expect(commits).toHaveLength(1);
+    expect(JSON.stringify(commits)).not.toContain("credentialRef");
+    expect(JSON.stringify(commits)).not.toContain("secret://");
   });
 
   test("does not commit or advance on country leak, body breach, or cursor drift", async () => {
