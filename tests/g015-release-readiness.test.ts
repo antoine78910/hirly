@@ -122,6 +122,20 @@ describe("G015 release verification contract", () => {
     })).toThrow("eight distinct");
     expect(() => disposableDatabaseUrlsFromEnvironment({
       ...matrixEnv,
+      PGCRYPTO_COMPAT_TEST_DATABASE_URL: String(matrixEnv.G014_TEST_DATABASE_URL).replace(
+        /g014$/,
+        "g%30%31%34",
+      ),
+    })).toThrow("distinct database names");
+    expect(() => disposableDatabaseUrlsFromEnvironment({
+      ...matrixEnv,
+      PGCRYPTO_COMPAT_TEST_DATABASE_URL: String(matrixEnv.PGCRYPTO_COMPAT_TEST_DATABASE_URL).replace(
+        "20260720120000",
+        "20260720120001",
+      ),
+    })).toThrow("same verification run");
+    expect(() => disposableDatabaseUrlsFromEnvironment({
+      ...matrixEnv,
       PGCRYPTO_COMPAT_TEST_DATABASE_URL: String(matrixEnv.PGCRYPTO_COMPAT_TEST_DATABASE_URL).replace(
         /pgcrypto_compat$/,
         "pgcrypto_compat_extra",
