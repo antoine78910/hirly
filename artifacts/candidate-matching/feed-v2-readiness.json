@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "hirly.feed-v2-readiness.v1",
+  "configurationStatus": "NOT_READY",
+  "deploymentStatus": "NOT_READY",
+  "unmetReasons": [
+    "configuration:assertionSecretConfigured",
+    "configuration:delegationEnabled",
+    "configuration:healthLive",
+    "configuration:healthRoutingEnabled",
+    "configuration:healthWithinSlo",
+    "configuration:internalUrlValid",
+    "smoke:not_supplied"
+  ],
+  "checks": {
+    "delegationEnabled": false,
+    "internalUrlValid": false,
+    "assertionSecretConfigured": false,
+    "cohortTargeted": true,
+    "healthLive": false,
+    "healthRoutingEnabled": false,
+    "healthWithinSlo": false
+  },
+  "smoke": {
+    "supplied": false,
+    "role": null,
+    "location": null,
+    "radiusKm": null,
+    "latencyMs": null,
+    "jobCount": null
+  }
+}

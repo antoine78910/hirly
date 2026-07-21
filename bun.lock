@@ -32,6 +32,14 @@
         "typescript": "5.9.3",
       },
     },
+    "apps/feed-v2-readiness-gate": {
+      "name": "@hirly/feed-v2-readiness-gate",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@types/bun": "1.3.14",
+        "typescript": "5.9.3",
+      },
+    },
     "apps/g009-retirement-gate": {
       "name": "@hirly/g009-retirement-gate",
       "version": "0.1.0",
@@ -197,6 +205,8 @@
     "@hirly/feed-v2": ["@hirly/feed-v2@workspace:packages/feed-v2"],
 
     "@hirly/feed-v2-app": ["@hirly/feed-v2-app@workspace:apps/feed-v2"],
+
+    "@hirly/feed-v2-readiness-gate": ["@hirly/feed-v2-readiness-gate@workspace:apps/feed-v2-readiness-gate"],
 
     "@hirly/g009-retirement-gate": ["@hirly/g009-retirement-gate@workspace:apps/g009-retirement-gate"],
 
