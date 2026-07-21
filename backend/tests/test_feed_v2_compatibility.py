@@ -187,6 +187,30 @@ def test_feed_v2_rollout_context_fails_closed_without_trusted_country_or_identit
     assert asyncio.run(server._feed_v2_rollout_enabled_for(ANALYTICS_USER_ID)) is False
 
 
+def test_feed_v2_rollout_evaluates_a_canonical_id_without_targeting_context(monkeypatch):
+    observed = {}
+
+    class Flags:
+        def is_enabled(self, key):
+            observed["key"] = key
+            return True
+
+    class PostHog:
+        def evaluate_flags(self, distinct_id, **kwargs):
+            observed["distinct_id"] = distinct_id
+            observed["kwargs"] = kwargs
+            return Flags()
+
+    monkeypatch.setattr(server, "_posthog_client", PostHog())
+
+    assert asyncio.run(server._feed_v2_rollout_enabled_for(ANALYTICS_USER_ID)) is True
+    assert observed == {
+        "distinct_id": ANALYTICS_USER_ID,
+        "kwargs": {"flag_keys": [server.FEED_V2_ROLLOUT_FLAG]},
+        "key": server.FEED_V2_ROLLOUT_FLAG,
+    }
+
+
 def test_feed_v2_rollout_uses_only_the_server_posthog_decision(monkeypatch):
     observed = {}
 
