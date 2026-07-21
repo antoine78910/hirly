@@ -7471,14 +7471,18 @@ async def _feed_v2_rollout_enabled_for(
     distinct_id: Optional[str], *, rollout_context: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """Return the PostHog rollout decision without ever opening the v2 path on error."""
-    if not distinct_id or not rollout_context or _posthog_client is None:
+    if not distinct_id or _posthog_client is None:
         return False
     try:
+        evaluation_kwargs: Dict[str, Any] = {
+            "flag_keys": [FEED_V2_ROLLOUT_FLAG],
+        }
+        if rollout_context:
+            evaluation_kwargs["person_properties"] = rollout_context
         flags = await asyncio.to_thread(
             _posthog_client.evaluate_flags,
             distinct_id,
-            flag_keys=[FEED_V2_ROLLOUT_FLAG],
-            person_properties=rollout_context,
+            **evaluation_kwargs,
         )
         return flags.is_enabled(FEED_V2_ROLLOUT_FLAG) is True
     except Exception as exc:
