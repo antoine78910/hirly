@@ -16,6 +16,9 @@ const inventoryUp = read(
 const inventoryDown = read(
   "backend/db/migrations/20260721002400_candidate_matching_common_schema.down.sql",
 );
+const versionGuardFix = read(
+  "backend/db/migrations/20260721003400_candidate_projection_version_guard.sql",
+);
 
 describe("candidate matching common migration contracts", () => {
   test("keeps every activation control disabled by default", () => {
@@ -114,6 +117,25 @@ describe("candidate matching common migration contracts", () => {
     );
     expect(inventoryDown).toContain(
       "DROP FUNCTION IF EXISTS public.candidate_group_is_excluded(text, uuid)",
+    );
+  });
+
+  test("keeps polymorphic trigger records behind table-specific branches", () => {
+    expect(versionGuardFix).toContain(
+      "IF TG_TABLE_NAME = 'candidate_search_profiles' THEN",
+    );
+    expect(versionGuardFix).toContain(
+      "ELSIF TG_TABLE_NAME = 'candidate_action_projection' THEN",
+    );
+    expect(versionGuardFix).toContain("NEW.version <= OLD.version");
+    expect(versionGuardFix).toContain(
+      "NEW.candidate_version <= OLD.candidate_version",
+    );
+    expect(versionGuardFix).not.toMatch(
+      /TG_TABLE_NAME\s*=\s*'candidate_search_profiles'\s+AND\s+NEW\.version/i,
+    );
+    expect(versionGuardFix).not.toMatch(
+      /TG_TABLE_NAME\s*=\s*'candidate_action_projection'\s+AND\s+NEW\.candidate_version/i,
     );
   });
 });
