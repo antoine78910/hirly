@@ -17,6 +17,30 @@ import { spawnSync } from "node:child_process";
 
 const MANIFEST_VERSION = "job-supply-release-verification.v4";
 const RELEASE_ATTESTATION_VERSION = "job-supply-release-attestation.v1";
+const ATS_PHASE0_RECEIPT_VERSION = "ats-phase0-receipt.v1";
+const EXTERNAL_DISCHARGE_VERSION = "job-supply-external-discharge.v1";
+export const REQUIRED_FULL_RELEASE_COMMAND_IDS = Object.freeze([
+  "repository-attestation",
+  "frozen-install",
+  "typecheck",
+  "lint",
+  "tests",
+  "build",
+  "backend-python-compatibility",
+  "release-contracts",
+  "stack-policy-revision",
+  "deployment-default-safety",
+  "diff-check",
+  "legacy-frontend-frozen-install",
+  "legacy-frontend-security-audit",
+  "legacy-frontend-tests",
+  "legacy-frontend-build",
+  "worker-docker-build",
+  "worker-docker-proof",
+  "postgres-provision",
+  "postgres-release-matrix",
+  "postgres-disabled-state-proof",
+]);
 const ALLOWED_EXTERNAL_BLOCKS = new Set([
   "REMOTE_DEPLOYMENT_VALIDATION_NOT_PERFORMED_BY_VERIFIER",
   "SOURCE_ACTIVATION_NOT_PERFORMED",
@@ -150,7 +174,7 @@ export function buildReleaseVerificationPlan(options = {}) {
       command(
         "legacy-frontend-security-audit",
         "npm",
-        ["audit", "--omit=dev", "--audit-level=critical"],
+        ["audit", "--omit=dev", "--audit-level=high"],
         { cwd: "frontend" },
       ),
       command(
@@ -573,6 +597,9 @@ export function verifyDeploymentDefaults(root = process.cwd()) {
   if (JSON.stringify(rootVercel).includes("apps/worker") || JSON.stringify(rootVercel.rewrites) !== JSON.stringify(frontendVercel.rewrites)) {
     throw new Error("Vercel routing would expose or diverge onto the worker");
   }
+  if (rootVercel.git?.deploymentEnabled !== false || frontendVercel.git?.deploymentEnabled !== false) {
+    throw new Error("Vercel Git auto-deployments must remain disabled for staged workflow ownership");
+  }
   return { migrations: ups, workerDockerValidated: true, backendRailwayValidated: true };
 }
 
@@ -666,6 +693,9 @@ export function validateSelectedManifest(manifest, options = {}) {
   if (manifest.overallStatus !== "passed") {
     throw new Error("selected manifest overallStatus must be passed");
   }
+  if (manifest.profile !== "full") {
+    throw new Error("selected manifest profile must be full");
+  }
   if (!Array.isArray(manifest.results) || manifest.results.length === 0) {
     throw new Error("selected manifest must contain non-empty results");
   }
@@ -674,6 +704,19 @@ export function validateSelectedManifest(manifest, options = {}) {
     .map((result, index) => String(result?.id ?? `result-${index}`));
   if (failedCommands.length) {
     throw new Error(`selected manifest has non-passing commands: ${failedCommands.join(", ")}`);
+  }
+  const resultIds = manifest.results.map((result) => String(result?.id ?? ""));
+  if (resultIds.some((id) => !id)) throw new Error("selected manifest result IDs are required");
+  if (new Set(resultIds).size !== resultIds.length) {
+    throw new Error("selected manifest result IDs must be unique");
+  }
+  const requiredIds = new Set(REQUIRED_FULL_RELEASE_COMMAND_IDS);
+  const missingResultIds = REQUIRED_FULL_RELEASE_COMMAND_IDS.filter((id) => !resultIds.includes(id));
+  const extraResultIds = resultIds.filter((id) => !requiredIds.has(id));
+  if (missingResultIds.length || extraResultIds.length) {
+    throw new Error(
+      `selected manifest command IDs must exactly match the full release plan; missing: ${missingResultIds.join(", ") || "none"}; extra: ${extraResultIds.join(", ") || "none"}`,
+    );
   }
   if (!/^[0-9a-f]{40}$/.test(String(manifest.exactHead ?? ""))) {
     throw new Error("selected manifest exactHead must be a lowercase 40-character commit SHA");
@@ -688,10 +731,64 @@ export function validateSelectedManifest(manifest, options = {}) {
   if (unexpected.length) {
     throw new Error(`selected manifest has unexpected external blocks: ${unexpected.join(", ")}`);
   }
+  if (new Set(externalBlockCodes).size !== externalBlockCodes.length) {
+    throw new Error("selected manifest external block codes must be unique");
+  }
+  const missing = [...ALLOWED_EXTERNAL_BLOCKS].filter((code) => !externalBlockCodes.includes(code));
+  if (missing.length) {
+    throw new Error(`selected manifest is missing mandatory external blocks: ${missing.join(", ")}`);
+  }
   if (options.requireVerificationId !== false && !String(manifest.verificationId ?? "").trim()) {
     throw new Error("selected manifest verificationId is required");
   }
   return { exactHead: manifest.exactHead, externalBlockCodes };
+}
+
+function containedEvidenceDescriptor(descriptor, evidenceRoot = process.cwd()) {
+  if (!descriptor || typeof descriptor !== "object" || Array.isArray(descriptor)) {
+    throw new Error("evidence descriptor must be an object");
+  }
+  if (Object.keys(descriptor).sort().join(",") !== "path,sha256") {
+    throw new Error("evidence descriptor must contain only path and sha256");
+  }
+  if (typeof descriptor.path !== "string" || !descriptor.path.trim()) {
+    throw new Error("evidence descriptor path is required");
+  }
+  if (!/^[0-9a-f]{64}$/.test(String(descriptor.sha256 ?? ""))) {
+    throw new Error("evidence descriptor sha256 must be a lowercase SHA-256 digest");
+  }
+  const root = realpathSync(resolve(evidenceRoot));
+  const absolute = resolve(root, descriptor.path);
+  const containment = relative(root, absolute);
+  if (
+    !containment
+    || containment === ".."
+    || containment.startsWith(`..${sep}`)
+    || resolve(root, containment) !== absolute
+  ) {
+    throw new Error("evidence descriptor path must be contained under evidenceRoot");
+  }
+  let realPath;
+  try {
+    realPath = realpathSync(absolute);
+  } catch {
+    throw new Error(`evidence descriptor file does not exist: ${descriptor.path}`);
+  }
+  const realContainment = relative(root, realPath);
+  if (realContainment === ".." || realContainment.startsWith(`..${sep}`)) {
+    throw new Error("evidence descriptor path must not escape evidenceRoot through symbolic links");
+  }
+  const bytes = readFileSync(realPath);
+  if (sha256(bytes) !== descriptor.sha256) {
+    throw new Error(`evidence descriptor digest mismatch: ${descriptor.path}`);
+  }
+  let json;
+  try {
+    json = JSON.parse(bytes.toString("utf8"));
+  } catch {
+    throw new Error(`evidence descriptor must contain valid JSON: ${descriptor.path}`);
+  }
+  return { descriptor: { path: descriptor.path, sha256: descriptor.sha256 }, bytes, json };
 }
 
 function durableEvidence(discharge) {
@@ -701,25 +798,15 @@ function durableEvidence(discharge) {
 }
 
 export function createReleaseAttestation({
-  manifestPath,
-  manifestBytes,
+  selectedManifest,
   discharges = [],
   deployedArtifactDigest,
   releaseHead,
   createdAt = new Date().toISOString(),
+  evidenceRoot = process.cwd(),
 } = {}) {
-  if (typeof manifestPath !== "string" || !manifestPath.trim()) {
-    throw new Error("manifestPath must be a non-empty durable evidence identifier");
-  }
-  if (!(typeof manifestBytes === "string" || ArrayBuffer.isView(manifestBytes))) {
-    throw new Error("manifestBytes must contain the exact selected manifest bytes");
-  }
-  let manifest;
-  try {
-    manifest = JSON.parse(typeof manifestBytes === "string" ? manifestBytes : Buffer.from(manifestBytes.buffer, manifestBytes.byteOffset, manifestBytes.byteLength).toString("utf8"));
-  } catch {
-    throw new Error("manifestBytes must contain valid JSON");
-  }
+  const sealedManifest = containedEvidenceDescriptor(selectedManifest, evidenceRoot);
+  const manifest = sealedManifest.json;
   const selected = validateSelectedManifest(manifest);
   if (releaseHead !== selected.exactHead) {
     throw new Error("releaseHead must equal the selected manifest exactHead");
@@ -727,21 +814,34 @@ export function createReleaseAttestation({
   if (!/^[0-9a-f]{64}$/.test(String(deployedArtifactDigest ?? ""))) {
     throw new Error("deployedArtifactDigest must be a lowercase SHA-256 digest");
   }
+  if (Number.isNaN(Date.parse(createdAt))) throw new Error("createdAt must be a valid timestamp");
   if (!Array.isArray(discharges)) throw new Error("discharges must be an array");
   const byCode = new Map();
-  for (const discharge of discharges) {
-    const code = discharge?.code;
+  for (const descriptor of discharges) {
+    const sealed = containedEvidenceDescriptor(descriptor, evidenceRoot);
+    const discharge = sealed.json;
+    if (!discharge || typeof discharge !== "object" || Array.isArray(discharge)) {
+      throw new Error("external discharge evidence must contain an object");
+    }
+    const allowedKeys = ["code", "deployedArtifactDigest", "observedAt", "releaseHead", "status", "version"];
+    if (Object.keys(discharge).sort().join(",") !== allowedKeys.sort().join(",")) {
+      throw new Error("external discharge evidence has an invalid schema");
+    }
+    if (discharge.version !== EXTERNAL_DISCHARGE_VERSION) {
+      throw new Error(`external discharge version must be ${EXTERNAL_DISCHARGE_VERSION}`);
+    }
+    const code = discharge.code;
     if (!ALLOWED_EXTERNAL_BLOCKS.has(code)) throw new Error(`unexpected discharge code: ${code}`);
     if (byCode.has(code)) throw new Error(`duplicate discharge code: ${code}`);
     if (discharge.status !== "discharged") throw new Error(`discharge ${code} must have status discharged`);
-    const evidence = durableEvidence(discharge);
-    if (evidence.length === 0) throw new Error(`discharge ${code} requires durable evidence`);
-    byCode.set(code, {
-      code,
-      status: "discharged",
-      evidence,
-      ...(discharge.observedAt ? { observedAt: discharge.observedAt } : {}),
-    });
+    if (discharge.releaseHead !== releaseHead) throw new Error(`discharge ${code} releaseHead mismatch`);
+    if (discharge.deployedArtifactDigest !== deployedArtifactDigest) {
+      throw new Error(`discharge ${code} deployedArtifactDigest mismatch`);
+    }
+    if (!discharge.observedAt || Number.isNaN(Date.parse(discharge.observedAt))) {
+      throw new Error(`discharge ${code} observedAt must be a valid timestamp`);
+    }
+    byCode.set(code, sealed.descriptor);
   }
   const missing = selected.externalBlockCodes.filter((code) => !byCode.has(code));
   const unexpected = [...byCode.keys()].filter((code) => !selected.externalBlockCodes.includes(code));
@@ -752,11 +852,7 @@ export function createReleaseAttestation({
     createdAt,
     releaseHead,
     deployedArtifactDigest,
-    selectedManifest: {
-      path: manifestPath,
-      sha256: sha256(manifestBytes),
-      verificationId: manifest.verificationId,
-    },
+    selectedManifest: sealedManifest.descriptor,
     externalBlockDischarges: selected.externalBlockCodes.map((code) => byCode.get(code)),
     readinessStatus: "ATTESTED_READY",
   };
@@ -797,49 +893,356 @@ export function classifyReleaseDrift(change = {}) {
   return { kind: change.kind, ...classification, requiredEvidence: [...new Set(classification.requiredEvidence)] };
 }
 
-function currentApprovedPolicy(policy, name, failures) {
+function canonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function rejectSecretShapedFields(value, path = "input") {
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) => rejectSecretShapedFields(entry, `${path}[${index}]`));
+    return;
+  }
+  if (typeof value === "string") {
+    if (/^\s*(?:Bearer|Basic)\s+/i.test(value)) {
+      throw new Error(`authorization value is forbidden: ${path}`);
+    }
+    try {
+      const parsed = new URL(value);
+      if (parsed.username || parsed.password) throw new Error(`URL userinfo is forbidden: ${path}`);
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("URL userinfo")) throw error;
+    }
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+  for (const [key, entry] of Object.entries(value)) {
+    const field = `${path}.${key}`;
+    if (/(?:authorization|cookie|credential|api[-_]?key|token|password|secret)/i.test(key)) {
+      throw new Error(`secret-shaped field is forbidden: ${field}`);
+    }
+    if (/(?:connection|database).*url|(?:connectionUrl|databaseUrl)$/i.test(key)) {
+      throw new Error(`connection URL field is forbidden: ${field}`);
+    }
+    if (typeof entry === "string" && /^(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis):\/\//i.test(entry)) {
+      throw new Error(`connection URL value is forbidden: ${field}`);
+    }
+    rejectSecretShapedFields(entry, field);
+  }
+}
+
+function requireReceiptPolicy(policy, name) {
+  if (!policy || typeof policy !== "object") throw new Error(`${name} policy record is required`);
+  assertOnlyKeys(policy, ["evidence", "evidenceLinks", "evidencePaths", "expiresAt", "owner", "reviewExpiresAt", "verdict"], `${name} policy`);
+  if (!["approved", "blocked"].includes(policy.verdict)) throw new Error(`${name} verdict must be approved or blocked`);
+  if (!String(policy.owner ?? "").trim()) throw new Error(`${name} owner is required`);
+  if (durableEvidence(policy).length === 0) throw new Error(`${name} evidence is required`);
+  const expiry = policy.reviewExpiresAt ?? policy.expiresAt;
+  if (!expiry || Number.isNaN(Date.parse(expiry))) throw new Error(`${name} review expiry is required`);
+}
+
+function assertOnlyKeys(value, allowed, name) {
+  const unexpected = Object.keys(value).filter((key) => !allowed.includes(key));
+  if (unexpected.length) throw new Error(`${name} contains unknown fields: ${unexpected.join(", ")}`);
+}
+
+function validatePhase0Input(input) {
+  assertOnlyKeys(input, [
+    "databaseMigrationState", "deployedArtifact", "deployedRuntime", "environmentFlags",
+    "exactHead", "migrationLedger", "policies", "providerBaselines", "providerOwnership",
+    "rollbackCommands", "verificationId", "workingTreeStatus",
+  ], "Phase 0 input");
+  if (input.workingTreeStatus !== "clean") throw new Error("workingTreeStatus must be clean");
+  if (!Array.isArray(input.migrationLedger) || input.migrationLedger.length === 0) {
+    throw new Error("migrationLedger must be a non-empty array");
+  }
+  const migrationIds = [];
+  for (const entry of input.migrationLedger) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new Error("migrationLedger entry must be an object");
+    assertOnlyKeys(entry, ["id", "status"], "migrationLedger entry");
+    if (!/^20260720\d{6}(?:_[a-z0-9_]+)?(?:\.sql)?$/i.test(String(entry.id ?? ""))) {
+      throw new Error("migrationLedger entry id is invalid");
+    }
+    if (!["observed", "applied", "pending", "blocked", "rolled_back"].includes(entry.status)) {
+      throw new Error("migrationLedger entry status is invalid");
+    }
+    migrationIds.push(entry.id);
+  }
+  if (new Set(migrationIds).size !== migrationIds.length) throw new Error("migrationLedger IDs must be unique");
+  if (!Array.isArray(input.providerOwnership) || input.providerOwnership.length === 0) {
+    throw new Error("providerOwnership must be a non-empty array");
+  }
+  const providers = [];
+  for (const entry of input.providerOwnership) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new Error("providerOwnership entry must be an object");
+    assertOnlyKeys(entry, ["provider", "writerRuntime"], "providerOwnership entry");
+    if (!["greenhouse", "recruitee", "nicoka"].includes(entry.provider)) {
+      throw new Error("providerOwnership provider is not registered");
+    }
+    if (!["none", "typescript", "python"].includes(entry.writerRuntime)) {
+      throw new Error("providerOwnership writerRuntime is invalid");
+    }
+    providers.push(entry.provider);
+  }
+  if (new Set(providers).size !== providers.length) throw new Error("providerOwnership providers must be unique");
+  if (!Array.isArray(input.environmentFlags) || input.environmentFlags.length === 0) {
+    throw new Error("environmentFlags must be a non-empty array");
+  }
+  const flagNames = [];
+  for (const flag of input.environmentFlags) {
+    if (!flag || typeof flag !== "object" || Array.isArray(flag)) throw new Error("environmentFlags entry must be an object");
+    if (Object.hasOwn(flag, "value")) throw new Error("environmentFlags must contain flag names and redacted states only");
+    assertOnlyKeys(flag, ["name", "state"], "environmentFlags entry");
+    if (!/^[A-Z][A-Z0-9_]{2,127}$/.test(String(flag.name ?? "")) || !/^redacted(?::[a-z0-9_-]+)?$/i.test(String(flag.state ?? ""))) {
+      throw new Error("environmentFlags must contain flag names and redacted states only");
+    }
+    flagNames.push(flag.name);
+  }
+  if (new Set(flagNames).size !== flagNames.length) throw new Error("environmentFlags names must be unique");
+  if (!Array.isArray(input.rollbackCommands) || input.rollbackCommands.length === 0) {
+    throw new Error("rollbackCommands must be a non-empty array");
+  }
+  const rollbackIds = [];
+  for (const command of input.rollbackCommands) {
+    if (!command || typeof command !== "object" || Array.isArray(command)) throw new Error("rollbackCommands entry must be an object");
+    assertOnlyKeys(command, ["evidence", "id"], "rollbackCommands entry");
+    if (!/^[a-z0-9][a-z0-9_-]{2,127}$/.test(String(command.id ?? ""))) throw new Error("rollbackCommands id is invalid");
+    if (durableEvidence(command).length === 0) throw new Error("rollbackCommands evidence is required");
+    rollbackIds.push(command.id);
+  }
+  if (new Set(rollbackIds).size !== rollbackIds.length) throw new Error("rollbackCommands IDs must be unique");
+  if (!input.policies || typeof input.policies !== "object" || Array.isArray(input.policies)) {
+    throw new Error("Phase 0 policies are required");
+  }
+  assertOnlyKeys(input.policies, ["candidateMandatePolicy", "inventoryAccess", "privacyBasis", "submissionAuthority"], "Phase 0 policies");
+}
+
+export function defaultAtsPhase0ReceiptOutput(verificationId) {
+  if (!/^[a-z0-9][a-z0-9-]{7,48}$/.test(String(verificationId))) {
+    throw new Error("verificationId must be valid before deriving the Phase 0 output path");
+  }
+  return `.omx/verification/ats-phase0-${verificationId}.json`;
+}
+
+export function createAtsPhase0Receipt(input = {}, options = {}) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Phase 0 input must be an object");
+  rejectSecretShapedFields(input);
+  for (const field of ["exactHead", "workingTreeStatus", "migrationLedger", "providerOwnership", "environmentFlags", "rollbackCommands"]) {
+    if (input[field] === undefined || input[field] === null) throw new Error(`Phase 0 ${field} observation is required`);
+  }
+  if (!/^[0-9a-f]{40}$/.test(String(input.exactHead))) throw new Error("Phase 0 exactHead must be a lowercase 40-character commit SHA");
+  validatePhase0Input(input);
+  const policies = input.policies ?? {};
+  for (const name of ["inventoryAccess", "submissionAuthority", "candidateMandatePolicy", "privacyBasis"]) {
+    requireReceiptPolicy(policies[name], name);
+  }
+  const verificationId = options.verificationId ?? input.verificationId ?? createVerificationId();
+  if (!/^[a-z0-9][a-z0-9-]{7,48}$/.test(String(verificationId))) throw new Error("invalid Phase 0 verificationId");
+  const observations = structuredClone(input);
+  delete observations.verificationId;
+  for (const field of ["deployedRuntime", "deployedArtifact", "databaseMigrationState", "providerBaselines"]) {
+    if (observations[field] === undefined || observations[field] === null) {
+      observations[field] = { status: "BLOCKED_EXTERNAL", reason: `${field} was not observed by this local receipt` };
+    }
+  }
+  return {
+    version: ATS_PHASE0_RECEIPT_VERSION,
+    verificationId,
+    createdAt: options.createdAt ?? new Date().toISOString(),
+    exactHead: input.exactHead,
+    canonicalInputSha256: sha256(canonicalJson(input)),
+    observations,
+    readinessStatus: Object.values(observations).some((entry) => entry?.status === "BLOCKED_EXTERNAL")
+      ? "BLOCKED_EXTERNAL"
+      : "EVIDENCE_CAPTURED",
+    safeguards: {
+      remoteInspectionPerformed: false,
+      productionMutationPerformed: false,
+      secretsAccepted: false,
+    },
+  };
+}
+
+function currentApprovedPolicy(policy, name, failures, now) {
   if (policy?.verdict !== "approved") failures.push(`${name} must be approved`);
   if (!String(policy?.owner ?? "").trim()) failures.push(`${name} owner is required`);
   if (durableEvidence(policy).length === 0) failures.push(`${name} evidence is required`);
   const expiry = policy?.reviewExpiresAt ?? policy?.expiresAt;
   if (!expiry || Number.isNaN(Date.parse(expiry))) failures.push(`${name} review expiry is required`);
-  else if (Date.parse(expiry) <= Date.now()) failures.push(`${name} is expired`);
+  else if (Date.parse(expiry) <= now) failures.push(`${name} is expired`);
 }
 
-export function evaluateProviderActivationPreflight(input = {}) {
+function validateReleaseAttestationEvidence(attestation, evidenceRoot, failures) {
+  if (
+    attestation?.version !== RELEASE_ATTESTATION_VERSION
+    || attestation?.readinessStatus !== "ATTESTED_READY"
+    || !/^[0-9a-f]{40}$/.test(String(attestation?.releaseHead ?? ""))
+    || !/^[0-9a-f]{64}$/.test(String(attestation?.deployedArtifactDigest ?? ""))
+    || !Array.isArray(attestation?.externalBlockDischarges)
+  ) {
+    failures.push("release attestation is incomplete or not ATTESTED_READY");
+    return;
+  }
+  let manifest;
+  try {
+    manifest = containedEvidenceDescriptor(attestation.selectedManifest, evidenceRoot).json;
+    const selected = validateSelectedManifest(manifest);
+    if (selected.exactHead !== attestation.releaseHead) {
+      failures.push("selected manifest exactHead does not match the release attestation");
+    }
+  } catch (error) {
+    failures.push(`selected manifest evidence is invalid: ${error.message}`);
+    return;
+  }
+  const observedCodes = [];
+  for (const descriptor of attestation.externalBlockDischarges) {
+    try {
+      const discharge = containedEvidenceDescriptor(descriptor, evidenceRoot).json;
+      const allowedKeys = ["code", "deployedArtifactDigest", "observedAt", "releaseHead", "status", "version"];
+      if (!discharge || typeof discharge !== "object" || Array.isArray(discharge)
+        || Object.keys(discharge).sort().join(",") !== allowedKeys.sort().join(",")) {
+        throw new Error("schema is invalid");
+      }
+      if (discharge?.version !== EXTERNAL_DISCHARGE_VERSION) throw new Error("version is invalid");
+      if (!ALLOWED_EXTERNAL_BLOCKS.has(discharge?.code)) throw new Error("code is invalid");
+      if (discharge.status !== "discharged") throw new Error("status is not discharged");
+      if (discharge.releaseHead !== attestation.releaseHead) throw new Error("releaseHead mismatch");
+      if (discharge.deployedArtifactDigest !== attestation.deployedArtifactDigest) {
+        throw new Error("deployedArtifactDigest mismatch");
+      }
+      if (!discharge.observedAt || Number.isNaN(Date.parse(discharge.observedAt))) {
+        throw new Error("observedAt is invalid");
+      }
+      observedCodes.push(discharge.code);
+    } catch (error) {
+      failures.push(`external discharge evidence is invalid: ${error.message}`);
+    }
+  }
+  const missing = [...ALLOWED_EXTERNAL_BLOCKS].filter((code) => !observedCodes.includes(code));
+  if (missing.length) failures.push(`missing mandatory external discharges: ${missing.join(", ")}`);
+  if (new Set(observedCodes).size !== observedCodes.length) failures.push("external discharge codes must be unique");
+  if (observedCodes.length !== ALLOWED_EXTERNAL_BLOCKS.size) {
+    failures.push("exactly one discharge for each mandatory external block is required");
+  }
+}
+
+function validateShadowScorecard(scorecard, input) {
+  if (!scorecard || typeof scorecard !== "object" || Array.isArray(scorecard)) throw new Error("scorecard must be an object");
+  assertOnlyKeys(scorecard, [
+    "canonicalWritesEnabled", "countryCode", "evidenceDigest", "policyDigest", "provider",
+    "reconciliation", "runIds", "schemaVersion", "tenantId", "verdict",
+  ], "shadow scorecard");
+  const provider = String(input.provider ?? "").trim();
+  const tenantId = String(input.tenantId ?? "").trim().toLowerCase();
+  const countryCode = String(input.countryCode ?? "").trim().toUpperCase();
+  const policyDigest = String(input.policyDigest ?? "");
+  if (
+    scorecard.schemaVersion !== 1
+    || scorecard.verdict !== "complete_shadow_ready"
+    || scorecard.canonicalWritesEnabled !== false
+    || scorecard.provider !== provider
+    || String(scorecard.tenantId ?? "").toLowerCase() !== tenantId
+    || String(scorecard.countryCode ?? "").toUpperCase() !== countryCode
+    || scorecard.policyDigest !== policyDigest
+  ) throw new Error("shadow scorecard scope or readiness fields are invalid");
+  if (!tenantId || !/^[A-Z]{2}$/.test(countryCode) || !/^[0-9a-f]{64}$/.test(policyDigest)) {
+    throw new Error("provider preflight shadow scope is invalid");
+  }
+  if (!Array.isArray(scorecard.runIds) || scorecard.runIds.length !== 2) {
+    throw new Error("shadow scorecard must contain exactly two run IDs");
+  }
+  if (scorecard.runIds.some((id) => typeof id !== "string" || !id.trim()) || new Set(scorecard.runIds).size !== 2) {
+    throw new Error("shadow scorecard run IDs must be non-empty and unique");
+  }
+  if (!Array.isArray(scorecard.reconciliation) || scorecard.reconciliation.length !== 1) {
+    throw new Error("shadow scorecard must contain exactly one reconciliation");
+  }
+  const reconciliation = scorecard.reconciliation[0];
+  if (!reconciliation || typeof reconciliation !== "object" || Array.isArray(reconciliation)) {
+    throw new Error("shadow scorecard reconciliation is malformed");
+  }
+  assertOnlyKeys(reconciliation, ["additions", "fromRunId", "removals", "toRunId", "updates"], "shadow reconciliation");
+  if (
+    reconciliation.fromRunId !== scorecard.runIds[0]
+    || reconciliation.toRunId !== scorecard.runIds[1]
+    || ["additions", "updates", "removals"].some((field) => (
+      !Array.isArray(reconciliation[field])
+      || reconciliation[field].some((id) => typeof id !== "string" || !id.trim())
+      || new Set(reconciliation[field]).size !== reconciliation[field].length
+    ))
+  ) throw new Error("shadow scorecard reconciliation does not match its run IDs");
+  if (!/^[0-9a-f]{64}$/.test(String(scorecard.evidenceDigest ?? ""))) {
+    throw new Error("shadow scorecard evidenceDigest is invalid");
+  }
+  const { evidenceDigest, ...evidence } = scorecard;
+  if (sha256(canonicalJson(evidence)) !== evidenceDigest) throw new Error("shadow scorecard evidenceDigest mismatch");
+}
+
+export function evaluateProviderActivationPreflight(input = {}, options = {}) {
   const failures = [];
+  const evidenceRoot = options.evidenceRoot ?? process.cwd();
+  const now = input.now === undefined ? Date.now() : Date.parse(input.now);
+  if (Number.isNaN(now)) failures.push("now must be a valid timestamp when provided");
   const provider = String(input.provider ?? "").trim();
   const targetVerdict = input.targetVerdict;
   const allowedTargets = new Set([
     "inventory_canary_ready", "inventory_active", "application_canary_ready",
     "application_active", "inventory_manual", "blocked",
   ]);
-  if (!provider) failures.push("provider is required");
+  if (!new Set(["greenhouse", "recruitee", "nicoka"]).has(provider)) {
+    failures.push("provider must be greenhouse, recruitee, or nicoka");
+  }
   if (!allowedTargets.has(targetVerdict)) failures.push("targetVerdict is missing or unsupported");
   if (targetVerdict === "blocked") failures.push("blocked target cannot activate a provider");
-  if (input.releaseAttestation?.readinessStatus !== "ATTESTED_READY") failures.push("release attestation is not ATTESTED_READY");
-  currentApprovedPolicy(input.inventoryAccess, "inventoryAccess", failures);
+  const attestation = input.releaseAttestation;
+  validateReleaseAttestationEvidence(attestation, evidenceRoot, failures);
+  currentApprovedPolicy(input.inventoryAccess, "inventoryAccess", failures, now);
   if (input.killSwitches?.providerArmed !== true) failures.push("provider kill switch is not armed");
   if (input.killSwitches?.tenantCountryArmed !== true) failures.push("tenant/country kill switch is not armed");
   if (input.rollback?.exercised !== true) failures.push("rollback was not exercised");
   if (durableEvidence(input.rollback).length === 0) failures.push("rollback evidence is required");
   if (!String(input.rollback?.commandTranscriptId ?? "").trim()) failures.push("rollback command/transcript identifier is required");
-  const shadows = Array.isArray(input.shadowRuns) ? input.shadowRuns : [];
-  if (shadows.length !== 2 || shadows.some((run) => run?.complete !== true || run?.digestBound !== true)) {
-    failures.push("exactly two complete digest-bound shadow runs are required");
+  try {
+    const scorecard = containedEvidenceDescriptor(input.shadowScorecard, evidenceRoot).json;
+    validateShadowScorecard(scorecard, input);
+  } catch (error) {
+    failures.push(`sealed repeated shadow scorecard is required: ${error.message}`);
   }
   if (input.simultaneousCanonicalWriters !== false) failures.push("simultaneous canonical writers must be explicitly false");
   if (input.writerTransfer?.throughNone !== true) failures.push("writer ownership transfer must pass through writer_runtime=none");
 
-  if (["application_canary_ready", "application_active"].includes(targetVerdict)) {
-    currentApprovedPolicy(input.submissionAuthority, "submissionAuthority", failures);
-    currentApprovedPolicy(input.privacyBasis, "privacyBasis", failures);
+  const applicationTarget = ["application_canary_ready", "application_active"].includes(targetVerdict);
+  const inventoryTarget = ["inventory_canary_ready", "inventory_active", "inventory_manual"].includes(targetVerdict);
+  if (["recruitee", "nicoka"].includes(provider) && targetVerdict !== "inventory_manual") {
+    failures.push(`${provider} supports inventory_manual only`);
+  }
+  if (provider === "greenhouse" && !inventoryTarget && !applicationTarget) {
+    failures.push("greenhouse target is unsupported");
+  }
+  if (applicationTarget) {
+    if (provider !== "greenhouse") failures.push("application targets are available only for greenhouse");
+    if (
+      input.applicationCapability?.reviewed !== true
+      || input.applicationCapability?.transport !== "hosted_candidate_form"
+      || durableEvidence(input.applicationCapability).length === 0
+    ) {
+      failures.push("greenhouse application requires reviewed hosted_candidate_form capability evidence");
+    }
+    currentApprovedPolicy(input.submissionAuthority, "submissionAuthority", failures, now);
+    currentApprovedPolicy(input.privacyBasis, "privacyBasis", failures, now);
     if (input.nonProductionSubmission?.status !== "passed" || durableEvidence(input.nonProductionSubmission).length === 0) {
       failures.push("passed non-production submission evidence is required");
     }
   }
   if (targetVerdict === "inventory_manual") {
-    if (input.manualDeepLink?.verified !== true || durableEvidence(input.manualDeepLink).length === 0) {
+    if (
+      input.manualDeepLink?.verified !== true
+      || input.manualDeepLink?.environment !== "production"
+      || durableEvidence(input.manualDeepLink).length === 0
+    ) {
       failures.push("verified production manual deep-link evidence is required");
     }
     if (input.applicationAutomationEnabled !== false) failures.push("application automation must remain disabled");
@@ -1099,9 +1502,9 @@ if (direct) {
     console.log(JSON.stringify(verifyPostMigrationDisabledState()));
   } else if (argv[0] === "--attest-selection") {
     const options = parseNamedArgs(argv, ["manifest", "discharges", "artifact-digest", "release-head", "output"]);
+    const manifestBytes = readFileSync(resolve(process.cwd(), options.manifest));
     const attestation = createReleaseAttestation({
-      manifestPath: options.manifest,
-      manifestBytes: readFileSync(resolve(process.cwd(), options.manifest)),
+      selectedManifest: { path: options.manifest, sha256: sha256(manifestBytes) },
       discharges: JSON.parse(readFileSync(resolve(process.cwd(), options.discharges), "utf8")),
       deployedArtifactDigest: options["artifact-digest"],
       releaseHead: options["release-head"],
@@ -1119,6 +1522,17 @@ if (direct) {
     writeManifest(options.output, evidence);
     console.log(JSON.stringify({ output: options.output, status: evidence.status }));
     if (evidence.status === "BLOCKED") process.exitCode = 1;
+  } else if (argv[0] === "--phase0-receipt") {
+    if (!argv[1] || argv[1].startsWith("--")) throw new Error("--phase0-receipt requires an input JSON path");
+    const outputOptions = argv.length > 2
+      ? parseNamedArgs(["phase0-receipt-mode", ...argv.slice(2)], ["output"])
+      : {};
+    const receipt = createAtsPhase0Receipt(
+      JSON.parse(readFileSync(resolve(process.cwd(), argv[1]), "utf8")),
+    );
+    const output = outputOptions.output ?? defaultAtsPhase0ReceiptOutput(receipt.verificationId);
+    writeManifest(output, receipt);
+    console.log(JSON.stringify({ output, readinessStatus: receipt.readinessStatus }));
   } else {
     const options = parseArgs(argv);
     const plan = buildReleaseVerificationPlan(options);

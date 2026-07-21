@@ -111,6 +111,25 @@ PYTHONPATH=backend:backend/tests .venv/bin/python \
 Do not use `execute_application(..., dry_run=True)` for this audit: that path
 claims and persists an application attempt before inspection.
 
+### Recruitee and Nicoka manual-route boundary
+
+Recruitee and Nicoka are inventory connectors only. They have no registered
+application driver, queue permission or verified no-submit submission path, so
+their maximum safe route state is `inventory_manual`; environment configuration
+and fixture evidence cannot widen that state. Greenhouse is limited to the
+reviewed `hosted_candidate_form` transport. Public-candidate APIs and
+credentialed employer APIs are denied even when other route-policy fields
+match.
+
+The committed inspection harness implements tenant/posting-bound Recruitee and
+Nicoka URL validation, fixture-only form classification, aggregate
+`routeStates`, `formClasses`, and `corpusCoverage`, plus the 50-form-per-provider
+thresholds. These are tooling capabilities only. Committed fixtures and live
+runs do not constitute production authority, permission to register a driver,
+or permission to enable automation; an authorized evidence run must still meet
+the acceptance thresholds below and prove no queue, registry, capability or
+submission mutation.
+
 ## Dry-run preferred occurrence
 
 `buildOccurrencePreferenceDryRun` ranks active occurrences without writing

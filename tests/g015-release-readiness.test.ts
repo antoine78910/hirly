@@ -1,16 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import {
   assertDisposableDatabase,
   buildReleaseVerificationPlan,
   classifyReleaseDrift,
   collectArtifactEvidence,
   collectToolEvidence,
+  createAtsPhase0Receipt,
   createReleaseAttestation,
+  defaultAtsPhase0ReceiptOutput,
   defaultReleaseManifestOutput,
-  evaluateProviderActivationPreflight,
+  evaluateProviderActivationPreflight as evaluateProviderActivationPreflightRaw,
   executeCommand,
   findMigrationActivationStatements,
   isolatedDatabaseUrl,
@@ -23,6 +25,10 @@ import {
 } from "../scripts/verify-job-supply-release.mjs";
 
 const root = resolve(import.meta.dir, "..");
+
+function evaluateProviderActivationPreflight(input: any) {
+  return evaluateProviderActivationPreflightRaw(input, { evidenceRoot: input.evidenceRoot });
+}
 
 describe("G015 release verification contract", () => {
   test("requires explicit opt-in and a local disposable database", () => {
@@ -67,7 +73,7 @@ describe("G015 release verification contract", () => {
     expect(plan.commands.find((entry) => entry.id === "legacy-frontend-security-audit")?.args).toEqual([
       "audit",
       "--omit=dev",
-      "--audit-level=critical",
+      "--audit-level=high",
     ]);
     expect(plan.commands.find((entry) => entry.id === "legacy-frontend-tests")?.env).toEqual({ CI: "true" });
     expect(plan.commands.find((entry) => entry.id === "backend-python-compatibility")?.args).toContain(
@@ -266,6 +272,14 @@ describe("G015 release verification contract", () => {
     expect(result.backendRailwayValidated).toBe(true);
   });
 
+  test("reserves Vercel production deployment ownership for the staged workflow", async () => {
+    const rootConfig = JSON.parse(await readFile(resolve(root, "vercel.json"), "utf8"));
+    const frontendConfig = JSON.parse(await readFile(resolve(root, "frontend/vercel.json"), "utf8"));
+    expect(rootConfig.git?.deploymentEnabled).toBe(false);
+    expect(frontendConfig.git?.deploymentEnabled).toBe(false);
+    expect(() => verifyDeploymentDefaults(root)).not.toThrow();
+  });
+
   test("documents every migration in exact application order with matching down coverage", async () => {
     const allFiles = await readdir(resolve(root, "backend/db/migrations"));
     const ups = allFiles
@@ -372,45 +386,59 @@ describe("G015 release verification contract", () => {
     });
     expect(() => validateSelectedManifest({ ...manifest, version: "job-supply-release-verification.v3" })).toThrow("version");
     expect(() => validateSelectedManifest({ ...manifest, expectedHead: null })).toThrow("expectedHead");
-    expect(() => validateSelectedManifest({ ...manifest, results: [{ id: "lint", status: "skipped" }] })).toThrow("lint");
+    expect(() => validateSelectedManifest({ ...manifest, profile: "repository" })).toThrow("profile");
+    expect(() => validateSelectedManifest({ ...manifest, results: manifest.results.slice(1) })).toThrow("missing");
+    expect(() => validateSelectedManifest({ ...manifest, results: [...manifest.results, manifest.results[0]] })).toThrow("unique");
+    expect(() => validateSelectedManifest({
+      ...manifest,
+      results: [...manifest.results, { id: "arbitrary-extra", status: "passed" }],
+    })).toThrow("extra");
+    expect(() => validateSelectedManifest({
+      ...manifest,
+      results: manifest.results.map((result) => result.id === "lint" ? { ...result, status: "skipped" } : result),
+    })).toThrow("lint");
     expect(() => validateSelectedManifest({
       ...manifest,
       blockedExternal: [{ code: "DATABASE_NOT_PROVIDED" }],
     })).toThrow("DATABASE_NOT_PROVIDED");
+    expect(() => validateSelectedManifest({ ...manifest, blockedExternal: [] })).toThrow("mandatory");
   });
 
-  test("attests the exact selected bytes only after every external block is discharged", () => {
-    const bytes = Buffer.from(`${JSON.stringify(selectedManifest())}\n`);
-    const discharges = [
-      discharge("REMOTE_DEPLOYMENT_VALIDATION_NOT_PERFORMED_BY_VERIFIER"),
-      discharge("SOURCE_ACTIVATION_NOT_PERFORMED"),
-    ];
+  test("attests contained sealed evidence only after every exact external block is discharged", async () => {
+    const evidenceRoot = await mkdtemp(join(tmpdir(), "g015-attestation-"));
+    const selectedManifestDescriptor = await writeEvidence(evidenceRoot, "manifest.json", selectedManifest());
+    const discharges = await Promise.all(EXTERNAL_BLOCKS.map((code) => writeDischarge(evidenceRoot, code)));
     const attestation = createReleaseAttestation({
-      manifestPath: "evidence/manifests/release.json",
-      manifestBytes: bytes,
+      selectedManifest: selectedManifestDescriptor,
       discharges,
       deployedArtifactDigest: "b".repeat(64),
       releaseHead: "a".repeat(40),
       createdAt: "2026-07-21T00:00:00.000Z",
+      evidenceRoot,
     });
     expect(attestation.readinessStatus).toBe("ATTESTED_READY");
-    expect(attestation.selectedManifest.sha256).toBe(sha256(bytes));
+    expect(attestation.selectedManifest).toEqual(selectedManifestDescriptor);
     expect(() => createReleaseAttestation({
-      manifestPath: "evidence/release.json", manifestBytes: bytes, discharges: discharges.slice(0, 1),
+      selectedManifest: selectedManifestDescriptor, discharges: discharges.slice(0, 1), evidenceRoot,
       deployedArtifactDigest: "b".repeat(64), releaseHead: "a".repeat(40),
     })).toThrow("missing");
     expect(() => createReleaseAttestation({
-      manifestPath: "evidence/release.json", manifestBytes: bytes, discharges: [...discharges, discharges[0]],
+      selectedManifest: selectedManifestDescriptor, discharges: [...discharges, discharges[0]], evidenceRoot,
       deployedArtifactDigest: "b".repeat(64), releaseHead: "a".repeat(40),
     })).toThrow("duplicate");
     expect(() => createReleaseAttestation({
-      manifestPath: "evidence/release.json", manifestBytes: bytes, discharges,
+      selectedManifest: selectedManifestDescriptor, discharges, evidenceRoot,
       deployedArtifactDigest: "not-a-digest", releaseHead: "a".repeat(40),
     })).toThrow("SHA-256");
     expect(() => createReleaseAttestation({
-      manifestPath: "evidence/release.json", manifestBytes: bytes, discharges,
+      selectedManifest: selectedManifestDescriptor, discharges, evidenceRoot,
       deployedArtifactDigest: "b".repeat(64), releaseHead: "c".repeat(40),
     })).toThrow("releaseHead");
+    expect(() => createReleaseAttestation({
+      selectedManifest: { ...selectedManifestDescriptor, path: "../manifest.json" }, discharges, evidenceRoot,
+      deployedArtifactDigest: "b".repeat(64), releaseHead: "a".repeat(40),
+    })).toThrow("contained");
+    await rm(evidenceRoot, { recursive: true, force: true });
   });
 
   test("classifies the complete release drift matrix", () => {
@@ -429,8 +457,9 @@ describe("G015 release verification contract", () => {
     expect(() => classifyReleaseDrift({ kind: "unknown" })).toThrow("unknown");
   });
 
-  test("provider activation preflight passes inventory manual and blocks each missing gate", () => {
-    const input = passingManualPreflight();
+  test("provider activation preflight passes sealed inventory manual evidence and blocks bypasses", async () => {
+    const evidenceRoot = await mkdtemp(join(tmpdir(), "g015-preflight-"));
+    const input = await passingManualPreflight(evidenceRoot);
     expect(evaluateProviderActivationPreflight(input)).toEqual({
       provider: "recruitee", targetVerdict: "inventory_manual", status: "PASS", failures: [],
     });
@@ -438,7 +467,8 @@ describe("G015 release verification contract", () => {
       (value: any) => { value.releaseAttestation = null; },
       (value: any) => { value.inventoryAccess.reviewExpiresAt = "2020-01-01T00:00:00.000Z"; },
       (value: any) => { value.killSwitches.providerArmed = false; },
-      (value: any) => { value.shadowRuns.pop(); },
+      (value: any) => { value.shadowScorecard.path = "../escape.json"; },
+      (value: any) => { value.shadowScorecard.path = "missing.json"; },
       (value: any) => { value.simultaneousCanonicalWriters = true; },
       (value: any) => { value.writerTransfer.throughNone = false; },
       (value: any) => { value.rollback.exercised = false; },
@@ -448,17 +478,107 @@ describe("G015 release verification contract", () => {
       mutate(changed);
       expect(evaluateProviderActivationPreflight(changed).status).toBe("BLOCKED");
     }
+    expect(evaluateProviderActivationPreflight({ ...input, provider: "unregistered-evil" }).status)
+      .toBe("BLOCKED");
+    for (const targetVerdict of ["inventory_canary_ready", "inventory_active", "application_canary_ready", "application_active"]) {
+      expect(evaluateProviderActivationPreflight({ ...input, targetVerdict }).status).toBe("BLOCKED");
+      const nicoka = { ...input, provider: "nicoka", targetVerdict };
+      expect(evaluateProviderActivationPreflight(nicoka).status).toBe("BLOCKED");
+    }
+    await writeFile(resolve(evidenceRoot, input.shadowScorecard.path), "tampered\n");
+    expect(evaluateProviderActivationPreflight(input).status).toBe("BLOCKED");
+    await rm(evidenceRoot, { recursive: true, force: true });
   });
 
-  test("application activation requires current authority, privacy basis, and non-production proof", () => {
-    const input = { ...passingManualPreflight(), targetVerdict: "application_canary_ready" };
-    expect(evaluateProviderActivationPreflight(input).status).toBe("BLOCKED");
+  test("validates exact shadow scorecard scope, reconciliation, run IDs, and inner digest", async () => {
+    for (const mutate of [
+      (value: any) => { value.provider = "nicoka"; },
+      (value: any) => { value.tenantId = "other"; },
+      (value: any) => { value.countryCode = "US"; },
+      (value: any) => { value.runIds[1] = value.runIds[0]; },
+      (value: any) => { value.reconciliation = []; },
+      (value: any) => { value.reconciliation[0].fromRunId = "wrong"; },
+      (value: any) => { value.evidenceDigest = "0".repeat(64); },
+    ]) {
+      const evidenceRoot = await mkdtemp(join(tmpdir(), "g015-scorecard-"));
+      const input = await passingManualPreflight(evidenceRoot);
+      const scorecard = JSON.parse(await readFile(resolve(evidenceRoot, input.shadowScorecard.path), "utf8"));
+      mutate(scorecard);
+      input.shadowScorecard = await writeEvidence(evidenceRoot, "shadow-mutated.json", scorecard);
+      expect(evaluateProviderActivationPreflight(input).status).toBe("BLOCKED");
+      await rm(evidenceRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("re-reads manifest and every exact discharge during provider preflight", async () => {
+    for (const mutate of [
+      async (root: string, input: any) => { await writeFile(resolve(root, input.releaseAttestation.selectedManifest.path), "tampered\n"); },
+      async (_root: string, input: any) => { input.releaseAttestation.externalBlockDischarges.pop(); },
+      async (_root: string, input: any) => { input.releaseAttestation.externalBlockDischarges[1] = input.releaseAttestation.externalBlockDischarges[0]; },
+      async (root: string, input: any) => {
+        input.releaseAttestation.externalBlockDischarges[0] = await writeDischarge(root, EXTERNAL_BLOCKS[0], { releaseHead: "c".repeat(40), path: "mismatch.json" });
+      },
+    ]) {
+      const evidenceRoot = await mkdtemp(join(tmpdir(), "g015-sealed-release-"));
+      const input = await passingManualPreflight(evidenceRoot);
+      await mutate(evidenceRoot, input);
+      expect(evaluateProviderActivationPreflight(input).status).toBe("BLOCKED");
+      await rm(evidenceRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("greenhouse application requires reviewed hosted-form capability evidence", async () => {
+    const evidenceRoot = await mkdtemp(join(tmpdir(), "g015-greenhouse-"));
+    const input = { ...(await passingManualPreflight(evidenceRoot, "greenhouse")), targetVerdict: "application_canary_ready" };
     Object.assign(input, {
       submissionAuthority: approvedPolicy(),
       privacyBasis: approvedPolicy(),
       nonProductionSubmission: { status: "passed", evidence: ["evidence/non-production/attempt.json"] },
     });
+    expect(evaluateProviderActivationPreflight(input).status).toBe("BLOCKED");
+    input.applicationCapability = { reviewed: true, transport: "hosted_candidate_form", evidence: ["reviews/greenhouse.json"] };
     expect(evaluateProviderActivationPreflight(input).status).toBe("PASS");
+    for (const applicationCapability of [
+      { ...input.applicationCapability, reviewed: false },
+      { ...input.applicationCapability, transport: "api" },
+      { ...input.applicationCapability, evidence: [] },
+    ]) expect(evaluateProviderActivationPreflight({ ...input, applicationCapability }).status).toBe("BLOCKED");
+    await rm(evidenceRoot, { recursive: true, force: true });
+  });
+
+  test("creates secret-free Phase 0 receipts and blocks unobserved remote evidence", () => {
+    const input = phase0Input();
+    const receipt = createAtsPhase0Receipt(input, {
+      verificationId: "20260721120000-321-deadbeef",
+      createdAt: "2026-07-21T12:00:00.000Z",
+    });
+    expect(receipt.version).toBe("ats-phase0-receipt.v1");
+    expect(receipt.readinessStatus).toBe("BLOCKED_EXTERNAL");
+    expect(receipt.observations.deployedArtifact.status).toBe("BLOCKED_EXTERNAL");
+    expect(receipt.canonicalInputSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(defaultAtsPhase0ReceiptOutput(receipt.verificationId)).toContain(receipt.verificationId);
+    expect(JSON.stringify(receipt)).not.toContain("secret-canary");
+    expect(() => createAtsPhase0Receipt({ ...input, apiToken: "secret-canary" })).toThrow("secret-shaped");
+    expect(() => createAtsPhase0Receipt({ ...input, unknownField: true })).toThrow("unknown fields");
+    expect(() => createAtsPhase0Receipt({ ...input, workingTreeStatus: "maybe-clean" })).toThrow("workingTreeStatus");
+    expect(() => createAtsPhase0Receipt({ ...input, migrationLedger: [{ id: "bad", status: "observed" }] })).toThrow("migrationLedger");
+    expect(() => createAtsPhase0Receipt({ ...input, providerOwnership: [{ provider: "evil", writerRuntime: "node" }] })).toThrow("providerOwnership");
+    expect(() => createAtsPhase0Receipt({ ...input, rollbackCommands: [{ id: "!", evidence: "" }] })).toThrow("rollbackCommands");
+    expect(() => createAtsPhase0Receipt({ ...input, policies: { ...input.policies, unexpected: approvedPolicy() } })).toThrow("unknown fields");
+    for (const key of ["authorization", "cookie", "credential", "apiKey"]) {
+      expect(() => createAtsPhase0Receipt({ ...input, deployedRuntime: { [key]: "redacted" } })).toThrow("secret-shaped");
+    }
+    for (const value of ["Bearer abc", "Basic YWJj", "https://user:pass@example.com/path"]) {
+      expect(() => createAtsPhase0Receipt({ ...input, deployedRuntime: { status: value } })).toThrow();
+    }
+    expect(() => createAtsPhase0Receipt({
+      ...input,
+      databaseMigrationState: { connection: "postgresql://user:secret-canary@localhost/prod" },
+    })).toThrow("connection URL");
+    expect(() => createAtsPhase0Receipt({
+      ...input,
+      environmentFlags: [{ name: "WORKER_CONTROL_ENABLED", state: "redacted", value: "true" }],
+    })).toThrow("redacted states only");
   });
 });
 
@@ -466,10 +586,18 @@ function selectedManifest() {
   return {
     version: "job-supply-release-verification.v4",
     verificationId: "20260720120000-123-deadbeef",
+    profile: "full",
     overallStatus: "passed",
     exactHead: "a".repeat(40),
     expectedHead: "a".repeat(40),
-    results: [{ id: "typecheck", status: "passed" }, { id: "tests", status: "passed" }],
+    results: [
+      "repository-attestation", "frozen-install", "typecheck", "lint", "tests", "build",
+      "backend-python-compatibility", "release-contracts", "stack-policy-revision",
+      "deployment-default-safety", "diff-check", "legacy-frontend-frozen-install",
+      "legacy-frontend-security-audit", "legacy-frontend-tests", "legacy-frontend-build",
+      "worker-docker-build", "worker-docker-proof", "postgres-provision",
+      "postgres-release-matrix", "postgres-disabled-state-proof",
+    ].map((id) => ({ id, status: "passed" })),
     blockedExternal: [
       { code: "REMOTE_DEPLOYMENT_VALIDATION_NOT_PERFORMED_BY_VERIFIER" },
       { code: "SOURCE_ACTIVATION_NOT_PERFORMED" },
@@ -477,8 +605,31 @@ function selectedManifest() {
   };
 }
 
-function discharge(code: string) {
-  return { code, status: "discharged", evidence: [`evidence/${code}.json`] };
+const EXTERNAL_BLOCKS = [
+  "REMOTE_DEPLOYMENT_VALIDATION_NOT_PERFORMED_BY_VERIFIER",
+  "SOURCE_ACTIVATION_NOT_PERFORMED",
+];
+
+async function writeEvidence(evidenceRoot: string, path: string, json: unknown) {
+  const bytes = Buffer.from(`${JSON.stringify(json)}\n`);
+  await mkdir(dirname(resolve(evidenceRoot, path)), { recursive: true });
+  await writeFile(resolve(evidenceRoot, path), bytes);
+  return { path, sha256: sha256(bytes) };
+}
+
+async function writeDischarge(
+  evidenceRoot: string,
+  code: string,
+  overrides: { releaseHead?: string; deployedArtifactDigest?: string; path?: string } = {},
+) {
+  return writeEvidence(evidenceRoot, overrides.path ?? `discharges/${code}.json`, {
+    version: "job-supply-external-discharge.v1",
+    code,
+    status: "discharged",
+    releaseHead: overrides.releaseHead ?? "a".repeat(40),
+    deployedArtifactDigest: overrides.deployedArtifactDigest ?? "b".repeat(64),
+    observedAt: "2026-07-21T00:00:00.000Z",
+  });
 }
 
 function approvedPolicy() {
@@ -490,11 +641,40 @@ function approvedPolicy() {
   };
 }
 
-function passingManualPreflight() {
+async function passingManualPreflight(evidenceRoot: string, provider = "recruitee") {
+  const policyDigest = "c".repeat(64);
+  const selectedManifestDescriptor = await writeEvidence(evidenceRoot, "release/manifest.json", selectedManifest());
+  const discharges = await Promise.all(EXTERNAL_BLOCKS.map((code) => writeDischarge(evidenceRoot, code)));
+  const releaseAttestation = createReleaseAttestation({
+    selectedManifest: selectedManifestDescriptor,
+    discharges,
+    deployedArtifactDigest: "b".repeat(64),
+    releaseHead: "a".repeat(40),
+    createdAt: "2026-07-21T00:00:00.000Z",
+    evidenceRoot,
+  });
+  const shadowEvidence = {
+    schemaVersion: 1,
+    verdict: "complete_shadow_ready",
+    canonicalWritesEnabled: false,
+    provider,
+    tenantId: "vaulttec",
+    countryCode: "FR",
+    policyDigest,
+    runIds: ["shadow-1", "shadow-2"],
+    reconciliation: [{
+      fromRunId: "shadow-1", toRunId: "shadow-2", additions: [], updates: ["job-1"], removals: [],
+    }],
+  };
+  const shadowScorecard = { ...shadowEvidence, evidenceDigest: sha256(canonicalTestJson(shadowEvidence)) };
   return {
-    provider: "recruitee",
+    evidenceRoot,
+    provider,
     targetVerdict: "inventory_manual",
-    releaseAttestation: { readinessStatus: "ATTESTED_READY" },
+    tenantId: "vaulttec",
+    countryCode: "FR",
+    policyDigest,
+    releaseAttestation,
     inventoryAccess: approvedPolicy(),
     killSwitches: { providerArmed: true, tenantCountryArmed: true },
     rollback: {
@@ -502,13 +682,39 @@ function passingManualPreflight() {
       evidence: ["evidence/rollback.json"],
       commandTranscriptId: "rollback-transcript-123",
     },
-    shadowRuns: [
-      { complete: true, digestBound: true },
-      { complete: true, digestBound: true },
-    ],
+    shadowScorecard: await writeEvidence(evidenceRoot, "shadow/scorecard.json", shadowScorecard),
     simultaneousCanonicalWriters: false,
     writerTransfer: { throughNone: true },
-    manualDeepLink: { verified: true, evidence: ["evidence/manual-link.json"] },
+    manualDeepLink: { verified: true, environment: "production", evidence: ["evidence/manual-link.json"] },
     applicationAutomationEnabled: false,
+  };
+}
+
+function canonicalTestJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalTestJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalTestJson((value as Record<string, unknown>)[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function phase0Input() {
+  return {
+    exactHead: "a".repeat(40),
+    workingTreeStatus: "clean",
+    migrationLedger: [{ id: "20260720000100", status: "observed" }],
+    providerOwnership: [{ provider: "recruitee", writerRuntime: "none" }],
+    environmentFlags: [{ name: "WORKER_CONTROL_ENABLED", state: "redacted:false" }],
+    rollbackCommands: [{ id: "disable-recruitee", evidence: "runbooks/rollback.md" }],
+    deployedRuntime: null,
+    deployedArtifact: null,
+    databaseMigrationState: null,
+    providerBaselines: null,
+    policies: {
+      inventoryAccess: approvedPolicy(),
+      submissionAuthority: { ...approvedPolicy(), verdict: "blocked" },
+      candidateMandatePolicy: { ...approvedPolicy(), verdict: "blocked" },
+      privacyBasis: { ...approvedPolicy(), verdict: "blocked" },
+    },
   };
 }

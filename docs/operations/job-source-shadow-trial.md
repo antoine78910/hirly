@@ -11,6 +11,8 @@ Classification: `TS_NEW`.
 | Provider | Trial transport | Production transport | Notes |
 | --- | --- | --- | --- |
 | Greenhouse | Bounded, exact allowlisted tenant, one complete board request | Disabled | Existing Python canonical ownership is unchanged |
+| Recruitee | Bounded, exact allowlisted tenant, one complete offers request | Disabled | Shadow-ready only; application driver and canonical writer remain disabled |
+| Nicoka | Bounded, exact allowlisted tenant, reconciled paginated complete snapshot | Disabled | Production/trial hosts are fixed; application driver and canonical writer remain disabled |
 | Lever | Bounded, exact allowlisted tenant and global/EU host, one complete postings request | Disabled | Existing Python canonical ownership is unchanged |
 | Choisir le Service Public | Bounded evidence-only CSV transport for one exact dataset/resource/content digest | Disabled | Fixed qualified snapshot only; no canonical apply route, production readiness or canonical writer |
 | Qualified data.gouv resource | Generic evidence-only transport bound to one separately approved dataset/resource/manifest digest | Disabled | Conditional per-resource capability; the catalogue is not an allowlist |
@@ -22,6 +24,23 @@ official HTTPS endpoint from the policy-bound tenant key and reject redirects.
 Open-data transports accept only an exact reviewed resource manifest whose
 dataset, resource, URL, content digest, policy evidence and attribution match
 the trial manifest. Every transport enforces request/page, byte and time limits.
+
+Production-shadow construction for Greenhouse, Recruitee and Nicoka additionally
+requires the strict `atsInventoryShadowPolicySchema`: schema version 1, exact
+provider, `mode=shadow`, `canonicalWritesEnabled=false`, a non-empty policy ID,
+an unexpired offset timestamp, and exact tenant/country allowlists. Tenant and
+country values normalize before duplicate checks. Wildcards, duplicate
+normalized entries, scope drift and expiry fail with `ATS_SHADOW_REFUSED`
+before any injected fetch can run.
+
+Persist two complete runs with unique run IDs and timestamps, identical
+provider/tenant/country/policy digest, positive request counts and unique job
+external IDs. `buildAtsRepeatedShadowScorecard` sorts the runs and reports only
+lexical additions, updates and removals plus a deterministic evidence digest.
+A successful complete empty snapshot may report removals; a partial or failed
+run cannot. `expiryDispositionAfterShadowFailure` always preserves existing
+inventory. These artifacts are release-preflight inputs only and never mutate
+canonical jobs.
 
 The CSP resource is only `qualified_evidence_only`: its sealed snapshot can
 measure volume, freshness and duplicates, but it cannot demonstrate an
@@ -262,3 +281,8 @@ requires measured incremental cohort value, reliable identifiers and removals,
 direct application quality, current commercial/redisplay/retention rights,
 bounded cost, alerts, a kill switch, and an exercised whole-provider writer
 rollback. Application submission remains a separate workstream.
+
+No approved real tenant/country policy or repeated live complete-run scorecard
+is committed for Greenhouse, Recruitee or Nicoka. Until authorized evidence is
+captured and linked to the release attestation, all three remain shadow-only and
+canonical writes remain disabled.

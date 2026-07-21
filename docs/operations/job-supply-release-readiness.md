@@ -67,12 +67,13 @@ represented as a passing live check.
 
 The full profile builds a unique Docker tag, records the image ID, layer digests and a
 digest of the inspected runtime configuration, then removes the tag in the verifier cleanup
-path. It also runs a critical-severity production-dependency audit, the legacy
+path. It also runs a HIGH-and-CRITICAL production-dependency audit, the legacy
 frontend test suite and the ingestion/feed-critical Python
 compatibility suite from the repository `.venv`; install `backend/requirements.txt` into
 that environment before running the command. Existing CRA lint warnings and
-non-critical legacy toolchain advisories remain visible and must stay in the
-dependency-remediation backlog; the release gate rejects critical advisories.
+lower-severity legacy toolchain advisories remain visible and must stay in the
+dependency-remediation backlog; the release gate rejects HIGH and CRITICAL
+production dependency advisories.
 The production build does not suppress its warning output. After the seven
 PostgreSQL suites, the verifier queries the migrated G014 database
 and requires zero enabled providers, TypeScript writers, worker/Python schedules, career
@@ -115,6 +116,7 @@ Apply in this order with `psql -v ON_ERROR_STOP=1`:
 11. `20260720001100_source_trial_foundation.sql`
 12. `20260720001150_source_trial_tenant_selection_binding.sql`
 13. `20260720002000_sprout_source_ingestion.sql`
+14. `20260720002100_sprout_canary_gate.sql`
 
 Migration `02000` adds the Sprout source boundary only. Its provider, France
 source, transport, incremental/backfill modes and schedule remain disabled;
@@ -241,3 +243,90 @@ The repository verifier must say that remote validation was not performed
 authorized attestation may record remote state, but it must identify its
 observation time, commands, exact deployment IDs and remaining unverified
 boundaries.
+
+## Selected manifest, drift, and activation attestation
+
+Every verification run writes a unique, append-only manifest named from its
+collision-resistant verification ID. Operators must never replace or edit an
+earlier manifest. Selection binds the immutable manifest path, the SHA-256 of
+its exact bytes, and its exact 40-character release HEAD; a reserialized JSON
+object is not equivalent evidence.
+
+A selected manifest must be v4, bind `expectedHead` to `exactHead`, and contain
+only passed command results. Its only permitted external blocks are:
+
+- `REMOTE_DEPLOYMENT_VALIDATION_NOT_PERFORMED_BY_VERIFIER`, discharged with
+  authorized deployment ID, deployed SHA/image digest, redacted effective
+  configuration digest, health/readiness/log observations, and rollback proof;
+- `SOURCE_ACTIVATION_NOT_PERFORMED`, discharged with current policy approval,
+  two digest-bound shadow runs, source baselines, canary evidence, armed kill
+  switches, and an exercised rollback transcript.
+
+Each block requires exactly one durable discharge. A missing, duplicate, or
+unexpected discharge fails closed. Production `/api/version` and the failed CI
+workflow history currently indicate a possible second or unidentified
+deployment owner. That is a hard provenance blocker until authorized operators
+identify the owner, attest the exact deployed artifact and configuration, and
+prove rollback. Local tooling cannot self-attest this evidence.
+
+Drift is classified before reusing release evidence:
+
+- `build_input` invalidates the selected manifest and code review and requires
+  the full verifier, security review, code review, UltraQA, and artifact
+  attestation;
+- `runtime_config_outside_envelope` requires affected security review,
+  UltraQA, deployment attestation, deployed smoke, and rollback proof. It also
+  invalidates the selected manifest and requires the full verifier when build
+  inputs changed, while code review remains valid unless code changed;
+- `rollout_config_inside_envelope` preserves release review evidence but
+  requires a change record, canonical configuration digest, policy/expiry
+  check, deployed smoke, and rollback proof;
+- `candidate_mandate` preserves release review evidence and requires claim,
+  post-claim, pre-submit, and attempt evidence for that exact attempt.
+
+The provider preflight is a pure, evidence-only evaluator. It cannot deploy,
+fetch a source, write canonical state, transfer writer ownership, or submit an
+application. A `PASS` is not activation: authorized operators must still
+execute the approved provider/country change. Manual-inventory readiness keeps
+application automation disabled. Application activation is independently
+gated by submission authority, privacy basis, non-production proof, and exact
+per-attempt candidate mandates.
+
+Rollback order is exact: disable transport and schedule, stop claims and drain,
+prove no writes, transition writer ownership through `writer_runtime=none`,
+then assign the single authoritative writer. Applications roll back
+independently; ambiguous attempts must be reconciled from durable evidence and
+must never be blindly retried.
+
+The optional `--phase0-receipt` mode captures only supplied local observations.
+It recursively rejects token, password, secret, and connection-URL fields;
+environment entries contain flag names and redacted states, never values. The
+receipt binds canonical inputs by digest, requires owner/evidence/review expiry
+and an explicit `approved` or `blocked` verdict for inventory access,
+submission authority, candidate-mandate policy, and privacy basis, and labels
+unobserved deployed runtime, artifact, database, or provider-baseline fields
+`BLOCKED_EXTERNAL`. It does not inspect or mutate any remote system.
+
+### Current CI and deployment-provenance blockers
+
+The previously observed Sprout typecheck failure for missing `canaryEvidence`
+and `rollbackEvidence` has been repaired in the current source and must not be
+reported as the current blocker after a fresh worker typecheck. Remaining
+release-evidence gaps are fail-closed:
+
+- both repository Vercel configurations set `git.deploymentEnabled=false`, so
+  Git integration cannot auto-promote around the staged workflow; because no
+  deployment was performed in this lane, authorized operators must still
+  confirm that the next deployment applied the repository setting;
+- CI runs the verifier but does not yet publish its generated manifest as an
+  immutable retained artifact, so operators cannot select a durable passing CI
+  manifest from repository evidence alone;
+- deployment jobs do not establish the full tuple of deployment ID, immutable
+  artifact/image digest, effective redacted configuration digest, deployed
+  smoke evidence, and exercised rollback proof;
+- the production revision observed after a workflow that failed before deploy
+  remains evidence of a possible second deployment owner/path.
+
+Resolving these items requires separately authorized CI/deployment changes or
+read-only operator evidence. This local verifier and receipt deliberately keep
+production mutations and credentials disabled.
