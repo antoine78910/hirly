@@ -510,8 +510,18 @@ describe("G002 real-Postgres durability and security", () => {
       enqueue(),
       enqueue(),
     ]);
-    expect(firstScheduler.exitCode, firstScheduler.stderr).toBe(0);
-    expect(secondScheduler.exitCode, secondScheduler.stderr).toBe(0);
+    const schedulerResults = [firstScheduler, secondScheduler];
+    const successfulSchedulers = schedulerResults.filter(
+      (result) => result.exitCode === 0,
+    );
+    const staleReplaySchedulers = schedulerResults.filter(
+      (result) => result.exitCode !== 0,
+    );
+    expect(successfulSchedulers).toHaveLength(1);
+    expect(staleReplaySchedulers).toHaveLength(1);
+    expect(staleReplaySchedulers[0]?.stderr).toContain(
+      "next due time must advance",
+    );
     expect(
       await assertSql(`
         SELECT count(*) FROM public.worker_runs
