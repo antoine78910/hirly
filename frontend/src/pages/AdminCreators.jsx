@@ -27,12 +27,14 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { createColumnHelper } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import { adminApiErrorMessage } from "../lib/adminApi";
 import { Button } from "../components/ui/button";
 import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
 import AddTrackedCreatorForm from "../components/admin/AddTrackedCreatorForm";
+import AdminDataTable from "../components/admin/AdminDataTable";
 
 const ORANGE = "#f97316";
 const BLUE = "#3b82f6";
@@ -324,6 +326,8 @@ function TopAccountRow({ creator, maxViews, usesLikesProxy }) {
   );
 }
 
+const columnHelper = createColumnHelper();
+
 function AccountSelector({ creators, selectedIds, onToggle, onSelectAll, onClear }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
@@ -567,6 +571,103 @@ export default function AdminCreators() {
     }
   }, [days, load]);
 
+  const postedVideoColumns = useMemo(() => [
+    columnHelper.accessor((row) => `${row.description || ""} ${row.creator_name || ""}`, {
+      id: "post",
+      header: "Post",
+      cell: (info) => {
+        const video = info.row.original;
+        return (
+          <a
+            href={video.url || undefined}
+            target="_blank"
+            rel="noreferrer"
+            className="flex min-w-[280px] items-center gap-3 text-zinc-900 hover:text-linkedin"
+          >
+            <div className="h-12 w-9 shrink-0 overflow-hidden rounded-md bg-zinc-900">
+              {video.cover_url ? (
+                <img src={video.cover_url} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-white">
+                  <Play className="h-4 w-4 fill-current" />
+                </div>
+              )}
+            </div>
+            <span className="line-clamp-2 font-medium">{truncateText(video.description || "Untitled video", 96)}</span>
+          </a>
+        );
+      },
+    }),
+    columnHelper.accessor((row) => row.creator_name || "Creator", {
+      id: "account",
+      header: "Account",
+      cell: (info) => <span className="text-zinc-700">{info.getValue()}</span>,
+    }),
+    columnHelper.accessor("posted_at", {
+      header: "Date",
+      cell: (info) => <span className="text-zinc-600">{fmtPostedAt(info.getValue())}</span>,
+    }),
+    columnHelper.accessor((row) => videoReachViews(row, usesLikesProxy), {
+      id: "views",
+      header: viewsLabel,
+      cell: (info) => <span className="font-mono font-semibold text-sky-700">{fmtCompact(info.getValue())}</span>,
+    }),
+    columnHelper.accessor("likes", {
+      header: "Likes",
+      cell: (info) => <span className="font-mono text-pink-600">{fmtCompact(info.getValue())}</span>,
+    }),
+    columnHelper.accessor("comments", {
+      header: "Comments",
+      cell: (info) => <span className="font-mono text-emerald-600">{fmtCompact(info.getValue())}</span>,
+    }),
+    columnHelper.accessor("shares", {
+      header: "Shares",
+      cell: (info) => <span className="font-mono text-violet-600">{fmtCompact(info.getValue())}</span>,
+    }),
+    columnHelper.accessor("favorites", {
+      id: "saves",
+      header: "Saves",
+      cell: (info) => <span className="font-mono text-amber-600">{fmtCompact(info.getValue())}</span>,
+    }),
+    columnHelper.accessor((row) => videoEngagementRate(row, usesLikesProxy), {
+      id: "engagement",
+      header: "Engagement",
+      cell: (info) => <span className="font-mono font-semibold text-amber-700">{info.getValue()}%</span>,
+    }),
+  ], [usesLikesProxy, viewsLabel]);
+
+  const dailyBreakdownColumns = useMemo(() => [
+    columnHelper.accessor("date", {
+      header: "Date",
+      cell: (info) => <span className="font-medium text-zinc-900 dark:text-zinc-100">{fmtDateLong(info.getValue())}</span>,
+    }),
+    columnHelper.accessor("posted_videos", {
+      header: "Videos",
+      cell: (info) => <span className="tabular-nums text-orange-600">{info.getValue() || 0}</span>,
+    }),
+    columnHelper.accessor((row) => (usesLikesProxy ? row.likes : row.views), {
+      id: "views",
+      header: viewsLabel,
+      cell: (info) => <span className="tabular-nums text-sky-600">{fmtCompact(info.getValue())}</span>,
+    }),
+    columnHelper.accessor("likes", {
+      header: "Likes",
+      cell: (info) => <span className="tabular-nums text-pink-600">{fmtCompact(info.getValue())}</span>,
+    }),
+    columnHelper.accessor("comments", {
+      header: "Comments",
+      cell: (info) => <span className="tabular-nums text-emerald-600">{fmtCompact(info.getValue())}</span>,
+    }),
+    columnHelper.accessor("engagement_rate", {
+      header: "Engagement",
+      cell: (info) => <span className="tabular-nums font-semibold text-amber-700">{info.getValue() ?? 0}%</span>,
+    }),
+    columnHelper.accessor("followers", {
+      header: "Followers",
+      cell: (info) => <span className="tabular-nums text-zinc-700">{fmtCompact(info.getValue())}</span>,
+    }),
+  ], [usesLikesProxy, viewsLabel]);
+
   const maxTopVideoViews = topVideos[0]?.reach || 0;
   const maxTopAccountViews = topAccounts[0]?.reach || 0;
 
@@ -739,55 +840,14 @@ export default function AdminCreators() {
                   <p className="text-sm text-zinc-500 dark:text-zinc-400">All tracked posts with publish date (UTC), {viewsLabel.toLowerCase()}, likes, comments, shares, saves, and engagement.</p>
                 </div>
                 {recentVideos.length ? (
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[1100px] text-left text-sm">
-                      <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-950 dark:text-zinc-400">
-                        <tr>
-                          <th className="px-5 py-3 font-semibold">Post</th>
-                          <th className="px-5 py-3 font-semibold">Account</th>
-                          <th className="px-5 py-3 font-semibold">Date</th>
-                          <th className="px-5 py-3 font-semibold">{viewsLabel}</th>
-                          <th className="px-5 py-3 font-semibold">Likes</th>
-                          <th className="px-5 py-3 font-semibold">Comments</th>
-                          <th className="px-5 py-3 font-semibold">Shares</th>
-                          <th className="px-5 py-3 font-semibold">Saves</th>
-                          <th className="px-5 py-3 font-semibold">Engagement</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                        {recentVideos.map((video) => (
-                          <tr key={`${video.creator_id}-${video.video_id}`} className="transition hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
-                            <td className="px-5 py-3">
-                              <a
-                                href={video.url || undefined}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="flex min-w-[280px] items-center gap-3 text-zinc-900 hover:text-linkedin"
-                              >
-                                <div className="h-12 w-9 shrink-0 overflow-hidden rounded-md bg-zinc-900">
-                                  {video.cover_url ? (
-                                    <img src={video.cover_url} alt="" className="h-full w-full object-cover" />
-                                  ) : (
-                                    <div className="flex h-full w-full items-center justify-center text-white">
-                                      <Play className="h-4 w-4 fill-current" />
-                                    </div>
-                                  )}
-                                </div>
-                                <span className="line-clamp-2 font-medium">{truncateText(video.description || "Untitled video", 96)}</span>
-                              </a>
-                            </td>
-                            <td className="px-5 py-3 text-zinc-700">{video.creator_name || "Creator"}</td>
-                            <td className="px-5 py-3 text-zinc-600">{fmtPostedAt(video.posted_at)}</td>
-                            <td className="px-5 py-3 font-mono font-semibold text-sky-700">{fmtCompact(videoReachViews(video, usesLikesProxy))}</td>
-                            <td className="px-5 py-3 font-mono text-pink-600">{fmtCompact(video.likes)}</td>
-                            <td className="px-5 py-3 font-mono text-emerald-600">{fmtCompact(video.comments)}</td>
-                            <td className="px-5 py-3 font-mono text-violet-600">{fmtCompact(video.shares)}</td>
-                            <td className="px-5 py-3 font-mono text-amber-600">{fmtCompact(video.favorites)}</td>
-                            <td className="px-5 py-3 font-mono font-semibold text-amber-700">{videoEngagementRate(video, usesLikesProxy)}%</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div className="p-5">
+                    <AdminDataTable
+                      columns={postedVideoColumns}
+                      data={recentVideos}
+                      getRowId={(video) => `${video.creator_id}-${video.video_id}`}
+                      searchPlaceholder="Search by post description or account…"
+                      emptyMessage="No posts loaded yet."
+                    />
                   </div>
                 ) : (
                   <p className="px-5 py-8 text-sm text-zinc-500">No posts loaded yet. Click Refresh stats to fetch per-post metrics.</p>
@@ -857,33 +917,15 @@ export default function AdminCreators() {
                   <h2 className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">Daily breakdown</h2>
                   <p className="text-sm text-zinc-500 dark:text-zinc-400">One row per UTC day — posts counted by each video's published date, not refresh time.</p>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[900px] text-left text-sm">
-                    <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
-                      <tr>
-                        <th className="px-5 py-3 font-semibold">Date</th>
-                        <th className="px-5 py-3 font-semibold">Videos</th>
-                        <th className="px-5 py-3 font-semibold">{viewsLabel}</th>
-                        <th className="px-5 py-3 font-semibold">Likes</th>
-                        <th className="px-5 py-3 font-semibold">Comments</th>
-                        <th className="px-5 py-3 font-semibold">Engagement</th>
-                        <th className="px-5 py-3 font-semibold">Followers</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-100">
-                      {(data?.daily || []).slice().reverse().map((row) => (
-                        <tr key={row.date} className="transition hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
-                          <td className="px-5 py-3 font-medium text-zinc-900 dark:text-zinc-100">{fmtDateLong(row.date)}</td>
-                          <td className="px-5 py-3 tabular-nums text-orange-600">{row.posted_videos || 0}</td>
-                          <td className="px-5 py-3 tabular-nums text-sky-600">{fmtCompact(usesLikesProxy ? row.likes : row.views)}</td>
-                          <td className="px-5 py-3 tabular-nums text-pink-600">{fmtCompact(row.likes)}</td>
-                          <td className="px-5 py-3 tabular-nums text-emerald-600">{fmtCompact(row.comments)}</td>
-                          <td className="px-5 py-3 tabular-nums font-semibold text-amber-700">{row.engagement_rate ?? 0}%</td>
-                          <td className="px-5 py-3 tabular-nums text-zinc-700">{fmtCompact(row.followers)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="p-5">
+                  <AdminDataTable
+                    columns={dailyBreakdownColumns}
+                    data={data?.daily || []}
+                    getRowId={(row) => row.date}
+                    searchPlaceholder="Search by date…"
+                    emptyMessage="No daily data yet."
+                    initialSorting={[{ id: "date", desc: true }]}
+                  />
                 </div>
               </section>
 

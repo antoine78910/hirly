@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Copy, Link2, Loader2, RefreshCw, Sparkles } from "lucide-react";
+import { createColumnHelper } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import { adminApiErrorMessage } from "../lib/adminApi";
@@ -7,8 +8,25 @@ import { buildInviteUrl } from "../lib/creatorInvite";
 import { formatInviteClicked, formatInviteConnectedAccount, formatInviteStatus } from "../lib/adminInviteTracking";
 import { Button } from "../components/ui/button";
 import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
+import AdminDataTable from "../components/admin/AdminDataTable";
 
 const COURSE_ID = "course_job_search_mastery";
+
+const columnHelper = createColumnHelper();
+
+function getQuizSummaries(row) {
+  return row.quiz_summaries?.length
+    ? row.quiz_summaries
+    : Object.entries(row.quiz_results || {}).map(([quizId, qres]) => ({
+        quiz_id: quizId,
+        module_id: qres?.module_id,
+        score: qres?.score,
+        passed: qres?.passed,
+        attempts: qres?.attempts,
+        answers: qres?.answers,
+        submitted_at: qres?.submitted_at,
+      }));
+}
 
 const fmtDate = (value) => {
   if (!value) return "—";
@@ -94,6 +112,37 @@ function TrainingInvitesPanel() {
   const code = latestInvite?.code || "";
   const inviteUrl = code ? buildInviteUrl(code) : "";
 
+  const inviteColumns = useMemo(() => [
+    columnHelper.accessor("code", {
+      header: "Code",
+      cell: (info) => <span className="font-mono text-xs">{info.getValue()}</span>,
+    }),
+    columnHelper.accessor((row) => row.label || row.email_hint || "—", {
+      id: "label",
+      header: "Label",
+    }),
+    columnHelper.accessor((row) => (row.created_at ? new Date(row.created_at).getTime() : 0), {
+      id: "created_at",
+      header: "Created",
+      cell: (info) => fmtDate(info.row.original.created_at),
+    }),
+    columnHelper.accessor((row) => formatInviteClicked(row, fmtDate), {
+      id: "clicked",
+      header: "Link opened",
+      enableSorting: false,
+    }),
+    columnHelper.accessor((row) => formatInviteConnectedAccount(row), {
+      id: "connected_account",
+      header: "Connected account",
+      enableSorting: false,
+    }),
+    columnHelper.accessor((row) => formatInviteStatus(row), {
+      id: "status",
+      header: "Status",
+      enableSorting: false,
+    }),
+  ], []);
+
   return (
     <section className="rounded-xl border border-zinc-200 bg-white shadow-sm">
       <div className="border-b border-zinc-100 px-5 py-4">
@@ -162,36 +211,15 @@ function TrainingInvitesPanel() {
           </div>
         ) : null}
 
-        {loading ? (
-          <p className="text-sm text-zinc-500">Loading recent invitations…</p>
-        ) : invites.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b border-zinc-100 text-left text-xs uppercase tracking-wide text-zinc-500">
-                  <th className="py-2 pr-4">Code</th>
-                  <th className="py-2 pr-4">Label</th>
-                  <th className="py-2 pr-4">Created</th>
-                  <th className="py-2 pr-4">Link opened</th>
-                  <th className="py-2 pr-4">Connected account</th>
-                  <th className="py-2">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {invites.slice(0, 8).map((row) => (
-                  <tr key={row.invite_id || row.code} className="border-b border-zinc-50">
-                    <td className="py-2 pr-4 font-mono text-xs">{row.code}</td>
-                    <td className="py-2 pr-4 text-zinc-600">{row.label || row.email_hint || "—"}</td>
-                    <td className="py-2 pr-4 text-zinc-500">{fmtDate(row.created_at)}</td>
-                    <td className="py-2 pr-4 text-zinc-600">{formatInviteClicked(row, fmtDate)}</td>
-                    <td className="py-2 pr-4 text-zinc-700">{formatInviteConnectedAccount(row)}</td>
-                    <td className="py-2 text-zinc-600">{formatInviteStatus(row)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
+        <AdminDataTable
+          columns={inviteColumns}
+          data={invites}
+          loading={loading}
+          getRowId={(row) => row.invite_id || row.code}
+          searchPlaceholder="Search training invites…"
+          emptyMessage="No training invitations yet."
+          initialSorting={[{ id: "created_at", desc: true }]}
+        />
       </div>
     </section>
   );
@@ -244,6 +272,137 @@ export default function AdminTraining() {
     [moduleStats],
   );
 
+  const moduleColumns = useMemo(() => [
+    columnHelper.accessor("title", {
+      header: "Module",
+      cell: (info) => <span className="font-medium text-zinc-800">{info.getValue()}</span>,
+    }),
+    columnHelper.accessor("completed_count", {
+      header: "Completed",
+      cell: (info) => {
+        const mod = info.row.original;
+        return (
+          <>
+            {mod.completed_count}
+            <span className="text-zinc-400"> ({mod.completion_rate_percent}%)</span>
+          </>
+        );
+      },
+    }),
+    columnHelper.accessor("quiz_pass_count", {
+      header: "Quiz pass",
+      cell: (info) => {
+        const mod = info.row.original;
+        return (
+          <>
+            {mod.quiz_pass_count}
+            <span className="text-zinc-400"> ({mod.quiz_pass_rate_percent}%)</span>
+          </>
+        );
+      },
+    }),
+    columnHelper.accessor((row) => row.stopped_here_count || 0, {
+      id: "stopped_here",
+      header: "Stopped here",
+      cell: (info) => {
+        const value = info.getValue();
+        return (
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-24 overflow-hidden rounded-full bg-zinc-100">
+              <div
+                className="h-full rounded-full bg-violet-500"
+                style={{ width: `${(value / maxStopped) * 100}%` }}
+              />
+            </div>
+            <span className="text-zinc-600">{value}</span>
+          </div>
+        );
+      },
+    }),
+  ], [maxStopped]);
+
+  const learnerColumns = useMemo(() => [
+    columnHelper.accessor((row) => `${row.name || ""} ${row.email || ""} ${row.user_id || ""}`, {
+      id: "user",
+      header: "User",
+      cell: (info) => {
+        const row = info.row.original;
+        return (
+          <>
+            <p className="font-medium text-zinc-800">{row.name || row.email || row.user_id}</p>
+            {row.email ? <p className="text-xs text-zinc-500">{row.email}</p> : null}
+          </>
+        );
+      },
+    }),
+    columnHelper.accessor((row) => row.progress_percent ?? 0, {
+      id: "progress",
+      header: "Progress",
+      cell: (info) => `${info.getValue()}%`,
+    }),
+    columnHelper.accessor((row) => (row.last_module_id ? (moduleTitleById[row.last_module_id] || row.last_module_id) : "—"), {
+      id: "last_module",
+      header: "Last module",
+      cell: (info) => {
+        const row = info.row.original;
+        return (
+          <>
+            {info.getValue()}
+            {row.last_section_id ? <span className="block text-xs text-zinc-400">{row.last_section_id}</span> : null}
+          </>
+        );
+      },
+    }),
+    columnHelper.accessor((row) => getQuizSummaries(row).filter((q) => q.passed).length, {
+      id: "quizzes",
+      header: "Quizzes",
+      cell: (info) => {
+        const row = info.row.original;
+        const quizSummaries = getQuizSummaries(row);
+        const passedQuizzes = info.getValue();
+        return (
+          <>
+            <p className="font-medium">{passedQuizzes} passed</p>
+            {quizSummaries.length === 0 ? (
+              <p className="text-xs text-zinc-400">No quiz attempts yet</p>
+            ) : (
+              <ul className="mt-2 space-y-2 text-xs">
+                {quizSummaries.map((quiz) => (
+                  <li
+                    key={`${row.user_id}-${quiz.quiz_id}`}
+                    className="rounded-md border border-zinc-100 bg-zinc-50 px-2 py-1.5"
+                  >
+                    <p className="font-medium text-zinc-700">
+                      {moduleTitleById[quiz.module_id] || quiz.module_id || quiz.quiz_id}
+                      {" · "}
+                      <span className={quiz.passed ? "text-emerald-700" : "text-amber-700"}>
+                        {quiz.passed ? "Passed" : "Not passed"}
+                      </span>
+                      {typeof quiz.score === "number" ? ` (${quiz.score}%)` : ""}
+                    </p>
+                    {quiz.answers && Object.keys(quiz.answers).length > 0 ? (
+                      <p className="mt-1 text-zinc-500">
+                        Answers:{" "}
+                        {Object.entries(quiz.answers)
+                          .map(([questionId, choiceId]) => `${questionId}=${choiceId}`)
+                          .join(", ")}
+                      </p>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        );
+      },
+    }),
+    columnHelper.accessor((row) => (row.updated_at ? new Date(row.updated_at).getTime() : 0), {
+      id: "updated_at",
+      header: "Updated",
+      cell: (info) => fmtDate(info.row.original.updated_at),
+    }),
+  ], [moduleTitleById]);
+
   return (
     <AdminShell
       title="Training"
@@ -292,43 +451,14 @@ export default function AdminTraining() {
                   <h2 className="font-display text-lg font-bold">Module funnel</h2>
                   <p className="text-sm text-zinc-500">Completion rate and where learners last stopped</p>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-zinc-100 bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
-                        <th className="px-5 py-3">Module</th>
-                        <th className="px-5 py-3">Completed</th>
-                        <th className="px-5 py-3">Quiz pass</th>
-                        <th className="px-5 py-3">Stopped here</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {moduleStats.map((mod) => (
-                        <tr key={mod.module_id} className="border-b border-zinc-50">
-                          <td className="px-5 py-3 font-medium text-zinc-800">{mod.title}</td>
-                          <td className="px-5 py-3 text-zinc-600">
-                            {mod.completed_count}
-                            <span className="text-zinc-400"> ({mod.completion_rate_percent}%)</span>
-                          </td>
-                          <td className="px-5 py-3 text-zinc-600">
-                            {mod.quiz_pass_count}
-                            <span className="text-zinc-400"> ({mod.quiz_pass_rate_percent}%)</span>
-                          </td>
-                          <td className="px-5 py-3">
-                            <div className="flex items-center gap-2">
-                              <div className="h-2 w-24 overflow-hidden rounded-full bg-zinc-100">
-                                <div
-                                  className="h-full rounded-full bg-violet-500"
-                                  style={{ width: `${((mod.stopped_here_count || 0) / maxStopped) * 100}%` }}
-                                />
-                              </div>
-                              <span className="text-zinc-600">{mod.stopped_here_count ?? 0}</span>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="px-5 py-4">
+                  <AdminDataTable
+                    columns={moduleColumns}
+                    data={moduleStats}
+                    getRowId={(row) => row.module_id}
+                    searchPlaceholder="Search modules…"
+                    emptyMessage="No module data yet."
+                  />
                 </div>
               </section>
 
@@ -337,93 +467,15 @@ export default function AdminTraining() {
                   <h2 className="font-display text-lg font-bold">Learners</h2>
                   <p className="text-sm text-zinc-500">Progress, last position, and quiz results</p>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-zinc-100 bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
-                        <th className="px-5 py-3">User</th>
-                        <th className="px-5 py-3">Progress</th>
-                        <th className="px-5 py-3">Last module</th>
-                        <th className="px-5 py-3">Quizzes</th>
-                        <th className="px-5 py-3">Updated</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {learners.length === 0 ? (
-                        <tr>
-                          <td colSpan={5} className="px-5 py-8 text-center text-zinc-500">
-                            No enrollments yet
-                          </td>
-                        </tr>
-                      ) : (
-                        learners.map((row) => {
-                          const quizSummaries = row.quiz_summaries?.length
-                            ? row.quiz_summaries
-                            : Object.entries(row.quiz_results || {}).map(([quizId, qres]) => ({
-                                quiz_id: quizId,
-                                module_id: qres?.module_id,
-                                score: qres?.score,
-                                passed: qres?.passed,
-                                attempts: qres?.attempts,
-                                answers: qres?.answers,
-                                submitted_at: qres?.submitted_at,
-                              }));
-                          const passedQuizzes = quizSummaries.filter((q) => q.passed).length;
-                          const lastModuleLabel = row.last_module_id
-                            ? (moduleTitleById[row.last_module_id] || row.last_module_id)
-                            : "—";
-                          return (
-                            <tr key={row.user_id} className="border-b border-zinc-50 align-top">
-                              <td className="px-5 py-3">
-                                <p className="font-medium text-zinc-800">{row.name || row.email || row.user_id}</p>
-                                {row.email ? <p className="text-xs text-zinc-500">{row.email}</p> : null}
-                              </td>
-                              <td className="px-5 py-3 text-zinc-600">{row.progress_percent ?? 0}%</td>
-                              <td className="px-5 py-3 text-zinc-600">
-                                {lastModuleLabel}
-                                {row.last_section_id ? (
-                                  <span className="block text-xs text-zinc-400">{row.last_section_id}</span>
-                                ) : null}
-                              </td>
-                              <td className="px-5 py-3 text-zinc-600">
-                                <p className="font-medium">{passedQuizzes} passed</p>
-                                {quizSummaries.length === 0 ? (
-                                  <p className="text-xs text-zinc-400">No quiz attempts yet</p>
-                                ) : (
-                                  <ul className="mt-2 space-y-2 text-xs">
-                                    {quizSummaries.map((quiz) => (
-                                      <li
-                                        key={`${row.user_id}-${quiz.quiz_id}`}
-                                        className="rounded-md border border-zinc-100 bg-zinc-50 px-2 py-1.5"
-                                      >
-                                        <p className="font-medium text-zinc-700">
-                                          {moduleTitleById[quiz.module_id] || quiz.module_id || quiz.quiz_id}
-                                          {" · "}
-                                          <span className={quiz.passed ? "text-emerald-700" : "text-amber-700"}>
-                                            {quiz.passed ? "Passed" : "Not passed"}
-                                          </span>
-                                          {typeof quiz.score === "number" ? ` (${quiz.score}%)` : ""}
-                                        </p>
-                                        {quiz.answers && Object.keys(quiz.answers).length > 0 ? (
-                                          <p className="mt-1 text-zinc-500">
-                                            Answers:{" "}
-                                            {Object.entries(quiz.answers)
-                                              .map(([questionId, choiceId]) => `${questionId}=${choiceId}`)
-                                              .join(", ")}
-                                          </p>
-                                        ) : null}
-                                      </li>
-                                    ))}
-                                  </ul>
-                                )}
-                              </td>
-                              <td className="px-5 py-3 text-zinc-500">{fmtDate(row.updated_at)}</td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
+                <div className="px-5 py-4">
+                  <AdminDataTable
+                    columns={learnerColumns}
+                    data={learners}
+                    getRowId={(row) => row.user_id}
+                    searchPlaceholder="Search learners by name, email, or user ID…"
+                    emptyMessage="No enrollments yet"
+                    initialSorting={[{ id: "updated_at", desc: true }]}
+                  />
                 </div>
               </section>
             </>

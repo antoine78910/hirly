@@ -1,5 +1,7 @@
 import "@/App.css";
 import { BrowserRouter, Navigate, Routes, Route, useLocation } from "react-router-dom";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "@/lib/queryClient";
 import { Toaster } from "@/components/ui/sonner";
 import ImpersonationBanner from "@/components/ImpersonationBanner";
 import { AuthProvider } from "@/context/AuthContext";
@@ -248,22 +250,24 @@ function AppRouter() {
 function App() {
   return (
     <div className="App">
-      <AuthProvider>
-        <BrowserRouter>
-          <PostHogLifecycle />
-          <AppLocaleProvider>
-            <MobileThemeProvider>
-            <UpgradeModalProvider>
-              <AppErrorBoundary>
-                <AppRouter />
-              </AppErrorBoundary>
-            </UpgradeModalProvider>
-            </MobileThemeProvider>
-          </AppLocaleProvider>
-          <AdminToaster />
-          <ImpersonationBanner />
-        </BrowserRouter>
-      </AuthProvider>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <BrowserRouter>
+            <PostHogLifecycle />
+            <AppLocaleProvider>
+              <MobileThemeProvider>
+              <UpgradeModalProvider>
+                <AppErrorBoundary>
+                  <AppRouter />
+                </AppErrorBoundary>
+              </UpgradeModalProvider>
+              </MobileThemeProvider>
+            </AppLocaleProvider>
+            <AdminToaster />
+            <ImpersonationBanner />
+          </BrowserRouter>
+        </AuthProvider>
+      </QueryClientProvider>
     </div>
   );
 }
