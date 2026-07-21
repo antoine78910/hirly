@@ -18,7 +18,6 @@ import {
 } from "../ats-trial-transport";
 import {
   approveAtsInventoryShadowScope,
-  type AtsInventoryShadowPolicy,
 } from "../ats-inventory-readiness";
 
 const greenhouseIdSchema = z.union([z.string(), z.number()]).transform(String);
@@ -214,7 +213,7 @@ export function createApprovedGreenhouseShadowTransport(options: {
       budgets: options.budgets,
     }),
     productionShadowApproved: true as const,
-    policyId: (approval.policy as AtsInventoryShadowPolicy).policyId,
+    policyId: approval.policy.policyId,
     policyDigest: approval.policyDigest,
     countryCode: approval.countryCode,
   };

@@ -62,7 +62,7 @@ export class AtsShadowRefusal extends Error {
   readonly code = "ATS_SHADOW_REFUSED" as const;
 
   constructor(message: string, options?: ErrorOptions) {
-    super(message, options);
+    super(`ATS_SHADOW_REFUSED: ${message}`, options);
     this.name = "AtsShadowRefusal";
   }
 }
