@@ -57,6 +57,7 @@ def test_posthog_client_uses_7x_positional_project_key(monkeypatch):
         "kwargs": {
             "host": "https://eu.i.posthog.com",
             "enable_exception_autocapture": True,
+            "feature_flags_request_timeout_seconds": 0.25,
         },
     }
 
