@@ -699,7 +699,11 @@ describe("G015 release verification contract", () => {
       .update(canonicalTestJson(unsignedRun))
       .digest("hex");
     scorecard.runs[0] = await writeEvidence(evidenceRoot, "shadow/canonical-run.json", run);
-    input.shadowScorecard = await writeEvidence(evidenceRoot, "shadow/canonical-scorecard.json", scorecard);
+    const { evidenceDigest: _evidenceDigest, ...canonicalScorecard } = scorecard;
+    input.shadowScorecard = await writeEvidence(evidenceRoot, "shadow/canonical-scorecard.json", {
+      ...canonicalScorecard,
+      evidenceDigest: sha256(canonicalTestJson(canonicalScorecard)),
+    });
     expect(evaluateProviderActivationPreflight(input).status).toBe("PASS");
 
     const previous = process.env.ATS_SHADOW_EVIDENCE_HMAC_KEY;
@@ -717,17 +721,21 @@ describe("G015 release verification contract", () => {
       else process.env.ATS_SHADOW_EVIDENCE_HMAC_KEY = previous;
     }
 
-    for (const mutate of [
+    for (const [index, mutate] of [
       (value: any) => { delete value.signature; },
       (value: any) => { value.signature = "0".repeat(64); },
       (value: any) => { value.jobs[0].externalId = "tampered-job"; },
-    ]) {
+    ].entries()) {
       const changed = structuredClone(input);
       const changedScorecard = JSON.parse(await readFile(resolve(evidenceRoot, changed.shadowScorecard.path), "utf8"));
       const changedRun = JSON.parse(await readFile(resolve(evidenceRoot, changedScorecard.runs[0].path), "utf8"));
       mutate(changedRun);
-      changedScorecard.runs[0] = await writeEvidence(evidenceRoot, `shadow/rejected-${Math.random()}.json`, changedRun);
-      changed.shadowScorecard = await writeEvidence(evidenceRoot, `shadow/rejected-scorecard-${Math.random()}.json`, changedScorecard);
+      changedScorecard.runs[0] = await writeEvidence(evidenceRoot, `shadow/rejected-${index}.json`, changedRun);
+      const { evidenceDigest, ...unsignedScorecard } = changedScorecard;
+      changed.shadowScorecard = await writeEvidence(evidenceRoot, `shadow/rejected-scorecard-${index}.json`, {
+        ...unsignedScorecard,
+        evidenceDigest: sha256(canonicalTestJson(unsignedScorecard)),
+      });
       expect(evaluateProviderActivationPreflight(changed).status).toBe("BLOCKED");
     }
     expect(evaluateProviderActivationPreflightRaw(input, {
