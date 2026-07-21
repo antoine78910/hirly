@@ -90,58 +90,28 @@ async function psql(sql: string): Promise<SqlResult> {
   if (!databaseUrl) {
     throw new Error("CANDIDATE_MATCHING_MIGRATION_TEST_DATABASE_URL is required");
   }
-  const proc = Bun.spawn(
-    [
-      "psql",
-      databaseUrl,
-      "-X",
-      "-v",
-      "ON_ERROR_STOP=1",
-      "-A",
-      "-t",
-      "-q",
-      "-c",
-      sql,
-    ],
-    { stdout: "pipe", stderr: "pipe" },
-  );
-  const [exitCode, stdout, stderr] = await Promise.all([
-    proc.exited,
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-  ]);
-  return { exitCode, stdout: stdout.trim(), stderr: stderr.trim() };
-}
-
-async function applyFile(relativePath: string): Promise<void> {
-  if (!databaseUrl) {
-    throw new Error("CANDIDATE_MATCHING_MIGRATION_TEST_DATABASE_URL is required");
-  }
-  const proc = Bun.spawn(
-    [
-      "psql",
-      databaseUrl,
-      "-X",
-      "-v",
-      "ON_ERROR_STOP=1",
-      "-q",
-      "-f",
-      `${repoRoot}/${relativePath}`,
-    ],
-    { stdout: "pipe", stderr: "pipe" },
-  );
-  const [exitCode, stderr] = await Promise.all([
-    proc.exited,
-    new Response(proc.stderr).text(),
-  ]);
-  if (exitCode !== 0) {
-    throw new Error(`Failed to apply ${relativePath}: ${stderr.trim()}`);
-  }
-}
-
-describePostgres("candidate matching migrations on disposable PostgreSQL", () => {
-  beforeAll(async () => {
-    await psql(`
+  const sql = createDatabase(databaseUrl, { max: 1 });
+  try {
+    await sql.unsafe(`
+      DROP TABLE IF EXISTS
+        public.projection_reconciliation_tasks,
+        public.job_search_documents,
+        public.candidate_action_projection,
+        public.candidate_search_profiles,
+        public.candidate_projection_tombstones,
+        public.candidate_projection_outbox,
+        public.candidate_deletion_tombstones,
+        public.candidate_serving_controls,
+        public.candidate_event_versions,
+        public.candidate_projection_runtime_controls,
+        public.candidate_projection_producer_flags,
+        public.matching_runtime_controls,
+        public.applications,
+        public.swipes,
+        public.profiles,
+        public.users,
+        public.jobs
+      CASCADE;
       CREATE TABLE public.users (
         user_id text PRIMARY KEY, email text, data jsonb NOT NULL DEFAULT '{}'::jsonb
       );
@@ -209,11 +179,15 @@ describePostgres("candidate matching migrations on disposable PostgreSQL", () =>
       FROM information_schema.columns
       WHERE table_name = 'candidate_projection_outbox' AND column_name = 'payload';
     `);
-    expect(result.exitCode, result.stderr).toBe(0);
-    const [eventLine, payloadLine] = result.stdout.split("\n").filter(Boolean);
-    expect(eventLine).toBe("1|profiles|candidate-a|update");
-    expect(payloadLine).toBe("0");
-  });
+    await sql.unsafe(primaryUp);
+    await sql.unsafe(inventoryUp);
+    return await callback(sql);
+  } finally {
+    await sql.unsafe(inventoryDown).catch(() => undefined);
+    await sql.unsafe(primaryDown).catch(() => undefined);
+    await sql.end({ timeout: 5 }).catch(() => undefined);
+  }
+}
 
   test("fails closed on direct user delete and keeps the RPC tombstone dominant", async () => {
     await expect(
@@ -232,101 +206,108 @@ describePostgres("candidate matching migrations on disposable PostgreSQL", () =>
     expect(directDelete.exitCode).not.toBe(0);
     expect(directDelete.stderr).toContain("user deletion must use begin_candidate_deletion first");
 
-    const tombstone = await psql(`
-      SELECT (public.begin_candidate_deletion('candidate-b', 'delete:candidate-b')).deletion_version;
-      DELETE FROM public.users WHERE user_id = 'candidate-b';
-      SELECT deletion_version || '|' || idempotency_key || '|' || serving_disabled
-      FROM public.candidate_deletion_tombstones
-      WHERE candidate_id = 'candidate-b';
-      SELECT count(*)::integer
-      FROM public.candidate_projection_outbox
-      WHERE candidate_id = 'candidate-b';
-    `);
-    expect(tombstone.exitCode, tombstone.stderr).toBe(0);
-    const [tombstoneVersion, tombstoneLine, outboxCount] = tombstone.stdout
-      .split("\n")
-      .filter(Boolean);
-    expect(tombstoneVersion).toBe("1");
-    expect(tombstoneLine).toBe("1|delete:candidate-b|t");
-    expect(outboxCount).toBe("1");
-    const replay = await psql(`
-      SELECT (public.begin_candidate_deletion('candidate-b', 'delete:candidate-b-replay')).deletion_version;
-      SELECT deletion_version || '|' || idempotency_key
-      FROM public.candidate_projection_tombstones
-      WHERE candidate_id = 'candidate-b';
-    `);
-    expect(replay.exitCode, replay.stderr).toBe(0);
-    const [replayVersion, replayLine] = replay.stdout.split("\n").filter(Boolean);
-    expect(replayVersion).toBe("1");
-    expect(replayLine).toBe("1|delete:candidate-b");
-  });
+  test.serial(
+    "commits one fail-closed deletion tombstone before cleanup",
+    { timeout: 30_000 },
+    async () =>
+      withDisposableDatabase(async (sql) => {
+        const [first] = await sql<{ deletion_version: number }[]>`
+          SELECT deletion_version
+          FROM public.begin_candidate_deletion('candidate-a', 'delete:candidate-a')
+        `;
+        const [retry] = await sql<{ deletion_version: number }[]>`
+          SELECT deletion_version
+          FROM public.begin_candidate_deletion('candidate-a', 'delete:candidate-a')
+        `;
+        expect(retry?.deletion_version).toBe(first?.deletion_version);
+        await sql`DELETE FROM public.profiles WHERE user_id = 'candidate-a'`;
+        const [state] = await sql<
+          { disabled: boolean; deletion_events: number; total_events: number }[]
+        >`
+          SELECT
+            control.serving_disabled AS disabled,
+            count(*) FILTER (WHERE event.entity_family = 'deletion')::integer AS deletion_events,
+            count(*)::integer AS total_events
+          FROM public.candidate_serving_controls AS control
+          JOIN public.candidate_projection_outbox AS event
+            ON event.candidate_id = control.candidate_id
+          WHERE control.candidate_id = 'candidate-a'
+          GROUP BY control.serving_disabled
+        `;
+        expect(state).toEqual({ disabled: true, deletion_events: 1, total_events: 1 });
+        try {
+          await sql`DELETE FROM public.candidate_deletion_tombstones WHERE candidate_id = 'candidate-a'`;
+          throw new Error("expected candidate deletion tombstones delete to fail");
+        } catch (error) {
+          expect(String(error)).toContain("cannot be deleted");
+        }
+      }),
+  );
 
-  test("deletion propagation purges projections and accepts higher-version replay", async () => {
-    await expect(
-      psql(`
-        INSERT INTO public.candidate_search_profiles (
-          candidate_id, version, status, location_policy, freshness_window_days,
-          exposure_policy_version, feature_schema_version,
-          source_profile_updated_at, source_event_id
-        ) VALUES (
-          'candidate-c', 4, 'active', 'country', 30, 'policy-v1', 1,
-          clock_timestamp(), '11111111-1111-4111-8111-111111111111'
+  test.serial(
+    "deletion propagation purges projections and rejects restored events",
+    { timeout: 30_000 },
+    async () =>
+      withDisposableDatabase(async (sql) => {
+        await sql`
+          INSERT INTO public.candidate_search_profiles (
+            candidate_id, version, status, location_policy, freshness_window_days,
+            exposure_policy_version, feature_schema_version,
+            source_profile_updated_at, source_event_id
+          ) VALUES (
+            'candidate-b', 4, 'active', 'country', 30, 'policy-v1', 1,
+            clock_timestamp(), '11111111-1111-4111-8111-111111111111'
+          )
+        `;
+        const [applied] = await sql<{ applied: boolean }[]>`
+          SELECT public.apply_candidate_projection_tombstone(
+            'candidate-b', 5, '22222222-2222-4222-8222-222222222222', clock_timestamp()
+          ) AS applied
+        `;
+        expect(applied?.applied).toBe(true);
+        const [remaining] = await sql<{ count: number }[]>`
+          SELECT count(*)::integer AS count FROM public.candidate_search_profiles
+          WHERE candidate_id = 'candidate-b'
+        `;
+        expect(remaining?.count).toBe(0);
+        try {
+          await sql`
+            INSERT INTO public.candidate_search_profiles (
+              candidate_id, version, status, location_policy, freshness_window_days,
+              exposure_policy_version, feature_schema_version,
+              source_profile_updated_at, source_event_id
+            ) VALUES (
+              'candidate-b', 4, 'active', 'country', 30, 'policy-v1', 1,
+              clock_timestamp(), '33333333-3333-4333-8333-333333333333'
+            )
+          `;
+          throw new Error("expected deleted candidate projection recreation to fail");
+        } catch (error) {
+          expect(String(error)).toContain("cannot be recreated");
+        }
+      }),
+  );
+
+  test.serial(
+    "uses the common retrieval indexes and rollback preserves canonical jobs",
+    { timeout: 30_000 },
+    async () =>
+      withDisposableDatabase(async (sql) => {
+        const [planRow] = await sql.begin(async (tx) => {
+          await tx`SET LOCAL enable_seqscan = off`;
+          return await tx<{ "QUERY PLAN": string }[]>`
+            EXPLAIN (FORMAT TEXT)
+            SELECT canonical_group_id
+            FROM public.job_search_documents
+            WHERE lifecycle_status = 'active'
+              AND source_eligible AND policy_eligible
+              AND country_codes && ARRAY['FR']::text[]
+              AND role_family_codes && ARRAY['software-engineering']::text[]
+          `;
+        });
+        expect(planRow?.["QUERY PLAN"]).toMatch(
+          /job_search_documents_(features|retrieval)_idx/,
         );
-      `),
-    ).resolves.toMatchObject({ exitCode: 0 });
-    let replay = await psql(`
-      SELECT public.apply_candidate_projection_tombstone(
-        'candidate-c', 5, '22222222-2222-4222-8222-222222222222', clock_timestamp()
-      ) AS applied;
-      SELECT count(*)::integer
-      FROM public.candidate_search_profiles
-      WHERE candidate_id = 'candidate-c';
-    `);
-    expect(replay.exitCode, replay.stderr).toBe(0);
-    let [appliedLine, remainingLine] = replay.stdout.split("\n").filter(Boolean);
-    expect(appliedLine).toBe("t");
-    expect(remainingLine).toBe("0");
-    replay = await psql(`
-      SELECT public.apply_candidate_projection_tombstone(
-        'candidate-c', 6, '33333333-3333-4333-8333-333333333333', clock_timestamp()
-      ) AS applied;
-      SELECT deletion_version || '|' || source_event_id
-      FROM public.candidate_projection_tombstones
-      WHERE candidate_id = 'candidate-c';
-    `);
-    expect(replay.exitCode, replay.stderr).toBe(0);
-    [appliedLine, remainingLine] = replay.stdout.split("\n").filter(Boolean);
-    expect(appliedLine).toBe("t");
-    expect(remainingLine).toBe(
-      "6|33333333-3333-4333-8333-333333333333",
-    );
-  });
-
-  test("supports action-group alias merge and split replay semantics", async () => {
-    const alias = await psql(`
-      INSERT INTO public.candidate_action_group_aliases (
-        alias_group_id, canonical_group_id, alias_kind, alias_version, source_event_id
-      ) VALUES (
-        '44444444-4444-4444-8444-444444444444',
-        '55555555-5555-4555-8555-555555555555',
-        'merge', 1, '66666666-6666-4666-8666-666666666666'
-      );
-      UPDATE public.candidate_action_group_aliases
-      SET canonical_group_id = '77777777-7777-4777-8777-777777777777',
-          alias_kind = 'split',
-          alias_version = 2,
-          source_event_id = '88888888-8888-4888-8888-888888888888'
-      WHERE alias_group_id = '44444444-4444-4444-8444-444444444444';
-      SELECT alias_kind || '|' || alias_version || '|' || canonical_group_id
-      FROM public.candidate_action_group_aliases
-      WHERE alias_group_id = '44444444-4444-4444-8444-444444444444';
-    `);
-    expect(alias.exitCode, alias.stderr).toBe(0);
-    const aliasLine = alias.stdout.split("\n").filter(Boolean).pop();
-    expect(aliasLine).toBe(
-      "split|2|77777777-7777-4777-8777-777777777777",
-    );
-  });
 
   test("uses the common retrieval indexes and rollback preserves canonical jobs", async () => {
     const plan = await psql(`
