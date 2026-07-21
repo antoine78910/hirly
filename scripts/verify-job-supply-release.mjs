@@ -385,7 +385,11 @@ export function disposableDatabaseUrlsFromEnvironment(environment = process.env)
   return urls;
 }
 
-export function provisionDisposableDatabases(urls = disposableDatabaseUrlsFromEnvironment()) {
+export function provisionDisposableDatabases(
+  urls = disposableDatabaseUrlsFromEnvironment(),
+  dependencies = {},
+) {
+  const executePsql = dependencies.psql ?? psql;
   const created = [];
   try {
     for (const databaseUrl of urls) {
@@ -394,16 +398,16 @@ export function provisionDisposableDatabases(urls = disposableDatabaseUrlsFromEn
         throw new Error(`refusing to provision an unrecognized database: ${name}`);
       }
       const maintenanceUrl = maintenanceDatabaseUrl(databaseUrl);
-      const exists = psql(
+      const exists = executePsql(
         maintenanceUrl,
         `SELECT count(*) FROM pg_database WHERE datname = ${sqlLiteral(name)};`,
       ).stdout.trim();
       if (exists !== "0") {
         throw new Error(`refusing to reuse existing disposable database: ${name}`);
       }
-      psql(maintenanceUrl, `CREATE DATABASE ${sqlIdentifier(name)} TEMPLATE template0;`);
+      executePsql(maintenanceUrl, `CREATE DATABASE ${sqlIdentifier(name)} TEMPLATE template0;`);
       created.push(databaseUrl);
-      const empty = psql(
+      const empty = executePsql(
         databaseUrl,
         `SELECT count(*) FROM pg_class c
          JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -416,7 +420,7 @@ export function provisionDisposableDatabases(urls = disposableDatabaseUrlsFromEn
       }
     }
   } catch (error) {
-    cleanupDisposableDatabases(created);
+    cleanupDisposableDatabases(created, { psql: executePsql });
     throw error;
   }
   return {
@@ -427,7 +431,11 @@ export function provisionDisposableDatabases(urls = disposableDatabaseUrlsFromEn
   };
 }
 
-export function cleanupDisposableDatabases(urls = disposableDatabaseUrlsFromEnvironment()) {
+export function cleanupDisposableDatabases(
+  urls = disposableDatabaseUrlsFromEnvironment(),
+  dependencies = {},
+) {
+  const executePsql = dependencies.psql ?? psql;
   const results = [];
   for (const databaseUrl of urls) {
     assertDisposableDatabase(databaseUrl, true);
@@ -436,12 +444,12 @@ export function cleanupDisposableDatabases(urls = disposableDatabaseUrlsFromEnvi
       throw new Error(`refusing to clean an unrecognized database: ${name}`);
     }
     const maintenanceUrl = maintenanceDatabaseUrl(databaseUrl);
-    psql(
+    executePsql(
       maintenanceUrl,
       `SELECT pg_terminate_backend(pid) FROM pg_stat_activity
        WHERE datname = ${sqlLiteral(name)} AND pid <> pg_backend_pid();`,
     );
-    const result = psql(
+    const result = executePsql(
       maintenanceUrl,
       `DROP DATABASE IF EXISTS ${sqlIdentifier(name)};`,
       { allowFailure: true },
@@ -449,6 +457,27 @@ export function cleanupDisposableDatabases(urls = disposableDatabaseUrlsFromEnvi
     results.push({ database: name, dropped: result.status === 0 });
   }
   return results;
+}
+
+export function successfullyCreatedDatabaseUrls(result, plannedUrls) {
+  if (result.status !== 0) return [];
+  const proof = JSON.parse(String(result.stdout ?? "").trim());
+  if (!Array.isArray(proof.databases)) {
+    throw new Error("PostgreSQL provisioning proof must list created databases");
+  }
+  const plannedByName = new Map(
+    plannedUrls.map((url) => [databaseName(url), url]),
+  );
+  if (new Set(proof.databases).size !== proof.databases.length) {
+    throw new Error("PostgreSQL provisioning proof contains duplicate databases");
+  }
+  return proof.databases.map((name) => {
+    const url = plannedByName.get(name);
+    if (!url) {
+      throw new Error(`PostgreSQL provisioning proof contains an unplanned database: ${name}`);
+    }
+    return url;
+  });
 }
 
 export function verifyPostMigrationDisabledState(
@@ -1686,7 +1715,7 @@ function run(plan) {
   const startedAt = new Date();
   const initial = repositoryAttestation();
   const results = [];
-  let databaseProvisionAttempted = false;
+  let createdDatabaseUrls = [];
   let dockerBuildAttempted = false;
   const expectedHead = plan.expectedHead ?? process.env.G015_EXPECTED_HEAD;
   if (expectedHead && !/^[0-9a-f]{40}$/i.test(expectedHead)) throw new Error("--expected-head must be a 40-character commit SHA");
@@ -1698,9 +1727,14 @@ function run(plan) {
     for (const item of plan.commands) {
       const commandStartedAt = Date.now();
       process.stdout.write(`\n[release:${item.id}] ${item.executable} ${item.args.join(" ")}\n`);
-      if (item.id === "postgres-provision") databaseProvisionAttempted = true;
       if (item.id === "worker-docker-build") dockerBuildAttempted = true;
       const result = executeCommand(item);
+      if (item.id === "postgres-provision") {
+        createdDatabaseUrls = successfullyCreatedDatabaseUrls(
+          result,
+          Object.values(plan.databaseUrls ?? {}),
+        );
+      }
       results.push({
         id: item.id,
         status: result.status === 0 ? "passed" : "failed",
@@ -1716,8 +1750,8 @@ function run(plan) {
     }
   }
   const cleanup = {
-    database: databaseProvisionAttempted
-      ? attemptDatabaseCleanup(plan.databaseUrls)
+    database: createdDatabaseUrls.length
+      ? attemptDatabaseCleanup(createdDatabaseUrls)
       : null,
     docker: dockerBuildAttempted ? attemptDockerCleanup(plan.dockerTag) : null,
   };
