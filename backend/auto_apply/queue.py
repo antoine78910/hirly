@@ -157,6 +157,19 @@ def answer_set_digest(answers: Any) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def reviewed_transport_for_job(provider: str, job: Optional[Dict[str, Any]]) -> Optional[str]:
+    """Derive transport authority from the validated job URL, never assertions."""
+    if provider != "greenhouse" or not job:
+        return None
+    from .drivers.greenhouse import _trusted_greenhouse_url
+
+    driver = DRIVER_REGISTRY.for_job(job)
+    application_url = driver.application_url(job) if driver is not None else ""
+    if _trusted_greenhouse_url(application_url):
+        return "hosted_candidate_form"
+    return None
+
+
 def submission_policy_failure(
     app_doc: Dict[str, Any],
     job: Optional[Dict[str, Any]],
@@ -203,6 +216,12 @@ def submission_policy_failure(
     reviewed = _REVIEWED_ROUTE_TRANSPORTS.get(provider)
     if reviewed is not None and str(route.get("transport")) not in reviewed:
         return "submission_route_transport_denied"
+    if reviewed is not None:
+        derived_transport = reviewed_transport_for_job(provider, job)
+        if derived_transport is None:
+            return "submission_route_url_denied"
+        if str(route.get("transport")) != derived_transport:
+            return "submission_route_transport_mismatch"
     if policy.get("enabled") is not True or policy.get("revoked") is True:
         return "submission_policy_inactive"
     if any(str(policy.get(key) or "") != str(route.get(key) or "") for key in _ROUTE_FIELDS):

@@ -129,7 +129,11 @@ def test_greenhouse_policy_accepts_only_reviewed_hosted_form_transport():
         "job_id": "j1",
         "ats_provider": "greenhouse",
     }, provider="greenhouse")
-    job = {"job_id": "j1", "ats_provider": "greenhouse"}
+    job = {
+        "job_id": "j1",
+        "ats_provider": "greenhouse",
+        "selected_apply_url": "https://boards.greenhouse.io/acme/jobs/1",
+    }
 
     assert q.submission_policy_failure(app, job, user_id="u1") is None
     for transport in ("public_candidate_api", "credentialed_employer_api"):
@@ -139,6 +143,27 @@ def test_greenhouse_policy_accepts_only_reviewed_hosted_form_transport():
             q.submission_policy_failure(app, job, user_id="u1")
             == "submission_route_transport_denied"
         )
+
+
+def test_greenhouse_transport_is_derived_from_reviewed_application_url():
+    app = _authorized({
+        "application_id": "app_greenhouse_url",
+        "user_id": "u1",
+        "job_id": "j1",
+        "ats_provider": "greenhouse",
+    }, provider="greenhouse")
+    for denied_url in (
+        "https://support.greenhouse.io/acme/jobs/1",
+        "https://api.greenhouse.io/acme/jobs/1",
+        "https://boards.greenhouse.io/acme/support/1",
+        "https://evil.example/acme/jobs/1",
+    ):
+        job = {
+            "job_id": "j1",
+            "ats_provider": "greenhouse",
+            "selected_apply_url": denied_url,
+        }
+        assert q.submission_policy_failure(app, job, user_id="u1") == "submission_route_url_denied"
 
 
 def test_driverless_provider_policy_cannot_authorize_or_enqueue():

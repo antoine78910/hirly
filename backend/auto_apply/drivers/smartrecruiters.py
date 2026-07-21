@@ -41,6 +41,7 @@ from job_providers.ats_adapters.smartrecruiters import SmartRecruitersAtsAdapter
 
 from ..driver import DRIVER_REGISTRY, BrowserApplyDriver
 from ..models import SubmissionContext, SubmissionEvidence, compute_blueprint_signature
+from ._html_forms import guarded_get
 
 logger = logging.getLogger(__name__)
 
@@ -247,7 +248,22 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
         posting_id = job.get("provider_job_id") or self._adapter.extract_posting_id_from_url(posting_url)
         if company and posting_id:
             try:
-                detail = await self._adapter.fetch_posting_detail(str(company), str(posting_id))
+                detail_url = (
+                    f"{self._adapter.base_url}/companies/{company}/postings/{posting_id}"
+                )
+                async with httpx.AsyncClient(
+                    timeout=self._adapter.timeout,
+                    follow_redirects=False,
+                ) as client:
+                    detail_response = await guarded_get(
+                        client,
+                        detail_url,
+                        provider=self.provider,
+                        headers={"Accept": "application/json"},
+                    )
+                    detail_response.raise_for_status()
+                    raw_detail = detail_response.json()
+                    detail = raw_detail if isinstance(raw_detail, dict) else {}
                 pub_uuid = str(detail.get("uuid") or "").strip()
                 if pub_uuid:
                     return {"company": company, "publication_uuid": pub_uuid}
@@ -256,8 +272,13 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
 
         if posting_url:
             try:
-                async with httpx.AsyncClient(timeout=12) as client:
-                    resp = await client.get(posting_url, headers={"User-Agent": "Mozilla/5.0"}, follow_redirects=True)
+                async with httpx.AsyncClient(timeout=12, follow_redirects=False) as client:
+                    resp = await guarded_get(
+                        client,
+                        posting_url,
+                        provider=self.provider,
+                        headers={"User-Agent": "Mozilla/5.0"},
+                    )
                     resp.raise_for_status()
                     parsed = _parse_oneclick_data(resp.text)
                     if parsed.get("company") and parsed.get("publication_uuid"):
@@ -289,16 +310,17 @@ class SmartRecruitersApplyDriver(BrowserApplyDriver):
 
         extra_fields: List[NormalizedField] = []
         try:
-            async with httpx.AsyncClient(timeout=15) as client:
-                resp = await client.get(
+            async with httpx.AsyncClient(timeout=15, follow_redirects=False) as client:
+                resp = await guarded_get(
+                    client,
                     _CONFIG_URL.format(company=company, uuid=pub_uuid),
+                    provider=self.provider,
                     headers={
                         "Accept": "application/json",
                         "User-Agent": "Mozilla/5.0",
                         "Referer": oneclick,
                         "Origin": "https://jobs.smartrecruiters.com",
                     },
-                    follow_redirects=True,
                 )
                 if resp.status_code == 200 and "json" in resp.headers.get("content-type", ""):
                     extra_fields = _fields_from_configuration(resp.json())

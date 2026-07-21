@@ -13,7 +13,7 @@ ApplicationBlueprint (and therefore the same blueprint signature).
 from __future__ import annotations
 
 from typing import Any, Dict, List
-from urllib.parse import urlparse
+from urllib.parse import unquote_to_bytes, urlparse
 
 from application_blueprint import (
     ApplicationBlueprint, FieldType, FieldValidation, NormalizedField,
@@ -57,6 +57,12 @@ _WIDGET_MAP = {
 }
 _SUPPORTED_WIDGETS = {"input_text", "textarea", "input_file",
                       "multi_value_single_select", "multi_value_multi_select"}
+_REVIEWED_APPLICATION_HOSTS = frozenset({
+    "boards.greenhouse.io",
+    "job-boards.greenhouse.io",
+    "boards.greenhouse.com",
+    "job-boards.greenhouse.com",
+})
 
 
 def _classify_field(name: str, label: str, widget: str) -> FieldType:
@@ -117,17 +123,24 @@ def _trusted_greenhouse_url(value: Any) -> bool:
         port = parsed.port
     except ValueError:
         return False
-    return bool(
+    if not (
         parsed.scheme == "https"
-        and hostname
+        and hostname in _REVIEWED_APPLICATION_HOSTS
         and parsed.username is None
         and parsed.password is None
         and port in (None, 443)
-        and any(
-            hostname == suffix or hostname.endswith(f".{suffix}")
-            for suffix in ("greenhouse.io", "greenhouse.com")
-        )
-    )
+        and not parsed.fragment
+    ):
+        return False
+    try:
+        parts = [
+            unquote_to_bytes(part).decode("utf-8").lower()
+            for part in parsed.path.split("/")
+            if part
+        ]
+    except (UnicodeDecodeError, ValueError):
+        return False
+    return "jobs" in parts and parts.index("jobs") + 1 < len(parts)
 
 
 def _job_http_url(job: Dict[str, Any], *keys: str) -> str:
@@ -171,8 +184,14 @@ class GreenhouseApplyDriver(BrowserApplyDriver):
         if not token or not job_id:
             raise ValueError("greenhouse_board_or_job_unresolved")
         url = f"{self._adapter.base_url}/{token}/jobs/{job_id}"
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(url, params={"questions": "true"})
+        from ._html_forms import guarded_get
+        async with httpx.AsyncClient(timeout=15, follow_redirects=False) as client:
+            resp = await guarded_get(
+                client,
+                url,
+                provider=self.provider,
+                params={"questions": "true"},
+            )
             resp.raise_for_status()
             payload = resp.json()
         return _blueprint_from_questions(payload)

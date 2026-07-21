@@ -93,6 +93,10 @@ def test_trusted_greenhouse_url_accepts_only_canonical_https_hosts():
         "https://user@boards.greenhouse.io/acme/jobs/1",
         "https://boards.greenhouse.io:8443/acme/jobs/1",
         "https://boards.greenhouse.io:not-a-port/acme/jobs/1",
+        "https://support.greenhouse.io/acme/jobs/1",
+        "https://api.greenhouse.io/acme/jobs/1",
+        "https://boards-api.greenhouse.io/acme/jobs/1",
+        "https://boards.greenhouse.io/acme/support/1",
     ):
         assert _trusted_greenhouse_url(value) is False
 

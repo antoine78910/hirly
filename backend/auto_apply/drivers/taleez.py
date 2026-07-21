@@ -101,13 +101,16 @@ class TaleezApplyDriver(BrowserApplyDriver):
         url = self.application_url(job)
         try:
             from ._html_forms import fetch_html
-            html = await fetch_html(url)
+            html = await fetch_html(url, provider=self.provider)
             # Prefer the apply form URL if listing page
             if html and "app-apply-form" not in html and "/apply/" not in url:
                 m = re.search(r'href="([^"]*/apply/[^"]+)"', html)
                 if m:
                     from urllib.parse import urljoin
-                    html = await fetch_html(urljoin(url, m.group(1)))
+                    html = await fetch_html(
+                        urljoin(url, m.group(1)),
+                        provider=self.provider,
+                    )
             if html:
                 custom = _parse_custom_questions(html)
                 known = {f.key for f in fields}

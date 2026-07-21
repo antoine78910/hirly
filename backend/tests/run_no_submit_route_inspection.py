@@ -29,6 +29,7 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 import auto_apply.drivers  # noqa: E402,F401 - registers the inspected drivers
+from auto_apply.drivers._html_forms import NETWORK_ROUTE_VALIDATOR  # noqa: E402
 from auto_apply.classifier import classify  # noqa: E402
 from auto_apply.driver import DRIVER_REGISTRY  # noqa: E402
 from auto_apply.models import compute_blueprint_signature  # noqa: E402
@@ -58,6 +59,12 @@ ALLOWED_HOST_SUFFIXES: Mapping[str, tuple[str, ...]] = {
     "recruitee": ("recruitee.com",),
     "nicoka": ("nicoka.com",),
 }
+GREENHOUSE_APPLICATION_HOSTS = frozenset({
+    "boards.greenhouse.io",
+    "job-boards.greenhouse.io",
+    "boards.greenhouse.com",
+    "job-boards.greenhouse.com",
+})
 
 _IDENTIFIER = re.compile(r"^[a-z0-9][a-z0-9_-]*$", re.IGNORECASE)
 _FIXTURE_BLOCKERS = {
@@ -213,7 +220,7 @@ def _validate_provider_route(
     parts = _decoded_path(parsed)
 
     if provider == "greenhouse":
-        if "jobs" not in parts:
+        if hostname not in GREENHOUSE_APPLICATION_HOSTS or "jobs" not in parts:
             raise UnsafeRouteError("Greenhouse route is not a job route")
         return hostname
 
@@ -416,11 +423,24 @@ async def inspect_route_batch(
             elif driver is None or getattr(driver, "provider", "") != provider:
                 return provider, "unsupported", "", route_state, "uncharacterized"
             else:
+                async def validate_network_route(
+                    derived_provider: str,
+                    derived_url: str,
+                ) -> None:
+                    if derived_provider != provider:
+                        raise UnsafeRouteError("derived URL provider changed")
+                    derived_hostname = _validate_url(provider, derived_url)
+                    await resolver(derived_hostname)
+
                 async with semaphore:
-                    blueprint = await asyncio.wait_for(
-                        driver.inspect_application(dict(job)),
-                        timeout=timeout_seconds,
-                    )
+                    token = NETWORK_ROUTE_VALIDATOR.set(validate_network_route)
+                    try:
+                        blueprint = await asyncio.wait_for(
+                            driver.inspect_application(dict(job)),
+                            timeout=timeout_seconds,
+                        )
+                    finally:
+                        NETWORK_ROUTE_VALIDATOR.reset(token)
             decision = classify(blueprint)
             return provider, decision.category, "", route_state, _form_class(blueprint)
         except Exception as exc:  # aggregate typed failures; never emit details

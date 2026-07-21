@@ -25,6 +25,7 @@ from run_no_submit_route_inspection import (
     inspect_route_batch,
     main,
 )
+from auto_apply.drivers._html_forms import guarded_get
 from job_providers.ats_detection import APPLICATION_CAPABILITIES
 
 
@@ -169,6 +170,77 @@ def test_rejects_unbounded_batches_and_unsafe_urls_before_inspection():
     assert report["failureBuckets"]["unsafe_url"] == 2
     assert report["failureBuckets"]["unsupported_provider"] == 1
     assert driver.inspections == 0
+    assert driver.submissions == 0
+
+
+def test_greenhouse_initial_route_rejects_support_and_api_hosts():
+    driver = FakeDriver("greenhouse")
+    report = asyncio.run(inspect_route_batch(
+        [
+            job("greenhouse", "https://support.greenhouse.io/acme/jobs/1"),
+            job("greenhouse", "https://api.greenhouse.io/acme/jobs/1"),
+            job("greenhouse", "https://boards-api.greenhouse.io/acme/jobs/1"),
+        ],
+        resolver=public_resolver,
+        registry=FakeRegistry({"greenhouse": driver}),
+        evidence_mode="fixture_contract",
+    ))
+    assert report["failureBuckets"]["unsafe_url"] == 3
+    assert driver.inspections == 0
+
+
+@pytest.mark.parametrize(
+    ("provider", "initial_url", "redirect_url"),
+    (
+        ("taleez", "https://jobs.taleez.com/acme/42", "https://127.0.0.1/admin"),
+        ("taleez", "https://jobs.taleez.com/acme/42", "https://10.0.0.8/admin"),
+        (
+            "smartrecruiters",
+            "https://jobs.smartrecruiters.com/Acme/123-role",
+            "https://169.254.169.254/latest/meta-data",
+        ),
+        (
+            "smartrecruiters",
+            "https://jobs.smartrecruiters.com/Acme/123-role",
+            "https://user@jobs.smartrecruiters.com/evil",
+        ),
+        ("taleez", "https://jobs.taleez.com/acme/42", "https://evil.example/apply"),
+    ),
+)
+def test_derived_redirect_hops_are_validated_before_following(
+    provider,
+    initial_url,
+    redirect_url,
+):
+    class Response:
+        status_code = 302
+        headers = {"location": redirect_url}
+        url = initial_url
+
+    class Client:
+        calls = []
+
+        async def get(self, url, **kwargs):
+            self.calls.append((url, kwargs))
+            return Response()
+
+    client = Client()
+
+    class RedirectDriver(FakeDriver):
+        async def inspect_application(self, _job):
+            self.inspections += 1
+            await guarded_get(client, initial_url, provider=provider)
+            raise AssertionError("unsafe redirect was followed")
+
+    driver = RedirectDriver(provider)
+    report = asyncio.run(inspect_route_batch(
+        [job(provider, initial_url)],
+        resolver=public_resolver,
+        registry=FakeRegistry({provider: driver}),
+    ))
+    assert report["failureBuckets"]["unsafe_url"] == 1
+    assert len(client.calls) == 1
+    assert client.calls[0][1]["follow_redirects"] is False
     assert driver.submissions == 0
 
 

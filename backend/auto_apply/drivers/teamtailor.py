@@ -116,7 +116,7 @@ class TeamtailorApplyDriver(BrowserApplyDriver):
         fields = list(_standard_fields())
         form_url = self._form_url(job)
         try:
-            html = await fetch_html(form_url)
+            html = await fetch_html(form_url, provider=self.provider)
             if html:
                 fields.extend(_parse_screening_questions(html))
         except Exception:

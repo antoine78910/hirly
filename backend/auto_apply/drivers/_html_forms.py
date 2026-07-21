@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from contextvars import ContextVar
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 from urllib.parse import urljoin, urlparse
 
 from application_blueprint import FieldType, FieldValidation, NormalizedField
@@ -15,6 +16,13 @@ _SENSITIVE_TOKENS = (
     "niveau d'étude", "education", "week end", "soirée", "extérieur",
     "distance", "parcourir",
 )
+
+NetworkRouteValidator = Callable[[str, str], Awaitable[None]]
+NETWORK_ROUTE_VALIDATOR: ContextVar[Optional[NetworkRouteValidator]] = ContextVar(
+    "auto_apply_network_route_validator",
+    default=None,
+)
+MAX_HTTP_REDIRECTS = 5
 
 
 def job_http_url(job: Dict[str, Any], *keys: str) -> str:
@@ -105,12 +113,48 @@ def slug_key(label: str, fallback: str) -> str:
     return (base or fallback)[:80]
 
 
-async def fetch_html(url: str, *, timeout: float = 20.0) -> str:
+async def guarded_get(
+    client: Any,
+    url: str,
+    *,
+    provider: str,
+    headers: Optional[Dict[str, str]] = None,
+    params: Optional[Dict[str, str]] = None,
+) -> Any:
+    """GET without implicit redirects, validating each requested hop."""
+    current = url
+    for redirect_count in range(MAX_HTTP_REDIRECTS + 1):
+        validator = NETWORK_ROUTE_VALIDATOR.get()
+        if validator is not None:
+            await validator(provider, current)
+        response = await client.get(
+            current,
+            headers=headers,
+            params=params if redirect_count == 0 else None,
+            follow_redirects=False,
+        )
+        if response.status_code not in {301, 302, 303, 307, 308}:
+            return response
+        location = response.headers.get("location")
+        if not location:
+            return response
+        if redirect_count == MAX_HTTP_REDIRECTS:
+            raise ValueError("redirect limit exceeded")
+        current = urljoin(str(response.url or current), location)
+    raise ValueError("redirect limit exceeded")
+
+
+async def fetch_html(url: str, *, provider: str, timeout: float = 20.0) -> str:
     if not url:
         return ""
     import httpx
-    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-        resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0 HirlyAutoApply/1.0"})
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
+        resp = await guarded_get(
+            client,
+            url,
+            provider=provider,
+            headers={"User-Agent": "Mozilla/5.0 HirlyAutoApply/1.0"},
+        )
         resp.raise_for_status()
         return resp.text or ""
 
