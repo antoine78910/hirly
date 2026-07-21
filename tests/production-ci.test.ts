@@ -99,7 +99,7 @@ describe("main production release workflow", () => {
     expect(legacyFrontend).toContain(secretMapping);
   });
 
-  test("uses a BuildKit secret for the worker dependency install", () => {
+  test("uses Railway-supported build-time token injection without shipping it", () => {
     expect(workerDockerfile.startsWith("# syntax=docker/dockerfile:1.7\n")).toBe(
       true,
     );
@@ -107,9 +107,12 @@ describe("main production release workflow", () => {
       "COPY package.json bun.lock bunfig.toml tsconfig.base.json .npmrc ./",
     );
     expect(workerDockerfile).toContain(
-      "RUN --mount=type=secret,id=CONTRACTSPEC_NPM_TOKEN,env=CONTRACTSPEC_NPM_TOKEN,required=true bun install --frozen-lockfile",
+      "ARG CONTRACTSPEC_NPM_TOKEN",
     );
-    expect(workerDockerfile).not.toMatch(/^(?:ARG|ENV)\s+CONTRACTSPEC_NPM_TOKEN/m);
+    expect(workerDockerfile).toContain(
+      "RUN test -n \"$CONTRACTSPEC_NPM_TOKEN\" && bun install --frozen-lockfile",
+    );
+    expect(workerDockerfile).not.toMatch(/^ENV\s+CONTRACTSPEC_NPM_TOKEN/m);
 
     const finalStage = workerDockerfile.slice(
       workerDockerfile.indexOf("FROM oven/bun:1.3.14-slim"),
@@ -118,21 +121,19 @@ describe("main production release workflow", () => {
     expect(finalStage).not.toMatch(/\b\.npmrc\b/);
   });
 
-  test("forwards the local Docker token as a BuildKit secret, never a build arg", () => {
+  test("forwards the local Docker token as the Railway-compatible build argument", () => {
     const command = workerPackage.scripts?.["docker:build"];
 
-    expect(command).toContain("DOCKER_BUILDKIT=1 docker build");
+    expect(command).toContain("docker build");
     expect(command).toContain(
-      "--secret id=CONTRACTSPEC_NPM_TOKEN,env=CONTRACTSPEC_NPM_TOKEN",
+      "--build-arg CONTRACTSPEC_NPM_TOKEN",
     );
-    expect(command).not.toContain("--build-arg");
   });
 
-  test("blocks a Railway worker release without BuildKit secret support", () => {
+  test("requires a Railway build-time package token without persisting it", () => {
     expect(workerOperations).toContain(
-      "CONTRACTSPEC_NPM_TOKEN` as a BuildKit secret",
+      "sealed Railway build variable",
     );
-    expect(workerOperations).toContain("block the release");
-    expect(workerOperations).toContain("Never substitute a Docker build argument.");
+    expect(workerOperations).toContain("be present in the final image");
   });
 });
