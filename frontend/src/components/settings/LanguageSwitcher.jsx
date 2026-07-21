@@ -22,6 +22,9 @@ export default function LanguageSwitcher({ className = "", variant = "light", on
       {[
         { id: "en", label: t("common.english") },
         { id: "fr", label: t("common.french") },
+        { id: "de", label: t("common.german") },
+        { id: "es", label: t("common.spanish") },
+        { id: "it", label: t("common.italian") },
       ].map(({ id, label }) => {
         const active = lang === id;
         return (

@@ -13,15 +13,20 @@ from typing import Any, Dict, List, Optional
 from db.base import is_missing_database_contract_error
 
 
+SUPPORTED_APP_LANGUAGES = frozenset({"en", "fr", "de", "es", "it"})
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
 def resolve_user_language(user_doc: Optional[Dict[str, Any]]) -> str:
-    """The "en"/"fr" the user has selected in the app, defaulting to "fr" to
-    match the frontend's own default (see readStoredAppLang in appUi.js)."""
+    """Return the selected supported app language, defaulting to French.
+
+    The default matches the frontend's readStoredAppLang behavior.
+    """
     language = (user_doc or {}).get("language")
-    return language if language in {"en", "fr"} else "fr"
+    return language if language in SUPPORTED_APP_LANGUAGES else "fr"
 
 
 async def create_notification(

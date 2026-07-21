@@ -169,13 +169,24 @@ def test_update_account_settings_persists_language(monkeypatch):
     assert fake_db.users.updates[0][1]["$set"]["language"] == "fr"
 
 
+@pytest.mark.parametrize("language", ["de", "es", "it"])
+def test_update_account_settings_persists_new_supported_language(monkeypatch, language):
+    fake_db = _DB()
+    monkeypatch.setattr(server, "db", fake_db)
+    user = _user()
+
+    result = asyncio.run(server.update_account_settings(server.AccountSettingsUpdate(language=language), user=user))
+
+    assert result == {"require_review_before_send": True, "language": language}
+    assert fake_db.users.updates[0][1]["$set"]["language"] == language
+
+
 def test_update_account_settings_ignores_invalid_language(monkeypatch):
     fake_db = _DB()
     monkeypatch.setattr(server, "db", fake_db)
     user = _user()
-    body = server.AccountSettingsUpdate(language="de")
 
-    result = asyncio.run(server.update_account_settings(body, user=user))
+    result = asyncio.run(server.update_account_settings(server.AccountSettingsUpdate(language="pt"), user=user))
 
     assert result == {"require_review_before_send": True, "language": None}
     assert fake_db.users.updates == []

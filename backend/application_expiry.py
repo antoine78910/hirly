@@ -70,18 +70,19 @@ async def mark_application_offer_expired(
         update["credit_refunded_at"] = now
         job = await db.jobs.find_one({"job_id": app_doc.get("job_id")}, {"_id": 0}) or {}
         user_doc = await db.users.find_one({"user_id": app_doc["user_id"]}, {"_id": 0, "language": 1})
-        if resolve_user_language(user_doc) == "fr":
-            job_label = job.get("title") or "ce poste"
-            if job.get("company"):
-                job_label += f" chez {job['company']}"
-            title = "Cette offre d'emploi a expiré"
-            body = f"Nous avons remboursé le crédit utilisé pour {job_label}."
-        else:
-            job_label = job.get("title") or "this position"
-            if job.get("company"):
-                job_label += f" at {job['company']}"
-            title = "This job offer has expired"
-            body = f"We've refunded the credit used for {job_label}."
+        language = resolve_user_language(user_doc)
+        copy = {
+            "en": ("this position", "at", "This job offer has expired", "We've refunded the credit used for {job_label}."),
+            "fr": ("ce poste", "chez", "Cette offre d'emploi a expiré", "Nous avons remboursé le crédit utilisé pour {job_label}."),
+            "de": ("diese Stelle", "bei", "Dieses Stellenangebot ist abgelaufen", "Wir haben das für {job_label} verwendete Guthaben zurückerstattet."),
+            "es": ("este puesto", "en", "Esta oferta de empleo ha caducado", "Hemos reembolsado el crédito utilizado para {job_label}."),
+            "it": ("questa posizione", "presso", "Questa offerta di lavoro è scaduta", "Abbiamo rimborsato il credito utilizzato per {job_label}."),
+        }[language]
+        job_label = job.get("title") or copy[0]
+        if job.get("company"):
+            job_label += f" {copy[1]} {job['company']}"
+        title = copy[2]
+        body = copy[3].format(job_label=job_label)
         await create_notification(
             db,
             user_id=app_doc["user_id"],

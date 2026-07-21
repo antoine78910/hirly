@@ -96,6 +96,7 @@ from notifications_service import (
     mark_all_notifications_read,
     mark_notification_read,
     resolve_user_language,
+    SUPPORTED_APP_LANGUAGES,
 )
 from creator_applications_service import create_creator_application
 from application_failure import classify_application_failure
@@ -7326,7 +7327,7 @@ async def onboarding_suggest_roles(body: OnboardingSuggestRolesRequest):
 async def update_account_settings(body: AccountSettingsUpdate, user: User = Depends(get_current_user)):
     if body.require_review_before_send is not None:
         await _set_user_require_review_before_send(user.user_id, body.require_review_before_send)
-    language = body.language if body.language in {"en", "fr"} else None
+    language = body.language if body.language in SUPPORTED_APP_LANGUAGES else None
     if language is not None:
         await _set_user_language(user.user_id, language)
     return {
@@ -13928,11 +13929,14 @@ async def admin_grant_credits(
             "billing.updated_at": datetime.now(timezone.utc).isoformat(),
         }},
     )
-    title = (
-        f"Vous avez reçu {body.credits} crédits gratuits"
-        if resolve_user_language(user_doc) == "fr"
-        else f"You received {body.credits} free credits"
-    )
+    language = resolve_user_language(user_doc)
+    title = {
+        "en": f"You received {body.credits} free credits",
+        "fr": f"Vous avez reçu {body.credits} crédits gratuits",
+        "de": f"Sie haben {body.credits} kostenlose Credits erhalten",
+        "es": f"Has recibido {body.credits} créditos gratis",
+        "it": f"Hai ricevuto {body.credits} crediti gratuiti",
+    }[language]
     await create_notification(
         db,
         user_id=user_id,

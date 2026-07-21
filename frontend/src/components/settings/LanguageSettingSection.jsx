@@ -9,7 +9,14 @@ export default function LanguageSettingSection({ variant = "profile" }) {
   const handleLang = (next) => {
     if (next === lang) return;
     setLang(next);
-    toast.success(next === "fr" ? t("settings.languageSetFr") : t("settings.languageSetEn"), {
+    const languageSetKey = {
+      en: "settings.languageSetEn",
+      fr: "settings.languageSetFr",
+      de: "settings.languageSetDe",
+      es: "settings.languageSetEs",
+      it: "settings.languageSetIt",
+    }[next];
+    toast.success(t(languageSetKey), {
       duration: 1800,
     });
   };

@@ -3,6 +3,13 @@
 import { readAiSettings } from "./aiSettings";
 import { PROFESSIONAL_PROFILE_I18N_EN, PROFESSIONAL_PROFILE_I18N_FR } from "./professionalProfileI18n";
 import { PERSONAL_INFO_OPTIONS_EN, PERSONAL_INFO_OPTIONS_FR } from "./personalInfoOptionsI18n";
+import { APP_UI_TRANSLATIONS } from "./appUiTranslations";
+
+export const APP_LANGUAGES = ["en", "fr", "de", "es", "it"];
+
+export function isAppLanguage(value) {
+  return APP_LANGUAGES.includes(value);
+}
 
 export const APP_UI = {
   en: {
@@ -26,6 +33,9 @@ export const APP_UI = {
       language: "Language",
       english: "English",
       french: "French",
+      german: "German",
+      spanish: "Spanish",
+      italian: "Italian",
     },
     accountMenu: {
       account: "Account",
@@ -277,6 +287,9 @@ export const APP_UI = {
       languageDesc: "Choose the language for menus, buttons, and job cards.",
       languageSetEn: "Language set to English",
       languageSetFr: "Language set to French",
+      languageSetDe: "Language set to German",
+      languageSetEs: "Language set to Spanish",
+      languageSetIt: "Language set to Italian",
     },
     aiSettings: {
       poweredBy: "Powered by {brand} AI",
@@ -1051,6 +1064,9 @@ export const APP_UI = {
       language: "Langue",
       english: "Anglais",
       french: "Français",
+      german: "Allemand",
+      spanish: "Espagnol",
+      italian: "Italien",
     },
     accountMenu: {
       account: "Compte",
@@ -1196,6 +1212,8 @@ export const APP_UI = {
       swipeMoreJobDesc: "Cette annonce ne contient pas assez de détails pour un dossier sur mesure.",
       swipeAppSaved: "Candidature enregistrée",
       swipeAppSavedDesc: "La génération a échoué. Consultez Candidatures pour relire ou réessayer.",
+      swipeQueued: "Candidature mise en attente pour {company}",
+      swipeQueuedDesc: "Nous générons le CV et la lettre de motivation personnalisés en arrière-plan.",
       swipePackageFor: "Dossier généré pour {company}",
       swipePackageReady: "CV et lettre prêts. Pas encore envoyés.",
       demoApplied: "Candidature enregistrée (démo)",
@@ -1300,6 +1318,9 @@ export const APP_UI = {
       languageDesc: "Langue des menus, boutons et fiches offres.",
       languageSetEn: "Langue définie sur l'anglais",
       languageSetFr: "Langue définie sur le français",
+      languageSetDe: "Langue définie sur l’allemand",
+      languageSetEs: "Langue définie sur l’espagnol",
+      languageSetIt: "Langue définie sur l’italien",
     },
     aiSettings: {
       poweredBy: "Propulsé par l'IA {brand}",
@@ -2053,6 +2074,9 @@ export const APP_UI = {
       loadJobsError: "Impossible de charger les offres",
     },
   },
+  de: APP_UI_TRANSLATIONS.de,
+  es: APP_UI_TRANSLATIONS.es,
+  it: APP_UI_TRANSLATIONS.it,
 };
 
 export function appT(lang, key, vars = {}) {
@@ -2072,7 +2096,7 @@ export function readStoredAppLang() {
   if (typeof window === "undefined") return "fr";
   try {
     const stored = localStorage.getItem("hirly_app_lang");
-    if (stored === "en" || stored === "fr") return stored;
+    if (isAppLanguage(stored)) return stored;
     return "fr";
   } catch (_) {
     return "fr";

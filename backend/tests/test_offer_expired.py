@@ -1,5 +1,7 @@
 import asyncio
 
+import pytest
+
 import server
 
 
@@ -119,6 +121,24 @@ def test_offer_expired_notification_localized_for_english_user(monkeypatch):
     notification = db.notifications.rows[0]
     assert notification["title"] == "This job offer has expired"
     assert "at Acme" in notification["body"]
+
+
+@pytest.mark.parametrize(("language", "title", "company_joiner"), [
+    ("de", "Dieses Stellenangebot ist abgelaufen", "bei Acme"),
+    ("es", "Esta oferta de empleo ha caducado", "en Acme"),
+    ("it", "Questa offerta di lavoro è scaduta", "presso Acme"),
+])
+def test_offer_expired_notification_localized_for_new_languages(monkeypatch, language, title, company_joiner):
+    db = _DB(applications=[_base_application()], users=[_base_user(language=language)])
+    monkeypatch.setattr(server, "db", db)
+
+    asyncio.run(server.admin_update_application_manual_status(
+        "app_1", server.AdminManualStatusUpdate(manual_status="offer_expired"), admin=_admin(),
+    ))
+
+    notification = db.notifications.rows[0]
+    assert notification["title"] == title
+    assert company_joiner in notification["body"]
 
 
 def test_offer_expired_does_not_double_refund(monkeypatch):

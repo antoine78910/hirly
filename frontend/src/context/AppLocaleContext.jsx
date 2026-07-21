@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { appT, readStoredAppLang } from "../lib/appUi";
+import { appT, isAppLanguage, readStoredAppLang } from "../lib/appUi";
 import { api } from "../lib/api";
 import { useAuth } from "./AuthContext";
 
@@ -13,7 +13,7 @@ export function AppLocaleProvider({ children }) {
   const hydratedUserIdRef = useRef(null);
 
   const setLang = useCallback((next) => {
-    const value = next === "fr" ? "fr" : "en";
+    const value = isAppLanguage(next) ? next : "en";
     try {
       localStorage.setItem(STORAGE_KEY, value);
     } catch (_) {}
@@ -33,7 +33,7 @@ export function AppLocaleProvider({ children }) {
   useEffect(() => {
     if (!user?.user_id || hydratedUserIdRef.current === user.user_id) return;
     hydratedUserIdRef.current = user.user_id;
-    if (user.language === "en" || user.language === "fr") {
+    if (isAppLanguage(user.language)) {
       if (user.language !== lang) {
         setLangState(user.language);
         try {
