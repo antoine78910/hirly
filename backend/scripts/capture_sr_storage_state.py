@@ -54,6 +54,20 @@ DEFAULT_START = (
 OUT_PATH = ROOT / "sr-storage-state.json"
 
 
+def _env_enabled(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _proxy_username_for_log(value: object) -> str:
+    return "[redacted]" if str(value or "").strip() else "-"
+
+
+def _exit_ip_for_log(ip_body: str) -> str:
+    if _env_enabled("SR_CAPTURE_LOG_EXIT_IP"):
+        return ip_body
+    return "[masked; set SR_CAPTURE_LOG_EXIT_IP=1 to show]"
+
+
 async def _current_ip(page) -> str:
     try:
         await page.goto("http://api.ipify.org?format=json", wait_until="commit", timeout=45000)
@@ -100,7 +114,7 @@ async def main() -> None:
     channel = (os.environ.get("BROWSER_CHANNEL") or "chrome").strip() or None
     print("Launching headed Chrome via proxy…")
     print("  server:", proxy.get("server"))
-    print("  user  :", proxy.get("username"))
+    print("  user  :", _proxy_username_for_log(proxy.get("username")))
     print("  start :", start_url)
     print("  out   :", OUT_PATH)
     print("  secrets:", ROOT / ".browser-secrets.env")
@@ -125,7 +139,7 @@ async def main() -> None:
         page = await context.new_page()
 
         ip_body = await _current_ip(page)
-        print("Exit IP via proxy:", ip_body)
+        print("Exit IP via proxy:", _exit_ip_for_log(ip_body))
         if _proxy_looks_dead(ip_body):
             await context.close()
             await browser.close()
