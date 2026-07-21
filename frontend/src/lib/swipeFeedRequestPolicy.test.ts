@@ -1,6 +1,7 @@
 import {
   createInitialSwipeFeedRequestGate,
   createSwipeFeedRequestFence,
+  resolveSwipeFeedSuggestions,
   resolveSwipeFeedViewState,
   sanitizeSwipeFeedParams,
 } from "./swipeFeedRequestPolicy";
@@ -40,7 +41,7 @@ describe("Swipe Feed v2 request policy", () => {
   });
 
   it.each([
-    [{ loading: true, jobCount: 0 }, "loading"],
+    [{ loading: true, jobCount: 0 }, "loading_initial"],
     [{ loading: false, jobCount: 1 }, "ready"],
     [
       {
@@ -56,7 +57,7 @@ describe("Swipe Feed v2 request policy", () => {
         jobCount: 0,
         feedMeta: { empty_reason: { code: "ALL_MATCHES_ACTIONED" } },
       },
-      "empty",
+      "exhausted",
     ],
     [
       {
@@ -77,7 +78,7 @@ describe("Swipe Feed v2 request policy", () => {
         jobCount: 0,
         feedMeta: { emptyReason: "NO_MATCHING_INVENTORY" },
       }),
-    ).toEqual({ kind: "loading" });
+    ).toEqual({ kind: "loading_initial" });
   });
 
   it("treats unsupported empty-reason values as an untyped empty state", () => {
@@ -87,7 +88,7 @@ describe("Swipe Feed v2 request policy", () => {
         jobCount: 0,
         feedMeta: { empty_reason: { code: "UNKNOWN_UPSTREAM_STATE" as never } },
       }),
-    ).toEqual({ kind: "empty", emptyReason: null });
+    ).toEqual({ kind: "legacy_empty", emptyReason: null });
   });
 
   it("reads typed degraded state from snake_case Feed V2 metadata", () => {
@@ -98,5 +99,22 @@ describe("Swipe Feed v2 request policy", () => {
         feedMeta: { inventory_state: "degraded" },
       }),
     ).toEqual({ kind: "error", emptyReason: null });
+  });
+
+  it("keeps a terminal state hidden while the next page is loading", () => {
+    expect(resolveSwipeFeedViewState({
+      loadingNextPage: true,
+      jobCount: 0,
+      feedMeta: { emptyReason: "ALL_MATCHES_ACTIONED" },
+    })).toEqual({ kind: "loading_next_page" });
+  });
+
+  it("orders only applicable broadening suggestions", () => {
+    expect(resolveSwipeFeedSuggestions({
+      targetLocation: "Paris",
+      filters: { searchRadius: "50km", postedDate: "7d" },
+    }).map(({ id }) => id)).toEqual(["preferences", "location", "radius", "filters"]);
+    expect(resolveSwipeFeedSuggestions({ filters: { searchRadius: "worldwide" } }).map(({ id }) => id))
+      .toEqual(["preferences", "revisit_later"]);
   });
 });

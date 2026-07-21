@@ -32,6 +32,7 @@ import { shouldShowSwipeAdminAtsBadge, filterPersonalSwipeFeedJobs } from "../li
 import { ensureTutorialSession } from "../lib/tutorialSession";
 import { useUpgradeModal } from "../context/UpgradeModalContext";
 import DesktopSwipeFeed from "../components/swipe/DesktopSwipeFeed";
+import SwipeFeedTerminalState from "../components/swipe/SwipeFeedTerminalState";
 import NotificationsPanel from "../components/notifications/NotificationsPanel";
 import ResumeSheet from "../components/ResumeSheet";
 import PhoneSheet from "../components/PhoneSheet";
@@ -808,6 +809,8 @@ export default function Swipe() {
   const [demoWelcomeOpen, setDemoWelcomeOpen] = useState(false);
   const [jobs, setJobs] = useState(() => getSwipeFeedCacheSnapshot().jobs);
   const [loading, setLoading] = useState(() => !getSwipeFeedCacheSnapshot().jobs.length);
+  const [nextPageLoading, setNextPageLoading] = useState(false);
+  const [nextCursor, setNextCursor] = useState(null);
   const [appLoading, setAppLoading] = useState(false);
   const [appliedToday, setAppliedToday] = useState(0);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -847,6 +850,8 @@ export default function Swipe() {
   const viewedJobIdsRef = useRef(new Set());
   const handleSwipeRef = useRef(null);
   const requestSwipeRef = useRef(null);
+  const nextCursorRef = useRef(null);
+  const terminalImpressionsRef = useRef(new Set());
 
   useEffect(() => {
     jobsRef.current = jobs;
@@ -1038,6 +1043,9 @@ export default function Swipe() {
   };
 
   const loadFeed = useCallback(async (replace = false, f = filtersRef.current, reason = "unspecified") => {
+    // Low-stack prefetches consume the committed Feed V2 cursor. Never repeat
+    // the first page after the server has declared this query terminal.
+    if (!replace && nextCursorRef.current === null) return;
     if (feedAbortRef.current) {
       feedAbortRef.current.abort();
       feedAbortRef.current = null;
@@ -1067,8 +1075,10 @@ export default function Swipe() {
       setLoading(true);
       if (replace) setJobs([]);
     }
+    if (!replace) setNextPageLoading(true);
     setFeedError("");
     const params = sanitizeSwipeFeedParams(buildFeedParams(f));
+    if (!replace && nextCursorRef.current) params.set("cursor", nextCursorRef.current);
     let requestUrl = `/jobs/feed?${params.toString()}`;
     setLastFeedDebug({
       reason,
@@ -1110,6 +1120,9 @@ export default function Swipe() {
       }
       if (!requestFence.isCurrent()) return;
       const financeFeed = isFinanceDemoFeedResponse(data);
+      const receivedNextCursor = data?.nextCursor ?? data?.next_cursor ?? null;
+      nextCursorRef.current = receivedNextCursor;
+      setNextCursor(receivedNextCursor);
       let localFeedGuard = financeFeed ? null : buildLocalFeedGuard({ params, response: data });
       let responseJobs = Array.isArray(data?.jobs) ? data.jobs : [];
       let safeJobs = localFeedGuard ? responseJobs.filter(localFeedGuard) : responseJobs;
@@ -1186,6 +1199,11 @@ export default function Swipe() {
         });
         return filtered;
       });
+      // Client-side swipe filtering can consume a complete server page. Keep
+      // advancing through committed cursors before allowing a terminal state.
+      if (!safeJobs.length && receivedNextCursor) {
+        window.setTimeout(() => loadFeed(false, f, "filtered_page_continue"), 0);
+      }
     } catch (e) {
       if (controller.signal.aborted || e?.code === "ERR_CANCELED") return;
       if (!requestFence.isCurrent()) return;
@@ -1209,6 +1227,7 @@ export default function Swipe() {
         // empty stack must remain a loading state, not an empty-feed state.
         if ((!stackPrefetch && !silentRefresh) || jobsRef.current.length === 0) setLoading(false);
         fetchingRef.current = false;
+        setNextPageLoading(false);
         if (feedAbortRef.current === controller) feedAbortRef.current = null;
       }
     }
@@ -1222,6 +1241,8 @@ export default function Swipe() {
       setJobs([]);
       setTotalCount(null);
       setFeedMeta(null);
+      nextCursorRef.current = null;
+      setNextCursor(null);
       setFeedError("");
       if (financeOn) {
         clearSwipedJobIdsByPrefix("finance_demo_");
@@ -1294,6 +1315,8 @@ export default function Swipe() {
       setJobs([]);
       setTotalCount(null);
       setFeedMeta(null);
+      nextCursorRef.current = null;
+      setNextCursor(null);
       setFeedError("");
       jobsRef.current = [];
       await loadFeed(true, nextFilters, "target_search_save");
@@ -1437,6 +1460,8 @@ export default function Swipe() {
     setLoading(true);
     setTotalCount(null);
     setFeedMeta(null);
+    nextCursorRef.current = null;
+    setNextCursor(null);
     setFeedError("");
     loadFeed(true, f, "filters_apply");
   };
@@ -1451,6 +1476,8 @@ export default function Swipe() {
     setLoading(true);
     setTotalCount(null);
     setFeedMeta(null);
+    nextCursorRef.current = null;
+    setNextCursor(null);
     setFeedError("");
     loadFeed(true, defaults, "filters_reset");
   };
@@ -1514,8 +1541,10 @@ export default function Swipe() {
     return null;
   }, [feedError, t]);
   const feedView = resolveSwipeFeedViewState({
-    loading,
+    loadingInitial: loading,
+    loadingNextPage: nextPageLoading,
     jobCount: jobs.length,
+    nextCursor,
     feedMeta,
     feedError,
   });
@@ -1538,6 +1567,25 @@ export default function Swipe() {
   useEffect(() => {
     trackEvent("swipe_page_view");
   }, []);
+
+  useEffect(() => {
+    if (!["exhausted", "policy_hidden", "blocked", "no_inventory", "legacy_empty"].includes(feedView.kind)) return;
+    const queryIdentity = buildSwipeFeedCacheKey({
+      userId: user?.user_id,
+      target: targetRef.current,
+      targetLocationData: targetLocationDataRef.current,
+      filters: filtersRef.current,
+    });
+    const impressionKey = `${queryIdentity}:${feedView.kind}`;
+    if (terminalImpressionsRef.current.has(impressionKey)) return;
+    terminalImpressionsRef.current.add(impressionKey);
+    trackEvent("swipe_feed_terminal_state_viewed", {
+      presentation_state: feedView.kind,
+      empty_reason: feedView.emptyReason,
+      query_identity: queryIdentity,
+      surface: typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches ? "desktop" : "mobile",
+    });
+  }, [feedView, user?.user_id]);
 
   useEffect(() => {
     if (!topJob?.job_id) return;
@@ -1760,6 +1808,7 @@ export default function Swipe() {
         <DesktopSwipeFeed
           job={topJob}
           loading={loading}
+          nextPageLoading={nextPageLoading}
           feedError={feedError}
           feedMeta={feedMeta}
           target={target}
@@ -1770,6 +1819,7 @@ export default function Swipe() {
           onFiltersOpenChange={setDesktopFiltersOpen}
           onTargetSave={saveTargetSearch}
           onTargetPreferencesOpen={() => setTargetSheetOpen(true)}
+          onTargetLocationOpen={() => setTargetSheetOpen(true)}
           targetLocationData={targetLocationData}
           targetSaving={targetSaving}
           onPass={() => handleSwipe("skip")}
@@ -1867,9 +1917,9 @@ export default function Swipe() {
 
       <div className="flex min-h-0 flex-1 flex-col px-4 pt-1">
         <div className="relative mx-auto min-h-0 w-full max-w-md flex-1 overflow-hidden">
-          {feedView.kind === "loading" && <SkeletonCard />}
+          {["loading_initial", "loading_next_page"].includes(feedView.kind) && jobs.length === 0 && <SkeletonCard />}
 
-          {["projection_lag", "empty", "error"].includes(feedView.kind) && (
+          {feedView.kind === "projection_lag" && (
             <motion.div
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1882,20 +1932,12 @@ export default function Swipe() {
               <h3 className="font-display text-2xl font-bold text-white">
                 {feedView.kind === "projection_lag"
                   ? projectionLagCopy.title
-                  : feedError
-                  ? t("swipe.couldNotLoad")
-                  : feedMeta?.fallback_reason === "no_auto_apply_jobs_found"
-                  ? t("swipe.noJobsFilters")
-                  : t("swipe.noJobsFiltered")}
+                  : t("swipe.couldNotLoad")}
               </h3>
               <p className="mt-2 max-w-xs text-sm text-sprout-muted">
                 {feedSetupGate?.body
                   || (feedView.kind === "projection_lag"
                     ? projectionLagCopy.body
-                    : feedError
-                    ? feedError
-                    : feedMeta?.provider_rate_limited
-                    ? t("swipe.providerRateLimited")
                     : feedFallbackMessage(t, feedMeta))}
               </p>
               {feedSetupGate?.action && (
@@ -1906,6 +1948,29 @@ export default function Swipe() {
                   {feedSetupGate.label}
                 </button>
               )}
+            </motion.div>
+          )}
+
+          {["exhausted", "policy_hidden", "blocked", "no_inventory", "legacy_empty"].includes(feedView.kind) && (
+            <div className="absolute inset-0 flex items-center justify-center px-6">
+              <SwipeFeedTerminalState
+                state={feedView.kind}
+                targetLocationData={targetLocationData}
+                targetLocation={target.location}
+                filters={filters}
+                t={t}
+                onPreferences={() => setTargetSheetOpen(true)}
+                onLocation={() => setTargetSheetOpen(true)}
+                onRadius={() => setFiltersOpen(true)}
+                onFilters={() => setFiltersOpen(true)}
+              />
+            </div>
+          )}
+
+          {feedView.kind === "error" && (
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center" role="status">
+              <h2 className="font-display text-2xl font-bold text-white">{t("swipe.couldNotLoad")}</h2>
+              <p className="mt-2 max-w-xs text-sm text-sprout-muted">{feedError || feedFallbackMessage(t, feedMeta)}</p>
             </motion.div>
           )}
 

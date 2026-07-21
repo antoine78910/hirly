@@ -48,7 +48,8 @@ describe("Swipe Feed v2 adoption boundary", () => {
 
   it("renders loading and typed projection state through the shared policy", () => {
     expect(swipeSource).toContain("resolveSwipeFeedViewState({");
-    expect(swipeSource).toContain('feedView.kind === "loading"');
+    expect(swipeSource).toContain('"loading_initial"');
+    expect(swipeSource).toContain('"loading_next_page"');
     expect(swipeSource).toContain('feedView.kind === "projection_lag"');
     expect(desktopSource).toContain("resolveSwipeFeedViewState({");
     expect(swipeSource).toContain("jobsRef.current.length === 0");

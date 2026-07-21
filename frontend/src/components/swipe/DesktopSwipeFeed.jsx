@@ -28,6 +28,7 @@ import { rankLocationSuggestions } from "../../lib/locationSearch";
 import { isResolvedLocation } from "../../lib/locationSearch";
 import { useAppLocale } from "../../context/AppLocaleContext";
 import { resolveSwipeFeedViewState } from "../../lib/swipeFeedRequestPolicy";
+import SwipeFeedTerminalState from "./SwipeFeedTerminalState";
 import { getDesktopNavItems } from "../desktop/desktopNav";
 import SearchRadiusSlider from "./SearchRadiusSlider";
 import {
@@ -59,6 +60,7 @@ const feedFallbackMessage = (t, feedMeta) => {
 export default function DesktopSwipeFeed({
   job,
   loading,
+  nextPageLoading = false,
   feedError,
   feedMeta,
   target,
@@ -68,6 +70,7 @@ export default function DesktopSwipeFeed({
   onFiltersOpenChange,
   onTargetSave,
   onTargetPreferencesOpen,
+  onTargetLocationOpen,
   targetLocationData = null,
   targetSaving = false,
   onPass,
@@ -95,7 +98,8 @@ export default function DesktopSwipeFeed({
   const isDark = themeMode === "dark";
   const theme = DESKTOP_THEMES[themeMode];
   const feedView = resolveSwipeFeedViewState({
-    loading,
+    loadingInitial: loading,
+    loadingNextPage: nextPageLoading,
     jobCount: job ? 1 : 0,
     feedMeta,
     feedError,
@@ -433,12 +437,25 @@ export default function DesktopSwipeFeed({
         </div>
 
         <div className="relative min-h-0 flex-1 px-4 pb-4 pt-2 lg:px-6 lg:pb-5">
-          {feedView.kind === "loading" ? (
+          {feedView.kind === "loading_initial" || (feedView.kind === "loading_next_page" && !displayJob) ? (
             <div className={`mx-auto ${DESKTOP_CARD_WIDTH} animate-pulse rounded-2xl border p-8 ${theme.skeleton}`}>
               <div className={`h-8 w-2/3 rounded ${theme.skeletonBar}`} />
               <div className={`mt-4 h-4 w-1/3 rounded ${theme.skeletonBar}`} />
               <div className={`mt-8 h-32 rounded-xl ${theme.skeletonBar}`} />
             </div>
+          ) : !displayJob && ["exhausted", "policy_hidden", "blocked", "no_inventory", "legacy_empty"].includes(feedView.kind) ? (
+            <SwipeFeedTerminalState
+              state={feedView.kind}
+              targetLocationData={targetLocationData}
+              targetLocation={target.location}
+              filters={filters}
+              t={t}
+              onPreferences={onTargetPreferencesOpen}
+              onLocation={onTargetLocationOpen || onTargetPreferencesOpen}
+              onRadius={() => onFiltersOpenChange?.(true)}
+              onFilters={() => onFiltersOpenChange?.(true)}
+              className="mx-auto max-w-lg py-20"
+            />
           ) : !displayJob ? (
             <div className="mx-auto max-w-lg py-20 text-center">
               <p className={`text-lg font-semibold ${theme.emptyTitle}`}>

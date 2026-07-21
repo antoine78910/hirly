@@ -20,10 +20,16 @@ const SWIPE_FEED_EMPTY_REASONS = new Set<SwipeFeedEmptyReason>([
 ]);
 
 export type SwipeFeedViewState =
-  | { kind: "loading" }
+  | { kind: "loading_initial" }
+  | { kind: "loading_next_page" }
   | { kind: "ready" }
   | { kind: "projection_lag"; emptyReason: SwipeFeedEmptyReason }
-  | { kind: "empty"; emptyReason: SwipeFeedEmptyReason | null }
+  | { kind: "exhausted"; emptyReason: "ALL_MATCHES_ACTIONED" }
+  | { kind: "policy_hidden"; emptyReason: "ALL_MATCHES_POLICY_HIDDEN" }
+  | { kind: "blocked"; emptyReason: "ALL_MATCHES_BLOCKED" }
+  | { kind: "no_inventory"; emptyReason: "NO_MATCHING_INVENTORY" | null }
+  | { kind: "profile_not_ready"; emptyReason: "PROFILE_NOT_READY" }
+  | { kind: "legacy_empty"; emptyReason: SwipeFeedEmptyReason | null }
   | { kind: "error"; emptyReason: SwipeFeedEmptyReason | null };
 
 type FeedMeta = {
@@ -49,12 +55,18 @@ function emptyReason(meta: FeedMeta | null | undefined): SwipeFeedEmptyReason | 
 }
 
 export function resolveSwipeFeedViewState(input: {
-  loading: boolean;
+  loading?: boolean;
+  loadingInitial?: boolean;
+  loadingNextPage?: boolean;
   jobCount: number;
+  /** A non-null cursor means the committed feed can still yield another page. */
+  nextCursor?: string | null;
   feedMeta?: FeedMeta | null;
   feedError?: string | null;
 }): SwipeFeedViewState {
-  if (input.loading && input.jobCount === 0) return { kind: "loading" };
+  const loadingInitial = input.loadingInitial ?? input.loading ?? false;
+  if (loadingInitial && input.jobCount === 0) return { kind: "loading_initial" };
+  if (input.loadingNextPage) return { kind: "loading_next_page" };
   if (input.jobCount > 0) return { kind: "ready" };
   const reason = emptyReason(input.feedMeta);
   const inventoryState = input.feedMeta?.inventoryState ?? input.feedMeta?.inventory_state;
@@ -68,7 +80,55 @@ export function resolveSwipeFeedViewState(input: {
   if (input.feedError || inventoryState === "degraded" || reason === "SERVICE_DEGRADED") {
     return { kind: "error", emptyReason: reason };
   }
-  return { kind: "empty", emptyReason: reason };
+  // Never infer a terminal state while another cursor remains to be consumed.
+  if (input.nextCursor) return { kind: "loading_next_page" };
+  if (reason === "ALL_MATCHES_ACTIONED") return { kind: "exhausted", emptyReason: reason };
+  if (reason === "ALL_MATCHES_POLICY_HIDDEN") return { kind: "policy_hidden", emptyReason: reason };
+  if (reason === "ALL_MATCHES_BLOCKED") return { kind: "blocked", emptyReason: reason };
+  if (reason === "PROFILE_NOT_READY") return { kind: "profile_not_ready", emptyReason: reason };
+  if (reason === "NO_MATCHING_INVENTORY" || inventoryState === "inventory_gap") {
+    return { kind: "no_inventory", emptyReason: reason };
+  }
+  return { kind: "legacy_empty", emptyReason: reason };
+}
+
+export type SwipeFeedSuggestionId = "preferences" | "location" | "radius" | "filters" | "revisit_later";
+
+export type SwipeFeedSuggestion = { id: SwipeFeedSuggestionId };
+
+/**
+ * Purely derives terminal-feed suggestions from the committed query snapshot.
+ * It intentionally never reads server inventory or changes filters itself.
+ */
+export function resolveSwipeFeedSuggestions(input: {
+  targetLocationData?: unknown;
+  targetLocation?: string | null;
+  filters?: Record<string, unknown> | null;
+}): SwipeFeedSuggestion[] {
+  const filters = input.filters || {};
+  const locations = Array.isArray(filters.locations) ? filters.locations : [];
+  const locationsData = Array.isArray(filters.locationsData) ? filters.locationsData : [];
+  const hasLocation = Boolean(
+    input.targetLocationData || filters.locationData || locationsData.length || locations.length
+    || (input.targetLocation && input.targetLocation !== "Anywhere"),
+  );
+  const radius = String(filters.searchRadius || "50km").toLowerCase();
+  const radiusIsWorldwide = radius === "worldwide" || Number.parseInt(radius, 10) >= 500;
+  const arrays = ["workLocations", "jobTypes", "experience", "onlyCompanies", "hideCompanies", "onlyIndustries", "hideIndustries"];
+  const hasBroadenableFilter = Boolean(
+    Number(filters.minSalary || 0) > 0
+    || (filters.postedDate && filters.postedDate !== "any")
+    || arrays.some((key) => Array.isArray(filters[key]) && filters[key].length)
+    || filters.includeUnknownLocation === false
+    || filters.includeUnknownSalary === false
+    || filters.onlyMyCountry === true,
+  );
+  const suggestions: SwipeFeedSuggestion[] = [{ id: "preferences" }];
+  if (hasLocation) suggestions.push({ id: "location" });
+  if (hasLocation && !radiusIsWorldwide) suggestions.push({ id: "radius" });
+  if (hasBroadenableFilter) suggestions.push({ id: "filters" });
+  if (suggestions.length === 1) suggestions.push({ id: "revisit_later" });
+  return suggestions;
 }
 
 export function sanitizeSwipeFeedParams(params: URLSearchParams): URLSearchParams {
