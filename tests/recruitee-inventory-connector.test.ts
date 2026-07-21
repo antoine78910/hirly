@@ -89,6 +89,28 @@ describe("Recruitee inventory connector", () => {
     );
   });
 
+  test("interprets Recruitee timezone-less offer timestamps as UTC and rejects malformed values", async () => {
+    const data = await fixture();
+    const parsed = recruiteeRawJobSchema.parse({
+      ...data.raw[0],
+      published_at: "2026-07-21T10:11:12.123456",
+      created_at: "2026-07-20T09:08:07",
+    });
+
+    expect(parsed.published_at).toBe("2026-07-21T10:11:12.123456Z");
+    expect(parsed.created_at).toBe("2026-07-20T09:08:07Z");
+
+    for (const published_at of [
+      "2026-07-21 10:11:12",
+      "2026-07-21T10:11",
+      "2026-07-21T10:11:12UTC",
+    ]) {
+      expect(() =>
+        recruiteeRawJobSchema.parse({ ...data.raw[0], published_at }),
+      ).toThrow();
+    }
+  });
+
   test("normalizes frozen fixture identity, URL, country and fulfillment parity", async () => {
     const data = await fixture();
     const rows = data.raw.map((raw) => recruiteeRawJobSchema.parse(raw));

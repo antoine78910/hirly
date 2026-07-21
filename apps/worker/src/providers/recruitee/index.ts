@@ -24,6 +24,25 @@ import { approveAtsInventoryShadowScope } from "../ats-inventory-readiness";
 const optionalText = z.string().trim().min(1).nullable().optional();
 const optionalUrl = z.url().nullable().optional();
 
+// Recruitee's public offers endpoint can omit an offset (for example,
+// `2026-07-21T10:11:12.123456`).  Treat only this exact ISO wall-clock form
+// as UTC before applying the usual explicit-offset validation.  All other
+// timestamp shapes still fail closed at the provider boundary.
+function normalizeRecruiteeTimestamp(value: unknown): unknown {
+  if (
+    typeof value === "string" &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(value)
+  ) {
+    return `${value}Z`;
+  }
+  return value;
+}
+
+const optionalRecruiteeTimestamp = z.preprocess(
+  normalizeRecruiteeTimestamp,
+  z.iso.datetime({ offset: true }).nullable().optional(),
+);
+
 export const recruiteeRawJobSchema = z
   .object({
     id: z.union([z.string(), z.number()]).transform(String),
@@ -40,8 +59,8 @@ export const recruiteeRawJobSchema = z
     department: optionalText,
     employment_type_code: optionalText,
     remote: z.boolean().nullable().optional(),
-    published_at: z.iso.datetime({ offset: true }).nullable().optional(),
-    created_at: z.iso.datetime({ offset: true }).nullable().optional(),
+    published_at: optionalRecruiteeTimestamp,
+    created_at: optionalRecruiteeTimestamp,
   })
   .passthrough();
 
