@@ -54,6 +54,20 @@ DEFAULT_START = (
 OUT_PATH = ROOT / "sr-storage-state.json"
 
 
+def _env_enabled(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _proxy_username_for_log(value: object) -> str:
+    return "[redacted]" if str(value or "").strip() else "-"
+
+
+def _exit_ip_for_log(ip_body: str) -> str:
+    if _env_enabled("SR_CAPTURE_LOG_EXIT_IP"):
+        return ip_body
+    return "[masked; set SR_CAPTURE_LOG_EXIT_IP=1 to show]"
+
+
 async def _current_ip(page) -> str:
     try:
         await page.goto("http://api.ipify.org?format=json", wait_until="commit", timeout=45000)
@@ -100,7 +114,7 @@ async def main() -> None:
     channel = (os.environ.get("BROWSER_CHANNEL") or "chrome").strip() or None
     print("Launching headed Chrome via proxy…")
     print("  server:", proxy.get("server"))
-    print("  user  :", proxy.get("username"))
+    print("  user  :", _proxy_username_for_log(proxy.get("username")))
     print("  start :", start_url)
     print("  out   :", OUT_PATH)
     print("  secrets:", ROOT / ".browser-secrets.env")
@@ -125,7 +139,7 @@ async def main() -> None:
         page = await context.new_page()
 
         ip_body = await _current_ip(page)
-        print("Exit IP via proxy:", ip_body)
+        print("Exit IP via proxy:", _exit_ip_for_log(ip_body))
         if _proxy_looks_dead(ip_body):
             await context.close()
             await browser.close()
@@ -175,14 +189,11 @@ async def main() -> None:
         hint_path.write_text(compact, encoding="utf-8")
         print(f"Also wrote compact JSON -> {hint_path}")
         print()
-        bundled = ROOT / "apply_agent" / "data" / "sr_storage_state.json"
-        bundled.write_text(OUT_PATH.read_text(encoding="utf-8"), encoding="utf-8")
-        print(f"Copied into deployed bundle -> {bundled}")
         print()
-        print("Next: commit + push (sticky SID lives in runtime_browser_config.py).")
-        print("  git add apply_agent/data/sr_storage_state.json apply_agent/runtime_browser_config.py")
-        print("  git commit && git push")
-        print("Railway no longer needs BROWSER_STORAGE_STATE_JSON / STICKY_SID in the dashboard.")
+        print("Next: update the approved runtime secret store.")
+        print("  BROWSER_STORAGE_STATE_JSON=<contents of sr-storage-state.railway.txt>")
+        print("  BROWSER_PROXY_STICKY_SID=<current capture SID>")
+        print("Never copy browser storage state or proxy credentials into tracked files.")
 
         await context.close()
         await browser.close()
