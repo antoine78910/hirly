@@ -80,6 +80,14 @@ export const sproutActivationSchema = sproutFranceRegistrationSchema.extend({
     .strict(),
 });
 
+export const sproutTaskPayloadSchema = z
+  .object({
+    sourceId: z.uuid(),
+    mode: z.enum(["backfill", "incremental"]),
+    maxResponseBytes: z.number().int().positive().max(50_000_000),
+  })
+  .strict();
+
 export type SproutActivation = z.infer<typeof sproutActivationSchema>;
 
 export function assertSproutActivationReady(

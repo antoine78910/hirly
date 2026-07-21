@@ -104,6 +104,13 @@ function primaryLocation(
   );
 }
 
+export function hasSproutFranceLocation(rawValue: SproutRawJob): boolean {
+  const raw = sproutRawJobSchema.parse(rawValue);
+  return raw.locations.some(
+    (location) => normalizeSproutLocation(location).countryCode === "FR",
+  );
+}
+
 function requireApplyUrl(value: string | null | undefined): string {
   const raw = cleanText(value);
   if (!raw) {

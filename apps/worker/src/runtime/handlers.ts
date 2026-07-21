@@ -16,12 +16,43 @@ import {
   providerModules,
 } from "../providers";
 import type { ProviderCore } from "../providers/core";
+import {
+  SPROUT_FRANCE_DISABLED_REGISTRATION,
+  SproutHttpTransport,
+  createSproutCommitRepository,
+  hasSproutFranceLocation,
+  runSproutPageTask,
+  sproutCheckpointSchema,
+  sproutTaskPayloadSchema,
+  type SproutRawJob,
+  type SproutSecretResolver,
+} from "../providers/sprout";
+
+function environmentSproutSecretResolver(): SproutSecretResolver {
+  return {
+    async resolve(reference) {
+      if (reference !== "secret://sprout/france-api") {
+        throw new IngestionError("authorization_blocked", "sprout_credential_reference_rejected");
+      }
+      const value = process.env.SPROUT_FRANCE_API_TOKEN?.trim();
+      if (!value) {
+        throw new IngestionError("authorization_blocked", "sprout_credential_unavailable");
+      }
+      return value;
+    },
+  };
+}
 
 export function createTaskHandlers(
   store: RuntimeStore,
   logger?: Logger,
   modules: Record<Provider, ProviderCore<unknown>> = providerModules,
-  options: { providerClaimHeartbeatMs?: number } = {},
+  options: {
+    providerClaimHeartbeatMs?: number;
+    sproutAllowedOrigins?: readonly string[];
+    sproutSecretResolver?: SproutSecretResolver;
+    sproutFetch?: typeof globalThis.fetch;
+  } = {},
 ): TaskHandlers {
   const rateGates = new Map<Provider, ProviderRateGate>();
   return {
@@ -111,6 +142,90 @@ export function createTaskHandlers(
           await heartbeatPromise;
         }, heartbeatMs);
         try {
+          if (provider === "sprout") {
+            if (!store.getSproutSourceRuntime || !store.commitSproutSourcePage) {
+              throw new IngestionError(
+                "integrity_error",
+                "Sprout source runtime persistence is unavailable",
+              );
+            }
+            const payload = sproutTaskPayloadSchema.parse(task.payload);
+            const runtime = await store.getSproutSourceRuntime(
+              payload.sourceId,
+              payload.mode,
+            );
+            if (!runtime) {
+              throw new IngestionError(
+                "authorization_blocked",
+                "sprout_source_activation_blocked",
+              );
+            }
+            const checkpoint = sproutCheckpointSchema.parse(runtime.checkpoint);
+            const configuredOrigins =
+              options.sproutAllowedOrigins ??
+              (process.env.SPROUT_ALLOWED_ORIGIN
+                ? [process.env.SPROUT_ALLOWED_ORIGIN]
+                : []);
+            if (configuredOrigins.length === 0) {
+              throw new IngestionError(
+                "authorization_blocked",
+                "sprout_transport_allowlist_missing",
+              );
+            }
+            const transport = new SproutHttpTransport({
+              endpoint: runtime.endpoint,
+              allowedOrigins: configuredOrigins,
+              secrets: options.sproutSecretResolver ?? environmentSproutSecretResolver(),
+              fetch: options.sproutFetch,
+              maxResponseBytes: payload.maxResponseBytes,
+            });
+            const commitSproutSourcePage = store.commitSproutSourcePage.bind(store);
+            const repository = createSproutCommitRepository({
+              sourceId: runtime.sourceId,
+              policyId: runtime.policyId,
+              countryCode: "FR",
+              mode: payload.mode,
+              async commit(commit) {
+                claimCompleting = true;
+                await heartbeatPromise;
+                if (heartbeatError) throw heartbeatError;
+                const result = await commitSproutSourcePage(
+                  task,
+                  providerClaim,
+                  commit,
+                );
+                claimCompleted = true;
+                return result;
+              },
+            });
+            await runSproutPageTask<SproutRawJob>({
+              activation: {
+                ...SPROUT_FRANCE_DISABLED_REGISTRATION,
+                authorizationStatus: "authorized",
+                writerRuntime: "typescript",
+                policyStatus: "approved",
+                policyEvidenceRef: runtime.policyEvidenceRef,
+                redisplayAllowed: true,
+                fullTextRetentionAllowed: true,
+                credentialRef: runtime.credentialRef,
+                approvedPageSize: runtime.approvedPageSize,
+                enabled: true,
+                transportEnabled: true,
+                incrementalEnabled: payload.mode === "incremental",
+                backfillEnabled: payload.mode === "backfill",
+                providerCountryKillSwitch: false,
+                sourceCountryKillSwitch: false,
+              },
+              mode: payload.mode,
+              checkpoint,
+              transport,
+              repository,
+              hasFranceLocation: hasSproutFranceLocation,
+              signal: claimAbort.signal,
+              maxResponseBytes: payload.maxResponseBytes,
+            });
+            return { taskCompleted: true };
+          }
           let rateGate = rateGates.get(provider);
           if (!rateGate) {
             rateGate = new ProviderRateGate(module.rateLimit);
