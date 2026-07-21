@@ -91,7 +91,10 @@ export async function runLoadEvidence(input: {
     await sql.unsafe("ANALYZE public.candidate_action_projection");
     await sql.unsafe("ANALYZE public.job_search_documents");
 
-    const parameters: [string, null, null, number] = [CANDIDATE_ID, null, null, 13];
+    const parameters = [
+      CANDIDATE_ID, null, null, 13, "candidate-profile", null,
+      [], [], [], [], [], [], 1, false,
+    ];
     const plan = await sql.unsafe(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${FEED_V2_INDEXED_READ_SQL}`, parameters);
     const facts = planFacts(plan);
     const availableIndexes = await sql.unsafe<Array<{ indexname: string }>>(
@@ -102,20 +105,20 @@ export async function runLoadEvidence(input: {
       unsafe: async (query, queryParameters) =>
         await sql.unsafe(query, [...queryParameters] as never[]) as never,
     });
-    const first = await repository.readIndexedCandidates({ candidateId: CANDIDATE_ID, limit: 12, after: null });
+    const first = await repository.readIndexedCandidates({ candidateId: CANDIDATE_ID, effectiveQuery: null, limit: 12, after: null });
     if (first.candidates.length !== 12 || new Set(first.candidates.map((row) => row.canonicalGroupId)).size !== 12) {
       throw new Error("Feed v2 first page correctness assertion failed");
     }
     for (let index = 0; index < 5; index += 1) {
-      await repository.readIndexedCandidates({ candidateId: CANDIDATE_ID, limit: 12, after: null });
+      await repository.readIndexedCandidates({ candidateId: CANDIDATE_ID, effectiveQuery: null, limit: 12, after: null });
     }
     const samples: number[] = [];
     for (let index = 0; index < input.samples; index += 1) {
-      samples.push((await measure(() => repository.readIndexedCandidates({ candidateId: CANDIDATE_ID, limit: 12, after: null }))).elapsedMs);
+      samples.push((await measure(() => repository.readIndexedCandidates({ candidateId: CANDIDATE_ID, effectiveQuery: null, limit: 12, after: null }))).elapsedMs);
     }
     const peakConcurrency = input.baselineConcurrency * 2;
     const concurrent = await Promise.all(Array.from({ length: peakConcurrency }, () =>
-      measure(() => repository.readIndexedCandidates({ candidateId: CANDIDATE_ID, limit: 12, after: null }))));
+      measure(() => repository.readIndexedCandidates({ candidateId: CANDIDATE_ID, effectiveQuery: null, limit: 12, after: null }))));
     const latency = {
       p50Ms: percentile(samples, 0.50), p95Ms: percentile(samples, 0.95), p99Ms: percentile(samples, 0.99),
       peakX2Concurrency: peakConcurrency, peakX2P99Ms: percentile(concurrent.map((sample) => sample.elapsedMs), 0.99),

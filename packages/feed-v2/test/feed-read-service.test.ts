@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
+  FEED_EFFECTIVE_QUERY_VERSION,
   FeedAuthorizationError,
   FeedCursorError,
   FeedV2ReadService,
+  createFeedEffectiveQuery,
   type FeedAuthAssertion,
   type FeedCandidate,
   type FeedReadRepository,
@@ -44,6 +46,7 @@ function snapshot(
     snapshotVersion: "inventory-7",
     profileVersion: "profile-3",
     actionWatermark: "actions-11",
+    queryFingerprint: "candidate-profile",
     profileReady: true,
     inventoryState: "ready",
     candidates,
@@ -65,10 +68,14 @@ describe("Feed v2 indexed read service", () => {
       candidate("group-b", 0.8),
       candidate("group-c", 0.7),
     ];
-    const calls: Array<{ candidateId: string; after: unknown }> = [];
+    const calls: Array<{ candidateId: string; effectiveQuery: unknown; after: unknown }> = [];
     const service = new FeedV2ReadService(
       repository(async (input) => {
-        calls.push({ candidateId: input.candidateId, after: input.after });
+        calls.push({
+          candidateId: input.candidateId,
+          effectiveQuery: input.effectiveQuery,
+          after: input.after,
+        });
         const start = input.after
           ? rows.findIndex(
               (row) => row.canonicalGroupId === input.after?.canonicalGroupId,
@@ -94,9 +101,10 @@ describe("Feed v2 indexed read service", () => {
     expect(second.jobs.map((job) => job.canonicalGroupId)).toEqual(["group-c"]);
     expect(second.nextCursor).toBeNull();
     expect(calls).toEqual([
-      { candidateId: "candidate-1", after: null },
+      { candidateId: "candidate-1", effectiveQuery: null, after: null },
       {
         candidateId: "candidate-1",
+        effectiveQuery: null,
         after: { relevanceScore: 0.8, canonicalGroupId: "group-b" },
       },
     ]);
@@ -217,4 +225,55 @@ describe("Feed v2 indexed read service", () => {
     ).rejects.toEqual(new FeedCursorError("invalid_cursor"));
     expect(reads).toBe(0);
   });
+  test("binds a cursor to the signed effective-query fingerprint before reading", async () => {
+    const query = (role: string) =>
+      createFeedEffectiveQuery({
+        version: FEED_EFFECTIVE_QUERY_VERSION,
+        role,
+        radiusKm: 52,
+        locations: [{
+          label: "Paris, France",
+          country: "France",
+          countryCode: "FR",
+          placeId: null,
+          latitude: 48.8566,
+          longitude: 2.3522,
+        }],
+        countryCode: "FR",
+        workModes: ["hybrid"],
+        jobTypes: ["permanent"],
+        experienceLevels: [],
+        freeTextLocations: [],
+        minimumSalary: 0,
+        postedWithin: null,
+        onlyCompanies: [],
+        hiddenCompanies: [],
+        onlyIndustries: [],
+        hiddenIndustries: [],
+        includeUnknownLocation: false,
+        includeUnknownSalary: true,
+        includeNonAutoApply: true,
+        onlyMyCountry: false,
+      });
+    let reads = 0;
+    const service = new FeedV2ReadService(
+      repository(async (input) => {
+        reads += 1;
+        return snapshot([candidate("group-a", 1), candidate("group-b", 0.5)], {
+          queryFingerprint:
+            input.effectiveQuery?.fingerprint ?? "candidate-profile",
+        });
+      }),
+      { now: () => new Date("2026-07-21T12:00:00Z") },
+    );
+    const firstAssertion = { ...assertion, effectiveQuery: query("Fullstack Engineer") };
+    const first = await service.read({ assertion: firstAssertion, limit: 1 });
+    expect(first.nextCursor).not.toBeNull();
+    await expect(service.read({
+      assertion: { ...assertion, effectiveQuery: query("Backend Engineer") },
+      cursor: first.nextCursor,
+    })).rejects.toEqual(new FeedCursorError("stale_cursor"));
+    expect(reads).toBe(1);
+  });
+
 });
