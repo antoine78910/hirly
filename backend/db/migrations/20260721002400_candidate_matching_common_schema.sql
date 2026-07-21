@@ -50,72 +50,100 @@ CREATE TABLE public.candidate_projection_tombstones (
 );
 
 CREATE TABLE public.candidate_search_profiles (
+  schema_version text NOT NULL DEFAULT 'hirly.matching.v1'
+    CHECK (schema_version = 'hirly.matching.v1'),
   candidate_id text PRIMARY KEY CHECK (length(btrim(candidate_id)) > 0),
   version bigint NOT NULL CHECK (version > 0),
   status text NOT NULL CHECK (status IN ('active', 'paused', 'deleted')),
-  role_family_codes text[] NOT NULL DEFAULT ARRAY[]::text[],
+  target_role_label_normalized text,
+  role_family_ids text[] NOT NULL DEFAULT ARRAY[]::text[],
   rome_codes text[] NOT NULL DEFAULT ARRAY[]::text[],
-  skill_codes text[] NOT NULL DEFAULT ARRAY[]::text[],
-  seniority_codes text[] NOT NULL DEFAULT ARRAY[]::text[],
-  contract_families text[] NOT NULL DEFAULT ARRAY[]::text[],
+  skill_ids text[] NOT NULL DEFAULT ARRAY[]::text[],
+  skill_terms text[] NOT NULL DEFAULT ARRAY[]::text[],
+  seniority_min integer CHECK (seniority_min IS NULL OR seniority_min BETWEEN 0 AND 20),
+  seniority_max integer CHECK (seniority_max IS NULL OR seniority_max BETWEEN 0 AND 20),
+  contract_types text[] NOT NULL DEFAULT ARRAY[]::text[],
   work_modes text[] NOT NULL DEFAULT ARRAY[]::text[],
   country_codes text[] NOT NULL DEFAULT ARRAY[]::text[],
-  location_policy text NOT NULL
+  location_policy text
     CHECK (location_policy IN ('explicit', 'country', 'worldwide')),
-  latitude double precision,
-  longitude double precision,
-  radius_km integer CHECK (radius_km IS NULL OR radius_km BETWEEN 0 AND 10000),
+  origin_latitude double precision,
+  origin_longitude double precision,
+  radius_km double precision CHECK (radius_km IS NULL OR radius_km > 0 AND radius_km <= 20000),
   salary_floor numeric CHECK (salary_floor IS NULL OR salary_floor >= 0),
   currency text CHECK (currency IS NULL OR currency ~ '^[A-Z]{3}$'),
-  freshness_window_days integer NOT NULL CHECK (freshness_window_days BETWEEN 1 AND 365),
+  freshness_window_days integer CHECK (freshness_window_days BETWEEN 1 AND 365),
   exposure_policy_version text NOT NULL CHECK (length(btrim(exposure_policy_version)) > 0),
-  feature_schema_version integer NOT NULL CHECK (feature_schema_version > 0),
+  feature_schema_version text NOT NULL CHECK (length(btrim(feature_schema_version)) > 0),
   source_profile_updated_at timestamptz NOT NULL,
-  role_label_history text[] NOT NULL DEFAULT ARRAY[]::text[],
-  role_label_history_expires_at timestamptz,
+  projected_at timestamptz NOT NULL,
   source_event_id uuid NOT NULL UNIQUE,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT candidate_search_profiles_location_guard CHECK (
-    (latitude IS NULL AND longitude IS NULL)
-    OR (latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180)
+    (origin_latitude IS NULL AND origin_longitude IS NULL)
+    OR (origin_latitude BETWEEN -90 AND 90 AND origin_longitude BETWEEN -180 AND 180)
   ),
-  CONSTRAINT candidate_search_profiles_history_retention_guard CHECK (
-    cardinality(role_label_history) = 0
+  CONSTRAINT candidate_search_profiles_seniority_guard CHECK (
+    seniority_min IS NULL OR seniority_max IS NULL OR seniority_max >= seniority_min
+  ),
+  CONSTRAINT candidate_search_profiles_deleted_guard CHECK (
+    status <> 'deleted'
     OR (
-      role_label_history_expires_at IS NOT NULL
-      AND role_label_history_expires_at <= created_at + interval '30 days'
+      target_role_label_normalized IS NULL
+      AND cardinality(role_family_ids) = 0
+      AND cardinality(rome_codes) = 0
+      AND cardinality(skill_ids) = 0
+      AND cardinality(skill_terms) = 0
+      AND seniority_min IS NULL
+      AND seniority_max IS NULL
+      AND cardinality(contract_types) = 0
+      AND cardinality(work_modes) = 0
+      AND origin_latitude IS NULL
+      AND origin_longitude IS NULL
+      AND radius_km IS NULL
+      AND cardinality(country_codes) = 0
+      AND location_policy IS NULL
+      AND salary_floor IS NULL
+      AND currency IS NULL
+      AND freshness_window_days IS NULL
     )
+  ),
+  CONSTRAINT candidate_search_profiles_active_guard CHECK (
+    status = 'deleted' OR (location_policy IS NOT NULL AND freshness_window_days IS NOT NULL)
   )
 );
 
 CREATE INDEX candidate_search_profiles_active_country_role_idx
   ON public.candidate_search_profiles
-  USING gin (country_codes, role_family_codes)
+  USING gin (country_codes, role_family_ids)
   WHERE status = 'active';
 CREATE INDEX candidate_search_profiles_active_updated_idx
   ON public.candidate_search_profiles (updated_at, candidate_id)
   WHERE status = 'active';
 
 CREATE TABLE public.candidate_action_projection (
+  schema_version text NOT NULL DEFAULT 'hirly.matching.v1'
+    CHECK (schema_version = 'hirly.matching.v1'),
   candidate_id text NOT NULL CHECK (length(btrim(candidate_id)) > 0),
   action_id text NOT NULL CHECK (length(btrim(action_id)) > 0),
   candidate_version bigint NOT NULL CHECK (candidate_version > 0),
   source_job_id text NOT NULL CHECK (length(btrim(source_job_id)) > 0),
-  canonical_group_id uuid,
+  canonical_group_id uuid NOT NULL,
+  canonical_group_aliases uuid[] NOT NULL DEFAULT ARRAY[]::uuid[],
   action_kind text NOT NULL CHECK (
-    action_kind IN ('dismissed', 'liked', 'application_started', 'applied', 'withdrawn')
+    action_kind IN ('seen', 'dismissed', 'applied', 'undo')
   ),
   action_at timestamptz NOT NULL,
   retention_state text NOT NULL DEFAULT 'active'
-    CHECK (retention_state IN ('active', 'expired', 'purge_pending')),
+    CHECK (retention_state IN ('active', 'superseded', 'deleted')),
   retained_until timestamptz,
   source_event_id uuid NOT NULL UNIQUE,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY (candidate_id, action_id),
-  CONSTRAINT candidate_action_projection_retention_guard CHECK (
-    retention_state = 'active' OR retained_until IS NOT NULL
+  CONSTRAINT candidate_action_projection_aliases_guard CHECK (
+    NOT canonical_group_id = ANY(canonical_group_aliases)
   )
 );
 
@@ -150,48 +178,63 @@ CREATE INDEX candidate_action_group_aliases_alias_idx
   ON public.candidate_action_group_aliases (alias_group_id, alias_kind, alias_version DESC);
 
 CREATE TABLE public.job_search_documents (
+  schema_version text NOT NULL DEFAULT 'hirly.matching.v1'
+    CHECK (schema_version = 'hirly.matching.v1'),
   canonical_group_id uuid PRIMARY KEY,
   preferred_job_id text NOT NULL CHECK (length(btrim(preferred_job_id)) > 0),
   job_version bigint NOT NULL CHECK (job_version > 0),
   lifecycle_status text NOT NULL
-    CHECK (lifecycle_status IN ('active', 'expired', 'removed', 'blocked')),
+    CHECK (lifecycle_status IN ('active', 'stale', 'expired', 'removed', 'blocked')),
   normalized_title text NOT NULL CHECK (length(btrim(normalized_title)) > 0),
   role_family_codes text[] NOT NULL DEFAULT ARRAY[]::text[],
   rome_codes text[] NOT NULL DEFAULT ARRAY[]::text[],
   skill_codes text[] NOT NULL DEFAULT ARRAY[]::text[],
-  seniority_codes text[] NOT NULL DEFAULT ARRAY[]::text[],
+  seniority_min integer CHECK (seniority_min IS NULL OR seniority_min BETWEEN 0 AND 20),
+  seniority_max integer CHECK (seniority_max IS NULL OR seniority_max BETWEEN 0 AND 20),
   contract_families text[] NOT NULL DEFAULT ARRAY[]::text[],
   work_modes text[] NOT NULL DEFAULT ARRAY[]::text[],
   country_codes text[] NOT NULL DEFAULT ARRAY[]::text[],
   latitude double precision,
   longitude double precision,
+  location_confidence double precision NOT NULL CHECK (location_confidence BETWEEN 0 AND 1),
+  location_unknown boolean NOT NULL,
   salary_min numeric CHECK (salary_min IS NULL OR salary_min >= 0),
   salary_max numeric CHECK (salary_max IS NULL OR salary_max >= 0),
   currency text CHECK (currency IS NULL OR currency ~ '^[A-Z]{3}$'),
-  posted_at timestamptz,
-  fresh_until timestamptz NOT NULL,
+  posted_at timestamptz NOT NULL,
+  last_seen_at timestamptz NOT NULL,
+  expires_at timestamptz,
+  validation_status text NOT NULL CHECK (validation_status IN ('valid', 'review', 'invalid')),
+  applyability_tier text NOT NULL CHECK (applyability_tier IN ('A', 'B', 'C', 'D', 'blocked')),
   fulfillment_route text NOT NULL CHECK (
     fulfillment_route IN ('auto', 'assisted', 'manual', 'blocked')
   ),
   source_eligible boolean NOT NULL,
   policy_eligible boolean NOT NULL,
-  feature_schema_version integer NOT NULL CHECK (feature_schema_version > 0),
-  search_vector tsvector NOT NULL,
+  feature_schema_version text NOT NULL CHECK (length(btrim(feature_schema_version)) > 0),
+  search_text text NOT NULL,
+  search_vector tsvector GENERATED ALWAYS AS (to_tsvector('simple', search_text)) STORED,
   source_updated_at timestamptz NOT NULL,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT job_search_documents_salary_guard CHECK (
     salary_min IS NULL OR salary_max IS NULL OR salary_max >= salary_min
   ),
+  CONSTRAINT job_search_documents_seniority_guard CHECK (
+    seniority_min IS NULL OR seniority_max IS NULL OR seniority_max >= seniority_min
+  ),
   CONSTRAINT job_search_documents_location_guard CHECK (
     (latitude IS NULL AND longitude IS NULL)
     OR (latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180)
+  ),
+  CONSTRAINT job_search_documents_location_unknown_guard CHECK (
+    NOT location_unknown OR (latitude IS NULL AND longitude IS NULL)
   )
 );
 
 CREATE INDEX job_search_documents_retrieval_idx
   ON public.job_search_documents (
-    lifecycle_status, source_eligible, policy_eligible, fresh_until DESC,
+    lifecycle_status, source_eligible, policy_eligible, last_seen_at DESC,
     canonical_group_id
   );
 CREATE INDEX job_search_documents_features_idx
@@ -205,11 +248,13 @@ CREATE INDEX job_search_documents_preferred_job_idx
   ON public.job_search_documents (preferred_job_id, job_version DESC);
 
 CREATE TABLE public.projection_reconciliation_tasks (
+  schema_version text NOT NULL DEFAULT 'hirly.matching.v1'
+    CHECK (schema_version = 'hirly.matching.v1'),
   task_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   task_kind text NOT NULL CHECK (
     task_kind IN (
-      'candidate_profile_project', 'candidate_action_project',
-      'job_document_project', 'candidate_purge', 'projection_reconcile'
+      'candidate.profile.project', 'candidate.action.project',
+      'candidate.delete', 'job.document.project', 'projection.reconcile'
     )
   ),
   entity_id text NOT NULL CHECK (length(btrim(entity_id)) > 0),
@@ -221,7 +266,7 @@ CREATE TABLE public.projection_reconciliation_tasks (
   lease_owner text,
   lease_token uuid,
   lease_until timestamptz,
-  attempts integer NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+  attempts integer NOT NULL DEFAULT 0 CHECK (attempts BETWEEN 0 AND 100),
   max_attempts integer NOT NULL DEFAULT 8 CHECK (max_attempts BETWEEN 1 AND 100),
   last_error_code text,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
