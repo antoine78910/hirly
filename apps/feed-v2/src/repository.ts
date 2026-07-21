@@ -200,6 +200,17 @@ function queryParameters(query: FeedEffectiveQuery | null): readonly unknown[] {
       ? []
       : [{ latitude: location.latitude, longitude: location.longitude }],
   );
+  // Many provider records have a normalized city/country but no coordinates.
+  // Make an explicitly selected location usable for those records as well as
+  // for coordinate-bearing inventory. The leading label segment is the city
+  // for our canonical location labels (for example "Paris, Île-de-France").
+  const freeTextLocations = [...new Set([
+    ...query.freeTextLocations,
+    ...query.locations.flatMap((location) => {
+      const city = location.label.split(",", 1)[0]?.trim();
+      return city ? [location.label, city] : [location.label];
+    }),
+  ])].sort();
   return [
     query.fingerprint,
     query.role,
@@ -213,7 +224,7 @@ function queryParameters(query: FeedEffectiveQuery | null): readonly unknown[] {
     }))].sort(),
     locations.map((location) => location.latitude),
     locations.map((location) => location.longitude),
-    query.freeTextLocations,
+    freeTextLocations,
     query.radiusKm,
     query.includeUnknownLocation,
   ];

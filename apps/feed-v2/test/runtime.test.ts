@@ -132,7 +132,7 @@ describe("Feed v2 runtime adapters", () => {
       workModes: ["hybrid", "remote"],
       jobTypes: ["full_time"],
       experienceLevels: [],
-      freeTextLocations: ["Paris"],
+      freeTextLocations: [],
       minimumSalary: 0,
       postedWithin: null,
       onlyCompanies: [],
@@ -178,7 +178,7 @@ describe("Feed v2 runtime adapters", () => {
       "candidate-1", null, null, 13, effectiveQuery.fingerprint,
       "Fullstack Engineer", ["FR"], ["hybrid", "remote"], ["full-time", "permanent"],
       [48.8566], [2.3522],
-      ["Paris"], 52, false,
+      ["Paris", "Paris, France"], 52, false,
     ]);
     expect(FEED_V2_INDEXED_READ_SQL).toContain("websearch_to_tsquery");
     expect(FEED_V2_INDEXED_READ_SQL).toContain("unnest(");
