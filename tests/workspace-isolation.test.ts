@@ -119,11 +119,10 @@ describe("legacy frontend install and deployment contract", () => {
       outputDirectory?: string;
     }>("frontend/vercel.json");
     const rootVercel = readJson<{
-      experimentalServices?: Record<
+      services?: Record<
         string,
         {
           root?: string;
-          routePrefix?: string;
           framework?: string;
           installCommand?: string;
           buildCommand?: string;
@@ -137,9 +136,8 @@ describe("legacy frontend install and deployment contract", () => {
       buildCommand: "CI=false npm run build",
       outputDirectory: "build",
     });
-    expect(rootVercel.experimentalServices?.frontend).toEqual({
+    expect(rootVercel.services?.frontend).toEqual({
       root: "frontend",
-      routePrefix: "/",
       framework: "create-react-app",
       installCommand: "npm install --legacy-peer-deps",
       buildCommand: "CI=false npm run build",

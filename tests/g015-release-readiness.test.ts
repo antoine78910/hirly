@@ -315,6 +315,18 @@ describe("G015 release verification contract", () => {
     const frontendConfig = JSON.parse(await readFile(resolve(root, "frontend/vercel.json"), "utf8"));
     expect(rootConfig.git?.deploymentEnabled).toBe(false);
     expect(frontendConfig.git?.deploymentEnabled).toBe(false);
+    expect(rootConfig.services?.frontend).toMatchObject({
+      root: "frontend",
+      framework: "create-react-app",
+      installCommand: "npm install --legacy-peer-deps",
+      buildCommand: "CI=false npm run build",
+      outputDirectory: "build",
+    });
+    expect(rootConfig.experimentalServices).toBeUndefined();
+    expect(rootConfig.rewrites).toContainEqual({
+      source: "/(.*)",
+      destination: { service: "frontend" },
+    });
     expect(() => verifyDeploymentDefaults(root)).not.toThrow();
   });
 

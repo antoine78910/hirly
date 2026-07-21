@@ -1,13 +1,9 @@
 {
-<<<<<<< HEAD
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "git": {
     "deploymentEnabled": false
   },
-  "experimentalServices": {
-=======
   "services": {
->>>>>>> 9dfdf5edb48bfe8d91e2ecfedcb97219d02759d8
     "frontend": {
       "root": "frontend",
       "framework": "create-react-app",

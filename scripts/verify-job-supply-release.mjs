@@ -606,7 +606,14 @@ export function verifyDeploymentDefaults(root = process.cwd()) {
 
   const rootVercel = JSON.parse(readFileSync(resolve(root, "vercel.json"), "utf8"));
   const frontendVercel = JSON.parse(readFileSync(resolve(root, "frontend/vercel.json"), "utf8"));
-  if (JSON.stringify(rootVercel).includes("apps/worker") || JSON.stringify(rootVercel.rewrites) !== JSON.stringify(frontendVercel.rewrites)) {
+  const rootApiRewrite = rootVercel.rewrites?.find((rewrite) => rewrite.source === "/api/:path*");
+  const frontendApiRewrite = frontendVercel.rewrites?.find((rewrite) => rewrite.source === "/api/:path*");
+  const rootFrontendRewrite = rootVercel.rewrites?.find((rewrite) => rewrite.source === "/(.*)");
+  if (
+    JSON.stringify(rootVercel).includes("apps/worker")
+    || JSON.stringify(rootApiRewrite) !== JSON.stringify(frontendApiRewrite)
+    || rootFrontendRewrite?.destination?.service !== "frontend"
+  ) {
     throw new Error("Vercel routing would expose or diverge onto the worker");
   }
   if (rootVercel.git?.deploymentEnabled !== false || frontendVercel.git?.deploymentEnabled !== false) {
