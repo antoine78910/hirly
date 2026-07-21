@@ -9,8 +9,6 @@ export const JOB_FEATURE_SCHEMA_VERSION = "matching-job-features.v1";
 export interface JobProjectionSource {
   canonicalGroupId: string;
   preferredJobId: string;
-  /** Monotonic canonical-inventory watermark used for stale-task fencing. */
-  authoritativeVersion: string;
   groupStatus: "active" | "split" | "superseded" | "archived";
   title: string;
   normalizedTitle: string | null;
@@ -37,12 +35,11 @@ export interface JobProjectionSource {
 }
 
 export type JobProjectionResult =
-  | { action: "remove"; canonicalGroupId: string; authoritativeVersion: string }
+  | { action: "remove"; canonicalGroupId: string }
   | {
       action: "upsert";
       canonicalGroupId: string;
       preferredJobId: string;
-      authoritativeVersion: string;
       sourceContentHash: string;
       row: JobSearchDocumentPersistenceRow;
     };
@@ -111,9 +108,7 @@ function workModes(source: JobProjectionSource): Array<"onsite" | "hybrid" | "re
     return [];
   });
   if (mapped.length > 0) return [...new Set(mapped)].sort();
-  if (source.remote === true) return ["remote"];
-  if (source.remote === false) return ["onsite"];
-  return [];
+  return [source.remote === true ? "remote" : "onsite"];
 }
 
 function roleFamilies(source: JobProjectionSource): string[] {
@@ -136,7 +131,9 @@ function lifecycle(source: JobProjectionSource, now: Date): "active" | "stale" |
     return explicit as "active" | "stale" | "removed" | "expired" | "blocked";
   }
   if (source.expiresAt && new Date(source.expiresAt) <= now) return "expired";
-  return "blocked";
+  const lastSeen = source.lastSeenAt ? new Date(source.lastSeenAt) : null;
+  if (lastSeen && now.getTime() - lastSeen.getTime() > 30 * 86_400_000) return "stale";
+  return "active";
 }
 
 function route(source: JobProjectionSource): "auto" | "assisted" | "manual" | "blocked" {
@@ -179,14 +176,7 @@ export async function projectJobSearchDocument(
   projectedAt: Date,
 ): Promise<JobProjectionResult> {
   if (source.groupStatus !== "active") {
-    return {
-      action: "remove",
-      canonicalGroupId: source.canonicalGroupId,
-      authoritativeVersion: source.authoritativeVersion,
-    };
-  }
-  if (!/^[1-9]\d*$/.test(source.authoritativeVersion)) {
-    throw new Error("job projection authoritative version must be a positive decimal string");
+    return { action: "remove", canonicalGroupId: source.canonicalGroupId };
   }
   const normalizedTitle = token(source.normalizedTitle ?? source.title);
   if (!normalizedTitle) throw new Error("job projection title normalizes to empty");
@@ -201,21 +191,10 @@ export async function projectJobSearchDocument(
   const contractTypesValue = contractTypes(source.data);
   const workModesValue = workModes(source);
   const publishedAt = iso(source.publishedAt, source.firstSeenAt, source.importedAt, source.lastSeenAt);
-  const hasAuthoritativeFreshness = source.lastSeenAt !== null;
   const lastSeenAt = iso(source.lastSeenAt, source.importedAt, source.firstSeenAt, source.publishedAt);
   const lifecycleStatus = lifecycle(source, projectedAt);
-  const validationStatus: "valid" | "review" | "invalid" =
-    source.validationStatus === "valid"
-      ? "valid"
-      : source.validationStatus === "invalid"
-        ? "invalid"
-        : "review";
-  const applyabilityTier: "A" | "B" | "C" | "D" | "blocked" =
-    source.applyabilityTier === "E"
-      ? "blocked"
-      : ["A", "B", "C", "D"].includes(source.applyabilityTier)
-        ? (source.applyabilityTier as "A" | "B" | "C" | "D")
-        : "blocked";
+  const validationStatus = source.validationStatus === "valid" ? "valid" : source.validationStatus === "invalid" ? "invalid" : "review";
+  const applyabilityTier = source.applyabilityTier === "E" ? "blocked" : ["A", "B", "C", "D"].includes(source.applyabilityTier) ? source.applyabilityTier as "A" | "B" | "C" | "D" : "blocked";
   const content = {
     canonicalGroupId: source.canonicalGroupId,
     preferredJobId: source.preferredJobId,
@@ -235,7 +214,7 @@ export async function projectJobSearchDocument(
     validationStatus,
     applyabilityTier,
     fulfillmentRoute: route(source),
-    sourceEligible: source.sourceEligible && hasAuthoritativeFreshness && source.lifecycleState !== null,
+    sourceEligible: source.sourceEligible,
     policyEligible: source.policyEligible,
     featureSchemaVersion: JOB_FEATURE_SCHEMA_VERSION,
     searchText: [source.title, source.company, source.location, ...roleFamilyIds, ...romeCodes, ...skillIds]
@@ -245,12 +224,13 @@ export async function projectJobSearchDocument(
       .slice(0, 8_192),
   };
   const sourceContentHash = await sha256(content);
+  const jobVersion = (BigInt(`0x${sourceContentHash.slice(0, 15)}`) + 1n).toString();
   const row = toJobSearchDocumentPersistenceRow(
     {
       schemaVersion: MATCHING_CONTRACT_VERSION,
       canonicalGroupId: content.canonicalGroupId,
       preferredJobId: content.preferredJobId,
-      jobVersion: source.authoritativeVersion,
+      jobVersion,
       roleFamilyIds: content.roleFamilyIds,
       romeCodes: content.romeCodes,
       skillIds: content.skillIds,
@@ -277,12 +257,5 @@ export async function projectJobSearchDocument(
     },
     { normalizedTitle, searchText: content.searchText },
   );
-  return {
-    action: "upsert",
-    canonicalGroupId: source.canonicalGroupId,
-    preferredJobId: source.preferredJobId,
-    authoritativeVersion: source.authoritativeVersion,
-    sourceContentHash,
-    row,
-  };
+  return { action: "upsert", canonicalGroupId: source.canonicalGroupId, preferredJobId: source.preferredJobId, sourceContentHash, row };
 }
