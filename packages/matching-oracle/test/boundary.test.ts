@@ -14,6 +14,7 @@ describe("PR0 matching oracle production and supply boundaries", () => {
       read("src/oracle.ts"),
       read("src/online-matcher.ts"),
       read("src/query-plan.ts"),
+      read("src/shadow-canary.ts"),
     ].join("\n");
 
     expect(packageJson.dependencies?.["@hirly/db"]).toBeUndefined();
@@ -25,6 +26,7 @@ describe("PR0 matching oracle production and supply boundaries", () => {
     const implementation = [
       read("src/online-matcher.ts"),
       read("src/query-plan.ts"),
+      read("src/shadow-canary.ts"),
     ].join("\n");
 
     expect(implementation).not.toMatch(/candidate_match_generations|candidate_job_matches|generation[_ -]fanout|CAS activation/i);
