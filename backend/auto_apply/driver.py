@@ -174,8 +174,9 @@ class BrowserApplyDriver(ApplyDriver):
         evidence: SubmissionEvidence,
     ) -> Optional[Any]:
         root, failure = await self.submission_locator_root(page, job)
-        if not failure:
+        if not failure and root is not None:
             return root
+        failure = failure or "submission_locator_root_missing"
         evidence.blocked_reason = f"route:{failure}"
         await self._log_step(
             evidence,
@@ -572,15 +573,6 @@ class BrowserApplyDriver(ApplyDriver):
                 ):
                     return evidence
 
-                # Provider redirects and form actions are untrusted browser
-                # state. Bind them before typing any candidate PII.
-                if await self._abort_if_submission_boundary_changed(
-                    page,
-                    ctx.job,
-                    evidence,
-                ):
-                    return evidence
-
                 starting_url = page.url
 
                 for step in ctx.plan.steps:
@@ -610,12 +602,6 @@ class BrowserApplyDriver(ApplyDriver):
                             stage="blocked_immediately_before_submit",
                         ):
                             return evidence
-                        if await self._abort_if_submission_boundary_changed(
-                            page,
-                            ctx.job,
-                            evidence,
-                        ):
-                            return evidence
                         pre_submit_check = ctx.documents.get("_pre_submit_check")
                         if callable(pre_submit_check):
                             policy_failure = await pre_submit_check()
@@ -636,7 +622,7 @@ class BrowserApplyDriver(ApplyDriver):
                         )
                         if locator_root is None:
                             return evidence
-                        await self._click_submit(locator_root, evidence)
+                        await self._click_submit_at_root(page, locator_root, evidence)
                         continue
                     locator_root = await self._validated_submission_locator_root(
                         page,
@@ -646,7 +632,13 @@ class BrowserApplyDriver(ApplyDriver):
                     if locator_root is None:
                         return evidence
                     try:
-                        await self._apply_step(locator_root, step, ctx.documents, evidence)
+                        await self._apply_step_at_root(
+                            page,
+                            locator_root,
+                            step,
+                            ctx.documents,
+                            evidence,
+                        )
                     except Exception as step_exc:
                         # Click intercepted by modal / overlay — screenshot and recover.
                         recovery = await recover_stuck_page(
@@ -666,7 +658,13 @@ class BrowserApplyDriver(ApplyDriver):
                         if screenshots_enabled() and recovery.get("screenshot_b64"):
                             evidence.screenshot_b64 = recovery["screenshot_b64"]
                         try:
-                            await self._apply_step(page, step, ctx.documents, evidence)
+                            await self._apply_step_at_root(
+                                page,
+                                locator_root,
+                                step,
+                                ctx.documents,
+                                evidence,
+                            )
                         except Exception as retry_exc:
                             await self._log_step(
                                 evidence,
@@ -728,6 +726,32 @@ class BrowserApplyDriver(ApplyDriver):
                 continue
         return None
 
+    async def _apply_step_at_root(
+        self,
+        page: Any,
+        locator_root: Any,
+        step: Any,
+        documents: Dict[str, Any],
+        evidence: SubmissionEvidence,
+    ) -> None:
+        """Apply one step with lookups scoped to a validated root.
+
+        Page-wide providers keep their subclass override path. A provider that
+        returns a narrower root uses the shared implementation for lookup while
+        retaining the real browser page for keyboard, mouse, and upload helpers.
+        """
+        if locator_root is page:
+            await self._apply_step(page, step, documents, evidence)
+            return
+        await BrowserApplyDriver._apply_step(
+            self,
+            page,
+            step,
+            documents,
+            evidence,
+            locator_root=locator_root,
+        )
+
     async def _log_step(self, evidence: SubmissionEvidence, *, action: str, locators: List[str],
                         status: str, value_preview: str = "", error: str = "") -> None:
         evidence.raw.setdefault("step_log", []).append({
@@ -737,9 +761,17 @@ class BrowserApplyDriver(ApplyDriver):
             "error": "operation_failed" if error else "",
         })
 
-    async def _apply_step(self, page: Any, step, documents: Dict[str, Any], evidence: SubmissionEvidence) -> None:
+    async def _apply_step(
+        self,
+        page: Any,
+        step: Any,
+        documents: Dict[str, Any],
+        evidence: SubmissionEvidence,
+        *,
+        locator_root: Optional[Any] = None,
+    ) -> None:
         preview = "(file)" if step.action == "upload" else "[redacted]"
-        loc = await self._first_locator(page, step.locators)
+        loc = await self._first_locator(locator_root or page, step.locators)
         if loc is None:
             evidence.raw.setdefault("unmatched_steps", []).append(step.action)
             await self._log_step(evidence, action=step.action, locators=step.locators,
@@ -773,8 +805,30 @@ class BrowserApplyDriver(ApplyDriver):
             await self._log_step(evidence, action=step.action, locators=step.locators,
                                  status="error", value_preview=preview, error=str(exc))
 
-    async def _click_submit(self, page: Any, evidence: SubmissionEvidence) -> None:
-        loc = await self._first_locator(page, [_SUBMIT_SELECTOR])
+    async def _click_submit_at_root(
+        self,
+        page: Any,
+        locator_root: Any,
+        evidence: SubmissionEvidence,
+    ) -> None:
+        if locator_root is page:
+            await self._click_submit(page, evidence)
+            return
+        await BrowserApplyDriver._click_submit(
+            self,
+            page,
+            evidence,
+            locator_root=locator_root,
+        )
+
+    async def _click_submit(
+        self,
+        page: Any,
+        evidence: SubmissionEvidence,
+        *,
+        locator_root: Optional[Any] = None,
+    ) -> None:
+        loc = await self._first_locator(locator_root or page, [_SUBMIT_SELECTOR])
         if loc is None:
             evidence.raw["submit"] = "button_not_found"
             await self._log_step(evidence, action="submit", locators=[_SUBMIT_SELECTOR],
