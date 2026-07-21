@@ -1,0 +1,57 @@
+WITH signup AS (
+    SELECT
+        distinct_id,
+        min(timestamp) AS anchor_at
+    FROM events
+    WHERE event = 'user_signed_up'
+      AND match(distinct_id, '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+    GROUP BY distinct_id
+),
+bounds AS (
+    SELECT
+        distinct_id,
+        anchor_at,
+        if(
+            {{j0_start_at_signup}},
+            anchor_at,
+            toDateTime(
+                toString(addDays(toDate(toTimeZone(anchor_at, 'Europe/Paris')), {{start_day}})),
+                'Europe/Paris'
+            )
+        ) AS window_start,
+        toDateTime(
+            toString(addDays(toDate(toTimeZone(anchor_at, 'Europe/Paris')), {{end_day}})),
+            'Europe/Paris'
+        ) AS window_end
+    FROM signup
+),
+eligible AS (
+    SELECT distinct_id, window_start, window_end
+    FROM bounds
+    WHERE window_end <= now()
+),
+activity AS (
+    SELECT DISTINCT eligible.distinct_id
+    FROM eligible
+    INNER JOIN events ON events.distinct_id = eligible.distinct_id
+    WHERE events.event IN (
+        'job_dismissed',
+        'application_intent_started',
+        'job_application_created',
+        'cv_uploaded',
+        'onboarding_completed'
+    )
+      AND events.timestamp >= eligible.window_start
+      AND events.timestamp < eligible.window_end
+),
+result AS (
+    SELECT
+        count() AS eligible_count,
+        countIf(activity.distinct_id IS NOT NULL) AS active_count,
+        eligible_count - active_count AS engagement_churn_count,
+        if(eligible_count = 0, NULL, active_count / eligible_count) AS active_rate,
+        if(eligible_count = 0, NULL, engagement_churn_count / eligible_count) AS engagement_churn_rate
+    FROM eligible
+    LEFT JOIN activity ON activity.distinct_id = eligible.distinct_id
+)
+SELECT * FROM result

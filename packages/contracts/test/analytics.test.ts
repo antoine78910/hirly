@@ -57,6 +57,110 @@ describe("analytics governance contract", () => {
     });
   });
 
+  test("governs first-paid activation and positive-generation churn", () => {
+    const activation = analyticsRegistry.events.filter(
+      (event) => event.name === "subscription_activated",
+    );
+    expect(activation).toHaveLength(1);
+    expect(resolveAnalyticsEventName("subscription_activated")).toBe(
+      "subscription_activated",
+    );
+    expect(activation[0]).toMatchObject({
+      schemaVersion: 1,
+      authoritativeSource: "backend",
+      identityPolicy: "identified",
+      semanticDeduplicationKey: "user_id",
+      canonicalTimeQualities: ["exact_business_timestamp"],
+      requiredProperties: {
+        invoice_id: { type: "string", privacy: "pseudonymous" },
+        subscription_id: { type: "string", privacy: "pseudonymous" },
+        currency: { type: "string", privacy: "public" },
+        revenue: { type: "number", privacy: "public" },
+      },
+    });
+
+    const churn = analyticsRegistry.events.find(
+      (event) => event.name === "subscription_churned",
+    );
+    expect(churn).toMatchObject({
+      authoritativeSource: "backend",
+      identityPolicy: "identified",
+      semanticDeduplicationKey: "subscription_id:generation",
+      requiredProperties: {
+        subscription_id: { type: "string", privacy: "pseudonymous" },
+        generation: { type: "integer", privacy: "public", minimum: 1 },
+        status: { type: "string", privacy: "public" },
+      },
+    });
+
+    for (const generation of [undefined, null, "1", 0, -1, 1.5]) {
+      const sanitized = sanitizeAnalyticsProperties("subscription_churned", {
+        subscription_id: "sub_123",
+        generation,
+        status: "canceled",
+      });
+      expect(sanitized.missingRequiredProperties).toContain("generation");
+    }
+    expect(
+      sanitizeAnalyticsProperties("subscription_churned", {
+        subscription_id: "sub_123",
+        generation: 1,
+        status: "canceled",
+        email: "secret@example.com",
+        raw_stripe_payload: {},
+      }),
+    ).toEqual({
+      properties: {
+        subscription_id: "sub_123",
+        generation: 1,
+        status: "canceled",
+      },
+      rejectedProperties: ["email", "raw_stripe_payload"],
+      missingRequiredProperties: [],
+    });
+  });
+
+  test("does not change existing signup and successful-payment definitions", () => {
+    expect(
+      analyticsRegistry.events.find((event) => event.name === "user_signed_up"),
+    ).toEqual({
+      name: "user_signed_up",
+      schemaVersion: 1,
+      definition: "A durable user account was created by the backend.",
+      identityPolicy: "identified",
+      authoritativeSource: "backend",
+      semanticDeduplicationKey: "user_id",
+      canonicalTimeQualities: ["exact_business_timestamp", "server_received_at"],
+      requiredProperties: {},
+      optionalProperties: {
+        auth_source: { type: "string", privacy: "public" },
+        has_gmail_provider: { type: "boolean", privacy: "public" },
+      },
+      legacyAliases: ["signup_completed"],
+    });
+    expect(
+      analyticsRegistry.events.find((event) => event.name === "payment_succeeded"),
+    ).toEqual({
+      name: "payment_succeeded",
+      schemaVersion: 1,
+      definition: "A Stripe webhook confirmed a successful payment.",
+      identityPolicy: "identified",
+      authoritativeSource: "backend",
+      semanticDeduplicationKey: "invoice_id",
+      canonicalTimeQualities: ["exact_business_timestamp"],
+      requiredProperties: {
+        invoice_id: { type: "string", privacy: "pseudonymous" },
+        currency: { type: "string", privacy: "public" },
+        revenue: { type: "number", privacy: "public" },
+      },
+      optionalProperties: {
+        subscription_id: { type: "string", privacy: "pseudonymous" },
+        plan: { type: "string", privacy: "public" },
+      },
+      legacyAliases: [],
+    });
+  });
+
   test("rejects missing canonical required properties", () => {
     expect(
       sanitizeAnalyticsProperties("payment_refunded", {

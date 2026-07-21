@@ -4,6 +4,7 @@ type RegistryEvent = (typeof analyticsRegistry.events)[number];
 type RegistryProperty = {
   readonly type: "boolean" | "integer" | "number" | "string" | "timestamp";
   readonly privacy: "public" | "pseudonymous" | "sensitive";
+  readonly minimum?: number;
 };
 
 const eventByName = new Map<string, RegistryEvent>();
@@ -28,10 +29,13 @@ export const resolveAnalyticsEvent = (
 };
 
 const matchesType = (value: unknown, property: RegistryProperty): boolean => {
+  const meetsMinimum =
+    property.minimum === undefined ||
+    (typeof value === "number" && value >= property.minimum);
   if (property.type === "boolean") return typeof value === "boolean";
-  if (property.type === "integer") return Number.isInteger(value);
+  if (property.type === "integer") return Number.isInteger(value) && meetsMinimum;
   if (property.type === "number") {
-    return typeof value === "number" && Number.isFinite(value);
+    return typeof value === "number" && Number.isFinite(value) && meetsMinimum;
   }
   if (property.type === "timestamp") {
     return typeof value === "string" && !Number.isNaN(Date.parse(value));
