@@ -20,6 +20,17 @@
         "typescript": "5.9.3",
       },
     },
+    "apps/feed-v2": {
+      "name": "@hirly/feed-v2-app",
+      "version": "0.1.0",
+      "dependencies": {
+        "@hirly/feed-v2": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "1.3.14",
+        "typescript": "5.9.3",
+      },
+    },
     "apps/job-ingestion-audit": {
       "name": "@hirly/job-ingestion-audit",
       "version": "0.1.0",
@@ -41,6 +52,7 @@
         "@hirly/contracts": "workspace:*",
         "@hirly/db": "workspace:*",
         "@hirly/ingestion": "workspace:*",
+        "@hirly/matching": "workspace:*",
         "@hirly/observability": "workspace:*",
         "zod": "4.1.12",
       },
@@ -79,6 +91,14 @@
         "typescript": "5.9.3",
       },
     },
+    "packages/feed-v2": {
+      "name": "@hirly/feed-v2",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@types/bun": "1.3.14",
+        "typescript": "5.9.3",
+      },
+    },
     "packages/ingestion": {
       "name": "@hirly/ingestion",
       "version": "0.1.0",
@@ -103,6 +123,9 @@
     "packages/matching-oracle": {
       "name": "@hirly/matching-oracle",
       "version": "0.1.0",
+      "dependencies": {
+        "@hirly/contracts": "workspace:*",
+      },
       "devDependencies": {
         "@types/bun": "1.3.14",
         "typescript": "5.9.3",
@@ -127,6 +150,10 @@
     "@hirly/contracts": ["@hirly/contracts@workspace:packages/contracts"],
 
     "@hirly/db": ["@hirly/db@workspace:packages/db"],
+
+    "@hirly/feed-v2": ["@hirly/feed-v2@workspace:packages/feed-v2"],
+
+    "@hirly/feed-v2-app": ["@hirly/feed-v2-app@workspace:apps/feed-v2"],
 
     "@hirly/ingestion": ["@hirly/ingestion@workspace:packages/ingestion"],
 
