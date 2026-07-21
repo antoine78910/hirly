@@ -19,6 +19,7 @@ import {
   type AtsTrialTransportOptions,
   type BoundAtsTrialTransport,
 } from "../ats-trial-transport";
+import { approveAtsInventoryShadowScope } from "../ats-inventory-readiness";
 
 const optionalText = z.string().trim().min(1).nullable().optional();
 const optionalUrl = z.url().nullable().optional();
@@ -185,7 +186,7 @@ export const recruiteeProvider: ProviderCore<RecruiteeRawJob> = {
   rateLimit,
   coreReady: true,
   liveTransportReady: false,
-  shadowModeReady: false,
+  shadowModeReady: true,
   canonicalWriteReady: false,
   activationRequirements: [
     "record approved commercial redisplay and retention policy",
@@ -278,5 +279,44 @@ export function createRecruiteeTrialTransport(
       });
       return page.offers;
     },
+  };
+}
+
+export function createRecruiteeShadowTransport(
+  options: AtsTrialTransportOptions,
+): ReturnType<typeof createRecruiteeTrialTransport> & {
+  readonly shadowOnly: true;
+} {
+  return {
+    ...createRecruiteeTrialTransport(options),
+    shadowOnly: true,
+  };
+}
+
+export function createApprovedRecruiteeShadowTransport(options: {
+  readonly approvedTenantId: string;
+  readonly countryCode: string;
+  readonly policy: unknown;
+  readonly now?: Date;
+  readonly fetch?: AtsTrialTransportOptions["fetch"];
+  readonly budgets?: AtsTrialTransportOptions["budgets"];
+}) {
+  const approval = approveAtsInventoryShadowScope({
+    policy: options.policy,
+    provider: "recruitee",
+    approvedTenantId: options.approvedTenantId,
+    countryCode: options.countryCode,
+    now: options.now,
+  });
+  return {
+    ...createRecruiteeShadowTransport({
+      approvedTenantId: approval.approvedTenantId,
+      fetch: options.fetch,
+      budgets: options.budgets,
+    }),
+    productionShadowApproved: true as const,
+    policyId: approval.policy.policyId,
+    policyDigest: approval.policyDigest,
+    countryCode: approval.countryCode,
   };
 }

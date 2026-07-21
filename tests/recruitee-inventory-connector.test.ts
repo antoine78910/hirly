@@ -77,7 +77,7 @@ describe("Recruitee inventory connector", () => {
     expect(recruiteeProvider).toMatchObject({
       authorizationStatus: "unverified",
       liveTransportReady: false,
-      shadowModeReady: false,
+      shadowModeReady: true,
       canonicalWriteReady: false,
       rateLimit: { requestsPerMinute: 1, concurrency: 1 },
     });

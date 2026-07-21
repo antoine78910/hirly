@@ -20,6 +20,7 @@ import {
   type AtsTrialTransportBudgets,
   type BoundAtsTrialTransport,
 } from "../ats-trial-transport";
+import { approveAtsInventoryShadowScope } from "../ats-inventory-readiness";
 
 const nicokaIdSchema = z.union([z.string(), z.number()]).transform(String);
 const optionalText = z.string().trim().max(100_000).nullable().optional();
@@ -362,5 +363,31 @@ export function createNicokaShadowTransport(options: NicokaShadowOptions):
       }
       return rows;
     },
+  };
+}
+
+export function createApprovedNicokaShadowTransport(options: NicokaShadowOptions & {
+  readonly countryCode: string;
+  readonly policy: unknown;
+  readonly now?: Date;
+}) {
+  const approval = approveAtsInventoryShadowScope({
+    policy: options.policy,
+    provider: "nicoka",
+    approvedTenantId: options.approvedTenantId,
+    countryCode: options.countryCode,
+    now: options.now,
+  });
+  return {
+    ...createNicokaShadowTransport({
+      approvedTenantId: approval.approvedTenantId,
+      environment: options.environment,
+      fetch: options.fetch,
+      budgets: options.budgets,
+    }),
+    productionShadowApproved: true as const,
+    policyId: approval.policy.policyId,
+    policyDigest: approval.policyDigest,
+    countryCode: approval.countryCode,
   };
 }

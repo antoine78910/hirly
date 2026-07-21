@@ -16,6 +16,10 @@ import {
   type AtsTrialTransportOptions,
   type BoundAtsTrialTransport,
 } from "../ats-trial-transport";
+import {
+  approveAtsInventoryShadowScope,
+  type AtsInventoryShadowPolicy,
+} from "../ats-inventory-readiness";
 
 const greenhouseIdSchema = z.union([z.string(), z.number()]).transform(String);
 
@@ -185,5 +189,33 @@ export function createGreenhouseShadowTransport(
   return {
     ...createGreenhouseTrialTransport(options),
     shadowOnly: true,
+  };
+}
+
+export function createApprovedGreenhouseShadowTransport(options: {
+  readonly approvedTenantId: string;
+  readonly countryCode: string;
+  readonly policy: unknown;
+  readonly now?: Date;
+  readonly fetch?: AtsTrialTransportOptions["fetch"];
+  readonly budgets?: AtsTrialTransportOptions["budgets"];
+}) {
+  const approval = approveAtsInventoryShadowScope({
+    policy: options.policy,
+    provider: "greenhouse",
+    approvedTenantId: options.approvedTenantId,
+    countryCode: options.countryCode,
+    now: options.now,
+  });
+  return {
+    ...createGreenhouseShadowTransport({
+      approvedTenantId: approval.approvedTenantId,
+      fetch: options.fetch,
+      budgets: options.budgets,
+    }),
+    productionShadowApproved: true as const,
+    policyId: (approval.policy as AtsInventoryShadowPolicy).policyId,
+    policyDigest: approval.policyDigest,
+    countryCode: approval.countryCode,
   };
 }
