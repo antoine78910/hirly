@@ -313,79 +313,119 @@ BEGIN
       updated_at = clock_timestamp();
     v_occurrences := v_occurrences + 1;
 
+    SELECT canonical_group_id INTO v_group_id
+    FROM public.jobs
+    WHERE job_id = v_expected_job_id
+    FOR UPDATE;
     v_match_job_id := NULL;
     v_match_group_id := NULL;
     v_collision_reason := NULL;
     v_evidence_layer := NULL;
-    SELECT occurrence.job_id, job.canonical_group_id,
-      CASE
-        WHEN v_entry->>'ats_posting_id' IS NOT NULL
-          AND occurrence.ats_posting_id = v_entry->>'ats_posting_id'
-          AND v_entry->>'canonical_apply_url' IS NOT NULL
-          AND occurrence.canonical_apply_url IS NOT NULL
-          AND occurrence.canonical_apply_url <> v_entry->>'canonical_apply_url'
-          THEN 'ats_id_conflicts_with_apply_url'
-        WHEN v_entry->>'canonical_apply_url' IS NOT NULL
-          AND occurrence.canonical_apply_url = v_entry->>'canonical_apply_url'
-          AND v_entry->>'ats_posting_id' IS NOT NULL
-          AND occurrence.ats_posting_id IS NOT NULL
-          AND occurrence.ats_posting_id <> v_entry->>'ats_posting_id'
-          THEN 'apply_url_conflicts_with_ats_id'
-        ELSE NULL
-      END,
-      CASE
-        WHEN occurrence.ats_posting_id = v_entry->>'ats_posting_id'
-          THEN 'ats_posting_id'
-        WHEN occurrence.canonical_apply_url = v_entry->>'canonical_apply_url'
-          THEN 'canonical_apply_url'
-        ELSE NULL
-      END
-    INTO v_match_job_id, v_match_group_id, v_collision_reason, v_evidence_layer
-    FROM public.job_occurrences AS occurrence
-    JOIN public.jobs AS job ON job.job_id = occurrence.job_id
-    WHERE occurrence.job_id <> v_expected_job_id
-      AND (
-        (v_entry->>'ats_posting_id' IS NOT NULL
-          AND occurrence.ats_posting_id = v_entry->>'ats_posting_id')
-        OR
-        (v_entry->>'canonical_apply_url' IS NOT NULL
-          AND occurrence.canonical_apply_url = v_entry->>'canonical_apply_url')
-      )
-    ORDER BY
-      (occurrence.ats_posting_id = v_entry->>'ats_posting_id') DESC,
-      occurrence.first_seen_at,
-      occurrence.job_id
-    LIMIT 1
-    FOR UPDATE OF occurrence, job;
-
-    IF v_match_job_id IS NOT NULL AND v_collision_reason IS NOT NULL THEN
-      INSERT INTO public.source_identity_collisions (
-        source_id, incoming_job_id, existing_job_id, reason, evidence
-      ) VALUES (
-        p_source_id, v_expected_job_id, v_match_job_id, v_collision_reason,
-        jsonb_build_object(
-          'atsPostingId', v_entry->>'ats_posting_id',
-          'canonicalApplyUrl', v_entry->>'canonical_apply_url'
+    IF v_group_id IS NULL THEN
+      SELECT occurrence.job_id, job.canonical_group_id,
+        CASE
+          WHEN v_entry->>'ats_posting_id' IS NOT NULL
+            AND occurrence.ats_posting_id = v_entry->>'ats_posting_id'
+            AND v_entry->>'canonical_apply_url' IS NOT NULL
+            AND occurrence.canonical_apply_url IS NOT NULL
+            AND occurrence.canonical_apply_url <> v_entry->>'canonical_apply_url'
+            THEN 'ats_id_conflicts_with_apply_url'
+          WHEN v_entry->>'canonical_apply_url' IS NOT NULL
+            AND occurrence.canonical_apply_url = v_entry->>'canonical_apply_url'
+            AND v_entry->>'ats_posting_id' IS NOT NULL
+            AND occurrence.ats_posting_id IS NOT NULL
+            AND occurrence.ats_posting_id <> v_entry->>'ats_posting_id'
+            THEN 'apply_url_conflicts_with_ats_id'
+          ELSE NULL
+        END,
+        CASE
+          WHEN occurrence.ats_posting_id = v_entry->>'ats_posting_id'
+            THEN 'ats_posting_id'
+          WHEN occurrence.canonical_apply_url = v_entry->>'canonical_apply_url'
+            THEN 'canonical_apply_url'
+          ELSE NULL
+        END
+      INTO v_match_job_id, v_match_group_id, v_collision_reason, v_evidence_layer
+      FROM public.job_occurrences AS occurrence
+      JOIN public.jobs AS job ON job.job_id = occurrence.job_id
+      WHERE occurrence.job_id <> v_expected_job_id
+        AND (
+          (v_entry->>'ats_posting_id' IS NOT NULL
+            AND occurrence.ats_posting_id = v_entry->>'ats_posting_id')
+          OR
+          (v_entry->>'canonical_apply_url' IS NOT NULL
+            AND occurrence.canonical_apply_url = v_entry->>'canonical_apply_url')
         )
-      ) ON CONFLICT DO NOTHING;
-      v_match_group_id := NULL;
-    END IF;
+      ORDER BY
+        (CASE
+          WHEN v_entry->>'ats_posting_id' IS NOT NULL
+            AND occurrence.ats_posting_id = v_entry->>'ats_posting_id'
+            AND v_entry->>'canonical_apply_url' IS NOT NULL
+            AND occurrence.canonical_apply_url IS NOT NULL
+            AND occurrence.canonical_apply_url <> v_entry->>'canonical_apply_url'
+            THEN false
+          WHEN v_entry->>'canonical_apply_url' IS NOT NULL
+            AND occurrence.canonical_apply_url = v_entry->>'canonical_apply_url'
+            AND v_entry->>'ats_posting_id' IS NOT NULL
+            AND occurrence.ats_posting_id IS NOT NULL
+            AND occurrence.ats_posting_id <> v_entry->>'ats_posting_id'
+            THEN false
+          ELSE true
+        END) DESC,
+        (occurrence.ats_posting_id = v_entry->>'ats_posting_id') DESC,
+        (job.canonical_group_id IS NOT NULL) DESC,
+        occurrence.first_seen_at,
+        occurrence.job_id
+      LIMIT 1
+      FOR UPDATE OF occurrence, job;
 
-    IF v_match_group_id IS NULL THEN
-      INSERT INTO "public".canonical_job_groups (
-        preferred_job_id, merge_confidence, merge_reason
-      ) VALUES (
-        v_expected_job_id, 1, 'source_identity'
-      ) RETURNING id INTO v_group_id;
-      v_groups := v_groups + 1;
-      v_evidence_layer := 'source_identity';
-    ELSE
-      v_group_id := v_match_group_id;
+      IF v_match_job_id IS NOT NULL AND v_collision_reason IS NOT NULL THEN
+        INSERT INTO public.source_identity_collisions (
+          source_id, incoming_job_id, existing_job_id, reason, evidence
+        ) VALUES (
+          p_source_id, v_expected_job_id, v_match_job_id, v_collision_reason,
+          jsonb_build_object(
+            'atsPostingId', v_entry->>'ats_posting_id',
+            'canonicalApplyUrl', v_entry->>'canonical_apply_url'
+          )
+        ) ON CONFLICT DO NOTHING;
+        v_match_job_id := NULL;
+        v_match_group_id := NULL;
+        v_evidence_layer := NULL;
+      END IF;
+
+      IF v_match_job_id IS NULL THEN
+        INSERT INTO public.canonical_job_groups (
+          preferred_job_id, merge_confidence, merge_reason
+        ) VALUES (
+          v_expected_job_id, 1, 'source_identity'
+        ) RETURNING id INTO v_group_id;
+        v_groups := v_groups + 1;
+        v_evidence_layer := 'source_identity';
+      ELSIF v_match_group_id IS NULL THEN
+        INSERT INTO public.canonical_job_groups (
+          preferred_job_id, merge_confidence, merge_reason
+        ) VALUES (
+          v_match_job_id,
+          CASE v_evidence_layer WHEN 'ats_posting_id' THEN 0.99 ELSE 0.95 END,
+          v_evidence_layer
+        ) RETURNING id INTO v_group_id;
+        v_groups := v_groups + 1;
+        UPDATE public.jobs SET canonical_group_id = v_group_id
+        WHERE job_id = v_match_job_id AND canonical_group_id IS NULL;
+        INSERT INTO public.canonical_job_group_members (
+          group_id, job_id, evidence_layer, confidence
+        ) VALUES (
+          v_group_id, v_match_job_id, 'source_identity', 1
+        ) ON CONFLICT (job_id) DO NOTHING;
+      ELSE
+        v_group_id := v_match_group_id;
+      END IF;
     END IF;
 
     UPDATE public.jobs SET canonical_group_id = v_group_id
     WHERE job_id = v_expected_job_id;
-    INSERT INTO "public".canonical_job_group_members (
+    INSERT INTO public.canonical_job_group_members (
       group_id, job_id, evidence_layer, confidence
     ) VALUES (
       v_group_id, v_expected_job_id, coalesce(v_evidence_layer, 'source_identity'),

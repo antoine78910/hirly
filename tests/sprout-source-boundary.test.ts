@@ -74,6 +74,29 @@ describe("Sprout source persistence boundary", () => {
     );
   });
 
+  test("reuses one canonical group across duplicate upserts and strong matches", () => {
+    expect(migration).toContain(
+      "SELECT canonical_group_id INTO v_group_id",
+    );
+    expect(migration).toContain("IF v_group_id IS NULL THEN");
+    expect(migration).toContain(
+      "ELSIF v_match_group_id IS NULL THEN",
+    );
+    expect(migration).toContain(
+      "preferred_job_id, merge_confidence, merge_reason",
+    );
+    expect(migration).toContain(
+      "v_group_id, v_match_job_id, 'source_identity', 1",
+    );
+    expect(migration).toContain(
+      "WHERE job_id = v_match_job_id AND canonical_group_id IS NULL",
+    );
+    expect(migration).toContain(
+      "ON CONFLICT (source_id, external_id) DO UPDATE",
+    );
+    expect(migration).toContain("ON CONFLICT (job_id) DO NOTHING");
+  });
+
   test("maps additive canonical columns into both writer paths", () => {
     for (const column of [
       "city",
