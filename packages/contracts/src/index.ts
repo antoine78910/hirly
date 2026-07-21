@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export * from "./analytics";
+export * from "./matching";
 
 export const CONTRACT_VERSION = "worker-foundation.v1" as const;
 
