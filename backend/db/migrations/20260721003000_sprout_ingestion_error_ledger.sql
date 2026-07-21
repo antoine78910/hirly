@@ -2,7 +2,7 @@
 BEGIN;
 
 CREATE TABLE public.sprout_ingestion_errors (
-  id uuid PRIMARY KEY DEFAULT public.gen_random_uuid(),
+  id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),
   observed_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   task_id uuid NOT NULL REFERENCES public.worker_tasks(id) ON DELETE RESTRICT,
   run_id uuid NOT NULL REFERENCES public.worker_runs(id) ON DELETE RESTRICT,
