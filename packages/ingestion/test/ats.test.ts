@@ -4,9 +4,11 @@ import {
   ATS_PROVIDERS,
   ATS_PROVIDER_HOST_PATTERNS,
   classifyAtsUrl,
+  detectAtsEvidence,
   isStrictAutoApplicableProvider,
   type AtsProvider,
 } from "../src/ats";
+import { toCanonicalJob } from "../src/index";
 
 describe("G011 ATS URL classification", () => {
   test.each([
@@ -159,5 +161,56 @@ describe("G011 ATS URL classification", () => {
     expect(isStrictAutoApplicableProvider("lever")).toBeFalse();
     expect(isStrictAutoApplicableProvider("ashby")).toBeFalse();
     expect(isStrictAutoApplicableProvider("unknown")).toBeFalse();
+  });
+
+  test("retains unmanaged ATS evidence without treating it as a supported provider", () => {
+    expect(detectAtsEvidence("https://acme.zohorecruit.eu/jobs/Careers/123")).toEqual({
+      status: "unmanaged",
+      host: "acme.zohorecruit.eu",
+      provider: null,
+      providerHint: "zoho_recruit",
+      match: "unknown",
+    });
+    expect(detectAtsEvidence("https://fa-eoic-saasfaprod1.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX/job/1")).toMatchObject({
+      status: "unmanaged",
+      providerHint: "oracle_fusion_hcm",
+    });
+  });
+
+  test("recognizes supported aliases as their catalogue provider", () => {
+    expect(classifyAtsUrl("https://grnh.se/acme/123")).toMatchObject({
+      provider: "greenhouse",
+      match: "provider_only",
+    });
+    expect(classifyAtsUrl("https://acme.applytojob.com/apply/123")).toMatchObject({
+      provider: "bamboohr",
+      match: "provider_only",
+    });
+  });
+
+  test("keeps an unmanaged ATS hint in canonical job metadata", () => {
+    const canonical = toCanonicalJob(
+      {
+        envelope: { provider: "sprout", externalId: "zoho-123", payload: {} },
+        title: "Engineer",
+        company: "Acme",
+        location: "Paris, France",
+        countryCode: "FR",
+        description: "Role description",
+        contractType: null,
+        status: "active",
+        applyUrls: ["https://acme.zohorecruit.eu/jobs/Careers/123"],
+      },
+      new Date("2026-07-21T00:00:00.000Z"),
+    );
+
+    expect(canonical.atsProvider).toBe("unknown");
+    expect(canonical.data.atsDetection).toEqual({
+      status: "unmanaged",
+      host: "acme.zohorecruit.eu",
+      provider: null,
+      providerHint: "zoho_recruit",
+      match: "unknown",
+    });
   });
 });

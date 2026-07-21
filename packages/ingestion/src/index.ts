@@ -15,7 +15,11 @@ import {
   type SourceRuntimePolicy,
   type ValidationResult,
 } from "@hirly/contracts";
-import { classifyAtsUrl, isStrictAutoApplicableProvider } from "./ats";
+import {
+  classifyAtsUrl,
+  detectAtsEvidence,
+  isStrictAutoApplicableProvider,
+} from "./ats";
 
 export interface ProviderPage<RawJob> {
   items: RawJob[];
@@ -768,6 +772,7 @@ export function toCanonicalJob(
 ): CanonicalJob {
   const envelope = rawProviderJobEnvelopeSchema.parse(job.envelope);
   const validation = validateApplyability(job, now);
+  const sourceDocument = sanitizeSourceDocument(envelope.payload) as Record<string, unknown>;
   return canonicalJobSchema.parse({
     jobId: stableJobId(envelope.provider, envelope.externalId),
     provider: envelope.provider,
@@ -789,7 +794,12 @@ export function toCanonicalJob(
     lastSeenAt: job.lastSeenAt ?? null,
     ...validation,
     fingerprint: buildFingerprint(job),
-    data: sanitizeSourceDocument(envelope.payload),
+    data: {
+      ...sourceDocument,
+      // Keep the observed host/hint even when we do not yet support the ATS.
+      // `atsProvider` above remains the reviewed, fulfilment-safe catalogue value.
+      atsDetection: detectAtsEvidence(validation.selectedApplyUrl),
+    },
   });
 }
 

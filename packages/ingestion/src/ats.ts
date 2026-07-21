@@ -102,6 +102,20 @@ export interface AtsUrlClassification {
   match: "tenant" | "provider_only" | "unknown" | "invalid_url";
 }
 
+/**
+ * Evidence retained for a destination that looks like an ATS but is not in the
+ * managed application catalogue. `providerHint` is deliberately not promoted
+ * to `ats_provider`: that column participates in fulfilment and must only hold
+ * providers whose capabilities we have reviewed.
+ */
+export interface AtsDetectionEvidence {
+  status: "catalogued" | "unmanaged" | "unclassified" | "invalid_url" | "no_apply_url";
+  host: string | null;
+  provider: AtsProvider | null;
+  providerHint: string | null;
+  match: AtsUrlClassification["match"] | null;
+}
+
 const EXACT_HOST_PROVIDERS = new Map<string, AtsProvider>([
   ["boards.greenhouse.io", "greenhouse"],
   ["job-boards.greenhouse.io", "greenhouse"],
@@ -123,6 +137,7 @@ const EXACT_HOST_PROVIDERS = new Map<string, AtsProvider>([
   ["flatchr.io", "flatchr"],
   ["jobs.sap.com", "successfactors"],
   ["applytojob.com", "bamboohr"],
+  ["grnh.se", "greenhouse"],
 ]);
 
 const SUFFIX_HOST_PROVIDERS: ReadonlyArray<
@@ -145,6 +160,7 @@ const SUFFIX_HOST_PROVIDERS: ReadonlyArray<
   [".digitalrecruiters.com", "digitalrecruiters"],
   [".jobaffinity.fr", "jobaffinity"],
   [".bamboohr.com", "bamboohr"],
+  [".applytojob.com", "bamboohr"],
   [".successfactors.com", "successfactors"],
   [".breezy.hr", "breezyhr"],
 ];
@@ -210,6 +226,52 @@ function providerForHost(host: string): AtsProvider | null {
     if (host.endsWith(suffix)) return provider;
   }
   return null;
+}
+
+function unmanagedProviderHint(host: string): string | null {
+  if (host === "zohorecruit.com" || host.endsWith(".zohorecruit.com") ||
+      host === "zohorecruit.eu" || host.endsWith(".zohorecruit.eu")) {
+    return "zoho_recruit";
+  }
+  if (host.endsWith(".oraclecloud.com") && (host.includes(".fa.") || host.startsWith("fa-"))) {
+    return "oracle_fusion_hcm";
+  }
+  if (host === "gohiring.com" || host.endsWith(".gohiring.com")) return "gohiring";
+  if (host === "occupop.com" || host.endsWith(".occupop.com")) return "occupop";
+  if (host === "careers-page.com" || host.endsWith(".careers-page.com")) return "careers_page";
+  if (host === "taleo.net" || host.endsWith(".taleo.net")) return "oracle_taleo";
+  return null;
+}
+
+export function detectAtsEvidence(input: string | null | undefined): AtsDetectionEvidence {
+  if (!input) {
+    return { status: "no_apply_url", host: null, provider: null, providerHint: null, match: null };
+  }
+
+  let host: string;
+  try {
+    host = new URL(input).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return { status: "invalid_url", host: null, provider: null, providerHint: null, match: "invalid_url" };
+  }
+
+  const classification = classifyAtsUrl(input);
+  if (classification.provider) {
+    return {
+      status: "catalogued",
+      host,
+      provider: classification.provider,
+      providerHint: null,
+      match: classification.match,
+    };
+  }
+  return {
+    status: unmanagedProviderHint(host) ? "unmanaged" : "unclassified",
+    host,
+    provider: null,
+    providerHint: unmanagedProviderHint(host),
+    match: classification.match,
+  };
 }
 
 function tenantFromSubdomain(host: string, suffix: string): string | null {
