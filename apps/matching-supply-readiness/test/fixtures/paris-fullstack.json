@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "hirly.matching-supply-readiness.v1",
+  "evaluatedAt": "2026-07-21T08:00:00Z",
+  "freshnessCutoff": "2026-06-21T08:00:00Z",
+  "scope": {
+    "countryCode": "FR",
+    "cohortId": "paris-52km",
+    "roleFamilyId": "fullstack-engineering",
+    "radiusKm": 52,
+    "centerLatitude": 48.8566,
+    "centerLongitude": 2.3522
+  },
+  "thresholds": {
+    "thresholdId": "paris-fullstack-launch-v1",
+    "approvedBy": "matching-product-owner",
+    "expiresAt": "2026-08-21T08:00:00Z",
+    "minimumFreshVisibleCanonicalGroups": 2,
+    "maximumBlockedRate": 0.25,
+    "maximumInvalidRate": 0.1,
+    "maximumDuplicateRate": 0,
+    "maximumActionExclusionRate": 0.5,
+    "maximumProjectionLagSeconds": 300
+  }
+}

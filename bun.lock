@@ -44,6 +44,17 @@
         "typescript": "5.9.3",
       },
     },
+    "apps/matching-supply-readiness": {
+      "name": "@hirly/matching-supply-readiness",
+      "version": "0.1.0",
+      "dependencies": {
+        "postgres": "3.4.7",
+      },
+      "devDependencies": {
+        "@types/bun": "1.3.14",
+        "typescript": "5.9.3",
+      },
+    },
     "apps/worker": {
       "name": "@hirly/worker",
       "version": "0.1.0",
@@ -162,6 +173,8 @@
     "@hirly/matching": ["@hirly/matching@workspace:packages/matching"],
 
     "@hirly/matching-oracle": ["@hirly/matching-oracle@workspace:packages/matching-oracle"],
+
+    "@hirly/matching-supply-readiness": ["@hirly/matching-supply-readiness@workspace:apps/matching-supply-readiness"],
 
     "@hirly/observability": ["@hirly/observability@workspace:packages/observability"],
 
