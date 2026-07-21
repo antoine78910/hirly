@@ -41,12 +41,14 @@ export interface G009RetirementGateEvidence {
     rollbackTested: boolean;
     rollbackHealthy: boolean;
   };
+  invariantFailures: string[];
   unmetReasons: string[];
   evidenceRefs: string[];
 }
 
-function finiteNonNegative(value: number | undefined): number | null {
+function wholeCount(value: number | undefined): number | null {
   return typeof value === "number" && Number.isFinite(value) && value >= 0
+    && Number.isInteger(value)
     ? value
     : null;
 }
@@ -58,21 +60,28 @@ function rate(value: number | undefined): number | null {
 }
 
 function coverage(input: G009RetirementGateInput): number | null {
-  const covered = finiteNonNegative(input.activePaidProfilesCovered);
-  const total = finiteNonNegative(input.activePaidProfilesTotal);
+  const covered = wholeCount(input.activePaidProfilesCovered);
+  const total = wholeCount(input.activePaidProfilesTotal);
   if (covered === null || total === null || total === 0 || covered > total) return null;
   return Math.round((covered / total) * 10_000) / 100;
+}
+
+function hasWholeCountViolation(value: number | undefined): boolean {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    && !Number.isInteger(value);
 }
 
 export function evaluateG009RetirementGate(
   input: G009RetirementGateInput = {},
 ): G009RetirementGateEvidence {
-  const evidenceKind = input.evidenceKind ?? "none";
-  const healthyDays = finiteNonNegative(input.healthyDays);
-  const v2Requests = finiteNonNegative(input.v2Requests);
+  const evidenceKind = input.evidenceKind === "fixture" || input.evidenceKind === "production"
+    ? input.evidenceKind
+    : "none";
+  const healthyDays = wholeCount(input.healthyDays);
+  const v2Requests = wholeCount(input.v2Requests);
   const paidCoverage = coverage(input);
-  const duplicateBreaches = finiteNonNegative(input.duplicateSubmissionBreaches);
-  const resurfacingBreaches = finiteNonNegative(input.resurfacingBreaches);
+  const duplicateBreaches = wholeCount(input.duplicateSubmissionBreaches);
+  const resurfacingBreaches = wholeCount(input.resurfacingBreaches);
   const legacyRate = rate(input.legacySuccessRatePercent);
   const v2Rate = rate(input.v2SuccessRatePercent);
   const delta = legacyRate === null || v2Rate === null
@@ -82,7 +91,22 @@ export function evaluateG009RetirementGate(
     && Number.isFinite(input.lowerConfidenceBoundDeltaPercentagePoints)
     ? input.lowerConfidenceBoundDeltaPercentagePoints
     : null;
-  const reasons: string[] = [];
+  const invariantFailures: string[] = [];
+  if (hasWholeCountViolation(input.healthyDays)) invariantFailures.push("healthy_days_must_be_a_whole_count");
+  if (hasWholeCountViolation(input.v2Requests)) invariantFailures.push("v2_requests_must_be_a_whole_count");
+  if (hasWholeCountViolation(input.activePaidProfilesCovered) || hasWholeCountViolation(input.activePaidProfilesTotal)) {
+    invariantFailures.push("active_paid_profile_counts_must_be_whole_counts");
+  }
+  if (hasWholeCountViolation(input.duplicateSubmissionBreaches)) {
+    invariantFailures.push("duplicate_submission_breaches_must_be_a_whole_count");
+  }
+  if (hasWholeCountViolation(input.resurfacingBreaches)) {
+    invariantFailures.push("resurfacing_breaches_must_be_a_whole_count");
+  }
+  if (delta !== null && lowerBound !== null && lowerBound > delta) {
+    invariantFailures.push("lower_confidence_bound_exceeds_observed_delta");
+  }
+  const reasons: string[] = [...invariantFailures];
 
   if (input.instrumentationReady !== true) reasons.push("instrumentation_not_ready");
   if (healthyDays === null) reasons.push("healthy_days_missing");
@@ -103,7 +127,10 @@ export function evaluateG009RetirementGate(
   if (input.rollbackTested !== true) reasons.push("rollback_not_tested");
   if (input.rollbackHealthy !== true) reasons.push("rollback_not_healthy");
   if (evidenceKind !== "production") reasons.push("production_evidence_required");
-  const evidenceRefs = [...new Set((input.evidenceRefs ?? []).map((value) => value.trim()).filter(Boolean))].sort();
+  const evidenceRefs = [...new Set((input.evidenceRefs ?? [])
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim())
+    .filter(Boolean))].sort();
   if (evidenceKind === "production" && evidenceRefs.length === 0) reasons.push("production_evidence_refs_missing");
 
   const implementationBlockers = new Set([
@@ -117,6 +144,7 @@ export function evaluateG009RetirementGate(
     "rollback_not_tested",
   ]);
   const implementationReady = !reasons.some((reason) => implementationBlockers.has(reason));
+  const sortedInvariantFailures = [...new Set(invariantFailures)].sort();
   const unmetReasons = [...new Set(reasons)].sort();
   return {
     schemaVersion: "hirly.g009-retirement-gate.v1",
@@ -135,6 +163,7 @@ export function evaluateG009RetirementGate(
       rollbackTested: input.rollbackTested === true,
       rollbackHealthy: input.rollbackHealthy === true,
     },
+    invariantFailures: sortedInvariantFailures,
     unmetReasons,
     evidenceRefs,
   };

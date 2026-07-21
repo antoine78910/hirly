@@ -71,4 +71,39 @@ describe("G009 retirement gate", () => {
     );
     expect(evaluateG009RetirementGate(input).evidenceRefs).toEqual(["a", "z"]);
   });
+
+  test("fails closed when quantitative counters are fractional", () => {
+    const evidence = evaluateG009RetirementGate({
+      ...healthy,
+      healthyDays: 30.5,
+      v2Requests: 10_000.1,
+      activePaidProfilesCovered: 800.5,
+      duplicateSubmissionBreaches: 0.5,
+      resurfacingBreaches: 0.5,
+    });
+
+    expect(evidence.retirementStatus).toBe("NOT_AUTHORIZED");
+    expect(evidence.invariantFailures).toEqual([
+      "active_paid_profile_counts_must_be_whole_counts",
+      "duplicate_submission_breaches_must_be_a_whole_count",
+      "healthy_days_must_be_a_whole_count",
+      "resurfacing_breaches_must_be_a_whole_count",
+      "v2_requests_must_be_a_whole_count",
+    ]);
+    expect(evidence.unmetReasons).toContain("active_paid_coverage_missing");
+  });
+
+  test("rejects an impossible confidence interval lower bound", () => {
+    const evidence = evaluateG009RetirementGate({
+      ...healthy,
+      v2SuccessRatePercent: 70,
+      lowerConfidenceBoundDeltaPercentagePoints: -1,
+    });
+
+    expect(evidence.retirementStatus).toBe("NOT_AUTHORIZED");
+    expect(evidence.invariantFailures).toEqual([
+      "lower_confidence_bound_exceeds_observed_delta",
+    ]);
+    expect(evidence.unmetReasons).toContain("lower_confidence_bound_exceeds_observed_delta");
+  });
 });
