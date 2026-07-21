@@ -11,6 +11,7 @@ export interface FeedAuthAssertionVerifier {
 
 export interface FeedV2AppConfig {
   routingEnabled: boolean;
+  requestTimeoutMs?: number;
 }
 
 function json(body: unknown, status: number): Response {
@@ -46,12 +47,19 @@ export function createFeedV2Handler(input: {
     }
 
     try {
-      const assertion = await input.auth.verify(request);
-      const response = await input.service.read({
-        assertion,
-        cursor: url.searchParams.get("cursor"),
-        limit: positiveInteger(url.searchParams.get("limit")),
-      });
+      const response = await Promise.race([
+        (async () => {
+          const assertion = await input.auth.verify(request);
+          return input.service.read({
+            assertion,
+            cursor: url.searchParams.get("cursor"),
+            limit: positiveInteger(url.searchParams.get("limit")),
+          });
+        })(),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error("request_timeout")), input.config.requestTimeoutMs ?? 1_500);
+        }),
+      ]);
       return json(response, 200);
     } catch (error) {
       if (error instanceof FeedAuthorizationError) {
@@ -66,7 +74,14 @@ export function createFeedV2Handler(input: {
       if (error instanceof Error && error.message === "invalid_limit") {
         return json({ error: "invalid_limit" }, 400);
       }
+      if (error instanceof Error && error.message === "request_timeout") {
+        return json({ error: "request_timeout" }, 504);
+      }
       return json({ error: "unauthorized" }, 401);
     }
   };
 }
+
+export * from "./auth";
+export * from "./config";
+export * from "./repository";

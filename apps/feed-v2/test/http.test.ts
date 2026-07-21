@@ -133,4 +133,17 @@ describe("private Feed v2 HTTP foundation", () => {
     }
     expect(calls).toBe(0);
   });
+
+  test("keeps health public and bounds slow internal reads", async () => {
+    const handler = createFeedV2Handler({
+      config: { routingEnabled: true, requestTimeoutMs: 5 },
+      auth: { verify: async () => assertion },
+      service: { async read() { await Bun.sleep(20); return response; } },
+    });
+    const health = await handler(new Request("http://feed.test/health/live"));
+    expect(health.status).toBe(200);
+    const timedOut = await handler(new Request("http://feed.test/internal/feed/v2"));
+    expect(timedOut.status).toBe(504);
+    expect(await timedOut.json()).toEqual({ error: "request_timeout" });
+  });
 });
