@@ -8,6 +8,17 @@ export type SwipeFeedEmptyReason =
   | "PROFILE_NOT_READY"
   | "SERVICE_DEGRADED";
 
+const SWIPE_FEED_EMPTY_REASONS = new Set<SwipeFeedEmptyReason>([
+  "NO_MATCHING_INVENTORY",
+  "MATCHING_PENDING",
+  "PROJECTION_LAG",
+  "ALL_MATCHES_ACTIONED",
+  "ALL_MATCHES_POLICY_HIDDEN",
+  "ALL_MATCHES_BLOCKED",
+  "PROFILE_NOT_READY",
+  "SERVICE_DEGRADED",
+]);
+
 export type SwipeFeedViewState =
   | { kind: "loading" }
   | { kind: "ready" }
@@ -22,11 +33,17 @@ type FeedMeta = {
   empty_reason?: SwipeFeedEmptyReason | { code?: SwipeFeedEmptyReason } | null;
 };
 
+function toEmptyReason(value: unknown): SwipeFeedEmptyReason | null {
+  return typeof value === "string" && SWIPE_FEED_EMPTY_REASONS.has(value as SwipeFeedEmptyReason)
+    ? value as SwipeFeedEmptyReason
+    : null;
+}
+
 function emptyReason(meta: FeedMeta | null | undefined): SwipeFeedEmptyReason | null {
-  if (typeof meta?.emptyReason === "string") return meta.emptyReason;
-  if (typeof meta?.empty_reason === "string") return meta.empty_reason;
+  if (typeof meta?.emptyReason === "string") return toEmptyReason(meta.emptyReason);
+  if (typeof meta?.empty_reason === "string") return toEmptyReason(meta.empty_reason);
   if (meta?.empty_reason && typeof meta.empty_reason === "object") {
-    return meta.empty_reason.code ?? null;
+    return toEmptyReason(meta.empty_reason.code);
   }
   return null;
 }
