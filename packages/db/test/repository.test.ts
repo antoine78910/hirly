@@ -33,6 +33,26 @@ describe("database repository boundary", () => {
             pageSize: 100,
           },
           policy_evidence_ref: "policy/sprout/france/2026-07-21",
+          canary_evidence: {
+            status: "pending",
+            evidenceRef: null,
+            pagesCommitted: 0,
+            identityReadBack: false,
+            rawSnapshotLinked: false,
+            occurrenceLinked: false,
+            checkpointReadBack: false,
+            singleWriterVerified: false,
+          },
+          rollback_evidence: {
+            status: "pending",
+            evidenceRef: null,
+            providerKillSwitchVerified: false,
+            sourceKillSwitchVerified: false,
+            scheduleDisableVerified: false,
+            transportDisableVerified: false,
+            outstandingTasksStopVerified: false,
+            writerClaimReleaseVerified: false,
+          },
         },
       ]);
     }) as unknown as Database;
