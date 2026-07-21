@@ -92,7 +92,15 @@ def _profile():
     }
 
 
-def _job(index, *, tier="A", status="valid", title="Marketing Manager", swiped=False):
+def _job(
+    index,
+    *,
+    tier="A",
+    status="valid",
+    title="Marketing Manager",
+    swiped=False,
+    canonical_group_id=None,
+):
     now = datetime.now(timezone.utc).isoformat()
     return {
         "job_id": f"job_{index}",
@@ -104,6 +112,7 @@ def _job(index, *, tier="A", status="valid", title="Marketing Manager", swiped=F
         "description": "Marketing campaigns, digital acquisition, communication.",
         "provider": "jsearch",
         "external_id": f"ext_{index}",
+        "canonical_group_id": canonical_group_id,
         "external_url": f"https://boards.greenhouse.io/company/jobs/{index}",
         "selected_apply_url": f"https://boards.greenhouse.io/company/jobs/{index}",
         "validation_status": status,
@@ -151,6 +160,7 @@ def _run_feed(
     prefetch=False,
     search_role=None,
     audit_mode=False,
+    limit=5,
 ):
     env = env or {}
     for key, value in {
@@ -189,7 +199,7 @@ def _run_feed(
 
     response = asyncio.run(server.get_feed(
         user=user,
-        limit=5,
+        limit=limit,
         min_salary=0,
         posted_within=None,
         work_location=work_location,
@@ -563,6 +573,11 @@ def test_feed_coverage_snapshot_is_hashed_versioned_and_ordered(monkeypatch):
 
     assert snapshot["user_id"] != "user_1"
     assert snapshot["ordered_eligible_job_ids"] == [job["job_id"] for job in response["jobs"]]
+    assert snapshot["ordered_eligible_canonical_group_ids"] == ["jsearch:ext_1", "jsearch:ext_2"]
+    assert snapshot["ordered_eligible_identities"] == [
+        {"canonical_group_id": "jsearch:ext_1", "job_id": "job_1"},
+        {"canonical_group_id": "jsearch:ext_2", "job_id": "job_2"},
+    ]
     assert snapshot["terminal_reason"] == (response["fallback_used"] or "RESULTS_RETURNED")
     assert snapshot["evaluator_version"] == FEED_COVERAGE_EVALUATOR_VERSION
     assert snapshot["relevant_total"] == len(response["jobs"])
@@ -570,6 +585,50 @@ def test_feed_coverage_snapshot_is_hashed_versioned_and_ordered(monkeypatch):
     assert response["jobs"]
     assert response["total"] <= 5
     assert response["filters_applied"]["manual_fulfillment_ready"] is True
+
+
+def test_paris_fullstack_characterization_records_12_canonical_groups_and_route_mix(monkeypatch):
+    monkeypatch.setenv("COVERAGE_AUDIT_HASH_SALT", "test-only-salt")
+    jobs = [
+        _job(
+            index,
+            tier="A" if index % 2 else "C",
+            status="valid" if index % 2 else "unknown",
+            title="Fullstack Engineer",
+            canonical_group_id=f"paris-fullstack-{index}",
+        )
+        for index in range(1, 13)
+    ]
+
+    response, calls = _run_feed(
+        monkeypatch,
+        jobs,
+        env={"JOBS_FEED_SYNC_REFRESH_ENABLED": "false"},
+        search_role="Fullstack Engineer",
+        locations_json=_location_payload("Paris"),
+        search_radius="52km",
+        audit_mode=True,
+        limit=25,
+    )
+    snapshot = build_feed_coverage_snapshot(
+        user_id="user_1",
+        profile=_profile(),
+        feed_response=response,
+    )
+
+    assert calls["refresh"] == 0
+    assert len(snapshot["ordered_eligible_canonical_group_ids"]) == 12
+    assert len(set(snapshot["ordered_eligible_canonical_group_ids"])) == 12
+    assert snapshot["route_mix"] == {
+        "auto": 6,
+        "assisted": 0,
+        "manual": 6,
+        "blocked": 0,
+    }
+    assert snapshot["exclusion_reason_counts"] == {
+        "BLOCKED_OR_INVALID": 0,
+        "OUTSIDE_EXPLICIT_LOCATION": 0,
+    }
 
 
 def test_legacy_jsearch_only_calls_provider_without_validation_fields(monkeypatch):

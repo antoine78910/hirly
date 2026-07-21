@@ -106,6 +106,16 @@ def build_feed_coverage_snapshot(
     """Summarize an already-evaluated no-refresh feed without mutating state."""
     evaluated_at = evaluated_at or datetime.now(timezone.utc)
     jobs = [job for job in (feed_response.get("jobs") or []) if isinstance(job, dict)]
+    feed_summary = (
+        feed_response.get("feed_summary")
+        if isinstance(feed_response.get("feed_summary"), dict)
+        else {}
+    )
+    filters_applied = (
+        feed_response.get("filters_applied")
+        if isinstance(feed_response.get("filters_applied"), dict)
+        else {}
+    )
 
     def _identity(job: Dict[str, Any]) -> str:
         return str(
@@ -138,7 +148,18 @@ def build_feed_coverage_snapshot(
         return parsed >= evaluated_at - timedelta(days=freshness_window_days)
 
     actionable_jobs = [job for job in jobs if _is_actionable(job)]
-    unique_ids = {_identity(job) for job in jobs if _identity(job)}
+    ordered_identities = [
+        {
+            "canonical_group_id": _identity(job),
+            "job_id": str(job.get("job_id") or ""),
+        }
+        for job in jobs
+        if _identity(job) and job.get("job_id")
+    ]
+    ordered_canonical_group_ids = list(dict.fromkeys(
+        identity["canonical_group_id"] for identity in ordered_identities
+    ))
+    unique_ids = set(ordered_canonical_group_ids)
     source_set = sorted({str(job.get("provider")) for job in jobs if job.get("provider")})
     empty_reason = feed_response.get("empty_reason")
     terminal_reason = (
@@ -148,6 +169,19 @@ def build_feed_coverage_snapshot(
         or ("RESULTS_RETURNED" if jobs else "NO_RESULTS")
     )
     profile_location = profile.get("target_location_data") if isinstance(profile.get("target_location_data"), dict) else {}
+    exclusion_reason_counts = {
+        "BLOCKED_OR_INVALID": max(0, int(feed_summary.get("blocked_hidden_count") or 0)),
+        "OUTSIDE_EXPLICIT_LOCATION": max(
+            0,
+            int(filters_applied.get("hard_location_rejected_count") or 0),
+        ),
+    }
+    route_mix = {
+        "auto": sum(1 for job in jobs if job.get("application_mode") == "auto_apply"),
+        "assisted": sum(1 for job in jobs if job.get("application_mode") == "assisted"),
+        "manual": sum(1 for job in jobs if job.get("application_mode") == "manual"),
+        "blocked": sum(1 for job in jobs if job.get("application_mode") == "blocked"),
+    }
 
     return {
         "user_id": hash_feed_coverage_user_id(user_id, salt=hash_salt),
@@ -175,7 +209,12 @@ def build_feed_coverage_snapshot(
             if str(job.get("provider") or "").strip().lower()
             in {"greenhouse", "lever", "ashby", "recruitee", "personio", "smartrecruiters", "teamtailor"}
         ),
+        "ordered_eligible_identities": ordered_identities,
+        "ordered_eligible_canonical_group_ids": ordered_canonical_group_ids,
         "ordered_eligible_job_ids": [str(job.get("job_id")) for job in jobs if job.get("job_id")],
+        "exclusion_reason_counts": exclusion_reason_counts,
+        "route_mix": route_mix,
+        "feed_elapsed_ms": max(0, int(feed_response.get("feed_elapsed_ms") or 0)),
         "terminal_reason": terminal_reason,
         "evaluator_version": FEED_COVERAGE_EVALUATOR_VERSION,
     }
