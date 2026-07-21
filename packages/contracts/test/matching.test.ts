@@ -220,7 +220,7 @@ describe("matching v1 contracts", () => {
   });
 
   test("validates purpose-limited action and opaque outbox envelopes", () => {
-    const action = {
+    const action = candidateActionProjectionSchema.parse({
         schemaVersion: MATCHING_CONTRACT_VERSION,
         candidateId: "mongo-user-id",
         sourceActionId: "swipe-123",
@@ -232,10 +232,8 @@ describe("matching v1 contracts", () => {
         occurredAt: now,
         retentionState: "active",
         projectedAt: now,
-      } as const;
-    expect(candidateActionProjectionSchema.parse(action).sourceJobId).toBe(
-      "job-text-id",
-    );
+      });
+    expect(action.sourceJobId).toBe("job-text-id");
     const actionRow = toCandidateActionProjectionPersistenceRow(
       action,
       "55555555-5555-4555-8555-555555555555",
