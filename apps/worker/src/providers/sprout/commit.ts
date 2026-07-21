@@ -82,7 +82,7 @@ export function createSproutCommitRepository(input: {
       items: readonly SproutRawJob[];
       complete: boolean;
       fetchedAt: Date;
-    }): Promise<{ committedCheckpoint: SproutCheckpoint }> {
+    }): Promise<{ committedCheckpoint: SproutCheckpoint; inserted: number }> {
       const entries = page.items.map((raw) =>
         buildSproutCommitEntry({ raw, policyId: input.policyId, fetchedAt: page.fetchedAt }),
       );
@@ -95,7 +95,12 @@ export function createSproutCommitRepository(input: {
         complete: page.complete,
         entries,
       });
-      return { committedCheckpoint: result.checkpoint as SproutCheckpoint };
+      return {
+        committedCheckpoint: result.checkpoint as SproutCheckpoint,
+        // A new canonical group is the reliable database signal that this
+        // page yielded a listing not already represented in the inventory.
+        inserted: result.groupsCreated,
+      };
     },
   };
 }

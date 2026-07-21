@@ -116,7 +116,7 @@ describe("Sprout activation and bounded page runtime", () => {
       providerCountryKillSwitch: true,
       sourceCountryKillSwitch: true,
       approvedPageSize: null,
-      requestsPerMinute: 1,
+      requestsPerMinute: 6,
       concurrency: 1,
     });
     expect(() =>

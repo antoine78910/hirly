@@ -38,7 +38,7 @@ export interface SproutPageCommitRepository<RawJob> {
     items: readonly RawJob[];
     complete: boolean;
     fetchedAt: Date;
-  }): Promise<{ committedCheckpoint: SproutCheckpoint }>;
+  }): Promise<{ committedCheckpoint: SproutCheckpoint; inserted: number }>;
 }
 
 export interface SproutPageTaskResult {
@@ -46,6 +46,7 @@ export interface SproutPageTaskResult {
   responseBytes: number;
   complete: boolean;
   checkpoint: SproutCheckpoint;
+  inserted: number;
 }
 
 export async function runSproutPageTask<RawJob>(input: {
@@ -57,6 +58,7 @@ export async function runSproutPageTask<RawJob>(input: {
   hasFranceLocation: (raw: RawJob) => boolean;
   signal: AbortSignal;
   maxResponseBytes: number;
+  includeQualifiedRadius?: boolean;
   now?: () => Date;
 }): Promise<SproutPageTaskResult> {
   const activation = assertSproutActivationReady(input.activation, input.mode);
@@ -78,6 +80,7 @@ export async function runSproutPageTask<RawJob>(input: {
       offset: checkpointIn.offset,
       pageSize: checkpointIn.pageSize,
       credentialRef: activation.credentialRef,
+      includeQualifiedRadius: input.includeQualifiedRadius,
     },
     input.signal,
   );
@@ -126,6 +129,7 @@ export async function runSproutPageTask<RawJob>(input: {
     responseBytes: page.responseBytes,
     complete: advanced.complete,
     checkpoint: committedCheckpoint,
+    inserted: committed.inserted,
   };
 }
 

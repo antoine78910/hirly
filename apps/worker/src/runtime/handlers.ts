@@ -308,6 +308,8 @@ export function createTaskHandlers(
                 countryCode: "FR",
                 checkpointOffset: checkpoint.offset,
                 pageSize: checkpoint.pageSize,
+                filterVariant: payload.filterVariant,
+                emptyInsertStreak: payload.emptyInsertStreak,
               },
             });
             const result = await runSproutPageTask<SproutRawJob>({
@@ -338,18 +340,32 @@ export function createTaskHandlers(
               hasFranceLocation: hasSproutFranceLocation,
               signal: claimAbort.signal,
               maxResponseBytes: payload.maxResponseBytes,
+              includeQualifiedRadius: payload.filterVariant === "qualified_radius",
             });
             if (!result.complete) {
               const nextOffset = result.checkpoint.offset;
+              const nextEmptyInsertStreak = result.inserted === 0
+                ? payload.emptyInsertStreak + 1
+                : 0;
+              const rotateFilters = nextEmptyInsertStreak >= 2;
+              const nextPayload = {
+                ...payload,
+                filterVariant: rotateFilters
+                  ? payload.filterVariant === "qualified_radius"
+                    ? "country_only"
+                    : "qualified_radius"
+                  : payload.filterVariant,
+                emptyInsertStreak: rotateFilters ? 0 : nextEmptyInsertStreak,
+              };
               const nextRunId = await store.enqueue(enqueueRunSchema.parse({
                 kind: "provider_ingestion",
                 provider: "sprout",
-                idempotencyKey: `sprout:${payload.sourceId}:${payload.mode}:${nextOffset}`,
+                idempotencyKey: `sprout:${payload.sourceId}:${payload.mode}:${nextPayload.filterVariant}:${nextOffset}`,
                 triggerSource: "cli",
                 tasks: [{
-                  taskKey: `sprout:france:${payload.mode}:${payload.sourceId}:${nextOffset}`,
+                  taskKey: `sprout:france:${payload.mode}:${payload.sourceId}:${nextPayload.filterVariant}:${nextOffset}`,
                   taskType: "provider.fetch_page",
-                  payload,
+                  payload: nextPayload,
                 }],
               }));
               await store.attachCareerSource?.(nextRunId, payload.sourceId);
@@ -366,10 +382,12 @@ export function createTaskHandlers(
                 checkpointOffset: result.checkpoint.offset,
                 pageSize: result.checkpoint.pageSize,
                 observedTotal: result.checkpoint.observedTotal,
+                filterVariant: payload.filterVariant,
+                emptyInsertStreak: payload.emptyInsertStreak,
                 listingCounts: {
                   fetched: result.fetched,
-                  added: result.fetched,
-                  ignored: 0,
+                  added: result.inserted,
+                  ignored: Math.max(0, result.fetched - result.inserted),
                   errors: 0,
                 },
               },

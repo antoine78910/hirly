@@ -85,6 +85,8 @@ export const sproutTaskPayloadSchema = z
     sourceId: z.uuid(),
     mode: z.enum(["canary", "backfill", "incremental"]),
     maxResponseBytes: z.number().int().positive().max(50_000_000),
+    filterVariant: z.enum(["qualified_radius", "country_only"]).default("qualified_radius"),
+    emptyInsertStreak: z.number().int().min(0).max(2).default(0),
   })
   .strict();
 
