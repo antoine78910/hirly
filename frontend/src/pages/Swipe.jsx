@@ -62,6 +62,7 @@ import JobOfferDetails from "../components/swipe/JobOfferDetails";
 import JobCardHighlights, { JobCardMatchBadge } from "../components/swipe/JobCardHighlights";
 import { translateLocationLabel, translateRoleLabel } from "../lib/localizedDisplay";
 import { useFeedV2RolloutObservation } from "../components/swipe/FeedV2RolloutObservation";
+import { canStartSwipe } from "../lib/swipeInteractionPolicy";
 
 import { preloadCompanyLogos } from "../lib/companyLogos";
 import {
@@ -1698,10 +1699,10 @@ export default function Swipe() {
         return;
       }
     }
-    if (!topJob || appLoading || loading || pendingCardSwipe) return;
+    if (!canStartSwipe({ hasJob: topJob, appLoading, pendingCardSwipe })) return;
     suppressCardTap(400);
     setPendingCardSwipe(intent);
-  }, [topJob, appLoading, loading, pendingCardSwipe, resolveApplyGate]);
+  }, [topJob, appLoading, pendingCardSwipe, resolveApplyGate]);
 
   const handleUndo = async () => {
     try {
@@ -1767,7 +1768,7 @@ export default function Swipe() {
       if (tag === "input" || tag === "textarea" || tag === "select") return;
       if (target?.isContentEditable) return;
       if (targetSheetOpen || filtersOpen || desktopFiltersOpen || reportJob || upgradeOpen) return;
-      if (appLoading || loading || !topJob) return;
+      if (!canStartSwipe({ hasJob: topJob, appLoading, pendingCardSwipe })) return;
       if (event.key === "ArrowRight" && shouldBlockApply()) {
         event.preventDefault();
         handleApplyBlocked();
@@ -1783,7 +1784,7 @@ export default function Swipe() {
     appLoading,
     filtersOpen,
     desktopFiltersOpen,
-    loading,
+    pendingCardSwipe,
     reportJob,
     targetSheetOpen,
     topJob,
