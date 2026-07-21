@@ -48,7 +48,8 @@ const ALLOWED_EXTERNAL_BLOCKS = new Set([
   "REMOTE_DEPLOYMENT_VALIDATION_NOT_PERFORMED_BY_VERIFIER",
   "SOURCE_ACTIVATION_NOT_PERFORMED",
 ]);
-const MIGRATION_RE = /^20260720\d+_.+\.sql$/;
+const PGCRYPTO_COMPAT_MIGRATION = "20260721001950_pgcrypto_schema_compatibility";
+const MIGRATION_RE = /^(?:20260720\d+_.+|20260721001950_pgcrypto_schema_compatibility)\.sql$/;
 const PYTHON_EXCEPTION_RE = /^\s*#\s*stack-policy:\s*python-exception=(.{12,})\s*$/im;
 const DISPOSABLE_DB_RE = /(?:^|_)(?:test|disposable)(?:$|_)/i;
 const SAFE_DATABASE_NAME_RE = /^[a-zA-Z0-9_]+$/;
@@ -60,8 +61,9 @@ const DATABASE_ENV_NAMES = [
   "G011_TEST_DATABASE_URL",
   "JOB_INGESTION_LEDGER_TEST_DATABASE_URL",
   "G014_TEST_DATABASE_URL",
+  "PGCRYPTO_COMPAT_TEST_DATABASE_URL",
 ];
-const SUITE_NAMES = ["g002", "g003", "g004", "g010", "g011", "ledger", "g014"];
+const SUITE_NAMES = ["g002", "g003", "g004", "g010", "g011", "ledger", "g014", "pgcrypto-compat"];
 const SAFE_INHERITED_ENV = new Set([
   "CI",
   "COLORTERM",
@@ -239,6 +241,7 @@ export function buildReleaseVerificationPlan(options = {}) {
       "tests/g011-ats-tenant-registration-postgres.integration.test.ts",
       "tests/job-ingestion-ledger-postgres.integration.test.ts",
       "tests/g014-source-trial-postgres.integration.test.ts",
+      "tests/pgcrypto-schema-compatibility-postgres.integration.test.ts",
     ], {
       env: databaseUrls,
       redactEnvironment: true,
@@ -1544,7 +1547,7 @@ function fileEvidence(path, root = process.cwd()) {
 export function collectArtifactEvidence(root = process.cwd()) {
   const migrationDir = resolve(root, "backend/db/migrations");
   const migrations = readdirSync(migrationDir)
-    .filter((name) => MIGRATION_RE.test(name) || /^20260720\d+_.+\.down\.sql$/.test(name))
+    .filter((name) => MIGRATION_RE.test(name) || /^20260720\d+_.+\.down\.sql$/.test(name) || name === `${PGCRYPTO_COMPAT_MIGRATION}.down.sql`)
     .map((name) => `backend/db/migrations/${name}`);
   return [...new Set([...RELEASE_ARTIFACTS, ...migrations])]
     .sort()

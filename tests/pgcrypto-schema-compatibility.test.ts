@@ -14,11 +14,14 @@ describe("portable pgcrypto schema compatibility contract", () => {
     expect(sql).toContain("create extension if not exists pgcrypto");
     expect(sql).toContain("extension.extnamespace");
     expect(sql).toContain("if v_extension_schema = 'public' then return");
-    expect(sql).toContain("to_regprocedure('public.digest(text,text)') is null");
-    expect(sql).toContain("to_regprocedure('public.digest(bytea,text)') is null");
+    expect(sql).toContain("if v_extension_schema <> 'extensions' then");
+    expect(sql).toContain("errcode = '0a000'");
+    expect(sql).toContain("errcode = '42723'");
+    expect(sql).toContain("security invoker");
+    expect(sql).toContain("set search_path = pg_catalog");
+    expect(sql).toContain("public.digest compatibility wrappers already exist; refusing partial creation");
     expect(sql.match(/create function public\.digest/g)).toHaveLength(2);
     expect(sql).not.toContain("create or replace function");
-    expect(sql).not.toContain("security definer");
     expect(sql).not.toContain("alter extension");
   });
 
@@ -28,7 +31,11 @@ describe("portable pgcrypto schema compatibility contract", () => {
       .toHaveLength(3);
     expect(down.match(/hirly:pgcrypto-schema-compatibility:20260721001950/g))
       .toHaveLength(1);
-    expect(sql).toContain("obj_description(v_function, 'pg_proc') = v_marker");
+    expect(sql).toContain("v_text_wrapper");
+    expect(sql).toContain("v_bytea_wrapper");
+    expect(sql).toContain("is distinct from v_marker");
+    expect(sql).toContain("partially present; refusing down migration");
+    expect(sql).toContain("not marker-owned; refusing down migration");
     expect(sql).toContain("drop function public.digest(bytea, text)");
     expect(sql).toContain("drop function public.digest(text, text)");
     expect(sql).not.toContain("drop extension");

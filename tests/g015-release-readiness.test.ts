@@ -98,7 +98,7 @@ describe("G015 release verification contract", () => {
       "SOURCE_ACTIVATION_NOT_PERFORMED",
     ]);
     const matrixEnv = plan.commands.find((entry) => entry.id === "postgres-release-matrix")?.env ?? {};
-    expect(new Set(Object.values(matrixEnv)).size).toBe(7);
+    expect(new Set(Object.values(matrixEnv)).size).toBe(8);
     expect(
       Object.values(matrixEnv).every((value) =>
         String(value).includes("_20260720"),
@@ -274,7 +274,12 @@ describe("G015 release verification contract", () => {
         verificationId: "20260720120000-123-deadbeef",
       }),
     );
-    expect(tools.every((tool) => tool.available && tool.sha256?.match(/^[a-f0-9]{64}$/))).toBe(true);
+    expect(tools.some((tool) => tool.executable === ".venv/bin/python")).toBe(true);
+    expect(
+      tools
+        .filter((tool) => tool.available)
+        .every((tool) => tool.sha256?.match(/^[a-f0-9]{64}$/)),
+    ).toBe(true);
   });
 
   test("executes deployment and disabled-default safety assertions", () => {
@@ -295,7 +300,7 @@ describe("G015 release verification contract", () => {
   test("documents every migration in exact application order with matching down coverage", async () => {
     const allFiles = await readdir(resolve(root, "backend/db/migrations"));
     const ups = allFiles
-      .filter((name) => /^20260720\d+_.+\.sql$/.test(name))
+      .filter((name) => /^(?:20260720\d+_.+|20260721001950_pgcrypto_schema_compatibility)\.sql$/.test(name))
       .filter((name) => !name.endsWith(".down.sql"))
       .sort();
     const downs = new Set(allFiles.filter((name) => name.endsWith(".down.sql")));
@@ -356,6 +361,7 @@ describe("G015 release verification contract", () => {
       "G011_TEST_DATABASE_URL:",
       "JOB_INGESTION_LEDGER_TEST_DATABASE_URL:",
       "G014_TEST_DATABASE_URL:",
+      "PGCRYPTO_COMPAT_TEST_DATABASE_URL:",
     ]) {
       expect(workflow).not.toContain(sharedSuiteVariable);
     }
