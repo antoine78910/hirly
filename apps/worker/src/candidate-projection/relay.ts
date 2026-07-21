@@ -44,7 +44,7 @@ export class CandidateProjectionRelay {
             environment: this.options.environment,
             event: "candidate_projection.batch",
             severity: result.missing > 0 ? "warn" : "info",
-            details: result,
+            details: { ...result },
           });
         }
       } catch (error) {
