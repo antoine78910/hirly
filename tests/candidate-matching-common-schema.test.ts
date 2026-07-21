@@ -285,15 +285,17 @@ describePostgres("candidate matching migrations on disposable PostgreSQL", () =>
           INSERT INTO public.candidate_action_projection (
             candidate_id, action_id, candidate_version, source_job_id,
             canonical_group_id, canonical_group_aliases,
-            action_kind, action_at, source_event_id
+            action_kind, action_at, projected_at, source_event_id
           ) VALUES
             ('candidate-a', 'action-a', 1, 'job-parent',
              'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
              ARRAY['99999999-9999-4999-8999-999999999999']::uuid[], 'dismissed',
-             clock_timestamp(), '40000000-0000-4000-8000-000000000003'),
+             clock_timestamp(), clock_timestamp(),
+             '40000000-0000-4000-8000-000000000003'),
             ('candidate-b', 'action-b', 1, 'job-other',
              'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', ARRAY[]::uuid[], 'dismissed',
-             clock_timestamp(), '40000000-0000-4000-8000-000000000004');
+             clock_timestamp(), clock_timestamp(),
+             '40000000-0000-4000-8000-000000000004');
 
           INSERT INTO public.candidate_action_group_aliases (
             alias_group_id, canonical_group_id, alias_kind, alias_version, source_event_id
