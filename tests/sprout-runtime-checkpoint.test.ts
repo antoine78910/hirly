@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   initialSproutCheckpoint,
   nextSproutCheckpoint,
-  parseSproutNextOffset,
+  parseSproutCheckpointOffset,
 } from "../apps/worker/src/providers/sprout/checkpoint";
 import {
   SPROUT_FRANCE_DISABLED_REGISTRATION,
@@ -32,12 +32,14 @@ function activeRegistration(): SproutActivation {
 
 describe("Sprout checkpoint safety", () => {
   test("accepts only a rebuilt numeric or relative-query offset", () => {
-    expect(parseSproutNextOffset(20)).toBe(20);
-    expect(parseSproutNextOffset("?offset=20&limit=10")).toBe(20);
+    expect(parseSproutCheckpointOffset(20)).toBe(20);
+    expect(parseSproutCheckpointOffset("?offset=20&limit=10")).toBe(20);
     expect(() =>
-      parseSproutNextOffset("https://api.usesprout.com/jobs?offset=20"),
+      parseSproutCheckpointOffset(
+        "https://api.usesprout.com/jobs?offset=20",
+      ),
     ).toThrow("sprout_checkpoint_untrusted_next");
-    expect(() => parseSproutNextOffset("?offset=-1")).toThrow(
+    expect(() => parseSproutCheckpointOffset("?offset=-1")).toThrow(
       "sprout_checkpoint_invalid_next_offset",
     );
   });

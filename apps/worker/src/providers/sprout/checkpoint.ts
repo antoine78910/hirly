@@ -81,7 +81,7 @@ export function nextSproutCheckpoint(input: {
     };
   }
 
-  const nextOffset = parseSproutNextOffset(input.next);
+  const nextOffset = parseSproutCheckpointOffset(input.next);
   if (input.returnedItemCount === 0 || nextOffset !== expectedOffset) {
     throw new Error("sprout_checkpoint_non_monotonic_offset");
   }
@@ -99,7 +99,7 @@ export function nextSproutCheckpoint(input: {
   };
 }
 
-export function parseSproutNextOffset(next: string | number): number {
+export function parseSproutCheckpointOffset(next: string | number): number {
   if (typeof next === "number") {
     if (!Number.isSafeInteger(next) || next < 0) {
       throw new Error("sprout_checkpoint_invalid_next_offset");

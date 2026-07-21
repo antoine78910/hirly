@@ -116,6 +116,11 @@ Apply in this order with `psql -v ON_ERROR_STOP=1`:
 12. `20260720001150_source_trial_tenant_selection_binding.sql`
 13. `20260720002000_sprout_source_ingestion.sql`
 
+Migration `02000` adds the Sprout source boundary only. Its provider, France
+source, transport, incremental/backfill modes and schedule remain disabled;
+authorization is unverified and writer ownership remains `none` until the
+separate Sprout authorization, canary and rollback gates pass.
+
 The following same-day migrations belong to the **primary application
 database**, not the split inventory database. They are documented here so a
 release operator does not accidentally treat the repository-wide timestamp
@@ -152,7 +157,7 @@ Apply the list to the primary database containing `public.jobs`.
 Bootstrap `backend/db/jobs_inventory_schema.sql` on the inventory database,
 then apply the ordered list there using `JOBS_DATABASE_URL`. Keep auth, billing,
 profiles and user application state on the primary application database. In
-this topology, “the ordered list” means the eleven inventory migrations above,
+this topology, “the ordered list” means the thirteen inventory migrations above,
 not the separately listed application-database migrations.
 
 ## Deployment configuration validation
