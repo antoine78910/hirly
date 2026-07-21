@@ -1,0 +1,33 @@
+{
+  "contractVersion": "hirly.feed.v2",
+  "jobs": [
+    {
+      "canonicalGroupId": "10000000-0000-4000-8000-000000000001",
+      "preferredJobId": "job-paris-fullstack-1",
+      "jobVersion": "17",
+      "relevanceScore": 0.94,
+      "fulfillmentRoute": "auto"
+    }
+  ],
+  "nextCursor": null,
+  "inventoryState": "ready",
+  "emptyReason": null,
+  "matchContext": {
+    "snapshotVersion": "inventory-paris-17",
+    "profileVersion": "profile-fullstack-3",
+    "actionWatermark": "actions-0"
+  },
+  "summary": {
+    "evaluated": 1,
+    "eligible": 1,
+    "hiddenActioned": 0,
+    "hiddenPolicy": 0,
+    "hiddenBlocked": 0,
+    "visibleByRoute": {
+      "auto": 1,
+      "assisted": 0,
+      "manual": 0,
+      "blocked": 0
+    }
+  }
+}
