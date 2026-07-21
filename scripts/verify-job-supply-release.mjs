@@ -15,7 +15,12 @@ import {
 import { dirname, relative, resolve, sep } from "node:path";
 import { spawnSync } from "node:child_process";
 
-const MANIFEST_VERSION = "job-supply-release-verification.v3";
+const MANIFEST_VERSION = "job-supply-release-verification.v4";
+const RELEASE_ATTESTATION_VERSION = "job-supply-release-attestation.v1";
+const ALLOWED_EXTERNAL_BLOCKS = new Set([
+  "REMOTE_DEPLOYMENT_VALIDATION_NOT_PERFORMED_BY_VERIFIER",
+  "SOURCE_ACTIVATION_NOT_PERFORMED",
+]);
 const MIGRATION_RE = /^20260720\d+_.+\.sql$/;
 const PYTHON_EXCEPTION_RE = /^\s*#\s*stack-policy:\s*python-exception=(.{12,})\s*$/im;
 const DISPOSABLE_DB_RE = /(?:^|_)(?:test|disposable)(?:$|_)/i;
@@ -572,7 +577,7 @@ export function verifyDeploymentDefaults(root = process.cwd()) {
 }
 
 function parseArgs(argv) {
-  const options = { profile: "repository", output: ".omx/verification/job-supply-release-manifest.json", includeFrontend: false, includeDocker: false, planOnly: false, expectedHead: process.env.G015_EXPECTED_HEAD ?? null, databaseUrl: process.env.G015_TEST_DATABASE_URL ?? null, allowDisposableDatabase: process.env.G015_ALLOW_DISPOSABLE_DATABASE === "true" };
+  const options = { profile: "repository", output: null, includeFrontend: false, includeDocker: false, planOnly: false, expectedHead: process.env.G015_EXPECTED_HEAD ?? null, databaseUrl: process.env.G015_TEST_DATABASE_URL ?? null, allowDisposableDatabase: process.env.G015_ALLOW_DISPOSABLE_DATABASE === "true" };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--with-frontend") options.includeFrontend = true;
@@ -595,6 +600,23 @@ function parseArgs(argv) {
     } else throw new Error(`unsupported argument: ${argument}`);
   }
   return options;
+}
+
+function parseNamedArgs(argv, required) {
+  const values = {};
+  for (let index = 1; index < argv.length; index += 2) {
+    const flag = argv[index];
+    const value = argv[index + 1];
+    if (!flag?.startsWith("--") || !value || value.startsWith("--")) {
+      throw new Error(`${flag ?? "argument"} requires a value`);
+    }
+    const name = flag.slice(2);
+    if (!required.includes(name)) throw new Error(`unsupported argument: ${flag}`);
+    values[name] = value;
+  }
+  const missing = required.filter((name) => !values[name]);
+  if (missing.length) throw new Error(`missing required arguments: ${missing.map((name) => `--${name}`).join(", ")}`);
+  return values;
 }
 
 export function sanitizedEnvironment(source = process.env) {
@@ -623,8 +645,206 @@ export function executeCommand(item, output = { stdout: (value) => process.stdou
   return result;
 }
 
-function sha256(value) {
+export function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+export function defaultReleaseManifestOutput(verificationId) {
+  if (!/^[a-z0-9][a-z0-9-]{7,48}$/.test(String(verificationId))) {
+    throw new Error("verificationId must be valid before deriving the output path");
+  }
+  return `.omx/verification/job-supply-release-${verificationId}.json`;
+}
+
+export function validateSelectedManifest(manifest, options = {}) {
+  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) {
+    throw new Error("selected manifest must be an object");
+  }
+  if (manifest.version !== MANIFEST_VERSION) {
+    throw new Error(`selected manifest version must be ${MANIFEST_VERSION}`);
+  }
+  if (manifest.overallStatus !== "passed") {
+    throw new Error("selected manifest overallStatus must be passed");
+  }
+  if (!Array.isArray(manifest.results) || manifest.results.length === 0) {
+    throw new Error("selected manifest must contain non-empty results");
+  }
+  const failedCommands = manifest.results
+    .filter((result) => result?.status !== "passed")
+    .map((result, index) => String(result?.id ?? `result-${index}`));
+  if (failedCommands.length) {
+    throw new Error(`selected manifest has non-passing commands: ${failedCommands.join(", ")}`);
+  }
+  if (!/^[0-9a-f]{40}$/.test(String(manifest.exactHead ?? ""))) {
+    throw new Error("selected manifest exactHead must be a lowercase 40-character commit SHA");
+  }
+  if (manifest.expectedHead !== manifest.exactHead) {
+    throw new Error("selected manifest expectedHead must equal exactHead");
+  }
+  const blocks = manifest.blockedExternal ?? [];
+  if (!Array.isArray(blocks)) throw new Error("selected manifest blockedExternal must be an array");
+  const externalBlockCodes = blocks.map((entry) => entry?.code);
+  const unexpected = externalBlockCodes.filter((code) => !ALLOWED_EXTERNAL_BLOCKS.has(code));
+  if (unexpected.length) {
+    throw new Error(`selected manifest has unexpected external blocks: ${unexpected.join(", ")}`);
+  }
+  if (options.requireVerificationId !== false && !String(manifest.verificationId ?? "").trim()) {
+    throw new Error("selected manifest verificationId is required");
+  }
+  return { exactHead: manifest.exactHead, externalBlockCodes };
+}
+
+function durableEvidence(discharge) {
+  const evidence = discharge?.evidence ?? discharge?.evidenceLinks ?? discharge?.evidencePaths;
+  if (Array.isArray(evidence)) return evidence.filter((item) => typeof item === "string" && item.trim());
+  return typeof evidence === "string" && evidence.trim() ? [evidence] : [];
+}
+
+export function createReleaseAttestation({
+  manifestPath,
+  manifestBytes,
+  discharges = [],
+  deployedArtifactDigest,
+  releaseHead,
+  createdAt = new Date().toISOString(),
+} = {}) {
+  if (typeof manifestPath !== "string" || !manifestPath.trim()) {
+    throw new Error("manifestPath must be a non-empty durable evidence identifier");
+  }
+  if (!(typeof manifestBytes === "string" || ArrayBuffer.isView(manifestBytes))) {
+    throw new Error("manifestBytes must contain the exact selected manifest bytes");
+  }
+  let manifest;
+  try {
+    manifest = JSON.parse(typeof manifestBytes === "string" ? manifestBytes : Buffer.from(manifestBytes.buffer, manifestBytes.byteOffset, manifestBytes.byteLength).toString("utf8"));
+  } catch {
+    throw new Error("manifestBytes must contain valid JSON");
+  }
+  const selected = validateSelectedManifest(manifest);
+  if (releaseHead !== selected.exactHead) {
+    throw new Error("releaseHead must equal the selected manifest exactHead");
+  }
+  if (!/^[0-9a-f]{64}$/.test(String(deployedArtifactDigest ?? ""))) {
+    throw new Error("deployedArtifactDigest must be a lowercase SHA-256 digest");
+  }
+  if (!Array.isArray(discharges)) throw new Error("discharges must be an array");
+  const byCode = new Map();
+  for (const discharge of discharges) {
+    const code = discharge?.code;
+    if (!ALLOWED_EXTERNAL_BLOCKS.has(code)) throw new Error(`unexpected discharge code: ${code}`);
+    if (byCode.has(code)) throw new Error(`duplicate discharge code: ${code}`);
+    if (discharge.status !== "discharged") throw new Error(`discharge ${code} must have status discharged`);
+    const evidence = durableEvidence(discharge);
+    if (evidence.length === 0) throw new Error(`discharge ${code} requires durable evidence`);
+    byCode.set(code, {
+      code,
+      status: "discharged",
+      evidence,
+      ...(discharge.observedAt ? { observedAt: discharge.observedAt } : {}),
+    });
+  }
+  const missing = selected.externalBlockCodes.filter((code) => !byCode.has(code));
+  const unexpected = [...byCode.keys()].filter((code) => !selected.externalBlockCodes.includes(code));
+  if (missing.length) throw new Error(`missing external block discharges: ${missing.join(", ")}`);
+  if (unexpected.length) throw new Error(`unexpected external block discharges: ${unexpected.join(", ")}`);
+  return {
+    version: RELEASE_ATTESTATION_VERSION,
+    createdAt,
+    releaseHead,
+    deployedArtifactDigest,
+    selectedManifest: {
+      path: manifestPath,
+      sha256: sha256(manifestBytes),
+      verificationId: manifest.verificationId,
+    },
+    externalBlockDischarges: selected.externalBlockCodes.map((code) => byCode.get(code)),
+    readinessStatus: "ATTESTED_READY",
+  };
+}
+
+export function classifyReleaseDrift(change = {}) {
+  const matrix = {
+    build_input: {
+      invalidatesSelectedManifest: true,
+      invalidatesCodeReview: true,
+      requiresFullVerifier: true,
+      requiredEvidence: ["full-verifier", "security-review", "code-review", "ultraqa", "artifact-attestation"],
+    },
+    runtime_config_outside_envelope: {
+      invalidatesSelectedManifest: change.affectsBuildInputs === true,
+      invalidatesCodeReview: false,
+      requiresFullVerifier: change.affectsBuildInputs === true,
+      requiredEvidence: [
+        ...(change.affectsBuildInputs === true ? ["full-verifier"] : []),
+        "affected-security-review", "ultraqa", "deployment-attestation", "deployed-smoke", "rollback-proof",
+      ],
+    },
+    rollout_config_inside_envelope: {
+      invalidatesSelectedManifest: false,
+      invalidatesCodeReview: false,
+      requiresFullVerifier: false,
+      requiredEvidence: ["change-record", "canonical-configuration-digest", "policy-expiry-check", "deployed-smoke", "rollback-proof"],
+    },
+    candidate_mandate: {
+      invalidatesSelectedManifest: false,
+      invalidatesCodeReview: false,
+      requiresFullVerifier: false,
+      requiredEvidence: ["claim-check", "post-claim-check", "pre-submit-check", "attempt-evidence"],
+    },
+  };
+  if (!Object.hasOwn(matrix, change.kind)) throw new Error(`unknown release drift kind: ${change.kind ?? "missing"}`);
+  const classification = matrix[change.kind];
+  return { kind: change.kind, ...classification, requiredEvidence: [...new Set(classification.requiredEvidence)] };
+}
+
+function currentApprovedPolicy(policy, name, failures) {
+  if (policy?.verdict !== "approved") failures.push(`${name} must be approved`);
+  if (!String(policy?.owner ?? "").trim()) failures.push(`${name} owner is required`);
+  if (durableEvidence(policy).length === 0) failures.push(`${name} evidence is required`);
+  const expiry = policy?.reviewExpiresAt ?? policy?.expiresAt;
+  if (!expiry || Number.isNaN(Date.parse(expiry))) failures.push(`${name} review expiry is required`);
+  else if (Date.parse(expiry) <= Date.now()) failures.push(`${name} is expired`);
+}
+
+export function evaluateProviderActivationPreflight(input = {}) {
+  const failures = [];
+  const provider = String(input.provider ?? "").trim();
+  const targetVerdict = input.targetVerdict;
+  const allowedTargets = new Set([
+    "inventory_canary_ready", "inventory_active", "application_canary_ready",
+    "application_active", "inventory_manual", "blocked",
+  ]);
+  if (!provider) failures.push("provider is required");
+  if (!allowedTargets.has(targetVerdict)) failures.push("targetVerdict is missing or unsupported");
+  if (targetVerdict === "blocked") failures.push("blocked target cannot activate a provider");
+  if (input.releaseAttestation?.readinessStatus !== "ATTESTED_READY") failures.push("release attestation is not ATTESTED_READY");
+  currentApprovedPolicy(input.inventoryAccess, "inventoryAccess", failures);
+  if (input.killSwitches?.providerArmed !== true) failures.push("provider kill switch is not armed");
+  if (input.killSwitches?.tenantCountryArmed !== true) failures.push("tenant/country kill switch is not armed");
+  if (input.rollback?.exercised !== true) failures.push("rollback was not exercised");
+  if (durableEvidence(input.rollback).length === 0) failures.push("rollback evidence is required");
+  if (!String(input.rollback?.commandTranscriptId ?? "").trim()) failures.push("rollback command/transcript identifier is required");
+  const shadows = Array.isArray(input.shadowRuns) ? input.shadowRuns : [];
+  if (shadows.length !== 2 || shadows.some((run) => run?.complete !== true || run?.digestBound !== true)) {
+    failures.push("exactly two complete digest-bound shadow runs are required");
+  }
+  if (input.simultaneousCanonicalWriters !== false) failures.push("simultaneous canonical writers must be explicitly false");
+  if (input.writerTransfer?.throughNone !== true) failures.push("writer ownership transfer must pass through writer_runtime=none");
+
+  if (["application_canary_ready", "application_active"].includes(targetVerdict)) {
+    currentApprovedPolicy(input.submissionAuthority, "submissionAuthority", failures);
+    currentApprovedPolicy(input.privacyBasis, "privacyBasis", failures);
+    if (input.nonProductionSubmission?.status !== "passed" || durableEvidence(input.nonProductionSubmission).length === 0) {
+      failures.push("passed non-production submission evidence is required");
+    }
+  }
+  if (targetVerdict === "inventory_manual") {
+    if (input.manualDeepLink?.verified !== true || durableEvidence(input.manualDeepLink).length === 0) {
+      failures.push("verified production manual deep-link evidence is required");
+    }
+    if (input.applicationAutomationEnabled !== false) failures.push("application automation must remain disabled");
+  }
+  return { provider, targetVerdict, status: failures.length ? "BLOCKED" : "PASS", failures };
 }
 
 function fileEvidence(path, root = process.cwd()) {
@@ -877,9 +1097,32 @@ if (direct) {
     console.log(JSON.stringify(provisionDisposableDatabases()));
   } else if (argv[0] === "--internal-disabled-state-proof") {
     console.log(JSON.stringify(verifyPostMigrationDisabledState()));
+  } else if (argv[0] === "--attest-selection") {
+    const options = parseNamedArgs(argv, ["manifest", "discharges", "artifact-digest", "release-head", "output"]);
+    const attestation = createReleaseAttestation({
+      manifestPath: options.manifest,
+      manifestBytes: readFileSync(resolve(process.cwd(), options.manifest)),
+      discharges: JSON.parse(readFileSync(resolve(process.cwd(), options.discharges), "utf8")),
+      deployedArtifactDigest: options["artifact-digest"],
+      releaseHead: options["release-head"],
+    });
+    writeManifest(options.output, attestation);
+    console.log(JSON.stringify({ output: options.output, readinessStatus: attestation.readinessStatus }));
+  } else if (argv[0] === "--provider-preflight") {
+    const options = parseNamedArgs(
+      ["provider-preflight-mode", "--provider-preflight", argv[1], ...argv.slice(2)],
+      ["provider-preflight", "output"],
+    );
+    const evidence = evaluateProviderActivationPreflight(
+      JSON.parse(readFileSync(resolve(process.cwd(), options["provider-preflight"]), "utf8")),
+    );
+    writeManifest(options.output, evidence);
+    console.log(JSON.stringify({ output: options.output, status: evidence.status }));
+    if (evidence.status === "BLOCKED") process.exitCode = 1;
   } else {
     const options = parseArgs(argv);
     const plan = buildReleaseVerificationPlan(options);
+    const output = options.output ?? defaultReleaseManifestOutput(plan.verificationId);
     const manifest = options.planOnly
       ? {
           version: MANIFEST_VERSION,
@@ -891,8 +1134,8 @@ if (direct) {
           blockedExternal: plan.blockedExternal,
         }
       : run(plan);
-    writeManifest(options.output, manifest);
-    console.log(JSON.stringify({ output: options.output, status: manifest.overallStatus ?? "planned", readinessStatus: manifest.readinessStatus }));
+    writeManifest(output, manifest);
+    console.log(JSON.stringify({ output, status: manifest.overallStatus ?? "planned", readinessStatus: manifest.readinessStatus }));
     if (manifest.overallStatus === "failed") process.exitCode = 1;
   }
 }

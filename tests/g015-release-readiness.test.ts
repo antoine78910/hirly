@@ -1,18 +1,24 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir, readFile, readdir, rm, symlink } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
   assertDisposableDatabase,
   buildReleaseVerificationPlan,
+  classifyReleaseDrift,
   collectArtifactEvidence,
   collectToolEvidence,
+  createReleaseAttestation,
+  defaultReleaseManifestOutput,
+  evaluateProviderActivationPreflight,
   executeCommand,
   findMigrationActivationStatements,
   isolatedDatabaseUrl,
   redactSensitiveText,
   resolveManifestOutput,
   sanitizedEnvironment,
+  sha256,
+  validateSelectedManifest,
   verifyDeploymentDefaults,
 } from "../scripts/verify-job-supply-release.mjs";
 
@@ -192,6 +198,10 @@ describe("G015 release verification contract", () => {
       expect(
         resolveManifestOutput(".omx/verification/manifest.json", temporaryRoot),
       ).toBe(resolve(temporaryRoot, ".omx/verification/manifest.json"));
+      await writeFile(resolve(temporaryRoot, ".omx/verification/existing.json"), "{}\n");
+      expect(() => resolveManifestOutput(".omx/verification/existing.json", temporaryRoot)).toThrow(
+        "must not already exist",
+      );
       expect(() => resolveManifestOutput("../escape.json", temporaryRoot)).toThrow(
         "contained under .omx/verification",
       );
@@ -344,4 +354,161 @@ describe("G015 release verification contract", () => {
     expect(runbook).toContain("BLOCKED_EXTERNAL");
     expect(runbook).toContain("production readiness or canonical writer");
   });
+
+  test("derives unique append-only default manifest paths", () => {
+    expect(defaultReleaseManifestOutput("20260720120000-123-deadbeef")).not.toBe(
+      defaultReleaseManifestOutput("20260720120000-123-feedface"),
+    );
+  });
+
+  test("selects only exact-head-bound all-passed v4 manifests", () => {
+    const manifest = selectedManifest();
+    expect(validateSelectedManifest(manifest)).toEqual({
+      exactHead: "a".repeat(40),
+      externalBlockCodes: [
+        "REMOTE_DEPLOYMENT_VALIDATION_NOT_PERFORMED_BY_VERIFIER",
+        "SOURCE_ACTIVATION_NOT_PERFORMED",
+      ],
+    });
+    expect(() => validateSelectedManifest({ ...manifest, version: "job-supply-release-verification.v3" })).toThrow("version");
+    expect(() => validateSelectedManifest({ ...manifest, expectedHead: null })).toThrow("expectedHead");
+    expect(() => validateSelectedManifest({ ...manifest, results: [{ id: "lint", status: "skipped" }] })).toThrow("lint");
+    expect(() => validateSelectedManifest({
+      ...manifest,
+      blockedExternal: [{ code: "DATABASE_NOT_PROVIDED" }],
+    })).toThrow("DATABASE_NOT_PROVIDED");
+  });
+
+  test("attests the exact selected bytes only after every external block is discharged", () => {
+    const bytes = Buffer.from(`${JSON.stringify(selectedManifest())}\n`);
+    const discharges = [
+      discharge("REMOTE_DEPLOYMENT_VALIDATION_NOT_PERFORMED_BY_VERIFIER"),
+      discharge("SOURCE_ACTIVATION_NOT_PERFORMED"),
+    ];
+    const attestation = createReleaseAttestation({
+      manifestPath: "evidence/manifests/release.json",
+      manifestBytes: bytes,
+      discharges,
+      deployedArtifactDigest: "b".repeat(64),
+      releaseHead: "a".repeat(40),
+      createdAt: "2026-07-21T00:00:00.000Z",
+    });
+    expect(attestation.readinessStatus).toBe("ATTESTED_READY");
+    expect(attestation.selectedManifest.sha256).toBe(sha256(bytes));
+    expect(() => createReleaseAttestation({
+      manifestPath: "evidence/release.json", manifestBytes: bytes, discharges: discharges.slice(0, 1),
+      deployedArtifactDigest: "b".repeat(64), releaseHead: "a".repeat(40),
+    })).toThrow("missing");
+    expect(() => createReleaseAttestation({
+      manifestPath: "evidence/release.json", manifestBytes: bytes, discharges: [...discharges, discharges[0]],
+      deployedArtifactDigest: "b".repeat(64), releaseHead: "a".repeat(40),
+    })).toThrow("duplicate");
+    expect(() => createReleaseAttestation({
+      manifestPath: "evidence/release.json", manifestBytes: bytes, discharges,
+      deployedArtifactDigest: "not-a-digest", releaseHead: "a".repeat(40),
+    })).toThrow("SHA-256");
+    expect(() => createReleaseAttestation({
+      manifestPath: "evidence/release.json", manifestBytes: bytes, discharges,
+      deployedArtifactDigest: "b".repeat(64), releaseHead: "c".repeat(40),
+    })).toThrow("releaseHead");
+  });
+
+  test("classifies the complete release drift matrix", () => {
+    expect(classifyReleaseDrift({ kind: "build_input" })).toMatchObject({
+      invalidatesSelectedManifest: true, invalidatesCodeReview: true, requiresFullVerifier: true,
+    });
+    expect(classifyReleaseDrift({ kind: "runtime_config_outside_envelope" })).toMatchObject({
+      invalidatesSelectedManifest: false, invalidatesCodeReview: false, requiresFullVerifier: false,
+    });
+    const buildAffected = classifyReleaseDrift({ kind: "runtime_config_outside_envelope", affectsBuildInputs: true });
+    expect(buildAffected.invalidatesSelectedManifest).toBe(true);
+    expect(buildAffected.invalidatesCodeReview).toBe(false);
+    expect(buildAffected.requiredEvidence.filter((item) => item === "full-verifier")).toHaveLength(1);
+    expect(classifyReleaseDrift({ kind: "rollout_config_inside_envelope" }).requiredEvidence).toContain("policy-expiry-check");
+    expect(classifyReleaseDrift({ kind: "candidate_mandate" }).requiredEvidence).toContain("attempt-evidence");
+    expect(() => classifyReleaseDrift({ kind: "unknown" })).toThrow("unknown");
+  });
+
+  test("provider activation preflight passes inventory manual and blocks each missing gate", () => {
+    const input = passingManualPreflight();
+    expect(evaluateProviderActivationPreflight(input)).toEqual({
+      provider: "recruitee", targetVerdict: "inventory_manual", status: "PASS", failures: [],
+    });
+    for (const mutate of [
+      (value: any) => { value.releaseAttestation = null; },
+      (value: any) => { value.inventoryAccess.reviewExpiresAt = "2020-01-01T00:00:00.000Z"; },
+      (value: any) => { value.killSwitches.providerArmed = false; },
+      (value: any) => { value.shadowRuns.pop(); },
+      (value: any) => { value.simultaneousCanonicalWriters = true; },
+      (value: any) => { value.writerTransfer.throughNone = false; },
+      (value: any) => { value.rollback.exercised = false; },
+      (value: any) => { value.applicationAutomationEnabled = true; },
+    ]) {
+      const changed = structuredClone(input);
+      mutate(changed);
+      expect(evaluateProviderActivationPreflight(changed).status).toBe("BLOCKED");
+    }
+  });
+
+  test("application activation requires current authority, privacy basis, and non-production proof", () => {
+    const input = { ...passingManualPreflight(), targetVerdict: "application_canary_ready" };
+    expect(evaluateProviderActivationPreflight(input).status).toBe("BLOCKED");
+    Object.assign(input, {
+      submissionAuthority: approvedPolicy(),
+      privacyBasis: approvedPolicy(),
+      nonProductionSubmission: { status: "passed", evidence: ["evidence/non-production/attempt.json"] },
+    });
+    expect(evaluateProviderActivationPreflight(input).status).toBe("PASS");
+  });
 });
+
+function selectedManifest() {
+  return {
+    version: "job-supply-release-verification.v4",
+    verificationId: "20260720120000-123-deadbeef",
+    overallStatus: "passed",
+    exactHead: "a".repeat(40),
+    expectedHead: "a".repeat(40),
+    results: [{ id: "typecheck", status: "passed" }, { id: "tests", status: "passed" }],
+    blockedExternal: [
+      { code: "REMOTE_DEPLOYMENT_VALIDATION_NOT_PERFORMED_BY_VERIFIER" },
+      { code: "SOURCE_ACTIVATION_NOT_PERFORMED" },
+    ],
+  };
+}
+
+function discharge(code: string) {
+  return { code, status: "discharged", evidence: [`evidence/${code}.json`] };
+}
+
+function approvedPolicy() {
+  return {
+    verdict: "approved",
+    owner: "release-owner",
+    evidence: ["evidence/policy.json"],
+    reviewExpiresAt: "2099-01-01T00:00:00.000Z",
+  };
+}
+
+function passingManualPreflight() {
+  return {
+    provider: "recruitee",
+    targetVerdict: "inventory_manual",
+    releaseAttestation: { readinessStatus: "ATTESTED_READY" },
+    inventoryAccess: approvedPolicy(),
+    killSwitches: { providerArmed: true, tenantCountryArmed: true },
+    rollback: {
+      exercised: true,
+      evidence: ["evidence/rollback.json"],
+      commandTranscriptId: "rollback-transcript-123",
+    },
+    shadowRuns: [
+      { complete: true, digestBound: true },
+      { complete: true, digestBound: true },
+    ],
+    simultaneousCanonicalWriters: false,
+    writerTransfer: { throughNone: true },
+    manualDeepLink: { verified: true, evidence: ["evidence/manual-link.json"] },
+    applicationAutomationEnabled: false,
+  };
+}
