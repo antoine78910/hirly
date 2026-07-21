@@ -5,6 +5,7 @@ import DesktopUpgradeModal from "../components/upgrade/DesktopUpgradeModal";
 import { useAppLocale } from "./AppLocaleContext";
 import { syncBillingAfterCheckout } from "../lib/billingSync";
 import { captureCheckoutSessionFromSearch } from "../lib/pendingCheckout";
+import { backendHasNewerFrontend } from "../lib/frontendVersion";
 
 const UpgradeModalContext = createContext({
   upgradeOpen: false,
@@ -17,7 +18,12 @@ export function UpgradeModalProvider({ children }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { t } = useAppLocale();
-  const openUpgrade = useCallback(() => setUpgradeOpen(true), []);
+  const openUpgrade = useCallback(async () => {
+    // A backend rollout can reach users before its matching frontend bundle.
+    // Keep the modal closed until this client matches the deployed backend.
+    if (await backendHasNewerFrontend()) return;
+    setUpgradeOpen(true);
+  }, []);
   const closeUpgrade = useCallback(() => setUpgradeOpen(false), []);
 
   useEffect(() => {
@@ -42,7 +48,7 @@ export function UpgradeModalProvider({ children }) {
     );
 
     if (upgradeStatus === "cancelled") {
-      setUpgradeOpen(true);
+      void openUpgrade();
       toast(t("upgrade.checkoutCancelled"));
       return;
     }
@@ -51,7 +57,7 @@ export function UpgradeModalProvider({ children }) {
       toast.success(t("upgrade.checkoutSuccess"));
       void syncBillingAfterCheckout({ sessionId, maxAttempts: 15, delayMs: 1500 });
     }
-  }, [location.pathname, location.search, navigate, t]);
+  }, [location.pathname, location.search, navigate, openUpgrade, t]);
 
   return (
     <UpgradeModalContext.Provider value={{ upgradeOpen, openUpgrade, closeUpgrade }}>
