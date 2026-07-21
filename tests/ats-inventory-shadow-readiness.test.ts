@@ -153,10 +153,10 @@ describe("ATS inventory production shadow readiness", () => {
   });
 
   test("reconciles two complete runs deterministically", () => {
-    const digest = approve("greenhouse").policyDigest;
+    const digest = approve("nicoka").policyDigest;
     const scorecard = buildAtsRepeatedShadowScorecard([
-      { runId: "run-b", capturedAt: "2026-07-22T00:00:00.000+00:00", provider: "greenhouse", tenantId: "vaulttec", countryCode: "FR", policyDigest: digest, complete: true, requestCount: 1, jobs: [{ externalId: "3", fingerprint: "c" }, { externalId: "2", fingerprint: "changed" }] },
-      { runId: "run-a", capturedAt: "2026-07-21T00:00:00.000+00:00", provider: "greenhouse", tenantId: "vaulttec", countryCode: "fr", policyDigest: digest, complete: true, requestCount: 1, jobs: [{ externalId: "2", fingerprint: "b" }, { externalId: "1", fingerprint: "a" }] },
+      { runId: "run-b", capturedAt: "2026-07-22T00:00:00.000+00:00", provider: "nicoka", tenantId: "vaulttec", countryCode: "FR", policyDigest: digest, complete: true, requestCount: 1, jobs: [{ externalId: "3", fingerprint: "c" }, { externalId: "2", fingerprint: "changed" }] },
+      { runId: "run-a", capturedAt: "2026-07-21T00:00:00.000+00:00", provider: "nicoka", tenantId: "vaulttec", countryCode: "fr", policyDigest: digest, complete: true, requestCount: 1, jobs: [{ externalId: "2", fingerprint: "b" }, { externalId: "1", fingerprint: "a" }] },
     ]);
     expect(scorecard).toMatchObject({
       verdict: "complete_shadow_ready",
@@ -166,8 +166,8 @@ describe("ATS inventory production shadow readiness", () => {
     });
     expect(scorecard.evidenceDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(buildAtsRepeatedShadowScorecard([...[
-      { runId: "run-b", capturedAt: "2026-07-22T00:00:00.000+00:00", provider: "greenhouse", tenantId: "vaulttec", countryCode: "FR", policyDigest: digest, complete: true, requestCount: 1, jobs: [{ externalId: "3", fingerprint: "c" }, { externalId: "2", fingerprint: "changed" }] },
-      { runId: "run-a", capturedAt: "2026-07-21T00:00:00.000+00:00", provider: "greenhouse", tenantId: "vaulttec", countryCode: "FR", policyDigest: digest, complete: true, requestCount: 1, jobs: [{ externalId: "2", fingerprint: "b" }, { externalId: "1", fingerprint: "a" }] },
+      { runId: "run-b", capturedAt: "2026-07-22T00:00:00.000+00:00", provider: "nicoka", tenantId: "vaulttec", countryCode: "FR", policyDigest: digest, complete: true, requestCount: 1, jobs: [{ externalId: "3", fingerprint: "c" }, { externalId: "2", fingerprint: "changed" }] },
+      { runId: "run-a", capturedAt: "2026-07-21T00:00:00.000+00:00", provider: "nicoka", tenantId: "vaulttec", countryCode: "FR", policyDigest: digest, complete: true, requestCount: 1, jobs: [{ externalId: "2", fingerprint: "b" }, { externalId: "1", fingerprint: "a" }] },
     ]].reverse()).evidenceDigest).toBe(scorecard.evidenceDigest);
   });
 
@@ -208,10 +208,10 @@ describe("ATS inventory production shadow readiness", () => {
   });
 
   test("complete empty snapshots can report removals without expiry mutation", () => {
-    const digest = approve("greenhouse").policyDigest;
+    const digest = approve("nicoka").policyDigest;
     const scorecard = buildAtsRepeatedShadowScorecard([
-      { runId: "a", capturedAt: "2026-07-21T00:00:00.000+00:00", provider: "greenhouse", tenantId: "vaulttec", countryCode: "FR", policyDigest: digest, complete: true, requestCount: 1, jobs: [{ externalId: "1", fingerprint: "a" }] },
-      { runId: "b", capturedAt: "2026-07-22T00:00:00.000+00:00", provider: "greenhouse", tenantId: "vaulttec", countryCode: "FR", policyDigest: digest, complete: true, requestCount: 1, jobs: [] },
+      { runId: "a", capturedAt: "2026-07-21T00:00:00.000+00:00", provider: "nicoka", tenantId: "vaulttec", countryCode: "FR", policyDigest: digest, complete: true, requestCount: 1, jobs: [{ externalId: "1", fingerprint: "a" }] },
+      { runId: "b", capturedAt: "2026-07-22T00:00:00.000+00:00", provider: "nicoka", tenantId: "vaulttec", countryCode: "FR", policyDigest: digest, complete: true, requestCount: 1, jobs: [] },
     ]);
     expect(scorecard.reconciliation[0]?.removals).toEqual(["1"]);
     expect(expiryDispositionAfterShadowFailure()).toEqual({

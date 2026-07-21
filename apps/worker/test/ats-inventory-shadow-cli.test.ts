@@ -1,5 +1,4 @@
-import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
@@ -90,8 +89,9 @@ describe("ATS inventory shadow CLI", () => {
         complete: true, canonicalWritesEnabled: false, capturedAt,
         jobs: [{ externalId: "vaulttec:1", fingerprint: "b".repeat(64) }],
       });
-      await Bun.write(firstPath, JSON.stringify(run("run-one", "2026-07-21T00:00:00.000Z")));
-      await Bun.write(secondPath, JSON.stringify(run("run-two", "2026-07-22T00:00:00.000Z")));
+      await mkdir(join(root, "runs"), { recursive: true });
+      await writeFile(firstPath, JSON.stringify(run("run-one", "2026-07-21T00:00:00.000Z")));
+      await writeFile(secondPath, JSON.stringify(run("run-two", "2026-07-22T00:00:00.000Z")));
       const scorecardPath = join(root, "scorecards", "sealed.json");
       const command = parseAtsInventoryShadowArgs([
         "seal", "--run", firstPath, "--run", secondPath, "--output", scorecardPath, "--evidence-root", root,
