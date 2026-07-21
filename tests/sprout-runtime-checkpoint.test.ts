@@ -101,6 +101,22 @@ describe("Sprout checkpoint safety", () => {
       }),
     ).toMatchObject({ checkpoint: { offset: 20, observedTotal: 26 }, complete: false });
   });
+
+  test("treats an empty page with a stale next cursor as terminal", () => {
+    const current = {
+      ...initialSproutCheckpoint({ approvedPageSize: 100 }),
+      offset: 65_820,
+      observedTotal: 67_670,
+    };
+    expect(
+      nextSproutCheckpoint({
+        current,
+        returnedItemCount: 0,
+        sourceReportedTotal: 67_670,
+        next: "?offset=65820&limit=100",
+      }),
+    ).toEqual({ checkpoint: current, complete: true });
+  });
 });
 
 describe("Sprout activation and bounded page runtime", () => {

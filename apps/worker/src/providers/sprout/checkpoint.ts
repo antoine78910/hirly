@@ -58,7 +58,11 @@ export function nextSproutCheckpoint(input: {
   const expectedOffset = current.offset + input.returnedItemCount;
   const observedTotal = Math.max(current.observedTotal ?? 0, input.sourceReportedTotal, expectedOffset);
 
-  if (input.next === null) {
+  // Sprout can return an empty collection with a stale/self-referential `next`
+  // link when filters have drifted. There is no safe offset advancement in
+  // that response, so it is a terminal page rather than a retryable cursor
+  // error. Committing it marks the source run complete without losing items.
+  if (input.next === null || input.returnedItemCount === 0) {
     return {
       checkpoint: sproutCheckpointSchema.parse({
         ...current,
@@ -70,7 +74,7 @@ export function nextSproutCheckpoint(input: {
   }
 
   const nextOffset = parseSproutCheckpointOffset(input.next);
-  if (input.returnedItemCount === 0 || nextOffset <= current.offset) {
+  if (nextOffset <= current.offset) {
     throw new Error("sprout_checkpoint_non_monotonic_offset");
   }
 
