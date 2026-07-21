@@ -102,6 +102,7 @@ def test_generation_child_inherits_governed_tags_and_trace_identity(monkeypatch)
     assert generation.attributes["gen_ai.hirly.feature"] == "career_coach"
     assert "gen_ai.hirly.raw_input" not in generation.attributes
     assert "gen_ai.hirly.operation" not in http_child.attributes
+    assert generation.attributes["gen_ai.operation.name"] == "hirly.career_coach_interview_score.v1"
 
 
 @pytest.mark.asyncio

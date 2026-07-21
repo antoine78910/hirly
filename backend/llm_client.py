@@ -164,6 +164,16 @@ def build_llm_generation_tag_processor() -> Any:
                 value = attributes.get(attribute)
                 if value is not None:
                     span.set_attribute(attribute, value)
+            # PostHog's AI-event projection retains standard GenAI attributes
+            # but drops arbitrary OTel attributes. Encode the governed
+            # operation and version in the standard operation name so cost,
+            # latency, token and error facts remain groupable in `$ai_span_name`.
+            operation = attributes.get("gen_ai.hirly.operation")
+            prompt_version = attributes.get("gen_ai.hirly.prompt_version")
+            if operation and prompt_version:
+                span.set_attribute(
+                    "gen_ai.operation.name", f"hirly.{operation}.{prompt_version}"
+                )
 
         def on_end(self, span: Any) -> None:
             return None

@@ -44,9 +44,10 @@ Never place API keys, authorization headers, cookies, or secrets in prompts.
 
 ## Reading the data
 
-Use PostHog AI Observability to drill into a trace by `gen_ai.hirly.operation` and
-`gen_ai.hirly.prompt_version`. Compare model/provider, token usage, total cost,
-latency, error rate, and `gen_ai.hirly.outcome` between versions. A regression is a
+Use PostHog AI Observability to drill into a trace by `$ai_span_name`, which is
+written as `hirly.<operation>.<prompt_version> <model>` on each generation.
+Compare model/provider, token usage, total cost, latency, error rate, and
+`gen_ai.hirly.outcome` between versions. A regression is a
 change in error rate, latency, cost, or an operation-specific evaluation metric
 after a prompt/model release.
 
