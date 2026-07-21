@@ -32,14 +32,24 @@ WITH profile AS (
     effective_query.longitudes
   ) AS location(latitude, longitude)
   WHERE location.latitude IS NOT NULL AND location.longitude IS NOT NULL
+), recency_candidates AS MATERIALIZED (
+  SELECT document.*
+  FROM public.job_search_documents AS document
+  WHERE document.lifecycle_status = 'active'
+  ORDER BY document.last_seen_at DESC, document.canonical_group_id ASC
+  LIMIT 1000
 ), inventory_meta AS (
   SELECT concat(
-    coalesce(max(document.projected_at), '-infinity'::timestamptz)::text,
+    coalesce((
+      SELECT document.projected_at
+      FROM public.job_search_documents AS document
+      WHERE document.lifecycle_status = 'active'
+      ORDER BY document.projected_at DESC
+      LIMIT 1
+    ), '-infinity'::timestamptz)::text,
     '#', max(effective_query.query_fingerprint)
   ) AS snapshot_version
-  FROM public.job_search_documents AS document
-  CROSS JOIN effective_query
-  WHERE document.lifecycle_status = 'active'
+  FROM effective_query
 ), scored AS (
   SELECT
     document.canonical_group_id::text AS canonical_group_id,
@@ -62,7 +72,7 @@ WITH profile AS (
       AND document.applyability_tier <> 'blocked'
       AND (document.expires_at IS NULL OR document.expires_at > clock_timestamp())
     ) AS lifecycle_eligible
-  FROM public.job_search_documents AS document
+  FROM recency_candidates AS document
   CROSS JOIN profile
   CROSS JOIN effective_query
   WHERE document.lifecycle_status = 'active'

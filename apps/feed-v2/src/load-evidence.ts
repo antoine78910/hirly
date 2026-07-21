@@ -7,7 +7,8 @@ import { FEED_V2_INDEXED_READ_SQL, PostgresFeedReadRepository } from "./reposito
 const CANDIDATE_ID = "feed-v2-load-evidence-candidate";
 const REQUIRED_INDEXES = [
   "candidate_search_profiles_active_country_role_idx",
-  "job_search_documents_features_idx",
+  "job_search_documents_active_recency_idx",
+  "job_search_documents_active_projected_idx",
   "candidate_action_projection_exclusion_idx",
 ] as const;
 export const DEFAULT_BASELINE_CONCURRENCY = 16;
@@ -17,20 +18,24 @@ export function percentile(samples: readonly number[], percentileValue: number):
   return sorted[Math.max(0, Math.ceil(sorted.length * percentileValue) - 1)] ?? 0;
 }
 
-export function planFacts(value: unknown): { nodeTypes: string[]; indexNames: string[] } {
+export function planFacts(value: unknown): { nodeTypes: string[]; indexNames: string[]; sharedHitBlocks: number; sharedReadBlocks: number } {
   const nodeTypes = new Set<string>();
   const indexNames = new Set<string>();
+  let sharedHitBlocks = 0;
+  let sharedReadBlocks = 0;
   const visit = (node: unknown): void => {
     if (Array.isArray(node)) return node.forEach(visit);
     if (!node || typeof node !== "object") return;
     for (const [key, child] of Object.entries(node)) {
       if (key === "Node Type" && typeof child === "string") nodeTypes.add(child);
       if (key === "Index Name" && typeof child === "string") indexNames.add(child);
+      if (key === "Shared Hit Blocks" && typeof child === "number") sharedHitBlocks += child;
+      if (key === "Shared Read Blocks" && typeof child === "number") sharedReadBlocks += child;
       visit(child);
     }
   };
   visit(value);
-  return { nodeTypes: [...nodeTypes].sort(), indexNames: [...indexNames].sort() };
+  return { nodeTypes: [...nodeTypes].sort(), indexNames: [...indexNames].sort(), sharedHitBlocks, sharedReadBlocks };
 }
 
 function localDisposableDatabase(databaseUrl: string): void {
@@ -96,7 +101,8 @@ export async function runLoadEvidence(input: {
       [], [], [], [], [], [], 1, false,
     ];
     const plan = await sql.unsafe(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${FEED_V2_INDEXED_READ_SQL}`, parameters);
-    const facts = planFacts(plan);
+    const explainPlan = (plan[0] as { "QUERY PLAN"?: unknown } | undefined)?.["QUERY PLAN"] ?? plan;
+    const facts = planFacts(explainPlan);
     const availableIndexes = await sql.unsafe<Array<{ indexname: string }>>(
       "SELECT indexname FROM pg_indexes WHERE schemaname = 'public' AND indexname = ANY($1::text[]) ORDER BY indexname",
       [REQUIRED_INDEXES],
@@ -126,6 +132,9 @@ export async function runLoadEvidence(input: {
     const assertions = {
       requiredIndexesPresent: REQUIRED_INDEXES.every((name) => availableIndexes.some((row) => row.indexname === name)),
       noSequentialScan: !facts.nodeTypes.includes("Seq Scan"),
+      recencyIndexUsed: facts.indexNames.includes("job_search_documents_active_recency_idx"),
+      projectedIndexUsed: facts.indexNames.includes("job_search_documents_active_projected_idx"),
+      explainBuffersCaptured: facts.sharedHitBlocks + facts.sharedReadBlocks > 0,
       resultCorrect: true,
       p50Within150Ms: latency.p50Ms <= 150,
       p95Within300Ms: latency.p95Ms <= 300,
@@ -139,7 +148,7 @@ export async function runLoadEvidence(input: {
       input: { cardinality: input.cardinality, firstPageLimit: 12, samples: input.samples, baselineConcurrency: input.baselineConcurrency },
       queryDigest: createHash("sha256").update(FEED_V2_INDEXED_READ_SQL).digest("hex"),
       resultDigest: createHash("sha256").update(JSON.stringify(first.candidates)).digest("hex"),
-      plan: { nodeTypes: facts.nodeTypes, indexNames: facts.indexNames, requiredIndexes: REQUIRED_INDEXES, raw: plan },
+      plan: { nodeTypes: facts.nodeTypes, indexNames: facts.indexNames, requiredIndexes: REQUIRED_INDEXES, raw: explainPlan },
       latency, assertions,
       releaseDecision: Object.values(assertions).every(Boolean) ? "PASS" : "BLOCKED",
     };
