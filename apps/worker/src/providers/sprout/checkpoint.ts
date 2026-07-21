@@ -55,6 +55,12 @@ export function nextSproutCheckpoint(input: {
   ) {
     throw new Error("sprout_checkpoint_invalid_source_total");
   }
+  if (
+    current.observedTotal !== null &&
+    current.observedTotal !== input.sourceReportedTotal
+  ) {
+    throw new Error("sprout_checkpoint_total_drift");
+  }
 
   const expectedOffset = current.offset + input.returnedItemCount;
   if (expectedOffset > input.sourceReportedTotal) {

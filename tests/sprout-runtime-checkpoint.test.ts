@@ -61,6 +61,23 @@ describe("Sprout checkpoint safety", () => {
       }),
     ).toThrow("sprout_checkpoint_non_monotonic_offset");
   });
+
+  test("stops when the source-reported total drifts between pages", () => {
+    const first = nextSproutCheckpoint({
+      current: initialSproutCheckpoint({ approvedPageSize: 10 }),
+      returnedItemCount: 10,
+      sourceReportedTotal: 25,
+      next: "?offset=10",
+    });
+    expect(() =>
+      nextSproutCheckpoint({
+        current: first.checkpoint,
+        returnedItemCount: 10,
+        sourceReportedTotal: 26,
+        next: "?offset=20",
+      }),
+    ).toThrow("sprout_checkpoint_total_drift");
+  });
 });
 
 describe("Sprout activation and bounded page runtime", () => {
