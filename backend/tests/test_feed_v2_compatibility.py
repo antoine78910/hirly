@@ -82,6 +82,11 @@ def _enable(monkeypatch):
     monkeypatch.setenv("FEED_V2_INTERNAL_URL", "http://feed-v2.internal/internal/feed/v2")
     monkeypatch.setenv("FEED_V2_ASSERTION_SECRET", "feed-v2-test-secret-that-is-at-least-32-bytes")
     monkeypatch.setenv("FEED_V2_TIMEOUT_MS", "125")
+    monkeypatch.setattr(server, "_feed_v2_rollout_enabled_for", _enabled_feed_v2_rollout)
+
+
+async def _enabled_feed_v2_rollout(_distinct_id):
+    return True
 
 
 class _ProfilesOnlyDB:
@@ -134,6 +139,60 @@ def _feed_args():
 def test_feed_v2_delegation_is_disabled_by_default(monkeypatch):
     monkeypatch.delenv("FEED_V2_DELEGATION_ENABLED", raising=False)
     monkeypatch.setattr(server.httpx, "AsyncClient", lambda **_kwargs: (_ for _ in ()).throw(AssertionError("HTTP called")))
+
+    result = asyncio.run(server._try_feed_v2(user_id="user-1", limit=5, filters=_default_filters()))
+
+    assert result is None
+
+
+def test_feed_v2_rollout_fails_closed_when_posthog_is_unavailable(monkeypatch):
+    monkeypatch.setattr(server, "_posthog_client", None)
+
+    assert asyncio.run(server._feed_v2_rollout_enabled_for("user-1")) is False
+
+
+def test_feed_v2_rollout_uses_only_the_server_posthog_decision(monkeypatch):
+    observed = {}
+
+    class Flags:
+        def is_enabled(self, key):
+            observed["key"] = key
+            return True
+
+    class PostHog:
+        def evaluate_flags(self, distinct_id, *, flag_keys):
+            observed["distinct_id"] = distinct_id
+            observed["flag_keys"] = flag_keys
+            return Flags()
+
+    monkeypatch.setattr(server, "_posthog_client", PostHog())
+
+    assert asyncio.run(server._feed_v2_rollout_enabled_for("analytics-user")) is True
+    assert observed == {
+        "distinct_id": "analytics-user",
+        "flag_keys": [server.FEED_V2_ROLLOUT_FLAG],
+        "key": server.FEED_V2_ROLLOUT_FLAG,
+    }
+
+
+def test_feed_v2_rollout_fails_closed_when_posthog_evaluation_errors(monkeypatch):
+    class PostHog:
+        def evaluate_flags(self, *_args, **_kwargs):
+            raise RuntimeError("PostHog unavailable")
+
+    monkeypatch.setattr(server, "_posthog_client", PostHog())
+
+    assert asyncio.run(server._feed_v2_rollout_enabled_for("analytics-user")) is False
+
+
+def test_feed_v2_delegation_requires_the_server_rollout_flag(monkeypatch):
+    monkeypatch.setenv("FEED_V2_DELEGATION_ENABLED", "true")
+    monkeypatch.setattr(server, "_posthog_client", None)
+    monkeypatch.setattr(
+        server.httpx,
+        "AsyncClient",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("HTTP called")),
+    )
 
     result = asyncio.run(server._try_feed_v2(user_id="user-1", limit=5, filters=_default_filters()))
 
