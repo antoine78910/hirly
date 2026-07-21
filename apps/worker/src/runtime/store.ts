@@ -1,5 +1,10 @@
 import type { CanonicalJob, Provider, RunView } from "@hirly/contracts";
-import type { Lease, ProviderWorkClaim, WorkerRepository } from "@hirly/db";
+import type {
+  JobProjectionRepository,
+  Lease,
+  ProviderWorkClaim,
+  WorkerRepository,
+} from "@hirly/db";
 import type { DueSchedule, RuntimeStore } from "./types";
 
 export class PostgresRuntimeStore implements RuntimeStore {
@@ -77,5 +82,39 @@ export class PostgresRuntimeStore implements RuntimeStore {
     providerClaim: ProviderWorkClaim,
   ) {
     return this.repository.releaseProviderWork(lease, providerClaim);
+  }
+}
+
+export class PostgresJobProjectionStore {
+  constructor(private readonly repository: JobProjectionRepository) {}
+
+  claim(...args: Parameters<JobProjectionRepository["claim"]>) {
+    return this.repository.claim(...args);
+  }
+
+  heartbeat(...args: Parameters<JobProjectionRepository["heartbeat"]>) {
+    return this.repository.heartbeat(...args);
+  }
+
+  loadSource(...args: Parameters<JobProjectionRepository["loadSource"]>) {
+    return this.repository.loadSource(...args);
+  }
+
+  completeUpsert(...args: Parameters<JobProjectionRepository["completeUpsert"]>) {
+    return this.repository.completeUpsert(...args);
+  }
+
+  completeRemove(...args: Parameters<JobProjectionRepository["completeRemove"]>) {
+    return this.repository.completeRemove(...args);
+  }
+
+  finish(...args: Parameters<JobProjectionRepository["finish"]>) {
+    return this.repository.finish(...args);
+  }
+
+  enqueueReconciliation(
+    ...args: Parameters<JobProjectionRepository["enqueueReconciliation"]>
+  ) {
+    return this.repository.enqueueReconciliation(...args);
   }
 }

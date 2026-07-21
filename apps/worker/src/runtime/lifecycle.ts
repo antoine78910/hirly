@@ -20,6 +20,7 @@ export interface ClosableRepository {
 export function createWorkerRuntime(input: {
   health: { ready: boolean };
   consumer: ConsumerComponent;
+  projectionConsumer?: ConsumerComponent;
   scheduler: SchedulerComponent;
   server: HttpComponent;
   repository: ClosableRepository;
@@ -29,6 +30,7 @@ export function createWorkerRuntime(input: {
   return {
     start() {
       input.consumer.start();
+      input.projectionConsumer?.start();
       input.scheduler.start();
       input.health.ready = true;
     },
@@ -36,8 +38,12 @@ export function createWorkerRuntime(input: {
       return (stopping ??= (async () => {
         input.health.ready = false;
         input.consumer.stopClaiming();
+        input.projectionConsumer?.stopClaiming();
         await Promise.all([input.server.stop(false), input.scheduler.stop()]);
-        await input.consumer.stop(input.shutdownMs);
+        await Promise.all([
+          input.consumer.stop(input.shutdownMs),
+          input.projectionConsumer?.stop(input.shutdownMs),
+        ]);
         await input.repository.close();
       })());
     },

@@ -18,6 +18,7 @@ import {
 import postgres, { type Sql } from "postgres";
 
 export * from "./analytics-backfill";
+export * from "./job-projection";
 
 export type Database = Sql<Record<string, postgres.PostgresType>>;
 

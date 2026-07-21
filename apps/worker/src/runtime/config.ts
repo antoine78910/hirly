@@ -17,6 +17,18 @@ const runtimeConfigSchema = z.object({
     .max(25_000)
     .default(25_000),
   WORKER_INSTANCE_ID: z.string().trim().min(1).max(128).optional(),
+  JOB_PROJECTION_ENABLED: z.string().default("false").transform((value) => value === "true"),
+  PROJECTION_RECONCILIATION_ENABLED: z
+    .string()
+    .default("false")
+    .transform((value) => value === "true"),
+  JOB_PROJECTION_BATCH_SIZE: z.coerce.number().int().min(1).max(100).default(10),
+  JOB_PROJECTION_RECONCILIATION_BATCH_SIZE: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(1_000)
+    .default(100),
 });
 
 export interface RuntimeConfig extends WorkerConfig {
@@ -25,6 +37,10 @@ export interface RuntimeConfig extends WorkerConfig {
   WORKER_SCHEDULE_POLL_MS: number;
   WORKER_SHUTDOWN_MS: number;
   WORKER_INSTANCE_ID: string;
+  JOB_PROJECTION_ENABLED: boolean;
+  PROJECTION_RECONCILIATION_ENABLED: boolean;
+  JOB_PROJECTION_BATCH_SIZE: number;
+  JOB_PROJECTION_RECONCILIATION_BATCH_SIZE: number;
 }
 
 export function parseRuntimeConfig(
