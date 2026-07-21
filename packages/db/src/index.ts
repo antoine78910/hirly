@@ -430,6 +430,23 @@ export class WorkerRepository {
     return sourcePageCommitResultSchema.parse(row.commit_sprout_source_page);
   }
 
+  async beginSproutIncrementalCycle(
+    lease: Lease,
+    providerClaim: ProviderWorkClaim,
+    sourceId: string,
+  ): Promise<void> {
+    await this.sql`
+      SELECT worker_private.begin_sprout_incremental_cycle(
+        ${lease.taskId}::uuid,
+        ${lease.leaseToken}::uuid,
+        ${lease.claimGeneration.toString()}::bigint,
+        ${lease.leaseOwner},
+        ${providerClaim.claimId}::uuid,
+        ${sourceId}::uuid
+      )
+    `;
+  }
+
   async getSproutSourceRuntime(
     sourceId: string,
     mode: "canary" | "incremental" | "backfill",

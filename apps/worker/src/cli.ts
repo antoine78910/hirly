@@ -91,6 +91,11 @@ export async function runCli(
           sourceId: command.sourceId,
           mode: command.mode,
           maxResponseBytes: 2_000_000,
+          // An operator-triggered incremental run is a bounded frontier scan,
+          // while backfill continues from its persisted checkpoint.
+          cycleStart: command.mode === "incremental",
+          pageCount: 0,
+          maxPages: command.mode === "incremental" ? 10 : null,
         },
       }],
     });

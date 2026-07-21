@@ -49,6 +49,11 @@ export interface RuntimeStore {
     providerClaim: ProviderWorkClaim,
     jobs: CanonicalJob[],
   ): Promise<boolean>;
+  beginSproutIncrementalCycle?(
+    lease: Lease,
+    providerClaim: ProviderWorkClaim,
+    sourceId: string,
+  ): Promise<void>;
   getSproutSourceRuntime?(
     sourceId: string,
     mode: "canary" | "backfill" | "incremental",

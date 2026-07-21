@@ -47,6 +47,18 @@ export class PostgresRuntimeStore implements RuntimeStore {
     return this.repository.writeJobsAndComplete(lease, providerClaim, jobs);
   }
 
+  beginSproutIncrementalCycle(
+    lease: Parameters<WorkerRepository["beginSproutIncrementalCycle"]>[0],
+    providerClaim: Parameters<WorkerRepository["beginSproutIncrementalCycle"]>[1],
+    sourceId: Parameters<WorkerRepository["beginSproutIncrementalCycle"]>[2],
+  ) {
+    return this.repository.beginSproutIncrementalCycle(
+      lease,
+      providerClaim,
+      sourceId,
+    );
+  }
+
   getSproutSourceRuntime(
     sourceId: string,
     mode: "canary" | "backfill" | "incremental",

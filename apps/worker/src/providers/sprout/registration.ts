@@ -90,6 +90,14 @@ export const sproutTaskPayloadSchema = z
     // fallback implementation. Discovery lanes no longer use this counter
     // to change query semantics, so it must never block checkpoint recovery.
     emptyInsertStreak: z.number().int().min(0).max(1_000_000).default(0),
+    // An incremental frontier cycle is deliberately restarted from offset zero
+    // only by its first, scheduled task. Chained pages retain the current
+    // checkpoint and cannot trigger another rewind.
+    cycleStart: z.boolean().default(false),
+    pageCount: z.number().int().nonnegative().max(500).default(0),
+    // null retains the full backfill behavior; incremental schedules bound
+    // their frontier scan so repeated runs do not re-snapshot the whole feed.
+    maxPages: z.number().int().positive().max(500).nullable().default(null),
   })
   .strict();
 

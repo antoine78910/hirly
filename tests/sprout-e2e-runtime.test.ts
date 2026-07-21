@@ -332,6 +332,7 @@ describe("Sprout source commit pipeline", () => {
     const commits: unknown[] = [];
     const enqueued: unknown[] = [];
     const logLines: string[] = [];
+    const cycleStarts: string[] = [];
     let released = 0;
     const store = {
       async assertProviderRunnable() {},
@@ -348,6 +349,9 @@ describe("Sprout source commit pipeline", () => {
       async finishProviderWork() { return true; },
       async releaseProviderWork() { released += 1; return true; },
       async writeJobsAndComplete() { throw new Error("legacy writer must not run"); },
+      async beginSproutIncrementalCycle(_lease: unknown, _claim: unknown, currentSourceId: string) {
+        cycleStarts.push(currentSourceId);
+      },
       async getSproutSourceRuntime(_sourceId: string, mode: "canary" | "backfill" | "incremental") {
         return {
           sourceId,
@@ -540,5 +544,40 @@ describe("Sprout source commit pipeline", () => {
     expect(fallbackLines.map((line) => JSON.parse(line).event)).not.toContain(
       "sprout.filter_fallback",
     );
+
+    const frontierHandler = createTaskHandlers(
+      store,
+      undefined,
+      undefined,
+      {
+        sproutAllowedOrigins: ["https://api.sprout.invalid"],
+        sproutSecretResolver: {
+          async resolve() {
+            return {
+              accessToken: "fixture-access-token",
+              refreshToken: "fixture-refresh-token",
+            };
+          },
+        },
+        sproutFetch: (async () => Response.json(fixture)) as typeof fetch,
+        providerClaimHeartbeatMs: 10_000,
+      },
+    )["provider.fetch_page"]!;
+    await expect(frontierHandler({
+      ...task("incremental"),
+      payload: {
+        sourceId,
+        mode: "incremental",
+        maxResponseBytes: 1_000_000,
+        cycleStart: true,
+        pageCount: 0,
+        maxPages: 1,
+      },
+    }, new AbortController().signal)).resolves.toEqual({ taskCompleted: true });
+    expect(cycleStarts).toEqual([sourceId]);
+    // The first frontier page has a provider continuation, but the bounded
+    // scan intentionally ends after this page rather than replaying the full
+    // historical corpus on every scheduled cycle.
+    expect(enqueued).toHaveLength(0);
   });
 });

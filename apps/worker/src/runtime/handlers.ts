@@ -238,6 +238,19 @@ export function createTaskHandlers(
             }
             const payload = sproutTaskPayloadSchema.parse(task.payload);
             sproutSourceId = payload.sourceId;
+            if (payload.cycleStart) {
+              if (payload.mode !== "incremental" || !store.beginSproutIncrementalCycle) {
+                throw new IngestionError(
+                  "integrity_error",
+                  "sprout_incremental_cycle_start_invalid",
+                );
+              }
+              await store.beginSproutIncrementalCycle(
+                task,
+                providerClaim,
+                payload.sourceId,
+              );
+            }
             const runtime = await store.getSproutSourceRuntime(
               payload.sourceId,
               payload.mode,
@@ -400,16 +413,21 @@ export function createTaskHandlers(
               includeQualifiedRadius: discoveryProfile.filterVariant === "qualified_radius",
               includeUnknownWorkLocation: discoveryProfile.includeUnknownWorkLocation,
             });
-            if (!result.complete && payload.mode !== "canary") {
+            const nextPageCount = payload.pageCount + 1;
+            const reachedPageLimit =
+              payload.maxPages !== null && nextPageCount >= payload.maxPages;
+            if (!result.complete && payload.mode !== "canary" && !reachedPageLimit) {
               const nextOffset = result.checkpoint.offset;
               const nextPayload = {
                 ...payload,
+                // Only the first task in a scheduled incremental cycle may
+                // rewind the source. Follow-up pages must keep their freshly
+                // committed checkpoint.
+                cycleStart: false,
+                pageCount: nextPageCount,
                 // The source key, not a mutable task payload, selects the
                 // discovery query. Each lane owns its checkpoint so retries
                 // and chained pages cannot silently switch query semantics.
-                // This legacy field remains only for compatibility with
-                // already queued tasks; do not let duplicate-heavy pages
-                // accumulate a value that can block the next page.
                 emptyInsertStreak: 0,
               };
               const nextRunId = await store.enqueue(enqueueRunSchema.parse({
@@ -441,6 +459,10 @@ export function createTaskHandlers(
                 filterVariant: discoveryProfile.filterVariant,
                 includeUnknownWorkLocation: discoveryProfile.includeUnknownWorkLocation,
                 emptyInsertStreak: 0,
+                cycleStart: payload.cycleStart,
+                pageCount: nextPageCount,
+                maxPages: payload.maxPages,
+                stoppedAtPageLimit: reachedPageLimit,
                 listingCounts: {
                   fetched: result.fetched,
                   added: result.inserted,
