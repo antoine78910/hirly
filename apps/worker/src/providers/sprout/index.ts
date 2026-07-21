@@ -8,6 +8,7 @@ import type { SproutRawJob } from "./schema";
 
 export * from "./normalization";
 export * from "./query";
+export * from "./qualification";
 export * from "./schema";
 export * from "./checkpoint";
 export * from "./commit";

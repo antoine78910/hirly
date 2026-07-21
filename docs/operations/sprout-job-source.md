@@ -119,6 +119,15 @@ qualification proves the serialized query shape, not page-size stability,
 pagination stability, credential refresh, corpus-wide country containment or
 permission expiry behavior. Those remain activation gates.
 
+The executable no-write qualification helpers live in
+`apps/worker/src/providers/sprout/qualification.ts`. The comparison matrix is
+hard-capped at six one-row requests with a minimum two-second delay and reports
+only counts, one sampled ID, byte size, and wrapper disagreement. Page-size
+qualification is a separate manually authorized trial capped at three requests
+and a caller-supplied response-byte budget. Neither helper writes jobs or changes
+source configuration; an operator must review the artifact before persisting an
+approved page size.
+
 ## Pagination and checkpoint safety
 
 The persisted checkpoint is
