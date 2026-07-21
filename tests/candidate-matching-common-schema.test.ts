@@ -141,7 +141,6 @@ async function withDisposableDatabase<T>(
 describePostgres("candidate matching migrations on disposable PostgreSQL", () => {
   test.serial(
     "commits one fail-closed deletion tombstone before cleanup",
-    { timeout: 30_000 },
     async () =>
       withDisposableDatabase(async (sql) => {
         const [first] = await sql<{ deletion_version: number }[]>`
@@ -175,11 +174,11 @@ describePostgres("candidate matching migrations on disposable PostgreSQL", () =>
           expect(String(error)).toContain("cannot be deleted");
         }
       }),
+    30_000,
   );
 
   test.serial(
     "deletion propagation purges projections and rejects restored events",
-    { timeout: 30_000 },
     async () =>
       withDisposableDatabase(async (sql) => {
         await sql`
@@ -219,11 +218,11 @@ describePostgres("candidate matching migrations on disposable PostgreSQL", () =>
           expect(String(error)).toContain("cannot be recreated");
         }
       }),
+    30_000,
   );
 
   test.serial(
     "uses the common retrieval indexes and rollback preserves canonical jobs",
-    { timeout: 30_000 },
     async () =>
       withDisposableDatabase(async (sql) => {
         const [planRow] = await sql.begin(async (tx) => {
@@ -256,5 +255,6 @@ describePostgres("candidate matching migrations on disposable PostgreSQL", () =>
         await sql.unsafe(primaryUp);
         await sql.unsafe(inventoryUp);
       }),
+    30_000,
   );
 });
