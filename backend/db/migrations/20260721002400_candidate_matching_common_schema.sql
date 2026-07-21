@@ -160,13 +160,15 @@ CREATE INDEX candidate_action_projection_retention_idx
   WHERE retention_state <> 'active';
 
 CREATE TABLE public.candidate_action_group_aliases (
-  alias_group_id uuid PRIMARY KEY,
+  alias_group_id uuid NOT NULL,
   canonical_group_id uuid NOT NULL,
   alias_kind text NOT NULL CHECK (alias_kind IN ('merge', 'split')),
   alias_version bigint NOT NULL CHECK (alias_version > 0),
-  source_event_id uuid NOT NULL UNIQUE,
+  source_event_id uuid NOT NULL,
   applied_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY (alias_group_id, canonical_group_id),
+  UNIQUE (source_event_id, alias_group_id, canonical_group_id),
   CONSTRAINT candidate_action_group_aliases_identity_guard CHECK (
     alias_group_id IS DISTINCT FROM canonical_group_id
   )
@@ -331,17 +333,33 @@ BEGIN
   END IF;
   IF TG_OP = 'UPDATE' AND (
     NEW.alias_group_id IS DISTINCT FROM OLD.alias_group_id
+    OR NEW.canonical_group_id IS DISTINCT FROM OLD.canonical_group_id
     OR NEW.source_event_id IS DISTINCT FROM OLD.source_event_id
     OR NEW.alias_version < OLD.alias_version
     OR (
       NEW.alias_version = OLD.alias_version
       AND (
-        NEW.canonical_group_id IS DISTINCT FROM OLD.canonical_group_id
-        OR NEW.alias_kind IS DISTINCT FROM OLD.alias_kind
+        NEW.alias_kind IS DISTINCT FROM OLD.alias_kind
       )
     )
   ) THEN
     RAISE EXCEPTION 'candidate action group alias must only advance monotonically'
+      USING ERRCODE = '22023';
+  END IF;
+  IF TG_OP = 'INSERT' AND EXISTS (
+    WITH RECURSIVE descendants(group_id) AS (
+      SELECT NEW.canonical_group_id
+      UNION
+      SELECT alias.canonical_group_id
+      FROM public.candidate_action_group_aliases AS alias
+      JOIN descendants
+        ON alias.alias_group_id = descendants.group_id
+    )
+    SELECT 1
+    FROM descendants
+    WHERE group_id = NEW.alias_group_id
+  ) THEN
+    RAISE EXCEPTION 'candidate action group aliases cannot contain cycles'
       USING ERRCODE = '22023';
   END IF;
   RETURN NEW;
@@ -349,8 +367,37 @@ END
 $$;
 
 CREATE TRIGGER candidate_action_group_alias_guard
-BEFORE UPDATE OR DELETE ON public.candidate_action_group_aliases
+BEFORE INSERT OR UPDATE OR DELETE ON public.candidate_action_group_aliases
 FOR EACH ROW EXECUTE FUNCTION public.candidate_action_group_alias_guard();
+
+CREATE OR REPLACE FUNCTION public.candidate_group_is_excluded(
+  p_candidate_id text,
+  p_canonical_group_id uuid
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = pg_catalog, public
+AS $$
+  WITH RECURSIVE excluded_groups(group_id) AS (
+    SELECT action.canonical_group_id
+    FROM public.candidate_action_projection AS action
+    WHERE action.candidate_id = p_candidate_id
+      AND action.retention_state = 'active'
+      AND action.canonical_group_id IS NOT NULL
+    UNION
+    SELECT alias.canonical_group_id
+    FROM public.candidate_action_group_aliases AS alias
+    JOIN excluded_groups
+      ON alias.alias_group_id = excluded_groups.group_id
+  )
+  SELECT EXISTS (
+    SELECT 1
+    FROM excluded_groups
+    WHERE group_id = p_canonical_group_id
+  )
+$$;
 
 CREATE OR REPLACE FUNCTION public.candidate_projection_tombstone_guard()
 RETURNS trigger
@@ -442,6 +489,7 @@ REVOKE ALL ON public.matching_runtime_controls,
   public.projection_reconciliation_tasks FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.candidate_projection_version_guard() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.candidate_action_group_alias_guard() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.candidate_group_is_excluded(text, uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.candidate_projection_tombstone_guard() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.apply_candidate_projection_tombstone(text, bigint, uuid, timestamptz)
   FROM PUBLIC;
@@ -466,13 +514,19 @@ CREATE POLICY projection_reconciliation_tasks_projector
   USING (true) WITH CHECK (true);
 CREATE POLICY candidate_projection_tombstones_reader
   ON public.candidate_projection_tombstones FOR SELECT TO hirly_matching_reader
-  USING (true);
+  USING (
+    candidate_id = nullif(current_setting('hirly.matching_candidate_id', true), '')
+  );
 CREATE POLICY candidate_search_profiles_reader
   ON public.candidate_search_profiles FOR SELECT TO hirly_matching_reader
-  USING (true);
+  USING (
+    candidate_id = nullif(current_setting('hirly.matching_candidate_id', true), '')
+  );
 CREATE POLICY candidate_action_projection_reader
   ON public.candidate_action_projection FOR SELECT TO hirly_matching_reader
-  USING (true);
+  USING (
+    candidate_id = nullif(current_setting('hirly.matching_candidate_id', true), '')
+  );
 CREATE POLICY candidate_action_group_aliases_reader
   ON public.candidate_action_group_aliases FOR SELECT TO hirly_matching_reader
   USING (true);
@@ -493,5 +547,7 @@ GRANT SELECT ON public.candidate_projection_tombstones,
   public.job_search_documents TO hirly_matching_reader;
 GRANT EXECUTE ON FUNCTION public.apply_candidate_projection_tombstone(text, bigint, uuid, timestamptz)
   TO hirly_matching_projector;
+GRANT EXECUTE ON FUNCTION public.candidate_group_is_excluded(text, uuid)
+  TO hirly_matching_reader, hirly_matching_projector;
 
 COMMIT;

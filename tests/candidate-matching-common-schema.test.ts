@@ -74,6 +74,37 @@ describe("candidate matching common migration contracts", () => {
     expect(proof).toContain("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)");
     expect(proof).toContain("ROLLBACK;");
   });
+
+  test("independently verifies candidate isolation and executable alias semantics", () => {
+    for (const policy of [
+      "candidate_projection_tombstones_reader",
+      "candidate_search_profiles_reader",
+      "candidate_action_projection_reader",
+    ]) {
+      const definition = inventoryUp.match(
+        new RegExp(`CREATE POLICY ${policy}[^;]+;`, "s"),
+      )?.[0];
+      expect(definition).toContain(
+        "current_setting('hirly.matching_candidate_id', true)",
+      );
+      expect(definition).not.toContain("USING (true)");
+    }
+    expect(inventoryUp).toContain(
+      "PRIMARY KEY (alias_group_id, canonical_group_id)",
+    );
+    expect(inventoryUp).toContain(
+      "candidate action group aliases cannot contain cycles",
+    );
+    expect(inventoryUp).toContain(
+      "CREATE OR REPLACE FUNCTION public.candidate_group_is_excluded",
+    );
+    expect(inventoryUp).toMatch(
+      /WITH RECURSIVE excluded_groups[\s\S]+JOIN excluded_groups[\s\S]+alias\.alias_group_id = excluded_groups\.group_id/,
+    );
+    expect(inventoryDown).toContain(
+      "DROP FUNCTION IF EXISTS public.candidate_group_is_excluded(text, uuid)",
+    );
+  });
 });
 
 const databaseUrl = process.env.CANDIDATE_MATCHING_MIGRATION_TEST_DATABASE_URL;
@@ -216,6 +247,102 @@ describePostgres("candidate matching migrations on disposable PostgreSQL", () =>
           throw new Error("expected deleted candidate projection recreation to fail");
         } catch (error) {
           expect(String(error)).toContain("cannot be recreated");
+        }
+      }),
+    30_000,
+  );
+
+  test.serial(
+    "reader RLS denies cross-candidate rows and aliases conservatively propagate exclusions",
+    async () =>
+      withDisposableDatabase(async (sql) => {
+        await sql.unsafe(`
+          INSERT INTO public.candidate_search_profiles (
+            candidate_id, version, status, location_policy, freshness_window_days,
+            exposure_policy_version, feature_schema_version,
+            source_profile_updated_at, source_event_id
+          ) VALUES
+            ('candidate-a', 1, 'active', 'country', 30, 'policy-v1', 1,
+             clock_timestamp(), '40000000-0000-4000-8000-000000000001'),
+            ('candidate-b', 1, 'active', 'country', 30, 'policy-v1', 1,
+             clock_timestamp(), '40000000-0000-4000-8000-000000000002');
+
+          INSERT INTO public.candidate_action_projection (
+            candidate_id, action_id, candidate_version, source_job_id,
+            canonical_group_id, action_kind, action_at, source_event_id
+          ) VALUES
+            ('candidate-a', 'action-a', 1, 'job-parent',
+             'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'dismissed',
+             clock_timestamp(), '40000000-0000-4000-8000-000000000003'),
+            ('candidate-b', 'action-b', 1, 'job-other',
+             'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'dismissed',
+             clock_timestamp(), '40000000-0000-4000-8000-000000000004');
+
+          INSERT INTO public.candidate_action_group_aliases (
+            alias_group_id, canonical_group_id, alias_kind, alias_version, source_event_id
+          ) VALUES
+            ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+             'cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'split', 1,
+             '40000000-0000-4000-8000-000000000005'),
+            ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+             'dddddddd-dddd-4ddd-8ddd-dddddddddddd', 'split', 1,
+             '40000000-0000-4000-8000-000000000005'),
+            ('cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+             'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 'merge', 2,
+             '40000000-0000-4000-8000-000000000006');
+        `);
+
+        await sql.begin(async (tx) => {
+          await tx.unsafe("SET LOCAL ROLE hirly_matching_reader");
+          await tx`SELECT set_config('hirly.matching_candidate_id', 'candidate-a', true)`;
+          const profiles = await tx<{ candidate_id: string }[]>`
+            SELECT candidate_id FROM public.candidate_search_profiles ORDER BY candidate_id
+          `;
+          expect(profiles).toEqual([{ candidate_id: "candidate-a" }]);
+
+          const [exclusions] = await tx<
+            {
+              merge_descendant: boolean;
+              split_descendant: boolean;
+              unrelated: boolean;
+              cross_candidate: boolean;
+            }[]
+          >`
+            SELECT
+              public.candidate_group_is_excluded(
+                'candidate-a', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+              ) AS merge_descendant,
+              public.candidate_group_is_excluded(
+                'candidate-a', 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
+              ) AS split_descendant,
+              public.candidate_group_is_excluded(
+                'candidate-a', 'ffffffff-ffff-4fff-8fff-ffffffffffff'
+              ) AS unrelated,
+              public.candidate_group_is_excluded(
+                'candidate-b', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+              ) AS cross_candidate
+          `;
+          expect(exclusions).toEqual({
+            merge_descendant: true,
+            split_descendant: true,
+            unrelated: false,
+            cross_candidate: false,
+          });
+        });
+
+        try {
+          await sql`
+            INSERT INTO public.candidate_action_group_aliases (
+              alias_group_id, canonical_group_id, alias_kind, alias_version, source_event_id
+            ) VALUES (
+              'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+              'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'merge', 3,
+              '40000000-0000-4000-8000-000000000007'
+            )
+          `;
+          throw new Error("expected cyclic alias insertion to fail");
+        } catch (error) {
+          expect(String(error)).toContain("cannot contain cycles");
         }
       }),
     30_000,

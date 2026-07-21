@@ -2,6 +2,7 @@
 -- jobs. This removes only additive common matching projections.
 BEGIN;
 
+DROP FUNCTION IF EXISTS public.candidate_group_is_excluded(text, uuid);
 DROP FUNCTION IF EXISTS public.apply_candidate_projection_tombstone(text, bigint, uuid, timestamptz);
 DROP TRIGGER IF EXISTS candidate_projection_tombstone_guard
   ON public.candidate_projection_tombstones;
