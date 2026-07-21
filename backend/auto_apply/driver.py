@@ -657,10 +657,17 @@ class BrowserApplyDriver(ApplyDriver):
                         )
                         if screenshots_enabled() and recovery.get("screenshot_b64"):
                             evidence.screenshot_b64 = recovery["screenshot_b64"]
+                        retry_locator_root = await self._validated_submission_locator_root(
+                            page,
+                            ctx.job,
+                            evidence,
+                        )
+                        if retry_locator_root is None:
+                            return evidence
                         try:
                             await self._apply_step_at_root(
                                 page,
-                                locator_root,
+                                retry_locator_root,
                                 step,
                                 ctx.documents,
                                 evidence,
