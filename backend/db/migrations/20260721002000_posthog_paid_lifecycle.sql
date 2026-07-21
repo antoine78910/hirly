@@ -314,7 +314,7 @@ BEGIN
 
   IF v_activation_created THEN
     v_name := 'subscription_activated:user:' || p_user_id;
-    v_hash := extensions.digest(
+    v_hash := public.digest(
       decode(replace('69fbb143-6b0b-42ca-8a9b-7f2c1b41c041', '-', ''), 'hex')
       || convert_to(v_name, 'UTF8'),
       'sha1'
@@ -381,7 +381,7 @@ BEGIN
     IF v_churn_created THEN
       v_name := 'subscription_churned:subscription:' || p_subscription_id
         || ':generation:' || v_generation::text;
-      v_hash := extensions.digest(
+      v_hash := public.digest(
         decode(replace('69fbb143-6b0b-42ca-8a9b-7f2c1b41c041', '-', ''), 'hex')
         || convert_to(v_name, 'UTF8'),
         'sha1'
@@ -576,7 +576,7 @@ BEGIN
       IF v_churn_created THEN
         v_name := 'subscription_churned:subscription:' || p_subscription_id
           || ':generation:' || v_generation::text;
-        v_hash := extensions.digest(
+        v_hash := public.digest(
           decode(replace('69fbb143-6b0b-42ca-8a9b-7f2c1b41c041', '-', ''), 'hex')
           || convert_to(v_name, 'UTF8'),
           'sha1'
@@ -649,7 +649,7 @@ BEGIN
   SET status = 'claimed',
       attempt_count = outbox.attempt_count + 1,
       lease_owner = p_owner,
-      lease_token = extensions.gen_random_uuid(),
+      lease_token = public.gen_random_uuid(),
       lease_generation = outbox.lease_generation + 1,
       lease_expires_at = v_now + make_interval(secs => p_lease_seconds),
       last_error_code = NULL,
