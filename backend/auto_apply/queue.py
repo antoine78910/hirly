@@ -484,15 +484,7 @@ async def backfill_pending_applications(db, *, limit: int = 200) -> int:
         return 0
     set_based_backfill = getattr(db, "backfill_auto_apply_queue", None)
     if set_based_backfill is not None:
-        try:
-            return await set_based_backfill(providers, limit=limit)
-        except Exception as error:
-            if not is_missing_database_contract_error(error, "backfill_auto_apply_queue"):
-                raise
-            logger.warning(
-                "auto_apply_queue_backfill_rpc_unavailable fallback=legacy error=%s",
-                str(error)[:300],
-            )
+        return await set_based_backfill(providers, limit=limit)
 
     # Prefer app.ats_provider (denormalized). Also scan recent not_submitted packages.
     candidates = await db.applications.find(
@@ -551,6 +543,32 @@ async def backfill_pending_applications(db, *, limit: int = 200) -> int:
 
 async def _claim_next(db) -> Optional[Dict[str, Any]]:
     async with _claim_lock:
+        atomic_claim = getattr(db, "claim_auto_apply_queue", None)
+        if atomic_claim is not None:
+            row = await atomic_claim()
+            if not row:
+                return None
+            policy_failure = submission_policy_failure(
+                row,
+                None,
+                user_id=str(row.get("user_id") or ""),
+            )
+            if policy_failure:
+                now = _now()
+                await db.applications.update_one(
+                    {"application_id": row["application_id"]},
+                    {"$set": {
+                        "auto_apply_queue_status": "failed",
+                        "auto_apply_queue_reason": policy_failure,
+                        "auto_apply_finished_at": now,
+                        "submission_status": "blocked",
+                        "submission_error": policy_failure,
+                        "updated_at": now,
+                    }},
+                )
+                return None
+            return row
+
         row = await db.applications.find_one(
             {"auto_apply_queue_status": "queued"},
             {"_id": 0},

@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS public.applications_auto_apply_queue_claim_idx;

@@ -2053,6 +2053,19 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
         )
         return int(result or 0)
 
+    async def claim_auto_apply_queue(self) -> Optional[Dict[str, Any]]:
+        result = await self._python_ingestion_rpc("claim_auto_apply_queue", {})
+        if result is None:
+            return None
+        if (
+            not isinstance(result, dict)
+            or not isinstance(result.get("application_id"), str)
+            or not result["application_id"].strip()
+            or result.get("auto_apply_queue_status") != "running"
+        ):
+            raise RuntimeError("Auto-apply queue claim RPC returned malformed payload")
+        return result
+
     async def apply_gmail_application_outcomes(
         self,
         user_id: str,
