@@ -47,7 +47,11 @@ export function parseCliArgs(args: string[]): CliCommand {
 
 export async function runCli(
   command: CliCommand,
-  dependencies: { queue: Enqueuer; store: RuntimeStore },
+  dependencies: {
+    queue: Enqueuer;
+    store: RuntimeStore;
+    attachCareerSource?: (runId: string, sourceId: string) => Promise<void>;
+  },
 ): Promise<Record<string, unknown>> {
   if (command.type === "run-status") {
     return { run: await dependencies.store.getRun(command.runId) };
@@ -90,7 +94,9 @@ export async function runCli(
         },
       }],
     });
-    return { runId: await dependencies.queue.enqueue(input) };
+    const runId = await dependencies.queue.enqueue(input);
+    await dependencies.attachCareerSource?.(runId, command.sourceId);
+    return { runId };
   }
   const input = enqueueRunSchema.parse({
     kind: "inventory_maintenance",
@@ -119,6 +125,7 @@ async function main(): Promise<void> {
         await runCli(parseCliArgs(process.argv.slice(2)), {
           queue: repository,
           store,
+          attachCareerSource: repository.attachCareerSource.bind(repository),
         }),
       ),
     );

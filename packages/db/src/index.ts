@@ -207,6 +207,14 @@ export class WorkerRepository {
     });
   }
 
+  async attachCareerSource(runId: string, sourceId: string): Promise<void> {
+    await this.sql`
+      UPDATE public.worker_runs
+      SET career_source_id = ${sourceId}::uuid
+      WHERE id = ${runId}::uuid AND provider = 'sprout'
+    `;
+  }
+
   async claim(
     leaseOwner: string,
     limit: number,
