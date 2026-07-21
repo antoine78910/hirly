@@ -38,6 +38,7 @@ from pydantic import BaseModel, Field, ConfigDict, PrivateAttr
 from typing import List, Optional, Dict, Any, Literal, Tuple
 from datetime import datetime, timezone, timedelta
 import atexit
+import asyncpg
 import httpx
 import stripe
 from posthog import Posthog, new_context, identify_context, capture as posthog_capture
@@ -113,6 +114,7 @@ from auto_apply.metrics import status_safe_attempt as auto_apply_status_safe_att
 from auto_apply.metrics import summary as auto_apply_metrics_summary
 from auto_apply import queue as auto_apply_queue
 from db import create_database_adapter
+from database import PostHogPaidLifecycleDelivery, PostHogPaidLifecycleRepository
 from db.supabase_adapter import count_supabase_table, database_journey, test_supabase_connection
 from influencer_store import create_influencer, get_influencer, list_influencers, update_influencer
 from creator_social_service import build_dashboard, refresh_all_creators, refresh_creator
@@ -316,6 +318,10 @@ _application_generation_tasks: Dict[str, asyncio.Task] = {}
 _posthog_client: Optional[Posthog] = None
 _posthog_log_provider: Optional[Any] = None
 _posthog_log_handler: Optional[logging.Handler] = None
+_posthog_paid_lifecycle_pool: Optional[asyncpg.Pool] = None
+_posthog_paid_lifecycle_repository: Optional[PostHogPaidLifecycleRepository] = None
+_posthog_paid_lifecycle_task: Optional[asyncio.Task] = None
+_posthog_paid_lifecycle_stop: Optional[asyncio.Event] = None
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -4342,6 +4348,417 @@ async def _capture_posthog_server_event(capture: Optional[Dict[str, Any]]) -> No
         )
 
 
+class _PostHogPaidLifecycleInvalidPayload(ValueError):
+    pass
+
+
+class _PostHogPaidLifecycleRetryableDelivery(RuntimeError):
+    pass
+
+
+class _PostHogPaidLifecyclePermanentDelivery(RuntimeError):
+    pass
+
+
+_POSTHOG_PAID_LIFECYCLE_TERMINAL_STATUSES = frozenset(
+    {"canceled", "past_due", "unpaid", "incomplete_expired", "paused"}
+)
+
+
+def _posthog_paid_lifecycle_enabled() -> bool:
+    return _env_bool("POSTHOG_PAID_LIFECYCLE_ENABLED", False)
+
+
+def _posthog_paid_lifecycle_event_time(event: Dict[str, Any]) -> Optional[datetime]:
+    try:
+        return datetime.fromtimestamp(int(event["created"]), tz=timezone.utc)
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return None
+
+
+def _posthog_paid_lifecycle_major_amount(amount_minor: int, currency: str) -> Decimal:
+    if not re.fullmatch(r"[A-Z]{3}", currency):
+        raise ValueError("invalid currency")
+    exponent = _POSTHOG_CURRENCY_EXPONENTS.get(currency, 2)
+    return Decimal(amount_minor).scaleb(-exponent)
+
+
+def _posthog_paid_lifecycle_reason(subscription: Dict[str, Any]) -> Optional[str]:
+    cancellation_details = subscription.get("cancellation_details") or {}
+    if not isinstance(cancellation_details, dict):
+        return None
+    reason = str(cancellation_details.get("reason") or "").strip().lower()
+    return reason[:128] or None
+
+
+def _posthog_paid_lifecycle_loss_time(
+    subscription: Dict[str, Any],
+    *,
+    event_type: str,
+    source_occurred_at: datetime,
+) -> Tuple[str, Optional[datetime]]:
+    status = str(subscription.get("status") or "").strip().lower()
+    if event_type == "customer.subscription.deleted":
+        status = "canceled"
+    if status not in _POSTHOG_PAID_LIFECYCLE_TERMINAL_STATUSES:
+        return status or "unknown", None
+    for field in ("ended_at", "current_period_end"):
+        try:
+            candidate = datetime.fromtimestamp(int(subscription.get(field)), tz=timezone.utc)
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if candidate <= source_occurred_at:
+            return status, candidate
+    return status, source_occurred_at
+
+
+async def _record_posthog_paid_invoice_lifecycle(
+    event: Dict[str, Any], invoice: Dict[str, Any]
+) -> bool:
+    repository = _posthog_paid_lifecycle_repository
+    if repository is None:
+        return False
+    event_id = str(event.get("id") or "").strip()
+    event_type = str(event.get("type") or "").strip()
+    invoice_id = str(invoice.get("id") or "").strip()
+    subscription_id = _stripe_object_id(invoice.get("subscription"))
+    currency = str(invoice.get("currency") or "").strip().upper()
+    source_occurred_at = _posthog_paid_lifecycle_event_time(event)
+    try:
+        amount_minor = int(invoice.get("amount_paid"))
+        revenue = _posthog_paid_lifecycle_major_amount(amount_minor, currency)
+    except (TypeError, ValueError, InvalidOperation, OverflowError):
+        amount_minor = 0
+        revenue = Decimal(0)
+    user_id = await _resolve_posthog_user_id(
+        metadata=invoice.get("metadata") if isinstance(invoice.get("metadata"), dict) else {},
+        customer_id=_stripe_object_id(invoice.get("customer")),
+        subscription_id=subscription_id,
+    )
+    canonical_user_id = _canonical_analytics_user_id(user_id)
+    if not all(
+        (
+            event_id,
+            event_type == "invoice.payment_succeeded",
+            invoice_id,
+            subscription_id,
+            currency,
+            source_occurred_at,
+            canonical_user_id,
+            amount_minor > 0,
+        )
+    ):
+        logger.info(
+            "posthog_paid_lifecycle_invoice_rejected stripe_event_id=%s invoice_id=%s reason=invalid_candidate",
+            event_id or "missing",
+            invoice_id or "missing",
+        )
+        return False
+    metadata = invoice.get("metadata") or {}
+    plan = str(metadata.get("plan") or "").strip()[:128] or None
+    billing_reason = str(invoice.get("billing_reason") or "").strip()[:128] or None
+    try:
+        result = await repository.record_paid_invoice(
+            user_id=canonical_user_id,
+            subscription_id=subscription_id,
+            invoice_id=invoice_id,
+            stripe_event_id=event_id,
+            stripe_event_type=event_type,
+            source_occurred_at=source_occurred_at,
+            currency=currency.lower(),
+            revenue=revenue,
+            plan=plan,
+            billing_reason=billing_reason,
+        )
+    except Exception as exc:
+        logger.error(
+            "posthog_paid_lifecycle_invoice_enqueue_failed stripe_event_id=%s invoice_id=%s error=%s",
+            event_id,
+            invoice_id,
+            type(exc).__name__,
+        )
+        raise
+    logger.info(
+        "posthog_paid_lifecycle_invoice_recorded stripe_event_id=%s invoice_id=%s generation=%s activation_created=%s churn_created=%s",
+        event_id,
+        invoice_id,
+        result.generation,
+        result.activation_created,
+        result.churn_created,
+    )
+    return True
+
+
+async def _record_posthog_subscription_lifecycle(
+    event: Dict[str, Any], subscription: Dict[str, Any]
+) -> bool:
+    repository = _posthog_paid_lifecycle_repository
+    if repository is None:
+        return False
+    event_id = str(event.get("id") or "").strip()
+    event_type = str(event.get("type") or "").strip()
+    subscription_id = str(subscription.get("id") or "").strip()
+    source_occurred_at = _posthog_paid_lifecycle_event_time(event)
+    user_id = await _resolve_posthog_user_id(
+        metadata=_subscription_metadata(subscription),
+        customer_id=_stripe_object_id(subscription.get("customer")),
+        subscription_id=subscription_id or None,
+    )
+    canonical_user_id = _canonical_analytics_user_id(user_id)
+    if not all((event_id, event_type, subscription_id, source_occurred_at, canonical_user_id)):
+        logger.info(
+            "posthog_paid_lifecycle_subscription_rejected stripe_event_id=%s subscription_id=%s reason=invalid_candidate",
+            event_id or "missing",
+            subscription_id or "missing",
+        )
+        return False
+    status, loss_occurred_at = _posthog_paid_lifecycle_loss_time(
+        subscription,
+        event_type=event_type,
+        source_occurred_at=source_occurred_at,
+    )
+    try:
+        result = await repository.record_subscription_state(
+            user_id=canonical_user_id,
+            subscription_id=subscription_id,
+            stripe_event_id=event_id,
+            stripe_event_type=event_type,
+            source_occurred_at=source_occurred_at,
+            status=status,
+            loss_occurred_at=loss_occurred_at,
+            reason=_posthog_paid_lifecycle_reason(subscription),
+        )
+    except Exception as exc:
+        logger.error(
+            "posthog_paid_lifecycle_subscription_enqueue_failed stripe_event_id=%s subscription_id=%s status=%s error=%s",
+            event_id,
+            subscription_id,
+            status,
+            type(exc).__name__,
+        )
+        raise
+    logger.info(
+        "posthog_paid_lifecycle_subscription_recorded stripe_event_id=%s subscription_id=%s status=%s generation=%s churn_created=%s",
+        event_id,
+        subscription_id,
+        status,
+        result.generation,
+        result.churn_created,
+    )
+    return True
+
+
+def _governed_posthog_paid_lifecycle_capture(
+    delivery: PostHogPaidLifecycleDelivery,
+) -> Dict[str, Any]:
+    payload = delivery.payload
+    if set(payload) != {"distinct_id", "timestamp", "properties"}:
+        raise _PostHogPaidLifecycleInvalidPayload("invalid payload shape")
+    canonical_user_id = _canonical_analytics_user_id(payload.get("distinct_id"))
+    occurred_at = _parse_analytics_utc(payload.get("timestamp"))
+    properties = payload.get("properties")
+    canonical_name, definition = _analytics_event_definition(delivery.event_name)
+    if (
+        not canonical_user_id
+        or occurred_at is None
+        or not isinstance(properties, dict)
+        or canonical_name != delivery.event_name
+        or not definition
+        or definition.get("authoritativeSource") != "backend"
+        or "exact_business_timestamp" not in definition.get("canonicalTimeQualities", [])
+    ):
+        raise _PostHogPaidLifecycleInvalidPayload("invalid governed event envelope")
+    safe_properties, rejected, missing = _registry_analytics_properties(definition, properties)
+    generation = safe_properties.get("generation")
+    if rejected or missing or (
+        delivery.event_name == "subscription_churned"
+        and (not isinstance(generation, int) or isinstance(generation, bool) or generation <= 0)
+    ):
+        raise _PostHogPaidLifecycleInvalidPayload("invalid governed event properties")
+    return {
+        "event": delivery.event_name,
+        "distinct_id": canonical_user_id,
+        "timestamp": occurred_at.isoformat(),
+        "uuid": str(delivery.posthog_uuid),
+        "properties": {
+            **safe_properties,
+            "schema_version": definition["schemaVersion"],
+            "event_source": "backend",
+            "timestamp_quality": "exact_business_timestamp",
+        },
+    }
+
+
+async def _send_posthog_paid_lifecycle_delivery(
+    delivery: PostHogPaidLifecycleDelivery,
+) -> None:
+    capture = _governed_posthog_paid_lifecycle_capture(delivery)
+    capture_url = _posthog_capture_url()
+    token = (
+        os.environ.get("POSTHOG_PROJECT_API_KEY", "").strip()
+        or os.environ.get("POSTHOG_SERVER_API_KEY", "").strip()
+    )
+    if not capture_url or not token:
+        raise _PostHogPaidLifecycleRetryableDelivery("posthog_not_configured")
+    timeout = httpx.Timeout(connect=0.5, read=1.0, write=1.0, pool=0.5)
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await asyncio.wait_for(
+                client.post(capture_url, json={"api_key": token, **capture}),
+                timeout=1.5,
+            )
+    except (asyncio.TimeoutError, httpx.TimeoutException, httpx.TransportError) as exc:
+        raise _PostHogPaidLifecycleRetryableDelivery(type(exc).__name__) from exc
+    if 200 <= response.status_code < 300:
+        return
+    if response.status_code in {408, 425, 429} or response.status_code >= 500:
+        raise _PostHogPaidLifecycleRetryableDelivery(f"http_{response.status_code}")
+    raise _PostHogPaidLifecyclePermanentDelivery(f"http_{response.status_code}")
+
+
+def _posthog_paid_lifecycle_retry_delay_seconds(
+    fact_key: str, attempt_count: int
+) -> float:
+    base_seconds = max(1, min(_env_int("POSTHOG_PAID_LIFECYCLE_RETRY_BASE_SECONDS", 5), 300))
+    cap_seconds = max(
+        base_seconds,
+        min(_env_int("POSTHOG_PAID_LIFECYCLE_RETRY_CAP_SECONDS", 3600), 21600),
+    )
+    exponent = max(0, min(attempt_count - 1, 16))
+    uncapped = min(cap_seconds, base_seconds * (2**exponent))
+    digest = hashlib.sha256(f"{fact_key}:{attempt_count}".encode("utf-8")).digest()
+    jitter = 0.75 + (digest[0] / 255) * 0.5
+    return max(1.0, min(float(cap_seconds), uncapped * jitter))
+
+
+async def _dispatch_posthog_paid_lifecycle_delivery(
+    repository: PostHogPaidLifecycleRepository,
+    delivery: PostHogPaidLifecycleDelivery,
+) -> None:
+    transition = "sent"
+    try:
+        await _send_posthog_paid_lifecycle_delivery(delivery)
+        changed = await repository.mark_sent(
+            fact_key=delivery.fact_key,
+            owner=delivery.lease_owner,
+            token=delivery.lease_token,
+            generation=delivery.lease_generation,
+        )
+    except (_PostHogPaidLifecycleInvalidPayload, _PostHogPaidLifecyclePermanentDelivery) as exc:
+        transition = "blocked"
+        changed = await repository.block(
+            fact_key=delivery.fact_key,
+            owner=delivery.lease_owner,
+            token=delivery.lease_token,
+            generation=delivery.lease_generation,
+            error_code=type(exc).__name__[:64],
+            error_message=str(exc)[:1000],
+        )
+    except Exception as exc:
+        transition = "retrying"
+        delay_seconds = _posthog_paid_lifecycle_retry_delay_seconds(
+            delivery.fact_key, delivery.attempt_count
+        )
+        changed = await repository.retry(
+            fact_key=delivery.fact_key,
+            owner=delivery.lease_owner,
+            token=delivery.lease_token,
+            generation=delivery.lease_generation,
+            error_code=type(exc).__name__[:64],
+            error_message=str(exc)[:1000] or type(exc).__name__,
+            next_attempt_at=datetime.now(timezone.utc) + timedelta(seconds=delay_seconds),
+        )
+        logger.warning(
+            "posthog_paid_lifecycle_delivery_retry fact_key=%s event=%s attempt=%s delay_seconds=%.3f error=%s fence_changed=%s",
+            delivery.fact_key,
+            delivery.event_name,
+            delivery.attempt_count,
+            delay_seconds,
+            type(exc).__name__,
+            changed,
+        )
+        return
+    logger.log(
+        logging.INFO if transition == "sent" else logging.ERROR,
+        "posthog_paid_lifecycle_delivery_%s fact_key=%s event=%s attempt=%s semantic_uuid=%s fence_changed=%s",
+        transition,
+        delivery.fact_key,
+        delivery.event_name,
+        delivery.attempt_count,
+        delivery.posthog_uuid,
+        changed,
+    )
+
+
+async def _dispatch_posthog_paid_lifecycle_once(
+    repository: PostHogPaidLifecycleRepository, owner: str
+) -> int:
+    claim_limit = max(1, min(_env_int("POSTHOG_PAID_LIFECYCLE_CLAIM_LIMIT", 10), 100))
+    lease_seconds = max(5, min(_env_int("POSTHOG_PAID_LIFECYCLE_LEASE_SECONDS", 30), 3600))
+    deliveries = await repository.claim_due(
+        owner=owner,
+        limit=claim_limit,
+        lease_seconds=lease_seconds,
+    )
+    if not deliveries:
+        return 0
+    oldest_due_seconds = max(
+        0.0,
+        max(
+            (datetime.now(timezone.utc) - delivery.next_attempt_at).total_seconds()
+            for delivery in deliveries
+        ),
+    )
+    logger.info(
+        "posthog_paid_lifecycle_delivery_claimed owner=%s count=%s oldest_due_seconds=%.3f",
+        owner,
+        len(deliveries),
+        oldest_due_seconds,
+    )
+    await asyncio.gather(
+        *(
+            _dispatch_posthog_paid_lifecycle_delivery(repository, delivery)
+            for delivery in deliveries
+        )
+    )
+    return len(deliveries)
+
+
+async def _run_posthog_paid_lifecycle_dispatcher(
+    repository: PostHogPaidLifecycleRepository,
+    stop: asyncio.Event,
+    owner: str,
+) -> None:
+    try:
+        configured_poll_seconds = float(
+            os.environ.get("POSTHOG_PAID_LIFECYCLE_POLL_SECONDS", "2") or 2
+        )
+    except ValueError:
+        configured_poll_seconds = 2.0
+    poll_seconds = max(
+        0.1,
+        min(configured_poll_seconds, 60.0),
+    )
+    while not stop.is_set():
+        try:
+            claimed = await _dispatch_posthog_paid_lifecycle_once(repository, owner)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            claimed = 0
+            logger.error(
+                "posthog_paid_lifecycle_dispatch_failed owner=%s error=%s",
+                owner,
+                type(exc).__name__,
+            )
+        if claimed:
+            continue
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=poll_seconds)
+        except asyncio.TimeoutError:
+            pass
+
+
 @api_router.post("/stripe/webhook")
 async def stripe_webhook(request: Request):
     _stripe_secret_key()
@@ -4374,6 +4791,7 @@ async def stripe_webhook(request: Request):
         if event_type in {"checkout.session.completed", "checkout.session.async_payment_succeeded"}:
             await _apply_checkout_session_billing(obj, event_id=event_id)
         elif event_type in {"customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted"}:
+            await _record_posthog_subscription_lifecycle(event, obj)
             await _handle_subscription_event(obj)
         elif event_type in {"invoice.payment_succeeded", "invoice.payment_failed"}:
             subscription_id = obj.get("subscription")
@@ -4392,6 +4810,8 @@ async def stripe_webhook(request: Request):
                 await _update_user_billing_by_customer_id(customer_id, {"last_payment_status": payment_status})
             else:
                 logger.warning("stripe_invoice_event_missing_subscription_customer event_id=%s type=%s", event_id, event_type)
+            if event_type == "invoice.payment_succeeded":
+                await _record_posthog_paid_invoice_lifecycle(event, obj)
             if event_type == "invoice.payment_succeeded" and _posthog_revenue_enabled("payment"):
                 await _capture_posthog_server_event(await _build_posthog_payment_capture(event))
         elif event_type in {"refund.created", "refund.updated", "refund.failed"}:
@@ -17928,6 +18348,64 @@ def _spawn_observed_startup_task(coro, *, name: str) -> asyncio.Task:
     return task
 
 
+async def _start_posthog_paid_lifecycle_runtime() -> bool:
+    global _posthog_paid_lifecycle_pool
+    global _posthog_paid_lifecycle_repository
+    global _posthog_paid_lifecycle_stop
+    global _posthog_paid_lifecycle_task
+    if not _posthog_paid_lifecycle_enabled():
+        return False
+    database_url = str(getattr(db, "db_url", None) or "").strip()
+    if not database_url:
+        raise RuntimeError(
+            "POSTHOG_PAID_LIFECYCLE_ENABLED requires SUPABASE_DB_URL or DATABASE_URL"
+        )
+    pool = await asyncpg.create_pool(
+        dsn=database_url,
+        min_size=1,
+        max_size=max(1, min(_env_int("POSTHOG_PAID_LIFECYCLE_POOL_SIZE", 4), 10)),
+        command_timeout=10,
+    )
+    repository = PostHogPaidLifecycleRepository(pool)
+    try:
+        await repository.verify_migration()
+    except Exception:
+        await pool.close()
+        raise
+    stop = asyncio.Event()
+    owner = f"paid-lifecycle:{os.getpid()}:{uuid.uuid4().hex[:12]}"
+    _posthog_paid_lifecycle_pool = pool
+    _posthog_paid_lifecycle_repository = repository
+    _posthog_paid_lifecycle_stop = stop
+    _posthog_paid_lifecycle_task = _spawn_observed_startup_task(
+        _run_posthog_paid_lifecycle_dispatcher(repository, stop, owner),
+        name="posthog-paid-lifecycle",
+    )
+    logger.info("posthog_paid_lifecycle_runtime_started owner=%s", owner)
+    return True
+
+
+async def _stop_posthog_paid_lifecycle_runtime() -> None:
+    global _posthog_paid_lifecycle_pool
+    global _posthog_paid_lifecycle_repository
+    global _posthog_paid_lifecycle_stop
+    global _posthog_paid_lifecycle_task
+    if _posthog_paid_lifecycle_stop is not None:
+        _posthog_paid_lifecycle_stop.set()
+    task = _posthog_paid_lifecycle_task
+    if task is not None and not task.done():
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+    pool = _posthog_paid_lifecycle_pool
+    if pool is not None:
+        await pool.close()
+    _posthog_paid_lifecycle_task = None
+    _posthog_paid_lifecycle_stop = None
+    _posthog_paid_lifecycle_repository = None
+    _posthog_paid_lifecycle_pool = None
+    logger.info("posthog_paid_lifecycle_runtime_stopped")
+
+
 @app.on_event("startup")
 async def startup_seed():
     """Register routes immediately; run seeding in the background."""
@@ -17954,6 +18432,7 @@ async def startup_seed():
             _otel_trace.set_tracer_provider(_otel_provider)
             _OpenAIInstrumentor().instrument()
             logger.info("posthog_otel_ai_observability_initialized")
+    await _start_posthog_paid_lifecycle_runtime()
     # Register concrete ApplyDrivers once at startup. The executor never imports
     # concrete drivers itself -- this import is the single registration point.
     import auto_apply.drivers  # noqa: F401
@@ -18000,6 +18479,7 @@ async def startup_seed():
 @app.on_event("shutdown")
 async def shutdown_db_client():
     global _supabase_auth_http_client
+    await _stop_posthog_paid_lifecycle_runtime()
     if _posthog_client is not None:
         _posthog_client.flush()
     _shutdown_posthog_logs()

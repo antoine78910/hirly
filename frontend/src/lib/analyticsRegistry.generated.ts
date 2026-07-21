@@ -342,6 +342,79 @@ export const analyticsRegistry = {
       "legacyAliases": []
     },
     {
+      "name": "subscription_activated",
+      "schemaVersion": 1,
+      "definition": "The Stripe webhook recorded a user's first observed successful positive subscription payment.",
+      "identityPolicy": "identified",
+      "authoritativeSource": "backend",
+      "semanticDeduplicationKey": "user_id",
+      "canonicalTimeQualities": [
+        "exact_business_timestamp"
+      ],
+      "requiredProperties": {
+        "invoice_id": {
+          "type": "string",
+          "privacy": "pseudonymous"
+        },
+        "subscription_id": {
+          "type": "string",
+          "privacy": "pseudonymous"
+        },
+        "currency": {
+          "type": "string",
+          "privacy": "public"
+        },
+        "revenue": {
+          "type": "number",
+          "privacy": "public"
+        }
+      },
+      "optionalProperties": {
+        "plan": {
+          "type": "string",
+          "privacy": "public"
+        },
+        "billing_reason": {
+          "type": "string",
+          "privacy": "public"
+        }
+      },
+      "legacyAliases": []
+    },
+    {
+      "name": "subscription_churned",
+      "schemaVersion": 1,
+      "definition": "A previously paid Stripe subscription generation lost paid entitlement.",
+      "identityPolicy": "identified",
+      "authoritativeSource": "backend",
+      "semanticDeduplicationKey": "subscription_id:generation",
+      "canonicalTimeQualities": [
+        "exact_business_timestamp"
+      ],
+      "requiredProperties": {
+        "subscription_id": {
+          "type": "string",
+          "privacy": "pseudonymous"
+        },
+        "generation": {
+          "type": "integer",
+          "privacy": "public",
+          "minimum": 1
+        },
+        "status": {
+          "type": "string",
+          "privacy": "public"
+        }
+      },
+      "optionalProperties": {
+        "reason": {
+          "type": "string",
+          "privacy": "public"
+        }
+      },
+      "legacyAliases": []
+    },
+    {
       "name": "payment_refunded",
       "schemaVersion": 1,
       "definition": "A Stripe webhook confirmed a successful refund.",

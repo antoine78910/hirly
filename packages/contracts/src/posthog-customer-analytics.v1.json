@@ -1,0 +1,95 @@
+{
+  "schemaVersion": "hirly.posthog-customer-analytics.v1",
+  "state": "local_contract_only_external_mutation_pending_g005",
+  "project": {
+    "id": 228425,
+    "name": "hirly-prd",
+    "timezone": "Europe/Paris",
+    "requiresFreshReadbackBeforeMutation": true
+  },
+  "runtime": {
+    "backendFlag": {
+      "name": "POSTHOG_PAID_LIFECYCLE_ENABLED",
+      "default": false,
+      "livePostgreSQLGateRequired": true
+    },
+    "frontendFlag": {
+      "name": "REACT_APP_ADMIN_POSTHOG_ANALYTICS_ENABLED",
+      "default": false,
+      "externalAccessAndParityGatesRequired": true
+    },
+    "dashboardUrl": {
+      "environmentVariable": "REACT_APP_POSTHOG_ADMIN_DASHBOARD_URL",
+      "immutableUrl": null,
+      "status": "awaiting_g005_private_dashboard_readback",
+      "publicShareUrlAllowed": false
+    }
+  },
+  "selectors": {
+    "signup": "user_signed_up",
+    "firstObservedPaidActivation": "subscription_activated",
+    "paidSubscriptionChurn": "subscription_churned",
+    "deliberateActivity": [
+      "job_dismissed",
+      "application_intent_started",
+      "job_application_created",
+      "cv_uploaded",
+      "onboarding_completed"
+    ],
+    "passiveActivityExcluded": [
+      "$pageview",
+      "job_card_viewed"
+    ]
+  },
+  "horizons": {
+    "J0": {
+      "startDay": 0,
+      "endDay": 1,
+      "j0StartAtSignup": true,
+      "definition": "[anchor timestamp, local midnight D+1)"
+    },
+    "J1": {
+      "startDay": 1,
+      "endDay": 2,
+      "j0StartAtSignup": false,
+      "definition": "[local midnight D+1, local midnight D+2)"
+    },
+    "W1": {
+      "startDay": 7,
+      "endDay": 14,
+      "j0StartAtSignup": false,
+      "definition": "[local midnight D+7, local midnight D+14), days 7-13"
+    },
+    "M1": {
+      "startDay": 28,
+      "endDay": 35,
+      "j0StartAtSignup": false,
+      "definition": "[local midnight D+28, local midnight D+35), days 28-34"
+    }
+  },
+  "queries": {
+    "engagement": {
+      "path": "packages/contracts/src/posthog-customer-analytics-engagement.hogql",
+      "sha256": "db06e0eadfa03ce5fd062f61e03a19f6b2a4eda00082e26358c167e4df1bc183",
+      "parameters": ["start_day", "end_day", "j0_start_at_signup"],
+      "anchor": "earliest user_signed_up per canonical distinct_id",
+      "result": "eligible, active, and engagement-churn complement from one query"
+    },
+    "paidSubscriptionChurn": {
+      "path": "packages/contracts/src/posthog-customer-analytics-paid-churn.hogql",
+      "sha256": "7c040a68b1716ce2d085eb94cb4e5ef4b52b3b7d7c21aadb2274723e9a168cd2",
+      "parameters": ["start_day", "end_day", "j0_start_at_signup"],
+      "title": "First-paid activation-cohort loss",
+      "anchor": "earliest first-observed subscription_activated per canonical distinct_id",
+      "result": "separate paid subscription churn; not engagement churn or conventional period churn"
+    }
+  },
+  "externalObjects": {
+    "ownershipMarkerTemplate": "[hirly-managed:customer-analytics:v1:<key>]",
+    "actionIds": {},
+    "insightIds": {},
+    "dashboardId": null,
+    "rollbackVerbs": {},
+    "status": "reserved_for_g005_authenticated_mutation_journal"
+  }
+}

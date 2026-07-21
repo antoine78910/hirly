@@ -4,14 +4,19 @@ Supabase (PostgreSQL) database layer with a MongoDB-compatible API.
 Documents are stored as JSONB so existing server code can keep using
 find_one / update_one / $set / etc. without a full rewrite.
 """
+# stack-policy: python-exception=shares the existing Python Stripe writer boundary
 from __future__ import annotations
 
 import json
 import os
 import re
 from copy import deepcopy
+from dataclasses import dataclass
+from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from uuid import UUID
 
 import asyncpg
 
@@ -581,6 +586,285 @@ class Collection:
         return None
 
 
+@dataclass(frozen=True)
+class PostHogPaidLifecycleRecordResult:
+    invoice_key: Optional[str]
+    state_key: Optional[str]
+    paid_generation_key: Optional[str]
+    activation_key: Optional[str]
+    churn_key: Optional[str]
+    generation: Optional[int]
+    watermark_advanced: bool
+    activation_created: bool
+    churn_created: bool
+
+
+@dataclass(frozen=True)
+class PostHogPaidLifecycleDelivery:
+    fact_key: str
+    event_name: str
+    posthog_uuid: UUID
+    payload: Dict[str, Any]
+    status: str
+    attempt_count: int
+    next_attempt_at: datetime
+    lease_owner: str
+    lease_token: UUID
+    lease_generation: int
+    lease_expires_at: datetime
+
+
+class PostHogPaidLifecycleRepository:
+    """Direct asyncpg boundary for the migration-owned paid lifecycle contract."""
+
+    _MIGRATION_ERROR = (
+        "PostHog paid lifecycle migration 20260721002000 is required before use"
+    )
+
+    def __init__(self, pool: asyncpg.Pool):
+        self._pool = pool
+
+    async def verify_migration(self) -> None:
+        signatures = [
+            "analytics_private.record_posthog_paid_invoice(text,text,text,text,text,timestamptz,text,numeric,text,text)",
+            "analytics_private.record_posthog_subscription_state(text,text,text,text,timestamptz,text,timestamptz,text)",
+            "analytics_private.claim_posthog_paid_lifecycle_deliveries(text,integer,integer)",
+            "analytics_private.mark_posthog_paid_lifecycle_sent(text,text,uuid,bigint)",
+            "analytics_private.retry_posthog_paid_lifecycle_delivery(text,text,uuid,bigint,text,text,timestamptz)",
+            "analytics_private.block_posthog_paid_lifecycle_delivery(text,text,uuid,bigint,text,text)",
+        ]
+        try:
+            async with self._pool.acquire() as connection:
+                ready = await connection.fetchval(
+                    """
+                    SELECT count(*) = $2
+                    FROM unnest($1::text[]) AS expected(signature)
+                    WHERE to_regprocedure(expected.signature) IS NOT NULL
+                    """,
+                    signatures,
+                    len(signatures),
+                )
+        except Exception as error:
+            self._raise_migration_error(error)
+        if not ready:
+            raise RuntimeError(self._MIGRATION_ERROR)
+
+    @staticmethod
+    def _record_result(row: Any) -> PostHogPaidLifecycleRecordResult:
+        keys = set(row.keys())
+        return PostHogPaidLifecycleRecordResult(
+            invoice_key=row["invoice_key"] if "invoice_key" in keys else None,
+            state_key=row["state_key"] if "state_key" in keys else None,
+            paid_generation_key=row["paid_generation_key"],
+            activation_key=row["activation_key"] if "activation_key" in keys else None,
+            churn_key=row["churn_key"],
+            generation=row["generation"],
+            watermark_advanced=bool(row["watermark_advanced"]),
+            activation_created=bool(row["activation_created"])
+            if "activation_created" in keys
+            else False,
+            churn_created=bool(row["churn_created"]),
+        )
+
+    @staticmethod
+    def _delivery(row: Any) -> PostHogPaidLifecycleDelivery:
+        payload = row["payload"]
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        if not isinstance(payload, dict):
+            raise RuntimeError("paid lifecycle delivery payload is not an object")
+        return PostHogPaidLifecycleDelivery(
+            fact_key=row["fact_key"],
+            event_name=row["event_name"],
+            posthog_uuid=row["posthog_uuid"],
+            payload=payload,
+            status=row["status"],
+            attempt_count=row["attempt_count"],
+            next_attempt_at=row["next_attempt_at"],
+            lease_owner=row["lease_owner"],
+            lease_token=row["lease_token"],
+            lease_generation=row["lease_generation"],
+            lease_expires_at=row["lease_expires_at"],
+        )
+
+    @classmethod
+    def _raise_migration_error(cls, error: Exception) -> None:
+        if isinstance(
+            error,
+            (asyncpg.InvalidSchemaNameError, asyncpg.UndefinedFunctionError),
+        ):
+            raise RuntimeError(cls._MIGRATION_ERROR) from error
+        raise error
+
+    async def record_paid_invoice(
+        self,
+        *,
+        user_id: str,
+        subscription_id: str,
+        invoice_id: str,
+        stripe_event_id: str,
+        stripe_event_type: str,
+        source_occurred_at: datetime,
+        currency: str,
+        revenue: Decimal,
+        plan: Optional[str] = None,
+        billing_reason: Optional[str] = None,
+    ) -> PostHogPaidLifecycleRecordResult:
+        try:
+            async with self._pool.acquire() as connection:
+                row = await connection.fetchrow(
+                    """
+                    SELECT * FROM analytics_private.record_posthog_paid_invoice(
+                      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+                    )
+                    """,
+                    user_id,
+                    subscription_id,
+                    invoice_id,
+                    stripe_event_id,
+                    stripe_event_type,
+                    source_occurred_at,
+                    currency,
+                    revenue,
+                    plan,
+                    billing_reason,
+                )
+        except Exception as error:
+            self._raise_migration_error(error)
+        if row is None:
+            raise RuntimeError("paid invoice lifecycle function returned no result")
+        return self._record_result(row)
+
+    async def record_subscription_state(
+        self,
+        *,
+        user_id: str,
+        subscription_id: str,
+        stripe_event_id: str,
+        stripe_event_type: str,
+        source_occurred_at: datetime,
+        status: str,
+        loss_occurred_at: Optional[datetime] = None,
+        reason: Optional[str] = None,
+    ) -> PostHogPaidLifecycleRecordResult:
+        try:
+            async with self._pool.acquire() as connection:
+                row = await connection.fetchrow(
+                    """
+                    SELECT * FROM analytics_private.record_posthog_subscription_state(
+                      $1, $2, $3, $4, $5, $6, $7, $8
+                    )
+                    """,
+                    user_id,
+                    subscription_id,
+                    stripe_event_id,
+                    stripe_event_type,
+                    source_occurred_at,
+                    status,
+                    loss_occurred_at,
+                    reason,
+                )
+        except Exception as error:
+            self._raise_migration_error(error)
+        if row is None:
+            raise RuntimeError("subscription-state lifecycle function returned no result")
+        return self._record_result(row)
+
+    async def claim_due(
+        self, *, owner: str, limit: int, lease_seconds: int
+    ) -> List[PostHogPaidLifecycleDelivery]:
+        try:
+            async with self._pool.acquire() as connection:
+                rows = await connection.fetch(
+                    """
+                    SELECT *
+                    FROM analytics_private.claim_posthog_paid_lifecycle_deliveries(
+                      $1, $2, $3
+                    )
+                    """,
+                    owner,
+                    limit,
+                    lease_seconds,
+                )
+        except Exception as error:
+            self._raise_migration_error(error)
+        return [self._delivery(row) for row in rows]
+
+    async def mark_sent(
+        self, *, fact_key: str, owner: str, token: UUID, generation: int
+    ) -> bool:
+        return await self._fenced_transition(
+            "mark_posthog_paid_lifecycle_sent",
+            fact_key,
+            owner,
+            token,
+            generation,
+        )
+
+    async def retry(
+        self,
+        *,
+        fact_key: str,
+        owner: str,
+        token: UUID,
+        generation: int,
+        error_code: str,
+        error_message: str,
+        next_attempt_at: datetime,
+    ) -> bool:
+        return await self._fenced_transition(
+            "retry_posthog_paid_lifecycle_delivery",
+            fact_key,
+            owner,
+            token,
+            generation,
+            error_code,
+            error_message,
+            next_attempt_at,
+        )
+
+    async def block(
+        self,
+        *,
+        fact_key: str,
+        owner: str,
+        token: UUID,
+        generation: int,
+        error_code: str,
+        error_message: str,
+    ) -> bool:
+        return await self._fenced_transition(
+            "block_posthog_paid_lifecycle_delivery",
+            fact_key,
+            owner,
+            token,
+            generation,
+            error_code,
+            error_message,
+        )
+
+    async def _fenced_transition(self, function_name: str, *arguments: Any) -> bool:
+        allowed_functions = {
+            "mark_posthog_paid_lifecycle_sent",
+            "retry_posthog_paid_lifecycle_delivery",
+            "block_posthog_paid_lifecycle_delivery",
+        }
+        if function_name not in allowed_functions:
+            raise ValueError("unsupported paid lifecycle transition")
+        placeholders = ", ".join(
+            f"${index}" for index in range(1, len(arguments) + 1)
+        )
+        try:
+            async with self._pool.acquire() as connection:
+                result = await connection.fetchval(
+                    f"SELECT analytics_private.{function_name}({placeholders})",
+                    *arguments,
+                )
+        except Exception as error:
+            self._raise_migration_error(error)
+        return bool(result)
+
+
 class Database:
     def __init__(self, pool: asyncpg.Pool):
         self._pool = pool
@@ -596,9 +880,17 @@ class Database:
         self.analytics_events = Collection("analytics_events", pool)
         self.stripe_events = Collection("stripe_events", pool)
         self.rome_profiles = Collection("rome_profiles", pool)
+        self.posthog_paid_lifecycle = PostHogPaidLifecycleRepository(pool)
 
 
 db: Optional[Database] = None
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.lower() in ("1", "true", "yes", "on")
 
 
 async def init_db() -> Database:
@@ -612,7 +904,10 @@ async def init_db() -> Database:
     if schema_path.exists():
         async with _pool.acquire() as conn:
             await conn.execute(schema_path.read_text(encoding="utf-8"))
-    db = Database(_pool)
+    initialized = Database(_pool)
+    if _env_bool("POSTHOG_PAID_LIFECYCLE_ENABLED", False):
+        await initialized.posthog_paid_lifecycle.verify_migration()
+    db = initialized
     return db
 
 

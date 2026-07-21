@@ -51,8 +51,18 @@ const analyticsPropertyDefinitionSchema = z
   .object({
     type: analyticsPropertyTypeSchema,
     privacy: analyticsPrivacyClassSchema,
+    minimum: z.number().finite().optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((property, context) => {
+    if (property.minimum !== undefined && !["integer", "number"].includes(property.type)) {
+      context.addIssue({
+        code: "custom",
+        message: "minimum is only valid for numeric analytics properties",
+        path: ["minimum"],
+      });
+    }
+  });
 
 export const analyticsEventDefinitionSchema = z
   .object({
@@ -157,12 +167,16 @@ export function getAnalyticsEventDefinition(
 
 function propertyMatchesType(
   value: unknown,
-  expected: z.infer<typeof analyticsPropertyTypeSchema>,
+  definition: z.infer<typeof analyticsPropertyDefinitionSchema>,
 ): boolean {
+  const expected = definition.type;
+  const meetsMinimum =
+    definition.minimum === undefined ||
+    (typeof value === "number" && value >= definition.minimum);
   if (expected === "boolean") return typeof value === "boolean";
-  if (expected === "integer") return Number.isInteger(value);
+  if (expected === "integer") return Number.isInteger(value) && meetsMinimum;
   if (expected === "number") {
-    return typeof value === "number" && Number.isFinite(value);
+    return typeof value === "number" && Number.isFinite(value) && meetsMinimum;
   }
   if (expected === "timestamp") {
     return (
@@ -198,7 +212,7 @@ export function sanitizeAnalyticsProperties(
     if (
       !propertyDefinition ||
       propertyDefinition.privacy === "sensitive" ||
-      !propertyMatchesType(value, propertyDefinition.type)
+      !propertyMatchesType(value, propertyDefinition)
     ) {
       rejectedProperties.push(key);
       continue;
