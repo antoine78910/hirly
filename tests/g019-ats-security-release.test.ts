@@ -258,6 +258,41 @@ describe("G019 adversarial ATS transport and policy release gates", () => {
       ],
     });
   });
+
+  test("drops candidate-like subtrees while preserving public job fields", () => {
+    const sanitized = sanitizeSourceDocument({
+      id: "job-42",
+      title: "Platform Engineer",
+      description: "Build public job inventory systems.",
+      location: { address: "10 Public Job Street", city: "Paris" },
+      applyUrl: "https://jobs.example.test/job-42/apply",
+      candidateProfile: {
+        name: "Candidate Canary",
+        address: "1 Private Street",
+        birthDate: "1990-01-02",
+        nationalId: "FR-CANARY-123",
+        linkedinUrl: "https://linkedin.example.test/candidate-canary",
+        authorization: "Bearer private-candidate-token",
+        cookie: "candidate_session=private",
+        coverLetter: "Private candidate free text",
+      },
+      applicant_data: {
+        fullName: "Applicant Canary",
+        profileUrl: "https://profiles.example.test/applicant-canary",
+        personalStatement: "Applicant private free text",
+      },
+    });
+
+    expect(sanitized).toEqual({
+      id: "job-42",
+      title: "Platform Engineer",
+      description: "Build public job inventory systems.",
+      location: { address: "10 Public Job Street", city: "Paris" },
+      applyUrl: "https://jobs.example.test/job-42/apply",
+      candidateProfile: "[REDACTED]",
+      applicant_data: "[REDACTED]",
+    });
+  });
 });
 
 describe("G019 canonical write, retry, and rollback safety", () => {

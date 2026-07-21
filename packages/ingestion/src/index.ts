@@ -358,6 +358,10 @@ const documentPiiKeys = [
   /^(?:fileupload|uploadedfile|uploadfile)(?:name|filename|content|bytes|body|data|url|path)?$/,
   /^(?:attachment|document|file)(?:content|bytes|body|data)$/,
 ];
+const candidateContainerKeys = [
+  /^(?:candidate|applicant|candidateprofile|applicantprofile|candidatepayload|applicantpayload|candidateapplication|applicantapplication)$/,
+  /^(?:candidate|applicant)(?:data|details|record|submission)$/,
+];
 const email = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const phone =
   /(?:\+\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)[\s.-]?)?\d[\d\s.-]{7,}\d/g;
@@ -366,20 +370,34 @@ const credentialUrl = /\b(?:postgres(?:ql)?|https?):\/\/[^/\s:@]+:[^@\s]+@/gi;
 const querySecret =
   /([?&](?:access_token|api_key|apikey|authorization|password|secret|token)=)[^&#\s]*/gi;
 
-function isDocumentPiiKey(key: string): boolean {
-  const normalized = key
+function normalizedSourceKey(key: string): string {
+  return key
     .normalize("NFKD")
     .replace(/\p{Diacritic}/gu, "")
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "");
+}
+
+function isDocumentPiiKey(key: string): boolean {
+  const normalized = normalizedSourceKey(key);
   return documentPiiKeys.some((pattern) => pattern.test(normalized));
+}
+
+function isCandidateContainerKey(key: string): boolean {
+  const normalized = normalizedSourceKey(key);
+  return candidateContainerKeys.some((pattern) => pattern.test(normalized));
 }
 
 export function sanitizeSourceDocument(
   value: unknown,
   key = "",
 ): unknown {
-  if (sensitiveKey.test(key) || piiKey.test(key) || isDocumentPiiKey(key)) {
+  if (
+    sensitiveKey.test(key) ||
+    piiKey.test(key) ||
+    isDocumentPiiKey(key) ||
+    isCandidateContainerKey(key)
+  ) {
     return "[REDACTED]";
   }
   if (typeof value === "string") {
