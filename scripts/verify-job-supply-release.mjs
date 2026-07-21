@@ -19,6 +19,9 @@ const MANIFEST_VERSION = "job-supply-release-verification.v4";
 const RELEASE_ATTESTATION_VERSION = "job-supply-release-attestation.v1";
 const ATS_PHASE0_RECEIPT_VERSION = "ats-phase0-receipt.v1";
 const EXTERNAL_DISCHARGE_VERSION = "job-supply-external-discharge.v1";
+const ACTIVATION_EVIDENCE_VERSION = "job-supply-activation-evidence.v1";
+const SHADOW_RUN_VERSION = "job-supply-shadow-run.v1";
+const WRITER_OWNERSHIP_VERSION = "job-supply-writer-ownership.v1";
 export const REQUIRED_FULL_RELEASE_COMMAND_IDS = Object.freeze([
   "repository-attestation",
   "frozen-install",
@@ -909,6 +912,13 @@ function rejectSecretShapedFields(value, path = "input") {
   if (typeof value === "string") {
     if (/^\s*(?:Bearer|Basic)\s+/i.test(value)) {
       throw new Error(`authorization value is forbidden: ${path}`);
+    }
+    if (
+      /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/i.test(value)
+      || /(?:^|[?&;\s])(?:access[_-]?token|api[_-]?key|authorization|cookie|password|secret|token)\s*[=:]\s*[^\s&;]+/i.test(value)
+      || /\beyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/.test(value)
+    ) {
+      throw new Error(`secret-pattern value is forbidden: ${path}`);
     }
     try {
       const parsed = new URL(value);
