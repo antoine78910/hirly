@@ -6,11 +6,15 @@ BEGIN;
 ALTER TABLE public.projection_reconciliation_tasks
   ADD COLUMN IF NOT EXISTS claim_generation bigint NOT NULL DEFAULT 0
     CHECK (claim_generation >= 0),
+  ADD COLUMN IF NOT EXISTS source_digest text
+    CHECK (source_digest IS NULL OR source_digest ~ '^[0-9a-f]{64}$'),
   ADD COLUMN IF NOT EXISTS last_error_message text;
 
 ALTER TABLE public.job_search_documents
   ADD COLUMN IF NOT EXISTS source_content_hash text
     CHECK (source_content_hash IS NULL OR source_content_hash ~ '^[0-9a-f]{64}$'),
+  ADD COLUMN IF NOT EXISTS source_snapshot_digest text
+    CHECK (source_snapshot_digest IS NULL OR source_snapshot_digest ~ '^[0-9a-f]{64}$'),
   ADD COLUMN IF NOT EXISTS source_updated_at timestamptz;
 
 CREATE TABLE public.job_projection_task_audit (
@@ -39,6 +43,97 @@ CREATE INDEX job_projection_task_audit_entity_idx
   ON public.job_projection_task_audit
     (entity_id, entity_version DESC, recorded_at DESC);
 
+CREATE OR REPLACE FUNCTION worker_private.job_projection_source_digest(
+  p_canonical_group_id uuid
+)
+RETURNS text
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+  SELECT encode(digest(convert_to(coalesce((
+    SELECT jsonb_build_object(
+      'canonicalGroupId', group_row.id::text,
+      'preferredJobId', group_row.preferred_job_id,
+      'groupStatus', group_row.status,
+      'title', job.title,
+      'normalizedTitle', job.normalized_title,
+      'company', job.company,
+      'location', job.location,
+      'countryCode', job.country_code,
+      'remote', job.remote,
+      'latitude', job.data->'latitude',
+      'longitude', job.data->'longitude',
+      'publishedAt', coalesce(occurrence.published_at, job.posted_at),
+      'importedAt', job.imported_at,
+      'firstSeenAt', coalesce(occurrence.first_seen_at, job.first_seen_at),
+      'lastSeenAt', coalesce(occurrence.last_seen_at, job.last_seen_at),
+      'expiresAt', coalesce(occurrence.expires_at, job.expires_at),
+      'lifecycleState', coalesce(occurrence.lifecycle_state, job.lifecycle_state),
+      'validationStatus', job.validation_status,
+      'applyabilityTier', job.applyability_tier,
+      'applyFulfillmentStatus', job.apply_fulfillment_status,
+      'autoApplySupported', job.auto_apply_supported,
+      'manualFulfillmentReady', job.manual_fulfillment_ready,
+      'sourceEligible', source.enabled,
+      'policyEligible', occurrence.policy_id IS NOT NULL,
+      -- The projector reads normalized role/location/contract/skill facts from
+      -- this complete canonical source document. Including all of it ensures a
+      -- projected-field-only mutation cannot evade reconciliation.
+      'data', job.data
+    )
+    FROM public.canonical_job_groups AS group_row
+    LEFT JOIN public.jobs AS job ON job.job_id = group_row.preferred_job_id
+    LEFT JOIN public.job_occurrences AS occurrence ON occurrence.job_id = job.job_id
+    LEFT JOIN public.career_sources AS source ON source.id = occurrence.source_id
+    WHERE group_row.id = p_canonical_group_id
+  ), jsonb_build_object(
+    'canonicalGroupId', p_canonical_group_id::text,
+    'missing', true
+  ))::text, 'UTF8'), 'sha256'), 'hex')
+$$;
+
+CREATE OR REPLACE FUNCTION worker_private.enqueue_current_job_projection_task(
+  p_canonical_group_id uuid,
+  p_source_digest text DEFAULT NULL
+)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_digest text := coalesce(
+    p_source_digest,
+    worker_private.job_projection_source_digest(p_canonical_group_id)
+  );
+  v_version bigint;
+  v_inserted integer;
+BEGIN
+  IF v_digest !~ '^[0-9a-f]{64}$' THEN
+    RAISE EXCEPTION 'invalid projection source digest' USING ERRCODE = '22023';
+  END IF;
+  SELECT greatest(
+    coalesce((SELECT job_version FROM public.job_search_documents
+      WHERE canonical_group_id = p_canonical_group_id), 0),
+    coalesce((SELECT max(entity_version)
+      FROM public.projection_reconciliation_tasks
+      WHERE task_kind = 'job.document.project'
+        AND entity_id = p_canonical_group_id::text), 0)
+  ) + 1 INTO v_version;
+  INSERT INTO public.projection_reconciliation_tasks (
+    task_kind, entity_id, entity_version, idempotency_key, source_digest
+  ) VALUES (
+    'job.document.project', p_canonical_group_id::text, v_version,
+    'job-source:' || p_canonical_group_id::text || ':' || v_digest,
+    v_digest
+  ) ON CONFLICT (idempotency_key) DO NOTHING;
+  GET DIAGNOSTICS v_inserted = ROW_COUNT;
+  RETURN v_inserted;
+END
+$$;
+
 CREATE OR REPLACE FUNCTION worker_private.claim_job_projection_tasks(
   p_lease_owner text,
   p_limit integer,
@@ -53,6 +148,7 @@ RETURNS TABLE (
   lease_owner text,
   lease_token uuid,
   claim_generation bigint,
+  source_digest text,
   lease_until timestamptz,
   attempts integer,
   max_attempts integer
@@ -122,8 +218,8 @@ BEGIN
   WHERE task.task_id = candidates.task_id
   RETURNING task.task_id, task.task_kind, task.entity_id,
     task.entity_version, task.idempotency_key, task.lease_owner,
-    task.lease_token, task.claim_generation, task.lease_until,
-    task.attempts, task.max_attempts;
+    task.lease_token, task.claim_generation, task.source_digest,
+    task.lease_until, task.attempts, task.max_attempts;
 END
 $$;
 
@@ -311,6 +407,10 @@ DECLARE
   v_task public.projection_reconciliation_tasks%ROWTYPE;
   v_existing public.job_search_documents%ROWTYPE;
   v_outcome text := 'succeeded';
+  v_live_digest text;
+  v_live_preferred_job_id text;
+  v_live_group_status text;
+  v_source_updated_at timestamptz;
 BEGIN
   IF p_source_content_hash !~ '^[0-9a-f]{64}$' OR p_duration_ms < 0 THEN
     RAISE EXCEPTION 'invalid job projection result' USING ERRCODE = '22023';
@@ -327,6 +427,47 @@ BEGIN
   THEN
     RAISE EXCEPTION 'projection result does not match leased entity/version'
       USING ERRCODE = '22023';
+  END IF;
+
+  v_live_digest := worker_private.job_projection_source_digest(
+    (p_document->>'canonical_group_id')::uuid
+  );
+  SELECT group_row.preferred_job_id, group_row.status,
+    greatest(
+      group_row.updated_at,
+      coalesce(job.lifecycle_checked_at, '-infinity'::timestamptz),
+      coalesce(job.last_seen_at, '-infinity'::timestamptz),
+      coalesce(occurrence.updated_at, '-infinity'::timestamptz)
+    )
+  INTO v_live_preferred_job_id, v_live_group_status, v_source_updated_at
+  FROM public.canonical_job_groups AS group_row
+  LEFT JOIN public.jobs AS job ON job.job_id = group_row.preferred_job_id
+  LEFT JOIN public.job_occurrences AS occurrence ON occurrence.job_id = job.job_id
+  WHERE group_row.id = (p_document->>'canonical_group_id')::uuid;
+
+  IF v_task.source_digest IS NULL
+    OR v_task.source_digest IS DISTINCT FROM v_live_digest
+    OR v_live_group_status IS DISTINCT FROM 'active'
+    OR v_live_preferred_job_id IS DISTINCT FROM p_document->>'preferred_job_id'
+  THEN
+    UPDATE public.projection_reconciliation_tasks SET
+      status = 'succeeded', lease_owner = NULL, lease_token = NULL,
+      lease_until = NULL, last_error_code = NULL, last_error_message = NULL,
+      updated_at = clock_timestamp()
+    WHERE task_id = v_task.task_id;
+    INSERT INTO public.job_projection_task_audit (
+      task_id, claim_generation, task_kind, entity_id, entity_version,
+      attempt, outcome, result_digest, duration_ms
+    ) VALUES (
+      v_task.task_id, v_task.claim_generation, v_task.task_kind,
+      v_task.entity_id, v_task.entity_version, v_task.attempts,
+      'stale_ignored', p_source_content_hash, p_duration_ms
+    );
+    PERFORM worker_private.enqueue_current_job_projection_task(
+      (p_document->>'canonical_group_id')::uuid,
+      v_live_digest
+    );
+    RETURN true;
   END IF;
 
   SELECT * INTO v_existing FROM public.job_search_documents
@@ -348,7 +489,7 @@ BEGIN
       last_seen_at, expires_at, validation_status, applyability_tier,
       fulfillment_route, source_eligible, policy_eligible,
       feature_schema_version, search_text, projected_at, source_updated_at,
-      source_content_hash
+      source_content_hash, source_snapshot_digest
     ) VALUES (
       p_document->>'schema_version', (p_document->>'canonical_group_id')::uuid,
       p_document->>'preferred_job_id', (p_document->>'job_version')::bigint,
@@ -373,8 +514,8 @@ BEGIN
       (p_document->>'policy_eligible')::boolean,
       p_document->>'feature_schema_version', p_document->>'search_text',
       (p_document->>'source_updated_at')::timestamptz,
-      (p_document->>'source_updated_at')::timestamptz,
-      p_source_content_hash
+      v_source_updated_at,
+      p_source_content_hash, v_task.source_digest
     )
     ON CONFLICT (canonical_group_id) DO UPDATE SET
       preferred_job_id = EXCLUDED.preferred_job_id,
@@ -404,6 +545,7 @@ BEGIN
       search_text = EXCLUDED.search_text, projected_at = EXCLUDED.projected_at,
       source_updated_at = EXCLUDED.source_updated_at,
       source_content_hash = EXCLUDED.source_content_hash,
+      source_snapshot_digest = EXCLUDED.source_snapshot_digest,
       updated_at = clock_timestamp()
     WHERE job_search_documents.job_version <= EXCLUDED.job_version;
   END IF;

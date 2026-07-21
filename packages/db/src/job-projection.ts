@@ -1,4 +1,5 @@
 import type { JobSearchDocumentPersistenceRow } from "@hirly/contracts";
+import type postgres from "postgres";
 import type { Database } from "./index";
 
 export type JobProjectionTaskKind =
@@ -14,6 +15,7 @@ export interface JobProjectionLease {
   leaseOwner: string;
   leaseToken: string;
   claimGeneration: bigint;
+  sourceDigest: string | null;
   leaseUntil: Date;
   attempts: number;
   maxAttempts: number;
@@ -57,6 +59,7 @@ interface ProjectionTaskRow {
   lease_owner: string;
   lease_token: string;
   claim_generation: string;
+  source_digest: string | null;
   lease_until: Date;
   attempts: number;
   max_attempts: number;
@@ -72,14 +75,15 @@ function leaseFromRow(row: ProjectionTaskRow): JobProjectionLease {
     leaseOwner: row.lease_owner,
     leaseToken: row.lease_token,
     claimGeneration: BigInt(row.claim_generation),
+    sourceDigest: row.source_digest,
     leaseUntil: row.lease_until,
     attempts: row.attempts,
     maxAttempts: row.max_attempts,
   };
 }
 
-function serialized(value: unknown): Record<string, unknown> {
-  return JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
+function serialized(value: unknown): postgres.JSONValue {
+  return JSON.parse(JSON.stringify(value)) as postgres.JSONValue;
 }
 
 export class JobProjectionRepository {

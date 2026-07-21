@@ -50,9 +50,6 @@ const wait = (milliseconds: number, signal: AbortSignal) =>
     );
   });
 
-const errorMessage = (error: unknown) =>
-  error instanceof Error ? error.message.slice(0, 1_000) : "projection_failed";
-
 export class JobProjectionConsumer {
   private readonly controller = new AbortController();
   private readonly taskControllers = new Set<AbortController>();
@@ -118,9 +115,10 @@ export class JobProjectionConsumer {
         await this.store.enqueueReconciliation(
           this.options.reconciliationBatchSize,
         );
-        await this.store.finish(task, "succeeded", {
+        const current = await this.store.finish(task, "succeeded", {
           durationMs: performance.now() - startedAt,
         });
+        if (!current) throw new Error("projection_lease_lost");
       } catch (error) {
         await this.retryOrFail(task, error, performance.now() - startedAt);
       }
@@ -192,9 +190,15 @@ export class JobProjectionConsumer {
     durationMs: number,
   ): Promise<void> {
     const exhausted = task.attempts >= task.maxAttempts;
+    const failureCode =
+      error instanceof Error && error.message === "projection_lease_lost"
+        ? "lease_lost"
+        : "projection_failed";
     await this.store.finish(task, exhausted ? "failed" : "retryable", {
-      errorCode: exhausted ? "retry_exhausted" : "projection_failed",
-      errorMessage: errorMessage(error),
+      errorCode: exhausted ? "retry_exhausted" : failureCode,
+      // Persist only an enumerated class. Raw exception text can contain
+      // canonical source data or driver details and belongs in redacted logs.
+      errorMessage: undefined,
       retryAt: exhausted
         ? undefined
         : new Date(Date.now() + Math.min(60_000, 250 * 2 ** task.attempts)),
@@ -222,7 +226,10 @@ export class JobProjectionConsumer {
       for (const controller of this.taskControllers) {
         controller.abort(new Error("shutdown_deadline"));
       }
-      await drain();
+      // Do not add an unbounded second drain after the declared deadline.
+      // allSettled keeps late abort completions observed while pool shutdown
+      // provides the final transport fence.
+      void drain();
     }
   }
 }

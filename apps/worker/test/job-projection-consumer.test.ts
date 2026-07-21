@@ -18,6 +18,7 @@ const lease: JobProjectionLease = {
   leaseOwner: "projection-1",
   leaseToken: "33333333-3333-4333-8333-333333333333",
   claimGeneration: 1n,
+  sourceDigest: "b".repeat(64),
   leaseUntil: new Date(Date.now() + 30_000),
   attempts: 1,
   maxAttempts: 8,
