@@ -10,6 +10,14 @@ const migration = readFileSync(
   "utf8",
 );
 
+const activationMigration = readFileSync(
+  new URL(
+    "../backend/db/migrations/20260721003600_enable_sprout_frontier_incremental_lane.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
+
 const sourceId = "11111111-1111-4111-8111-111111111111";
 
 describe("Sprout incremental frontier cycles", () => {
@@ -45,5 +53,12 @@ describe("Sprout incremental frontier cycles", () => {
     expect(migration).toContain("'7 * * * *'");
     expect(migration).toContain("'maxPages', 10");
     expect(migration).toContain("worker_private.set_schedule_enabled");
+  });
+
+  test("enables incremental mode only for the approved passed-canary frontier lane", () => {
+    expect(activationMigration).toContain("source.source_key = 'sprout:france:country-only'");
+    expect(activationMigration).toContain("SET incremental_enabled = true");
+    expect(activationMigration).toContain("source.discovery_state = 'approved'");
+    expect(activationMigration).toContain("source.canary_evidence->>'status' = 'passed'");
   });
 });
