@@ -8,6 +8,8 @@ import {
   buildSproutCommitEntry,
   initialSproutCheckpoint,
   parseSproutResponse,
+  runSproutPageSizeQualification,
+  runSproutQualificationMatrix,
 } from "../apps/worker/src/providers/sprout";
 
 const sourceId = "11111111-1111-4111-8111-111111111111";
@@ -88,6 +90,51 @@ describe("Sprout authenticated transport", () => {
 });
 
 describe("Sprout source commit pipeline", () => {
+  test("bounds semantic and page-size qualification without writes", async () => {
+    const queries: URLSearchParams[] = [];
+    const requester = {
+      async request(query: URLSearchParams) {
+        queries.push(query);
+        return { parsed: parseSproutResponse(fixture), responseBytes: 512 };
+      },
+    };
+    const sleep = async () => {};
+    const signal = new AbortController().signal;
+
+    const matrix = await runSproutQualificationMatrix({
+      requester,
+      signal,
+      delayMs: 2_000,
+      sleep,
+    });
+    expect(matrix).toHaveLength(6);
+    expect(queries.every((query) => query.get("limit") === "1")).toBe(true);
+    expect(queries.some((query) => query.has("location[radius]") === false)).toBe(true);
+    expect(queries.some((query) => query.get("includeUnknownWorkLocation") === "true")).toBe(true);
+
+    const pageSizes = await runSproutPageSizeQualification({
+      pageSizes: [10, 50, 100],
+      requester,
+      signal,
+      delayMs: 2_000,
+      maxResponseBytes: 1_024,
+      sleep,
+    });
+    expect(pageSizes.map((entry) => entry.scenario)).toEqual([
+      "page-size-10",
+      "page-size-50",
+      "page-size-100",
+    ]);
+    await expect(runSproutPageSizeQualification({
+      pageSizes: [1, 2, 3, 4],
+      requester,
+      signal,
+      delayMs: 2_000,
+      maxResponseBytes: 1_024,
+      sleep,
+    })).rejects.toThrow("sprout_page_size_trial_request_budget_exceeded");
+  });
+
   test("normalizes, validates, canonicalizes tracking URLs, and preserves sanitized source evidence", () => {
     const raw = parseSproutResponse(fixture).jobs[0]!;
     const entry = buildSproutCommitEntry({
@@ -138,6 +185,26 @@ describe("Sprout source commit pipeline", () => {
           approvedPageSize: 2,
           checkpoint: initialSproutCheckpoint({ approvedPageSize: 2 }),
           policyEvidenceRef: "reviewed-policy",
+          canaryEvidence: {
+            status: "passed" as const,
+            evidenceRef: "canary-read-back",
+            pagesCommitted: 1 as const,
+            identityReadBack: true,
+            rawSnapshotLinked: true,
+            occurrenceLinked: true,
+            checkpointReadBack: true,
+            singleWriterVerified: true,
+          },
+          rollbackEvidence: {
+            status: "passed" as const,
+            evidenceRef: "rollback-drill",
+            providerKillSwitchVerified: true,
+            sourceKillSwitchVerified: true,
+            scheduleDisableVerified: true,
+            transportDisableVerified: true,
+            outstandingTasksStopVerified: true,
+            writerClaimReleaseVerified: true,
+          },
         };
       },
       async commitSproutSourcePage(_lease: unknown, _claim: unknown, commit: unknown) {

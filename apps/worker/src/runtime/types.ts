@@ -10,6 +10,19 @@ import type {
   Provider,
   RunView,
 } from "@hirly/contracts";
+import type { SproutActivation } from "../providers/sprout";
+
+export interface SproutSourceRuntimeConfiguration {
+  sourceId: string;
+  policyId: string;
+  endpoint: string;
+  credentialRef: string;
+  approvedPageSize: number;
+  checkpoint: Record<string, unknown>;
+  policyEvidenceRef: string;
+  canaryEvidence?: SproutActivation["canaryEvidence"];
+  rollbackEvidence?: SproutActivation["rollbackEvidence"];
+}
 
 export type QueueRepository = Pick<
   WorkerRepository,
@@ -47,7 +60,7 @@ export interface RuntimeStore {
   getSproutSourceRuntime?(
     sourceId: string,
     mode: "backfill" | "incremental",
-  ): ReturnType<WorkerRepository["getSproutSourceRuntime"]>;
+  ): Promise<SproutSourceRuntimeConfiguration | null>;
   commitSproutSourcePage?: WorkerRepository["commitSproutSourcePage"];
 }
 
