@@ -71,6 +71,7 @@ export default function DesktopSwipeFeed({
   onTargetSave,
   onTargetPreferencesOpen,
   onTargetLocationOpen,
+  onTerminalSuggestionClick,
   targetLocationData = null,
   targetSaving = false,
   onPass,
@@ -454,6 +455,7 @@ export default function DesktopSwipeFeed({
               onLocation={onTargetLocationOpen || onTargetPreferencesOpen}
               onRadius={() => onFiltersOpenChange?.(true)}
               onFilters={() => onFiltersOpenChange?.(true)}
+              onSuggestionClick={(actionId) => onTerminalSuggestionClick?.(actionId, feedView.kind)}
               className="mx-auto max-w-lg py-20"
             />
           ) : !displayJob ? (

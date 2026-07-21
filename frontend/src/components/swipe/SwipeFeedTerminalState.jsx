@@ -29,6 +29,7 @@ export default function SwipeFeedTerminalState({
   onLocation,
   onRadius,
   onFilters,
+  onSuggestionClick,
   className = "",
 }) {
   const [titleKey, bodyKey] = copyFor(state);
@@ -49,7 +50,7 @@ export default function SwipeFeedTerminalState({
           const action = ACTIONS[id];
           const Icon = action.icon;
           return (
-            <button key={id} type="button" onClick={callbacks[id]} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-sprout-border bg-sprout-surface px-4 text-sm font-semibold text-sprout-text hover:border-sprout-mint" aria-label={t(action.label)}>
+            <button key={id} type="button" onClick={() => { onSuggestionClick?.(id); callbacks[id]?.(); }} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-sprout-border bg-sprout-surface px-4 text-sm font-semibold text-sprout-text hover:border-sprout-mint" aria-label={t(action.label)}>
               <Icon className="h-4 w-4 text-sprout-mint" aria-hidden="true" />
               {t(action.label)}
             </button>

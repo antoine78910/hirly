@@ -1820,6 +1820,7 @@ export default function Swipe() {
           onTargetSave={saveTargetSearch}
           onTargetPreferencesOpen={() => setTargetSheetOpen(true)}
           onTargetLocationOpen={() => setTargetSheetOpen(true)}
+          onTerminalSuggestionClick={(actionId, presentationState) => trackEvent("swipe_feed_suggestion_clicked", { action_id: actionId, presentation_state: presentationState })}
           targetLocationData={targetLocationData}
           targetSaving={targetSaving}
           onPass={() => handleSwipe("skip")}
@@ -1963,6 +1964,7 @@ export default function Swipe() {
                 onLocation={() => setTargetSheetOpen(true)}
                 onRadius={() => setFiltersOpen(true)}
                 onFilters={() => setFiltersOpen(true)}
+                onSuggestionClick={(actionId) => trackEvent("swipe_feed_suggestion_clicked", { action_id: actionId, presentation_state: feedView.kind })}
               />
             </div>
           )}
