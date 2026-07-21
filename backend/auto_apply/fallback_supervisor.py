@@ -13,6 +13,8 @@ import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set
 
+from llm_client import LLMObservation, observe_llm_operation
+
 logger = logging.getLogger(__name__)
 
 ALLOWED_ACTIONS: Set[str] = {
@@ -181,20 +183,28 @@ async def vision_decide(
             os.environ.get("OPENAI_MODEL", "gpt-4.1-mini"),
         )
         data_url = f"data:image/jpeg;base64,{screenshot_b64}"
-        response = await client.chat.completions.create(
-            model=model,
-            response_format={"type": "json_object"},
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": json.dumps(payload)},
-                        {"type": "image_url", "image_url": {"url": data_url, "detail": "low"}},
-                    ],
-                }
-            ],
-            max_completion_tokens=220,
-        )
+        with observe_llm_operation(
+            LLMObservation(
+                operation="application_vision_fallback_decision",
+                prompt_version="v1",
+                feature="application_automation",
+                actor_scope="system",
+            )
+        ):
+            response = await client.chat.completions.create(
+                model=model,
+                response_format={"type": "json_object"},
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": json.dumps(payload)},
+                            {"type": "image_url", "image_url": {"url": data_url, "detail": "low"}},
+                        ],
+                    }
+                ],
+                max_completion_tokens=220,
+            )
         raw = response.choices[0].message.content or "{}"
         parsed = json.loads(raw)
         if not isinstance(parsed, dict):

@@ -73,7 +73,7 @@ def _tag_otel_span_with_user() -> None:
 
 
 @contextmanager
-def _observe_llm_operation(observation: LLMObservation):
+def observe_llm_operation(observation: LLMObservation):
     """Create an AI parent span that groups an auto-instrumented generation.
 
     The OpenAI instrumentor still owns the authoritative `$ai_generation`
@@ -111,6 +111,11 @@ def _observe_llm_operation(observation: LLMObservation):
         # AI functionality must remain available when optional OTel packages
         # are unavailable (for local/test environments).
         yield None
+
+
+# Kept as a private compatibility alias while direct callers migrate to the
+# explicit public operation boundary above.
+_observe_llm_operation = observe_llm_operation
 
 
 def configure_raw_llm_content_capture() -> bool:

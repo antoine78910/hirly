@@ -16,6 +16,7 @@ from typing import Any, Dict, List
 from .browser import screenshot_b64
 from .blockers import dismiss_cookie_banner
 from .human_browser import human_click, human_pause
+from llm_client import LLMObservation, observe_llm_operation
 
 logger = logging.getLogger(__name__)
 
@@ -212,20 +213,28 @@ async def _vision_recovery_actions(screenshot: str, stuck: Dict[str, Any]) -> Li
             ),
         }
         data_url = f"data:image/jpeg;base64,{screenshot}"
-        response = await client.chat.completions.create(
-            model=model,
-            response_format={"type": "json_object"},
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": json.dumps(prompt)},
-                        {"type": "image_url", "image_url": {"url": data_url, "detail": "low"}},
-                    ],
-                }
-            ],
-            max_completion_tokens=400,
-        )
+        with observe_llm_operation(
+            LLMObservation(
+                operation="application_vision_recovery_actions",
+                prompt_version="v1",
+                feature="application_automation",
+                actor_scope="system",
+            )
+        ):
+            response = await client.chat.completions.create(
+                model=model,
+                response_format={"type": "json_object"},
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": json.dumps(prompt)},
+                            {"type": "image_url", "image_url": {"url": data_url, "detail": "low"}},
+                        ],
+                    }
+                ],
+                max_completion_tokens=400,
+            )
         raw = response.choices[0].message.content or "{}"
         parsed = json.loads(raw)
         actions = parsed.get("actions") if isinstance(parsed, dict) else None
