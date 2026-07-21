@@ -1371,6 +1371,7 @@ function validateWriterOwnership(descriptor, input, evidenceRoot) {
   ], "writer ownership evidence");
   const scope = activationScope(input);
   const expectedWriter = "typescript";
+  const writerUnchanged = input.currentVerdict !== "blocked";
   if (
     evidence.schemaVersion !== WRITER_OWNERSHIP_VERSION
     || evidence.status !== "observed"
@@ -1380,8 +1381,9 @@ function validateWriterOwnership(descriptor, input, evidenceRoot) {
     || evidence.policyDigest !== scope.policyDigest
     || evidence.releaseHead !== scope.releaseHead
     || evidence.writerRuntime !== expectedWriter
-    || !["none", "python", "typescript"].includes(evidence.previousWriterRuntime)
-    || evidence.throughNone !== true
+    || (writerUnchanged
+      ? evidence.previousWriterRuntime !== "typescript" || evidence.throughNone !== false
+      : !["none", "python"].includes(evidence.previousWriterRuntime) || evidence.throughNone !== true)
     || evidence.simultaneousCanonicalWriters !== false
     || !Number.isInteger(evidence.ownershipEpoch)
     || evidence.ownershipEpoch < 1
