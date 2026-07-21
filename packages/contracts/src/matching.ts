@@ -390,7 +390,7 @@ export const jobSearchDocumentPersistenceRowSchema = z
     policy_eligible: z.boolean(),
     feature_schema_version: z.string().min(1).max(64),
     search_text: z.string().trim().min(1).max(8_192),
-    projected_at: z.iso.datetime({ offset: true }),
+    source_updated_at: z.iso.datetime({ offset: true }),
   })
   .strict()
   .superRefine((value, context) => {
@@ -448,7 +448,7 @@ export function toJobSearchDocumentPersistenceRow(
     policy_eligible: value.policyEligible,
     feature_schema_version: value.featureSchemaVersion,
     search_text: derived.searchText,
-    projected_at: value.projectedAt,
+    source_updated_at: value.projectedAt,
   });
 }
 
