@@ -8,7 +8,7 @@ INSERT INTO public.job_search_documents (
   normalized_title, role_family_codes, contract_families, work_modes,
   country_codes, location_confidence, location_unknown, posted_at, last_seen_at,
   validation_status, applyability_tier, fulfillment_route, source_eligible,
-  policy_eligible, feature_schema_version, search_text, source_updated_at
+  policy_eligible, feature_schema_version, search_text, projected_at
 )
 SELECT
   md5('pr1-group-' || n::text)::uuid,

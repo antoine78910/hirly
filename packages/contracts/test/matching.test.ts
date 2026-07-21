@@ -2,8 +2,10 @@ import { describe, expect, test } from "bun:test";
 import * as matchingContracts from "../src";
 import {
   MATCHING_CONTRACT_VERSION,
+  candidateActionProjectionPersistenceRowSchema,
   candidateActionProjectionSchema,
   candidateProjectionOutboxEventSchema,
+  candidateSearchProfilePersistenceRowSchema,
   candidateSearchProfileSchema,
   jobSearchDocumentSchema,
   toJobSearchDocumentPersistenceRow,
@@ -12,7 +14,11 @@ import {
   onlineMatchRequestSchema,
   onlineMatchResponseSchema,
   projectionTaskKindSchema,
+  projectionTaskPersistenceRowSchema,
   projectionTaskSchema,
+  toCandidateActionProjectionPersistenceRow,
+  toCandidateSearchProfilePersistenceRow,
+  toProjectionTaskPersistenceRow,
 } from "../src";
 
 const now = "2026-07-21T04:00:00+00:00";
@@ -167,34 +173,50 @@ describe("matching v1 contracts", () => {
         status: "deleted",
       }),
     ).toThrow();
-    expect(
-      candidateSearchProfileSchema.parse({
-        ...candidateProfile,
-        status: "deleted",
-        targetRoleLabelNormalized: null,
-        roleFamilyIds: [],
-        romeCodes: [],
-        skillIds: [],
-        skillTerms: [],
-        seniorityMin: null,
-        seniorityMax: null,
-        contractTypes: [],
-        workModes: [],
-        originLatitude: null,
-        originLongitude: null,
-        radiusKm: null,
-        countryCodes: [],
-        locationPolicy: null,
-        salaryFloor: null,
-        currency: null,
-        freshnessWindowDays: null,
-      }).status,
-    ).toBe("deleted");
+    const deletedProfile = {
+      ...candidateProfile,
+      status: "deleted" as const,
+      targetRoleLabelNormalized: null,
+      roleFamilyIds: [],
+      romeCodes: [],
+      skillIds: [],
+      skillTerms: [],
+      seniorityMin: null,
+      seniorityMax: null,
+      contractTypes: [],
+      workModes: [],
+      originLatitude: null,
+      originLongitude: null,
+      radiusKm: null,
+      countryCodes: [],
+      locationPolicy: null,
+      salaryFloor: null,
+      currency: null,
+      freshnessWindowDays: null,
+    };
+    expect(candidateSearchProfileSchema.parse(deletedProfile).status).toBe(
+      "deleted",
+    );
+    const row = toCandidateSearchProfilePersistenceRow(
+      deletedProfile,
+      "44444444-4444-4444-8444-444444444444",
+    );
+    expect(row).toMatchObject({
+      status: "deleted",
+      location_policy: null,
+      freshness_window_days: null,
+      projected_at: now,
+    });
+    expect(() =>
+      candidateSearchProfilePersistenceRowSchema.parse({
+        ...row,
+        raw_cv: "forbidden",
+      }),
+    ).toThrow();
   });
 
   test("validates purpose-limited action and opaque outbox envelopes", () => {
-    expect(
-      candidateActionProjectionSchema.parse({
+    const action = {
         schemaVersion: MATCHING_CONTRACT_VERSION,
         candidateId: "mongo-user-id",
         sourceActionId: "swipe-123",
@@ -206,8 +228,28 @@ describe("matching v1 contracts", () => {
         occurredAt: now,
         retentionState: "active",
         projectedAt: now,
-      }).sourceJobId,
-    ).toBe("job-text-id");
+      } as const;
+    expect(candidateActionProjectionSchema.parse(action).sourceJobId).toBe(
+      "job-text-id",
+    );
+    const actionRow = toCandidateActionProjectionPersistenceRow(
+      action,
+      "55555555-5555-4555-8555-555555555555",
+    );
+    expect(actionRow).toMatchObject({
+      action_id: "swipe-123",
+      candidate_version: "9007199254740994",
+      action_kind: "dismissed",
+      action_at: now,
+      projected_at: now,
+      retention_state: "active",
+    });
+    expect(() =>
+      candidateActionProjectionPersistenceRowSchema.parse({
+        ...actionRow,
+        kind: "liked",
+      }),
+    ).toThrow();
 
     const event = {
       schemaVersion: MATCHING_CONTRACT_VERSION,
@@ -307,7 +349,7 @@ describe("matching v1 contracts", () => {
       applyability_tier: "B",
       feature_schema_version: "matching-features.v1",
       search_text: "fullstack engineer typescript",
-      source_updated_at: now,
+      projected_at: now,
     });
   });
 
@@ -383,8 +425,7 @@ describe("matching v1 contracts", () => {
       "projection.reconcile",
     ] as const;
     expect(projectionTaskKindSchema.options).toEqual([...commonKinds]);
-    expect(
-      projectionTaskSchema.parse({
+    const task = {
         schemaVersion: MATCHING_CONTRACT_VERSION,
         taskId: "33333333-3333-4333-8333-333333333333",
         taskKind: "projection.reconcile",
@@ -393,8 +434,27 @@ describe("matching v1 contracts", () => {
         idempotencyKey: "reconcile:mongo-user-id:6",
         availableAt: now,
         attempt: 0,
-      }).taskKind,
-    ).toBe("projection.reconcile");
+      } as const;
+    expect(projectionTaskSchema.parse(task).taskKind).toBe(
+      "projection.reconcile",
+    );
+    const taskRow = toProjectionTaskPersistenceRow(task);
+    expect(taskRow).toMatchObject({
+      task_kind: "projection.reconcile",
+      entity_version: "6",
+      status: "queued",
+      attempts: 0,
+      max_attempts: 8,
+      lease_owner: null,
+      lease_token: null,
+      lease_until: null,
+    });
+    expect(() =>
+      projectionTaskPersistenceRowSchema.parse({
+        ...taskRow,
+        attempt: 0,
+      }),
+    ).toThrow();
     expect(
       matchingRollbackControlsSchema.parse({
         schemaVersion: MATCHING_CONTRACT_VERSION,

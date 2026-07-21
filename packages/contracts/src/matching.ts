@@ -155,6 +155,72 @@ export const candidateSearchProfileSchema = z
     }
   });
 
+export const candidateSearchProfilePersistenceRowSchema = z
+  .object({
+    schema_version: z.literal(MATCHING_CONTRACT_VERSION),
+    candidate_id: z.string().min(1).max(256),
+    version: monotonicVersionSchema,
+    status: candidateProjectionStatusSchema,
+    target_role_label_normalized: normalizedTokenSchema.nullable(),
+    role_family_ids: uniqueArray(normalizedTokenSchema, 32),
+    rome_codes: uniqueArray(z.string().regex(/^[A-Z]\d{4}$/), 32),
+    skill_ids: uniqueArray(normalizedTokenSchema, 128),
+    skill_terms: uniqueArray(normalizedTokenSchema, 128),
+    seniority_min: z.number().int().min(0).max(20).nullable(),
+    seniority_max: z.number().int().min(0).max(20).nullable(),
+    contract_types: uniqueArray(normalizedTokenSchema, 16),
+    work_modes: uniqueArray(workModeSchema, 3),
+    origin_latitude: z.number().min(-90).max(90).nullable(),
+    origin_longitude: z.number().min(-180).max(180).nullable(),
+    radius_km: z.number().positive().max(20_000).nullable(),
+    country_codes: uniqueArray(countryCodeSchema, 250),
+    location_policy: locationPolicySchema.nullable(),
+    salary_floor: z.number().nonnegative().nullable(),
+    currency: z.string().regex(/^[A-Z]{3}$/).nullable(),
+    freshness_window_days: z.number().int().min(1).max(365).nullable(),
+    exposure_policy_version: monotonicVersionSchema,
+    feature_schema_version: z.string().min(1).max(64),
+    source_profile_updated_at: z.iso.datetime({ offset: true }),
+    projected_at: z.iso.datetime({ offset: true }),
+    source_event_id: z.uuid(),
+  })
+  .strict();
+
+export function toCandidateSearchProfilePersistenceRow(
+  profile: z.input<typeof candidateSearchProfileSchema>,
+  sourceEventId: string,
+): CandidateSearchProfilePersistenceRow {
+  const value = candidateSearchProfileSchema.parse(profile);
+  return candidateSearchProfilePersistenceRowSchema.parse({
+    schema_version: value.schemaVersion,
+    candidate_id: value.candidateId,
+    version: value.version,
+    status: value.status,
+    target_role_label_normalized: value.targetRoleLabelNormalized,
+    role_family_ids: value.roleFamilyIds,
+    rome_codes: value.romeCodes,
+    skill_ids: value.skillIds,
+    skill_terms: value.skillTerms,
+    seniority_min: value.seniorityMin,
+    seniority_max: value.seniorityMax,
+    contract_types: value.contractTypes,
+    work_modes: value.workModes,
+    origin_latitude: value.originLatitude,
+    origin_longitude: value.originLongitude,
+    radius_km: value.radiusKm,
+    country_codes: value.countryCodes,
+    location_policy: value.locationPolicy,
+    salary_floor: value.salaryFloor,
+    currency: value.currency,
+    freshness_window_days: value.freshnessWindowDays,
+    exposure_policy_version: value.exposurePolicyVersion,
+    feature_schema_version: value.featureSchemaVersion,
+    source_profile_updated_at: value.sourceProfileUpdatedAt,
+    projected_at: value.projectedAt,
+    source_event_id: sourceEventId,
+  });
+}
+
 export const candidateActionKindSchema = z.enum([
   "seen",
   "dismissed",
@@ -182,6 +248,46 @@ export const candidateActionProjectionSchema = z
     projectedAt: z.iso.datetime({ offset: true }),
   })
   .strict();
+
+export const candidateActionProjectionPersistenceRowSchema = z
+  .object({
+    schema_version: z.literal(MATCHING_CONTRACT_VERSION),
+    candidate_id: z.string().min(1).max(256),
+    action_id: z.string().min(1).max(256),
+    candidate_version: monotonicVersionSchema,
+    source_job_id: z.string().min(1).max(256),
+    canonical_group_id: z.uuid(),
+    canonical_group_aliases: uniqueArray(z.uuid(), 128),
+    action_kind: candidateActionKindSchema,
+    action_at: z.iso.datetime({ offset: true }),
+    projected_at: z.iso.datetime({ offset: true }),
+    retention_state: actionRetentionStateSchema,
+    retained_until: z.iso.datetime({ offset: true }).nullable(),
+    source_event_id: z.uuid(),
+  })
+  .strict();
+
+export function toCandidateActionProjectionPersistenceRow(
+  action: z.input<typeof candidateActionProjectionSchema>,
+  sourceEventId: string,
+): CandidateActionProjectionPersistenceRow {
+  const value = candidateActionProjectionSchema.parse(action);
+  return candidateActionProjectionPersistenceRowSchema.parse({
+    schema_version: value.schemaVersion,
+    candidate_id: value.candidateId,
+    action_id: value.sourceActionId,
+    candidate_version: value.version,
+    source_job_id: value.sourceJobId,
+    canonical_group_id: value.canonicalGroupId,
+    canonical_group_aliases: value.canonicalGroupAliases,
+    action_kind: value.kind,
+    action_at: value.occurredAt,
+    projected_at: value.projectedAt,
+    retention_state: value.retentionState,
+    retained_until: null,
+    source_event_id: sourceEventId,
+  });
+}
 
 export const jobLifecycleStatusSchema = z.enum([
   "active",
@@ -284,7 +390,7 @@ export const jobSearchDocumentPersistenceRowSchema = z
     policy_eligible: z.boolean(),
     feature_schema_version: z.string().min(1).max(64),
     search_text: z.string().trim().min(1).max(8_192),
-    source_updated_at: z.iso.datetime({ offset: true }),
+    projected_at: z.iso.datetime({ offset: true }),
   })
   .strict()
   .superRefine((value, context) => {
@@ -342,7 +448,7 @@ export function toJobSearchDocumentPersistenceRow(
     policy_eligible: value.policyEligible,
     feature_schema_version: value.featureSchemaVersion,
     search_text: derived.searchText,
-    source_updated_at: value.projectedAt,
+    projected_at: value.projectedAt,
   });
 }
 
@@ -471,6 +577,47 @@ export const projectionTaskSchema = z
   })
   .strict();
 
+export const projectionTaskPersistenceRowSchema = z
+  .object({
+    schema_version: z.literal(MATCHING_CONTRACT_VERSION),
+    task_id: z.uuid(),
+    task_kind: projectionTaskKindSchema,
+    entity_id: z.string().min(1).max(256),
+    entity_version: monotonicVersionSchema,
+    idempotency_key: z.string().min(1).max(512),
+    status: z.literal("queued"),
+    available_at: z.iso.datetime({ offset: true }),
+    lease_owner: z.null(),
+    lease_token: z.null(),
+    lease_until: z.null(),
+    attempts: z.number().int().min(0).max(100),
+    max_attempts: z.number().int().min(1).max(100),
+    last_error_code: z.null(),
+  })
+  .strict();
+
+export function toProjectionTaskPersistenceRow(
+  task: z.input<typeof projectionTaskSchema>,
+): ProjectionTaskPersistenceRow {
+  const value = projectionTaskSchema.parse(task);
+  return projectionTaskPersistenceRowSchema.parse({
+    schema_version: value.schemaVersion,
+    task_id: value.taskId,
+    task_kind: value.taskKind,
+    entity_id: value.entityId,
+    entity_version: value.entityVersion,
+    idempotency_key: value.idempotencyKey,
+    status: "queued",
+    available_at: value.availableAt,
+    lease_owner: null,
+    lease_token: null,
+    lease_until: null,
+    attempts: value.attempt,
+    max_attempts: 8,
+    last_error_code: null,
+  });
+}
+
 export const matchingRollbackControlsSchema = z
   .object({
     schemaVersion: z.literal(MATCHING_CONTRACT_VERSION),
@@ -485,8 +632,14 @@ export const matchingRollbackControlsSchema = z
 export type CandidateSearchProfile = z.infer<
   typeof candidateSearchProfileSchema
 >;
+export type CandidateSearchProfilePersistenceRow = z.infer<
+  typeof candidateSearchProfilePersistenceRowSchema
+>;
 export type CandidateActionProjection = z.infer<
   typeof candidateActionProjectionSchema
+>;
+export type CandidateActionProjectionPersistenceRow = z.infer<
+  typeof candidateActionProjectionPersistenceRowSchema
 >;
 export type JobSearchDocument = z.infer<typeof jobSearchDocumentSchema>;
 export type JobSearchDocumentPersistenceRow = z.infer<
@@ -498,3 +651,6 @@ export type CandidateProjectionOutboxEvent = z.infer<
   typeof candidateProjectionOutboxEventSchema
 >;
 export type ProjectionTask = z.infer<typeof projectionTaskSchema>;
+export type ProjectionTaskPersistenceRow = z.infer<
+  typeof projectionTaskPersistenceRowSchema
+>;
