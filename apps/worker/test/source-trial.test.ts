@@ -52,6 +52,7 @@ const response = {
       content: "Build systems.",
     },
   ],
+  meta: { total: 2 },
 };
 
 describe("G014 evidence-only source trial runner", () => {
@@ -109,7 +110,8 @@ describe("G014 evidence-only source trial runner", () => {
     await persistAtsSourceTrial({
       manifest,
       repository,
-      fetch: async () => Response.json({ jobs: [response.jobs[0]] }),
+      fetch: async () =>
+        Response.json({ jobs: [response.jobs[0]], meta: { total: 1 } }),
       now: () => new Date("2026-07-20T12:00:00Z"),
     });
     expect(calls).toEqual(["begin", "page", "candidate", "scorecard"]);
@@ -277,7 +279,10 @@ describe("G014 evidence-only source trial runner", () => {
     };
     await Promise.all([
       writeFile(manifestPath, JSON.stringify(currentManifest)),
-      writeFile(responsePath, JSON.stringify({ jobs: [response.jobs[0]] })),
+      writeFile(
+        responsePath,
+        JSON.stringify({ jobs: [response.jobs[0]], meta: { total: 1 } }),
+      ),
     ]);
     const preview = parseSourceTrialArgs([
       "preview",
