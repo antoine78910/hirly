@@ -8,7 +8,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
-from llm_client import complete_json_text
+from llm_client import LLMObservation, complete_json_text
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,11 @@ Return JSON with this exact schema:
 }}
 
 Tone: concise, modern, no fluff. Return ONLY the JSON object."""
-    response = await complete_json_text(system_message, prompt)
+    response = await complete_json_text(
+        system_message,
+        prompt,
+        observation=LLMObservation("career_coach_interview_prep", "v1", "career_coach"),
+    )
     data = _parse_json(response)
     # safety defaults
     data.setdefault("likely_questions", [])
@@ -96,7 +100,11 @@ Return JSON with this exact schema:
 }}
 
 Be honest, calibrated, and concise. Empty answers should drop scores. Return ONLY the JSON."""
-    response = await complete_json_text(system_message, prompt)
+    response = await complete_json_text(
+        system_message,
+        prompt,
+        observation=LLMObservation("career_coach_interview_score", "v1", "career_coach"),
+    )
     data = _parse_json(response)
     for k in ("confidence", "communication", "technical", "overall"):
         v = data.get(k, 0)
@@ -152,7 +160,11 @@ Return JSON with this exact schema:
 }}
 
 Return ONLY the JSON object."""
-    response = await complete_json_text(system_message, prompt)
+    response = await complete_json_text(
+        system_message,
+        prompt,
+        observation=LLMObservation("career_coach_profile_improvements", "v1", "career_coach"),
+    )
     data = _parse_json(response)
     data.setdefault("resume_tips", [])
     data.setdefault("skill_gaps", [])

@@ -6,7 +6,7 @@ import json
 import re
 from typing import Any
 
-from llm_client import LLMProviderNotConfigured, complete_json_text
+from llm_client import LLMObservation, LLMProviderNotConfigured, complete_json_text
 
 CONTRACT_LABELS = {
     "permanent": "Permanent contract (CDI)",
@@ -193,7 +193,11 @@ Rules:
 - For permanent roles in cities, include professional categories suited to that market.
 - Labels must be in English.
 - ids must be unique snake_case."""
-        raw = await complete_json_text(system, prompt)
+        raw = await complete_json_text(
+            system,
+            prompt,
+            observation=LLMObservation("onboarding_category_suggestions", "v1", "onboarding", "unknown"),
+        )
         parsed = _parse_json(raw)
         items = parsed.get("categories") or []
         cleaned: list[dict[str, str]] = []
@@ -251,7 +255,11 @@ Rules:
 - Titles must match the region (local industry) and contract type.
 - For summer jobs in French wine regions, include examples like manual grape harvester and retail sales associate.
 - English only. No duplicates."""
-        raw = await complete_json_text(system, prompt)
+        raw = await complete_json_text(
+            system,
+            prompt,
+            observation=LLMObservation("onboarding_role_suggestions", "v1", "onboarding", "unknown"),
+        )
         parsed = _parse_json(raw)
         roles = parsed.get("roles") or []
         cleaned = []

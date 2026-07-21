@@ -21,7 +21,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from email_addresses import INBOUND_MANAGED_EMAIL_ENABLED, managed_reply_address
-from llm_client import LLMProviderNotConfigured, complete_json_text
+from llm_client import LLMObservation, LLMProviderNotConfigured, complete_json_text
 
 from .guardrails import canonical, is_sensitive_field, validate_agent_fill
 
@@ -219,7 +219,11 @@ async def plan_fills(
         "fields": [_fillable_field_summary(f) for f in fillable],
     }
     try:
-        raw = await complete_json_text(_SYSTEM_PROMPT, json.dumps(prompt, ensure_ascii=True))
+        raw = await complete_json_text(
+            _SYSTEM_PROMPT,
+            json.dumps(prompt, ensure_ascii=True),
+            observation=LLMObservation("application_field_fill_plan", "v1", "apply_agent", "system"),
+        )
         parsed = json.loads(raw)
     except LLMProviderNotConfigured:
         logger.info("apply_agent_llm_not_configured")
@@ -278,7 +282,11 @@ async def decide_reveal_action(
         "clickable_elements": clickable_elements[:60],
     }
     try:
-        raw = await complete_json_text(_REVEAL_SYSTEM_PROMPT, json.dumps(prompt, ensure_ascii=True))
+        raw = await complete_json_text(
+            _REVEAL_SYSTEM_PROMPT,
+            json.dumps(prompt, ensure_ascii=True),
+            observation=LLMObservation("application_reveal_decision", "v1", "apply_agent", "system"),
+        )
         parsed = json.loads(raw)
     except LLMProviderNotConfigured:
         return None
@@ -317,7 +325,11 @@ async def assess_submission_outcome(page_text: str) -> Dict[str, Any]:
     to check whether their application actually went through.
     """
     try:
-        raw = await complete_json_text(_OUTCOME_SYSTEM_PROMPT, json.dumps({"page_text": page_text[:4000]}, ensure_ascii=True))
+        raw = await complete_json_text(
+            _OUTCOME_SYSTEM_PROMPT,
+            json.dumps({"page_text": page_text[:4000]}, ensure_ascii=True),
+            observation=LLMObservation("application_submission_assessment", "v1", "apply_agent", "system"),
+        )
         parsed = json.loads(raw)
     except LLMProviderNotConfigured:
         return {"status": "unclear", "detail": "llm_not_configured"}

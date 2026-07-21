@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
+from llm_client import llm_user_context
 import record_tools_service as service
 from record_tools_access import require_record_tools_user
 
@@ -93,11 +94,12 @@ def register_record_tools_routes(
 
         audio_bytes = await audio.read()
         try:
-            transcripts = await service.transcribe_segments(
-                audio_bytes=audio_bytes,
-                original_filename=audio.filename or "audio.mp3",
-                segments=parsed_segments,
-            )
+            with llm_user_context(user.user_id):
+                transcripts = await service.transcribe_segments(
+                    audio_bytes=audio_bytes,
+                    original_filename=audio.filename or "audio.mp3",
+                    segments=parsed_segments,
+                )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:  # noqa: BLE001 - surface a clean error to the UI

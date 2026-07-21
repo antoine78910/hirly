@@ -224,7 +224,15 @@ from employment_kind import (
 from location_intelligence import COUNTRY_NAME_TO_CODE, country_to_jsearch_language, expand_location_radius, normalize_place_name
 from role_query_terms import ACADEMIC_LEVEL_STOPWORDS, resolve_role_match_tokens
 from location_search import search_locations
-from llm_client import LLMProviderNotConfigured, complete_json_text, extract_text_from_image_bytes, set_llm_user_context
+from llm_client import (
+    LLMObservation,
+    LLMProviderNotConfigured,
+    build_llm_generation_tag_processor,
+    complete_json_text,
+    configure_raw_llm_content_capture,
+    extract_text_from_image_bytes,
+    llm_user_context,
+)
 from openai import RateLimitError as LLMRateLimitError
 from onboarding_suggestions import suggest_categories, suggest_roles
 from profile_search_preferences import (
@@ -5216,7 +5224,11 @@ def extract_text_from_upload(filename: str, content: bytes, content_type: Option
 
 
 async def _ocr_cv_image_bytes(content: bytes, mime: str) -> str:
-    return await extract_text_from_image_bytes(content, mime)
+    return await extract_text_from_image_bytes(
+        content,
+        mime,
+        observation=LLMObservation("cv_image_text_extraction", "v1", "cv_upload"),
+    )
 
 
 async def extract_cv_text_from_upload(
@@ -5309,7 +5321,11 @@ CV:
 {cv_text[:8000]}
 ---
 Return ONLY the JSON object."""
-    response = await complete_json_text(system_message, prompt)
+    response = await complete_json_text(
+        system_message,
+        prompt,
+        observation=LLMObservation("cv_profile_extraction", "v1", "cv_upload"),
+    )
     return _parse_json_from_llm(response)
 
 
@@ -5747,7 +5763,11 @@ Jobs:
 {json.dumps(job_summaries, indent=2)}
 
 Return JSON: {{"matches": [{{"job_id": "...", "score": 0-100, "reasons": ["...", "..."]}}]}}"""
-    response = await complete_json_text(system_message, prompt)
+    response = await complete_json_text(
+        system_message,
+        prompt,
+        observation=LLMObservation("job_match_scoring", "v1", "job_matching"),
+    )
     parsed = _parse_json_from_llm(response)
     return parsed.get("matches", [])
 
@@ -6069,7 +6089,11 @@ Retourne uniquement du JSON valide. Mappe la sortie attendue ci-dessus dans ce s
     "signature_name": "Nom complet du candidat"
   }}
 }}"""
-    response = await complete_json_text(system_message, prompt)
+    response = await complete_json_text(
+        system_message,
+        prompt,
+        observation=LLMObservation("application_document_generation", "v1", "application_generation"),
+    )
     parsed = _parse_json_from_llm(response)
     parsed = _merge_generated_resume_with_profile(parsed, profile, job)
     if "tailored_cover_letter" in parsed and "cover_letter" not in parsed:
@@ -6091,10 +6115,10 @@ def _merge_generated_resume_with_profile(
 
 
 async def _generate_application_doc(user: User, profile: Dict[str, Any], job: Dict[str, Any]) -> Dict[str, Any]:
-    set_llm_user_context(user.user_id)
     profile = prepare_profile_for_application_generation(profile, user)
     try:
-        gen = await claude_generate_application(profile, job)
+        with llm_user_context(user.user_id):
+            gen = await claude_generate_application(profile, job)
     except Exception as exc:
         logger.exception("Application generation failed")
         return _pending_application_doc(user, job, exc)
@@ -6521,7 +6545,8 @@ async def coach_interview_prep(refresh: bool = False, user: User = Depends(get_c
     if not refresh and is_fresh(cached):
         return cached
     try:
-        data = await claude_interview_prep(profile)
+        with llm_user_context(user.user_id):
+            data = await claude_interview_prep(profile)
     except LLMProviderNotConfigured as e:
         raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:
@@ -6543,7 +6568,8 @@ async def coach_interview_score(body: InterviewScoreBody, user: User = Depends(g
         raise HTTPException(status_code=400, detail="questions and answers must be same non-empty length")
     profile = await _require_profile(user)
     try:
-        result = await claude_interview_score(profile, body.questions, body.answers)
+        with llm_user_context(user.user_id):
+            result = await claude_interview_score(profile, body.questions, body.answers)
     except LLMProviderNotConfigured as e:
         raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:
@@ -6569,7 +6595,8 @@ async def coach_improve(refresh: bool = False, user: User = Depends(get_current_
     if not refresh and is_fresh(cached):
         return cached
     try:
-        data = await claude_improve_analysis(profile)
+        with llm_user_context(user.user_id):
+            data = await claude_improve_analysis(profile)
     except LLMProviderNotConfigured as e:
         raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:
@@ -6631,9 +6658,9 @@ async def upload_cv(file: UploadFile = File(...), user: User = Depends(get_curre
             detail="Please upload a PDF, DOCX, RTF, TXT, or image (PNG/JPG/HEIC/WEBP) resume.",
         )
     photo_bytes, photo_mime = _extract_cv_photo(fmt, content)
-    set_llm_user_context(user.user_id)
     try:
-        cv_text = await extract_cv_text_from_upload(filename, content, file.content_type)
+        with llm_user_context(user.user_id):
+            cv_text = await extract_cv_text_from_upload(filename, content, file.content_type)
     except LLMProviderNotConfigured:
         raise HTTPException(
             status_code=503,
@@ -6655,7 +6682,8 @@ async def upload_cv(file: UploadFile = File(...), user: User = Depends(get_curre
         )
 
     try:
-        extracted = await claude_extract_profile(cv_text)
+        with llm_user_context(user.user_id):
+            extracted = await claude_extract_profile(cv_text)
     except LLMProviderNotConfigured as e:
         logger.warning("cv_upload_ai_provider_not_configured user_id=%s error=%s", user.user_id, str(e))
         extracted = _fallback_extract_profile_from_cv(cv_text)
@@ -10837,7 +10865,8 @@ async def get_feed(
     score_map: Dict[str, Dict[str, Any]] = {}
     if score:
         try:
-            matches = await claude_score_jobs(profile, jobs)
+            with llm_user_context(user.user_id):
+                matches = await claude_score_jobs(profile, jobs)
             score_map = {m["job_id"]: m for m in matches}
         except LLMProviderNotConfigured as e:
             raise HTTPException(status_code=502, detail=str(e))
@@ -16547,7 +16576,11 @@ Return JSON:
   ],
   "missing_information": ["work authorization"]
 }}"""
-    response = await complete_json_text(system_message, prompt)
+    response = await complete_json_text(
+        system_message,
+        prompt,
+        observation=LLMObservation("greenhouse_answer_generation", "v1", "application_submission"),
+    )
     return _parse_json_from_llm(response)
 
 
@@ -16614,7 +16647,8 @@ async def greenhouse_prepare_submit(body: GreenhousePrepareSubmitRequest, user: 
     fields = preview["fields"]
 
     try:
-        generated = await _generate_greenhouse_answers(profile, job, app_doc, fields)
+        with llm_user_context(user.user_id):
+            generated = await _generate_greenhouse_answers(profile, job, app_doc, fields)
     except LLMProviderNotConfigured as e:
         raise HTTPException(status_code=502, detail=str(e))
     except Exception as exc:
@@ -18943,15 +18977,20 @@ async def startup_seed():
         ):
             logger.info("posthog_logs_initialized")
         if _OTEL_AVAILABLE:
+            raw_content_enabled = configure_raw_llm_content_capture()
             _otel_provider = _OtelTracerProvider(
                 resource=_OtelResource(attributes={_OTEL_SERVICE_NAME: "hirly-backend"})
             )
+            _otel_provider.add_span_processor(build_llm_generation_tag_processor())
             _otel_provider.add_span_processor(
                 _PostHogSpanProcessor(api_key=_ph_api_key, host=_ph_host)
             )
             _otel_trace.set_tracer_provider(_otel_provider)
             _OpenAIInstrumentor().instrument()
-            logger.info("posthog_otel_ai_observability_initialized")
+            logger.info(
+                "posthog_otel_ai_observability_initialized raw_content_enabled=%s",
+                raw_content_enabled,
+            )
     await _start_posthog_paid_lifecycle_runtime()
     # Register concrete ApplyDrivers once at startup. The executor never imports
     # concrete drivers itself -- this import is the single registration point.
