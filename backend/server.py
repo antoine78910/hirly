@@ -1435,6 +1435,8 @@ class AdminSendApplicationEmail(BaseModel):
 class PreferencesUpdate(BaseModel):
     target_role: Optional[str] = None
     target_roles: Optional[List[str]] = None
+    sector_ids: Optional[List[str]] = None
+    industry_ids: Optional[List[str]] = None
     target_location: Optional[str] = None
     target_location_data: Optional[Dict[str, Any]] = None
     remote_preference: Optional[str] = None
@@ -7355,6 +7357,18 @@ async def update_preferences(prefs: PreferencesUpdate, user: User = Depends(get_
     elif isinstance(target_role, str) and target_role.strip():
         update["target_role"] = target_role.strip()
         update["target_roles"] = [target_role.strip()]
+    for field_name in ("sector_ids", "industry_ids"):
+        values = update.get(field_name)
+        if not isinstance(values, list):
+            continue
+        cleaned = []
+        for value in values:
+            normalized = unicodedata.normalize("NFKD", _clean_string(value, 80))
+            normalized = "".join(char for char in normalized if not unicodedata.combining(char))
+            normalized = re.sub(r"[^a-zA-Z0-9]+", "-", normalized).strip("-").lower()
+            if normalized and normalized not in cleaned:
+                cleaned.append(normalized)
+        update[field_name] = cleaned[:16]
     update["updated_at"] = datetime.now(timezone.utc).isoformat()
     await db.profiles.update_one(
         {"user_id": user.user_id},

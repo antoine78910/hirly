@@ -42,7 +42,13 @@ WITH profile AS (
       ARRAY[]::text[]
     ) AS labels,
     coalesce(
-      array_agg(DISTINCT token ORDER BY token) FILTER (WHERE char_length(token) >= 3),
+      array_agg(DISTINCT token ORDER BY token) FILTER (
+        WHERE char_length(token) >= 3
+          -- These generic titles make nearly every engineering vacancy eligible.
+          -- Keep the distinctive role tokens (for example "fullstack") so aliases
+          -- such as "Développeur FullStack" still match a Fullstack Engineer.
+          AND token NOT IN ('engineer', 'developer', 'developpeur', 'ingenieur', 'software')
+      ),
       ARRAY[]::text[]
     ) AS tokens
   FROM effective_query
@@ -84,7 +90,7 @@ WITH profile AS (
     document.preferred_job_id,
     document.job_version::text AS job_version,
     document.canonical_group_id::text AS company_key,
-    round((
+    round(LEAST(1.0, (
       0.10
       -- A role phrase/all-term match ranks above a single compatible token;
       -- partial matches remain eligible instead of disappearing from inventory.
@@ -110,7 +116,7 @@ WITH profile AS (
       + CASE WHEN document.work_modes && profile.work_modes THEN 0.10 ELSE 0 END
       + CASE WHEN document.sector_ids && profile.sector_ids THEN 0.10 ELSE 0 END
       + CASE WHEN document.industry_ids && profile.industry_ids THEN 0.10 ELSE 0 END
-    )::numeric, 6)::double precision AS relevance_score,
+    ))::numeric, 6)::double precision AS relevance_score,
     document.fulfillment_route,
     public.candidate_group_is_excluded($1, document.canonical_group_id) AS action_excluded,
     (document.source_eligible AND document.policy_eligible) AS policy_eligible,

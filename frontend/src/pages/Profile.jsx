@@ -12,6 +12,7 @@ import {
   Pencil,
   Plus,
   Users,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import ProfilePersonalInfoTab from "../components/profile/ProfilePersonalInfoTab";
@@ -37,6 +38,29 @@ import { useAppLocale } from "../context/AppLocaleContext";
 import { getResumeSections } from "../lib/appUi";
 import LanguageSettingSection from "../components/settings/LanguageSettingSection";
 
+const MATCHING_SECTORS = [
+  ["software-engineering", "Software engineering"],
+  ["data-analytics", "Data & analytics"],
+  ["product-management", "Product management"],
+  ["sales", "Sales"],
+  ["marketing", "Marketing"],
+  ["hr", "Human resources"],
+  ["finance", "Finance"],
+  ["operations", "Operations"],
+];
+
+const MATCHING_INDUSTRIES = [
+  ["healthcare", "Healthcare"],
+  ["hr-tech", "HR tech"],
+  ["manufacturing", "Manufacturing"],
+  ["financial-services", "Financial services"],
+  ["retail", "Retail"],
+  ["public-sector", "Public sector"],
+  ["saas", "SaaS"],
+  ["defense", "Defense"],
+  ["ad-tech", "Ad tech"],
+];
+
 const PROFILE_TAB_ICONS = {
   resume: FileText,
   personal: UserIcon,
@@ -47,6 +71,9 @@ const PROFILE_TAB_ICONS = {
 function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
   const { t, lang } = useAppLocale();
   const [targetRole, setTargetRole] = useState("");
+  const [targetRoles, setTargetRoles] = useState([]);
+  const [sectorIds, setSectorIds] = useState([]);
+  const [industryIds, setIndustryIds] = useState([]);
   const [targetLocation, setTargetLocation] = useState("");
   const [targetLocationData, setTargetLocationData] = useState(null);
   const [remote, setRemote] = useState("any");
@@ -55,7 +82,12 @@ function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
 
   useEffect(() => {
     if (!open) return;
-    setTargetRole(profile?.target_role || profile?.target_roles?.[0] || "");
+    const roles = (profile?.target_roles || []).filter(Boolean);
+    const initialRoles = roles.length ? roles : [profile?.target_role].filter(Boolean);
+    setTargetRoles(initialRoles.slice(0, 3));
+    setTargetRole("");
+    setSectorIds(profile?.sector_ids || []);
+    setIndustryIds(profile?.industry_ids || []);
     setTargetLocation(profile?.target_location_data?.location_label || profile?.target_location || "");
     setTargetLocationData(profile?.target_location_data || null);
     setRemote(profile?.remote_preference || "any");
@@ -63,8 +95,9 @@ function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
   }, [open, profile]);
 
   const save = async () => {
-    const trimmedRole = (targetRole || "").trim();
-    if (!trimmedRole) {
+    const draftRole = (targetRole || "").trim();
+    const roles = [...new Set([...targetRoles, ...(draftRole ? [draftRole] : [])])].slice(0, 3);
+    if (!roles.length) {
       toast.error(t("toasts.enterJobTitle") || (lang === "fr" ? "Saisissez un métier" : "Enter a job title"));
       return;
     }
@@ -77,8 +110,10 @@ function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
         return;
       }
       await api.put("/profile/preferences", {
-        target_role: trimmedRole,
-        target_roles: [trimmedRole],
+        target_role: roles[0],
+        target_roles: roles,
+        sector_ids: sectorIds,
+        industry_ids: industryIds,
         target_location: normalizedLocationData?.location_label || trimmedLocation,
         target_location_data: normalizedLocationData,
         remote_preference: remote,
@@ -104,7 +139,36 @@ function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
       footer={<SaveButton saving={saving} onClick={save} testId="job-preferences-save" />}
     >
       <div className="space-y-4">
-        <RolePicker value={targetRole} onChange={setTargetRole} testId="job-prefs-role" lang={lang} />
+        <div className="space-y-2">
+          <RolePicker value={targetRole} onChange={setTargetRole} testId="job-prefs-role" lang={lang} />
+          <div className="flex flex-wrap gap-2">
+            {targetRoles.map((role) => (
+              <button
+                key={role}
+                type="button"
+                onClick={() => setTargetRoles((roles) => roles.filter((entry) => entry !== role))}
+                className="inline-flex items-center gap-1 rounded-full bg-sprout-primary/20 px-3 py-1 text-sm text-white"
+              >
+                {role}<X className="h-3.5 w-3.5" />
+              </button>
+            ))}
+            {targetRole.trim() && targetRoles.length < 3 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setTargetRoles((roles) => [...new Set([...roles, targetRole.trim()])].slice(0, 3));
+                  setTargetRole("");
+                }}
+                className="rounded-full border border-sprout-border px-3 py-1 text-sm text-zinc-200"
+              >
+                + {lang === "fr" ? "Ajouter ce métier" : "Add this role"}
+              </button>
+            )}
+          </div>
+          <p className="text-xs text-zinc-400">{lang === "fr" ? "Ajoutez jusqu’à 3 métiers : les offres correspondant à l’un d’eux seront classées." : "Add up to 3 roles. Jobs matching any role are ranked together."}</p>
+        </div>
+        <FacetPicker label={lang === "fr" ? "Secteurs" : "Sectors"} options={MATCHING_SECTORS} values={sectorIds} onChange={setSectorIds} />
+        <FacetPicker label={lang === "fr" ? "Industries" : "Industries"} options={MATCHING_INDUSTRIES} values={industryIds} onChange={setIndustryIds} />
         <PlacesAutocomplete
           label={t("profile.targetLocation")}
           optional
@@ -152,6 +216,29 @@ function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
         </div>
       </div>
     </Sheet>
+  );
+}
+
+function FacetPicker({ label, options, values, onChange }) {
+  const toggle = (value) => onChange((current) => current.includes(value)
+    ? current.filter((entry) => entry !== value)
+    : [...current, value]);
+  return (
+    <div className="space-y-2">
+      <Label className="text-sm font-semibold text-zinc-200">{label}</Label>
+      <div className="flex flex-wrap gap-2">
+        {options.map(([value, text]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => toggle(value)}
+            className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${values.includes(value) ? "border-sprout-primary bg-sprout-primary/20 text-white" : "border-sprout-border text-zinc-300"}`}
+          >
+            {text}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 

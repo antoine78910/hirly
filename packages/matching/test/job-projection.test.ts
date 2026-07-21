@@ -70,7 +70,7 @@ describe("job search-document projection", () => {
     expect(second.row.job_version).toBe(first.row.job_version);
     expect(second.row.skill_codes).toEqual(["react", "typescript"]);
     expect(second.row.sector_ids).toEqual(["software-engineering"]);
-    expect(second.row.industry_ids).toEqual(["health-tech"]);
+    expect(second.row.industry_ids).toEqual(["healthcare"]);
   });
 
   test("uses the authoritative version even when projected content changes", async () => {

@@ -64,7 +64,7 @@ describe("job projection repository", () => {
 
   test("persists documents only through the fenced completion RPC", async () => {
     const database = databaseReturning([
-      { complete_job_projection_upsert: true },
+      { complete_job_projection_upsert_with_facets: true },
     ]);
     const completed = await new JobProjectionRepository(
       database.tag,
@@ -111,7 +111,7 @@ describe("job projection repository", () => {
     );
     expect(completed).toBe(true);
     expect(database.statements[0]).toContain(
-      "worker_private.complete_job_projection_upsert",
+      "worker_private.complete_job_projection_upsert_with_facets",
     );
     expect(database.statements[0]).not.toContain("UPDATE public.jobs");
     expect(database.values[0]?.slice(0, 4)).toEqual([

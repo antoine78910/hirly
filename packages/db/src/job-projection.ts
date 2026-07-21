@@ -139,8 +139,8 @@ export class JobProjectionRepository {
     sourceContentHash: string,
     durationMs: number,
   ): Promise<boolean> {
-    const [row] = await this.sql<{ complete_job_projection_upsert: boolean }[]>`
-      SELECT worker_private.complete_job_projection_upsert(
+    const [row] = await this.sql<{ complete_job_projection_upsert_with_facets: boolean }[]>`
+      SELECT worker_private.complete_job_projection_upsert_with_facets(
         ${lease.taskId}::uuid,
         ${lease.leaseToken}::uuid,
         ${lease.claimGeneration.toString()}::bigint,
@@ -150,7 +150,7 @@ export class JobProjectionRepository {
         ${Math.max(0, Math.round(durationMs))}
       )
     `;
-    return row?.complete_job_projection_upsert === true;
+    return row?.complete_job_projection_upsert_with_facets === true;
   }
 
   async completeRemove(

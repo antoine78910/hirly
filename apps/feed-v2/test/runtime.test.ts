@@ -188,6 +188,11 @@ describe("Feed v2 runtime adapters", () => {
     expect(FEED_V2_INDEXED_READ_SQL).toContain("unnest(");
     expect(FEED_V2_INDEXED_READ_SQL).toContain("document.work_modes &&");
     expect(FEED_V2_INDEXED_READ_SQL).toContain("document.contract_families &&");
+    expect(FEED_V2_INDEXED_READ_SQL).toContain("profile.target_role_labels_normalized");
+    expect(FEED_V2_INDEXED_READ_SQL).toContain("document.sector_ids && profile.sector_ids");
+    expect(FEED_V2_INDEXED_READ_SQL).toContain("document.industry_ids && profile.industry_ids");
+    expect(FEED_V2_INDEXED_READ_SQL).toContain("token NOT IN ('engineer', 'developer'");
+    expect(FEED_V2_INDEXED_READ_SQL).toContain("LEAST(1.0");
   });
 
 });

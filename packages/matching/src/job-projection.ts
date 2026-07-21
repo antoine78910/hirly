@@ -116,6 +116,40 @@ function workModes(source: JobProjectionSource): Array<"onsite" | "hybrid" | "re
   return [source.remote === true ? "remote" : "onsite"];
 }
 
+const INDUSTRY_ALIASES: Array<[string, RegExp]> = [
+  ["healthcare", /health|healthcare|medtech|medical|pharma|hospital/],
+  ["hr-tech", /human resources|hr|recruit|talent/],
+  ["manufacturing", /manufactur|industrial|automotive|factory/],
+  ["financial-services", /fintech|financial|bank|insurance|payments?/],
+  ["retail", /retail|e-commerce|ecommerce|marketplace/],
+  ["public-sector", /public sector|govtech|government|civil service/],
+  ["saas", /saas|software as a service/],
+  ["defense", /defen[cs]e|military|sovereign/],
+  ["ad-tech", /adtech|advertis|marketing technology/],
+];
+
+function sectorIds(source: JobProjectionSource, families: string[]): string[] {
+  const explicit = strings(read(source.data, "sectorIds", "sector_ids", "sectors", "sector"), 32);
+  return [...new Set([
+    ...explicit,
+    ...(families.includes("software-engineering") ? ["software-engineering"] : []),
+    ...(families.includes("data-engineering") ? ["data-analytics"] : []),
+    ...(families.includes("product-management") ? ["product-management"] : []),
+  ])].sort();
+}
+
+function industryIds(source: JobProjectionSource): string[] {
+  const explicit = strings(read(source.data, "industryIds", "industry_ids", "industries"), 32);
+  const raw = [
+    ...explicit,
+    ...strings(read(source.data, "industry", "industry_name", "company_industry"), 16),
+  ].join(" ");
+  return [...new Set([
+    ...explicit,
+    ...INDUSTRY_ALIASES.filter(([, pattern]) => pattern.test(raw)).map(([id]) => id),
+  ])].sort();
+}
+
 function roleFamilies(source: JobProjectionSource): string[] {
   const explicit = strings(read(source.data, "roleFamilyIds", "role_family_ids", "roleFamilyCodes", "role_family_codes"), 32);
   if (explicit.length > 0) return explicit;
@@ -196,8 +230,8 @@ export async function projectJobSearchDocument(
   const validCountry = countryCode && /^[A-Z]{2}$/.test(countryCode) ? countryCode : null;
   const coordinatesKnown = source.latitude != null && source.longitude != null;
   const roleFamilyIds = roleFamilies(source);
-  const sectorIds = strings(read(source.data, "sectorIds", "sector_ids", "sectors", "sector"), 32);
-  const industryIds = strings(read(source.data, "industryIds", "industry_ids", "industries", "industry"), 32);
+  const sectorIdsValue = sectorIds(source, roleFamilyIds);
+  const industryIdsValue = industryIds(source);
   const romeCodes = strings(read(source.data, "romeCodes", "rome_codes"), 32)
     .map((value) => value.toUpperCase())
     .filter((value) => /^[A-Z]\d{4}$/.test(value));
@@ -224,8 +258,8 @@ export async function projectJobSearchDocument(
     preferredJobId: source.preferredJobId,
     normalizedTitle,
     roleFamilyIds,
-    sectorIds,
-    industryIds,
+    sectorIds: sectorIdsValue,
+    industryIds: industryIdsValue,
     romeCodes,
     skillIds,
     contractTypes: contractTypesValue,
@@ -248,8 +282,8 @@ export async function projectJobSearchDocument(
       source.company,
       source.location,
       ...roleFamilyIds,
-      ...sectorIds,
-      ...industryIds,
+      ...sectorIdsValue,
+      ...industryIdsValue,
       ...romeCodes,
       ...skillIds,
     ]
