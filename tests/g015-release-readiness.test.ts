@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -686,6 +687,58 @@ describe("G015 release verification contract", () => {
       expect(evaluateProviderActivationPreflight(input).status).toBe("BLOCKED");
       await rm(evidenceRoot, { recursive: true, force: true });
     }
+  });
+
+  test("requires canonical HMAC-signed ATS shadow runs from dedicated option or environment", async () => {
+    const evidenceRoot = await mkdtemp(join(tmpdir(), "g015-shadow-hmac-"));
+    const input = await passingManualPreflight(evidenceRoot);
+    const scorecard = JSON.parse(await readFile(resolve(evidenceRoot, input.shadowScorecard.path), "utf8"));
+    const run = JSON.parse(await readFile(resolve(evidenceRoot, scorecard.runs[0].path), "utf8"));
+    const { signature: _signature, ...unsignedRun } = run;
+    run.signature = createHmac("sha256", SHADOW_EVIDENCE_HMAC_KEY)
+      .update(canonicalTestJson(unsignedRun))
+      .digest("hex");
+    scorecard.runs[0] = await writeEvidence(evidenceRoot, "shadow/canonical-run.json", run);
+    input.shadowScorecard = await writeEvidence(evidenceRoot, "shadow/canonical-scorecard.json", scorecard);
+    expect(evaluateProviderActivationPreflight(input).status).toBe("PASS");
+
+    const previous = process.env.ATS_SHADOW_EVIDENCE_HMAC_KEY;
+    process.env.ATS_SHADOW_EVIDENCE_HMAC_KEY = SHADOW_EVIDENCE_HMAC_KEY;
+    try {
+      expect(evaluateProviderActivationPreflightRaw(input, {
+        evidenceRoot,
+        trustedAttestationKey: ACTIVATION_HMAC_KEY,
+        trustedAttestationIssuer: ACTIVATION_ISSUER,
+        trustedWorkflowId: ACTIVATION_WORKFLOW_ID,
+        trustedWorkflowRunId: ACTIVATION_WORKFLOW_RUN_ID,
+      }).status).toBe("PASS");
+    } finally {
+      if (previous === undefined) delete process.env.ATS_SHADOW_EVIDENCE_HMAC_KEY;
+      else process.env.ATS_SHADOW_EVIDENCE_HMAC_KEY = previous;
+    }
+
+    for (const mutate of [
+      (value: any) => { delete value.signature; },
+      (value: any) => { value.signature = "0".repeat(64); },
+      (value: any) => { value.jobs[0].externalId = "tampered-job"; },
+    ]) {
+      const changed = structuredClone(input);
+      const changedScorecard = JSON.parse(await readFile(resolve(evidenceRoot, changed.shadowScorecard.path), "utf8"));
+      const changedRun = JSON.parse(await readFile(resolve(evidenceRoot, changedScorecard.runs[0].path), "utf8"));
+      mutate(changedRun);
+      changedScorecard.runs[0] = await writeEvidence(evidenceRoot, `shadow/rejected-${Math.random()}.json`, changedRun);
+      changed.shadowScorecard = await writeEvidence(evidenceRoot, `shadow/rejected-scorecard-${Math.random()}.json`, changedScorecard);
+      expect(evaluateProviderActivationPreflight(changed).status).toBe("BLOCKED");
+    }
+    expect(evaluateProviderActivationPreflightRaw(input, {
+      evidenceRoot,
+      trustedAttestationKey: ACTIVATION_HMAC_KEY,
+      trustedAttestationIssuer: ACTIVATION_ISSUER,
+      trustedWorkflowId: ACTIVATION_WORKFLOW_ID,
+      trustedWorkflowRunId: ACTIVATION_WORKFLOW_RUN_ID,
+      trustedShadowEvidenceKey: "too-short",
+    }).status).toBe("BLOCKED");
+    await rm(evidenceRoot, { recursive: true, force: true });
   });
 
   test("re-reads manifest and every exact discharge during provider preflight", async () => {
