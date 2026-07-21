@@ -39,6 +39,15 @@ export interface NormalizedProviderJob {
   contractType: string | null;
   status: string | null;
   applyUrls: string[];
+  city?: string | null;
+  region?: string | null;
+  remote?: boolean | null;
+  salaryMin?: number | null;
+  salaryMax?: number | null;
+  currency?: string | null;
+  postedAt?: string | null;
+  importedAt?: string | null;
+  lastSeenAt?: string | null;
 }
 
 export interface ProviderAdapter<RawJob> {
@@ -712,7 +721,16 @@ export function toCanonicalJob(
     company: job.company.trim(),
     normalizedCompany: normalizeCompany(job.company),
     location: job.location.trim(),
+    city: job.city ?? null,
+    region: job.region ?? null,
     countryCode: normalizeCountryCode(job.countryCode),
+    remote: job.remote ?? null,
+    salaryMin: job.salaryMin ?? null,
+    salaryMax: job.salaryMax ?? null,
+    currency: job.currency ?? null,
+    postedAt: job.postedAt ?? null,
+    importedAt: job.importedAt ?? null,
+    lastSeenAt: job.lastSeenAt ?? null,
     ...validation,
     fingerprint: buildFingerprint(job),
     data: sanitizeSourceDocument(envelope.payload),
