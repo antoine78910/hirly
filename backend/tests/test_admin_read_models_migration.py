@@ -4,6 +4,12 @@ from pathlib import Path
 ROOT = Path(__file__).parents[1]
 UP = ROOT / "db/migrations/20260720001800_admin_read_models.sql"
 DOWN = ROOT / "db/migrations/20260720001800_admin_read_models.down.sql"
+SERIALIZATION_UP = (
+    ROOT / "db/migrations/20260721002200_admin_user_rebuild_serialization.sql"
+)
+SERIALIZATION_DOWN = (
+    ROOT / "db/migrations/20260721002200_admin_user_rebuild_serialization.down.sql"
+)
 SEMANTIC_FIXTURE = ROOT / "tests/sql/admin_read_model_semantic_parity_fixture.sql"
 SERVER = ROOT / "server.py"
 
@@ -177,6 +183,25 @@ def test_application_user_facts_use_a_lock_safe_bounded_refresh():
             maxsplit=1,
         )[1].split(";", maxsplit=1)[0]
         assert "admin_refresh_user_application_facts_transition" in trigger
+
+
+def test_user_projection_rebuilds_are_serialized_per_user():
+    sql = SERIALIZATION_UP.read_text()
+    down = SERIALIZATION_DOWN.read_text()
+
+    assert "RENAME TO admin_rebuild_users_unlocked" in sql
+    wrapper = sql.split(
+        "CREATE FUNCTION public.admin_rebuild_users(p_user_ids text[])", 1
+    )[1]
+    lock_position = wrapper.index("pg_advisory_xact_lock")
+    rebuild_position = wrapper.index("admin_rebuild_users_unlocked(p_user_ids)")
+    assert lock_position < rebuild_position
+    assert "SELECT DISTINCT requested.user_id" in wrapper
+    assert "ORDER BY requested.user_id" in wrapper
+    assert "'admin-user-read-model:' || v_user_id" in wrapper
+    assert "REVOKE ALL ON FUNCTION public.admin_rebuild_users(text[])" in sql
+    assert "DROP FUNCTION public.admin_rebuild_users(text[])" in down
+    assert "RENAME TO admin_rebuild_users" in down
 
 
 def test_readiness_requires_two_clean_reconciliations_with_an_intervening_write():
