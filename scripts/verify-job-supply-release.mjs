@@ -800,6 +800,59 @@ function durableEvidence(discharge) {
   return typeof evidence === "string" && evidence.trim() ? [evidence] : [];
 }
 
+function activationScope(input) {
+  return {
+    provider: String(input.provider ?? "").trim(),
+    tenantId: String(input.tenantId ?? "").trim().toLowerCase(),
+    countryCode: String(input.countryCode ?? "").trim().toUpperCase(),
+    policyDigest: String(input.policyDigest ?? ""),
+    releaseHead: String(input.releaseAttestation?.releaseHead ?? ""),
+  };
+}
+
+function validateActivationEvidence(descriptor, input, evidenceRoot, expectedKind) {
+  const envelope = containedEvidenceDescriptor(descriptor, evidenceRoot).json;
+  if (!envelope || typeof envelope !== "object" || Array.isArray(envelope)) {
+    throw new Error(`${expectedKind} evidence envelope must be an object`);
+  }
+  assertOnlyKeys(envelope, [
+    "artifacts", "countryCode", "kind", "observedAt", "policyDigest", "provider",
+    "releaseHead", "schemaVersion", "status", "tenantId",
+  ], `${expectedKind} evidence envelope`);
+  const scope = activationScope(input);
+  if (
+    envelope.schemaVersion !== ACTIVATION_EVIDENCE_VERSION
+    || envelope.kind !== expectedKind
+    || envelope.status !== "passed"
+    || envelope.provider !== scope.provider
+    || String(envelope.tenantId ?? "").toLowerCase() !== scope.tenantId
+    || String(envelope.countryCode ?? "").toUpperCase() !== scope.countryCode
+    || envelope.policyDigest !== scope.policyDigest
+    || envelope.releaseHead !== scope.releaseHead
+    || !envelope.observedAt
+    || Number.isNaN(Date.parse(envelope.observedAt))
+  ) {
+    throw new Error(`${expectedKind} evidence envelope scope or status is invalid`);
+  }
+  if (!Array.isArray(envelope.artifacts) || envelope.artifacts.length === 0) {
+    throw new Error(`${expectedKind} evidence envelope must seal underlying artifacts`);
+  }
+  const sealed = envelope.artifacts.map((artifact) => containedEvidenceDescriptor(artifact, evidenceRoot).descriptor);
+  const identities = sealed.map((artifact) => `${artifact.path}:${artifact.sha256}`);
+  if (new Set(identities).size !== identities.length) {
+    throw new Error(`${expectedKind} evidence artifacts must be unique`);
+  }
+  return envelope;
+}
+
+function requireActivationEvidence(record, input, evidenceRoot, kind, failures) {
+  try {
+    validateActivationEvidence(record?.evidence, input, evidenceRoot, kind);
+  } catch (error) {
+    failures.push(`${kind} sealed evidence is required: ${error.message}`);
+  }
+}
+
 export function createReleaseAttestation({
   selectedManifest,
   discharges = [],
@@ -1076,10 +1129,10 @@ export function createAtsPhase0Receipt(input = {}, options = {}) {
   };
 }
 
-function currentApprovedPolicy(policy, name, failures, now) {
+function currentApprovedPolicy(policy, name, failures, now, input, evidenceRoot) {
   if (policy?.verdict !== "approved") failures.push(`${name} must be approved`);
   if (!String(policy?.owner ?? "").trim()) failures.push(`${name} owner is required`);
-  if (durableEvidence(policy).length === 0) failures.push(`${name} evidence is required`);
+  requireActivationEvidence(policy, input, evidenceRoot, `${name}_policy`, failures);
   const expiry = policy?.reviewExpiresAt ?? policy?.expiresAt;
   if (!expiry || Number.isNaN(Date.parse(expiry))) failures.push(`${name} review expiry is required`);
   else if (Date.parse(expiry) <= now) failures.push(`${name} is expired`);
@@ -1139,11 +1192,11 @@ function validateReleaseAttestationEvidence(attestation, evidenceRoot, failures)
   }
 }
 
-function validateShadowScorecard(scorecard, input) {
+function validateShadowScorecard(scorecard, input, evidenceRoot) {
   if (!scorecard || typeof scorecard !== "object" || Array.isArray(scorecard)) throw new Error("scorecard must be an object");
   assertOnlyKeys(scorecard, [
     "canonicalWritesEnabled", "countryCode", "evidenceDigest", "policyDigest", "provider",
-    "reconciliation", "runIds", "schemaVersion", "tenantId", "verdict",
+    "reconciliation", "runIds", "runs", "schemaVersion", "tenantId", "verdict",
   ], "shadow scorecard");
   const provider = String(input.provider ?? "").trim();
   const tenantId = String(input.tenantId ?? "").trim().toLowerCase();
@@ -1167,6 +1220,34 @@ function validateShadowScorecard(scorecard, input) {
   if (scorecard.runIds.some((id) => typeof id !== "string" || !id.trim()) || new Set(scorecard.runIds).size !== 2) {
     throw new Error("shadow scorecard run IDs must be non-empty and unique");
   }
+  if (!Array.isArray(scorecard.runs) || scorecard.runs.length !== 2) {
+    throw new Error("shadow scorecard must seal exactly two run artifacts");
+  }
+  scorecard.runs.forEach((descriptor, index) => {
+    const run = containedEvidenceDescriptor(descriptor, evidenceRoot).json;
+    if (!run || typeof run !== "object" || Array.isArray(run)) throw new Error("shadow run must be an object");
+    assertOnlyKeys(run, [
+      "canonicalWritesEnabled", "capturedAt", "complete", "countryCode", "jobs",
+      "policyDigest", "provider", "runId", "schemaVersion", "tenantId",
+    ], "shadow run");
+    if (
+      run.schemaVersion !== SHADOW_RUN_VERSION
+      || run.runId !== scorecard.runIds[index]
+      || run.provider !== provider
+      || String(run.tenantId ?? "").toLowerCase() !== tenantId
+      || String(run.countryCode ?? "").toUpperCase() !== countryCode
+      || run.policyDigest !== policyDigest
+      || run.complete !== true
+      || run.canonicalWritesEnabled !== false
+      || !run.capturedAt
+      || Number.isNaN(Date.parse(run.capturedAt))
+      || !Array.isArray(run.jobs)
+    ) throw new Error("shadow run scope or completeness is invalid");
+    const jobIds = run.jobs.map((job) => String(job?.externalId ?? ""));
+    if (jobIds.some((id) => !id) || new Set(jobIds).size !== jobIds.length) {
+      throw new Error("shadow run external IDs must be non-empty and unique");
+    }
+  });
   if (!Array.isArray(scorecard.reconciliation) || scorecard.reconciliation.length !== 1) {
     throw new Error("shadow scorecard must contain exactly one reconciliation");
   }
@@ -1191,6 +1272,82 @@ function validateShadowScorecard(scorecard, input) {
   if (sha256(canonicalJson(evidence)) !== evidenceDigest) throw new Error("shadow scorecard evidenceDigest mismatch");
 }
 
+function validateWriterOwnership(descriptor, input, evidenceRoot) {
+  const evidence = containedEvidenceDescriptor(descriptor, evidenceRoot).json;
+  if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) {
+    throw new Error("writer ownership evidence must be an object");
+  }
+  assertOnlyKeys(evidence, [
+    "countryCode", "observedAt", "ownershipEpoch", "policyDigest", "previousWriterRuntime",
+    "provider", "releaseHead", "schemaVersion", "simultaneousCanonicalWriters", "status",
+    "tenantId", "throughNone", "writerRuntime",
+  ], "writer ownership evidence");
+  const scope = activationScope(input);
+  const expectedWriter = input.targetVerdict === "inventory_manual" ? "none" : "typescript";
+  if (
+    evidence.schemaVersion !== WRITER_OWNERSHIP_VERSION
+    || evidence.status !== "observed"
+    || evidence.provider !== scope.provider
+    || String(evidence.tenantId ?? "").toLowerCase() !== scope.tenantId
+    || String(evidence.countryCode ?? "").toUpperCase() !== scope.countryCode
+    || evidence.policyDigest !== scope.policyDigest
+    || evidence.releaseHead !== scope.releaseHead
+    || evidence.writerRuntime !== expectedWriter
+    || !["none", "python", "typescript"].includes(evidence.previousWriterRuntime)
+    || evidence.throughNone !== true
+    || evidence.simultaneousCanonicalWriters !== false
+    || !Number.isInteger(evidence.ownershipEpoch)
+    || evidence.ownershipEpoch < 1
+    || !evidence.observedAt
+    || Number.isNaN(Date.parse(evidence.observedAt))
+  ) throw new Error("writer ownership scope, epoch, or one-writer state is invalid");
+}
+
+function validateActivationTransition(input, evidenceRoot, failures) {
+  const requirements = {
+    inventory_canary_ready: {
+      from: "inventory_manual",
+      gates: ["prior_state_receipt", "review", "ultraqa"],
+    },
+    inventory_active: {
+      from: "inventory_canary_ready",
+      gates: ["canary_receipt", "observation", "review", "ultraqa"],
+    },
+    application_canary_ready: {
+      from: "inventory_active",
+      gates: ["prior_state_receipt", "review", "ultraqa"],
+    },
+    application_active: {
+      from: "application_canary_ready",
+      gates: ["canary_receipt", "observation", "review", "ultraqa"],
+    },
+  };
+  const requirement = requirements[input.targetVerdict];
+  if (!requirement) return;
+  if (input.currentVerdict !== requirement.from) {
+    failures.push(`${input.targetVerdict} requires currentVerdict ${requirement.from}`);
+  }
+  const prerequisites = input.transitionEvidence;
+  if (!prerequisites || typeof prerequisites !== "object" || Array.isArray(prerequisites)) {
+    failures.push(`${input.targetVerdict} transitionEvidence is required`);
+    return;
+  }
+  const unexpected = Object.keys(prerequisites).filter((key) => !requirement.gates.includes(key));
+  if (unexpected.length) failures.push(`transitionEvidence contains unknown gates: ${unexpected.join(", ")}`);
+  for (const gate of requirement.gates) {
+    try {
+      validateActivationEvidence(
+        prerequisites[gate],
+        input,
+        evidenceRoot,
+        `${input.targetVerdict}_${gate}`,
+      );
+    } catch (error) {
+      failures.push(`${input.targetVerdict} ${gate} gate is invalid: ${error.message}`);
+    }
+  }
+}
+
 export function evaluateProviderActivationPreflight(input = {}, options = {}) {
   const failures = [];
   const evidenceRoot = options.evidenceRoot ?? process.cwd();
@@ -1207,22 +1364,32 @@ export function evaluateProviderActivationPreflight(input = {}, options = {}) {
   }
   if (!allowedTargets.has(targetVerdict)) failures.push("targetVerdict is missing or unsupported");
   if (targetVerdict === "blocked") failures.push("blocked target cannot activate a provider");
-  const attestation = input.releaseAttestation;
+  let attestation = null;
+  try {
+    attestation = containedEvidenceDescriptor(input.releaseAttestation, evidenceRoot).json;
+  } catch (error) {
+    failures.push(`sealed release attestation is required: ${error.message}`);
+  }
   validateReleaseAttestationEvidence(attestation, evidenceRoot, failures);
-  currentApprovedPolicy(input.inventoryAccess, "inventoryAccess", failures, now);
+  const scopedInput = { ...input, releaseAttestation: attestation };
+  currentApprovedPolicy(input.inventoryAccess, "inventoryAccess", failures, now, scopedInput, evidenceRoot);
   if (input.killSwitches?.providerArmed !== true) failures.push("provider kill switch is not armed");
   if (input.killSwitches?.tenantCountryArmed !== true) failures.push("tenant/country kill switch is not armed");
   if (input.rollback?.exercised !== true) failures.push("rollback was not exercised");
-  if (durableEvidence(input.rollback).length === 0) failures.push("rollback evidence is required");
+  requireActivationEvidence(input.rollback, scopedInput, evidenceRoot, "rollback_exercise", failures);
   if (!String(input.rollback?.commandTranscriptId ?? "").trim()) failures.push("rollback command/transcript identifier is required");
   try {
     const scorecard = containedEvidenceDescriptor(input.shadowScorecard, evidenceRoot).json;
-    validateShadowScorecard(scorecard, input);
+    validateShadowScorecard(scorecard, scopedInput, evidenceRoot);
   } catch (error) {
     failures.push(`sealed repeated shadow scorecard is required: ${error.message}`);
   }
-  if (input.simultaneousCanonicalWriters !== false) failures.push("simultaneous canonical writers must be explicitly false");
-  if (input.writerTransfer?.throughNone !== true) failures.push("writer ownership transfer must pass through writer_runtime=none");
+  try {
+    validateWriterOwnership(input.writerOwnership, scopedInput, evidenceRoot);
+  } catch (error) {
+    failures.push(`sealed writer ownership evidence is required: ${error.message}`);
+  }
+  validateActivationTransition(scopedInput, evidenceRoot, failures);
 
   const applicationTarget = ["application_canary_ready", "application_active"].includes(targetVerdict);
   const inventoryTarget = ["inventory_canary_ready", "inventory_active", "inventory_manual"].includes(targetVerdict);
@@ -1237,24 +1404,27 @@ export function evaluateProviderActivationPreflight(input = {}, options = {}) {
     if (
       input.applicationCapability?.reviewed !== true
       || input.applicationCapability?.transport !== "hosted_candidate_form"
-      || durableEvidence(input.applicationCapability).length === 0
+      || !input.applicationCapability?.evidence
     ) {
       failures.push("greenhouse application requires reviewed hosted_candidate_form capability evidence");
     }
-    currentApprovedPolicy(input.submissionAuthority, "submissionAuthority", failures, now);
-    currentApprovedPolicy(input.privacyBasis, "privacyBasis", failures, now);
-    if (input.nonProductionSubmission?.status !== "passed" || durableEvidence(input.nonProductionSubmission).length === 0) {
+    requireActivationEvidence(input.applicationCapability, scopedInput, evidenceRoot, "application_capability_review", failures);
+    currentApprovedPolicy(input.submissionAuthority, "submissionAuthority", failures, now, scopedInput, evidenceRoot);
+    currentApprovedPolicy(input.privacyBasis, "privacyBasis", failures, now, scopedInput, evidenceRoot);
+    if (input.nonProductionSubmission?.status !== "passed" || !input.nonProductionSubmission?.evidence) {
       failures.push("passed non-production submission evidence is required");
     }
+    requireActivationEvidence(input.nonProductionSubmission, scopedInput, evidenceRoot, "non_production_submission", failures);
   }
   if (targetVerdict === "inventory_manual") {
     if (
       input.manualDeepLink?.verified !== true
       || input.manualDeepLink?.environment !== "production"
-      || durableEvidence(input.manualDeepLink).length === 0
+      || !input.manualDeepLink?.evidence
     ) {
       failures.push("verified production manual deep-link evidence is required");
     }
+    requireActivationEvidence(input.manualDeepLink, scopedInput, evidenceRoot, "manual_deep_link", failures);
     if (input.applicationAutomationEnabled !== false) failures.push("application automation must remain disabled");
   }
   return { provider, targetVerdict, status: failures.length ? "BLOCKED" : "PASS", failures };
