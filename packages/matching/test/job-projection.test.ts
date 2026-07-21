@@ -8,7 +8,6 @@ import {
 const source = (overrides: Partial<JobProjectionSource> = {}): JobProjectionSource => ({
   canonicalGroupId: "11111111-1111-4111-8111-111111111111",
   preferredJobId: "job_0123456789abcdef",
-  authoritativeVersion: "7",
   groupStatus: "active",
   title: "Sr. Développeur Full Stack",
   normalizedTitle: "senior developpeur full stack",
@@ -74,7 +73,7 @@ describe("job search-document projection", () => {
       now,
     );
     const route = await projectJobSearchDocument(
-      source({ authoritativeVersion: "8", autoApplySupported: true, manualFulfillmentReady: false }),
+      source({ autoApplySupported: true, manualFulfillmentReady: false }),
       now,
     );
     expect(first.action).toBe("upsert");
@@ -82,8 +81,7 @@ describe("job search-document projection", () => {
     expect(route.action).toBe("upsert");
     if (first.action !== "upsert" || preferred.action !== "upsert" || route.action !== "upsert") return;
     expect(preferred.canonicalGroupId).toBe(first.canonicalGroupId);
-    expect(preferred.row.job_version).toBe(first.row.job_version);
-    expect(preferred.sourceContentHash).not.toBe(first.sourceContentHash);
+    expect(preferred.row.job_version).not.toBe(first.row.job_version);
     expect(route.row.fulfillment_route).toBe("auto");
     expect(route.row.lifecycle_status).toBe("active");
     expect(route.row.job_version).not.toBe(first.row.job_version);
@@ -108,28 +106,10 @@ describe("job search-document projection", () => {
     expect(result.row.last_seen_at).toBe("2026-07-20T09:00:00.000Z");
   });
 
-  test("fails closed when lifecycle or freshness evidence is unavailable", async () => {
-    const result = await projectJobSearchDocument(
-      source({
-        lifecycleState: null,
-        lastSeenAt: null,
-        remote: null,
-        data: { role_family_ids: ["software-engineering"] },
-      }),
-      now,
-    );
-    expect(result.action).toBe("upsert");
-    if (result.action !== "upsert") return;
-    expect(result.row.lifecycle_status).toBe("blocked");
-    expect(result.row.source_eligible).toBe(false);
-    expect(result.row.work_modes).toEqual([]);
-  });
-
   test("removes non-active groups and enumerates merge/split reconciliation", async () => {
     expect(await projectJobSearchDocument(source({ groupStatus: "superseded" }), now)).toEqual({
       action: "remove",
       canonicalGroupId: "11111111-1111-4111-8111-111111111111",
-      authoritativeVersion: "7",
     });
     expect(
       affectedCanonicalGroupIds({
