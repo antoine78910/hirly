@@ -47,6 +47,23 @@ async def _insert_application(conn, application_id, user_id, job_id, data, creat
     )
 
 
+async def _create_attempt_fence(conn):
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS public.auto_apply_attempts (
+          id text PRIMARY KEY,
+          user_id text NOT NULL,
+          job_id text NOT NULL,
+          status text NOT NULL,
+          data jsonb NOT NULL DEFAULT '{}'::jsonb
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS auto_apply_attempts_active_unique
+          ON public.auto_apply_attempts (user_id, job_id)
+          WHERE status IN ('in_flight', 'submitted_success');
+        """
+    )
+
+
 async def _claim(url, ready, start):
     import asyncpg
 
@@ -75,6 +92,7 @@ async def _run_database_proof(url):
     lock_conn = await asyncpg.connect(url)
     locked = False
     applications_ready = False
+    attempts_ready = False
     try:
         locked = await lock_conn.fetchval("SELECT pg_try_advisory_lock($1)", ADVISORY_LOCK_KEY)
         if not locked:
@@ -100,6 +118,8 @@ async def _run_database_proof(url):
         assert {
             "application_id", "user_id", "job_id", "data", "created_at", "updated_at",
         } <= columns
+        await _create_attempt_fence(lock_conn)
+        attempts_ready = True
 
         migrate_conn = await asyncpg.connect(url)
         try:
@@ -151,9 +171,18 @@ async def _run_database_proof(url):
                 queued_at,
             )
         two_results = await _concurrent_claims(url)
-        assert {result["application_id"] for result in two_results if result} == {
-            "claim_test_fifo_a", "claim_test_fifo_b",
+        fifo_mapping = {
+            result["application_id"]: result["auto_apply_queued_at"]
+            for result in two_results if result
         }
+        assert fifo_mapping == {
+            "claim_test_fifo_a": "2026-07-21T01:00:00+00:00",
+            "claim_test_fifo_b": "2026-07-21T02:00:00+00:00",
+        }
+        assert [
+            application_id
+            for application_id, _ in sorted(fifo_mapping.items(), key=lambda item: item[1])
+        ] == ["claim_test_fifo_a", "claim_test_fifo_b"]
 
         await _insert_application(
             lock_conn, "claim_test_missing_json_id", "claim_test_physical_user",
@@ -185,6 +214,43 @@ async def _run_database_proof(url):
         assert physical["job_id"] == "claim_test_physical_job_2"
         assert physical["auto_apply_queue_status"] == "running"
         assert await lock_conn.fetchval("SELECT public.claim_auto_apply_queue()") is None
+
+        await lock_conn.execute(
+            """
+            INSERT INTO public.auto_apply_attempts (id, user_id, job_id, status, data)
+            VALUES (
+              'claim_test_attempt_success',
+              'claim_test_attempt_user',
+              'claim_test_attempt_job',
+              'submitted_success',
+              '{}'::jsonb
+            )
+            """
+        )
+        with pytest.raises(asyncpg.UniqueViolationError):
+            await lock_conn.execute(
+                """
+                INSERT INTO public.auto_apply_attempts (id, user_id, job_id, status, data)
+                VALUES (
+                  'claim_test_attempt_reclaim',
+                  'claim_test_attempt_user',
+                  'claim_test_attempt_job',
+                  'in_flight',
+                  '{}'::jsonb
+                )
+                """
+            )
+        active_attempts = await lock_conn.fetch(
+            """
+            SELECT id, status FROM public.auto_apply_attempts
+            WHERE user_id = 'claim_test_attempt_user'
+              AND job_id = 'claim_test_attempt_job'
+              AND status IN ('in_flight', 'submitted_success')
+            """
+        )
+        assert [(row["id"], row["status"]) for row in active_attempts] == [
+            ("claim_test_attempt_success", "submitted_success")
+        ]
 
         states = await lock_conn.fetch(
             "SELECT application_id, data ->> 'auto_apply_queue_status' AS status "
@@ -246,6 +312,10 @@ async def _run_database_proof(url):
         )
         assert ready and valid
     finally:
+        if locked and attempts_ready:
+            await lock_conn.execute(
+                "DELETE FROM public.auto_apply_attempts WHERE id LIKE 'claim_test_%'"
+            )
         if locked and applications_ready:
             await lock_conn.execute(
                 "DELETE FROM public.applications WHERE application_id LIKE 'claim_test_%'"
