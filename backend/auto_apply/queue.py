@@ -161,11 +161,9 @@ def reviewed_transport_for_job(provider: str, job: Optional[Dict[str, Any]]) -> 
     """Derive transport authority from the validated job URL, never assertions."""
     if provider != "greenhouse" or not job:
         return None
-    from .drivers.greenhouse import _trusted_greenhouse_url
-
     driver = DRIVER_REGISTRY.for_job(job)
-    application_url = driver.application_url(job) if driver is not None else ""
-    if _trusted_greenhouse_url(application_url):
+    route_identity = driver.route_identity(job) if driver is not None else None
+    if route_identity is not None:
         return "hosted_candidate_form"
     return None
 
@@ -222,6 +220,15 @@ def submission_policy_failure(
             return "submission_route_url_denied"
         if str(route.get("transport")) != derived_transport:
             return "submission_route_transport_mismatch"
+        driver = DRIVER_REGISTRY.for_job(job or {})
+        route_identity = driver.route_identity(job or {}) if driver is not None else None
+        if route_identity is None:
+            return "submission_route_url_denied"
+        board_token, provider_job_id = route_identity
+        if str(route.get("tenant") or "").strip().lower() != board_token:
+            return "submission_route_tenant_mismatch"
+        if str(route.get("route_id") or "").strip().lower() != provider_job_id:
+            return "submission_route_id_mismatch"
     if policy.get("enabled") is not True or policy.get("revoked") is True:
         return "submission_policy_inactive"
     if any(str(policy.get(key) or "") != str(route.get(key) or "") for key in _ROUTE_FIELDS):

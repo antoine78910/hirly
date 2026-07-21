@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 from contextvars import ContextVar
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 from urllib.parse import urljoin, urlparse
 
 from application_blueprint import FieldType, FieldValidation, NormalizedField
@@ -120,11 +120,12 @@ async def guarded_get(
     provider: str,
     headers: Optional[Dict[str, str]] = None,
     params: Optional[Dict[str, str]] = None,
+    route_validator: Optional[NetworkRouteValidator] = None,
 ) -> Any:
     """GET without implicit redirects, validating each requested hop."""
     current = url
     for redirect_count in range(MAX_HTTP_REDIRECTS + 1):
-        validator = NETWORK_ROUTE_VALIDATOR.get()
+        validator = route_validator or NETWORK_ROUTE_VALIDATOR.get()
         if validator is not None:
             await validator(provider, current)
         response = await client.get(

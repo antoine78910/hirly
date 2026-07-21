@@ -491,6 +491,61 @@ def test_policy_is_rechecked_immediately_before_submit(monkeypatch):
     assert ev.blocked_reason == "policy:submission_policy_expired"
 
 
+def test_provider_boundary_aborts_before_candidate_fill(monkeypatch):
+    page = _FakePage(known_selectors={'[name="email"]', driver_mod._SUBMIT_SELECTOR})
+    _install_fake_page(monkeypatch, page)
+
+    class _RouteBoundDriver(_StubDriver):
+        async def submission_boundary_failure(self, page, job):
+            return "redirected_to_unreviewed_route"
+
+    plan = ApplicationPlan(steps=[
+        PlanStep(action="fill", locators=['[name="email"]'], value="pii@example.test"),
+        PlanStep(action="submit", locators=[]),
+    ])
+    ctx = SubmissionContext(
+        job={"external_url": "https://boards.greenhouse.io/acme/jobs/1"},
+        blueprint=None,
+        plan=plan,
+        documents={},
+    )
+
+    ev = asyncio.run(_RouteBoundDriver().submit(ctx))
+
+    assert ev.blocked_reason == "route:redirected_to_unreviewed_route"
+    assert page.filled == []
+    assert ev.submit_performed is False
+
+
+def test_provider_boundary_is_rechecked_immediately_before_submit(monkeypatch):
+    page = _FakePage(known_selectors={'[name="email"]', driver_mod._SUBMIT_SELECTOR})
+    _install_fake_page(monkeypatch, page)
+    calls = {"count": 0}
+
+    class _RouteBoundDriver(_StubDriver):
+        async def submission_boundary_failure(self, page, job):
+            calls["count"] += 1
+            return None if calls["count"] == 1 else "form_action_changed"
+
+    plan = ApplicationPlan(steps=[
+        PlanStep(action="fill", locators=['[name="email"]'], value="pii@example.test"),
+        PlanStep(action="submit", locators=[]),
+    ])
+    ctx = SubmissionContext(
+        job={"external_url": "https://boards.greenhouse.io/acme/jobs/1"},
+        blueprint=None,
+        plan=plan,
+        documents={},
+    )
+
+    ev = asyncio.run(_RouteBoundDriver().submit(ctx))
+
+    assert calls["count"] == 2
+    assert page.filled[-1] == ('[name="email"]', "pii@example.test")
+    assert ev.blocked_reason == "route:form_action_changed"
+    assert ev.submit_performed is False
+
+
 def test_proxy_retries_stop_when_driver_deadline_exceeded(monkeypatch):
     """Dead exits must not burn minutes — abort after the wall-clock budget."""
     from apply_agent.models import ApplyAgentError

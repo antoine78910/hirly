@@ -143,6 +143,33 @@ class BrowserApplyDriver(ApplyDriver):
         Default: nothing. Subclasses override with a deterministic selector."""
         return None
 
+    async def submission_boundary_failure(
+        self,
+        page: Any,
+        job: Dict[str, Any],
+    ) -> Optional[str]:
+        """Return a provider-specific route failure before candidate data moves."""
+        return None
+
+    async def _abort_if_submission_boundary_changed(
+        self,
+        page: Any,
+        job: Dict[str, Any],
+        evidence: SubmissionEvidence,
+    ) -> bool:
+        failure = await self.submission_boundary_failure(page, job)
+        if not failure:
+            return False
+        evidence.blocked_reason = f"route:{failure}"
+        await self._log_step(
+            evidence,
+            action="submission_route",
+            locators=[],
+            status="blocked",
+            error=failure,
+        )
+        return True
+
     async def _raise_if_proxy_connect_failure(
         self,
         page: Any,
@@ -521,6 +548,15 @@ class BrowserApplyDriver(ApplyDriver):
                 ):
                     return evidence
 
+                # Provider redirects and form actions are untrusted browser
+                # state. Bind them before typing any candidate PII.
+                if await self._abort_if_submission_boundary_changed(
+                    page,
+                    ctx.job,
+                    evidence,
+                ):
+                    return evidence
+
                 starting_url = page.url
 
                 for step in ctx.plan.steps:
@@ -548,6 +584,12 @@ class BrowserApplyDriver(ApplyDriver):
                             page,
                             evidence,
                             stage="blocked_immediately_before_submit",
+                        ):
+                            return evidence
+                        if await self._abort_if_submission_boundary_changed(
+                            page,
+                            ctx.job,
+                            evidence,
                         ):
                             return evidence
                         pre_submit_check = ctx.documents.get("_pre_submit_check")
