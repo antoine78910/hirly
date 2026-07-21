@@ -131,6 +131,24 @@ CREATE INDEX candidate_action_projection_retention_idx
   ON public.candidate_action_projection (retained_until, candidate_id)
   WHERE retention_state <> 'active';
 
+CREATE TABLE public.candidate_action_group_aliases (
+  alias_group_id uuid PRIMARY KEY,
+  canonical_group_id uuid NOT NULL,
+  alias_kind text NOT NULL CHECK (alias_kind IN ('merge', 'split')),
+  alias_version bigint NOT NULL CHECK (alias_version > 0),
+  source_event_id uuid NOT NULL UNIQUE,
+  applied_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT candidate_action_group_aliases_identity_guard CHECK (
+    alias_group_id IS DISTINCT FROM canonical_group_id
+  )
+);
+
+CREATE INDEX candidate_action_group_aliases_canonical_idx
+  ON public.candidate_action_group_aliases (canonical_group_id, alias_kind, alias_version DESC);
+CREATE INDEX candidate_action_group_aliases_alias_idx
+  ON public.candidate_action_group_aliases (alias_group_id, alias_kind, alias_version DESC);
+
 CREATE TABLE public.job_search_documents (
   canonical_group_id uuid PRIMARY KEY,
   preferred_job_id text NOT NULL CHECK (length(btrim(preferred_job_id)) > 0),
@@ -256,6 +274,39 @@ CREATE TRIGGER candidate_action_projection_version_guard
 BEFORE INSERT OR UPDATE ON public.candidate_action_projection
 FOR EACH ROW EXECUTE FUNCTION public.candidate_projection_version_guard();
 
+CREATE OR REPLACE FUNCTION public.candidate_action_group_alias_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'candidate action group aliases cannot be deleted'
+      USING ERRCODE = '55000';
+  END IF;
+  IF TG_OP = 'UPDATE' AND (
+    NEW.alias_group_id IS DISTINCT FROM OLD.alias_group_id
+    OR NEW.source_event_id IS DISTINCT FROM OLD.source_event_id
+    OR NEW.alias_version < OLD.alias_version
+    OR (
+      NEW.alias_version = OLD.alias_version
+      AND (
+        NEW.canonical_group_id IS DISTINCT FROM OLD.canonical_group_id
+        OR NEW.alias_kind IS DISTINCT FROM OLD.alias_kind
+      )
+    )
+  ) THEN
+    RAISE EXCEPTION 'candidate action group alias must only advance monotonically'
+      USING ERRCODE = '22023';
+  END IF;
+  RETURN NEW;
+END
+$$;
+
+CREATE TRIGGER candidate_action_group_alias_guard
+BEFORE UPDATE OR DELETE ON public.candidate_action_group_aliases
+FOR EACH ROW EXECUTE FUNCTION public.candidate_action_group_alias_guard();
+
 CREATE OR REPLACE FUNCTION public.candidate_projection_tombstone_guard()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -268,7 +319,10 @@ BEGIN
   END IF;
   IF NEW.candidate_id IS DISTINCT FROM OLD.candidate_id
     OR NEW.deletion_version < OLD.deletion_version
-    OR NEW.source_event_id IS DISTINCT FROM OLD.source_event_id
+    OR (
+      NEW.deletion_version = OLD.deletion_version
+      AND NEW.source_event_id IS DISTINCT FROM OLD.source_event_id
+    )
     OR NEW.requested_at IS DISTINCT FROM OLD.requested_at
   THEN
     RAISE EXCEPTION 'candidate projection tombstone cannot be lowered or reassigned'
@@ -330,6 +384,7 @@ ALTER TABLE public.matching_runtime_controls ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.candidate_projection_tombstones ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.candidate_search_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.candidate_action_projection ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.candidate_action_group_aliases ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.job_search_documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.projection_reconciliation_tasks ENABLE ROW LEVEL SECURITY;
 
@@ -337,9 +392,11 @@ REVOKE ALL ON public.matching_runtime_controls,
   public.candidate_projection_tombstones,
   public.candidate_search_profiles,
   public.candidate_action_projection,
+  public.candidate_action_group_aliases,
   public.job_search_documents,
   public.projection_reconciliation_tasks FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.candidate_projection_version_guard() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.candidate_action_group_alias_guard() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.candidate_projection_tombstone_guard() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.apply_candidate_projection_tombstone(text, bigint, uuid, timestamptz)
   FROM PUBLIC;
@@ -352,6 +409,9 @@ CREATE POLICY candidate_search_profiles_projector
   USING (true) WITH CHECK (true);
 CREATE POLICY candidate_action_projection_projector
   ON public.candidate_action_projection TO hirly_matching_projector
+  USING (true) WITH CHECK (true);
+CREATE POLICY candidate_action_group_aliases_projector
+  ON public.candidate_action_group_aliases TO hirly_matching_projector
   USING (true) WITH CHECK (true);
 CREATE POLICY job_search_documents_projector
   ON public.job_search_documents TO hirly_matching_projector
@@ -368,6 +428,9 @@ CREATE POLICY candidate_search_profiles_reader
 CREATE POLICY candidate_action_projection_reader
   ON public.candidate_action_projection FOR SELECT TO hirly_matching_reader
   USING (true);
+CREATE POLICY candidate_action_group_aliases_reader
+  ON public.candidate_action_group_aliases FOR SELECT TO hirly_matching_reader
+  USING (true);
 CREATE POLICY job_search_documents_reader
   ON public.job_search_documents FOR SELECT TO hirly_matching_reader
   USING (true);
@@ -375,11 +438,13 @@ CREATE POLICY job_search_documents_reader
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.candidate_projection_tombstones,
   public.candidate_search_profiles,
   public.candidate_action_projection,
+  public.candidate_action_group_aliases,
   public.job_search_documents,
   public.projection_reconciliation_tasks TO hirly_matching_projector;
 GRANT SELECT ON public.candidate_projection_tombstones,
   public.candidate_search_profiles,
   public.candidate_action_projection,
+  public.candidate_action_group_aliases,
   public.job_search_documents TO hirly_matching_reader;
 GRANT EXECUTE ON FUNCTION public.apply_candidate_projection_tombstone(text, bigint, uuid, timestamptz)
   TO hirly_matching_projector;

@@ -1,4 +1,6 @@
 -- Primary database only: atomic, opaque candidate projection events.
+-- Wire contract v1 keeps profiles/swipes/applications/users/deletion families
+-- and insert/update/delete operations.
 -- Producers and relay are installed disabled; applying this migration does not
 -- change the authoritative Python writers or activate cross-database traffic.
 BEGIN;
@@ -75,7 +77,7 @@ CREATE TABLE public.candidate_projection_outbox (
     entity_family IN ('profiles', 'swipes', 'applications', 'users', 'deletion')
   ),
   entity_id text NOT NULL CHECK (length(btrim(entity_id)) > 0),
-  operation text NOT NULL CHECK (operation IN ('insert', 'update', 'delete', 'tombstone')),
+  operation text NOT NULL CHECK (operation IN ('insert', 'update', 'delete')),
   event_key text NOT NULL UNIQUE CHECK (length(btrim(event_key)) > 0),
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   available_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -134,8 +136,9 @@ DECLARE
   v_row jsonb := CASE WHEN TG_OP = 'DELETE' THEN to_jsonb(OLD) ELSE to_jsonb(NEW) END;
   v_candidate_id text;
   v_entity_id text;
-  v_version bigint;
+  v_entity_family text := TG_TABLE_NAME;
   v_operation text := lower(TG_OP);
+  v_version bigint;
 BEGIN
   IF NOT coalesce((
     SELECT enabled
@@ -157,7 +160,15 @@ BEGIN
     SELECT 1 FROM public.candidate_deletion_tombstones
     WHERE candidate_id = v_candidate_id
   ) THEN
+    IF TG_TABLE_NAME = 'users' AND TG_OP = 'DELETE' THEN
+      RETURN OLD;
+    END IF;
     RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+  END IF;
+
+  IF TG_TABLE_NAME = 'users' AND TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'user deletion must use begin_candidate_deletion first'
+      USING ERRCODE = '55000';
   END IF;
 
   v_entity_id := CASE TG_TABLE_NAME
@@ -173,10 +184,10 @@ BEGIN
   ) VALUES (
     v_candidate_id,
     v_version,
-    TG_TABLE_NAME,
+    v_entity_family,
     v_entity_id,
     v_operation,
-    TG_TABLE_NAME || ':' || v_entity_id || ':' || v_version::text || ':' || v_operation
+    v_entity_family || ':' || v_entity_id || ':' || v_version::text || ':' || v_operation
   );
   RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
 END
@@ -305,8 +316,8 @@ BEGIN
   INSERT INTO public.candidate_projection_outbox (
     candidate_id, candidate_version, entity_family, entity_id, operation, event_key
   ) VALUES (
-    p_user_id, v_version, 'deletion', p_user_id, 'tombstone',
-    'deletion:' || p_user_id || ':' || v_version::text || ':tombstone'
+    p_user_id, v_version, 'deletion', p_user_id, 'delete',
+    'deletion:' || p_user_id || ':' || v_version::text || ':delete'
   );
   RETURN v_result;
 END
