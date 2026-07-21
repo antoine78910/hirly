@@ -14,6 +14,7 @@ export interface SproutRuntimePage<RawJob> {
   sourceReportedTotal: number;
   responseBytes: number;
   watermark: string | null;
+  wrapperMismatch?: boolean;
 }
 
 export interface SproutRuntimeTransport<RawJob> {
@@ -23,6 +24,8 @@ export interface SproutRuntimeTransport<RawJob> {
       offset: number;
       pageSize: number;
       credentialRef: string;
+      includeUnknownWorkLocation?: boolean;
+      includeQualifiedRadius?: boolean;
     },
     signal: AbortSignal,
   ): Promise<SproutRuntimePage<RawJob>>;

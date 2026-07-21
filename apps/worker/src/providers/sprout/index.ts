@@ -9,6 +9,11 @@ import type { SproutRawJob } from "./schema";
 export * from "./normalization";
 export * from "./query";
 export * from "./schema";
+export * from "./checkpoint";
+export * from "./commit";
+export * from "./registration";
+export * from "./runtime";
+export * from "./transport";
 
 const SPROUT_PROVIDER = "sprout" as Provider;
 

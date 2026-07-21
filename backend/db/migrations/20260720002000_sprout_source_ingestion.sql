@@ -28,7 +28,7 @@ USING (
     'Sprout France'::text,
     ARRAY['FR']::text[],
     'partner_feed'::text,
-    '{"version":"sprout.offset.v1","offset":0,"observedTotal":null,"watermark":null}'::jsonb,
+    '{"version":"sprout.offset.v1","offset":0,"pageSize":10,"observedTotal":null,"watermark":null}'::jsonb,
     '{"FR":true}'::jsonb
   )
 ) AS incoming(
@@ -109,7 +109,7 @@ BEGIN
     OR jsonb_typeof(p_checkpoint_in) <> 'object'
     OR jsonb_typeof(p_checkpoint_out) <> 'object'
     OR jsonb_typeof(p_entries) <> 'array'
-    OR jsonb_array_length(p_entries) NOT BETWEEN 1 AND 500
+    OR jsonb_array_length(p_entries) NOT BETWEEN 0 AND 500
   THEN
     RAISE EXCEPTION 'invalid Sprout source page commit' USING ERRCODE = '22023';
   END IF;

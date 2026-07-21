@@ -565,7 +565,7 @@ export const sourcePageCommitSchema = z
     checkpointIn: sourceCheckpointSchema,
     checkpointOut: sourceCheckpointSchema,
     complete: z.boolean(),
-    entries: z.array(sourcePageCommitEntrySchema).min(1).max(500),
+    entries: z.array(sourcePageCommitEntrySchema).max(500),
   })
   .strict();
 
