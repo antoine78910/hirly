@@ -398,8 +398,8 @@ export function createTaskHandlers(
                 listingCounts: {
                   fetched: result.fetched,
                   added: result.inserted,
-                  ignored: Math.max(0, result.fetched - result.inserted),
-                  errors: 0,
+                  ignored: Math.max(0, result.fetched - result.inserted - result.rejected),
+                  errors: result.rejected,
                 },
               },
             });

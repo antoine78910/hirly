@@ -38,7 +38,7 @@ export interface SproutPageCommitRepository<RawJob> {
     items: readonly RawJob[];
     complete: boolean;
     fetchedAt: Date;
-  }): Promise<{ committedCheckpoint: SproutCheckpoint; inserted: number }>;
+  }): Promise<{ committedCheckpoint: SproutCheckpoint; inserted: number; rejected: number }>;
 }
 
 export interface SproutPageTaskResult {
@@ -47,6 +47,7 @@ export interface SproutPageTaskResult {
   complete: boolean;
   checkpoint: SproutCheckpoint;
   inserted: number;
+  rejected: number;
 }
 
 export async function runSproutPageTask<RawJob>(input: {
@@ -130,6 +131,7 @@ export async function runSproutPageTask<RawJob>(input: {
     complete: advanced.complete,
     checkpoint: committedCheckpoint,
     inserted: committed.inserted,
+    rejected: committed.rejected,
   };
 }
 

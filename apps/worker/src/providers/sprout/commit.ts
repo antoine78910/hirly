@@ -82,10 +82,20 @@ export function createSproutCommitRepository(input: {
       items: readonly SproutRawJob[];
       complete: boolean;
       fetchedAt: Date;
-    }): Promise<{ committedCheckpoint: SproutCheckpoint; inserted: number }> {
-      const entries = page.items.map((raw) =>
-        buildSproutCommitEntry({ raw, policyId: input.policyId, fetchedAt: page.fetchedAt }),
-      );
+    }): Promise<{ committedCheckpoint: SproutCheckpoint; inserted: number; rejected: number }> {
+      const entries: SourcePageCommit["entries"] = [];
+      let rejected = 0;
+      for (const raw of page.items) {
+        try {
+          entries.push(
+            buildSproutCommitEntry({ raw, policyId: input.policyId, fetchedAt: page.fetchedAt }),
+          );
+        } catch {
+          // A malformed provider row must not prevent valid rows in the same
+          // bounded page from committing or block checkpoint progress.
+          rejected += 1;
+        }
+      }
       const result = await input.commit({
         sourceId: input.sourceId,
         countryCode: input.countryCode,
@@ -100,6 +110,7 @@ export function createSproutCommitRepository(input: {
         // A new canonical group is the reliable database signal that this
         // page yielded a listing not already represented in the inventory.
         inserted: result.groupsCreated,
+        rejected,
       };
     },
   };
