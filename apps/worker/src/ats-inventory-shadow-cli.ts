@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { lstat, mkdir, open, readFile, realpath } from "node:fs/promises";
 import { basename, dirname, relative, resolve, sep } from "node:path";
 import { z } from "zod";
@@ -86,16 +86,18 @@ const runArtifactSchema = z.object({
   canonicalWritesEnabled: z.literal(false),
   capturedAt: z.iso.datetime({ offset: true }),
   jobs: z.array(z.object({ externalId: z.string().min(1), fingerprint: z.string().regex(/^[a-f0-9]{64}$/) }).strict()),
+  signature: z.string().regex(/^[a-f0-9]{64}$/),
 }).strict();
 
 type RunArtifact = z.output<typeof runArtifactSchema>;
 
 export async function runAtsInventoryShadowCli(
   command: AtsInventoryShadowCliCommand,
-  options: { fetch?: AtsTrialFetch; now?: () => Date; makeRunId?: () => string } = {},
+  options: { fetch?: AtsTrialFetch; now?: () => Date; makeRunId?: () => string; evidenceHmacKey?: string } = {},
 ): Promise<RunArtifact | ReturnType<typeof buildAtsRepeatedShadowScorecard> & { runs: readonly { path: string; sha256: string }[] }> {
   const root = await resolveEvidenceRoot(command.evidenceRootPath);
-  if (command.type === "seal") return seal(command, root);
+  const evidenceHmacKey = requireEvidenceHmacKey(options.evidenceHmacKey);
+  if (command.type === "seal") return seal(command, root, evidenceHmacKey);
   assertCompleteShadowSnapshotProven(command.provider);
   const policy = JSON.parse(await readRegularFile(command.policyPath));
   const approvalNow = options.now?.();
@@ -110,19 +112,22 @@ export async function runAtsInventoryShadowCli(
     fingerprint: sha256(canonicalJson(record)),
   })).sort((left, right) => left.externalId.localeCompare(right.externalId));
   if (new Set(jobs.map((job) => job.externalId)).size !== jobs.length) throw new Error("shadow transport returned duplicate external IDs");
-  const artifact = runArtifactSchema.parse({
-    schemaVersion: "job-supply-shadow-run.v1", runId: options.makeRunId?.() ?? randomUUID(), provider: command.provider,
-    tenantId: transport.approvedTenantId, countryCode: "FR", policyDigest: transport.policyDigest,
-    complete: true, canonicalWritesEnabled: false, capturedAt: (options.now?.() ?? new Date()).toISOString(), jobs,
-  });
+  const unsignedArtifact = {
+    schemaVersion: "job-supply-shadow-run.v1" as const, runId: options.makeRunId?.() ?? randomUUID(), provider: command.provider,
+    tenantId: transport.approvedTenantId, countryCode: "FR" as const, policyDigest: transport.policyDigest,
+    complete: true as const, canonicalWritesEnabled: false as const, capturedAt: (options.now?.() ?? new Date()).toISOString(), jobs,
+  };
+  const artifact = runArtifactSchema.parse({ ...unsignedArtifact, signature: signRunArtifact(unsignedArtifact, evidenceHmacKey) });
   await writeImmutableContained(command.outputPath, root, artifact);
   return artifact;
 }
 
-async function seal(command: Extract<AtsInventoryShadowCliCommand, { type: "seal" }>, root: string) {
+async function seal(command: Extract<AtsInventoryShadowCliCommand, { type: "seal" }>, root: string, evidenceHmacKey: string) {
   const loaded = await Promise.all(command.runPaths.map(async (path) => {
     const contents = await readContainedFile(path, root);
-    return { path: await containedPath(path, root), contents, artifact: runArtifactSchema.parse(JSON.parse(contents)) };
+    const artifact = runArtifactSchema.parse(JSON.parse(contents));
+    verifyRunArtifactSignature(artifact, evidenceHmacKey);
+    return { path: await containedPath(path, root), contents, artifact };
   }));
   const scorecard = buildAtsRepeatedShadowScorecard(loaded.map(({ artifact }) => ({
     runId: artifact.runId, capturedAt: artifact.capturedAt, provider: artifact.provider, tenantId: artifact.tenantId,
@@ -142,6 +147,22 @@ async function seal(command: Extract<AtsInventoryShadowCliCommand, { type: "seal
 }
 
 function sha256(value: string): string { return createHash("sha256").update(value, "utf8").digest("hex"); }
+function requireEvidenceHmacKey(value = process.env.ATS_SHADOW_EVIDENCE_HMAC_KEY): string {
+  if (typeof value !== "string" || value.length < 32) {
+    throw new Error("ATS_SHADOW_EVIDENCE_HMAC_KEY must contain at least 32 characters");
+  }
+  return value;
+}
+function signRunArtifact(artifact: Omit<RunArtifact, "signature">, key: string): string {
+  return createHmac("sha256", key).update(canonicalJson(artifact)).digest("hex");
+}
+function verifyRunArtifactSignature(artifact: RunArtifact, key: string): void {
+  const { signature, ...unsignedArtifact } = artifact;
+  const expected = signRunArtifact(unsignedArtifact, key);
+  if (!timingSafeEqual(Buffer.from(signature, "hex"), Buffer.from(expected, "hex"))) {
+    throw new Error("shadow run signature is invalid");
+  }
+}
 function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   if (value !== null && typeof value === "object") return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, entry]) => `${JSON.stringify(key)}:${canonicalJson(entry)}`).join(",")}}`;
