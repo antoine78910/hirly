@@ -12,6 +12,7 @@ import { assertProviderTransportActive } from "./providers";
 export type CliCommand =
   | { type: "enqueue-maintenance"; idempotencyKey: string }
   | { type: "enqueue-provider"; provider: Provider; idempotencyKey: string }
+  | { type: "enqueue-sprout"; mode: "canary" | "backfill" | "incremental"; sourceId: string; idempotencyKey: string }
   | { type: "run-status"; runId: string };
 
 export function parseCliArgs(args: string[]): CliCommand {
@@ -26,6 +27,12 @@ export function parseCliArgs(args: string[]): CliCommand {
       idempotencyKey: second,
     };
   }
+  if (command === "enqueue-sprout" && first && second && args[3]) {
+    if (first !== "canary" && first !== "backfill" && first !== "incremental") {
+      throw new Error("sprout mode must be canary, backfill, or incremental");
+    }
+    return { type: command, mode: first, sourceId: second, idempotencyKey: args[3] };
+  }
   if (
     command === "run-status" &&
     first &&
@@ -34,7 +41,7 @@ export function parseCliArgs(args: string[]): CliCommand {
     return { type: command, runId: first };
   }
   throw new Error(
-    "usage: enqueue-maintenance <idempotency-key> | enqueue-provider <provider> <idempotency-key> | run-status <uuid>",
+    "usage: enqueue-maintenance <idempotency-key> | enqueue-provider <provider> <idempotency-key> | enqueue-sprout <mode> <source-id> <idempotency-key> | run-status <uuid>",
   );
 }
 
@@ -60,6 +67,26 @@ export async function runCli(
           payload: {},
         },
       ],
+    });
+    return { runId: await dependencies.queue.enqueue(input) };
+  }
+  if (command.type === "enqueue-sprout") {
+    await dependencies.store.assertProviderRunnable("sprout");
+    assertProviderTransportActive("sprout");
+    const input = enqueueRunSchema.parse({
+      kind: "provider_ingestion",
+      provider: "sprout",
+      idempotencyKey: command.idempotencyKey,
+      triggerSource: "cli",
+      tasks: [{
+        taskKey: `sprout:france:${command.mode}:${command.sourceId}`,
+        taskType: "provider.fetch_page",
+        payload: {
+          sourceId: command.sourceId,
+          mode: command.mode,
+          maxResponseBytes: 2_000_000,
+        },
+      }],
     });
     return { runId: await dependencies.queue.enqueue(input) };
   }
