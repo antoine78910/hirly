@@ -65,6 +65,8 @@ export async function startApplication(
       reconciliationBatchSize:
         config.JOB_PROJECTION_RECONCILIATION_BATCH_SIZE,
     },
+    undefined,
+    logger,
   );
   const scheduler = new Scheduler(store, logger, {
     pollMs: config.WORKER_SCHEDULE_POLL_MS,

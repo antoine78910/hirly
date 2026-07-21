@@ -1,3 +1,5 @@
+import type { Logger } from "@hirly/observability";
+import { safeErrorMessage } from "./retry";
 import {
   projectJobSearchDocument,
   type JobProjectionResult,
@@ -60,6 +62,7 @@ export class JobProjectionConsumer {
     private readonly store: JobProjectionStore,
     private readonly options: JobProjectionConsumerOptions,
     private readonly project: Project = projectJobSearchDocument,
+    private readonly logger?: Logger,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
@@ -91,7 +94,16 @@ export class JobProjectionConsumer {
           Math.min(capacity, this.options.batchSize),
           this.options.leaseSeconds,
         );
-      } catch {
+      } catch (error) {
+        this.logger?.emit({
+          service: "hirly-worker",
+          version: "0.1.0",
+          environment: process.env.NODE_ENV ?? "unknown",
+          event: "job_projection.claim_failed",
+          severity: "error",
+          reasonCode: "database_unavailable",
+          details: { message: safeErrorMessage(error) },
+        });
         await wait(this.options.pollMs, this.controller.signal);
         continue;
       }
