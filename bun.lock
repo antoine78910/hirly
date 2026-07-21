@@ -64,6 +64,18 @@
         "typescript": "5.9.3",
       },
     },
+    "apps/matching-shadow-canary": {
+      "name": "@hirly/matching-shadow-canary",
+      "version": "0.1.0",
+      "dependencies": {
+        "@hirly/contracts": "workspace:*",
+        "@hirly/matching-oracle": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "1.3.14",
+        "typescript": "5.9.3",
+      },
+    },
     "apps/matching-supply-readiness": {
       "name": "@hirly/matching-supply-readiness",
       "version": "0.1.0",
@@ -197,6 +209,8 @@
     "@hirly/matching": ["@hirly/matching@workspace:packages/matching"],
 
     "@hirly/matching-oracle": ["@hirly/matching-oracle@workspace:packages/matching-oracle"],
+
+    "@hirly/matching-shadow-canary": ["@hirly/matching-shadow-canary@workspace:apps/matching-shadow-canary"],
 
     "@hirly/matching-supply-readiness": ["@hirly/matching-supply-readiness@workspace:apps/matching-supply-readiness"],
 
