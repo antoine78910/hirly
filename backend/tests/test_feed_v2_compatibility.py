@@ -307,6 +307,66 @@ def test_feed_v2_timeout_rolls_back_to_legacy_selection(monkeypatch):
     assert calls == 1
 
 
+def test_feed_v2_timeout_preserves_the_legacy_jsearch_emergency_path(monkeypatch):
+    """The legacy path remains the rollback until G009 authorizes retirement."""
+    _enable(monkeypatch)
+    monkeypatch.setenv("JOBS_FEED_LEGACY_JSEARCH_ONLY", "true")
+    monkeypatch.setenv("JSEARCH_API_KEY", "test-key")
+
+    class EmptyCursor:
+        def limit(self, _count):
+            return self
+
+        async def to_list(self, _count):
+            return []
+
+    class LegacyFallbackDB(_ProfilesOnlyDB):
+        class Swipes:
+            def find(self, *_args, **_kwargs):
+                return EmptyCursor()
+
+        swipes = Swipes()
+
+    class Client:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def get(self, *_args, **_kwargs):
+            raise httpx.ReadTimeout("bounded timeout")
+
+    class Provider:
+        async def search(self, _query):
+            return type("Result", (), {"jobs": [{
+                "job_id": "legacy-job-1",
+                "provider": "jsearch",
+                "external_id": "legacy-1",
+                "title": "Engineer",
+                "company": "Hirly",
+                "location": "Paris, France",
+                "external_url": "https://example.test/jobs/legacy-1",
+            }]})()
+
+    async def upsert(_db, jobs, **_kwargs):
+        return {"total_imported": len(jobs), "auto_apply_supported_imported": 0}
+
+    monkeypatch.setattr(server, "db", LegacyFallbackDB())
+    monkeypatch.setattr(server.httpx, "AsyncClient", Client)
+    monkeypatch.setattr(server, "get_job_provider", lambda *_args: Provider())
+    monkeypatch.setattr(server.jobs_service_module, "upsert_imported_jobs", upsert)
+
+    result = asyncio.run(server.get_feed(**_feed_args()))
+
+    assert result["feed_mode"] == "legacy_jsearch_only"
+    assert result["fallback_reason"] == "legacy_jsearch_only"
+    assert [job["job_id"] for job in result["jobs"]] == ["legacy-job-1"]
+
+
 def test_successful_feed_v2_response_is_the_only_customer_visible_path(monkeypatch):
     _enable(monkeypatch)
     monkeypatch.setattr(server, "db", _ProfilesOnlyDB())
