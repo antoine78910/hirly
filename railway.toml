@@ -1,0 +1,5 @@
+[deploy]
+# Feed V2's liveness endpoint is intentionally database-free. Deployment
+# readiness must not depend on the matching database being immediately ready.
+healthcheckPath = "/health/live"
+healthcheckTimeout = 60
