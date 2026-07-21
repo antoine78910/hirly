@@ -5,6 +5,11 @@ COPY apps/worker/package.json apps/worker/package.json
 COPY apps/job-ingestion-audit/package.json apps/job-ingestion-audit/package.json
 COPY apps/analytics-backfill/package.json apps/analytics-backfill/package.json
 COPY apps/feed-v2/package.json apps/feed-v2/package.json
+COPY apps/feed-v2-readiness-gate/package.json apps/feed-v2-readiness-gate/package.json
+COPY apps/g009-retirement-gate/package.json apps/g009-retirement-gate/package.json
+COPY apps/job-projection-backfill/package.json apps/job-projection-backfill/package.json
+COPY apps/matching-shadow-canary/package.json apps/matching-shadow-canary/package.json
+COPY apps/matching-supply-readiness/package.json apps/matching-supply-readiness/package.json
 COPY packages/config/package.json packages/config/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/db/package.json packages/db/package.json
