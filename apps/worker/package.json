@@ -9,6 +9,7 @@
     "cli": "bun src/cli.ts",
     "trial": "bun src/source-trial-cli.ts",
     "trial:french": "bun src/french-source-trial-cli.ts",
+    "ats-inventory-shadow": "bun src/ats-inventory-shadow-cli.ts",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
