@@ -807,7 +807,35 @@ function activationScope(input) {
     countryCode: String(input.countryCode ?? "").trim().toUpperCase(),
     policyDigest: String(input.policyDigest ?? ""),
     releaseHead: String(input.releaseAttestation?.releaseHead ?? ""),
+    deployedArtifactDigest: String(input.releaseAttestation?.deployedArtifactDigest ?? ""),
   };
+}
+
+function validateActivationSemantics(record, expectedKind, label) {
+  if (expectedKind.endsWith("_review")) {
+    assertOnlyKeys(record.review, ["architecture", "codeReview", "security"], `${label} review verdicts`);
+    assertOnlyKeys(record.review?.security, ["unresolvedFindings", "verdict"], `${label} security review`);
+    assertOnlyKeys(record.review?.codeReview, ["verdict"], `${label} code review`);
+    assertOnlyKeys(record.review?.architecture, ["verdict"], `${label} architecture review`);
+    if (
+      record.review?.security?.verdict !== "CLEAN"
+      || record.review?.security?.unresolvedFindings !== 0
+      || record.review?.codeReview?.verdict !== "APPROVE"
+      || record.review?.architecture?.verdict !== "CLEAR"
+    ) {
+      throw new Error(`${label} must record security CLEAN with zero unresolved findings, code review APPROVE, and architecture CLEAR`);
+    }
+  } else if (Object.hasOwn(record, "review")) {
+    throw new Error(`${label} must not contain review verdicts`);
+  }
+  if (expectedKind.endsWith("_ultraqa")) {
+    assertOnlyKeys(record.ultraqa, ["status"], `${label} UltraQA result`);
+    if (record.ultraqa?.status !== "passed") {
+      throw new Error(`${label} must record UltraQA passed`);
+    }
+  } else if (Object.hasOwn(record, "ultraqa")) {
+    throw new Error(`${label} must not contain an UltraQA result`);
+  }
 }
 
 function validateActivationEvidence(descriptor, input, evidenceRoot, expectedKind) {
@@ -816,8 +844,9 @@ function validateActivationEvidence(descriptor, input, evidenceRoot, expectedKin
     throw new Error(`${expectedKind} evidence envelope must be an object`);
   }
   assertOnlyKeys(envelope, [
-    "artifacts", "countryCode", "kind", "observedAt", "policyDigest", "provider",
-    "releaseHead", "schemaVersion", "status", "tenantId",
+    "artifacts", "countryCode", "deployedArtifactDigest", "kind", "observedAt",
+    "policyDigest", "provider", "releaseHead", "review", "schemaVersion", "status",
+    "tenantId", "ultraqa",
   ], `${expectedKind} evidence envelope`);
   const scope = activationScope(input);
   if (
@@ -829,16 +858,32 @@ function validateActivationEvidence(descriptor, input, evidenceRoot, expectedKin
     || String(envelope.countryCode ?? "").toUpperCase() !== scope.countryCode
     || envelope.policyDigest !== scope.policyDigest
     || envelope.releaseHead !== scope.releaseHead
+    || envelope.deployedArtifactDigest !== scope.deployedArtifactDigest
     || !envelope.observedAt
     || Number.isNaN(Date.parse(envelope.observedAt))
   ) {
     throw new Error(`${expectedKind} evidence envelope scope or status is invalid`);
   }
+  validateActivationSemantics(envelope, expectedKind, `${expectedKind} evidence envelope`);
   if (!Array.isArray(envelope.artifacts) || envelope.artifacts.length === 0) {
     throw new Error(`${expectedKind} evidence envelope must seal underlying artifacts`);
   }
-  const sealed = envelope.artifacts.map((artifact) => containedEvidenceDescriptor(artifact, evidenceRoot).descriptor);
-  const identities = sealed.map((artifact) => `${artifact.path}:${artifact.sha256}`);
+  const sealed = envelope.artifacts.map((artifact) => containedEvidenceDescriptor(artifact, evidenceRoot));
+  for (const artifact of sealed) {
+    assertOnlyKeys(artifact.json, [
+      "deployedArtifactDigest", "kind", "releaseHead", "result", "review", "ultraqa",
+    ], `${expectedKind} underlying artifact`);
+    if (
+      artifact.json?.kind !== expectedKind
+      || artifact.json?.result !== "passed"
+      || artifact.json?.releaseHead !== scope.releaseHead
+      || artifact.json?.deployedArtifactDigest !== scope.deployedArtifactDigest
+    ) {
+      throw new Error(`${expectedKind} underlying artifact scope or result is invalid`);
+    }
+    validateActivationSemantics(artifact.json, expectedKind, `${expectedKind} underlying artifact`);
+  }
+  const identities = sealed.map(({ descriptor: artifact }) => `${artifact.path}:${artifact.sha256}`);
   if (new Set(identities).size !== identities.length) {
     throw new Error(`${expectedKind} evidence artifacts must be unique`);
   }
@@ -1283,7 +1328,7 @@ function validateWriterOwnership(descriptor, input, evidenceRoot) {
     "tenantId", "throughNone", "writerRuntime",
   ], "writer ownership evidence");
   const scope = activationScope(input);
-  const expectedWriter = input.targetVerdict === "inventory_manual" ? "none" : "typescript";
+  const expectedWriter = "typescript";
   if (
     evidence.schemaVersion !== WRITER_OWNERSHIP_VERSION
     || evidence.status !== "observed"
@@ -1306,12 +1351,16 @@ function validateWriterOwnership(descriptor, input, evidenceRoot) {
 function validateActivationTransition(input, evidenceRoot, failures) {
   const requirements = {
     inventory_canary_ready: {
-      from: "inventory_manual",
+      from: "blocked",
       gates: ["prior_state_receipt", "review", "ultraqa"],
     },
     inventory_active: {
       from: "inventory_canary_ready",
       gates: ["canary_receipt", "observation", "review", "ultraqa"],
+    },
+    inventory_manual: {
+      from: "inventory_active",
+      gates: ["prior_state_receipt", "review", "ultraqa"],
     },
     application_canary_ready: {
       from: "inventory_active",
@@ -1393,8 +1442,8 @@ export function evaluateProviderActivationPreflight(input = {}, options = {}) {
 
   const applicationTarget = ["application_canary_ready", "application_active"].includes(targetVerdict);
   const inventoryTarget = ["inventory_canary_ready", "inventory_active", "inventory_manual"].includes(targetVerdict);
-  if (["recruitee", "nicoka"].includes(provider) && targetVerdict !== "inventory_manual") {
-    failures.push(`${provider} supports inventory_manual only`);
+  if (["recruitee", "nicoka"].includes(provider) && applicationTarget) {
+    failures.push(`${provider} supports inventory targets only`);
   }
   if (provider === "greenhouse" && !inventoryTarget && !applicationTarget) {
     failures.push("greenhouse target is unsupported");
