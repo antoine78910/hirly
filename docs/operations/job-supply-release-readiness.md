@@ -101,7 +101,21 @@ digest used by a trial scorecard.
 
 ## Ordered migration application
 
-Apply in this order with `psql -v ON_ERROR_STOP=1`:
+Before any downstream digest-dependent migration, first apply the shared pgcrypto
+compatibility migration to every database that will participate in that chain:
+
+1. `20260721001950_pgcrypto_schema_compatibility.sql`
+
+This additive migration is topology-aware:
+
+- on a split deployment, apply it to both the inventory database and the primary
+  application database before any later digest-dependent migration;
+- on an unsplit deployment, apply it once to the single database.
+
+Its down migration removes only marker-owned `public.digest` wrappers; do not
+roll it back until later digest-dependent migrations have been fully rolled back.
+
+Apply the remaining migrations in this order with `psql -v ON_ERROR_STOP=1`:
 
 1. `20260720000100_typescript_worker_foundation.sql`
 2. `20260720000200_bun_worker_runtime.sql`
@@ -159,7 +173,7 @@ Apply the list to the primary database containing `public.jobs`.
 Bootstrap `backend/db/jobs_inventory_schema.sql` on the inventory database,
 then apply the ordered list there using `JOBS_DATABASE_URL`. Keep auth, billing,
 profiles and user application state on the primary application database. In
-this topology, “the ordered list” means the thirteen inventory migrations above,
+this topology, “the ordered list” means the fourteen inventory migrations above,
 not the separately listed application-database migrations.
 
 ## Deployment configuration validation
@@ -292,6 +306,32 @@ application automation disabled. Application activation is independently
 gated by submission authority, privacy basis, non-production proof, and exact
 per-attempt candidate mandates.
 
+All provider-preflight evidence is sealed twice: the input contains a contained
+`{path, sha256}` descriptor for a strict scope-bound envelope, and that envelope
+contains descriptors for its underlying artifacts. Envelopes bind provider,
+tenant, country, policy digest, release HEAD, observation time, evidence kind,
+and passed status. Plain paths, prose-only evidence arrays, extra fields,
+symlink escapes, reserialized documents, and digest mismatches fail closed.
+Repeated-shadow scorecards additionally seal exactly two complete no-write run
+artifacts whose run IDs and provider scope match the scorecard. Writer evidence
+seals the current runtime, previous runtime, ownership epoch, the transition
+through `writer_runtime=none`, and the absence of simultaneous writers.
+
+Activation state cannot be skipped. `inventory_canary_ready` starts only from
+`blocked` and requires the prior-state receipt plus sealed review and UltraQA gates;
+`inventory_active` requires the inventory-canary receipt, observation window,
+review, and UltraQA; `inventory_manual` is terminal and starts only from
+`inventory_active`, retaining TypeScript as the inventory writer without a
+false writer transfer; `application_canary_ready` starts only from
+`inventory_active`; and `application_active` requires the application-canary
+receipt, observation window, review, and UltraQA. Every prerequisite is a
+separately sealed evidence envelope and underlying artifact, both bound to the
+exact release HEAD and deployed artifact digest. Activation evidence must be
+fresh, non-future, uniquely identified, and HMAC-attested by the configured CI
+issuer and exact workflow run using runtime-provided trust material. Review
+attestations require security `CLEAN` with zero unresolved findings, code review
+`APPROVE`, and architecture `CLEAR`; UltraQA attestations require `passed`.
+
 Rollback order is exact: disable transport and schedule, stop claims and drain,
 prove no writes, transition writer ownership through `writer_runtime=none`,
 then assign the single authoritative writer. Applications roll back
@@ -299,7 +339,9 @@ independently; ambiguous attempts must be reconciled from durable evidence and
 must never be blindly retried.
 
 The optional `--phase0-receipt` mode captures only supplied local observations.
-It recursively rejects token, password, secret, and connection-URL fields;
+It recursively rejects token, password, secret, and connection-URL fields as
+well as secret-shaped values such as key/value assignments, JWTs, bearer/basic
+credentials, URL userinfo, and private-key material;
 environment entries contain flag names and redacted states, never values. The
 receipt binds canonical inputs by digest, requires owner/evidence/review expiry
 and an explicit `approved` or `blocked` verdict for inventory access,

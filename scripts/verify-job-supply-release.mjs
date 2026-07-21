@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import {
   existsSync,
   lstatSync,
@@ -19,6 +19,9 @@ const MANIFEST_VERSION = "job-supply-release-verification.v4";
 const RELEASE_ATTESTATION_VERSION = "job-supply-release-attestation.v1";
 const ATS_PHASE0_RECEIPT_VERSION = "ats-phase0-receipt.v1";
 const EXTERNAL_DISCHARGE_VERSION = "job-supply-external-discharge.v1";
+const ACTIVATION_EVIDENCE_VERSION = "job-supply-activation-evidence.v1";
+const SHADOW_RUN_VERSION = "job-supply-shadow-run.v1";
+const WRITER_OWNERSHIP_VERSION = "job-supply-writer-ownership.v1";
 export const REQUIRED_FULL_RELEASE_COMMAND_IDS = Object.freeze([
   "repository-attestation",
   "frozen-install",
@@ -45,7 +48,8 @@ const ALLOWED_EXTERNAL_BLOCKS = new Set([
   "REMOTE_DEPLOYMENT_VALIDATION_NOT_PERFORMED_BY_VERIFIER",
   "SOURCE_ACTIVATION_NOT_PERFORMED",
 ]);
-const MIGRATION_RE = /^20260720\d+_.+\.sql$/;
+const PGCRYPTO_COMPAT_MIGRATION = "20260721001950_pgcrypto_schema_compatibility";
+const MIGRATION_RE = /^(?:20260720\d+_.+|20260721001950_pgcrypto_schema_compatibility)\.sql$/;
 const PYTHON_EXCEPTION_RE = /^\s*#\s*stack-policy:\s*python-exception=(.{12,})\s*$/im;
 const DISPOSABLE_DB_RE = /(?:^|_)(?:test|disposable)(?:$|_)/i;
 const SAFE_DATABASE_NAME_RE = /^[a-zA-Z0-9_]+$/;
@@ -57,8 +61,9 @@ const DATABASE_ENV_NAMES = [
   "G011_TEST_DATABASE_URL",
   "JOB_INGESTION_LEDGER_TEST_DATABASE_URL",
   "G014_TEST_DATABASE_URL",
+  "PGCRYPTO_COMPAT_TEST_DATABASE_URL",
 ];
-const SUITE_NAMES = ["g002", "g003", "g004", "g010", "g011", "ledger", "g014"];
+const SUITE_NAMES = ["g002", "g003", "g004", "g010", "g011", "ledger", "g014", "pgcrypto-compat"];
 const SAFE_INHERITED_ENV = new Set([
   "CI",
   "COLORTERM",
@@ -236,6 +241,7 @@ export function buildReleaseVerificationPlan(options = {}) {
       "tests/g011-ats-tenant-registration-postgres.integration.test.ts",
       "tests/job-ingestion-ledger-postgres.integration.test.ts",
       "tests/g014-source-trial-postgres.integration.test.ts",
+      "tests/pgcrypto-schema-compatibility-postgres.integration.test.ts",
     ], {
       env: databaseUrls,
       redactEnvironment: true,
@@ -797,6 +803,146 @@ function durableEvidence(discharge) {
   return typeof evidence === "string" && evidence.trim() ? [evidence] : [];
 }
 
+function activationScope(input) {
+  return {
+    provider: String(input.provider ?? "").trim(),
+    tenantId: String(input.tenantId ?? "").trim().toLowerCase(),
+    countryCode: String(input.countryCode ?? "").trim().toUpperCase(),
+    policyDigest: String(input.policyDigest ?? ""),
+    releaseHead: String(input.releaseAttestation?.releaseHead ?? ""),
+    deployedArtifactDigest: String(input.releaseAttestation?.deployedArtifactDigest ?? ""),
+  };
+}
+
+export function signActivationEvidenceRecord(record, key) {
+  if (typeof key !== "string" || key.length < 32) {
+    throw new Error("activation attestation HMAC key must contain at least 32 characters");
+  }
+  const { signature: _signature, ...unsigned } = record;
+  return createHmac("sha256", key).update(canonicalJson(unsigned)).digest("hex");
+}
+
+function validateActivationProvenance(record, trust, label) {
+  assertOnlyKeys(record, trust.allowedKeys, label);
+  if (!trust.key || trust.key.length < 32 || !trust.issuer || !trust.workflowId || !trust.workflowRunId) {
+    throw new Error("trusted activation attestation configuration is incomplete");
+  }
+  if (
+    record.issuer !== trust.issuer
+    || record.workflowId !== trust.workflowId
+    || record.workflowRunId !== trust.workflowRunId
+    || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{15,255}$/.test(String(record.evidenceId ?? ""))
+    || !/^[0-9a-f]{64}$/.test(String(record.signature ?? ""))
+  ) throw new Error(`${label} trusted issuer, workflow, run, evidence ID, or signature is invalid`);
+  const expected = signActivationEvidenceRecord(record, trust.key);
+  if (!timingSafeEqual(Buffer.from(record.signature, "hex"), Buffer.from(expected, "hex"))) {
+    throw new Error(`${label} signature is invalid`);
+  }
+  const observedAt = Date.parse(record.observedAt);
+  if (
+    Number.isNaN(observedAt)
+    || observedAt > trust.now + trust.maxFutureSkewMs
+    || observedAt < trust.now - trust.maxAgeMs
+  ) throw new Error(`${label} observedAt is future-dated or stale`);
+  if (trust.evidenceIds.has(record.evidenceId)) throw new Error(`${label} evidenceId was replayed`);
+  const runKind = `${record.workflowRunId}:${record.kind}`;
+  if (Object.hasOwn(record, "schemaVersion") && trust.runKinds.has(runKind)) {
+    throw new Error(`${label} workflow run and kind were replayed`);
+  }
+  trust.evidenceIds.add(record.evidenceId);
+  if (Object.hasOwn(record, "schemaVersion")) trust.runKinds.add(runKind);
+}
+
+function validateActivationSemantics(record, expectedKind, label) {
+  if (expectedKind.endsWith("_review")) {
+    assertOnlyKeys(record.review, ["architecture", "codeReview", "security"], `${label} review verdicts`);
+    assertOnlyKeys(record.review?.security, ["unresolvedFindings", "verdict"], `${label} security review`);
+    assertOnlyKeys(record.review?.codeReview, ["verdict"], `${label} code review`);
+    assertOnlyKeys(record.review?.architecture, ["verdict"], `${label} architecture review`);
+    if (
+      record.review?.security?.verdict !== "CLEAN"
+      || record.review?.security?.unresolvedFindings !== 0
+      || record.review?.codeReview?.verdict !== "APPROVE"
+      || record.review?.architecture?.verdict !== "CLEAR"
+    ) {
+      throw new Error(`${label} must record security CLEAN with zero unresolved findings, code review APPROVE, and architecture CLEAR`);
+    }
+  } else if (Object.hasOwn(record, "review")) {
+    throw new Error(`${label} must not contain review verdicts`);
+  }
+  if (expectedKind.endsWith("_ultraqa")) {
+    assertOnlyKeys(record.ultraqa, ["status"], `${label} UltraQA result`);
+    if (record.ultraqa?.status !== "passed") {
+      throw new Error(`${label} must record UltraQA passed`);
+    }
+  } else if (Object.hasOwn(record, "ultraqa")) {
+    throw new Error(`${label} must not contain an UltraQA result`);
+  }
+}
+
+function validateActivationEvidence(descriptor, input, evidenceRoot, expectedKind, trust) {
+  const envelope = containedEvidenceDescriptor(descriptor, evidenceRoot).json;
+  if (!envelope || typeof envelope !== "object" || Array.isArray(envelope)) {
+    throw new Error(`${expectedKind} evidence envelope must be an object`);
+  }
+  validateActivationProvenance(envelope, { ...trust, allowedKeys: [
+    "artifacts", "countryCode", "deployedArtifactDigest", "kind", "observedAt",
+    "evidenceId", "issuer", "policyDigest", "provider", "releaseHead", "review",
+    "schemaVersion", "signature", "status", "tenantId", "ultraqa", "workflowId",
+    "workflowRunId",
+  ] }, `${expectedKind} evidence envelope`);
+  const scope = activationScope(input);
+  if (
+    envelope.schemaVersion !== ACTIVATION_EVIDENCE_VERSION
+    || envelope.kind !== expectedKind
+    || envelope.status !== "passed"
+    || envelope.provider !== scope.provider
+    || String(envelope.tenantId ?? "").toLowerCase() !== scope.tenantId
+    || String(envelope.countryCode ?? "").toUpperCase() !== scope.countryCode
+    || envelope.policyDigest !== scope.policyDigest
+    || envelope.releaseHead !== scope.releaseHead
+    || envelope.deployedArtifactDigest !== scope.deployedArtifactDigest
+    || !envelope.observedAt
+    || Number.isNaN(Date.parse(envelope.observedAt))
+  ) {
+    throw new Error(`${expectedKind} evidence envelope scope or status is invalid`);
+  }
+  validateActivationSemantics(envelope, expectedKind, `${expectedKind} evidence envelope`);
+  if (!Array.isArray(envelope.artifacts) || envelope.artifacts.length === 0) {
+    throw new Error(`${expectedKind} evidence envelope must seal underlying artifacts`);
+  }
+  const sealed = envelope.artifacts.map((artifact) => containedEvidenceDescriptor(artifact, evidenceRoot));
+  for (const artifact of sealed) {
+    validateActivationProvenance(artifact.json, { ...trust, allowedKeys: [
+      "deployedArtifactDigest", "evidenceId", "issuer", "kind", "observedAt",
+      "releaseHead", "result", "review", "signature", "ultraqa", "workflowId",
+      "workflowRunId",
+    ] }, `${expectedKind} underlying artifact`);
+    if (
+      artifact.json?.kind !== expectedKind
+      || artifact.json?.result !== "passed"
+      || artifact.json?.releaseHead !== scope.releaseHead
+      || artifact.json?.deployedArtifactDigest !== scope.deployedArtifactDigest
+    ) {
+      throw new Error(`${expectedKind} underlying artifact scope or result is invalid`);
+    }
+    validateActivationSemantics(artifact.json, expectedKind, `${expectedKind} underlying artifact`);
+  }
+  const identities = sealed.map(({ descriptor: artifact }) => `${artifact.path}:${artifact.sha256}`);
+  if (new Set(identities).size !== identities.length) {
+    throw new Error(`${expectedKind} evidence artifacts must be unique`);
+  }
+  return envelope;
+}
+
+function requireActivationEvidence(record, input, evidenceRoot, kind, failures, trust) {
+  try {
+    validateActivationEvidence(record?.evidence, input, evidenceRoot, kind, trust);
+  } catch (error) {
+    failures.push(`${kind} sealed evidence is required: ${error.message}`);
+  }
+}
+
 export function createReleaseAttestation({
   selectedManifest,
   discharges = [],
@@ -909,6 +1055,13 @@ function rejectSecretShapedFields(value, path = "input") {
   if (typeof value === "string") {
     if (/^\s*(?:Bearer|Basic)\s+/i.test(value)) {
       throw new Error(`authorization value is forbidden: ${path}`);
+    }
+    if (
+      /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/i.test(value)
+      || /(?:^|[?&;\s])(?:access[_-]?token|api[_-]?key|authorization|cookie|password|secret|token)\s*[=:]\s*[^\s&;]+/i.test(value)
+      || /\beyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/.test(value)
+    ) {
+      throw new Error(`secret-pattern value is forbidden: ${path}`);
     }
     try {
       const parsed = new URL(value);
@@ -1066,10 +1219,10 @@ export function createAtsPhase0Receipt(input = {}, options = {}) {
   };
 }
 
-function currentApprovedPolicy(policy, name, failures, now) {
+function currentApprovedPolicy(policy, name, failures, now, input, evidenceRoot, trust) {
   if (policy?.verdict !== "approved") failures.push(`${name} must be approved`);
   if (!String(policy?.owner ?? "").trim()) failures.push(`${name} owner is required`);
-  if (durableEvidence(policy).length === 0) failures.push(`${name} evidence is required`);
+  requireActivationEvidence(policy, input, evidenceRoot, `${name}_policy`, failures, trust);
   const expiry = policy?.reviewExpiresAt ?? policy?.expiresAt;
   if (!expiry || Number.isNaN(Date.parse(expiry))) failures.push(`${name} review expiry is required`);
   else if (Date.parse(expiry) <= now) failures.push(`${name} is expired`);
@@ -1129,11 +1282,11 @@ function validateReleaseAttestationEvidence(attestation, evidenceRoot, failures)
   }
 }
 
-function validateShadowScorecard(scorecard, input) {
+function validateShadowScorecard(scorecard, input, evidenceRoot) {
   if (!scorecard || typeof scorecard !== "object" || Array.isArray(scorecard)) throw new Error("scorecard must be an object");
   assertOnlyKeys(scorecard, [
     "canonicalWritesEnabled", "countryCode", "evidenceDigest", "policyDigest", "provider",
-    "reconciliation", "runIds", "schemaVersion", "tenantId", "verdict",
+    "reconciliation", "runIds", "runs", "schemaVersion", "tenantId", "verdict",
   ], "shadow scorecard");
   const provider = String(input.provider ?? "").trim();
   const tenantId = String(input.tenantId ?? "").trim().toLowerCase();
@@ -1157,6 +1310,34 @@ function validateShadowScorecard(scorecard, input) {
   if (scorecard.runIds.some((id) => typeof id !== "string" || !id.trim()) || new Set(scorecard.runIds).size !== 2) {
     throw new Error("shadow scorecard run IDs must be non-empty and unique");
   }
+  if (!Array.isArray(scorecard.runs) || scorecard.runs.length !== 2) {
+    throw new Error("shadow scorecard must seal exactly two run artifacts");
+  }
+  scorecard.runs.forEach((descriptor, index) => {
+    const run = containedEvidenceDescriptor(descriptor, evidenceRoot).json;
+    if (!run || typeof run !== "object" || Array.isArray(run)) throw new Error("shadow run must be an object");
+    assertOnlyKeys(run, [
+      "canonicalWritesEnabled", "capturedAt", "complete", "countryCode", "jobs",
+      "policyDigest", "provider", "runId", "schemaVersion", "tenantId",
+    ], "shadow run");
+    if (
+      run.schemaVersion !== SHADOW_RUN_VERSION
+      || run.runId !== scorecard.runIds[index]
+      || run.provider !== provider
+      || String(run.tenantId ?? "").toLowerCase() !== tenantId
+      || String(run.countryCode ?? "").toUpperCase() !== countryCode
+      || run.policyDigest !== policyDigest
+      || run.complete !== true
+      || run.canonicalWritesEnabled !== false
+      || !run.capturedAt
+      || Number.isNaN(Date.parse(run.capturedAt))
+      || !Array.isArray(run.jobs)
+    ) throw new Error("shadow run scope or completeness is invalid");
+    const jobIds = run.jobs.map((job) => String(job?.externalId ?? ""));
+    if (jobIds.some((id) => !id) || new Set(jobIds).size !== jobIds.length) {
+      throw new Error("shadow run external IDs must be non-empty and unique");
+    }
+  });
   if (!Array.isArray(scorecard.reconciliation) || scorecard.reconciliation.length !== 1) {
     throw new Error("shadow scorecard must contain exactly one reconciliation");
   }
@@ -1181,11 +1362,105 @@ function validateShadowScorecard(scorecard, input) {
   if (sha256(canonicalJson(evidence)) !== evidenceDigest) throw new Error("shadow scorecard evidenceDigest mismatch");
 }
 
+function validateWriterOwnership(descriptor, input, evidenceRoot) {
+  const evidence = containedEvidenceDescriptor(descriptor, evidenceRoot).json;
+  if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) {
+    throw new Error("writer ownership evidence must be an object");
+  }
+  assertOnlyKeys(evidence, [
+    "countryCode", "observedAt", "ownershipEpoch", "policyDigest", "previousWriterRuntime",
+    "provider", "releaseHead", "schemaVersion", "simultaneousCanonicalWriters", "status",
+    "tenantId", "throughNone", "writerRuntime",
+  ], "writer ownership evidence");
+  const scope = activationScope(input);
+  const expectedWriter = "typescript";
+  const writerUnchanged = input.currentVerdict !== "blocked";
+  if (
+    evidence.schemaVersion !== WRITER_OWNERSHIP_VERSION
+    || evidence.status !== "observed"
+    || evidence.provider !== scope.provider
+    || String(evidence.tenantId ?? "").toLowerCase() !== scope.tenantId
+    || String(evidence.countryCode ?? "").toUpperCase() !== scope.countryCode
+    || evidence.policyDigest !== scope.policyDigest
+    || evidence.releaseHead !== scope.releaseHead
+    || evidence.writerRuntime !== expectedWriter
+    || (writerUnchanged
+      ? evidence.previousWriterRuntime !== "typescript" || evidence.throughNone !== false
+      : !["none", "python"].includes(evidence.previousWriterRuntime) || evidence.throughNone !== true)
+    || evidence.simultaneousCanonicalWriters !== false
+    || !Number.isInteger(evidence.ownershipEpoch)
+    || evidence.ownershipEpoch < 1
+    || !evidence.observedAt
+    || Number.isNaN(Date.parse(evidence.observedAt))
+  ) throw new Error("writer ownership scope, epoch, or one-writer state is invalid");
+}
+
+function validateActivationTransition(input, evidenceRoot, failures, trust) {
+  const requirements = {
+    inventory_canary_ready: {
+      from: "blocked",
+      gates: ["prior_state_receipt", "review", "ultraqa"],
+    },
+    inventory_active: {
+      from: "inventory_canary_ready",
+      gates: ["canary_receipt", "observation", "review", "ultraqa"],
+    },
+    inventory_manual: {
+      from: "inventory_active",
+      gates: ["prior_state_receipt", "review", "ultraqa"],
+    },
+    application_canary_ready: {
+      from: "inventory_active",
+      gates: ["prior_state_receipt", "review", "ultraqa"],
+    },
+    application_active: {
+      from: "application_canary_ready",
+      gates: ["canary_receipt", "observation", "review", "ultraqa"],
+    },
+  };
+  const requirement = requirements[input.targetVerdict];
+  if (!requirement) return;
+  if (input.currentVerdict !== requirement.from) {
+    failures.push(`${input.targetVerdict} requires currentVerdict ${requirement.from}`);
+  }
+  const prerequisites = input.transitionEvidence;
+  if (!prerequisites || typeof prerequisites !== "object" || Array.isArray(prerequisites)) {
+    failures.push(`${input.targetVerdict} transitionEvidence is required`);
+    return;
+  }
+  const unexpected = Object.keys(prerequisites).filter((key) => !requirement.gates.includes(key));
+  if (unexpected.length) failures.push(`transitionEvidence contains unknown gates: ${unexpected.join(", ")}`);
+  for (const gate of requirement.gates) {
+    try {
+      validateActivationEvidence(
+        prerequisites[gate],
+        input,
+        evidenceRoot,
+        `${input.targetVerdict}_${gate}`,
+        trust,
+      );
+    } catch (error) {
+      failures.push(`${input.targetVerdict} ${gate} gate is invalid: ${error.message}`);
+    }
+  }
+}
+
 export function evaluateProviderActivationPreflight(input = {}, options = {}) {
   const failures = [];
   const evidenceRoot = options.evidenceRoot ?? process.cwd();
   const now = input.now === undefined ? Date.now() : Date.parse(input.now);
   if (Number.isNaN(now)) failures.push("now must be a valid timestamp when provided");
+  const trust = {
+    key: options.trustedAttestationKey ?? process.env.JOB_SUPPLY_ATTESTATION_HMAC_KEY,
+    issuer: options.trustedAttestationIssuer ?? process.env.JOB_SUPPLY_ATTESTATION_ISSUER,
+    workflowId: options.trustedWorkflowId ?? process.env.JOB_SUPPLY_ATTESTATION_WORKFLOW_ID,
+    workflowRunId: options.trustedWorkflowRunId ?? process.env.JOB_SUPPLY_ATTESTATION_WORKFLOW_RUN_ID,
+    now,
+    maxAgeMs: options.maxEvidenceAgeMs ?? 24 * 60 * 60 * 1000,
+    maxFutureSkewMs: options.maxFutureSkewMs ?? 5 * 60 * 1000,
+    evidenceIds: new Set(),
+    runKinds: new Set(),
+  };
   const provider = String(input.provider ?? "").trim();
   const targetVerdict = input.targetVerdict;
   const allowedTargets = new Set([
@@ -1197,27 +1472,37 @@ export function evaluateProviderActivationPreflight(input = {}, options = {}) {
   }
   if (!allowedTargets.has(targetVerdict)) failures.push("targetVerdict is missing or unsupported");
   if (targetVerdict === "blocked") failures.push("blocked target cannot activate a provider");
-  const attestation = input.releaseAttestation;
+  let attestation = null;
+  try {
+    attestation = containedEvidenceDescriptor(input.releaseAttestation, evidenceRoot).json;
+  } catch (error) {
+    failures.push(`sealed release attestation is required: ${error.message}`);
+  }
   validateReleaseAttestationEvidence(attestation, evidenceRoot, failures);
-  currentApprovedPolicy(input.inventoryAccess, "inventoryAccess", failures, now);
+  const scopedInput = { ...input, releaseAttestation: attestation };
+  currentApprovedPolicy(input.inventoryAccess, "inventoryAccess", failures, now, scopedInput, evidenceRoot, trust);
   if (input.killSwitches?.providerArmed !== true) failures.push("provider kill switch is not armed");
   if (input.killSwitches?.tenantCountryArmed !== true) failures.push("tenant/country kill switch is not armed");
   if (input.rollback?.exercised !== true) failures.push("rollback was not exercised");
-  if (durableEvidence(input.rollback).length === 0) failures.push("rollback evidence is required");
+  requireActivationEvidence(input.rollback, scopedInput, evidenceRoot, "rollback_exercise", failures, trust);
   if (!String(input.rollback?.commandTranscriptId ?? "").trim()) failures.push("rollback command/transcript identifier is required");
   try {
     const scorecard = containedEvidenceDescriptor(input.shadowScorecard, evidenceRoot).json;
-    validateShadowScorecard(scorecard, input);
+    validateShadowScorecard(scorecard, scopedInput, evidenceRoot);
   } catch (error) {
     failures.push(`sealed repeated shadow scorecard is required: ${error.message}`);
   }
-  if (input.simultaneousCanonicalWriters !== false) failures.push("simultaneous canonical writers must be explicitly false");
-  if (input.writerTransfer?.throughNone !== true) failures.push("writer ownership transfer must pass through writer_runtime=none");
+  try {
+    validateWriterOwnership(input.writerOwnership, scopedInput, evidenceRoot);
+  } catch (error) {
+    failures.push(`sealed writer ownership evidence is required: ${error.message}`);
+  }
+  validateActivationTransition(scopedInput, evidenceRoot, failures, trust);
 
   const applicationTarget = ["application_canary_ready", "application_active"].includes(targetVerdict);
   const inventoryTarget = ["inventory_canary_ready", "inventory_active", "inventory_manual"].includes(targetVerdict);
-  if (["recruitee", "nicoka"].includes(provider) && targetVerdict !== "inventory_manual") {
-    failures.push(`${provider} supports inventory_manual only`);
+  if (["recruitee", "nicoka"].includes(provider) && applicationTarget) {
+    failures.push(`${provider} supports inventory targets only`);
   }
   if (provider === "greenhouse" && !inventoryTarget && !applicationTarget) {
     failures.push("greenhouse target is unsupported");
@@ -1227,24 +1512,27 @@ export function evaluateProviderActivationPreflight(input = {}, options = {}) {
     if (
       input.applicationCapability?.reviewed !== true
       || input.applicationCapability?.transport !== "hosted_candidate_form"
-      || durableEvidence(input.applicationCapability).length === 0
+      || !input.applicationCapability?.evidence
     ) {
       failures.push("greenhouse application requires reviewed hosted_candidate_form capability evidence");
     }
-    currentApprovedPolicy(input.submissionAuthority, "submissionAuthority", failures, now);
-    currentApprovedPolicy(input.privacyBasis, "privacyBasis", failures, now);
-    if (input.nonProductionSubmission?.status !== "passed" || durableEvidence(input.nonProductionSubmission).length === 0) {
+    requireActivationEvidence(input.applicationCapability, scopedInput, evidenceRoot, "application_capability_review", failures, trust);
+    currentApprovedPolicy(input.submissionAuthority, "submissionAuthority", failures, now, scopedInput, evidenceRoot, trust);
+    currentApprovedPolicy(input.privacyBasis, "privacyBasis", failures, now, scopedInput, evidenceRoot, trust);
+    if (input.nonProductionSubmission?.status !== "passed" || !input.nonProductionSubmission?.evidence) {
       failures.push("passed non-production submission evidence is required");
     }
+    requireActivationEvidence(input.nonProductionSubmission, scopedInput, evidenceRoot, "non_production_submission", failures, trust);
   }
   if (targetVerdict === "inventory_manual") {
     if (
       input.manualDeepLink?.verified !== true
       || input.manualDeepLink?.environment !== "production"
-      || durableEvidence(input.manualDeepLink).length === 0
+      || !input.manualDeepLink?.evidence
     ) {
       failures.push("verified production manual deep-link evidence is required");
     }
+    requireActivationEvidence(input.manualDeepLink, scopedInput, evidenceRoot, "manual_deep_link", failures, trust);
     if (input.applicationAutomationEnabled !== false) failures.push("application automation must remain disabled");
   }
   return { provider, targetVerdict, status: failures.length ? "BLOCKED" : "PASS", failures };
@@ -1259,7 +1547,7 @@ function fileEvidence(path, root = process.cwd()) {
 export function collectArtifactEvidence(root = process.cwd()) {
   const migrationDir = resolve(root, "backend/db/migrations");
   const migrations = readdirSync(migrationDir)
-    .filter((name) => MIGRATION_RE.test(name) || /^20260720\d+_.+\.down\.sql$/.test(name))
+    .filter((name) => MIGRATION_RE.test(name) || /^20260720\d+_.+\.down\.sql$/.test(name) || name === `${PGCRYPTO_COMPAT_MIGRATION}.down.sql`)
     .map((name) => `backend/db/migrations/${name}`);
   return [...new Set([...RELEASE_ARTIFACTS, ...migrations])]
     .sort()

@@ -20,14 +20,26 @@ import {
   resolveManifestOutput,
   sanitizedEnvironment,
   sha256,
+  signActivationEvidenceRecord,
   validateSelectedManifest,
   verifyDeploymentDefaults,
 } from "../scripts/verify-job-supply-release.mjs";
 
 const root = resolve(import.meta.dir, "..");
+const ACTIVATION_HMAC_KEY = "g015-test-only-activation-attestation-key-material";
+const ACTIVATION_ISSUER = "github-actions";
+const ACTIVATION_WORKFLOW_ID = "job-supply-release";
+const ACTIVATION_WORKFLOW_RUN_ID = "20260721.1";
+let activationEvidenceSequence = 0;
 
 function evaluateProviderActivationPreflight(input: any) {
-  return evaluateProviderActivationPreflightRaw(input, { evidenceRoot: input.evidenceRoot });
+  return evaluateProviderActivationPreflightRaw(input, {
+    evidenceRoot: input.evidenceRoot,
+    trustedAttestationKey: ACTIVATION_HMAC_KEY,
+    trustedAttestationIssuer: ACTIVATION_ISSUER,
+    trustedWorkflowId: ACTIVATION_WORKFLOW_ID,
+    trustedWorkflowRunId: ACTIVATION_WORKFLOW_RUN_ID,
+  });
 }
 
 describe("G015 release verification contract", () => {
@@ -86,7 +98,7 @@ describe("G015 release verification contract", () => {
       "SOURCE_ACTIVATION_NOT_PERFORMED",
     ]);
     const matrixEnv = plan.commands.find((entry) => entry.id === "postgres-release-matrix")?.env ?? {};
-    expect(new Set(Object.values(matrixEnv)).size).toBe(7);
+    expect(new Set(Object.values(matrixEnv)).size).toBe(8);
     expect(
       Object.values(matrixEnv).every((value) =>
         String(value).includes("_20260720"),
@@ -262,7 +274,12 @@ describe("G015 release verification contract", () => {
         verificationId: "20260720120000-123-deadbeef",
       }),
     );
-    expect(tools.every((tool) => tool.available && tool.sha256?.match(/^[a-f0-9]{64}$/))).toBe(true);
+    expect(tools.some((tool) => tool.executable === ".venv/bin/python")).toBe(true);
+    expect(
+      tools
+        .filter((tool) => tool.available)
+        .every((tool) => tool.sha256?.match(/^[a-f0-9]{64}$/)),
+    ).toBe(true);
   });
 
   test("executes deployment and disabled-default safety assertions", () => {
@@ -283,7 +300,7 @@ describe("G015 release verification contract", () => {
   test("documents every migration in exact application order with matching down coverage", async () => {
     const allFiles = await readdir(resolve(root, "backend/db/migrations"));
     const ups = allFiles
-      .filter((name) => /^20260720\d+_.+\.sql$/.test(name))
+      .filter((name) => /^(?:20260720\d+_.+|20260721001950_pgcrypto_schema_compatibility)\.sql$/.test(name))
       .filter((name) => !name.endsWith(".down.sql"))
       .sort();
     const downs = new Set(allFiles.filter((name) => name.endsWith(".down.sql")));
@@ -344,6 +361,7 @@ describe("G015 release verification contract", () => {
       "G011_TEST_DATABASE_URL:",
       "JOB_INGESTION_LEDGER_TEST_DATABASE_URL:",
       "G014_TEST_DATABASE_URL:",
+      "PGCRYPTO_COMPAT_TEST_DATABASE_URL:",
     ]) {
       expect(workflow).not.toContain(sharedSuiteVariable);
     }
@@ -469,8 +487,7 @@ describe("G015 release verification contract", () => {
       (value: any) => { value.killSwitches.providerArmed = false; },
       (value: any) => { value.shadowScorecard.path = "../escape.json"; },
       (value: any) => { value.shadowScorecard.path = "missing.json"; },
-      (value: any) => { value.simultaneousCanonicalWriters = true; },
-      (value: any) => { value.writerTransfer.throughNone = false; },
+      (value: any) => { value.writerOwnership.path = "missing.json"; },
       (value: any) => { value.rollback.exercised = false; },
       (value: any) => { value.applicationAutomationEnabled = true; },
     ]) {
@@ -490,12 +507,49 @@ describe("G015 release verification contract", () => {
     await rm(evidenceRoot, { recursive: true, force: true });
   });
 
+  test("enforces the complete inventory lifecycle for every supported inventory provider", async () => {
+    for (const provider of ["greenhouse", "recruitee", "nicoka"]) {
+      for (const step of [
+        { currentVerdict: "blocked", targetVerdict: "inventory_canary_ready", gates: ["prior_state_receipt", "review", "ultraqa"] },
+        { currentVerdict: "inventory_canary_ready", targetVerdict: "inventory_active", gates: ["canary_receipt", "observation", "review", "ultraqa"] },
+        { currentVerdict: "inventory_active", targetVerdict: "inventory_manual", gates: ["prior_state_receipt", "review", "ultraqa"] },
+      ] as const) {
+        const evidenceRoot = await mkdtemp(join(tmpdir(), `g015-${provider}-lifecycle-`));
+        const input = await passingManualPreflight(evidenceRoot, provider);
+        const scope = {
+          provider, tenantId: input.tenantId, countryCode: input.countryCode,
+          policyDigest: input.policyDigest, releaseHead: "a".repeat(40),
+          deployedArtifactDigest: "b".repeat(64),
+        };
+        Object.assign(input, step, {
+          transitionEvidence: await writeTransitionEvidence(evidenceRoot, step.targetVerdict, step.gates, scope),
+        });
+        const { deployedArtifactDigest: _artifactDigest, ...writerScope } = scope;
+        input.writerOwnership = await writeEvidence(evidenceRoot, `ownership/${provider}-${step.targetVerdict}.json`, {
+          schemaVersion: "job-supply-writer-ownership.v1", status: "observed", ...writerScope,
+          previousWriterRuntime: step.currentVerdict === "blocked" ? "none" : "typescript",
+          writerRuntime: "typescript", throughNone: step.currentVerdict === "blocked",
+          simultaneousCanonicalWriters: false, ownershipEpoch: 5,
+          observedAt: "2026-07-21T00:00:00.000Z",
+        });
+        expect(evaluateProviderActivationPreflight(input)).toMatchObject({ status: "PASS", failures: [] });
+        const skipped = structuredClone(input);
+        skipped.currentVerdict = "blocked";
+        if (step.targetVerdict !== "inventory_canary_ready") {
+          expect(evaluateProviderActivationPreflight(skipped).status).toBe("BLOCKED");
+        }
+        await rm(evidenceRoot, { recursive: true, force: true });
+      }
+    }
+  });
+
   test("validates exact shadow scorecard scope, reconciliation, run IDs, and inner digest", async () => {
     for (const mutate of [
       (value: any) => { value.provider = "nicoka"; },
       (value: any) => { value.tenantId = "other"; },
       (value: any) => { value.countryCode = "US"; },
       (value: any) => { value.runIds[1] = value.runIds[0]; },
+      (value: any) => { value.runs = value.runs.slice(0, 1); },
       (value: any) => { value.reconciliation = []; },
       (value: any) => { value.reconciliation[0].fromRunId = "wrong"; },
       (value: any) => { value.evidenceDigest = "0".repeat(64); },
@@ -510,13 +564,42 @@ describe("G015 release verification contract", () => {
     }
   });
 
+  test("re-reads both sealed shadow runs and sealed writer ownership evidence", async () => {
+    for (const mutate of [
+      async (root: string, input: any) => {
+        const scorecard = JSON.parse(await readFile(resolve(root, input.shadowScorecard.path), "utf8"));
+        await writeFile(resolve(root, scorecard.runs[0].path), "tampered\n");
+      },
+      async (_root: string, input: any) => { input.writerOwnership.sha256 = "0".repeat(64); },
+    ]) {
+      const evidenceRoot = await mkdtemp(join(tmpdir(), "g015-underlying-"));
+      const input = await passingManualPreflight(evidenceRoot);
+      await mutate(evidenceRoot, input);
+      expect(evaluateProviderActivationPreflight(input).status).toBe("BLOCKED");
+      await rm(evidenceRoot, { recursive: true, force: true });
+    }
+  });
+
   test("re-reads manifest and every exact discharge during provider preflight", async () => {
     for (const mutate of [
-      async (root: string, input: any) => { await writeFile(resolve(root, input.releaseAttestation.selectedManifest.path), "tampered\n"); },
-      async (_root: string, input: any) => { input.releaseAttestation.externalBlockDischarges.pop(); },
-      async (_root: string, input: any) => { input.releaseAttestation.externalBlockDischarges[1] = input.releaseAttestation.externalBlockDischarges[0]; },
       async (root: string, input: any) => {
-        input.releaseAttestation.externalBlockDischarges[0] = await writeDischarge(root, EXTERNAL_BLOCKS[0], { releaseHead: "c".repeat(40), path: "mismatch.json" });
+        const attestation = JSON.parse(await readFile(resolve(root, input.releaseAttestation.path), "utf8"));
+        await writeFile(resolve(root, attestation.selectedManifest.path), "tampered\n");
+      },
+      async (root: string, input: any) => {
+        const attestation = JSON.parse(await readFile(resolve(root, input.releaseAttestation.path), "utf8"));
+        attestation.externalBlockDischarges.pop();
+        input.releaseAttestation = await writeEvidence(root, "release/attestation-missing.json", attestation);
+      },
+      async (root: string, input: any) => {
+        const attestation = JSON.parse(await readFile(resolve(root, input.releaseAttestation.path), "utf8"));
+        attestation.externalBlockDischarges[1] = attestation.externalBlockDischarges[0];
+        input.releaseAttestation = await writeEvidence(root, "release/attestation-duplicate.json", attestation);
+      },
+      async (root: string, input: any) => {
+        const attestation = JSON.parse(await readFile(resolve(root, input.releaseAttestation.path), "utf8"));
+        attestation.externalBlockDischarges[0] = await writeDischarge(root, EXTERNAL_BLOCKS[0], { releaseHead: "c".repeat(40), path: "mismatch.json" });
+        input.releaseAttestation = await writeEvidence(root, "release/attestation-mismatch.json", attestation);
       },
     ]) {
       const evidenceRoot = await mkdtemp(join(tmpdir(), "g015-sealed-release-"));
@@ -529,20 +612,162 @@ describe("G015 release verification contract", () => {
 
   test("greenhouse application requires reviewed hosted-form capability evidence", async () => {
     const evidenceRoot = await mkdtemp(join(tmpdir(), "g015-greenhouse-"));
-    const input = { ...(await passingManualPreflight(evidenceRoot, "greenhouse")), targetVerdict: "application_canary_ready" };
+    const input = {
+      ...(await passingManualPreflight(evidenceRoot, "greenhouse")),
+      currentVerdict: "inventory_active",
+      targetVerdict: "application_canary_ready",
+    };
+    const scope = {
+      provider: input.provider,
+      tenantId: input.tenantId,
+      countryCode: input.countryCode,
+      policyDigest: input.policyDigest,
+      releaseHead: "a".repeat(40),
+    };
+    input.writerOwnership = await writeEvidence(evidenceRoot, "ownership/greenhouse-active.json", {
+      schemaVersion: "job-supply-writer-ownership.v1", status: "observed", ...scope,
+      previousWriterRuntime: "typescript", writerRuntime: "typescript", throughNone: false,
+      simultaneousCanonicalWriters: false, ownershipEpoch: 5,
+      observedAt: "2026-07-21T00:00:00.000Z",
+    });
+    input.transitionEvidence = await writeTransitionEvidence(
+      evidenceRoot,
+      input.targetVerdict,
+      ["prior_state_receipt", "review", "ultraqa"],
+      scope,
+    );
     Object.assign(input, {
-      submissionAuthority: approvedPolicy(),
-      privacyBasis: approvedPolicy(),
-      nonProductionSubmission: { status: "passed", evidence: ["evidence/non-production/attempt.json"] },
+      submissionAuthority: approvedPolicy(await writeActivationEvidence(evidenceRoot, "submissionAuthority_policy", scope)),
+      privacyBasis: approvedPolicy(await writeActivationEvidence(evidenceRoot, "privacyBasis_policy", scope)),
+      nonProductionSubmission: {
+        status: "passed",
+        evidence: await writeActivationEvidence(evidenceRoot, "non_production_submission", scope),
+      },
     });
     expect(evaluateProviderActivationPreflight(input).status).toBe("BLOCKED");
-    input.applicationCapability = { reviewed: true, transport: "hosted_candidate_form", evidence: ["reviews/greenhouse.json"] };
+    input.applicationCapability = {
+      reviewed: true,
+      transport: "hosted_candidate_form",
+      evidence: await writeActivationEvidence(evidenceRoot, "application_capability_review", scope),
+    };
     expect(evaluateProviderActivationPreflight(input).status).toBe("PASS");
     for (const applicationCapability of [
       { ...input.applicationCapability, reviewed: false },
       { ...input.applicationCapability, transport: "api" },
-      { ...input.applicationCapability, evidence: [] },
+      { ...input.applicationCapability, evidence: null },
     ]) expect(evaluateProviderActivationPreflight({ ...input, applicationCapability }).status).toBe("BLOCKED");
+    await rm(evidenceRoot, { recursive: true, force: true });
+  });
+
+  test("blocks skipped active transitions and requires sealed canary, observation, review, and UltraQA gates", async () => {
+    const evidenceRoot = await mkdtemp(join(tmpdir(), "g015-state-machine-"));
+    const input = {
+      ...(await passingManualPreflight(evidenceRoot, "greenhouse")),
+      currentVerdict: "inventory_canary_ready",
+      targetVerdict: "inventory_active",
+    };
+    const scope = {
+      provider: input.provider,
+      tenantId: input.tenantId,
+      countryCode: input.countryCode,
+      policyDigest: input.policyDigest,
+      releaseHead: "a".repeat(40),
+    };
+    input.writerOwnership = await writeEvidence(evidenceRoot, "ownership/greenhouse-inventory-active.json", {
+      schemaVersion: "job-supply-writer-ownership.v1", status: "observed", ...scope,
+      previousWriterRuntime: "typescript", writerRuntime: "typescript", throughNone: false,
+      simultaneousCanonicalWriters: false, ownershipEpoch: 5,
+      observedAt: "2026-07-21T00:00:00.000Z",
+    });
+    input.transitionEvidence = await writeTransitionEvidence(
+      evidenceRoot,
+      input.targetVerdict,
+      ["canary_receipt", "observation", "review", "ultraqa"],
+      scope,
+    );
+    expect(evaluateProviderActivationPreflight(input).status).toBe("PASS");
+
+    for (const mutate of [
+      (value: any) => { value.currentVerdict = "inventory_manual"; },
+      (value: any) => { delete value.transitionEvidence.canary_receipt; },
+      (value: any) => { delete value.transitionEvidence.observation; },
+      (value: any) => { delete value.transitionEvidence.review; },
+      (value: any) => { delete value.transitionEvidence.ultraqa; },
+      (value: any) => { value.transitionEvidence.unreviewed = value.transitionEvidence.review; },
+      (value: any) => { value.transitionEvidence.review.sha256 = "0".repeat(64); },
+    ]) {
+      const changed = structuredClone(input);
+      mutate(changed);
+      expect(evaluateProviderActivationPreflight(changed).status).toBe("BLOCKED");
+    }
+    await rm(evidenceRoot, { recursive: true, force: true });
+  });
+
+  test("rejects forged, stale, future, replayed, or artifact-mismatched activation attestations", async () => {
+    const mutations = [
+      async (_root: string, input: any) => {
+        input.transitionEvidence.review.signature = "0".repeat(64);
+      },
+      async (root: string, input: any) => {
+        const descriptor = input.transitionEvidence.review;
+        const envelope = JSON.parse(await readFile(resolve(root, descriptor.path), "utf8"));
+        envelope.review.security.verdict = "CLEAN";
+        envelope.review.security.unresolvedFindings = 1;
+        envelope.signature = signActivationEvidenceRecord(envelope, ACTIVATION_HMAC_KEY);
+        input.transitionEvidence.review = await writeEvidence(root, "activation/forged-review.json", envelope);
+      },
+      async (root: string, input: any) => {
+        const descriptor = input.transitionEvidence.ultraqa;
+        const envelope = JSON.parse(await readFile(resolve(root, descriptor.path), "utf8"));
+        envelope.ultraqa.status = "failed";
+        envelope.signature = signActivationEvidenceRecord(envelope, ACTIVATION_HMAC_KEY);
+        input.transitionEvidence.ultraqa = await writeEvidence(root, "activation/failed-ultraqa.json", envelope);
+      },
+      async (root: string, input: any) => {
+        const descriptor = input.transitionEvidence.review;
+        const envelope = JSON.parse(await readFile(resolve(root, descriptor.path), "utf8"));
+        envelope.observedAt = "2026-07-22T00:00:00.000Z";
+        envelope.signature = signActivationEvidenceRecord(envelope, ACTIVATION_HMAC_KEY);
+        input.transitionEvidence.review = await writeEvidence(root, "activation/future-review.json", envelope);
+      },
+      async (root: string, input: any) => {
+        const descriptor = input.transitionEvidence.review;
+        const envelope = JSON.parse(await readFile(resolve(root, descriptor.path), "utf8"));
+        envelope.observedAt = "2026-07-19T00:00:00.000Z";
+        envelope.signature = signActivationEvidenceRecord(envelope, ACTIVATION_HMAC_KEY);
+        input.transitionEvidence.review = await writeEvidence(root, "activation/stale-review.json", envelope);
+      },
+      async (root: string, input: any) => {
+        const review = JSON.parse(await readFile(resolve(root, input.transitionEvidence.review.path), "utf8"));
+        const ultraqa = JSON.parse(await readFile(resolve(root, input.transitionEvidence.ultraqa.path), "utf8"));
+        ultraqa.evidenceId = review.evidenceId;
+        ultraqa.signature = signActivationEvidenceRecord(ultraqa, ACTIVATION_HMAC_KEY);
+        input.transitionEvidence.ultraqa = await writeEvidence(root, "activation/replayed-ultraqa.json", ultraqa);
+      },
+      async (root: string, input: any) => {
+        const scope = {
+          provider: input.provider, tenantId: input.tenantId, countryCode: input.countryCode,
+          policyDigest: input.policyDigest, releaseHead: "a".repeat(40),
+          deployedArtifactDigest: "c".repeat(64),
+        };
+        input.transitionEvidence.review = await writeActivationEvidence(
+          root,
+          "inventory_manual_review",
+          scope,
+        );
+      },
+    ];
+    for (const mutate of mutations) {
+      const evidenceRoot = await mkdtemp(join(tmpdir(), "g015-hostile-attestation-"));
+      const input = await passingManualPreflight(evidenceRoot);
+      input.now = "2026-07-21T01:00:00.000Z";
+      await mutate(evidenceRoot, input);
+      expect(evaluateProviderActivationPreflight(input).status).toBe("BLOCKED");
+      await rm(evidenceRoot, { recursive: true, force: true });
+    }
+    const evidenceRoot = await mkdtemp(join(tmpdir(), "g015-missing-trust-"));
+    const input = await passingManualPreflight(evidenceRoot);
+    expect(evaluateProviderActivationPreflightRaw(input, { evidenceRoot }).status).toBe("BLOCKED");
     await rm(evidenceRoot, { recursive: true, force: true });
   });
 
@@ -570,6 +795,16 @@ describe("G015 release verification contract", () => {
     }
     for (const value of ["Bearer abc", "Basic YWJj", "https://user:pass@example.com/path"]) {
       expect(() => createAtsPhase0Receipt({ ...input, deployedRuntime: { status: value } })).toThrow();
+    }
+    for (const value of [
+      "password=secret-canary",
+      "token:secret-canary",
+      "api_key=secret-canary",
+      "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJjYW5hcnkifQ.signature",
+      "-----BEGIN PRIVATE KEY-----\nsecret-canary\n-----END PRIVATE KEY-----",
+    ]) {
+      expect(() => createAtsPhase0Receipt({ ...input, deployedRuntime: { status: value } }))
+        .toThrow("secret-pattern");
     }
     expect(() => createAtsPhase0Receipt({
       ...input,
@@ -632,13 +867,86 @@ async function writeDischarge(
   });
 }
 
-function approvedPolicy() {
+function approvedPolicy(evidence: unknown = ["evidence/policy.json"]) {
   return {
     verdict: "approved",
     owner: "release-owner",
-    evidence: ["evidence/policy.json"],
+    evidence,
     reviewExpiresAt: "2099-01-01T00:00:00.000Z",
   };
+}
+
+async function writeActivationEvidence(
+  evidenceRoot: string,
+  kind: string,
+  scope: {
+    provider: string;
+    tenantId: string;
+    countryCode: string;
+    policyDigest: string;
+    releaseHead: string;
+    deployedArtifactDigest?: string;
+  },
+  semanticOverrides: Record<string, unknown> = {},
+) {
+  const semantics = kind.endsWith("_review")
+    ? {
+        review: {
+          security: { verdict: "CLEAN", unresolvedFindings: 0 },
+          codeReview: { verdict: "APPROVE" },
+          architecture: { verdict: "CLEAR" },
+        },
+      }
+    : kind.endsWith("_ultraqa")
+      ? { ultraqa: { status: "passed" } }
+      : {};
+  const provenance = () => ({
+    issuer: ACTIVATION_ISSUER,
+    workflowId: ACTIVATION_WORKFLOW_ID,
+    workflowRunId: ACTIVATION_WORKFLOW_RUN_ID,
+    evidenceId: `g015-${++activationEvidenceSequence}-${kind}`,
+    observedAt: "2026-07-21T00:00:00.000Z",
+  });
+  const unsignedArtifact = {
+    kind,
+    result: "passed",
+    releaseHead: scope.releaseHead,
+    deployedArtifactDigest: scope.deployedArtifactDigest ?? "b".repeat(64),
+    ...provenance(),
+    ...semantics,
+  };
+  const artifact = await writeEvidence(
+    evidenceRoot,
+    `activation/artifacts/${kind}.json`,
+    { ...unsignedArtifact, signature: signActivationEvidenceRecord(unsignedArtifact, ACTIVATION_HMAC_KEY) },
+  );
+  const unsignedEnvelope = {
+    schemaVersion: "job-supply-activation-evidence.v1",
+    kind,
+    status: "passed",
+    ...scope,
+    deployedArtifactDigest: scope.deployedArtifactDigest ?? "b".repeat(64),
+    ...provenance(),
+    artifacts: [artifact],
+    ...semantics,
+    ...semanticOverrides,
+  };
+  return writeEvidence(evidenceRoot, `activation/${kind}.json`, {
+    ...unsignedEnvelope,
+    signature: signActivationEvidenceRecord(unsignedEnvelope, ACTIVATION_HMAC_KEY),
+  });
+}
+
+async function writeTransitionEvidence(
+  evidenceRoot: string,
+  targetVerdict: string,
+  gates: readonly string[],
+  scope: { provider: string; tenantId: string; countryCode: string; policyDigest: string; releaseHead: string },
+) {
+  return Object.fromEntries(await Promise.all(gates.map(async (gate) => [
+    gate,
+    await writeActivationEvidence(evidenceRoot, `${targetVerdict}_${gate}`, scope),
+  ])));
 }
 
 async function passingManualPreflight(evidenceRoot: string, provider = "recruitee") {
@@ -653,6 +961,34 @@ async function passingManualPreflight(evidenceRoot: string, provider = "recruite
     createdAt: "2026-07-21T00:00:00.000Z",
     evidenceRoot,
   });
+  const releaseAttestationDescriptor = await writeEvidence(
+    evidenceRoot,
+    "release/attestation.json",
+    releaseAttestation,
+  );
+  const scope = {
+    provider,
+    tenantId: "vaulttec",
+    countryCode: "FR",
+    policyDigest,
+    releaseHead: releaseAttestation.releaseHead,
+  };
+  const runs = await Promise.all(["shadow-1", "shadow-2"].map((runId, index) => writeEvidence(
+    evidenceRoot,
+    `shadow/${runId}.json`,
+    {
+      schemaVersion: "job-supply-shadow-run.v1",
+      runId,
+      provider,
+      tenantId: "vaulttec",
+      countryCode: "FR",
+      policyDigest,
+      complete: true,
+      canonicalWritesEnabled: false,
+      capturedAt: `2026-07-2${index + 1}T00:00:00.000Z`,
+      jobs: [{ externalId: `job-${index + 1}`, fingerprint: `${index + 1}` }],
+    },
+  )));
   const shadowEvidence = {
     schemaVersion: 1,
     verdict: "complete_shadow_ready",
@@ -662,30 +998,52 @@ async function passingManualPreflight(evidenceRoot: string, provider = "recruite
     countryCode: "FR",
     policyDigest,
     runIds: ["shadow-1", "shadow-2"],
+    runs,
     reconciliation: [{
       fromRunId: "shadow-1", toRunId: "shadow-2", additions: [], updates: ["job-1"], removals: [],
     }],
   };
   const shadowScorecard = { ...shadowEvidence, evidenceDigest: sha256(canonicalTestJson(shadowEvidence)) };
+  const writerOwnership = await writeEvidence(evidenceRoot, "ownership/recruitee.json", {
+    schemaVersion: "job-supply-writer-ownership.v1",
+    status: "observed",
+    ...scope,
+    previousWriterRuntime: "typescript",
+    writerRuntime: "typescript",
+    throughNone: false,
+    simultaneousCanonicalWriters: false,
+    ownershipEpoch: 4,
+    observedAt: "2026-07-21T00:00:00.000Z",
+  });
   return {
     evidenceRoot,
     provider,
+    currentVerdict: "inventory_active",
     targetVerdict: "inventory_manual",
     tenantId: "vaulttec",
     countryCode: "FR",
     policyDigest,
-    releaseAttestation,
-    inventoryAccess: approvedPolicy(),
+    releaseAttestation: releaseAttestationDescriptor,
+    inventoryAccess: approvedPolicy(await writeActivationEvidence(evidenceRoot, "inventoryAccess_policy", scope)),
     killSwitches: { providerArmed: true, tenantCountryArmed: true },
     rollback: {
       exercised: true,
-      evidence: ["evidence/rollback.json"],
+      evidence: await writeActivationEvidence(evidenceRoot, "rollback_exercise", scope),
       commandTranscriptId: "rollback-transcript-123",
     },
     shadowScorecard: await writeEvidence(evidenceRoot, "shadow/scorecard.json", shadowScorecard),
-    simultaneousCanonicalWriters: false,
-    writerTransfer: { throughNone: true },
-    manualDeepLink: { verified: true, environment: "production", evidence: ["evidence/manual-link.json"] },
+    writerOwnership,
+    transitionEvidence: await writeTransitionEvidence(
+      evidenceRoot,
+      "inventory_manual",
+      ["prior_state_receipt", "review", "ultraqa"],
+      scope,
+    ),
+    manualDeepLink: {
+      verified: true,
+      environment: "production",
+      evidence: await writeActivationEvidence(evidenceRoot, "manual_deep_link", scope),
+    },
     applicationAutomationEnabled: false,
   };
 }

@@ -358,10 +358,10 @@ const documentPiiKeys = [
   /^(?:fileupload|uploadedfile|uploadfile)(?:name|filename|content|bytes|body|data|url|path)?$/,
   /^(?:attachment|document|file)(?:content|bytes|body|data)$/,
 ];
-const candidateContainerKeys = [
-  /^(?:candidate|applicant|candidateprofile|applicantprofile|candidatepayload|applicantpayload|candidateapplication|applicantapplication)$/,
-  /^(?:candidate|applicant)(?:data|details|record|submission)$/,
-];
+const candidateContainerKey =
+  /^(?:candidates?|applicants?|applications?)(?:(?:info|profiles?|payloads?|data|details|records?|submissions?)s?)?$/;
+const candidateSensitiveScalarKey =
+  /^(?:candidates?|applicants?|applications?)(?:firstnames?|lastnames?|fullnames?|names?|emails?|phones?|addresses?|birthdates?|dates?ofbirth|nationalids?|profileurls?|linkedinurls?|coverletters?|personalstatements?|messages?|notes?|freetexts?|texts?|answers?)$/;
 const email = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const phone =
   /(?:\+\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)[\s.-]?)?\d[\d\s.-]{7,}\d/g;
@@ -385,7 +385,10 @@ function isDocumentPiiKey(key: string): boolean {
 
 function isCandidateContainerKey(key: string): boolean {
   const normalized = normalizedSourceKey(key);
-  return candidateContainerKeys.some((pattern) => pattern.test(normalized));
+  return (
+    candidateContainerKey.test(normalized) ||
+    candidateSensitiveScalarKey.test(normalized)
+  );
 }
 
 export function sanitizeSourceDocument(

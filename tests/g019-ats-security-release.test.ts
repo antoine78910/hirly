@@ -293,6 +293,50 @@ describe("G019 adversarial ATS transport and policy release gates", () => {
       applicant_data: "[REDACTED]",
     });
   });
+
+  test("drops normalized singular and plural candidate application subtrees and scalars", () => {
+    const privateCanary = "private-candidate-canary";
+    const sanitized = sanitizeSourceDocument({
+      description: "Public job description retained.",
+      location: { address: "10 Public Job Street" },
+      company: { profileUrl: "https://company.example.test/profile" },
+      applicationUrl: "https://jobs.example.test/job-42/apply",
+      candidate_info: { message: privateCanary },
+      candidateInfo: { message: privateCanary },
+      candidates: [{ message: privateCanary }],
+      candidatesProfiles: [{ message: privateCanary }],
+      applicantPayload: { message: privateCanary },
+      applicants: [{ message: privateCanary }],
+      applicants_records: [{ message: privateCanary }],
+      applicationDetails: { message: privateCanary },
+      applications: [{ message: privateCanary }],
+      application_submissions: [{ message: privateCanary }],
+      candidateCoverLetter: privateCanary,
+      applicantPersonalStatement: privateCanary,
+      applicationAnswers: [privateCanary],
+    });
+
+    expect(sanitized).toEqual({
+      description: "Public job description retained.",
+      location: { address: "10 Public Job Street" },
+      company: { profileUrl: "https://company.example.test/profile" },
+      applicationUrl: "https://jobs.example.test/job-42/apply",
+      candidate_info: "[REDACTED]",
+      candidateInfo: "[REDACTED]",
+      candidates: "[REDACTED]",
+      candidatesProfiles: "[REDACTED]",
+      applicantPayload: "[REDACTED]",
+      applicants: "[REDACTED]",
+      applicants_records: "[REDACTED]",
+      applicationDetails: "[REDACTED]",
+      applications: "[REDACTED]",
+      application_submissions: "[REDACTED]",
+      candidateCoverLetter: "[REDACTED]",
+      applicantPersonalStatement: "[REDACTED]",
+      applicationAnswers: "[REDACTED]",
+    });
+    expect(JSON.stringify(sanitized)).not.toContain(privateCanary);
+  });
 });
 
 describe("G019 canonical write, retry, and rollback safety", () => {
