@@ -14,6 +14,13 @@ describe("worker lifecycle", () => {
           calls.push(`consumer:stop:ready=${health.ready}`);
         },
       },
+      projectionConsumer: {
+        start: () => calls.push("projection:start"),
+        stopClaiming: () => calls.push("projection:stop-claiming"),
+        stop: async () => {
+          calls.push(`projection:stop:ready=${health.ready}`);
+        },
+      },
       scheduler: {
         start: () => calls.push("scheduler:start"),
         stop: async () => {
@@ -37,11 +44,14 @@ describe("worker lifecycle", () => {
     await Promise.all([runtime.stop(), runtime.stop()]);
     expect(calls).toEqual([
       "consumer:start",
+      "projection:start",
       "scheduler:start",
       "consumer:stop-claiming",
+      "projection:stop-claiming",
       "server:stop:ready=false",
       "scheduler:stop:ready=false",
       "consumer:stop:ready=false",
+      "projection:stop:ready=false",
       "repository:close",
     ]);
   });

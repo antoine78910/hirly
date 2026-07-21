@@ -17,9 +17,12 @@ const runtimeConfigSchema = z.object({
     .max(25_000)
     .default(25_000),
   WORKER_INSTANCE_ID: z.string().trim().min(1).max(128).optional(),
-  JOB_PROJECTION_ENABLED: z.string().default("false").transform((value) => value === "true"),
+  JOB_PROJECTION_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
   PROJECTION_RECONCILIATION_ENABLED: z
-    .string()
+    .enum(["true", "false"])
     .default("false")
     .transform((value) => value === "true"),
   JOB_PROJECTION_BATCH_SIZE: z.coerce.number().int().min(1).max(100).default(10),

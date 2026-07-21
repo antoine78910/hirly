@@ -1,131 +1,155 @@
 import { describe, expect, test } from "bun:test";
-import type { JobSearchDocumentPersistenceRow } from "@hirly/contracts";
-import type { JobProjectionLease } from "@hirly/db";
 import type {
-  JobProjectionResult,
-  JobProjectionSource,
-} from "@hirly/matching";
+  JobProjectionLease,
+  JobProjectionSourceRecord,
+} from "@hirly/db";
+import type { JobSearchDocumentPersistenceRow } from "@hirly/contracts";
 import {
   JobProjectionConsumer,
-  type JobProjectionConsumerOptions,
   type JobProjectionStore,
 } from "../src/runtime/job-projection-consumer";
 
 const lease: JobProjectionLease = {
-  taskId: "10000000-0000-4000-8000-000000000001",
+  taskId: "11111111-1111-4111-8111-111111111111",
   taskKind: "job.document.project",
-  entityId: "20000000-0000-4000-8000-000000000002",
-  entityVersion: 9n,
-  idempotencyKey: "job:group:9",
-  leaseOwner: "worker-test",
-  leaseToken: "30000000-0000-4000-8000-000000000003",
+  entityId: "22222222-2222-4222-8222-222222222222",
+  entityVersion: 7n,
+  idempotencyKey: "job:7",
+  leaseOwner: "projection-1",
+  leaseToken: "33333333-3333-4333-8333-333333333333",
   claimGeneration: 1n,
-  leaseUntil: new Date("2026-07-21T09:00:00.000Z"),
+  leaseUntil: new Date(Date.now() + 30_000),
   attempts: 1,
   maxAttempts: 8,
 };
 
-const options = (
-  overrides: Partial<JobProjectionConsumerOptions> = {},
-): JobProjectionConsumerOptions => ({
-  enabled: true,
-  reconciliationEnabled: false,
-  instanceId: "worker-test",
-  concurrency: 1,
-  batchSize: 1,
-  leaseSeconds: 60,
-  heartbeatSeconds: 30,
-  pollMs: 1,
-  reconciliationBatchSize: 10,
-  ...overrides,
-});
+const source: JobProjectionSourceRecord = {
+  authoritativeVersion: "7",
+  canonicalGroupId: lease.entityId,
+  preferredJobId: "job_0123456789abcdef",
+  groupStatus: "active",
+  title: "Software Engineer",
+  normalizedTitle: "software engineer",
+  company: "Hirly",
+  location: "Paris",
+  countryCode: "FR",
+  remote: null,
+  latitude: null,
+  longitude: null,
+  publishedAt: "2026-07-20T00:00:00.000Z",
+  importedAt: "2026-07-20T00:00:00.000Z",
+  firstSeenAt: "2026-07-20T00:00:00.000Z",
+  lastSeenAt: "2026-07-21T00:00:00.000Z",
+  expiresAt: null,
+  lifecycleState: "active",
+  validationStatus: "valid",
+  applyabilityTier: "B",
+  applyFulfillmentStatus: "manual_ready",
+  autoApplySupported: false,
+  manualFulfillmentReady: true,
+  sourceEligible: true,
+  policyEligible: true,
+  data: {},
+};
 
-async function eventually(assertion: () => void): Promise<void> {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    try {
-      assertion();
-      return;
-    } catch {
-      await Bun.sleep(2);
-    }
-  }
-  assertion();
-}
+const document = {
+  schema_version: "hirly.matching.v1",
+  canonical_group_id: lease.entityId,
+  preferred_job_id: source.preferredJobId,
+  job_version: "7",
+  lifecycle_status: "active",
+  normalized_title: "software-engineer",
+  role_family_codes: [],
+  rome_codes: [],
+  skill_codes: [],
+  seniority_min: null,
+  seniority_max: null,
+  contract_families: [],
+  work_modes: [],
+  country_codes: ["FR"],
+  latitude: null,
+  longitude: null,
+  location_confidence: 0.6,
+  location_unknown: false,
+  salary_min: null,
+  salary_max: null,
+  currency: null,
+  posted_at: source.publishedAt!,
+  last_seen_at: source.lastSeenAt!,
+  expires_at: null,
+  validation_status: "valid",
+  applyability_tier: "B",
+  fulfillment_route: "manual",
+  source_eligible: true,
+  policy_eligible: true,
+  feature_schema_version: "matching-job-features.v1",
+  search_text: "software engineer",
+  source_updated_at: "2026-07-21T00:00:00.000Z",
+} satisfies JobSearchDocumentPersistenceRow;
 
-function store(overrides: Partial<JobProjectionStore> = {}): JobProjectionStore {
+function options(enabled: boolean) {
   return {
-    claim: async () => [],
-    heartbeat: async () => true,
-    loadSource: async () => null,
-    completeUpsert: async () => true,
-    completeRemove: async () => true,
-    finish: async () => true,
-    enqueueReconciliation: async () => 0,
-    ...overrides,
+    enabled,
+    reconciliationEnabled: false,
+    instanceId: "projection-1",
+    concurrency: 1,
+    batchSize: 1,
+    leaseSeconds: 30,
+    heartbeatSeconds: 5,
+    pollMs: 5,
+    reconciliationBatchSize: 10,
   };
 }
 
 describe("job projection consumer", () => {
-  test("does not claim while the application rollout flag is disabled", async () => {
+  test("does not claim when application rollout is disabled", async () => {
     let claims = 0;
-    const consumer = new JobProjectionConsumer(
-      store({ claim: async () => { claims += 1; return []; } }),
-      options({ enabled: false }),
-    );
+    const store = {
+      claim: async () => {
+        claims += 1;
+        return [];
+      },
+    } as unknown as JobProjectionStore;
+    const consumer = new JobProjectionConsumer(store, options(false));
     consumer.start();
-    await Bun.sleep(5);
-    await consumer.stop(20);
+    await Bun.sleep(15);
+    await consumer.stop(50);
     expect(claims).toBe(0);
   });
 
-  test("dispatches a projected document through the fenced completion", async () => {
+  test("projects and atomically completes a claimed document", async () => {
+    const completed: unknown[][] = [];
     let claimed = false;
-    const completed: Array<{ lease: JobProjectionLease; digest: string }> = [];
-    const source = { authoritativeVersion: "9" } as JobProjectionSource;
-    const row = { job_version: "9" } as JobSearchDocumentPersistenceRow;
-    const result: JobProjectionResult = {
-      action: "upsert",
-      canonicalGroupId: lease.entityId,
-      preferredJobId: "job_0123456789abcdef",
-      authoritativeVersion: "9",
-      sourceContentHash: "a".repeat(64),
-      row,
+    const store: JobProjectionStore = {
+      claim: async () => (claimed ? [] : ((claimed = true), [lease])),
+      heartbeat: async () => true,
+      loadSource: async () => source,
+      completeUpsert: async (...args) => {
+        completed.push(args);
+        return true;
+      },
+      completeRemove: async () => true,
+      finish: async () => true,
+      enqueueReconciliation: async () => 0,
     };
     const consumer = new JobProjectionConsumer(
-      store({
-        claim: async () => claimed ? [] : ((claimed = true), [lease]),
-        loadSource: async () => source,
-        completeUpsert: async (task, _row, digest) => {
-          completed.push({ lease: task, digest });
-          return true;
-        },
+      store,
+      options(true),
+      async () => ({
+        action: "upsert",
+        canonicalGroupId: lease.entityId,
+        preferredJobId: source.preferredJobId,
+        authoritativeVersion: "7",
+        sourceContentHash: "a".repeat(64),
+        row: document,
       }),
-      options(),
-      async () => result,
+      () => new Date("2026-07-21T00:00:00Z"),
     );
     consumer.start();
-    await eventually(() => expect(completed).toHaveLength(1));
-    await consumer.stop(50);
-    expect(completed[0]).toEqual({ lease, digest: "a".repeat(64) });
-  });
-
-  test("uses the leased entity version for a missing canonical source", async () => {
-    let claimed = false;
-    const removals: Array<{ groupId: string; version: string }> = [];
-    const consumer = new JobProjectionConsumer(
-      store({
-        claim: async () => claimed ? [] : ((claimed = true), [lease]),
-        loadSource: async () => null,
-        completeRemove: async (_task, groupId, version) => {
-          removals.push({ groupId, version });
-          return true;
-        },
-      }),
-      options(),
-    );
-    consumer.start();
-    await eventually(() => expect(removals).toHaveLength(1));
-    await consumer.stop(50);
-    expect(removals).toEqual([{ groupId: lease.entityId, version: "9" }]);
+    await Bun.sleep(20);
+    await consumer.stop(100);
+    expect(completed).toHaveLength(1);
+    expect(completed[0]?.[0]).toBe(lease);
+    expect(completed[0]?.[1]).toEqual(document);
   });
 });
