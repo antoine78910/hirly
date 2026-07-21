@@ -33,6 +33,10 @@ describe("Swipe Feed v2 request policy", () => {
     expect(sanitizeSwipeFeedParams(params).toString()).toBe(
       "search_role=engineer",
     );
+    expect(params.get("prefetch")).toBe("true");
+    expect(params.get("refresh")).toBe("true");
+    expect(params.get("provider_refresh")).toBe("true");
+    expect(params.get("background_refresh")).toBe("true");
   });
 
   it.each([
@@ -84,5 +88,15 @@ describe("Swipe Feed v2 request policy", () => {
         feedMeta: { empty_reason: { code: "UNKNOWN_UPSTREAM_STATE" as never } },
       }),
     ).toEqual({ kind: "empty", emptyReason: null });
+  });
+
+  it("reads typed degraded state from snake_case Feed V2 metadata", () => {
+    expect(
+      resolveSwipeFeedViewState({
+        loading: false,
+        jobCount: 0,
+        feedMeta: { inventory_state: "degraded" },
+      }),
+    ).toEqual({ kind: "error", emptyReason: null });
   });
 });
