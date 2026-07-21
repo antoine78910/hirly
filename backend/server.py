@@ -7401,6 +7401,7 @@ class _FeedV2MatchContext(BaseModel):
     snapshot_version: str = Field(alias="snapshotVersion")
     profile_version: str = Field(alias="profileVersion")
     action_watermark: str = Field(alias="actionWatermark")
+    query_fingerprint: str = Field(alias="queryFingerprint")
 
 
 class _FeedV2VisibleByRoute(BaseModel):

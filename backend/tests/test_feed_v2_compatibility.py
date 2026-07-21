@@ -28,6 +28,7 @@ def _v2_response():
             "snapshotVersion": "inventory-1",
             "profileVersion": "profile-1",
             "actionWatermark": "actions-1",
+            "queryFingerprint": "candidate-profile",
         },
         "summary": {
             "evaluated": 1,

@@ -15,7 +15,8 @@
   "matchContext": {
     "snapshotVersion": "inventory-paris-17",
     "profileVersion": "profile-fullstack-3",
-    "actionWatermark": "actions-0"
+    "actionWatermark": "actions-0",
+    "queryFingerprint": "candidate-profile"
   },
   "summary": {
     "evaluated": 1,
