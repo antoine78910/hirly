@@ -27,6 +27,16 @@ export type ProductionShadowProvider = z.output<
   typeof productionShadowProviderSchema
 >;
 
+const completeSnapshotProviders = new Set<ProductionShadowProvider>(["nicoka"]);
+
+export function assertCompleteShadowSnapshotProven(
+  provider: ProductionShadowProvider,
+): void {
+  if (!completeSnapshotProviders.has(provider)) {
+    refuse(`${provider} public transport cannot prove complete snapshots`);
+  }
+}
+
 export const atsInventoryShadowPolicySchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -175,6 +185,7 @@ export function buildAtsRepeatedShadowScorecard(runs: readonly unknown[]) {
     if (runs.length < 2) refuse("at least two complete shadow runs are required");
     const parsed = runs.map((run) => atsCompleteShadowRunSchema.parse(run));
     const first = parsed[0]!;
+    assertCompleteShadowSnapshotProven(first.provider);
     const scope = `${first.provider}\0${first.tenantId}\0${first.countryCode}\0${first.policyDigest}`;
     const runIds = new Set<string>();
     const timestamps = new Set<number>();

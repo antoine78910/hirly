@@ -3,6 +3,7 @@ import { lstat, mkdir, open, readFile, realpath } from "node:fs/promises";
 import { basename, dirname, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import {
+  assertCompleteShadowSnapshotProven,
   buildAtsRepeatedShadowScorecard,
   productionShadowProviderSchema,
   type ProductionShadowProvider,
@@ -95,6 +96,7 @@ export async function runAtsInventoryShadowCli(
 ): Promise<RunArtifact | ReturnType<typeof buildAtsRepeatedShadowScorecard> & { runs: readonly { path: string; sha256: string }[] }> {
   const root = await resolveEvidenceRoot(command.evidenceRootPath);
   if (command.type === "seal") return seal(command, root);
+  assertCompleteShadowSnapshotProven(command.provider);
   const policy = JSON.parse(await readRegularFile(command.policyPath));
   const approvalNow = options.now?.();
   const transport = command.provider === "greenhouse"
