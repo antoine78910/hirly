@@ -1,7 +1,48 @@
 import asyncio
 from contextlib import nullcontext
+from pathlib import Path
 
 import server
+
+
+def test_backend_deployable_analytics_registry_matches_canonical_contract():
+    canonical_path = (
+        Path(__file__).resolve().parents[2]
+        / "packages"
+        / "contracts"
+        / "src"
+        / "analytics-registry.v1.json"
+    )
+    deployable_path = Path(server.__file__).resolve().with_name(
+        "analytics-registry.v1.json"
+    )
+
+    assert deployable_path.read_bytes() == canonical_path.read_bytes()
+
+
+def test_analytics_registry_loader_falls_back_to_backend_deployable_copy(
+    monkeypatch, tmp_path
+):
+    missing_path = tmp_path / "packages" / "analytics-registry.v1.json"
+    deployable_path = Path(server.__file__).resolve().with_name(
+        "analytics-registry.v1.json"
+    )
+    monkeypatch.setattr(
+        server,
+        "_ANALYTICS_REGISTRY_PATHS",
+        (missing_path, deployable_path),
+    )
+
+    registry = server._load_analytics_registry()
+
+    assert registry["schemaVersion"] == "hirly.analytics-registry.v1"
+    assert {event["name"] for event in registry["events"]} >= {
+        "user_signed_up",
+        "cv_uploaded",
+        "job_dismissed",
+        "subscription_activated",
+        "subscription_churned",
+    }
 
 
 class _Request:
