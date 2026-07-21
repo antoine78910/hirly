@@ -114,6 +114,7 @@ Apply in this order with `psql -v ON_ERROR_STOP=1`:
 10. `20260720001000_open_source_policy_evidence.sql`
 11. `20260720001100_source_trial_foundation.sql`
 12. `20260720001150_source_trial_tenant_selection_binding.sql`
+13. `20260720002000_sprout_source_ingestion.sql`
 
 The following same-day migrations belong to the **primary application
 database**, not the split inventory database. They are documented here so a
