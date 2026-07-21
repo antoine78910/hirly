@@ -495,7 +495,11 @@ export function createTaskHandlers(
               const nextRunId = await store.enqueue(enqueueRunSchema.parse({
                 kind: "provider_ingestion",
                 provider: "sprout",
-                idempotencyKey: `sprout:${payload.sourceId}:${payload.mode}:${nextOffset}`,
+                // A continuation is idempotent within this cycle, not across
+                // every historical cycle. Reusing a source+offset key caused
+                // later scheduled scans to stop after their first page once a
+                // previous run had already visited that offset.
+                idempotencyKey: `sprout:${payload.sourceId}:${payload.mode}:${task.runId}:${nextOffset}`,
                 triggerSource: "cli",
                 tasks: [{
                   taskKey: `sprout:page:${payload.mode}:${payload.sourceId}:${nextOffset}`,
