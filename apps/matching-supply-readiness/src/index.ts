@@ -285,7 +285,7 @@ export function buildReadinessScorecard(
   if (projectionLagSeconds === null || projectionLagSeconds > manifest.thresholds.maximumProjectionLagSeconds) failedGates.push("PROJECTION_LAG_EXCEEDED");
   if (exception && !exceptionActive) failedGates.push("EXCEPTION_EXPIRED_OR_INVALID");
 
-  const decision = failedGates.length === 0 ? "enabled" : "disabled";
+  const decision: ReadinessScorecard["decision"] = failedGates.length === 0 ? "enabled" : "disabled";
   const scorecardWithoutDigest = {
     schemaVersion: "hirly.matching-supply-readiness.v1" as const,
     decision,
