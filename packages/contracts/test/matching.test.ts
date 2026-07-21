@@ -24,6 +24,10 @@ import {
 const now = "2026-07-21T04:00:00+00:00";
 const groupId = "11111111-1111-4111-8111-111111111111";
 
+function expectExactKeys(value: object, keys: readonly string[]): void {
+  expect(Object.keys(value).sort()).toEqual([...keys].sort());
+}
+
 const candidateProfile = {
   schemaVersion: MATCHING_CONTRACT_VERSION,
   candidateId: "mongo-user-id",
@@ -207,6 +211,34 @@ describe("matching v1 contracts", () => {
       freshness_window_days: null,
       projected_at: now,
     });
+    expectExactKeys(row, [
+      "schema_version",
+      "candidate_id",
+      "version",
+      "status",
+      "target_role_label_normalized",
+      "role_family_ids",
+      "rome_codes",
+      "skill_ids",
+      "skill_terms",
+      "seniority_min",
+      "seniority_max",
+      "contract_types",
+      "work_modes",
+      "origin_latitude",
+      "origin_longitude",
+      "radius_km",
+      "country_codes",
+      "location_policy",
+      "salary_floor",
+      "currency",
+      "freshness_window_days",
+      "exposure_policy_version",
+      "feature_schema_version",
+      "source_profile_updated_at",
+      "projected_at",
+      "source_event_id",
+    ]);
     expect(() =>
       candidateSearchProfilePersistenceRowSchema.parse({
         ...row,
@@ -242,6 +274,21 @@ describe("matching v1 contracts", () => {
       projected_at: now,
       retention_state: "active",
     });
+    expectExactKeys(actionRow, [
+      "schema_version",
+      "candidate_id",
+      "action_id",
+      "candidate_version",
+      "source_job_id",
+      "canonical_group_id",
+      "canonical_group_aliases",
+      "action_kind",
+      "action_at",
+      "projected_at",
+      "retention_state",
+      "retained_until",
+      "source_event_id",
+    ]);
     expect(() =>
       candidateActionProjectionPersistenceRowSchema.parse({
         ...actionRow,
@@ -349,6 +396,46 @@ describe("matching v1 contracts", () => {
       search_text: "fullstack engineer typescript",
       projected_at: now,
     });
+    expectExactKeys(
+      toJobSearchDocumentPersistenceRow(document, {
+        normalizedTitle: "fullstack engineer",
+        searchText: "fullstack engineer typescript",
+      }),
+      [
+        "schema_version",
+        "canonical_group_id",
+        "preferred_job_id",
+        "job_version",
+        "lifecycle_status",
+        "normalized_title",
+        "role_family_codes",
+        "rome_codes",
+        "skill_codes",
+        "seniority_min",
+        "seniority_max",
+        "contract_families",
+        "work_modes",
+        "country_codes",
+        "latitude",
+        "longitude",
+        "location_confidence",
+        "location_unknown",
+        "salary_min",
+        "salary_max",
+        "currency",
+        "posted_at",
+        "last_seen_at",
+        "expires_at",
+        "validation_status",
+        "applyability_tier",
+        "fulfillment_route",
+        "source_eligible",
+        "policy_eligible",
+        "feature_schema_version",
+        "search_text",
+        "projected_at",
+      ],
+    );
   });
 
   test("enforces bounded deterministic online matcher contracts", () => {
@@ -447,6 +534,22 @@ describe("matching v1 contracts", () => {
       lease_token: null,
       lease_until: null,
     });
+    expectExactKeys(taskRow, [
+      "schema_version",
+      "task_id",
+      "task_kind",
+      "entity_id",
+      "entity_version",
+      "idempotency_key",
+      "status",
+      "available_at",
+      "lease_owner",
+      "lease_token",
+      "lease_until",
+      "attempts",
+      "max_attempts",
+      "last_error_code",
+    ]);
     expect(() =>
       projectionTaskPersistenceRowSchema.parse({
         ...taskRow,
