@@ -45,6 +45,20 @@ const canonicalIdentityCompletionRollback = readFileSync(
   ),
   "utf8",
 );
+const backfillIdentityProvenance = readFileSync(
+  join(
+    root,
+    "backend/db/migrations/20260721002300_posthog_warehouse_backfill_identity_provenance.sql",
+  ),
+  "utf8",
+);
+const backfillIdentityProvenanceRollback = readFileSync(
+  join(
+    root,
+    "backend/db/migrations/20260721002300_posthog_warehouse_backfill_identity_provenance.down.sql",
+  ),
+  "utf8",
+);
 
 describe("PostHog warehouse containment migration", () => {
   test("exposes only explicit analytical views through a dedicated role", () => {
@@ -138,6 +152,30 @@ describe("PostHog warehouse containment migration", () => {
     );
     expect(canonicalIdentityCompletionRollback).toContain(
       "CREATE OR REPLACE VIEW analytics_public.swipe_facts_v1",
+    );
+  });
+
+  test("exposes importer identity provenance without anonymous fallback", () => {
+    expect(backfillIdentityProvenance).toContain("AS identity_resolution");
+    expect(backfillIdentityProvenance).toContain("'canonical_uuid'");
+    expect(backfillIdentityProvenance).toContain("'known_user_unresolved'");
+    expect(backfillIdentityProvenance).toContain("'known_user_ambiguous'");
+    expect(backfillIdentityProvenance).toContain("'anonymous_unlinked'");
+    expect(backfillIdentityProvenance).toContain("'no_identity'");
+    expect(backfillIdentityProvenance).toContain(
+      "WHEN analytics_events.user_id IS NULL THEN analytics_events.anonymous_id::text",
+    );
+    expect(backfillIdentityProvenance).toContain(
+      "'server_received_at'::text AS timestamp_quality",
+    );
+    expect(backfillIdentityProvenance).toContain(
+      "'receipt-time legacy history with identity provenance', 9",
+    );
+    expect(backfillIdentityProvenanceRollback).toContain(
+      "'receipt-time legacy history without property payloads', 8",
+    );
+    expect(backfillIdentityProvenanceRollback).not.toContain(
+      "AS identity_resolution",
     );
   });
 });

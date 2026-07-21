@@ -34,7 +34,7 @@ import unicodedata
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from urllib.parse import quote as url_quote, urlparse
-from pydantic import BaseModel, Field, ConfigDict, PrivateAttr
+from pydantic import BaseModel, Field, ConfigDict, PrivateAttr, model_validator
 from typing import List, Optional, Dict, Any, Literal, Tuple
 from datetime import datetime, timezone, timedelta
 import atexit
@@ -1110,6 +1110,8 @@ async def validate_job_before_application(job: Dict[str, Any]) -> Dict[str, Any]
 class User(BaseModel):
     model_config = ConfigDict(extra="ignore")
     user_id: str
+    supabase_user_id: Optional[str] = Field(default=None, exclude=True)
+    analytics_user_id: Optional[str] = None
     email: str
     name: str
     picture: Optional[str] = None
@@ -1120,6 +1122,13 @@ class User(BaseModel):
     language: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     _auth_flags: Dict[str, bool] = PrivateAttr(default_factory=dict)
+
+    @model_validator(mode="after")
+    def resolve_analytics_user_id(self):
+        self.analytics_user_id = _canonical_analytics_user_id(
+            self.analytics_user_id or self.supabase_user_id
+        )
+        return self
 
 
 class Profile(BaseModel):
@@ -1864,7 +1873,7 @@ async def _session_payload_from_supabase_token(
     event_name = "user_signed_up" if is_new_user else "user_logged_in"
     _capture_posthog_registry_event(
         event_name,
-        user_doc["user_id"],
+        data.get("id"),
         {
             "auth_source": source,
             "has_gmail_provider": bool(provider_token or provider_refresh_token),
@@ -4142,26 +4151,30 @@ async def _resolve_posthog_user_id(
     customer_id: Optional[str] = None,
     subscription_id: Optional[str] = None,
 ) -> Optional[str]:
-    """Resolve an existing Hirly identity without email fallback or user creation."""
-    metadata_user_id = str((metadata or {}).get("user_id") or "").strip()
+    """Resolve the canonical auth UUID without email fallback or user creation."""
+    async def canonical_for(filter_query: Dict[str, Any]) -> Optional[str]:
+        found = await db.users.find_one(
+            filter_query,
+            {"_id": 0, "supabase_user_id": 1},
+        )
+        return _canonical_analytics_user_id(
+            (found or {}).get("supabase_user_id")
+        )
+
+    safe_metadata = metadata if isinstance(metadata, dict) else {}
+    metadata_user_id = str(safe_metadata.get("user_id") or "").strip()
     if metadata_user_id:
-        found = await db.users.find_one({"user_id": metadata_user_id}, {"_id": 0, "user_id": 1})
-        if found:
-            return found.get("user_id")
+        canonical_user_id = await canonical_for({"user_id": metadata_user_id})
+        if canonical_user_id:
+            return canonical_user_id
     if subscription_id:
-        found = await db.users.find_one(
-            {"billing.stripe_subscription_id": subscription_id},
-            {"_id": 0, "user_id": 1},
+        canonical_user_id = await canonical_for(
+            {"billing.stripe_subscription_id": subscription_id}
         )
-        if found:
-            return found.get("user_id")
+        if canonical_user_id:
+            return canonical_user_id
     if customer_id:
-        found = await db.users.find_one(
-            {"billing.stripe_customer_id": customer_id},
-            {"_id": 0, "user_id": 1},
-        )
-        if found:
-            return found.get("user_id")
+        return await canonical_for({"billing.stripe_customer_id": customer_id})
     return None
 
 
@@ -4175,7 +4188,8 @@ def _posthog_invoice_product_properties(invoice: Dict[str, Any]) -> Dict[str, An
             properties["product_id"] = product_id
         if price.get("id"):
             properties["price_id"] = price["id"]
-    plan = (invoice.get("metadata") or {}).get("plan")
+    metadata = invoice.get("metadata")
+    plan = metadata.get("plan") if isinstance(metadata, dict) else None
     if plan:
         properties["plan"] = str(plan)
     return properties
@@ -6693,7 +6707,7 @@ async def upload_cv(file: UploadFile = File(...), user: User = Depends(get_curre
     )
     _capture_posthog_registry_event(
         "cv_uploaded",
-        user.user_id,
+        user.analytics_user_id,
         {
             "file_format": fmt,
             "has_photo": bool(photo_bytes),
@@ -7020,7 +7034,7 @@ async def delete_account(user: User = Depends(get_current_user)):
     """Wipe everything the user created. Sessions are revoked too."""
     user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0}) or {}
     logger.info("account_delete_start user_id=%s", user.user_id)
-    _capture_posthog_registry_event("account_deleted", user.user_id)
+    _capture_posthog_registry_event("account_deleted", user.analytics_user_id)
     await _cancel_stripe_subscription_for_user(user_doc)
     await _delete_all_user_data(user.user_id)
     await _delete_supabase_auth_user(user_doc)
@@ -10578,7 +10592,7 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
             if not existing:
                 _capture_posthog_registry_event(
                     "job_dismissed",
-                    user.user_id,
+                    user.analytics_user_id,
                     {
                         "job_provider": job.get("provider"),
                         "ats_provider": job.get("ats_provider"),
@@ -10740,7 +10754,7 @@ async def swipe(req: SwipeRequest, user: User = Depends(get_current_user)):
         if not existing_app:
             _capture_posthog_registry_event(
                 "job_application_created",
-                user.user_id,
+                user.analytics_user_id,
                 {
                     "application_id": saved_doc.get("application_id"),
                     "job_provider": job.get("provider"),

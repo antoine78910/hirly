@@ -108,6 +108,13 @@ Do not enable the migration until:
 No PostHog personal API key belongs in a browser environment variable. The frontend
 opens an external page and does not embed or proxy PostHog.
 
+Identified PostHog persons use the verified lowercase Supabase auth UUID as their
+distinct ID. The frontend `$identify` boundary may set only `email`, `first_name`,
+and `last_name` so operators can recognize people in PostHog. Those fields remain
+forbidden on ordinary analytics events and are not exposed through warehouse
+views. The first identify call must preserve the current anonymous distinct ID;
+reset is reserved for logout or a direct account switch.
+
 ## Rollback
 
 Set `REACT_APP_ADMIN_POSTHOG_ANALYTICS_ENABLED=false` and redeploy the frontend.
@@ -155,6 +162,29 @@ rehearsal:
 Production imports, warehouse cleanup, credential rotation, dashboard archival,
 and deployment require separate operator authorization. The local release does
 not perform them.
+
+### Historical importer identity boundary
+
+Before every new dry run, regenerate the importer input after the canonical UUID
+warehouse migrations. Each row must carry an explicit `identityResolution`:
+
+- `canonical_uuid` only when `userId` is the verified lowercase auth UUID;
+- `anonymous_unlinked`, `anonymous_one_to_one`, or `anonymous_ambiguous` only
+  when the source event had no known user identity at ingest;
+- `known_user_unresolved` or `known_user_ambiguous` when a source event referred
+  to a user but the canonical UUID cannot be proved;
+- `no_identity` when the source event carried neither a known user nor an
+  anonymous identifier.
+
+Known-but-unresolved users are quarantined even when an anonymous identifier is
+available. They must never fall back to a personless anonymous event. A missing
+identity resolution is also quarantined. The CLI validates the JSON boundary and
+remains dry-run only; `--execute` deliberately fails until a reviewed,
+credentialed transport and read-side observation step are provided.
+
+The contained legacy-event warehouse view currently exposes receipt time only.
+Rows without a separately proven exact business timestamp are excluded as
+`noncanonical_timestamp_quality` before property-shape review and are never sent.
 
 ## G005 mutation journal placeholders
 
