@@ -415,7 +415,7 @@ $$;
 
 
 
-CREATE OR REPLACE FUNCTION worker_private.get_sprout_source_runtime_v2(
+CREATE OR REPLACE FUNCTION worker_private.get_sprout_source_runtime_v3(
   p_source_id uuid,
   p_mode text
 )
@@ -491,8 +491,8 @@ BEGIN
   END LOOP;
 END $$;
 
-REVOKE ALL ON FUNCTION worker_private.get_sprout_source_runtime_v2(uuid,text) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION worker_private.get_sprout_source_runtime_v2(uuid,text) TO hirly_inventory_worker;
+REVOKE ALL ON FUNCTION worker_private.get_sprout_source_runtime_v3(uuid,text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION worker_private.get_sprout_source_runtime_v3(uuid,text) TO hirly_inventory_worker;
 REVOKE ALL ON FUNCTION worker_private.begin_sprout_incremental_cycle(uuid,uuid,bigint,text,uuid,uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION worker_private.begin_sprout_incremental_cycle(uuid,uuid,bigint,text,uuid,uuid) TO hirly_inventory_worker;
 COMMIT;

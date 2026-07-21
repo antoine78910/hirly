@@ -66,7 +66,7 @@ describe("database repository boundary", () => {
     );
 
     expect(statements[0]).toContain(
-      "worker_private.get_sprout_source_runtime_v2",
+      "worker_private.get_sprout_source_runtime_v3",
     );
     expect(values[0]).toEqual([
       "11111111-1111-4111-8111-111111111111",

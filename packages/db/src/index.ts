@@ -467,7 +467,7 @@ export class WorkerRepository {
       }[]
     >`
       SELECT *
-      FROM worker_private.get_sprout_source_runtime_v2(
+      FROM worker_private.get_sprout_source_runtime_v3(
         ${sourceId}::uuid,
         ${mode}
       )
