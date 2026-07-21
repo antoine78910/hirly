@@ -29,6 +29,20 @@ function positiveInteger(value: string | null): number | undefined {
   return parsed;
 }
 
+async function withDeadline<T>(operation: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("request_timeout")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 export function createFeedV2Handler(input: {
   config: FeedV2AppConfig;
   auth: FeedAuthAssertionVerifier;
@@ -47,7 +61,7 @@ export function createFeedV2Handler(input: {
     }
 
     try {
-      const response = await Promise.race([
+      const response = await withDeadline(
         (async () => {
           const assertion = await input.auth.verify(request);
           return input.service.read({
@@ -56,10 +70,8 @@ export function createFeedV2Handler(input: {
             limit: positiveInteger(url.searchParams.get("limit")),
           });
         })(),
-        new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error("request_timeout")), input.config.requestTimeoutMs ?? 1_500);
-        }),
-      ]);
+        input.config.requestTimeoutMs ?? 1_500,
+      );
       return json(response, 200);
     } catch (error) {
       if (error instanceof FeedAuthorizationError) {

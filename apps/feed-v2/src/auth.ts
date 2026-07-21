@@ -8,10 +8,12 @@ const SIGNATURE_HEADER = "x-hirly-feed-signature";
 function validAssertion(value: unknown): value is FeedAuthAssertion {
   if (!value || typeof value !== "object") return false;
   const assertion = value as Partial<FeedAuthAssertion>;
-  return typeof assertion.subject === "string" && assertion.subject.length > 0
+  return Object.keys(value).sort().join(",") === "candidateId,expiresAt,issuedAt,scopes,subject"
+    && typeof assertion.subject === "string" && assertion.subject.length > 0
     && typeof assertion.candidateId === "string" && assertion.candidateId.length > 0
     && assertion.candidateId.length <= 256
-    && Array.isArray(assertion.scopes) && assertion.scopes.every((scope) => typeof scope === "string")
+    && Array.isArray(assertion.scopes) && assertion.scopes.length <= 16
+    && assertion.scopes.every((scope) => typeof scope === "string" && scope.length > 0 && scope.length <= 64)
     && typeof assertion.issuedAt === "string" && Number.isFinite(Date.parse(assertion.issuedAt))
     && typeof assertion.expiresAt === "string" && Number.isFinite(Date.parse(assertion.expiresAt));
 }

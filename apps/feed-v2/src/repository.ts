@@ -7,7 +7,7 @@ import type {
 
 export const FEED_V2_INDEXED_READ_SQL = `
 WITH profile AS (
-  SELECT * FROM public.read_candidate_search_profile($1)
+  SELECT * FROM public.read_candidate_search_profile($1) WHERE status = 'active'
 ), action_meta AS (
   SELECT coalesce(max(candidate_version), 0)::text AS action_watermark
   FROM public.read_candidate_actions($1)

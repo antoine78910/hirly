@@ -27,6 +27,11 @@ describe("Feed v2 runtime adapters", () => {
       assertionSecret: null,
     });
     expect(() => parseFeedV2Config({ FEED_V2_ROUTING_ENABLED: "true" })).toThrow("JOBS_DATABASE_URL");
+    expect(parseFeedV2Config({
+      FEED_V2_ROUTING_ENABLED: "true",
+      JOBS_DATABASE_URL: "postgres://feed-reader@inventory/feed",
+      FEED_V2_ASSERTION_SECRET: secret,
+    }).routingEnabled).toBe(true);
     expect(() => parseFeedV2Config({ FEED_V2_ROUTING_ENABLED: "maybe" })).toThrow("must be true or false");
   });
 
