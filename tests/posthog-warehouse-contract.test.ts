@@ -17,6 +17,13 @@ const rollback = readFileSync(
   ),
   "utf8",
 );
+const canonicalIdentityRepair = readFileSync(
+  join(
+    root,
+    "backend/db/migrations/20260721002100_posthog_warehouse_canonical_identity.sql",
+  ),
+  "utf8",
+);
 
 describe("PostHog warehouse containment migration", () => {
   test("exposes only explicit analytical views through a dedicated role", () => {
@@ -62,5 +69,29 @@ describe("PostHog warehouse containment migration", () => {
       "managed-by-hirly-migration-20260720001800",
     );
     expect(rollback).not.toContain("DROP OWNED BY posthog_warehouse_reader");
+  });
+
+  test("maps warehouse identities through unique canonical auth UUIDs", () => {
+    expect(canonicalIdentityRepair).toContain(
+      "users.data ->> 'supabase_user_id'",
+    );
+    expect(canonicalIdentityRepair).toContain(
+      "users.canonical_mapping_count = 1",
+    );
+    expect(canonicalIdentityRepair).toContain(
+      "canonical_mapping_count = 1",
+    );
+    expect(canonicalIdentityRepair).toMatch(
+      /canonical_user_id\s+~\s+'\^\[0-9a-f\]/,
+    );
+    expect(canonicalIdentityRepair).toContain(
+      "canonical_users.canonical_user_id AS user_id",
+    );
+    expect(canonicalIdentityRepair).not.toContain(
+      "analytics_events.user_id::text AS user_id",
+    );
+    expect(canonicalIdentityRepair).toContain(
+      "REVOKE ALL ON analytics_public.user_identity_v1 FROM PUBLIC",
+    );
   });
 });
