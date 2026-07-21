@@ -178,15 +178,15 @@ export async function projectJobSearchDocument(
   source: JobProjectionSource,
   projectedAt: Date,
 ): Promise<JobProjectionResult> {
+  if (!/^[1-9]\d*$/.test(source.authoritativeVersion)) {
+    throw new Error("job projection authoritative version must be a positive decimal string");
+  }
   if (source.groupStatus !== "active") {
     return {
       action: "remove",
       canonicalGroupId: source.canonicalGroupId,
       authoritativeVersion: source.authoritativeVersion,
     };
-  }
-  if (!/^[1-9]\d*$/.test(source.authoritativeVersion)) {
-    throw new Error("job projection authoritative version must be a positive decimal string");
   }
   const normalizedTitle = token(source.normalizedTitle ?? source.title);
   if (!normalizedTitle) throw new Error("job projection title normalizes to empty");

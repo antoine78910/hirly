@@ -108,6 +108,23 @@ describe("job search-document projection", () => {
     expect(result.row.last_seen_at).toBe("2026-07-20T09:00:00.000Z");
   });
 
+  test("fails closed when lifecycle or freshness evidence is unavailable", async () => {
+    const result = await projectJobSearchDocument(
+      source({
+        lifecycleState: null,
+        lastSeenAt: null,
+        remote: null,
+        data: { role_family_ids: ["software-engineering"] },
+      }),
+      now,
+    );
+    expect(result.action).toBe("upsert");
+    if (result.action !== "upsert") return;
+    expect(result.row.lifecycle_status).toBe("blocked");
+    expect(result.row.source_eligible).toBe(false);
+    expect(result.row.work_modes).toEqual([]);
+  });
+
   test("removes non-active groups and enumerates merge/split reconciliation", async () => {
     expect(await projectJobSearchDocument(source({ groupStatus: "superseded" }), now)).toEqual({
       action: "remove",
