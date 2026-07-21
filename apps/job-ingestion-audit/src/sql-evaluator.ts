@@ -33,6 +33,7 @@ export function buildOnlineOracleQuery(input: OnlineOracleQueryInput): string {
     throw new Error("oracle limit must be an integer from 1 to 1000");
   }
   const terms = [...new Set(role.split(/[^\p{L}\p{N}]+/u).filter((term) => term.length > 1))];
+  if (terms.length === 0) throw new Error("oracle role must contain a searchable term");
   const rolePredicates = terms.map((term) => {
     const pattern = sqlLiteral(`%${term}%`);
     return `(lower(coalesce(normalized_title, title, '')) LIKE ${pattern})`;

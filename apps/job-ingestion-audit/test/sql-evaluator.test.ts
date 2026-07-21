@@ -48,5 +48,11 @@ describe("read-only SQL evaluator", () => {
       freshnessWindowDays: 0,
       limit: 25,
     })).toThrow("freshnessWindowDays");
+    expect(() => buildOnlineOracleQuery({
+      role: "--",
+      countryCode: "fr",
+      freshnessWindowDays: 30,
+      limit: 25,
+    })).toThrow("searchable term");
   });
 });
