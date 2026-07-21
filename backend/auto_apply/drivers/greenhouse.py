@@ -246,27 +246,38 @@ class GreenhouseApplyDriver(BrowserApplyDriver):
             payload = resp.json()
         return _blueprint_from_questions(payload)
 
+    async def submission_locator_root(
+        self,
+        page: Any,
+        job: Dict[str, Any],
+    ) -> Tuple[Optional[Any], Optional[str]]:
+        """Atomically validate the job route and return its sole submit form."""
+        expected = self.route_identity(job)
+        if expected is None:
+            return None, "greenhouse_job_identity_unresolved"
+        current_url = str(getattr(page, "url", "") or "")
+        current = _greenhouse_route_identity(current_url, allow_fragment=True)
+        if current != expected:
+            return None, "greenhouse_browser_route_mismatch"
+
+        forms = page.locator('form:has(button[type="submit"], input[type="submit"])')
+        if await forms.count() != 1:
+            return None, "greenhouse_submit_form_ambiguous"
+        form = forms.first
+        action = await form.get_attribute("action")
+        action_url = urljoin(current_url, str(action or ""))
+        if _greenhouse_route_identity(action_url, allow_fragment=True) != expected:
+            return None, "greenhouse_form_action_mismatch"
+        return form, None
+
     async def submission_boundary_failure(
         self,
         page: Any,
         job: Dict[str, Any],
     ) -> Optional[str]:
-        expected = self.route_identity(job)
-        if expected is None:
-            return "greenhouse_job_identity_unresolved"
-        current_url = str(getattr(page, "url", "") or "")
-        current = _greenhouse_route_identity(current_url, allow_fragment=True)
-        if current != expected:
-            return "greenhouse_browser_route_mismatch"
-
-        forms = page.locator('form:has(button[type="submit"], input[type="submit"])')
-        if await forms.count() != 1:
-            return "greenhouse_submit_form_ambiguous"
-        action = await forms.first.get_attribute("action")
-        action_url = urljoin(current_url, str(action or ""))
-        if _greenhouse_route_identity(action_url, allow_fragment=True) != expected:
-            return "greenhouse_form_action_mismatch"
-        return None
+        """Compatibility hook for direct boundary checks and older callers."""
+        _, failure = await self.submission_locator_root(page, job)
+        return failure
 
     async def reveal_form(self, page: Any, evidence: Any = None) -> None:
         # job-boards.greenhouse.io often hides the form behind Apply / #app.
