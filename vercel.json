@@ -1,5 +1,5 @@
 {
-  "experimentalServices": {
+  "services": {
     "frontend": {
       "root": "frontend",
       "routePrefix": "/",
