@@ -27,7 +27,9 @@ export function parseFeedV2Config(env: Record<string, string | undefined>): Feed
   }
   return {
     routingEnabled,
-    port: integer("FEED_V2_PORT", env.FEED_V2_PORT, 3_002, 1, 65_535),
+    // Railway assigns PORT at runtime; keep the explicit local override for
+    // development and other orchestrators that do not provide it.
+    port: integer("PORT", env.PORT ?? env.FEED_V2_PORT, 3_002, 1, 65_535),
     requestTimeoutMs: integer("FEED_V2_REQUEST_TIMEOUT_MS", env.FEED_V2_REQUEST_TIMEOUT_MS, 1_500, 100, 10_000),
     databaseUrl,
     assertionSecret,

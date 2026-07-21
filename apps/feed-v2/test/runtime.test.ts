@@ -37,6 +37,7 @@ describe("Feed v2 runtime adapters", () => {
       JOBS_DATABASE_URL: "postgres://feed-reader@inventory/feed",
       FEED_V2_ASSERTION_SECRET: secret,
     }).routingEnabled).toBe(true);
+    expect(parseFeedV2Config({ PORT: "8080", FEED_V2_PORT: "3002" }).port).toBe(8_080);
     expect(() => parseFeedV2Config({ FEED_V2_ROUTING_ENABLED: "maybe" })).toThrow("must be true or false");
   });
 
