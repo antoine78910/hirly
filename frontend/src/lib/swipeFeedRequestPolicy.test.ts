@@ -75,4 +75,14 @@ describe("Swipe Feed v2 request policy", () => {
       }),
     ).toEqual({ kind: "loading" });
   });
+
+  it("treats unsupported empty-reason values as an untyped empty state", () => {
+    expect(
+      resolveSwipeFeedViewState({
+        loading: false,
+        jobCount: 0,
+        feedMeta: { empty_reason: { code: "UNKNOWN_UPSTREAM_STATE" as never } },
+      }),
+    ).toEqual({ kind: "empty", emptyReason: null });
+  });
 });
