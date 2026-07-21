@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "hirly.no-submit-route-inspection.v1",
+  "generatedAt": "2026-07-20T21:30:00Z",
+  "evidenceMode": "fixture_contract",
+  "jobsReceived": 1,
+  "jobsInspected": 1,
+  "outcomes": {
+    "eligible": 0,
+    "needs_user_input": 1,
+    "unsupported": 0,
+    "failed": 0
+  },
+  "providers": {
+    "jobaffinity": {
+      "eligible": 0,
+      "needs_user_input": 1,
+      "unsupported": 0,
+      "failed": 0
+    }
+  },
+  "formClasses": {
+    "candidate_review": 1
+  },
+  "routeStates": {
+    "application_gated": 1,
+    "inventory_manual": 0,
+    "blocked": 0
+  },
+  "corpusCoverage": {
+    "jobaffinity": {
+      "formsCharacterized": 1,
+      "minimumRequired": 50,
+      "meetsMinimum": false,
+      "manualDeepLinksVerified": 0,
+      "formClasses": {
+        "candidate_review": 1
+      }
+    }
+  },
+  "failureBuckets": {
+    "unsupported_provider": 0,
+    "unsafe_url": 0,
+    "dns_resolution_failed": 0,
+    "route_unresolved": 0,
+    "timeout": 0,
+    "provider_http_error": 0,
+    "inspection_error": 0
+  },
+  "safeguards": {
+    "aggregateOnly": true,
+    "applicationSubmissions": false,
+    "applicationAttemptWrites": false,
+    "canonicalWrites": false,
+    "sourceActivationChanges": false,
+    "writerTransfer": false,
+    "capabilityFlagsChanged": false,
+    "fixtureEvidenceCannotAuthorizeSubmission": true,
+    "corpusMinimumPerProvider": 50,
+    "maxJobs": 100,
+    "maxConcurrency": 4,
+    "timeoutSeconds": 20.0,
+    "allowlistedProviders": [
+      "greenhouse",
+      "jobaffinity",
+      "nicoka",
+      "recruitee",
+      "smartrecruiters",
+      "taleez",
+      "teamtailor"
+    ]
+  },
+  "digest": "4703f24e36ba49c8709b7a5028717a26fc127595622d12e870da9326c3560a96"
+}

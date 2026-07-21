@@ -1,0 +1,42 @@
+{
+  "sample": false,
+  "status": "COMPLETE",
+  "generatedAt": "2026-07-20T20:57:24.000Z",
+  "queryVersion": "g018-route-readiness-v1",
+  "blockerReason": null,
+  "actionableJobs": 68988,
+  "failureBuckets": {
+    "missing_url": 155,
+    "expired_or_unavailable": 1349,
+    "account_or_login_required": 0,
+    "captcha_or_bot_wall": 0,
+    "aggregator_or_discovery_route": 2777,
+    "unknown_ats": 5739,
+    "known_ats_without_runtime_driver": 58549,
+    "runtime_driver_route_unresolved": 0,
+    "unsupported_required_fields": 0,
+    "missing_user_input": 0,
+    "stale_validation": 0,
+    "direct_manual_only": 0
+  },
+  "freshnessCutoff": "2026-06-20T20:57:24.000Z",
+  "paidUserCoverage": {
+    "evaluatedPaidUsers": 74,
+    "exhaustedPaidUsers": 8,
+    "p10": 0,
+    "p50": 38,
+    "p90": 133
+  },
+  "layeredFrenchJobs": 70492,
+  "staticAutoApplicable": 17686,
+  "topProviderRuntimeReady": 962,
+  "franceTravailRuntimeReady": 801,
+  "runtimeReadyAutoApplicable": 1923,
+  "schemaVersion": "hirly.french-route-readiness.v1",
+  "autoApplicableRate": 0.02727969,
+  "optimisticOverclaim": 15763,
+  "feedExhaustionRate": 0.10810811,
+  "franceTravailRuntimeReadyShare": 0.41653666,
+  "topProviderRuntimeReadyShare": 0.50026001,
+  "digest": "f73bebd2f489b24881eb42fe89821bed8bd0fa1b6c95889506119aebdfea9903"
+}

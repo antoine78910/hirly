@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "hirly.g009-retirement-gate.v1",
+  "implementationStatus": "NOT_READY",
+  "retirementStatus": "NOT_AUTHORIZED",
+  "evidenceKind": "none",
+  "thresholds": {
+    "healthyDays": 30,
+    "v2Requests": 10000,
+    "activePaidCoveragePercent": 80,
+    "maxDuplicateSubmissionBreaches": 0,
+    "maxResurfacingBreaches": 0,
+    "maxNonInferiorityRegressionPercentagePoints": 2
+  },
+  "measurements": {
+    "healthyDays": null,
+    "v2Requests": null,
+    "activePaidCoveragePercent": null,
+    "duplicateSubmissionBreaches": null,
+    "resurfacingBreaches": null,
+    "successRateDeltaPercentagePoints": null,
+    "lowerConfidenceBoundDeltaPercentagePoints": null,
+    "rollbackTested": false,
+    "rollbackHealthy": false
+  },
+  "unmetReasons": [
+    "active_paid_coverage_missing",
+    "duplicate_submission_breaches_missing",
+    "healthy_days_missing",
+    "instrumentation_not_ready",
+    "non_inferiority_evidence_missing",
+    "production_evidence_required",
+    "resurfacing_breaches_missing",
+    "rollback_not_healthy",
+    "rollback_not_tested",
+    "v2_requests_missing"
+  ],
+  "evidenceRefs": []
+}

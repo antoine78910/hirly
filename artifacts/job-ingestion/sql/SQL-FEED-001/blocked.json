@@ -1,0 +1,10 @@
+{
+  "status": "BLOCKED_EXTERNAL",
+  "capturedAt": "2026-07-20T00:00:00.000Z",
+  "dependency": "read-only representative Postgres URL and product latency SLO",
+  "capabilityCheck": "test -n \"$DATABASE_URL\"",
+  "reproductionCommand": "DATABASE_URL=<readonly> bun test tests/g003-postgres-runtime.integration.test.ts",
+  "safety": "Use EXPLAIN ANALYZE only for SELECT statements against staging/anonymized data; mutating statements use EXPLAIN without ANALYZE.",
+  "requiredSamples": 5,
+  "requiredMetrics": ["min","p50","p95","max","mean","rows","buffers","indexes","resultDigest"]
+}

@@ -1,0 +1,260 @@
+const PHOTON_URL = "https://photon.komoot.io/api/";
+
+const RELEVANT_KINDS = new Set([
+  "city",
+  "town",
+  "village",
+  "hamlet",
+  "municipality",
+  "borough",
+  "suburb",
+  "locality",
+  "county",
+  "state",
+  "region",
+  "district",
+  "province",
+]);
+
+function normalizeLabel(text) {
+  return (text || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+function formatPhotonLabel(properties) {
+  const name = properties.name || properties.city || properties.town || properties.village || "";
+  if (!name) return "";
+
+  const parts = [name];
+  const state = properties.state || properties.county || "";
+  const country = properties.country || "";
+
+  if (state && state !== name && !parts.includes(state)) {
+    parts.push(state);
+  }
+  if (country && !parts.includes(country)) {
+    parts.push(country);
+  }
+
+  return parts.join(", ");
+}
+
+function photonFeatureToResult(feature, index) {
+  const properties = feature.properties || {};
+  const label = formatPhotonLabel(properties);
+  if (!label) return null;
+
+  const coords = feature.geometry?.coordinates || [];
+
+  return {
+    id: `photon:${properties.osm_type || "n"}:${properties.osm_id || index}`,
+    label,
+    source: "photon",
+    place_id: String(properties.osm_id || ""),
+    country: properties.country || "",
+    country_code: (properties.countrycode || "").toLowerCase(),
+    lat: coords[1] ?? null,
+    lng: coords[0] ?? null,
+    kind: properties.type || properties.osm_value || "place",
+  };
+}
+
+function primaryCityName(label) {
+  return normalizeLabel((label || "").split(",")[0]);
+}
+
+export function cityNameMatchScore(query, name) {
+  const q = normalizeLabel(query);
+  const city = normalizeLabel(name);
+  if (!q || !city) return 0;
+  if (city === q) return 200;
+  if (city.startsWith(q)) return 120;
+  if (q.length >= 3 && city.includes(q) && !city.startsWith(q)) return -120;
+  return 0;
+}
+
+export function locationMatchesQuery(query, label) {
+  const q = normalizeLabel(query);
+  if (!q) return false;
+  const city = primaryCityName(label);
+  if (city === q || city.startsWith(q)) return true;
+  return cityNameMatchScore(q, city) > 0;
+}
+
+export function scoreLocationResult(query, result) {
+  const q = normalizeLabel(query);
+  const label = result?.label || "";
+  let score = cityNameMatchScore(q, primaryCityName(label));
+  if (RELEVANT_KINDS.has(result?.kind)) score += 20;
+  if (result?.country_code) score += 5;
+  if (result?.lat != null && result?.lng != null) score += 8;
+  if (result?.place_id) score += 6;
+  if (["nominatim", "google", "photon"].includes(result?.source)) score += 10;
+  return score;
+}
+
+export function sortLocationResults(query, results) {
+  return [...(results || [])]
+    .sort((a, b) => scoreLocationResult(query, b) - scoreLocationResult(query, a));
+}
+
+export function preferFranceLocationSearch(query) {
+  return looksLikeFranceLocation(query);
+}
+
+export function isResolvedLocation(locationData, typedValue = "") {
+  if (!locationData?.location_label) return false;
+  const label = String(locationData.location_label).trim();
+  const typed = String(typedValue || "").trim();
+  if (typed && label !== typed) return false;
+  if (locationData.source === "typed" && !locationData.place_id && locationData.lat == null) {
+    return false;
+  }
+  return Boolean(
+    locationData.place_id
+    || (locationData.lat != null && locationData.lng != null)
+    || ["nominatim", "google", "photon"].includes(locationData.source),
+  );
+}
+
+function scorePhotonResult(query, result) {
+  return scoreLocationResult(query, result);
+}
+
+const FRENCH_CITY_MARKERS = new Set([
+  "dijon", "paris", "lyon", "marseille", "toulouse", "nice", "nantes", "strasbourg",
+  "lille", "montpellier", "rennes", "grenoble", "bordeaux", "reims", "metz", "nancy",
+  "angers", "caen", "rouen", "tours", "besancon", "brest", "amiens", "orleans",
+  "perpignan", "bayonne", "pau", "avignon", "annecy", "chambery", "valence", "nimes",
+  "mulhouse", "colmar", "lorient", "vannes", "quimper", "saint etienne", "clermont ferrant",
+]);
+
+function looksLikeFranceLocation(text) {
+  const normalized = normalizeLabel(text);
+  if (!normalized) return false;
+  if (normalized.includes("france")) return true;
+  if (FRENCH_CITY_MARKERS.has(normalized)) return true;
+  const cityPart = normalized.split(",")[0]?.trim();
+  return Boolean(cityPart && FRENCH_CITY_MARKERS.has(cityPart));
+}
+
+export function enrichLocationData(locationData) {
+  if (!locationData || typeof locationData !== "object") return locationData;
+
+  const label = String(locationData.location_label || locationData.label || "").trim();
+  if (!label) return locationData;
+
+  const isFrench = looksLikeFranceLocation(label);
+  const displayLabel = isFrench && !label.toLowerCase().includes("france")
+    ? `${label.split(",")[0].trim()}, France`
+    : label;
+  const countryCode = String(locationData.country_code || "").toLowerCase().trim()
+    || (isFrench ? "fr" : "");
+
+  return {
+    ...locationData,
+    location_label: displayLabel,
+    label: displayLabel,
+    country: locationData.country || (isFrench ? "France" : ""),
+    country_code: countryCode,
+  };
+}
+
+export function buildTypedLocationResult(query) {
+  const trimmed = (query || "").trim();
+  if (trimmed.length < 2) return [];
+
+  const label = trimmed
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+
+  const isFrench = looksLikeFranceLocation(label);
+  const displayLabel = isFrench && !label.toLowerCase().includes("france")
+    ? `${label}, France`
+    : label;
+
+  return [enrichLocationData({
+    id: `typed:${normalizeLabel(displayLabel)}`,
+    label: displayLabel,
+    source: "typed",
+    place_id: "",
+    country: isFrench ? "France" : "",
+    country_code: isFrench ? "fr" : "",
+    lat: null,
+    lng: null,
+    kind: "city",
+  })];
+}
+
+/** Browser-side fallback using Photon, restricted to France. */
+export async function searchLocationsClient(query, limit = 12, signal) {
+  const q = (query || "").trim();
+  if (q.length < 1) return [];
+
+  // Photon supports bbox and countrycodes — restrict to France
+  const FRANCE_BBOX = "-5.14,41.33,9.56,51.09";
+  const response = await fetch(
+    `${PHOTON_URL}?${new URLSearchParams({
+      q,
+      limit: String(Math.min(limit * 2, 20)),
+      lang: "fr",
+      bbox: FRANCE_BBOX,
+    })}`,
+    { signal },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Photon search failed (${response.status})`);
+  }
+
+  const payload = await response.json();
+  const seen = new Set();
+  const results = [];
+
+  for (const [index, feature] of (payload.features || []).entries()) {
+    const result = photonFeatureToResult(feature, index);
+    if (!result) continue;
+
+    const cc = (result.country_code || "").toLowerCase();
+    if (cc && cc !== "fr") continue;
+
+    const key = normalizeLabel(result.label);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+
+    results.push({ ...result, _score: scorePhotonResult(q, result) });
+  }
+
+  return results
+    .sort((a, b) => b._score - a._score)
+    .slice(0, limit)
+    .map(({ _score, ...row }) => row);
+}
+
+/** Prioritize locations in the same country/region as the user's current target. */
+export function rankLocationSuggestions(labels, hint, limit = 12) {
+  const list = Array.isArray(labels) ? labels : [];
+  if (!list.length) return [];
+
+  const country = (hint || "")
+    .split(",")
+    .slice(-1)[0]
+    ?.trim()
+    .toLowerCase();
+
+  if (!country || country === "anywhere") {
+    return list.slice(0, limit);
+  }
+
+  return [...list]
+    .sort((a, b) => {
+      const aMatch = a.toLowerCase().includes(country);
+      const bMatch = b.toLowerCase().includes(country);
+      return Number(bMatch) - Number(aMatch);
+    })
+    .slice(0, limit);
+}

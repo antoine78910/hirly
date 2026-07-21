@@ -1,0 +1,9 @@
+{
+  "datasetVersion": "job-ingestion-golden.v1",
+  "rawReceived": 12,
+  "normalized": null,
+  "rejectedNormalization": null,
+  "acceptedAfterFilters": null,
+  "rejectedByReason": {},
+  "note": "Baseline code did not emit reconcilable stage-level buckets."
+}

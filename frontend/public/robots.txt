@@ -1,0 +1,21 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /app
+Disallow: /swipe
+Disallow: /tracker
+Disallow: /profile
+Disallow: /settings
+Disallow: /history
+Disallow: /review
+Disallow: /feedback
+Disallow: /interviews
+Disallow: /improve
+Disallow: /people
+Disallow: /emails
+Disallow: /credits
+Disallow: /billing
+Disallow: /onboarding
+Disallow: /auth
+
+Sitemap: https://tryhirly.com/sitemap.xml

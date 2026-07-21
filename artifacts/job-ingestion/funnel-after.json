@@ -1,0 +1,12 @@
+{
+  "datasetVersion": "job-ingestion-golden.v1",
+  "rawReceived": 12,
+  "normalized": 11,
+  "rejectedNormalization": 1,
+  "acceptedAfterFilters": 8,
+  "rejectedByReason": {"missing_title":1,"missing_company":1,"unusable_apply_url":1},
+  "newIdentity": 4,
+  "existingIdentity": 2,
+  "duplicateOccurrence": 1,
+  "fuzzyCandidateOnly": 1
+}

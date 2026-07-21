@@ -1,0 +1,1589 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  FileText,
+  Headphones,
+  Loader2,
+  Mic,
+  MicOff,
+  Pause,
+  Play,
+  RotateCcw,
+  Save,
+  ScrollText,
+  SkipForward,
+  Square,
+  Upload,
+  Volume2,
+} from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import {
+  fetchInterviewTemplate,
+  fetchInterviewTemplateAudioBlob,
+  fetchInterviewTemplates,
+  saveInterviewTemplate,
+  transcribeInterviewAudio,
+} from "../../lib/interviewSimulatorTemplates";
+
+function useMicrophoneSilenceDetector({
+  onSilence,
+  threshold = 0.02,
+  silenceMs = 1200,
+  graceMs = 1500,
+  minSpeechMs = 500,
+} = {}) {
+  const onSilenceRef = useRef(onSilence);
+  onSilenceRef.current = onSilence;
+
+  const [listening, setListening] = useState(false);
+  const [level, setLevel] = useState(0);
+  const [error, setError] = useState(null);
+
+  const rafRef = useRef(null);
+  const streamRef = useRef(null);
+  const audioCtxRef = useRef(null);
+  const analyserRef = useRef(null);
+  const dataRef = useRef(null);
+
+  const speakingRef = useRef(false);
+  const lastLoudAtRef = useRef(0);
+  const speechStartedAtRef = useRef(0);
+  const sessionStartedAtRef = useRef(0);
+  const silenceTriggeredRef = useRef(false);
+
+  const stopAll = useCallback(() => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
+
+    try {
+      if (streamRef.current) {
+        for (const track of streamRef.current.getTracks()) track.stop();
+      }
+    } catch (_) {}
+    streamRef.current = null;
+
+    try {
+      if (audioCtxRef.current) audioCtxRef.current.close();
+    } catch (_) {}
+    audioCtxRef.current = null;
+
+    analyserRef.current = null;
+    dataRef.current = null;
+    speakingRef.current = false;
+    lastLoudAtRef.current = 0;
+    speechStartedAtRef.current = 0;
+    sessionStartedAtRef.current = 0;
+    silenceTriggeredRef.current = false;
+
+    setListening(false);
+  }, []);
+
+  const start = useCallback(async () => {
+    setError(null);
+    stopAll();
+
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Microphone not supported in this browser.");
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+      streamRef.current = stream;
+
+      const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+      const audioCtx = new AudioContextCtor();
+      audioCtxRef.current = audioCtx;
+      if (audioCtx.state === "suspended") {
+        await audioCtx.resume();
+      }
+
+      const source = audioCtx.createMediaStreamSource(stream);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0.82;
+      source.connect(analyser);
+
+      const data = new Uint8Array(analyser.fftSize);
+      analyserRef.current = analyser;
+      dataRef.current = data;
+
+      speakingRef.current = false;
+      lastLoudAtRef.current = 0;
+      speechStartedAtRef.current = 0;
+      sessionStartedAtRef.current = Date.now();
+      silenceTriggeredRef.current = false;
+
+      setListening(true);
+      const tick = () => {
+        const a = analyserRef.current;
+        const d = dataRef.current;
+        if (!a || !d) return;
+
+        a.getByteTimeDomainData(d);
+
+        let sumSq = 0;
+        for (let i = 0; i < d.length; i += 1) {
+          const v = (d[i] - 128) / 128;
+          sumSq += v * v;
+        }
+        const rms = Math.sqrt(sumSq / d.length);
+        setLevel(rms);
+
+        const now = Date.now();
+        const inGracePeriod = now - sessionStartedAtRef.current < graceMs;
+
+        if (rms > threshold) {
+          if (!speakingRef.current) {
+            speechStartedAtRef.current = now;
+          }
+          speakingRef.current = true;
+          lastLoudAtRef.current = now;
+          silenceTriggeredRef.current = false;
+        } else {
+          const spokeLongEnough =
+            speechStartedAtRef.current > 0 && now - speechStartedAtRef.current >= minSpeechMs;
+          const isSilence =
+            !inGracePeriod &&
+            speakingRef.current &&
+            spokeLongEnough &&
+            !silenceTriggeredRef.current &&
+            now - lastLoudAtRef.current >= silenceMs;
+
+          if (isSilence) {
+            silenceTriggeredRef.current = true;
+            onSilenceRef.current?.(rms);
+          }
+        }
+
+        rafRef.current = requestAnimationFrame(tick);
+      };
+
+      rafRef.current = requestAnimationFrame(tick);
+    } catch (e) {
+      setError(e?.message || "Could not start microphone.");
+    }
+  }, [stopAll, threshold, silenceMs, graceMs, minSpeechMs]);
+
+  const stop = useCallback(() => stopAll(), [stopAll]);
+
+  useEffect(() => () => stopAll(), []);
+
+  return { start, stop, listening, level, error };
+}
+
+function formatTime(sec) {
+  if (!Number.isFinite(sec)) return "0:00.0";
+  const s = Math.max(0, sec);
+  const m = Math.floor(s / 60);
+  const rem = s - m * 60;
+  return `${m}:${rem.toFixed(1).padStart(4, "0")}`;
+}
+
+// Playback buffers so we never clip the start/end of a spoken line.
+const PLAY_LEAD_IN_SEC = 0.5;
+const PLAY_TAIL_SEC = 0.5;
+const STEP_TRANSITION_MS = 500;
+
+function getPlaybackBounds(start, end, duration, {
+  leadIn = PLAY_LEAD_IN_SEC,
+  tail = PLAY_TAIL_SEC,
+} = {}) {
+  const startAt = Math.max(0, start - leadIn);
+  const maxEnd = Number.isFinite(duration) ? duration : end + tail;
+  const endAt = Math.min(maxEnd, end + tail);
+  return { startAt, endAt: Math.max(startAt + 0.05, endAt) };
+}
+
+function createZoomMeetingAudioChain(audioCtx) {
+  const input = audioCtx.createGain();
+  const bypass = audioCtx.createGain();
+  const wet = audioCtx.createGain();
+
+  const highPass = audioCtx.createBiquadFilter();
+  highPass.type = "highpass";
+  highPass.frequency.value = 180;
+  highPass.Q.value = 0.8;
+
+  const lowPass = audioCtx.createBiquadFilter();
+  lowPass.type = "lowpass";
+  lowPass.frequency.value = 5600;
+  lowPass.Q.value = 0.85;
+
+  const presence = audioCtx.createBiquadFilter();
+  presence.type = "peaking";
+  presence.frequency.value = 2400;
+  presence.Q.value = 1.3;
+  presence.gain.value = 4;
+
+  const compressor = audioCtx.createDynamicsCompressor();
+  compressor.threshold.value = -28;
+  compressor.knee.value = 18;
+  compressor.ratio.value = 4.5;
+  compressor.attack.value = 0.003;
+  compressor.release.value = 0.16;
+
+  const makeup = audioCtx.createGain();
+  makeup.gain.value = 1.18;
+
+  const delay = audioCtx.createDelay(0.08);
+  delay.delayTime.value = 0.028;
+
+  const delayGain = audioCtx.createGain();
+  delayGain.gain.value = 0.14;
+
+  const dryGain = audioCtx.createGain();
+  dryGain.gain.value = 0.86;
+
+  const output = audioCtx.createGain();
+  output.gain.value = 1;
+
+  input.connect(bypass);
+  input.connect(highPass);
+  highPass.connect(lowPass);
+  lowPass.connect(presence);
+  presence.connect(compressor);
+  compressor.connect(dryGain);
+  compressor.connect(delay);
+  delay.connect(delayGain);
+  dryGain.connect(makeup);
+  delayGain.connect(makeup);
+  makeup.connect(wet);
+  bypass.connect(output);
+  wet.connect(output);
+
+  return {
+    input,
+    output,
+    nodes: { bypass, wet },
+  };
+}
+
+function setZoomMeetingEffectEnabled(chain, enabled) {
+  if (!chain?.nodes) return;
+  chain.nodes.bypass.gain.value = enabled ? 0 : 1;
+  chain.nodes.wet.gain.value = enabled ? 1 : 0;
+}
+
+function InterviewTurnIndicator({ status, currentIndex, totalSteps, micLevel, previewIndex, advanceMode }) {
+  if (previewIndex != null) {
+    return (
+      <div className="relative overflow-hidden rounded-3xl border border-sky-200 bg-gradient-to-br from-sky-50 via-white to-cyan-50 p-6 shadow-sm">
+        <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-sky-200/40 blur-2xl" />
+        <div className="relative flex flex-col items-center text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-sky-600 text-white shadow-lg shadow-sky-200">
+            <Headphones className="h-8 w-8" />
+          </div>
+          <p className="mt-4 text-lg font-bold text-zinc-900">Previewing step {previewIndex + 1}</p>
+          <p className="mt-1 text-sm text-zinc-600">Listen only — this does not start the dialogue.</p>
+          <div className="mt-5 flex h-10 items-end justify-center gap-1">
+            {Array.from({ length: 7 }).map((_, i) => (
+              <span
+                key={i}
+                className="w-1.5 rounded-full bg-sky-500 animate-pulse"
+                style={{
+                  height: `${12 + ((i * 5 + previewIndex * 3) % 24)}px`,
+                  animationDelay: `${i * 0.08}s`,
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "playing") {
+    return (
+      <div className="relative overflow-hidden rounded-3xl border border-violet-200 bg-gradient-to-br from-violet-100 via-white to-fuchsia-50 p-6 shadow-sm">
+        <div className="absolute -left-10 -top-10 h-36 w-36 rounded-full bg-violet-300/30 blur-2xl" />
+        <div className="relative flex flex-col items-center text-center">
+          <div className="relative flex h-20 w-20 items-center justify-center rounded-full bg-violet-600 text-white shadow-xl shadow-violet-200">
+            <Volume2 className="h-9 w-9" />
+            <span className="absolute inset-0 rounded-full border-2 border-violet-400/60 animate-ping" />
+          </div>
+          <p className="mt-4 text-xl font-bold text-zinc-900">Interviewer is speaking</p>
+          <p className="mt-1 text-sm text-zinc-600">
+            Step {currentIndex + 1} of {totalSteps}
+          </p>
+          <div className="mt-5 flex h-12 items-end justify-center gap-1.5">
+            {Array.from({ length: 9 }).map((_, i) => (
+              <span
+                key={i}
+                className="w-2 animate-bounce rounded-full bg-violet-500"
+                style={{
+                  height: `${16 + (i % 3) * 10}px`,
+                  animationDelay: `${i * 0.07}s`,
+                  animationDuration: "0.55s",
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "ready") {
+    return (
+      <div className="relative overflow-hidden rounded-3xl border border-amber-200 bg-gradient-to-br from-amber-50 via-white to-orange-50 p-6 shadow-sm">
+        <div className="absolute -right-10 -bottom-10 h-36 w-36 rounded-full bg-amber-300/30 blur-2xl" />
+        <div className="relative flex flex-col items-center text-center">
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-amber-500 text-white shadow-xl shadow-amber-200">
+            <SkipForward className="h-9 w-9" />
+          </div>
+          <p className="mt-4 text-xl font-bold text-zinc-900">Your turn to practice</p>
+          <p className="mt-1 text-sm text-zinc-600">
+            Answer out loud, then press <span className="font-semibold">Next step</span> when you want the next question.
+          </p>
+          <p className="mt-2 text-xs text-zinc-500">
+            Step {currentIndex + 1} of {totalSteps} · Manual mode
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "waiting") {
+    const levelPct = Math.min(100, Math.round(micLevel * 400));
+    return (
+      <div className="relative overflow-hidden rounded-3xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-teal-50 p-6 shadow-sm">
+        <div className="absolute -right-10 -bottom-10 h-36 w-36 rounded-full bg-emerald-300/30 blur-2xl" />
+        <div className="relative flex flex-col items-center text-center">
+          <div
+            className="relative flex h-20 w-20 items-center justify-center rounded-full bg-emerald-600 text-white shadow-xl shadow-emerald-200 transition-transform"
+            style={{ transform: `scale(${1 + micLevel * 0.8})` }}
+          >
+            <Mic className="h-9 w-9" />
+            <span
+              className="absolute inset-0 rounded-full border-2 border-emerald-400/70"
+              style={{ transform: `scale(${1 + levelPct / 100})`, opacity: 0.35 + micLevel * 2 }}
+            />
+          </div>
+          <p className="mt-4 text-xl font-bold text-zinc-900">Your turn to speak</p>
+          <p className="mt-1 text-sm text-zinc-600">
+            {advanceMode === "auto"
+              ? "Take your time — we listen for at least a couple of seconds, then move on after you pause."
+              : "Take your time, then press Next step when you are ready."}
+          </p>
+          <div className="mt-5 h-2 w-full max-w-xs overflow-hidden rounded-full bg-emerald-100">
+            <div
+              className="h-full rounded-full bg-emerald-500 transition-all duration-75"
+              style={{ width: `${Math.max(8, levelPct)}%` }}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "done") {
+    return (
+      <div className="rounded-3xl border border-zinc-200 bg-zinc-50 p-6 text-center">
+        <p className="text-lg font-bold text-zinc-900">Session complete</p>
+        <p className="mt-1 text-sm text-zinc-600">Hit Play this template to run it again.</p>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+function splitAudioBufferBySilence(audioBuffer, {
+  thresholdDb = -42,
+  minSilenceMs = 900,
+  paddingMs = 500,
+  minSegmentMs = 600,
+} = {}) {
+  const channel = audioBuffer.getChannelData(0);
+  const sampleRate = audioBuffer.sampleRate;
+  const duration = audioBuffer.duration;
+
+  const windowMs = 20;
+  const hopMs = 10;
+  const windowSize = Math.max(1, Math.floor((sampleRate * windowMs) / 1000));
+  const hopSize = Math.max(1, Math.floor((sampleRate * hopMs) / 1000));
+
+  const frames = [];
+  for (let i = 0; i + windowSize <= channel.length; i += hopSize) {
+    let sumSq = 0;
+    for (let j = i; j < i + windowSize; j += 1) {
+      const v = channel[j] || 0;
+      sumSq += v * v;
+    }
+    const rms = Math.sqrt(sumSq / windowSize);
+    const db = 20 * Math.log10(rms + 1e-8); // avoid -Infinity
+    frames.push({ i, rms, db, silent: db < thresholdDb });
+  }
+
+  const minSilenceFrames = Math.max(1, Math.floor(minSilenceMs / hopMs));
+
+  // Build contiguous speech segments from frames.
+  const rawSegments = [];
+  let currentStart = null;
+  for (let idx = 0; idx < frames.length; idx += 1) {
+    const f = frames[idx];
+    if (!f.silent) {
+      if (currentStart === null) currentStart = idx;
+    } else if (currentStart !== null) {
+      // Speech ended at previous frame.
+      const startFrame = currentStart;
+      const endFrame = idx - 1;
+      rawSegments.push({ startFrame, endFrame });
+      currentStart = null;
+    }
+  }
+  if (currentStart !== null) {
+    rawSegments.push({ startFrame: currentStart, endFrame: frames.length - 1 });
+  }
+
+  // Convert to seconds and merge segments separated by short silences.
+  const padSec = paddingMs / 1000;
+  const minSegSec = minSegmentMs / 1000;
+
+  const toSeg = (seg) => {
+    const startSample = frames[seg.startFrame]?.i ?? 0;
+    const endFrame = frames[seg.endFrame] || frames[frames.length - 1];
+    const endSample = (endFrame.i ?? 0) + windowSize;
+    return {
+      start: Math.max(0, startSample / sampleRate - padSec),
+      end: Math.min(duration, endSample / sampleRate + padSec),
+    };
+  };
+
+  const raw = rawSegments.map(toSeg).filter((s) => s.end - s.start >= minSegSec);
+  if (raw.length <= 1) return raw;
+
+  const merged = [];
+  for (const seg of raw) {
+    const prev = merged[merged.length - 1];
+    if (!prev) {
+      merged.push(seg);
+      continue;
+    }
+
+    const gap = seg.start - prev.end;
+    const gapFrames = gap <= 0 ? 0 : Math.floor((gap * 1000) / hopMs);
+    const shouldMerge = gapFrames < minSilenceFrames;
+    if (shouldMerge) {
+      prev.end = Math.max(prev.end, seg.end);
+    } else {
+      merged.push({ ...seg });
+    }
+  }
+
+  return merged;
+}
+
+/** Auto-scrolling script panel so the speaker can read their answer without looking down. */
+function TeleprompterPanel({ text }) {
+  const [scrolling, setScrolling] = useState(true);
+  const [speed, setSpeed] = useState(36); // px/sec
+  const containerRef = useRef(null);
+  const rafRef = useRef(null);
+  const lastTsRef = useRef(0);
+
+  useEffect(() => {
+    if (containerRef.current) containerRef.current.scrollTop = 0;
+    setScrolling(true);
+  }, [text]);
+
+  useEffect(() => {
+    if (!scrolling || !text) {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+      return undefined;
+    }
+    lastTsRef.current = performance.now();
+    const tick = (ts) => {
+      const dt = (ts - lastTsRef.current) / 1000;
+      lastTsRef.current = ts;
+      const el = containerRef.current;
+      if (el) {
+        el.scrollTop += speed * dt;
+        if (el.scrollTop >= el.scrollHeight - el.clientHeight - 1) {
+          setScrolling(false);
+          return;
+        }
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    };
+  }, [scrolling, speed, text]);
+
+  if (!text) return null;
+
+  return (
+    <div className="mt-4 rounded-3xl border border-zinc-800 bg-zinc-950 p-4 shadow-xl">
+      <div className="flex items-center justify-between gap-3">
+        <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-zinc-400">
+          <ScrollText className="h-3.5 w-3.5" />
+          Teleprompter
+        </p>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1.5 text-xs text-zinc-400">
+            Speed
+            <input
+              type="range"
+              min={10}
+              max={90}
+              value={speed}
+              onChange={(e) => setSpeed(Number(e.target.value))}
+              className="w-16 accent-violet-500"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => setScrolling((s) => !s)}
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
+          >
+            {scrolling ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+          </button>
+        </div>
+      </div>
+      <div
+        ref={containerRef}
+        className="mt-3 h-44 overflow-y-auto rounded-2xl bg-black/70 px-5 py-8 text-center [scrollbar-width:none]"
+      >
+        <p className="whitespace-pre-wrap text-2xl font-semibold leading-relaxed text-white">
+          {text}
+        </p>
+        <div className="h-32" />
+      </div>
+    </div>
+  );
+}
+
+export default function Mp3InterviewSimulator() {
+  const [mp3File, setMp3File] = useState(null);
+  const [mp3FileName, setMp3FileName] = useState("");
+  const [audioUrl, setAudioUrl] = useState(null);
+  const [audioBuffer, setAudioBuffer] = useState(null);
+  const [segments, setSegments] = useState([]);
+
+  const [templates, setTemplates] = useState([]);
+  const [templatesLoading, setTemplatesLoading] = useState(true);
+  const [templateName, setTemplateName] = useState("");
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [loadingTemplateId, setLoadingTemplateId] = useState(null);
+  const [activeTemplateId, setActiveTemplateId] = useState(null);
+
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisError, setAnalysisError] = useState(null);
+  const [transcribing, setTranscribing] = useState(false);
+
+  const [thresholdDb, setThresholdDb] = useState(-42);
+  const [minSilenceMs, setMinSilenceMs] = useState(900);
+  const [paddingMs, setPaddingMs] = useState(500);
+  const [minSegmentMs, setMinSegmentMs] = useState(600);
+  const [meetingVoiceEffect, setMeetingVoiceEffect] = useState(true);
+  const [advanceMode, setAdvanceMode] = useState("auto"); // auto | manual
+
+  const [status, setStatus] = useState("setup"); // setup | playing | waiting | ready | done
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [previewIndex, setPreviewIndex] = useState(null);
+  const [micError, setMicError] = useState(null);
+
+  const audioRef = useRef(null);
+  const stopTimerRef = useRef(null);
+  const transitionTimerRef = useRef(null);
+  const playbackAudioCtxRef = useRef(null);
+  const playbackChainRef = useRef(null);
+  const bufferSourceRef = useRef(null);
+  const audioBufferRef = useRef(null);
+  const segmentsRef = useRef([]);
+  const audioDurationRef = useRef(null);
+  const currentIndexRef = useRef(0);
+  const statusRef = useRef(status);
+  const advanceModeRef = useRef(advanceMode);
+  const playNextSessionSegmentRef = useRef(null);
+  const goToNextStepRef = useRef(null);
+  const meetingVoiceEffectRef = useRef(meetingVoiceEffect);
+
+  useEffect(() => {
+    segmentsRef.current = segments;
+  }, [segments]);
+
+  useEffect(() => {
+    currentIndexRef.current = currentIndex;
+  }, [currentIndex]);
+
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
+  useEffect(() => {
+    advanceModeRef.current = advanceMode;
+  }, [advanceMode]);
+
+  useEffect(() => {
+    meetingVoiceEffectRef.current = meetingVoiceEffect;
+    setZoomMeetingEffectEnabled(playbackChainRef.current, meetingVoiceEffect);
+  }, [meetingVoiceEffect]);
+
+  useEffect(() => {
+    audioBufferRef.current = audioBuffer;
+  }, [audioBuffer]);
+
+  const clearTransitionTimer = useCallback(() => {
+    if (transitionTimerRef.current) {
+      clearTimeout(transitionTimerRef.current);
+      transitionTimerRef.current = null;
+    }
+  }, []);
+
+  const stopAudio = useCallback(() => {
+    if (stopTimerRef.current) {
+      clearTimeout(stopTimerRef.current);
+      stopTimerRef.current = null;
+    }
+    clearTransitionTimer();
+    try {
+      bufferSourceRef.current?.stop();
+    } catch (_) {}
+    bufferSourceRef.current = null;
+    try {
+      audioRef.current?.pause();
+    } catch (_) {}
+  }, [clearTransitionTimer]);
+
+  const ensurePlaybackAudioContext = useCallback(async () => {
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!playbackAudioCtxRef.current) {
+      const ctx = new AudioContextCtor();
+      const chain = createZoomMeetingAudioChain(ctx);
+      chain.output.connect(ctx.destination);
+      playbackAudioCtxRef.current = ctx;
+      playbackChainRef.current = chain;
+    }
+    const ctx = playbackAudioCtxRef.current;
+    if (ctx.state === "suspended") {
+      await ctx.resume();
+    }
+    setZoomMeetingEffectEnabled(playbackChainRef.current, meetingVoiceEffectRef.current);
+    return ctx;
+  }, []);
+
+  useEffect(() => () => {
+    try {
+      bufferSourceRef.current?.stop();
+    } catch (_) {}
+    try {
+      playbackAudioCtxRef.current?.close();
+    } catch (_) {}
+    playbackAudioCtxRef.current = null;
+    playbackChainRef.current = null;
+    bufferSourceRef.current = null;
+  }, []);
+
+  const { start: startMic, stop: stopMic, listening: micListening, level: micLevel, error: micDetectError } = useMicrophoneSilenceDetector({
+    // Tuning for "stop talking" detection:
+    // - graceMs: give time for the interviewer audio → reduce false triggers
+    // - threshold/minSpeechMs: avoid tiny blips
+    // - silenceMs: require a real pause before advancing
+    threshold: 0.012,
+    graceMs: 1800,
+    minSpeechMs: 300,
+    silenceMs: 2200,
+    onSilence: () => {
+      if (statusRef.current !== "waiting" || advanceModeRef.current !== "auto") return;
+
+      stopMic();
+      setMicError(null);
+      goToNextStepRef.current?.();
+    },
+  });
+
+  useEffect(() => {
+    if (micDetectError) setMicError(micDetectError);
+  }, [micDetectError]);
+
+  const analyze = useCallback(async (file, { applySegments = true } = {}) => {
+    setAnalysisLoading(true);
+    setAnalysisError(null);
+    if (applySegments) setSegments([]);
+    setAudioBuffer(null);
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AudioContextCtor();
+      const buffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
+      setAudioBuffer(buffer);
+      audioDurationRef.current = buffer.duration;
+      ctx.close?.();
+
+      if (!applySegments) return buffer;
+
+      const segs = splitAudioBufferBySilence(buffer, {
+        thresholdDb,
+        minSilenceMs,
+        paddingMs,
+        minSegmentMs,
+      });
+
+      const named = segs.map((s, idx) => ({
+        id: `seg-${idx + 1}`,
+        label: `Step ${idx + 1}`,
+        start: s.start,
+        end: s.end,
+      }));
+      setSegments(named);
+      return buffer;
+    } catch (e) {
+      setAnalysisError(e?.message || "Could not analyze audio.");
+      return null;
+    } finally {
+      setAnalysisLoading(false);
+    }
+  }, [minSegmentMs, minSilenceMs, paddingMs, thresholdDb]);
+
+  const refreshTemplates = useCallback(async () => {
+    setTemplatesLoading(true);
+    try {
+      const rows = await fetchInterviewTemplates();
+      setTemplates(rows);
+    } catch {
+      setTemplates([]);
+    } finally {
+      setTemplatesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshTemplates();
+  }, [refreshTemplates]);
+
+  useEffect(() => {
+    // Cleanup on unmount
+    return () => {
+      stopAudio();
+      stopMic();
+    };
+  }, [stopAudio, stopMic]);
+
+  const playAudioRange = useCallback(async (start, end, onEnd) => {
+    const buffer = audioBufferRef.current;
+    if (!buffer) {
+      toast.error("Audio is not ready yet. Wait for analysis to finish.");
+      onEnd?.();
+      return;
+    }
+
+    stopAudio();
+    stopMic();
+
+    const duration = audioDurationRef.current ?? buffer.duration;
+    const { startAt, endAt } = getPlaybackBounds(start, end, duration);
+    const playDuration = Math.max(0.05, endAt - startAt);
+    let finished = false;
+
+    let ctx;
+    try {
+      ctx = await ensurePlaybackAudioContext();
+    } catch (e) {
+      console.warn("Playback audio context setup failed:", e);
+      toast.error("Could not start audio playback.");
+      onEnd?.();
+      return;
+    }
+
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      if (stopTimerRef.current) {
+        clearTimeout(stopTimerRef.current);
+        stopTimerRef.current = null;
+      }
+      try {
+        bufferSourceRef.current?.stop();
+      } catch (_) {}
+      bufferSourceRef.current = null;
+      onEnd?.();
+    };
+
+    try {
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(playbackChainRef.current.input);
+      source.onended = finish;
+      bufferSourceRef.current = source;
+      source.start(0, startAt, playDuration);
+    } catch (e) {
+      toast.error(e?.message || "Could not play audio segment.");
+      finish();
+      return;
+    }
+
+    stopTimerRef.current = setTimeout(finish, playDuration * 1000 + 600);
+  }, [ensurePlaybackAudioContext, stopAudio, stopMic]);
+
+  const previewSegment = useCallback((idx) => {
+    const seg = segments[idx];
+    if (!seg) return;
+
+    stopMic();
+    stopAudio();
+    setStatus("setup");
+    setCurrentIndex(0);
+    setMicError(null);
+    setPreviewIndex(idx);
+    ensurePlaybackAudioContext().catch(() => {});
+
+    playAudioRange(seg.start, seg.end, () => {
+      setPreviewIndex(null);
+    });
+  }, [ensurePlaybackAudioContext, playAudioRange, segments, stopAudio, stopMic]);
+
+  const afterSegmentPlayback = useCallback(() => {
+    clearTransitionTimer();
+    transitionTimerRef.current = setTimeout(() => {
+      transitionTimerRef.current = null;
+      if (advanceModeRef.current === "manual") {
+        statusRef.current = "ready";
+        setStatus("ready");
+        return;
+      }
+      statusRef.current = "waiting";
+      setStatus("waiting");
+    }, STEP_TRANSITION_MS);
+  }, [clearTransitionTimer]);
+
+  const playNextSessionSegment = useCallback(
+    (idx) => {
+      const seg = segmentsRef.current[idx];
+      if (!seg) {
+        stopAudio();
+        stopMic();
+        statusRef.current = "done";
+        setStatus("done");
+        return;
+      }
+
+      setPreviewIndex(null);
+      currentIndexRef.current = idx;
+      setCurrentIndex(idx);
+      statusRef.current = "playing";
+      setStatus("playing");
+      playAudioRange(seg.start, seg.end, afterSegmentPlayback);
+    },
+    [afterSegmentPlayback, playAudioRange, stopAudio, stopMic],
+  );
+
+  const goToNextStep = useCallback(() => {
+    stopMic();
+    stopAudio();
+    const nextIdx = currentIndexRef.current + 1;
+    clearTransitionTimer();
+    transitionTimerRef.current = setTimeout(() => {
+      transitionTimerRef.current = null;
+      playNextSessionSegmentRef.current?.(nextIdx);
+    }, STEP_TRANSITION_MS);
+  }, [clearTransitionTimer, stopAudio, stopMic]);
+
+  const skipToPracticeTurn = useCallback(() => {
+    stopAudio();
+    stopMic();
+    clearTransitionTimer();
+    statusRef.current = "ready";
+    setStatus("ready");
+  }, [clearTransitionTimer, stopAudio, stopMic]);
+
+  useEffect(() => {
+    playNextSessionSegmentRef.current = playNextSessionSegment;
+  }, [playNextSessionSegment]);
+
+  useEffect(() => {
+    goToNextStepRef.current = goToNextStep;
+  }, [goToNextStep]);
+
+  useEffect(() => {
+    if (status !== "waiting" || advanceMode !== "auto") return;
+    setMicError(null);
+    startMic();
+  }, [advanceMode, startMic, status]);
+
+  const startSession = () => {
+    if (!segments.length || !audioBufferRef.current) {
+      if (!audioBufferRef.current) toast.error("Audio is still loading. Try again in a moment.");
+      return;
+    }
+    stopMic();
+    stopAudio();
+    setPreviewIndex(null);
+    currentIndexRef.current = 0;
+    statusRef.current = "playing";
+    setCurrentIndex(0);
+    setStatus("playing");
+    setMicError(null);
+    ensurePlaybackAudioContext().catch(() => {});
+    clearTransitionTimer();
+    transitionTimerRef.current = setTimeout(() => {
+      transitionTimerRef.current = null;
+      playNextSessionSegment(0);
+    }, STEP_TRANSITION_MS);
+  };
+
+  const stopSession = () => {
+    stopMic();
+    stopAudio();
+    setPreviewIndex(null);
+    statusRef.current = "setup";
+    setStatus("setup");
+    setCurrentIndex(0);
+    setMicError(null);
+  };
+
+  const manualNext = goToNextStep;
+
+  const canEditSegment = segments.length > 0;
+
+  const applyAudioSource = async (file, displayName) => {
+    setMp3File(file);
+    setMp3FileName(displayName || file.name);
+    if (audioUrl) {
+      try { URL.revokeObjectURL(audioUrl); } catch (_) {}
+    }
+    const nextUrl = URL.createObjectURL(file);
+    setAudioUrl(nextUrl);
+  };
+
+  const onUpload = async (file) => {
+    if (!file) return;
+    if (!file.type.includes("audio")) {
+      setAnalysisError("Please upload an audio file (mp3/wav).");
+      return;
+    }
+    setActiveTemplateId(null);
+    setTemplateName(file.name.replace(/\.[^.]+$/, ""));
+    await applyAudioSource(file, file.name);
+    await analyze(file);
+    stopSession();
+  };
+
+  const loadTemplate = async (templateId) => {
+    if (!templateId) return;
+    setLoadingTemplateId(templateId);
+    setAnalysisError(null);
+    stopSession();
+    try {
+      const [detail, blob] = await Promise.all([
+        fetchInterviewTemplate(templateId),
+        fetchInterviewTemplateAudioBlob(templateId),
+      ]);
+      const file = new File(
+        [blob],
+        detail.original_filename || `${detail.name || "template"}.mp3`,
+        { type: blob.type || "audio/mpeg" },
+      );
+      await applyAudioSource(file, detail.name || file.name);
+      setSegments(detail.segments || []);
+      setActiveTemplateId(templateId);
+      setTemplateName(detail.name || "");
+      const settings = detail.split_settings || {};
+      if (settings.thresholdDb != null) setThresholdDb(Number(settings.thresholdDb));
+      if (settings.minSilenceMs != null) setMinSilenceMs(Number(settings.minSilenceMs));
+      if (settings.paddingMs != null) setPaddingMs(Number(settings.paddingMs));
+      if (settings.minSegmentMs != null) setMinSegmentMs(Number(settings.minSegmentMs));
+      await analyze(file, { applySegments: false });
+      toast.success("Template loaded");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e?.message || "Could not load template");
+    } finally {
+      setLoadingTemplateId(null);
+    }
+  };
+
+  const handleSaveTemplate = async () => {
+    if (!mp3File || !segments.length) {
+      toast.error("Upload and trim an MP3 before saving.");
+      return;
+    }
+    if (mp3File.size > 25 * 1024 * 1024) {
+      toast.error("Audio file is too large (max 25 MB). Try trimming or exporting with a lower bitrate.");
+      return;
+    }
+    if (!templateName.trim()) {
+      toast.error("Enter a template name.");
+      return;
+    }
+    setSavingTemplate(true);
+    try {
+      const saved = await saveInterviewTemplate({
+        name: templateName.trim(),
+        segments,
+        splitSettings: { thresholdDb, minSilenceMs, paddingMs, minSegmentMs },
+        durationSeconds: audioBuffer?.duration,
+        audioFile: mp3File,
+      });
+      setActiveTemplateId(saved.template_id);
+      await refreshTemplates();
+      toast.success("Template saved for all creators");
+    } catch (e) {
+      const status = e?.response?.status;
+      const isTimeout = e?.code === "ECONNABORTED";
+      if (status === 504 || isTimeout) {
+        toast.error("Upload timed out. Retry in a moment (or refresh the page).");
+      } else {
+        toast.error(e?.response?.data?.detail || e?.message || "Could not save template");
+      }
+    } finally {
+      setSavingTemplate(false);
+    }
+  };
+
+  const handleTranscribeAudio = async () => {
+    if (!mp3File || !segments.length) {
+      toast.error("Upload an MP3 and detect steps before transcribing.");
+      return;
+    }
+    setTranscribing(true);
+    try {
+      const transcripts = await transcribeInterviewAudio({ segments, audioFile: mp3File });
+      setSegments((prev) => prev.map((seg) => (
+        transcripts[seg.id] != null ? { ...seg, transcript: transcripts[seg.id] } : seg
+      )));
+      toast.success("Transcript ready");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e?.message || "Could not transcribe audio");
+    } finally {
+      setTranscribing(false);
+    }
+  };
+
+  const updateSegment = (idx, patch) => {
+    setSegments((prev) => {
+      const seg = prev[idx];
+      if (!seg) return prev;
+      const next = [...prev];
+      next[idx] = { ...seg, ...patch };
+      // Keep start/end sane.
+      if (next[idx].end <= next[idx].start + 0.05) {
+        next[idx].end = next[idx].start + 0.05;
+      }
+      if (idx > 0 && next[idx].start < next[idx - 1].end) {
+        next[idx].start = next[idx - 1].end + 0.01;
+      }
+      return next;
+    });
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      <div className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-6 shadow-sm">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="font-display text-2xl font-bold tracking-tight text-zinc-900">
+              Record tools — Interview simulator
+            </h1>
+            <p className="mt-1 text-sm text-zinc-600">
+              Upload an MP3 of interview questions, auto-split on silence, then play step by step. Use auto mode (mic) or manual mode (press Next step).
+            </p>
+          </div>
+
+          <Button type="button" variant="outline" onClick={stopSession} className="rounded-full">
+            <Square className="w-4 h-4 mr-2" />
+            Stop
+          </Button>
+        </div>
+
+        <div className="mt-5 rounded-2xl border border-violet-200 bg-violet-50/60 p-4">
+          <p className="text-xs font-bold uppercase tracking-wider text-violet-800">
+            Shared templates
+          </p>
+          <p className="mt-1 text-sm text-zinc-600">
+            Load a saved interview script that every creator can reuse.
+          </p>
+          {templatesLoading ? (
+            <div className="mt-3 flex items-center gap-2 text-sm text-zinc-500">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading templates…
+            </div>
+          ) : templates.length ? (
+            <div className="mt-3 space-y-2">
+              {templates.map((tpl) => (
+                <div
+                  key={tpl.template_id}
+                  className={`flex items-center justify-between gap-3 rounded-xl border bg-white p-3 ${
+                    activeTemplateId === tpl.template_id ? "border-violet-300" : "border-zinc-200"
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-zinc-900">{tpl.name}</p>
+                    <p className="text-xs text-zinc-500">
+                      {tpl.segment_count} steps · {formatTime(tpl.duration_seconds)}
+                      {tpl.created_by_name ? ` · ${tpl.created_by_name}` : ""}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0 rounded-full"
+                    disabled={loadingTemplateId === tpl.template_id || analysisLoading}
+                    onClick={() => loadTemplate(tpl.template_id)}
+                  >
+                    {loadingTemplateId === tpl.template_id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Load"
+                    )}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-zinc-500">No shared templates yet.</p>
+          )}
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-5">
+          <div className="lg:col-span-2">
+            <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+              <p className="text-xs font-bold uppercase tracking-wider text-zinc-600">
+                1) Upload your MP3
+              </p>
+
+              <div className="mt-3 flex items-center gap-3">
+                <label className="cursor-pointer rounded-full bg-zinc-900 text-white px-4 py-2 text-sm font-semibold hover:opacity-90 inline-flex items-center gap-2">
+                  <Upload className="w-4 h-4" />
+                  Upload
+                  <input
+                    type="file"
+                    accept="audio/*"
+                    className="hidden"
+                    onChange={(e) => onUpload(e.target.files?.[0])}
+                    disabled={analysisLoading}
+                  />
+                </label>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-zinc-900 truncate">
+                    {mp3FileName || "No file selected"}
+                  </p>
+                  {analysisLoading ? (
+                    <p className="mt-1 text-xs text-zinc-500 flex items-center gap-2">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Analyzing…
+                    </p>
+                  ) : analysisError ? (
+                    <p className="mt-1 text-xs text-rose-700 font-semibold">
+                      {analysisError}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+
+              {audioBuffer ? (
+                <div className="mt-4">
+                  <p className="text-xs text-zinc-500">
+                    Duration: <span className="font-semibold text-zinc-700">{formatTime(audioBuffer.duration)}</span>
+                  </p>
+                </div>
+              ) : null}
+            </div>
+
+            {segments.length > 0 && status === "setup" ? (
+              <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4">
+                <p className="text-xs font-bold uppercase tracking-wider text-zinc-600">
+                  Save as shared template
+                </p>
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <Input
+                    value={templateName}
+                    onChange={(e) => setTemplateName(e.target.value)}
+                    placeholder="Template name"
+                    className="rounded-xl"
+                  />
+                  <Button
+                    type="button"
+                    className="rounded-full bg-zinc-900 text-white hover:opacity-90 sm:shrink-0"
+                    disabled={savingTemplate || !mp3File}
+                    onClick={handleSaveTemplate}
+                  >
+                    {savingTemplate ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4 mr-2" />
+                    )}
+                    Save template
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4">
+              <p className="text-xs font-bold uppercase tracking-wider text-zinc-600">2) Split settings</p>
+              <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={meetingVoiceEffect}
+                  onChange={(e) => setMeetingVoiceEffect(e.target.checked)}
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-zinc-900">Zoom meeting voice effect</span>
+                  <span className="mt-0.5 block text-xs text-zinc-600">
+                    Band-limiting, compression, and a short call tail so uploaded meeting audio feels more like a live video call.
+                  </span>
+                </span>
+              </label>
+
+              <div className="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+                <p className="text-sm font-semibold text-zinc-900">Session advance mode</p>
+                <div className="mt-2 space-y-2">
+                  <label className="flex cursor-pointer items-start gap-2 text-sm text-zinc-700">
+                    <input
+                      type="radio"
+                      name="advanceMode"
+                      className="mt-1"
+                      checked={advanceMode === "auto"}
+                      onChange={() => setAdvanceMode("auto")}
+                      disabled={status !== "setup" && status !== "done"}
+                    />
+                    <span>
+                      <span className="font-semibold text-zinc-900">Auto</span>
+                      <span className="mt-0.5 block text-xs text-zinc-600">
+                        Microphone detects when you stop speaking, then plays the next step.
+                      </span>
+                    </span>
+                  </label>
+                  <label className="flex cursor-pointer items-start gap-2 text-sm text-zinc-700">
+                    <input
+                      type="radio"
+                      name="advanceMode"
+                      className="mt-1"
+                      checked={advanceMode === "manual"}
+                      onChange={() => setAdvanceMode("manual")}
+                      disabled={status !== "setup" && status !== "done"}
+                    />
+                    <span>
+                      <span className="font-semibold text-zinc-900">Manual</span>
+                      <span className="mt-0.5 block text-xs text-zinc-600">
+                        You press Next step yourself to launch each new interviewer line.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="mt-3 space-y-3">
+                <label className="block text-sm">
+                  <span className="block text-xs font-semibold text-zinc-600">Silence threshold (dB)</span>
+                  <Input
+                    type="number"
+                    step={1}
+                    value={thresholdDb}
+                    onChange={(e) => setThresholdDb(Number(e.target.value))}
+                    className="mt-1"
+                  />
+                </label>
+                <label className="block text-sm">
+                  <span className="block text-xs font-semibold text-zinc-600">Min silence (ms)</span>
+                  <Input
+                    type="number"
+                    step={50}
+                    value={minSilenceMs}
+                    onChange={(e) => setMinSilenceMs(Number(e.target.value))}
+                    className="mt-1"
+                  />
+                </label>
+                <label className="block text-sm">
+                  <span className="block text-xs font-semibold text-zinc-600">Padding (ms)</span>
+                  <Input
+                    type="number"
+                    step={50}
+                    value={paddingMs}
+                    onChange={(e) => setPaddingMs(Number(e.target.value))}
+                    className="mt-1"
+                  />
+                  <span className="mt-1 block text-xs text-zinc-500">
+                    Extra time kept before/after each detected cut (default 500 ms).
+                  </span>
+                </label>
+                <label className="block text-sm">
+                  <span className="block text-xs font-semibold text-zinc-600">Min segment (ms)</span>
+                  <Input
+                    type="number"
+                    step={50}
+                    value={minSegmentMs}
+                    onChange={(e) => setMinSegmentMs(Number(e.target.value))}
+                    className="mt-1"
+                  />
+                </label>
+
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-full flex-1"
+                    disabled={!audioBuffer || analysisLoading}
+                    onClick={() => {
+                      if (!audioBuffer) return;
+                      setAnalysisLoading(true);
+                      try {
+                        const segs = splitAudioBufferBySilence(audioBuffer, {
+                          thresholdDb,
+                          minSilenceMs,
+                          paddingMs,
+                          minSegmentMs,
+                        });
+                        setSegments(segs.map((s, idx) => ({
+                          id: `seg-${idx + 1}`,
+                          label: `Step ${idx + 1}`,
+                          start: s.start,
+                          end: s.end,
+                        })));
+                        setAnalysisLoading(false);
+                      } catch (e) {
+                        setAnalysisLoading(false);
+                      }
+                    }}
+                  >
+                    <RotateCcw className="w-4 h-4 mr-2" />
+                    Re-analyze
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="lg:col-span-3">
+            <div className="rounded-2xl border border-zinc-200 bg-white p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-zinc-600">3) Detected steps</p>
+                  <p className="mt-2 text-sm text-zinc-600">
+                    {segments.length ? `${segments.length} steps ready.` : "Upload an MP3 to detect steps."}
+                  </p>
+                </div>
+                {segments.length > 0 && status === "setup" ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0 rounded-full"
+                    disabled={transcribing || !mp3File}
+                    onClick={handleTranscribeAudio}
+                  >
+                    {transcribing ? (
+                      <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                    ) : (
+                      <FileText className="h-4 w-4 mr-1.5" />
+                    )}
+                    Transcribe audio
+                  </Button>
+                ) : null}
+              </div>
+
+              {segments.length > 0 && (status === "setup" || status === "done") && previewIndex == null ? (
+                <Button
+                  type="button"
+                  className="mt-4 h-14 w-full rounded-2xl bg-violet-600 text-base font-bold text-white shadow-lg shadow-violet-200 hover:bg-violet-700"
+                  onClick={startSession}
+                >
+                  <Play className="mr-2 h-5 w-5 fill-current" />
+                  Play this template
+                </Button>
+              ) : null}
+
+              {(status !== "setup" || previewIndex != null) ? (
+                <div className="mt-4">
+                  <InterviewTurnIndicator
+                    status={status}
+                    currentIndex={currentIndex}
+                    totalSteps={segments.length}
+                    micLevel={micLevel}
+                    previewIndex={previewIndex}
+                    advanceMode={advanceMode}
+                  />
+                  {(status === "waiting" || status === "ready") ? (
+                    <TeleprompterPanel text={segments[currentIndex]?.script || ""} />
+                  ) : null}
+                </div>
+              ) : null}
+
+              {(status === "ready" && advanceMode === "manual") ? (
+                <Button
+                  type="button"
+                  className="mt-4 h-14 w-full rounded-2xl bg-amber-500 text-base font-bold text-white shadow-lg shadow-amber-200 hover:bg-amber-600"
+                  onClick={goToNextStep}
+                >
+                  <SkipForward className="mr-2 h-5 w-5" />
+                  Next step
+                </Button>
+              ) : null}
+
+              {status === "playing" && advanceMode === "manual" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-3 w-full rounded-full"
+                  onClick={skipToPracticeTurn}
+                >
+                  <SkipForward className="mr-2 h-4 w-4" />
+                  Skip to your turn
+                </Button>
+              ) : null}
+
+              {segments.length ? (
+                <div className="mt-4 space-y-3">
+                  {segments.map((seg, idx) => (
+                    <div
+                      key={seg.id}
+                      className={`rounded-2xl border p-3 ${
+                        idx === currentIndex && (status === "playing" || status === "waiting" || status === "ready")
+                          ? "border-violet-200 bg-violet-50"
+                          : previewIndex === idx
+                            ? "border-sky-200 bg-sky-50"
+                            : "border-zinc-200 bg-white"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-zinc-900">{seg.label}</p>
+                          <p className="text-xs text-zinc-500">
+                            {formatTime(seg.start)} → {formatTime(seg.end)}
+                          </p>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="rounded-full"
+                            disabled={analysisLoading || status === "playing" || status === "waiting" || status === "ready"}
+                            onClick={() => previewSegment(idx)}
+                          >
+                            <Headphones className="w-4 h-4 mr-1.5" />
+                            Listen
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <label className="block text-xs">
+                          <span className="block font-semibold text-zinc-600">Start (s)</span>
+                          <Input
+                            type="number"
+                            step={0.1}
+                            value={Number(seg.start.toFixed(2))}
+                            onChange={(e) => updateSegment(idx, { start: Number(e.target.value) })}
+                            disabled={!canEditSegment || status !== "setup"}
+                          />
+                        </label>
+                        <label className="block text-xs">
+                          <span className="block font-semibold text-zinc-600">End (s)</span>
+                          <Input
+                            type="number"
+                            step={0.1}
+                            value={Number(seg.end.toFixed(2))}
+                            onChange={(e) => updateSegment(idx, { end: Number(e.target.value) })}
+                            disabled={!canEditSegment || status !== "setup"}
+                          />
+                        </label>
+                      </div>
+
+                      {seg.transcript ? (
+                        <div className="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 p-2.5">
+                          <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-zinc-500">
+                            <FileText className="h-3 w-3" />
+                            Transcript
+                          </p>
+                          <p className="mt-1 text-sm text-zinc-700">{seg.transcript}</p>
+                        </div>
+                      ) : null}
+
+                      <label className="mt-3 block text-xs">
+                        <span className="flex items-center gap-1.5 font-semibold text-zinc-600">
+                          <ScrollText className="h-3.5 w-3.5" />
+                          Your answer (teleprompter script)
+                        </span>
+                        <textarea
+                          value={seg.script || ""}
+                          onChange={(e) => updateSegment(idx, { script: e.target.value })}
+                          placeholder="Write what you want to say for this step, and it will scroll on screen while you speak."
+                          rows={2}
+                          disabled={status !== "setup"}
+                          className="mt-1 w-full rounded-xl border border-zinc-200 p-2 text-sm text-zinc-800 focus:border-violet-400 focus:outline-none disabled:bg-zinc-50 disabled:text-zinc-500"
+                        />
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
+              <div className="mt-5 flex flex-col sm:flex-row gap-2">
+                {segments.length > 0 && status !== "setup" ? (
+                  <Button
+                    type="button"
+                    className="rounded-full bg-violet-600 text-white hover:opacity-90"
+                    onClick={startSession}
+                  >
+                    <Play className="w-4 h-4 mr-2" />
+                    Restart template
+                  </Button>
+                ) : null}
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-full"
+                  disabled={status !== "waiting" || advanceMode !== "auto" || micListening === false}
+                  onClick={manualNext}
+                >
+                  <Square className="w-4 h-4 mr-2" />
+                  Stop talking &amp; next
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-full"
+                  disabled={status !== "ready" || advanceMode !== "manual"}
+                  onClick={goToNextStep}
+                >
+                  <SkipForward className="w-4 h-4 mr-2" />
+                  Next step
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-full"
+                  disabled={status !== "waiting" || micListening === true}
+                  onClick={() => {
+                    setMicError(null);
+                    startMic();
+                  }}
+                >
+                  <MicOff className="w-4 h-4 mr-2" />
+                  Enable mic
+                </Button>
+              </div>
+
+              {status === "waiting" && micError ? (
+                <p className="mt-3 text-xs font-semibold text-rose-700">{micError}</p>
+              ) : null}
+
+              <audio ref={audioRef} src={audioUrl || undefined} preload="metadata" />
+              <div className="mt-3 text-xs text-zinc-400">
+                Tip: if the split is off, adjust silence threshold and min silence, then Re-analyze.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
