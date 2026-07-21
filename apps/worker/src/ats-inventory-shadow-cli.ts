@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, mkdir, open, readFile, realpath } from "node:fs/promises";
-import { dirname, relative, resolve, sep } from "node:path";
+import { basename, dirname, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import {
   buildAtsRepeatedShadowScorecard,
@@ -96,11 +96,12 @@ export async function runAtsInventoryShadowCli(
   const root = await resolveEvidenceRoot(command.evidenceRootPath);
   if (command.type === "seal") return seal(command, root);
   const policy = JSON.parse(await readRegularFile(command.policyPath));
+  const approvalNow = options.now?.();
   const transport = command.provider === "greenhouse"
-    ? createApprovedGreenhouseShadowTransport({ approvedTenantId: command.tenantId, countryCode: command.countryCode, policy, fetch: options.fetch })
+    ? createApprovedGreenhouseShadowTransport({ approvedTenantId: command.tenantId, countryCode: command.countryCode, policy, now: approvalNow, fetch: options.fetch })
     : command.provider === "recruitee"
-      ? createApprovedRecruiteeShadowTransport({ approvedTenantId: command.tenantId, countryCode: command.countryCode, policy, fetch: options.fetch })
-      : createApprovedNicokaShadowTransport({ approvedTenantId: command.tenantId, countryCode: command.countryCode, policy, fetch: options.fetch, environment: "production" });
+      ? createApprovedRecruiteeShadowTransport({ approvedTenantId: command.tenantId, countryCode: command.countryCode, policy, now: approvalNow, fetch: options.fetch })
+      : createApprovedNicokaShadowTransport({ approvedTenantId: command.tenantId, countryCode: command.countryCode, policy, now: approvalNow, fetch: options.fetch, environment: "production" });
   const records = await transport.fetch(new AbortController().signal);
   const jobs = records.map((record) => ({
     externalId: `${transport.approvedTenantId}:${String((record as { id: string }).id)}`,
@@ -129,7 +130,9 @@ async function seal(command: Extract<AtsInventoryShadowCliCommand, { type: "seal
   const runs = scorecard.runIds.map((runId) => {
     const entry = byRunId.get(runId);
     if (!entry) throw new Error("scorecard run ID did not resolve to an input artifact");
-    return { path: entry.path, sha256: sha256(entry.contents) };
+    // Release evidence descriptors are intentionally root-relative; absolute
+    // paths would be rejected by the verifier and leak local filesystem layout.
+    return { path: relative(root, entry.path), sha256: sha256(entry.contents) };
   });
   const artifact = { ...scorecard, runs };
   await writeImmutableContained(command.outputPath, root, artifact);
@@ -152,10 +155,26 @@ async function resolveEvidenceRoot(path: string): Promise<string> {
   return realpath(root);
 }
 async function containedPath(path: string, root: string): Promise<string> {
-  const candidate = resolve(path);
+  const candidate = await canonicalizePath(path);
   const rel = relative(root, candidate);
   if (rel === "" || rel === ".." || rel.startsWith(`..${sep}`) || resolve(root, rel) !== candidate) throw new Error("artifact path must be contained by the evidence root");
   return candidate;
+}
+async function canonicalizePath(path: string): Promise<string> {
+  let existing = resolve(path);
+  const missingSegments: string[] = [];
+  for (;;) {
+    try {
+      await lstat(existing);
+      return resolve(await realpath(existing), ...missingSegments);
+    } catch (error) {
+      if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") throw error;
+      const parent = dirname(existing);
+      if (parent === existing) throw error;
+      missingSegments.unshift(basename(existing));
+      existing = parent;
+    }
+  }
 }
 async function readContainedFile(path: string, root: string): Promise<string> {
   const candidate = await containedPath(path, root);
