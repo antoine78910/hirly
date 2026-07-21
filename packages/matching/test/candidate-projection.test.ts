@@ -138,7 +138,7 @@ describe("candidate projection", () => {
     }).kind).toBe("applied");
   });
 
-  test("does not acknowledge an action until its canonical group exists", async () => {
+  test("acknowledges a terminal missing action so it cannot block later projection events", async () => {
     const actionEvent = { ...event, eventFamily: "swipes" as const, entityId: "candidate-paris:job-1" };
     const source = new FakeSource(
       [actionEvent],
@@ -148,8 +148,8 @@ describe("candidate projection", () => {
     const store = new FakeStore();
     store.groupId = null;
     const result = await new CandidateProjector(source, store).runBatch(10, 30);
-    expect(result).toMatchObject({ missing: 1, acknowledged: 0 });
-    expect(source.acknowledgements).toEqual([]);
+    expect(result).toMatchObject({ missing: 1, acknowledged: 1 });
+    expect(source.acknowledgements).toEqual([actionEvent.eventId]);
   });
 
   test("acknowledges monotonic stale replays without rewriting", async () => {

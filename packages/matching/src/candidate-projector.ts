@@ -50,7 +50,11 @@ export class CandidateProjector {
     for (const event of events) {
       const outcome = await this.project(event);
       result[outcome] += 1;
-      if (outcome !== "missing" && (await this.source.acknowledge(event.eventId))) {
+      // A missing source action is terminal for this projection event: the
+      // source row or its canonical job group no longer exists. Retrying it
+      // cannot make it projectable and would permanently starve later events
+      // (including the candidate profile) behind the outbox lease.
+      if (await this.source.acknowledge(event.eventId)) {
         result.acknowledged += 1;
       }
     }
