@@ -225,7 +225,7 @@ export function createTaskHandlers(
             "provider ownership claim lifecycle is unavailable",
           );
         }
-        const claimProviderWork = store.claimProviderWork;
+        const claimProviderWork = store.claimProviderWork.bind(store);
         const heartbeatProviderWork = store.heartbeatProviderWork;
         const finishProviderWork = store.finishProviderWork;
         const releaseProviderWork = store.releaseProviderWork;
