@@ -476,6 +476,14 @@ describe("Sprout source commit pipeline", () => {
     expect(serializedLogs).not.toContain("api.sprout.invalid");
     expect(serializedLogs).not.toContain(JSON.stringify(fixture.jobs[0]));
 
+    await expect(
+      handler(task("backfill"), new AbortController().signal),
+    ).resolves.toEqual({ taskCompleted: true });
+    expect(enqueued).toHaveLength(1);
+    expect((enqueued[0] as { idempotencyKey: string }).idempotencyKey).toBe(
+      `sprout:${sourceId}:backfill:11111111-1111-4111-8111-111111111111:2`,
+    );
+
     const failedLines: string[] = [];
     const failedHandler = createTaskHandlers(
       store,
