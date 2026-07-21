@@ -603,6 +603,29 @@ describe("G004 rate control", () => {
     expect(sleeps).toEqual([1_000]);
   });
 
+  test("supports a bounded randomized gap between request starts", async () => {
+    let now = 0;
+    const sleeps: number[] = [];
+    const gate = new ProviderRateGate(
+      { requestsPerMinute: 20, concurrency: 1 },
+      () => now,
+      async (milliseconds) => {
+        sleeps.push(milliseconds);
+        now += milliseconds;
+      },
+      {
+        startIntervalMs: { min: 3_000, max: 6_000 },
+        random: () => 0.5,
+      },
+    );
+    const signal = new AbortController().signal;
+
+    await gate.run(async () => "first", signal);
+    await gate.run(async () => "second", signal);
+
+    expect(sleeps).toEqual([4_500]);
+  });
+
   test("spaces aggregate starts even when concurrency permits overlap", async () => {
     let now = 0;
     const starts: number[] = [];

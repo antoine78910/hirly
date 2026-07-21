@@ -259,6 +259,18 @@ export function sourceActivationBlockReason(
 type Clock = () => number;
 type Sleep = (milliseconds: number, signal: AbortSignal) => Promise<void>;
 
+export interface ProviderRateGateOptions {
+  /**
+   * Overrides the fixed interval derived from requestsPerMinute. The interval
+   * is sampled before every start after the first one.
+   */
+  startIntervalMs?: {
+    min: number;
+    max: number;
+  };
+  random?: () => number;
+}
+
 const defaultSleep: Sleep = (milliseconds, signal) =>
   new Promise<void>((resolve, reject) => {
     const timer = setTimeout(resolve, milliseconds);
@@ -282,6 +294,7 @@ export class ProviderRateGate {
     private readonly config: RateLimitConfig,
     private readonly clock: Clock = Date.now,
     private readonly sleep: Sleep = defaultSleep,
+    private readonly options: ProviderRateGateOptions = {},
   ) {}
 
   async run<T>(
@@ -309,7 +322,7 @@ export class ProviderRateGate {
     await previousStart;
     let result: Promise<T>;
     try {
-      const minimumInterval = 60_000 / this.config.requestsPerMinute;
+      const minimumInterval = this.nextStartIntervalMs();
       const delay = Math.max(
         0,
         this.lastStartedAt + minimumInterval - this.clock(),
@@ -322,6 +335,24 @@ export class ProviderRateGate {
       releaseStart();
     }
     return await result;
+  }
+
+  private nextStartIntervalMs(): number {
+    const configured = this.options.startIntervalMs;
+    if (!configured) return 60_000 / this.config.requestsPerMinute;
+    if (
+      !Number.isFinite(configured.min) ||
+      !Number.isFinite(configured.max) ||
+      configured.min < 0 ||
+      configured.max < configured.min
+    ) {
+      throw new Error("invalid provider start interval");
+    }
+    const random = Math.min(
+      1,
+      Math.max(0, (this.options.random ?? Math.random)()),
+    );
+    return configured.min + (configured.max - configured.min) * random;
   }
 
   private async acquire(signal: AbortSignal): Promise<void> {

@@ -131,7 +131,14 @@ export function createTaskHandlers(
         const module = modules[provider] ?? getProviderModule(provider);
         let rateGate = rateGates.get(provider);
         if (!rateGate) {
-          rateGate = new ProviderRateGate(module.rateLimit);
+          rateGate = new ProviderRateGate(
+            module.rateLimit,
+            undefined,
+            undefined,
+            provider === "sprout"
+              ? { startIntervalMs: { min: 3_000, max: 6_000 } }
+              : undefined,
+          );
           rateGates.set(provider, rateGate);
         }
         if (
