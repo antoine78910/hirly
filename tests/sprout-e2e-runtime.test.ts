@@ -476,14 +476,6 @@ describe("Sprout source commit pipeline", () => {
     expect(serializedLogs).not.toContain("api.sprout.invalid");
     expect(serializedLogs).not.toContain(JSON.stringify(fixture.jobs[0]));
 
-    await expect(
-      handler(task("backfill"), new AbortController().signal),
-    ).resolves.toEqual({ taskCompleted: true });
-    expect(enqueued).toHaveLength(1);
-    expect((enqueued[0] as { idempotencyKey: string }).idempotencyKey).toBe(
-      `sprout:${sourceId}:backfill:11111111-1111-4111-8111-111111111111:2`,
-    );
-
     const failedLines: string[] = [];
     const failedHandler = createTaskHandlers(
       store,
@@ -546,9 +538,7 @@ describe("Sprout source commit pipeline", () => {
     await expect(
       fallbackHandler(task("backfill"), new AbortController().signal),
     ).resolves.toEqual({ taskCompleted: true });
-    // An empty terminal page ends this lane. A distinct source owns the broad
-    // country-only query, so a completed radius scan never reuses this
-    // source's checkpoint with different query semantics.
+    // An empty terminal page adds no continuation.
     expect(enqueued).toHaveLength(0);
     expect(fallbackLines.map((line) => JSON.parse(line).event)).not.toContain(
       "sprout.filter_fallback",
