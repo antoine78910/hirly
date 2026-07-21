@@ -54,6 +54,12 @@ export interface RuntimeStore {
     providerClaim: ProviderWorkClaim,
     sourceId: string,
   ): Promise<void>;
+  bindSproutSourceRun?(
+    lease: Lease,
+    providerClaim: ProviderWorkClaim,
+    sourceId: string,
+    mode: "canary" | "backfill" | "incremental",
+  ): Promise<void>;
   getSproutSourceRuntime?(
     sourceId: string,
     mode: "canary" | "backfill" | "incremental",

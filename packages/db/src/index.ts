@@ -447,6 +447,25 @@ export class WorkerRepository {
     `;
   }
 
+  async bindSproutSourceRun(
+    lease: Lease,
+    providerClaim: ProviderWorkClaim,
+    sourceId: string,
+    mode: "canary" | "backfill" | "incremental",
+  ): Promise<void> {
+    await this.sql`
+      SELECT worker_private.bind_sprout_source_run(
+        ${lease.taskId}::uuid,
+        ${lease.leaseToken}::uuid,
+        ${lease.claimGeneration.toString()}::bigint,
+        ${lease.leaseOwner},
+        ${providerClaim.claimId}::uuid,
+        ${sourceId}::uuid,
+        ${mode}
+      )
+    `;
+  }
+
   async getSproutSourceRuntime(
     sourceId: string,
     mode: "canary" | "incremental" | "backfill",

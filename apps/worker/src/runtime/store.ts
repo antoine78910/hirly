@@ -59,6 +59,20 @@ export class PostgresRuntimeStore implements RuntimeStore {
     );
   }
 
+  bindSproutSourceRun(
+    lease: Parameters<WorkerRepository["bindSproutSourceRun"]>[0],
+    providerClaim: Parameters<WorkerRepository["bindSproutSourceRun"]>[1],
+    sourceId: Parameters<WorkerRepository["bindSproutSourceRun"]>[2],
+    mode: Parameters<WorkerRepository["bindSproutSourceRun"]>[3],
+  ) {
+    return this.repository.bindSproutSourceRun(
+      lease,
+      providerClaim,
+      sourceId,
+      mode,
+    );
+  }
+
   getSproutSourceRuntime(
     sourceId: string,
     mode: "canary" | "backfill" | "incremental",

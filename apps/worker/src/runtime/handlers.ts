@@ -299,6 +299,22 @@ export function createTaskHandlers(
             }
             const payload = sproutTaskPayloadSchema.parse(task.payload);
             sproutSourceId = payload.sourceId;
+            if (!store.bindSproutSourceRun) {
+              throw new IngestionError(
+                "integrity_error",
+                "sprout_source_run_binding_is_unavailable",
+              );
+            }
+            // Schedule-created runs have no career_source_id until the worker
+            // has fenced the active task and provider claim. Bind it before
+            // reading or committing a source checkpoint; this preserves the
+            // source ownership invariant without rewinding incremental scans.
+            await store.bindSproutSourceRun(
+              task,
+              providerClaim,
+              payload.sourceId,
+              payload.mode,
+            );
             if (payload.cycleStart) {
               if (payload.mode !== "incremental" || !store.beginSproutIncrementalCycle) {
                 throw new IngestionError(

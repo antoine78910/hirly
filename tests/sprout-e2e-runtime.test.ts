@@ -333,6 +333,7 @@ describe("Sprout source commit pipeline", () => {
     const enqueued: unknown[] = [];
     const logLines: string[] = [];
     const cycleStarts: string[] = [];
+    const boundSources: string[] = [];
     let released = 0;
     const store = {
       async assertProviderRunnable() {},
@@ -351,6 +352,13 @@ describe("Sprout source commit pipeline", () => {
       async writeJobsAndComplete() { throw new Error("legacy writer must not run"); },
       async beginSproutIncrementalCycle(_lease: unknown, _claim: unknown, currentSourceId: string) {
         cycleStarts.push(currentSourceId);
+      },
+      async bindSproutSourceRun(
+        _lease: unknown,
+        _claim: unknown,
+        currentSourceId: string,
+      ) {
+        boundSources.push(currentSourceId);
       },
       async getSproutSourceRuntime(_sourceId: string, mode: "canary" | "backfill" | "incremental") {
         return {
@@ -574,6 +582,8 @@ describe("Sprout source commit pipeline", () => {
       },
     }, new AbortController().signal)).resolves.toEqual({ taskCompleted: true });
     expect(cycleStarts).toEqual([sourceId]);
+    expect(boundSources).toContain(sourceId);
+    expect(boundSources.every((currentSourceId) => currentSourceId === sourceId)).toBe(true);
     // The first frontier page has a provider continuation, but the bounded
     // scan intentionally ends after this page rather than replaying the full
     // historical corpus on every scheduled cycle.
