@@ -15,10 +15,38 @@ const down = readFileSync(
   ),
   "utf8",
 );
+const generationQualification = readFileSync(
+  new URL(
+    "../backend/db/migrations/20260721002800_posthog_paid_lifecycle_generation_qualification.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const generationQualificationDown = readFileSync(
+  new URL(
+    "../backend/db/migrations/20260721002800_posthog_paid_lifecycle_generation_qualification.down.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const compact = (sql: string): string =>
   sql.replace(/--.*$/gm, "").replace(/\s+/g, " ").trim().toLowerCase();
 
 describe("governed paid-lifecycle migration contract", () => {
+  test("qualifies generation in the paid invoice replay guard", () => {
+    const sql = compact(up);
+    expect(sql).toContain(
+      "from public.posthog_paid_lifecycle_evidence as ended where ended.evidence_type = 'end'",
+    );
+    expect(sql).toContain("and ended.generation = v_generation");
+    expect(compact(generationQualification)).toContain(
+      "execute replace(v_definition, v_broken, v_fixed)",
+    );
+    expect(compact(generationQualificationDown)).toContain(
+      "execute replace(v_definition, v_fixed, v_broken)",
+    );
+  });
+
   test("owns immutable evidence, independent watermarks, and fenced outbox state", () => {
     const sql = compact(up);
     for (const table of [

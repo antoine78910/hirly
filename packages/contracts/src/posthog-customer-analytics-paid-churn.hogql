@@ -3,7 +3,8 @@ WITH activation AS (
         distinct_id,
         min(timestamp) AS anchor_at
     FROM events
-    WHERE event = 'subscription_activated'
+    WHERE timestamp >= toDateTime('{{paid_source_start_at}}', 'UTC')
+      AND event = 'subscription_activated'
       AND match(distinct_id, '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
     GROUP BY distinct_id
 ),
@@ -34,13 +35,16 @@ paid_churn AS (
     SELECT DISTINCT eligible.distinct_id
     FROM eligible
     INNER JOIN events ON events.distinct_id = eligible.distinct_id
-    WHERE events.event = 'subscription_churned'
+    WHERE events.timestamp >= toDateTime('{{paid_source_start_at}}', 'UTC')
+      AND events.event = 'subscription_churned'
       AND events.timestamp >= eligible.window_start
       AND events.timestamp < eligible.window_end
 )
 SELECT
     count() AS eligible_first_paid_count,
-    countIf(paid_churn.distinct_id IS NOT NULL) AS paid_subscription_churn_count,
+    countIf(
+        paid_churn.distinct_id = eligible.distinct_id
+    ) AS paid_subscription_churn_count,
     if(
         eligible_first_paid_count = 0,
         NULL,

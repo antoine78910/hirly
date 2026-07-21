@@ -351,10 +351,10 @@ BEGIN
   LIMIT 1;
 
   IF FOUND AND NOT EXISTS (
-    SELECT 1 FROM public.posthog_paid_lifecycle_evidence
-    WHERE evidence_type = 'end'
-      AND subscription_id = p_subscription_id
-      AND generation = v_generation
+    SELECT 1 FROM public.posthog_paid_lifecycle_evidence AS ended
+    WHERE ended.evidence_type = 'end'
+      AND ended.subscription_id = p_subscription_id
+      AND ended.generation = v_generation
   ) THEN
     v_end_key := 'end:' || p_subscription_id || ':' || v_generation::text;
     v_churn_payload := jsonb_strip_nulls(jsonb_build_object(
