@@ -225,11 +225,6 @@ RETURNS trigger
 LANGUAGE plpgsql
 SET search_path = pg_catalog, public
 AS $$
-DECLARE
-  v_version bigint := CASE
-    WHEN TG_TABLE_NAME = 'candidate_search_profiles' THEN NEW.version
-    ELSE NEW.candidate_version
-  END;
 BEGIN
   IF EXISTS (
     SELECT 1 FROM public.candidate_projection_tombstones

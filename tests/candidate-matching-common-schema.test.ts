@@ -73,12 +73,33 @@ describe("candidate matching common migration contracts", () => {
 const databaseUrl = process.env.CANDIDATE_MATCHING_MIGRATION_TEST_DATABASE_URL;
 const describePostgres = databaseUrl ? describe : describe.skip;
 
-describePostgres("candidate matching migrations on disposable PostgreSQL", () => {
-  let sql: Database;
-
-  beforeAll(async () => {
-    sql = createDatabase(databaseUrl!, { max: 1 });
+async function withDisposableDatabase<T>(
+  callback: (sql: Database) => Promise<T>,
+): Promise<T> {
+  if (!databaseUrl) {
+    throw new Error("CANDIDATE_MATCHING_MIGRATION_TEST_DATABASE_URL is required");
+  }
+  const sql = createDatabase(databaseUrl, { max: 1 });
+  try {
     await sql.unsafe(`
+      DROP TABLE IF EXISTS
+        public.projection_reconciliation_tasks,
+        public.job_search_documents,
+        public.candidate_action_projection,
+        public.candidate_search_profiles,
+        public.candidate_projection_tombstones,
+        public.candidate_projection_outbox,
+        public.candidate_deletion_tombstones,
+        public.candidate_serving_controls,
+        public.candidate_event_versions,
+        public.candidate_projection_runtime_controls,
+        public.candidate_projection_producer_flags,
+        public.applications,
+        public.swipes,
+        public.profiles,
+        public.users,
+        public.jobs
+      CASCADE;
       CREATE TABLE public.users (
         user_id text PRIMARY KEY, email text, data jsonb NOT NULL DEFAULT '{}'::jsonb
       );
@@ -101,137 +122,156 @@ describePostgres("candidate matching migrations on disposable PostgreSQL", () =>
     `);
     await sql.unsafe(primaryUp);
     await sql.unsafe(inventoryUp);
-  });
-
-  afterAll(async () => {
+    return await callback(sql);\n+  } finally {
     await sql.unsafe(inventoryDown).catch(() => undefined);
     await sql.unsafe(primaryDown).catch(() => undefined);
-    await sql.unsafe(`
-      DROP TABLE IF EXISTS public.applications;
-      DROP TABLE IF EXISTS public.swipes;
-      DROP TABLE IF EXISTS public.profiles;
-      DROP TABLE IF EXISTS public.users;
-      DROP TABLE IF EXISTS public.jobs;
-    `).catch(() => undefined);
-    await sql.end({ timeout: 5 });
-  });
+    await sql.end({ timeout: 5 }).catch(() => undefined);
+  }
+}
 
-  test("emits monotonic opaque events only after a producer is enabled", async () => {
-    await sql`INSERT INTO public.profiles (user_id) VALUES ('candidate-a')`;
-    let [count] = await sql<{ count: number }[]>`
-      SELECT count(*)::integer AS count FROM public.candidate_projection_outbox
-    `;
-    expect(count?.count).toBe(0);
-    await sql`
-      UPDATE public.candidate_projection_producer_flags
-      SET enabled = true WHERE entity_family = 'profiles'
-    `;
-    await sql`UPDATE public.profiles SET data = '{"role":"engineer"}' WHERE user_id = 'candidate-a'`;
-    const events = await sql<
-      { candidate_version: number; entity_family: string; entity_id: string }[]
-    >`
-      SELECT candidate_version, entity_family, entity_id
-      FROM public.candidate_projection_outbox
-      WHERE candidate_id = 'candidate-a'
-    `;
-    expect(events).toEqual([
-      { candidate_version: 1, entity_family: "profiles", entity_id: "candidate-a" },
-    ]);
-    [count] = await sql<{ count: number }[]>`
-      SELECT count(*)::integer AS count
-      FROM information_schema.columns
-      WHERE table_name = 'candidate_projection_outbox' AND column_name = 'payload'
-    `;
-    expect(count?.count).toBe(0);
-  });
+describePostgres("candidate matching migrations on disposable PostgreSQL", () => {
+  test.serial(
+    "emits monotonic opaque events only after a producer is enabled",
+    { timeout: 20_000 },
+    async () =>
+      withDisposableDatabase(async (sql) => {
+        await sql`INSERT INTO public.profiles (user_id) VALUES ('candidate-a')`;
+        let [count] = await sql<{ count: number }[]>`
+          SELECT count(*)::integer AS count FROM public.candidate_projection_outbox
+        `;
+        expect(count?.count).toBe(0);
+        await sql`
+          UPDATE public.candidate_projection_producer_flags
+          SET enabled = true WHERE entity_family = 'profiles'
+        `;
+        await sql`UPDATE public.profiles SET data = '{"role":"engineer"}' WHERE user_id = 'candidate-a'`;
+        const events = await sql<
+          { candidate_version: string; entity_family: string; entity_id: string }[]
+        >`
+          SELECT candidate_version, entity_family, entity_id
+          FROM public.candidate_projection_outbox
+          WHERE candidate_id = 'candidate-a'
+        `;
+        expect(events).toEqual([
+          {
+            candidate_version: "1",
+            entity_family: "profiles",
+            entity_id: "candidate-a",
+          },
+        ]);
+        [count] = await sql<{ count: number }[]>`
+          SELECT count(*)::integer AS count
+          FROM information_schema.columns
+          WHERE table_name = 'candidate_projection_outbox' AND column_name = 'payload'
+        `;
+        expect(count?.count).toBe(0);
+      }),
+  );
 
-  test("commits one fail-closed deletion tombstone before cleanup", async () => {
-    const [first] = await sql<{ deletion_version: number }[]>`
-      SELECT deletion_version
-      FROM public.begin_candidate_deletion('candidate-a', 'delete:candidate-a')
-    `;
-    const [retry] = await sql<{ deletion_version: number }[]>`
-      SELECT deletion_version
-      FROM public.begin_candidate_deletion('candidate-a', 'delete:candidate-a')
-    `;
-    expect(retry?.deletion_version).toBe(first?.deletion_version);
-    await sql`DELETE FROM public.profiles WHERE user_id = 'candidate-a'`;
-    const [state] = await sql<
-      { disabled: boolean; deletion_events: number; total_events: number }[]
-    >`
-      SELECT
-        control.serving_disabled AS disabled,
-        count(*) FILTER (WHERE event.entity_family = 'deletion')::integer AS deletion_events,
-        count(*)::integer AS total_events
-      FROM public.candidate_serving_controls AS control
-      JOIN public.candidate_projection_outbox AS event
-        ON event.candidate_id = control.candidate_id
-      WHERE control.candidate_id = 'candidate-a'
-      GROUP BY control.serving_disabled
-    `;
-    expect(state).toEqual({ disabled: true, deletion_events: 1, total_events: 2 });
-    await expect(
-      sql`DELETE FROM public.candidate_deletion_tombstones WHERE candidate_id = 'candidate-a'`,
-    ).rejects.toThrow("cannot be deleted");
-  });
+  test.serial(
+    "commits one fail-closed deletion tombstone before cleanup",
+    { timeout: 30_000 },
+    async () =>
+      withDisposableDatabase(async (sql) => {
+        const [first] = await sql<{ deletion_version: number }[]>`
+          SELECT deletion_version
+          FROM public.begin_candidate_deletion('candidate-a', 'delete:candidate-a')
+        `;
+        const [retry] = await sql<{ deletion_version: number }[]>`
+          SELECT deletion_version
+          FROM public.begin_candidate_deletion('candidate-a', 'delete:candidate-a')
+        `;
+        expect(retry?.deletion_version).toBe(first?.deletion_version);
+        await sql`DELETE FROM public.profiles WHERE user_id = 'candidate-a'`;
+        const [state] = await sql<
+          { disabled: boolean; deletion_events: number; total_events: number }[]
+        >`
+          SELECT
+            control.serving_disabled AS disabled,
+            count(*) FILTER (WHERE event.entity_family = 'deletion')::integer AS deletion_events,
+            count(*)::integer AS total_events
+          FROM public.candidate_serving_controls AS control
+          JOIN public.candidate_projection_outbox AS event
+            ON event.candidate_id = control.candidate_id
+          WHERE control.candidate_id = 'candidate-a'
+          GROUP BY control.serving_disabled
+        `;
+        expect(state).toEqual({ disabled: true, deletion_events: 1, total_events: 2 });
+        await expect(
+          sql`DELETE FROM public.candidate_deletion_tombstones WHERE candidate_id = 'candidate-a'`,
+        ).rejects.toThrow("cannot be deleted");
+      }),
+  );
 
-  test("deletion propagation purges projections and rejects restored events", async () => {
-    await sql`
-      INSERT INTO public.candidate_search_profiles (
-        candidate_id, version, status, location_policy, freshness_window_days,
-        exposure_policy_version, feature_schema_version,
-        source_profile_updated_at, source_event_id
-      ) VALUES (
-        'candidate-b', 4, 'active', 'country', 30, 'policy-v1', 1,
-        clock_timestamp(), '11111111-1111-4111-8111-111111111111'
-      )
-    `;
-    const [applied] = await sql<{ applied: boolean }[]>`
-      SELECT public.apply_candidate_projection_tombstone(
-        'candidate-b', 5, '22222222-2222-4222-8222-222222222222', clock_timestamp()
-      ) AS applied
-    `;
-    expect(applied?.applied).toBe(true);
-    const [remaining] = await sql<{ count: number }[]>`
-      SELECT count(*)::integer AS count FROM public.candidate_search_profiles
-      WHERE candidate_id = 'candidate-b'
-    `;
-    expect(remaining?.count).toBe(0);
-    await expect(sql`
-      INSERT INTO public.candidate_search_profiles (
-        candidate_id, version, status, location_policy, freshness_window_days,
-        exposure_policy_version, feature_schema_version,
-        source_profile_updated_at, source_event_id
-      ) VALUES (
-        'candidate-b', 4, 'active', 'country', 30, 'policy-v1', 1,
-        clock_timestamp(), '33333333-3333-4333-8333-333333333333'
-      )
-    `).rejects.toThrow("cannot be recreated");
-  });
+  test.serial(
+    "deletion propagation purges projections and rejects restored events",
+    { timeout: 30_000 },
+    async () =>
+      withDisposableDatabase(async (sql) => {
+        await sql`
+          INSERT INTO public.candidate_search_profiles (
+            candidate_id, version, status, location_policy, freshness_window_days,
+            exposure_policy_version, feature_schema_version,
+            source_profile_updated_at, source_event_id
+          ) VALUES (
+            'candidate-b', 4, 'active', 'country', 30, 'policy-v1', 1,
+            clock_timestamp(), '11111111-1111-4111-8111-111111111111'
+          )
+        `;
+        const [applied] = await sql<{ applied: boolean }[]>`
+          SELECT public.apply_candidate_projection_tombstone(
+            'candidate-b', 5, '22222222-2222-4222-8222-222222222222', clock_timestamp()
+          ) AS applied
+        `;
+        expect(applied?.applied).toBe(true);
+        const [remaining] = await sql<{ count: number }[]>`
+          SELECT count(*)::integer AS count FROM public.candidate_search_profiles
+          WHERE candidate_id = 'candidate-b'
+        `;
+        expect(remaining?.count).toBe(0);
+        await expect(sql`
+          INSERT INTO public.candidate_search_profiles (
+            candidate_id, version, status, location_policy, freshness_window_days,
+            exposure_policy_version, feature_schema_version,
+            source_profile_updated_at, source_event_id
+          ) VALUES (
+            'candidate-b', 4, 'active', 'country', 30, 'policy-v1', 1,
+            clock_timestamp(), '33333333-3333-4333-8333-333333333333'
+          )
+        `).rejects.toThrow("cannot be recreated");
+      }),
+  );
 
-  test("uses the common retrieval indexes and rollback preserves canonical jobs", async () => {
-    const [plan] = await sql<{ plan: string }[]>`
-      SET LOCAL enable_seqscan = off;
-      EXPLAIN (FORMAT TEXT)
-      SELECT canonical_group_id
-      FROM public.job_search_documents
-      WHERE lifecycle_status = 'active'
-        AND source_eligible AND policy_eligible
-        AND country_codes && ARRAY['FR']::text[]
-        AND role_family_codes && ARRAY['software-engineering']::text[]
-    `;
-    expect(plan?.plan).toMatch(/job_search_documents_(features|retrieval)_idx/);
+  test.serial(
+    "uses the common retrieval indexes and rollback preserves canonical jobs",
+    { timeout: 30_000 },
+    async () =>
+      withDisposableDatabase(async (sql) => {
+        const [plan] = await sql.begin(async (tx) => {
+          await tx`SET LOCAL enable_seqscan = off`;
+          return await tx<{ plan: string }[]>`
+            EXPLAIN (FORMAT TEXT)
+            SELECT canonical_group_id
+            FROM public.job_search_documents
+            WHERE lifecycle_status = 'active'
+              AND source_eligible AND policy_eligible
+              AND country_codes && ARRAY['FR']::text[]
+              AND role_family_codes && ARRAY['software-engineering']::text[]
+          `;
+        });
+        expect(plan?.plan).toMatch(/job_search_documents_(features|retrieval)_idx/);
 
-    await sql.unsafe(inventoryDown);
-    await sql.unsafe(primaryDown);
-    const [preserved] = await sql<{ jobs: string; users: string; projection: string | null }[]>`
-      SELECT
-        to_regclass('public.jobs')::text AS jobs,
-        to_regclass('public.users')::text AS users,
-        to_regclass('public.candidate_search_profiles')::text AS projection
-    `;
-    expect(preserved).toEqual({ jobs: "jobs", users: "users", projection: null });
-    await sql.unsafe(primaryUp);
-    await sql.unsafe(inventoryUp);
-  });
+        await sql.unsafe(inventoryDown);
+        await sql.unsafe(primaryDown);
+        const [preserved] = await sql<{ jobs: string; users: string; projection: string | null }[]>`
+          SELECT
+            to_regclass('public.jobs')::text AS jobs,
+            to_regclass('public.users')::text AS users,
+            to_regclass('public.candidate_search_profiles')::text AS projection
+        `;
+        expect(preserved).toEqual({ jobs: "jobs", users: "users", projection: null });
+        await sql.unsafe(primaryUp);
+        await sql.unsafe(inventoryUp);
+      }),
+  );
 });
