@@ -1,10 +1,18 @@
-WITH signup AS (
+WITH user_map AS (
     SELECT
-        distinct_id,
-        min(timestamp) AS anchor_at
-    FROM events
-    WHERE event = 'user_signed_up'
-      AND match(distinct_id, '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+        toString(user_id) AS legacy_user_id,
+        lower(toString(data.supabase_user_id)) AS distinct_id,
+        min(created_at) AS anchor_at
+    FROM postgres.internal_posthog.public__users
+    WHERE match(
+        lower(toString(data.supabase_user_id)),
+        '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    )
+    GROUP BY legacy_user_id, distinct_id
+),
+signup AS (
+    SELECT distinct_id, min(anchor_at) AS anchor_at
+    FROM user_map
     GROUP BY distinct_id
 ),
 bounds AS (
@@ -30,27 +38,48 @@ eligible AS (
     FROM bounds
     WHERE window_end <= now()
 ),
+activity_facts AS (
+    SELECT user_map.distinct_id, swipes.created_at AS activity_at
+    FROM postgres.internal_posthog.public__swipes AS swipes
+    INNER JOIN user_map ON toString(swipes.user_id) = user_map.legacy_user_id
+    UNION ALL
+    SELECT user_map.distinct_id, applications.created_at AS activity_at
+    FROM postgres.internal_posthog.public__applications AS applications
+    INNER JOIN user_map ON toString(applications.user_id) = user_map.legacy_user_id
+    UNION ALL
+    SELECT user_map.distinct_id, analytics.created_at AS activity_at
+    FROM postgres.internal_posthog.public__analytics_events AS analytics
+    INNER JOIN user_map ON toString(analytics.user_id) = user_map.legacy_user_id
+    WHERE analytics.event IN (
+        'cv_upload_completed',
+        'cv_uploaded',
+        'onboarding_completed',
+        'application_generation_started',
+        'application_intent_started',
+        'job_swiped_left',
+        'job_swiped_right',
+        'job_dismissed',
+        'job_application_created'
+    )
+),
 activity AS (
     SELECT DISTINCT eligible.distinct_id
     FROM eligible
-    INNER JOIN events ON events.distinct_id = eligible.distinct_id
-    WHERE events.event IN (
-        'job_dismissed',
-        'application_intent_started',
-        'job_application_created',
-        'cv_uploaded',
-        'onboarding_completed'
-    )
-      AND events.timestamp >= eligible.window_start
-      AND events.timestamp < eligible.window_end
+    INNER JOIN activity_facts ON activity_facts.distinct_id = eligible.distinct_id
+    WHERE activity_facts.activity_at >= eligible.window_start
+      AND activity_facts.activity_at < eligible.window_end
 ),
 result AS (
     SELECT
         count() AS eligible_count,
-        countIf(activity.distinct_id IS NOT NULL) AS active_count,
+        countIf(activity.distinct_id = eligible.distinct_id) AS active_count,
         eligible_count - active_count AS engagement_churn_count,
         if(eligible_count = 0, NULL, active_count / eligible_count) AS active_rate,
-        if(eligible_count = 0, NULL, engagement_churn_count / eligible_count) AS engagement_churn_rate
+        if(
+            eligible_count = 0,
+            NULL,
+            engagement_churn_count / eligible_count
+        ) AS engagement_churn_rate
     FROM eligible
     LEFT JOIN activity ON activity.distinct_id = eligible.distinct_id
 )

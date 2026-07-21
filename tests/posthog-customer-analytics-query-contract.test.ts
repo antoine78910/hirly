@@ -97,8 +97,8 @@ describe("PostHog Customer Analytics local contract", () => {
     });
     expect(manifest.runtime.dashboardUrl).toMatchObject({
       environmentVariable: "REACT_APP_POSTHOG_ADMIN_DASHBOARD_URL",
-      immutableUrl: null,
-      status: "awaiting_g005_private_dashboard_readback",
+      immutableUrl: "https://eu.posthog.com/project/228425/dashboard/836530",
+      status: "private_dashboard_verified",
       publicShareUrlAllowed: false,
     });
 
@@ -184,6 +184,11 @@ describe("PostHog Customer Analytics local contract", () => {
       "$pageview",
       "job_card_viewed",
     ]);
+    expect(manifest.selectors.warehouseActivityFacts).toEqual([
+      "public__swipes.created_at",
+      "public__applications.created_at",
+      "public__analytics_events.created_at",
+    ]);
 
     const deliberate = new Set(manifest.selectors.deliberateActivity);
     const passiveOnly = ["job_card_viewed", "$pageview"];
@@ -211,27 +216,38 @@ describe("PostHog Customer Analytics local contract", () => {
     }
     expect(engagement).toContain("engagement_churn_count");
     expect(engagement).toContain("eligible_count - active_count");
+    expect(engagement).toContain("data.supabase_user_id");
+    expect(engagement).toContain("public__swipes");
+    expect(engagement).toContain("public__applications");
     expect(paid).toContain("event = 'subscription_activated'");
     expect(paid).toContain("event = 'subscription_churned'");
+    expect(paid).toContain("paid_churn.distinct_id = eligible.distinct_id");
     expect(paid).not.toContain("engagement_churn");
     expect(manifest.queries.paidSubscriptionChurn.title).toBe(
       "First-paid activation-cohort loss",
     );
   });
 
-  test("renders every horizon from only the three governed parameters", () => {
-    for (const query of [queryText("engagement"), queryText("paidSubscriptionChurn")]) {
+  test("renders every horizon from the governed window and paid-source parameters", () => {
+    for (const [key, query] of [
+      ["engagement", queryText("engagement")],
+      ["paidSubscriptionChurn", queryText("paidSubscriptionChurn")],
+    ] as const) {
       const placeholders = [...query.matchAll(/\{\{([a-z0-9_]+)\}\}/g)].map(
         (match) => match[1],
       );
-      expect(new Set(placeholders)).toEqual(
-        new Set(["start_day", "end_day", "j0_start_at_signup"]),
-      );
+      const expected = ["start_day", "end_day", "j0_start_at_signup"];
+      if (key === "paidSubscriptionChurn") expected.push("paid_source_start_at");
+      expect(new Set(placeholders)).toEqual(new Set(expected));
       for (const horizon of Object.values(manifest.horizons)) {
         const rendered = query
           .replaceAll("{{start_day}}", String(horizon.startDay))
           .replaceAll("{{end_day}}", String(horizon.endDay))
-          .replaceAll("{{j0_start_at_signup}}", horizon.j0StartAtSignup ? "1" : "0");
+          .replaceAll("{{j0_start_at_signup}}", horizon.j0StartAtSignup ? "1" : "0")
+          .replaceAll(
+            "{{paid_source_start_at}}",
+            manifest.queries.paidSubscriptionChurn.paidSourceStartAt,
+          );
         expect(rendered).not.toContain("{{");
       }
     }
