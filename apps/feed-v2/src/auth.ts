@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import type { FeedAuthAssertion } from "@hirly/feed-v2";
+import { isFeedEffectiveQuery, type FeedAuthAssertion } from "@hirly/feed-v2";
 import type { FeedAuthAssertionVerifier } from "./index";
 
 const ASSERTION_HEADER = "x-hirly-feed-assertion";
@@ -8,14 +8,17 @@ const SIGNATURE_HEADER = "x-hirly-feed-signature";
 function validAssertion(value: unknown): value is FeedAuthAssertion {
   if (!value || typeof value !== "object") return false;
   const assertion = value as Partial<FeedAuthAssertion>;
-  return Object.keys(value).sort().join(",") === "candidateId,expiresAt,issuedAt,scopes,subject"
+  const keys = Object.keys(value).sort().join(",");
+  return (keys === "candidateId,expiresAt,issuedAt,scopes,subject"
+      || keys === "candidateId,effectiveQuery,expiresAt,issuedAt,scopes,subject")
     && typeof assertion.subject === "string" && assertion.subject.length > 0
     && typeof assertion.candidateId === "string" && assertion.candidateId.length > 0
     && assertion.candidateId.length <= 256
     && Array.isArray(assertion.scopes) && assertion.scopes.length <= 16
     && assertion.scopes.every((scope) => typeof scope === "string" && scope.length > 0 && scope.length <= 64)
     && typeof assertion.issuedAt === "string" && Number.isFinite(Date.parse(assertion.issuedAt))
-    && typeof assertion.expiresAt === "string" && Number.isFinite(Date.parse(assertion.expiresAt));
+    && typeof assertion.expiresAt === "string" && Number.isFinite(Date.parse(assertion.expiresAt))
+    && (assertion.effectiveQuery === undefined || isFeedEffectiveQuery(assertion.effectiveQuery));
 }
 
 function signature(secret: string, encodedAssertion: string): Buffer {
@@ -26,6 +29,7 @@ export function signFeedAssertion(assertion: FeedAuthAssertion, secret: string):
   encodedAssertion: string;
   signature: string;
 } {
+  if (!validAssertion(assertion)) throw new Error("invalid_assertion_payload");
   const encodedAssertion = Buffer.from(JSON.stringify(assertion), "utf8").toString("base64url");
   return { encodedAssertion, signature: signature(secret, encodedAssertion).toString("hex") };
 }

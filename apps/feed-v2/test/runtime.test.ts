@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import type { FeedAuthAssertion } from "@hirly/feed-v2";
+import { createHmac } from "node:crypto";
+import {
+  FEED_EFFECTIVE_QUERY_VERSION,
+  createFeedEffectiveQuery,
+  type FeedAuthAssertion,
+} from "@hirly/feed-v2";
 import {
   FEED_V2_INDEXED_READ_SQL,
   HmacFeedAssertionVerifier,
@@ -47,6 +52,36 @@ describe("Feed v2 runtime adapters", () => {
       "x-hirly-feed-assertion": signed.encodedAssertion,
       "x-hirly-feed-signature": "0".repeat(64),
     } }))).rejects.toThrow("invalid_assertion_signature");
+  });
+
+  test("binds the effective explicit query to both its fingerprint and assertion signature", async () => {
+    const explicitAssertion: FeedAuthAssertion = {
+      ...assertion,
+      effectiveQuery: createFeedEffectiveQuery({
+        version: FEED_EFFECTIVE_QUERY_VERSION,
+        role: "Fullstack Engineer",
+        radiusKm: 52,
+        locations: [{ label: "Paris, France", country: "France", countryCode: "FR", placeId: null, latitude: 48.8566, longitude: 2.3522 }],
+        countryCode: "FR",
+        workModes: [], jobTypes: [], experienceLevels: [], freeTextLocations: [], minimumSalary: 0,
+        postedWithin: null, onlyCompanies: [], hiddenCompanies: [], onlyIndustries: [], hiddenIndustries: [],
+        includeUnknownLocation: true, includeUnknownSalary: true, includeNonAutoApply: false, onlyMyCountry: false,
+      }),
+    };
+    const signed = signFeedAssertion(explicitAssertion, secret);
+    const verifier = new HmacFeedAssertionVerifier(secret, { now: () => new Date("2026-07-21T12:00:00Z") });
+    expect(await verifier.verify(new Request("http://feed.test/internal/feed/v2", { headers: {
+      "x-hirly-feed-assertion": signed.encodedAssertion,
+      "x-hirly-feed-signature": signed.signature,
+    } }))).toEqual(explicitAssertion);
+
+    const tampered = { ...explicitAssertion, effectiveQuery: { ...explicitAssertion.effectiveQuery!, radiusKm: 53 } };
+    const encoded = Buffer.from(JSON.stringify(tampered), "utf8").toString("base64url");
+    const signature = createHmac("sha256", secret).update(encoded).digest("hex");
+    await expect(verifier.verify(new Request("http://feed.test/internal/feed/v2", { headers: {
+      "x-hirly-feed-assertion": encoded,
+      "x-hirly-feed-signature": signature,
+    } }))).rejects.toThrow("invalid_assertion_payload");
   });
 
   test("uses candidate-scoped indexed keyset SQL without any mutation surface", async () => {

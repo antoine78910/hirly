@@ -180,6 +180,7 @@ def test_feed_v2_delegation_signs_candidate_identity_with_runtime_convention(mon
 
 def test_feed_v2_timeout_rolls_back_to_legacy_selection(monkeypatch):
     _enable(monkeypatch)
+    calls = 0
 
     class Client:
         def __init__(self, **_kwargs):
@@ -192,11 +193,14 @@ def test_feed_v2_timeout_rolls_back_to_legacy_selection(monkeypatch):
             return None
 
         async def get(self, *_args, **_kwargs):
+            nonlocal calls
+            calls += 1
             raise httpx.ReadTimeout("bounded timeout")
 
     monkeypatch.setattr(server.httpx, "AsyncClient", Client)
 
     assert asyncio.run(server._try_feed_v2(user_id="user-1", limit=5, filters=_default_filters())) is None
+    assert calls == 1
 
 
 def test_successful_feed_v2_response_is_the_only_customer_visible_path(monkeypatch):
@@ -232,11 +236,148 @@ def test_successful_feed_v2_response_is_the_only_customer_visible_path(monkeypat
     assert result == _v2_response()
 
 
-def test_explicit_filter_request_stays_on_legacy_path_without_v2_http(monkeypatch):
+def test_explicit_paris_bounded_radius_get_never_calls_providers_or_schedules_background_work(monkeypatch):
+    _enable(monkeypatch)
+    monkeypatch.setattr(server, "db", _ProfilesOnlyDB())
+    for radius in ("52km", "103km"):
+        observed = {"calls": 0}
+
+        class Client:
+            def __init__(self, **_kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_args):
+                return None
+
+            async def get(self, *_args, **_kwargs):
+                observed["calls"] += 1
+                return httpx.Response(200, json=_v2_response())
+
+        def forbidden(*_args, **_kwargs):
+            raise AssertionError("explicit v2 GET must not call providers or schedule feed work")
+
+        async def forbidden_async(*_args, **_kwargs):
+            forbidden()
+
+        monkeypatch.setattr(server.httpx, "AsyncClient", Client)
+        monkeypatch.setattr(server, "get_job_provider", forbidden)
+        monkeypatch.setattr(server, "refresh_jobs_for_profile_if_needed", forbidden_async)
+        monkeypatch.setattr(server, "schedule_feed_background_refresh", forbidden)
+        args = _feed_args()
+        args.update({
+            "search_role": "Fullstack Engineer",
+            "search_radius": radius,
+            "locations_json": json.dumps([{
+                "location_label": "Paris, France", "country": "France", "country_code": "fr",
+                "lat": 48.8566, "lng": 2.3522,
+            }]),
+        })
+
+        assert asyncio.run(server.get_feed(**args)) == _v2_response()
+        assert observed["calls"] == 1
+
+
+def test_exact_paris_fullstack_query_is_normalized_signed_and_forwarded_once(monkeypatch):
     _enable(monkeypatch)
     filters = _default_filters()
-    filters["searchRole"] = "Data Engineer"
+    filters.update({
+        "searchRole": "Fullstack Engineer",
+        "searchRadius": "52km",
+        "workLocation": ["remote", "hybrid"],
+        "jobType": ["full_time"],
+        "locationsJson": json.dumps([{
+            "location_label": "Paris, France",
+            "country": "France",
+            "country_code": "fr",
+            "lat": 48.8566,
+            "lng": 2.3522,
+        }]),
+    })
+    observed = {"calls": 0}
+
+    class Client:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def get(self, _url, **kwargs):
+            observed["calls"] += 1
+            observed.update(kwargs)
+            return httpx.Response(200, json=_v2_response())
+
+    monkeypatch.setattr(server.httpx, "AsyncClient", Client)
+    assert asyncio.run(server._try_feed_v2(user_id="user-1", limit=5, filters=filters)) == _v2_response()
+    assert observed["calls"] == 1
+    assert observed["params"] == {"limit": 5}
+
+    encoded = observed["headers"]["X-Hirly-Feed-Assertion"]
+    assertion = json.loads(base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)))
+    query = assertion["effectiveQuery"]
+    assert query["role"] == "Fullstack Engineer"
+    assert query["radiusKm"] == 52
+    assert query["countryCode"] == "FR"
+    assert query["workModes"] == ["hybrid", "remote"]
+    assert query["locations"] == [{
+        "label": "Paris, France", "country": "France", "countryCode": "FR", "placeId": None,
+        "latitude": 48.8566, "longitude": 2.3522,
+    }]
+    payload = {key: value for key, value in query.items() if key != "fingerprint"}
+    expected_fingerprint = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8"),
+    ).hexdigest()
+    assert query["fingerprint"] == expected_fingerprint
+    assert query["fingerprint"] == "08225c46c605d1d6c18c22acc6a7fc67eed42dc91f4121fbebae67a50440b3cd"
+    expected_signature = hmac.new(
+        b"feed-v2-test-secret-that-is-at-least-32-bytes", encoded.encode(), hashlib.sha256,
+    ).hexdigest()
+    assert observed["headers"]["X-Hirly-Feed-Signature"] == expected_signature
+
+
+def test_provider_and_background_controls_remain_non_delegable(monkeypatch):
+    _enable(monkeypatch)
     monkeypatch.setattr(server.httpx, "AsyncClient", lambda **_kwargs: (_ for _ in ()).throw(AssertionError("HTTP called")))
+
+    for control in ("forceProviderRefresh", "prefetch", "score", "auditMode"):
+        filters = _default_filters()
+        filters[control] = True
+        assert asyncio.run(server._try_feed_v2(user_id="user-1", limit=5, filters=filters)) is None
+
+
+def test_invalid_or_oversized_locations_json_falls_back_before_any_v2_http(monkeypatch):
+    _enable(monkeypatch)
+    attempts = 0
+
+    class Client:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def get(self, *_args, **_kwargs):
+            nonlocal attempts
+            attempts += 1
+            raise AssertionError("invalid explicit query must not make a v2 HTTP attempt")
+
+    monkeypatch.setattr(server.httpx, "AsyncClient", Client)
+    too_many_locations = [{"location_label": f"Paris {index}", "country_code": "fr"} for index in range(9)]
+    oversized_locations = json.dumps([{"location_label": "Paris " + "x" * 4096, "country_code": "fr"}])
+    for locations_json in ("{not-json", json.dumps(too_many_locations), oversized_locations):
+        filters = _default_filters()
+        filters.update({"searchRole": "Fullstack Engineer", "searchRadius": "103km", "locationsJson": locations_json})
+        assert asyncio.run(server._try_feed_v2(user_id="user-1", limit=5, filters=filters)) is None
+    assert attempts == 0
 
     assert asyncio.run(server._try_feed_v2(user_id="user-1", limit=5, filters=filters)) is None
 

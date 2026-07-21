@@ -23,6 +23,7 @@ import io
 import json
 import logging
 import inspect
+import math
 import random
 import uuid
 import re
@@ -7474,13 +7475,159 @@ def _feed_v2_request_is_profile_equivalent(filters: Dict[str, Any]) -> bool:
     )
 
 
+_FEED_V2_EFFECTIVE_QUERY_VERSION = "hirly.feed.explicit-query.v1"
+_FEED_V2_LOCATIONS_JSON_MAX_CHARS = 4096
+
+
+def _feed_v2_clean_query_string(value: Any, maximum: int) -> Optional[str]:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError("invalid explicit feed query string")
+    cleaned = " ".join(value.strip().split())
+    if not cleaned:
+        return None
+    if len(cleaned) > maximum:
+        raise ValueError("explicit feed query string is too long")
+    return cleaned
+
+
+def _feed_v2_clean_query_list(value: Any, maximum_items: int) -> List[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list) or len(value) > maximum_items:
+        raise ValueError("invalid explicit feed query list")
+    cleaned = {_feed_v2_clean_query_string(item, 128) for item in value}
+    return sorted(item for item in cleaned if item is not None)
+
+
+def _feed_v2_country_code(value: Any) -> Optional[str]:
+    cleaned = _feed_v2_clean_query_string(value, 2)
+    if cleaned is None:
+        return None
+    normalized = cleaned.upper()
+    if not re.fullmatch(r"[A-Z]{2}", normalized):
+        raise ValueError("invalid explicit feed country code")
+    return normalized
+
+
+def _feed_v2_coordinate(value: Any, minimum: float, maximum: float) -> Optional[float]:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        raise ValueError("invalid explicit feed coordinate")
+    if value < minimum or value > maximum:
+        raise ValueError("explicit feed coordinate is out of range")
+    return value
+
+
+def _feed_v2_canonical_query_json(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _feed_v2_effective_query(filters: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    if any(filters[name] for name in ("forceProviderRefresh", "prefetch", "score", "auditMode")):
+        raise ValueError("provider/background feed controls are not delegable")
+    if _feed_v2_request_is_profile_equivalent(filters):
+        return None
+
+    radius_match = re.fullmatch(r"([1-9]\d{0,2})km", str(filters["searchRadius"] or ""))
+    if not radius_match:
+        raise ValueError("explicit feed radius must be a bounded kilometre value")
+    radius_km = int(radius_match.group(1))
+    if radius_km > 500:
+        raise ValueError("explicit feed radius exceeds 500km")
+
+    raw_locations: Any = []
+    if filters["locationsJson"] is not None:
+        if not isinstance(filters["locationsJson"], str) or len(filters["locationsJson"]) > _FEED_V2_LOCATIONS_JSON_MAX_CHARS:
+            raise ValueError("locations_json exceeds bounded transport limit")
+        try:
+            raw_locations = json.loads(filters["locationsJson"])
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise ValueError("invalid locations_json") from exc
+        if not isinstance(raw_locations, list) or len(raw_locations) > 8:
+            raise ValueError("locations_json must contain at most eight locations")
+    elif any(filters[name] is not None for name in ("locationLabel", "placeId", "lat", "lng")):
+        raw_locations = [{
+            "location_label": filters["locationLabel"] or filters["country"] or filters["countryCode"],
+            "country": filters["country"],
+            "country_code": filters["countryCode"],
+            "place_id": filters["placeId"],
+            "lat": filters["lat"],
+            "lng": filters["lng"],
+        }]
+
+    locations = []
+    for raw in raw_locations:
+        if not isinstance(raw, dict):
+            raise ValueError("invalid explicit feed location")
+        label = _feed_v2_clean_query_string(raw.get("location_label") or raw.get("label"), 160)
+        if label is None:
+            raise ValueError("explicit feed location requires a label")
+        locations.append({
+            "label": label,
+            "country": _feed_v2_clean_query_string(raw.get("country"), 80),
+            "countryCode": _feed_v2_country_code(raw.get("country_code") or raw.get("countryCode")),
+            "placeId": _feed_v2_clean_query_string(raw.get("place_id") or raw.get("placeId"), 256),
+            "latitude": _feed_v2_coordinate(raw.get("lat", raw.get("latitude")), -90, 90),
+            "longitude": _feed_v2_coordinate(raw.get("lng", raw.get("longitude")), -180, 180),
+        })
+    locations.sort(key=_feed_v2_canonical_query_json)
+
+    explicit_country_code = _feed_v2_country_code(filters["countryCode"])
+    if explicit_country_code is None and isinstance(filters["country"], str) and len(filters["country"].strip()) == 2:
+        explicit_country_code = _feed_v2_country_code(filters["country"])
+    if explicit_country_code is None:
+        explicit_country_code = next((location["countryCode"] for location in locations if location["countryCode"]), None)
+
+    work_modes = _feed_v2_clean_query_list(filters["workLocation"], 3)
+    if any(mode not in ("remote", "hybrid", "onsite") for mode in work_modes):
+        raise ValueError("unsupported explicit feed work mode")
+    posted_within = filters["postedWithin"]
+    if posted_within not in (None, "any", "1d", "7d", "30d"):
+        raise ValueError("unsupported explicit feed freshness filter")
+    minimum_salary = filters["minSalary"]
+    if isinstance(minimum_salary, bool) or not isinstance(minimum_salary, int) or not 0 <= minimum_salary <= 10_000_000:
+        raise ValueError("invalid explicit feed salary")
+
+    payload = {
+        "version": _FEED_V2_EFFECTIVE_QUERY_VERSION,
+        "role": _feed_v2_clean_query_string(filters["searchRole"], 200),
+        "radiusKm": radius_km,
+        "locations": locations,
+        "countryCode": explicit_country_code,
+        "workModes": work_modes,
+        "jobTypes": _feed_v2_clean_query_list(filters["jobType"], 16),
+        "experienceLevels": _feed_v2_clean_query_list(filters["experience"], 16),
+        "freeTextLocations": _feed_v2_clean_query_list(filters["location"], 16),
+        "minimumSalary": minimum_salary,
+        "postedWithin": posted_within,
+        "onlyCompanies": _feed_v2_clean_query_list(filters["onlyCompany"], 20),
+        "hiddenCompanies": _feed_v2_clean_query_list(filters["hideCompany"], 20),
+        "onlyIndustries": _feed_v2_clean_query_list(filters["onlyIndustry"], 20),
+        "hiddenIndustries": _feed_v2_clean_query_list(filters["hideIndustry"], 20),
+        "includeUnknownLocation": bool(filters["includeUnknownLocation"]),
+        "includeUnknownSalary": bool(filters["includeUnknownSalary"]),
+        "includeNonAutoApply": bool(filters["includeNonAutoApply"]),
+        "onlyMyCountry": bool(filters["onlyMyCountry"]),
+    }
+    fingerprint = hashlib.sha256(_feed_v2_canonical_query_json(payload).encode("utf-8")).hexdigest()
+    return {**payload, "fingerprint": fingerprint}
+
+
 async def _try_feed_v2(
     *,
     user_id: str,
     limit: int,
     filters: Dict[str, Any],
 ) -> Optional[Dict[str, Any]]:
-    if not _feed_v2_enabled_for(user_id) or not _feed_v2_request_is_profile_equivalent(filters):
+    if not _feed_v2_enabled_for(user_id):
+        return None
+    try:
+        effective_query = _feed_v2_effective_query(filters)
+    except (KeyError, TypeError, ValueError) as exc:
+        logger.warning("jobs/feed v2_fallback reason=unsupported_explicit_query detail=%s", exc)
         return None
     endpoint = os.environ.get("FEED_V2_INTERNAL_URL", "").strip()
     secret = os.environ.get("FEED_V2_ASSERTION_SECRET", "").strip()
@@ -7497,6 +7644,8 @@ async def _try_feed_v2(
         "issuedAt": now.isoformat().replace("+00:00", "Z"),
         "expiresAt": (now + timedelta(seconds=30)).isoformat().replace("+00:00", "Z"),
     }
+    if effective_query is not None:
+        assertion["effectiveQuery"] = effective_query
     unsigned = json.dumps(
         assertion, sort_keys=True, separators=(",", ":"), ensure_ascii=True,
     ).encode("utf-8")

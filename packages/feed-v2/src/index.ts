@@ -1,3 +1,5 @@
+import type { FeedEffectiveQuery } from "./explicit-query";
+
 export const FEED_V2_CONTRACT_VERSION = "hirly.feed.v2" as const;
 
 export type FeedEmptyReason =
@@ -19,7 +21,10 @@ export interface FeedAuthAssertion {
   scopes: readonly string[];
   issuedAt: string;
   expiresAt: string;
+  effectiveQuery?: FeedEffectiveQuery;
 }
+
+export * from "./explicit-query";
 
 export interface FeedCursorPosition {
   relevanceScore: number;
