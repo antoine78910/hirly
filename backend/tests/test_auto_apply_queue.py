@@ -77,13 +77,19 @@ class _FakeDB:
         self.auto_apply_attempts = _FakeCollection()
 
 
-def _authorized(app, provider="smartrecruiters"):
+def _authorized(
+    app,
+    provider="smartrecruiters",
+    *,
+    tenant="fixture-tenant",
+    route_id="fixture-route",
+):
     app = dict(app)
     app.setdefault("document_review_status", "approved")
     route = {
         "provider": provider,
-        "tenant": "fixture-tenant",
-        "route_id": "fixture-route",
+        "tenant": tenant,
+        "route_id": route_id,
         "transport": "hosted_candidate_form",
         "schema_version": "fixture-v1",
         "country": "FR",
@@ -128,10 +134,12 @@ def test_greenhouse_policy_accepts_only_reviewed_hosted_form_transport():
         "user_id": "u1",
         "job_id": "j1",
         "ats_provider": "greenhouse",
-    }, provider="greenhouse")
+    }, provider="greenhouse", tenant="acme", route_id="1")
     job = {
         "job_id": "j1",
         "ats_provider": "greenhouse",
+        "board_token": "acme",
+        "provider_job_id": "1",
         "selected_apply_url": "https://boards.greenhouse.io/acme/jobs/1",
     }
 
@@ -151,19 +159,61 @@ def test_greenhouse_transport_is_derived_from_reviewed_application_url():
         "user_id": "u1",
         "job_id": "j1",
         "ats_provider": "greenhouse",
-    }, provider="greenhouse")
+    }, provider="greenhouse", tenant="acme", route_id="1")
     for denied_url in (
         "https://support.greenhouse.io/acme/jobs/1",
         "https://api.greenhouse.io/acme/jobs/1",
         "https://boards.greenhouse.io/acme/support/1",
+        "https://boards.greenhouse.io/acme/jobs/1?source=campaign",
         "https://evil.example/acme/jobs/1",
     ):
         job = {
             "job_id": "j1",
             "ats_provider": "greenhouse",
+            "board_token": "acme",
+            "provider_job_id": "1",
             "selected_apply_url": denied_url,
         }
         assert q.submission_policy_failure(app, job, user_id="u1") == "submission_route_url_denied"
+
+    mismatched_identity = {
+        "job_id": "j1",
+        "ats_provider": "greenhouse",
+        "board_token": "other",
+        "provider_job_id": "1",
+        "selected_apply_url": "https://boards.greenhouse.io/acme/jobs/1",
+    }
+    assert q.submission_policy_failure(app, mismatched_identity, user_id="u1") == \
+        "submission_route_url_denied"
+
+
+def test_greenhouse_policy_binds_route_tenant_and_id_to_job_identity():
+    app = _authorized({
+        "application_id": "app_greenhouse_identity",
+        "user_id": "u1",
+        "job_id": "j1",
+        "ats_provider": "greenhouse",
+    }, provider="greenhouse", tenant="acme", route_id="123")
+    job = {
+        "job_id": "j1",
+        "ats_provider": "greenhouse",
+        "board_token": "acme",
+        "provider_job_id": "123",
+        "selected_apply_url": "https://boards.greenhouse.io/acme/jobs/123",
+    }
+    assert q.submission_policy_failure(app, job, user_id="u1") is None
+
+    app["submission_route"]["tenant"] = "other"
+    app["submission_policy"]["tenant"] = "other"
+    assert q.submission_policy_failure(app, job, user_id="u1") == \
+        "submission_route_tenant_mismatch"
+
+    app["submission_route"]["tenant"] = "acme"
+    app["submission_policy"]["tenant"] = "acme"
+    app["submission_route"]["route_id"] = "999"
+    app["submission_policy"]["route_id"] = "999"
+    assert q.submission_policy_failure(app, job, user_id="u1") == \
+        "submission_route_id_mismatch"
 
 
 def test_driverless_provider_policy_cannot_authorize_or_enqueue():
