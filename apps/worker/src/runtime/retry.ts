@@ -19,19 +19,7 @@ export function retryDelayMs(
 }
 
 export function safeErrorMessage(error: unknown): string {
-  let message: unknown;
-  if (error instanceof Error) {
-    message = error.message;
-  } else if (typeof error === "string") {
-    message = error;
-  } else if (error && typeof error === "object") {
-    try {
-      message = JSON.stringify(redact(error));
-    } catch {
-      message = "unknown task failure";
-    }
-  } else {
-    message = "unknown task failure";
-  }
-  return String(redact(message)).slice(0, 512);
+  if (!(error instanceof Error)) return "unknown task failure";
+  const redacted = redact(error.message);
+  return String(redacted).slice(0, 512);
 }

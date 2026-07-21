@@ -1,12 +1,11 @@
 import type { TaskHandlers, RuntimeStore } from "./types";
-import { PermanentTaskError, safeErrorMessage } from "./retry";
+import { PermanentTaskError } from "./retry";
 import {
   providerSchema,
   providerSearchRequestSchema,
   type Provider,
 } from "@hirly/contracts";
 import type { Logger } from "@hirly/observability";
-import type { ClaimedTask } from "@hirly/db";
 import {
   IngestionError,
   ProviderRateGate,
@@ -28,39 +27,6 @@ import {
   type SproutRawJob,
   type SproutSecretResolver,
 } from "../providers/sprout";
-
-function emitSproutOperation(
-  logger: Logger | undefined,
-  task: ClaimedTask,
-  input: {
-    event: string;
-    severity: "debug" | "info" | "warn" | "error";
-    outcome?: string;
-    reasonCode?: string;
-    details?: Record<string, unknown>;
-  },
-): void {
-  try {
-    logger?.emit({
-      service: "hirly-worker",
-      version: "0.1.0",
-      environment: process.env.NODE_ENV ?? "development",
-      event: input.event,
-      severity: input.severity,
-      runId: task.runId,
-      taskId: task.taskId,
-      taskType: task.taskType,
-      provider: "sprout",
-      attempt: task.attempts,
-      maxAttempts: task.maxAttempts,
-      outcome: input.outcome,
-      reasonCode: input.reasonCode,
-      details: input.details,
-    });
-  } catch {
-    // Logging failures must not affect the authoritative provider writer.
-  }
-}
 
 function environmentSproutSecretResolver(): SproutSecretResolver {
   return {
@@ -213,24 +179,6 @@ export function createTaskHandlers(
               secrets: options.sproutSecretResolver ?? environmentSproutSecretResolver(),
               fetch: options.sproutFetch,
               maxResponseBytes: payload.maxResponseBytes,
-              onOperation(operation) {
-                if (operation.type === "fetch_response") {
-                  emitSproutOperation(logger, task, {
-                    event: "sprout.fetch_response",
-                    severity: "info",
-                    outcome: "succeeded",
-                    details: operation,
-                  });
-                  return;
-                }
-                emitSproutOperation(logger, task, {
-                  event: "sprout.retry_backoff",
-                  severity: "warn",
-                  outcome: "retrying",
-                  reasonCode: operation.classification,
-                  details: operation,
-                });
-              },
             });
             const commitSproutSourcePage = store.commitSproutSourcePage.bind(store);
             const repository = createSproutCommitRepository({
@@ -248,39 +196,10 @@ export function createTaskHandlers(
                   commit,
                 );
                 claimCompleted = true;
-                emitSproutOperation(logger, task, {
-                  event: "sprout.page_committed",
-                  severity: "info",
-                  outcome: "succeeded",
-                  details: {
-                    mode: payload.mode,
-                    itemCount: commit.entries.length,
-                    complete: commit.complete,
-                    checkpointInOffset: commit.checkpointIn.offset,
-                    checkpointOutOffset: commit.checkpointOut.offset,
-                    pageSize: commit.checkpointOut.pageSize,
-                    observedTotal: commit.checkpointOut.observedTotal,
-                    snapshotsInserted: result.snapshotsInserted,
-                    canonicalUpserts: result.canonicalUpserts,
-                    occurrencesUpserted: result.occurrencesUpserted,
-                    groupsCreated: result.groupsCreated,
-                  },
-                });
                 return result;
               },
             });
-            emitSproutOperation(logger, task, {
-              event: "sprout.page_start",
-              severity: "info",
-              outcome: "started",
-              details: {
-                mode: payload.mode,
-                countryCode: "FR",
-                checkpointOffset: checkpoint.offset,
-                pageSize: checkpoint.pageSize,
-              },
-            });
-            const result = await runSproutPageTask<SproutRawJob>({
+            await runSproutPageTask<SproutRawJob>({
               activation: {
                 ...SPROUT_FRANCE_DISABLED_REGISTRATION,
                 authorizationStatus: "authorized",
@@ -308,20 +227,6 @@ export function createTaskHandlers(
               hasFranceLocation: hasSproutFranceLocation,
               signal: claimAbort.signal,
               maxResponseBytes: payload.maxResponseBytes,
-            });
-            emitSproutOperation(logger, task, {
-              event: "sprout.page_complete",
-              severity: "info",
-              outcome: "succeeded",
-              details: {
-                mode: payload.mode,
-                fetched: result.fetched,
-                responseBytes: result.responseBytes,
-                complete: result.complete,
-                checkpointOffset: result.checkpoint.offset,
-                pageSize: result.checkpoint.pageSize,
-                observedTotal: result.checkpoint.observedTotal,
-              },
             });
             return { taskCompleted: true };
           }
@@ -427,16 +332,6 @@ export function createTaskHandlers(
           }
         }
       } catch (error) {
-        if (provider === "sprout") {
-          emitSproutOperation(logger, task, {
-            event: "sprout.page_terminal",
-            severity: "error",
-            outcome: "failed",
-            reasonCode:
-              error instanceof IngestionError ? error.code : "unexpected_error",
-            details: { message: safeErrorMessage(error) },
-          });
-        }
         if (
           error instanceof IngestionError ||
           (error instanceof Error && error.message === "authorization_blocked")

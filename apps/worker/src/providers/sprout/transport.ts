@@ -20,36 +20,6 @@ export interface SproutHttpTransportOptions {
   maxAttempts?: number;
   sleep?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
   random?: () => number;
-  onOperation?: (event: SproutTransportOperation) => void;
-}
-
-export type SproutTransportOperation =
-  | {
-      type: "fetch_response";
-      attempt: number;
-      status: number;
-      responseBytes: number;
-      itemCount: number;
-      durationMs: number;
-    }
-  | {
-      type: "retry_backoff";
-      attempt: number;
-      nextAttempt: number;
-      status?: number;
-      classification: "network_error" | "rate_limited" | "upstream_unavailable";
-      backoffMs: number;
-    };
-
-function observe(
-  callback: SproutHttpTransportOptions["onOperation"],
-  event: SproutTransportOperation,
-): void {
-  try {
-    callback?.(event);
-  } catch {
-    // Observability must not alter provider fetch or retry behavior.
-  }
 }
 
 function approvedEndpoint(endpoint: string, allowedOrigins: readonly string[]): URL {
@@ -191,7 +161,6 @@ export class SproutHttpTransport implements SproutRuntimeTransport<SproutRawJob>
 
     for (let attempt = 0; attempt < this.maxAttempts; attempt += 1) {
       signal.throwIfAborted();
-      const startedAt = performance.now();
       const timeout = AbortSignal.timeout(this.timeoutMs);
       const requestSignal = AbortSignal.any([signal, timeout]);
       let response: Response | null = null;
@@ -212,15 +181,7 @@ export class SproutHttpTransport implements SproutRuntimeTransport<SproutRawJob>
         if (attempt + 1 >= this.maxAttempts) {
           throw new IngestionError("provider_permanent", "sprout_transport_failed");
         }
-        const backoffMs = retryDelay(null, attempt, this.random);
-        observe(this.options.onOperation, {
-          type: "retry_backoff",
-          attempt: attempt + 1,
-          nextAttempt: attempt + 2,
-          classification: "network_error",
-          backoffMs,
-        });
-        await this.sleep(backoffMs, signal);
+        await this.sleep(retryDelay(null, attempt, this.random), signal);
         continue;
       }
       if (response.status === 401 || response.status === 403) {
@@ -236,17 +197,7 @@ export class SproutHttpTransport implements SproutRuntimeTransport<SproutRawJob>
             response.status === 429 ? "sprout_rate_limit_exhausted" : "sprout_upstream_unavailable",
           );
         }
-        const backoffMs = retryDelay(response, attempt, this.random);
-        observe(this.options.onOperation, {
-          type: "retry_backoff",
-          attempt: attempt + 1,
-          nextAttempt: attempt + 2,
-          status: response.status,
-          classification:
-            response.status === 429 ? "rate_limited" : "upstream_unavailable",
-          backoffMs,
-        });
-        await this.sleep(backoffMs, signal);
+        await this.sleep(retryDelay(response, attempt, this.random), signal);
         continue;
       }
       if (!response.ok) {
@@ -265,14 +216,6 @@ export class SproutHttpTransport implements SproutRuntimeTransport<SproutRawJob>
       } catch {
         throw new IngestionError("provider_permanent", "sprout_schema_drift");
       }
-      observe(this.options.onOperation, {
-        type: "fetch_response",
-        attempt: attempt + 1,
-        status: response.status,
-        responseBytes: body.byteLength,
-        itemCount: parsed.jobs.length,
-        durationMs: performance.now() - startedAt,
-      });
       return {
         items: parsed.jobs,
         next: parsed.next,
