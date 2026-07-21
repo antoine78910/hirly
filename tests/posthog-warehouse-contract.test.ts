@@ -24,6 +24,27 @@ const canonicalIdentityRepair = readFileSync(
   ),
   "utf8",
 );
+const canonicalIdentityRollback = readFileSync(
+  join(
+    root,
+    "backend/db/migrations/20260721002100_posthog_warehouse_canonical_identity.down.sql",
+  ),
+  "utf8",
+);
+const canonicalIdentityCompletion = readFileSync(
+  join(
+    root,
+    "backend/db/migrations/20260721002200_posthog_warehouse_identity_completion.sql",
+  ),
+  "utf8",
+);
+const canonicalIdentityCompletionRollback = readFileSync(
+  join(
+    root,
+    "backend/db/migrations/20260721002200_posthog_warehouse_identity_completion.down.sql",
+  ),
+  "utf8",
+);
 
 describe("PostHog warehouse containment migration", () => {
   test("exposes only explicit analytical views through a dedicated role", () => {
@@ -92,6 +113,31 @@ describe("PostHog warehouse containment migration", () => {
     );
     expect(canonicalIdentityRepair).toContain(
       "REVOKE ALL ON analytics_public.user_identity_v1 FROM PUBLIC",
+    );
+    expect(canonicalIdentityRollback).toContain(
+      "analytics_events.user_id::text AS user_id",
+    );
+  });
+
+  test("completes UUID mapping for application and swipe facts", () => {
+    expect(canonicalIdentityCompletion).toContain(
+      "canonical_users.canonical_user_id AS user_id",
+    );
+    expect(canonicalIdentityCompletion).toContain(
+      "FROM public.applications",
+    );
+    expect(canonicalIdentityCompletion).toContain("FROM public.swipes");
+    expect(canonicalIdentityCompletion).toContain(
+      "WHEN analytics_events.user_id IS NULL THEN analytics_events.anonymous_id::text",
+    );
+    expect(canonicalIdentityCompletion).toContain(
+      "ELSE NULL\n  END AS anonymous_id",
+    );
+    expect(canonicalIdentityCompletionRollback).toContain(
+      "CREATE OR REPLACE VIEW analytics_public.application_facts_v1",
+    );
+    expect(canonicalIdentityCompletionRollback).toContain(
+      "CREATE OR REPLACE VIEW analytics_public.swipe_facts_v1",
     );
   });
 });
