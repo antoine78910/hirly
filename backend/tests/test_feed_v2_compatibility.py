@@ -78,7 +78,6 @@ def _default_filters():
 
 
 def _enable(monkeypatch):
-    monkeypatch.setenv("FEED_V2_DELEGATION_ENABLED", "true")
     monkeypatch.setenv("FEED_V2_INTERNAL_URL", "http://feed-v2.internal/internal/feed/v2")
     monkeypatch.setenv("FEED_V2_ASSERTION_SECRET", "feed-v2-test-secret-that-is-at-least-32-bytes")
     monkeypatch.setenv("FEED_V2_TIMEOUT_MS", "125")
@@ -136,8 +135,11 @@ def _feed_args():
     }
 
 
-def test_feed_v2_delegation_is_disabled_by_default(monkeypatch):
-    monkeypatch.delenv("FEED_V2_DELEGATION_ENABLED", raising=False)
+def test_feed_v2_delegation_fails_closed_when_posthog_disables_the_flag(monkeypatch):
+    async def disabled_rollout(_distinct_id):
+        return False
+
+    monkeypatch.setattr(server, "_feed_v2_rollout_enabled_for", disabled_rollout)
     monkeypatch.setattr(server.httpx, "AsyncClient", lambda **_kwargs: (_ for _ in ()).throw(AssertionError("HTTP called")))
 
     result = asyncio.run(server._try_feed_v2(user_id="user-1", limit=5, filters=_default_filters()))
@@ -186,7 +188,6 @@ def test_feed_v2_rollout_fails_closed_when_posthog_evaluation_errors(monkeypatch
 
 
 def test_feed_v2_delegation_requires_the_server_rollout_flag(monkeypatch):
-    monkeypatch.setenv("FEED_V2_DELEGATION_ENABLED", "true")
     monkeypatch.setattr(server, "_posthog_client", None)
     monkeypatch.setattr(
         server.httpx,
@@ -503,7 +504,10 @@ def _explicit_paris_fullstack_args():
 
 
 def test_explicit_paris_52km_fullstack_falls_back_truthfully_when_v2_disabled(monkeypatch):
-    monkeypatch.delenv("FEED_V2_DELEGATION_ENABLED", raising=False)
+    async def disabled_rollout(_distinct_id):
+        return False
+
+    monkeypatch.setattr(server, "_feed_v2_rollout_enabled_for", disabled_rollout)
     monkeypatch.setenv("JOBS_FEED_LEGACY_JSEARCH_ONLY", "true")
     monkeypatch.setattr(server, "db", _ProfilesOnlyDB())
     monkeypatch.setattr(server, "is_job_provider_configured", lambda _provider: False)

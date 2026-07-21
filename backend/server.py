@@ -7464,17 +7464,9 @@ async def _feed_v2_rollout_enabled_for(distinct_id: Optional[str]) -> bool:
         return False
 
 
-async def _feed_v2_enabled_for(user_id: str, analytics_user_id: Optional[str] = None) -> bool:
-    if not _env_bool("FEED_V2_DELEGATION_ENABLED"):
-        return False
-    cohort = {
-        value.strip()
-        for value in os.environ.get("FEED_V2_COHORT_USER_IDS", "").split(",")
-        if value.strip()
-    }
-    if cohort and user_id not in cohort:
-        return False
-    return await _feed_v2_rollout_enabled_for(analytics_user_id or user_id)
+async def _feed_v2_enabled_for(analytics_user_id: Optional[str]) -> bool:
+    """Authorize Feed v2 solely through the server-side PostHog flag."""
+    return await _feed_v2_rollout_enabled_for(analytics_user_id)
 
 
 def _feed_v2_request_is_profile_equivalent(filters: Dict[str, Any]) -> bool:
@@ -7650,7 +7642,7 @@ async def _try_feed_v2(
     limit: int,
     filters: Dict[str, Any],
 ) -> Optional[Dict[str, Any]]:
-    if not await _feed_v2_enabled_for(user_id, analytics_user_id):
+    if not await _feed_v2_enabled_for(analytics_user_id):
         return None
     try:
         effective_query = _feed_v2_effective_query(filters)
