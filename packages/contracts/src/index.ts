@@ -561,7 +561,7 @@ export const sourcePageCommitEntrySchema = z
 export const sourcePageCommitSchema = z
   .object({
     sourceId: z.uuid(),
-    countryCode: z.literal("FR"),
+    countryCode: z.string().regex(/^[A-Z]{2}$/),
     mode: z.enum(["canary", "incremental", "backfill"]),
     checkpointIn: sourceCheckpointSchema,
     checkpointOut: sourceCheckpointSchema,
