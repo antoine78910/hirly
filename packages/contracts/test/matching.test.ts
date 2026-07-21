@@ -351,7 +351,7 @@ describe("matching v1 contracts", () => {
       applyability_tier: "B",
       feature_schema_version: "matching-features.v1",
       search_text: "fullstack engineer typescript",
-      projected_at: now,
+      source_updated_at: now,
     });
     expectExactKeys(
       toJobSearchDocumentPersistenceRow(document, {
@@ -390,7 +390,7 @@ describe("matching v1 contracts", () => {
         "policy_eligible",
         "feature_schema_version",
         "search_text",
-        "projected_at",
+        "source_updated_at",
       ],
     );
   });
