@@ -13,11 +13,13 @@ describe("Feed v2 load evidence helpers", () => {
   });
 
   test("collects plan nodes and indexes for serving-path assertions", () => {
-    expect(planFacts([{ Plan: { "Node Type": "Index Scan", "Index Name": "feed_idx", Plans: [
-      { "Node Type": "Bitmap Index Scan", "Index Name": "features_idx" },
+    expect(planFacts([{ Plan: { "Node Type": "Index Scan", "Index Name": "feed_idx", "Shared Hit Blocks": 4, "Shared Read Blocks": 2, Plans: [
+      { "Node Type": "Bitmap Index Scan", "Index Name": "features_idx", "Shared Hit Blocks": 3 },
     ] } }])).toEqual({
       nodeTypes: ["Bitmap Index Scan", "Index Scan"],
       indexNames: ["features_idx", "feed_idx"],
+      sharedHitBlocks: 7,
+      sharedReadBlocks: 2,
     });
   });
 });
