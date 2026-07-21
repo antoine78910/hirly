@@ -28,6 +28,9 @@ describe("persisted scheduler cron policy", () => {
     const successors: Date[] = [];
     const count = await runSchedulerTick(
       {
+        async enqueue() {
+          return crypto.randomUUID();
+        },
         async assertProviderRunnable() {},
         async dueSchedules() {
           return [

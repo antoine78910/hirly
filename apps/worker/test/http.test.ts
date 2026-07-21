@@ -44,6 +44,9 @@ const queue = {
 };
 
 const store: RuntimeStore = {
+  async enqueue() {
+    return "00000000-0000-4000-8000-000000000002";
+  },
   async assertProviderRunnable() {
     throw new Error("authorization_blocked");
   },
