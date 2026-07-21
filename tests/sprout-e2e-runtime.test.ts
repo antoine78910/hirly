@@ -14,6 +14,7 @@ import {
   parseSproutResponse,
   runSproutPageSizeQualification,
   runSproutQualificationMatrix,
+  sproutTaskPayloadSchema,
 } from "../apps/worker/src/providers/sprout";
 
 const sourceId = "11111111-1111-4111-8111-111111111111";
@@ -49,6 +50,15 @@ describe("Sprout authenticated transport", () => {
     expect(() => sproutDiscoveryProfile("sprout:france:unapproved")).toThrow(
       "sprout_unknown_discovery_lane",
     );
+  });
+
+  test("accepts legacy chained-task counters without blocking recovery", () => {
+    expect(sproutTaskPayloadSchema.parse({
+      sourceId,
+      mode: "backfill",
+      maxResponseBytes: 1_000_000,
+      emptyInsertStreak: 3,
+    }).emptyInsertStreak).toBe(3);
   });
 
   test("uses only the allowlisted HTTPS origin, omits cookies, and consumes jobs once", async () => {

@@ -402,15 +402,15 @@ export function createTaskHandlers(
             });
             if (!result.complete && payload.mode !== "canary") {
               const nextOffset = result.checkpoint.offset;
-              const nextEmptyInsertStreak = result.inserted === 0
-                ? payload.emptyInsertStreak + 1
-                : 0;
               const nextPayload = {
                 ...payload,
                 // The source key, not a mutable task payload, selects the
                 // discovery query. Each lane owns its checkpoint so retries
                 // and chained pages cannot silently switch query semantics.
-                emptyInsertStreak: nextEmptyInsertStreak,
+                // This legacy field remains only for compatibility with
+                // already queued tasks; do not let duplicate-heavy pages
+                // accumulate a value that can block the next page.
+                emptyInsertStreak: 0,
               };
               const nextRunId = await store.enqueue(enqueueRunSchema.parse({
                 kind: "provider_ingestion",
@@ -440,7 +440,7 @@ export function createTaskHandlers(
                 sourceKey: runtime.sourceKey,
                 filterVariant: discoveryProfile.filterVariant,
                 includeUnknownWorkLocation: discoveryProfile.includeUnknownWorkLocation,
-                emptyInsertStreak: payload.emptyInsertStreak,
+                emptyInsertStreak: 0,
                 listingCounts: {
                   fetched: result.fetched,
                   added: result.inserted,
