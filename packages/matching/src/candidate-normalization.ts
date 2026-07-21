@@ -109,19 +109,20 @@ function radiusValue(value: unknown): number | null {
   return match ? Number(match[1]) : null;
 }
 
-function roleFamilies(explicit: unknown, targetRole: unknown): string[] {
+function roleFamilies(explicit: unknown, targetRoles: unknown): string[] {
   const provided = identifierTokens(explicit, 32);
   if (provided.length > 0) return provided;
-  const role = normalizedToken(targetRole) ?? "";
-  if (/security|securite|cyber/.test(role)) return ["security-engineering"];
-  if (/data|donnee/.test(role)) return ["data-engineering"];
-  if (/product|produit/.test(role)) return ["product-management"];
-  if (/developer|developpeur|engineer|ingenieur|full stack|backend|frontend|software/.test(role)) {
-    return ["software-engineering"];
-  }
-  if (/marketing|growth|communication/.test(role)) return ["marketing"];
-  if (/sales|commercial|vente/.test(role)) return ["sales"];
-  return [];
+  return [...new Set(normalizedTokens(targetRoles, 32).flatMap((role) => {
+    if (/security|securite|cyber/.test(role)) return ["security-engineering"];
+    if (/data|donnee/.test(role)) return ["data-engineering"];
+    if (/product|produit/.test(role)) return ["product-management"];
+    if (/developer|developpeur|engineer|ingenieur|full stack|backend|frontend|software/.test(role)) {
+      return ["software-engineering"];
+    }
+    if (/marketing|growth|communication/.test(role)) return ["marketing"];
+    if (/sales|commercial|vente/.test(role)) return ["sales"];
+    return [];
+  }))].sort();
 }
 
 function consentPaused(user: Record<string, unknown>): boolean {
@@ -200,6 +201,7 @@ export function normalizeCandidateProfile(input: {
 
   const targetRoles = array(first(profile.target_roles, onboarding.selected_roles));
   const targetRole = first(profile.target_role, targetRoles[0]);
+  const allTargetRoles = [targetRole, ...targetRoles];
   const latitude = numberValue(first(location.latitude, location.lat));
   const longitude = numberValue(first(location.longitude, location.lng, location.lon));
   const countries = countryCodes(first(profile.country_codes, location.country_code, location.countryCode));
@@ -225,7 +227,7 @@ export function normalizeCandidateProfile(input: {
     version: input.event.entityVersion,
     status: "active",
     targetRoleLabelNormalized: normalizedToken(targetRole),
-    roleFamilyIds: roleFamilies(first(profile.role_family_ids, profile.role_family_codes), targetRole),
+    roleFamilyIds: roleFamilies(first(profile.role_family_ids, profile.role_family_codes), allTargetRoles),
     romeCodes: romeCodes(first(profile.rome_codes, profile.rome_code, record(profile.rome_profile).rome_code)),
     skillIds: identifierTokens(profile.skill_ids, 128),
     skillTerms: normalizedTokens(profile.skills, 128),
